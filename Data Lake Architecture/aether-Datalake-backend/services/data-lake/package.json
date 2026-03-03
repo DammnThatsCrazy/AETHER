@@ -1,0 +1,27 @@
+{
+  "name": "@aether/data-lake",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "dist/index.js",
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "generate-ddl": "tsx src/schema/ddl-generator.ts",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@aether/common": "*",
+    "@aether/logger": "*",
+    "@aether/auth": "*",
+    "@aether/cache": "*",
+    "@aether/events": "*"
+  },
+  "devDependencies": {
+    "tsx": "^4.7.0",
+    "typescript": "^5.4.0",
+    "vitest": "^1.6.0"
+  }
+}

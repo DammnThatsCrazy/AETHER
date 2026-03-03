@@ -1,0 +1,29 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "lib": ["ES2022"],
+    "outDir": "dist",
+    "rootDir": ".",
+    "strict": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "forceConsistentCasingInFileNames": true,
+    "resolveJsonModule": true,
+    "declaration": true,
+    "declarationMap": true,
+    "sourceMap": true,
+    "baseUrl": ".",
+    "paths": {
+      "@aether/common": ["packages/common/src"],
+      "@aether/common/*": ["packages/common/src/*"],
+      "@aether/auth": ["packages/auth/src"],
+      "@aether/logger": ["packages/logger/src"],
+      "@aether/events": ["packages/events/src"],
+      "@aether/cache": ["packages/cache/src"]
+    }
+  },
+  "include": ["packages/*/src/**/*.ts", "services/*/src/**/*.ts"],
+  "exclude": ["node_modules", "dist", "**/*.test.ts", "**/*.spec.ts"]
+}
