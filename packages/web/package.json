@@ -1,0 +1,25 @@
+{
+  "name": "@aether/web",
+  "version": "4.0.0",
+  "description": "Aether SDK for Web — Behavioral analytics, Web3 tracking, and Edge ML",
+  "main": "dist/aether.cjs.js",
+  "module": "dist/aether.esm.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": "./dist/aether.esm.js",
+      "require": "./dist/aether.cjs.js",
+      "types": "./dist/index.d.ts"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "rollup -c rollup.config.mjs && tsc --emitDeclarationOnly",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit"
+  },
+  "sideEffects": false,
+  "license": "UNLICENSED"
+}

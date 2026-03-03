@@ -1,0 +1,33 @@
+{
+  "name": "aether-sdk",
+  "version": "4.0.0",
+  "private": true,
+  "description": "Aether SDK — Multi-platform behavioral analytics and Web3 data collection",
+  "workspaces": [
+    "packages/web",
+    "packages/react-native"
+  ],
+  "scripts": {
+    "build": "npm run build --workspaces",
+    "test": "npm run test --workspaces",
+    "lint": "eslint 'packages/*/src/**/*.ts' --fix",
+    "typecheck": "tsc --noEmit --project packages/web/tsconfig.json",
+    "clean": "rm -rf packages/*/dist packages/*/node_modules",
+    "docs": "typedoc --entryPoints packages/web/src/index.ts --out docs/api"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "eslint": "^9.0.0",
+    "typescript": "^5.4.0",
+    "vitest": "^1.6.0",
+    "typedoc": "^0.25.0",
+    "rollup": "^4.0.0",
+    "@rollup/plugin-typescript": "^11.0.0",
+    "@rollup/plugin-terser": "^0.4.0",
+    "@rollup/plugin-node-resolve": "^15.0.0"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "license": "UNLICENSED"
+}

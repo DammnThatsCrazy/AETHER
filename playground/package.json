@@ -1,0 +1,15 @@
+{
+  "name": "aether-playground",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite --port 5173"
+  },
+  "dependencies": {
+    "@aether/web": "file:../packages/web"
+  },
+  "devDependencies": {
+    "vite": "^5.0.0"
+  }
+}
