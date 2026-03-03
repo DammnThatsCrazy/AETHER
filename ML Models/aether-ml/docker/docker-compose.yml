@@ -1,0 +1,95 @@
+# =============================================================================
+# Aether ML — Docker Compose for local development
+# Services: serving API, Redis, MLflow, Prometheus, Jupyter
+#
+# Usage:
+#   cd docker && docker compose up -d
+#   docker compose down
+# =============================================================================
+
+services:
+  # -------------------------------------------------------------------------
+  # ML Model Serving API
+  # -------------------------------------------------------------------------
+  serving:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+      target: serving
+    ports:
+      - "8000:8000"
+    volumes:
+      - model-data:/tmp/aether-models
+    depends_on:
+      - redis
+    environment:
+      - REDIS_URL=redis://redis:6379
+      - MLFLOW_TRACKING_URI=http://mlflow:5000
+      - LOG_LEVEL=info
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+
+  # -------------------------------------------------------------------------
+  # Redis — online feature store and prediction cache
+  # -------------------------------------------------------------------------
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    command: redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru
+
+  # -------------------------------------------------------------------------
+  # MLflow — experiment tracking and model registry
+  # -------------------------------------------------------------------------
+  mlflow:
+    image: ghcr.io/mlflow/mlflow:v2.11.0
+    ports:
+      - "5000:5000"
+    command: >
+      mlflow server
+        --host 0.0.0.0
+        --port 5000
+        --backend-store-uri sqlite:///mlflow.db
+        --default-artifact-root /mlflow/artifacts
+    volumes:
+      - mlflow-data:/mlflow
+
+  # -------------------------------------------------------------------------
+  # Prometheus — metrics scraping
+  # -------------------------------------------------------------------------
+  prometheus:
+    image: prom/prometheus:latest
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml
+
+  # -------------------------------------------------------------------------
+  # Jupyter Lab — interactive exploration and prototyping
+  # -------------------------------------------------------------------------
+  jupyter:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+      target: training
+    ports:
+      - "8888:8888"
+    command: jupyter lab --ip=0.0.0.0 --port=8888 --allow-root --no-browser
+    volumes:
+      - ..:/app
+    environment:
+      - REDIS_URL=redis://redis:6379
+      - MLFLOW_TRACKING_URI=http://mlflow:5000
+    depends_on:
+      - redis
+      - mlflow
+
+volumes:
+  model-data:
+  redis-data:
+  mlflow-data:

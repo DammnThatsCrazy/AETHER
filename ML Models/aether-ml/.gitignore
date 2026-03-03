@@ -1,0 +1,58 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+build/
+.eggs/
+*.egg
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# ML artifacts
+*.pkl
+*.joblib
+*.onnx
+*.tflite
+*.mlmodel
+*.pt
+*.pth
+*.h5
+*.pb
+*.json.bak
+model_output/
+/tmp/aether-*/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Jupyter
+.ipynb_checkpoints/
+*.ipynb_metadata
+
+# Environment
+.env
+.env.local
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Docker
+docker/volumes/
+
+# MLflow
+mlruns/
+mlflow.db
+
+# Test
+.pytest_cache/
+.coverage
+htmlcov/
+.mypy_cache/
