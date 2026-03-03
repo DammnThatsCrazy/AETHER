@@ -1,0 +1,30 @@
+{
+  "name": "aether-backend",
+  "version": "4.0.0",
+  "private": true,
+  "description": "Aether Backend — Microservices for behavioral analytics, identity resolution, and ML serving",
+  "workspaces": [
+    "packages/*",
+    "services/*"
+  ],
+  "scripts": {
+    "build": "tsc -b tsconfig.build.json",
+    "dev:ingestion": "tsx watch services/ingestion/src/index.ts",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:integration": "vitest run --config vitest.integration.config.ts",
+    "lint": "eslint . --ext .ts",
+    "typecheck": "tsc --noEmit",
+    "clean": "rm -rf packages/*/dist services/*/dist"
+  },
+  "devDependencies": {
+    "@types/node": "^20.11.0",
+    "eslint": "^9.0.0",
+    "tsx": "^4.7.0",
+    "typescript": "^5.4.0",
+    "vitest": "^1.4.0"
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  }
+}
