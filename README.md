@@ -1,4 +1,4 @@
-# Aether Platform
+# Aether
 
 **Full-stack behavioral analytics, identity resolution, and AI-powered insights platform with Web3 support.**
 
