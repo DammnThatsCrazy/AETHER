@@ -1,5 +1,6 @@
 // =============================================================================
 // AETHER SDK — EVENT QUEUE (BATCH, FLUSH, RETRY, OFFLINE PERSISTENCE)
+// Updated for multi-VM Web3 event types
 // =============================================================================
 
 import type { AetherEvent, RetryConfig, ConsentState } from '../types';
@@ -26,6 +27,16 @@ const DEFAULT_RETRY: Required<RetryConfig> = {
   backoffMultiplier: 2,
 };
 
+// All Web3-related event types that require web3 consent
+const WEB3_EVENT_TYPES = new Set([
+  'wallet', 'transaction', 'token_balance', 'nft_detection',
+  'whale_alert', 'portfolio_update', 'defi_interaction',
+  'bridge_transfer', 'cex_transfer', 'perpetual_trade',
+  'options_trade', 'governance_vote', 'yield_harvest',
+  'nft_trade', 'staking_action', 'insurance_action',
+  'launchpad_action', 'payment_stream',
+]);
+
 export class EventQueue {
   private queue: AetherEvent[] = [];
   private config: QueueConfig;
@@ -50,36 +61,22 @@ export class EventQueue {
     this.setupLifecycleHandlers();
   }
 
-  /** Set current consent state — events are filtered at flush time */
   setConsent(consent: ConsentState): void {
     this.consent = consent;
   }
 
-  /** Add an event to the queue */
   enqueue(event: AetherEvent): void {
     if (this.isDestroyed) return;
-
     this.queue.push(event);
-
-    // Auto-flush when queue reaches batch size
-    if (this.queue.length >= this.config.batchSize) {
-      this.flush();
-    }
-
-    // Hard flush when queue hits max
-    if (this.queue.length >= this.config.maxQueueSize) {
-      this.flush();
-    }
+    if (this.queue.length >= this.config.batchSize) this.flush();
+    if (this.queue.length >= this.config.maxQueueSize) this.flush();
   }
 
-  /** Flush all queued events to the server */
   async flush(): Promise<void> {
     if (this.isFlushing || this.queue.length === 0 || this.isDestroyed) return;
 
     this.isFlushing = true;
     const batch = this.queue.splice(0, this.config.batchSize);
-
-    // Filter events based on consent
     const allowedEvents = this.filterByConsent(batch);
 
     if (allowedEvents.length === 0) {
@@ -91,48 +88,34 @@ export class EventQueue {
       await this.sendBatch(allowedEvents);
       this.persistQueue();
     } catch (error) {
-      // Put events back at the front of the queue for retry
       this.queue.unshift(...allowedEvents);
       this.persistQueue();
       this.config.onError?.(error as Error, allowedEvents);
     } finally {
       this.isFlushing = false;
-
-      // Continue flushing if there are more events
-      if (this.queue.length >= this.config.batchSize) {
-        this.flush();
-      }
+      if (this.queue.length >= this.config.batchSize) this.flush();
     }
   }
 
-  /** Get current queue size */
   get size(): number {
     return this.queue.length;
   }
 
-  /** Destroy the queue and clean up */
   destroy(): void {
     this.isDestroyed = true;
-    if (this.flushTimer) {
-      clearInterval(this.flushTimer);
-      this.flushTimer = null;
-    }
-    // Attempt final flush
-    if (this.queue.length > 0) {
-      this.sendBeacon(this.queue);
-    }
+    if (this.flushTimer) { clearInterval(this.flushTimer); this.flushTimer = null; }
+    if (this.queue.length > 0) this.sendBeacon(this.queue);
     this.queue = [];
   }
 
   // ===========================================================================
-  // PRIVATE METHODS
+  // PRIVATE
   // ===========================================================================
 
   private filterByConsent(events: AetherEvent[]): AetherEvent[] {
-    if (!this.consent) return events; // No consent state = allow all (pre-consent)
+    if (!this.consent) return events;
 
     return events.filter((event) => {
-      // Consent events always pass through
       if ((event.type as string) === 'consent') return true;
 
       // Analytics consent covers behavioral tracking
@@ -145,8 +128,8 @@ export class EventQueue {
         return this.consent!.marketing;
       }
 
-      // Web3 consent covers wallet/transaction
-      if (['wallet', 'transaction'].includes(event.type)) {
+      // Web3 consent covers ALL blockchain/wallet/DeFi events
+      if (WEB3_EVENT_TYPES.has(event.type)) {
         return this.consent!.web3;
       }
 
@@ -163,9 +146,7 @@ export class EventQueue {
     const payload = JSON.stringify({
       batch: events,
       sentAt: new Date().toISOString(),
-      context: {
-        library: { name: '@aether/sdk', version: '__SDK_VERSION__' },
-      },
+      context: { library: { name: '@aether/sdk', version: '__SDK_VERSION__' } },
     });
 
     const response = await fetch(`${this.config.endpoint}/v1/batch`, {
@@ -200,56 +181,40 @@ export class EventQueue {
     }
   }
 
-  /** Fallback: use Navigator.sendBeacon for unload events */
   private sendBeacon(events: AetherEvent[]): boolean {
     if (typeof navigator === 'undefined' || !navigator.sendBeacon) return false;
-
     const payload = JSON.stringify({
       batch: this.filterByConsent(events),
       sentAt: new Date().toISOString(),
       context: { library: { name: '@aether/sdk', version: '__SDK_VERSION__' } },
     });
-
     const blob = new Blob([payload], { type: 'application/json' });
     return navigator.sendBeacon(`${this.config.endpoint}/v1/batch?key=${this.config.apiKey}`, blob);
   }
 
   private startFlushTimer(): void {
     this.flushTimer = setInterval(() => {
-      if (this.queue.length > 0) {
-        this.flush();
-      }
+      if (this.queue.length > 0) this.flush();
     }, this.config.flushInterval);
   }
 
   private setupLifecycleHandlers(): void {
     if (typeof window === 'undefined') return;
-
-    // Flush on page hide (tab switch, minimize, navigate away)
     window.addEventListener('visibilitychange', () => {
       if (document.visibilityState === 'hidden' && this.queue.length > 0) {
-        this.sendBeacon(this.queue);
-        this.queue = [];
+        this.sendBeacon(this.queue); this.queue = [];
       }
     });
-
-    // Flush on page unload
     window.addEventListener('pagehide', () => {
-      if (this.queue.length > 0) {
-        this.sendBeacon(this.queue);
-        this.queue = [];
-      }
+      if (this.queue.length > 0) { this.sendBeacon(this.queue); this.queue = []; }
     });
-
-    // Handle online/offline
     window.addEventListener('online', () => {
       if (this.queue.length > 0) this.flush();
     });
   }
 
   private persistQueue(): void {
-    const toStore = this.queue.slice(0, MAX_STORED_EVENTS);
-    storage.set(QUEUE_STORAGE_KEY, toStore);
+    storage.set(QUEUE_STORAGE_KEY, this.queue.slice(0, MAX_STORED_EVENTS));
   }
 
   private restoreQueue(): void {

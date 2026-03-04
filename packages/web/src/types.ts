@@ -39,6 +39,31 @@ export interface ModuleConfig {
   autoDiscovery?: boolean;
   rageClickDetection?: boolean;
   deadClickDetection?: boolean;
+  // Multi-VM Web3 modules
+  svmTracking?: boolean;
+  bitcoinTracking?: boolean;
+  moveTracking?: boolean;
+  nearTracking?: boolean;
+  tronTracking?: boolean;
+  cosmosTracking?: boolean;
+  // DeFi tracking modules
+  tokenTracking?: boolean;
+  nftDetection?: boolean;
+  defiTracking?: boolean;
+  portfolioTracking?: boolean;
+  whaleAlerts?: boolean;
+  walletClassification?: boolean;
+  bridgeTracking?: boolean;
+  cexTracking?: boolean;
+  perpetualsTracking?: boolean;
+  optionsTracking?: boolean;
+  yieldTracking?: boolean;
+  governanceTracking?: boolean;
+  insuranceTracking?: boolean;
+  launchpadTracking?: boolean;
+  paymentsTracking?: boolean;
+  nftMarketplaceTracking?: boolean;
+  restakingTracking?: boolean;
 }
 
 export interface PrivacyConfig {
@@ -91,6 +116,220 @@ export interface RetryConfig {
 }
 
 // =============================================================================
+// MULTI-VM TYPES
+// =============================================================================
+
+/** Virtual machine family */
+export type VMType = 'evm' | 'svm' | 'bitcoin' | 'movevm' | 'near' | 'tvm' | 'cosmos';
+
+/** Wallet classification by security model */
+export type WalletClassification = 'hot' | 'cold' | 'smart' | 'exchange' | 'protocol' | 'multisig';
+
+/** DeFi protocol categories */
+export type DeFiCategory =
+  | 'dex'
+  | 'router'
+  | 'lending'
+  | 'staking'
+  | 'restaking'
+  | 'perpetuals'
+  | 'options'
+  | 'bridge'
+  | 'cex'
+  | 'yield'
+  | 'nft_marketplace'
+  | 'governance'
+  | 'payments'
+  | 'insurance'
+  | 'launchpad';
+
+/** Chain information across all VMs */
+export interface ChainInfo {
+  vm: VMType;
+  chainId: number | string;
+  name: string;
+  shortName: string;
+  nativeCurrency: { name: string; symbol: string; decimals: number };
+  rpcUrl?: string;
+  explorerUrl?: string;
+  isTestnet: boolean;
+  isL2?: boolean;
+  logoUrl?: string;
+}
+
+/** Connected wallet across any VM */
+export interface ConnectedWallet {
+  address: string;
+  vm: VMType;
+  chainId: number | string;
+  walletType: string;
+  displayName: string;
+  classification: WalletClassification;
+  ens?: string;
+  sns?: string;
+  suiNS?: string;
+  nearAccountId?: string;
+  connectedAt: string;
+  isConnected: boolean;
+  isPrimary: boolean;
+}
+
+/** Token balance for any chain */
+export interface TokenBalance {
+  symbol: string;
+  name: string;
+  contractAddress: string;
+  balance: string;
+  decimals: number;
+  usdValue?: number;
+  vm: VMType;
+  chainId: number | string;
+  standard: 'native' | 'erc20' | 'spl' | 'brc20' | 'trc20' | 'nep141' | 'ibc' | 'sui_coin';
+  logoUrl?: string;
+}
+
+/** NFT asset for any chain */
+export interface NFTAsset {
+  contractAddress: string;
+  tokenId: string;
+  name?: string;
+  collection?: string;
+  imageUrl?: string;
+  standard: 'erc721' | 'erc1155' | 'metaplex' | 'trc721' | 'nep171' | 'sui_object' | 'ordinal';
+  vm: VMType;
+  chainId: number | string;
+  floorPrice?: number;
+  lastSalePrice?: number;
+}
+
+/** DeFi position across any protocol */
+export interface DeFiPosition {
+  protocol: string;
+  category: DeFiCategory;
+  positionType: string;
+  assets: { symbol: string; amount: string; side?: 'supply' | 'borrow' | 'long' | 'short' }[];
+  valueUSD?: number;
+  apy?: number;
+  healthFactor?: number;
+  pnl?: number;
+  pnlPercent?: number;
+  leverage?: number;
+  liquidationPrice?: number;
+  vm: VMType;
+  chainId: number | string;
+  entryTimestamp?: string;
+}
+
+/** Whale alert event data */
+export interface WhaleAlert {
+  txHash: string;
+  value: string;
+  valueUSD?: number;
+  from: string;
+  to: string;
+  chainId: number | string;
+  vm: VMType;
+  threshold: string;
+  token?: string;
+  protocol?: string;
+  fromLabel?: string;
+  toLabel?: string;
+}
+
+/** Gas/fee analytics across VMs */
+export interface GasAnalytics {
+  gasPrice?: string;
+  gasUsed?: string;
+  gasCostNative: string;
+  gasCostUSD?: number;
+  chainId: number | string;
+  vm: VMType;
+  computeUnits?: number;
+  priorityFee?: string;
+  energyUsed?: number;
+  bandwidthUsed?: number;
+}
+
+/** Cross-chain portfolio snapshot */
+export interface PortfolioSnapshot {
+  wallets: ConnectedWallet[];
+  totalValueUSD?: number;
+  chains: { vm: VMType; chainId: number | string; name: string; valueUSD?: number }[];
+  tokens: TokenBalance[];
+  nfts: NFTAsset[];
+  defiPositions: DeFiPosition[];
+  timestamp: string;
+}
+
+/** Bridge transfer data */
+export interface BridgeTransfer {
+  sourceChain: { vm: VMType; chainId: number | string; name: string };
+  destChain: { vm: VMType; chainId: number | string; name: string };
+  token: string;
+  amount: string;
+  fee?: string;
+  bridge: string;
+  status: 'initiated' | 'in_flight' | 'completed' | 'failed' | 'refunded';
+  sourceTxHash?: string;
+  destTxHash?: string;
+  estimatedTime?: number;
+}
+
+/** Known address label */
+export interface AddressLabel {
+  address: string;
+  name: string;
+  category: 'cex' | 'dex' | 'bridge' | 'dao' | 'whale' | 'protocol' | 'deployer' | 'validator';
+  subcategory?: string;
+  confidence: number;
+  chainId: number | string;
+  vm: VMType;
+}
+
+/** Perpetual/derivatives position data */
+export interface PerpetualPosition {
+  protocol: string;
+  market: string;
+  side: 'long' | 'short';
+  size: string;
+  collateral: string;
+  leverage: number;
+  entryPrice: string;
+  markPrice?: string;
+  liquidationPrice?: string;
+  unrealizedPnl?: string;
+  realizedPnl?: string;
+  fundingRate?: string;
+  vm: VMType;
+  chainId: number | string;
+}
+
+/** Options position data */
+export interface OptionsPosition {
+  protocol: string;
+  underlying: string;
+  optionType: 'call' | 'put';
+  strikePrice: string;
+  expiryDate: string;
+  premium: string;
+  size: string;
+  side: 'buy' | 'sell';
+  iv?: number;
+  delta?: number;
+  vm: VMType;
+  chainId: number | string;
+}
+
+/** Protocol identification info */
+export interface ProtocolInfo {
+  name: string;
+  category: DeFiCategory;
+  chains: Record<string, string[]>;
+  website?: string;
+  logoUrl?: string;
+}
+
+// =============================================================================
 // EVENT TYPES
 // =============================================================================
 
@@ -106,7 +345,24 @@ export type EventType =
   | 'performance'
   | 'experiment'
   | 'consent'
-  | 'heartbeat';
+  | 'heartbeat'
+  // Multi-VM Web3 events
+  | 'token_balance'
+  | 'nft_detection'
+  | 'whale_alert'
+  | 'portfolio_update'
+  | 'defi_interaction'
+  | 'bridge_transfer'
+  | 'cex_transfer'
+  | 'perpetual_trade'
+  | 'options_trade'
+  | 'governance_vote'
+  | 'yield_harvest'
+  | 'nft_trade'
+  | 'staking_action'
+  | 'insurance_action'
+  | 'launchpad_action'
+  | 'payment_stream';
 
 export interface BaseEvent {
   id: string;
@@ -208,11 +464,15 @@ export interface ConversionEvent extends BaseEvent {
 export interface WalletEvent extends BaseEvent {
   type: 'wallet';
   properties: {
-    action: 'connect' | 'disconnect' | 'switch_chain' | 'sign' | 'approve';
+    action: 'connect' | 'disconnect' | 'switch_chain' | 'sign' | 'approve'
+      | 'sign_message' | 'sign_transaction' | 'approve_token' | 'revoke_token';
     address: string;
-    chainId: number;
+    chainId: number | string;
     walletType: string;
+    vm?: VMType;
+    classification?: WalletClassification;
     ens?: string;
+    sns?: string;
     [key: string]: unknown;
   };
 }
@@ -221,14 +481,20 @@ export interface TransactionEvent extends BaseEvent {
   type: 'transaction';
   properties: {
     txHash: string;
-    chainId: number;
+    chainId: number | string;
     from: string;
     to: string;
     value?: string;
     gasUsed?: string;
     gasPrice?: string;
     status: 'pending' | 'confirmed' | 'failed';
-    type?: 'transfer' | 'swap' | 'stake' | 'mint' | 'approve' | 'custom';
+    type?: 'transfer' | 'swap' | 'stake' | 'mint' | 'approve' | 'custom'
+      | 'bridge' | 'wrap' | 'unwrap' | 'governance' | 'nft_mint' | 'nft_transfer'
+      | 'borrow' | 'repay' | 'liquidation' | 'flash_loan'
+      | 'open_position' | 'close_position' | 'add_liquidity' | 'remove_liquidity';
+    vm?: VMType;
+    protocol?: string;
+    defiCategory?: DeFiCategory;
     [key: string]: unknown;
   };
 }
@@ -294,15 +560,23 @@ export interface IdentityData {
   chainId?: number;
   ens?: string;
   traits?: UserTraits;
+  /** Multi-wallet linking (EVM + SVM + BTC + ...) */
+  wallets?: ConnectedWallet[];
 }
 
 export interface Identity {
   anonymousId: string;
   userId?: string;
+  /** @deprecated Use wallets[] array. Kept for backwards compatibility. */
   walletAddress?: string;
+  /** @deprecated Use wallets[] array. Kept for backwards compatibility. */
   walletType?: string;
+  /** @deprecated Use wallets[] array. Kept for backwards compatibility. */
   chainId?: number;
+  /** @deprecated Use wallets[] array. Kept for backwards compatibility. */
   ens?: string;
+  /** All connected wallets across VMs */
+  wallets: ConnectedWallet[];
   traits: UserTraits;
   firstSeen: string;
   lastSeen: string;
@@ -372,20 +646,44 @@ export interface SessionScore {
 
 export interface WalletInfo {
   address: string;
-  chainId: number;
+  chainId: number | string;
   type: string;
+  vm?: VMType;
+  classification?: WalletClassification;
   ens?: string;
+  sns?: string;
   isConnected: boolean;
   connectedAt?: string;
 }
 
 export interface TransactionOptions {
-  chainId?: number;
-  type?: 'transfer' | 'swap' | 'stake' | 'mint' | 'approve' | 'custom';
+  chainId?: number | string;
+  type?: 'transfer' | 'swap' | 'stake' | 'mint' | 'approve' | 'custom'
+    | 'bridge' | 'wrap' | 'unwrap' | 'governance' | 'nft_mint' | 'nft_transfer'
+    | 'borrow' | 'repay' | 'liquidation' | 'flash_loan'
+    | 'open_position' | 'close_position' | 'add_liquidity' | 'remove_liquidity';
   value?: string;
   from?: string;
   to?: string;
+  vm?: VMType;
+  protocol?: string;
+  defiCategory?: DeFiCategory;
   metadata?: Record<string, unknown>;
+}
+
+/** Solana-specific transaction options */
+export interface SolanaTransactionOptions extends TransactionOptions {
+  signature?: string;
+  cluster?: 'mainnet-beta' | 'devnet' | 'testnet';
+  computeUnits?: number;
+  priorityFee?: string;
+}
+
+/** Bitcoin-specific transaction options */
+export interface BitcoinTransactionOptions extends TransactionOptions {
+  utxos?: { txid: string; vout: number; value: number }[];
+  feeRate?: number;
+  isInscription?: boolean;
 }
 
 // =============================================================================
@@ -459,6 +757,10 @@ export type SessionCallback = (score: SessionScore) => void;
 export type EventCallback = (event: AetherEvent) => void;
 export type ErrorCallback = (error: Error) => void;
 export type ConsentCallback = (consent: ConsentState) => void;
+export type WalletChangeCallback = (wallets: ConnectedWallet[]) => void;
+export type PortfolioCallback = (portfolio: PortfolioSnapshot) => void;
+export type WhaleCallback = (alert: WhaleAlert) => void;
+export type DeFiCallback = (position: DeFiPosition) => void;
 
 /** Plugin interface for extending SDK functionality */
 export interface AetherPlugin {
@@ -489,10 +791,36 @@ export interface AetherSDKInterface {
 }
 
 export interface WalletInterface {
+  /** Connect an EVM wallet (backwards compatible) */
   connect(address: string, options?: Partial<WalletInfo>): void;
-  disconnect(): void;
+  /** Connect a Solana wallet */
+  connectSVM(address: string, options?: Partial<WalletInfo>): void;
+  /** Connect a Bitcoin wallet */
+  connectBTC(address: string, options?: Partial<WalletInfo>): void;
+  /** Connect a SUI wallet */
+  connectSUI(address: string, options?: Partial<WalletInfo>): void;
+  /** Connect a NEAR wallet */
+  connectNEAR(accountId: string, options?: Partial<WalletInfo>): void;
+  /** Connect a TRON wallet */
+  connectTRON(address: string, options?: Partial<WalletInfo>): void;
+  /** Connect a Cosmos/SEI wallet */
+  connectCosmos(address: string, options?: Partial<WalletInfo>): void;
+  /** Disconnect a specific wallet or all wallets */
+  disconnect(address?: string): void;
+  /** Get primary wallet info (backwards compatible) */
   getInfo(): WalletInfo | null;
+  /** Get all connected wallets */
+  getWallets(): ConnectedWallet[];
+  /** Get wallets filtered by VM */
+  getWalletsByVM(vm: VMType): ConnectedWallet[];
+  /** Track a transaction */
   transaction(txHash: string, options?: TransactionOptions): void;
+  /** Get cross-chain portfolio */
+  getPortfolio(): PortfolioSnapshot | null;
+  /** Register callback for wallet connection changes */
+  onWalletChange(callback: WalletChangeCallback): () => void;
+  /** Classify a wallet address */
+  classifyWallet(address: string, vm: VMType): WalletClassification;
 }
 
 export interface ExperimentInterface {

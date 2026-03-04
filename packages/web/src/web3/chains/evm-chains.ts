@@ -1,0 +1,137 @@
+// =============================================================================
+// AETHER SDK — EVM CHAIN REGISTRY
+// 13+ EVM-compatible chains with full metadata
+// =============================================================================
+
+export interface EVMChainInfo {
+  chainId: number;
+  name: string;
+  shortName: string;
+  nativeCurrency: { name: string; symbol: string; decimals: number };
+  rpcUrl: string;
+  explorerUrl: string;
+  isTestnet: boolean;
+  isL2: boolean;
+  logoSlug: string;
+}
+
+export const EVM_CHAINS: Record<number, EVMChainInfo> = {
+  // Mainnets
+  1: {
+    chainId: 1, name: 'Ethereum', shortName: 'ETH',
+    nativeCurrency: { name: 'Ether', symbol: 'ETH', decimals: 18 },
+    rpcUrl: 'https://eth.llamarpc.com', explorerUrl: 'https://etherscan.io',
+    isTestnet: false, isL2: false, logoSlug: 'ethereum',
+  },
+  137: {
+    chainId: 137, name: 'Polygon', shortName: 'MATIC',
+    nativeCurrency: { name: 'POL', symbol: 'POL', decimals: 18 },
+    rpcUrl: 'https://polygon-rpc.com', explorerUrl: 'https://polygonscan.com',
+    isTestnet: false, isL2: true, logoSlug: 'polygon',
+  },
+  42161: {
+    chainId: 42161, name: 'Arbitrum One', shortName: 'ARB',
+    nativeCurrency: { name: 'Ether', symbol: 'ETH', decimals: 18 },
+    rpcUrl: 'https://arb1.arbitrum.io/rpc', explorerUrl: 'https://arbiscan.io',
+    isTestnet: false, isL2: true, logoSlug: 'arbitrum',
+  },
+  10: {
+    chainId: 10, name: 'Optimism', shortName: 'OP',
+    nativeCurrency: { name: 'Ether', symbol: 'ETH', decimals: 18 },
+    rpcUrl: 'https://mainnet.optimism.io', explorerUrl: 'https://optimistic.etherscan.io',
+    isTestnet: false, isL2: true, logoSlug: 'optimism',
+  },
+  8453: {
+    chainId: 8453, name: 'Base', shortName: 'BASE',
+    nativeCurrency: { name: 'Ether', symbol: 'ETH', decimals: 18 },
+    rpcUrl: 'https://mainnet.base.org', explorerUrl: 'https://basescan.org',
+    isTestnet: false, isL2: true, logoSlug: 'base',
+  },
+  56: {
+    chainId: 56, name: 'BNB Smart Chain', shortName: 'BSC',
+    nativeCurrency: { name: 'BNB', symbol: 'BNB', decimals: 18 },
+    rpcUrl: 'https://bsc-dataseed.binance.org', explorerUrl: 'https://bscscan.com',
+    isTestnet: false, isL2: false, logoSlug: 'bsc',
+  },
+  43114: {
+    chainId: 43114, name: 'Avalanche C-Chain', shortName: 'AVAX',
+    nativeCurrency: { name: 'Avalanche', symbol: 'AVAX', decimals: 18 },
+    rpcUrl: 'https://api.avax.network/ext/bc/C/rpc', explorerUrl: 'https://snowtrace.io',
+    isTestnet: false, isL2: false, logoSlug: 'avalanche',
+  },
+  1329: {
+    chainId: 1329, name: 'SEI', shortName: 'SEI',
+    nativeCurrency: { name: 'SEI', symbol: 'SEI', decimals: 18 },
+    rpcUrl: 'https://evm-rpc.sei-apis.com', explorerUrl: 'https://seitrace.com',
+    isTestnet: false, isL2: false, logoSlug: 'sei',
+  },
+  999: {
+    chainId: 999, name: 'Hyperliquid', shortName: 'HL',
+    nativeCurrency: { name: 'Hyperliquid', symbol: 'HYPE', decimals: 18 },
+    rpcUrl: 'https://rpc.hyperliquid.xyz', explorerUrl: 'https://explorer.hyperliquid.xyz',
+    isTestnet: false, isL2: true, logoSlug: 'hyperliquid',
+  },
+  59144: {
+    chainId: 59144, name: 'Linea', shortName: 'LINEA',
+    nativeCurrency: { name: 'Ether', symbol: 'ETH', decimals: 18 },
+    rpcUrl: 'https://rpc.linea.build', explorerUrl: 'https://lineascan.build',
+    isTestnet: false, isL2: true, logoSlug: 'linea',
+  },
+  324: {
+    chainId: 324, name: 'zkSync Era', shortName: 'ZKSYNC',
+    nativeCurrency: { name: 'Ether', symbol: 'ETH', decimals: 18 },
+    rpcUrl: 'https://mainnet.era.zksync.io', explorerUrl: 'https://explorer.zksync.io',
+    isTestnet: false, isL2: true, logoSlug: 'zksync',
+  },
+  250: {
+    chainId: 250, name: 'Fantom', shortName: 'FTM',
+    nativeCurrency: { name: 'Fantom', symbol: 'FTM', decimals: 18 },
+    rpcUrl: 'https://rpc.ftm.tools', explorerUrl: 'https://ftmscan.com',
+    isTestnet: false, isL2: false, logoSlug: 'fantom',
+  },
+  100: {
+    chainId: 100, name: 'Gnosis', shortName: 'GNO',
+    nativeCurrency: { name: 'xDai', symbol: 'xDAI', decimals: 18 },
+    rpcUrl: 'https://rpc.gnosischain.com', explorerUrl: 'https://gnosisscan.io',
+    isTestnet: false, isL2: false, logoSlug: 'gnosis',
+  },
+  // Testnets
+  11155111: {
+    chainId: 11155111, name: 'Sepolia', shortName: 'SEP',
+    nativeCurrency: { name: 'Sepolia Ether', symbol: 'ETH', decimals: 18 },
+    rpcUrl: 'https://rpc.sepolia.org', explorerUrl: 'https://sepolia.etherscan.io',
+    isTestnet: true, isL2: false, logoSlug: 'ethereum',
+  },
+};
+
+/** Get chain info by chainId */
+export function getEVMChainInfo(chainId: number): EVMChainInfo | undefined {
+  return EVM_CHAINS[chainId];
+}
+
+/** Check if a chain is supported */
+export function isEVMChainSupported(chainId: number): boolean {
+  return chainId in EVM_CHAINS;
+}
+
+/** Get block explorer transaction URL */
+export function getEVMExplorerTxUrl(chainId: number, txHash: string): string | undefined {
+  const chain = EVM_CHAINS[chainId];
+  return chain ? `${chain.explorerUrl}/tx/${txHash}` : undefined;
+}
+
+/** Get block explorer address URL */
+export function getEVMExplorerAddressUrl(chainId: number, address: string): string | undefined {
+  const chain = EVM_CHAINS[chainId];
+  return chain ? `${chain.explorerUrl}/address/${address}` : undefined;
+}
+
+/** Get all mainnet chains */
+export function getEVMMainnets(): EVMChainInfo[] {
+  return Object.values(EVM_CHAINS).filter((c) => !c.isTestnet);
+}
+
+/** Get all L2 chains */
+export function getEVML2Chains(): EVMChainInfo[] {
+  return Object.values(EVM_CHAINS).filter((c) => c.isL2 && !c.isTestnet);
+}
