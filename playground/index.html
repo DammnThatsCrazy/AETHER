@@ -3,76 +3,607 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Aether SDK Playground</title>
+  <title>Aether SDK Playground — Multi-VM Web3</title>
   <style>
+    :root {
+      --bg: #0a0a1a;
+      --bg-card: #12122a;
+      --bg-surface: #0e0e22;
+      --border: #1e1e3a;
+      --border-active: #6C63FF;
+      --accent: #6C63FF;
+      --accent-dim: #4a42cc;
+      --text: #e0e0e0;
+      --text-dim: #888;
+      --text-muted: #a0a0c0;
+      --success: #4ade80;
+      --warning: #fbbf24;
+      --error: #f87171;
+      --evm: #627EEA;
+      --svm: #9945FF;
+      --btc: #F7931A;
+      --sui: #4DA2FF;
+      --near: #00C08B;
+      --tron: #FF0013;
+      --cosmos: #2E3148;
+      --tag-hot: #f97316;
+      --tag-cold: #3b82f6;
+      --tag-smart: #a855f7;
+      --tag-exchange: #eab308;
+    }
     * { margin: 0; padding: 0; box-sizing: border-box; }
-    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #0a0a1a; color: #e0e0e0; min-height: 100vh; padding: 2rem; }
-    h1 { font-size: 1.8rem; margin-bottom: 0.5rem; color: #fff; }
-    h1 span { color: #6C63FF; }
-    .subtitle { color: #888; margin-bottom: 2rem; font-size: 0.9rem; }
-    .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 1.5rem; margin-top: 1.5rem; }
-    .card { background: #12122a; border: 1px solid #1e1e3a; border-radius: 12px; padding: 1.5rem; }
-    .card h2 { font-size: 1rem; color: #6C63FF; margin-bottom: 1rem; }
-    .card pre { background: #0a0a1a; border-radius: 8px; padding: 1rem; font-size: 0.8rem; overflow-x: auto; color: #a0a0c0; line-height: 1.5; max-height: 300px; overflow-y: auto; }
-    button { background: #6C63FF; color: #fff; border: none; padding: 0.6rem 1.2rem; border-radius: 8px; cursor: pointer; font-size: 0.85rem; margin: 0.25rem; transition: opacity 0.2s; }
-    button:hover { opacity: 0.85; }
-    button.secondary { background: #1e1e3a; color: #a0a0c0; }
-    .actions { margin-bottom: 1rem; display: flex; flex-wrap: wrap; gap: 0.5rem; }
-    #status { color: #4ade80; font-size: 0.85rem; margin-top: 0.5rem; }
+    body { font-family: 'SF Mono', 'Fira Code', 'Cascadia Code', 'JetBrains Mono', monospace; background: var(--bg); color: var(--text); min-height: 100vh; }
+
+    /* Header */
+    .header { padding: 1.5rem 2rem 0; }
+    h1 { font-size: 1.6rem; font-weight: 700; color: #fff; letter-spacing: -0.5px; }
+    h1 span { color: var(--accent); }
+    .subtitle { color: var(--text-dim); font-size: 0.8rem; margin-top: 0.3rem; }
+    .version-badge { display: inline-block; background: var(--accent); color: #fff; font-size: 0.65rem; padding: 2px 8px; border-radius: 999px; margin-left: 8px; font-weight: 600; vertical-align: middle; }
+
+    /* Layout */
+    .container { padding: 1rem 2rem 2rem; display: flex; flex-direction: column; gap: 1rem; }
+
+    /* Action bar */
+    .action-bar { display: flex; flex-wrap: wrap; gap: 0.4rem; align-items: center; }
+    .action-group { display: flex; gap: 0.3rem; align-items: center; padding: 0 0.5rem; border-right: 1px solid var(--border); }
+    .action-group:last-child { border-right: none; }
+    .action-group-label { font-size: 0.65rem; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.5px; margin-right: 0.3rem; }
+
+    button { background: var(--bg-card); color: var(--text-muted); border: 1px solid var(--border); padding: 0.45rem 0.85rem; border-radius: 6px; cursor: pointer; font-size: 0.75rem; font-family: inherit; transition: all 0.15s; white-space: nowrap; }
+    button:hover { border-color: var(--accent); color: #fff; background: rgba(108, 99, 255, 0.1); }
+    button.primary { background: var(--accent); color: #fff; border-color: var(--accent); }
+    button.primary:hover { background: var(--accent-dim); }
+    button.vm-evm { border-color: var(--evm); color: var(--evm); }
+    button.vm-evm:hover { background: rgba(98, 126, 234, 0.15); color: #fff; }
+    button.vm-svm { border-color: var(--svm); color: var(--svm); }
+    button.vm-svm:hover { background: rgba(153, 69, 255, 0.15); color: #fff; }
+    button.vm-btc { border-color: var(--btc); color: var(--btc); }
+    button.vm-btc:hover { background: rgba(247, 147, 26, 0.15); color: #fff; }
+    button.destructive { border-color: var(--error); color: var(--error); }
+    button.destructive:hover { background: rgba(248, 113, 113, 0.1); }
+
+    /* Status bar */
+    .status-bar { display: flex; align-items: center; gap: 1rem; padding: 0.5rem 0.75rem; background: var(--bg-card); border: 1px solid var(--border); border-radius: 8px; font-size: 0.75rem; }
+    .status-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+    .status-dot.off { background: var(--error); }
+    .status-dot.on { background: var(--success); box-shadow: 0 0 6px var(--success); }
+    .status-text { color: var(--text-dim); }
+    .status-text strong { color: var(--text); font-weight: 600; }
+    .status-badges { display: flex; gap: 0.4rem; margin-left: auto; flex-wrap: wrap; }
+    .badge { font-size: 0.65rem; padding: 2px 8px; border-radius: 999px; font-weight: 500; }
+    .badge-evm { background: rgba(98, 126, 234, 0.2); color: var(--evm); }
+    .badge-svm { background: rgba(153, 69, 255, 0.2); color: var(--svm); }
+    .badge-btc { background: rgba(247, 147, 26, 0.2); color: var(--btc); }
+    .badge-wallets { background: rgba(74, 222, 128, 0.2); color: var(--success); }
+
+    /* Main grid */
+    .main-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
+    @media (max-width: 900px) { .main-grid { grid-template-columns: 1fr; } }
+
+    .card { background: var(--bg-card); border: 1px solid var(--border); border-radius: 10px; overflow: hidden; }
+    .card-header { display: flex; align-items: center; justify-content: space-between; padding: 0.75rem 1rem; border-bottom: 1px solid var(--border); }
+    .card-header h2 { font-size: 0.8rem; font-weight: 600; color: var(--accent); letter-spacing: 0.3px; }
+    .card-header .card-tag { font-size: 0.6rem; color: var(--text-dim); }
+    .card-body { padding: 1rem; }
+    .card-body pre { background: var(--bg); border-radius: 6px; padding: 0.75rem; font-size: 0.72rem; overflow: auto; color: var(--text-muted); line-height: 1.6; max-height: 320px; font-family: inherit; }
+
+    /* Event log */
+    .log-entry { padding: 3px 0; border-bottom: 1px solid rgba(30, 30, 58, 0.5); }
+    .log-entry:last-child { border-bottom: none; }
+    .log-time { color: var(--text-dim); font-size: 0.65rem; }
+    .log-type { font-weight: 600; font-size: 0.7rem; margin: 0 0.3rem; }
+    .log-type.wallet { color: var(--accent); }
+    .log-type.tx { color: var(--warning); }
+    .log-type.defi { color: var(--success); }
+    .log-type.portfolio { color: #38bdf8; }
+    .log-type.system { color: var(--text-dim); }
+    .log-type.identity { color: #c084fc; }
+    .log-msg { color: var(--text-muted); font-size: 0.7rem; }
+
+    /* Wallet cards */
+    .wallet-grid { display: flex; flex-direction: column; gap: 0.5rem; }
+    .wallet-card { background: var(--bg); border: 1px solid var(--border); border-radius: 8px; padding: 0.75rem; display: flex; align-items: center; gap: 0.75rem; }
+    .wallet-card .vm-icon { width: 32px; height: 32px; border-radius: 8px; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 0.7rem; color: #fff; flex-shrink: 0; }
+    .wallet-card .vm-icon.evm { background: var(--evm); }
+    .wallet-card .vm-icon.svm { background: var(--svm); }
+    .wallet-card .vm-icon.btc { background: var(--btc); }
+    .wallet-card .wallet-info { flex: 1; min-width: 0; }
+    .wallet-card .wallet-addr { font-size: 0.75rem; color: var(--text); font-weight: 500; }
+    .wallet-card .wallet-meta { font-size: 0.65rem; color: var(--text-dim); margin-top: 2px; display: flex; gap: 0.5rem; flex-wrap: wrap; }
+    .wallet-card .wallet-meta .tag { padding: 1px 6px; border-radius: 4px; font-size: 0.6rem; }
+    .tag-hot { background: rgba(249, 115, 22, 0.15); color: var(--tag-hot); }
+    .tag-cold { background: rgba(59, 130, 246, 0.15); color: var(--tag-cold); }
+    .tag-smart { background: rgba(168, 85, 247, 0.15); color: var(--tag-smart); }
+    .tag-primary { background: rgba(74, 222, 128, 0.15); color: var(--success); }
+
+    /* Portfolio */
+    .portfolio-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 0.5rem; }
+    .portfolio-stat { background: var(--bg); border: 1px solid var(--border); border-radius: 8px; padding: 0.6rem 0.75rem; }
+    .portfolio-stat .label { font-size: 0.6rem; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.5px; }
+    .portfolio-stat .value { font-size: 1.1rem; font-weight: 700; color: #fff; margin-top: 4px; }
+    .portfolio-stat .sub { font-size: 0.65rem; color: var(--success); margin-top: 2px; }
+
+    /* Tabs */
+    .tab-bar { display: flex; gap: 0; border-bottom: 1px solid var(--border); }
+    .tab { padding: 0.5rem 1rem; font-size: 0.72rem; color: var(--text-dim); cursor: pointer; border-bottom: 2px solid transparent; font-family: inherit; background: none; border-top: none; border-left: none; border-right: none; }
+    .tab:hover { color: var(--text); }
+    .tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+    .tab-content { display: none; }
+    .tab-content.active { display: block; }
+
+    /* Token/NFT/DeFi rows */
+    .asset-row { display: flex; align-items: center; gap: 0.75rem; padding: 0.5rem 0; border-bottom: 1px solid rgba(30, 30, 58, 0.3); }
+    .asset-row:last-child { border-bottom: none; }
+    .asset-icon { width: 28px; height: 28px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 0.7rem; font-weight: 600; flex-shrink: 0; }
+    .asset-info { flex: 1; }
+    .asset-name { font-size: 0.75rem; color: var(--text); font-weight: 500; }
+    .asset-detail { font-size: 0.65rem; color: var(--text-dim); }
+    .asset-value { text-align: right; }
+    .asset-amount { font-size: 0.75rem; color: var(--text); font-weight: 500; }
+    .asset-usd { font-size: 0.65rem; color: var(--text-dim); }
+
+    /* DeFi position card */
+    .defi-position { background: var(--bg); border: 1px solid var(--border); border-radius: 8px; padding: 0.75rem; margin-bottom: 0.5rem; }
+    .defi-position .defi-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.4rem; }
+    .defi-position .protocol-name { font-size: 0.75rem; font-weight: 600; color: var(--text); }
+    .defi-position .protocol-cat { font-size: 0.6rem; padding: 2px 6px; border-radius: 4px; background: rgba(108, 99, 255, 0.15); color: var(--accent); }
+    .defi-position .defi-stats { display: flex; gap: 1rem; flex-wrap: wrap; }
+    .defi-position .defi-stat { font-size: 0.65rem; }
+    .defi-position .defi-stat span { color: var(--text-dim); }
+
+    /* Full-width card */
+    .full-width { grid-column: 1 / -1; }
+
+    /* Scrollbar */
+    ::-webkit-scrollbar { width: 5px; height: 5px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+    ::-webkit-scrollbar-thumb:hover { background: var(--accent); }
+
+    /* Simulate animation */
+    @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
+    .pulsing { animation: pulse 1.5s ease-in-out infinite; }
+
+    /* Empty state */
+    .empty-state { text-align: center; padding: 2rem 1rem; color: var(--text-dim); font-size: 0.75rem; }
+    .empty-state .empty-icon { font-size: 1.5rem; margin-bottom: 0.5rem; opacity: 0.3; }
   </style>
 </head>
 <body>
-  <h1><span>Aether</span> SDK Playground</h1>
-  <p class="subtitle">v4.0.0 &mdash; Interactive SDK testing environment</p>
-
-  <div class="actions">
-    <button onclick="initSDK()">Init SDK</button>
-    <button onclick="trackEvent()">Track Event</button>
-    <button onclick="trackPageView()">Page View</button>
-    <button onclick="trackConversion()">Conversion</button>
-    <button onclick="identifyUser()">Identify User</button>
-    <button class="secondary" onclick="showIdentity()">Get Identity</button>
-    <button class="secondary" onclick="resetSDK()">Reset</button>
-  </div>
-  <p id="status"></p>
-
-  <div class="grid">
-    <div class="card">
-      <h2>Event Log</h2>
-      <pre id="log">Waiting for SDK init...</pre>
-    </div>
-    <div class="card">
-      <h2>Identity</h2>
-      <pre id="identity">-</pre>
-    </div>
-    <div class="card">
-      <h2>Consent State</h2>
-      <pre id="consent">-</pre>
-    </div>
+  <div class="header">
+    <h1><span>Aether</span> SDK Playground <span class="version-badge">v5.0.0</span></h1>
+    <p class="subtitle">Multi-VM Web3 Wallet Tracking &mdash; EVM &bull; Solana &bull; Bitcoin &bull; SUI &bull; NEAR &bull; TRON &bull; Cosmos</p>
   </div>
 
+  <div class="container">
+    <!-- Action Bar -->
+    <div class="action-bar">
+      <div class="action-group">
+        <span class="action-group-label">SDK</span>
+        <button class="primary" onclick="initSDK()">Init SDK</button>
+        <button onclick="resetSDK()" class="destructive">Reset</button>
+      </div>
+      <div class="action-group">
+        <span class="action-group-label">EVM</span>
+        <button class="vm-evm" onclick="connectEVMWallet()">Connect MetaMask</button>
+        <button class="vm-evm" onclick="connectLedger()">Connect Ledger</button>
+        <button class="vm-evm" onclick="simulateEVMSwap()">Uniswap Swap</button>
+        <button class="vm-evm" onclick="simulateAAVESupply()">AAVE Supply</button>
+      </div>
+      <div class="action-group">
+        <span class="action-group-label">SVM</span>
+        <button class="vm-svm" onclick="connectSolanaWallet()">Connect Phantom</button>
+        <button class="vm-svm" onclick="simulateJupiterSwap()">Jupiter Swap</button>
+        <button class="vm-svm" onclick="simulateMarinadeStake()">Marinade Stake</button>
+      </div>
+      <div class="action-group">
+        <span class="action-group-label">Multi</span>
+        <button class="vm-btc" onclick="connectBTCWallet()">Connect BTC</button>
+        <button onclick="simulateBridgeTransfer()">Bridge ETH→SOL</button>
+        <button onclick="viewPortfolio()">Portfolio</button>
+        <button onclick="disconnectAll()" class="destructive">Disconnect All</button>
+      </div>
+    </div>
+
+    <!-- Status Bar -->
+    <div class="status-bar">
+      <div class="status-dot off" id="statusDot"></div>
+      <span class="status-text" id="statusText">SDK not initialized</span>
+      <div class="status-badges" id="statusBadges"></div>
+    </div>
+
+    <!-- Main Grid -->
+    <div class="main-grid">
+      <!-- Event Log -->
+      <div class="card">
+        <div class="card-header">
+          <h2>Event Log</h2>
+          <span class="card-tag" id="eventCount">0 events</span>
+        </div>
+        <div class="card-body">
+          <div id="logContainer" style="max-height: 320px; overflow-y: auto;">
+            <div class="empty-state">
+              <div class="empty-icon">◇</div>
+              Click "Init SDK" to begin
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Connected Wallets -->
+      <div class="card">
+        <div class="card-header">
+          <h2>Connected Wallets</h2>
+          <span class="card-tag" id="walletCount">0 wallets</span>
+        </div>
+        <div class="card-body">
+          <div class="wallet-grid" id="walletGrid">
+            <div class="empty-state">
+              <div class="empty-icon">◈</div>
+              No wallets connected
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Portfolio / Tokens / DeFi (tabbed) -->
+      <div class="card full-width">
+        <div class="tab-bar">
+          <button class="tab active" onclick="switchTab('portfolio')">Portfolio</button>
+          <button class="tab" onclick="switchTab('tokens')">Tokens</button>
+          <button class="tab" onclick="switchTab('defi')">DeFi Positions</button>
+          <button class="tab" onclick="switchTab('identity')">Identity</button>
+          <button class="tab" onclick="switchTab('consent')">Consent</button>
+        </div>
+        <div class="card-body">
+          <!-- Portfolio Tab -->
+          <div class="tab-content active" id="tab-portfolio">
+            <div class="portfolio-grid" id="portfolioStats">
+              <div class="empty-state" style="grid-column: 1/-1;">
+                <div class="empty-icon">◎</div>
+                Connect a wallet to view portfolio
+              </div>
+            </div>
+          </div>
+          <!-- Tokens Tab -->
+          <div class="tab-content" id="tab-tokens">
+            <div id="tokenList">
+              <div class="empty-state">
+                <div class="empty-icon">◈</div>
+                No token balances yet
+              </div>
+            </div>
+          </div>
+          <!-- DeFi Tab -->
+          <div class="tab-content" id="tab-defi">
+            <div id="defiList">
+              <div class="empty-state">
+                <div class="empty-icon">◇</div>
+                No DeFi positions yet
+              </div>
+            </div>
+          </div>
+          <!-- Identity Tab -->
+          <div class="tab-content" id="tab-identity">
+            <pre id="identityPre">-</pre>
+          </div>
+          <!-- Consent Tab -->
+          <div class="tab-content" id="tab-consent">
+            <pre id="consentPre">-</pre>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ======================================================================= -->
+  <!-- PLAYGROUND SCRIPT -->
+  <!-- ======================================================================= -->
   <script type="module">
     import aether from '@aether/web';
-
     window.aether = aether;
-    const log = [];
 
-    function appendLog(msg) {
-      log.push(`[${new Date().toLocaleTimeString()}] ${msg}`);
-      if (log.length > 50) log.shift();
-      document.getElementById('log').textContent = log.join('\n');
+    // =========================================================================
+    // STATE
+    // =========================================================================
+    const state = {
+      initialized: false,
+      logs: [],
+      wallets: [],
+      tokens: [],
+      defiPositions: [],
+      portfolioValue: 0,
+    };
+
+    // =========================================================================
+    // DEMO ADDRESSES — Realistic simulated wallet data
+    // =========================================================================
+    const DEMO = {
+      evm: {
+        metamask: {
+          address: '0x71C7656EC7ab88b098defB751B7401B5f6d8976F',
+          type: 'MetaMask',
+          chainId: 1,
+          ens: 'aetherdemo.eth',
+        },
+        ledger: {
+          address: '0x2B5AD5c4795c026514f8317c7a215E218DcCD6cF',
+          type: 'Ledger',
+          chainId: 1,
+        },
+      },
+      svm: {
+        phantom: {
+          address: '7fUAJdStEuGbc3sM84cKRL6yYaaSstyLAfXsB6g8sBHM',
+          type: 'Phantom',
+        },
+      },
+      btc: {
+        unisat: {
+          address: 'bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq',
+          type: 'UniSat',
+        },
+      },
+    };
+
+    // Simulated EVM token balances
+    const EVM_TOKENS = [
+      { symbol: 'ETH', name: 'Ethereum', contractAddress: '0x0000000000000000000000000000000000000000', balance: '4.2371', decimals: 18, usdValue: 13558.72, vm: 'evm', chainId: 1, standard: 'native' },
+      { symbol: 'USDC', name: 'USD Coin', contractAddress: '0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48', balance: '12450.00', decimals: 6, usdValue: 12450.00, vm: 'evm', chainId: 1, standard: 'erc20' },
+      { symbol: 'WETH', name: 'Wrapped ETH', contractAddress: '0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2', balance: '1.5000', decimals: 18, usdValue: 4805.25, vm: 'evm', chainId: 1, standard: 'erc20' },
+      { symbol: 'stETH', name: 'Lido Staked ETH', contractAddress: '0xae7ab96520DE3A18E5e111B5EaAb095312D7fE84', balance: '2.8000', decimals: 18, usdValue: 8974.80, vm: 'evm', chainId: 1, standard: 'erc20' },
+      { symbol: 'AAVE', name: 'Aave', contractAddress: '0x7Fc66500c84A76Ad7e9c93437bFc5Ac33E2DDaE9', balance: '45.00', decimals: 18, usdValue: 5850.00, vm: 'evm', chainId: 1, standard: 'erc20' },
+    ];
+
+    // Simulated Solana token balances
+    const SVM_TOKENS = [
+      { symbol: 'SOL', name: 'Solana', contractAddress: '11111111111111111111111111111111', balance: '128.459', decimals: 9, usdValue: 18441.57, vm: 'svm', chainId: 'mainnet-beta', standard: 'native' },
+      { symbol: 'USDC', name: 'USD Coin (SPL)', contractAddress: 'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v', balance: '8200.00', decimals: 6, usdValue: 8200.00, vm: 'svm', chainId: 'mainnet-beta', standard: 'spl' },
+      { symbol: 'JTO', name: 'Jito', contractAddress: 'jtojtomepa8beP8AuQc6eXt5FriJwfFMwQx2v2f9mCL', balance: '500.00', decimals: 9, usdValue: 1575.00, vm: 'svm', chainId: 'mainnet-beta', standard: 'spl' },
+      { symbol: 'mSOL', name: 'Marinade SOL', contractAddress: 'mSoLzYCxHdYgdzU16g5QSh3i5K3z3KZK7ytfqcJm7So', balance: '25.000', decimals: 9, usdValue: 3725.00, vm: 'svm', chainId: 'mainnet-beta', standard: 'spl' },
+    ];
+
+    // Simulated BTC balance
+    const BTC_TOKENS = [
+      { symbol: 'BTC', name: 'Bitcoin', contractAddress: '', balance: '0.3821', decimals: 8, usdValue: 36499.55, vm: 'bitcoin', chainId: 'mainnet', standard: 'native' },
+    ];
+
+    // =========================================================================
+    // LOGGING
+    // =========================================================================
+    function appendLog(type, msg) {
+      const time = new Date().toLocaleTimeString('en-US', { hour12: false });
+      state.logs.unshift({ time, type, msg });
+      if (state.logs.length > 80) state.logs.pop();
+      renderLogs();
     }
 
-    function updateUI() {
+    function renderLogs() {
+      const container = document.getElementById('logContainer');
+      document.getElementById('eventCount').textContent = `${state.logs.length} events`;
+      if (state.logs.length === 0) {
+        container.innerHTML = '<div class="empty-state"><div class="empty-icon">◇</div>Click "Init SDK" to begin</div>';
+        return;
+      }
+      container.innerHTML = state.logs.map(l => `
+        <div class="log-entry">
+          <span class="log-time">${l.time}</span>
+          <span class="log-type ${l.type}">${l.type}</span>
+          <span class="log-msg">${l.msg}</span>
+        </div>
+      `).join('');
+    }
+
+    // =========================================================================
+    // UI UPDATES
+    // =========================================================================
+    function updateStatus() {
+      const dot = document.getElementById('statusDot');
+      const text = document.getElementById('statusText');
+      const badges = document.getElementById('statusBadges');
+
+      if (state.initialized) {
+        dot.className = 'status-dot on';
+        const walletCount = state.wallets.length;
+        text.innerHTML = `<strong>SDK Active</strong> — ${walletCount} wallet${walletCount !== 1 ? 's' : ''} connected`;
+
+        const vmCounts = {};
+        state.wallets.forEach(w => { vmCounts[w.vm] = (vmCounts[w.vm] || 0) + 1; });
+        let badgeHTML = '';
+        if (vmCounts.evm) badgeHTML += `<span class="badge badge-evm">EVM ×${vmCounts.evm}</span>`;
+        if (vmCounts.svm) badgeHTML += `<span class="badge badge-svm">SVM ×${vmCounts.svm}</span>`;
+        if (vmCounts.bitcoin) badgeHTML += `<span class="badge badge-btc">BTC ×${vmCounts.bitcoin}</span>`;
+        if (walletCount > 0) badgeHTML += `<span class="badge badge-wallets">$${formatUSD(state.portfolioValue)}</span>`;
+        badges.innerHTML = badgeHTML;
+      } else {
+        dot.className = 'status-dot off';
+        text.innerHTML = 'SDK not initialized';
+        badges.innerHTML = '';
+      }
+    }
+
+    function renderWallets() {
+      const grid = document.getElementById('walletGrid');
+      document.getElementById('walletCount').textContent = `${state.wallets.length} wallet${state.wallets.length !== 1 ? 's' : ''}`;
+
+      if (state.wallets.length === 0) {
+        grid.innerHTML = '<div class="empty-state"><div class="empty-icon">◈</div>No wallets connected</div>';
+        return;
+      }
+
+      grid.innerHTML = state.wallets.map((w, i) => {
+        const vmLabel = { evm: 'EVM', svm: 'SVM', bitcoin: 'BTC' }[w.vm] || w.vm.toUpperCase();
+        const vmClass = w.vm === 'bitcoin' ? 'btc' : w.vm;
+        const addr = w.ens || truncAddr(w.address);
+        const chainName = getChainName(w.vm, w.chainId);
+        return `
+          <div class="wallet-card">
+            <div class="vm-icon ${vmClass}">${vmLabel}</div>
+            <div class="wallet-info">
+              <div class="wallet-addr">${addr}${w.ens ? ` <span style="color:var(--text-dim);font-size:0.65rem">(${truncAddr(w.address)})</span>` : ''}</div>
+              <div class="wallet-meta">
+                <span>${w.walletType}</span>
+                <span>•</span>
+                <span>${chainName}</span>
+                <span class="tag tag-${w.classification}">${w.classification}</span>
+                ${w.isPrimary ? '<span class="tag tag-primary">primary</span>' : ''}
+              </div>
+            </div>
+          </div>
+        `;
+      }).join('');
+    }
+
+    function renderPortfolio() {
+      const container = document.getElementById('portfolioStats');
+      if (state.wallets.length === 0) {
+        container.innerHTML = '<div class="empty-state" style="grid-column:1/-1"><div class="empty-icon">◎</div>Connect a wallet to view portfolio</div>';
+        return;
+      }
+
+      const evmValue = state.tokens.filter(t => t.vm === 'evm').reduce((s, t) => s + (t.usdValue || 0), 0);
+      const svmValue = state.tokens.filter(t => t.vm === 'svm').reduce((s, t) => s + (t.usdValue || 0), 0);
+      const btcValue = state.tokens.filter(t => t.vm === 'bitcoin').reduce((s, t) => s + (t.usdValue || 0), 0);
+      const defiValue = state.defiPositions.reduce((s, p) => s + (p.valueUSD || 0), 0);
+      state.portfolioValue = evmValue + svmValue + btcValue + defiValue;
+
+      container.innerHTML = `
+        <div class="portfolio-stat">
+          <div class="label">Total Value</div>
+          <div class="value">$${formatUSD(state.portfolioValue)}</div>
+          <div class="sub">${state.wallets.length} wallets • ${state.tokens.length} tokens</div>
+        </div>
+        ${evmValue > 0 ? `<div class="portfolio-stat"><div class="label">EVM (Ethereum)</div><div class="value" style="color:var(--evm)">$${formatUSD(evmValue)}</div><div class="sub">${state.tokens.filter(t => t.vm === 'evm').length} tokens</div></div>` : ''}
+        ${svmValue > 0 ? `<div class="portfolio-stat"><div class="label">SVM (Solana)</div><div class="value" style="color:var(--svm)">$${formatUSD(svmValue)}</div><div class="sub">${state.tokens.filter(t => t.vm === 'svm').length} tokens</div></div>` : ''}
+        ${btcValue > 0 ? `<div class="portfolio-stat"><div class="label">Bitcoin</div><div class="value" style="color:var(--btc)">$${formatUSD(btcValue)}</div><div class="sub">1 token</div></div>` : ''}
+        ${defiValue > 0 ? `<div class="portfolio-stat"><div class="label">DeFi Positions</div><div class="value" style="color:var(--success)">$${formatUSD(defiValue)}</div><div class="sub">${state.defiPositions.length} positions</div></div>` : ''}
+      `;
+    }
+
+    function renderTokens() {
+      const container = document.getElementById('tokenList');
+      if (state.tokens.length === 0) {
+        container.innerHTML = '<div class="empty-state"><div class="empty-icon">◈</div>No token balances yet</div>';
+        return;
+      }
+
+      const colors = { ETH: '#627EEA', USDC: '#2775CA', WETH: '#EC1C79', stETH: '#00A3FF', AAVE: '#B6509E', SOL: '#9945FF', JTO: '#31D0AA', mSOL: '#4DA8DA', BTC: '#F7931A' };
+      container.innerHTML = state.tokens.map(t => `
+        <div class="asset-row">
+          <div class="asset-icon" style="background:${colors[t.symbol] || '#555'}">${t.symbol.slice(0,2)}</div>
+          <div class="asset-info">
+            <div class="asset-name">${t.name}</div>
+            <div class="asset-detail">${t.vm.toUpperCase()} • ${t.standard}</div>
+          </div>
+          <div class="asset-value">
+            <div class="asset-amount">${t.balance} ${t.symbol}</div>
+            <div class="asset-usd">${t.usdValue ? '$' + formatUSD(t.usdValue) : '—'}</div>
+          </div>
+        </div>
+      `).join('');
+    }
+
+    function renderDeFi() {
+      const container = document.getElementById('defiList');
+      if (state.defiPositions.length === 0) {
+        container.innerHTML = '<div class="empty-state"><div class="empty-icon">◇</div>No DeFi positions yet</div>';
+        return;
+      }
+
+      container.innerHTML = state.defiPositions.map(p => `
+        <div class="defi-position">
+          <div class="defi-header">
+            <span class="protocol-name">${p.protocol}</span>
+            <span class="protocol-cat">${p.category}</span>
+          </div>
+          <div class="defi-stats">
+            <div class="defi-stat"><span>Type:</span> ${p.positionType}</div>
+            <div class="defi-stat"><span>Value:</span> $${formatUSD(p.valueUSD || 0)}</div>
+            ${p.apy ? `<div class="defi-stat"><span>APY:</span> <span style="color:var(--success)">${p.apy}%</span></div>` : ''}
+            ${p.healthFactor ? `<div class="defi-stat"><span>Health:</span> <span style="color:${p.healthFactor > 1.5 ? 'var(--success)' : 'var(--warning)'}">${p.healthFactor}</span></div>` : ''}
+            ${p.leverage ? `<div class="defi-stat"><span>Leverage:</span> ${p.leverage}x</div>` : ''}
+            ${p.pnl !== undefined ? `<div class="defi-stat"><span>PnL:</span> <span style="color:${p.pnl >= 0 ? 'var(--success)' : 'var(--error)'}">$${p.pnl >= 0 ? '+' : ''}${formatUSD(p.pnl)}</span></div>` : ''}
+            <div class="defi-stat"><span>Chain:</span> ${p.vm.toUpperCase()}</div>
+          </div>
+          <div style="margin-top: 0.4rem; font-size: 0.65rem; color: var(--text-dim);">
+            Assets: ${p.assets.map(a => `${a.amount} ${a.symbol}${a.side ? ' (' + a.side + ')' : ''}`).join(', ')}
+          </div>
+        </div>
+      `).join('');
+    }
+
+    function updateIdentityPanel() {
       const identity = aether.getIdentity();
-      document.getElementById('identity').textContent = identity
+      document.getElementById('identityPre').textContent = identity
         ? JSON.stringify(identity, null, 2)
         : 'Not initialized';
-      const consent = aether.consent.getState();
-      document.getElementById('consent').textContent = JSON.stringify(consent, null, 2);
     }
 
+    function updateConsentPanel() {
+      try {
+        const consent = aether.consent.getState();
+        document.getElementById('consentPre').textContent = JSON.stringify(consent, null, 2);
+      } catch { document.getElementById('consentPre').textContent = '-'; }
+    }
+
+    function refreshAll() {
+      updateStatus();
+      renderWallets();
+      renderPortfolio();
+      renderTokens();
+      renderDeFi();
+      updateIdentityPanel();
+      updateConsentPanel();
+    }
+
+    // =========================================================================
+    // HELPERS
+    // =========================================================================
+    function truncAddr(a) {
+      if (!a) return '—';
+      if (a.length <= 12) return a;
+      return a.slice(0, 6) + '...' + a.slice(-4);
+    }
+    function formatUSD(n) {
+      return Number(n).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    }
+    function getChainName(vm, chainId) {
+      const names = { 1: 'Ethereum', 137: 'Polygon', 42161: 'Arbitrum', 10: 'Optimism', 8453: 'Base', 56: 'BSC' };
+      if (vm === 'evm') return names[chainId] || `Chain ${chainId}`;
+      if (vm === 'svm') return 'Solana';
+      if (vm === 'bitcoin') return 'Bitcoin';
+      return vm.toUpperCase();
+    }
+    function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+    function now() { return new Date().toISOString(); }
+    /** Safely call an SDK method; return fallback on any error */
+    function safeCall(fn, fallback) { try { return fn() ?? fallback; } catch { return fallback; } }
+
+    // =========================================================================
+    // TAB SWITCHING
+    // =========================================================================
+    window.switchTab = (id) => {
+      document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+      document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
+      document.getElementById(`tab-${id}`).classList.add('active');
+      // Find the tab button by text
+      document.querySelectorAll('.tab').forEach(t => {
+        if (t.textContent.trim().toLowerCase() === id.toLowerCase() || t.textContent.trim().toLowerCase().replace(' ', '') === id) {
+          t.classList.add('active');
+        }
+      });
+    };
+
+    // =========================================================================
+    // SDK INIT
+    // =========================================================================
     window.initSDK = () => {
+      if (state.initialized) {
+        appendLog('system', 'SDK already initialized — reset first');
+        return;
+      }
+
       try {
         aether.init({
           apiKey: 'playground_demo_key',
@@ -84,50 +615,467 @@
             errorTracking: true,
             experiments: true,
             intentPrediction: true,
+            // Multi-VM Web3
+            walletTracking: true,
+            svmTracking: true,
+            bitcoinTracking: true,
+            // DeFi
+            tokenTracking: true,
+            nftDetection: true,
+            defiTracking: true,
+            portfolioTracking: true,
+            walletClassification: true,
+            whaleAlerts: true,
+            perpetualsTracking: true,
+            bridgeTracking: true,
+            cexTracking: true,
           },
           privacy: { maskSensitiveFields: true },
+          advanced: {
+            flushInterval: 600000,   // 10 min — no real backend, avoid retry storms
+            maxQueueSize: 9999,      // don't auto-flush
+            retry: { maxRetries: 0 }, // no retries against dummy endpoint
+          },
         });
-        document.getElementById('status').textContent = 'SDK initialized';
-        appendLog('SDK initialized');
-        updateUI();
+
+        // Grant web3 consent for demo
+        aether.consent.grant(['analytics', 'marketing', 'web3']);
+
+        state.initialized = true;
+        appendLog('system', 'SDK v5.0.0 initialized — Multi-VM Web3 modules active');
+        appendLog('system', 'Consent granted: analytics, marketing, web3');
+        appendLog('system', 'Enabled: EVM + SVM + BTC tracking, DeFi, Portfolio, Whale Alerts');
+        refreshAll();
       } catch (e) {
-        appendLog('Init error: ' + e.message);
+        appendLog('system', `Init error: ${e.message}`);
       }
     };
 
-    window.trackEvent = () => {
-      aether.track('button_click', { label: 'demo', value: Math.random() });
-      appendLog('Tracked: button_click');
-    };
+    // =========================================================================
+    // EVM WALLET CONNECTIONS
+    // =========================================================================
+    window.connectEVMWallet = async () => {
+      if (!state.initialized) { appendLog('system', '⚠ Init SDK first'); return; }
 
-    window.trackPageView = () => {
-      aether.pageView('/playground', { section: 'demo' });
-      appendLog('Tracked: pageView /playground');
-    };
+      const w = DEMO.evm.metamask;
+      appendLog('wallet', `Connecting EVM wallet: ${w.type}...`);
 
-    window.trackConversion = () => {
-      aether.conversion('purchase', 49.99, { product: 'Pro Plan' });
-      appendLog('Tracked: conversion $49.99');
-    };
+      // Call SDK — use optional chaining for v5 methods, fallback for v4
+      try { aether.wallet.connect(w.address, { type: w.type, chainId: w.chainId, ens: w.ens }); } catch {}
 
-    window.identifyUser = () => {
-      aether.hydrateIdentity({
-        userId: 'user_123',
-        traits: { name: 'Demo User', email: 'demo@aether.dev', plan: 'pro' },
+      await sleep(300);
+
+      // Identify user with wallet
+      try {
+        aether.hydrateIdentity({
+          walletAddress: w.address, walletType: w.type,
+          chainId: w.chainId, ens: w.ens,
+        });
+      } catch {}
+
+      // Wallet classification — v5 API, fallback to 'hot'
+      const classification = safeCall(() => aether.wallet.classifyWallet(w.address, 'evm'), 'hot');
+
+      // Add to local state
+      state.wallets.push({
+        address: w.address, vm: 'evm', chainId: w.chainId,
+        walletType: w.type, displayName: w.ens || truncAddr(w.address),
+        classification, ens: w.ens, connectedAt: now(),
+        isConnected: true, isPrimary: state.wallets.length === 0,
       });
-      appendLog('Identified: user_123');
-      updateUI();
+
+      // Add EVM tokens
+      state.tokens.push(...EVM_TOKENS);
+
+      appendLog('wallet', `✓ EVM wallet connected: ${w.ens} (${truncAddr(w.address)})`);
+      appendLog('wallet', `  Chain: Ethereum (1) • Type: ${w.type} • Class: ${classification}`);
+      appendLog('identity', `Identity hydrated with EVM wallet — ENS: ${w.ens}`);
+
+      // Simulate token balance events
+      await sleep(200);
+      for (const tok of EVM_TOKENS) {
+        appendLog('portfolio', `Token: ${tok.balance} ${tok.symbol} ($${formatUSD(tok.usdValue)})`);
+      }
+
+      refreshAll();
     };
 
-    window.showIdentity = () => {
-      updateUI();
-      appendLog('Identity refreshed');
+    window.connectLedger = async () => {
+      if (!state.initialized) { appendLog('system', '⚠ Init SDK first'); return; }
+
+      const w = DEMO.evm.ledger;
+      appendLog('wallet', `Connecting hardware wallet: ${w.type}...`);
+
+      try { aether.wallet.connect(w.address, { type: w.type, chainId: w.chainId }); } catch {}
+
+      await sleep(500);
+
+      const classification = 'cold'; // Ledger is always cold
+
+      state.wallets.push({
+        address: w.address, vm: 'evm', chainId: w.chainId,
+        walletType: w.type, displayName: truncAddr(w.address),
+        classification, connectedAt: now(),
+        isConnected: true, isPrimary: false,
+      });
+
+      // Additional tokens on Ledger
+      const ledgerTokens = [
+        { symbol: 'UNI', name: 'Uniswap', contractAddress: '0x1f9840a85d5aF5bf1D1762F925BDADdC4201F984', balance: '250.00', decimals: 18, usdValue: 2125.00, vm: 'evm', chainId: 1, standard: 'erc20' },
+        { symbol: 'LINK', name: 'Chainlink', contractAddress: '0x514910771AF9Ca656af840dff83E8264EcF986CA', balance: '150.00', decimals: 18, usdValue: 2340.00, vm: 'evm', chainId: 1, standard: 'erc20' },
+      ];
+      state.tokens.push(...ledgerTokens);
+
+      appendLog('wallet', `✓ Hardware wallet connected: ${truncAddr(w.address)}`);
+      appendLog('wallet', `  Chain: Ethereum (1) • Type: ${w.type} • Class: cold`);
+      appendLog('system', `🔒 Cold storage wallet detected — enhanced security tracking`);
+
+      refreshAll();
     };
 
+    // =========================================================================
+    // SOLANA WALLET CONNECTION
+    // =========================================================================
+    window.connectSolanaWallet = async () => {
+      if (!state.initialized) { appendLog('system', '⚠ Init SDK first'); return; }
+
+      const w = DEMO.svm.phantom;
+      appendLog('wallet', `Connecting SVM wallet: ${w.type}...`);
+
+      try { aether.wallet?.connectSVM?.(w.address, { type: w.type }); } catch {}
+
+      await sleep(300);
+
+      const classification = safeCall(() => aether.wallet.classifyWallet(w.address, 'svm'), 'hot');
+
+      state.wallets.push({
+        address: w.address, vm: 'svm', chainId: 'mainnet-beta',
+        walletType: w.type, displayName: truncAddr(w.address),
+        classification, connectedAt: now(),
+        isConnected: true, isPrimary: state.wallets.filter(w => w.vm === 'svm').length === 0,
+      });
+
+      state.tokens.push(...SVM_TOKENS);
+
+      appendLog('wallet', `✓ SVM wallet connected: ${truncAddr(w.address)}`);
+      appendLog('wallet', `  Chain: Solana (mainnet-beta) • Type: ${w.type} • Class: ${classification}`);
+
+      await sleep(200);
+      for (const tok of SVM_TOKENS) {
+        appendLog('portfolio', `Token: ${tok.balance} ${tok.symbol} ($${formatUSD(tok.usdValue)})`);
+      }
+
+      refreshAll();
+    };
+
+    // =========================================================================
+    // BITCOIN WALLET CONNECTION
+    // =========================================================================
+    window.connectBTCWallet = async () => {
+      if (!state.initialized) { appendLog('system', '⚠ Init SDK first'); return; }
+
+      const w = DEMO.btc.unisat;
+      appendLog('wallet', `Connecting Bitcoin wallet: ${w.type}...`);
+
+      try { aether.wallet?.connectBTC?.(w.address, { type: w.type }); } catch {}
+
+      await sleep(400);
+
+      state.wallets.push({
+        address: w.address, vm: 'bitcoin', chainId: 'mainnet',
+        walletType: w.type, displayName: truncAddr(w.address),
+        classification: 'hot', connectedAt: now(),
+        isConnected: true, isPrimary: state.wallets.filter(w => w.vm === 'bitcoin').length === 0,
+      });
+
+      state.tokens.push(...BTC_TOKENS);
+
+      appendLog('wallet', `✓ BTC wallet connected: ${truncAddr(w.address)}`);
+      appendLog('wallet', `  Chain: Bitcoin (mainnet) • Type: ${w.type} • Address: native_segwit`);
+      appendLog('portfolio', `Balance: ${BTC_TOKENS[0].balance} BTC ($${formatUSD(BTC_TOKENS[0].usdValue)})`);
+
+      refreshAll();
+    };
+
+    // =========================================================================
+    // EVM DeFi SIMULATIONS
+    // =========================================================================
+    window.simulateEVMSwap = async () => {
+      if (!state.initialized) { appendLog('system', '⚠ Init SDK first'); return; }
+      if (!state.wallets.find(w => w.vm === 'evm')) { appendLog('system', '⚠ Connect an EVM wallet first'); return; }
+
+      const txHash = '0x' + Array.from({length: 64}, () => Math.floor(Math.random() * 16).toString(16)).join('');
+
+      appendLog('tx', `Initiating Uniswap V3 swap...`);
+      appendLog('tx', `  Swap: 1.5 ETH → ~4,815 USDC`);
+      appendLog('tx', `  Router: 0x E592...3832 (Uniswap V3)`);
+
+      try { aether.wallet.transaction(txHash, {
+        chainId: 1, from: DEMO.evm.metamask.address,
+        to: '0xE592427A0AEce92De3Edee1F18E0157C05861564',
+        value: '1500000000000000000', type: 'swap', vm: 'evm',
+        protocol: 'Uniswap V3', defiCategory: 'dex',
+      }); } catch {}
+
+      try { aether.track('defi_interaction', {
+        protocol: 'Uniswap V3', category: 'dex', action: 'swap',
+        tokenIn: 'ETH', tokenOut: 'USDC', amountIn: '1.5', amountOut: '4815.23',
+        chainId: 1, vm: 'evm',
+      }); } catch {}
+
+      await sleep(600);
+
+      appendLog('tx', `✓ Swap confirmed — tx: ${truncAddr(txHash)}`);
+      appendLog('defi', `DeFi: Uniswap V3 swap — 1.5 ETH → 4,815.23 USDC`);
+      appendLog('defi', `  Gas: 152,847 gas • $8.42 • Priority: 2.1 gwei`);
+
+      // Add DeFi position if not exists
+      if (!state.defiPositions.find(p => p.protocol === 'Uniswap V3' && p.positionType === 'Swap History')) {
+        state.defiPositions.push({
+          protocol: 'Uniswap V3', category: 'dex', positionType: 'Swap History',
+          assets: [{ symbol: 'ETH', amount: '1.5', side: 'supply' }, { symbol: 'USDC', amount: '4815.23', side: 'borrow' }],
+          valueUSD: 4815.23, vm: 'evm', chainId: 1,
+        });
+      }
+
+      refreshAll();
+    };
+
+    window.simulateAAVESupply = async () => {
+      if (!state.initialized) { appendLog('system', '⚠ Init SDK first'); return; }
+      if (!state.wallets.find(w => w.vm === 'evm')) { appendLog('system', '⚠ Connect an EVM wallet first'); return; }
+
+      const txHash = '0x' + Array.from({length: 64}, () => Math.floor(Math.random() * 16).toString(16)).join('');
+
+      appendLog('tx', `Initiating AAVE V3 supply...`);
+      appendLog('tx', `  Supply: 5,000 USDC to AAVE V3 Lending Pool`);
+
+      try { aether.wallet.transaction(txHash, {
+        chainId: 1, from: DEMO.evm.metamask.address,
+        to: '0x87870Bca3F3fD6335C3F4ce8392D69350B4fA4E2',
+        value: '0', type: 'stake', vm: 'evm',
+        protocol: 'AAVE V3', defiCategory: 'lending',
+      }); } catch {}
+
+      try { aether.track('defi_interaction', {
+        protocol: 'AAVE V3', category: 'lending', action: 'supply',
+        token: 'USDC', amount: '5000', apy: 4.82,
+        chainId: 1, vm: 'evm',
+      }); } catch {}
+
+      await sleep(500);
+
+      appendLog('tx', `✓ Supply confirmed — tx: ${truncAddr(txHash)}`);
+      appendLog('defi', `DeFi: AAVE V3 supply — 5,000 USDC at 4.82% APY`);
+      appendLog('defi', `  Health Factor: 2.45 • Collateral: enabled`);
+
+      state.defiPositions.push({
+        protocol: 'AAVE V3', category: 'lending', positionType: 'Supply',
+        assets: [{ symbol: 'USDC', amount: '5000', side: 'supply' }],
+        valueUSD: 5000, apy: 4.82, healthFactor: 2.45,
+        vm: 'evm', chainId: 1,
+      });
+
+      refreshAll();
+    };
+
+    // =========================================================================
+    // SOLANA DeFi SIMULATIONS
+    // =========================================================================
+    window.simulateJupiterSwap = async () => {
+      if (!state.initialized) { appendLog('system', '⚠ Init SDK first'); return; }
+      if (!state.wallets.find(w => w.vm === 'svm')) { appendLog('system', '⚠ Connect a Solana wallet first'); return; }
+
+      const sig = Array.from({length: 88}, () => 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz123456789'[Math.floor(Math.random() * 58)]).join('');
+
+      appendLog('tx', `Initiating Jupiter aggregator swap...`);
+      appendLog('tx', `  Swap: 10 SOL → ~1,435 USDC (via Raydium + Orca route)`);
+      appendLog('tx', `  Program: JUP6L...Nt5U (Jupiter V6)`);
+
+      try { aether.wallet.transaction(sig, {
+        vm: 'svm', chainId: 'mainnet-beta',
+        from: DEMO.svm.phantom.address,
+        to: 'JUP6LkbZbjS1jKKwapdHNy74zcZ3tLUZoi5QNyVTaV4',
+        type: 'swap', protocol: 'Jupiter', defiCategory: 'router',
+      }); } catch {}
+
+      try { aether.track('defi_interaction', {
+        protocol: 'Jupiter', category: 'router', action: 'route_swap',
+        tokenIn: 'SOL', tokenOut: 'USDC', amountIn: '10', amountOut: '1435.67',
+        route: ['Raydium V4', 'Orca Whirlpool'], hops: 2,
+        computeUnits: 245000, chainId: 'mainnet-beta', vm: 'svm',
+      }); } catch {}
+
+      await sleep(500);
+
+      appendLog('tx', `✓ Swap confirmed — sig: ${sig.slice(0, 12)}...`);
+      appendLog('defi', `DeFi: Jupiter route swap — 10 SOL → 1,435.67 USDC`);
+      appendLog('defi', `  Route: Raydium V4 → Orca Whirlpool (2 hops)`);
+      appendLog('defi', `  Compute: 245,000 CU • Priority fee: 0.00005 SOL`);
+
+      if (!state.defiPositions.find(p => p.protocol === 'Jupiter')) {
+        state.defiPositions.push({
+          protocol: 'Jupiter', category: 'router', positionType: 'Aggregated Swap',
+          assets: [{ symbol: 'SOL', amount: '10' }, { symbol: 'USDC', amount: '1435.67' }],
+          valueUSD: 1435.67, vm: 'svm', chainId: 'mainnet-beta',
+        });
+      }
+
+      refreshAll();
+    };
+
+    window.simulateMarinadeStake = async () => {
+      if (!state.initialized) { appendLog('system', '⚠ Init SDK first'); return; }
+      if (!state.wallets.find(w => w.vm === 'svm')) { appendLog('system', '⚠ Connect a Solana wallet first'); return; }
+
+      const sig = Array.from({length: 88}, () => 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz123456789'[Math.floor(Math.random() * 58)]).join('');
+
+      appendLog('tx', `Initiating Marinade liquid staking...`);
+      appendLog('tx', `  Stake: 25 SOL → 25 mSOL via Marinade Finance`);
+
+      try { aether.wallet.transaction(sig, {
+        vm: 'svm', chainId: 'mainnet-beta',
+        from: DEMO.svm.phantom.address,
+        to: 'MarBmsSgKXdrN1egZf5sqe1TMai9K1rChYNDJgjq7aD',
+        type: 'stake', protocol: 'Marinade', defiCategory: 'staking',
+      }); } catch {}
+
+      try { aether.track('defi_interaction', {
+        protocol: 'Marinade', category: 'staking', action: 'stake',
+        tokenIn: 'SOL', tokenOut: 'mSOL', amount: '25',
+        apy: 7.12, vm: 'svm', chainId: 'mainnet-beta',
+      }); } catch {}
+
+      await sleep(400);
+
+      appendLog('tx', `✓ Stake confirmed — sig: ${sig.slice(0, 12)}...`);
+      appendLog('defi', `DeFi: Marinade stake — 25 SOL → 25 mSOL (7.12% APY)`);
+      appendLog('defi', `  Protocol: Marinade Finance • Liquid staking`);
+
+      state.defiPositions.push({
+        protocol: 'Marinade Finance', category: 'staking', positionType: 'Liquid Stake',
+        assets: [{ symbol: 'mSOL', amount: '25', side: 'supply' }],
+        valueUSD: 3725.00, apy: 7.12,
+        vm: 'svm', chainId: 'mainnet-beta',
+      });
+
+      refreshAll();
+    };
+
+    // =========================================================================
+    // CROSS-CHAIN BRIDGE SIMULATION
+    // =========================================================================
+    window.simulateBridgeTransfer = async () => {
+      if (!state.initialized) { appendLog('system', '⚠ Init SDK first'); return; }
+      if (!state.wallets.find(w => w.vm === 'evm') || !state.wallets.find(w => w.vm === 'svm')) {
+        appendLog('system', '⚠ Connect both EVM and SVM wallets first');
+        return;
+      }
+
+      const txHash = '0x' + Array.from({length: 64}, () => Math.floor(Math.random() * 16).toString(16)).join('');
+
+      appendLog('tx', `Initiating Wormhole bridge transfer...`);
+      appendLog('tx', `  Bridge: 2 ETH from Ethereum → Solana`);
+      appendLog('tx', `  Protocol: Wormhole Portal Bridge`);
+
+      try { aether.wallet.transaction(txHash, {
+        chainId: 1, from: DEMO.evm.metamask.address,
+        to: '0x3ee18B2214AFF97000D974cf647E7C347E8fa585',
+        value: '2000000000000000000', type: 'bridge', vm: 'evm',
+        protocol: 'Wormhole', defiCategory: 'bridge',
+      }); } catch {}
+
+      try { aether.track('bridge_transfer', {
+        bridge: 'Wormhole', token: 'ETH', amount: '2.0',
+        sourceChain: { vm: 'evm', chainId: 1, name: 'Ethereum' },
+        destChain: { vm: 'svm', chainId: 'mainnet-beta', name: 'Solana' },
+        status: 'initiated', fee: '0.003',
+      }); } catch {}
+
+      await sleep(400);
+      appendLog('tx', `⏳ Bridge initiated — waiting for Wormhole guardians...`);
+
+      await sleep(1000);
+      appendLog('tx', `✓ Bridge confirmed on source chain — tx: ${truncAddr(txHash)}`);
+
+      await sleep(800);
+      appendLog('tx', `✓ Bridge completed on destination — 2 wETH arrived on Solana`);
+      appendLog('defi', `Bridge: Wormhole — 2 ETH (Ethereum) → 2 wETH (Solana)`);
+      appendLog('defi', `  Fee: 0.003 ETH • Time: ~2 min • Status: completed`);
+
+      state.defiPositions.push({
+        protocol: 'Wormhole', category: 'bridge', positionType: 'Cross-Chain Bridge',
+        assets: [{ symbol: 'ETH', amount: '2.0' }],
+        valueUSD: 6414.00, vm: 'evm', chainId: 1,
+      });
+
+      refreshAll();
+    };
+
+    // =========================================================================
+    // PORTFOLIO VIEW
+    // =========================================================================
+    window.viewPortfolio = () => {
+      if (!state.initialized) { appendLog('system', '⚠ Init SDK first'); return; }
+
+      const portfolio = safeCall(() => aether.wallet.getPortfolio(), null);
+      const wallets = safeCall(() => aether.wallet.getWallets(), []);
+
+      appendLog('portfolio', `Portfolio snapshot — ${state.wallets.length} wallets, $${formatUSD(state.portfolioValue)} total`);
+
+      // Log per-VM breakdown
+      const vms = [...new Set(state.wallets.map(w => w.vm))];
+      for (const vm of vms) {
+        const vmTokens = state.tokens.filter(t => t.vm === vm);
+        const vmValue = vmTokens.reduce((s, t) => s + (t.usdValue || 0), 0);
+        const vmWallets = state.wallets.filter(w => w.vm === vm);
+        appendLog('portfolio', `  ${vm.toUpperCase()}: ${vmWallets.length} wallet(s), ${vmTokens.length} tokens, $${formatUSD(vmValue)}`);
+      }
+
+      if (state.defiPositions.length > 0) {
+        const defiValue = state.defiPositions.reduce((s, p) => s + (p.valueUSD || 0), 0);
+        appendLog('portfolio', `  DeFi: ${state.defiPositions.length} positions, $${formatUSD(defiValue)}`);
+      }
+
+      switchTab('portfolio');
+      refreshAll();
+    };
+
+    // =========================================================================
+    // DISCONNECT
+    // =========================================================================
+    window.disconnectAll = () => {
+      if (!state.initialized) { appendLog('system', '⚠ Init SDK first'); return; }
+
+      const count = state.wallets.length;
+      try { aether.wallet.disconnect(); } catch {}
+
+      state.wallets = [];
+      state.tokens = [];
+      state.defiPositions = [];
+      state.portfolioValue = 0;
+
+      appendLog('wallet', `Disconnected ${count} wallet(s) — all balances cleared`);
+      refreshAll();
+    };
+
+    // =========================================================================
+    // RESET
+    // =========================================================================
     window.resetSDK = () => {
-      aether.reset();
-      appendLog('SDK reset');
-      updateUI();
+      if (state.initialized) {
+        aether.destroy();
+      }
+
+      state.initialized = false;
+      state.wallets = [];
+      state.tokens = [];
+      state.defiPositions = [];
+      state.portfolioValue = 0;
+      state.logs = [];
+
+      appendLog('system', 'SDK destroyed and reset');
+      refreshAll();
     };
   </script>
 </body>

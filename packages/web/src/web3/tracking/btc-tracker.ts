@@ -92,8 +92,8 @@ export class BTCTracker {
       const response = await fetch(`${baseUrl}/address/${address}`);
       const data = await response.json();
       return {
-        confirmed: data.chain_stats?.funded_txo_sum - data.chain_stats?.spent_txo_sum ?? 0,
-        unconfirmed: data.mempool_stats?.funded_txo_sum - data.mempool_stats?.spent_txo_sum ?? 0,
+        confirmed: (data.chain_stats?.funded_txo_sum ?? 0) - (data.chain_stats?.spent_txo_sum ?? 0),
+        unconfirmed: (data.mempool_stats?.funded_txo_sum ?? 0) - (data.mempool_stats?.spent_txo_sum ?? 0),
       };
     } catch { return { confirmed: 0, unconfirmed: 0 }; }
   }
