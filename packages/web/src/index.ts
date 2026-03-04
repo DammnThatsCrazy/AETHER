@@ -22,6 +22,11 @@ import { ExperimentsModule } from './modules/experiments';
 import { ConsentModule } from './consent';
 import { Web3Module } from './web3';
 import { EdgeMLModule } from './ml/edge-ml';
+import { UpdateManager } from './core/update-manager';
+import { setRemoteData as setChainRemoteData } from './web3/chains/chain-registry';
+import { setRemoteData as setProtocolRemoteData } from './web3/defi/protocol-registry';
+import { setRemoteData as setLabelRemoteData } from './web3/wallet/wallet-labels';
+import { setRemoteData as setClassifierRemoteData } from './web3/wallet/wallet-classifier';
 import { generateId, now, getPageContext, getDeviceContext, getCampaignContext } from './utils';
 
 const SDK_VERSION = '5.0.0';
@@ -38,6 +43,7 @@ class AetherSDK implements AetherSDKInterface {
   private consentModule: ConsentModule | null = null;
   private web3Module: Web3Module | null = null;
   private edgeML: EdgeMLModule | null = null;
+  private updateManager: UpdateManager | null = null;
   private plugins: AetherPlugin[] = [];
   private initialized = false;
   private debug = false;
@@ -208,8 +214,36 @@ class AetherSDK implements AetherSDKInterface {
       this.log('info', 'DNT detected — limiting data collection');
     }
 
+    // Auto-update — OTA data module sync (non-blocking, fire-and-forget)
+    const autoUpdate = config.autoUpdate ?? {};
+    if (autoUpdate.enabled !== false) {
+      const cdnEndpoint = config.endpoint?.replace('/api.', '/cdn.') ?? 'https://cdn.aether.network';
+      this.updateManager = new UpdateManager(
+        cdnEndpoint,
+        SDK_VERSION,
+        {
+          enabled: true,
+          checkIntervalMs: autoUpdate.checkIntervalMs,
+          onUpdateAvailable: autoUpdate.onUpdateAvailable,
+        },
+        this.debug,
+      );
+
+      // Register data module injectors
+      this.updateManager.registerInjector('chainRegistry', (data) => setChainRemoteData(data as any));
+      this.updateManager.registerInjector('protocolRegistry', (data) => setProtocolRemoteData(data as any));
+      this.updateManager.registerInjector('walletLabels', (data) => setLabelRemoteData(data as any));
+      this.updateManager.registerInjector('walletClassification', (data) => setClassifierRemoteData(data as any));
+
+      // Load cached data modules first (sync, instant)
+      this.updateManager.loadCachedModules();
+
+      // Start background update check (async, non-blocking)
+      this.updateManager.start();
+    }
+
     this.initialized = true;
-    this.log('info', 'Aether SDK v5.0.0 initialized — Multi-VM Web3 enabled');
+    this.log('info', 'Aether SDK v5.0.0 initialized — Multi-VM Web3 + auto-update enabled');
   }
 
   track(event: string, properties?: Record<string, unknown>): void {
@@ -293,6 +327,7 @@ class AetherSDK implements AetherSDKInterface {
     this.consentModule?.destroy();
     this.web3Module?.destroy();
     this.edgeML?.destroy();
+    this.updateManager?.destroy();
     this.sessionManager?.destroy();
     this.eventQueue?.destroy();
     this.plugins.forEach((p) => { try { p.destroy(); } catch { /* */ } });
@@ -303,6 +338,7 @@ class AetherSDK implements AetherSDKInterface {
     this.consentModule = null;
     this.web3Module = null;
     this.edgeML = null;
+    this.updateManager = null;
     this.sessionManager = null;
     this.identityManager = null;
     this.eventQueue = null;

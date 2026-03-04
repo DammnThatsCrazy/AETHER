@@ -1,0 +1,417 @@
+{
+  "_meta": {
+    "version": "2026.03.04",
+    "generatedAt": "2026-03-04T00:00:00.000Z",
+    "protocolCount": 55,
+    "description": "Aether SDK DeFi protocol registry data module",
+    "categories": ["dex", "router", "lending", "perpetuals", "staking", "restaking", "bridge", "yield", "nft_marketplace", "governance", "insurance", "payments"]
+  },
+  "protocols": {
+    "uniswap_v3": {
+      "name": "Uniswap V3",
+      "category": "dex",
+      "chains": {
+        "1": ["0xE592427A0AEce92De3Edee1F18E0157C05861564", "0x68b3465833fb72A70ecDF485E0e4C7bD8665Fc45"],
+        "137": ["0xE592427A0AEce92De3Edee1F18E0157C05861564"],
+        "42161": ["0xE592427A0AEce92De3Edee1F18E0157C05861564"],
+        "10": ["0xE592427A0AEce92De3Edee1F18E0157C05861564"],
+        "8453": ["0x2626664c2603336E57B271c5C0b26F421741e481"]
+      }
+    },
+    "uniswap_v2": {
+      "name": "Uniswap V2",
+      "category": "dex",
+      "chains": {
+        "1": ["0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D"]
+      }
+    },
+    "sushiswap": {
+      "name": "SushiSwap",
+      "category": "dex",
+      "chains": {
+        "1": ["0xd9e1cE17f2641f24aE83637ab66a2cca9C378B9F"],
+        "137": ["0x1b02dA8Cb0d097eB8D57A175b88c7D8b47997506"],
+        "42161": ["0x1b02dA8Cb0d097eB8D57A175b88c7D8b47997506"]
+      }
+    },
+    "pancakeswap": {
+      "name": "PancakeSwap",
+      "category": "dex",
+      "chains": {
+        "56": ["0x10ED43C718714eb63d5aA57B78B54704E256024E"],
+        "1": ["0xEfF92A263d31888d860bD50809A8D171709b7b1c"]
+      }
+    },
+    "curve": {
+      "name": "Curve Finance",
+      "category": "dex",
+      "chains": {
+        "1": ["0xbEbc44782C7dB0a1A60Cb6fe97d0b483032FF1C7", "0xD51a44d3FaE010294C616388b506AcdA1bfAAE46"]
+      }
+    },
+    "balancer": {
+      "name": "Balancer",
+      "category": "dex",
+      "chains": {
+        "1": ["0xBA12222222228d8Ba445958a75a0704d566BF2C8"],
+        "42161": ["0xBA12222222228d8Ba445958a75a0704d566BF2C8"]
+      }
+    },
+    "velodrome": {
+      "name": "Velodrome",
+      "category": "dex",
+      "chains": {
+        "10": ["0xa062aE8A9c5e11aaA026fc2670B0D65cCc8B2858"]
+      }
+    },
+    "aerodrome": {
+      "name": "Aerodrome",
+      "category": "dex",
+      "chains": {
+        "8453": ["0xcF77a3Ba9A5CA399B7c97c74d54e5b1Beb874E43"]
+      }
+    },
+    "trader_joe": {
+      "name": "Trader Joe",
+      "category": "dex",
+      "chains": {
+        "43114": ["0x60aE616a2155Ee3d9A68541Ba4544862310933d4"],
+        "42161": ["0xb4315e873dBcf96Ffd0acd8EA43f689D8c20fB30"]
+      }
+    },
+    "camelot": {
+      "name": "Camelot",
+      "category": "dex",
+      "chains": {
+        "42161": ["0xc873fEcbd354f5A56E00E710B90EF4201db2448d"]
+      }
+    },
+    "1inch": {
+      "name": "1inch",
+      "category": "router",
+      "chains": {
+        "1": ["0x1111111254EEB25477B68fb85Ed929f73A960582"],
+        "56": ["0x1111111254EEB25477B68fb85Ed929f73A960582"],
+        "137": ["0x1111111254EEB25477B68fb85Ed929f73A960582"],
+        "42161": ["0x1111111254EEB25477B68fb85Ed929f73A960582"],
+        "10": ["0x1111111254EEB25477B68fb85Ed929f73A960582"]
+      }
+    },
+    "paraswap": {
+      "name": "Paraswap",
+      "category": "router",
+      "chains": {
+        "1": ["0xDEF171Fe48CF0115B1d80b88dc8eAB59176FEe57"]
+      }
+    },
+    "0x_protocol": {
+      "name": "0x Protocol",
+      "category": "router",
+      "chains": {
+        "1": ["0xDef1C0ded9bec7F1a1670819833240f027b25EfF"]
+      }
+    },
+    "cowswap": {
+      "name": "CowSwap",
+      "category": "router",
+      "chains": {
+        "1": ["0x9008D19f58AAbD9eD0D60971565AA8510560ab41"]
+      }
+    },
+    "lifi": {
+      "name": "Li.Fi",
+      "category": "router",
+      "chains": {
+        "1": ["0x1231DEB6f5749EF6cE6943a275A1D3E7486F4EaE"]
+      }
+    },
+    "socket": {
+      "name": "Socket",
+      "category": "router",
+      "chains": {
+        "1": ["0x3a23F943181N408C9cC5c7c1f1E4C1c4F098FA1b"]
+      }
+    },
+    "kyberswap": {
+      "name": "KyberSwap",
+      "category": "router",
+      "chains": {
+        "1": ["0x6131B5fae19EA4f9D964eAc0408E4408b66337b5"]
+      }
+    },
+    "odos": {
+      "name": "Odos",
+      "category": "router",
+      "chains": {
+        "1": ["0xCf5540fFFCdC3d510B18bFcA6d2b9987b0772559"]
+      }
+    },
+    "aave_v3": {
+      "name": "AAVE V3",
+      "category": "lending",
+      "chains": {
+        "1": ["0x87870Bca3F3fD6335C3F4ce8392D69350B4fA4E2"],
+        "137": ["0x794a61358D6845594F94dc1DB02A252b5b4814aD"],
+        "42161": ["0x794a61358D6845594F94dc1DB02A252b5b4814aD"],
+        "10": ["0x794a61358D6845594F94dc1DB02A252b5b4814aD"],
+        "8453": ["0xA238Dd80C259a72e81d7e4664a9801593F98d1c5"],
+        "43114": ["0x794a61358D6845594F94dc1DB02A252b5b4814aD"]
+      }
+    },
+    "compound_v3": {
+      "name": "Compound V3",
+      "category": "lending",
+      "chains": {
+        "1": ["0xc3d688B66703497DAA19211EEdff47f25384cdc3", "0xA17581A9E3356d9A858b789D68B4d866e593aE94"]
+      }
+    },
+    "maker": {
+      "name": "MakerDAO / Spark",
+      "category": "lending",
+      "chains": {
+        "1": ["0xC13e21B648A5Ee794902342038FF3aDAB66BE987"]
+      }
+    },
+    "morpho": {
+      "name": "Morpho",
+      "category": "lending",
+      "chains": {
+        "1": ["0xBBBBBbbBBb9cC5e90e3b3Af64bdAF62C37EEFFCb"]
+      }
+    },
+    "radiant": {
+      "name": "Radiant Capital",
+      "category": "lending",
+      "chains": {
+        "42161": ["0xF4B1486DD74D07706052A33d31d7c0AAFD0659E1"]
+      }
+    },
+    "venus": {
+      "name": "Venus",
+      "category": "lending",
+      "chains": {
+        "56": ["0xfD36E2c2a6789Db23113685031d7F16329158384"]
+      }
+    },
+    "gmx_v2": {
+      "name": "GMX V2",
+      "category": "perpetuals",
+      "chains": {
+        "42161": ["0x7C68C7866A64FA2160F78EEaE12217FFbf871fa8"],
+        "43114": ["0x7C68C7866A64FA2160F78EEaE12217FFbf871fa8"]
+      }
+    },
+    "dydx_v4": {
+      "name": "dYdX V4",
+      "category": "perpetuals",
+      "chains": {}
+    },
+    "hyperliquid": {
+      "name": "Hyperliquid",
+      "category": "perpetuals",
+      "chains": {
+        "999": ["0x0000000000000000000000000000000000000000"]
+      }
+    },
+    "vertex": {
+      "name": "Vertex",
+      "category": "perpetuals",
+      "chains": {
+        "42161": ["0xbB6A8d6E28aE28C9E3F1bC02C35c0ac5C92E7df"]
+      }
+    },
+    "kwenta": {
+      "name": "Kwenta",
+      "category": "perpetuals",
+      "chains": {
+        "10": ["0x0488401c3F535193Fa8Df029d9fFe615A06E74E6"]
+      }
+    },
+    "gains_network": {
+      "name": "Gains Network",
+      "category": "perpetuals",
+      "chains": {
+        "137": ["0x91993f2101cc758D0dEB7279d41e880F7dEFe827"],
+        "42161": ["0x91993f2101cc758D0dEB7279d41e880F7dEFe827"]
+      }
+    },
+    "mux": {
+      "name": "MUX Protocol",
+      "category": "perpetuals",
+      "chains": {
+        "42161": ["0x3e0199792Ce69DC29A0a36146bFa68bd7C8D6633"]
+      }
+    },
+    "lido": {
+      "name": "Lido",
+      "category": "staking",
+      "chains": {
+        "1": ["0xae7ab96520DE3A18E5e111B5EaAb095312D7fE84", "0x7f39C581F595B53c5cb19bD0b3f8dA6c935E2Ca0"]
+      }
+    },
+    "rocket_pool": {
+      "name": "Rocket Pool",
+      "category": "staking",
+      "chains": {
+        "1": ["0xae78736Cd615f374D3085123A210448E74Fc6393"]
+      }
+    },
+    "etherfi": {
+      "name": "EtherFi",
+      "category": "staking",
+      "chains": {
+        "1": ["0x35fA164735182de50811E8e2E824cFb9B6118ac2", "0xCd5fE23C85820F7B72D0926FC9b05b43E359b7ee"]
+      }
+    },
+    "swell": {
+      "name": "Swell",
+      "category": "staking",
+      "chains": {
+        "1": ["0xf951E335afb289353dc249e82926178EaC7DEd78"]
+      }
+    },
+    "frax_ether": {
+      "name": "Frax Ether",
+      "category": "staking",
+      "chains": {
+        "1": ["0x5E8422345238F34275888049021821E8E08CAa1f", "0xac3E018457B222d93114458476f3E3416Abbe38F"]
+      }
+    },
+    "eigenlayer": {
+      "name": "EigenLayer",
+      "category": "restaking",
+      "chains": {
+        "1": ["0x858646372CC42E1A627fcE94aa7A7033e7CF075A", "0x39053D51B77DC0d36036Fc1fCc8Cb819df8Ef37A"]
+      }
+    },
+    "renzo": {
+      "name": "Renzo",
+      "category": "restaking",
+      "chains": {
+        "1": ["0x74a09653A083691711cF8215a6ab074BB4e99ef5"]
+      }
+    },
+    "puffer": {
+      "name": "Puffer Finance",
+      "category": "restaking",
+      "chains": {
+        "1": ["0xD9A442856C234a39a81a089C06451EBAa4306a72"]
+      }
+    },
+    "wormhole": {
+      "name": "Wormhole",
+      "category": "bridge",
+      "chains": {
+        "1": ["0x3ee18B2214AFF97000D974cf647E7C347E8fa585"]
+      }
+    },
+    "stargate": {
+      "name": "Stargate",
+      "category": "bridge",
+      "chains": {
+        "1": ["0x8731d54E9D02c286767d56ac03e8037C07e01e98"],
+        "56": ["0x4a364f8c717cAAD9A442737Eb7b8A55cc6cf18D8"],
+        "42161": ["0x53Bf833A5d6c4ddA888F69c22C88C9f356a41614"],
+        "10": ["0xB0D502E938ed5f4df2E681fE6E419ff29631d62b"],
+        "137": ["0x45A01E4e04F14f7A4a6702c74187c5F6222033cd"]
+      }
+    },
+    "across": {
+      "name": "Across",
+      "category": "bridge",
+      "chains": {
+        "1": ["0x5c7BCd6E7De5423a257D81B442095A1a6ced35C5"]
+      }
+    },
+    "hop": {
+      "name": "Hop Protocol",
+      "category": "bridge",
+      "chains": {
+        "1": ["0xb8901acB165ed027E32754E0FFe830802468CcE7"]
+      }
+    },
+    "synapse": {
+      "name": "Synapse",
+      "category": "bridge",
+      "chains": {
+        "1": ["0x2796317b0fF8538F253012862c06787Adfb8cEb6"]
+      }
+    },
+    "yearn_v3": {
+      "name": "Yearn V3",
+      "category": "yield",
+      "chains": {
+        "1": ["0x444045c5C13C246e117eD36437303cac8E250aB0"]
+      }
+    },
+    "beefy": {
+      "name": "Beefy Finance",
+      "category": "yield",
+      "chains": {
+        "56": ["0x453D4Ba9a2D594314DF88564248497F7D74d6b2C"],
+        "137": ["0x453D4Ba9a2D594314DF88564248497F7D74d6b2C"],
+        "42161": ["0x453D4Ba9a2D594314DF88564248497F7D74d6b2C"]
+      }
+    },
+    "convex": {
+      "name": "Convex Finance",
+      "category": "yield",
+      "chains": {
+        "1": ["0xF403C135812408BFbE8713b5A23a04b3D48AAE31"]
+      }
+    },
+    "opensea": {
+      "name": "OpenSea",
+      "category": "nft_marketplace",
+      "chains": {
+        "1": ["0x00000000000000ADc04C56Bf30aC9d3c0aAF14dC"]
+      }
+    },
+    "blur": {
+      "name": "Blur",
+      "category": "nft_marketplace",
+      "chains": {
+        "1": ["0xb2ecfE4E4D61f8790bbb9DE2D1259B9e2410CEA5", "0x39da41747a83aeE658334415666f3EF92DD0D541"]
+      }
+    },
+    "looks_rare": {
+      "name": "LooksRare",
+      "category": "nft_marketplace",
+      "chains": {
+        "1": ["0x0000000000E655fAe4d56241588680F86E3b2377"]
+      }
+    },
+    "snapshot": {
+      "name": "Snapshot",
+      "category": "governance",
+      "chains": {}
+    },
+    "tally": {
+      "name": "Tally",
+      "category": "governance",
+      "chains": {}
+    },
+    "nexus_mutual": {
+      "name": "Nexus Mutual",
+      "category": "insurance",
+      "chains": {
+        "1": ["0xcafeaBED7e0653aFe9674A3ad862b55Bb1c5739f"]
+      }
+    },
+    "superfluid": {
+      "name": "Superfluid",
+      "category": "payments",
+      "chains": {
+        "137": ["0x3E14dC1b13c488a8d5D310918780c983bD5982E7"],
+        "10": ["0x4C073B3baB6d8826b8C5b229f3cfdC1eC6E47E74"]
+      }
+    },
+    "sablier": {
+      "name": "Sablier",
+      "category": "payments",
+      "chains": {
+        "1": ["0xAFb979d9afAd1981C4Df0a8E44D99bE03aD3dB33"]
+      }
+    }
+  }
+}

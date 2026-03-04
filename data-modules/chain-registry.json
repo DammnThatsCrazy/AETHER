@@ -1,0 +1,325 @@
+{
+  "_meta": {
+    "version": "2026.03.04",
+    "generatedAt": "2026-03-04T00:00:00.000Z",
+    "entryCount": 30,
+    "description": "Aether SDK unified cross-VM chain registry data module",
+    "source": "aggregated from ethereum-lists/chains, solana-labs, bitcoin, sui, near, tron, cosmos registries"
+  },
+  "chains": [
+    {
+      "vm": "evm",
+      "chainId": 1,
+      "name": "Ethereum",
+      "shortName": "ETH",
+      "nativeCurrency": { "name": "Ether", "symbol": "ETH", "decimals": 18 },
+      "rpcUrl": "https://eth.llamarpc.com",
+      "explorerUrl": "https://etherscan.io",
+      "isTestnet": false,
+      "isL2": false
+    },
+    {
+      "vm": "evm",
+      "chainId": 137,
+      "name": "Polygon",
+      "shortName": "MATIC",
+      "nativeCurrency": { "name": "POL", "symbol": "POL", "decimals": 18 },
+      "rpcUrl": "https://polygon-rpc.com",
+      "explorerUrl": "https://polygonscan.com",
+      "isTestnet": false,
+      "isL2": true
+    },
+    {
+      "vm": "evm",
+      "chainId": 42161,
+      "name": "Arbitrum One",
+      "shortName": "ARB",
+      "nativeCurrency": { "name": "Ether", "symbol": "ETH", "decimals": 18 },
+      "rpcUrl": "https://arb1.arbitrum.io/rpc",
+      "explorerUrl": "https://arbiscan.io",
+      "isTestnet": false,
+      "isL2": true
+    },
+    {
+      "vm": "evm",
+      "chainId": 10,
+      "name": "Optimism",
+      "shortName": "OP",
+      "nativeCurrency": { "name": "Ether", "symbol": "ETH", "decimals": 18 },
+      "rpcUrl": "https://mainnet.optimism.io",
+      "explorerUrl": "https://optimistic.etherscan.io",
+      "isTestnet": false,
+      "isL2": true
+    },
+    {
+      "vm": "evm",
+      "chainId": 8453,
+      "name": "Base",
+      "shortName": "BASE",
+      "nativeCurrency": { "name": "Ether", "symbol": "ETH", "decimals": 18 },
+      "rpcUrl": "https://mainnet.base.org",
+      "explorerUrl": "https://basescan.org",
+      "isTestnet": false,
+      "isL2": true
+    },
+    {
+      "vm": "evm",
+      "chainId": 56,
+      "name": "BNB Smart Chain",
+      "shortName": "BSC",
+      "nativeCurrency": { "name": "BNB", "symbol": "BNB", "decimals": 18 },
+      "rpcUrl": "https://bsc-dataseed.binance.org",
+      "explorerUrl": "https://bscscan.com",
+      "isTestnet": false,
+      "isL2": false
+    },
+    {
+      "vm": "evm",
+      "chainId": 43114,
+      "name": "Avalanche C-Chain",
+      "shortName": "AVAX",
+      "nativeCurrency": { "name": "Avalanche", "symbol": "AVAX", "decimals": 18 },
+      "rpcUrl": "https://api.avax.network/ext/bc/C/rpc",
+      "explorerUrl": "https://snowtrace.io",
+      "isTestnet": false,
+      "isL2": false
+    },
+    {
+      "vm": "evm",
+      "chainId": 1329,
+      "name": "SEI",
+      "shortName": "SEI",
+      "nativeCurrency": { "name": "SEI", "symbol": "SEI", "decimals": 18 },
+      "rpcUrl": "https://evm-rpc.sei-apis.com",
+      "explorerUrl": "https://seitrace.com",
+      "isTestnet": false,
+      "isL2": false
+    },
+    {
+      "vm": "evm",
+      "chainId": 999,
+      "name": "Hyperliquid",
+      "shortName": "HL",
+      "nativeCurrency": { "name": "Hyperliquid", "symbol": "HYPE", "decimals": 18 },
+      "rpcUrl": "https://rpc.hyperliquid.xyz",
+      "explorerUrl": "https://explorer.hyperliquid.xyz",
+      "isTestnet": false,
+      "isL2": true
+    },
+    {
+      "vm": "evm",
+      "chainId": 59144,
+      "name": "Linea",
+      "shortName": "LINEA",
+      "nativeCurrency": { "name": "Ether", "symbol": "ETH", "decimals": 18 },
+      "rpcUrl": "https://rpc.linea.build",
+      "explorerUrl": "https://lineascan.build",
+      "isTestnet": false,
+      "isL2": true
+    },
+    {
+      "vm": "evm",
+      "chainId": 324,
+      "name": "zkSync Era",
+      "shortName": "ZKSYNC",
+      "nativeCurrency": { "name": "Ether", "symbol": "ETH", "decimals": 18 },
+      "rpcUrl": "https://mainnet.era.zksync.io",
+      "explorerUrl": "https://explorer.zksync.io",
+      "isTestnet": false,
+      "isL2": true
+    },
+    {
+      "vm": "evm",
+      "chainId": 250,
+      "name": "Fantom",
+      "shortName": "FTM",
+      "nativeCurrency": { "name": "Fantom", "symbol": "FTM", "decimals": 18 },
+      "rpcUrl": "https://rpc.ftm.tools",
+      "explorerUrl": "https://ftmscan.com",
+      "isTestnet": false,
+      "isL2": false
+    },
+    {
+      "vm": "evm",
+      "chainId": 100,
+      "name": "Gnosis",
+      "shortName": "GNO",
+      "nativeCurrency": { "name": "xDai", "symbol": "xDAI", "decimals": 18 },
+      "rpcUrl": "https://rpc.gnosischain.com",
+      "explorerUrl": "https://gnosisscan.io",
+      "isTestnet": false,
+      "isL2": false
+    },
+    {
+      "vm": "evm",
+      "chainId": 11155111,
+      "name": "Sepolia",
+      "shortName": "SEP",
+      "nativeCurrency": { "name": "Sepolia Ether", "symbol": "ETH", "decimals": 18 },
+      "rpcUrl": "https://rpc.sepolia.org",
+      "explorerUrl": "https://sepolia.etherscan.io",
+      "isTestnet": true,
+      "isL2": false
+    },
+    {
+      "vm": "svm",
+      "chainId": "mainnet-beta",
+      "name": "Solana",
+      "shortName": "SOL",
+      "nativeCurrency": { "name": "Solana", "symbol": "SOL", "decimals": 9 },
+      "rpcUrl": "https://api.mainnet-beta.solana.com",
+      "explorerUrl": "https://solscan.io",
+      "isTestnet": false
+    },
+    {
+      "vm": "svm",
+      "chainId": "devnet",
+      "name": "Solana Devnet",
+      "shortName": "SOL-DEV",
+      "nativeCurrency": { "name": "Solana", "symbol": "SOL", "decimals": 9 },
+      "rpcUrl": "https://api.devnet.solana.com",
+      "explorerUrl": "https://solscan.io?cluster=devnet",
+      "isTestnet": true
+    },
+    {
+      "vm": "svm",
+      "chainId": "testnet",
+      "name": "Solana Testnet",
+      "shortName": "SOL-TEST",
+      "nativeCurrency": { "name": "Solana", "symbol": "SOL", "decimals": 9 },
+      "rpcUrl": "https://api.testnet.solana.com",
+      "explorerUrl": "https://solscan.io?cluster=testnet",
+      "isTestnet": true
+    },
+    {
+      "vm": "bitcoin",
+      "chainId": "mainnet",
+      "name": "Bitcoin",
+      "shortName": "BTC",
+      "nativeCurrency": { "name": "Bitcoin", "symbol": "BTC", "decimals": 8 },
+      "rpcUrl": "https://blockstream.info/api",
+      "explorerUrl": "https://mempool.space",
+      "isTestnet": false
+    },
+    {
+      "vm": "bitcoin",
+      "chainId": "testnet",
+      "name": "Bitcoin Testnet",
+      "shortName": "tBTC",
+      "nativeCurrency": { "name": "Bitcoin", "symbol": "tBTC", "decimals": 8 },
+      "rpcUrl": "https://blockstream.info/testnet/api",
+      "explorerUrl": "https://mempool.space/testnet",
+      "isTestnet": true
+    },
+    {
+      "vm": "bitcoin",
+      "chainId": "signet",
+      "name": "Bitcoin Signet",
+      "shortName": "sBTC",
+      "nativeCurrency": { "name": "Bitcoin", "symbol": "sBTC", "decimals": 8 },
+      "rpcUrl": "https://blockstream.info/signet/api",
+      "explorerUrl": "https://mempool.space/signet",
+      "isTestnet": true
+    },
+    {
+      "vm": "movevm",
+      "chainId": "sui:mainnet",
+      "name": "SUI",
+      "shortName": "SUI",
+      "nativeCurrency": { "name": "SUI", "symbol": "SUI", "decimals": 9 },
+      "rpcUrl": "https://fullnode.mainnet.sui.io",
+      "explorerUrl": "https://suiscan.xyz/mainnet",
+      "isTestnet": false
+    },
+    {
+      "vm": "movevm",
+      "chainId": "sui:testnet",
+      "name": "SUI Testnet",
+      "shortName": "SUI-TEST",
+      "nativeCurrency": { "name": "SUI", "symbol": "SUI", "decimals": 9 },
+      "rpcUrl": "https://fullnode.testnet.sui.io",
+      "explorerUrl": "https://suiscan.xyz/testnet",
+      "isTestnet": true
+    },
+    {
+      "vm": "movevm",
+      "chainId": "sui:devnet",
+      "name": "SUI Devnet",
+      "shortName": "SUI-DEV",
+      "nativeCurrency": { "name": "SUI", "symbol": "SUI", "decimals": 9 },
+      "rpcUrl": "https://fullnode.devnet.sui.io",
+      "explorerUrl": "https://suiscan.xyz/devnet",
+      "isTestnet": true
+    },
+    {
+      "vm": "near",
+      "chainId": "near:mainnet",
+      "name": "NEAR Protocol",
+      "shortName": "NEAR",
+      "nativeCurrency": { "name": "NEAR", "symbol": "NEAR", "decimals": 24 },
+      "rpcUrl": "https://rpc.mainnet.near.org",
+      "explorerUrl": "https://nearblocks.io",
+      "isTestnet": false
+    },
+    {
+      "vm": "near",
+      "chainId": "near:testnet",
+      "name": "NEAR Testnet",
+      "shortName": "NEAR-TEST",
+      "nativeCurrency": { "name": "NEAR", "symbol": "NEAR", "decimals": 24 },
+      "rpcUrl": "https://rpc.testnet.near.org",
+      "explorerUrl": "https://testnet.nearblocks.io",
+      "isTestnet": true
+    },
+    {
+      "vm": "tvm",
+      "chainId": "tron:mainnet",
+      "name": "TRON",
+      "shortName": "TRX",
+      "nativeCurrency": { "name": "TRON", "symbol": "TRX", "decimals": 6 },
+      "rpcUrl": "https://api.trongrid.io",
+      "explorerUrl": "https://tronscan.org",
+      "isTestnet": false
+    },
+    {
+      "vm": "tvm",
+      "chainId": "tron:shasta",
+      "name": "TRON Shasta",
+      "shortName": "TRX-TEST",
+      "nativeCurrency": { "name": "TRON", "symbol": "TRX", "decimals": 6 },
+      "rpcUrl": "https://api.shasta.trongrid.io",
+      "explorerUrl": "https://shasta.tronscan.org",
+      "isTestnet": true
+    },
+    {
+      "vm": "tvm",
+      "chainId": "tron:nile",
+      "name": "TRON Nile",
+      "shortName": "TRX-NILE",
+      "nativeCurrency": { "name": "TRON", "symbol": "TRX", "decimals": 6 },
+      "rpcUrl": "https://nile.trongrid.io",
+      "explorerUrl": "https://nile.tronscan.org",
+      "isTestnet": true
+    },
+    {
+      "vm": "cosmos",
+      "chainId": "sei-pacific-1",
+      "name": "SEI",
+      "shortName": "SEI",
+      "nativeCurrency": { "name": "SEI", "symbol": "SEI", "decimals": 6 },
+      "rpcUrl": "https://sei-rpc.polkachu.com",
+      "explorerUrl": "https://www.seiscan.app",
+      "isTestnet": false
+    },
+    {
+      "vm": "cosmos",
+      "chainId": "cosmoshub-4",
+      "name": "Cosmos Hub",
+      "shortName": "ATOM",
+      "nativeCurrency": { "name": "Cosmos", "symbol": "ATOM", "decimals": 6 },
+      "rpcUrl": "https://cosmos-rpc.polkachu.com",
+      "explorerUrl": "https://www.mintscan.io/cosmos",
+      "isTestnet": false
+    }
+  ]
+}

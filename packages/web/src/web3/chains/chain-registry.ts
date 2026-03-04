@@ -145,11 +145,36 @@ export const COSMOS_NETWORKS: Record<string, ChainInfo> = {
 };
 
 // ---------------------------------------------------------------------------
+// OTA Remote Data Support
+// ---------------------------------------------------------------------------
+
+/** Remote chain data injected via OTA updates (overlays bundled defaults) */
+let remoteChainData: ChainInfo[] | null = null;
+
+/**
+ * Inject remote chain data from OTA update.
+ * When set, getAllChains() returns the remote data instead of bundled defaults.
+ * Pass null to revert to bundled defaults.
+ */
+export function setRemoteData(remote: ChainInfo[] | null): void {
+  remoteChainData = remote;
+}
+
+/** Get the current data module version info for cache comparison */
+export function getDataVersion(): string | null {
+  return remoteChainData ? 'remote' : null;
+}
+
+// ---------------------------------------------------------------------------
 // Unified registry
 // ---------------------------------------------------------------------------
 
 /** Get all chains across all VMs */
 export function getAllChains(): ChainInfo[] {
+  // If remote data is available (from OTA update), use it
+  if (remoteChainData) return remoteChainData;
+
+  // Otherwise, use bundled defaults
   const evmChains: ChainInfo[] = Object.values(EVM_CHAINS).map((c) => ({
     vm: 'evm' as VMType,
     chainId: c.chainId,

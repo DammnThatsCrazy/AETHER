@@ -119,6 +119,29 @@ The demo environment uses a simplified deployment pipeline -- no canary, no prog
 
 The demo pipeline is triggered by pushes to the `demo` branch or via `workflow_dispatch` with `environment=demo`. Rollback is simplified: redeploy previous ECS task definitions (no ALB weight management).
 
+### Data Module Release Pipeline
+
+Independent workflow for updating OTA data modules (chain registry, DeFi protocols, wallet labels, wallet classification) without a full SDK release. Runs as `.github/workflows/data-module-release.yml`.
+
+| # | Step                   | Description                                                     |
+| - | ---------------------- | --------------------------------------------------------------- |
+| 1 | **Extract**            | Parse TypeScript sources, generate JSON data modules             |
+| 2 | **Publish**            | Upload versioned + latest JSON to S3 CDN, generate SDK manifests |
+| 3 | **Verify**             | Verify published URLs return HTTP 200, check hash integrity      |
+
+**Triggers:** `workflow_dispatch` (manual) or push to `packages/web/src/web3/chains/**`, `packages/web/src/web3/defi/protocol-registry.ts`, `packages/web/src/web3/wallet/**`.
+
+**CDN structure:**
+```
+s3://cdn.aether.network/sdk/
+  v5/loader.js                           # Stable auto-loader
+  manifests/{web,ios,android,react-native}/latest.json
+  data/chain-registry/{version}.json + latest.json
+  data/protocol-registry/{version}.json + latest.json
+  data/wallet-labels/{version}.json + latest.json
+  data/wallet-classification/{version}.json + latest.json
+```
+
 ---
 
 ## Quality Gates
@@ -173,7 +196,7 @@ demo ----o----o----o--------------> demo environment (sales/BD)
 
 ## SDK Release Automation
 
-The SDK release system (`stages/sdk/sdk_release.py`) manages the full lifecycle for all four platform SDKs.
+The SDK release system (`stages/sdk/sdk_release.py`) manages the full lifecycle for all four platform SDKs. The release pipeline now also includes OTA data module publishing (`stages/sdk/data_module_publisher.py`) and manifest generation (`stages/sdk/manifest_publisher.py`).
 
 | Platform     | Package Name                | Registry                          | Build Tool   |
 | ------------ | --------------------------- | --------------------------------- | ------------ |
@@ -189,6 +212,9 @@ The SDK release system (`stages/sdk/sdk_release.py`) manages the full lifecycle 
 - **Dry-run mode** -- validate the full release flow without publishing
 - **Parallel coordination** -- release multiple platforms concurrently
 - **Rollback-safe** -- version commits only occur after successful publish
+- **CDN auto-loader** -- builds and uploads the lightweight SDK loader to stable CDN URL
+- **OTA data modules** -- extracts, publishes, and verifies data modules for all platforms
+- **SDK manifests** -- generates per-platform manifest JSON for OTA update checks
 - **Notification integration** -- Slack alerts on release success or failure
 
 ---

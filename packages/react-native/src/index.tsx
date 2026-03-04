@@ -6,6 +6,7 @@
 import { NativeModules, NativeEventEmitter, Platform } from 'react-native';
 import { useState, useEffect, useCallback, createContext, useContext, ReactNode } from 'react';
 import React from 'react';
+import { OTAUpdateManager } from './ota/OTAUpdateManager';
 
 const { AetherNative } = NativeModules;
 const emitter = AetherNative ? new NativeEventEmitter(AetherNative) : null;
@@ -199,6 +200,12 @@ export function AetherProvider({
   useEffect(() => {
     Aether.init(config);
     setIsInitialized(true);
+
+    // Start OTA data module sync (non-blocking, fire-and-forget)
+    const endpoint = config.endpoint ?? 'https://api.aether.network';
+    OTAUpdateManager.syncDataModules(config.apiKey, endpoint, '5.0.0').catch(() => {
+      // OTA sync failures are silent — SDK works with bundled defaults
+    });
   }, [config.apiKey]);
 
   return (

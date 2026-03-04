@@ -71,7 +71,7 @@ data class IdentityData(
 
 object Aether : DefaultLifecycleObserver {
     private const val TAG = "AetherSDK"
-    private const val VERSION = "4.0.0"
+    private const val VERSION = "5.0.0"
     private const val PREFS_NAME = "com.aether.sdk"
 
     private var config: AetherConfig? = null
@@ -128,6 +128,14 @@ object Aether : DefaultLifecycleObserver {
 
         isInitialized = true
         log("Aether Android SDK initialized (v$VERSION)")
+
+        // Start OTA data module update manager (non-blocking, background)
+        AetherUpdateManager.start(
+            context = application.applicationContext,
+            apiKey = config.apiKey,
+            endpoint = config.endpoint,
+            currentVersion = VERSION
+        )
     }
 
     fun track(event: String, properties: Map<String, Any?> = emptyMap()) {

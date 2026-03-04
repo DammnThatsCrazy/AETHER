@@ -156,12 +156,17 @@ def release_web_sdk(
         ("Build ESM",        "cd packages/sdk-web && npx esbuild src/index.ts --bundle --format=esm --outfile=dist/aether-sdk.esm.js || true"),
         ("Build UMD",        "cd packages/sdk-web && npx esbuild src/index.ts --bundle --format=iife --global-name=Aether --outfile=dist/aether-sdk.umd.js || true"),
         ("Minify",           "cd packages/sdk-web && npx esbuild dist/aether-sdk.esm.js --minify --outfile=dist/aether-sdk.esm.min.js || true"),
+        ("Build Loader",     "cd packages/sdk-web && npx rollup -c rollup.loader.mjs || true"),
         ("Type declarations","cd packages/sdk-web && npx tsc --emitDeclarationOnly --outDir dist/types || true"),
         ("Test",             "cd packages/sdk-web && npx jest --ci || true"),
         ("Changelog",        f"npx conventional-changelog -p angular -i CHANGELOG.md -s --commit-path packages/sdk-web || true"),
         ("Publish npm",      f"cd packages/sdk-web && npm publish --access public {npm_tag} || true"),
         ("Upload CDN",       f"aws s3 sync packages/sdk-web/dist/ s3://cdn.aether.network/sdk/{new_version}/ --acl public-read || true"),
         ("CDN latest",       f"aws s3 sync packages/sdk-web/dist/ s3://cdn.aether.network/sdk/latest/ --acl public-read || true"),
+        ("Upload Loader",    f"aws s3 cp packages/sdk-web/dist/loader.js s3://cdn.aether.network/sdk/v5/loader.js --acl public-read || true"),
+        ("Upload Loader ESM",f"aws s3 cp packages/sdk-web/dist/loader.mjs s3://cdn.aether.network/sdk/v5/loader.mjs --acl public-read || true"),
+        ("Extract data modules", "cd packages/sdk-web && python ../../cicd/aether-cicd/stages/sdk/data_module_publisher.py || true"),
+        ("Publish manifests", f"python cicd/aether-cicd/stages/sdk/manifest_publisher.py --version {new_version} || true"),
         ("Git tag",          f"git tag sdk-web-v{new_version} && git push origin sdk-web-v{new_version} || true"),
     ]
 
@@ -170,10 +175,14 @@ def release_web_sdk(
         "dist/aether-sdk.esm.js",
         "dist/aether-sdk.esm.min.js",
         "dist/aether-sdk.umd.js",
+        "dist/loader.js",
+        "dist/loader.mjs",
     ]
     ctx.published_to = [
         f"npm: @aether/sdk@{new_version}",
         f"CDN: https://cdn.aether.network/sdk/{new_version}/aether-sdk.esm.min.js",
+        f"Loader: https://cdn.aether.network/sdk/v5/loader.js",
+        f"Manifests: https://cdn.aether.network/sdk/manifests/{{platform}}/latest.json",
     ]
     ctx.success = success
     log(f"Web SDK v{new_version} {'released' if success else 'FAILED'}", stage="SDK")

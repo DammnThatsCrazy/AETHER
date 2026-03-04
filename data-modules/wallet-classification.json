@@ -1,0 +1,50 @@
+{
+  "_meta": {
+    "version": "2026.03.04",
+    "generatedAt": "2026-03-04T00:00:00.000Z",
+    "description": "Aether SDK wallet classification rules — hardware RDNS, smart wallet RDNS, wallet type patterns, labels, security scores"
+  },
+  "hardwareRdns": [
+    "com.ledger",
+    "io.metamask.flask",
+    "com.gridplus",
+    "com.keystonehq",
+    "io.trezor"
+  ],
+  "smartWalletRdns": [
+    "global.safe",
+    "com.ambire",
+    "com.sequence",
+    "network.zerodev",
+    "com.biconomy"
+  ],
+  "hardwareWalletTypes": [
+    "ledger",
+    "trezor",
+    "gridplus",
+    "keystone",
+    "lattice",
+    "coldcard"
+  ],
+  "multisigWalletTypes": [
+    "safe",
+    "gnosis_safe",
+    "squads"
+  ],
+  "classificationLabels": {
+    "hot": "Hot Wallet",
+    "cold": "Hardware Wallet",
+    "smart": "Smart Account",
+    "exchange": "Exchange",
+    "protocol": "Protocol",
+    "multisig": "Multisig"
+  },
+  "securityScores": {
+    "cold": 95,
+    "multisig": 90,
+    "smart": 80,
+    "hot": 60,
+    "exchange": 50,
+    "protocol": 70
+  }
+}

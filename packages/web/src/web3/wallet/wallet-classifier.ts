@@ -22,16 +22,43 @@ export interface ProviderMeta {
 }
 
 // Known hardware wallet RDNS identifiers (EIP-6963)
-const HARDWARE_RDNS = new Set([
+let HARDWARE_RDNS = new Set([
   'com.ledger', 'io.metamask.flask', 'com.gridplus',
   'com.keystonehq', 'io.trezor',
 ]);
 
 // Known smart wallet RDNS identifiers
-const SMART_WALLET_RDNS = new Set([
+let SMART_WALLET_RDNS = new Set([
   'global.safe', 'com.ambire', 'com.sequence',
   'network.zerodev', 'com.biconomy',
 ]);
+
+// ---------------------------------------------------------------------------
+// OTA Remote Data Support
+// ---------------------------------------------------------------------------
+
+interface ClassificationRules {
+  hardwareRdns?: string[];
+  smartWalletRdns?: string[];
+  hardwareWalletTypes?: string[];
+  multisigWalletTypes?: string[];
+}
+
+/**
+ * Inject remote classification rules from OTA update.
+ * Updates the RDNS sets and wallet type patterns used for classification.
+ * Pass null to revert to bundled defaults.
+ */
+export function setRemoteData(remote: ClassificationRules | null): void {
+  if (remote) {
+    if (remote.hardwareRdns) HARDWARE_RDNS = new Set(remote.hardwareRdns);
+    if (remote.smartWalletRdns) SMART_WALLET_RDNS = new Set(remote.smartWalletRdns);
+  } else {
+    // Revert to defaults
+    HARDWARE_RDNS = new Set(['com.ledger', 'io.metamask.flask', 'com.gridplus', 'com.keystonehq', 'io.trezor']);
+    SMART_WALLET_RDNS = new Set(['global.safe', 'com.ambire', 'com.sequence', 'network.zerodev', 'com.biconomy']);
+  }
+}
 
 /**
  * Classify a wallet based on provider metadata and on-chain data

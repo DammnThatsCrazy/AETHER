@@ -2,7 +2,7 @@ import typescript from '@rollup/plugin-typescript';
 import resolve from '@rollup/plugin-node-resolve';
 import terser from '@rollup/plugin-terser';
 
-const SDK_VERSION = '4.0.0';
+const SDK_VERSION = '5.0.0';
 
 export default {
   input: 'src/index.ts',

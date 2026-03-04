@@ -28,6 +28,7 @@ The Aether Mobile SDK provides native analytics, identity resolution, multi-chai
 - **Push notification tracking** -- campaign-level open attribution
 - **Error tracking** -- uncaught exception capture (Android)
 - **Lifecycle tracking** -- foreground/background events with automatic flush
+- **OTA data updates** -- automatic over-the-air updates for chain registry, DeFi protocol definitions, wallet labels, and classification rules without requiring app store updates (JSON data modules only, no executable code)
 
 ---
 

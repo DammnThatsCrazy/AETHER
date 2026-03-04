@@ -12,6 +12,27 @@ interface LabelEntry {
   confidence: number;
 }
 
+// ---------------------------------------------------------------------------
+// OTA Remote Data Support
+// ---------------------------------------------------------------------------
+
+/** Remote label data injected via OTA updates */
+let remoteLabelData: Record<string, LabelEntry> | null = null;
+
+/**
+ * Inject remote wallet label data from OTA update.
+ * When set, lookups use remote data instead of bundled defaults.
+ * Pass null to revert to bundled defaults.
+ */
+export function setRemoteData(remote: Record<string, LabelEntry> | null): void {
+  remoteLabelData = remote;
+}
+
+/** Get the active labels database (remote if available, otherwise bundled) */
+function getActiveLabels(): Record<string, LabelEntry> {
+  return remoteLabelData ?? ETH_LABELS;
+}
+
 // Known Ethereum mainnet labels (chainId: 1)
 const ETH_LABELS: Record<string, LabelEntry> = {
   // Binance
@@ -59,10 +80,11 @@ const ETH_LABELS: Record<string, LabelEntry> = {
 export function getAddressLabel(chainId: number | string, address: string, _vm?: VMType): AddressLabel | null {
   const addr = address.toLowerCase();
   const chainStr = String(chainId);
+  const labels = getActiveLabels();
 
   // Currently we have labels for Ethereum mainnet
   if (chainStr === '1' || chainStr === '56') {
-    const label = ETH_LABELS[addr];
+    const label = labels[addr];
     if (label) {
       return {
         address: addr, name: label.name, category: label.category,
@@ -96,7 +118,8 @@ export function getExchangeName(chainId: number | string, address: string): stri
 
 /** Get all known labels for a chain */
 export function getAllLabelsForChain(_chainId: number | string): AddressLabel[] {
-  return Object.entries(ETH_LABELS).map(([addr, label]) => ({
+  const labels = getActiveLabels();
+  return Object.entries(labels).map(([addr, label]) => ({
     address: addr, name: label.name, category: label.category,
     subcategory: label.subcategory, confidence: label.confidence,
     chainId: 1, vm: 'evm' as VMType,

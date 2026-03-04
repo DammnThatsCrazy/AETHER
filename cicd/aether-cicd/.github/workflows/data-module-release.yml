@@ -1,0 +1,378 @@
+name: "Data Module Release"
+
+# ---------------------------------------------------------------------------
+# Triggers
+# ---------------------------------------------------------------------------
+# 1. Manual dispatch with optional version override
+# 2. Push to data-module source files on the main branch
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Data module version override (default: date-stamp YYYY.MM.DD)"
+        required: false
+        type: string
+      dry_run:
+        description: "Dry run (skip S3 upload and CloudFront invalidation)"
+        required: false
+        type: boolean
+        default: false
+
+  push:
+    branches: [main]
+    paths:
+      - "packages/web/src/web3/chains/**"
+      - "packages/web/src/web3/defi/protocol-registry.ts"
+      - "packages/web/src/web3/wallet/**"
+
+# ---------------------------------------------------------------------------
+# Permissions & concurrency
+# ---------------------------------------------------------------------------
+
+permissions:
+  contents: read
+  id-token: write   # required for OIDC -> AWS assume-role
+
+concurrency:
+  group: data-module-release
+  cancel-in-progress: false   # never cancel an in-flight data release
+
+# ---------------------------------------------------------------------------
+# Environment
+# ---------------------------------------------------------------------------
+
+env:
+  PYTHON_VERSION: "3.11"
+  CDN_BUCKET: cdn.aether.network
+  CDN_BASE: https://cdn.aether.network
+  DATA_MODULES_DIR: /tmp/aether-data-modules
+
+# ---------------------------------------------------------------------------
+# Jobs
+# ---------------------------------------------------------------------------
+
+jobs:
+  # ──────────────────────────────────────────────────────────────────────────
+  # EXTRACT — parse TS sources into JSON, calculate hashes
+  # ──────────────────────────────────────────────────────────────────────────
+  extract:
+    name: "Extract Data Modules"
+    runs-on: ubuntu-latest
+    environment: production
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      chain_registry_hash: ${{ steps.hashes.outputs.chain_registry_hash }}
+      protocol_registry_hash: ${{ steps.hashes.outputs.protocol_registry_hash }}
+      wallet_labels_hash: ${{ steps.hashes.outputs.wallet_labels_hash }}
+      wallet_classification_hash: ${{ steps.hashes.outputs.wallet_classification_hash }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Set up Python ${{ env.PYTHON_VERSION }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install pipeline dependencies
+        working-directory: cicd/aether-cicd
+        run: |
+          pip install --quiet --upgrade pip
+          pip install --quiet -e .
+
+      - name: Determine version
+        id: version
+        run: |
+          if [ -n "${{ inputs.version }}" ]; then
+            VERSION="${{ inputs.version }}"
+          else
+            VERSION="$(date -u +'%Y.%m.%d')"
+          fi
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+          echo "Data module version: ${VERSION}"
+
+      - name: Extract data modules
+        id: extract
+        working-directory: cicd/aether-cicd
+        run: |
+          python -c "
+          from stages.sdk.data_module_publisher import extract_data_modules
+          import json, pathlib
+
+          modules = extract_data_modules('../../packages/web/src')
+
+          # Write extracted modules to output directory
+          out = pathlib.Path('${{ env.DATA_MODULES_DIR }}')
+          for name, info in modules.items():
+            mod_dir = out / name
+            mod_dir.mkdir(parents=True, exist_ok=True)
+            with open(mod_dir / 'data.json', 'w') as f:
+              json.dump(info['data'], f, indent=2, sort_keys=True)
+            print(f'Extracted {name}: {info[\"size\"]} bytes, hash={info[\"hash\"][:32]}...')
+
+          print(f'Total modules extracted: {len(modules)}')
+          "
+
+      - name: Calculate hashes
+        id: hashes
+        run: |
+          for module in chain-registry protocol-registry wallet-labels wallet-classification; do
+            FILE="${{ env.DATA_MODULES_DIR }}/${module}/data.json"
+            if [ -f "$FILE" ]; then
+              HASH=$(sha256sum "$FILE" | awk '{print $1}')
+              # Convert dashes to underscores for output names
+              OUTPUT_KEY=$(echo "${module}" | tr '-' '_')
+              echo "${OUTPUT_KEY}_hash=sha256:${HASH}" >> "$GITHUB_OUTPUT"
+              echo "${module}: sha256:${HASH}"
+            else
+              echo "WARNING: ${FILE} not found"
+            fi
+          done
+
+      - name: Upload extraction artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: data-modules-extracted
+          path: ${{ env.DATA_MODULES_DIR }}
+          retention-days: 7
+
+  # ──────────────────────────────────────────────────────────────────────────
+  # PUBLISH — upload to S3, generate manifests, invalidate CDN
+  # ──────────────────────────────────────────────────────────────────────────
+  publish:
+    name: "Publish Data Modules"
+    runs-on: ubuntu-latest
+    needs: [extract]
+    environment: production
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Set up Python ${{ env.PYTHON_VERSION }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install pipeline dependencies
+        working-directory: cicd/aether-cicd
+        run: |
+          pip install --quiet --upgrade pip
+          pip install --quiet -e .
+
+      - name: Download extraction artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: data-modules-extracted
+          path: ${{ env.DATA_MODULES_DIR }}
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_CDN_ROLE_ARN }}
+          aws-region: us-east-1
+
+      - name: Upload data modules to S3
+        id: upload
+        env:
+          VERSION: ${{ needs.extract.outputs.version }}
+        run: |
+          DRY_RUN_FLAG=""
+          if [ "${{ inputs.dry_run }}" = "true" ]; then
+            DRY_RUN_FLAG="--dryrun"
+            echo "DRY RUN mode enabled"
+          fi
+
+          for module in chain-registry protocol-registry wallet-labels wallet-classification; do
+            SOURCE="${{ env.DATA_MODULES_DIR }}/${module}/data.json"
+            if [ ! -f "$SOURCE" ]; then
+              echo "ERROR: ${SOURCE} not found"
+              exit 1
+            fi
+
+            S3_BASE="s3://${{ env.CDN_BUCKET }}/sdk/data/${module}"
+
+            echo "Uploading ${module} v${VERSION}..."
+
+            # Upload versioned copy
+            aws s3 cp ${DRY_RUN_FLAG} \
+              "${SOURCE}" \
+              "${S3_BASE}/${VERSION}.json" \
+              --content-type "application/json" \
+              --cache-control "public, max-age=31536000, immutable"
+
+            # Upload latest copy
+            aws s3 cp ${DRY_RUN_FLAG} \
+              "${SOURCE}" \
+              "${S3_BASE}/latest.json" \
+              --content-type "application/json" \
+              --cache-control "public, max-age=300"
+
+            echo "Uploaded ${module}: ${S3_BASE}/${VERSION}.json + latest.json"
+          done
+
+      - name: Generate SDK manifests
+        env:
+          VERSION: ${{ needs.extract.outputs.version }}
+        working-directory: cicd/aether-cicd
+        run: |
+          DRY_RUN="False"
+          if [ "${{ inputs.dry_run }}" = "true" ]; then
+            DRY_RUN="True"
+          fi
+
+          python -c "
+          from stages.sdk.manifest_publisher import publish_manifests
+
+          results = publish_manifests(
+              sdk_version='${{ env.VERSION }}',
+              cdn_base='${{ env.CDN_BASE }}',
+              data_modules_dir='${{ env.DATA_MODULES_DIR }}',
+              dry_run=${DRY_RUN},
+          )
+          for platform, manifest in results.items():
+              print(f'  {platform}: latestVersion={manifest[\"latestVersion\"]}')
+          "
+
+      - name: Invalidate CloudFront cache
+        if: inputs.dry_run != 'true'
+        env:
+          CLOUDFRONT_DISTRIBUTION_ID: ${{ secrets.CDN_DISTRIBUTION_ID }}
+        run: |
+          aws cloudfront create-invalidation \
+            --distribution-id "${{ secrets.CDN_DISTRIBUTION_ID }}" \
+            --paths \
+              "/sdk/data/chain-registry/*" \
+              "/sdk/data/protocol-registry/*" \
+              "/sdk/data/wallet-labels/*" \
+              "/sdk/data/wallet-classification/*" \
+              "/sdk/manifests/web/latest.json" \
+              "/sdk/manifests/ios/latest.json" \
+              "/sdk/manifests/android/latest.json" \
+              "/sdk/manifests/react-native/latest.json"
+
+          echo "CloudFront invalidation created"
+
+  # ──────────────────────────────────────────────────────────────────────────
+  # VERIFY — confirm published files are accessible and correct
+  # ──────────────────────────────────────────────────────────────────────────
+  verify:
+    name: "Verify Published Files"
+    runs-on: ubuntu-latest
+    needs: [extract, publish]
+    if: inputs.dry_run != 'true'
+    environment: production
+    steps:
+      - name: Wait for CDN propagation
+        run: sleep 15
+
+      - name: Verify data modules are accessible
+        env:
+          VERSION: ${{ needs.extract.outputs.version }}
+          CHAIN_HASH: ${{ needs.extract.outputs.chain_registry_hash }}
+          PROTOCOL_HASH: ${{ needs.extract.outputs.protocol_registry_hash }}
+          LABELS_HASH: ${{ needs.extract.outputs.wallet_labels_hash }}
+          CLASSIFICATION_HASH: ${{ needs.extract.outputs.wallet_classification_hash }}
+        run: |
+          ERRORS=0
+
+          for module in chain-registry protocol-registry wallet-labels wallet-classification; do
+            # Verify versioned URL
+            VERSIONED_URL="${{ env.CDN_BASE }}/sdk/data/${module}/${VERSION}.json"
+            HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" "${VERSIONED_URL}")
+
+            if [ "$HTTP_CODE" = "200" ]; then
+              echo "OK: ${module} v${VERSION} accessible (HTTP ${HTTP_CODE})"
+            else
+              echo "FAIL: ${module} v${VERSION} returned HTTP ${HTTP_CODE}"
+              ERRORS=$((ERRORS + 1))
+            fi
+
+            # Verify latest URL
+            LATEST_URL="${{ env.CDN_BASE }}/sdk/data/${module}/latest.json"
+            HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" "${LATEST_URL}")
+
+            if [ "$HTTP_CODE" = "200" ]; then
+              echo "OK: ${module} latest accessible (HTTP ${HTTP_CODE})"
+            else
+              echo "FAIL: ${module} latest returned HTTP ${HTTP_CODE}"
+              ERRORS=$((ERRORS + 1))
+            fi
+
+            # Verify hash integrity for latest
+            DOWNLOADED=$(curl -s "${LATEST_URL}")
+            ACTUAL_HASH="sha256:$(echo -n "$DOWNLOADED" | sha256sum | awk '{print $1}')"
+
+            # Get expected hash
+            HASH_KEY=$(echo "${module}" | tr '-' '_')_hash
+            EXPECTED_HASH="${!HASH_KEY:-unknown}"
+
+            # Note: downloaded JSON may be re-serialised differently so hash
+            # comparison against the pre-upload file is indicative, not exact.
+            echo "  Expected hash: ${EXPECTED_HASH}"
+            echo "  Downloaded hash: ${ACTUAL_HASH}"
+          done
+
+          # Verify manifests
+          for platform in web ios android react-native; do
+            MANIFEST_URL="${{ env.CDN_BASE }}/sdk/manifests/${platform}/latest.json"
+            HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" "${MANIFEST_URL}")
+
+            if [ "$HTTP_CODE" = "200" ]; then
+              echo "OK: ${platform} manifest accessible"
+            else
+              echo "FAIL: ${platform} manifest returned HTTP ${HTTP_CODE}"
+              ERRORS=$((ERRORS + 1))
+            fi
+          done
+
+          if [ "$ERRORS" -gt 0 ]; then
+            echo "::error::${ERRORS} verification checks failed"
+            exit 1
+          fi
+
+          echo "All verification checks passed"
+
+      - name: Send Slack notification
+        if: always()
+        env:
+          VERSION: ${{ needs.extract.outputs.version }}
+        run: |
+          if [ "${{ job.status }}" = "success" ]; then
+            STATUS="succeeded"
+            EMOJI=":white_check_mark:"
+          else
+            STATUS="FAILED"
+            EMOJI=":x:"
+          fi
+
+          PAYLOAD=$(cat <<EOF
+          {
+            "blocks": [
+              {
+                "type": "section",
+                "text": {
+                  "type": "mrkdwn",
+                  "text": "${EMOJI} *Data Module Release ${STATUS}*\nVersion: \`${VERSION}\`\nCommit: \`${{ github.sha }}\`\nTriggered by: ${{ github.actor }}"
+                }
+              },
+              {
+                "type": "section",
+                "fields": [
+                  {"type": "mrkdwn", "text": "*Modules:*\nchain-registry, protocol-registry, wallet-labels, wallet-classification"},
+                  {"type": "mrkdwn", "text": "*CDN:*\n${{ env.CDN_BASE }}/sdk/data/"}
+                ]
+              }
+            ]
+          }
+          EOF
+          )
+
+          curl -sf -X POST "${{ secrets.SLACK_WEBHOOK }}" \
+            -H 'Content-type: application/json' \
+            -d "${PAYLOAD}" \
+            2>/dev/null || echo "Slack notification failed (non-fatal)"

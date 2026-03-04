@@ -154,7 +154,14 @@ public final class Aether {
         }
         
         isInitialized = true
-        log("Aether iOS SDK initialized (v4.0.0)")
+        log("Aether iOS SDK initialized (v5.0.0)")
+
+        // Start OTA data module update manager (non-blocking, background)
+        AetherUpdateManager.shared.start(
+            apiKey: config.apiKey,
+            endpoint: config.endpoint,
+            currentVersion: "5.0.0"
+        )
     }
     
     public func track(_ event: String, properties: [String: AnyCodable] = [:]) {
@@ -296,7 +303,7 @@ public final class Aether {
         let screen = UIScreen.main
         
         return EventContext(
-            library: .init(name: "AetherSDK-iOS", version: "4.0.0"),
+            library: .init(name: "AetherSDK-iOS", version: "5.0.0"),
             device: .init(
                 type: device.userInterfaceIdiom == .pad ? "tablet" : "mobile",
                 os: "iOS",

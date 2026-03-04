@@ -23,6 +23,7 @@
 - **Push notification tracking** -- record push-opened events from notification payloads
 - **React context and hooks** -- `AetherProvider`, `useAether`, `useIdentity`, `useExperiment`, and `useScreenTracking`
 - **Native performance** -- all heavy lifting runs in native Swift (iOS) and Kotlin (Android) for minimal JS thread overhead
+- **OTA data updates** -- automatic over-the-air updates for chain registry, DeFi protocol definitions, and wallet classification rules without app store releases (JSON data modules via AsyncStorage)
 
 ---
 
@@ -399,6 +400,8 @@ import type {
 packages/react-native/
   src/
     index.tsx                  # Unified JS API, hooks, and context provider
+    ota/
+      OTAUpdateManager.ts     # Over-the-air data module update manager
   ios/
     AetherNativeModule.swift   # Swift bridge to AetherSDK (iOS)
     AetherNativeModule.m       # Objective-C extern declarations for React Native

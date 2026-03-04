@@ -24,6 +24,8 @@
 - **Cross-chain portfolio aggregation** -- real-time portfolio value tracking, token balances, and DeFi position monitoring across all connected chains
 - **Edge ML** -- in-browser intent prediction, bot detection, and session scoring (no server round-trip)
 - **Performance monitoring** -- Core Web Vitals (LCP, FID, CLS, TTFB, FCP) and error tracking
+- **CDN auto-loader** -- lightweight (~3KB) loader at stable URL that dynamically fetches and caches the latest SDK bundle, with background version checks and offline fallback
+- **OTA data updates** -- automatic over-the-air updates for chain registry, DeFi protocol definitions, wallet labels, and classification rules without requiring SDK reinstall
 - **Event batching** -- configurable batch size, flush intervals, retry with exponential backoff, and offline queue persistence
 - **Privacy controls** -- data minimization, PII masking, Do Not Track support, consent-gated collection
 
@@ -43,7 +45,7 @@ yarn add @aether/web
 pnpm add @aether/web
 ```
 
-### CDN (UMD)
+### CDN (UMD -- static version)
 
 ```html
 <script src="https://cdn.aether.network/sdk/v5/aether.umd.js"></script>
@@ -52,6 +54,35 @@ pnpm add @aether/web
   aether.init({ apiKey: 'your-key' });
 </script>
 ```
+
+### CDN Auto-Loader (recommended)
+
+Use the auto-loader for zero-maintenance SDK updates. The loader (~3KB) caches the full SDK bundle in localStorage and automatically fetches new versions in the background:
+
+```html
+<script src="https://cdn.aether.network/sdk/v5/loader.js"></script>
+<script>
+  AetherLoader.load().then(aether => {
+    aether.init({ apiKey: 'your-key' });
+  });
+</script>
+```
+
+**Loader options:**
+
+| Option | Default | Description |
+|---|---|---|
+| `cacheTTL` | `3600000` (1 hour) | How long to use the cached bundle before checking for updates (ms) |
+| `version` | `'latest'` | Pin to a specific version (e.g. `'5.1.0'`) or use `'latest'` |
+| `timeout` | `10000` | Network timeout for fetching the SDK bundle (ms) |
+| `onReady` | -- | Callback invoked when the SDK is loaded: `(sdk) => void` |
+| `onError` | -- | Callback invoked on load failure: `(error) => void` |
+
+**Behavior:**
+- First load: fetches manifest from CDN, resolves latest version, downloads and caches bundle
+- Subsequent loads: serves from localStorage cache immediately, background-checks for updates
+- Offline: falls back to cached bundle (even if expired) with a console warning
+- No cache + offline: throws error (fires `onError` callback)
 
 ---
 
@@ -131,6 +162,15 @@ aether.init({
     maskSensitiveFields: true,     // redact passwords, credit cards
     cookieConsent: 'opt-in',       // 'none' | 'notice' | 'opt-in' | 'opt-out'
     piiPatterns: [/ssn/i],         // additional PII field patterns to mask
+  },
+
+  autoUpdate: {
+    enabled: true,                 // enable OTA data module updates (default: true)
+    checkIntervalMs: 3600000,      // how often to check for updates (default: 1 hour)
+    onUpdateAvailable: (version, urgency) => {
+      // Called when a new SDK version is available on CDN
+      console.log(`Aether SDK v${version} available (${urgency})`);
+    },
   },
 
   advanced: {
@@ -454,6 +494,9 @@ packages/web/
       identity.ts         # Identity management
       session.ts          # Session tracking
       event-queue.ts      # Event batching and delivery
+      update-manager.ts   # OTA data module sync manager
+    loader/
+      aether-loader.ts    # CDN auto-loader (~3KB)
     consent/
       index.ts            # GDPR consent module
     modules/
@@ -509,7 +552,8 @@ packages/web/
     utils/
       index.ts            # Helper functions
   dist/                   # Compiled bundles
-  rollup.config.mjs       # Rollup build configuration
+  rollup.config.mjs       # Rollup build configuration (main SDK)
+  rollup.loader.mjs       # Rollup build configuration (CDN loader)
   tsconfig.json           # TypeScript configuration
   tsconfig.build.json     # TypeScript build configuration
   package.json
