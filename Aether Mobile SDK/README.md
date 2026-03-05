@@ -28,6 +28,7 @@ The Aether Mobile SDK provides native analytics, identity resolution, multi-chai
 - **Push notification tracking** -- campaign-level open attribution
 - **Error tracking** -- uncaught exception capture (Android)
 - **Lifecycle tracking** -- foreground/background events with automatic flush
+- **Tiered semantic context** -- 3-tier consent-driven context enrichment (Essential → Functional → Rich) automatically attached to every event. Tier 1: timestamp, event ID, basic device info (anonymized). Tier 2: journey stage, screen path, session duration, app state. Tier 3: inferred intent, sentiment signals, error logs
 - **OTA data updates** -- automatic over-the-air updates for chain registry, DeFi protocol definitions, wallet labels, and classification rules without requiring app store updates (JSON data modules only, no executable code)
 
 ---

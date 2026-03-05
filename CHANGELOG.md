@@ -6,6 +6,68 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ---
 
+## [5.2.0] — 2026-03-04
+
+### Semantic Context, Traffic Source Tracking, and ML Optimization
+
+Three cross-cutting platform enhancements: a tiered semantic context layer that enriches every event across all SDKs with consent-driven behavioral signals, zero-config automatic traffic source detection that identifies all inbound sources without pre-created links, and a modular ML optimization stack for production model compression and accuracy tuning.
+
+### Added
+
+- **Tiered Semantic Context — Web** (`packages/web/src/context/semantic-context.ts`) — `SemanticContextCollector` with 3-tier consent-driven enrichment:
+  - **Tier 1 (Essential):** Timestamp, event ID, SDK version, basic device info (anonymized). Always collected.
+  - **Tier 2 (Functional):** Journey stage inference (awareness → consideration → decision → retention), screen path history, session duration, scroll depth, active/idle time. Requires `analytics` consent.
+  - **Tier 3 (Rich):** Inferred intent, sentiment signals (frustration via rage-clicks/errors, engagement via scroll/active-time, urgency via navigation speed, confusion via backtracking), interaction heatmaps (configurable grid bucketing), and precise error logs. Requires `analytics` + `marketing` consent.
+  - Passive DOM listeners with proper cleanup, all signals 0-1 normalized.
+
+- **Tiered Semantic Context — iOS** (`Aether Mobile SDK/SemanticContext.swift`) — `SemanticContextCollector` singleton with serial DispatchQueue thread safety, lifecycle observers (`didBecomeActive`, `didEnterBackground`, `willResignActive`), Codable types for JSON serialization.
+
+- **Tiered Semantic Context — Android** (`Aether Mobile SDK/SemanticContext.kt`) — `SemanticContextCollector` Kotlin object with `CopyOnWriteArrayList` and `@Volatile` fields, returns `JSONObject` envelopes, requires `initialize(context)` call.
+
+- **Tiered Semantic Context — React Native** (`packages/react-native/src/context/SemanticContext.ts`) — `RNSemanticContextCollector` with `AppState.addEventListener` for app state tracking, pre-instantiated singleton, session duration and screen path tracking.
+
+- **Automatic Traffic Source Tracker** (`packages/web/src/tracking/traffic-source-tracker.ts`) — zero-config detection pipeline with priority resolution:
+  1. UTM parameters (`utm_source`, `utm_medium`, `utm_campaign`, `utm_term`, `utm_content`)
+  2. Ad click IDs across 12 platforms (`gclid`, `fbclid`, `msclkid`, `ttclid`, `twclid`, `li_fat_id`, `rdt_cid`, `scid`, `dclid`, `epik`, `irclickid`, `aff_id`)
+  3. Referrer classification (27 social platforms, 15 search engines, 8 email providers)
+  4. localStorage-persisted attribution with configurable 30-day window
+  5. 12 traffic types: direct, organic, paid, social, email, referral, affiliate, push, sms, display, video, unknown
+
+- **Traffic Source Backend Service** (`Backend Architecture/aether-backend/services/traffic/routes.py`) — FastAPI router with 5 endpoints: `POST /v1/traffic/sources` (register/upsert source), `POST /v1/traffic/events` (record traffic event), `GET /v1/traffic/sources` (list sources with filters), `GET /v1/traffic/sources/{id}` (get source by ID), `GET /v1/traffic/channels` (channel breakdown analytics). Pydantic models for request/response validation.
+
+- **ML Quantization** (`ML Models/aether-ml/optimization/quantization.py`) — `ModelQuantizer` with 4 strategies: Dynamic (INT8 runtime), Static (INT8 calibrated), Weight-only (INT8 weights, FP32 activations), FP16. Includes tolerance checking with FP32 fallback and inference speedup benchmarking.
+
+- **ML Distillation** (`ML Models/aether-ml/optimization/distillation.py`) — `ModelDistiller` with 3 modes: Soft-label (temperature-scaled probability transfer), Feature-matching (intermediate representation alignment), Progressive (iterative teacher shrinking). Supports data augmentation and configurable temperature scaling.
+
+- **ML Pruning** (`ML Models/aether-ml/optimization/pruning.py`) — `ModelPruner` with 4 strategies: Magnitude (unstructured L1-norm), Structured (feature/neuron removal), Iterative (gradual pruning with fine-tune cycles), Sensitivity-aware (permutation importance-based). Automatic warm-start fine-tuning when accuracy drops.
+
+- **ML Optimization Pipeline** (`ML Models/aether-ml/optimization/pipeline.py`) — `OptimizationPipeline` orchestrating Prune → Quantize → Distill with 3 pre-built profiles: Edge (INT8 dynamic + 30% magnitude pruning), Server (FP16 + 20% structured pruning), Aggressive (INT8 static + 50% iterative pruning). `OptimizationResult` with `summary()` method for reporting.
+
+### Changed
+
+- **Web SDK** (`packages/web/src/index.ts`) — Integrated `SemanticContextCollector` and `TrafficSourceTracker` into `init()`. Semantic context attached to every event via `enqueueEvent()`. Traffic source auto-detected on init and included in event payload. EdgeML callbacks inject intent and session score into semantic context. Cleanup on `destroy()`.
+
+- **iOS SDK** (`Aether Mobile SDK/Aether.swift`) — `SemanticContextCollector.shared.resetSession()` called on init, `.recordScreen()` called on screen views, semantic context JSON injected into every event via `enqueueEvent()`.
+
+- **Android SDK** (`Aether Mobile SDK/Aether.kt`) — `SemanticContextCollector.initialize()` and `.resetSession()` called on init, `.recordScreen()` called on screen views, semantic context injected into every event.
+
+- **React Native** (`packages/react-native/src/index.tsx`) — Imported `semanticContext` singleton, `.resetSession()` called in `AetherProvider` mount, `.recordScreen()` called in `screenView()`, `.destroy()` called on unmount.
+
+- **Backend** (`Backend Architecture/aether-backend/main.py`) — Added `traffic_router` as 11th service router.
+
+### Documentation
+
+- Updated Web SDK README with semantic context and traffic source tracking module descriptions, project structure additions
+- Updated Mobile SDK README with tiered semantic context feature description
+- Updated React Native README with semantic context feature and project structure additions
+- Updated Backend README with Traffic service in service listing and project structure
+
+### Stats
+
+- **17 files changed** — 12 added, 5 modified
+
+---
+
 ## [5.1.0] — 2026-03-04
 
 ### SDK Auto-Update System with OTA Data Modules
@@ -301,6 +363,7 @@ Initial release of the Aether platform with the Web SDK, React Native bridge, na
 
 | Version | Date | Highlights |
 |---------|------|------------|
+| [5.2.0](#520--2026-03-04) | 2026-03-04 | Tiered semantic context, automatic traffic source tracking, ML optimization (quantization, distillation, pruning) |
 | [5.1.0](#510--2026-03-04) | 2026-03-04 | SDK auto-update system, CDN auto-loader, OTA data modules |
 | [5.0.0](#500--2026-03-04) | 2026-03-04 | Multi-VM Web3 (7 VMs, 150+ DeFi protocols), demo environment |
 | [4.0.0](#400--2026-03-03) | 2026-03-03 | CI/CD pipeline, AWS deployment, GDPR & SOC 2 compliance |

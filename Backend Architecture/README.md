@@ -2,7 +2,7 @@
 
 **FastAPI microservices backend for the Aether platform.**
 
-Aether Backend is a unified API gateway that mounts 10 domain-specific microservices onto a single FastAPI application. It provides real-time data ingestion, identity resolution, analytics, ML model serving, autonomous agent orchestration, campaign management, consent/DSR compliance, notifications, and multi-tenant administration -- all behind a single versioned API surface with 50+ endpoints.
+Aether Backend is a unified API gateway that mounts 11 domain-specific microservices onto a single FastAPI application. It provides real-time data ingestion, identity resolution, analytics, ML model serving, autonomous agent orchestration, campaign management, consent/DSR compliance, notifications, traffic source tracking, and multi-tenant administration -- all behind a single versioned API surface with 55+ endpoints.
 
 ---
 
@@ -103,6 +103,7 @@ Aether Backend is a unified API gateway that mounts 10 domain-specific microserv
 | 8  | **Consent**      | `/v1/consent`           | GDPR/CCPA consent records, data subject request management   | `POST /v1/consent/records`, `POST /v1/consent/dsr`       |
 | 9  | **Notification** | `/v1/notifications`     | Webhook management, alert creation and listing               | `POST /v1/notifications/webhooks`, `POST /v1/notifications/alerts` |
 | 10 | **Admin**        | `/v1/admin`             | Tenant management, API key provisioning, billing             | `POST /v1/admin/tenants`, `POST /v1/admin/tenants/{id}/api-keys` |
+| 11 | **Traffic**      | `/v1/traffic`           | Automatic traffic source tracking, channel attribution       | `POST /v1/traffic/sources`, `GET /v1/traffic/channels` |
 
 ---
 
@@ -510,7 +511,8 @@ aether-backend/
 |   |-- campaign/routes.py      # Campaign lifecycle, attribution
 |   |-- consent/routes.py       # Consent records, DSR
 |   |-- notification/routes.py  # Webhooks, alerts
-|   +-- admin/routes.py         # Tenants, API keys, billing
+|   |-- admin/routes.py         # Tenants, API keys, billing
+|   +-- traffic/routes.py       # Automatic traffic source tracking and attribution
 +-- shared/
     |-- common/common.py        # Error classes, response formatters, validation
     |-- auth/auth.py            # JWT, API key validation, roles, permissions

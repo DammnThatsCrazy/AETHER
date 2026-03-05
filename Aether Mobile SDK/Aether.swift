@@ -153,6 +153,9 @@ public final class Aether {
             UIViewController.swizzleViewDidAppear()
         }
         
+        // Start semantic context collector
+        SemanticContextCollector.shared.resetSession()
+
         isInitialized = true
         log("Aether iOS SDK initialized (v5.0.0)")
 
@@ -170,6 +173,7 @@ public final class Aether {
     
     public func screenView(_ screenName: String, properties: [String: AnyCodable] = [:]) {
         screenCount += 1
+        SemanticContextCollector.shared.recordScreen(screenName)
         enqueueEvent(type: .screen, properties: ["screen": AnyCodable(screenName)].merging(properties) { _, new in new })
     }
     
@@ -244,6 +248,13 @@ public final class Aether {
     private func enqueueEvent(type: AetherEventType, properties: [String: AnyCodable]) {
         guard isInitialized else { return }
         
+        var enrichedProperties = properties
+        // Inject tiered semantic context into every event
+        if let semanticData = try? JSONEncoder().encode(SemanticContextCollector.shared.collect()),
+           let semanticDict = try? JSONSerialization.jsonObject(with: semanticData) as? [String: Any] {
+            enrichedProperties["_semantic"] = AnyCodable(semanticDict)
+        }
+
         let event = AetherEvent(
             id: UUID().uuidString,
             type: type,
@@ -251,7 +262,7 @@ public final class Aether {
             sessionId: sessionId,
             anonymousId: anonymousId,
             userId: userId,
-            properties: properties,
+            properties: enrichedProperties,
             context: buildContext()
         )
         

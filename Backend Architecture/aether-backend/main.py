@@ -86,6 +86,7 @@ from services.campaign.routes import router as campaign_router
 from services.consent.routes import router as consent_router
 from services.notification.routes import router as notification_router
 from services.admin.routes import router as admin_router
+from services.traffic.routes import router as traffic_router
 
 
 # ═══════════════════════════════════════════════════════════════════════
@@ -143,7 +144,7 @@ def create_app() -> FastAPI:
     # ── Auth / Logging / Rate Limit / Error Handling Middleware ────
     register_middleware(app)
 
-    # ── Mount all 10 service routers ──────────────────────────────
+    # ── Mount all 11 service routers ──────────────────────────────
     app.include_router(gateway_router)
     app.include_router(ingestion_router)
     app.include_router(identity_router)
@@ -154,6 +155,7 @@ def create_app() -> FastAPI:
     app.include_router(consent_router)
     app.include_router(notification_router)
     app.include_router(admin_router)
+    app.include_router(traffic_router)
 
     return app
 

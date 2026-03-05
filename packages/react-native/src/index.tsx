@@ -7,6 +7,7 @@ import { NativeModules, NativeEventEmitter, Platform } from 'react-native';
 import { useState, useEffect, useCallback, createContext, useContext, ReactNode } from 'react';
 import React from 'react';
 import { OTAUpdateManager } from './ota/OTAUpdateManager';
+import { semanticContext } from './context/SemanticContext';
 
 const { AetherNative } = NativeModules;
 const emitter = AetherNative ? new NativeEventEmitter(AetherNative) : null;
@@ -65,6 +66,7 @@ const Aether = {
   },
 
   screenView(screenName: string, properties?: Record<string, unknown>): void {
+    semanticContext.recordScreen(screenName);
     AetherNative?.screenView(screenName, properties ?? {});
   },
 
@@ -199,6 +201,7 @@ export function AetherProvider({
 
   useEffect(() => {
     Aether.init(config);
+    semanticContext.resetSession();
     setIsInitialized(true);
 
     // Start OTA data module sync (non-blocking, fire-and-forget)
@@ -206,6 +209,10 @@ export function AetherProvider({
     OTAUpdateManager.syncDataModules(config.apiKey, endpoint, '5.0.0').catch(() => {
       // OTA sync failures are silent — SDK works with bundled defaults
     });
+
+    return () => {
+      semanticContext.destroy();
+    };
   }, [config.apiKey]);
 
   return (

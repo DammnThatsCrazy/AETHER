@@ -27,6 +27,8 @@
 - **CDN auto-loader** -- lightweight (~3KB) loader at stable URL that dynamically fetches and caches the latest SDK bundle, with background version checks and offline fallback
 - **OTA data updates** -- automatic over-the-air updates for chain registry, DeFi protocol definitions, wallet labels, and classification rules without requiring SDK reinstall
 - **Event batching** -- configurable batch size, flush intervals, retry with exponential backoff, and offline queue persistence
+- **Tiered semantic context** -- 3-tier consent-driven context enrichment (Essential → Functional → Rich) with journey stage inference, sentiment signals (frustration, engagement, urgency, confusion), interaction heatmaps, and inferred intent -- automatically attached to every event
+- **Automatic traffic source tracking** -- zero-config detection of all traffic sources (UTM params, ad click IDs across 12 platforms, organic/social/email/referral classification), localStorage-persisted attribution with configurable window, and dynamic virtual link creation on the backend
 - **Privacy controls** -- data minimization, PII masking, Do Not Track support, consent-gated collection
 
 ---
@@ -451,6 +453,8 @@ aether.use(myPlugin);
 | `src/web3/defi/` | `protocol-registry.ts`, `dex-tracker.ts`, `lending-tracker.ts`, `staking-tracker.ts`, `perpetuals-tracker.ts`, `bridge-tracker.ts`, `nft-marketplace-tracker.ts`, + 9 more | DeFi protocol detection and tracking across 15 categories and 150+ protocols |
 | `src/web3/wallet/` | `wallet-classifier.ts`, `wallet-labels.ts` | Wallet classification (hot, cold, smart, exchange, protocol, multisig) and behavioral labeling |
 | `src/web3/portfolio/` | `portfolio-tracker.ts` | Cross-chain portfolio aggregation, token balances, and DeFi position monitoring |
+| `src/context/` | `semantic-context.ts` | 3-tier semantic context collector: Tier 1 (timestamp, event ID, basic device info), Tier 2 (journey stage, screen path, session duration, app state), Tier 3 (inferred intent, sentiment signals, interaction heatmaps, error logs) |
+| `src/tracking/` | `traffic-source-tracker.ts` | Zero-config traffic source auto-detection with UTM params, 12 ad click IDs (gclid, fbclid, msclkid, ttclid, twclid, etc.), referrer classification, 27 social platforms, 15 search engines, localStorage-persisted attribution |
 | `src/utils/` | `index.ts` | ID generation, timestamps, localStorage/cookie helpers, device/page/campaign context extraction |
 | `src/` | `types.ts` | Full TypeScript interface definitions for config, events, identity, session, ML, Web3, and consent |
 
@@ -497,6 +501,10 @@ packages/web/
       update-manager.ts   # OTA data module sync manager
     loader/
       aether-loader.ts    # CDN auto-loader (~3KB)
+    context/
+      semantic-context.ts # 3-tier semantic context collector
+    tracking/
+      traffic-source-tracker.ts # Zero-config traffic source auto-detection
     consent/
       index.ts            # GDPR consent module
     modules/

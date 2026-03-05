@@ -23,6 +23,7 @@
 - **Push notification tracking** -- record push-opened events from notification payloads
 - **React context and hooks** -- `AetherProvider`, `useAether`, `useIdentity`, `useExperiment`, and `useScreenTracking`
 - **Native performance** -- all heavy lifting runs in native Swift (iOS) and Kotlin (Android) for minimal JS thread overhead
+- **Tiered semantic context** -- 3-tier consent-driven context enrichment (Essential → Functional → Rich) with journey stage inference, session duration, app state tracking, and error logging -- automatically attached to every event sent through native modules
 - **OTA data updates** -- automatic over-the-air updates for chain registry, DeFi protocol definitions, and wallet classification rules without app store releases (JSON data modules via AsyncStorage)
 
 ---
@@ -400,6 +401,8 @@ import type {
 packages/react-native/
   src/
     index.tsx                  # Unified JS API, hooks, and context provider
+    context/
+      SemanticContext.ts       # 3-tier semantic context collector for React Native
     ota/
       OTAUpdateManager.ts     # Over-the-air data module update manager
   ios/

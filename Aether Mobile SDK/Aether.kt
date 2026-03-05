@@ -126,6 +126,10 @@ object Aether : DefaultLifecycleObserver {
         // Start flush timer
         startFlushTimer()
 
+        // Initialize semantic context collector
+        SemanticContextCollector.initialize(application.applicationContext)
+        SemanticContextCollector.resetSession()
+
         isInitialized = true
         log("Aether Android SDK initialized (v$VERSION)")
 
@@ -146,6 +150,7 @@ object Aether : DefaultLifecycleObserver {
 
     fun screenView(screenName: String, properties: Map<String, Any?> = emptyMap()) {
         screenCount++
+        SemanticContextCollector.recordScreen(screenName)
         val props = mutableMapOf<String, Any?>("screen" to screenName)
         props.putAll(properties)
         enqueueEvent("screen", props)
@@ -240,6 +245,12 @@ object Aether : DefaultLifecycleObserver {
     private fun enqueueEvent(type: String, properties: Map<String, Any?>) {
         if (!isInitialized) return
 
+        // Inject tiered semantic context into every event
+        val enrichedProperties = properties.toMutableMap()
+        try {
+            enrichedProperties["_semantic"] = SemanticContextCollector.collect()
+        } catch (_: Exception) {}
+
         val event = JSONObject().apply {
             put("id", UUID.randomUUID().toString())
             put("type", type)
@@ -247,7 +258,7 @@ object Aether : DefaultLifecycleObserver {
             put("sessionId", sessionId)
             put("anonymousId", anonymousId)
             put("userId", userId ?: JSONObject.NULL)
-            put("properties", JSONObject(properties.mapValues { it.value ?: JSONObject.NULL }))
+            put("properties", JSONObject(enrichedProperties.mapValues { it.value ?: JSONObject.NULL }))
             put("context", buildContext())
         }
 

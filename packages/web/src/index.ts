@@ -23,6 +23,8 @@ import { ConsentModule } from './consent';
 import { Web3Module } from './web3';
 import { EdgeMLModule } from './ml/edge-ml';
 import { UpdateManager } from './core/update-manager';
+import { SemanticContextCollector } from './context/semantic-context';
+import { TrafficSourceTracker } from './tracking/traffic-source-tracker';
 import { setRemoteData as setChainRemoteData } from './web3/chains/chain-registry';
 import { setRemoteData as setProtocolRemoteData } from './web3/defi/protocol-registry';
 import { setRemoteData as setLabelRemoteData } from './web3/wallet/wallet-labels';
@@ -44,6 +46,8 @@ class AetherSDK implements AetherSDKInterface {
   private web3Module: Web3Module | null = null;
   private edgeML: EdgeMLModule | null = null;
   private updateManager: UpdateManager | null = null;
+  private semanticContext: SemanticContextCollector | null = null;
+  private trafficTracker: TrafficSourceTracker | null = null;
   private plugins: AetherPlugin[] = [];
   private initialized = false;
   private debug = false;
@@ -106,6 +110,16 @@ class AetherSDK implements AetherSDKInterface {
     if (config.privacy?.gdprMode && !this.consentModule.hasRecordedConsent()) {
       this.consentModule.showBanner();
     }
+
+    // Semantic context — tiered enrichment for all events
+    this.semanticContext = new SemanticContextCollector(SDK_VERSION, {
+      maxTier: config.privacy?.vectorizeData ? 1 : 3,
+    });
+
+    // Traffic source tracking — zero-config, auto-detect all sources
+    this.trafficTracker = new TrafficSourceTracker();
+    const detectedSource = this.trafficTracker.detect();
+    this.log('debug', 'Traffic source detected:', detectedSource.source, '/', detectedSource.medium);
 
     // Start session
     this.sessionManager.start();
@@ -192,6 +206,7 @@ class AetherSDK implements AetherSDKInterface {
     if (modules.intentPrediction || modules.predictiveAnalytics) {
       this.edgeML = new EdgeMLModule({
         onIntentPrediction: (intent) => {
+          this.semanticContext?.setIntent(intent);
           this.intentCallbacks.forEach((cb) => { try { cb(intent); } catch { /* */ } });
           if (modules.predictiveAnalytics) {
             this.enqueueEvent('track', { event: 'intent_prediction', ...intent });
@@ -201,6 +216,7 @@ class AetherSDK implements AetherSDKInterface {
           this.botCallbacks.forEach((cb) => { try { cb(score); } catch { /* */ } });
         },
         onSessionScore: (score) => {
+          this.semanticContext?.setSessionScore(score);
           this.sessionScoreCallbacks.forEach((cb) => { try { cb(score); } catch { /* */ } });
         },
       });
@@ -255,6 +271,7 @@ class AetherSDK implements AetherSDKInterface {
     if (typeof window === 'undefined') return;
     const pageCtx = getPageContext();
     this.sessionManager?.recordPageView(pageCtx.url);
+    this.semanticContext?.recordScreen(pageCtx.path);
     this.enqueueEvent('page', {
       url: page ?? pageCtx.url, path: pageCtx.path,
       title: pageCtx.title, referrer: pageCtx.referrer, ...properties,
@@ -332,6 +349,7 @@ class AetherSDK implements AetherSDKInterface {
     this.eventQueue?.destroy();
     this.plugins.forEach((p) => { try { p.destroy(); } catch { /* */ } });
 
+    this.semanticContext?.destroy();
     this.autoDiscovery = null;
     this.performanceModule = null;
     this.experimentsModule = null;
@@ -339,6 +357,8 @@ class AetherSDK implements AetherSDKInterface {
     this.web3Module = null;
     this.edgeML = null;
     this.updateManager = null;
+    this.semanticContext = null;
+    this.trafficTracker = null;
     this.sessionManager = null;
     this.identityManager = null;
     this.eventQueue = null;
@@ -458,6 +478,10 @@ class AetherSDK implements AetherSDKInterface {
 
     const session = this.sessionManager.getSession();
     const identity = this.identityManager.getIdentity();
+    const consent = this.consentModule?.getState() ?? null;
+
+    // Collect tiered semantic context
+    const semantic = this.semanticContext?.collect(consent);
 
     const event = {
       id: generateId(),
@@ -474,7 +498,9 @@ class AetherSDK implements AetherSDKInterface {
         campaign: typeof window !== 'undefined' ? getCampaignContext() : undefined,
         locale: typeof navigator !== 'undefined' ? navigator.language : undefined,
         timezone: Intl?.DateTimeFormat?.()?.resolvedOptions?.()?.timeZone,
-        consent: this.consentModule?.getState(),
+        consent,
+        semantic,
+        trafficSource: this.trafficTracker?.toEventPayload(),
       },
     };
 
