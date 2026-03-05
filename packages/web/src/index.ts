@@ -1,50 +1,35 @@
 // =============================================================================
-// AETHER SDK — MAIN CLASS v5.0.0
-// Public API orchestrating all modules: identity, session, events, ML, web3
-// Multi-VM Web3 support: EVM, Solana, Bitcoin, SUI, NEAR, TRON, Cosmos
+// AETHER SDK — MAIN CLASS v5.1.0 (Tier 2 Thin Client)
+// Public API orchestrating all modules: identity, session, events, web3
+// Removed: EdgeML, Experiments, Performance, Feedback, UpdateManager
+// Added: fetchConfig() for backend-driven configuration
 // =============================================================================
 
 import type {
   AetherConfig, AetherSDKInterface, AetherPlugin,
   IdentityData, Identity, WalletInfo, TransactionOptions,
-  IntentVector, BotScore, SessionScore, VMType,
-  IntentCallback, BotCallback, SessionCallback, ConsentCallback,
-  ExperimentConfig, ExperimentAssignment, ConnectedWallet,
-  ConsentState, ConsentBannerConfig, WalletInterface, ExperimentInterface, ConsentInterface,
-  PortfolioSnapshot, WalletClassification,
+  VMType, ConsentCallback, ConnectedWallet,
+  ConsentState, ConsentBannerConfig, WalletInterface, ConsentInterface,
 } from './types';
 import { EventQueue } from './core/event-queue';
 import { SessionManager } from './core/session';
 import { IdentityManager } from './core/identity';
 import { AutoDiscoveryModule } from './modules/auto-discovery';
-import { PerformanceModule } from './modules/performance';
-import { ExperimentsModule } from './modules/experiments';
 import { ConsentModule } from './consent';
 import { Web3Module } from './web3';
-import { EdgeMLModule } from './ml/edge-ml';
-import { UpdateManager } from './core/update-manager';
 import { SemanticContextCollector } from './context/semantic-context';
 import { TrafficSourceTracker } from './tracking/traffic-source-tracker';
 import { RewardClient, createRewardClient } from './rewards/reward-client';
-import type { RewardProof, UserReward, RewardCampaign, RewardCallback } from './rewards/reward-client';
 import { EcommerceModule } from './modules/ecommerce';
-import type { Product, CartItem, Order } from './modules/ecommerce';
 import { FormAnalyticsModule } from './modules/form-analytics';
 import { FeatureFlagModule } from './modules/feature-flags';
-import type { FeatureFlag } from './modules/feature-flags';
-import { FeedbackModule } from './modules/feedback';
-import type { Survey, SurveyResponse } from './modules/feedback';
 import { HeatmapModule } from './modules/heatmaps';
 import { FunnelModule } from './modules/funnels';
-import type { FunnelDefinition, FunnelProgress } from './modules/funnels';
-import { setRemoteData as setChainRemoteData } from './web3/chains/chain-registry';
-import { setRemoteData as setProtocolRemoteData } from './web3/defi/protocol-registry';
-import { setRemoteData as setLabelRemoteData } from './web3/wallet/wallet-labels';
-import { setRemoteData as setClassifierRemoteData } from './web3/wallet/wallet-classifier';
+import type { FunnelDefinition } from './modules/funnels';
 import { generateId, now, getPageContext, getDeviceContext, getCampaignContext } from './utils';
 import { createModuleProxy } from './utils/module-proxy';
 
-const SDK_VERSION = '5.0.0';
+const SDK_VERSION = '5.1.0';
 const DEFAULT_ENDPOINT = 'https://api.aether.network';
 
 class AetherSDK implements AetherSDKInterface {
@@ -53,29 +38,21 @@ class AetherSDK implements AetherSDKInterface {
   private sessionManager: SessionManager | null = null;
   private identityManager: IdentityManager | null = null;
   private autoDiscovery: AutoDiscoveryModule | null = null;
-  private performanceModule: PerformanceModule | null = null;
-  private experimentsModule: ExperimentsModule | null = null;
   private consentModule: ConsentModule | null = null;
   private web3Module: Web3Module | null = null;
-  private edgeML: EdgeMLModule | null = null;
-  private updateManager: UpdateManager | null = null;
   private semanticContext: SemanticContextCollector | null = null;
   private trafficTracker: TrafficSourceTracker | null = null;
   private rewardClient: RewardClient | null = null;
   private ecommerceModule: EcommerceModule | null = null;
   private formAnalytics: FormAnalyticsModule | null = null;
   private featureFlags: FeatureFlagModule | null = null;
-  private feedbackModule: FeedbackModule | null = null;
   private heatmapModule: HeatmapModule | null = null;
   private funnelModule: FunnelModule | null = null;
   private plugins: AetherPlugin[] = [];
   private initialized = false;
   private debug = false;
 
-  // Callback registries
-  private intentCallbacks: IntentCallback[] = [];
-  private botCallbacks: BotCallback[] = [];
-  private sessionScoreCallbacks: SessionCallback[] = [];
+  // Wallet change listeners
   private walletChangeListeners: ((wallets: ConnectedWallet[]) => void)[] = [];
 
   // =========================================================================
@@ -102,7 +79,11 @@ class AetherSDK implements AetherSDKInterface {
     this.initWeb3(config, modules);
     this.initWeb2(config, modules);
     this.initAnalytics(config, modules);
-    this.initAutoUpdate(config);
+
+    // Fetch backend config (feature flags, funnel definitions, etc.)
+    this.fetchConfig().catch(() => {
+      this.log('warn', 'Failed to fetch remote config — using defaults');
+    });
 
     this.pageView();
     this.setupSPATracking();
@@ -112,7 +93,7 @@ class AetherSDK implements AetherSDKInterface {
     }
 
     this.initialized = true;
-    this.log('info', 'Aether SDK v5.0.0 initialized — Web2 + Web3 + auto-update + rewards enabled');
+    this.log('info', 'Aether SDK v5.1.0 initialized — Tier 2 thin client');
   }
 
   track(event: string, properties?: Record<string, unknown>): void {
@@ -124,7 +105,6 @@ class AetherSDK implements AetherSDKInterface {
     if (typeof window === 'undefined') return;
     const pageCtx = getPageContext();
     this.sessionManager?.recordPageView(pageCtx.url);
-    this.semanticContext?.recordScreen(pageCtx.path);
     this.enqueueEvent('page', {
       url: page ?? pageCtx.url, path: pageCtx.path,
       title: pageCtx.title, referrer: pageCtx.referrer, ...properties,
@@ -152,7 +132,6 @@ class AetherSDK implements AetherSDKInterface {
       });
     }
 
-    // Link additional wallets
     if (data.wallets) {
       for (const w of data.wallets) {
         switch (w.vm) {
@@ -166,10 +145,6 @@ class AetherSDK implements AetherSDKInterface {
         }
       }
     }
-
-    if (this.experimentsModule) {
-      this.experimentsModule.setAnonymousId(identity.anonymousId);
-    }
   }
 
   getIdentity(): Identity | null {
@@ -180,7 +155,6 @@ class AetherSDK implements AetherSDKInterface {
     this.flush();
     this.identityManager?.reset();
     this.sessionManager?.reset();
-    this.experimentsModule?.reset();
     this.web3Module?.disconnect();
     this.log('info', 'SDK reset — new anonymous identity created');
   }
@@ -193,11 +167,8 @@ class AetherSDK implements AetherSDKInterface {
     this.log('info', 'Destroying Aether SDK');
     this.flush();
     this.autoDiscovery?.destroy();
-    this.performanceModule?.destroy();
     this.consentModule?.destroy();
     this.web3Module?.destroy();
-    this.edgeML?.destroy();
-    this.updateManager?.destroy();
     this.sessionManager?.destroy();
     this.eventQueue?.destroy();
     this.plugins.forEach((p) => { try { p.destroy(); } catch { /* */ } });
@@ -207,23 +178,17 @@ class AetherSDK implements AetherSDKInterface {
     this.ecommerceModule?.destroy();
     this.formAnalytics?.destroy();
     this.featureFlags?.destroy();
-    this.feedbackModule?.destroy();
     this.heatmapModule?.destroy();
     this.funnelModule?.destroy();
     this.autoDiscovery = null;
-    this.performanceModule = null;
-    this.experimentsModule = null;
     this.consentModule = null;
     this.web3Module = null;
-    this.edgeML = null;
-    this.updateManager = null;
     this.semanticContext = null;
     this.trafficTracker = null;
     this.rewardClient = null;
     this.ecommerceModule = null;
     this.formAnalytics = null;
     this.featureFlags = null;
-    this.feedbackModule = null;
     this.heatmapModule = null;
     this.funnelModule = null;
     this.sessionManager = null;
@@ -231,15 +196,12 @@ class AetherSDK implements AetherSDKInterface {
     this.eventQueue = null;
     this.config = null;
     this.plugins = [];
-    this.intentCallbacks = [];
-    this.botCallbacks = [];
-    this.sessionScoreCallbacks = [];
     this.walletChangeListeners = [];
     this.initialized = false;
   }
 
   // =========================================================================
-  // SUB-INTERFACES — Explicit (complex return types, async, error-throwing)
+  // SUB-INTERFACES
   // =========================================================================
 
   wallet: WalletInterface = {
@@ -271,31 +233,16 @@ class AetherSDK implements AetherSDKInterface {
       return this.web3Module?.getInfo() ?? null;
     },
     getWallets: (): ConnectedWallet[] => {
-      return this.web3Module?.getWallets() ?? [];
+      return [];
     },
-    getWalletsByVM: (vm: VMType): ConnectedWallet[] => {
-      return this.web3Module?.getWalletsByVM(vm) ?? [];
+    getWalletsByVM: (_vm: VMType): ConnectedWallet[] => {
+      return [];
     },
     transaction: (txHash: string, options?: TransactionOptions) => {
       this.web3Module?.transaction(txHash, options);
     },
-    getPortfolio: (): PortfolioSnapshot | null => {
-      return this.web3Module?.getPortfolio() ?? null;
-    },
     onWalletChange: (callback: (wallets: ConnectedWallet[]) => void): (() => void) => {
       return this.web3Module?.onWalletChange(callback) ?? (() => {});
-    },
-    classifyWallet: (address: string, vm: VMType): WalletClassification => {
-      return this.web3Module?.classifyWalletAddress(address, vm) ?? 'hot';
-    },
-  };
-
-  experiments: ExperimentInterface = {
-    run: (config: ExperimentConfig): string => {
-      return this.experimentsModule?.run(config) ?? Object.keys(config.variants)[0];
-    },
-    getAssignment: (experimentId: string): ExperimentAssignment | null => {
-      return this.experimentsModule?.getAssignment(experimentId) ?? null;
     },
   };
 
@@ -313,48 +260,30 @@ class AetherSDK implements AetherSDKInterface {
   };
 
   // =========================================================================
-  // REWARDS — Web2 + Web3 Automated Reward Pipeline (explicit — async + throws)
+  // REWARDS — Thin claim-only API
   // =========================================================================
 
   rewards = {
-    /** Set the connected wallet address for reward claims */
-    setUserAddress: (address: string): void => {
-      this.rewardClient?.setUserAddress(address);
-    },
-    /** Check if an event qualifies for a reward (fraud -> attribution -> eligibility -> oracle proof) */
-    checkEligibility: async (eventType: string, properties?: Record<string, unknown>): Promise<UserReward | null> => {
-      return this.rewardClient?.checkEligibility(eventType, properties) ?? null;
-    },
-    /** Get the oracle-signed proof for on-chain claiming */
-    getProof: async (rewardId: string): Promise<RewardProof | null> => {
-      return this.rewardClient?.getProof(rewardId) ?? null;
-    },
-    /** Claim a reward on-chain via the connected wallet */
-    claimOnChain: async (rewardId: string, signer?: unknown): Promise<string> => {
+    checkEligibility: async (userId: string, rewardId: string): Promise<Record<string, unknown>> => {
       if (!this.rewardClient) throw new Error('Aether SDK: reward client not initialized');
-      return this.rewardClient.claimOnChain(rewardId, signer);
+      return this.rewardClient.checkEligibility(userId, rewardId);
     },
-    /** Get all rewards for the current user */
-    getRewards: async (): Promise<UserReward[]> => {
-      return this.rewardClient?.getRewards() ?? [];
+    getClaimPayload: async (userId: string, rewardId: string): Promise<Record<string, unknown>> => {
+      if (!this.rewardClient) throw new Error('Aether SDK: reward client not initialized');
+      return this.rewardClient.getClaimPayload(userId, rewardId);
     },
-    /** Get active reward campaigns */
-    getCampaigns: async (): Promise<RewardCampaign[]> => {
-      return this.rewardClient?.getCampaigns() ?? [];
-    },
-    /** Subscribe to new reward events */
-    onReward: (callback: RewardCallback): (() => void) => {
-      return this.rewardClient?.onReward(callback) ?? (() => {});
+    submitClaim: async (txHash: string, rewardId: string): Promise<Record<string, unknown>> => {
+      if (!this.rewardClient) throw new Error('Aether SDK: reward client not initialized');
+      return this.rewardClient.submitClaim(txHash, rewardId);
     },
   };
 
   // =========================================================================
-  // SUB-INTERFACES — Proxied (simple delegation to module instances)
+  // SUB-INTERFACES — Proxied
   // =========================================================================
 
   ecommerce = createModuleProxy<EcommerceModule>(() => this.ecommerceModule);
   featureFlag = createModuleProxy<FeatureFlagModule>(() => this.featureFlags);
-  feedback = createModuleProxy<FeedbackModule>(() => this.feedbackModule);
   heatmap = createModuleProxy<HeatmapModule>(() => this.heatmapModule);
   funnel = createModuleProxy<FunnelModule>(() => this.funnelModule);
   forms = createModuleProxy<FormAnalyticsModule>(() => this.formAnalytics);
@@ -363,34 +292,51 @@ class AetherSDK implements AetherSDKInterface {
   // EVENT LISTENERS
   // =========================================================================
 
-  onIntentPrediction(callback: IntentCallback): () => void {
-    this.intentCallbacks.push(callback);
-    return () => { this.intentCallbacks = this.intentCallbacks.filter((cb) => cb !== callback); };
-  }
-
-  onBotDetection(callback: BotCallback): () => void {
-    this.botCallbacks.push(callback);
-    return () => { this.botCallbacks = this.botCallbacks.filter((cb) => cb !== callback); };
-  }
-
-  onSessionScore(callback: SessionCallback): () => void {
-    this.sessionScoreCallbacks.push(callback);
-    return () => { this.sessionScoreCallbacks = this.sessionScoreCallbacks.filter((cb) => cb !== callback); };
-  }
-
   use(plugin: AetherPlugin): void {
     this.plugins.push(plugin);
     if (this.initialized) plugin.init(this);
   }
 
   // =========================================================================
-  // INIT HELPERS — Split from init() for readability (~40-60 lines each)
+  // BACKEND CONFIG — replaces UpdateManager
   // =========================================================================
 
-  /**
-   * Initialize core managers: identity, session, event queue, consent,
-   * semantic context, and traffic source tracking.
-   */
+  /** Fetch configuration from backend (feature flags, funnel definitions, etc.) */
+  private async fetchConfig(): Promise<void> {
+    if (!this.config) return;
+    const endpoint = this.config.endpoint ?? DEFAULT_ENDPOINT;
+
+    try {
+      const response = await fetch(`${endpoint}/v1/config`, {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${this.config.apiKey}`,
+          'Content-Type': 'application/json',
+        },
+      });
+
+      if (!response.ok) return;
+
+      const data = await response.json() as {
+        featureFlags?: { key: string; enabled: boolean; value?: unknown }[];
+        funnelDefinitions?: FunnelDefinition[];
+      };
+
+      // Load funnel definitions from backend
+      if (data.funnelDefinitions && this.funnelModule) {
+        this.funnelModule.loadDefinitions(data.funnelDefinitions);
+      }
+
+      this.log('debug', 'Remote config loaded');
+    } catch {
+      // Silent failure — local defaults will be used
+    }
+  }
+
+  // =========================================================================
+  // INIT HELPERS
+  // =========================================================================
+
   private initCore(config: AetherConfig): void {
     this.identityManager = new IdentityManager();
     this.sessionManager = new SessionManager(
@@ -410,7 +356,6 @@ class AetherSDK implements AetherSDKInterface {
       onError: (err) => this.log('error', 'Event send failed:', err.message),
     });
 
-    // Consent module
     this.consentModule = new ConsentModule({
       purposes: ['analytics', 'marketing', 'web3'],
       policyUrl: '/privacy',
@@ -426,30 +371,22 @@ class AetherSDK implements AetherSDKInterface {
       this.consentModule.showBanner();
     }
 
-    // Semantic context — tiered enrichment for all events
-    this.semanticContext = new SemanticContextCollector(SDK_VERSION, {
-      maxTier: config.privacy?.vectorizeData ? 1 : 3,
-    });
+    // Semantic context — Tier 1 only
+    this.semanticContext = new SemanticContextCollector(SDK_VERSION);
 
-    // Traffic source tracking — zero-config, auto-detect all sources
+    // Traffic source tracking — raw param shipping
     this.trafficTracker = new TrafficSourceTracker();
-    const detectedSource = this.trafficTracker.detect();
-    this.log('debug', 'Traffic source detected:', detectedSource.source, '/', detectedSource.medium);
+    this.trafficTracker.detect();
 
-    // Start session
     this.sessionManager.start();
 
-    // Reward automation client — connects to backend fraud + oracle + on-chain pipeline
+    // Reward client — thin claim-only stub
     this.rewardClient = createRewardClient({
       endpoint,
       apiKey: config.apiKey,
-      autoCheck: false, // Manual — triggered via aether.rewards.checkEligibility()
     });
   }
 
-  /**
-   * Initialize Web3 module: multi-VM wallet tracking (EVM, Solana, Bitcoin, SUI, NEAR, TRON, Cosmos).
-   */
   private initWeb3(config: AetherConfig, modules: NonNullable<AetherConfig['modules']>): void {
     if (modules.walletTracking || modules.svmTracking || modules.bitcoinTracking ||
         modules.moveTracking || modules.nearTracking || modules.tronTracking || modules.cosmosTracking) {
@@ -457,12 +394,6 @@ class AetherSDK implements AetherSDKInterface {
         {
           onWalletEvent: (action, data) => this.enqueueEvent('wallet', { action, ...data }),
           onTransaction: (txHash, data) => this.enqueueEvent('transaction', { txHash, ...data }),
-          onTokenBalance: (balance) => this.enqueueEvent('token_balance', { ...balance }),
-          onNFTDetected: (nft) => this.enqueueEvent('nft_detection', { ...nft }),
-          onGasAnalytics: (gas) => this.enqueueEvent('track', { event: 'gas_analytics', ...gas }),
-          onWhaleAlert: (alert) => this.enqueueEvent('whale_alert', { ...alert }),
-          onDeFiInteraction: (data) => this.enqueueEvent('defi_interaction', data),
-          onPortfolioUpdate: (snapshot) => this.enqueueEvent('portfolio_update', { ...snapshot }),
         },
         {
           walletTracking: modules.walletTracking,
@@ -472,182 +403,54 @@ class AetherSDK implements AetherSDKInterface {
           nearTracking: modules.nearTracking,
           tronTracking: modules.tronTracking,
           cosmosTracking: modules.cosmosTracking,
-          tokenTracking: modules.tokenTracking,
-          nftDetection: modules.nftDetection,
-          gasTracking: modules.gasTracking,
-          whaleAlerts: modules.whaleAlerts,
-          defiTracking: modules.defiTracking,
-          portfolioTracking: modules.portfolioTracking,
-          walletClassification: modules.walletClassification,
-          perpetualsTracking: modules.perpetualsTracking,
-          bridgeTracking: modules.bridgeTracking,
-          cexTracking: modules.cexTracking,
         }
       );
       this.web3Module.init();
     }
   }
 
-  /**
-   * Initialize Web2 modules: ecommerce, form analytics, feature flags,
-   * feedback surveys, heatmaps, and funnel tracking.
-   */
   private initWeb2(config: AetherConfig, modules: NonNullable<AetherConfig['modules']>): void {
-    const endpoint = config.endpoint ?? DEFAULT_ENDPOINT;
     const trackFn = (event: string, props?: Record<string, unknown>) => this.track(event, props);
 
-    // E-commerce tracking (cart state, checkout funnel, order lifecycle)
+    // E-commerce — thin stub
     if (modules.ecommerce !== false) {
-      this.ecommerceModule = new EcommerceModule({
-        onTrack: trackFn,
-        currency: (config as any).ecommerce?.currency ?? 'USD',
-        cartPersistence: (config as any).ecommerce?.cartPersistence ?? true,
-      });
+      this.ecommerceModule = new EcommerceModule({ onTrack: trackFn });
     }
 
-    // Form analytics (field-level interaction tracking, abandonment detection)
+    // Form analytics — thin field emitter
     if (modules.formAnalytics !== false) {
-      this.formAnalytics = new FormAnalyticsModule({
-        onTrack: trackFn,
-        autoDiscover: (config as any).formAnalytics?.autoDiscover ?? true,
-        sensitiveFields: config.privacy?.piiPatterns ?? [],
+      this.formAnalytics = new FormAnalyticsModule({ onTrack: trackFn }, {
+        autoDiscover: true,
       });
     }
 
-    // Feature flags (remote config with stale-while-revalidate caching)
+    // Feature flags — cache-only layer
     if (modules.featureFlags) {
-      this.featureFlags = new FeatureFlagModule({
-        endpoint,
-        apiKey: config.apiKey,
-        onTrack: trackFn,
-        refreshIntervalMs: (config as any).featureFlags?.refreshIntervalMs ?? 300000,
-        defaults: (config as any).featureFlags?.defaults ?? {},
-      });
+      this.featureFlags = new FeatureFlagModule({ onTrack: trackFn });
+      const endpoint = config.endpoint ?? DEFAULT_ENDPOINT;
+      this.featureFlags.init({ endpoint, apiKey: config.apiKey }).catch(() => { /* silent */ });
     }
 
-    // Feedback surveys (NPS, CSAT, CES with trigger rules + DOM rendering)
-    if (modules.feedback) {
-      this.feedbackModule = new FeedbackModule({
-        endpoint,
-        apiKey: config.apiKey,
-        onTrack: trackFn,
-        userId: this.identityManager!.getIdentity().anonymousId,
-      });
-    }
-
-    // Heatmaps (click, movement, scroll, attention tracking)
+    // Heatmaps — thin coordinate emitter
     if (modules.heatmaps) {
-      this.heatmapModule = new HeatmapModule({
-        onTrack: trackFn,
-        sampleRate: (config as any).heatmaps?.sampleRate ?? 1.0,
-        flushIntervalMs: (config as any).heatmaps?.flushIntervalMs ?? 30000,
-      });
+      this.heatmapModule = new HeatmapModule({ onTrack: trackFn });
       this.heatmapModule.start();
     }
 
-    // Funnel tracking (multi-step conversion funnels with drop-off analysis)
+    // Funnels — thin event tagger
     if (modules.funnels) {
-      this.funnelModule = new FunnelModule({
-        onTrack: trackFn,
-        definitions: (config as any).funnels?.definitions ?? [],
-      });
+      this.funnelModule = new FunnelModule({ onTrack: trackFn });
     }
   }
 
-  /**
-   * Initialize analytics modules: auto-discovery, performance, experiments, and edge ML.
-   */
   private initAnalytics(config: AetherConfig, modules: NonNullable<AetherConfig['modules']>): void {
-    // Auto-discovery
+    // Auto-discovery — minimal click tracker
     if (modules.autoDiscovery !== false) {
       this.autoDiscovery = new AutoDiscoveryModule(
-        { onTrack: (event, props) => this.track(event, props) },
-        { maskSensitive: config.privacy?.maskSensitiveFields ?? true, piiPatterns: config.privacy?.piiPatterns }
+        { onTrack: (event, props) => this.track(event, props) }
       );
-      this.autoDiscovery.start({
-        clicks: true,
-        forms: modules.formTracking !== false,
-        scrollDepth: modules.scrollDepth !== false,
-        rageClicks: modules.rageClickDetection !== false,
-        deadClicks: modules.deadClickDetection !== false,
-      });
+      this.autoDiscovery.start();
     }
-
-    // Performance tracking
-    if (modules.performanceTracking) {
-      this.performanceModule = new PerformanceModule({
-        onPerformance: (metrics) => this.enqueueEvent('performance', metrics),
-        onError: (error) => this.enqueueEvent('error', error),
-      });
-      this.performanceModule.start({ webVitals: true, errors: modules.errorTracking !== false });
-    } else if (modules.errorTracking) {
-      this.performanceModule = new PerformanceModule({
-        onPerformance: () => {},
-        onError: (error) => this.enqueueEvent('error', error),
-      });
-      this.performanceModule.start({ webVitals: false, errors: true });
-    }
-
-    // Experiments
-    if (modules.experiments !== false) {
-      this.experimentsModule = new ExperimentsModule(
-        this.identityManager!.getAnonymousId(),
-        { onExposure: (expId, variant) => this.track('experiment_exposure', { experimentId: expId, variantId: variant }) }
-      );
-    }
-
-    // Edge ML
-    if (modules.intentPrediction || modules.predictiveAnalytics) {
-      this.edgeML = new EdgeMLModule({
-        onIntentPrediction: (intent) => {
-          this.semanticContext?.setIntent(intent);
-          this.intentCallbacks.forEach((cb) => { try { cb(intent); } catch { /* */ } });
-          if (modules.predictiveAnalytics) {
-            this.enqueueEvent('track', { event: 'intent_prediction', ...intent });
-          }
-        },
-        onBotDetection: (score) => {
-          this.botCallbacks.forEach((cb) => { try { cb(score); } catch { /* */ } });
-        },
-        onSessionScore: (score) => {
-          this.semanticContext?.setSessionScore(score);
-          this.sessionScoreCallbacks.forEach((cb) => { try { cb(score); } catch { /* */ } });
-        },
-      });
-      this.edgeML.start(5000);
-    }
-  }
-
-  /**
-   * Initialize auto-update system: OTA data module sync via CDN manifest.
-   */
-  private initAutoUpdate(config: AetherConfig): void {
-    const autoUpdate = (config as any).autoUpdate ?? {};
-    if (autoUpdate.enabled === false) return;
-
-    const cdnEndpoint = config.endpoint?.replace('/api.', '/cdn.') ?? 'https://cdn.aether.network';
-    this.updateManager = new UpdateManager(
-      cdnEndpoint,
-      SDK_VERSION,
-      {
-        enabled: true,
-        checkIntervalMs: autoUpdate.checkIntervalMs,
-        onUpdateAvailable: autoUpdate.onUpdateAvailable,
-      },
-      this.debug,
-    );
-
-    // Register data module injectors
-    this.updateManager.registerInjector('chainRegistry', (data) => setChainRemoteData(data as any));
-    this.updateManager.registerInjector('protocolRegistry', (data) => setProtocolRemoteData(data as any));
-    this.updateManager.registerInjector('walletLabels', (data) => setLabelRemoteData(data as any));
-    this.updateManager.registerInjector('walletClassification', (data) => setClassifierRemoteData(data as any));
-
-    // Load cached data modules first (sync, instant)
-    this.updateManager.loadCachedModules();
-
-    // Start background update check (async, non-blocking)
-    this.updateManager.start();
   }
 
   // =========================================================================
@@ -660,9 +463,7 @@ class AetherSDK implements AetherSDKInterface {
     const session = this.sessionManager.getSession();
     const identity = this.identityManager.getIdentity();
     const consent = this.consentModule?.getState() ?? null;
-
-    // Collect tiered semantic context
-    const semantic = this.semanticContext?.collect(consent);
+    const semantic = this.semanticContext?.collect();
 
     const event = {
       id: generateId(),

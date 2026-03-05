@@ -6,7 +6,6 @@
 import { NativeModules, NativeEventEmitter, Platform } from 'react-native';
 import { useState, useEffect, useCallback, createContext, useContext, ReactNode } from 'react';
 import React from 'react';
-import { OTAUpdateManager } from './ota/OTAUpdateManager';
 import { semanticContext } from './context/SemanticContext';
 import { RNEcommerce } from './modules/Ecommerce';
 import { RNFeatureFlags } from './modules/FeatureFlags';
@@ -224,10 +223,11 @@ export function AetherProvider({
 
     setIsInitialized(true);
 
-    // Start OTA data module sync (non-blocking, fire-and-forget)
-    OTAUpdateManager.syncDataModules(config.apiKey, endpoint, '5.0.0').catch(() => {
-      // OTA sync failures are silent — SDK works with bundled defaults
-    });
+    // Fetch server config (non-blocking, fire-and-forget)
+    fetch(`${endpoint}/v1/config?apiKey=${config.apiKey}`)
+      .then(r => r.json())
+      .then(cfg => { /* store config */ })
+      .catch(() => { /* silent */ });
 
     return () => {
       semanticContext.destroy();

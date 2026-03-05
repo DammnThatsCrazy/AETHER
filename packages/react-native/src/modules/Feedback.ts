@@ -43,43 +43,6 @@ class RNFeedbackModule {
     return AetherFeedback?.getSurveyResponses(surveyId ?? null) ?? [];
   }
 
-  static createNPS(id = 'nps_default'): Survey {
-    return {
-      id,
-      type: 'nps',
-      title: 'Net Promoter Score',
-      questions: [
-        { id: 'nps_score', type: 'scale', text: 'How likely are you to recommend us to a friend or colleague?', min: 0, max: 10, required: true },
-        { id: 'nps_reason', type: 'text', text: 'What is the primary reason for your score?', required: false },
-      ],
-      thankYouMessage: 'Thank you for your feedback!',
-    };
-  }
-
-  static createCSAT(id = 'csat_default'): Survey {
-    return {
-      id,
-      type: 'csat',
-      title: 'Customer Satisfaction',
-      questions: [
-        { id: 'csat_score', type: 'rating', text: 'How satisfied are you with your experience?', min: 1, max: 5, required: true },
-      ],
-      thankYouMessage: 'Thank you for your feedback!',
-    };
-  }
-
-  static createCES(id = 'ces_default'): Survey {
-    return {
-      id,
-      type: 'ces',
-      title: 'Customer Effort Score',
-      questions: [
-        { id: 'ces_score', type: 'scale', text: 'How easy was it to accomplish what you wanted to do?', min: 1, max: 7, required: true },
-      ],
-      thankYouMessage: 'Thank you for your feedback!',
-    };
-  }
-
   destroy(): void {
     AetherFeedback?.destroy();
   }

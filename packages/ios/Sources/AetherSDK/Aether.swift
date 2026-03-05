@@ -75,14 +75,9 @@ public struct EventContext: Codable {
     }
 
     public struct DeviceInfo: Codable {
-        public let type: String
-        public let os: String
+        public let osName: String
         public let osVersion: String
-        public let model: String
-        public let manufacturer: String
-        public let screenWidth: Int
-        public let screenHeight: Int
-        public let language: String
+        public let locale: String
         public let timezone: String
     }
 
@@ -125,6 +120,8 @@ public final class Aether {
     private var screenCount: Int = 0
     private var eventCount: Int = 0
     private var isInitialized = false
+    private var serverConfig: [String: Any] = [:]
+    private var consentState: [String] = []
 
     private let serialQueue = DispatchQueue(label: "com.aether.sdk.serial")
     private let defaults = UserDefaults(suiteName: "com.aether.sdk")!
@@ -158,7 +155,9 @@ public final class Aether {
         }
 
         isInitialized = true
-        log("Aether iOS SDK initialized (v4.0.0)")
+        log("Aether iOS SDK initialized (v7.0.0)")
+
+        fetchConfig()
     }
 
     public func track(_ event: String, properties: [String: AnyCodable] = [:]) {
@@ -236,6 +235,95 @@ public final class Aether {
         track("push_notification_opened", properties: props)
     }
 
+    // MARK: - Wallet Tracking
+
+    public func walletConnected(address: String, walletType: String? = nil, chainId: String? = nil) {
+        enqueueEvent(type: .wallet, properties: [
+            "action": AnyCodable("connect"),
+            "address": AnyCodable(address),
+            "walletType": AnyCodable(walletType ?? "unknown"),
+            "chainId": AnyCodable(chainId ?? "unknown")
+        ])
+    }
+
+    public func walletDisconnected(address: String) {
+        enqueueEvent(type: .wallet, properties: [
+            "action": AnyCodable("disconnect"),
+            "address": AnyCodable(address)
+        ])
+    }
+
+    public func walletTransaction(txHash: String, chainId: String, value: String? = nil, properties: [String: AnyCodable]? = nil) {
+        var props: [String: AnyCodable] = [
+            "action": AnyCodable("transaction"),
+            "txHash": AnyCodable(txHash),
+            "chainId": AnyCodable(chainId)
+        ]
+        if let value = value { props["value"] = AnyCodable(value) }
+        if let extra = properties { props.merge(extra) { _, new in new } }
+        enqueueEvent(type: .transaction, properties: props)
+    }
+
+    // MARK: - Consent Management
+
+    public func grantConsent(categories: [String]) {
+        consentState = categories
+        enqueueEvent(type: .consent, properties: [
+            "action": AnyCodable("grant"),
+            "categories": AnyCodable(categories)
+        ])
+    }
+
+    public func revokeConsent(categories: [String]) {
+        consentState = consentState.filter { !categories.contains($0) }
+        enqueueEvent(type: .consent, properties: [
+            "action": AnyCodable("revoke"),
+            "categories": AnyCodable(categories)
+        ])
+    }
+
+    public func getConsentState() -> [String] { return consentState }
+
+    // MARK: - Ecommerce
+
+    public func trackProductView(_ product: [String: AnyCodable]) {
+        enqueueEvent(type: .track, properties: [
+            "event": AnyCodable("product_viewed"),
+            "product": AnyCodable(product)
+        ])
+    }
+
+    public func trackAddToCart(_ item: [String: AnyCodable]) {
+        enqueueEvent(type: .track, properties: [
+            "event": AnyCodable("product_added"),
+            "item": AnyCodable(item)
+        ])
+    }
+
+    public func trackPurchase(orderId: String, total: Double, currency: String = "USD", items: [[String: AnyCodable]]? = nil) {
+        var props: [String: AnyCodable] = [
+            "event": AnyCodable("order_completed"),
+            "orderId": AnyCodable(orderId),
+            "total": AnyCodable(total),
+            "currency": AnyCodable(currency)
+        ]
+        if let items = items { props["items"] = AnyCodable(items) }
+        enqueueEvent(type: .conversion, properties: props)
+    }
+
+    // MARK: - Feature Flags (from server config)
+
+    public func isFeatureEnabled(_ key: String, default defaultValue: Bool = false) -> Bool {
+        guard let flags = serverConfig["featureFlags"] as? [String: Any],
+              let value = flags[key] as? Bool else { return defaultValue }
+        return value
+    }
+
+    public func getFeatureValue(_ key: String, default defaultValue: Any? = nil) -> Any? {
+        guard let flags = serverConfig["featureFlags"] as? [String: Any] else { return defaultValue }
+        return flags[key] ?? defaultValue
+    }
+
     // MARK: - Private
 
     private func enqueueEvent(type: AetherEventType, properties: [String: AnyCodable]) {
@@ -295,21 +383,25 @@ public final class Aether {
         }.resume()
     }
 
-    private func buildContext() -> EventContext {
-        let device = UIDevice.current
-        let screen = UIScreen.main
+    private func fetchConfig() {
+        guard let url = URL(string: "\(config?.endpoint ?? "")/v1/config?apiKey=\(config?.apiKey ?? "")") else { return }
+        URLSession.shared.dataTask(with: url) { [weak self] data, _, _ in
+            guard let data = data,
+                  let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { return }
+            self?.serialQueue.async {
+                self?.serverConfig = json
+                if self?.config?.debug == true { self?.log("Config loaded") }
+            }
+        }.resume()
+    }
 
+    private func buildContext() -> EventContext {
         return EventContext(
-            library: .init(name: "AetherSDK-iOS", version: "4.0.0"),
+            library: .init(name: "aether-ios", version: "7.0.0"),
             device: .init(
-                type: device.userInterfaceIdiom == .pad ? "tablet" : "mobile",
-                os: "iOS",
-                osVersion: device.systemVersion,
-                model: device.model,
-                manufacturer: "Apple",
-                screenWidth: Int(screen.bounds.width * screen.scale),
-                screenHeight: Int(screen.bounds.height * screen.scale),
-                language: Locale.current.language.languageCode?.identifier ?? "en",
+                osName: "iOS",
+                osVersion: UIDevice.current.systemVersion,
+                locale: Locale.current.identifier,
                 timezone: TimeZone.current.identifier
             )
         )

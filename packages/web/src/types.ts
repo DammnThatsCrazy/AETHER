@@ -23,22 +23,21 @@ export interface AetherConfig {
 }
 
 export interface ModuleConfig {
-  intentPrediction?: boolean;
   walletTracking?: boolean;
   formTracking?: boolean;
   errorTracking?: boolean;
-  performanceTracking?: boolean;
   scrollDepth?: boolean;
   onChainAttribution?: boolean;
   tokenGating?: boolean;
   gasTracking?: boolean;
   whaleTracking?: boolean;
-  experiments?: boolean;
   cohortAnalysis?: boolean;
-  predictiveAnalytics?: boolean;
   autoDiscovery?: boolean;
-  rageClickDetection?: boolean;
-  deadClickDetection?: boolean;
+  ecommerce?: boolean;
+  featureFlags?: boolean;
+  heatmaps?: boolean;
+  funnels?: boolean;
+  formAnalytics?: boolean;
   // Multi-VM Web3 modules
   svmTracking?: boolean;
   bitcoinTracking?: boolean;
@@ -46,7 +45,7 @@ export interface ModuleConfig {
   nearTracking?: boolean;
   tronTracking?: boolean;
   cosmosTracking?: boolean;
-  // DeFi tracking modules
+  // DeFi tracking modules (backend classifies — SDK ships raw tx)
   tokenTracking?: boolean;
   nftDetection?: boolean;
   defiTracking?: boolean;
@@ -67,8 +66,6 @@ export interface ModuleConfig {
 }
 
 export interface PrivacyConfig {
-  /** Send ML vectors instead of raw behavioral data */
-  vectorizeData?: boolean;
   /** Anonymize IP addresses before transmission */
   anonymizeIP?: boolean;
   /** Enable full GDPR compliance mode */
@@ -86,14 +83,6 @@ export interface PrivacyConfig {
 }
 
 export interface AdvancedConfig {
-  /** Offload processing to Web Worker */
-  useWebWorker?: boolean;
-  /** Pre-fetch ML predictions speculatively */
-  speculativeExecution?: boolean;
-  /** Run ML inference locally on-device */
-  edgeComputation?: boolean;
-  /** Use WASM for data vectorization acceleration */
-  wasmVectorization?: boolean;
   /** Session heartbeat interval in ms (default: 30000) */
   heartbeatInterval?: number;
   /** Event batch size before flush (default: 10) */
@@ -342,8 +331,6 @@ export type EventType =
   | 'wallet'
   | 'transaction'
   | 'error'
-  | 'performance'
-  | 'experiment'
   | 'consent'
   | 'heartbeat'
   // Multi-VM Web3 events
@@ -512,20 +499,6 @@ export interface ErrorEvent extends BaseEvent {
   };
 }
 
-export interface PerformanceEvent extends BaseEvent {
-  type: 'performance';
-  properties: {
-    lcp?: number;
-    fid?: number;
-    cls?: number;
-    ttfb?: number;
-    fcp?: number;
-    domReady?: number;
-    loadComplete?: number;
-    [key: string]: unknown;
-  };
-}
-
 export type AetherEvent =
   | TrackEvent
   | PageEvent
@@ -533,8 +506,7 @@ export type AetherEvent =
   | ConversionEvent
   | WalletEvent
   | TransactionEvent
-  | ErrorEvent
-  | PerformanceEvent;
+  | ErrorEvent;
 
 // =============================================================================
 // IDENTITY TYPES
@@ -599,45 +571,6 @@ export interface Session {
   campaign?: CampaignContext;
   device: DeviceContext;
   isActive: boolean;
-}
-
-// =============================================================================
-// ML / PREDICTION TYPES
-// =============================================================================
-
-export interface IntentVector {
-  predictedAction: 'purchase' | 'signup' | 'browse' | 'exit' | 'engage' | 'idle';
-  confidenceScore: number;
-  highExitRisk: boolean;
-  highConversionProbability: boolean;
-  journeyStage: 'awareness' | 'consideration' | 'decision' | 'retention';
-  features: Record<string, number>;
-  timestamp: string;
-}
-
-export interface BotScore {
-  likelyBot: boolean;
-  confidenceScore: number;
-  botType: 'human' | 'scraper' | 'automated_test' | 'click_farm' | 'legitimate_bot';
-  signals: BehaviorSignature;
-}
-
-export interface BehaviorSignature {
-  avgTimeBetweenActions: number;
-  actionTimingVariance: number;
-  clickToScrollRatio: number;
-  mouseMovementEntropy: number;
-  navigationEntropy: number;
-  interactionDiversityScore: number;
-  hasNaturalPauses: boolean;
-  hasErraticMovement: boolean;
-  hasPerfectTiming: boolean;
-}
-
-export interface SessionScore {
-  engagementScore: number;
-  conversionProbability: number;
-  recommendedIntervention: 'none' | 'soft_cta' | 'hard_cta' | 'exit_offer';
 }
 
 // =============================================================================
@@ -717,22 +650,6 @@ export interface ConsentBannerConfig {
 }
 
 // =============================================================================
-// EXPERIMENT TYPES
-// =============================================================================
-
-export interface ExperimentConfig {
-  id: string;
-  variants: Record<string, () => void>;
-  weights?: Record<string, number>;
-}
-
-export interface ExperimentAssignment {
-  experimentId: string;
-  variantId: string;
-  assignedAt: string;
-}
-
-// =============================================================================
 // PRODUCT / ECOMMERCE TYPES
 // =============================================================================
 
@@ -751,16 +668,10 @@ export interface ProductItem {
 // CALLBACK / LISTENER TYPES
 // =============================================================================
 
-export type IntentCallback = (intent: IntentVector) => void;
-export type BotCallback = (score: BotScore) => void;
-export type SessionCallback = (score: SessionScore) => void;
 export type EventCallback = (event: AetherEvent) => void;
 export type ErrorCallback = (error: Error) => void;
 export type ConsentCallback = (consent: ConsentState) => void;
 export type WalletChangeCallback = (wallets: ConnectedWallet[]) => void;
-export type PortfolioCallback = (portfolio: PortfolioSnapshot) => void;
-export type WhaleCallback = (alert: WhaleAlert) => void;
-export type DeFiCallback = (position: DeFiPosition) => void;
 
 /** Plugin interface for extending SDK functionality */
 export interface AetherPlugin {
@@ -782,11 +693,7 @@ export interface AetherSDKInterface {
   flush(): Promise<void>;
   destroy(): void;
   wallet: WalletInterface;
-  experiments: ExperimentInterface;
   consent: ConsentInterface;
-  onIntentPrediction(callback: IntentCallback): () => void;
-  onBotDetection(callback: BotCallback): () => void;
-  onSessionScore(callback: SessionCallback): () => void;
   use(plugin: AetherPlugin): void;
 }
 
@@ -815,17 +722,8 @@ export interface WalletInterface {
   getWalletsByVM(vm: VMType): ConnectedWallet[];
   /** Track a transaction */
   transaction(txHash: string, options?: TransactionOptions): void;
-  /** Get cross-chain portfolio */
-  getPortfolio(): PortfolioSnapshot | null;
   /** Register callback for wallet connection changes */
   onWalletChange(callback: WalletChangeCallback): () => void;
-  /** Classify a wallet address */
-  classifyWallet(address: string, vm: VMType): WalletClassification;
-}
-
-export interface ExperimentInterface {
-  run(config: ExperimentConfig): string;
-  getAssignment(experimentId: string): ExperimentAssignment | null;
 }
 
 export interface ConsentInterface {

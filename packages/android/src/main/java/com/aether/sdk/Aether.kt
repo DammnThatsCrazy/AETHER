@@ -70,7 +70,7 @@ data class IdentityData(
 
 object Aether : DefaultLifecycleObserver {
     private const val TAG = "AetherSDK"
-    private const val VERSION = "4.0.0"
+    private const val VERSION = "7.0.0"
     private const val PREFS_NAME = "com.aether.sdk"
 
     private var config: AetherConfig? = null
@@ -88,6 +88,8 @@ object Aether : DefaultLifecycleObserver {
     private var screenCount = 0
     private var eventCount = 0
     private var isInitialized = false
+    private var serverConfig: JSONObject = JSONObject()
+    private var consentState: MutableList<String> = mutableListOf()
     private val dateFormat = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", Locale.US).apply {
         timeZone = TimeZone.getTimeZone("UTC")
     }
@@ -127,6 +129,8 @@ object Aether : DefaultLifecycleObserver {
 
         isInitialized = true
         log("Aether Android SDK initialized (v$VERSION)")
+
+        fetchConfig()
     }
 
     fun track(event: String, properties: Map<String, Any?> = emptyMap()) {
@@ -211,6 +215,83 @@ object Aether : DefaultLifecycleObserver {
     }
 
     // =========================================================================
+    // WALLET TRACKING
+    // =========================================================================
+
+    fun walletConnected(address: String, walletType: String = "unknown", chainId: String = "unknown") {
+        enqueueEvent("wallet", mapOf(
+            "action" to "connect", "address" to address,
+            "walletType" to walletType, "chainId" to chainId
+        ))
+    }
+
+    fun walletDisconnected(address: String) {
+        enqueueEvent("wallet", mapOf("action" to "disconnect", "address" to address))
+    }
+
+    fun walletTransaction(txHash: String, chainId: String, value: String? = null, properties: Map<String, Any>? = null) {
+        val props = mutableMapOf<String, Any>(
+            "action" to "transaction", "txHash" to txHash, "chainId" to chainId
+        )
+        value?.let { props["value"] = it }
+        properties?.let { props.putAll(it) }
+        enqueueEvent("transaction", props)
+    }
+
+    // =========================================================================
+    // CONSENT MANAGEMENT
+    // =========================================================================
+
+    fun grantConsent(categories: List<String>) {
+        consentState.addAll(categories)
+        enqueueEvent("consent", mapOf("action" to "grant", "categories" to categories))
+    }
+
+    fun revokeConsent(categories: List<String>) {
+        consentState.removeAll(categories)
+        enqueueEvent("consent", mapOf("action" to "revoke", "categories" to categories))
+    }
+
+    fun getConsentState(): List<String> = consentState.toList()
+
+    // =========================================================================
+    // ECOMMERCE TRACKING
+    // =========================================================================
+
+    fun trackProductView(product: Map<String, Any>) {
+        enqueueEvent("track", mapOf("event" to "product_viewed", "product" to product))
+    }
+
+    fun trackAddToCart(item: Map<String, Any>) {
+        enqueueEvent("track", mapOf("event" to "product_added", "item" to item))
+    }
+
+    fun trackPurchase(orderId: String, total: Double, currency: String = "USD", items: List<Map<String, Any>>? = null) {
+        val props = mutableMapOf<String, Any>(
+            "event" to "order_completed", "orderId" to orderId,
+            "total" to total, "currency" to currency
+        )
+        items?.let { props["items"] = it }
+        enqueueEvent("conversion", props)
+    }
+
+    // =========================================================================
+    // FEATURE FLAGS
+    // =========================================================================
+
+    fun isFeatureEnabled(key: String, default: Boolean = false): Boolean {
+        return try {
+            serverConfig.optJSONObject("featureFlags")?.optBoolean(key, default) ?: default
+        } catch (_: Exception) { default }
+    }
+
+    fun getFeatureValue(key: String, default: Any? = null): Any? {
+        return try {
+            serverConfig.optJSONObject("featureFlags")?.opt(key) ?: default
+        } catch (_: Exception) { default }
+    }
+
+    // =========================================================================
     // LIFECYCLE
     // =========================================================================
 
@@ -290,28 +371,33 @@ object Aether : DefaultLifecycleObserver {
         }
     }
 
-    private fun buildContext(): JSONObject {
-        val ctx = context ?: return JSONObject()
-        val dm = ctx.resources.displayMetrics
-
-        return JSONObject().apply {
-            put("library", JSONObject().apply {
-                put("name", "AetherSDK-Android")
-                put("version", VERSION)
-            })
-            put("device", JSONObject().apply {
-                put("type", if (ctx.resources.configuration.smallestScreenWidthDp >= 600) "tablet" else "mobile")
-                put("os", "Android")
-                put("osVersion", Build.VERSION.RELEASE)
-                put("model", Build.MODEL)
-                put("manufacturer", Build.MANUFACTURER)
-                put("screenWidth", dm.widthPixels)
-                put("screenHeight", dm.heightPixels)
-                put("density", dm.density)
-                put("language", Locale.getDefault().language)
-                put("timezone", TimeZone.getDefault().id)
-            })
+    private fun fetchConfig() {
+        val endpoint = config?.endpoint ?: return
+        scope.launch(Dispatchers.IO) {
+            try {
+                val url = URL("$endpoint/v1/config?apiKey=${config?.apiKey ?: ""}")
+                val conn = url.openConnection() as HttpURLConnection
+                conn.connectTimeout = 5000
+                conn.readTimeout = 5000
+                val response = conn.inputStream.bufferedReader().readText()
+                serverConfig = JSONObject(response)
+                if (config?.debug == true) log("Config loaded")
+                conn.disconnect()
+            } catch (_: Exception) { }
         }
+    }
+
+    private fun buildContext(): JSONObject = JSONObject().apply {
+        put("os", JSONObject().apply {
+            put("name", "Android")
+            put("version", Build.VERSION.RELEASE)
+        })
+        put("locale", Locale.getDefault().toLanguageTag())
+        put("timezone", TimeZone.getDefault().id)
+        put("library", JSONObject().apply {
+            put("name", "aether-android")
+            put("version", VERSION)
+        })
     }
 
     private fun loadOrCreateAnonymousId(): String {

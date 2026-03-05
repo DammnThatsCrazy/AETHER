@@ -1,13 +1,12 @@
 // =============================================================================
-// AETHER SDK — WEB3 MODULE (MULTI-VM ORCHESTRATOR)
-// Coordinates 7 VM providers, 7 VM trackers, generic DeFi trackers,
-// wallet classification, and portfolio aggregation
+// AETHER SDK — WEB3 MODULE (Tier 2 Thin Client)
+// Simplified orchestrator: wallet detection (7 VM providers),
+// connect/disconnect events, raw transaction shipping to backend.
+// No DeFi classification, no portfolio aggregation, no wallet classification.
 // =============================================================================
 
 import type {
   WalletInfo, TransactionOptions, VMType, ConnectedWallet,
-  PortfolioSnapshot, WalletClassification, TokenBalance, NFTAsset,
-  DeFiPosition, WhaleAlert, GasAnalytics, DeFiCategory,
 } from '../types';
 
 // Providers
@@ -19,7 +18,7 @@ import { NEARProvider } from './providers/near-provider';
 import { TronProvider } from './providers/tron-provider';
 import { CosmosProvider } from './providers/cosmos-provider';
 
-// Trackers
+// Trackers (slim — raw data only)
 import { EVMTracker } from './tracking/evm-tracker';
 import { SVMTracker } from './tracking/svm-tracker';
 import { BTCTracker } from './tracking/btc-tracker';
@@ -28,17 +27,6 @@ import { NEARTracker } from './tracking/near-tracker';
 import { TronTracker } from './tracking/tron-tracker';
 import { CosmosTracker } from './tracking/cosmos-tracker';
 
-// DeFi
-import { DexTracker } from './defi/dex-tracker';
-import { createDeFiTrackers, type GenericDeFiTracker } from './defi/generic-defi-tracker';
-import { identifyProtocol } from './defi/protocol-registry';
-
-// Wallet
-import { classifyWallet } from './wallet/wallet-classifier';
-
-// Portfolio
-import { PortfolioTracker } from './portfolio/portfolio-tracker';
-
 // =============================================================================
 // Callbacks interface
 // =============================================================================
@@ -46,16 +34,9 @@ import { PortfolioTracker } from './portfolio/portfolio-tracker';
 export interface Web3Callbacks {
   onWalletEvent: (action: string, data: Record<string, unknown>) => void;
   onTransaction: (txHash: string, data: Record<string, unknown>) => void;
-  onTokenBalance?: (balance: TokenBalance) => void;
-  onNFTDetected?: (nft: NFTAsset) => void;
-  onGasAnalytics?: (gas: GasAnalytics) => void;
-  onWhaleAlert?: (alert: WhaleAlert) => void;
-  onDeFiInteraction?: (data: Record<string, unknown>) => void;
-  onPortfolioUpdate?: (snapshot: PortfolioSnapshot) => void;
 }
 
 export interface Web3ModuleConfig {
-  // VM enables
   walletTracking?: boolean;
   svmTracking?: boolean;
   bitcoinTracking?: boolean;
@@ -63,20 +44,6 @@ export interface Web3ModuleConfig {
   nearTracking?: boolean;
   tronTracking?: boolean;
   cosmosTracking?: boolean;
-  // Feature enables
-  tokenTracking?: boolean;
-  nftDetection?: boolean;
-  gasTracking?: boolean;
-  whaleAlerts?: boolean;
-  defiTracking?: boolean;
-  portfolioTracking?: boolean;
-  walletClassification?: boolean;
-  perpetualsTracking?: boolean;
-  bridgeTracking?: boolean;
-  cexTracking?: boolean;
-  // Thresholds
-  whaleThresholdETH?: number;
-  whaleThresholdBTC?: number;
 }
 
 // =============================================================================
@@ -96,7 +63,7 @@ export class Web3Module {
   private tronProvider: TronProvider | null = null;
   private cosmosProvider: CosmosProvider | null = null;
 
-  // Trackers
+  // Trackers (slim)
   private evmTracker: EVMTracker | null = null;
   private svmTracker: SVMTracker | null = null;
   private btcTracker: BTCTracker | null = null;
@@ -104,13 +71,6 @@ export class Web3Module {
   private nearTracker: NEARTracker | null = null;
   private tronTracker: TronTracker | null = null;
   private cosmosTracker: CosmosTracker | null = null;
-
-  // DeFi
-  private dexTracker: DexTracker | null = null;
-  private defiTrackers: Map<DeFiCategory, GenericDeFiTracker> | null = null;
-
-  // Portfolio
-  private portfolio: PortfolioTracker | null = null;
 
   // Wallet change listeners
   private walletChangeListeners: ((wallets: ConnectedWallet[]) => void)[] = [];
@@ -127,40 +87,22 @@ export class Web3Module {
   init(): void {
     const cfg = this.config;
 
-    // Tracker callbacks (shared across VMs)
     const trackerCallbacks = {
-      onTokenBalance: (b: TokenBalance) => this.callbacks.onTokenBalance?.(b),
-      onNFTDetected: (n: NFTAsset) => this.callbacks.onNFTDetected?.(n),
-      onGasAnalytics: (g: GasAnalytics) => this.callbacks.onGasAnalytics?.(g),
-      onWhaleAlert: (a: WhaleAlert) => this.callbacks.onWhaleAlert?.(a),
-      onDeFiInteraction: (d: Record<string, unknown>) => this.callbacks.onDeFiInteraction?.(d),
-      onProgramInteraction: (d: Record<string, unknown>) => this.callbacks.onDeFiInteraction?.(d),
-      onInscriptionDetected: (d: Record<string, unknown>) => this.callbacks.onDeFiInteraction?.(d),
-      onUTXOUpdate: (d: Record<string, unknown>) => this.callbacks.onDeFiInteraction?.(d),
-      onActionDetected: (d: Record<string, unknown>) => this.callbacks.onDeFiInteraction?.(d),
-      onMoveCall: (d: Record<string, unknown>) => this.callbacks.onDeFiInteraction?.(d),
-      onIBCTransfer: (d: Record<string, unknown>) => this.callbacks.onDeFiInteraction?.(d),
-      onGovernanceAction: (d: Record<string, unknown>) => this.callbacks.onDeFiInteraction?.(d),
+      onTransaction: (txHash: string, data: Record<string, unknown>) =>
+        this.callbacks.onTransaction(txHash, data),
     };
 
-    // EVM (always if walletTracking enabled)
+    // EVM
     if (cfg.walletTracking !== false) {
       this.evmProvider = new EVMProvider({
         onWalletEvent: (action, data) => this.handleWalletEvent('evm', action, data),
         onTransaction: (hash, data) => this.handleTransaction('evm', hash, data),
       });
       this.evmProvider.init();
-
-      this.evmTracker = new EVMTracker(trackerCallbacks, {
-        whaleThresholdETH: cfg.whaleThresholdETH,
-        enableTokenTracking: cfg.tokenTracking,
-        enableNFTDetection: cfg.nftDetection,
-        enableGasAnalytics: cfg.gasTracking,
-        enableWhaleAlerts: cfg.whaleAlerts,
-      });
+      this.evmTracker = new EVMTracker(trackerCallbacks);
     }
 
-    // Solana (SVM)
+    // Solana
     if (cfg.svmTracking) {
       this.svmProvider = new SVMProvider({
         onWalletEvent: (action, data) => this.handleWalletEvent('svm', action, data),
@@ -177,7 +119,7 @@ export class Web3Module {
         onTransaction: (txid, data) => this.handleTransaction('bitcoin', txid, data),
       });
       this.btcProvider.init();
-      this.btcTracker = new BTCTracker(trackerCallbacks, { whaleThresholdBTC: cfg.whaleThresholdBTC });
+      this.btcTracker = new BTCTracker(trackerCallbacks);
     }
 
     // SUI (Move VM)
@@ -219,75 +161,42 @@ export class Web3Module {
       this.cosmosProvider.init();
       this.cosmosTracker = new CosmosTracker(trackerCallbacks);
     }
-
-    // DeFi tracking
-    if (cfg.defiTracking) {
-      this.dexTracker = new DexTracker({
-        onSwap: (d) => this.callbacks.onDeFiInteraction?.(d),
-        onLiquidityChange: (d) => this.callbacks.onDeFiInteraction?.(d),
-        onPoolInteraction: (d) => this.callbacks.onDeFiInteraction?.(d),
-      });
-      this.defiTrackers = createDeFiTrackers({
-        onInteraction: (d) => this.callbacks.onDeFiInteraction?.(d),
-        onPositionChange: (d) => this.callbacks.onDeFiInteraction?.(d),
-      });
-    }
-
-    // Portfolio tracking
-    if (cfg.portfolioTracking) {
-      this.portfolio = new PortfolioTracker({
-        onPortfolioUpdate: (s) => this.callbacks.onPortfolioUpdate?.(s),
-        onWalletAdded: () => this.notifyWalletChange(),
-        onWalletRemoved: () => this.notifyWalletChange(),
-      });
-    }
   }
 
   // =========================================================================
-  // PUBLIC API — Backwards compatible + new multi-VM methods
+  // PUBLIC API
   // =========================================================================
 
-  /** Connect an EVM wallet (backwards compatible) */
   connect(address: string, options?: Partial<WalletInfo>): void {
-    if (this.evmProvider) {
-      this.evmProvider.connect(address, options);
-    }
+    this.evmProvider?.connect(address, options);
   }
 
-  /** Connect a Solana wallet */
   connectSVM(address: string, options?: Partial<WalletInfo>): void {
     this.svmProvider?.connect(address, options);
   }
 
-  /** Connect a Bitcoin wallet */
   connectBTC(address: string, options?: Partial<WalletInfo>): void {
     this.btcProvider?.connect(address, options);
   }
 
-  /** Connect a SUI wallet */
   connectSUI(address: string, options?: Partial<WalletInfo>): void {
     this.moveProvider?.connect(address, options);
   }
 
-  /** Connect a NEAR wallet */
   connectNEAR(accountId: string, options?: Partial<WalletInfo>): void {
     this.nearProvider?.connect(accountId, options);
   }
 
-  /** Connect a TRON wallet */
   connectTRON(address: string, options?: Partial<WalletInfo>): void {
     this.tronProvider?.connect(address, options);
   }
 
-  /** Connect a Cosmos/SEI wallet */
   connectCosmos(address: string, options?: Partial<WalletInfo>): void {
     this.cosmosProvider?.connect(address, options);
   }
 
-  /** Disconnect a wallet (or all wallets if no address) */
   disconnect(address?: string): void {
     if (address) {
-      // Try to find which provider owns this address
       this.evmProvider?.disconnect(address);
       this.svmProvider?.disconnect();
       this.btcProvider?.disconnect();
@@ -306,7 +215,6 @@ export class Web3Module {
     }
   }
 
-  /** Get primary wallet info (backwards compatible) */
   getInfo(): WalletInfo | null {
     return this.evmProvider?.getPrimaryWallet()
       ?? this.svmProvider?.getWallet()
@@ -318,17 +226,6 @@ export class Web3Module {
       ?? null;
   }
 
-  /** Get all connected wallets across all VMs */
-  getWallets(): ConnectedWallet[] {
-    return this.portfolio?.getWallets() ?? [];
-  }
-
-  /** Get wallets filtered by VM */
-  getWalletsByVM(vm: VMType): ConnectedWallet[] {
-    return this.portfolio?.getWalletsByVM(vm) ?? [];
-  }
-
-  /** Track a transaction */
   transaction(txHash: string, options?: TransactionOptions): void {
     const vm = options?.vm ?? 'evm';
     switch (vm) {
@@ -342,12 +239,6 @@ export class Web3Module {
     }
   }
 
-  /** Get cross-chain portfolio */
-  getPortfolio(): PortfolioSnapshot | null {
-    return this.portfolio?.getPortfolio() ?? null;
-  }
-
-  /** Register wallet change callback */
   onWalletChange(callback: (wallets: ConnectedWallet[]) => void): () => void {
     this.walletChangeListeners.push(callback);
     return () => {
@@ -355,17 +246,6 @@ export class Web3Module {
     };
   }
 
-  /** Classify a wallet address */
-  classifyWalletAddress(address: string, vm: VMType, chainId?: number | string): WalletClassification {
-    return classifyWallet(address, vm, chainId ?? 1);
-  }
-
-  /** Identify a DeFi protocol by contract address */
-  identifyDeFiProtocol(chainId: number | string, contractAddress: string) {
-    return identifyProtocol(chainId, contractAddress);
-  }
-
-  /** Destroy all providers and trackers */
   destroy(): void {
     this.evmProvider?.destroy();
     this.svmProvider?.destroy();
@@ -383,10 +263,6 @@ export class Web3Module {
     this.tronTracker?.destroy();
     this.cosmosTracker?.destroy();
 
-    this.dexTracker?.destroy();
-    this.defiTrackers?.forEach((t) => t.destroy());
-    this.portfolio?.destroy();
-
     this.walletChangeListeners = [];
 
     this.evmProvider = null;
@@ -403,68 +279,17 @@ export class Web3Module {
     this.nearTracker = null;
     this.tronTracker = null;
     this.cosmosTracker = null;
-    this.dexTracker = null;
-    this.defiTrackers = null;
-    this.portfolio = null;
   }
 
   // =========================================================================
-  // PRIVATE — Event routing
+  // PRIVATE — Event routing (raw data, no enrichment)
   // =========================================================================
 
   private handleWalletEvent(vm: VMType, action: string, data: Record<string, unknown>): void {
-    // Add VM tag and classification
-    const enriched = {
-      ...data,
-      vm,
-      classification: this.config.walletClassification
-        ? classifyWallet(data.address as string, vm, data.chainId as number | string)
-        : undefined,
-    };
-
-    this.callbacks.onWalletEvent(action, enriched);
-
-    // Update portfolio
-    if (this.portfolio && action === 'connect' && data.address) {
-      this.portfolio.addWallet(
-        PortfolioTracker.createWallet(
-          data.address as string, vm,
-          data.chainId as number | string ?? 1,
-          data.walletType as string ?? 'unknown',
-          enriched.classification ?? 'hot',
-          { ens: data.ens as string, isPrimary: this.portfolio.getWallets().length === 0 }
-        )
-      );
-    } else if (this.portfolio && action === 'disconnect' && data.address) {
-      this.portfolio.removeWallet(data.address as string, vm);
-    }
+    this.callbacks.onWalletEvent(action, { ...data, vm });
   }
 
   private handleTransaction(vm: VMType, txHash: string, data: Record<string, unknown>): void {
-    // Enrich with VM tag
-    const enriched = { ...data, vm };
-    this.callbacks.onTransaction(txHash, enriched);
-
-    // Route to DeFi trackers for classification
-    if (data.to) {
-      const txData = {
-        hash: txHash, to: data.to as string,
-        chainId: data.chainId as number | string ?? 1,
-        vm, input: data.input as string, value: data.value as string,
-        from: data.from as string,
-      };
-
-      this.dexTracker?.detectSwap(txData);
-
-      // Route through generic DeFi trackers (lending, staking, bridge, etc.)
-      this.defiTrackers?.forEach((tracker) => {
-        tracker.detect(txData);
-      });
-    }
-  }
-
-  private notifyWalletChange(): void {
-    const wallets = this.getWallets();
-    this.walletChangeListeners.forEach((l) => { try { l(wallets); } catch { /* */ } });
+    this.callbacks.onTransaction(txHash, { ...data, vm });
   }
 }
