@@ -105,6 +105,30 @@ export interface RetryConfig {
 }
 
 // =============================================================================
+// FINGERPRINT TYPES
+// =============================================================================
+
+export interface FingerprintComponents {
+  canvasHash: string;
+  webglRenderer: string;
+  webglVendor: string;
+  audioHash: string;
+  screenResolution: string;
+  colorDepth: number;
+  timezone: string;
+  language: string;
+  languages: string[];
+  platform: string;
+  hardwareConcurrency: number;
+  deviceMemory: number;
+  touchSupport: boolean;
+  fontHash: string;
+  cookieEnabled: boolean;
+  doNotTrack: string | null;
+  pixelRatio: number;
+}
+
+// =============================================================================
 // MULTI-VM TYPES
 // =============================================================================
 
@@ -367,6 +391,7 @@ export interface EventContext {
   page?: PageContext;
   device?: DeviceContext;
   campaign?: CampaignContext;
+  fingerprint?: { id: string };
   ip?: string;
   locale?: string;
   timezone?: string;
@@ -534,6 +559,14 @@ export interface IdentityData {
   traits?: UserTraits;
   /** Multi-wallet linking (EVM + SVM + BTC + ...) */
   wallets?: ConnectedWallet[];
+  /** Email address for identity resolution */
+  email?: string;
+  /** Phone number for identity resolution */
+  phone?: string;
+  /** OAuth provider name (e.g. 'google', 'github') */
+  oauthProvider?: string;
+  /** OAuth subject identifier */
+  oauthSubject?: string;
 }
 
 export interface Identity {

@@ -5,6 +5,7 @@
 
 import Foundation
 import UIKit
+import CryptoKit
 
 // MARK: - Configuration
 
@@ -68,6 +69,7 @@ public struct EventContext: Codable {
     public let library: LibraryInfo
     public var device: DeviceInfo?
     public var campaign: CampaignInfo?
+    public var fingerprint: FingerprintInfo?
 
     public struct LibraryInfo: Codable {
         public let name: String
@@ -86,6 +88,10 @@ public struct EventContext: Codable {
         public var medium: String?
         public var campaign: String?
     }
+
+    public struct FingerprintInfo: Codable {
+        public let id: String
+    }
 }
 
 // MARK: - Identity
@@ -101,6 +107,32 @@ public struct IdentityData {
         self.userId = userId
         self.walletAddress = walletAddress
         self.traits = traits
+    }
+}
+
+// MARK: - Device Fingerprint
+
+struct DeviceFingerprint {
+    static func generate() -> String {
+        let signals = [
+            UIDevice.current.identifierForVendor?.uuidString ?? "",
+            UIDevice.current.model,
+            UIDevice.current.systemVersion,
+            String(describing: UIScreen.main.bounds.width),
+            String(describing: UIScreen.main.bounds.height),
+            String(describing: UIScreen.main.scale),
+            Locale.current.identifier,
+            TimeZone.current.identifier,
+            String(ProcessInfo.processInfo.processorCount),
+            String(ProcessInfo.processInfo.physicalMemory),
+        ]
+        return sha256(signals.joined(separator: "|"))
+    }
+
+    static func sha256(_ input: String) -> String {
+        let data = Data(input.utf8)
+        let hash = SHA256.hash(data: data)
+        return hash.compactMap { String(format: "%02x", $0) }.joined()
     }
 }
 
@@ -122,6 +154,7 @@ public final class Aether {
     private var isInitialized = false
     private var serverConfig: [String: Any] = [:]
     private var consentState: [String] = []
+    private var fingerprintId: String = ""
 
     private let serialQueue = DispatchQueue(label: "com.aether.sdk.serial")
     private let defaults = UserDefaults(suiteName: "com.aether.sdk")!
@@ -153,6 +186,8 @@ public final class Aether {
         if config.modules.screenTracking {
             UIViewController.swizzleViewDidAppear()
         }
+
+        self.fingerprintId = DeviceFingerprint.generate()
 
         isInitialized = true
         log("Aether iOS SDK initialized (v7.0.0)")
@@ -403,7 +438,8 @@ public final class Aether {
                 osVersion: UIDevice.current.systemVersion,
                 locale: Locale.current.identifier,
                 timezone: TimeZone.current.identifier
-            )
+            ),
+            fingerprint: .init(id: self.fingerprintId)
         )
     }
 

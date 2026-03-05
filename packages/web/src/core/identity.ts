@@ -54,6 +54,12 @@ export class IdentityManager {
       this.identity.traits = { ...this.identity.traits, ...data.traits };
     }
 
+    // Store additional identity resolution fields as traits
+    if (data.email) this.identity.traits.email = data.email;
+    if (data.phone) this.identity.traits.phone = data.phone;
+    if (data.oauthProvider) this.identity.traits.oauthProvider = data.oauthProvider;
+    if (data.oauthSubject) this.identity.traits.oauthSubject = data.oauthSubject;
+
     this.identity.lastSeen = now();
     this.identity.sessionCount++;
     this.persist();

@@ -31,6 +31,15 @@ class VertexType:
     CAMPAIGN = "Campaign"
     EXTERNAL_DATA = "ExternalData"
 
+    # Identity Resolution
+    DEVICE_FINGERPRINT = "DeviceFingerprint"
+    IP_ADDRESS = "IPAddress"
+    LOCATION = "Location"
+    EMAIL = "Email"
+    PHONE = "Phone"
+    WALLET = "Wallet"
+    IDENTITY_CLUSTER = "IdentityCluster"
+
 
 class EdgeType:
     HAS_SESSION = "HAS_SESSION"
@@ -41,6 +50,17 @@ class EdgeType:
     ATTRIBUTED_TO = "ATTRIBUTED_TO"
     RESOLVED_AS = "RESOLVED_AS"
     ENRICHED_BY = "ENRICHED_BY"
+
+    # Identity Resolution
+    HAS_FINGERPRINT = "HAS_FINGERPRINT"
+    SEEN_FROM_IP = "SEEN_FROM_IP"
+    LOCATED_IN = "LOCATED_IN"
+    HAS_EMAIL = "HAS_EMAIL"
+    HAS_PHONE = "HAS_PHONE"
+    OWNS_WALLET = "OWNS_WALLET"
+    MEMBER_OF_CLUSTER = "MEMBER_OF_CLUSTER"
+    SIMILAR_TO = "SIMILAR_TO"
+    IP_MAPS_TO = "IP_MAPS_TO"
 
 
 # ═══════════════════════════════════════════════════════════════════════════

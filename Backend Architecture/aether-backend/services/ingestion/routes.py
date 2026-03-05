@@ -5,6 +5,7 @@ Event validation, normalization, and queuing from SDK, API feeds, and Agent.
 
 from __future__ import annotations
 
+import hashlib
 import uuid
 from typing import Any, Optional
 
@@ -51,7 +52,7 @@ async def ingest_single_event(
 ):
     """Ingest a single SDK event."""
     tenant = request.state.tenant
-    validated = _validate_and_normalize(event, tenant.tenant_id)
+    validated = _validate_and_normalize(event, tenant.tenant_id, request)
 
     await producer.publish(Event(
         topic=Topic.SDK_EVENTS_VALIDATED,
@@ -78,7 +79,7 @@ async def ingest_batch_events(
 
     events_to_publish = []
     for sdk_event in batch.events:
-        validated = _validate_and_normalize(sdk_event, tenant.tenant_id)
+        validated = _validate_and_normalize(sdk_event, tenant.tenant_id, request)
         event_ids.append(validated["event_id"])
         events_to_publish.append(Event(
             topic=Topic.SDK_EVENTS_VALIDATED,
@@ -123,10 +124,15 @@ async def ingest_api_feed(
 
 # ── Internal Helpers ──────────────────────────────────────────────────
 
-def _validate_and_normalize(event: SDKEvent, tenant_id: str) -> dict:
+def _validate_and_normalize(
+    event: SDKEvent, tenant_id: str, request: Optional[Request] = None,
+) -> dict:
     """Validate event fields and normalize to canonical schema."""
     if not event.event_type:
         raise BadRequestError("event_type is required")
+
+    # IP Enrichment (GeoLite2)
+    ip_data = _enrich_ip(request) if request else {}
 
     return {
         "event_id": str(uuid.uuid4()),
@@ -138,4 +144,41 @@ def _validate_and_normalize(event: SDKEvent, tenant_id: str) -> dict:
         "properties": event.properties,
         "timestamp": event.timestamp or utc_now().isoformat(),
         "ingested_at": utc_now().isoformat(),
+        "ip_enrichment": ip_data,
+    }
+
+
+def _enrich_ip(request: Request) -> dict:
+    """Extract and enrich IP from request headers.
+
+    Checks Cloudflare, X-Forwarded-For, then falls back to the ASGI client
+    host.  In production, replace the stub geo fields with MaxMind GeoLite2
+    lookups.
+    """
+    ip = (
+        request.headers.get("CF-Connecting-IP")
+        or request.headers.get("X-Forwarded-For", "").split(",")[0].strip()
+        or (request.client.host if request.client else "")
+    )
+    if not ip:
+        return {}
+
+    ip_hash = hashlib.sha256(ip.encode()).hexdigest()
+
+    # Stub: In production, use MaxMind GeoLite2 for geo/ASN lookups
+    return {
+        "ip_hash": ip_hash,
+        "ip_range": ".".join(ip.split(".")[:3]) + ".0/24" if "." in ip else "",
+        "country_code": "",
+        "region": "",
+        "city": "",
+        "latitude": 0.0,
+        "longitude": 0.0,
+        "timezone": "",
+        "asn": 0,
+        "isp": "",
+        "is_vpn": False,
+        "is_proxy": False,
+        "is_tor": False,
+        "is_datacenter": False,
     }

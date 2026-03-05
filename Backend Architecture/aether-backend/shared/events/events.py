@@ -55,6 +55,15 @@ class Topic(str, Enum):
     CONSENT_UPDATED = "aether.consent.updated"
     DATA_SUBJECT_REQUEST = "aether.consent.dsr"
 
+    # Identity Resolution
+    RESOLUTION_EVALUATED = "aether.resolution.evaluated"
+    RESOLUTION_AUTO_MERGED = "aether.resolution.auto_merged"
+    RESOLUTION_FLAGGED = "aether.resolution.flagged"
+    RESOLUTION_APPROVED = "aether.resolution.approved"
+    RESOLUTION_REJECTED = "aether.resolution.rejected"
+    FINGERPRINT_OBSERVED = "aether.identity.fingerprint.observed"
+    IP_OBSERVED = "aether.identity.ip.observed"
+
     # Dead letter
     DEAD_LETTER = "aether.dlq"
 

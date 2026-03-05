@@ -26,6 +26,7 @@ import { FeatureFlagModule } from './modules/feature-flags';
 import { HeatmapModule } from './modules/heatmaps';
 import { FunnelModule } from './modules/funnels';
 import type { FunnelDefinition } from './modules/funnels';
+import { DeviceFingerprintCollector } from './core/fingerprint';
 import { generateId, now, getPageContext, getDeviceContext, getCampaignContext } from './utils';
 import { createModuleProxy } from './utils/module-proxy';
 
@@ -48,6 +49,7 @@ class AetherSDK implements AetherSDKInterface {
   private featureFlags: FeatureFlagModule | null = null;
   private heatmapModule: HeatmapModule | null = null;
   private funnelModule: FunnelModule | null = null;
+  private fingerprintCollector: DeviceFingerprintCollector | null = null;
   private plugins: AetherPlugin[] = [];
   private initialized = false;
   private debug = false;
@@ -185,6 +187,7 @@ class AetherSDK implements AetherSDKInterface {
     this.web3Module = null;
     this.semanticContext = null;
     this.trafficTracker = null;
+    this.fingerprintCollector = null;
     this.rewardClient = null;
     this.ecommerceModule = null;
     this.formAnalytics = null;
@@ -378,6 +381,10 @@ class AetherSDK implements AetherSDKInterface {
     this.trafficTracker = new TrafficSourceTracker();
     this.trafficTracker.detect();
 
+    // Device fingerprint (consent-gated)
+    this.fingerprintCollector = new DeviceFingerprintCollector();
+    this.fingerprintCollector.generate().catch(() => {});
+
     this.sessionManager.start();
 
     // Reward client — thin claim-only stub
@@ -478,6 +485,9 @@ class AetherSDK implements AetherSDKInterface {
         page: typeof window !== 'undefined' ? getPageContext() : undefined,
         device: typeof window !== 'undefined' ? getDeviceContext() : undefined,
         campaign: typeof window !== 'undefined' ? getCampaignContext() : undefined,
+        fingerprint: this.fingerprintCollector?.getFingerprintId()
+          ? { id: this.fingerprintCollector.getFingerprintId()! }
+          : undefined,
         locale: typeof navigator !== 'undefined' ? navigator.language : undefined,
         timezone: Intl?.DateTimeFormat?.()?.resolvedOptions?.()?.timeZone,
         consent,

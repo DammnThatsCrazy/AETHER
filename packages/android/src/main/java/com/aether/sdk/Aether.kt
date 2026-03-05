@@ -9,6 +9,7 @@ import android.app.Application
 import android.content.Context
 import android.content.SharedPreferences
 import android.os.Build
+import android.provider.Settings
 import android.util.Log
 import androidx.lifecycle.*
 import kotlinx.coroutines.*
@@ -90,6 +91,7 @@ object Aether : DefaultLifecycleObserver {
     private var isInitialized = false
     private var serverConfig: JSONObject = JSONObject()
     private var consentState: MutableList<String> = mutableListOf()
+    private var fingerprintId: String = ""
     private val dateFormat = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", Locale.US).apply {
         timeZone = TimeZone.getTimeZone("UTC")
     }
@@ -126,6 +128,8 @@ object Aether : DefaultLifecycleObserver {
 
         // Start flush timer
         startFlushTimer()
+
+        fingerprintId = DeviceFingerprint.generate(application.applicationContext)
 
         isInitialized = true
         log("Aether Android SDK initialized (v$VERSION)")
@@ -398,6 +402,9 @@ object Aether : DefaultLifecycleObserver {
             put("name", "aether-android")
             put("version", VERSION)
         })
+        put("fingerprint", JSONObject().apply {
+            put("id", fingerprintId)
+        })
     }
 
     private fun loadOrCreateAnonymousId(): String {
@@ -435,6 +442,33 @@ object Aether : DefaultLifecycleObserver {
 
     private fun log(message: String) {
         if (config?.debug == true) Log.d(TAG, message)
+    }
+
+    // =========================================================================
+    // DEVICE FINGERPRINT
+    // =========================================================================
+
+    private object DeviceFingerprint {
+        fun generate(context: Context): String {
+            val signals = listOf(
+                Settings.Secure.getString(context.contentResolver, Settings.Secure.ANDROID_ID) ?: "",
+                Build.MODEL,
+                Build.MANUFACTURER,
+                Build.VERSION.RELEASE,
+                context.resources.displayMetrics.widthPixels.toString(),
+                context.resources.displayMetrics.heightPixels.toString(),
+                context.resources.displayMetrics.density.toString(),
+                Locale.getDefault().toString(),
+                TimeZone.getDefault().id,
+                Runtime.getRuntime().availableProcessors().toString(),
+            )
+            return sha256(signals.joinToString("|"))
+        }
+
+        private fun sha256(input: String): String {
+            val bytes = java.security.MessageDigest.getInstance("SHA-256").digest(input.toByteArray())
+            return bytes.joinToString("") { "%02x".format(it) }
+        }
     }
 
     // =========================================================================

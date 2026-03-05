@@ -92,6 +92,14 @@ const Aether = {
     AetherNative?.flush();
   },
 
+  async getFingerprint(): Promise<string> {
+    try {
+      return await NativeModules.AetherNative.getFingerprint();
+    } catch {
+      return '';
+    }
+  },
+
   handleDeepLink(url: string): void {
     AetherNative?.handleDeepLink(url);
   },
@@ -228,6 +236,9 @@ export function AetherProvider({
       .then(r => r.json())
       .then(cfg => { /* store config */ })
       .catch(() => { /* silent */ });
+
+    // Cache fingerprint ID
+    Aether.getFingerprint().catch(() => {});
 
     return () => {
       semanticContext.destroy();
