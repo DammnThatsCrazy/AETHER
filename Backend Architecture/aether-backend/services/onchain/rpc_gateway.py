@@ -7,6 +7,7 @@ Wraps QuickNode endpoints with rate limiting, caching, and x402 pay-per-request.
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import time
 from typing import Any, Optional
 
@@ -14,6 +15,18 @@ from config.settings import settings
 from shared.logger.logger import get_logger, metrics
 
 logger = get_logger("aether.service.onchain.rpc")
+
+ALLOWED_RPC_METHODS = {
+    # EVM read methods
+    "eth_getBalance", "eth_getTransactionCount", "eth_getCode", "eth_getStorageAt",
+    "eth_call", "eth_estimateGas", "eth_getBlockByNumber", "eth_getBlockByHash",
+    "eth_getTransactionByHash", "eth_getTransactionReceipt", "eth_getLogs",
+    "eth_blockNumber", "eth_chainId", "eth_gasPrice", "eth_feeHistory",
+    "eth_getBlockTransactionCountByNumber", "eth_getBlockTransactionCountByHash",
+    # Solana read methods
+    "sol_getBalance", "sol_getAccountInfo", "sol_getTransaction",
+    "sol_getBlock", "sol_getLatestBlockhash", "sol_getSlot",
+}
 
 
 class RPCGateway:
@@ -29,6 +42,7 @@ class RPCGateway:
         self._request_times: list[float] = []
         self._cache: dict[str, Any] = {}
         self._connected = False
+        self._rate_lock = asyncio.Lock()
 
     async def connect(self) -> None:
         """Initialize RPC connections."""
@@ -48,20 +62,23 @@ class RPCGateway:
         self,
         chain_id: str,
         method: str,
-        params: list[Any] = None,
+        params: Optional[list[Any]] = None,
         vm_type: str = "evm",
     ) -> dict:
         """
         Execute an RPC call with rate limiting and caching.
         Returns the RPC response.
         """
+        if method not in ALLOWED_RPC_METHODS:
+            raise ValueError(f"RPC method not allowed: {method}")
+
         params = params or []
 
         # Rate limiting: enforce max_rps
         await self._rate_limit()
 
         # Cache check for read-only methods
-        cache_key = f"{chain_id}:{method}:{hash(str(params))}"
+        cache_key = f"{chain_id}:{method}:{hashlib.sha256(str(params).encode()).hexdigest()[:16]}"
         if method.startswith("eth_get") or method.startswith("sol_get"):
             cached = self._cache.get(cache_key)
             if cached is not None:
@@ -91,13 +108,14 @@ class RPCGateway:
 
     async def _rate_limit(self) -> None:
         """Simple sliding-window rate limiter."""
-        now = time.time()
-        # Remove timestamps older than 1 second
-        self._request_times = [t for t in self._request_times if now - t < 1.0]
-        if len(self._request_times) >= self._config.max_rps:
-            wait = 1.0 - (now - self._request_times[0])
-            if wait > 0:
-                await asyncio.sleep(wait)
+        async with self._rate_lock:
+            now = time.time()
+            # Remove timestamps older than 1 second
+            self._request_times = [t for t in self._request_times if now - t < 1.0]
+            if len(self._request_times) >= self._config.max_rps:
+                wait = 1.0 - (now - self._request_times[0])
+                if wait > 0:
+                    await asyncio.sleep(wait)
 
     async def health_check(self) -> dict:
         """RPC gateway health status."""

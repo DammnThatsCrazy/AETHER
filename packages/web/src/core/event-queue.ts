@@ -163,6 +163,9 @@ export class EventQueue {
       }
 
       if (response.status === 429) {
+        if (retryCount >= this.config.retry.maxRetries) {
+          throw new Error('Rate limited: max retries exceeded');
+        }
         const retryAfter = parseInt(response.headers.get('Retry-After') || '5', 10);
         await this.sleep(retryAfter * 1000);
         return this.sendBatch(events, retryCount + 1);
@@ -178,9 +181,10 @@ export class EventQueue {
       batch: this.filterByConsent(events),
       sentAt: new Date().toISOString(),
       context: { library: { name: '@aether/sdk', version: '__SDK_VERSION__' } },
+      apiKey: this.config.apiKey,
     });
     const blob = new Blob([payload], { type: 'application/json' });
-    return navigator.sendBeacon(`${this.config.endpoint}/v1/batch?key=${this.config.apiKey}`, blob);
+    return navigator.sendBeacon(`${this.config.endpoint}/v1/batch`, blob);
   }
 
   private startFlushTimer(): void {

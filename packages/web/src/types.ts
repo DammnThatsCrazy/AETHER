@@ -357,6 +357,8 @@ export type EventType =
   | 'error'
   | 'consent'
   | 'heartbeat'
+  | 'experiment'
+  | 'performance'
   // Multi-VM Web3 events
   | 'token_balance'
   | 'nft_detection'
@@ -530,6 +532,58 @@ export interface ErrorEvent extends BaseEvent {
   };
 }
 
+export interface AgentTaskEvent extends BaseEvent {
+  type: 'agent_task';
+  properties: {
+    task_id: string;
+    agent_id: string;
+    event_type: string;
+    [key: string]: unknown;
+  };
+}
+
+export interface AgentDecisionEvent extends BaseEvent {
+  type: 'agent_decision';
+  properties: {
+    task_id: string;
+    agent_id: string;
+    chosen_action: string;
+    [key: string]: unknown;
+  };
+}
+
+export interface PaymentEvent extends BaseEvent {
+  type: 'payment';
+  properties: {
+    payment_id: string;
+    amount: number;
+    currency: string;
+    method: string;
+    [key: string]: unknown;
+  };
+}
+
+export interface X402PaymentEvent extends BaseEvent {
+  type: 'x402_payment';
+  properties: {
+    capture_id: string;
+    payer_agent_id: string;
+    payee_service_id: string;
+    amount_usd: number;
+    [key: string]: unknown;
+  };
+}
+
+export interface ContractActionEvent extends BaseEvent {
+  type: 'contract_action';
+  properties: {
+    action_type: string;
+    chain_id: string;
+    contract_address?: string;
+    [key: string]: unknown;
+  };
+}
+
 export type AetherEvent =
   | TrackEvent
   | PageEvent
@@ -537,7 +591,12 @@ export type AetherEvent =
   | ConversionEvent
   | WalletEvent
   | TransactionEvent
-  | ErrorEvent;
+  | ErrorEvent
+  | AgentTaskEvent
+  | AgentDecisionEvent
+  | PaymentEvent
+  | X402PaymentEvent
+  | ContractActionEvent;
 
 // =============================================================================
 // IDENTITY TYPES

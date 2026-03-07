@@ -15,11 +15,13 @@ from __future__ import annotations
 
 import uuid
 from datetime import datetime, timezone
+from difflib import SequenceMatcher
 from typing import Any, Optional
 
 from fastapi import APIRouter, Request
 from pydantic import BaseModel, Field
 
+from config.settings import settings
 from shared.common.common import APIResponse, BadRequestError
 from shared.events.events import Event, EventProducer, Topic
 from shared.graph.graph import Edge, EdgeType, GraphClient, Vertex, VertexType
@@ -143,6 +145,7 @@ class TaskLifecycleEvent(BaseModel):
     state_snapshot: dict[str, Any] = Field(default_factory=dict)
     decision_record: Optional[DecisionRecord] = None
     confidence: float = 0.0
+    tenant_id: str = ""
     timestamp: str = Field(
         default_factory=lambda: datetime.now(timezone.utc).isoformat()
     )
@@ -156,6 +159,7 @@ class GroundTruthFeedback(BaseModel):
     actual_outcome: str
     confidence_delta: float = 0.0
     verified_by: str = Field(default="human", pattern="^(human|automated)$")
+    tenant_id: str = ""
     timestamp: str = Field(
         default_factory=lambda: datetime.now(timezone.utc).isoformat()
     )
@@ -170,10 +174,14 @@ _feedback_records: list[GroundTruthFeedback] = []
 @router.post("/register")
 async def register_agent(body: AgentRegistration, request: Request):
     """Register an agent and create AGENT vertex + LAUNCHED_BY edge in the graph."""
+    if not settings.intelligence_graph.enable_agent_layer:
+        raise BadRequestError("Intelligence Graph agent layer is not enabled")
     request.state.tenant.require_permission("agent:manage")
 
     if not body.agent_id:
         body.agent_id = str(uuid.uuid4())
+
+    tenant_id = request.state.tenant.tenant_id
 
     # Create AGENT vertex
     vertex = Vertex(
@@ -189,14 +197,14 @@ async def register_agent(body: AgentRegistration, request: Request):
     )
     await _graph.add_vertex(vertex)
 
-    # Create LAUNCHED_BY edge: agent → user
+    # Create LAUNCHED_BY edge: agent -> user
     await _graph.add_edge(Edge(
         edge_type=EdgeType.LAUNCHED_BY,
         from_vertex_id=body.agent_id,
         to_vertex_id=body.owner_user_id,
     ))
 
-    # Create DELEGATES edge: user → agent
+    # Create DELEGATES edge: user -> agent
     await _graph.add_edge(Edge(
         edge_type=EdgeType.DELEGATES,
         from_vertex_id=body.owner_user_id,
@@ -204,7 +212,7 @@ async def register_agent(body: AgentRegistration, request: Request):
         properties={"permissions": ",".join(body.permissions)},
     ))
 
-    _registered_agents[body.agent_id] = body
+    _registered_agents[f"{tenant_id}:{body.agent_id}"] = body
     metrics.increment("agents_registered")
     logger.info(f"Agent registered: {body.agent_id} (owner={body.owner_user_id})")
 
@@ -214,8 +222,11 @@ async def register_agent(body: AgentRegistration, request: Request):
 @router.post("/tasks/{task_id}/lifecycle")
 async def record_lifecycle_event(task_id: str, body: TaskLifecycleEvent, request: Request):
     """Record a task lifecycle event with state snapshot."""
+    if not settings.intelligence_graph.enable_agent_layer:
+        raise BadRequestError("Intelligence Graph agent layer is not enabled")
     request.state.tenant.require_permission("agent:manage")
     body.task_id = task_id
+    body.tenant_id = request.state.tenant.tenant_id
 
     # Determine event topic
     topic_map = {
@@ -241,9 +252,12 @@ async def record_lifecycle_event(task_id: str, body: TaskLifecycleEvent, request
 @router.post("/tasks/{task_id}/decision")
 async def record_decision(task_id: str, body: TaskLifecycleEvent, request: Request):
     """Record a decision with rejected alternatives (roads not taken)."""
+    if not settings.intelligence_graph.enable_agent_layer:
+        raise BadRequestError("Intelligence Graph agent layer is not enabled")
     request.state.tenant.require_permission("agent:manage")
     body.task_id = task_id
     body.event_type = "decision_made"
+    body.tenant_id = request.state.tenant.tenant_id
 
     await _producer.publish(Event(
         topic=Topic.AGENT_DECISION_MADE,
@@ -260,16 +274,23 @@ async def record_decision(task_id: str, body: TaskLifecycleEvent, request: Reque
 @router.post("/tasks/{task_id}/feedback")
 async def submit_feedback(task_id: str, body: GroundTruthFeedback, request: Request):
     """Submit ground truth feedback and compute confidence_delta."""
+    if not settings.intelligence_graph.enable_agent_layer:
+        raise BadRequestError("Intelligence Graph agent layer is not enabled")
     request.state.tenant.require_permission("agent:manage")
     body.task_id = task_id
+    body.tenant_id = request.state.tenant.tenant_id
 
-    # Compute confidence_delta from lifecycle events
-    task_events = [e for e in _lifecycle_events if e.task_id == task_id]
+    # Compute confidence_delta from lifecycle events (filtered by tenant)
+    tenant_id = request.state.tenant.tenant_id
+    task_events = [
+        e for e in _lifecycle_events
+        if e.task_id == task_id and e.tenant_id == tenant_id
+    ]
     if task_events:
         predicted_confidence = task_events[-1].confidence
-        # delta = how much the agent's confidence needs adjustment
-        match_score = 1.0 if body.predicted_outcome == body.actual_outcome else 0.0
-        body.confidence_delta = round(match_score - predicted_confidence, 4)
+        # Use string similarity for near-misses instead of binary exact match
+        similarity = SequenceMatcher(None, body.predicted_outcome, body.actual_outcome).ratio()
+        body.confidence_delta = round(similarity - predicted_confidence, 4)
 
     await _producer.publish(Event(
         topic=Topic.AGENT_GROUND_TRUTH,
@@ -290,6 +311,8 @@ async def submit_feedback(task_id: str, body: GroundTruthFeedback, request: Requ
 @router.get("/{agent_id}/graph")
 async def get_agent_graph(agent_id: str, request: Request, layer: str = "all"):
     """Get an agent's subgraph (hired agents, contracts, payments)."""
+    if not settings.intelligence_graph.enable_agent_layer:
+        raise BadRequestError("Intelligence Graph agent layer is not enabled")
     request.state.tenant.require_permission("agent:manage")
 
     if layer != "all":
@@ -320,6 +343,10 @@ async def get_agent_graph(agent_id: str, request: Request, layer: str = "all"):
 @router.get("/{agent_id}/trust")
 async def get_agent_trust(agent_id: str, request: Request):
     """Get an agent's composite trust score."""
+    if not settings.intelligence_graph.enable_agent_layer:
+        raise BadRequestError("Intelligence Graph agent layer is not enabled")
+    if not settings.intelligence_graph.enable_trust_scoring:
+        raise BadRequestError("Intelligence Graph agent layer is not enabled")
     request.state.tenant.require_permission("agent:manage")
 
     score = await _trust_scorer.compute(

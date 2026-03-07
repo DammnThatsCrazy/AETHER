@@ -98,7 +98,7 @@ class EdgeType:
 # SAFE VALUE ESCAPING
 # ═══════════════════════════════════════════════════════════════════════════
 
-_GREMLIN_UNSAFE = re.compile(r"['\\\x00-\x1f]")
+_GREMLIN_UNSAFE = re.compile(r"['\"\\\x00-\x1f`;]")
 
 
 def _escape_gremlin(value: Any) -> str:

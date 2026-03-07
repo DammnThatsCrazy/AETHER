@@ -8,7 +8,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from typing import Any, Optional
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, PrivateAttr
 
 
 class PaymentTerms(BaseModel):
@@ -61,6 +61,9 @@ class X402Node(BaseModel):
     total_paid_usd: float = 0.0
     total_received_usd: float = 0.0
     transaction_count: int = 0
+    unique_services: int = 0
+    fee_eliminated_usd: float = 0.0
+    _seen_services: set = PrivateAttr(default_factory=set)
 
 
 class SpendingSummary(BaseModel):

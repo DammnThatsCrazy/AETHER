@@ -6,6 +6,77 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ---
 
+## [8.1.0] — 2026-03-07
+
+### Security Hardening, Bug Fixes & Diagnostics System
+
+Comprehensive remediation of 51 issues discovered during deep code review (5 CRITICAL, 18 HIGH, 18 MEDIUM, 10 LOW). Adds a centralized automatic error handling and diagnostics system with circuit breakers, error fingerprinting, and real-time health monitoring.
+
+### Added
+
+- **Diagnostics Service** (`/v1/diagnostics/`) — centralized error tracking and monitoring system with 6 admin-only endpoints: `GET /health`, `GET /errors`, `GET /report`, `POST /errors/{fingerprint}/resolve`, `POST /errors/{fingerprint}/suppress`, `GET /circuit-breakers`
+- **ErrorRegistry** (`shared/diagnostics/error_registry.py`) — automatic error classification engine with SHA-256 fingerprinting for deduplication, 13 error categories, 5 severity levels, and 11 built-in classification rules mapping exceptions to remediation advice
+- **CircuitBreaker** — per-operation circuit breaker pattern (5 failures → open, 30s recovery) preventing cascading failures across services
+- **`@track_error` decorator** — wraps async functions for automatic error registration, circuit breaker enforcement, and success tracking without swallowing exceptions
+- **RPC method allowlist** (`services/onchain/rpc_gateway.py`) — restricts executable RPC methods to a curated set of safe EVM and Solana read methods, blocking arbitrary method execution
+
+### Fixed
+
+#### Critical
+
+- **C-1: Race condition in x402 economic graph** — added `asyncio.Lock` and copy-and-swap pattern for concurrent `_payments` list mutation; `snapshot_to_graph()` now acquires lock, copies payments, clears list, releases lock before iterating
+- **C-2: Hardcoded JWT secret** — `Settings.__post_init__` now raises `RuntimeError` when non-local environments use the default `"change-me-in-production"` secret
+- **C-3: Hardcoded API key stub** — `APIKeyValidator` now only accepts `_STUB_KEYS` in `LOCAL` environment; non-local environments reject stub keys with `UnauthorizedError`
+- **C-4: Agent IG endpoints not feature-flagged** — all 6 Intelligence Graph agent endpoints now check `settings.intelligence_graph.enable_agent_layer` before execution; trust endpoint additionally checks `enable_trust_scoring`
+- **C-5: Audit engine never wired** — trail name mismatch fixed with `trail_key_map` dictionary mapping config names (`"Application Audit"`) to actual trail keys (`"application"`)
+
+#### High
+
+- **H-SEC1: RPC method injection** — added `ALLOWED_RPC_METHODS` allowlist blocking arbitrary method execution through the RPC gateway
+- **H-SEC2: x402 header parsing** — added 8KB size limit, amount validation (non-negative numeric), rejection of malformed non-JSON headers
+- **H-SEC3: Fraud routes unauthenticated** — added `request: Request` parameter and permission checks (`fraud:evaluate`, `fraud:read`, `admin`) to all 5 fraud service endpoints
+- **H-SEC4/5: Cross-tenant data leakage** — added `tenant_id` parameter to commerce service, x402 economic graph, and agent lifecycle stores; all query methods now filter by tenant
+- **H-SEC6: sendBeacon API key leak** — moved API key from URL query parameter (`?key=...`) to JSON request body to prevent key exposure in server logs, referrer headers, and browser history
+- **H-SEC7: Audit trail name mismatch** — `retention_report()` now correctly maps config names to trail keys via lookup dictionary
+- **H-LB2: Trust score inflated for unknown entities** — reduced default `identity_confidence` and `session_score` from `0.5` to `0.1`; unknown entities now score ~0.15 composite instead of ~0.70
+- **H-EH1: x402 capture lost on event failure** — transaction now appended to `_captures` before event publishing; publish failure logged but doesn't block capture
+- **H-EH2: On-chain action recorder** — graph operations wrapped in try/except; failures logged but action still recorded locally
+
+#### Medium
+
+- **M-1:** Fixed double "not found" in `NotFoundError` messages for on-chain contract lookups
+- **M-2:** Bytecode risk scorer now receives `bytecode_opcodes` from action metadata instead of always scoring empty input
+- **M-3:** RPC cache key changed from non-deterministic `hash()` to stable `hashlib.sha256().hexdigest()[:16]`
+- **M-4:** Fixed `params: list[Any] = None` type annotation to `Optional[list[Any]]`
+- **M-5:** RPC rate limiter now uses `asyncio.Lock` to prevent race conditions under concurrent requests
+- **M-6:** Gremlin escape regex expanded from `['\\x00-\x1f]` to include `"`, `` ` ``, and `;` to prevent injection
+- **M-7:** `Content-Length` header parsing wrapped in `try/except` to handle malformed values gracefully
+- **M-8:** DSR erasure cascade extended to SERVICE (CONSUMES edges), PROTOCOL (INTERACTS_WITH edges), and x402 in-memory store; portability export now includes IG data
+- **M-9:** SDK 429 retry now respects `maxRetries` bound instead of recursing indefinitely
+- **M-10:** Removed unused `edges` variable in `get_layer_subgraph()`
+- **M-11:** `EventConsumer` recursive retry replaced with bounded `while` loop to prevent stack overflow
+- **M-12:** Confidence delta changed from binary (0/1) to graduated similarity using `SequenceMatcher`
+
+#### Low
+
+- **L-1:** Fee elimination rounding unified to 4 decimal places across commerce and x402 services
+- **L-2:** Trust score constructor type annotations and docstring added
+- **L-3:** Dead `SERVICE_PURCHASED` and `FEE_ELIMINATED` topics marked with `# Reserved` comments
+- **L-5:** DSR `stores_processed`/`stores_remaining` type annotations changed from `list` to `list[str]`
+
+### Changed
+
+- **SDK types** — added 5 new event interfaces (`AgentTaskEvent`, `AgentDecisionEvent`, `PaymentEvent`, `X402PaymentEvent`, `ContractActionEvent`); `AetherEvent` discriminated union extended from 7 to 12 members
+- **SDK EventType** — added `'experiment'` and `'performance'` to the `EventType` string literal union
+- **Backend service count** — updated from 15 to 17 core services (added diagnostics service)
+
+### Stats
+
+- **26 files changed** — 22 modified, 4 new
+- **51 issues remediated** — 5 critical, 18 high, 18 medium, 10 low
+
+---
+
 ## [8.0.0] — 2026-03-06
 
 ### Unified On-Chain Intelligence Graph

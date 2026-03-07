@@ -18,7 +18,7 @@ from collections import defaultdict
 from typing import Any, Optional
 from uuid import uuid4
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Request
 from pydantic import BaseModel, Field
 
 from services.fraud.engine import FraudConfig, FraudEngine, FraudResult
@@ -163,8 +163,9 @@ def _to_response(result: FraudResult) -> FraudEvaluationResponse:
 
 @router.post("/evaluate", response_model=None)
 @api_response
-async def evaluate_event(body: FraudEvaluationRequest):
+async def evaluate_event(body: FraudEvaluationRequest, request: Request):
     """Evaluate a single event for fraud and return a scored verdict."""
+    request.state.tenant.require_permission("fraud:evaluate")
     result = await _engine.evaluate(body.event, body.context)
     _stats.record(result)
     metrics.increment("fraud_evaluate_requests", labels={"verdict": result.verdict})
@@ -173,8 +174,9 @@ async def evaluate_event(body: FraudEvaluationRequest):
 
 @router.post("/evaluate/batch", response_model=None)
 @api_response
-async def evaluate_batch(body: BatchFraudRequest):
+async def evaluate_batch(body: BatchFraudRequest, request: Request):
     """Evaluate a batch of events. Returns individual results plus summary counts."""
+    request.state.tenant.require_permission("fraud:evaluate")
     responses: list[FraudEvaluationResponse] = []
     counts: dict[str, int] = defaultdict(int)
 
@@ -196,8 +198,9 @@ async def evaluate_batch(body: BatchFraudRequest):
 
 @router.get("/config", response_model=None)
 @api_response
-async def get_config():
+async def get_config(request: Request):
     """Return the current fraud engine configuration."""
+    request.state.tenant.require_permission("fraud:read")
     return FraudConfigResponse(
         block_threshold=_config.block_threshold,
         flag_threshold=_config.flag_threshold,
@@ -209,8 +212,9 @@ async def get_config():
 
 @router.put("/config", response_model=None)
 @api_response
-async def update_config(body: FraudConfigUpdate):
+async def update_config(body: FraudConfigUpdate, request: Request):
     """Update fraud engine configuration (partial update)."""
+    request.state.tenant.require_permission("admin")
     global _config, _engine
 
     if body.block_threshold is not None:
@@ -233,6 +237,7 @@ async def update_config(body: FraudConfigUpdate):
 
 @router.get("/stats", response_model=None)
 @api_response
-async def get_stats():
+async def get_stats(request: Request):
     """Return aggregated fraud detection statistics."""
+    request.state.tenant.require_permission("fraud:read")
     return _stats.snapshot()

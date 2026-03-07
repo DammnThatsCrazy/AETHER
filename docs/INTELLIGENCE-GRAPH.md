@@ -260,3 +260,62 @@ Complete flow for an agent executing a task with chain interaction:
              -> ML Pipeline (anomaly detection with 6 new features)
              -> WebSocket (real-time dashboard updates)
 ```
+
+## Security Hardening (v8.1.0)
+
+### Authentication & Authorization
+
+- All IG endpoints are **feature-flagged** — each route checks its corresponding `IntelligenceGraphConfig` flag before execution
+- All fraud service endpoints now require tenant-scoped permission checks (`fraud:evaluate`, `fraud:read`, `admin`)
+- API key stubs are restricted to `LOCAL` environment only; non-local environments reject stub keys
+- JWT secret validation enforced at startup — `RuntimeError` raised if default secret used in non-local environments
+
+### Tenant Isolation
+
+All in-memory stores are tenant-scoped:
+- Agent registry keys: `f"{tenant_id}:{agent_id}"`
+- x402 economic graph nodes: `f"{tenant_id}:{agent_id}"`
+- Commerce service: all query methods accept and filter by `tenant_id`
+- Lifecycle events and feedback records carry `tenant_id` from request context
+
+### Input Validation
+
+- **x402 headers:** 8KB size limit, amount validation (non-negative numeric), malformed non-JSON rejection
+- **RPC gateway:** Method allowlist restricts execution to curated EVM/Solana read methods
+- **Gremlin queries:** Escape regex expanded to include `"`, `` ` ``, and `;` to prevent injection
+- **Middleware:** `Content-Length` parsing handles malformed values gracefully
+
+### Error Handling
+
+- x402 capture persists transactions before event publishing; publish failures are logged but don't block capture
+- On-chain action recorder wraps graph operations in try/except; failures logged but actions still recorded locally
+- `EventConsumer` retry uses bounded loop instead of recursive calls to prevent stack overflow
+- SDK 429 retry respects `maxRetries` bound instead of infinite recursion
+
+## Diagnostics Service (v8.1.0)
+
+Centralized error tracking with automatic classification, circuit breakers, and health monitoring.
+
+### Endpoints
+
+| Method | Path | Description |
+|--------|------|-------------|
+| `GET` | `/v1/diagnostics/health` | Quick health status (healthy/degraded/critical) |
+| `GET` | `/v1/diagnostics/errors` | List tracked errors with filters (service, category, severity) |
+| `GET` | `/v1/diagnostics/report` | Full diagnostics report with breakdowns and top offenders |
+| `POST` | `/v1/diagnostics/errors/{fingerprint}/resolve` | Mark an error as resolved |
+| `POST` | `/v1/diagnostics/errors/{fingerprint}/suppress` | Suppress alerts for a known error |
+| `GET` | `/v1/diagnostics/circuit-breakers` | List all circuit breaker states |
+
+### Error Classification
+
+13 categories: `RACE_CONDITION`, `SECURITY`, `DATA_INTEGRITY`, `GRAPH_MUTATION`, `EVENT_PIPELINE`, `AUTH`, `RATE_LIMITING`, `VALIDATION`, `TIMEOUT`, `DEPENDENCY`, `MEMORY`, `CONFIGURATION`, `UNKNOWN`
+
+5 severity levels: `CRITICAL`, `HIGH`, `MEDIUM`, `LOW`, `WARNING`
+
+### Circuit Breaker
+
+Per-operation circuit breaker prevents cascading failures:
+- **Closed** (normal) → opens after 5 consecutive failures
+- **Open** (blocking) → rejects all calls for 30 seconds
+- **Half-open** (testing) → allows one call through to test recovery

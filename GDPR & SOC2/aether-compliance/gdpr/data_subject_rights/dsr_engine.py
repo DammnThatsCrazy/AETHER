@@ -17,9 +17,9 @@ import uuid
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 from enum import Enum
-from typing import Any, Optional
+from typing import Optional
 
-from config.compliance_config import GDPR_RIGHTS, GDPR_DATA_STORES
+from config.compliance_config import GDPR_DATA_STORES
 from shared.logger import dsr_log
 
 
@@ -54,8 +54,8 @@ class DSRRequest:
     created_at: str = field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
     deadline: str = ""
     completed_at: Optional[str] = None
-    stores_processed: list = field(default_factory=list)
-    stores_remaining: list = field(default_factory=list)
+    stores_processed: list[str] = field(default_factory=list)
+    stores_remaining: list[str] = field(default_factory=list)
     result: Optional[dict] = None
     errors: list = field(default_factory=list)
 
@@ -217,6 +217,20 @@ class DSRExecutor:
             dsr_log(f"    ✗ {store_name}: {operation}")
             dsr.stores_processed.append(store_name)
 
+        # Additional IG erasure steps for services, protocols, and x402 data
+        ig_extra_steps = [
+            ("Neptune (Graph DB) — Services",
+             f"DELETE CONSUMES edges WHERE from_vertex is user's agent + pseudonymize SERVICE vertex references"),
+            ("Neptune (Graph DB) — Protocols",
+             f"DELETE INTERACTS_WITH edges WHERE from_vertex = '{dsr.user_id}'"),
+            ("x402 In-Memory Store",
+             f"DELETE x402 captured transactions WHERE payer_agent owned by '{dsr.user_id}'"),
+        ]
+
+        for store_name, operation in ig_extra_steps:
+            dsr_log(f"    ✗ {store_name}: {operation}")
+            dsr.stores_processed.append(store_name)
+
         dsr_log(f"    ⏱ Backup purge scheduled: {dsr.user_id} (90-day window)")
         dsr_log(f"  Erasure complete: {len(dsr.stores_processed)} stores purged")
 
@@ -255,6 +269,10 @@ class DSRExecutor:
                 "consent_history": [],
                 "ml_predictions": [],
                 "campaign_interactions": [],
+                "agent_registrations": [],
+                "payment_records": [],
+                "onchain_actions": [],
+                "trust_scores": [],
             },
         }
 

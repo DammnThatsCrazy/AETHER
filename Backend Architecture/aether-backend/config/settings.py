@@ -193,6 +193,10 @@ class Settings:
     intelligence_graph: IntelligenceGraphConfig = field(default_factory=IntelligenceGraphConfig)
     quicknode: QuickNodeConfig = field(default_factory=QuickNodeConfig)
 
+    def __post_init__(self):
+        if self.env != Environment.LOCAL and self.auth.jwt_secret == "change-me-in-production":
+            raise RuntimeError("JWT_SECRET must be set in non-local environments")
+
     @property
     def is_production(self) -> bool:
         return self.env == Environment.PRODUCTION

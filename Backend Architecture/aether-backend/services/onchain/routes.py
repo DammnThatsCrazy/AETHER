@@ -45,7 +45,7 @@ async def get_contract(address: str, request: Request):
     request.state.tenant.require_permission("onchain:read")
     info = await _recorder.get_contract_info(address)
     if not info:
-        raise NotFoundError(f"Contract {address} not found")
+        raise NotFoundError(f"Contract {address}")
     return APIResponse(data=info.model_dump()).to_dict()
 
 

@@ -162,9 +162,18 @@ class AuditEngine:
         for e in self._entries:
             trail_counts[e.trail] = trail_counts.get(e.trail, 0) + 1
 
+        # Map config names to actual trail values used in _log_entry
+        trail_key_map = {
+            "CloudTrail": "cloudtrail",
+            "Application Audit": "application",
+            "Consent Audit": "consent",
+            "Agent Audit": "agent",
+            "Access Reviews": "access_review",
+        }
+
         report = []
         for config in AUDIT_TRAILS:
-            name_key = config.name.lower().replace(" ", "_")
+            name_key = trail_key_map.get(config.name, config.name.lower().replace(" ", "_"))
             count = trail_counts.get(name_key, 0)
             years = config.retention_days / 365
             report.append({

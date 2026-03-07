@@ -63,7 +63,18 @@ class TrustScoreComposite:
     Each component calls existing ML serving or fraud engine endpoints.
     """
 
-    def __init__(self, ml_serving=None, fraud_engine=None, resolution_engine=None):
+    def __init__(
+        self,
+        ml_serving: Optional[object] = None,
+        fraud_engine: Optional[object] = None,
+        resolution_engine: Optional[object] = None,
+    ):
+        """
+        Args:
+            ml_serving: ML serving client (production DI).
+            fraud_engine: Fraud engine client (production DI).
+            resolution_engine: Identity resolution engine (production DI).
+        """
         self._ml = ml_serving
         self._fraud = fraud_engine
         self._resolution = resolution_engine
@@ -93,7 +104,8 @@ class TrustScoreComposite:
 
         # Component 2: Identity Trust (35%)
         # Uses: Identity Resolution confidence + Bot Detection model
-        identity_confidence = features.get("identity_confidence", 0.5)
+        # Default 0.1: unknown identity = low trust
+        identity_confidence = features.get("identity_confidence", 0.1)
         bot_score = features.get("bot_score", 0.0)
         identity_trust = identity_confidence * (1.0 - bot_score)
         components["identity_confidence"] = identity_confidence
@@ -101,18 +113,20 @@ class TrustScoreComposite:
 
         # Component 3: Behavioral Trust (25%)
         # Uses: Session Scorer + Churn Prediction model
-        session_score = features.get("session_score", 0.5)
+        # Default 0.1: no behavioral data = low trust
+        session_score = features.get("session_score", 0.1)
         churn_risk = features.get("churn_risk", 0.0)
         behavioral_trust = session_score * (1.0 - churn_risk)
         components["session_score"] = session_score
         components["churn_risk"] = churn_risk
 
-        # Weighted composite
+        # Weighted composite (clamped to [0.0, 1.0])
         composite = (
             TRANSACTION_WEIGHT * transaction_trust
             + IDENTITY_WEIGHT * identity_trust
             + BEHAVIORAL_WEIGHT * behavioral_trust
         )
+        composite = max(0.0, min(1.0, composite))
 
         score = TrustScore(
             entity_id=entity_id,

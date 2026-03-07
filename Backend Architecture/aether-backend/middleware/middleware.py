@@ -68,20 +68,34 @@ def register_middleware(app: FastAPI) -> None:
         # --- Body size check (skip for GET/HEAD/OPTIONS) ---
         if request.method in ("POST", "PUT", "PATCH"):
             content_length = request.headers.get("content-length")
-            if content_length and int(content_length) > settings.api.max_request_body_bytes:
-                return JSONResponse(
-                    status_code=413,
-                    content={
-                        "error": {
-                            "code": 413,
-                            "message": "Request body too large",
-                            "details": {
-                                "max_bytes": settings.api.max_request_body_bytes,
-                            },
-                            "request_id": request_id,
-                        }
-                    },
-                )
+            if content_length:
+                try:
+                    cl = int(content_length)
+                except (ValueError, TypeError):
+                    return JSONResponse(
+                        status_code=400,
+                        content={
+                            "error": {
+                                "code": 400,
+                                "message": "Invalid Content-Length header",
+                                "request_id": request_id,
+                            }
+                        },
+                    )
+                if cl > settings.api.max_request_body_bytes:
+                    return JSONResponse(
+                        status_code=413,
+                        content={
+                            "error": {
+                                "code": 413,
+                                "message": "Request body too large",
+                                "details": {
+                                    "max_bytes": settings.api.max_request_body_bytes,
+                                },
+                                "request_id": request_id,
+                            }
+                        },
+                    )
 
         # --- Auth (skip public paths) ---
         if request.url.path not in _PUBLIC_PATHS:

@@ -482,6 +482,25 @@ Three service groups are available when Intelligence Graph feature flags are ena
 | GET | `/v1/agent/{id}/graph` | Agent's full graph neighborhood |
 | GET | `/v1/agent/{id}/trust` | Agent trust score + history |
 
+### Diagnostics Service (Admin Only)
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/v1/diagnostics/health` | Quick health check (healthy/degraded/critical) |
+| GET | `/v1/diagnostics/errors` | List tracked errors with filters |
+| GET | `/v1/diagnostics/report` | Full diagnostics report with breakdowns |
+| POST | `/v1/diagnostics/errors/{fingerprint}/resolve` | Mark error as resolved |
+| POST | `/v1/diagnostics/errors/{fingerprint}/suppress` | Suppress alerts for known error |
+| GET | `/v1/diagnostics/circuit-breakers` | List all circuit breaker states |
+
+All diagnostics endpoints require `admin` permission.
+
+**Query Parameters (GET /errors):**
+- `service` (optional) — filter by service name
+- `category` (optional) — filter by error category
+- `severity` (optional) — filter by severity level
+- `resolved` (optional) — filter by resolution status
+
 ---
 
 ## Error Responses
@@ -500,8 +519,10 @@ All endpoints return standard error format:
 
 Common error codes:
 - `400` — `INVALID_REQUEST` — Malformed request body
+- `400` — `FEATURE_DISABLED` — Intelligence Graph feature flag not enabled
 - `401` — `INVALID_API_KEY` — Missing or invalid API key
 - `403` — `FORBIDDEN` — API key lacks required permissions
 - `404` — `NOT_FOUND` — Resource not found
 - `429` — `RATE_LIMITED` — Too many requests
 - `500` — `INTERNAL_ERROR` — Server error
+- `503` — `CIRCUIT_OPEN` — Circuit breaker is open for the requested operation

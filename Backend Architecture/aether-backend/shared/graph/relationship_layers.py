@@ -138,7 +138,6 @@ async def get_layer_subgraph(
 
     # Get all neighbors from the user vertex, filtering by layer
     vertices: list[Vertex] = []
-    edges: list[Edge] = []
 
     neighbors = await graph_client.get_neighbors(user_id, direction="both")
     for neighbor in neighbors:

@@ -33,14 +33,14 @@ class CommerceService:
         self._payments: list[PaymentRecord] = []
         self._hires: list[AgentHireRecord] = []
 
-    async def record_payment(self, payment: PaymentRecord) -> PaymentRecord:
+    async def record_payment(self, payment: PaymentRecord, tenant_id: str = "") -> PaymentRecord:
         """Record a payment and create a PAYS edge in the graph."""
         if not payment.payment_id:
             payment.payment_id = str(uuid.uuid4())
 
         # Calculate fee elimination if using crypto/x402 instead of card
         if payment.method in ("x402", "usdc", "eth", "sol", "sponge"):
-            payment.fee_eliminated_usd = round(payment.amount * CARD_FEE_RATE, 2)
+            payment.fee_eliminated_usd = round(payment.amount * CARD_FEE_RATE, 4)
 
         # Create Payment vertex
         vertex = Vertex(
@@ -53,11 +53,12 @@ class CommerceService:
                 "chain_id": payment.chain_id or "",
                 "tx_hash": payment.tx_hash or "",
                 "fee_eliminated_usd": str(payment.fee_eliminated_usd),
+                "tenant_id": tenant_id,
             },
         )
         await self._graph.add_vertex(vertex)
 
-        # Create PAYS edge: payer → payee
+        # Create PAYS edge: payer -> payee
         edge = Edge(
             edge_type=EdgeType.PAYS,
             from_vertex_id=payment.payer_id,
@@ -80,15 +81,15 @@ class CommerceService:
 
         self._payments.append(payment)
         metrics.increment("commerce_payments_recorded", labels={"method": payment.method})
-        logger.info(f"Payment recorded: {payment.payment_id} ({payment.payer_type}→{payment.payee_type})")
+        logger.info(f"Payment recorded: {payment.payment_id} ({payment.payer_type}->{payment.payee_type})")
         return payment
 
-    async def record_hire(self, hire: AgentHireRecord) -> AgentHireRecord:
+    async def record_hire(self, hire: AgentHireRecord, tenant_id: str = "") -> AgentHireRecord:
         """Record an agent hiring another agent and create a HIRED edge."""
         if not hire.hire_id:
             hire.hire_id = str(uuid.uuid4())
 
-        # Create HIRED edge: hiring_agent → hired_agent
+        # Create HIRED edge: hiring_agent -> hired_agent
         edge = Edge(
             edge_type=EdgeType.HIRED,
             from_vertex_id=hire.hiring_agent_id,
@@ -98,6 +99,7 @@ class CommerceService:
                 "task_type": hire.task_type,
                 "agreed_amount": str(hire.agreed_amount),
                 "status": hire.status,
+                "tenant_id": tenant_id,
             },
         )
         await self._graph.add_edge(edge)
@@ -114,27 +116,34 @@ class CommerceService:
         logger.info(f"Agent hire recorded: {hire.hiring_agent_id} hired {hire.hired_agent_id}")
         return hire
 
-    async def get_fee_elimination_report(self, period: str = "all") -> FeeEliminationReport:
+    async def get_fee_elimination_report(self, period: str = "all", tenant_id: str = "") -> FeeEliminationReport:
         """Generate fee elimination report for a period."""
-        total_volume = sum(p.amount for p in self._payments)
-        total_eliminated = sum(p.fee_eliminated_usd for p in self._payments)
+        payments = self._payments
+        if tenant_id:
+            payments = [p for p in payments if getattr(p, 'tenant_id', '') == tenant_id]
+
+        total_volume = sum(p.amount for p in payments)
+        total_eliminated = sum(p.fee_eliminated_usd for p in payments)
         card_fees_would_be = round(total_volume * CARD_FEE_RATE, 2)
 
         return FeeEliminationReport(
             period=period,
-            total_transactions=len(self._payments),
+            total_transactions=len(payments),
             total_volume_usd=round(total_volume, 2),
             card_fees_would_be_usd=card_fees_would_be,
             actual_fees_usd=round(card_fees_would_be - total_eliminated, 2),
             eliminated_usd=round(total_eliminated, 2),
         )
 
-    async def get_agent_spend(self, agent_id: str) -> dict:
+    async def get_agent_spend(self, agent_id: str, tenant_id: str = "") -> dict:
         """Get spending history for an agent."""
         agent_payments = [
             p for p in self._payments
             if p.payer_id == agent_id and p.payer_type == "agent"
         ]
+        if tenant_id:
+            agent_payments = [p for p in agent_payments if getattr(p, 'tenant_id', '') == tenant_id]
+
         return {
             "agent_id": agent_id,
             "total_spent_usd": sum(p.amount for p in agent_payments),

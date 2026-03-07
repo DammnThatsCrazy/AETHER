@@ -161,7 +161,21 @@ class APIKeyValidator:
         },
     }
 
+    def __init__(self, environment: Optional[str] = None):
+        from config.settings import Environment
+        self._environment = environment or settings.env
+
     def validate(self, api_key: str) -> TenantContext:
+        from config.settings import Environment
+
+        # Only allow stub keys in LOCAL environment
+        if self._environment != Environment.LOCAL:
+            # In non-local environments, stub keys must not be used
+            if api_key in self._STUB_KEYS:
+                raise UnauthorizedError("Stub API keys are not allowed in non-local environments")
+            # In production, look up keys from DynamoDB/Redis (stub: reject all)
+            raise UnauthorizedError("Invalid API key")
+
         key_data = self._STUB_KEYS.get(api_key)
         if not key_data:
             raise UnauthorizedError("Invalid API key")

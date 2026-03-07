@@ -1,6 +1,6 @@
 # Aether
 
-Cross-platform analytics SDK with Web3 wallet tracking, cross-device identity resolution, and on-chain reward automation.
+Cross-platform Unified Intelligence Graph with Web3 wallet tracking, cross-device identity resolution, and on-chain reward automation.
 
 ## Architecture
 

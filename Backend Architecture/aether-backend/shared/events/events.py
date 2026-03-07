@@ -74,8 +74,8 @@ class Topic(str, Enum):
     # Intelligence Graph — Commerce (L3a)
     PAYMENT_SENT = "aether.commerce.payment.sent"
     AGENT_HIRED = "aether.commerce.agent.hired"
-    SERVICE_PURCHASED = "aether.commerce.service.purchased"
-    FEE_ELIMINATED = "aether.commerce.fee.eliminated"
+    SERVICE_PURCHASED = "aether.commerce.service.purchased"  # Reserved — not yet published by any service
+    FEE_ELIMINATED = "aether.commerce.fee.eliminated"  # Reserved — not yet published by any service
 
     # Intelligence Graph — On-Chain Actions (L0)
     ACTION_RECORDED = "aether.onchain.action.recorded"
@@ -215,22 +215,26 @@ class EventConsumer:
         logger.info(f"Subscribed handler to {topic.value}")
 
     async def process(self, event: Event) -> None:
-        """Process an event with concurrency limiting and retry."""
+        """Process an event with concurrency limiting and retry (loop-based, no recursion)."""
         async with self._semaphore:
             handlers = self._handlers.get(event.topic, [])
             for handler in handlers:
-                try:
-                    await handler(event)
-                    metrics.increment("events_processed", labels={"topic": event.topic.value})
-                except Exception as e:
-                    logger.error(f"Handler failed for event {event.event_id}: {e}")
-                    metrics.increment("events_handler_failed", labels={"topic": event.topic.value})
-                    if event.retry_count < self.MAX_HANDLER_RETRIES:
-                        event.retry_count += 1
-                        logger.info(f"Retrying event {event.event_id} (attempt {event.retry_count})")
-                        await self.process(event)
-                    else:
-                        await self._send_to_dlq(event, str(e))
+                success = False
+                while not success:
+                    try:
+                        await handler(event)
+                        metrics.increment("events_processed", labels={"topic": event.topic.value})
+                        success = True
+                    except Exception as e:
+                        logger.error(f"Handler failed for event {event.event_id}: {e}")
+                        metrics.increment("events_handler_failed", labels={"topic": event.topic.value})
+                        if event.retry_count < self.MAX_HANDLER_RETRIES:
+                            event.retry_count += 1
+                            logger.info(f"Retrying event {event.event_id} (attempt {event.retry_count})")
+                            # Loop will retry without recursive call
+                        else:
+                            await self._send_to_dlq(event, str(e))
+                            break  # Exit retry loop, move to next handler
 
     async def _send_to_dlq(self, event: Event, error: str) -> None:
         """Send failed events to dead-letter queue for manual review."""

@@ -1,9 +1,9 @@
 """
 Aether Service — x402 Interceptor
 Captures 3 HTTP headers for agent-to-service micropayments:
-  1. PAYMENT-REQUIRED  (402 response → payment terms)
-  2. X-PAYMENT          (client request → payment proof)
-  3. X-PAYMENT-RESPONSE (server response → confirmation)
+  1. PAYMENT-REQUIRED  (402 response -> payment terms)
+  2. X-PAYMENT          (client request -> payment proof)
+  3. X-PAYMENT-RESPONSE (server response -> confirmation)
 
 All captured payments are routed to the economic graph and commerce service.
 """
@@ -29,6 +29,9 @@ logger = get_logger("aether.service.x402.interceptor")
 # Card fee rate for computing fee_eliminated_usd
 CARD_FEE_RATE = 0.029
 
+# Maximum header value size (8 KB)
+_MAX_HEADER_SIZE = 8192
+
 
 class X402Interceptor:
     """
@@ -42,9 +45,18 @@ class X402Interceptor:
 
     def parse_payment_required(self, header_value: str) -> PaymentTerms:
         """Parse PAYMENT-REQUIRED header (402 response)."""
-        # Format: JSON or structured header
-        # e.g. {"amount": 0.001, "token": "USDC", "chain": "eip155:1", "recipient": "0x..."}
-        data = json.loads(header_value) if header_value.startswith("{") else {}
+        if len(header_value) > _MAX_HEADER_SIZE:
+            raise ValueError("Header value too large")
+
+        if not header_value.startswith("{"):
+            raise ValueError("Malformed payment header")
+
+        data = json.loads(header_value)
+
+        # Validate amount is a positive number
+        if not isinstance(data.get("amount"), (int, float)) or data.get("amount", 0) < 0:
+            raise ValueError("Invalid amount")
+
         return PaymentTerms(
             amount=data.get("amount", 0.0),
             token=data.get("token", "USDC"),
@@ -56,7 +68,18 @@ class X402Interceptor:
 
     def parse_payment_proof(self, header_value: str) -> PaymentProof:
         """Parse X-PAYMENT header (client request with payment proof)."""
-        data = json.loads(header_value) if header_value.startswith("{") else {}
+        if len(header_value) > _MAX_HEADER_SIZE:
+            raise ValueError("Header value too large")
+
+        if not header_value.startswith("{"):
+            raise ValueError("Malformed payment header")
+
+        data = json.loads(header_value)
+
+        # Validate amount is a positive number
+        if not isinstance(data.get("amount"), (int, float)) or data.get("amount", 0) < 0:
+            raise ValueError("Invalid amount")
+
         return PaymentProof(
             tx_hash=data.get("tx_hash", ""),
             payer=data.get("payer", ""),
@@ -67,7 +90,13 @@ class X402Interceptor:
 
     def parse_payment_response(self, header_value: str) -> PaymentResponse:
         """Parse X-PAYMENT-RESPONSE header (server confirmation)."""
-        data = json.loads(header_value) if header_value.startswith("{") else {}
+        if len(header_value) > _MAX_HEADER_SIZE:
+            raise ValueError("Header value too large")
+
+        if not header_value.startswith("{"):
+            raise ValueError("Malformed payment header")
+
+        data = json.loads(header_value)
         return PaymentResponse(
             verified=data.get("verified", False),
             receipt_id=data.get("receipt_id"),
@@ -101,18 +130,22 @@ class X402Interceptor:
             fee_eliminated_usd=fee_eliminated,
         )
 
+        # Record capture locally first (always succeeds)
         self._captures.append(tx)
 
-        # Publish event
-        await self._producer.publish(Event(
-            topic=Topic.X402_PAYMENT_CAPTURED,
-            payload=tx.model_dump(),
-            source_service="x402",
-        ))
+        # Publish event (non-critical — capture still succeeds if publish fails)
+        try:
+            await self._producer.publish(Event(
+                topic=Topic.X402_PAYMENT_CAPTURED,
+                payload=tx.model_dump(),
+                source_service="x402",
+            ))
+        except Exception as e:
+            logger.error(f"Failed to publish x402 capture event: {e}")
 
         metrics.increment("x402_payments_captured", labels={"chain": terms.chain})
         logger.info(
-            f"x402 captured: {tx.capture_id} | {payer_agent_id}→{payee_service_id} "
+            f"x402 captured: {tx.capture_id} | {payer_agent_id}->{payee_service_id} "
             f"| ${amount_usd} {terms.token} on {terms.chain}"
         )
         return tx

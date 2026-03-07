@@ -1,6 +1,6 @@
 """
 Aether Backend — Main Application
-Mounts 15 core services + up to 3 Intelligence Graph services (feature-flagged).
+Mounts 16 core services + up to 3 Intelligence Graph services (feature-flagged).
 Applies middleware and serves the unified API.
 
 Run:
@@ -80,6 +80,12 @@ Routes:
     GET  /v1/automation/overview        Platform overview
     GET  /v1/automation/insights        Automated insights
     POST /v1/automation/report/{id}     Campaign report
+    GET  /v1/diagnostics/health          Diagnostics health check
+    GET  /v1/diagnostics/errors          List tracked errors
+    GET  /v1/diagnostics/report          Diagnostics report
+    POST /v1/diagnostics/errors/{fp}/resolve   Resolve error
+    POST /v1/diagnostics/errors/{fp}/suppress  Suppress error
+    GET  /v1/diagnostics/circuit-breakers      Circuit breaker states
 """
 
 from __future__ import annotations
@@ -119,6 +125,7 @@ from services.attribution.routes import router as attribution_router
 from services.rewards.routes import router as rewards_router
 from services.oracle.routes import router as oracle_router
 from services.analytics_automation.routes import router as automation_router
+from services.diagnostics.routes import router as diagnostics_router
 
 
 # ═══════════════════════════════════════════════════════════════════════
@@ -176,7 +183,7 @@ def create_app() -> FastAPI:
     # ── Auth / Logging / Rate Limit / Error Handling Middleware ────
     register_middleware(app)
 
-    # ── Mount all 15 core service routers ──────────────────────────
+    # ── Mount all 16 core service routers ──────────────────────────
     app.include_router(gateway_router)
     app.include_router(ingestion_router)
     app.include_router(identity_router)
@@ -193,6 +200,7 @@ def create_app() -> FastAPI:
     app.include_router(rewards_router)
     app.include_router(oracle_router)
     app.include_router(automation_router)
+    app.include_router(diagnostics_router)
 
     # ── Intelligence Graph services (feature-flagged) ───────────
     ig = settings.intelligence_graph
