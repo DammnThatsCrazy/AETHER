@@ -1,5 +1,41 @@
 # Changelog
 
+## v8.2.0 — Automatic Traffic Source Detection (2026-03-07)
+
+- **NEW**: Server-side `SourceClassifier` (`services/traffic/classifier.py`) with O(1) domain lookup tables — 40+ social platforms, 17+ search engines, 14 email providers, 12 ad platform click IDs
+- **NEW**: Priority classification chain: Click IDs (confidence 1.0) → UTM params (0.95) → Referrer domain (0.9) → Direct (0.5)
+- **Web SDK**: Added `referrerDomain` extraction and `sessionStorage` persistence for SPA navigation
+- **iOS SDK**: Expanded click ID capture from 2 → 12, expanded `CampaignInfo` with content/term/clickIds/referrerDomain, wired into `buildContext()`
+- **Android SDK**: Expanded click ID capture from 3 → 12, added `campaignContext` JSONObject wired into `buildContext()`
+- **Backend**: `POST /v1/track/traffic-source` now auto-classifies raw signals before storage — `traffic_type` no longer arrives as `"unknown"`
+- **9 files changed**, ~277 lines added, zero classification logic in any SDK
+
+---
+
+## v8.1.0 — Security Hardening & Diagnostics (2026-03-07)
+
+- **51 issues remediated** — 5 critical, 18 high, 18 medium, 10 low
+- **NEW**: Diagnostics service (`/v1/diagnostics/`) — centralized error tracking with 6 admin endpoints
+- **NEW**: `ErrorRegistry` — SHA-256 error fingerprinting, 13 categories, 5 severity levels, auto-classification
+- **NEW**: `CircuitBreaker` — per-operation failure tracking (5 failures → open, 30s recovery)
+- **FIXED**: Race condition in x402 economic graph, hardcoded JWT secret, API key stubs, unprotected IG endpoints, unlinked audit engine
+- **FIXED**: RPC method injection, x402 header parsing, unauthenticated fraud routes, cross-tenant data leakage, sendBeacon API key leak
+- **26 files changed** — 22 modified, 4 new
+
+---
+
+## v8.0.0 — Unified On-Chain Intelligence Graph (2026-03-06)
+
+- **NEW**: 8-layer architecture (L0 On-Chain Actions through L7 Compliance) for human-to-human, human-to-agent, and agent-to-agent interactions
+- **NEW**: 3 feature-flagged services — Commerce (L3a), On-Chain (L0), x402 Interceptor (L3b)
+- **NEW**: 6 new graph node types, 13 new edge types layered onto existing Identity Graph
+- **NEW**: Trust Score composite (weighted blend of existing ML models), Bytecode Risk scorer (rule-based)
+- **NEW**: 2 new consent purposes (`agent`, `commerce`), DSR cascade extended to new vertex types
+- **NEW**: Agent lifecycle tracking with decision records, ground truth feedback, confidence delta
+- All layers disabled by default — progressive activation via `IntelligenceGraphConfig` feature flags
+
+---
+
 ## v7.0.0 — Thin-Client Architecture + Identity Resolution (2026-03-05)
 
 ### Architecture

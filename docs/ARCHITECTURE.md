@@ -15,7 +15,7 @@ Aether v7.0 adopts a **"Sense and Ship"** thin-client architecture across all pl
 │  - Raw event batching       │        │     cross-device matching)       │
 │  - Session & identity mgmt  │  GET   │  - ML inference (intent, bot)    │
 │  - Consent gates (GDPR)     │  /v1/  │  - DeFi tx classification        │
-│  - Feature flag cache       │ config │  - Traffic source classification │
+│  - Feature flag cache       │ config │  - Traffic source auto-classify  │
 │  - Fingerprint generation   │        │  - Funnel matching & analysis    │
 │                             │        │  - Heatmap grid generation       │
 │                             │        │  - Whale detection               │
@@ -81,6 +81,39 @@ All SDKs generate a deterministic device fingerprint (SHA-256 hash) that is incl
 | **iOS** | `identifierForVendor`, device model, system version, screen dimensions, scale, locale, timezone, processor count, physical memory | SHA-256 via CryptoKit |
 | **Android** | `ANDROID_ID`, `Build.MODEL`, `Build.MANUFACTURER`, OS version, display metrics (width, height, density), locale, timezone, available processors | SHA-256 via `MessageDigest` |
 | **React Native** | Delegates to native module: `NativeModules.AetherNative.getFingerprint()` | Native implementation (iOS/Android) |
+
+## Traffic Source Classification
+
+SDKs collect raw traffic signals and ship them to the backend, where the `SourceClassifier` (`services/traffic/classifier.py`) classifies every session into source/medium/channel automatically.
+
+```
+SDK detect()                    Backend SourceClassifier
+┌─────────────────────┐         ┌──────────────────────────────────────┐
+│ referrer URL        │  POST   │ Priority chain:                      │
+│ referrerDomain      │ /v1/    │  1. Click IDs → Paid (confidence 1.0)│
+│ UTM params (5)      │ track/  │  2. UTM params → Custom (0.95)       │
+│ Click IDs (12)      │ traffic │  3. Referrer → Organic/Social (0.9)  │
+│ Landing page        │ source  │  4. No signals → Direct (0.5)        │
+└─────────────────────┘ ──────> └──────────────────────────────────────┘
+                                         │
+                                ClassifiedSource{source, medium, channel, confidence}
+```
+
+**Domain lookup tables (O(1) dict lookups — no regex):**
+
+| Table | Coverage | Examples |
+|---|---|---|
+| Social | 40+ domains | facebook.com, t.co, linkedin.com, reddit.com, tiktok.com |
+| Search | 17+ domains | google.*, bing.com, duckduckgo.com, baidu.com, yandex.ru |
+| Email | 14 domains | mail.google.com, outlook.live.com, protonmail.com |
+| Click IDs | 12 mappings | gclid→google/cpc, fbclid→facebook/cpc, epik→pinterest/cpc |
+
+**Channel categories:** Paid Search, Paid Social, Organic Search, Organic Social, Email, Display, Affiliate, Referral, Direct, Other
+
+**Key design decisions:**
+- Email domains checked before search to prevent `mail.google.com` → Search misclassification
+- `sessionStorage` persistence on web ensures SPA navigations retain original traffic source
+- iOS/Android SDKs include campaign context (source, medium, campaign, content, term, clickIds, referrerDomain) in every event via `buildContext()`
 
 ## Identity Resolution
 

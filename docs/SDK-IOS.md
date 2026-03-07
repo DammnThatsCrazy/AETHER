@@ -157,6 +157,14 @@ let limit = Aether.shared.getFeatureValue("upload-limit", default: 10)
 
 ## Deep Link Attribution
 
+The SDK captures **12 ad platform click IDs** and all UTM parameters from deep links, storing them as campaign context that is included in every subsequent event via `buildContext()`.
+
+**Supported click IDs:** `gclid`, `msclkid`, `fbclid`, `ttclid`, `twclid`, `li_fat_id`, `rdt_cid`, `scid`, `dclid`, `epik`, `irclickid`, `aff_id`
+
+**Campaign context fields:** `source`, `medium`, `campaign`, `content`, `term`, `clickIds` (dictionary), `referrerDomain`
+
+All classification (organic, paid, social, email, direct) happens server-side via the backend `SourceClassifier` — the SDK ships raw signals only.
+
 ```swift
 // In SceneDelegate or AppDelegate
 func scene(_ scene: UIScene, openURLContexts contexts: Set<UIOpenURLContext>) {
@@ -229,13 +237,14 @@ UIKit Events / Wallet Interactions
 - Event type, name, and raw properties
 - Minimal context: `{os: "iOS", osVersion, locale, timezone}`
 - Device fingerprint hash
+- Campaign context: `{source, medium, campaign, content, term, clickIds, referrerDomain}` (from deep links)
 - Session ID, anonymous ID, user ID
 
 ### What the backend derives:
 - Device model, screen size from User-Agent
 - IP geolocation (MaxMind GeoLite2)
 - Identity resolution (cross-device matching)
-- Traffic source classification
+- Traffic source classification (via `SourceClassifier` — 40+ social, 17+ search, 14 email domain tables)
 - ML predictions (intent, bot detection)
 
 ## Auto Screen Tracking

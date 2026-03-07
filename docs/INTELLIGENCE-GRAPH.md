@@ -2,7 +2,7 @@
 
 ## Overview
 
-The Unified On-Chain Intelligence Graph extends the Aether v7.0 platform with an 8-layer architecture for tracking human, agent, and protocol interactions across Web2, Web3, and autonomous agent workflows.
+The Unified On-Chain Intelligence Graph extends the Aether platform with an 8-layer architecture for tracking human, agent, and protocol interactions across Web2, Web3, and autonomous agent workflows.
 
 - **Additive extension** — all 9 existing ML models remain unchanged; no retraining required
 - **Feature-flagged** — every layer activates independently via environment variables (all default to `false`)

@@ -24,7 +24,7 @@ The Aether Mobile SDK provides native analytics, identity resolution, multi-chai
 - **A/B experiment framework** -- variant assignment with persistent bucketing
 - **Auto screen tracking** -- automatic view controller / activity tracking
 - **Offline event queuing** -- batched delivery with automatic retry on failure
-- **Deep link attribution** -- UTM, gclid, fbclid, and msclkid parameter capture
+- **Deep link attribution** -- UTM parameters and 12 ad platform click IDs (gclid, msclkid, fbclid, ttclid, twclid, li_fat_id, rdt_cid, scid, dclid, epik, irclickid, aff_id) with campaign context in every event
 - **Push notification tracking** -- campaign-level open attribution
 - **Error tracking** -- uncaught exception capture (Android)
 - **Lifecycle tracking** -- foreground/background events with automatic flush
@@ -52,7 +52,7 @@ Enter the repository URL:
 https://github.com/aether-network/aether-ios-sdk.git
 ```
 
-Set the version rule to **5.0.0** or later.
+Set the version rule to **8.0.0** or later.
 
 ### iOS -- CocoaPods
 

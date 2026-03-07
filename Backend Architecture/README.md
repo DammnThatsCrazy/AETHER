@@ -2,7 +2,7 @@
 
 **FastAPI microservices backend for the Aether platform.**
 
-Aether Backend is a unified API gateway that mounts 18 domain-specific microservices (15 core + 3 Intelligence Graph) onto a single FastAPI application. It provides real-time data ingestion, identity resolution, analytics, ML model serving, autonomous agent orchestration, campaign management, consent/DSR compliance, notifications, traffic source tracking, fraud detection, multi-touch attribution, automated reward distribution with oracle-signed proofs, multi-chain automation, and multi-tenant administration -- all behind a single versioned API surface with 85+ endpoints.
+Aether Backend is a unified API gateway that mounts 19 domain-specific microservices (16 core + 3 Intelligence Graph) onto a single FastAPI application. It provides real-time data ingestion, identity resolution, analytics, ML model serving, autonomous agent orchestration, campaign management, consent/DSR compliance, notifications, traffic source tracking, fraud detection, multi-touch attribution, automated reward distribution with oracle-signed proofs, multi-chain automation, and multi-tenant administration -- all behind a single versioned API surface with 85+ endpoints.
 
 ---
 
@@ -59,7 +59,7 @@ Aether Backend is a unified API gateway that mounts 18 domain-specific microserv
                  |  CORS -> Auth -> Rate Limit -> Body Size -> Log |
                  +------------------------+------------------------+
                                           |
-          18 Service Routers (85+ endpoints)
+          19 Service Routers (90+ endpoints)
     +-----+-----+------+------+-----+------+------+------+
     |     |     |      |      |     |      |      |      |
   +-v--+ +v--+ +v---+ +v---+ +v--+ +v---+ +v---+ +v---+ |
@@ -90,7 +90,7 @@ Aether Backend is a unified API gateway that mounts 18 domain-specific microserv
 
 **Key architectural decisions:**
 
-- **Single process, multiple routers** -- all 18 services are mounted as FastAPI `APIRouter` instances, sharing a single event loop and connection pool for reduced operational overhead.
+- **Single process, multiple routers** -- all 19 services are mounted as FastAPI `APIRouter` instances, sharing a single event loop and connection pool for reduced operational overhead.
 - **Dependency injection with lifecycle management** -- a `ResourceRegistry` singleton owns all shared resources (cache, graph, event bus, auth handlers). It is initialized at startup and torn down at shutdown via FastAPI's lifespan protocol.
 - **Repository pattern** -- data access is abstracted behind repository classes that separate query logic from business logic, with built-in caching, graph operations, and write-ahead logging hooks.
 - **12-Factor configuration** -- all settings are sourced from environment variables with sensible defaults (`config/settings.py`).
@@ -117,6 +117,7 @@ Aether Backend is a unified API gateway that mounts 18 domain-specific microserv
 | 14 | **Rewards**      | `/v1/rewards`           | Automated reward eligibility, campaign management, queue     | `POST /v1/rewards/evaluate`, `GET /v1/rewards/proof/{id}` |
 | 15 | **Oracle**       | `/v1/oracle`            | Multi-chain (EVM, SVM, Bitcoin, MoveVM, NEAR, TVM, Cosmos) cryptographic proof generation/verification   | `POST /v1/oracle/proof/generate`, `POST /v1/oracle/proof/verify` |
 | 16 | **Automation**   | `/v1/automation`        | Automated analytics pipeline, reward trigger, insights      | `POST /v1/automation/ingest`, `GET /v1/automation/insights` |
+| 17 | **Diagnostics**  | `/v1/diagnostics`       | Error tracking, circuit breakers, health monitoring          | `GET /v1/diagnostics/health`, `GET /v1/diagnostics/errors` |
 
 ---
 
@@ -126,9 +127,9 @@ Three additional services power the **Unified On-Chain Intelligence Graph**. All
 
 | #  | Service          | Prefix           | Feature Flag          | Description                                                    |
 | -- | ---------------- | ---------------- | --------------------- | -------------------------------------------------------------- |
-| 17 | **Commerce (L3a)** | `/v1/commerce` | `IG_COMMERCE_LAYER`   | Payment recording, agent hiring, fee elimination               |
-| 18 | **On-Chain (L0)**  | `/v1/onchain`  | `IG_ONCHAIN_LAYER`    | Action recording, chain listening, RPC gateway                 |
-| 19 | **x402 (L3b)**     | `/v1/x402`     | `IG_X402_LAYER`       | HTTP payment header capture, economic graph                    |
+| 18 | **Commerce (L3a)** | `/v1/commerce` | `IG_COMMERCE_LAYER`   | Payment recording, agent hiring, fee elimination               |
+| 19 | **On-Chain (L0)**  | `/v1/onchain`  | `IG_ONCHAIN_LAYER`    | Action recording, chain listening, RPC gateway                 |
+| 20 | **x402 (L3b)**     | `/v1/x402`     | `IG_X402_LAYER`       | HTTP payment header capture, economic graph                    |
 
 ### Shared Modules
 
@@ -591,7 +592,9 @@ aether-backend/
 |   |-- consent/routes.py       # Consent records, DSR
 |   |-- notification/routes.py  # Webhooks, alerts
 |   |-- admin/routes.py         # Tenants, API keys, billing
-|   |-- traffic/routes.py       # Automatic traffic source tracking and attribution
+|   |-- traffic/
+|   |   |-- routes.py            # Automatic traffic source tracking and attribution
+|   |   +-- classifier.py       # SourceClassifier: domain tables, click ID mapping, priority chain
 |   |-- fraud/
 |   |   |-- engine.py           # Composable weighted fraud scoring
 |   |   |-- signals.py          # 8 fraud signal detectors
@@ -618,6 +621,8 @@ aether-backend/
     |-- cache/cache.py          # Redis cache client
     |-- events/events.py        # Kafka/SNS event producer and consumer
     |-- graph/graph.py          # Neptune graph client
+    |-- diagnostics/
+    |   +-- error_registry.py   # Error fingerprinting, classification, circuit breakers
     +-- rate_limit/limiter.py   # Token bucket rate limiter
 ```
 

@@ -1,7 +1,7 @@
 # @aether/web
 
 <!-- Badges -->
-![Version](https://img.shields.io/badge/version-6.1.0-blue)
+![Version](https://img.shields.io/badge/version-8.2.0-blue)
 ![TypeScript](https://img.shields.io/badge/TypeScript-strict-3178C6)
 ![Build](https://img.shields.io/badge/build-Rollup-EC4A3F)
 ![Tests](https://img.shields.io/badge/tests-Vitest-6E9F18)
@@ -58,7 +58,7 @@ pnpm add @aether/web
 ### CDN (UMD -- static version)
 
 ```html
-<script src="https://cdn.aether.network/sdk/v5/aether.umd.js"></script>
+<script src="https://cdn.aether.network/sdk/v8/aether.umd.js"></script>
 <script>
   const aether = Aether.default;
   aether.init({ apiKey: 'your-key' });
@@ -70,7 +70,7 @@ pnpm add @aether/web
 Use the auto-loader for zero-maintenance SDK updates. The loader (~3KB) caches the full SDK bundle in localStorage and automatically fetches new versions in the background:
 
 ```html
-<script src="https://cdn.aether.network/sdk/v5/loader.js"></script>
+<script src="https://cdn.aether.network/sdk/v8/loader.js"></script>
 <script>
   AetherLoader.load().then(aether => {
     aether.init({ apiKey: 'your-key' });
@@ -148,7 +148,7 @@ aether.init({
     intentPrediction: true,        // edge ML intent model
     predictiveAnalytics: true,     // ML prediction event forwarding
 
-    // Web3 — Multi-VM wallet tracking (v5.0)
+    // Web3 — Multi-VM wallet tracking
     walletTracking: true,          // EVM wallet events (MetaMask, Coinbase, etc.)
     svmTracking: true,             // Solana/SVM wallet tracking (Phantom, Solflare)
     bitcoinTracking: true,         // Bitcoin wallet tracking (UniSat, Xverse)
@@ -163,7 +163,7 @@ aether.init({
     walletClassification: true,    // Wallet type classification
     crossChainTracking: true,      // Cross-chain bridge and transfer tracking
 
-    // Web2 Modules (v6.1)
+    // Web2 Modules
     ecommerce: true,              // e-commerce product/cart/order tracking
     formAnalytics: true,          // field-level form interaction tracking
     featureFlags: true,           // remote feature flag management
@@ -561,7 +561,7 @@ aether.use(myPlugin);
 | `src/web3/wallet/` | `wallet-classifier.ts`, `wallet-labels.ts` | Wallet classification (hot, cold, smart, exchange, protocol, multisig) and behavioral labeling |
 | `src/web3/portfolio/` | `portfolio-tracker.ts` | Cross-chain portfolio aggregation, token balances, and DeFi position monitoring |
 | `src/context/` | `semantic-context.ts` | 3-tier semantic context collector: Tier 1 (timestamp, event ID, basic device info), Tier 2 (journey stage, screen path, session duration, app state), Tier 3 (inferred intent, sentiment signals, interaction heatmaps, error logs) |
-| `src/tracking/` | `traffic-source-tracker.ts` | Zero-config traffic source auto-detection with UTM params, 12 ad click IDs (gclid, fbclid, msclkid, ttclid, twclid, etc.), referrer classification, 27 social platforms, 15 search engines, localStorage-persisted attribution |
+| `src/tracking/` | `traffic-source-tracker.ts` | Zero-config traffic source capture: raw referrer + `referrerDomain` extraction, 5 UTM params, 12 ad click IDs (gclid, msclkid, fbclid, ttclid, twclid, li_fat_id, rdt_cid, scid, dclid, epik, irclickid, aff_id), landing page URL. `sessionStorage`-persisted for SPA navigation. All classification happens server-side via `SourceClassifier` |
 | `src/rewards/` | `reward-client.ts` | SDK reward client: eligibility checking, oracle proof retrieval, ABI-encoded on-chain claiming via `claimReward()`, campaign discovery, reward history, localStorage proof caching |
 | `src/modules/` | `ecommerce.ts` | Full e-commerce tracking: product views, cart state (Map + localStorage), checkout funnel, purchase, refund, coupon tracking |
 | `src/modules/` | `form-analytics.ts` | Field-level form interaction tracking: focus time, hesitation, corrections, abandonment detection, MutationObserver for dynamic forms |

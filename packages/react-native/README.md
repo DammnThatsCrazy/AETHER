@@ -1,7 +1,7 @@
 # @aether/react-native
 
 <!-- Badges -->
-![Version](https://img.shields.io/badge/version-6.1.0-blue)
+![Version](https://img.shields.io/badge/version-8.2.0-blue)
 ![TypeScript](https://img.shields.io/badge/TypeScript-strict-3178C6)
 ![Platform](https://img.shields.io/badge/platform-iOS%20%7C%20Android-lightgrey)
 ![License](https://img.shields.io/badge/license-proprietary-lightgrey)

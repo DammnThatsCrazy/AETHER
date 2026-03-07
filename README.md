@@ -4,7 +4,7 @@ Cross-platform Unified Intelligence Graph with Web3 wallet tracking, cross-devic
 
 ## Architecture
 
-Aether v7.0 uses a **"Sense and Ship"** thin-client architecture. SDKs collect raw events, device fingerprints, and wallet interactions — the backend handles all processing, ML inference, identity resolution, and analytics.
+Aether uses a **"Sense and Ship"** thin-client architecture. SDKs collect raw events, device fingerprints, and wallet interactions — the backend handles all processing, ML inference, identity resolution, traffic source classification, and analytics.
 
 ```
 SDK (Web/iOS/Android/RN)          Backend (FastAPI + Neptune + TimescaleDB)
@@ -13,7 +13,7 @@ SDK (Web/iOS/Android/RN)          Backend (FastAPI + Neptune + TimescaleDB)
 │ Device fingerprint   │  /v1/   │ Identity Resolution (10 signals)│
 │ Wallet connections   │  batch   │ ML Scoring (intent, bot)        │
 │ Session + identity   │ ──────> │ DeFi Tx Classification          │
-│ Consent gates        │         │ Traffic Source Attribution       │
+│ Consent gates        │         │ Traffic Source Auto-Classification│
 │ Feature flag cache   │  GET    │ Funnel Matching                 │
 │                      │  /v1/   │ Heatmap Grid Generation         │
 │                      │  config │ Reward Automation               │
@@ -22,7 +22,7 @@ SDK (Web/iOS/Android/RN)          Backend (FastAPI + Neptune + TimescaleDB)
 
 ## SDKs
 
-| Platform | Package | Size (v7.0) |
+| Platform | Package | Size |
 |---|---|---|
 | **Web** | `@aether/web-sdk` | ~5,200 LOC |
 | **iOS** | `AetherSDK` (Swift) | ~535 LOC |
@@ -75,8 +75,10 @@ import { AetherProvider } from '@aether/react-native-sdk';
 - **On-chain reward automation** — Eligibility checks, pre-built claim payloads, oracle-verified proofs
 - **GDPR/CCPA consent management** — Consent-gated data collection with banner UI
 - **Feature flags** — Server-evaluated, locally cached
-- **Web2 analytics** — Ecommerce, funnels, heatmaps, form analytics, traffic attribution
+- **Automatic traffic source detection** — Server-side SourceClassifier with 40+ social, 17+ search, 14 email domain tables and 12 ad platform click IDs; priority chain: Click IDs → UTMs → Referrer → Direct
+- **Web2 analytics** — Ecommerce, funnels, heatmaps, form analytics
 - **ML inference** — Server-side intent prediction, bot detection, session scoring
+- **Diagnostics & circuit breakers** — Centralized error registry with SHA-256 fingerprinting, per-operation circuit breakers, and real-time health monitoring
 
 ## Unified On-Chain Intelligence Graph
 
@@ -136,11 +138,16 @@ Backend Architecture/
     │   ├── analytics/     Session scoring + anomaly detection
     │   ├── fraud/         Fraud detection
     │   ├── attribution/   Campaign attribution
-    │   └── ml_serving/    ML model serving
+    │   ├── ml_serving/    ML model serving
+    │   ├── traffic/
+    │   │   ├── routes.py      Automatic traffic source tracking
+    │   │   └── classifier.py  SourceClassifier (domain tables, click IDs)
+    │   └── diagnostics/   Error tracking & circuit breakers
     ├── shared/
     │   ├── graph/         Neptune graph client
     │   ├── events/        Event bus (Kafka/SNS)
     │   ├── cache/         Redis cache
+    │   ├── diagnostics/   Error registry & circuit breakers
     │   └── common/        Shared utilities
     └── main.py            FastAPI application
 
@@ -152,6 +159,7 @@ docs/
 ├── SDK-IOS.md            iOS SDK integration guide
 ├── SDK-ANDROID.md        Android SDK integration guide
 ├── SDK-REACT-NATIVE.md   React Native SDK integration guide
+├── INTELLIGENCE-GRAPH.md Unified On-Chain Intelligence Graph spec
 ├── MIGRATION-v7.md       v6 → v7 migration guide
 └── CHANGELOG.md          Version history
 ```
@@ -167,6 +175,7 @@ docs/
 | [iOS SDK](docs/SDK-IOS.md) | iOS integration guide |
 | [Android SDK](docs/SDK-ANDROID.md) | Android integration guide |
 | [React Native SDK](docs/SDK-REACT-NATIVE.md) | React Native integration guide |
+| [Intelligence Graph](docs/INTELLIGENCE-GRAPH.md) | On-chain intelligence graph architecture |
 | [Migration Guide](docs/MIGRATION-v7.md) | Breaking changes from v6 to v7 |
 | [Changelog](docs/CHANGELOG.md) | Version history |
 
