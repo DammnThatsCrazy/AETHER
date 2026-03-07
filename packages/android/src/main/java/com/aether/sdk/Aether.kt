@@ -92,6 +92,12 @@ object Aether : DefaultLifecycleObserver {
     private var serverConfig: JSONObject = JSONObject()
     private var consentState: MutableList<String> = mutableListOf()
     private var fingerprintId: String = ""
+    private var campaignContext: JSONObject? = null
+    private val CLICK_ID_PARAMS = setOf(
+        "gclid", "msclkid", "fbclid", "ttclid", "twclid",
+        "li_fat_id", "rdt_cid", "scid", "dclid", "epik",
+        "irclickid", "aff_id"
+    )
     private val dateFormat = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", Locale.US).apply {
         timeZone = TimeZone.getTimeZone("UTC")
     }
@@ -200,11 +206,28 @@ object Aether : DefaultLifecycleObserver {
             } ?: emptyMap()
 
             val attribution = mutableMapOf<String, Any?>("url" to url)
+            val clickIds = JSONObject()
             params.forEach { (key, value) ->
-                if (key.startsWith("utm_") || key in listOf("gclid", "fbclid", "msclkid")) {
+                if (key.startsWith("utm_")) {
+                    attribution[key] = value
+                }
+                if (key in CLICK_ID_PARAMS) {
+                    clickIds.put(key, value)
                     attribution[key] = value
                 }
             }
+
+            // Store campaign context for inclusion in event context
+            campaignContext = JSONObject().apply {
+                put("source", params["utm_source"] ?: "")
+                put("medium", params["utm_medium"] ?: "")
+                put("campaign", params["utm_campaign"] ?: "")
+                put("content", params["utm_content"] ?: "")
+                put("term", params["utm_term"] ?: "")
+                put("clickIds", clickIds)
+                put("referrerDomain", uri.host ?: "")
+            }
+
             track("deep_link_opened", attribution)
         } catch (e: Exception) {
             log("Failed to parse deep link: ${e.message}")
@@ -405,6 +428,7 @@ object Aether : DefaultLifecycleObserver {
         put("fingerprint", JSONObject().apply {
             put("id", fingerprintId)
         })
+        campaignContext?.let { put("campaign", it) }
     }
 
     private fun loadOrCreateAnonymousId(): String {

@@ -238,12 +238,15 @@ Funnel definitions come from the server via `/v1/config`. The SDK tags events wi
 ## Traffic Source Attribution
 
 The SDK automatically captures on init:
-- `document.referrer`
-- All UTM parameters (`utm_source`, `utm_medium`, `utm_campaign`, etc.)
-- Click IDs (`gclid`, `fbclid`, `ttclid`, `msclkid`, etc.)
+- `document.referrer` — full referrer URL
+- `referrerDomain` — parsed hostname with `www.` stripped (e.g. `google.com`, `t.co`)
+- All UTM parameters (`utm_source`, `utm_medium`, `utm_campaign`, `utm_term`, `utm_content`)
+- 12 click IDs (`gclid`, `msclkid`, `fbclid`, `ttclid`, `twclid`, `li_fat_id`, `rdt_cid`, `scid`, `dclid`, `epik`, `irclickid`, `aff_id`)
 - Landing page URL
 
-Classification (organic, paid, social, email, etc.) happens server-side via `POST /v1/classify-source`.
+**SPA persistence:** Traffic source data is cached in `sessionStorage` on first detection. Subsequent SPA navigations return the original source data instead of losing it when `document.referrer` clears.
+
+Classification (organic, paid, social, email, direct, etc.) happens server-side via `POST /v1/track/traffic-source` using the `SourceClassifier` — the SDK ships raw signals only.
 
 ## Rewards
 

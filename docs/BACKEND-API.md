@@ -247,6 +247,35 @@ Classifies a traffic source from raw attribution data.
 }
 ```
 
+### Automatic Traffic Source Classification (v8.2.0)
+
+`POST /v1/track/traffic-source` now automatically classifies raw SDK signals into source/medium/channel using the server-side `SourceClassifier`. No client-side classification logic is needed — SDKs ship raw referrer, UTM params, click IDs, and referrer domain; the backend resolves everything.
+
+**Classification Priority Chain:**
+
+| Priority | Signal | Confidence | Example |
+|----------|--------|------------|---------|
+| 1 | Click IDs | 1.0 | `gclid=abc` → google / cpc / Paid Search |
+| 2 | UTM params | 0.95 | `utm_source=newsletter` → newsletter / email / Email |
+| 3 | Referrer domain | 0.9 | `t.co` → twitter / social / Organic Social |
+| 4 | No signals | 0.5 | → (direct) / (none) / Direct |
+
+**Supported Click IDs (12):** `gclid`, `msclkid`, `fbclid`, `ttclid`, `twclid`, `li_fat_id`, `rdt_cid`, `scid`, `dclid`, `epik`, `irclickid`, `aff_id`
+
+**Channel Categories:** Paid Search, Paid Social, Organic Search, Organic Social, Email, Display, Affiliate, Referral, Direct, Other
+
+**SourceInfo model now includes:**
+```json
+{
+  "source": "google",
+  "medium": "cpc",
+  "traffic_type": "Paid Search",
+  "confidence": 1.0,
+  "referrer_domain": "google.com",
+  "click_ids": { "gclid": "abc123" }
+}
+```
+
 ### GET /v1/wallet-label/{address}
 
 Returns risk assessment and label for a wallet address.

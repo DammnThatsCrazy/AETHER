@@ -6,6 +6,35 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ---
 
+## [8.2.0] — 2026-03-07
+
+### Automatic Traffic Source Detection
+
+Server-side traffic source classification with full-stack signal capture. SDKs collect raw referrer, UTM params, and click IDs — the backend classifies every session into source/medium/channel automatically. No pre-created links required.
+
+### Added
+
+- **SourceClassifier** (`services/traffic/classifier.py`) — stateless, pure-function classifier with O(1) domain lookup tables covering 40+ social platforms, 17+ search engines, 14 email providers, and 12 ad platform click IDs. Uses a priority chain: Click IDs (confidence 1.0) → UTM params (0.95) → Referrer domain (0.9) → Direct (0.5). Email domains checked before search to prevent `mail.google.com` misclassification
+- **Web SDK: `referrerDomain` field** — `TrafficSourceData` now includes a parsed `referrerDomain` (with `www.` stripped) for backend classification
+- **Web SDK: SPA session persistence** — `sessionStorage`-based caching ensures traffic source data survives client-side SPA navigations without losing the original referrer
+- **iOS SDK: 12 click ID capture** — `handleDeepLink()` expanded from 2 (gclid, fbclid) to 12 ad platform click IDs (gclid, msclkid, fbclid, ttclid, twclid, li_fat_id, rdt_cid, scid, dclid, epik, irclickid, aff_id)
+- **iOS SDK: campaign context in events** — `CampaignInfo` expanded with `content`, `term`, `clickIds`, `referrerDomain` fields; now wired into `buildContext()` so every event includes campaign attribution data
+- **Android SDK: 12 click ID capture** — `handleDeepLink()` expanded from 3 (gclid, fbclid, msclkid) to 12 ad platform click IDs
+- **Android SDK: campaign context in events** — new `campaignContext` JSONObject wired into `buildContext()` with source, medium, campaign, content, term, clickIds, referrerDomain
+- **`confidence` field on `SourceInfo`** — classifier confidence score (0.0–1.0) now stored with each classified traffic source
+
+### Changed
+
+- **Traffic source classification** — `traffic_type` field on traffic sources is now automatically populated by the backend classifier instead of always arriving as `"unknown"` from the SDK. Channel breakdowns in `/v1/analytics/channels` now return meaningful categories (Paid Search, Organic Social, Email, Direct, Referral, etc.)
+- **`POST /v1/track/traffic-source`** — now runs raw signals through `SourceClassifier` before storage, overriding SDK-provided source/medium/traffic_type with classified values
+
+### Stats
+
+- **5 files changed** — 1 new, 4 modified
+- **~277 lines added** — zero classification logic in any SDK
+
+---
+
 ## [8.1.0] — 2026-03-07
 
 ### Security Hardening, Bug Fixes & Diagnostics System

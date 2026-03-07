@@ -87,6 +87,10 @@ public struct EventContext: Codable {
         public var source: String?
         public var medium: String?
         public var campaign: String?
+        public var content: String?
+        public var term: String?
+        public var clickIds: [String: String] = [:]
+        public var referrerDomain: String?
     }
 
     public struct FingerprintInfo: Codable {
@@ -155,6 +159,13 @@ public final class Aether {
     private var serverConfig: [String: Any] = [:]
     private var consentState: [String] = []
     private var fingerprintId: String = ""
+    private var campaignInfo: EventContext.CampaignInfo?
+
+    private static let clickIdParams: Set<String> = [
+        "gclid", "msclkid", "fbclid", "ttclid", "twclid",
+        "li_fat_id", "rdt_cid", "scid", "dclid", "epik",
+        "irclickid", "aff_id"
+    ]
 
     private let serialQueue = DispatchQueue(label: "com.aether.sdk.serial")
     private let defaults = UserDefaults(suiteName: "com.aether.sdk")!
@@ -250,12 +261,28 @@ public final class Aether {
     public func handleDeepLink(_ url: URL) {
         let components = URLComponents(url: url, resolvingAgainstBaseURL: false)
         var attribution: [String: AnyCodable] = ["url": AnyCodable(url.absoluteString)]
+        var clickIds: [String: String] = [:]
 
         for item in components?.queryItems ?? [] {
-            if item.name.hasPrefix("utm_") || item.name == "gclid" || item.name == "fbclid" {
+            if item.name.hasPrefix("utm_") {
                 attribution[item.name] = AnyCodable(item.value ?? "")
             }
+            if Self.clickIdParams.contains(item.name), let val = item.value {
+                clickIds[item.name] = val
+                attribution[item.name] = AnyCodable(val)
+            }
         }
+
+        // Store campaign info for inclusion in event context
+        self.campaignInfo = EventContext.CampaignInfo(
+            source: attribution["utm_source"]?.value as? String,
+            medium: attribution["utm_medium"]?.value as? String,
+            campaign: attribution["utm_campaign"]?.value as? String,
+            content: attribution["utm_content"]?.value as? String,
+            term: attribution["utm_term"]?.value as? String,
+            clickIds: clickIds,
+            referrerDomain: components?.host
+        )
 
         track("deep_link_opened", properties: attribution)
     }
@@ -439,6 +466,7 @@ public final class Aether {
                 locale: Locale.current.identifier,
                 timezone: TimeZone.current.identifier
             ),
+            campaign: self.campaignInfo,
             fingerprint: .init(id: self.fingerprintId)
         )
     }

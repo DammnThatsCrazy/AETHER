@@ -64,7 +64,8 @@ AetherSDK (index.ts) — v7.0.0
 │
 ├── Context
 │   ├── SemanticContext ........ Tier 1 only (device, viewport, URL)
-│   └── TrafficSource .......... Raw UTM/referrer/click ID shipper
+│   └── TrafficSource .......... Raw UTM/referrer/click ID/referrerDomain shipper
+│                                 + sessionStorage persistence for SPA navigation
 │
 └── Rewards (thin API client)
     └── RewardClient ........... eligibility + claim via backend API

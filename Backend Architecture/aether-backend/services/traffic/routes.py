@@ -24,8 +24,11 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 
 from shared.decorators import require_api_key_raw
+from .classifier import SourceClassifier
 
 logger = logging.getLogger("aether.traffic")
+
+_classifier = SourceClassifier()
 
 router = APIRouter(prefix="/v1", tags=["traffic"])
 
@@ -47,6 +50,7 @@ class SourceInfo(BaseModel):
     landing_page: str = "/"
     click_ids: dict[str, str] = Field(default_factory=dict)
     is_new_user: bool = True
+    confidence: float = 0.0
 
 
 class TrafficSourceRequest(BaseModel):
@@ -203,8 +207,26 @@ async def report_traffic_source(
 ) -> dict[str, Any]:
     """
     Called by the client SDK on every new session to report the detected source.
-    Creates or updates the virtual traffic source entry and records the session.
+    Classifies raw signals into source/medium/channel, then creates or updates
+    the virtual traffic source entry and records the session.
     """
+    # Classify raw traffic signals into source/medium/channel
+    classified = _classifier.classify(
+        referrer=body.source.referrer_url or "",
+        referrer_domain=body.source.referrer_domain or "",
+        utm_source=body.source.source if body.source.source not in ("(direct)", "", "unknown") else None,
+        utm_medium=body.source.medium if body.source.medium not in ("(none)", "", "unknown") else None,
+        utm_campaign=body.source.campaign,
+        click_ids=body.source.click_ids,
+        landing_page=body.source.landing_page,
+    )
+
+    # Override raw values with classified results
+    body.source.source = classified.source
+    body.source.medium = classified.medium
+    body.source.traffic_type = classified.channel
+    body.source.confidence = classified.confidence
+
     source = _store.get_or_create_source(api_key, body.source)
     _store.record_session(
         source_id=source["id"],
