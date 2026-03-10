@@ -73,13 +73,19 @@ Aether Backend is a unified API gateway that mounts 21 domain-specific microserv
   |fic | |in | |fic | |d   | |rib| |ards| |le  | |mat |
   |    | |   | |    | |    | |   | |    | |7VMs| |ion |
   +----+ +---+ +----+ +----+ +---+ +----+ +----+ +----+
-    |     |     |      |      |     |      |      |
-    +-----+-----+------+------+-----+------+------+------+
-                                          |
+    +-----+-----+------+
+    |     |             |
+  +-v--+ +v---+         |
+  |Diag| |Prov|         |
+  |nost| |ider|         |
+  |ics | |Gtwy|         |
+  +----+ +----+         |
+    +-----+------+------+
+                         |
                  +------------------------+------------------------+
                  |         Dependency Injection (ResourceRegistry)  |
                  |  Cache | Graph | EventProducer | RateLimiter     |
-                 |  JWTHandler | APIKeyValidator                    |
+                 |  JWTHandler | APIKeyValidator | ProviderGateway  |
                  +------+------+------+------+------+--------------+
                         |      |      |      |      |
                   +-----v+ +--v---+ +v----+ +v---+ +v--------+

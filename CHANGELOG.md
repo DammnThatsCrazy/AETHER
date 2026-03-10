@@ -6,6 +6,36 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ---
 
+## [8.3.0] — 2026-03-10
+
+### Provider Gateway: BYOK, Failover & Usage Metering
+
+Unified abstraction layer for all third-party provider calls. Tenants can bring their own API keys (encrypted at rest), the system automatically fails over between providers using circuit breakers, and every call is metered per-tenant for billing and monitoring.
+
+### Added
+
+- **Provider Gateway** (`shared/providers/`) — multi-provider abstraction with 4 categories: blockchain RPC (QuickNode, Alchemy, Infura, custom), block explorer (Etherscan, Moralis), social API (Twitter, Reddit), analytics data (Dune Analytics)
+- **BYOK (Bring Your Own Key)** — tenants store encrypted API keys via `POST /v1/providers/keys`; keys are automatically used for routing at request time with Fernet encryption at rest
+- **Automatic failover** — `AdaptiveRouter` implements priority chain: tenant BYOK → system default → fallback provider(s) → `ServiceUnavailableError`. Composes with existing `ErrorRegistry` circuit breakers
+- **Usage metering** — `UsageMeter` tracks per-tenant, per-provider call counts, latency, success rates, and method-level breakdown
+- **Admin API** — 8 endpoints under `/v1/providers/`: key CRUD, usage stats, usage summary, health monitoring, category listing, and provider testing
+- **9 concrete provider adapters** — QuickNodeProvider, AlchemyProvider, InfuraProvider, GenericRPCProvider, EtherscanProvider, MoralisProvider, TwitterProvider, RedditProvider, DuneAnalyticsProvider
+- **`ProviderGatewayConfig`** in `config/settings.py` — 12 environment variables with feature flag (`PROVIDER_GATEWAY_ENABLED=false` default)
+- **`ProviderGateway` facade** in `dependencies/providers.py` — owns key vault, registry, meter, and router lifecycle
+
+### Changed
+
+- **`RPCGateway`** — delegates through Provider Gateway when enabled; falls back to direct QuickNode on failure (fully backwards compatible)
+- **`main.py`** — mounts providers router (service count 17 → 18 core, 21 total with IG)
+- **Backend Architecture README** — updated service count, diagrams, endpoint listing, project structure, and configuration reference
+
+### Stats
+
+- **10 new files**, **4 modified files** — 1,720 lines added
+- Backend service count: 20 → 21 (18 core + 3 IG)
+
+---
+
 ## [8.2.0] — 2026-03-07
 
 ### Automatic Traffic Source Detection

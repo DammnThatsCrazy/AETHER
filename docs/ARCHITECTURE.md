@@ -1,4 +1,4 @@
-# Aether SDK v8.2.0 — Architecture Guide
+# Aether SDK v8.3.0 — Architecture Guide
 
 ## Overview
 
@@ -41,7 +41,7 @@ Aether v7.0 adopts a **"Sense and Ship"** thin-client architecture across all pl
 ### Module Architecture (Web SDK)
 
 ```
-AetherSDK (index.ts) — v8.2.0
+AetherSDK (index.ts) — v8.3.0
 │
 ├── Core (always loaded)
 │   ├── EventQueue .............. Batch + offline queue (POST /v1/events)

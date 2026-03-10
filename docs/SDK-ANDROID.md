@@ -1,4 +1,4 @@
-# Aether Android SDK v8.2.0 — Integration Guide
+# Aether Android SDK v8.3.0 — Integration Guide
 
 ## Installation
 
@@ -7,7 +7,7 @@
 ```kotlin
 // build.gradle.kts
 dependencies {
-    implementation("io.aether:sdk-android:7.0.0")
+    implementation("io.aether:sdk-android:8.3.0")
 }
 ```
 
@@ -15,7 +15,7 @@ dependencies {
 
 ```groovy
 // build.gradle
-implementation 'io.aether:sdk-android:7.0.0'
+implementation 'io.aether:sdk-android:8.3.0'
 ```
 
 ## Quick Start

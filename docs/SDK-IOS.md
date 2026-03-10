@@ -1,4 +1,4 @@
-# Aether iOS SDK v8.2.0 — Integration Guide
+# Aether iOS SDK v8.3.0 — Integration Guide
 
 ## Installation
 
@@ -8,7 +8,7 @@ Add to your `Package.swift`:
 
 ```swift
 dependencies: [
-    .package(url: "https://github.com/AetherSDK/aether-ios.git", from: "7.0.0")
+    .package(url: "https://github.com/AetherSDK/aether-ios.git", from: "8.3.0")
 ]
 ```
 
@@ -17,7 +17,7 @@ Or in Xcode: File > Add Packages > enter the repository URL.
 ### CocoaPods
 
 ```ruby
-pod 'AetherSDK', '~> 7.0'
+pod 'AetherSDK', '~> 8.0'
 ```
 
 ## Quick Start

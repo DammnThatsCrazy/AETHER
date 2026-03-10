@@ -1,10 +1,10 @@
-# Aether Web SDK v8.2.0 — Integration Guide
+# Aether Web SDK v8.3.0 — Integration Guide
 
 ## Installation
 
 ```html
 <!-- CDN (recommended) -->
-<script src="https://cdn.aether.io/sdk/v7/aether.min.js"></script>
+<script src="https://cdn.aether.io/sdk/v8/aether.min.js"></script>
 
 <!-- Or via npm -->
 npm install @aether/web-sdk

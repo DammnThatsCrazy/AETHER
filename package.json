@@ -1,6 +1,6 @@
 {
   "name": "aether-sdk",
-  "version": "8.2.0",
+  "version": "8.3.0",
   "private": true,
   "description": "Aether SDK — Multi-platform behavioral analytics and Web3 data collection",
   "workspaces": [

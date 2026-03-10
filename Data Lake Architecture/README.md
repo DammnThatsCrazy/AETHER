@@ -1,4 +1,4 @@
-# Aether Data Lake Architecture
+# Aether Data Lake Architecture v8.3.0
 
 A distributed data warehouse and lakehouse backend for the Aether behavioral analytics platform. The system ingests, processes, and serves high-volume event data through a medallion architecture (Bronze / Silver / Gold), providing real-time streaming, batch ETL, GDPR governance, and ML feature serving across multi-tenant workspaces.
 

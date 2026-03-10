@@ -52,14 +52,14 @@ Enter the repository URL:
 https://github.com/aether-network/aether-ios-sdk.git
 ```
 
-Set the version rule to **8.0.0** or later.
+Set the version rule to **8.3.0** or later.
 
 ### iOS -- CocoaPods
 
 Add the following to your `Podfile`:
 
 ```ruby
-pod 'AetherSDK', '~> 5.0'
+pod 'AetherSDK', '~> 8.0'
 ```
 
 Then run:
@@ -78,7 +78,7 @@ repositories {
 }
 
 dependencies {
-    implementation("com.aether:sdk-android:5.0.0")
+    implementation("com.aether:sdk-android:8.3.0")
 }
 ```
 
