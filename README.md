@@ -78,6 +78,7 @@ import { AetherProvider } from '@aether/react-native-sdk';
 - **Automatic traffic source detection** — Server-side SourceClassifier with 40+ social, 17+ search, 14 email domain tables and 12 ad platform click IDs; priority chain: Click IDs → UTMs → Referrer → Direct
 - **Web2 analytics** — Ecommerce, funnels, heatmaps, form analytics
 - **ML inference** — 9 production models across edge and server tiers: intent prediction, bot detection, session scoring (edge, < 100ms); identity resolution (GNN), journey prediction (LSTM), churn prediction (XGBoost), LTV prediction (ensemble), anomaly detection (Isolation Forest + AutoEncoder), campaign attribution (Shapley values) (server, SageMaker/ECS)
+- **BYOK provider gateway** — Multi-provider abstraction with Bring Your Own Key support, automatic failover (tenant BYOK → system default → fallback), per-tenant usage metering, and circuit breaker integration across 4 provider categories (blockchain RPC, block explorer, social API, analytics data)
 - **Diagnostics & circuit breakers** — Centralized error registry with SHA-256 fingerprinting, per-operation circuit breakers, and real-time health monitoring
 
 ## Unified On-Chain Intelligence Graph

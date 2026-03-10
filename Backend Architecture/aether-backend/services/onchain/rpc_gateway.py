@@ -13,6 +13,7 @@ from typing import Any, Optional
 
 from config.settings import settings
 from shared.logger.logger import get_logger, metrics
+from shared.providers.categories import ProviderCategory
 
 logger = get_logger("aether.service.onchain.rpc")
 
@@ -36,8 +37,9 @@ class RPCGateway:
     Stub implementation returns mock responses.
     """
 
-    def __init__(self) -> None:
+    def __init__(self, provider_gateway=None) -> None:
         self._config = settings.quicknode
+        self._provider_gateway = provider_gateway
         self._request_count = 0
         self._request_times: list[float] = []
         self._cache: dict[str, Any] = {}
@@ -73,6 +75,17 @@ class RPCGateway:
             raise ValueError(f"RPC method not allowed: {method}")
 
         params = params or []
+
+        # Delegate to Provider Gateway when enabled
+        if self._provider_gateway and settings.provider_gateway.enabled:
+            result = await self._provider_gateway.route(
+                category=ProviderCategory.BLOCKCHAIN_RPC,
+                method=method,
+                params={"chain_id": chain_id, "method": method, "params": params, "vm_type": vm_type},
+            )
+            if result.success:
+                return result.data
+            logger.warning(f"Provider Gateway failed, falling back to direct RPC: {result.error}")
 
         # Rate limiting: enforce max_rps
         await self._rate_limit()

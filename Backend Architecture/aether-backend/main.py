@@ -1,6 +1,6 @@
 """
 Aether Backend — Main Application
-Mounts 16 core services + up to 3 Intelligence Graph services (feature-flagged).
+Mounts 17 core services + up to 3 Intelligence Graph services (feature-flagged).
 Applies middleware and serves the unified API.
 
 Run:
@@ -86,6 +86,14 @@ Routes:
     POST /v1/diagnostics/errors/{fp}/resolve   Resolve error
     POST /v1/diagnostics/errors/{fp}/suppress  Suppress error
     GET  /v1/diagnostics/circuit-breakers      Circuit breaker states
+    POST /v1/providers/keys                    Store BYOK key
+    GET  /v1/providers/keys                    List BYOK keys (masked)
+    DELETE /v1/providers/keys/{provider}       Delete BYOK key
+    GET  /v1/providers/usage                   Provider usage stats
+    GET  /v1/providers/usage/summary           Tenant usage summary
+    GET  /v1/providers/health                  Provider health + circuit breakers
+    GET  /v1/providers/categories              List provider categories
+    POST /v1/providers/test                    Test a provider call
 """
 
 from __future__ import annotations
@@ -126,6 +134,7 @@ from services.rewards.routes import router as rewards_router
 from services.oracle.routes import router as oracle_router
 from services.analytics_automation.routes import router as automation_router
 from services.diagnostics.routes import router as diagnostics_router
+from services.providers.routes import router as providers_router
 
 
 # ═══════════════════════════════════════════════════════════════════════
@@ -141,11 +150,23 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     """
     registry = get_registry()
     await registry.startup()
+
+    # Provider Gateway (feature-flagged)
+    from dependencies.providers import _init_provider_gateway
+    provider_gateway = _init_provider_gateway()
+    if provider_gateway:
+        await provider_gateway.startup()
+        app.state.provider_gateway = provider_gateway
+        logger.info("Provider Gateway initialised")
+
     logger.info(
         f"Aether Backend started | env={settings.env.value} "
         f"| debug={settings.debug} | version={settings.api.version}"
     )
     yield
+
+    if provider_gateway:
+        await provider_gateway.shutdown()
     await registry.shutdown()
     logger.info("Aether Backend shut down gracefully")
 
@@ -183,7 +204,7 @@ def create_app() -> FastAPI:
     # ── Auth / Logging / Rate Limit / Error Handling Middleware ────
     register_middleware(app)
 
-    # ── Mount all 16 core service routers ──────────────────────────
+    # ── Mount all 17 core service routers ──────────────────────────
     app.include_router(gateway_router)
     app.include_router(ingestion_router)
     app.include_router(identity_router)
@@ -201,6 +222,7 @@ def create_app() -> FastAPI:
     app.include_router(oracle_router)
     app.include_router(automation_router)
     app.include_router(diagnostics_router)
+    app.include_router(providers_router)
 
     # ── Intelligence Graph services (feature-flagged) ───────────
     ig = settings.intelligence_graph

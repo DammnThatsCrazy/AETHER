@@ -1,5 +1,21 @@
 # Changelog
 
+## v8.3.0 — Provider Gateway: BYOK, Failover & Usage Metering (2026-03-09)
+
+- **NEW**: `shared/providers/` module — unified abstraction layer for all third-party provider calls (blockchain RPC, block explorers, social APIs, analytics data)
+- **NEW**: BYOK (Bring Your Own Key) — tenants store encrypted API keys via `POST /v1/providers/keys`, routed automatically at request time
+- **NEW**: Automatic failover with circuit breaker integration — tenant BYOK → system default → fallback providers → `ServiceUnavailableError`
+- **NEW**: Per-tenant, per-provider usage metering — request counts, latency, success rates, method-level breakdown
+- **NEW**: 8 admin API endpoints under `/v1/providers/` — key CRUD, usage stats, health monitoring, provider testing
+- **NEW**: 9 concrete provider adapters — QuickNode, Alchemy, Infura, GenericRPC, Etherscan, Moralis, Twitter, Reddit, Dune Analytics
+- **NEW**: `AdaptiveRouter` composes with existing `ErrorRegistry` circuit breakers — provider failures auto-appear in `/v1/diagnostics/circuit-breakers`
+- **NEW**: `ProviderGatewayConfig` with feature flag (`PROVIDER_GATEWAY_ENABLED=false` default) — zero impact until activated
+- **MODIFIED**: `RPCGateway` delegates through Provider Gateway when enabled, falls back to direct QuickNode on failure
+- **10 new files**, **4 modified files** — fully backwards compatible
+- Backend service count: 20 → 21 (18 core + 3 IG)
+
+---
+
 ## v8.2.0 — Automatic Traffic Source Detection (2026-03-07)
 
 - **NEW**: Server-side `SourceClassifier` (`services/traffic/classifier.py`) with O(1) domain lookup tables — 40+ social platforms, 17+ search engines, 14 email providers, 12 ad platform click IDs

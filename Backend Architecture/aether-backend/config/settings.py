@@ -168,6 +168,30 @@ class QuickNodeConfig:
 
 
 # ---------------------------------------------------------------------------
+# Provider Gateway — BYOK, failover, usage metering
+# ---------------------------------------------------------------------------
+
+@dataclass(frozen=True)
+class ProviderGatewayConfig:
+    """Multi-provider abstraction with BYOK support and automatic failover."""
+    enabled: bool = _env_bool("PROVIDER_GATEWAY_ENABLED", False)
+    encryption_key: str = _env("PROVIDER_GATEWAY_ENCRYPTION_KEY", "")
+    # Additional provider API keys (system defaults)
+    alchemy_api_key: str = _env("ALCHEMY_API_KEY", "")
+    alchemy_endpoint: str = _env("ALCHEMY_ENDPOINT", "")
+    infura_api_key: str = _env("INFURA_API_KEY", "")
+    infura_project_id: str = _env("INFURA_PROJECT_ID", "")
+    etherscan_api_key: str = _env("ETHERSCAN_API_KEY", "")
+    moralis_api_key: str = _env("MORALIS_API_KEY", "")
+    # Failover tunables
+    max_retries: int = _env_int("PROVIDER_MAX_RETRIES", 2)
+    circuit_breaker_threshold: int = _env_int("PROVIDER_CB_THRESHOLD", 5)
+    circuit_breaker_timeout_s: int = _env_int("PROVIDER_CB_TIMEOUT_S", 30)
+    # Metering
+    meter_flush_interval_s: int = _env_int("PROVIDER_METER_FLUSH_S", 60)
+
+
+# ---------------------------------------------------------------------------
 # Master settings
 # ---------------------------------------------------------------------------
 
@@ -193,9 +217,21 @@ class Settings:
     intelligence_graph: IntelligenceGraphConfig = field(default_factory=IntelligenceGraphConfig)
     quicknode: QuickNodeConfig = field(default_factory=QuickNodeConfig)
 
+    # Provider Gateway
+    provider_gateway: ProviderGatewayConfig = field(default_factory=ProviderGatewayConfig)
+
     def __post_init__(self):
         if self.env != Environment.LOCAL and self.auth.jwt_secret == "change-me-in-production":
             raise RuntimeError("JWT_SECRET must be set in non-local environments")
+        if (
+            self.provider_gateway.enabled
+            and self.env != Environment.LOCAL
+            and not self.provider_gateway.encryption_key
+        ):
+            raise RuntimeError(
+                "PROVIDER_GATEWAY_ENCRYPTION_KEY must be set when "
+                "Provider Gateway is enabled in non-local environments"
+            )
 
     @property
     def is_production(self) -> bool:

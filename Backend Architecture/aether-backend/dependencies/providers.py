@@ -9,12 +9,17 @@ from __future__ import annotations
 from functools import lru_cache
 from typing import Any, Optional
 
+from config.settings import settings
 from shared.cache.cache import CacheClient
 from shared.events.events import EventProducer, EventConsumer
 from shared.graph.graph import GraphClient
 from shared.rate_limit.limiter import TokenBucketLimiter
 from shared.auth.auth import JWTHandler, APIKeyValidator
 from shared.logger.logger import get_logger
+from shared.providers.key_vault import BYOKKeyVault
+from shared.providers.meter import UsageMeter
+from shared.providers.registry import ProviderRegistry
+from shared.providers.router import AdaptiveRouter
 
 logger = get_logger("aether.dependencies")
 
@@ -109,3 +114,60 @@ def get_jwt_handler() -> JWTHandler:
 
 def get_api_key_validator() -> APIKeyValidator:
     return get_registry().api_key_validator
+
+
+# ── Provider Gateway ──────────────────────────────────────────────────
+
+class ProviderGateway:
+    """
+    Facade that owns the BYOK key vault, provider registry,
+    usage meter, and adaptive router.
+    """
+
+    def __init__(self) -> None:
+        gw_cfg = settings.provider_gateway
+        self.key_vault = BYOKKeyVault(encryption_key=gw_cfg.encryption_key or "dev-key")
+        self.meter = UsageMeter(flush_interval_s=gw_cfg.meter_flush_interval_s)
+        self.registry = ProviderRegistry(key_vault=self.key_vault)
+        self.router = AdaptiveRouter(
+            registry=self.registry,
+            meter=self.meter,
+            max_retries=gw_cfg.max_retries,
+        )
+        self._started = False
+
+    async def startup(self) -> None:
+        """Bootstrap system-default providers from env vars."""
+        await self.registry.initialize_system_providers(settings)
+        self._started = True
+        logger.info("ProviderGateway started")
+
+    async def shutdown(self) -> None:
+        """Tear down all provider instances and flush metering."""
+        await self.meter.flush()
+        await self.registry.teardown()
+        self._started = False
+        logger.info("ProviderGateway shut down")
+
+    async def route(self, **kwargs):
+        """Delegate to AdaptiveRouter.route()."""
+        return await self.router.route(**kwargs)
+
+    async def health_check(self) -> dict:
+        return await self.router.health()
+
+
+_provider_gateway: Optional[ProviderGateway] = None
+
+
+def get_provider_gateway() -> Optional[ProviderGateway]:
+    """Get the Provider Gateway instance (None if feature disabled)."""
+    return _provider_gateway
+
+
+def _init_provider_gateway() -> Optional[ProviderGateway]:
+    """Create the ProviderGateway singleton if enabled."""
+    global _provider_gateway
+    if settings.provider_gateway.enabled and _provider_gateway is None:
+        _provider_gateway = ProviderGateway()
+    return _provider_gateway

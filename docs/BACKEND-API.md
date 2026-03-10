@@ -530,6 +530,36 @@ All diagnostics endpoints require `admin` permission.
 - `severity` (optional) — filter by severity level
 - `resolved` (optional) — filter by resolution status
 
+### Provider Gateway (BYOK)
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| POST | `/v1/providers/keys` | Store or update an encrypted BYOK API key |
+| GET | `/v1/providers/keys` | List tenant's stored BYOK keys (masked) |
+| DELETE | `/v1/providers/keys/{provider}` | Remove a BYOK key for a provider |
+| GET | `/v1/providers/usage` | Provider usage statistics with optional category/provider filters |
+| GET | `/v1/providers/usage/summary` | Tenant-wide usage summary across all providers |
+| GET | `/v1/providers/health` | All providers with health status and circuit breaker states |
+| GET | `/v1/providers/categories` | List all provider categories and supported provider names |
+| POST | `/v1/providers/test` | Test a provider call (verifies BYOK key works) |
+
+**Permissions:**
+- Key management endpoints (`POST/GET/DELETE /keys`) require `admin` permission
+- Usage endpoints (`GET /usage`, `GET /usage/summary`) require `billing` permission
+- Health and categories endpoints require `admin` permission
+- Test endpoint requires `admin` permission
+
+**Provider Categories:**
+- `blockchain_rpc` — QuickNode, Alchemy, Infura, Custom RPC
+- `block_explorer` — Etherscan, Moralis
+- `social_api` — Twitter, Reddit
+- `analytics_data` — Dune Analytics
+
+**Priority Chain (every provider call):**
+1. Tenant BYOK key → 2. System default provider → 3. Fallback provider(s) → 4. ServiceUnavailableError
+
+Feature flag: `PROVIDER_GATEWAY_ENABLED=false` (default). Zero impact until activated.
+
 ---
 
 ## Error Responses

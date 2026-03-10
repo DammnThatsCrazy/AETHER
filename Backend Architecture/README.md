@@ -2,7 +2,7 @@
 
 **FastAPI microservices backend for the Aether platform.**
 
-Aether Backend is a unified API gateway that mounts 20 domain-specific microservices (17 core + 3 Intelligence Graph) onto a single FastAPI application. It provides real-time data ingestion, identity resolution, analytics, ML model serving, autonomous agent orchestration, campaign management, consent/DSR compliance, notifications, traffic source tracking, fraud detection, multi-touch attribution, automated reward distribution with oracle-signed proofs, multi-chain automation, diagnostics, and multi-tenant administration -- all behind a single versioned API surface with 90+ endpoints.
+Aether Backend is a unified API gateway that mounts 21 domain-specific microservices (18 core + 3 Intelligence Graph) onto a single FastAPI application. It provides real-time data ingestion, identity resolution, analytics, ML model serving, autonomous agent orchestration, campaign management, consent/DSR compliance, notifications, traffic source tracking, fraud detection, multi-touch attribution, automated reward distribution with oracle-signed proofs, multi-chain automation, diagnostics, BYOK provider gateway with automatic failover, and multi-tenant administration -- all behind a single versioned API surface with 95+ endpoints.
 
 ---
 
@@ -59,7 +59,7 @@ Aether Backend is a unified API gateway that mounts 20 domain-specific microserv
                  |  CORS -> Auth -> Rate Limit -> Body Size -> Log |
                  +------------------------+------------------------+
                                           |
-          20 Service Routers (90+ endpoints)
+          21 Service Routers (95+ endpoints)
     +-----+-----+------+------+-----+------+------+------+
     |     |     |      |      |     |      |      |      |
   +-v--+ +v--+ +v---+ +v---+ +v--+ +v---+ +v---+ +v---+ |
@@ -90,7 +90,7 @@ Aether Backend is a unified API gateway that mounts 20 domain-specific microserv
 
 **Key architectural decisions:**
 
-- **Single process, multiple routers** -- all 20 services are mounted as FastAPI `APIRouter` instances, sharing a single event loop and connection pool for reduced operational overhead.
+- **Single process, multiple routers** -- all 21 services are mounted as FastAPI `APIRouter` instances, sharing a single event loop and connection pool for reduced operational overhead.
 - **Dependency injection with lifecycle management** -- a `ResourceRegistry` singleton owns all shared resources (cache, graph, event bus, auth handlers). It is initialized at startup and torn down at shutdown via FastAPI's lifespan protocol.
 - **Repository pattern** -- data access is abstracted behind repository classes that separate query logic from business logic, with built-in caching, graph operations, and write-ahead logging hooks.
 - **12-Factor configuration** -- all settings are sourced from environment variables with sensible defaults (`config/settings.py`).
@@ -118,6 +118,7 @@ Aether Backend is a unified API gateway that mounts 20 domain-specific microserv
 | 15 | **Oracle**       | `/v1/oracle`            | Multi-chain (EVM, SVM, Bitcoin, MoveVM, NEAR, TVM, Cosmos) cryptographic proof generation/verification   | `POST /v1/oracle/proof/generate`, `POST /v1/oracle/proof/verify` |
 | 16 | **Automation**   | `/v1/automation`        | Automated analytics pipeline, reward trigger, insights      | `POST /v1/automation/ingest`, `GET /v1/automation/insights` |
 | 17 | **Diagnostics**  | `/v1/diagnostics`       | Error tracking, circuit breakers, health monitoring          | `GET /v1/diagnostics/health`, `GET /v1/diagnostics/errors` |
+| 18 | **Providers**    | `/v1/providers`         | BYOK key management, provider failover, usage metering       | `POST /v1/providers/keys`, `GET /v1/providers/health` |
 
 ---
 
@@ -213,7 +214,7 @@ All endpoints are versioned under `/v1` and return consistent JSON envelopes:
 
 **Interactive docs** are available at `/docs` (Swagger UI) and `/redoc` (ReDoc) when the server is running.
 
-### Full Endpoint Listing (85+)
+### Full Endpoint Listing (95+)
 
 <details>
 <summary>Click to expand all endpoints</summary>
@@ -326,6 +327,18 @@ All endpoints are versioned under `/v1` and return consistent JSON envelopes:
 | `POST` | `/v1/oracle/proof/generate/tvm` | Generate a TVM (TRON)-specific proof |
 | `POST` | `/v1/oracle/proof/generate/cosmos` | Generate a Cosmos-specific proof |
 | `GET` | `/v1/oracle/chains` | List supported chains and signing algorithms |
+
+**Providers (BYOK Gateway)**
+| Method | Path | Description |
+| ------ | ---- | ----------- |
+| `POST` | `/v1/providers/keys` | Store a BYOK API key (encrypted at rest) |
+| `GET` | `/v1/providers/keys` | List tenant's BYOK keys (masked) |
+| `DELETE` | `/v1/providers/keys/{provider}` | Delete a BYOK key |
+| `GET` | `/v1/providers/usage` | Provider usage statistics |
+| `GET` | `/v1/providers/usage/summary` | Tenant usage summary |
+| `GET` | `/v1/providers/health` | Provider health + circuit breaker states |
+| `GET` | `/v1/providers/categories` | List provider categories |
+| `POST` | `/v1/providers/test` | Test a provider call |
 
 </details>
 
@@ -527,6 +540,22 @@ All configuration is sourced from environment variables with sensible defaults. 
 | `SNS_TOPIC_ARN` | *(empty)* | SNS topic ARN (when using `sns_sqs`) |
 | `SQS_QUEUE_URL` | *(empty)* | SQS queue URL (when using `sns_sqs`) |
 
+### Provider Gateway
+
+| Variable | Default | Description |
+| -------- | ------- | ----------- |
+| `PROVIDER_GATEWAY_ENABLED` | `false` | Enable the BYOK provider gateway |
+| `PROVIDER_GATEWAY_ENCRYPTION_KEY` | *(empty)* | Fernet key for encrypting BYOK keys at rest (required in non-local envs) |
+| `ALCHEMY_API_KEY` | *(empty)* | Alchemy RPC API key |
+| `INFURA_API_KEY` | *(empty)* | Infura RPC API key |
+| `INFURA_PROJECT_ID` | *(empty)* | Infura project ID |
+| `ETHERSCAN_API_KEY` | *(empty)* | Etherscan block explorer API key |
+| `MORALIS_API_KEY` | *(empty)* | Moralis block explorer API key |
+| `PROVIDER_MAX_RETRIES` | `2` | Max retries per provider before failover |
+| `PROVIDER_CB_THRESHOLD` | `5` | Failures before circuit breaker opens |
+| `PROVIDER_CB_TIMEOUT_S` | `30` | Seconds before circuit breaker half-opens |
+| `PROVIDER_METER_FLUSH_S` | `60` | Usage meter flush interval |
+
 ### Authentication
 
 | Variable | Default | Description |
@@ -612,9 +641,13 @@ aether-backend/
 |   |   |-- multichain_signer.py # Multi-chain oracle signer (7 VMs: EVM, SVM, Bitcoin, MoveVM, NEAR, TVM, Cosmos)
 |   |   |-- verifier.py         # Off-chain proof verification
 |   |   +-- routes.py           # Oracle API endpoints
-|   +-- analytics_automation/
-|       |-- pipeline.py         # Automated analytics + reward pipeline
-|       +-- routes.py           # Automation API endpoints
+|   |-- analytics_automation/
+|   |   |-- pipeline.py         # Automated analytics + reward pipeline
+|   |   +-- routes.py           # Automation API endpoints
+|   +-- providers/
+|       |-- __init__.py          # Module marker
+|       |-- models.py            # Pydantic schemas for BYOK admin API
+|       +-- routes.py            # 8 admin endpoints (keys, usage, health, test)
 +-- shared/
     |-- common/common.py        # Error classes, response formatters, validation
     |-- auth/auth.py            # JWT, API key validation, roles, permissions
@@ -623,6 +656,14 @@ aether-backend/
     |-- graph/graph.py          # Neptune graph client
     |-- diagnostics/
     |   +-- error_registry.py   # Error fingerprinting, classification, circuit breakers
+    |-- providers/
+    |   |-- __init__.py          # Public re-exports
+    |   |-- base.py              # Provider ABC, ProviderConfig, ProviderResult, ProviderStatus
+    |   |-- categories.py        # 9 concrete adapters + PROVIDER_FACTORY
+    |   |-- key_vault.py         # BYOKKeyVault — encrypted tenant key storage
+    |   |-- meter.py             # UsageMeter — per-tenant usage tracking
+    |   |-- registry.py          # ProviderRegistry — two-tier provider resolution
+    |   +-- router.py            # AdaptiveRouter — failover routing + circuit breakers
     +-- rate_limit/limiter.py   # Token bucket rate limiter
 ```
 
