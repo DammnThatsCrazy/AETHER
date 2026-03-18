@@ -1,0 +1,24 @@
+# Aether Platform — Pre-commit Hooks
+#
+# Install: pip install pre-commit && pre-commit install
+# Run manually: pre-commit run --all-files
+
+repos:
+  # Documentation drift check — ensures versions are in sync
+  - repo: local
+    hooks:
+      - id: validate-docs
+        name: Validate documentation versions
+        entry: python scripts/validate_docs.py
+        language: python
+        pass_filenames: false
+        always_run: true
+        stages: [commit]
+
+  # Python linting
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.4.0
+    hooks:
+      - id: ruff
+        args: [--fix]
+      - id: ruff-format

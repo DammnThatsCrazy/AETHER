@@ -1,0 +1,116 @@
+# =============================================================================
+# Aether Platform — Root Project Configuration
+#
+# Single source of truth for:
+#   - Platform version (used by scripts/bump_version.py)
+#   - Python dependencies across all subsystems
+#   - Test discovery paths
+#   - Linter/formatter settings
+#
+# Quick start:
+#   pip install -e ".[dev]"     # minimal: security + tests
+#   pip install -e ".[all]"     # everything: agent, backend, ml, security, dev
+#   make setup                  # same as pip install -e ".[all]"
+#   make test                   # run all tests
+# =============================================================================
+
+[project]
+name = "aether"
+version = "8.3.1"
+description = "Aether Platform — Cross-platform Unified Intelligence Graph"
+requires-python = ">=3.9"
+license = {text = "Proprietary"}
+
+# Core dependencies shared by security module and basic operation
+dependencies = [
+    "numpy>=1.26.0",
+    "pydantic>=2.6.0",
+]
+
+[project.optional-dependencies]
+# Security module (extraction defense)
+security = [
+    "numpy>=1.26.0",
+]
+
+# Agent Layer workers (discovery + enrichment)
+agent = [
+    "httpx>=0.27",
+    "beautifulsoup4>=4.12",
+]
+
+# Agent Layer production queue
+agent-celery = [
+    "celery[redis]>=5.3",
+    "httpx>=0.27",
+    "beautifulsoup4>=4.12",
+]
+
+# Backend API server
+backend = [
+    "fastapi>=0.115",
+    "uvicorn[standard]>=0.30",
+    "pydantic>=2.7",
+    "httpx>=0.27",
+]
+
+# ML model training and serving
+ml = [
+    "scikit-learn>=1.4.0",
+    "xgboost>=2.0.0",
+    "numpy>=1.26.0",
+    "pandas>=2.2.0",
+    "fastapi>=0.110.0",
+    "uvicorn>=0.27.0",
+    "redis>=5.0.0",
+]
+
+# Development and testing
+dev = [
+    "pytest>=8.0",
+    "pytest-asyncio>=0.23",
+    "ruff>=0.4",
+]
+
+# Everything
+all = [
+    "aether[security,agent,backend,ml,dev]",
+]
+
+# ---------------------------------------------------------------------------
+# Pytest — unified test discovery across all subsystems
+# ---------------------------------------------------------------------------
+
+[tool.pytest.ini_options]
+testpaths = [
+    "tests",
+    "ML Models/aether-ml/tests",
+]
+pythonpath = ["."]
+asyncio_mode = "auto"
+filterwarnings = [
+    "ignore::DeprecationWarning",
+]
+
+# ---------------------------------------------------------------------------
+# Ruff — linter + formatter
+# ---------------------------------------------------------------------------
+
+[tool.ruff]
+target-version = "py39"
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I"]
+ignore = ["E501"]  # line length handled by formatter
+
+# ---------------------------------------------------------------------------
+# Build system
+# ---------------------------------------------------------------------------
+
+[build-system]
+requires = ["setuptools>=68.0", "wheel"]
+build-backend = "setuptools.backends._legacy:_Backend"
+
+[tool.setuptools]
+packages = ["security", "security.model_extraction_defense"]
