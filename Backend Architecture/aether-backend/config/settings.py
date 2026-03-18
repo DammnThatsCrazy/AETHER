@@ -192,6 +192,32 @@ class ProviderGatewayConfig:
 
 
 # ---------------------------------------------------------------------------
+# Model Extraction Defense
+# ---------------------------------------------------------------------------
+
+@dataclass(frozen=True)
+class ModelExtractionDefenseConfig:
+    """Model extraction defense layer — protects ML serving endpoints."""
+    enabled: bool = _env_bool("ENABLE_EXTRACTION_DEFENSE", False)
+    enable_output_noise: bool = _env_bool("ENABLE_OUTPUT_NOISE", True)
+    enable_watermark: bool = _env_bool("ENABLE_WATERMARK", True)
+    enable_query_analysis: bool = _env_bool("ENABLE_QUERY_ANALYSIS", True)
+    watermark_secret_key: str = _env("WATERMARK_SECRET_KEY", "aether-wm-default-change-me")
+    canary_secret_seed: str = _env("CANARY_SECRET_SEED", "aether-canary-seed-change-me")
+    # Rate limits (per-API-key)
+    key_max_per_minute: int = _env_int("EXTRACTION_KEY_RPM", 60)
+    key_max_per_hour: int = _env_int("EXTRACTION_KEY_RPH", 1000)
+    key_max_per_day: int = _env_int("EXTRACTION_KEY_RPD", 10000)
+    # Rate limits (per-IP)
+    ip_max_per_minute: int = _env_int("EXTRACTION_IP_RPM", 120)
+    ip_max_per_hour: int = _env_int("EXTRACTION_IP_RPH", 3000)
+    ip_max_per_day: int = _env_int("EXTRACTION_IP_RPD", 30000)
+    # Output perturbation
+    logit_noise_std: float = float(_env("EXTRACTION_NOISE_STD", "0.02"))
+    output_precision: int = _env_int("EXTRACTION_OUTPUT_PRECISION", 2)
+
+
+# ---------------------------------------------------------------------------
 # Master settings
 # ---------------------------------------------------------------------------
 
@@ -220,6 +246,11 @@ class Settings:
     # Provider Gateway
     provider_gateway: ProviderGatewayConfig = field(default_factory=ProviderGatewayConfig)
 
+    # Model Extraction Defense
+    extraction_defense: ModelExtractionDefenseConfig = field(
+        default_factory=ModelExtractionDefenseConfig,
+    )
+
     def __post_init__(self):
         if self.env != Environment.LOCAL and self.auth.jwt_secret == "change-me-in-production":
             raise RuntimeError("JWT_SECRET must be set in non-local environments")
@@ -231,6 +262,16 @@ class Settings:
             raise RuntimeError(
                 "PROVIDER_GATEWAY_ENCRYPTION_KEY must be set when "
                 "Provider Gateway is enabled in non-local environments"
+            )
+        if (
+            self.extraction_defense.enabled
+            and self.env != Environment.LOCAL
+            and self.extraction_defense.watermark_secret_key
+            == "aether-wm-default-change-me"
+        ):
+            raise RuntimeError(
+                "WATERMARK_SECRET_KEY must be changed from default when "
+                "extraction defense is enabled in non-local environments"
             )
 
     @property

@@ -1,14 +1,16 @@
 """
 Aether Backend — Middleware Stack
-Auth, request tracing, rate limiting, body limits, and error handling middleware.
-Applied globally to the FastAPI app.
+Auth, request tracing, rate limiting, body limits, extraction defense,
+and error handling middleware. Applied globally to the FastAPI app.
 """
 
 from __future__ import annotations
 
+import json
+import logging
 import time
 import uuid
-from typing import Callable
+from typing import Callable, Optional
 
 from fastapi import FastAPI, Request, Response
 from fastapi.responses import JSONResponse
@@ -21,6 +23,28 @@ from config.settings import settings
 from dependencies.providers import get_registry
 
 logger = get_logger("aether.middleware")
+
+# ---------------------------------------------------------------------------
+# Extraction defense — lazy import to avoid hard dependency
+# ---------------------------------------------------------------------------
+_defense_layer = None
+
+
+def _get_backend_defense_layer():
+    """Lazy-init the extraction defense layer for backend ML routes."""
+    global _defense_layer
+    if _defense_layer is not None:
+        return _defense_layer
+    if not settings.extraction_defense.enabled:
+        return None
+    try:
+        from security.model_extraction_defense import ExtractionDefenseLayer
+        _defense_layer = ExtractionDefenseLayer.from_env()
+        logger.info("Backend extraction defense layer loaded")
+    except ImportError:
+        logger.debug("Extraction defense module not available at backend — skipping")
+        _defense_layer = None
+    return _defense_layer
 
 # Paths that skip auth
 _PUBLIC_PATHS = {"/health", "/v1/health", "/docs", "/openapi.json", "/redoc", "/"}
@@ -136,6 +160,64 @@ def register_middleware(app: FastAPI) -> None:
                     },
                     headers=rl_result.headers,
                 )
+
+            # --- Extraction defense (ML prediction routes only) ---
+            if request.url.path.startswith("/v1/ml/predict"):
+                defense = _get_backend_defense_layer()
+                if defense is not None:
+                    ip_address = (
+                        request.client.host if request.client else "0.0.0.0"
+                    )
+                    # Parse features from body for analysis
+                    features: dict = {}
+                    batch_size = 1
+                    try:
+                        body_bytes = await request.body()
+                        body = json.loads(body_bytes) if body_bytes else {}
+                        features = body.get("features", {})
+                        entities = body.get("entities", [])
+                        if entities:
+                            batch_size = len(entities)
+                            features = entities[0] if entities else {}
+                    except (json.JSONDecodeError, IndexError, TypeError):
+                        pass
+
+                    pre_result = defense.pre_request(
+                        api_key=api_key,
+                        ip_address=ip_address,
+                        features=features,
+                        model_name=body.get("model_name", ""),
+                        batch_size=batch_size,
+                    )
+                    if pre_result.blocked:
+                        status = (
+                            429
+                            if "rate limit" in pre_result.block_reason.lower()
+                            else 403
+                        )
+                        metrics.increment("extraction_defense_blocked")
+                        headers = {}
+                        if pre_result.retry_after_seconds:
+                            headers["Retry-After"] = str(
+                                pre_result.retry_after_seconds
+                            )
+                        return JSONResponse(
+                            status_code=status,
+                            content={
+                                "error": {
+                                    "code": status,
+                                    "message": pre_result.block_reason,
+                                    "request_id": request_id,
+                                }
+                            },
+                            headers=headers,
+                        )
+                    # Store risk score for downstream use
+                    request.state.extraction_risk = (
+                        pre_result.risk_assessment.risk_score
+                        if pre_result.risk_assessment
+                        else 0.0
+                    )
 
         # --- Execute request ---
         response: Response = await call_next(request)

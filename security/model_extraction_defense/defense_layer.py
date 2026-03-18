@@ -23,7 +23,8 @@ Usage:
 from __future__ import annotations
 
 import logging
-from dataclasses import dataclass
+import threading
+from dataclasses import dataclass, field
 from typing import Any, Optional, Union
 
 import numpy as np
@@ -35,6 +36,7 @@ from .output_perturbation import OutputPerturbationLayer
 from .watermark import ModelWatermark
 from .canary_detector import CanaryInputDetector
 from .risk_scorer import ExtractionRiskScorer, RiskAssessment
+from .metrics import DefenseMetrics
 
 logger = logging.getLogger("aether.security.defense_layer")
 
@@ -68,6 +70,10 @@ class ExtractionDefenseLayer:
     or call pre_request / post_response around inference calls.
     """
 
+    # Common feature dimensionalities observed — canaries are lazily
+    # generated on the first request so we can infer dimensionality.
+    _CANARY_DIMS_INITIALIZED: set[int] = set()
+
     def __init__(self, config: Optional[ExtractionDefenseConfig] = None):
         self.config = config or ExtractionDefenseConfig()
 
@@ -78,6 +84,9 @@ class ExtractionDefenseLayer:
         self.watermark = ModelWatermark(self.config.watermark)
         self.canary_detector = CanaryInputDetector(self.config.canary)
         self.risk_scorer = ExtractionRiskScorer(self.config.risk_scorer)
+        self.metrics = DefenseMetrics()
+
+        self._canary_init_lock = threading.Lock()
 
         logger.info(
             "Extraction defense initialized: "
@@ -92,6 +101,34 @@ class ExtractionDefenseLayer:
     def from_env(cls) -> ExtractionDefenseLayer:
         """Create a defense layer with config from environment variables."""
         return cls(ExtractionDefenseConfig.from_env())
+
+    # ------------------------------------------------------------------
+    # Canary lazy initialization
+    # ------------------------------------------------------------------
+
+    def _ensure_canaries(self, n_features: int) -> None:
+        """
+        Lazily generate canary inputs on the first request that has
+        enough features. Thread-safe — only initialises once per
+        dimensionality.
+        """
+        if n_features < 2:
+            return
+        if n_features in self._CANARY_DIMS_INITIALIZED:
+            return
+        with self._canary_init_lock:
+            if n_features in self._CANARY_DIMS_INITIALIZED:
+                return  # double-check after acquiring lock
+            self.canary_detector.generate_canaries(n_features)
+            self._CANARY_DIMS_INITIALIZED.add(n_features)
+            logger.info(
+                "Canary inputs lazily generated for %d-dimensional feature space",
+                n_features,
+            )
+
+    # ------------------------------------------------------------------
+    # Pre-request processing
+    # ------------------------------------------------------------------
 
     def pre_request(
         self,
@@ -120,6 +157,7 @@ class ExtractionDefenseLayer:
         if not self.config.enable_extraction_defense:
             return PreRequestResult()
 
+        self.metrics.record_request(api_key, model_name)
         result = PreRequestResult()
 
         # 1. Rate limiting
@@ -131,30 +169,45 @@ class ExtractionDefenseLayer:
             result.blocked = True
             result.block_reason = f"Rate limit exceeded ({rl_check.source}/{rl_check.window})"
             result.retry_after_seconds = rl_check.retry_after_seconds
+            self.metrics.record_block(api_key, "rate_limit", rl_check.window)
             return result
 
-        # 2. Canary check
-        float_features = {k: float(v) for k, v in features.items() if isinstance(v, (int, float))}
-        canary_result = self.canary_detector.check(float_features, api_key, ip_address)
-        if canary_result.is_canary:
-            if canary_result.action == "block":
-                result.blocked = True
-                result.block_reason = "Request blocked by security policy"
-                return result
-            # "throttle" or "alert" — continue but spike the risk score
-
-        # Check canary cooldown
+        # 2. Check canary cooldown first (cheap check before canary matching)
         if self.canary_detector.is_in_cooldown(api_key):
             result.blocked = True
             result.block_reason = "Client in security cooldown"
             result.retry_after_seconds = self.config.canary.cooldown_seconds
+            self.metrics.record_block(api_key, "canary_cooldown")
             return result
 
-        # 3. Record query for pattern analysis
+        # 3. Canary check — lazy-init canaries from observed feature dimensionality
+        float_features = {k: float(v) for k, v in features.items() if isinstance(v, (int, float))}
+        self._ensure_canaries(len(float_features))
+
+        canary_result = self.canary_detector.check(float_features, api_key, ip_address)
+        if canary_result.is_canary:
+            self.metrics.record_canary_trigger(api_key, canary_result.canary_id)
+            if canary_result.action == "block":
+                result.blocked = True
+                result.block_reason = "Request blocked by security policy"
+                self.metrics.record_block(api_key, "canary_block")
+                return result
+            elif canary_result.action == "throttle":
+                # Throttle: client enters cooldown and this request proceeds
+                # but with an inflated risk score (handled below via
+                # canary_triggered=True in risk_scorer.assess).
+                logger.warning(
+                    "Canary throttle for %s — request proceeds with elevated risk",
+                    api_key[:8] + "...",
+                )
+            # "alert": log only, no blocking or throttling — risk scorer
+            # still sees canary_triggered=True so noise increases.
+
+        # 4. Record query for pattern analysis
         if self.config.enable_query_analysis:
             self.pattern_detector.record_query(api_key, float_features, model_name)
 
-        # 4. Compute risk score
+        # 5. Compute risk score
         velocity = self.rate_limiter.get_query_velocity(api_key)
         pattern_analysis = PatternAnalysis()
 
@@ -170,13 +223,19 @@ class ExtractionDefenseLayer:
             canary_triggered=canary_result.is_canary,
         )
         result.risk_assessment = risk
+        self.metrics.record_risk_score(api_key, risk.risk_score, risk.tier)
 
         if risk.should_block:
             result.blocked = True
             result.block_reason = "Extraction risk score exceeds threshold"
+            self.metrics.record_block(api_key, "risk_score")
             return result
 
         return result
+
+    # ------------------------------------------------------------------
+    # Post-response processing
+    # ------------------------------------------------------------------
 
     def post_response(
         self,
@@ -225,14 +284,16 @@ class ExtractionDefenseLayer:
                     result.output = self.watermark.embed(arr, fingerprint).tolist()
                     result.watermark_applied = True
             elif isinstance(output, dict):
-                # Watermark the first probability-like array found
+                # Watermark all probability-like arrays and scalar numerics
                 for key, value in output.items():
                     if isinstance(value, (list, np.ndarray)):
                         arr = np.asarray(value, dtype=float)
                         if arr.ndim == 1 and len(arr) >= self.watermark.config.min_classes:
                             output[key] = self.watermark.embed(arr, fingerprint).tolist()
                             result.watermark_applied = True
-                            break
+                    elif isinstance(value, (int, float)) and not isinstance(value, bool):
+                        output[key] = self.watermark.embed_scalar(float(value), fingerprint)
+                        result.watermark_applied = True
                 result.output = output
             elif isinstance(output, (int, float)) and not isinstance(output, bool):
                 result.output = self.watermark.embed_scalar(float(output), fingerprint)
@@ -255,6 +316,10 @@ class ExtractionDefenseLayer:
     def get_canary_triggers(self) -> list:
         """Return all canary trigger events."""
         return self.canary_detector.get_all_triggers()
+
+    def get_metrics_snapshot(self) -> dict:
+        """Return a snapshot of all defense metrics for monitoring."""
+        return self.metrics.snapshot()
 
     def cleanup(self) -> dict[str, int]:
         """Run periodic cleanup across all components."""

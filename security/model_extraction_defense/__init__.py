@@ -16,9 +16,9 @@ Quick start:
     from security.model_extraction_defense import ExtractionDefenseLayer
 
     defense = ExtractionDefenseLayer.from_env()
-    # Apply to a prediction response:
-    result = defense.process_request(api_key, ip, features, model_name)
-    perturbed = defense.process_response(api_key, raw_output, features)
+    pre = defense.pre_request(api_key, ip, features, model_name)
+    if not pre.blocked:
+        post = defense.post_response(api_key, raw_output, features)
 """
 
 from .config import ExtractionDefenseConfig
@@ -28,11 +28,18 @@ from .output_perturbation import OutputPerturbationLayer
 from .watermark import ModelWatermark
 from .canary_detector import CanaryInputDetector, CanaryDetection
 from .risk_scorer import ExtractionRiskScorer, RiskAssessment
-from .defense_layer import ExtractionDefenseLayer
+from .metrics import DefenseMetrics
+from .defense_layer import ExtractionDefenseLayer, PreRequestResult, PostResponseResult
+from .cleanup import CleanupThread, start_cleanup_thread, cleanup_periodic
 
 __all__ = [
-    "ExtractionDefenseConfig",
+    # Facade
     "ExtractionDefenseLayer",
+    "PreRequestResult",
+    "PostResponseResult",
+    # Config
+    "ExtractionDefenseConfig",
+    # Components
     "QueryRateLimiter",
     "RateLimitCheck",
     "QueryPatternDetector",
@@ -43,4 +50,9 @@ __all__ = [
     "CanaryDetection",
     "ExtractionRiskScorer",
     "RiskAssessment",
+    # Operational
+    "DefenseMetrics",
+    "CleanupThread",
+    "start_cleanup_thread",
+    "cleanup_periodic",
 ]

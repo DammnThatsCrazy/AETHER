@@ -6,6 +6,39 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ---
 
+## [8.3.1] — 2026-03-18
+
+### Model Extraction Defense Layer
+
+Modular defense layer protecting ML serving endpoints against model extraction and knowledge distillation attacks. Audited the inference pipeline and found critical vulnerability — 9 models exposed with exact probability outputs, no perturbation, no watermarking, and no query anomaly detection.
+
+### Added
+
+- **Query Rate Limiter** (`security/model_extraction_defense/rate_limiter.py`) — dual-axis sliding window rate limiting (per-API-key + per-IP), three time windows each (minute/hour/day), batch cost accounting
+- **Query Pattern Detector** (`security/model_extraction_defense/pattern_detector.py`) — detects systematic feature sweeps, input similarity clustering, uniform random probing, and bot-like timing regularity
+- **Output Perturbation Layer** (`security/model_extraction_defense/output_perturbation.py`) — logit noise injection, top-k probability clipping, entropy smoothing, precision rounding; noise scales with extraction risk score
+- **Model Watermarking** (`security/model_extraction_defense/watermark.py`) — HMAC-based probabilistic bias embedding in outputs; statistically detectable across many queries for forensic identification of extracted models
+- **Canary Input Detector** (`security/model_extraction_defense/canary_detector.py`) — secret-seed-generated trap inputs with lazy initialization from observed feature dimensionality; triggers cooldown on detection
+- **Extraction Risk Scorer** (`security/model_extraction_defense/risk_scorer.py`) — EMA-smoothed aggregate score combining velocity, pattern anomaly, similarity, and entropy signals; drives response degradation across four tiers (normal/elevated/high/critical)
+- **Defense Metrics** (`security/model_extraction_defense/metrics.py`) — thread-safe metrics collector with Prometheus exposition format export; tracks requests, blocks, canary triggers, risk distribution
+- **Background Cleanup** (`security/model_extraction_defense/cleanup.py`) — daemon thread, asyncio coroutine, and Celery beat task modes for periodic expiration of in-memory state
+- **Admin CLI** (`security/model_extraction_defense/admin_cli.py`) — watermark verification against suspect models, canary generation, metrics inspection
+- **`ModelExtractionDefenseConfig`** in `Backend Architecture/aether-backend/config/settings.py` — 16 environment variables with production validation for secret keys
+- **`EXTRACTION_DEFENSE_AUDIT.md`** — comprehensive audit report with threat model covering 4 attack scenarios
+
+### Changed
+
+- **ML Serving API** (`ML Models/aether-ml/serving/src/api.py`) — all 8 prediction endpoints + batch endpoint now wrapped with extraction defense middleware and post-response perturbation
+- **Backend Middleware** (`Backend Architecture/aether-backend/middleware/middleware.py`) — extraction defense checks integrated into request lifecycle for `/v1/ml/predict` routes
+
+### Stats
+
+- **13 new files**, **4 modified files** — 4,500+ lines added
+- All protections gated behind `ENABLE_EXTRACTION_DEFENSE=false` (default off)
+- Zero latency impact when disabled; <2ms overhead when enabled
+
+---
+
 ## [8.3.0] — 2026-03-10
 
 ### Provider Gateway: BYOK, Failover & Usage Metering

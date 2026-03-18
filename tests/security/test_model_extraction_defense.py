@@ -34,6 +34,8 @@ from security.model_extraction_defense.watermark import ModelWatermark
 from security.model_extraction_defense.canary_detector import CanaryInputDetector
 from security.model_extraction_defense.risk_scorer import ExtractionRiskScorer
 from security.model_extraction_defense.defense_layer import ExtractionDefenseLayer
+from security.model_extraction_defense.metrics import DefenseMetrics
+from security.model_extraction_defense.cleanup import CleanupThread
 
 
 # =========================================================================
@@ -636,3 +638,234 @@ class TestExtractionDefenseLayer:
                 break
 
         assert blocked, "Multi-key attack from single IP should be rate-limited"
+
+
+# =========================================================================
+# 8. Canary Lazy Initialization Tests
+# =========================================================================
+
+
+class TestCanaryLazyInit:
+    def test_canaries_generated_on_first_request(self):
+        """Canary vectors should be lazily generated from first request dimensionality."""
+        config = ExtractionDefenseConfig(
+            enable_extraction_defense=True,
+            rate_limiter=RateLimiterConfig(key_max_per_minute=100),
+            canary=CanaryConfig(
+                secret_seed="test-lazy-seed",
+                num_canaries=5,
+                match_tolerance=0.05,
+            ),
+        )
+        layer = ExtractionDefenseLayer(config)
+
+        # Before any request, canaries should be empty
+        assert len(layer.canary_detector._canaries) == 0
+
+        # After a request with 8 features, canaries should be generated
+        features = {f"f{i}": float(i) for i in range(8)}
+        layer.pre_request("key-lazy", "1.1.1.1", features, "intent")
+
+        assert len(layer.canary_detector._canaries) == 5
+        assert layer.canary_detector._canaries[0].shape == (8,)
+
+    def test_canaries_not_generated_for_tiny_features(self):
+        """Canaries should not be generated for <2 features."""
+        config = ExtractionDefenseConfig(
+            enable_extraction_defense=True,
+            rate_limiter=RateLimiterConfig(key_max_per_minute=100),
+        )
+        layer = ExtractionDefenseLayer(config)
+
+        layer.pre_request("key-tiny", "1.1.1.1", {"f1": 1.0}, "intent")
+        assert len(layer.canary_detector._canaries) == 0
+
+    def test_empty_features_handled(self):
+        """Empty feature dict should not crash the defense layer."""
+        config = ExtractionDefenseConfig(
+            enable_extraction_defense=True,
+            rate_limiter=RateLimiterConfig(key_max_per_minute=100),
+        )
+        layer = ExtractionDefenseLayer(config)
+
+        pre = layer.pre_request("key-empty", "1.1.1.1", {}, "intent")
+        assert not pre.blocked
+
+        post = layer.post_response("key-empty", 0.5, {})
+        assert post.output is not None
+
+    def test_non_numeric_features_filtered(self):
+        """Non-numeric features should be safely filtered out."""
+        config = ExtractionDefenseConfig(
+            enable_extraction_defense=True,
+            rate_limiter=RateLimiterConfig(key_max_per_minute=100),
+        )
+        layer = ExtractionDefenseLayer(config)
+
+        features = {"name": "test", "score": 0.5, "label": "high", "count": 3}
+        pre = layer.pre_request("key-mixed", "1.1.1.1", features, "intent")
+        assert not pre.blocked
+
+
+# =========================================================================
+# 9. Metrics Tests
+# =========================================================================
+
+
+class TestDefenseMetrics:
+    def test_metrics_snapshot_structure(self):
+        """Metrics snapshot should have expected structure."""
+        m = DefenseMetrics()
+        snap = m.snapshot()
+
+        assert "counters" in snap
+        assert "gauges" in snap
+        assert "risk_tier_distribution" in snap
+        assert "block_reasons" in snap
+        assert "uptime_seconds" in snap
+        assert snap["counters"]["requests_total"] == 0
+
+    def test_request_recording(self):
+        """Request counter should increment."""
+        m = DefenseMetrics()
+        m.record_request("key1", "intent")
+        m.record_request("key1", "intent")
+        m.record_request("key2", "churn")
+
+        snap = m.snapshot()
+        assert snap["counters"]["requests_total"] == 3
+        assert snap["model_requests"]["intent"] == 2
+        assert snap["model_requests"]["churn"] == 1
+
+    def test_block_recording(self):
+        """Block events should be tracked with reasons."""
+        m = DefenseMetrics()
+        m.record_block("key1", "rate_limit", "minute")
+        m.record_block("key1", "risk_score")
+        m.record_block("key2", "canary_cooldown")
+
+        snap = m.snapshot()
+        assert snap["counters"]["blocks_total"] == 3
+        assert snap["counters"]["rate_limit_blocks"] == 1
+        assert snap["counters"]["risk_blocks"] == 1
+        assert snap["block_reasons"]["rate_limit:minute"] == 1
+
+    def test_canary_trigger_recording(self):
+        """Canary triggers should be logged."""
+        m = DefenseMetrics()
+        m.record_canary_trigger("key-bad", canary_id=7)
+
+        snap = m.snapshot()
+        assert snap["counters"]["canary_triggers_total"] == 1
+        assert len(snap["recent_canary_triggers"]) == 1
+        assert snap["recent_canary_triggers"][0]["canary_id"] == 7
+
+    def test_risk_score_recording(self):
+        """Risk scores should be tracked per client."""
+        m = DefenseMetrics()
+        m.record_risk_score("key1", 0.3, "elevated")
+        m.record_risk_score("key2", 0.7, "high")
+
+        snap = m.snapshot()
+        assert snap["gauges"]["active_clients"] == 2
+        assert snap["gauges"]["max_risk_score"] == 0.7
+        assert snap["risk_tier_distribution"]["elevated"] == 1
+        assert snap["risk_tier_distribution"]["high"] == 1
+
+    def test_prometheus_export(self):
+        """Prometheus export should produce valid exposition format."""
+        m = DefenseMetrics()
+        m.record_request("key1", "intent")
+        m.record_block("key1", "rate_limit")
+
+        output = m.export_prometheus()
+        assert output is not None
+        assert "extraction_defense_requests_total 1" in output
+        assert "extraction_defense_blocks_total 1" in output
+
+    def test_reset(self):
+        """Reset should zero all counters."""
+        m = DefenseMetrics()
+        m.record_request("key1", "intent")
+        m.record_block("key1", "rate_limit")
+        m.reset()
+
+        snap = m.snapshot()
+        assert snap["counters"]["requests_total"] == 0
+        assert snap["counters"]["blocks_total"] == 0
+
+    def test_metrics_integrated_in_defense_layer(self, defense_layer):
+        """Defense layer should record metrics during pre_request."""
+        features = {"f1": 0.5, "f2": 0.5}
+        defense_layer.pre_request("key-metrics", "1.1.1.1", features, "intent")
+
+        snap = defense_layer.get_metrics_snapshot()
+        assert snap["counters"]["requests_total"] >= 1
+
+
+# =========================================================================
+# 10. Batch & Dict Output Perturbation Tests
+# =========================================================================
+
+
+class TestBatchAndDictDefense:
+    def test_dict_output_all_numerics_perturbed(self, defense_layer):
+        """Dict outputs should have all numeric values perturbed."""
+        features = {"f1": 1.0}
+        raw = {"score": 0.85, "risk": 0.3, "label": "high"}
+
+        post = defense_layer.post_response("key-dict", raw, features, risk_score=0.4)
+        assert post.noise_applied
+        assert isinstance(post.output["score"], float)
+        assert isinstance(post.output["risk"], float)
+        assert post.output["label"] == "high"  # string unchanged
+
+    def test_batch_list_output_perturbed(self, defense_layer):
+        """List/vector outputs should be perturbed."""
+        features = {"f1": 1.0}
+        raw = [0.7, 0.2, 0.1]
+
+        post = defense_layer.post_response("key-batch", raw, features, risk_score=0.2)
+        assert post.noise_applied
+        assert post.watermark_applied  # 3 classes >= min_classes
+        assert abs(sum(post.output) - 1.0) < 0.05
+
+    def test_boolean_output_not_perturbed(self, defense_layer):
+        """Boolean outputs should pass through unchanged."""
+        features = {"f1": 1.0}
+
+        post = defense_layer.post_response("key-bool", True, features, risk_score=0.5)
+        assert post.output is True
+
+    def test_high_risk_batch_degrades_more(self, defense_layer):
+        """High-risk batch outputs should deviate more from originals."""
+        features = {"f1": 1.0}
+        raw = 0.85
+
+        low_risk_devs = []
+        high_risk_devs = []
+        for _ in range(50):
+            low = defense_layer.post_response("k-low", raw, features, risk_score=0.05)
+            high = defense_layer.post_response("k-high", raw, features, risk_score=0.9)
+            low_risk_devs.append(abs(low.output - raw))
+            high_risk_devs.append(abs(high.output - raw))
+
+        assert np.mean(high_risk_devs) > np.mean(low_risk_devs), (
+            "High-risk should produce more deviation than low-risk"
+        )
+
+
+# =========================================================================
+# 11. Cleanup Thread Tests
+# =========================================================================
+
+
+class TestCleanupThread:
+    def test_cleanup_thread_starts_and_stops(self, defense_layer):
+        """Cleanup thread should start as daemon and stop cleanly."""
+        thread = CleanupThread(defense_layer, interval_seconds=0.1)
+        thread.start()
+        assert thread.is_alive()
+        time.sleep(0.3)  # Let it run a few cycles
+        thread.stop()
+        assert not thread.is_alive()

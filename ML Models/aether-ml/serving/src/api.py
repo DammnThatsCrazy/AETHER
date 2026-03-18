@@ -782,7 +782,7 @@ async def predict_ltv(req: LTVPredictionRequest, request: Request) -> LTVPredict
 
 
 @app.post("/v1/predict/journey", response_model=JourneyPredictionResponse)
-async def predict_journey(req: JourneyPredictionRequest) -> JourneyPredictionResponse:
+async def predict_journey(req: JourneyPredictionRequest, request: Request) -> JourneyPredictionResponse:
     """Predict the next N steps in a user journey.
 
     Accepts an ordered list of observed events and forecasts the most
@@ -811,6 +811,20 @@ async def predict_journey(req: JourneyPredictionRequest) -> JourneyPredictionRes
         if results
         else {"predicted_journey": [], "conversion_reached": False}
     )
+
+    # Apply extraction defense to probability values in predicted journey steps
+    defense = _get_defense_layer()
+    if defense is not None:
+        risk_score = getattr(request.state, "extraction_risk", 0.0)
+        api_key = request.headers.get("X-API-Key", "anon")
+        features = {"identity_id_hash": hash(req.identity_id) % 1000}
+        for step in result.get("predicted_journey", []):
+            if isinstance(step, dict):
+                for k, v in list(step.items()):
+                    if isinstance(v, (int, float)) and not isinstance(v, bool):
+                        post = defense.post_response(api_key, float(v), features, risk_score=risk_score)
+                        step[k] = post.output
+
     return JourneyPredictionResponse(
         identity_id=req.identity_id,
         predicted_journey=result["predicted_journey"],
@@ -820,7 +834,7 @@ async def predict_journey(req: JourneyPredictionRequest) -> JourneyPredictionRes
 
 
 @app.post("/v1/predict/attribution", response_model=AttributionResponse)
-async def predict_attribution(req: AttributionRequest) -> AttributionResponse:
+async def predict_attribution(req: AttributionRequest, request: Request) -> AttributionResponse:
     """Compute multi-touch attribution for a conversion.
 
     Distributes credit across touchpoints using the specified method
@@ -833,11 +847,24 @@ async def predict_attribution(req: AttributionRequest) -> AttributionResponse:
     journeys["conversion_id"] = req.conversion_id
 
     attribution = model.attribute(journeys, method=req.method)
+    attr_records = attribution.to_dict(orient="records")
+
+    # Apply extraction defense to attribution scores
+    defense = _get_defense_layer()
+    if defense is not None:
+        risk_score = getattr(request.state, "extraction_risk", 0.0)
+        api_key = request.headers.get("X-API-Key", "anon")
+        features = {"conversion_id_hash": hash(req.conversion_id) % 1000}
+        for record in attr_records:
+            for k, v in list(record.items()):
+                if isinstance(v, (int, float)) and not isinstance(v, bool):
+                    post = defense.post_response(api_key, float(v), features, risk_score=risk_score)
+                    record[k] = post.output
 
     latency_ms = (time.perf_counter() - t0) * 1000
     return AttributionResponse(
         conversion_id=req.conversion_id,
-        attribution=attribution.to_dict(orient="records"),
+        attribution=attr_records,
         method=req.method,
         latency_ms=round(latency_ms, 2),
     )
@@ -849,7 +876,7 @@ async def predict_attribution(req: AttributionRequest) -> AttributionResponse:
 
 
 @app.post("/v1/predict/batch", response_model=BatchPredictionResponse)
-async def batch_predict(req: BatchPredictionRequest) -> BatchPredictionResponse:
+async def batch_predict(req: BatchPredictionRequest, request: Request) -> BatchPredictionResponse:
     """Run batch prediction for any loaded model.
 
     Accepts a list of feature dictionaries and returns predictions for all
@@ -866,6 +893,10 @@ async def batch_predict(req: BatchPredictionRequest) -> BatchPredictionResponse:
     df = pd.DataFrame(req.instances)
     raw_predictions = model.predict(df)
 
+    defense = _get_defense_layer()
+    risk_score = getattr(request.state, "extraction_risk", 0.0)
+    api_key = request.headers.get("X-API-Key", "anon")
+
     results: list[dict[str, Any]] = []
     for idx, pred in enumerate(raw_predictions):
         if isinstance(pred, (np.integer,)):
@@ -876,6 +907,13 @@ async def batch_predict(req: BatchPredictionRequest) -> BatchPredictionResponse:
             value = pred.tolist()
         else:
             value = pred
+
+        # Apply extraction defense to each prediction in the batch
+        if defense is not None and isinstance(value, (int, float, list)):
+            features = req.instances[idx] if idx < len(req.instances) else {}
+            post = defense.post_response(api_key, value, features, risk_score=risk_score)
+            value = post.output
+
         results.append({"index": idx, "prediction": value})
 
     latency_ms = (time.perf_counter() - t0) * 1000
