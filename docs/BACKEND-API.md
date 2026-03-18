@@ -583,5 +583,72 @@ Common error codes:
 - `403` — `FORBIDDEN` — API key lacks required permissions
 - `404` — `NOT_FOUND` — Resource not found
 - `429` — `RATE_LIMITED` — Too many requests
+- `403` — `EXTRACTION_BLOCKED` — Extraction defense triggered (canary or risk score)
 - `500` — `INTERNAL_ERROR` — Server error
 - `503` — `CIRCUIT_OPEN` — Circuit breaker is open for the requested operation
+
+---
+
+## Model Extraction Defense (v8.3.1)
+
+The extraction defense layer protects ML inference endpoints against model extraction and knowledge distillation attacks. Enabled via `ENABLE_EXTRACTION_DEFENSE=true`.
+
+### Middleware Behavior
+
+When enabled, all `/v1/predict/*` (ML serving API) and `/v1/ml/predict` (backend gateway) requests pass through the defense middleware:
+
+1. **Rate limiting** — dual-axis sliding window (per-API-key + per-IP) with minute/hour/day windows. Exceeding limits returns `429`.
+2. **Canary detection** — secret-seed trap inputs detect systematic input-space exploration. Triggers cooldown (`403`).
+3. **Pattern analysis** — detects feature sweeps, similarity clustering, uniform probing, bot-like timing.
+4. **Risk scoring** — EMA-smoothed score in `[0, 1]` drives response degradation across four tiers.
+
+### Response Perturbation
+
+Responses are modified based on the client's risk tier:
+
+| Tier | Risk Score | Noise Multiplier | Effect |
+|------|-----------|-------------------|--------|
+| Normal | 0.0 – 0.3 | 1x | Minimal noise, near-original outputs |
+| Elevated | 0.3 – 0.6 | 3x | Moderate noise added to probabilities |
+| High | 0.6 – 0.8 | 8x | Aggressive noise, top-k clipping |
+| Critical | 0.8 – 1.0 | 15x | Maximum degradation, may block |
+
+### Defense Monitoring Endpoints (ML Serving API)
+
+#### `GET /v1/defense/status`
+
+Returns defense layer configuration and state.
+
+```json
+{
+  "enabled": true,
+  "output_noise": true,
+  "watermark": true,
+  "query_analysis": true,
+  "canary_count": 50,
+  "tracked_clients": 12
+}
+```
+
+#### `GET /v1/defense/metrics`
+
+Returns operational metrics snapshot including request counts, block reasons, risk tier distribution, and recent canary triggers.
+
+#### `GET /v1/defense/risk-scores`
+
+Returns current EMA risk scores for all tracked API keys.
+
+#### `GET /v1/defense/canary-triggers`
+
+Returns the last 50 canary detection events with API key (masked), IP, canary ID, and timestamp.
+
+### Configuration
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `ENABLE_EXTRACTION_DEFENSE` | `false` | Master switch |
+| `ENABLE_OUTPUT_NOISE` | `true` | Enable output perturbation |
+| `ENABLE_WATERMARK` | `true` | Enable probabilistic watermarking |
+| `ENABLE_QUERY_ANALYSIS` | `true` | Enable pattern detection and risk scoring |
+| `WATERMARK_SECRET_KEY` | (default) | Secret for watermark generation (change in production) |
+| `CANARY_SECRET_SEED` | (default) | Seed for canary input generation (change in production) |

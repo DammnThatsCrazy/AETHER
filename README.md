@@ -162,6 +162,8 @@ docs/
 ├── SDK-ANDROID.md        Android SDK integration guide
 ├── SDK-REACT-NATIVE.md   React Native SDK integration guide
 ├── INTELLIGENCE-GRAPH.md Unified On-Chain Intelligence Graph spec
+├── AGENT-CONTROLLER.md   Agent Layer orchestrator documentation
+├── MODEL-EXTRACTION-DEFENSE.md  ML extraction defense architecture
 ├── MIGRATION-v7.md       v6 → v7 migration guide
 └── CHANGELOG.md          Version history
 ```
@@ -178,6 +180,8 @@ docs/
 | [Android SDK](docs/SDK-ANDROID.md) | Android integration guide |
 | [React Native SDK](docs/SDK-REACT-NATIVE.md) | React Native integration guide |
 | [Intelligence Graph](docs/INTELLIGENCE-GRAPH.md) | On-chain intelligence graph architecture |
+| [Agent Controller](docs/AGENT-CONTROLLER.md) | Agent Layer orchestrator, task queue, feedback loop |
+| [Model Extraction Defense](docs/MODEL-EXTRACTION-DEFENSE.md) | ML model extraction defense layer architecture |
 | [Migration Guide](docs/MIGRATION-v7.md) | Breaking changes from v6 to v7 |
 | [Changelog](docs/CHANGELOG.md) | Version history |
 

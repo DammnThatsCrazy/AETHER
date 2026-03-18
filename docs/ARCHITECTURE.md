@@ -344,6 +344,30 @@ All four SDKs expose the same core public API surface:
 | **Undo capability** | `RESOLVED_AS` edges store full signal snapshots. Merges can be reversed by restoring the secondary profile. |
 | **Privacy** | All PII (email, phone, IP) stored as SHA-256 hashes only. Raw values never persisted in graph or audit trail. |
 
+## Model Extraction Defense (v8.3.1)
+
+The ML serving pipeline is wrapped with a modular defense layer that protects against model extraction and knowledge distillation attacks.
+
+```
+Request ──> Auth ──> Extraction Defense ──> Model.predict() ──> Output Defense ──> Response
+                     ├─ Rate Limiter                            ├─ Logit noise
+                     │  (per-key + per-IP)                      ├─ Top-k clipping
+                     ├─ Canary Detector                         ├─ Watermark embedding
+                     ├─ Pattern Detector                        └─ Entropy smoothing
+                     └─ Risk Scorer
+```
+
+| Component | Purpose |
+|-----------|---------|
+| **Query Rate Limiter** | Dual-axis sliding window (per-API-key + per-IP), three time windows |
+| **Query Pattern Detector** | Detects feature sweeps, similarity clustering, uniform probing, bot timing |
+| **Output Perturbation** | Logit noise, top-k clipping, entropy smoothing — scales with risk score |
+| **Model Watermark** | HMAC-based probabilistic bias for forensic identification of extracted models |
+| **Canary Detector** | Secret-seed trap inputs trigger cooldown on detection |
+| **Risk Scorer** | EMA-smoothed aggregate score across 4 tiers (normal/elevated/high/critical) |
+
+All protections are gated behind `ENABLE_EXTRACTION_DEFENSE` (default off). See [Model Extraction Defense](MODEL-EXTRACTION-DEFENSE.md) for full documentation.
+
 ## Unified On-Chain Intelligence Graph
 
 The Identity Graph above captures **who** a user is across devices and wallets. The Intelligence Graph extends it with three relationship layers that track **what** humans, agents, and protocols do — and how they interact with each other.

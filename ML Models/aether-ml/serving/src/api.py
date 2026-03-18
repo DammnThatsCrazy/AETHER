@@ -446,7 +446,24 @@ async def lifespan(app: FastAPI):
     """Application lifespan: load models on startup, clean up on shutdown."""
     loaded = server.load_all_models()
     logger.info("Serving %d models: %s", len(loaded), loaded)
+
+    # Start extraction defense cleanup task if defense is enabled
+    _cleanup_task = None
+    defense = _get_defense_layer()
+    if defense is not None:
+        try:
+            from security.model_extraction_defense.cleanup import cleanup_periodic
+            import asyncio
+            _cleanup_task = asyncio.create_task(cleanup_periodic(defense, interval_seconds=300))
+            logger.info("Extraction defense cleanup task started (interval=300s)")
+        except ImportError:
+            pass
+
     yield
+
+    if _cleanup_task is not None:
+        _cleanup_task.cancel()
+        logger.info("Extraction defense cleanup task cancelled")
     logger.info("Shutting down Aether ML serving API")
 
 
@@ -925,6 +942,70 @@ async def batch_predict(req: BatchPredictionRequest, request: Request) -> BatchP
         count=len(results),
         total_latency_ms=round(latency_ms, 2),
     )
+
+
+# =============================================================================
+# EXTRACTION DEFENSE — MONITORING ENDPOINTS
+# =============================================================================
+
+
+@app.get("/v1/defense/status")
+async def defense_status():
+    """Return extraction defense layer status and configuration flags."""
+    defense = _get_defense_layer()
+    if defense is None:
+        return {"enabled": False}
+    return {
+        "enabled": True,
+        "output_noise": defense.config.enable_output_noise,
+        "watermark": defense.config.enable_watermark,
+        "query_analysis": defense.config.enable_query_analysis,
+        "canary_count": len(defense.canary_detector._canaries),
+        "tracked_clients": len(defense.risk_scorer._states),
+    }
+
+
+@app.get("/v1/defense/metrics")
+async def defense_metrics():
+    """Return extraction defense metrics snapshot for monitoring dashboards."""
+    defense = _get_defense_layer()
+    if defense is None:
+        return {"enabled": False, "message": "Extraction defense is not enabled"}
+    return defense.get_metrics_snapshot()
+
+
+@app.get("/v1/defense/risk-scores")
+async def defense_risk_scores():
+    """Return current risk scores for all tracked clients."""
+    defense = _get_defense_layer()
+    if defense is None:
+        return {"enabled": False}
+    scores = defense.get_all_risk_scores()
+    return {
+        "count": len(scores),
+        "scores": {k[:12] + "...": round(v, 4) for k, v in sorted(scores.items(), key=lambda x: -x[1])},
+    }
+
+
+@app.get("/v1/defense/canary-triggers")
+async def defense_canary_triggers():
+    """Return canary trigger event history."""
+    defense = _get_defense_layer()
+    if defense is None:
+        return {"enabled": False}
+    triggers = defense.get_canary_triggers()
+    return {
+        "count": len(triggers),
+        "triggers": [
+            {
+                "api_key": t.api_key[:8] + "..." if t.api_key else "",
+                "ip": t.ip_address,
+                "canary_id": t.canary_id,
+                "timestamp": t.timestamp,
+            }
+            for t in triggers[-50:]  # last 50
+        ],
+    }
 
 
 # =============================================================================

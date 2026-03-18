@@ -125,6 +125,7 @@ Aether Backend is a unified API gateway that mounts 21 domain-specific microserv
 | 16 | **Automation**   | `/v1/automation`        | Automated analytics pipeline, reward trigger, insights      | `POST /v1/automation/ingest`, `GET /v1/automation/insights` |
 | 17 | **Diagnostics**  | `/v1/diagnostics`       | Error tracking, circuit breakers, health monitoring          | `GET /v1/diagnostics/health`, `GET /v1/diagnostics/errors` |
 | 18 | **Providers**    | `/v1/providers`         | BYOK key management, provider failover, usage metering       | `POST /v1/providers/keys`, `GET /v1/providers/health` |
+| 19 | **Resolution**   | `/v1/resolution`        | Identity resolution admin, cluster queries, batch resolution | `GET /v1/resolution/cluster/{id}`, `POST /v1/resolution/pending` |
 
 ---
 
@@ -134,9 +135,9 @@ Three additional services power the **Unified On-Chain Intelligence Graph**. All
 
 | #  | Service          | Prefix           | Feature Flag          | Description                                                    |
 | -- | ---------------- | ---------------- | --------------------- | -------------------------------------------------------------- |
-| 18 | **Commerce (L3a)** | `/v1/commerce` | `IG_COMMERCE_LAYER`   | Payment recording, agent hiring, fee elimination               |
-| 19 | **On-Chain (L0)**  | `/v1/onchain`  | `IG_ONCHAIN_LAYER`    | Action recording, chain listening, RPC gateway                 |
-| 20 | **x402 (L3b)**     | `/v1/x402`     | `IG_X402_LAYER`       | HTTP payment header capture, economic graph                    |
+| 20 | **Commerce (L3a)** | `/v1/commerce` | `IG_COMMERCE_LAYER`   | Payment recording, agent hiring, fee elimination               |
+| 21 | **On-Chain (L0)**  | `/v1/onchain`  | `IG_ONCHAIN_LAYER`    | Action recording, chain listening, RPC gateway                 |
+| 22 | **x402 (L3b)**     | `/v1/x402`     | `IG_X402_LAYER`       | HTTP payment header capture, economic graph                    |
 
 ### Shared Modules
 

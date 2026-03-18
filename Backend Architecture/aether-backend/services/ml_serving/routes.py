@@ -1,16 +1,23 @@
 """
 Aether Service — ML Serving
 Model inference API, feature serving, and prediction caching.
+
+This service acts as a gateway to the ML serving API (aether-ml). Requests
+are validated, cached, and forwarded to the inference backend. When the ML
+serving API is unreachable, cached predictions are returned where available.
 """
 
 from __future__ import annotations
 
+import os
+import time
 from typing import Any, Optional
 
+import httpx
 from fastapi import APIRouter, Depends, Request
 from pydantic import BaseModel, Field
 
-from shared.common.common import APIResponse, BadRequestError
+from shared.common.common import APIResponse, BadRequestError, ServiceUnavailableError
 from shared.cache.cache import CacheClient, CacheKey, TTL
 from shared.events.events import Event, EventProducer, Topic
 from shared.logger.logger import get_logger, metrics
@@ -19,11 +26,40 @@ from dependencies.providers import get_cache, get_producer
 logger = get_logger("aether.service.ml_serving")
 router = APIRouter(prefix="/v1/ml", tags=["ML Serving"])
 
+# ML serving API base URL — override via env var in production
+_ML_SERVING_URL = os.getenv("ML_SERVING_URL", "http://localhost:8080")
+
 AVAILABLE_MODELS = [
     "intent_prediction", "bot_detection", "session_scorer",
     "identity_gnn", "journey_tft", "churn_prediction",
     "ltv_prediction", "anomaly_detection", "campaign_attribution",
 ]
+
+# Model name → ML serving API endpoint path mapping
+_MODEL_ENDPOINTS: dict[str, str] = {
+    "intent_prediction": "/v1/predict/intent",
+    "bot_detection": "/v1/predict/bot",
+    "session_scorer": "/v1/predict/session-score",
+    "churn_prediction": "/v1/predict/churn",
+    "ltv_prediction": "/v1/predict/ltv",
+    "anomaly_detection": "/v1/predict/batch",
+    "campaign_attribution": "/v1/predict/attribution",
+    "identity_gnn": "/v1/predict/batch",
+    "journey_tft": "/v1/predict/journey",
+}
+
+# Shared async HTTP client (created lazily)
+_http_client: Optional[httpx.AsyncClient] = None
+
+
+def _get_client() -> httpx.AsyncClient:
+    global _http_client
+    if _http_client is None:
+        _http_client = httpx.AsyncClient(
+            base_url=_ML_SERVING_URL,
+            timeout=httpx.Timeout(30.0, connect=5.0),
+        )
+    return _http_client
 
 
 class PredictionRequest(BaseModel):
@@ -40,10 +76,22 @@ class BatchPredictionRequest(BaseModel):
 
 @router.get("/models")
 async def list_models(request: Request):
-    """List all available ML models and their status."""
+    """List all available ML models and their status.
+
+    Attempts to fetch live status from the ML serving API; falls back
+    to a static list if the serving API is unreachable.
+    """
+    client = _get_client()
+    try:
+        resp = await client.get("/models")
+        if resp.status_code == 200:
+            return APIResponse(data={"models": resp.json()}).to_dict()
+    except httpx.RequestError:
+        logger.debug("ML serving API unreachable for /models — returning static list")
+
     return APIResponse(data={
         "models": [
-            {"name": m, "status": "active", "version": "1.0"}
+            {"name": m, "status": "unknown", "version": "n/a"}
             for m in AVAILABLE_MODELS
         ]
     }).to_dict()
@@ -56,13 +104,18 @@ async def predict(
     cache: CacheClient = Depends(get_cache),
     producer: EventProducer = Depends(get_producer),
 ):
-    """Run inference on a single entity against a model."""
+    """Run inference on a single entity against a model.
+
+    Forwards the request to the ML serving API for real-time inference.
+    Results are cached and published to the event bus.
+    """
     tenant = request.state.tenant
     tenant.require_permission("ml:inference")
 
     if body.model_name not in AVAILABLE_MODELS:
         raise BadRequestError(f"Unknown model: {body.model_name}")
 
+    # 1. Check cache
     if body.use_cache:
         cache_key = CacheKey.prediction(body.model_name, body.entity_id)
         cached = await cache.get_json(cache_key)
@@ -70,59 +123,137 @@ async def predict(
             metrics.increment("ml_cache_hit", labels={"model": body.model_name})
             return APIResponse(data={**cached, "cached": True}).to_dict()
 
-    prediction = {
-        "model": body.model_name,
-        "entity_id": body.entity_id,
-        "score": 0.0,
-        "label": "stub",
-        "confidence": 0.0,
-        "features_used": list(body.features.keys()),
-    }
+    # 2. Forward to ML serving API
+    t0 = time.perf_counter()
+    endpoint = _MODEL_ENDPOINTS.get(body.model_name, "/v1/predict/batch")
+    client = _get_client()
 
-    cache_key = CacheKey.prediction(body.model_name, body.entity_id)
-    await cache.set_json(cache_key, prediction, TTL.PREDICTION)
+    # Build request payload based on model type
+    if body.model_name in ("intent_prediction", "bot_detection", "session_scorer"):
+        payload = {"session_id": body.entity_id, "features": body.features}
+    elif body.model_name in ("churn_prediction", "ltv_prediction"):
+        payload = {"identity_id": body.entity_id, "features": body.features}
+    elif body.model_name == "journey_tft":
+        events = body.features.get("observed_events", ["page_view"])
+        payload = {"identity_id": body.entity_id, "observed_events": events}
+    elif body.model_name == "campaign_attribution":
+        touchpoints = body.features.get("touchpoints", [])
+        payload = {"conversion_id": body.entity_id, "touchpoints": touchpoints}
+    else:
+        # Generic batch-style request for other models
+        payload = {"model": body.model_name, "instances": [body.features]}
 
-    await producer.publish(Event(
-        topic=Topic.PREDICTION_GENERATED,
-        tenant_id=tenant.tenant_id,
-        source_service="ml_serving",
-        payload=prediction,
-    ))
+    try:
+        api_key = request.headers.get("X-API-Key", "")
+        headers = {"X-API-Key": api_key} if api_key else {}
+        resp = await client.post(endpoint, json=payload, headers=headers)
 
-    metrics.increment("ml_predictions", labels={"model": body.model_name})
-    return APIResponse(data={**prediction, "cached": False}).to_dict()
+        if resp.status_code == 200:
+            ml_result = resp.json()
+            latency_ms = (time.perf_counter() - t0) * 1000
+
+            prediction = {
+                "model": body.model_name,
+                "entity_id": body.entity_id,
+                "result": ml_result,
+                "latency_ms": round(latency_ms, 2),
+                "features_used": list(body.features.keys()),
+            }
+
+            # 3. Cache result
+            cache_key = CacheKey.prediction(body.model_name, body.entity_id)
+            await cache.set_json(cache_key, prediction, TTL.PREDICTION)
+
+            # 4. Publish event
+            await producer.publish(Event(
+                topic=Topic.PREDICTION_GENERATED,
+                tenant_id=tenant.tenant_id,
+                source_service="ml_serving",
+                payload=prediction,
+            ))
+
+            metrics.increment("ml_predictions", labels={"model": body.model_name})
+            return APIResponse(data={**prediction, "cached": False}).to_dict()
+
+        logger.warning(
+            "ML serving API returned %d for model %s",
+            resp.status_code, body.model_name,
+        )
+        raise ServiceUnavailableError(
+            f"ML serving API returned {resp.status_code}"
+        )
+
+    except httpx.RequestError as exc:
+        logger.error("ML serving API unreachable: %s", exc)
+        raise ServiceUnavailableError(
+            "ML inference backend is temporarily unavailable"
+        )
 
 
 @router.post("/predict/batch")
 async def predict_batch(body: BatchPredictionRequest, request: Request):
-    """Batch inference for multiple entities."""
+    """Batch inference for multiple entities.
+
+    Forwards the full batch to the ML serving API's batch endpoint.
+    """
     tenant = request.state.tenant
     tenant.require_permission("ml:inference")
 
     if body.model_name not in AVAILABLE_MODELS:
         raise BadRequestError(f"Unknown model: {body.model_name}")
 
-    predictions = [
-        {
-            "entity_id": entity.get("entity_id", f"unknown_{i}"),
-            "score": 0.0,
-            "label": "stub",
-        }
-        for i, entity in enumerate(body.entities)
-    ]
-
-    return APIResponse(data={
+    client = _get_client()
+    payload = {
         "model": body.model_name,
-        "predictions": predictions,
-        "count": len(predictions),
-    }).to_dict()
+        "instances": [entity.get("features", entity) for entity in body.entities],
+    }
+
+    try:
+        api_key = request.headers.get("X-API-Key", "")
+        headers = {"X-API-Key": api_key} if api_key else {}
+        resp = await client.post("/v1/predict/batch", json=payload, headers=headers)
+
+        if resp.status_code == 200:
+            ml_result = resp.json()
+            metrics.increment("ml_batch_predictions", labels={"model": body.model_name})
+            return APIResponse(data={
+                "model": body.model_name,
+                "predictions": ml_result.get("predictions", []),
+                "count": ml_result.get("count", len(body.entities)),
+            }).to_dict()
+
+        raise ServiceUnavailableError(
+            f"ML serving API returned {resp.status_code}"
+        )
+
+    except httpx.RequestError as exc:
+        logger.error("ML serving API unreachable for batch: %s", exc)
+        raise ServiceUnavailableError(
+            "ML inference backend is temporarily unavailable"
+        )
 
 
 @router.get("/features/{entity_id}")
-async def get_features(entity_id: str, request: Request):
-    """Serve pre-computed features for an entity (feature store)."""
+async def get_features(entity_id: str, request: Request, cache: CacheClient = Depends(get_cache)):
+    """Serve pre-computed features for an entity.
+
+    Looks up cached features from the feature store. Returns empty if
+    no features have been computed yet.
+    """
+    cache_key = CacheKey.custom(f"features:{entity_id}")
+    cached = await cache.get_json(cache_key)
+    if cached:
+        metrics.increment("feature_store_hit")
+        return APIResponse(data={
+            "entity_id": entity_id,
+            "features": cached.get("features", {}),
+            "computed_at": cached.get("computed_at"),
+        }).to_dict()
+
+    metrics.increment("feature_store_miss")
     return APIResponse(data={
         "entity_id": entity_id,
         "features": {},
         "computed_at": None,
+        "message": "No pre-computed features available. Features are populated after the first prediction or via batch pipeline.",
     }).to_dict()
