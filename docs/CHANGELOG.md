@@ -1,5 +1,24 @@
 # Changelog
 
+## v8.3.1 — Model Extraction Defense Layer (2026-03-18)
+
+- **NEW**: `security/model_extraction_defense/` — modular defense layer against model extraction and knowledge distillation attacks
+- **NEW**: Query rate limiter with dual-axis sliding window (per-API-key + per-IP), three time windows each
+- **NEW**: Query pattern detector — detects systematic feature sweeps, input similarity clustering, uniform random probing, bot-like timing
+- **NEW**: Output perturbation layer — logit noise, top-k clipping, entropy smoothing, precision rounding; scales with risk score
+- **NEW**: Model watermarking — HMAC-based probabilistic bias embedding, verifiable across many queries for forensic identification
+- **NEW**: Canary input detector — secret-seed trap inputs with lazy auto-init from observed feature dimensionality
+- **NEW**: Extraction risk scorer — EMA-smoothed aggregate score driving response degradation across 4 tiers
+- **NEW**: Defense metrics — thread-safe counters with Prometheus exposition format export
+- **NEW**: Background cleanup task — daemon thread, asyncio coroutine, and Celery beat modes
+- **NEW**: Admin CLI — watermark verification, canary generation, metrics inspection
+- **NEW**: `ModelExtractionDefenseConfig` in backend settings with 16 env vars and production validation
+- **MODIFIED**: ML serving API — all 8 prediction endpoints + batch endpoint wrapped with defense middleware
+- **MODIFIED**: Backend middleware — extraction defense checks on `/v1/ml/predict` routes
+- **13 new files**, **4 modified files** — gated behind `ENABLE_EXTRACTION_DEFENSE=false` (default off)
+
+---
+
 ## v8.3.0 — Provider Gateway: BYOK, Failover & Usage Metering (2026-03-09)
 
 - **NEW**: `shared/providers/` module — unified abstraction layer for all third-party provider calls (blockchain RPC, block explorers, social APIs, analytics data)

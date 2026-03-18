@@ -495,9 +495,11 @@ async def extraction_defense_middleware(request: Request, call_next):
     api_key = request.headers.get("X-API-Key", request.headers.get("Authorization", "anon"))
     ip_address = request.client.host if request.client else "0.0.0.0"
 
-    # Parse features from the request body (read once, stash for endpoint)
+    # Read body once — Starlette caches the result so downstream endpoint
+    # parsing (Pydantic model binding) still works on repeated reads.
     body_bytes = await request.body()
     features: dict = {}
+    body: dict = {}
     batch_size = 1
     try:
         body = json.loads(body_bytes) if body_bytes else {}

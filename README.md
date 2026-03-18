@@ -80,6 +80,7 @@ import { AetherProvider } from '@aether/react-native-sdk';
 - **ML inference** — 9 production models across edge and server tiers: intent prediction, bot detection, session scoring (edge, < 100ms); identity resolution (GNN), journey prediction (LSTM), churn prediction (XGBoost), LTV prediction (ensemble), anomaly detection (Isolation Forest + AutoEncoder), campaign attribution (Shapley values) (server, SageMaker/ECS)
 - **BYOK provider gateway** — Multi-provider abstraction with Bring Your Own Key support, automatic failover (tenant BYOK → system default → fallback), per-tenant usage metering, and circuit breaker integration across 4 provider categories (blockchain RPC, block explorer, social API, analytics data)
 - **Diagnostics & circuit breakers** — Centralized error registry with SHA-256 fingerprinting, per-operation circuit breakers, and real-time health monitoring
+- **Model extraction defense** — 6-component security layer protecting ML inference against extraction and distillation attacks: dual-axis rate limiting, query pattern anomaly detection, output perturbation, probabilistic watermarking, canary trap inputs, and adaptive risk scoring. Gated behind `ENABLE_EXTRACTION_DEFENSE` feature flag
 
 ## Unified On-Chain Intelligence Graph
 

@@ -1,6 +1,6 @@
 {
   "name": "@aether/web",
-  "version": "8.3.0",
+  "version": "8.3.1",
   "description": "Aether SDK for Web — Behavioral analytics with thin-client architecture",
   "main": "dist/aether.cjs.js",
   "module": "dist/aether.esm.js",

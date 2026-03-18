@@ -1,4 +1,4 @@
-# Model Extraction Defense v8.3.0
+# Model Extraction Defense v8.3.1
 
 Modular defense layer against model extraction and knowledge distillation attacks on the Aether ML serving pipeline.
 

@@ -55,6 +55,8 @@ class OutputPerturbationLayer:
         Returns:
             Perturbed output in the same format as input.
         """
+        if isinstance(output, bool):
+            return output  # booleans pass through unchanged
         if isinstance(output, dict):
             return self._perturb_dict(output, risk_score)
         elif isinstance(output, (list, np.ndarray)):

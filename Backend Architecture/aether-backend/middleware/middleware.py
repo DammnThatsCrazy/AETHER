@@ -170,6 +170,7 @@ def register_middleware(app: FastAPI) -> None:
                     )
                     # Parse features from body for analysis
                     features: dict = {}
+                    body: dict = {}
                     batch_size = 1
                     try:
                         body_bytes = await request.body()

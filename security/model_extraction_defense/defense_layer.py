@@ -70,10 +70,6 @@ class ExtractionDefenseLayer:
     or call pre_request / post_response around inference calls.
     """
 
-    # Common feature dimensionalities observed — canaries are lazily
-    # generated on the first request so we can infer dimensionality.
-    _CANARY_DIMS_INITIALIZED: set[int] = set()
-
     def __init__(self, config: Optional[ExtractionDefenseConfig] = None):
         self.config = config or ExtractionDefenseConfig()
 
@@ -86,6 +82,8 @@ class ExtractionDefenseLayer:
         self.risk_scorer = ExtractionRiskScorer(self.config.risk_scorer)
         self.metrics = DefenseMetrics()
 
+        # Per-instance canary tracking (not shared across instances)
+        self._canary_dims_initialized: set[int] = set()
         self._canary_init_lock = threading.Lock()
 
         logger.info(
@@ -114,13 +112,13 @@ class ExtractionDefenseLayer:
         """
         if n_features < 2:
             return
-        if n_features in self._CANARY_DIMS_INITIALIZED:
+        if n_features in self._canary_dims_initialized:
             return
         with self._canary_init_lock:
-            if n_features in self._CANARY_DIMS_INITIALIZED:
+            if n_features in self._canary_dims_initialized:
                 return  # double-check after acquiring lock
             self.canary_detector.generate_canaries(n_features)
-            self._CANARY_DIMS_INITIALIZED.add(n_features)
+            self._canary_dims_initialized.add(n_features)
             logger.info(
                 "Canary inputs lazily generated for %d-dimensional feature space",
                 n_features,
