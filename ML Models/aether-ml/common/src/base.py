@@ -59,6 +59,20 @@ class ModelStage(str, Enum):
     ARCHIVED = "archived"
 
 
+
+
+class ModelType(str, Enum):
+    INTENT_PREDICTION = "intent_prediction"
+    BOT_DETECTION = "bot_detection"
+    SESSION_SCORER = "session_scorer"
+    IDENTITY_RESOLUTION = "identity_resolution"
+    JOURNEY_PREDICTION = "journey_prediction"
+    CHURN_PREDICTION = "churn_prediction"
+    LTV_PREDICTION = "ltv_prediction"
+    ANOMALY_DETECTION = "anomaly_detection"
+    CAMPAIGN_ATTRIBUTION = "campaign_attribution"
+
+
 # ---------------------------------------------------------------------------
 # Pydantic data models
 # ---------------------------------------------------------------------------
@@ -66,7 +80,9 @@ class ModelStage(str, Enum):
 class ModelMetadata(BaseModel):
     """Immutable snapshot of model provenance and performance."""
 
-    name: str
+    name: str = ""
+    model_id: str = ""
+    model_type: ModelType = ModelType.CHURN_PREDICTION
     version: str = "0.0.1"
     deployment_target: DeploymentTarget = DeploymentTarget.SERVER_ECS
     stage: ModelStage = ModelStage.DEVELOPMENT
@@ -75,6 +91,7 @@ class ModelMetadata(BaseModel):
     updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     description: str = ""
     tags: list[str] = Field(default_factory=list)
+    feature_columns: list[str] = Field(default_factory=list)
 
 
 # ---------------------------------------------------------------------------
@@ -515,7 +532,7 @@ class FeatureEngineer:
             avg_scroll_depth=("max_scroll_depth", "mean"),
         ).reset_index()
 
-        now = pd.Timestamp.now(tz="UTC")
+        now = pd.Timestamp.utcnow().tz_localize(None)
         agg["days_since_first_visit"] = (now - agg["first_seen"]).dt.days
         agg["days_since_last_visit"] = (now - agg["last_seen"]).dt.days
         agg["visit_frequency"] = agg["total_sessions"] / (agg["days_since_first_visit"] + 1)

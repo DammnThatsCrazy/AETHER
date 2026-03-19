@@ -376,3 +376,24 @@ def raw_events() -> pd.DataFrame:
             )
 
     return pd.DataFrame(records)
+
+
+class SyntheticDataFactory:
+    @staticmethod
+    def session_events(n_sessions: int = 10, seed: int = 42) -> pd.DataFrame:
+        rng = np.random.default_rng(seed)
+        rows: list[dict[str, Any]] = []
+        base_time = datetime(2025, 1, 1)
+        for session_idx in range(n_sessions):
+            session_id = f"sess_{session_idx:03d}"
+            event_count = int(rng.integers(5, 12))
+            for event_idx in range(event_count):
+                event_type = str(rng.choice(['page_view', 'click', 'scroll', 'conversion'], p=[0.4, 0.35, 0.2, 0.05]))
+                rows.append({
+                    'session_id': session_id,
+                    'timestamp': base_time + timedelta(minutes=session_idx, seconds=event_idx * 15),
+                    'event_type': event_type,
+                    'page_url': f"/page-{rng.integers(1,5)}",
+                    'scroll_depth': float(rng.uniform(0, 100)) if event_type == 'scroll' else 0.0,
+                })
+        return pd.DataFrame(rows)

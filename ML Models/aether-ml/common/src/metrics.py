@@ -11,6 +11,7 @@ from __future__ import annotations
 import io
 import logging
 import tempfile
+from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Optional
 
@@ -334,3 +335,185 @@ class MetricsCollector:
             regressions,
         )
         return comparison
+
+
+# ------------------------------------------------------------------
+# Backwards-compatible report API used by the ML unit suite
+# ------------------------------------------------------------------
+
+
+@dataclass
+class ClassificationReport:
+    accuracy: float
+    precision: float
+    recall: float
+    f1: float
+    auc_roc: float
+    optimal_threshold: float
+    confusion_matrix: np.ndarray
+    calibration_error: float
+
+    def to_dict(self) -> dict[str, object]:
+        data = asdict(self)
+        data["confusion_matrix"] = self.confusion_matrix.tolist()
+        return data
+
+
+@dataclass
+class RegressionReport:
+    mae: float
+    rmse: float
+    r2: float
+    mape: float
+    percentile_errors: dict[str, float]
+
+    def to_dict(self) -> dict[str, object]:
+        return asdict(self)
+
+
+@dataclass
+class StatisticalTestResult:
+    test_name: str
+    statistic: float
+    p_value: float
+    effect_size: float
+    significant: bool
+
+
+class StatisticalTests:
+    @staticmethod
+    def compare_proportions(successes_a: int, total_a: int, successes_b: int, total_b: int) -> StatisticalTestResult:
+        from math import erf, sqrt
+
+        p1 = successes_a / total_a
+        p2 = successes_b / total_b
+        pooled = (successes_a + successes_b) / (total_a + total_b)
+        se = np.sqrt(max(pooled * (1 - pooled) * ((1 / total_a) + (1 / total_b)), 1e-12))
+        z_score = (p2 - p1) / se
+        cdf = 0.5 * (1 + erf(abs(z_score) / sqrt(2)))
+        p_value = 2 * (1 - cdf)
+        return StatisticalTestResult(
+            test_name='two_proportion_z_test',
+            statistic=float(z_score),
+            p_value=float(p_value),
+            effect_size=float(p2 - p1),
+            significant=bool(p_value < 0.05),
+        )
+
+    @staticmethod
+    def compare_means(sample_a: np.ndarray, sample_b: np.ndarray) -> StatisticalTestResult:
+        from math import erf, sqrt
+
+        a = np.asarray(sample_a, dtype=float)
+        b = np.asarray(sample_b, dtype=float)
+        mean_diff = float(b.mean() - a.mean())
+        variance = (a.var(ddof=1) / len(a)) + (b.var(ddof=1) / len(b))
+        t_stat = mean_diff / np.sqrt(max(variance, 1e-12))
+        cdf = 0.5 * (1 + erf(abs(t_stat) / sqrt(2)))
+        p_value = 2 * (1 - cdf)
+        pooled_sd = np.sqrt(max((((len(a) - 1) * a.var(ddof=1)) + ((len(b) - 1) * b.var(ddof=1))) / max(len(a) + len(b) - 2, 1), 1e-12))
+        return StatisticalTestResult(
+            test_name='welch_t_test',
+            statistic=float(t_stat),
+            p_value=float(p_value),
+            effect_size=float(mean_diff / pooled_sd),
+            significant=bool(p_value < 0.05),
+        )
+
+    @staticmethod
+    def compute_minimum_sample_size(baseline_rate: float, mde: float, alpha: float = 0.05, power: float = 0.8) -> int:
+        z_alpha = 1.96 if alpha <= 0.05 else 1.64
+        z_beta = 0.84 if power >= 0.8 else 0.52
+        pooled = max(baseline_rate * (1 - baseline_rate), 1e-9)
+        n = 2 * pooled * ((z_alpha + z_beta) ** 2) / max(mde ** 2, 1e-9)
+        return int(np.ceil(n))
+
+
+class BusinessMetrics:
+    @staticmethod
+    def lift_over_random(y_true: np.ndarray, y_pred: np.ndarray, top_fraction: float = 0.1) -> float:
+        y_true = np.asarray(y_true)
+        y_pred = np.asarray(y_pred, dtype=float)
+        cutoff = max(1, int(np.ceil(len(y_true) * top_fraction)))
+        ranked = y_true[np.argsort(-y_pred)][:cutoff]
+        return float(ranked.mean() / max(float(y_true.mean()), 1e-12))
+
+    @staticmethod
+    def cumulative_gains(y_true: np.ndarray, y_pred: np.ndarray, bins: int = 10):
+        import pandas as pd
+
+        y_true = np.asarray(y_true)
+        y_pred = np.asarray(y_pred, dtype=float)
+        ranked = y_true[np.argsort(-y_pred)]
+        total_positive = max(float(ranked.sum()), 1.0)
+        rows: list[dict[str, float]] = []
+        for pct in np.linspace(0.1, 1.0, bins):
+            cutoff = max(1, int(np.ceil(len(ranked) * pct)))
+            rows.append({
+                'population_pct': float(pct),
+                'captured_pct': float(ranked[:cutoff].sum() / total_positive),
+            })
+        return pd.DataFrame(rows)
+
+
+class MetricsEngine:
+    @staticmethod
+    def _expected_calibration_error(y_true: np.ndarray, y_pred_proba: np.ndarray, bins: int = 10) -> float:
+        y_true = np.asarray(y_true)
+        y_pred_proba = np.asarray(y_pred_proba, dtype=float)
+        edges = np.linspace(0.0, 1.0, bins + 1)
+        total = len(y_true)
+        ece = 0.0
+        for start, end in zip(edges[:-1], edges[1:]):
+            mask = (y_pred_proba >= start) & ((y_pred_proba < end) if end < 1.0 else (y_pred_proba <= end))
+            if not mask.any():
+                continue
+            confidence = float(y_pred_proba[mask].mean())
+            accuracy = float(y_true[mask].mean())
+            ece += abs(accuracy - confidence) * (mask.sum() / total)
+        return float(ece)
+
+    @classmethod
+    def classification_report(cls, y_true: np.ndarray, y_pred_proba: np.ndarray) -> ClassificationReport:
+        from sklearn.metrics import confusion_matrix
+
+        y_true = np.asarray(y_true)
+        y_pred_proba = np.asarray(y_pred_proba, dtype=float)
+        best_metrics: dict[str, float] | None = None
+        best_threshold = 0.5
+        best_pred = (y_pred_proba >= 0.5).astype(int)
+        best_f1 = -1.0
+        for threshold in np.linspace(0.05, 0.95, 19):
+            pred = (y_pred_proba >= threshold).astype(int)
+            metrics = MetricsCollector.compute_classification_metrics(y_true, pred, y_pred_proba)
+            if metrics['f1'] > best_f1:
+                best_f1 = metrics['f1']
+                best_threshold = float(threshold)
+                best_pred = pred
+                best_metrics = metrics
+        assert best_metrics is not None
+        return ClassificationReport(
+            accuracy=float(best_metrics['accuracy']),
+            precision=float(best_metrics['precision']),
+            recall=float(best_metrics['recall']),
+            f1=float(best_metrics['f1']),
+            auc_roc=float(best_metrics.get('auc_roc', 0.0)),
+            optimal_threshold=best_threshold,
+            confusion_matrix=confusion_matrix(y_true, best_pred),
+            calibration_error=cls._expected_calibration_error(y_true, y_pred_proba),
+        )
+
+    @staticmethod
+    def regression_report(y_true: np.ndarray, y_pred: np.ndarray) -> RegressionReport:
+        metrics = MetricsCollector.compute_regression_metrics(y_true, y_pred)
+        abs_error = np.abs(np.asarray(y_true, dtype=float) - np.asarray(y_pred, dtype=float))
+        return RegressionReport(
+            mae=float(metrics['mae']),
+            rmse=float(metrics['rmse']),
+            r2=float(metrics['r2']),
+            mape=float(metrics['mape']),
+            percentile_errors={
+                'p50_error': float(np.percentile(abs_error, 50)),
+                'p95_error': float(np.percentile(abs_error, 95)),
+            },
+        )

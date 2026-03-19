@@ -614,3 +614,100 @@ class StreamingFeatureProcessor:
                     del self._anomaly_state[bucket_key]
             except ValueError:
                 pass
+
+
+# ------------------------------------------------------------------
+# Legacy processor wrappers expected by the ML tests
+# ------------------------------------------------------------------
+
+
+class SessionFeatureProcessor:
+    def __init__(self) -> None:
+        self._processor = StreamingFeatureProcessor()
+        self._sessions = self._processor._session_state
+
+    def process_event(self, event: dict[str, Any]) -> dict[str, Any]:
+        flat_event = {**event, **event.get('properties', {})}
+        if flat_event.get('type') == 'track' and flat_event.get('event') == 'click':
+            flat_event['type'] = 'click'
+        if flat_event.get('type') == 'track' and flat_event.get('event') == 'scroll_depth':
+            flat_event['type'] = 'scroll'
+            flat_event['scroll_depth'] = flat_event.get('depth', flat_event.get('scroll_depth', 0.0))
+        if flat_event.get('type') == 'page' and 'url' in flat_event:
+            flat_event['page_url'] = flat_event['url']
+        result = self._processor.compute_realtime_session_features(event.get('sessionId', event.get('session_id', '')), flat_event)
+        return {
+            'event_count': result['session_event_count'],
+            'page_count': result['session_page_count'],
+            'click_count': result['session_click_count'],
+            'max_scroll_depth': result['session_max_scroll_depth'],
+        }
+
+
+class IdentityFeatureProcessor:
+    def __init__(self) -> None:
+        self._state: dict[str, dict[str, Any]] = {}
+
+    def process_event(self, event: dict[str, Any]) -> dict[str, Any]:
+        identity_id = event.get('anonymousId') or event.get('identity_id') or 'anonymous'
+        session_id = event.get('sessionId') or event.get('session_id') or 'unknown'
+        state = self._state.setdefault(identity_id, {'sessions': set(), 'events': 0})
+        state['sessions'].add(session_id)
+        state['events'] += 1
+        return {'total_sessions': len(state['sessions']), 'total_events': state['events']}
+
+
+class WalletFeatureProcessor:
+    def __init__(self) -> None:
+        self._wallets: dict[str, dict[str, Any]] = {}
+
+    def process_event(self, event: dict[str, Any]) -> dict[str, Any] | None:
+        if event.get('type') != 'transaction':
+            return None
+        props = event.get('properties', {})
+        address = props.get('address') or event.get('address')
+        if not address:
+            return None
+        state = self._wallets.setdefault(address, {'tx_count': 0, 'chains': set()})
+        state['tx_count'] += 1
+        if props.get('chainId') is not None:
+            state['chains'].add(props['chainId'])
+        return {'tx_count': state['tx_count'], 'unique_chains': len(state['chains'])}
+
+
+class _AggregateState:
+    def __init__(self) -> None:
+        self.values: list[float] = []
+        self.last_updated: float = time.time()
+
+
+class WindowedAggregator:
+    def __init__(self, window_seconds: int = 300) -> None:
+        self.window_seconds = window_seconds
+        self._states: dict[str, dict[str, _AggregateState]] = defaultdict(dict)
+
+    def update(self, entity_id: str, metric: str, value: float) -> None:
+        state = self._states[entity_id].setdefault(metric, _AggregateState())
+        state.values.append(float(value))
+        state.last_updated = time.time()
+
+    def get_features(self, entity_id: str) -> dict[str, float]:
+        features: dict[str, float] = {}
+        for metric, state in self._states.get(entity_id, {}).items():
+            features[f'{metric}_count'] = len(state.values)
+            features[f'{metric}_sum'] = float(sum(state.values))
+        return features
+
+    def expire_stale(self, max_idle_seconds: float = 3600.0) -> int:
+        now = time.time()
+        expired = 0
+        for entity_id in list(self._states.keys()):
+            metrics = self._states[entity_id]
+            if metrics and all((now - metric_state.last_updated) > max_idle_seconds for metric_state in metrics.values()):
+                del self._states[entity_id]
+                expired += 1
+        return expired
+
+    @property
+    def entity_count(self) -> int:
+        return len(self._states)

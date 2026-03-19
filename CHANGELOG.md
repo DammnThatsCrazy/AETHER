@@ -6,6 +6,15 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ---
 
+## [Unreleased]
+
+### Fixed
+
+- Restored ML compatibility interfaces so the `ML Models/aether-ml/tests` suite passes again after prior API refactors removed legacy entry points.
+- Fixed timezone mismatches in identity feature aggregation that caused tz-aware vs tz-naive subtraction failures.
+- Hardened the serving API test/dev path with deterministic fallback models and corrected response-contract mismatches for `/models`, batch prediction errors, and missing feature validation.
+- Expanded repository health automation so CI covers both the root test suite and the ML subproject suite.
+
 ## [8.3.1] — 2026-03-18
 
 ### Model Extraction Defense Layer

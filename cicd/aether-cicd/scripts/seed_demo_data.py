@@ -547,6 +547,8 @@ def clear_demo_data() -> None:
 # ---------------------------------------------------------------------------
 
 def main() -> None:
+    global BASE_URL, API_KEY
+
     parser = argparse.ArgumentParser(description="Seed Aether demo environment with sample data")
     parser.add_argument("--url", default=BASE_URL, help="Demo API base URL")
     parser.add_argument("--api-key", default=API_KEY, help="Demo API key")
@@ -560,7 +562,6 @@ def main() -> None:
 
     args = parser.parse_args()
 
-    global BASE_URL, API_KEY
     BASE_URL = args.url.rstrip("/")
     API_KEY = args.api_key
 

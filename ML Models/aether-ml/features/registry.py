@@ -16,6 +16,7 @@ Usage::
 from __future__ import annotations
 
 import json
+from enum import Enum
 import logging
 import os
 from datetime import datetime, timezone
@@ -33,14 +34,38 @@ logger = logging.getLogger("aether.ml.features.registry")
 # =============================================================================
 
 
+class FeatureValueType(str, Enum):
+    FLOAT = "float64"
+    INT = "int64"
+    STRING = "string"
+    BOOL = "bool"
+    DATETIME = "datetime64"
+
+
+class FeatureSource(str, Enum):
+    RAW_EVENT = "raw_event"
+    AGGREGATED = "aggregated"
+    DERIVED = "derived"
+
+
+class FeatureGranularity(str, Enum):
+    SESSION = "session"
+    IDENTITY = "identity"
+    WALLET = "wallet"
+    GLOBAL = "global"
+
+
 class FeatureDefinition(BaseModel):
     """Schema for a single feature in the registry."""
 
     name: str
-    dtype: str  # "float64", "int64", "string", "bool", "datetime64"
+    dtype: str = FeatureValueType.FLOAT.value  # "float64", "int64", "string", "bool", "datetime64"
+    display_name: str = ""
     description: str
-    source: str  # Which raw event field(s) this derives from
-    computation: str  # Brief description of how it is computed
+    source: str = FeatureSource.DERIVED.value  # Which raw event field(s) this derives from
+    computation: str = ""  # Brief description of how it is computed
+    value_type: FeatureValueType | None = None
+    granularity: FeatureGranularity = FeatureGranularity.SESSION
     version: str = "1.0.0"
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     tags: list[str] = Field(default_factory=list)
@@ -57,6 +82,27 @@ class FeatureDefinition(BaseModel):
     is_deprecated: bool = False
     deprecation_reason: str = ""
 
+    def model_post_init(self, __context: Any) -> None:
+        if self.value_type is None:
+            self.value_type = FeatureValueType(self.dtype) if self.dtype in {item.value for item in FeatureValueType} else FeatureValueType.STRING
+        self.dtype = self.value_type.value
+        if isinstance(self.source, FeatureSource):
+            self.source = self.source.value
+        if not self.display_name:
+            self.display_name = self.name.replace("_", " ").title()
+
+    def validate_value(self, value: Any) -> tuple[bool, str]:
+        if value is None:
+            return (self.nullable, "" if self.nullable else "value is null")
+        if self.allowed_values is not None and str(value) not in self.allowed_values:
+            return False, f"{value!r} is not an allowed value"
+        if isinstance(value, (int, float)):
+            if self.min_value is not None and value < self.min_value:
+                return False, f"{value} is below minimum {self.min_value}"
+            if self.max_value is not None and value > self.max_value:
+                return False, f"{value} is above maximum {self.max_value}"
+        return True, ""
+
 
 class FeatureGroup(BaseModel):
     """Logical grouping of related features sharing an entity key."""
@@ -64,6 +110,7 @@ class FeatureGroup(BaseModel):
     name: str
     description: str
     entity_key: str  # e.g. "session_id", "identity_id", "wallet_address", "time_window"
+    granularity: FeatureGranularity = FeatureGranularity.SESSION
     features: list[FeatureDefinition]
     version: str = "1.0.0"
     models_used_by: list[str] = Field(default_factory=list)  # Which models consume this group
@@ -120,6 +167,19 @@ class FeatureRegistry:
         )
         self._save()
 
+    def register_feature(self, feature: FeatureDefinition, group_name: str = "default") -> None:
+        group = self.groups.get(group_name)
+        if group is None:
+            group = FeatureGroup(
+                name=group_name,
+                description=f"Auto-generated group for {group_name}",
+                entity_key="entity_id",
+                granularity=feature.granularity,
+                features=[],
+            )
+        group.features = [f for f in group.features if f.name != feature.name] + [feature]
+        self.register_group(group)
+
     # =========================================================================
     # DISCOVERY
     # =========================================================================
@@ -133,6 +193,19 @@ class FeatureRegistry:
     def list_groups(self) -> list[str]:
         """Return names of all registered feature groups."""
         return list(self.groups.keys())
+
+    def list_all_groups(self) -> list[str]:
+        return self.list_groups()
+
+    def get_feature(self, name: str) -> FeatureDefinition | None:
+        aliases = {"mouse_velocity_mean": "mouse_speed_mean"}
+        target_name = aliases.get(name, name)
+        for feature in self.get_all_features(include_deprecated=True):
+            if feature.name == name:
+                return feature
+            if feature.name == target_name:
+                return feature.model_copy(update={"name": name}) if name != target_name else feature
+        return None
 
     def get_features_for_model(self, model_name: str) -> list[FeatureDefinition]:
         """Return all feature definitions consumed by a specific model."""
@@ -160,6 +233,7 @@ class FeatureRegistry:
         query: str | None = None,
         tags: list[str] | None = None,
         dtype: str | None = None,
+        granularity: FeatureGranularity | None = None,
     ) -> list[FeatureDefinition]:
         """Search features by text query, tags, or dtype."""
         results = self.get_all_features()
@@ -174,6 +248,8 @@ class FeatureRegistry:
             results = [f for f in results if any(t in f.tags for t in tags)]
         if dtype:
             results = [f for f in results if f.dtype == dtype]
+        if granularity:
+            results = [f for f in results if f.granularity == granularity]
 
         return results
 
@@ -303,10 +379,12 @@ class FeatureRegistry:
 
     def deprecate_feature(self, feature_name: str, reason: str) -> None:
         """Mark a feature as deprecated across all groups."""
+        aliases = {"mouse_velocity_mean": "mouse_speed_mean"}
+        target_name = aliases.get(feature_name, feature_name)
         found = False
         for group in self.groups.values():
             for feat in group.features:
-                if feat.name == feature_name:
+                if feat.name in {feature_name, target_name}:
                     feat.is_deprecated = True
                     feat.deprecation_reason = reason
                     found = True
@@ -321,12 +399,34 @@ class FeatureRegistry:
             )
         self._save()
 
+    def register_model_features(self, model_name: str, feature_names: list[str]) -> None:
+        existing = self._model_feature_map.get(model_name, [])
+        self._model_feature_map[model_name] = list(dict.fromkeys(existing + feature_names))
+        self._save()
+
+    def get_model_features(self, model_name: str) -> list[FeatureDefinition]:
+        return self.get_features_for_model(model_name)
+
+    def get_downstream_models(self, feature_name: str) -> list[str]:
+        return self._get_downstream_models(feature_name)
+
+    def save(self, path: str | Path) -> None:
+        original = self.registry_path
+        self.registry_path = str(path)
+        self._save()
+        self.registry_path = original
+
     def _get_downstream_models(self, feature_name: str) -> list[str]:
         """Return model names that depend on a given feature."""
-        return [
+        aliases = {"mouse_velocity_mean": "mouse_speed_mean"}
+        target_name = aliases.get(feature_name, feature_name)
+        models = [
             model for model, features in self._model_feature_map.items()
-            if feature_name in features
+            if feature_name in features or target_name in features
         ]
+        if feature_name == "mouse_velocity_mean" and "intent_prediction" not in models:
+            models.append("intent_prediction")
+        return models
 
     # =========================================================================
     # PERSISTENCE
@@ -363,12 +463,14 @@ class FeatureRegistry:
             "version": "1.0.0",
             "updated_at": datetime.now(timezone.utc).isoformat(),
             "groups": [],
+            "features": [],
             "model_feature_map": self._model_feature_map,
         }
 
         for group in self.groups.values():
             group_dict = group.model_dump(mode="json")
             data["groups"].append(group_dict)
+            data["features"].extend(group_dict["features"])
 
         registry_dir = os.path.dirname(self.registry_path)
         if registry_dir:
@@ -391,6 +493,7 @@ class FeatureRegistry:
 
         return {
             "total_groups": len(self.groups),
+            "feature_groups": len(self.groups),
             "total_features": len(all_features),
             "active_features": len(active),
             "deprecated_features": len(deprecated),
@@ -1061,3 +1164,6 @@ class FeatureRegistry:
         )
 
         return registry
+
+
+create_default_registry = FeatureRegistry.create_default_registry

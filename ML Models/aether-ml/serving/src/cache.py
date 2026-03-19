@@ -378,3 +378,20 @@ def _round_value(v: Any) -> str:
     if isinstance(v, float):
         return f"{v:.4f}"
     return str(v)
+
+
+class CacheKeyBuilder:
+    @staticmethod
+    def build(model_name: str, model_version: str, features: dict[str, Any], prefix: str = 'aether:pred:') -> str:
+        sorted_items = sorted(features.items(), key=lambda kv: kv[0])
+        parts = '|'.join(f"{k}={_round_value(v)}" for k, v in sorted_items)
+        digest = hashlib.md5(f"{model_name}:{model_version}:{parts}".encode()).hexdigest()[:16]
+        return f"{prefix}{model_name}:v{model_version}:{digest}"
+
+    @staticmethod
+    def build_entity(model_name: str, model_version: str, entity_type: str, entity_id: str, prefix: str = 'aether:pred:') -> str:
+        return f"{prefix}{model_name}:{entity_type}:{entity_id}:v{model_version}"
+
+    @staticmethod
+    def invalidation_pattern(model_name: str, prefix: str = 'aether:pred:') -> str:
+        return f"{prefix}{model_name}:*"

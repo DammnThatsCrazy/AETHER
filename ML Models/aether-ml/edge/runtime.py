@@ -7,6 +7,7 @@ Supports ONNX (via onnxruntime), sklearn (via joblib), and TFLite formats.
 from __future__ import annotations
 
 import logging
+from dataclasses import dataclass, field
 import os
 import time
 from pathlib import Path
@@ -401,3 +402,76 @@ class EdgeInferenceRuntime:
         if self._feature_names:
             return len(self._feature_names)
         return 10  # conservative default for edge models
+
+
+@dataclass
+class EdgeRuntimeConfig:
+    model_path: str = ''
+    runtime: str = 'auto'
+    max_latency_ms: float = 100.0
+
+
+@dataclass
+class EdgePrediction:
+    outputs: dict[str, Any]
+    latency_ms: float
+    model_format: str
+    error: str | None = None
+    max_latency_ms: float = 100.0
+
+    @property
+    def is_valid(self) -> bool:
+        return self.error is None and self.latency_ms <= self.max_latency_ms
+
+
+class PredictionCache:
+    def __init__(self, max_size: int = 1024, ttl_seconds: int = 300) -> None:
+        self.max_size = max_size
+        self.ttl_seconds = ttl_seconds
+        self._entries: dict[str, tuple[float, Any]] = {}
+
+    @staticmethod
+    def hash_features(features: dict[str, Any]) -> str:
+        import hashlib, json
+        payload = json.dumps(features, sort_keys=True, separators=(',', ':'))
+        return hashlib.sha256(payload.encode()).hexdigest()[:16]
+
+    def put(self, key: str, value: Any) -> None:
+        self._entries[key] = (time.time(), value)
+        while len(self._entries) > self.max_size:
+            oldest = min(self._entries, key=lambda item: self._entries[item][0])
+            del self._entries[oldest]
+
+    def get(self, key: str) -> Any:
+        entry = self._entries.get(key)
+        if entry is None:
+            return None
+        created_at, value = entry
+        if time.time() - created_at > self.ttl_seconds:
+            del self._entries[key]
+            return None
+        return value
+
+    @property
+    def size(self) -> int:
+        return len(self._entries)
+
+
+class SklearnBackend:
+    def __init__(self, model: Any) -> None:
+        self.model = model
+
+
+class EdgeModelManager:
+    def __init__(self) -> None:
+        self.models: dict[str, Any] = {}
+
+
+class EdgeRuntime(EdgeInferenceRuntime):
+    def __init__(self, config: EdgeRuntimeConfig | str) -> None:
+        if isinstance(config, EdgeRuntimeConfig):
+            super().__init__(config.model_path, runtime=config.runtime)
+            self.config = config
+        else:
+            super().__init__(config)
+            self.config = EdgeRuntimeConfig(model_path=config)

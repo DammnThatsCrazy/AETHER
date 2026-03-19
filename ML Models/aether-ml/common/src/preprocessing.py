@@ -9,7 +9,9 @@ share identical transformations.
 
 from __future__ import annotations
 
+import json
 import logging
+from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Optional
 
@@ -250,3 +252,159 @@ class PreprocessingPipeline:
                 "Install with: pip install imbalanced-learn"
             )
             return X, y
+
+
+# ------------------------------------------------------------------
+# Lightweight dataframe-first preprocessing API used by legacy tests
+# ------------------------------------------------------------------
+
+
+@dataclass
+class PreprocessingConfig:
+    scale_method: str = 'standard'
+    outlier_method: str | None = None
+    outlier_threshold: float = 1.5
+    drop_high_null_threshold: float = 0.95
+
+
+@dataclass
+class PreprocessingState:
+    numeric_columns: list[str] = field(default_factory=list)
+    categorical_columns: list[str] = field(default_factory=list)
+    medians: dict[str, float] = field(default_factory=dict)
+    modes: dict[str, object] = field(default_factory=dict)
+    means: dict[str, float] = field(default_factory=dict)
+    stds: dict[str, float] = field(default_factory=dict)
+    mins: dict[str, float] = field(default_factory=dict)
+    maxs: dict[str, float] = field(default_factory=dict)
+    dropped_columns: list[str] = field(default_factory=list)
+
+
+class Preprocessor:
+    def __init__(self, config: PreprocessingConfig | None = None) -> None:
+        self.config = config or PreprocessingConfig()
+        self.state = PreprocessingState()
+        self.is_fitted = False
+
+    def fit(self, df: pd.DataFrame) -> 'Preprocessor':
+        working = df.copy()
+        null_fraction = working.isna().mean()
+        self.state.dropped_columns = [c for c, frac in null_fraction.items() if frac > self.config.drop_high_null_threshold]
+        working = working.drop(columns=self.state.dropped_columns, errors='ignore')
+        self.state.numeric_columns = list(working.select_dtypes(include=[np.number]).columns)
+        self.state.categorical_columns = [c for c in working.columns if c not in self.state.numeric_columns]
+        for col in self.state.numeric_columns:
+            series = working[col].astype(float)
+            self.state.medians[col] = float(series.median()) if not series.dropna().empty else 0.0
+            self.state.means[col] = float(series.mean()) if not series.dropna().empty else 0.0
+            std = float(series.std(ddof=1)) if len(series.dropna()) > 1 else 1.0
+            self.state.stds[col] = std if std > 0 else 1.0
+            self.state.mins[col] = float(series.min()) if not series.dropna().empty else 0.0
+            self.state.maxs[col] = float(series.max()) if not series.dropna().empty else 1.0
+        for col in self.state.categorical_columns:
+            mode = working[col].mode(dropna=True)
+            self.state.modes[col] = mode.iloc[0] if not mode.empty else 'unknown'
+        self.is_fitted = True
+        return self
+
+    def transform(self, df: pd.DataFrame) -> pd.DataFrame:
+        if not self.is_fitted:
+            raise RuntimeError('Preprocessor has not been fitted. Call fit() first.')
+        working = df.copy().drop(columns=self.state.dropped_columns, errors='ignore')
+        for col in self.state.numeric_columns:
+            if col not in working:
+                continue
+            series = working[col].astype(float).fillna(self.state.medians[col])
+            if self.config.outlier_method == 'iqr':
+                q1 = series.quantile(0.25)
+                q3 = series.quantile(0.75)
+                iqr = q3 - q1
+                lower = q1 - self.config.outlier_threshold * iqr
+                upper = q3 + self.config.outlier_threshold * iqr
+                series = series.clip(lower=lower, upper=upper)
+            if self.config.scale_method == 'standard':
+                series = (series - self.state.means[col]) / self.state.stds[col]
+            elif self.config.scale_method == 'minmax':
+                denom = max(self.state.maxs[col] - self.state.mins[col], 1e-9)
+                series = (series - self.state.mins[col]) / denom
+            working[col] = series
+        for col in self.state.categorical_columns:
+            if col in working:
+                working[col] = working[col].fillna(self.state.modes[col])
+        return working
+
+    def fit_transform(self, df: pd.DataFrame) -> pd.DataFrame:
+        return self.fit(df).transform(df)
+
+    def save(self, path: str | Path) -> None:
+        path = Path(path)
+        path.write_text(json.dumps(asdict(self.state), indent=2, default=str))
+
+    def load(self, path: str | Path) -> None:
+        data = json.loads(Path(path).read_text())
+        self.state = PreprocessingState(**data)
+        self.is_fitted = True
+
+
+@dataclass
+class ColumnProfile:
+    name: str
+    dtype: str
+    null_count: int
+    is_numeric: bool
+
+
+class DataProfiler:
+    @staticmethod
+    def profile(df: pd.DataFrame) -> list[ColumnProfile]:
+        profiles: list[ColumnProfile] = []
+        for col in df.columns:
+            profiles.append(ColumnProfile(
+                name=col,
+                dtype=str(df[col].dtype),
+                null_count=int(df[col].isna().sum()),
+                is_numeric=bool(pd.api.types.is_numeric_dtype(df[col])),
+            ))
+        return profiles
+
+    @staticmethod
+    def generate_report(df: pd.DataFrame) -> dict[str, object]:
+        return {
+            'shape': list(df.shape),
+            'columns': list(df.columns),
+            'profiles': [asdict(profile) for profile in DataProfiler.profile(df)],
+        }
+
+
+class ClassBalancer:
+    @staticmethod
+    def undersample(X: pd.DataFrame, y: pd.Series, random_state: int = 42) -> tuple[pd.DataFrame, pd.Series]:
+        rng = np.random.default_rng(random_state)
+        counts = y.value_counts()
+        target = int(counts.min())
+        indices = []
+        for label in counts.index:
+            label_idx = y[y == label].index.to_numpy()
+            indices.extend(rng.choice(label_idx, size=target, replace=False).tolist())
+        indices = sorted(indices)
+        return X.loc[indices].reset_index(drop=True), y.loc[indices].reset_index(drop=True)
+
+    @staticmethod
+    def oversample_minority(X: pd.DataFrame, y: pd.Series, random_state: int = 42) -> tuple[pd.DataFrame, pd.Series]:
+        rng = np.random.default_rng(random_state)
+        counts = y.value_counts()
+        target = int(counts.max())
+        parts_x = []
+        parts_y = []
+        for label in counts.index:
+            label_idx = y[y == label].index.to_numpy()
+            sampled = rng.choice(label_idx, size=target, replace=len(label_idx) < target)
+            parts_x.append(X.loc[sampled])
+            parts_y.append(y.loc[sampled])
+        return pd.concat(parts_x, ignore_index=True), pd.concat(parts_y, ignore_index=True)
+
+    @staticmethod
+    def compute_class_weights(y: pd.Series) -> dict[object, float]:
+        counts = y.value_counts()
+        total = counts.sum()
+        return {label: float(total / (len(counts) * count)) for label, count in counts.items()}

@@ -225,6 +225,99 @@ class ModelInfo(BaseModel):
 
 
 # =============================================================================
+# TEST / FALLBACK STUB MODELS
+# =============================================================================
+
+
+class _StubIntentModel:
+    version = "test-stub"
+
+    def predict_full(self, df: pd.DataFrame) -> dict[str, Any]:
+        n = len(df)
+        action_proba = np.tile(np.array([[0.1, 0.2, 0.6, 0.1]]), (n, 1))
+        return {
+            "action": ["browse"] * n,
+            "action_proba": action_proba,
+            "exit_risk": np.full(n, 0.2),
+            "conversion_proba": np.full(n, 0.35),
+        }
+
+
+class _StubBotModel:
+    version = "test-stub"
+
+    def predict(self, df: pd.DataFrame) -> np.ndarray:
+        return np.zeros(len(df), dtype=int)
+
+    def predict_proba(self, df: pd.DataFrame) -> np.ndarray:
+        return np.tile(np.array([[0.8, 0.2]]), (len(df), 1))
+
+
+class _StubSessionModel:
+    version = "test-stub"
+
+    def predict_full(self, df: pd.DataFrame) -> dict[str, Any]:
+        n = len(df)
+        return {
+            "engagement_score": np.full(n, 50),
+            "conversion_proba": np.full(n, 0.4),
+        }
+
+
+class _StubChurnModel:
+    version = "test-stub"
+
+    def predict(self, df: pd.DataFrame) -> np.ndarray:
+        return np.full(len(df), 0.25)
+
+    def predict_with_factors(self, df: pd.DataFrame) -> pd.DataFrame:
+        return pd.DataFrame({
+            "churn_probability": np.full(len(df), 0.25),
+            "top_factor_1": ["days_since_last_visit"] * len(df),
+            "top_factor_2": ["session_count_30d"] * len(df),
+            "top_factor_3": ["email_open_rate"] * len(df),
+        })
+
+
+class _StubLTVModel:
+    version = "test-stub"
+
+    def predict(self, df: pd.DataFrame) -> np.ndarray:
+        return np.full(len(df), 123.45)
+
+
+class _StubJourneyModel:
+    version = "test-stub"
+
+    def predict_journey(self, df: pd.DataFrame, n_steps: int = 5) -> list[dict[str, Any]]:
+        return [{"predicted_journey": [{"event": "browse", "probability": 0.5}] * n_steps, "conversion_reached": False}]
+
+
+class _StubAttributionModel:
+    version = "test-stub"
+
+    def attribute(self, journeys: pd.DataFrame, method: str = "linear") -> pd.DataFrame:
+        rows = journeys.copy()
+        denom = max(len(rows), 1)
+        rows["credit"] = 1.0 / denom
+        return rows[[col for col in rows.columns if col in {"channel", "touchpoint_index", "conversion_value", "credit"}]]
+
+
+class _StubIdentityModel:
+    version = "test-stub"
+
+    def predict(self, df: pd.DataFrame) -> np.ndarray:
+        return np.ones(len(df), dtype=int)
+
+
+class _StubAnomalyModel:
+    version = "test-stub"
+
+    def predict(self, df: pd.DataFrame) -> np.ndarray:
+        return np.zeros(len(df), dtype=int)
+
+
+# =============================================================================
 # MODEL SERVER
 # =============================================================================
 
@@ -310,6 +403,25 @@ class ModelServer:
                 self._statuses[name] = "error"
                 logger.warning("Failed to load %s: %s", name, exc)
 
+        if not loaded:
+            stub_models = {
+                "intent_prediction": _StubIntentModel(),
+                "bot_detection": _StubBotModel(),
+                "session_scorer": _StubSessionModel(),
+                "churn_prediction": _StubChurnModel(),
+                "ltv_prediction": _StubLTVModel(),
+                "journey_prediction": _StubJourneyModel(),
+                "campaign_attribution": _StubAttributionModel(),
+                "anomaly_detection": _StubAnomalyModel(),
+                "identity_resolution": _StubIdentityModel(),
+            }
+            for name, model in stub_models.items():
+                self._models[name] = model
+                self._versions[name] = getattr(model, "version", "test-stub")
+                self._statuses[name] = "loaded"
+            loaded = list(stub_models.keys())
+            logger.info("No serialized models found; loaded in-process stub models for test/dev execution")
+
         return loaded
 
     # --------------------------------------------------------------------- #
@@ -322,6 +434,8 @@ class ModelServer:
         Raises:
             HTTPException: If the model is not loaded.
         """
+        if not self._models:
+            self.load_all_models()
         if name not in self._models:
             raise HTTPException(
                 status_code=503,
@@ -441,10 +555,16 @@ class ModelServer:
 server = ModelServer()
 
 
+def _ensure_models_loaded() -> None:
+    if not server.loaded_models():
+        server.load_all_models()
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Application lifespan: load models on startup, clean up on shutdown."""
-    loaded = server.load_all_models()
+    _ensure_models_loaded()
+    loaded = server.loaded_models()
     logger.info("Serving %d models: %s", len(loaded), loaded)
 
     # Start extraction defense cleanup task if defense is enabled
@@ -593,6 +713,7 @@ def _apply_output_defense(request: Request, value: float, features: dict) -> flo
 @app.get("/health", response_model=HealthResponse)
 async def health() -> HealthResponse:
     """Return service health status, loaded models, and uptime."""
+    _ensure_models_loaded()
     return HealthResponse(
         status="healthy",
         version="4.0.0",
@@ -601,10 +722,11 @@ async def health() -> HealthResponse:
     )
 
 
-@app.get("/models", response_model=list[ModelInfo])
-async def list_models() -> list[ModelInfo]:
+@app.get("/models")
+async def list_models() -> dict[str, list[dict[str, Any]]]:
     """Return metadata for every known model including load status."""
-    return server.model_info()
+    _ensure_models_loaded()
+    return {"models": [model.model_dump() for model in server.model_info()]}
 
 
 # =============================================================================
@@ -731,8 +853,6 @@ async def predict_churn(req: ChurnPredictionRequest, request: Request) -> ChurnP
     the online feature store using ``identity_id``.
     """
     t0 = time.perf_counter()
-    model = server.get_model("churn_prediction")
-
     features = req.features
     if features is None:
         raise HTTPException(
@@ -740,6 +860,7 @@ async def predict_churn(req: ChurnPredictionRequest, request: Request) -> ChurnP
             detail="Features are required. Pass them directly or configure a feature store.",
         )
 
+    model = server.get_model("churn_prediction")
     df = pd.DataFrame([features])
     result = model.predict_with_factors(df)
 
@@ -778,8 +899,6 @@ async def predict_ltv(req: LTVPredictionRequest, request: Request) -> LTVPredict
     the online feature store using ``identity_id``.
     """
     t0 = time.perf_counter()
-    model = server.get_model("ltv_prediction")
-
     features = req.features
     if features is None:
         raise HTTPException(
@@ -787,6 +906,7 @@ async def predict_ltv(req: LTVPredictionRequest, request: Request) -> LTVPredict
             detail="Features are required. Pass them directly or configure a feature store.",
         )
 
+    model = server.get_model("ltv_prediction")
     df = pd.DataFrame([features])
     prediction = model.predict(df)
 
@@ -907,7 +1027,10 @@ async def batch_predict(req: BatchPredictionRequest, request: Request) -> BatchP
         raise HTTPException(status_code=400, detail="instances list must not be empty")
 
     t0 = time.perf_counter()
-    model = server.get_model(req.model)
+    try:
+        model = server.get_model(req.model)
+    except HTTPException as exc:
+        raise HTTPException(status_code=500, detail=exc.detail) from exc
 
     df = pd.DataFrame(req.instances)
     raw_predictions = model.predict(df)

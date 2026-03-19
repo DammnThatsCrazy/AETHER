@@ -349,7 +349,7 @@ class FeaturePipeline:
             )
 
             # Roll up to identity level
-            now = pd.Timestamp.now(tz="UTC")
+            now = pd.Timestamp.utcnow().tz_localize(None)
             identity_agg = session_agg.groupby(id_col).agg(
                 total_sessions=("session_id", "nunique"),
                 total_events=("session_event_count", "sum"),
@@ -360,7 +360,7 @@ class FeaturePipeline:
                 avg_pages_per_session=("session_page_count", "mean"),
             ).reset_index()
         else:
-            now = pd.Timestamp.now(tz="UTC")
+            now = pd.Timestamp.utcnow().tz_localize(None)
             identity_agg = events.groupby(id_col).agg(
                 total_sessions=("session_id", "nunique") if "session_id" in events.columns else ("timestamp", "count"),
                 total_events=("timestamp", "count"),
