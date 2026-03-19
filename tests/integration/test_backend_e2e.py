@@ -10,6 +10,9 @@ Tests full cross-service flows:
 
 These tests exercise the actual service code without HTTP transport
 by calling route handler functions directly with mocked request state.
+
+Requires backend dependencies (fastapi, pydantic, httpx). Skipped
+gracefully if not installed.
 """
 
 from __future__ import annotations
@@ -17,13 +20,22 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import json
+import sys
 import threading
+
+import pytest
+
+# Add backend path early so service imports resolve
+sys.path.insert(0, "Backend Architecture/aether-backend")
+
+# Skip entire module if backend deps aren't installed
+pytest.importorskip("fastapi", reason="Backend deps not installed (pip install -e '.[backend]')")
+
 import uuid
 from datetime import datetime, timezone
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
-import pytest
 
 # =========================================================================
 # Shared test utilities
@@ -96,8 +108,7 @@ class TestCampaignAttributionE2E:
     @pytest.fixture(autouse=True)
     def setup(self):
         """Reset campaign state between tests."""
-        import sys
-        sys.path.insert(0, "Backend Architecture/aether-backend")
+        # sys.path configured at module level
         from services.campaign import routes
         # Clear durable store internal state
         if hasattr(routes._touchpoint_store, '_data'):
@@ -210,8 +221,7 @@ class TestAnalyticsExportE2E:
 
     @pytest.fixture(autouse=True)
     def setup(self):
-        import sys
-        sys.path.insert(0, "Backend Architecture/aether-backend")
+        # sys.path configured at module level
         from services.analytics import routes
         if hasattr(routes._export_store, '_data'):
             routes._export_store._data.clear()
@@ -276,11 +286,6 @@ class TestAnalyticsExportE2E:
 
 class TestGraphQLValidationE2E:
     """Full flow: query parsing → validation → field-level enforcement."""
-
-    @pytest.fixture(autouse=True)
-    def setup(self):
-        import sys
-        sys.path.insert(0, "Backend Architecture/aether-backend")
 
     def test_valid_events_query(self):
         from services.analytics.routes import _parse_and_validate_graphql
@@ -351,8 +356,7 @@ class TestAgentTaskBridgeE2E:
 
     @pytest.fixture(autouse=True)
     def setup(self):
-        import sys
-        sys.path.insert(0, "Backend Architecture/aether-backend")
+        # sys.path configured at module level
         from services.agent import routes
         if hasattr(routes._task_store, '_data'):
             routes._task_store._data.clear()
@@ -436,11 +440,6 @@ class TestAgentTaskBridgeE2E:
 class TestGeoEnrichmentE2E:
     """Full flow: IP extraction → enrichment → normalized output."""
 
-    @pytest.fixture(autouse=True)
-    def setup(self):
-        import sys
-        sys.path.insert(0, "Backend Architecture/aether-backend")
-
     def test_private_ip_returns_empty_geo(self):
         from services.ingestion.routes import _is_private_ip, _geo_lookup
 
@@ -506,12 +505,6 @@ class TestGeoEnrichmentE2E:
 
 class TestConcurrencySafety:
     """Verify DurableStore thread safety under concurrent access."""
-
-    @pytest.fixture(autouse=True)
-    def setup(self):
-        import sys
-        sys.path.insert(0, "Backend Architecture/aether-backend")
-        yield
 
     def test_concurrent_in_memory_store_writes(self):
         """InMemoryStore should handle concurrent writes without data loss."""
