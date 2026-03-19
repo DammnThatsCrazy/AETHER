@@ -154,21 +154,18 @@ class ChainMonitorV2:
         if not tracked:
             return
 
-        match vm:
-            case VMType.EVM:
-                await self._scan_evm(tracked)
-            case VMType.SVM:
-                await self._scan_svm(tracked)
-            case VMType.BITCOIN:
-                await self._scan_bitcoin(tracked)
-            case VMType.MOVEVM:
-                await self._scan_sui(tracked)
-            case VMType.NEAR:
-                await self._scan_near(tracked)
-            case VMType.TVM:
-                await self._scan_tron(tracked)
-            case VMType.COSMOS:
-                await self._scan_cosmos(tracked)
+        scanners = {
+            VMType.EVM: self._scan_evm,
+            VMType.SVM: self._scan_svm,
+            VMType.BITCOIN: self._scan_bitcoin,
+            VMType.MOVEVM: self._scan_sui,
+            VMType.NEAR: self._scan_near,
+            VMType.TVM: self._scan_tron,
+            VMType.COSMOS: self._scan_cosmos,
+        }
+        scanner = scanners.get(vm)
+        if scanner is not None:
+            await scanner(tracked)
 
     async def _scan_evm(self, addresses: set[str]) -> None:
         """Scan EVM chains for tracked address activity."""
