@@ -246,6 +246,11 @@ def _parse_and_validate_graphql(query: str) -> dict:
     if root_type not in _GRAPHQL_FIELDS:
         raise BadRequestError(f"Unknown root type: {root_type}. Available: {list(_GRAPHQL_FIELDS.keys())}")
 
+    # Check depth BEFORE parsing fields (deep queries may produce garbage fields)
+    depth = query.count("{")
+    if depth > _MAX_QUERY_DEPTH:
+        raise BadRequestError(f"Query too deep ({depth} > {_MAX_QUERY_DEPTH})")
+
     # Extract requested fields
     field_block = re.search(r"\{[^{]*\{([^}]*)\}", query)
     if not field_block:
@@ -259,11 +264,6 @@ def _parse_and_validate_graphql(query: str) -> dict:
 
     if len(raw_fields) > _MAX_FIELDS:
         raise BadRequestError(f"Too many fields requested ({len(raw_fields)} > {_MAX_FIELDS})")
-
-    # Check depth (count nested braces)
-    depth = query.count("{")
-    if depth > _MAX_QUERY_DEPTH:
-        raise BadRequestError(f"Query too deep ({depth} > {_MAX_QUERY_DEPTH})")
 
     return {"root_type": root_type, "fields": raw_fields}
 
