@@ -64,7 +64,7 @@ jobs:
           git push
 
       - name: Fail PRs and non-main pushes on drift
-        if: steps.drift.outputs.drift == 'true' && !(github.event_name == 'push' && github.ref == 'refs/heads/main')
+        if: ${{ steps.drift.outputs.drift == 'true' && (github.event_name != 'push' || github.ref != 'refs/heads/main') }}
         run: |
           echo 'Generated docs are out of date. Run: python scripts/sync_docs.py'
           exit 1
