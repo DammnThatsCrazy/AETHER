@@ -117,6 +117,7 @@ async def ingest_api_feed(
         },
     ))
 
+    metrics.increment("api_feeds_ingested", labels={"source": feed_event.source})
     return APIResponse(
         data={"status": "accepted", "source": feed_event.source}
     ).to_dict()

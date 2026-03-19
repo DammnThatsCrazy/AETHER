@@ -48,17 +48,21 @@ _MODEL_ENDPOINTS: dict[str, str] = {
     "journey_tft": "/v1/predict/journey",
 }
 
-# Shared async HTTP client (created lazily)
+# Shared async HTTP client (thread-safe lazy init)
 _http_client: Optional[httpx.AsyncClient] = None
+_client_lock = __import__("threading").Lock()
 
 
 def _get_client() -> httpx.AsyncClient:
     global _http_client
-    if _http_client is None:
-        _http_client = httpx.AsyncClient(
-            base_url=_ML_SERVING_URL,
-            timeout=httpx.Timeout(30.0, connect=5.0),
-        )
+    if _http_client is not None:
+        return _http_client
+    with _client_lock:
+        if _http_client is None:
+            _http_client = httpx.AsyncClient(
+                base_url=_ML_SERVING_URL,
+                timeout=httpx.Timeout(30.0, connect=5.0),
+            )
     return _http_client
 
 
@@ -149,7 +153,11 @@ async def predict(
         resp = await client.post(endpoint, json=payload, headers=headers)
 
         if resp.status_code == 200:
-            ml_result = resp.json()
+            try:
+                ml_result = resp.json()
+            except Exception:
+                logger.error("ML serving returned invalid JSON for model %s", body.model_name)
+                raise ServiceUnavailableError("ML inference returned malformed response")
             latency_ms = (time.perf_counter() - t0) * 1000
 
             prediction = {
@@ -157,7 +165,6 @@ async def predict(
                 "entity_id": body.entity_id,
                 "result": ml_result,
                 "latency_ms": round(latency_ms, 2),
-                "features_used": list(body.features.keys()),
             }
 
             # 3. Cache result

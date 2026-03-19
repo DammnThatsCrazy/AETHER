@@ -22,7 +22,7 @@ from fastapi import APIRouter, Request
 from pydantic import BaseModel, Field
 
 from config.settings import settings
-from shared.common.common import APIResponse, BadRequestError
+from shared.common.common import APIResponse, BadRequestError, NotFoundError
 from shared.events.events import Event, EventProducer, Topic
 from shared.graph.graph import Edge, EdgeType, GraphClient, Vertex, VertexType
 from shared.graph.relationship_layers import get_cross_layer_paths, get_layer_subgraph, RelationshipLayer
@@ -69,8 +69,11 @@ async def agent_status(request: Request):
 
 # ── Task Store (production: TimescaleDB + Celery result backend) ──────
 
+import threading
+
 _task_store: dict[str, dict] = {}
 _audit_store: list[dict] = []
+_task_lock = threading.Lock()
 
 _PRIORITY_MAP = {
     "critical": 0, "high": 1, "medium": 2, "low": 3, "background": 4,
@@ -111,7 +114,8 @@ async def submit_task(body: TaskSubmission, request: Request):
         "result": None,
         "error": None,
     }
-    _task_store[task_id] = task
+    with _task_lock:
+        _task_store[task_id] = task
 
     # Publish task event for the agent controller to pick up
     await _producer.publish(Event(
@@ -121,14 +125,15 @@ async def submit_task(body: TaskSubmission, request: Request):
         payload=task,
     ))
 
-    # Record audit entry
-    _audit_store.append({
-        "task_id": task_id,
-        "action": "task_submitted",
-        "worker_type": body.worker_type,
-        "tenant_id": tenant.tenant_id,
-        "timestamp": now,
-    })
+    # Record audit entry (thread-safe)
+    with _task_lock:
+        _audit_store.append({
+            "task_id": task_id,
+            "action": "task_submitted",
+            "worker_type": body.worker_type,
+            "tenant_id": tenant.tenant_id,
+            "timestamp": now,
+        })
 
     metrics.increment("agent_tasks_submitted", labels={"worker_type": body.worker_type})
     logger.info(
@@ -155,11 +160,10 @@ async def get_task(task_id: str, request: Request):
     tenant = request.state.tenant
     tenant.require_permission("agent:manage")
 
-    task = _task_store.get(task_id)
-    if task is None:
-        raise BadRequestError(f"Task not found: {task_id}")
-    if task.get("tenant_id") != tenant.tenant_id:
-        raise BadRequestError(f"Task not found: {task_id}")
+    with _task_lock:
+        task = _task_store.get(task_id)
+    if task is None or task.get("tenant_id") != tenant.tenant_id:
+        raise NotFoundError("Task")
 
     return APIResponse(data={
         "task_id": task["task_id"],
@@ -183,10 +187,11 @@ async def get_audit_trail(request: Request, limit: int = 50):
     tenant = request.state.tenant
     tenant.require_permission("agent:manage")
 
-    tenant_records = [
-        r for r in _audit_store
-        if r.get("tenant_id") == tenant.tenant_id
-    ]
+    with _task_lock:
+        tenant_records = [
+            r for r in _audit_store
+            if r.get("tenant_id") == tenant.tenant_id
+        ]
     # Return most recent first, up to limit
     records = sorted(
         tenant_records, key=lambda r: r.get("timestamp", ""), reverse=True

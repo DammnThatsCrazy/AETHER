@@ -6,18 +6,23 @@ Includes the GraphQL endpoint for flexible dashboard queries.
 
 from __future__ import annotations
 
+import hashlib
+import json as _json
+import re
+import threading
+import uuid as _uuid
 from typing import Any, Optional
 
 from fastapi import APIRouter, Depends, Request, WebSocket, WebSocketDisconnect
 from pydantic import BaseModel, Field
 
 from shared.common.common import (
-    APIResponse, CursorPagination, PaginatedResponse, PaginationMeta,
-    UnauthorizedError,
+    APIResponse, BadRequestError, CursorPagination, NotFoundError,
+    PaginatedResponse, PaginationMeta, UnauthorizedError, utc_now,
 )
 from shared.cache.cache import CacheClient
 from shared.auth.auth import JWTHandler, APIKeyValidator
-from shared.logger.logger import get_logger
+from shared.logger.logger import get_logger, metrics
 from dependencies.providers import get_cache, get_registry
 from repositories.repos import AnalyticsRepository
 
@@ -87,8 +92,13 @@ async def get_event(
     request: Request,
     repo: AnalyticsRepository = Depends(_get_repo),
 ):
-    """Get a single event by ID."""
+    """Get a single event by ID (tenant-scoped)."""
+    tenant = request.state.tenant
     event = await repo.get_event(event_id)
+    # Enforce tenant isolation
+    if event.get("tenant_id") and event["tenant_id"] != tenant.tenant_id:
+        raise NotFoundError("Event")
+    metrics.increment("analytics_events_read")
     return APIResponse(data=event).to_dict()
 
 
@@ -106,6 +116,7 @@ async def dashboard_summary(
 # ── Export Job Store ──────────────────────────────────────────────────
 
 _export_jobs: dict[str, dict] = {}
+_export_lock = threading.Lock()
 
 
 @router.post("/export")
@@ -122,9 +133,6 @@ async def export_data(
     Idempotent: re-submitting the same query + format within 60s returns
     the existing job instead of creating a duplicate.
     """
-    import hashlib, json as _json, uuid as _uuid
-    from shared.common.common import utc_now
-
     tenant = request.state.tenant
     tenant.require_permission("analytics:export")
 
@@ -133,14 +141,16 @@ async def export_data(
         _json.dumps({"q": body.query.model_dump(), "f": body.format}, sort_keys=True).encode()
     ).hexdigest()[:16]
 
-    for job in _export_jobs.values():
-        if (
-            job.get("query_hash") == query_hash
-            and job.get("tenant_id") == tenant.tenant_id
-            and job.get("status") in ("queued", "processing")
-        ):
-            logger.info("Returning existing export job %s (idempotent)", job["export_id"])
-            return APIResponse(data=job).to_dict()
+    with _export_lock:
+        for job in _export_jobs.values():
+            if (
+                job.get("query_hash") == query_hash
+                and job.get("tenant_id") == tenant.tenant_id
+                and job.get("status") in ("queued", "processing", "completed")
+            ):
+                logger.info("Returning existing export job %s (idempotent)", job["export_id"])
+                metrics.increment("analytics_exports_idempotent")
+                return APIResponse(data=_sanitize_export_job(job)).to_dict()
 
     export_id = str(_uuid.uuid4())
     now = utc_now().isoformat()
@@ -155,12 +165,11 @@ async def export_data(
         row_count = len(results)
         status = "completed"
         error = None
-    except Exception as exc:
-        logger.error("Export query failed for job %s: %s", export_id, exc)
-        results = []
+    except Exception:
+        logger.exception("Export query failed for job %s", export_id)
         row_count = 0
         status = "failed"
-        error = str(exc)
+        error = "Export query failed. Contact support if this persists."
 
     job = {
         "export_id": export_id,
@@ -174,25 +183,30 @@ async def export_data(
         "error": error,
         "download_url": f"/v1/analytics/export/{export_id}/download" if status == "completed" else None,
     }
-    _export_jobs[export_id] = job
 
-    from shared.logger.logger import metrics
+    with _export_lock:
+        _export_jobs[export_id] = job
+
     metrics.increment("analytics_exports_created", labels={"format": body.format, "status": status})
-    logger.info("Export job %s created: format=%s rows=%d status=%s", export_id, body.format, row_count, status)
+    logger.info("Export job %s: format=%s rows=%d status=%s", export_id, body.format, row_count, status)
 
-    return APIResponse(data=job).to_dict()
+    return APIResponse(data=_sanitize_export_job(job)).to_dict()
 
 
 @router.get("/export/{export_id}")
 async def get_export_status(export_id: str, request: Request):
-    """Check the status of an export job."""
-    from shared.common.common import NotFoundError
-    job = _export_jobs.get(export_id)
-    if job is None:
+    """Check the status of an export job (tenant-scoped)."""
+    with _export_lock:
+        job = _export_jobs.get(export_id)
+    if job is None or job.get("tenant_id") != request.state.tenant.tenant_id:
         raise NotFoundError("Export job")
-    if job.get("tenant_id") != request.state.tenant.tenant_id:
-        raise NotFoundError("Export job")
-    return APIResponse(data=job).to_dict()
+    metrics.increment("analytics_exports_polled")
+    return APIResponse(data=_sanitize_export_job(job)).to_dict()
+
+
+def _sanitize_export_job(job: dict) -> dict:
+    """Remove internal fields before returning to client."""
+    return {k: v for k, v in job.items() if k not in ("tenant_id", "query_hash")}
 
 
 # ── GraphQL Endpoint ──────────────────────────────────────────────────
@@ -215,9 +229,6 @@ def _parse_and_validate_graphql(query: str) -> dict:
     Production systems should use graphql-core; this parser handles
     the subset needed for analytics dashboard queries.
     """
-    import re
-    from shared.common.common import BadRequestError
-
     query = query.strip()
     if not query:
         raise BadRequestError("Empty GraphQL query")
@@ -297,7 +308,6 @@ async def graphql_endpoint(
     else:
         data = []
 
-    from shared.logger.logger import metrics
     metrics.increment("graphql_queries", labels={"root_type": root_type})
     logger.info("GraphQL query: tenant=%s root=%s fields=%d results=%d",
                 tenant.tenant_id, root_type, len(fields), len(data))
@@ -337,8 +347,9 @@ async def websocket_event_stream(websocket: WebSocket):
         await websocket.send_json({"authenticated": True, "tenant_id": tenant.tenant_id})
         logger.info(f"WebSocket authenticated for tenant {tenant.tenant_id}")
 
-    except Exception as e:
-        await websocket.send_json({"error": f"Authentication failed: {str(e)}"})
+    except Exception:
+        logger.exception("WebSocket authentication failed")
+        await websocket.send_json({"error": "Authentication failed"})
         await websocket.close(code=4001)
         return
 

@@ -5,14 +5,18 @@ Campaign management, attribution calculation, and reporting.
 
 from __future__ import annotations
 
+import threading
 import uuid
 from datetime import datetime, timezone
 from typing import Any, Optional
 
-from fastapi import APIRouter, Depends, Request
+from fastapi import APIRouter, Depends, Query, Request
 from pydantic import BaseModel, Field
 
-from shared.common.common import APIResponse, NotFoundError, PaginatedResponse, PaginationMeta
+from shared.common.common import (
+    APIResponse, BadRequestError, NotFoundError,
+    PaginatedResponse, PaginationMeta,
+)
 from shared.events.events import Event, EventProducer, Topic
 from shared.logger.logger import get_logger, metrics
 from dependencies.providers import get_producer
@@ -23,6 +27,12 @@ router = APIRouter(prefix="/v1/campaigns", tags=["Campaigns"])
 
 _repo = CampaignRepository()
 
+VALID_ATTRIBUTION_MODELS = {
+    "multi_touch", "first_touch", "last_touch", "linear", "time_decay",
+}
+
+
+# ── Request Models ───────────────────────────────────────────────────
 
 class CampaignCreate(BaseModel):
     name: str
@@ -41,8 +51,33 @@ class CampaignUpdate(BaseModel):
     status: Optional[str] = None
 
 
+class TouchpointCreate(BaseModel):
+    """Validated touchpoint input — replaces raw request.json()."""
+    channel: Optional[str] = None
+    source: str = ""
+    user_id: str = ""
+    session_id: str = ""
+    event_type: str = "pageview"
+    is_conversion: bool = False
+    revenue_usd: float = Field(default=0.0, ge=0.0)
+    timestamp: Optional[str] = None
+    properties: dict[str, Any] = Field(default_factory=dict)
+
+
+# ── Thread-Safe Touchpoint Store ─────────────────────────────────────
+
+_touchpoint_store: dict[str, list[dict]] = {}
+_touchpoint_lock = threading.Lock()
+
+
+# ── CRUD Routes ──────────────────────────────────────────────────────
+
 @router.get("")
-async def list_campaigns(request: Request, limit: int = 50, offset: int = 0):
+async def list_campaigns(
+    request: Request,
+    limit: int = Query(default=50, ge=1, le=200),
+    offset: int = Query(default=0, ge=0),
+):
     tenant = request.state.tenant
     campaigns = await _repo.find_many(
         filters={"tenant_id": tenant.tenant_id}, limit=limit, offset=offset
@@ -71,12 +106,17 @@ async def create_campaign(
         **body.model_dump(),
         "status": "active",
     })
+    metrics.increment("campaigns_created")
     return APIResponse(data=campaign).to_dict()
 
 
 @router.get("/{campaign_id}")
 async def get_campaign(campaign_id: str, request: Request):
-    campaign = await _repo.find_by_id_or_fail(campaign_id)
+    tenant = request.state.tenant
+    campaign = await _repo.find_by_id(campaign_id)
+    if campaign is None or campaign.get("tenant_id") != tenant.tenant_id:
+        raise NotFoundError("Campaign")
+    metrics.increment("campaigns_read")
     return APIResponse(data=campaign).to_dict()
 
 
@@ -86,6 +126,7 @@ async def update_campaign(
 ):
     request.state.tenant.require_permission("campaign:manage")
     campaign = await _repo.update(campaign_id, body.model_dump(exclude_none=True))
+    metrics.increment("campaigns_updated")
     return APIResponse(data=campaign).to_dict()
 
 
@@ -93,68 +134,51 @@ async def update_campaign(
 async def delete_campaign(campaign_id: str, request: Request):
     request.state.tenant.require_permission("campaign:manage")
     await _repo.delete(campaign_id)
+    metrics.increment("campaigns_deleted")
     return APIResponse(data={"deleted": True}).to_dict()
 
 
-class AttributionQuery(BaseModel):
-    model: str = Field(
-        default="multi_touch",
-        pattern="^(multi_touch|first_touch|last_touch|linear|time_decay)$",
-    )
-    start_date: Optional[str] = None
-    end_date: Optional[str] = None
-
-
-# In-memory touchpoint store (production: TimescaleDB)
-_touchpoint_store: dict[str, list[dict]] = {}
-
+# ── Attribution ──────────────────────────────────────────────────────
 
 @router.get("/{campaign_id}/attribution")
 async def get_attribution(
     campaign_id: str,
     request: Request,
-    model: str = "multi_touch",
+    model: str = Query(default="multi_touch"),
     start_date: Optional[str] = None,
     end_date: Optional[str] = None,
 ):
-    """Compute attribution results for a campaign.
-
-    Retrieves all touchpoints for the campaign and applies the selected
-    attribution model to distribute conversion credit.
-    """
+    """Compute attribution results for a campaign."""
     tenant = request.state.tenant
-    # Verify campaign exists and belongs to tenant
+
+    if model not in VALID_ATTRIBUTION_MODELS:
+        raise BadRequestError(
+            f"Invalid attribution model: {model}. "
+            f"Valid: {sorted(VALID_ATTRIBUTION_MODELS)}"
+        )
+
     campaign = await _repo.find_by_id(campaign_id)
-    if campaign is None:
-        raise NotFoundError("Campaign")
-    if campaign.get("tenant_id") != tenant.tenant_id:
+    if campaign is None or campaign.get("tenant_id") != tenant.tenant_id:
         raise NotFoundError("Campaign")
 
-    # Fetch touchpoints for this campaign
-    touchpoints = _touchpoint_store.get(campaign_id, [])
+    with _touchpoint_lock:
+        touchpoints = list(_touchpoint_store.get(campaign_id, []))
 
-    # Filter by date range if provided
     if start_date or end_date:
-        filtered = []
-        for tp in touchpoints:
-            ts = tp.get("timestamp", "")
-            if start_date and ts < start_date:
-                continue
-            if end_date and ts > end_date:
-                continue
-            filtered.append(tp)
-        touchpoints = filtered
+        touchpoints = [
+            tp for tp in touchpoints
+            if (not start_date or tp.get("timestamp", "") >= start_date)
+            and (not end_date or tp.get("timestamp", "") <= end_date)
+        ]
 
-    # Apply attribution model
     conversions = [tp for tp in touchpoints if tp.get("is_conversion")]
     total_revenue = sum(tp.get("revenue_usd", 0.0) for tp in conversions)
-
     attributed = _compute_attribution(touchpoints, conversions, model)
 
     metrics.increment("campaign_attribution_computed", labels={"model": model})
     logger.info(
-        "Attribution computed for campaign %s: model=%s conversions=%d revenue=%.2f",
-        campaign_id, model, len(conversions), total_revenue,
+        "Attribution computed: campaign=%s model=%s conversions=%d",
+        campaign_id, model, len(conversions),
     )
 
     return APIResponse(data={
@@ -171,12 +195,12 @@ async def get_attribution(
 @router.post("/{campaign_id}/touchpoints")
 async def record_touchpoint(
     campaign_id: str,
+    body: TouchpointCreate,
     request: Request,
     producer: EventProducer = Depends(get_producer),
 ):
     """Record a campaign touchpoint (page view, click, conversion)."""
     tenant = request.state.tenant
-    body = await request.json()
 
     campaign = await _repo.find_by_id(campaign_id)
     if campaign is None or campaign.get("tenant_id") != tenant.tenant_id:
@@ -185,18 +209,20 @@ async def record_touchpoint(
     touchpoint = {
         "touchpoint_id": str(uuid.uuid4()),
         "campaign_id": campaign_id,
-        "channel": body.get("channel", campaign.get("channel", "unknown")),
-        "source": body.get("source", ""),
-        "user_id": body.get("user_id", ""),
-        "session_id": body.get("session_id", ""),
-        "event_type": body.get("event_type", "pageview"),
-        "is_conversion": body.get("is_conversion", False),
-        "revenue_usd": float(body.get("revenue_usd", 0.0)),
-        "timestamp": body.get("timestamp", datetime.now(timezone.utc).isoformat()),
-        "properties": body.get("properties", {}),
+        "tenant_id": tenant.tenant_id,
+        "channel": body.channel or campaign.get("channel", "unknown"),
+        "source": body.source,
+        "user_id": body.user_id,
+        "session_id": body.session_id,
+        "event_type": body.event_type,
+        "is_conversion": body.is_conversion,
+        "revenue_usd": body.revenue_usd,
+        "timestamp": body.timestamp or datetime.now(timezone.utc).isoformat(),
+        "properties": body.properties,
     }
 
-    _touchpoint_store.setdefault(campaign_id, []).append(touchpoint)
+    with _touchpoint_lock:
+        _touchpoint_store.setdefault(campaign_id, []).append(touchpoint)
 
     await producer.publish(Event(
         topic=Topic.TOUCHPOINT_RECORDED,
@@ -209,12 +235,14 @@ async def record_touchpoint(
     return APIResponse(data=touchpoint).to_dict()
 
 
+# ── Attribution Engine ───────────────────────────────────────────────
+
 def _compute_attribution(
     touchpoints: list[dict],
     conversions: list[dict],
     model: str,
 ) -> list[dict]:
-    """Apply attribution model to distribute conversion credit across touchpoints."""
+    """Apply attribution model to distribute conversion credit."""
     if not touchpoints:
         return []
 
@@ -229,22 +257,21 @@ def _compute_attribution(
         tp["attributed_revenue"] = 0.0
         tp["attribution_weight"] = 0.0
 
-    if model == "first_touch" and non_conversion:
+    if model == "first_touch":
         non_conversion[0]["attribution_weight"] = 1.0
         non_conversion[0]["attributed_revenue"] = total_revenue
 
-    elif model == "last_touch" and non_conversion:
+    elif model == "last_touch":
         non_conversion[-1]["attribution_weight"] = 1.0
         non_conversion[-1]["attributed_revenue"] = total_revenue
 
-    elif model == "linear" and non_conversion:
+    elif model == "linear":
         weight = 1.0 / n
         for tp in non_conversion:
             tp["attribution_weight"] = round(weight, 4)
             tp["attributed_revenue"] = round(total_revenue * weight, 2)
 
-    elif model == "time_decay" and non_conversion:
-        # More recent touchpoints get higher weight (exponential decay)
+    elif model == "time_decay":
         weights = [2 ** i for i in range(n)]
         total_weight = sum(weights)
         for i, tp in enumerate(non_conversion):
@@ -252,7 +279,7 @@ def _compute_attribution(
             tp["attribution_weight"] = round(w, 4)
             tp["attributed_revenue"] = round(total_revenue * w, 2)
 
-    else:  # multi_touch (default): position-based 40/20/40
+    else:  # multi_touch: position-based 40/20/40
         if n == 1:
             non_conversion[0]["attribution_weight"] = 1.0
             non_conversion[0]["attributed_revenue"] = total_revenue
@@ -261,13 +288,11 @@ def _compute_attribution(
                 tp["attribution_weight"] = 0.5
                 tp["attributed_revenue"] = round(total_revenue * 0.5, 2)
         else:
-            first_weight = 0.4
-            last_weight = 0.4
-            middle_weight = 0.2 / (n - 2) if n > 2 else 0
-            non_conversion[0]["attribution_weight"] = first_weight
-            non_conversion[0]["attributed_revenue"] = round(total_revenue * first_weight, 2)
-            non_conversion[-1]["attribution_weight"] = last_weight
-            non_conversion[-1]["attributed_revenue"] = round(total_revenue * last_weight, 2)
+            middle_weight = 0.2 / (n - 2)
+            non_conversion[0]["attribution_weight"] = 0.4
+            non_conversion[0]["attributed_revenue"] = round(total_revenue * 0.4, 2)
+            non_conversion[-1]["attribution_weight"] = 0.4
+            non_conversion[-1]["attributed_revenue"] = round(total_revenue * 0.4, 2)
             for tp in non_conversion[1:-1]:
                 tp["attribution_weight"] = round(middle_weight, 4)
                 tp["attributed_revenue"] = round(total_revenue * middle_weight, 2)
