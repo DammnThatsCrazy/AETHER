@@ -85,7 +85,7 @@ services:
   ml-serving:
     build:
       context: "ML Models/aether-ml"
-      dockerfile: docker/Dockerfile.serving
+      dockerfile: docker/Dockerfile
     ports:
       - "8080:8080"
     depends_on:
