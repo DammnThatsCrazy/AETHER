@@ -19,6 +19,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 ### Changed
 
 - Documented branch-protection requirements in the generated automation policy so GitHub's unprotected-`main` warning has a repeatable remediation path and the `Repo Health / validate` check can be enforced.
+- Made `.github/workflows/repo-health.yml` a generated artifact of `scripts/sync_docs.py` and documented a merge-conflict recovery flow so concurrent edits to repo-health automation are resolved from one source of truth.
 
 ## [8.3.1] — 2026-03-18
 

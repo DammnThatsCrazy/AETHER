@@ -13,6 +13,7 @@
 ### Changed
 
 - Documented the required `main` branch protection settings so `Repo Health / validate` is enforced instead of advisory only.
+- Made `.github/workflows/repo-health.yml` a generated artifact of `scripts/sync_docs.py` and documented how to regenerate the workflow/docs pair after merge conflicts.
 
 ## v8.3.1 — Model Extraction Defense Layer (2026-03-18)
 
