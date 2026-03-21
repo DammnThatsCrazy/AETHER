@@ -56,7 +56,7 @@ INTENT_PREDICTION_CONFIG = TrainingConfig(
         "C": 1.0,
         "max_iter": 1000,
         "solver": "lbfgs",
-        "multi_class": "multinomial",
+
     },
     features=[
         "mouse_velocity_mean", "mouse_velocity_std",

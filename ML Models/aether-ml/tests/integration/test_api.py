@@ -39,7 +39,6 @@ class TestPredictionPipeline:
         model = LogisticRegression(
             class_weight="balanced",
             max_iter=1000,
-            multi_class="multinomial",
             solver="lbfgs",
         )
         model.fit(X, y)
@@ -84,7 +83,6 @@ class TestPredictionPipeline:
             learning_rate=0.1,
             eval_metric="auc",
             random_state=42,
-            use_label_encoder=False,
         )
         model.fit(X, y, verbose=False)
 

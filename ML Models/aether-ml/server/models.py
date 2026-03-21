@@ -348,7 +348,6 @@ class ChurnPrediction(AetherModel):
             scale_pos_weight=scale_pos_weight,
             eval_metric="auc",
             random_state=42,
-            use_label_encoder=False,
         )
         self._model.fit(X_features, y, eval_set=[(X_features, y)], verbose=False)
 

@@ -83,7 +83,6 @@ class IntentPrediction(AetherModel):
         self._model = LogisticRegression(
             class_weight="balanced",
             max_iter=1000,
-            multi_class="multinomial",
             solver="lbfgs",
         )
         self._model.fit(X_features, y)

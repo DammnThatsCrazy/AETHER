@@ -386,7 +386,7 @@ class TrainingPipeline:
         # Map model names to reasonable stand-in estimators
         fallback_map: dict[str, Any] = {
             "intent_prediction": LogisticRegression(
-                C=1.0, max_iter=1000, solver="lbfgs", multi_class="multinomial",
+                C=1.0, max_iter=1000, solver="lbfgs",
             ),
             "bot_detection": RandomForestClassifier(
                 n_estimators=100, max_depth=12, min_samples_leaf=5,
