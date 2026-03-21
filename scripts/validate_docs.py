@@ -76,7 +76,7 @@ def check_changelog_has_version(path: Path, version: str) -> None:
 
 
 def check_doc_header_version(path: Path, current: str, previous: str) -> None:
-    """Check that a doc header contains a recent version."""
+    """Check that a doc header contains the current version."""
     if not path.exists():
         return  # optional files
     text = path.read_text()
@@ -86,10 +86,11 @@ def check_doc_header_version(path: Path, current: str, previous: str) -> None:
             match = VERSION_PATTERN.search(line)
             if match:
                 found = match.group(1)
-                if found != current and found != previous:
-                    warnings.append(
+                if found != current:
+                    errors.append(
                         f"{path.relative_to(ROOT)}: header says v{found}, "
-                        f"current is v{current}"
+                        f"expected v{current}. "
+                        f"Fix: python scripts/bump_version.py {current}"
                     )
             return
 

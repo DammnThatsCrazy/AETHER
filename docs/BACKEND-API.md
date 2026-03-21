@@ -1,4 +1,4 @@
-# Aether Backend API v8.3.0 — Endpoint Specification
+# Aether Backend API v8.3.1 — Endpoint Specification
 
 ## Overview
 

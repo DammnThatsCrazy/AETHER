@@ -88,6 +88,10 @@ testpaths = [
 ]
 pythonpath = ["."]
 asyncio_mode = "auto"
+markers = [
+    "asyncio: async test functions",
+    "integration: integration tests requiring backend deps",
+]
 filterwarnings = [
     "ignore::DeprecationWarning",
 ]

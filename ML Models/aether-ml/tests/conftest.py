@@ -14,9 +14,10 @@ from __future__ import annotations
 from datetime import datetime, timedelta
 from typing import Any
 
-import numpy as np
-import pandas as pd
 import pytest
+
+np = pytest.importorskip("numpy", reason="ML tests require numpy (pip install -e '.[ml]')")
+pd = pytest.importorskip("pandas", reason="ML tests require pandas (pip install -e '.[ml]')")
 
 
 # =============================================================================

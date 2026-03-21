@@ -1,4 +1,4 @@
-# Aether SDK v8.3.0 — Architecture Guide
+# Aether SDK v8.3.1 — Architecture Guide
 
 ## Overview
 

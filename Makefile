@@ -9,8 +9,12 @@
 # =============================================================================
 
 .DEFAULT_GOAL := help
-.PHONY: setup test test-security test-ml lint format serve-backend serve-ml \
-        docker-up docker-down docker-logs clean validate-docs bump-version help
+.PHONY: setup setup-dev setup-minimal \
+        test test-security test-ml test-coverage \
+        lint format typecheck \
+        serve-backend serve-ml \
+        docker-up docker-down docker-logs \
+        clean validate-docs bump-version help
 
 # ---------------------------------------------------------------------------
 # Setup
@@ -29,8 +33,8 @@ setup-minimal: ## Install minimal dependencies (security module only)
 # Testing
 # ---------------------------------------------------------------------------
 
-test: ## Run ALL tests across all subsystems
-	python -m pytest tests/ -v
+test: ## Run ALL tests across all subsystems (matches pyproject.toml testpaths)
+	python -m pytest tests/ "ML Models/aether-ml/tests/" -v
 
 test-security: ## Run extraction defense tests only
 	python -m pytest tests/security/ -v
@@ -38,8 +42,11 @@ test-security: ## Run extraction defense tests only
 test-ml: ## Run ML model tests only
 	python -m pytest "ML Models/aether-ml/tests/" -v
 
-test-coverage: ## Run tests with coverage report
-	python -m pytest tests/ --cov=security --cov-report=term-missing -v
+test-coverage: ## Run tests with coverage report (all subsystems)
+	python -m pytest tests/ "ML Models/aether-ml/tests/" \
+		--cov=security \
+		--cov="Backend Architecture/aether-backend" \
+		--cov-report=term-missing -v
 
 # ---------------------------------------------------------------------------
 # Code Quality
