@@ -8,7 +8,7 @@ Add to your `Package.swift`:
 
 ```swift
 dependencies: [
-    .package(url: "https://github.com/AetherSDK/aether-ios.git", from: "8.3.0")
+    .package(url: "https://github.com/AetherSDK/aether-ios.git", from: "8.3.1")
 ]
 ```
 
