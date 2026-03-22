@@ -131,6 +131,11 @@ async def get_profile_graph(
     repo: IdentityRepository = Depends(_get_repo),
 ):
     """Get the graph neighborhood for a user (sessions, devices, events)."""
+    tenant = request.state.tenant
+    # Verify the profile belongs to this tenant before returning graph data
+    profile = await repo.get_profile(tenant.tenant_id, user_id)
+    if not profile:
+        raise NotFoundError("Profile")
     connections = await repo.get_graph_neighbors(user_id)
     return APIResponse(data={
         "user_id": user_id,

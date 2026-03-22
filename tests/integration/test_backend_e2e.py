@@ -715,3 +715,28 @@ class TestA2HRelationshipLayerE2E:
 
         for interaction_type in VALID_A2H_TYPES:
             assert interaction_type in _A2H_TOPIC_MAP
+
+
+# =========================================================================
+# 8. Bug Fix Regression Tests
+# =========================================================================
+
+
+class TestBugFixRegressions:
+    """Regression tests for production bugs found during audit."""
+
+    def test_cache_key_custom_method_exists(self):
+        """CacheKey.custom() must exist — used by ml_serving feature store."""
+        from shared.cache.cache import CacheKey
+
+        key = CacheKey.custom("features:user-123")
+        assert "features:user-123" in key
+        assert key.startswith("aether:")
+
+    def test_cache_key_custom_different_inputs(self):
+        """CacheKey.custom() must produce distinct keys for different inputs."""
+        from shared.cache.cache import CacheKey
+
+        key1 = CacheKey.custom("features:user-1")
+        key2 = CacheKey.custom("features:user-2")
+        assert key1 != key2

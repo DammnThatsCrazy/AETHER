@@ -96,6 +96,8 @@ async def get_event(
     """Get a single event by ID (tenant-scoped)."""
     tenant = request.state.tenant
     event = await repo.get_event(event_id)
+    if not event:
+        raise NotFoundError("Event")
     # Enforce tenant isolation
     if event.get("tenant_id") and event["tenant_id"] != tenant.tenant_id:
         raise NotFoundError("Event")

@@ -70,6 +70,11 @@ class CacheKey:
         return f"aether:notification:webhook:{tenant_id}:{webhook_id}"
 
     @staticmethod
+    def custom(key: str) -> str:
+        """Build a cache key for ad-hoc / cross-service lookups."""
+        return f"aether:custom:{key}"
+
+    @staticmethod
     def hash_query(query: str) -> str:
         return hashlib.sha256(query.encode()).hexdigest()[:16]
 
