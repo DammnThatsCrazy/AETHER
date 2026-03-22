@@ -51,6 +51,26 @@ class TestFeatureRegistry:
         assert retrieved is not None
         assert retrieved.name == "test_feature"
 
+
+    def test_default_registry_path_avoids_repo_root_artifacts(self, monkeypatch, tmp_path):
+        monkeypatch.chdir(tmp_path)
+        monkeypatch.delenv("AETHER_FEATURE_REGISTRY_PATH", raising=False)
+        monkeypatch.setenv("XDG_CACHE_HOME", str(tmp_path / "cache"))
+
+        registry = FeatureRegistry()
+        feat = FeatureDefinition(
+            name="cache_safe_feature",
+            display_name="Cache Safe Feature",
+            description="Ensures default registry writes outside the repo root",
+            value_type=FeatureValueType.FLOAT,
+            source=FeatureSource.AGGREGATED,
+            granularity=FeatureGranularity.SESSION,
+        )
+        registry.register_feature(feat)
+
+        assert Path(registry.registry_path) == tmp_path / "cache" / "aether" / "feature_registry.json"
+        assert not (tmp_path / "feature_registry.json").exists()
+
     def test_register_group(self):
         registry = FeatureRegistry()
         group = FeatureGroup(

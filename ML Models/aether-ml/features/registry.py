@@ -123,6 +123,17 @@ class FeatureGroup(BaseModel):
 # =============================================================================
 
 
+
+
+def _default_registry_path() -> str:
+    env_path = os.environ.get("AETHER_FEATURE_REGISTRY_PATH")
+    if env_path:
+        return env_path
+
+    cache_root = Path(os.environ.get("XDG_CACHE_HOME", Path.home() / ".cache"))
+    return str(cache_root / "aether" / "feature_registry.json")
+
+
 class FeatureRegistry:
     """Centralized registry managing feature groups, schemas, lineage, and validation.
 
@@ -130,8 +141,8 @@ class FeatureRegistry:
     version-controlled alongside model code.
     """
 
-    def __init__(self, registry_path: str = "feature_registry.json") -> None:
-        self.registry_path = registry_path
+    def __init__(self, registry_path: str | None = None) -> None:
+        self.registry_path = registry_path or _default_registry_path()
         self.groups: dict[str, FeatureGroup] = {}
         self._model_feature_map: dict[str, list[str]] = {}
         self._load()
@@ -510,7 +521,7 @@ class FeatureRegistry:
     # =========================================================================
 
     @classmethod
-    def create_default_registry(cls, registry_path: str = "feature_registry.json") -> FeatureRegistry:
+    def create_default_registry(cls, registry_path: str | None = None) -> FeatureRegistry:
         """Create a registry pre-loaded with all predefined Aether feature groups.
 
         Includes:
