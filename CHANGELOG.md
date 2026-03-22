@@ -20,6 +20,13 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ### Fixed
 
+- Productionization follow-up: legacy top-level `Agent Layer/entity_resolver.py` now delegates to the canonical enrichment worker instead of shipping a stale scaffold implementation.
+- On-chain RPC gateway hardening: direct JSON-RPC execution now uses configured live transport and fails closed when no provider or endpoint is configured, replacing mock-response behavior.
+- Generated ECS Terraform output no longer hardcodes a placeholder ACM certificate ARN; it now accepts an explicit `acm_cert_arn` input.
+
+- Production web SDK hardening: corrected `ConsentState` fallback shape, fixed isolated-module type exports in the CDN loader, and added regression tests for cached/offline loader recovery plus concurrent load deduplication.
+- Test harness hardening: async backend integration tests now auto-run under AnyIO in environments where `pytest-asyncio` is unavailable.
+
 - Restored ML compatibility interfaces so the `ML Models/aether-ml/tests` suite passes again after prior API refactors removed legacy entry points.
 - Fixed timezone mismatches in identity feature aggregation that caused tz-aware vs tz-naive subtraction failures.
 - Hardened the serving API test/dev path with deterministic fallback models and corrected response-contract mismatches for `/models`, batch prediction errors, and missing feature validation.

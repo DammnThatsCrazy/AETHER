@@ -4,11 +4,13 @@ Demonstrates the full multi-account, multi-AZ deployment with
 all operational scripts: network, monitoring, cost, security,
 capacity planning, and disaster recovery.
 
-Run:  AETHER_STUB_AWS=1 python main.py
+Run in stub mode:  python main.py --stub-aws
+Run against live AWS: AETHER_STUB_AWS=0 python main.py --live-aws
 """
 
 from __future__ import annotations
 
+import argparse
 import os
 import sys
 
@@ -190,11 +192,41 @@ def show_terraform_modules() -> None:
 # MAIN
 # =========================================================================
 
-def main() -> None:
-    # Force stub mode for demo
-    os.environ.setdefault("AETHER_STUB_AWS", "1")
+def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description="Aether AWS deployment demo runner")
+    mode = parser.add_mutually_exclusive_group()
+    mode.add_argument(
+        "--stub-aws",
+        action="store_true",
+        help="Force stub mode for demo/CI execution without AWS credentials",
+    )
+    mode.add_argument(
+        "--live-aws",
+        action="store_true",
+        help="Require live AWS execution and fail fast if AETHER_STUB_AWS=1",
+    )
+    return parser.parse_args(argv)
+
+
+def configure_stub_mode(args: argparse.Namespace) -> bool:
+    if args.stub_aws:
+        os.environ["AETHER_STUB_AWS"] = "1"
+        return True
+    if args.live_aws:
+        os.environ["AETHER_STUB_AWS"] = "0"
+        return False
+    return os.environ.get("AETHER_STUB_AWS", "0") == "1"
+
+
+def main(argv: list[str] | None = None) -> None:
+    args = parse_args(argv)
+    stub_mode = configure_stub_mode(args)
 
     print_header("AETHER AWS DEPLOYMENT ARCHITECTURE -- FULL DEMO")
+    print(f"  AWS mode: {'stub/demo' if stub_mode else 'live'}")
+    if not stub_mode:
+        print("  Live AWS mode selected -- ensure credentials and target account access are configured.")
+    print()
 
     # ── Architecture overview ──────────────────────────────────────────
     show_account_structure()

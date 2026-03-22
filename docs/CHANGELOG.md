@@ -15,6 +15,9 @@
 
 ## v8.3.1 — Model Extraction Defense Layer (2026-03-18)
 
+- **FIXED**: Web SDK production hardening — corrected `ConsentState` fallback defaults, fixed isolated-module loader exports, and added regression coverage for offline cached-loader recovery plus concurrent-load deduplication
+- **FIXED**: Test harness resilience — backend async integration tests now auto-run under AnyIO when `pytest-asyncio` is not installed
+
 - **NEW**: `security/model_extraction_defense/` — modular defense layer against model extraction and knowledge distillation attacks
 - **NEW**: Query rate limiter with dual-axis sliding window (per-API-key + per-IP), three time windows each
 - **NEW**: Query pattern detector — detects systematic feature sweeps, input similarity clustering, uniform random probing, bot-like timing

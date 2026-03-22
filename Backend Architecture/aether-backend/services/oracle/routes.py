@@ -12,8 +12,8 @@ Routes:
 
 Security:
     The ``/proof/generate`` endpoint is intended for service-to-service
-    calls only.  In production, protect it with an internal API-key or
-    mTLS check.  The header guard below is a placeholder.
+    calls only. In non-local environments, signing and internal-auth secrets
+    must be explicitly configured or the module fails closed at import time.
 """
 
 from __future__ import annotations
@@ -22,6 +22,8 @@ import os
 from typing import Optional
 
 from fastapi import APIRouter, Header, HTTPException
+
+from config.settings import Environment, settings
 from pydantic import BaseModel, Field
 
 from services.oracle.signer import OracleSigner, ProofConfig, RewardProof
@@ -34,16 +36,26 @@ logger = get_logger("aether.service.oracle")
 router = APIRouter(prefix="/v1/oracle", tags=["Oracle"])
 
 
+def _require_env(name: str, local_default: str = "") -> str:
+    value = os.environ.get(name)
+    if value:
+        return value
+    if settings.env == Environment.LOCAL:
+        return local_default
+    raise RuntimeError(f"{name} must be set in non-local environments")
+
+
+
 # ═══════════════════════════════════════════════════════════════════════════
 # SINGLETON
 # ═══════════════════════════════════════════════════════════════════════════
 
 _config = ProofConfig(
-    signer_private_key=os.environ.get(
+    signer_private_key=_require_env(
         "ORACLE_SIGNER_KEY",
         "ac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80",
     ),
-    contract_address=os.environ.get(
+    contract_address=_require_env(
         "REWARD_CONTRACT_ADDRESS",
         "0x5FbDB2315678afecb367f032d93F642f64180aa3",
     ),
@@ -53,7 +65,7 @@ _config = ProofConfig(
 
 _signer = OracleSigner(_config)
 
-_INTERNAL_API_KEY = os.environ.get("ORACLE_INTERNAL_KEY", "aether-internal-dev-key")
+_INTERNAL_API_KEY = _require_env("ORACLE_INTERNAL_KEY", "aether-internal-dev-key")
 
 
 # ═══════════════════════════════════════════════════════════════════════════
