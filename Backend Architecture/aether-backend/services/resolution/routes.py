@@ -84,8 +84,14 @@ async def get_cluster(
     user_id: str,
     request: Request,
     repo: ResolutionRepository = Depends(_get_resolution_repo),
+    identity_repo: IdentityRepository = Depends(_get_identity_repo),
 ):
     """Get the identity cluster for a user (linked profiles, devices, IPs, wallets, emails)."""
+    # Verify the user belongs to the requesting tenant before returning cluster data
+    tenant = request.state.tenant
+    profile = await identity_repo.get_profile(tenant.tenant_id, user_id)
+    if not profile:
+        raise NotFoundError("Profile")
     cluster = await repo.get_cluster(user_id)
     return APIResponse(data=cluster).to_dict()
 

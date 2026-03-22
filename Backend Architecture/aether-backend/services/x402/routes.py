@@ -37,8 +37,9 @@ async def capture_payment(body: CapturedX402Transaction, request: Request):
         request_method=body.request_method,
     )
 
-    # Add to economic graph
-    _economic_graph.add_payment(tx)
+    # Add to economic graph (tenant-isolated)
+    tenant_id = request.state.tenant.tenant_id
+    await _economic_graph.add_payment(tx, tenant_id=tenant_id)
 
     return APIResponse(data=tx.model_dump()).to_dict()
 
@@ -47,7 +48,8 @@ async def capture_payment(body: CapturedX402Transaction, request: Request):
 async def get_economic_graph(request: Request):
     """Get the current x402 economic graph snapshot."""
     request.state.tenant.require_permission("x402:read")
-    snapshot = _economic_graph.get_graph_snapshot()
+    tenant_id = request.state.tenant.tenant_id
+    snapshot = _economic_graph.get_graph_snapshot(tenant_id=tenant_id)
     return APIResponse(data=snapshot).to_dict()
 
 
@@ -55,7 +57,8 @@ async def get_economic_graph(request: Request):
 async def get_agent_x402_history(agent_id: str, request: Request):
     """Get an agent's x402 payment history and spending patterns."""
     request.state.tenant.require_permission("x402:read")
-    summary = _economic_graph.get_spending_patterns(agent_id)
+    tenant_id = request.state.tenant.tenant_id
+    summary = _economic_graph.get_spending_patterns(agent_id, tenant_id=tenant_id)
     return APIResponse(data=summary.model_dump()).to_dict()
 
 
