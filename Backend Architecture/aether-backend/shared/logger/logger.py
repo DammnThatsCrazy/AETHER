@@ -107,20 +107,79 @@ def log_event(
 # Lightweight metrics counter (Prometheus-compatible in production)
 # ---------------------------------------------------------------------------
 
+try:
+    from prometheus_client import Counter, Histogram, CollectorRegistry, generate_latest
+    PROMETHEUS_AVAILABLE = True
+except ImportError:
+    PROMETHEUS_AVAILABLE = False
+
+
 class MetricsCollector:
-    """Simple in-memory metrics. Replace with prometheus_client in production."""
+    """
+    Metrics collection with Prometheus backend when available.
+
+    Production: uses prometheus_client Counter/Histogram for /metrics export.
+    Local/fallback: in-memory dicts (same interface, no Prometheus export).
+    """
 
     def __init__(self) -> None:
         self._counters: dict[str, int] = defaultdict(int)
         self._histograms: dict[str, list[float]] = defaultdict(list)
+        self._prom_counters: dict[str, Any] = {}
+        self._prom_histograms: dict[str, Any] = {}
+        self._prom_registry: Optional[Any] = None
+        if PROMETHEUS_AVAILABLE:
+            self._prom_registry = CollectorRegistry()
+
+    def _get_prom_counter(self, name: str, label_names: tuple) -> Any:
+        key = f"{name}:{','.join(label_names)}"
+        if key not in self._prom_counters:
+            safe_name = name.replace(".", "_").replace("-", "_").replace("{", "").replace("}", "")
+            self._prom_counters[key] = Counter(
+                safe_name, f"Aether counter: {name}",
+                label_names, registry=self._prom_registry,
+            )
+        return self._prom_counters[key]
+
+    def _get_prom_histogram(self, name: str, label_names: tuple) -> Any:
+        key = f"{name}:{','.join(label_names)}"
+        if key not in self._prom_histograms:
+            safe_name = name.replace(".", "_").replace("-", "_").replace("{", "").replace("}", "")
+            self._prom_histograms[key] = Histogram(
+                safe_name, f"Aether histogram: {name}",
+                label_names, registry=self._prom_registry,
+            )
+        return self._prom_histograms[key]
 
     def increment(self, name: str, value: int = 1, labels: Optional[dict] = None) -> None:
         key = self._key(name, labels)
         self._counters[key] += value
+        if PROMETHEUS_AVAILABLE and self._prom_registry:
+            label_names = tuple(sorted(labels.keys())) if labels else ()
+            label_values = tuple(str(labels[k]) for k in sorted(labels.keys())) if labels else ()
+            try:
+                counter = self._get_prom_counter(name, label_names)
+                if label_values:
+                    counter.labels(*label_values).inc(value)
+                else:
+                    counter.inc(value)
+            except Exception:
+                pass  # Prometheus errors never break application logic
 
     def observe(self, name: str, value: float, labels: Optional[dict] = None) -> None:
         key = self._key(name, labels)
         self._histograms[key].append(value)
+        if PROMETHEUS_AVAILABLE and self._prom_registry:
+            label_names = tuple(sorted(labels.keys())) if labels else ()
+            label_values = tuple(str(labels[k]) for k in sorted(labels.keys())) if labels else ()
+            try:
+                hist = self._get_prom_histogram(name, label_names)
+                if label_values:
+                    hist.labels(*label_values).observe(value)
+                else:
+                    hist.observe(value)
+            except Exception:
+                pass
 
     def get_counter(self, name: str, labels: Optional[dict] = None) -> int:
         return self._counters.get(self._key(name, labels), 0)
@@ -133,6 +192,12 @@ class MetricsCollector:
                 for k, v in self._histograms.items()
             },
         }
+
+    def prometheus_export(self) -> bytes:
+        """Export metrics in Prometheus text format."""
+        if PROMETHEUS_AVAILABLE and self._prom_registry:
+            return generate_latest(self._prom_registry)
+        return b""
 
     @staticmethod
     def _key(name: str, labels: Optional[dict] = None) -> str:

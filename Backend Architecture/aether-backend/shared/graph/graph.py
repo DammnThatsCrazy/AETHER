@@ -2,10 +2,16 @@
 Aether Shared — @aether/graph
 Neptune/Neo4j query builders, graph traversal helpers, vertex/edge factories.
 Used by: Identity, Analytics, Agent services.
+
+Backend selection:
+- AETHER_ENV=local → in-memory graph (no Neptune required)
+- AETHER_ENV=staging/production → Neptune via websocket (gremlinpython)
+  Set NEPTUNE_ENDPOINT env var to the Neptune cluster endpoint.
 """
 
 from __future__ import annotations
 
+import os
 import re
 import uuid
 from dataclasses import dataclass, field
@@ -15,6 +21,16 @@ from typing import Any, Optional
 from shared.logger.logger import get_logger
 
 logger = get_logger("aether.graph")
+
+# Optional gremlinpython import
+try:
+    from gremlin_python.driver.driver_remote_connection import DriverRemoteConnection
+    from gremlin_python.process.anonymous_traversal import traversal
+    from gremlin_python.process.graph_traversal import GraphTraversalSource, __
+    from gremlin_python.process.traversal import T, Cardinality
+    GREMLIN_AVAILABLE = True
+except ImportError:
+    GREMLIN_AVAILABLE = False
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -166,52 +182,41 @@ class Edge:
 
 
 # ═══════════════════════════════════════════════════════════════════════════
-# GRAPH CLIENT (stub — replace with gremlinpython or Neptune SDK)
+# ENVIRONMENT HELPERS
 # ═══════════════════════════════════════════════════════════════════════════
 
-class GraphClient:
-    """
-    Stub graph client with async lifecycle.
-    In production, use gremlinpython connecting to Neptune.
-    """
+def _is_local_env() -> bool:
+    return os.getenv("AETHER_ENV", "local").lower() == "local"
+
+
+def _neptune_endpoint() -> str:
+    return os.getenv("NEPTUNE_ENDPOINT", "")
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# IN-MEMORY BACKEND (local/dev)
+# ═══════════════════════════════════════════════════════════════════════════
+
+class _InMemoryGraphBackend:
+    """Dict-based graph for local development."""
 
     def __init__(self) -> None:
         self._vertices: dict[str, Vertex] = {}
         self._edges: list[Edge] = []
-        self._connected = False
-
-    async def connect(self) -> None:
-        self._connected = True
-        logger.info("GraphClient connected (in-memory stub)")
-
-    async def close(self) -> None:
-        self._vertices.clear()
-        self._edges.clear()
-        self._connected = False
-        logger.info("GraphClient closed")
 
     async def add_vertex(self, vertex: Vertex) -> str:
         self._vertices[vertex.vertex_id] = vertex
-        logger.info(f"Graph ADD_V {vertex.vertex_type} id={vertex.vertex_id}")
         return vertex.vertex_id
 
     async def add_edge(self, edge: Edge) -> None:
         self._edges.append(edge)
-        logger.info(
-            f"Graph ADD_E {edge.edge_type} "
-            f"{edge.from_vertex_id} -> {edge.to_vertex_id}"
-        )
 
     async def get_vertex(self, vertex_id: str) -> Optional[Vertex]:
         return self._vertices.get(vertex_id)
 
     async def get_neighbors(
-        self,
-        vertex_id: str,
-        edge_type: Optional[str] = None,
-        direction: str = "out",
+        self, vertex_id: str, edge_type: Optional[str] = None, direction: str = "out",
     ) -> list[Vertex]:
-        """Traverse edges from a vertex."""
         results: list[Vertex] = []
         for edge in self._edges:
             if direction in ("out", "both") and edge.from_vertex_id == vertex_id:
@@ -227,19 +232,265 @@ class GraphClient:
         return results
 
     async def query(self, gremlin: str) -> list[dict]:
-        """Execute a raw Gremlin query. Stub returns empty."""
-        logger.info(f"Graph QUERY: {gremlin[:100]}...")
+        logger.debug(f"In-memory graph QUERY (no-op): {gremlin[:80]}...")
         return []
 
     async def upsert_vertex(self, vertex: Vertex) -> str:
-        """Insert or update a vertex by ID."""
         existing = self._vertices.get(vertex.vertex_id)
         if existing:
             existing.properties.update(vertex.properties)
-            logger.info(f"Graph UPSERT_V (updated) {vertex.vertex_id}")
         else:
+            self._vertices[vertex.vertex_id] = vertex
+        return vertex.vertex_id
+
+    async def ping(self) -> bool:
+        return True
+
+    async def close(self) -> None:
+        self._vertices.clear()
+        self._edges.clear()
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# NEPTUNE BACKEND (production via gremlinpython)
+# ═══════════════════════════════════════════════════════════════════════════
+
+class _NeptuneGraphBackend:
+    """Real Neptune graph backend using gremlinpython."""
+
+    def __init__(self, endpoint: str) -> None:
+        if not GREMLIN_AVAILABLE:
+            raise RuntimeError(
+                "gremlinpython is required for Neptune: pip install gremlinpython>=3.7"
+            )
+        self._endpoint = endpoint
+        self._connection: Optional[Any] = None
+        self._g: Optional[Any] = None
+
+    async def _ensure_connected(self) -> Any:
+        if self._g is None:
+            url = f"wss://{self._endpoint}:8182/gremlin"
+            self._connection = DriverRemoteConnection(url, "g")
+            self._g = traversal().withRemote(self._connection)
+            logger.info(f"Neptune connected: {self._endpoint}")
+        return self._g
+
+    async def add_vertex(self, vertex: Vertex) -> str:
+        g = await self._ensure_connected()
+        t = g.addV(vertex.vertex_type).property(T.id, vertex.vertex_id)
+        t = t.property("created_at", vertex.created_at)
+        for k, v in vertex.properties.items():
+            t = t.property(k, str(v))
+        t.next()
+        logger.info(f"Neptune ADD_V {vertex.vertex_type} id={vertex.vertex_id}")
+        return vertex.vertex_id
+
+    async def add_edge(self, edge: Edge) -> None:
+        g = await self._ensure_connected()
+        t = g.V(edge.from_vertex_id).addE(edge.edge_type).to(__.V(edge.to_vertex_id))
+        t = t.property("created_at", edge.created_at)
+        for k, v in edge.properties.items():
+            t = t.property(k, str(v))
+        t.next()
+        logger.info(
+            f"Neptune ADD_E {edge.edge_type} "
+            f"{edge.from_vertex_id} -> {edge.to_vertex_id}"
+        )
+
+    async def get_vertex(self, vertex_id: str) -> Optional[Vertex]:
+        g = await self._ensure_connected()
+        try:
+            result = g.V(vertex_id).valueMap(True).next()
+            return Vertex(
+                vertex_type=result.get(T.label, "unknown"),
+                vertex_id=str(result.get(T.id, vertex_id)),
+                properties={
+                    k: v[0] if isinstance(v, list) and len(v) == 1 else v
+                    for k, v in result.items()
+                    if k not in (T.id, T.label)
+                },
+            )
+        except StopIteration:
+            return None
+        except Exception as e:
+            logger.error(f"Neptune get_vertex error for {vertex_id}: {e}")
+            return None
+
+    async def get_neighbors(
+        self, vertex_id: str, edge_type: Optional[str] = None, direction: str = "out",
+    ) -> list[Vertex]:
+        g = await self._ensure_connected()
+        results: list[Vertex] = []
+        try:
+            if direction == "out":
+                t = g.V(vertex_id).outE()
+            elif direction == "in":
+                t = g.V(vertex_id).inE()
+            else:
+                t = g.V(vertex_id).bothE()
+
+            if edge_type:
+                t = t.hasLabel(edge_type)
+
+            if direction == "out":
+                t = t.inV()
+            elif direction == "in":
+                t = t.outV()
+            else:
+                t = t.otherV()
+
+            for v_map in t.valueMap(True).toList():
+                results.append(Vertex(
+                    vertex_type=v_map.get(T.label, "unknown"),
+                    vertex_id=str(v_map.get(T.id, "")),
+                    properties={
+                        k: v[0] if isinstance(v, list) and len(v) == 1 else v
+                        for k, v in v_map.items()
+                        if k not in (T.id, T.label)
+                    },
+                ))
+        except Exception as e:
+            logger.error(f"Neptune get_neighbors error for {vertex_id}: {e}")
+        return results
+
+    async def query(self, gremlin: str) -> list[dict]:
+        g = await self._ensure_connected()
+        try:
+            # Submit raw Gremlin string via the connection's client
+            if self._connection and hasattr(self._connection, '_client'):
+                result = self._connection._client.submit(gremlin).all().result()
+                return [dict(r) if hasattr(r, 'items') else {"value": r} for r in result]
+        except Exception as e:
+            logger.error(f"Neptune raw query error: {e}")
+        return []
+
+    async def upsert_vertex(self, vertex: Vertex) -> str:
+        g = await self._ensure_connected()
+        try:
+            # Try to find existing vertex first
+            existing = g.V(vertex.vertex_id).hasNext()
+            if existing:
+                t = g.V(vertex.vertex_id)
+                for k, v in vertex.properties.items():
+                    t = t.property(Cardinality.single, k, str(v))
+                t.next()
+            else:
+                await self.add_vertex(vertex)
+        except Exception:
             await self.add_vertex(vertex)
         return vertex.vertex_id
 
+    async def ping(self) -> bool:
+        try:
+            g = await self._ensure_connected()
+            g.V().limit(1).hasNext()
+            return True
+        except Exception:
+            return False
+
+    async def close(self) -> None:
+        if self._connection:
+            self._connection.close()
+            self._connection = None
+            self._g = None
+            logger.info("Neptune connection closed")
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# GRAPH CLIENT (public API — auto-selects backend)
+# ═══════════════════════════════════════════════════════════════════════════
+
+class GraphClient:
+    """
+    Async graph client with automatic backend selection.
+
+    - AETHER_ENV=local → in-memory graph
+    - AETHER_ENV=staging/production + NEPTUNE_ENDPOINT → Neptune via gremlinpython
+    - Non-local without Neptune → RuntimeError (fail-closed)
+    """
+
+    def __init__(self) -> None:
+        self._backend: Optional[_InMemoryGraphBackend | _NeptuneGraphBackend] = None
+        self._connected = False
+        self._mode = "uninitialized"
+
+    async def connect(self) -> None:
+        endpoint = _neptune_endpoint()
+        if endpoint and GREMLIN_AVAILABLE:
+            self._backend = _NeptuneGraphBackend(endpoint)
+            if await self._backend.ping():
+                self._mode = "neptune"
+                logger.info(f"GraphClient connected (Neptune: {endpoint})")
+            else:
+                if _is_local_env():
+                    logger.warning("Neptune not reachable — falling back to in-memory graph")
+                    self._backend = _InMemoryGraphBackend()
+                    self._mode = "in-memory"
+                else:
+                    raise RuntimeError(
+                        f"Neptune not reachable at {endpoint}. "
+                        "Set AETHER_ENV=local for in-memory fallback."
+                    )
+        elif _is_local_env():
+            self._backend = _InMemoryGraphBackend()
+            self._mode = "in-memory"
+            logger.info("GraphClient connected (in-memory, local mode)")
+        else:
+            raise RuntimeError(
+                "NEPTUNE_ENDPOINT not configured. Required in non-local environments. "
+                "Set AETHER_ENV=local for in-memory fallback."
+            )
+        self._connected = True
+
+    async def close(self) -> None:
+        if self._backend:
+            await self._backend.close()
+        self._connected = False
+        logger.info("GraphClient closed")
+
+    async def add_vertex(self, vertex: Vertex) -> str:
+        if self._backend is None:
+            await self.connect()
+        return await self._backend.add_vertex(vertex)  # type: ignore[union-attr]
+
+    async def add_edge(self, edge: Edge) -> None:
+        if self._backend is None:
+            await self.connect()
+        await self._backend.add_edge(edge)  # type: ignore[union-attr]
+
+    async def get_vertex(self, vertex_id: str) -> Optional[Vertex]:
+        if self._backend is None:
+            await self.connect()
+        return await self._backend.get_vertex(vertex_id)  # type: ignore[union-attr]
+
+    async def get_neighbors(
+        self,
+        vertex_id: str,
+        edge_type: Optional[str] = None,
+        direction: str = "out",
+    ) -> list[Vertex]:
+        if self._backend is None:
+            await self.connect()
+        return await self._backend.get_neighbors(vertex_id, edge_type, direction)  # type: ignore[union-attr]
+
+    async def query(self, gremlin: str) -> list[dict]:
+        if self._backend is None:
+            await self.connect()
+        return await self._backend.query(gremlin)  # type: ignore[union-attr]
+
+    async def upsert_vertex(self, vertex: Vertex) -> str:
+        if self._backend is None:
+            await self.connect()
+        return await self._backend.upsert_vertex(vertex)  # type: ignore[union-attr]
+
     async def health_check(self) -> bool:
-        return self._connected or True  # Stub always healthy
+        if self._backend is None:
+            return False
+        try:
+            return await self._backend.ping()
+        except Exception:
+            return False
+
+    @property
+    def mode(self) -> str:
+        return self._mode

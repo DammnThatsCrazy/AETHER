@@ -2,12 +2,18 @@
 Aether Shared — @aether/events
 Event schema definitions, producer/consumer wrappers, dead-letter handling.
 Used by: Ingestion, Identity, Analytics, ML Serving, Agent.
+
+Backend selection:
+- AETHER_ENV=local → in-memory event bus (no Kafka required)
+- AETHER_ENV=staging/production → Kafka via aiokafka
+  Set KAFKA_BOOTSTRAP_SERVERS env var.
 """
 
 from __future__ import annotations
 
 import asyncio
 import json
+import os
 import uuid
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
@@ -19,6 +25,23 @@ from shared.logger.logger import get_logger, metrics
 logger = get_logger("aether.events")
 
 EventHandler = Callable[["Event"], Awaitable[None]]
+
+# Optional aiokafka import
+try:
+    from aiokafka import AIOKafkaProducer, AIOKafkaConsumer
+    KAFKA_AVAILABLE = True
+except ImportError:
+    AIOKafkaProducer = None  # type: ignore[misc, assignment]
+    AIOKafkaConsumer = None  # type: ignore[misc, assignment]
+    KAFKA_AVAILABLE = False
+
+
+def _is_local_env() -> bool:
+    return os.getenv("AETHER_ENV", "local").lower() == "local"
+
+
+def _kafka_bootstrap() -> str:
+    return os.getenv("KAFKA_BOOTSTRAP_SERVERS", "")
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -143,14 +166,16 @@ class Event:
 
 
 # ═══════════════════════════════════════════════════════════════════════════
-# PRODUCER (abstract — swap implementation for Kafka vs SNS)
+# PRODUCER — auto-selects Kafka or in-memory
 # ═══════════════════════════════════════════════════════════════════════════
 
 class EventProducer:
     """
     Publishes events to the event bus with retry logic.
-    Stub implementation — logs events in memory.
-    Replace with aiokafka.AIOKafkaProducer or boto3 SNS client.
+
+    Backend selection:
+    - AETHER_ENV=local → in-memory list (for dev/testing)
+    - AETHER_ENV=staging/production → Kafka via aiokafka
     """
 
     MAX_RETRIES = 3
@@ -159,20 +184,67 @@ class EventProducer:
     def __init__(self) -> None:
         self._published: list[Event] = []
         self._connected = False
+        self._kafka_producer: Optional[Any] = None
+        self._mode = "uninitialized"
 
     async def connect(self) -> None:
+        bootstrap = _kafka_bootstrap()
+        if bootstrap and KAFKA_AVAILABLE:
+            try:
+                self._kafka_producer = AIOKafkaProducer(
+                    bootstrap_servers=bootstrap,
+                    value_serializer=lambda v: v.encode("utf-8"),
+                    acks="all",
+                    retries=3,
+                    request_timeout_ms=30000,
+                )
+                await self._kafka_producer.start()
+                self._mode = "kafka"
+                logger.info(f"EventProducer connected (Kafka: {bootstrap})")
+            except Exception as e:
+                if _is_local_env():
+                    logger.warning(f"Kafka not reachable ({e}) — falling back to in-memory")
+                    self._kafka_producer = None
+                    self._mode = "in-memory"
+                else:
+                    raise RuntimeError(
+                        f"Kafka not reachable at {bootstrap}: {e}. "
+                        "Set AETHER_ENV=local for in-memory fallback."
+                    )
+        elif _is_local_env():
+            self._mode = "in-memory"
+            logger.info("EventProducer connected (in-memory, local mode)")
+        else:
+            if not KAFKA_AVAILABLE:
+                raise RuntimeError(
+                    "aiokafka required for production: pip install aiokafka>=0.10"
+                )
+            raise RuntimeError(
+                "KAFKA_BOOTSTRAP_SERVERS not set. Required in non-local environments."
+            )
         self._connected = True
-        logger.info("EventProducer connected (in-memory stub)")
 
     async def close(self) -> None:
+        if self._kafka_producer:
+            await self._kafka_producer.stop()
+            self._kafka_producer = None
         self._connected = False
         logger.info("EventProducer closed")
 
     async def publish(self, event: Event) -> None:
         """Publish a single event with retry."""
+        if not self._connected:
+            await self.connect()
+
         for attempt in range(self.MAX_RETRIES):
             try:
-                self._published.append(event)
+                if self._kafka_producer:
+                    await self._kafka_producer.send_and_wait(
+                        event.topic.value, event.serialize()
+                    )
+                else:
+                    self._published.append(event)
+
                 metrics.increment("events_published", labels={"topic": event.topic.value})
                 logger.info(f"Published event {event.event_id} to {event.topic.value}")
                 return
@@ -187,41 +259,120 @@ class EventProducer:
 
     async def publish_batch(self, events: list[Event]) -> None:
         """Publish a batch of events."""
-        for event in events:
-            await self.publish(event)
+        if self._kafka_producer:
+            batch = self._kafka_producer.create_batch()
+            for event in events:
+                batch.append(
+                    value=event.serialize().encode("utf-8"),
+                    key=None,
+                    timestamp=None,
+                )
+            for event in events:
+                await self.publish(event)
+        else:
+            for event in events:
+                await self.publish(event)
 
     @property
     def published_count(self) -> int:
         return len(self._published)
 
     async def health_check(self) -> bool:
-        return self._connected or True  # Stub always healthy
+        if not self._connected:
+            return False
+        if self._kafka_producer:
+            try:
+                partitions = await self._kafka_producer.partitions_for("__health")
+                return True
+            except Exception:
+                return False
+        return True  # In-memory mode is always healthy
+
+    @property
+    def mode(self) -> str:
+        return self._mode
 
 
 # ═══════════════════════════════════════════════════════════════════════════
-# CONSUMER (abstract)
+# CONSUMER — auto-selects Kafka or in-memory
 # ═══════════════════════════════════════════════════════════════════════════
 
 class EventConsumer:
     """
     Subscribes to topics and processes events with backpressure.
-    Stub — in production use aiokafka.AIOKafkaConsumer or SQS poller.
+
+    Backend:
+    - AETHER_ENV=local → processes events in-memory via process()
+    - AETHER_ENV=staging/production → Kafka consumer group via aiokafka
     """
 
     MAX_CONCURRENT = 10
     MAX_HANDLER_RETRIES = 2
 
-    def __init__(self) -> None:
+    def __init__(self, group_id: str = "aether-backend") -> None:
         self._handlers: dict[Topic, list[EventHandler]] = {}
         self._semaphore = asyncio.Semaphore(self.MAX_CONCURRENT)
         self._dlq: list[Event] = []
+        self._kafka_consumer: Optional[Any] = None
+        self._group_id = group_id
+        self._running = False
+        self._mode = "uninitialized"
 
     def subscribe(self, topic: Topic, handler: EventHandler) -> None:
         self._handlers.setdefault(topic, []).append(handler)
         logger.info(f"Subscribed handler to {topic.value}")
 
+    async def start(self) -> None:
+        """Start consuming from Kafka or stay in in-memory mode."""
+        bootstrap = _kafka_bootstrap()
+        topics = [t.value for t in self._handlers.keys()]
+        if not topics:
+            self._mode = "in-memory"
+            logger.info("EventConsumer: no subscriptions, in-memory mode")
+            return
+
+        if bootstrap and KAFKA_AVAILABLE:
+            try:
+                self._kafka_consumer = AIOKafkaConsumer(
+                    *topics,
+                    bootstrap_servers=bootstrap,
+                    group_id=self._group_id,
+                    auto_offset_reset="earliest",
+                    enable_auto_commit=True,
+                    value_deserializer=lambda m: m.decode("utf-8"),
+                )
+                await self._kafka_consumer.start()
+                self._mode = "kafka"
+                self._running = True
+                logger.info(f"EventConsumer started (Kafka: {bootstrap}, topics: {topics})")
+            except Exception as e:
+                if _is_local_env():
+                    logger.warning(f"Kafka consumer start failed ({e}) — in-memory mode")
+                    self._mode = "in-memory"
+                else:
+                    raise RuntimeError(f"Kafka consumer start failed: {e}")
+        else:
+            self._mode = "in-memory"
+            logger.info("EventConsumer started (in-memory mode)")
+
+    async def consume_loop(self) -> None:
+        """Main consume loop for Kafka mode. Run as asyncio task."""
+        if not self._kafka_consumer:
+            return
+        try:
+            async for msg in self._kafka_consumer:
+                try:
+                    event = Event.deserialize(msg.value)
+                    await self.process(event)
+                except Exception as e:
+                    logger.error(f"Error processing Kafka message: {e}")
+        except Exception as e:
+            logger.error(f"Kafka consume loop error: {e}")
+        finally:
+            self._running = False
+
     async def process(self, event: Event) -> None:
-        """Process an event with concurrency limiting and retry (loop-based, no recursion)."""
+        """Process an event with concurrency limiting and retry."""
         async with self._semaphore:
             handlers = self._handlers.get(event.topic, [])
             for handler in handlers:
@@ -237,13 +388,12 @@ class EventConsumer:
                         if event.retry_count < self.MAX_HANDLER_RETRIES:
                             event.retry_count += 1
                             logger.info(f"Retrying event {event.event_id} (attempt {event.retry_count})")
-                            # Loop will retry without recursive call
                         else:
                             await self._send_to_dlq(event, str(e))
-                            break  # Exit retry loop, move to next handler
+                            break
 
     async def _send_to_dlq(self, event: Event, error: str) -> None:
-        """Send failed events to dead-letter queue for manual review."""
+        """Send failed events to dead-letter queue."""
         dlq_event = Event(
             topic=Topic.DEAD_LETTER,
             tenant_id=event.tenant_id,
@@ -262,6 +412,17 @@ class EventConsumer:
         metrics.increment("events_dead_lettered")
         logger.warning(f"Event {event.event_id} sent to DLQ: {error}")
 
+    async def stop(self) -> None:
+        self._running = False
+        if self._kafka_consumer:
+            await self._kafka_consumer.stop()
+            self._kafka_consumer = None
+        logger.info("EventConsumer stopped")
+
     @property
     def dlq_depth(self) -> int:
         return len(self._dlq)
+
+    @property
+    def mode(self) -> str:
+        return self._mode
