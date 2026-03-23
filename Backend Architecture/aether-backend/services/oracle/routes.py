@@ -89,6 +89,7 @@ class GenerateProofResponse(BaseModel):
     contract_address: str
     signature: str
     message_hash: str
+    signer_public_key: str
 
 
 class VerifyProofRequest(BaseModel):
@@ -102,6 +103,7 @@ class VerifyProofRequest(BaseModel):
     contract_address: str
     signature: str
     message_hash: str
+    signer_public_key: str
 
 
 class VerifyProofResponse(BaseModel):
@@ -172,6 +174,7 @@ async def verify_proof(body: VerifyProofRequest):
         contract_address=body.contract_address,
         signature=body.signature,
         message_hash=body.message_hash,
+        signer_public_key=body.signer_public_key,
     )
 
     expired = is_proof_expired(proof)

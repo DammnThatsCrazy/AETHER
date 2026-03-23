@@ -280,7 +280,7 @@ Complete flow for an agent executing a task with chain interaction:
 
 - All IG endpoints are **feature-flagged** — each route checks its corresponding `IntelligenceGraphConfig` flag before execution
 - All fraud service endpoints now require tenant-scoped permission checks (`fraud:evaluate`, `fraud:read`, `admin`)
-- API key stubs are restricted to `LOCAL` environment only; non-local environments reject stub keys
+- API keys are validated against the durable registry configured by `AETHER_AUTH_DB_PATH`; non-local environments fail fast when the registry is not configured
 - JWT secret validation enforced at startup — `RuntimeError` raised if default secret used in non-local environments
 
 ### Tenant Isolation

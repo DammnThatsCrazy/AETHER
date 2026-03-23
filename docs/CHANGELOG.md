@@ -2,6 +2,10 @@
 
 ## [Unreleased] — A2H Relationship Layer
 
+- **FIXED**: Replaced reject-all API-key auth with a durable SQLite-backed key registry including revocation, expiry, tenant metadata, and permission validation
+- **FIXED**: Replaced in-process event, graph, and guardrail audit/spend state with durable SQLite-backed implementations; non-local cache access now requires Redis
+- **FIXED**: Replaced oracle proof simulation with real secp256k1 signing and verification; non-local ML serving now fails when artifacts are missing
+
 - **NEW**: A2H (Agent-to-Human) relationship layer — fourth relationship category in the Intelligence Graph
 - **NEW**: 4 edge types: `NOTIFIES`, `RECOMMENDS`, `DELIVERS_TO`, `ESCALATES_TO` (Agent → User)
 - **NEW**: 4 event topics for A2H interactions (notification, recommendation, delivery, escalation)
