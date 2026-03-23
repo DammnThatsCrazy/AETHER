@@ -471,8 +471,17 @@ curl http://localhost:8000/
 # 5. Check the health endpoint
 curl http://localhost:8000/v1/health
 
-# 6. Make an authenticated request (using the stub API key)
-curl -H "X-API-Key: ak_test_123" http://localhost:8000/v1/analytics/dashboard/summary
+# 6. Provision a durable API key for local development
+export AETHER_AUTH_DB_PATH="$PWD/.state/auth.sqlite3"
+python - <<'PYA'
+import os, sys
+sys.path.insert(0, os.getcwd())
+from shared.auth.auth import APIKeyValidator, Role, APIKeyTier
+validator = APIKeyValidator(environment="local")
+print(validator.provision_key(tenant_id="tenant_local", role=Role.ADMIN.value, tier=APIKeyTier.PRO.value, permissions=["read","write","analytics"]))
+PYA
+# 7. Use the emitted key for an authenticated request
+curl -H "X-API-Key: <generated-key>" http://localhost:8000/v1/analytics/dashboard/summary
 
 # 7. Open interactive API docs
 open http://localhost:8000/docs
@@ -517,7 +526,12 @@ All configuration is sourced from environment variables with sensible defaults. 
 
 | Variable | Default | Description |
 | -------- | ------- | ----------- |
-| `REDIS_HOST` | `localhost` | Redis host |
+| `REDIS_HOST` | `localhost` | Redis host; required in non-local environments unless `REDIS_URL` is set |
+| `REDIS_URL` | *(derived from host/port)* | Full Redis connection string for shared cache access |
+| `AETHER_AUTH_DB_PATH` | *(empty in non-local)* | Durable API-key registry path; required outside `local` |
+| `AETHER_EVENT_BUS_DB_PATH` | *(empty in non-local)* | Durable event-bus database path; required outside `local` |
+| `AETHER_GRAPH_DB_PATH` | *(empty in non-local)* | Durable graph store path; required outside `local` |
+| `AETHER_GUARDRAILS_DB_PATH` | *(empty in non-local)* | Durable guardrail audit/spend store path; required outside `local` |
 | `REDIS_PORT` | `6379` | Redis port |
 | `REDIS_DB` | `0` | Redis database number |
 | `REDIS_PASSWORD` | *(empty)* | Redis password |

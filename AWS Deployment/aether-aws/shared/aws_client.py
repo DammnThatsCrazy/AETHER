@@ -7,7 +7,6 @@ when credentials are unavailable (demo/CI mode).
 from __future__ import annotations
 
 import os
-from functools import lru_cache
 from typing import Any, Optional
 
 
@@ -15,7 +14,8 @@ from typing import Any, Optional
 # If AETHER_STUB_AWS=1 or boto3 is unavailable, all client calls
 # return None so operational scripts can fall back to illustrative data.
 
-STUB_MODE = os.environ.get("AETHER_STUB_AWS", "0") == "1"
+def _stub_mode_enabled() -> bool:
+    return os.environ.get("AETHER_STUB_AWS", "0") == "1"
 
 try:
     import boto3
@@ -57,7 +57,7 @@ class AWSClientFactory:
 
     @property
     def is_stub(self) -> bool:
-        return STUB_MODE or not BOTO_AVAILABLE
+        return _stub_mode_enabled() or not BOTO_AVAILABLE
 
     def _get_session(self) -> Any:
         if self._session is None and not self.is_stub:

@@ -10,6 +10,7 @@ variable "environment" { type = string }
 variable "ecs_cluster_name" { type = string }
 variable "service_names" { type = map(string) default = {} }
 variable "sns_alert_topic_arn" { type = string default = "" }
+variable "pagerduty_endpoint" { type = string default = "" }
 variable "monthly_budget_usd" { type = number default = 5000 }
 
 locals {
@@ -24,10 +25,10 @@ resource "aws_sns_topic" "alerts" {
 }
 
 resource "aws_sns_topic_subscription" "pagerduty" {
-  count     = var.environment == "production" ? 1 : 0
+  count     = var.environment == "production" && var.pagerduty_endpoint != "" ? 1 : 0
   topic_arn = aws_sns_topic.alerts.arn
   protocol  = "https"
-  endpoint  = "https://events.pagerduty.com/integration/placeholder/enqueue"
+  endpoint  = var.pagerduty_endpoint
 }
 
 # ── CloudWatch Alarms — Error Rate per Service ───────────────────────
