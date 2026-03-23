@@ -41,10 +41,10 @@ Aether v7.0 adopts a **"Sense and Ship"** thin-client architecture across all pl
 ### Module Architecture (Web SDK)
 
 ```
-AetherSDK (index.ts) — v8.3.0
+AetherSDK (index.ts) — v8.3.1
 │
 ├── Core (always loaded)
-│   ├── EventQueue .............. Batch + offline queue (POST /v1/events)
+│   ├── EventQueue .............. Batch + offline queue (POST /v1/ingest/events/batch)
 │   ├── SessionManager ......... Session lifecycle + heartbeat
 │   ├── IdentityManager ........ Multi-wallet identity + traits
 │   ├── ConsentModule .......... GDPR/CCPA consent gates
@@ -227,13 +227,13 @@ Resolution Consumer (real-time)
 
 | Endpoint | Method | Purpose |
 |---|---|---|
-| `/v1/events` | POST | Batched raw events (Web SDK) |
-| `/v1/batch` | POST | Batched raw events (iOS/Android) |
+| `/v1/ingest/events` | POST | Single SDK event ingestion |
+| `/v1/ingest/events/batch` | POST | Batched SDK event ingestion |
 | `/v1/config` | GET | SDK init config (flags, funnels, surveys) |
 | `/v1/tx/enrich` | POST | Transaction classification + DeFi labeling |
 | `/v1/chains/{id}` | GET | Chain metadata on demand |
 | `/v1/protocols/{addr}` | GET | Protocol identification |
-| `/v1/predict` | POST | ML inference (9 models: intent, bot, session, identity, journey, churn, LTV, anomaly, attribution) |
+| `/v1/ml/predict` | POST | ML inference (9 models: intent, bot, session, identity, journey, churn, LTV, anomaly, attribution) |
 | `/v1/rewards/{id}/eligibility` | GET | Reward eligibility check |
 | `/v1/rewards/{id}/payload` | GET | Pre-built claim transaction |
 | `/v1/rewards/{id}/claim` | POST | Submit on-chain claim |
@@ -264,7 +264,7 @@ Resolution Consumer (real-time)
          │
 5. Batch threshold reached OR flush timer fires
          │
-6. POST /v1/events { batch: [...events], sentAt, context }
+6. POST /v1/ingest/events/batch { events: [...events] }
          │
 7. Backend pipeline:
    ├── IP enrichment (MaxMind GeoLite2)
@@ -291,8 +291,8 @@ Resolution Consumer (real-time)
 
 | Capability | Was (Client) | Now (Backend) |
 |---|---|---|
-| ML Intent Prediction | `edge-ml.ts` (401 LOC) | `POST /v1/predict` |
-| Bot Detection | `edge-ml.ts` | `POST /v1/predict` |
+| ML Intent Prediction | `edge-ml.ts` (401 LOC) | `POST /v1/ml/predict` |
+| Bot Detection | `edge-ml.ts` | `POST /v1/ml/predict` |
 | DeFi Classification | `protocol-registry.ts` + 15 trackers | `POST /v1/tx/enrich` |
 | Portfolio Aggregation | `portfolio-tracker.ts` (209 LOC) | Backend aggregation service |
 | Wallet Classification | `wallet-classifier.ts` (170 LOC) | `GET /v1/wallet-label/{addr}` |

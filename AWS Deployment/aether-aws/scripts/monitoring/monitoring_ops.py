@@ -4,7 +4,7 @@ Health checks, alarm management, SLO tracking, log retention,
 X-Ray tracing verification, and dashboard status.
 
 Enhanced:
-  + Real CloudWatch API queries (with fallback)
+  + Real CloudWatch API queries
   + X-Ray sampling rule verification
   + Dashboard existence checks
   + Alarm state querying (not just existence)
@@ -19,6 +19,16 @@ from typing import Any, Optional
 from config.aws_config import MONITORING_STACK, COMPUTE_SPECS, SERVICE_NAMES
 from shared.runner import mon_log, timed
 from shared.aws_client import aws_client
+
+
+def _require_live_aws(response: Optional[dict[str, Any]], operation: str) -> dict[str, Any]:
+    """Fail closed in live mode when AWS data cannot be retrieved."""
+    if response is None:
+        raise RuntimeError(
+            f"{operation} failed while AETHER_STUB_AWS=0; rerun with --stub-aws for demo mode "
+            "or fix AWS credentials/permissions."
+        )
+    return response
 
 
 # =========================================================================
@@ -48,10 +58,13 @@ def check_all_services(environment: str = "production") -> list[HealthCheckResul
         mon_log(f"  Checking {svc}...")
         # Real: curl -sf http://{alb_dns}:8xxx/v1/health
         if not aws_client.is_stub:
-            resp = aws_client.safe_call(
+            resp = _require_live_aws(
+                aws_client.safe_call(
                 "ecs", "describe_services",
                 cluster=f"aether-{environment}",
                 services=[f"aether-{svc}"],
+                ),
+                f"ecs.describe_services for {svc}",
             )
             if resp and resp.get("services"):
                 svc_data = resp["services"][0]
@@ -59,7 +72,7 @@ def check_all_services(environment: str = "production") -> list[HealthCheckResul
                 desired = svc_data.get("desiredCount", 0)
                 status = "healthy" if running == desired else "degraded"
             else:
-                status = "healthy"  # fallback
+                raise RuntimeError(f"ECS service metadata missing for {svc} in {environment}")
         else:
             status = "healthy"
 
@@ -133,19 +146,26 @@ def verify_alarms(environment: str = "production") -> dict[str, str]:
     # Try real CloudWatch query
     if not aws_client.is_stub:
         alarm_names = [f"aether-{environment}-{a.name}" for a in STANDARD_ALARMS]
-        resp = aws_client.safe_call(
+        resp = _require_live_aws(
+            aws_client.safe_call(
             "cloudwatch", "describe_alarms",
             AlarmNames=alarm_names,
+            ),
+            "cloudwatch.describe_alarms",
         )
-        if resp:
-            existing = {a["AlarmName"]: a["StateValue"] for a in resp.get("MetricAlarms", [])}
-            for alarm in STANDARD_ALARMS:
-                full_name = f"aether-{environment}-{alarm.name}"
-                state = existing.get(full_name, "MISSING")
-                alarm_status[full_name] = state
-                icon = "\u2713" if state == "OK" else "\u26a0"
-                mon_log(f"  {icon} {full_name:45s} -> {state}")
-            return alarm_status
+        existing = {a["AlarmName"]: a["StateValue"] for a in resp.get("MetricAlarms", [])}
+        missing = []
+        for alarm in STANDARD_ALARMS:
+            full_name = f"aether-{environment}-{alarm.name}"
+            state = existing.get(full_name, "MISSING")
+            alarm_status[full_name] = state
+            icon = "\u2713" if state == "OK" else "\u26a0"
+            mon_log(f"  {icon} {full_name:45s} -> {state}")
+            if state == "MISSING":
+                missing.append(full_name)
+        if missing:
+            raise RuntimeError(f"Missing CloudWatch alarms in live mode: {', '.join(missing)}")
+        return alarm_status
 
     # Fallback: stub verification
     for alarm in STANDARD_ALARMS:
@@ -224,16 +244,18 @@ def check_log_retention(environment: str = "production") -> list[dict[str, Any]]
     for lg in log_groups:
         # Attempt real query
         if not aws_client.is_stub:
-            resp = aws_client.safe_call(
+            resp = _require_live_aws(
+                aws_client.safe_call(
                 "logs", "describe_log_groups",
                 logGroupNamePrefix=lg,
+                ),
+                f"logs.describe_log_groups for {lg}",
             )
             if resp and resp.get("logGroups"):
                 actual = resp["logGroups"][0].get("retentionInDays", "Never")
                 status = "pass" if actual == expected_retention else "warn"
             else:
-                actual = expected_retention
-                status = "pass"
+                raise RuntimeError(f"Log group {lg} not found in live mode")
         else:
             actual = expected_retention
             status = "pass"

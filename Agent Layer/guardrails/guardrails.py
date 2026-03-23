@@ -1,33 +1,114 @@
-"""
-Aether Agent Layer — Guardrails
-Safety net that wraps every worker execution.
-"""
+"""Aether Agent Layer — durable guardrails."""
 
 from __future__ import annotations
 
+import json
 import logging
-import re
+import os
+import sqlite3
 import time
 from collections import defaultdict
+from dataclasses import asdict
+from pathlib import Path
 from typing import Optional
 
-from config.settings import (
-    AgentLayerSettings,
-    ConfidenceThresholds,
-    RateLimitBudget,
-)
+from config.settings import AgentLayerSettings, ConfidenceThresholds, RateLimitBudget
 from models.core import AuditRecord, TaskResult, AgentTask
 
 logger = logging.getLogger("aether.guardrails")
 
 
-# ---------------------------------------------------------------------------
-# Kill Switch
-# ---------------------------------------------------------------------------
+def _state_dir(component: str) -> Path:
+    base = Path(os.environ.get("XDG_STATE_HOME", Path.home() / ".local" / "state"))
+    path = base / "aether" / component
+    path.mkdir(parents=True, exist_ok=True)
+    return path
+
+
+def _guardrails_db_path() -> Path:
+    explicit = os.environ.get("AETHER_GUARDRAILS_DB_PATH")
+    env = os.environ.get("AETHER_ENV", "local").lower()
+    if explicit:
+        path = Path(explicit)
+    elif env == "local":
+        path = _state_dir("guardrails") / "guardrails.sqlite3"
+    else:
+        raise RuntimeError(
+            "AETHER_GUARDRAILS_DB_PATH must be set in non-local environments to enable durable guardrail audit and cost tracking."
+        )
+    path.parent.mkdir(parents=True, exist_ok=True)
+    return path
+
+
+class _GuardrailsStore:
+    def __init__(self, db_path: Path):
+        self.db_path = db_path
+        self._init_db()
+
+    def _connect(self) -> sqlite3.Connection:
+        conn = sqlite3.connect(self.db_path)
+        conn.row_factory = sqlite3.Row
+        conn.execute("PRAGMA journal_mode=WAL")
+        return conn
+
+    def _init_db(self) -> None:
+        with self._connect() as conn:
+            conn.execute(
+                "CREATE TABLE IF NOT EXISTS audit_records (audit_id TEXT PRIMARY KEY, task_id TEXT NOT NULL, worker_type TEXT NOT NULL, action TEXT NOT NULL, entity_id TEXT, data_before TEXT, data_after TEXT, confidence REAL NOT NULL, timestamp TEXT NOT NULL)"
+            )
+            conn.execute(
+                "CREATE TABLE IF NOT EXISTS spend_ledger (id INTEGER PRIMARY KEY AUTOINCREMENT, amount_usd REAL NOT NULL, recorded_at REAL NOT NULL)"
+            )
+
+    def write_audit(self, record: AuditRecord) -> None:
+        payload = asdict(record)
+        with self._connect() as conn:
+            conn.execute(
+                "INSERT OR REPLACE INTO audit_records(audit_id, task_id, worker_type, action, entity_id, data_before, data_after, confidence, timestamp) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                (
+                    payload["audit_id"], payload["task_id"], str(payload["worker_type"]), payload["action"], payload["entity_id"],
+                    json.dumps(payload["data_before"], default=str), json.dumps(payload["data_after"], default=str), payload["confidence"], payload["timestamp"].isoformat(),
+                ),
+            )
+
+    def read_audit(self, task_id: Optional[str] = None) -> list[AuditRecord]:
+        query = "SELECT * FROM audit_records"
+        params: tuple = ()
+        if task_id:
+            query += " WHERE task_id = ?"
+            params = (task_id,)
+        query += " ORDER BY timestamp"
+        with self._connect() as conn:
+            rows = conn.execute(query, params).fetchall()
+        records: list[AuditRecord] = []
+        for row in rows:
+            records.append(
+                AuditRecord(
+                    task_id=row["task_id"],
+                    worker_type=row["worker_type"],
+                    action=row["action"],
+                    entity_id=row["entity_id"],
+                    data_before=json.loads(row["data_before"]) if row["data_before"] else None,
+                    data_after=json.loads(row["data_after"]) if row["data_after"] else None,
+                    confidence=row["confidence"],
+                    audit_id=row["audit_id"],
+                )
+            )
+        return records
+
+    def record_spend(self, amount_usd: float) -> None:
+        with self._connect() as conn:
+            conn.execute("INSERT INTO spend_ledger(amount_usd, recorded_at) VALUES (?, ?)", (amount_usd, time.time()))
+
+    def spend_totals(self) -> tuple[float, float]:
+        now = time.time()
+        with self._connect() as conn:
+            hourly = conn.execute("SELECT COALESCE(SUM(amount_usd), 0) AS total FROM spend_ledger WHERE recorded_at >= ?", (now - 3600,)).fetchone()["total"]
+            daily = conn.execute("SELECT COALESCE(SUM(amount_usd), 0) AS total FROM spend_ledger WHERE recorded_at >= ?", (now - 86400,)).fetchone()["total"]
+        return float(hourly), float(daily)
+
 
 class KillSwitch:
-    """Emergency stop — when engaged, all workers must halt immediately."""
-
     def __init__(self, settings: AgentLayerSettings):
         self._settings = settings
 
@@ -44,21 +125,13 @@ class KillSwitch:
         self._settings.kill_switch_enabled = False
 
     def check(self):
-        """Raises if kill switch is on. Call at the top of every worker run."""
         if self.is_engaged:
             raise RuntimeError("Agent kill switch is engaged. All work halted.")
 
 
-# ---------------------------------------------------------------------------
-# Rate Limiter (sliding-window token bucket per source)
-# ---------------------------------------------------------------------------
-
 class RateLimiter:
-    """Per-source call budget enforcement."""
-
     def __init__(self, budgets: list[RateLimitBudget]):
         self._budgets = {b.source: b for b in budgets}
-        # Simple sliding-window counters: {source: [(timestamp, count)]}
         self._minute_counts: dict[str, list[float]] = defaultdict(list)
         self._hour_counts: dict[str, list[float]] = defaultdict(list)
         self._day_counts: dict[str, list[float]] = defaultdict(list)
@@ -68,64 +141,33 @@ class RateLimiter:
         return [t for t in timestamps if t > cutoff]
 
     def check_and_consume(self, source: str) -> bool:
-        """Returns True if the call is allowed; False if rate-limited."""
         budget = self._budgets.get(source)
         if budget is None:
-            return True  # no budget defined → allow
-
+            return True
         now = time.time()
-
         self._minute_counts[source] = self._prune(self._minute_counts[source], 60)
-        if len(self._minute_counts[source]) >= budget.max_calls_per_minute:
-            logger.warning(f"Rate limit hit for {source} (per-minute)")
-            return False
-
         self._hour_counts[source] = self._prune(self._hour_counts[source], 3600)
-        if len(self._hour_counts[source]) >= budget.max_calls_per_hour:
-            logger.warning(f"Rate limit hit for {source} (per-hour)")
-            return False
-
         self._day_counts[source] = self._prune(self._day_counts[source], 86400)
-        if len(self._day_counts[source]) >= budget.max_calls_per_day:
-            logger.warning(f"Rate limit hit for {source} (per-day)")
+        if len(self._minute_counts[source]) >= budget.max_calls_per_minute:
             return False
-
-        # Consume a token
+        if len(self._hour_counts[source]) >= budget.max_calls_per_hour:
+            return False
+        if len(self._day_counts[source]) >= budget.max_calls_per_day:
+            return False
         self._minute_counts[source].append(now)
         self._hour_counts[source].append(now)
         self._day_counts[source].append(now)
         return True
 
 
-# ---------------------------------------------------------------------------
-# PII Detector (placeholder — swap in a real classifier)
-# ---------------------------------------------------------------------------
-
 class PIIDetector:
-    """
-    Facade over the production PIIDetectorModel.
-    Delegates to guardrails.pii_model for multi-layer detection
-    (regex + checksum + optional NER).
-    """
-
     def __init__(self):
         from guardrails.pii_model import PIIDetectorModel
         self._model = PIIDetectorModel(min_confidence=0.50)
 
     def scan(self, text: str) -> list[dict]:
-        """Returns list of detected PII items with type, span, and confidence."""
         findings = self._model.scan(text)
-        return [
-            {
-                "type": f.category.value,
-                "value": f.value,
-                "start": f.start,
-                "end": f.end,
-                "confidence": f.confidence,
-                "layer": f.layer,
-            }
-            for f in findings
-        ]
+        return [{"type": f.category.value, "value": f.value, "start": f.start, "end": f.end, "confidence": f.confidence, "layer": f.layer} for f in findings]
 
     def contains_pii(self, text: str) -> bool:
         return self._model.contains_pii(text)
@@ -134,104 +176,67 @@ class PIIDetector:
         return self._model.redact(text)
 
 
-# ---------------------------------------------------------------------------
-# Confidence Gate
-# ---------------------------------------------------------------------------
-
 class ConfidenceGate:
-    """Routes results based on confidence thresholds."""
-
     def __init__(self, thresholds: ConfidenceThresholds):
         self.thresholds = thresholds
 
     def evaluate(self, result: TaskResult) -> str:
-        """
-        Returns:
-          - 'accept'       → confidence >= 0.7, write to graph
-          - 'human_review'  → 0.3 <= confidence < 0.7
-          - 'discard'       → confidence < 0.3
-        """
         if result.confidence >= self.thresholds.auto_accept:
             return "accept"
-        elif result.confidence >= self.thresholds.discard:
-            logger.info(
-                f"Task {result.task_id} queued for human review "
-                f"(confidence={result.confidence:.2f})"
-            )
+        if result.confidence >= self.thresholds.discard:
+            logger.info("Task %s queued for human review (confidence=%.2f)", result.task_id, result.confidence)
             return "human_review"
-        else:
-            logger.info(
-                f"Task {result.task_id} discarded "
-                f"(confidence={result.confidence:.2f})"
-            )
-            return "discard"
+        logger.info("Task %s discarded (confidence=%.2f)", result.task_id, result.confidence)
+        return "discard"
 
-
-# ---------------------------------------------------------------------------
-# Audit Logger
-# ---------------------------------------------------------------------------
 
 class AuditLogger:
-    """
-    Logs every agent action with full provenance.
-    In production, this writes to a durable store (DynamoDB / S3).
-    For now, it keeps an in-memory log and prints to stdout.
-    """
+    """Durable audit log backed by SQLite."""
 
-    def __init__(self):
-        self._records: list[AuditRecord] = []
+    def __init__(self, db_path: Optional[Path] = None):
+        self._store = _GuardrailsStore(db_path or _guardrails_db_path())
 
     def log(self, record: AuditRecord):
-        self._records.append(record)
-        logger.info(
-            f"AUDIT | {record.action} | task={record.task_id} "
-            f"| entity={record.entity_id} | conf={record.confidence:.2f}"
-        )
+        self._store.write_audit(record)
+        logger.info("AUDIT | %s | task=%s | entity=%s | conf=%.2f", record.action, record.task_id, record.entity_id, record.confidence)
 
     def get_records(self, task_id: Optional[str] = None) -> list[AuditRecord]:
-        if task_id:
-            return [r for r in self._records if r.task_id == task_id]
-        return list(self._records)
+        return self._store.read_audit(task_id)
 
-
-# ---------------------------------------------------------------------------
-# Cost Monitor (stub)
-# ---------------------------------------------------------------------------
 
 class CostMonitor:
-    """Tracks spend and enforces budget caps."""
+    """Durable spend tracker with hourly and daily budget enforcement."""
 
-    def __init__(self, max_hourly: float, max_daily: float):
+    def __init__(self, max_hourly: float, max_daily: float, db_path: Optional[Path] = None):
         self.max_hourly = max_hourly
         self.max_daily = max_daily
-        self._hourly_spend = 0.0
-        self._daily_spend = 0.0
+        self._store = _GuardrailsStore(db_path or _guardrails_db_path())
+
+    @property
+    def hourly_spend(self) -> float:
+        return self._store.spend_totals()[0]
+
+    @property
+    def daily_spend(self) -> float:
+        return self._store.spend_totals()[1]
 
     def record_cost(self, amount_usd: float):
-        self._hourly_spend += amount_usd
-        self._daily_spend += amount_usd
+        if amount_usd < 0:
+            raise ValueError("amount_usd must be non-negative")
+        self._store.record_spend(amount_usd)
 
     def is_over_budget(self) -> bool:
-        return (
-            self._hourly_spend >= self.max_hourly
-            or self._daily_spend >= self.max_daily
-        )
+        hourly, daily = self._store.spend_totals()
+        return hourly >= self.max_hourly or daily >= self.max_daily
 
     def reset_hourly(self):
-        self._hourly_spend = 0.0
+        raise RuntimeError("Hourly spend is derived from the immutable ledger and cannot be reset manually")
 
     def reset_daily(self):
-        self._daily_spend = 0.0
-        self._hourly_spend = 0.0
+        raise RuntimeError("Daily spend is derived from the immutable ledger and cannot be reset manually")
 
-
-# ---------------------------------------------------------------------------
-# Guardrails Facade — single entry point for workers to call
-# ---------------------------------------------------------------------------
 
 class Guardrails:
-    """Aggregates all safety checks into a single interface."""
-
     def __init__(self, settings: AgentLayerSettings):
         self.kill_switch = KillSwitch(settings)
         self.rate_limiter = RateLimiter(settings.rate_limits)
@@ -244,18 +249,11 @@ class Guardrails:
         )
 
     def pre_execute_checks(self, task: AgentTask, source: str) -> None:
-        """Run before every worker execution. Raises on failure."""
         self.kill_switch.check()
-
         if self.cost_monitor.is_over_budget():
             raise RuntimeError(f"Cost budget exceeded. Task {task.task_id} blocked.")
-
         if not self.rate_limiter.check_and_consume(source):
-            raise RuntimeError(
-                f"Rate limit exceeded for source '{source}'. "
-                f"Task {task.task_id} will be retried."
-            )
+            raise RuntimeError(f"Rate limit exceeded for source '{source}'. Task {task.task_id} will be retried.")
 
     def post_execute_checks(self, result: TaskResult) -> str:
-        """Run after worker execution. Returns disposition: accept/human_review/discard."""
         return self.confidence_gate.evaluate(result)

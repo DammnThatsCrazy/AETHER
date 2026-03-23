@@ -116,7 +116,7 @@ async def resolve_attribution(body: ResolveRequest):
     if body.touchpoints is not None:
         raw_touchpoints = body.touchpoints
     else:
-        raw_touchpoints = _journey_store.get(body.user_id)
+        raw_touchpoints = await _journey_store.get(body.user_id)
 
     if not raw_touchpoints:
         raise HTTPException(
@@ -150,7 +150,7 @@ async def record_touchpoint(body: TouchpointRequest):
         "timestamp": ts,
         "properties": body.properties,
     }
-    _journey_store.add(body.user_id, raw)
+    await _journey_store.add(body.user_id, raw)
 
     logger.info(
         "Touchpoint recorded: user=%s channel=%s source=%s",
@@ -160,7 +160,7 @@ async def record_touchpoint(body: TouchpointRequest):
 
     return {
         "user_id": body.user_id,
-        "touchpoint_count": _journey_store.count(body.user_id),
+        "touchpoint_count": await _journey_store.count(body.user_id),
         "recorded": True,
     }
 
@@ -169,7 +169,7 @@ async def record_touchpoint(body: TouchpointRequest):
 @api_response
 async def get_journey(user_id: str):
     """Return all stored touchpoints for a user journey."""
-    touchpoints = _journey_store.get(user_id)
+    touchpoints = await _journey_store.get(user_id)
     return {
         "user_id": user_id,
         "touchpoint_count": len(touchpoints),
@@ -181,7 +181,7 @@ async def get_journey(user_id: str):
 @api_response
 async def clear_journey(user_id: str):
     """Clear all stored touchpoints for a user."""
-    removed = _journey_store.clear(user_id)
+    removed = await _journey_store.clear(user_id)
     return {
         "user_id": user_id,
         "removed": removed,
