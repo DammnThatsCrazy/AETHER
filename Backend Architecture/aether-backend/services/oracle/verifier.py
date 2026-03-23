@@ -2,18 +2,17 @@
 Aether Backend — Oracle Signature Verifier
 
 Utilities for verifying oracle signatures off-chain before submitting
-on-chain.  Used by the rewards service to validate proofs before storing
+on-chain. Used by the rewards service to validate proofs before storing
 them and by the oracle routes for standalone verification.
 
-Demo implementation:
-    Uses SHA-256 / HMAC to mirror the simulated signing in ``signer.py``.
-    In production, swap the helpers for real keccak256 + ecrecover calls.
+Production: uses eth_account for keccak256 + ecrecover.
+Local fallback: HMAC comparison when eth_account unavailable.
 """
 
 from __future__ import annotations
 
 import hashlib
-import hmac
+import os
 import struct
 import time
 
@@ -21,6 +20,20 @@ from services.oracle.signer import RewardProof
 from shared.logger.logger import get_logger
 
 logger = get_logger("aether.service.oracle.verifier")
+
+# Real crypto when available
+try:
+    from eth_account import Account
+    from eth_hash.auto import keccak
+    REAL_CRYPTO_AVAILABLE = True
+except ImportError:
+    Account = None  # type: ignore[misc, assignment]
+    keccak = None  # type: ignore[assignment]
+    REAL_CRYPTO_AVAILABLE = False
+
+
+def _is_local_env() -> bool:
+    return os.getenv("AETHER_ENV", "local").lower() == "local"
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -35,13 +48,6 @@ def verify_reward_proof(proof: RewardProof, expected_signer: str) -> bool:
         1. The proof has not expired.
         2. The message hash is correctly derived from the proof fields.
         3. The recovered signer matches ``expected_signer``.
-
-    Args:
-        proof:           The proof to verify.
-        expected_signer: Hex address of the oracle signer.
-
-    Returns:
-        ``True`` when all checks pass.
     """
     if is_proof_expired(proof):
         logger.warning(f"Proof expired: user={proof.user} expiry={proof.expiry}")
@@ -67,7 +73,6 @@ def verify_reward_proof(proof: RewardProof, expected_signer: str) -> bool:
     recovered = _recover_signer(
         message_hash=actual_hash,
         signature=proof.signature.removeprefix("0x"),
-        signer_key_hint=expected_signer,
     )
 
     if recovered.lower() != expected_signer.lower():
@@ -95,19 +100,15 @@ def compute_message_hash(
 ) -> str:
     """
     Recompute the canonical message hash from proof components.
-
-    Must mirror the packing logic in ``OracleSigner._build_message_hash``.
-
-    Production replacement:
-        ``keccak256(abi.encodePacked(...))``
+    Mirrors the packing logic in OracleProofSigner._build_message_hash.
     """
     packed = b"".join([
         bytes.fromhex(user.removeprefix("0x").lower()),
         action_type.encode("utf-8"),
-        struct.pack(">Q", amount_wei),
+        amount_wei.to_bytes(32, "big"),
         bytes.fromhex(nonce),
-        struct.pack(">Q", expiry),
-        struct.pack(">Q", chain_id),
+        expiry.to_bytes(32, "big"),
+        chain_id.to_bytes(32, "big"),
         bytes.fromhex(contract_address.removeprefix("0x").lower()),
     ])
     return _keccak256(packed)
@@ -118,40 +119,35 @@ def compute_message_hash(
 # ═══════════════════════════════════════════════════════════════════════════
 
 def _keccak256(data: bytes) -> str:
-    """
-    Simulated keccak256 using SHA-256.
-
-    Production replacement:
-        ``Web3.keccak(data).hex()``
-    """
+    """Compute keccak256. Uses real keccak when available, SHA-256 fallback for local."""
+    if REAL_CRYPTO_AVAILABLE and keccak is not None:
+        return keccak(data).hex()
+    if not _is_local_env():
+        raise RuntimeError(
+            "eth-account required for production oracle verification. "
+            "Install: pip install eth-account>=0.11.0"
+        )
     return hashlib.sha256(data).hexdigest()
 
 
-def _recover_signer(
-    message_hash: str,
-    signature: str,
-    signer_key_hint: str,
-) -> str:
-    """
-    Simulated ecrecover.
+def _recover_signer(message_hash: str, signature: str) -> str:
+    """Recover signer address from signature via ecrecover."""
+    if REAL_CRYPTO_AVAILABLE:
+        try:
+            msg_bytes = bytes.fromhex(message_hash)
+            sig_bytes = bytes.fromhex(signature)
+            return Account.recoverHash(msg_bytes, signature=sig_bytes)
+        except Exception as e:
+            logger.error(f"ecrecover failed: {e}")
+            return "0x" + "0" * 40
 
-    In the demo implementation we cannot truly recover a public key from an
-    HMAC, so we rely on verifying the HMAC against the expected signer
-    address.  When the signer address is unknown, this will always fail.
-
-    Production replacement:
-        ``Account.recoverHash(bytes.fromhex(message_hash), signature=signature)``
-
-    Args:
-        message_hash:    Hex hash to verify.
-        signature:       Hex signature to verify.
-        signer_key_hint: The expected signer address — used only in the demo
-                         flow to derive the comparison HMAC key.
-    """
-    # In the simulated path we cannot reverse the address back to a private
-    # key.  The real ecrecover doesn't need a hint, so this parameter would
-    # be removed in production.  For demo purposes, we simply return the
-    # hinted address if the signature length is plausible.
+    if not _is_local_env():
+        raise RuntimeError(
+            "eth-account required for production oracle verification."
+        )
+    # Local-only fallback: accept any plausible-length signature
+    # This is NOT real verification — only for local dev
+    logger.warning("Using local-only signature verification (NOT production-safe)")
     if len(signature) >= 64:
-        return signer_key_hint
-    return "0x0000000000000000000000000000000000000000"
+        return "0x" + "0" * 40  # Cannot recover without real crypto
+    return "0x" + "0" * 40

@@ -69,6 +69,7 @@ async def update_tenant(tenant_id: str, body: TenantUpdate, request: Request):
 
 @router.post("/tenants/{tenant_id}/api-keys")
 async def create_api_key(tenant_id: str, body: APIKeyCreate, request: Request):
+    """Create a new API key for a tenant. Registers it in both the key repo and the auth cache."""
     request.state.tenant.require_permission("admin")
     raw_key = f"ak_{uuid.uuid4().hex[:24]}"
     hashed = hashlib.sha256(raw_key.encode()).hexdigest()
@@ -81,6 +82,20 @@ async def create_api_key(tenant_id: str, body: APIKeyCreate, request: Request):
         "key_hash": hashed,
         "last_used_at": None,
     })
+
+    # Register with the auth validator for async Redis lookup
+    try:
+        from dependencies.providers import get_registry
+        registry = get_registry()
+        await registry.api_key_validator.register_api_key(
+            api_key=raw_key,
+            tenant_id=tenant_id,
+            role="editor",
+            tier=body.tier,
+            permissions=body.permissions,
+        )
+    except Exception as e:
+        logger.warning(f"Failed to register key in auth cache: {e}")
 
     return APIResponse(data={
         "api_key": raw_key,

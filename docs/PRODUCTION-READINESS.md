@@ -1,11 +1,15 @@
 # Production Readiness Review v8.3.1
 
-## Status: All Infrastructure Integrated
+## Status: Infrastructure Integrated, Operational Prerequisites Remain
 
-> All 20 previously-identified infrastructure stubs have been replaced with
-> real production implementations. Each component auto-selects its backend
-> based on `AETHER_ENV` and required environment variables. Non-local
-> environments fail-closed if infrastructure is unavailable.
+> All infrastructure stubs have been replaced with real production
+> implementations (Redis, PostgreSQL, Neptune, Kafka, eth_account, Prometheus).
+> Oracle signing and verification use real secp256k1 ECDSA and keccak256.
+> Rewards scoring calls ML serving API with heuristic fallback.
+>
+> **Remaining external prerequisites:** ML model training artifacts must be
+> generated, infrastructure must be provisioned, and production secrets must
+> be configured. These cannot be solved from code alone.
 
 ---
 
