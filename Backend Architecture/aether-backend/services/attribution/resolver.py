@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import logging
 import os
+from collections import defaultdict
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 from typing import Any, Optional
@@ -66,7 +67,12 @@ class JourneyStore:
     """
 
     def __init__(self) -> None:
-        self._repo = BaseRepository("attribution_touchpoints")
+        if not _inmemory_journey_store_allowed():
+            raise RuntimeError(
+                "JourneyStore is disabled outside local mode. Configure a persistent attribution "
+                "store or set AETHER_ALLOW_INMEMORY_JOURNEY_STORE=1 for an explicit override."
+            )
+        self._store: dict[str, list[dict[str, Any]]] = defaultdict(list)
 
     async def add(self, user_id: str, touchpoint: dict[str, Any]) -> None:
         """Append a raw touchpoint dict for a user."""

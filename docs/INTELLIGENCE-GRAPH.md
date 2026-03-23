@@ -103,7 +103,7 @@ A weighted composite derived entirely from existing model outputs. No new model 
 | Identity Score | 35% | Existing Identity Resolution confidence + Bot Detection inverse |
 | Behavioral Score | 25% | Existing Intent Prediction + Session Scoring heuristics |
 
-**Current implementation note:** the agent trust endpoint now computes against live fraud-engine output, live ML-serving predictions, and durable agent-ownership graph/repository signals. Broader production-readiness claims still depend on the release-gate requirements in `PRODUCTION-READINESS.md`.
+**Current implementation note:** the trust score endpoint exists, but full live dependency wiring to fraud, anomaly, resolution, and ML services must remain aligned with code before making production-readiness claims.
 
 ### Bytecode Risk Scorer
 

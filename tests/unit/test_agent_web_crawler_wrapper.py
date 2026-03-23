@@ -5,6 +5,10 @@ import sys
 from contextlib import contextmanager
 from pathlib import Path
 
+import pytest
+
+pytest.importorskip("httpx", reason="httpx required (pip install -e '.[backend]')")
+
 ROOT = Path(__file__).resolve().parents[2]
 AGENT_ROOT = ROOT / 'Agent Layer'
 
