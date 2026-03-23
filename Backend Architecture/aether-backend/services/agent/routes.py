@@ -19,10 +19,13 @@ from datetime import datetime, timezone
 from difflib import SequenceMatcher
 from typing import Any, Optional
 
+import httpx
 from fastapi import APIRouter, Request
 from pydantic import BaseModel, Field
 
 from config.settings import settings
+from services.fraud.engine import FraudEngine
+from services.ml_serving.routes import _MODEL_ENDPOINTS, _get_client
 from shared.common.common import APIResponse, BadRequestError, NotFoundError
 from shared.events.events import Event, EventProducer, Topic
 from shared.graph.graph import Edge, EdgeType, GraphClient, Vertex, VertexType
@@ -39,7 +42,6 @@ router = APIRouter(prefix="/v1/agent", tags=["Agent"])
 # Shared instances (in production, injected via dependency providers)
 _graph = GraphClient()
 _producer = EventProducer()
-_trust_scorer = TrustScoreComposite()
 
 VALID_WORKER_TYPES = [
     "web_crawler", "api_scanner", "social_listener",
@@ -450,10 +452,21 @@ async def get_agent_trust(agent_id: str, request: Request):
         raise BadRequestError("Intelligence Graph agent layer is not enabled")
     request.state.tenant.require_permission("agent:manage")
 
-    score = await _trust_scorer.compute(
-        entity_id=agent_id,
-        entity_type="agent",
-    )
+    tenant_id = request.state.tenant.tenant_id
+    registration = await _registered_agents.find_by_id(f"{tenant_id}:{agent_id}")
+    if registration is None:
+        raise NotFoundError("Agent")
+
+    features = await _build_trust_features(agent_id, tenant_id)
+
+    try:
+        score = await _trust_scorer.compute(
+            entity_id=agent_id,
+            entity_type="agent",
+            features=features,
+        )
+    except httpx.HTTPError as exc:
+        raise BadRequestError(f"Trust score upstream dependency failed: {exc}") from exc
 
     return APIResponse(data=score.to_dict()).to_dict()
 
