@@ -4,7 +4,7 @@ Per-service cost allocation, budget alerts, Spot savings, optimization,
 and Cost Explorer integration.
 
 Enhanced:
-  + Real Cost Explorer API queries (with fallback)
+  + Real Cost Explorer API queries
   + Configuration-driven budgets from aws_config
   + Rightsizing recommendations from Compute Optimizer
   + Reserved Instance / Savings Plan analysis
@@ -15,7 +15,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime, timezone, timedelta
-from typing import Any, Optional
+from typing import Any, Optional, TypeVar
 
 from config.aws_config import (
     COMPUTE_SPECS, DATA_STORES, BUDGET_CONFIGS, SERVICE_NAMES,
@@ -23,6 +23,18 @@ from config.aws_config import (
 from shared.runner import cost_log, timed
 from shared.aws_client import aws_client
 from shared.notifier import notifier
+
+
+T = TypeVar("T")
+
+
+def _require_live_data(value: T | None, operation: str) -> T:
+    if value is None:
+        raise RuntimeError(
+            f"{operation} returned no AWS data while AETHER_STUB_AWS=0; rerun with --stub-aws "
+            "for demo mode or fix AWS credentials/permissions."
+        )
+    return value
 
 
 # =========================================================================
@@ -84,15 +96,13 @@ class SavingsOpportunity:
 def estimate_service_costs(environment: str = "production") -> list[ServiceCost]:
     """Estimate monthly costs per service.
 
-    Attempts Cost Explorer API first, falls back to illustrative figures.
+    Uses illustrative figures only in explicit stub/demo mode.
     """
     cost_log(f"Cost breakdown for {environment}:")
 
     # Attempt real Cost Explorer query
     if not aws_client.is_stub:
-        real_costs = _query_cost_explorer(environment)
-        if real_costs:
-            return real_costs
+        return _require_live_data(_query_cost_explorer(environment), "Cost Explorer service cost query")
 
     # Fallback: illustrative estimates
     costs = [
@@ -184,9 +194,7 @@ def check_budget_status() -> list[BudgetStatus]:
 
     # Attempt real Budget API query
     if not aws_client.is_stub:
-        real_budgets = _query_budgets()
-        if real_budgets:
-            return real_budgets
+        return _require_live_data(_query_budgets(), "AWS Budgets query")
 
     # Fallback: illustrative data
     budgets = [
@@ -321,13 +329,16 @@ def check_cost_anomalies() -> list[dict[str, Any]]:
     cost_log("Cost Anomaly Detection:")
 
     if not aws_client.is_stub:
-        resp = aws_client.safe_call(
+        resp = _require_live_data(
+            aws_client.safe_call(
             "ce", "get_anomalies",
             DateInterval={"StartDate": (datetime.now(timezone.utc) - timedelta(days=7)).strftime("%Y-%m-%d"),
                           "EndDate": datetime.now(timezone.utc).strftime("%Y-%m-%d")},
             MaxResults=10,
+            ),
+            "Cost Explorer anomaly query",
         )
-        if resp and resp.get("Anomalies"):
+        if resp.get("Anomalies"):
             anomalies = []
             for a in resp["Anomalies"]:
                 anomalies.append({
@@ -339,6 +350,9 @@ def check_cost_anomalies() -> list[dict[str, Any]]:
                 cost_log(f"  \u26a0 {a.get('DimensionValue', 'Unknown')}: "
                          f"${a.get('Impact', {}).get('TotalImpact', 0):,.2f} unexpected spend")
             return anomalies
+
+        cost_log("  \u2713 No cost anomalies detected in the last 7 days")
+        return []
 
     cost_log("  \u2713 No cost anomalies detected in the last 7 days")
     return []

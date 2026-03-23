@@ -34,6 +34,19 @@ from shared.logger.logger import get_logger
 logger = get_logger("aether.store")
 
 
+def _inmemory_allowed() -> bool:
+    env = os.getenv("AETHER_ENV", "local").lower()
+    return env == "local" or os.getenv("AETHER_ALLOW_INMEMORY_STORE", "0") == "1"
+
+
+def _require_inmemory_allowed(store_name: str) -> None:
+    if not _inmemory_allowed():
+        raise RuntimeError(
+            f"In-memory store '{store_name}' is disabled outside local mode. "
+            "Configure Redis or set AETHER_ALLOW_INMEMORY_STORE=1 for an explicit override."
+        )
+
+
 # =========================================================================
 # Store Interface
 # =========================================================================
@@ -78,6 +91,7 @@ class InMemoryStore(DurableStore):
     """Thread-safe in-memory store with optional TTL."""
 
     def __init__(self, name: str):
+        _require_inmemory_allowed(name)
         self.name = name
         self._data: dict[str, dict] = {}
         self._lists: dict[str, list[dict]] = {}
@@ -150,7 +164,7 @@ class InMemoryStore(DurableStore):
 class RedisStore(DurableStore):
     """Redis-backed store for multi-instance deployments.
 
-    Falls back to InMemoryStore if Redis is unavailable.
+    Falls back to InMemoryStore only in local mode or with explicit override.
     """
 
     def __init__(self, name: str, redis_url: str = ""):
@@ -176,6 +190,11 @@ class RedisStore(DurableStore):
             await self._redis.ping()
             logger.info("Redis store connected: %s (prefix=%s)", self._redis_url, self._prefix)
         except Exception as exc:
+            if not _inmemory_allowed():
+                raise RuntimeError(
+                    f"Redis unavailable for store {self.name}: {exc}. "
+                    "In-memory fallback is disabled outside local mode."
+                ) from exc
             logger.warning("Redis unavailable for store %s, using in-memory fallback: %s", self.name, exc)
             self._redis = None
         return self._redis

@@ -251,7 +251,15 @@ class AetherSDK implements AetherSDKInterface {
 
   consent: ConsentInterface = {
     getState: (): ConsentState => {
-      return this.consentModule?.getState() ?? { analytics: false, marketing: false, web3: false, updatedAt: '', policyVersion: '' };
+      return this.consentModule?.getState() ?? {
+        analytics: false,
+        marketing: false,
+        web3: false,
+        agent: false,
+        commerce: false,
+        updatedAt: '',
+        policyVersion: '',
+      };
     },
     grant: (purposes: string[]) => { this.consentModule?.grant(purposes); },
     revoke: (purposes: string[]) => { this.consentModule?.revoke(purposes); },

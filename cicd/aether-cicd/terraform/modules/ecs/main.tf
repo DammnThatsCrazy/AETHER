@@ -10,6 +10,7 @@ variable "vpc_id" { type = string }
 variable "subnet_ids" { type = list(string) }
 variable "image_tag" { type = string }
 variable "ecr_registry" { type = string }
+variable "acm_cert_arn" { type = string default = "" }
 
 data "aws_caller_identity" "current" {}
 data "aws_region" "current" {}
@@ -187,7 +188,7 @@ resource "aws_lb_listener" "https" {
   port              = 443
   protocol          = "HTTPS"
   ssl_policy        = "ELBSecurityPolicy-TLS13-1-2-2021-06"
-  certificate_arn   = "arn:aws:acm:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}:certificate/placeholder"
+  certificate_arn   = var.acm_cert_arn
 
   default_action {
     type             = "forward"

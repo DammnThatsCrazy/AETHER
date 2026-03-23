@@ -129,11 +129,11 @@ def preflight_check(ctx: RecoveryContext) -> bool:
                 "s3", "get_bucket_replication",
                 Bucket="aether-data-lake-production",
             )
-            status = "pass" if resp else "warn"
+            status = "pass" if resp else "failed"
         else:
             status = "pass"
 
-        icon = "\u2713" if status == "pass" else "\u26a0"
+        icon = "\u2713" if status == "pass" else "\u2717"
         dr_log(f"  {icon} {check_name:22s} -> {description}")
         if status != "pass":
             all_pass = False
@@ -219,7 +219,11 @@ def rebuild_infrastructure(ctx: RecoveryContext) -> bool:
         dr_log(f"  Running: {tf_cmd[:80]}...")
         result = run_cmd(tf_cmd)
         if not result.ok:
-            dr_log(f"  \u26a0 Terraform step returned non-zero (stub mode)")
+            step.status = "failed"
+            step.details = f"Terraform command failed: {tf_cmd}"
+            ctx.errors.append(step.details)
+            dr_log(f"  \u2717 Terraform step failed")
+            return False
 
     step.duration_ms = (time.monotonic() - start) * 1000
     step.status = "complete"
@@ -261,6 +265,12 @@ def recover_data_stores(ctx: RecoveryContext) -> bool:
         dr_log(f"  {store}: {action}")
         if cmd and not aws_client.is_stub:
             result = run_cmd(cmd)
+            if not result.ok:
+                step.status = "failed"
+                step.details = f"{store} recovery failed: {cmd}"
+                ctx.errors.append(step.details)
+                dr_log(f"  \u2717 {store} recovery command failed")
+                return False
 
     step.duration_ms = (time.monotonic() - start) * 1000
     step.status = "complete"
@@ -327,8 +337,12 @@ def validate_recovery(ctx: RecoveryContext) -> bool:
     passed = 0
     for name, cmd in checks.items():
         dr_log(f"  Checking {name}...")
-        # In real mode: result = run_cmd(cmd); passed += result.ok
-        passed += 1  # stub
+        if aws_client.is_stub:
+            passed += 1
+            continue
+        result = run_cmd(cmd)
+        if result.ok:
+            passed += 1
 
     total = len(checks)
     dr_log(f"  Validation: {passed}/{total} checks passed")

@@ -2,6 +2,10 @@
 
 ## [Unreleased] — A2H Relationship Layer
 
+- **FIXED**: Replaced reject-all API-key auth with a durable SQLite-backed key registry including revocation, expiry, tenant metadata, and permission validation
+- **FIXED**: Replaced in-process event, graph, and guardrail audit/spend state with durable SQLite-backed implementations; non-local cache access now requires Redis
+- **FIXED**: Replaced oracle proof simulation with real secp256k1 signing and verification; non-local ML serving now fails when artifacts are missing
+
 - **NEW**: A2H (Agent-to-Human) relationship layer — fourth relationship category in the Intelligence Graph
 - **NEW**: 4 edge types: `NOTIFIES`, `RECOMMENDS`, `DELIVERS_TO`, `ESCALATES_TO` (Agent → User)
 - **NEW**: 4 event topics for A2H interactions (notification, recommendation, delivery, escalation)
@@ -14,6 +18,9 @@
 ---
 
 ## v8.3.1 — Model Extraction Defense Layer (2026-03-18)
+
+- **FIXED**: Web SDK production hardening — corrected `ConsentState` fallback defaults, fixed isolated-module loader exports, and added regression coverage for offline cached-loader recovery plus concurrent-load deduplication
+- **FIXED**: Test harness resilience — backend async integration tests now auto-run under AnyIO when `pytest-asyncio` is not installed
 
 - **NEW**: `security/model_extraction_defense/` — modular defense layer against model extraction and knowledge distillation attacks
 - **NEW**: Query rate limiter with dual-axis sliding window (per-API-key + per-IP), three time windows each
