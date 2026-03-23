@@ -103,8 +103,8 @@ import { AetherProvider } from '@aether/react-native-sdk';
 | ML Models | 9 | Intent, bot, session (edge); identity resolution, journey, churn, LTV, anomaly, attribution (server) |
 | Streams | 5 | Wallet tx, SDK events, agent logs, x402 receipts, oracle callbacks |
 | Node Types | 6 | Agent, Service, Contract, Protocol, Payment, ActionRecord (new; layered onto existing Identity Graph) |
-| Edge Types | 17 | LAUNCHED_BY, DELEGATES, INTERACTS_WITH, NOTIFIES, RECOMMENDS, DELIVERS_TO, ESCALATES_TO, HIRED, PAYS, CONSUMES, EARNS_FROM, DEPLOYED, CALLED, USES_PROTOCOL, PRODUCED, REFERENCES, TRIGGERED_BY |
-| Stores | 5 | Neptune, TimescaleDB, Redis, S3, Kafka |
+| Edge Types | 19 | LAUNCHED_BY, DELEGATES, INTERACTS_WITH, NOTIFIES, RECOMMENDS, DELIVERS_TO, ESCALATES_TO, HIRED, PAYS, CONSUMES, EARNS_FROM, DEPLOYED, CALLED, COMPOSED_WITH, UPGRADED, GOVERNED_BY, DEPENDS_ON, PERFORMED_ACTION, USES_PROTOCOL |
+| Stores | 5 | Neptune*, TimescaleDB*, Redis*, S3, Kafka* (*in-memory stubs in dev; real integrations required for production) |
 
 ### New Services (Feature-Flagged)
 

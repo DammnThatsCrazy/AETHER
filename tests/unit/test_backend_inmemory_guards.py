@@ -54,5 +54,5 @@ def test_journey_store_rejects_inmemory_outside_local(monkeypatch):
         module = importlib.import_module("services.attribution.resolver")
         importlib.reload(module)
 
-        with pytest.raises(RuntimeError, match="AETHER_REPOSITORY_DB_PATH must be set"):
+        with pytest.raises(RuntimeError, match="JourneyStore is disabled outside local mode"):
             module.JourneyStore()

@@ -7,7 +7,9 @@ The Unified On-Chain Intelligence Graph extends the Aether platform with an 8-la
 - **Additive extension** — all 9 existing ML models remain unchanged; no retraining required
 - **Feature-flagged** — every layer activates independently via environment variables (all default to `false`)
 - **GDPR + SOC 2 compliant** — 2 new consent purposes, DSR cascade for agent/payment vertices, 10 new audit actions
-- **Graph-native** — 6 new node types, 17 new edge types layered onto the existing Identity Graph
+- **Graph-native** — 6 new node types, 19 new edge types layered onto the existing Identity Graph
+
+> **Infrastructure note:** The graph layer currently uses an **in-memory stub** (`GraphClient`). The interfaces and edge/vertex schemas are production-ready, but a real Neptune or Neo4j backend must be connected before production deployment. The `query()` method returns empty results in stub mode.
 
 ## Architecture Layers
 
@@ -20,7 +22,7 @@ The Unified On-Chain Intelligence Graph extends the Aether platform with an 8-la
 | **L3a** | Commerce | Payment tracking, agent hiring, fee analysis | Payment records, hire events, fee elimination reports |
 | **L3b** | x402 Interceptor | HTTP 402-based micropayment capture | Payment headers, economic graph edges, per-call cost tracking |
 | **L4** | ML Intelligence | Scoring and anomaly detection | 9 existing models + Trust Score composite + Bytecode Risk scorer |
-| **L5** | Unified Graph | Cross-layer relationship store | 6 node types, 17 edge types, durable graph storage + repository-backed operational records |
+| **L5** | Unified Graph | Cross-layer relationship store | 6 node types, 19 edge types, in-memory stub (Neptune integration pending) |
 
 ## Relationship Layers
 

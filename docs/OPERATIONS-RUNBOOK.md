@@ -1,6 +1,8 @@
 # Operations Runbook v8.3.1
 
-Production operations guide for the Aether backend services.
+Operations guide for the Aether backend services.
+
+> **Infrastructure status:** The application logic, API contracts, and error handling described in this runbook are fully implemented. However, the data persistence layer (graph, events, cache, repositories) currently uses **in-memory stubs**. The failure behaviors described below are accurate for the application layer, but data will not survive process restarts until real infrastructure (Neptune, Kafka, Redis, PostgreSQL) is connected. See `PRODUCTION-READINESS.md` for the full infrastructure integration checklist.
 
 ---
 
