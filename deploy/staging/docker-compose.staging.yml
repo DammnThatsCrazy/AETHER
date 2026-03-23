@@ -1,0 +1,139 @@
+# =============================================================================
+# Aether Platform — Staging Docker Compose
+#
+# This is the staging-equivalent stack. Run on a machine with Docker:
+#   cd deploy/staging
+#   ./bootstrap.sh
+#
+# Or manually:
+#   docker compose -f docker-compose.staging.yml up -d
+#   docker compose -f docker-compose.staging.yml exec backend python scripts/validate_infra.py
+# =============================================================================
+
+services:
+  # ── Infrastructure ────────────────────────────────────────────────
+
+  postgres:
+    image: postgres:16-alpine
+    ports:
+      - "5432:5432"
+    volumes:
+      - staging_postgres:/var/lib/postgresql/data
+    environment:
+      POSTGRES_DB: aether_staging
+      POSTGRES_USER: aether
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-aether_staging_pw}
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U aether -d aether_staging"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - staging_redis:/data
+    command: redis-server --appendonly yes --requirepass ${REDIS_PASSWORD:-aether_staging_redis}
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD:-aether_staging_redis}", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    restart: unless-stopped
+
+  zookeeper:
+    image: confluentinc/cp-zookeeper:7.6.0
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+      ZOOKEEPER_TICK_TIME: 2000
+    restart: unless-stopped
+
+  kafka:
+    image: confluentinc/cp-kafka:7.6.0
+    ports:
+      - "9092:9092"
+    depends_on:
+      - zookeeper
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
+    healthcheck:
+      test: ["CMD-SHELL", "kafka-topics --bootstrap-server localhost:9092 --list"]
+      interval: 10s
+      timeout: 10s
+      retries: 10
+    restart: unless-stopped
+
+  # ── Application ──────────────────────────────────────────────────
+
+  backend:
+    build:
+      context: ../../
+      dockerfile: Backend Architecture/aether-backend/Dockerfile
+    ports:
+      - "8000:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+    environment:
+      AETHER_ENV: staging
+      DATABASE_URL: postgresql://aether:${POSTGRES_PASSWORD:-aether_staging_pw}@postgres:5432/aether_staging
+      REDIS_HOST: redis
+      REDIS_PORT: "6379"
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-aether_staging_redis}
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      JWT_SECRET: ${JWT_SECRET}
+      BYOK_ENCRYPTION_KEY: ${BYOK_ENCRYPTION_KEY}
+      WATERMARK_SECRET_KEY: ${WATERMARK_SECRET_KEY:-aether-staging-watermark}
+      CANARY_SECRET_SEED: ${CANARY_SECRET_SEED:-aether-staging-canary}
+      ML_SERVING_URL: http://ml-serving:8080
+      ENABLE_EXTRACTION_DEFENSE: "true"
+    command: uvicorn main:app --host 0.0.0.0 --port 8000 --workers 2
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:8000/v1/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  ml-serving:
+    build:
+      context: ../../
+      dockerfile: ML Models/aether-ml/docker/Dockerfile
+    ports:
+      - "8080:8080"
+    depends_on:
+      redis:
+        condition: service_healthy
+    environment:
+      AETHER_ENV: staging
+      REDIS_HOST: redis
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-aether_staging_redis}
+    command: uvicorn serving.src.api:app --host 0.0.0.0 --port 8080
+    restart: unless-stopped
+
+  # ── Monitoring ────────────────────────────────────────────────────
+
+  prometheus:
+    image: prom/prometheus:v2.49.0
+    ports:
+      - "9090:9090"
+    volumes:
+      - staging_prometheus:/prometheus
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml:ro
+    restart: unless-stopped
+
+volumes:
+  staging_postgres:
+  staging_redis:
+  staging_prometheus:
