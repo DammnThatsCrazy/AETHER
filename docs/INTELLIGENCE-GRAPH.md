@@ -20,7 +20,7 @@ The Unified On-Chain Intelligence Graph extends the Aether platform with an 8-la
 | **L3a** | Commerce | Payment tracking, agent hiring, fee analysis | Payment records, hire events, fee elimination reports |
 | **L3b** | x402 Interceptor | HTTP 402-based micropayment capture | Payment headers, economic graph edges, per-call cost tracking |
 | **L4** | ML Intelligence | Scoring and anomaly detection | 9 existing models + Trust Score composite + Bytecode Risk scorer |
-| **L5** | Unified Graph | Cross-layer relationship store | 6 node types, 17 edge types, ClickHouse + graph DB dual write |
+| **L5** | Unified Graph | Cross-layer relationship store | 6 node types, 17 edge types, durable graph storage + repository-backed operational records |
 
 ## Relationship Layers
 
@@ -103,7 +103,7 @@ A weighted composite derived entirely from existing model outputs. No new model 
 | Identity Score | 35% | Existing Identity Resolution confidence + Bot Detection inverse |
 | Behavioral Score | 25% | Existing Intent Prediction + Session Scoring heuristics |
 
-**Output:** `trustScore` float `0.0 - 1.0`, written to `AGENT` node on every task completion.
+**Current implementation note:** the agent trust endpoint now computes against live fraud-engine output, live ML-serving predictions, and durable agent-ownership graph/repository signals. Broader production-readiness claims still depend on the release-gate requirements in `PRODUCTION-READINESS.md`.
 
 ### Bytecode Risk Scorer
 
@@ -240,7 +240,7 @@ Complete flow for an agent executing a task with chain interaction:
 
 2. Agent starts task
    API: POST /v1/agent/tasks/{id}/lifecycle { state: "started" }
-   Graph: state_snapshot stored
+   Graph: state_snapshot stored and persisted durably in the backend repository store
    Event: AGENT_TASK_STARTED -> Unified Pipeline
 
 3. Agent needs chain data
@@ -249,12 +249,12 @@ Complete flow for an agent executing a task with chain interaction:
 
 4. Agent deploys contract
    API: POST /v1/onchain/actions { type: "deploy", bytecode }
-   Graph: ACTION_RECORD node + DEPLOYED edge to new CONTRACT node
+   Graph: ACTION_RECORD node + DEPLOYED edge to new CONTRACT node, with the action record also persisted durably
    ML: Bytecode Risk Scorer runs -> riskScore written to CONTRACT
 
 5. Agent hires specialist agent
    API: POST /v1/commerce/hires { hiredAgentId, terms }
-   Graph: HIRED edge + PAYS edge + x402 payment captured
+   Graph: HIRED edge + PAYS edge + x402 payment captured, with commerce/x402 records also persisted durably
    Event: HIRE_RECORDED audit action
 
 6. Task completes
@@ -280,7 +280,7 @@ Complete flow for an agent executing a task with chain interaction:
 
 - All IG endpoints are **feature-flagged** — each route checks its corresponding `IntelligenceGraphConfig` flag before execution
 - All fraud service endpoints now require tenant-scoped permission checks (`fraud:evaluate`, `fraud:read`, `admin`)
-- API key stubs are restricted to `LOCAL` environment only; non-local environments reject stub keys
+- API keys are validated against the durable registry configured by `AETHER_AUTH_DB_PATH`; non-local environments fail fast when the registry is not configured
 - JWT secret validation enforced at startup — `RuntimeError` raised if default secret used in non-local environments
 
 ### Tenant Isolation

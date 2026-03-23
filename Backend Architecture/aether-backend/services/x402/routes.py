@@ -49,7 +49,7 @@ async def get_economic_graph(request: Request):
     """Get the current x402 economic graph snapshot."""
     request.state.tenant.require_permission("x402:read")
     tenant_id = request.state.tenant.tenant_id
-    snapshot = _economic_graph.get_graph_snapshot(tenant_id=tenant_id)
+    snapshot = await _economic_graph.get_graph_snapshot(tenant_id=tenant_id)
     return APIResponse(data=snapshot).to_dict()
 
 
@@ -58,7 +58,7 @@ async def get_agent_x402_history(agent_id: str, request: Request):
     """Get an agent's x402 payment history and spending patterns."""
     request.state.tenant.require_permission("x402:read")
     tenant_id = request.state.tenant.tenant_id
-    summary = _economic_graph.get_spending_patterns(agent_id, tenant_id=tenant_id)
+    summary = await _economic_graph.get_spending_patterns(agent_id, tenant_id=tenant_id)
     return APIResponse(data=summary.model_dump()).to_dict()
 
 

@@ -1,8 +1,8 @@
 """
 Aether Shared -- Usage Meter
 
-Per-tenant, per-provider usage tracking for billing and monitoring.
-Stub uses in-memory dicts; production flushes to TimescaleDB.
+Per-tenant, per-provider usage tracking for billing and monitoring,
+persisted durably in the shared repository SQLite store.
 """
 
 from __future__ import annotations
@@ -13,6 +13,7 @@ from dataclasses import dataclass
 from typing import Optional
 
 from shared.logger.logger import get_logger, metrics
+from repositories.repos import BaseRepository
 
 logger = get_logger("aether.providers.meter")
 
@@ -58,17 +59,13 @@ class UsageRecord:
 
 class UsageMeter:
     """
-    In-memory usage aggregation per tenant per provider.
-    Production: periodic flush to TimescaleDB.
+    Durable usage aggregation per tenant per provider.
     """
 
     def __init__(self, flush_interval_s: int = 60) -> None:
-        self._records: dict[str, UsageRecord] = {}
+        self._repo = BaseRepository("provider_usage")
         self._flush_interval = flush_interval_s
         self._last_flush = time.time()
-        self._method_counts: dict[str, dict[str, int]] = defaultdict(
-            lambda: defaultdict(int),
-        )
 
     @staticmethod
     def _usage_key(tenant_id: str, category: str, provider_name: str) -> str:
@@ -86,15 +83,26 @@ class UsageMeter:
         """Record a single provider call."""
         key = self._usage_key(tenant_id, category, provider_name)
 
-        if key not in self._records:
-            self._records[key] = UsageRecord(
+        existing = await self._repo.find_by_id(key)
+        if existing is None:
+            rec = UsageRecord(
                 tenant_id=tenant_id,
                 category=category,
                 provider_name=provider_name,
                 period_start=time.time(),
             )
-
-        rec = self._records[key]
+        else:
+            rec = UsageRecord(
+                tenant_id=existing["tenant_id"],
+                category=existing["category"],
+                provider_name=existing["provider_name"],
+                total_requests=existing.get("total_requests", 0),
+                successful_requests=existing.get("successful_requests", 0),
+                failed_requests=existing.get("failed_requests", 0),
+                total_latency_ms=existing.get("total_latency_ms", 0.0),
+                period_start=existing.get("period_start", time.time()),
+            )
+        method_counts = dict((existing or {}).get("method_breakdown", {}))
         rec.total_requests += 1
         rec.total_latency_ms += latency_ms
         if success:
@@ -102,7 +110,14 @@ class UsageMeter:
         else:
             rec.failed_requests += 1
 
-        self._method_counts[key][method] += 1
+        method_counts[method] = method_counts.get(method, 0) + 1
+        payload = rec.to_dict()
+        payload["total_latency_ms"] = rec.total_latency_ms
+        payload["method_breakdown"] = method_counts
+        if existing is None:
+            await self._repo.insert(key, payload)
+        else:
+            await self._repo.update(key, payload)
 
         metrics.increment("provider_usage", labels={
             "tenant_id": tenant_id,
@@ -119,15 +134,13 @@ class UsageMeter:
     ) -> list[dict]:
         """Query usage records for a tenant with optional filters."""
         results = []
-        for key, rec in self._records.items():
-            if rec.tenant_id != tenant_id:
-                continue
-            if category and rec.category != category:
-                continue
-            if provider_name and rec.provider_name != provider_name:
-                continue
-            entry = rec.to_dict()
-            entry["method_breakdown"] = dict(self._method_counts.get(key, {}))
+        filters = {"tenant_id": tenant_id}
+        if category:
+            filters["category"] = category
+        if provider_name:
+            filters["provider_name"] = provider_name
+        for raw in await self._repo.find_many(filters=filters, limit=10_000):
+            entry = {k: v for k, v in raw.items() if k not in {"id", "created_at", "updated_at", "total_latency_ms"}}
             results.append(entry)
         return results
 
@@ -137,14 +150,12 @@ class UsageMeter:
         by_category: dict[str, int] = defaultdict(int)
         by_provider: dict[str, int] = defaultdict(int)
 
-        for rec in self._records.values():
-            if rec.tenant_id != tenant_id:
-                continue
-            total += rec.total_requests
-            success += rec.successful_requests
-            failed += rec.failed_requests
-            by_category[rec.category] += rec.total_requests
-            by_provider[rec.provider_name] += rec.total_requests
+        for raw in await self._repo.find_many(filters={"tenant_id": tenant_id}, limit=10_000):
+            total += raw.get("total_requests", 0)
+            success += raw.get("successful_requests", 0)
+            failed += raw.get("failed_requests", 0)
+            by_category[raw.get("category", "")] = by_category.get(raw.get("category", ""), 0) + raw.get("total_requests", 0)
+            by_provider[raw.get("provider_name", "")] = by_provider.get(raw.get("provider_name", ""), 0) + raw.get("total_requests", 0)
 
         return {
             "tenant_id": tenant_id,
@@ -157,6 +168,6 @@ class UsageMeter:
         }
 
     async def flush(self) -> None:
-        """Flush to persistent storage.  Stub: no-op."""
+        """Flush hook retained for compatibility; writes are already durable."""
         self._last_flush = time.time()
-        logger.debug(f"Usage meter flushed {len(self._records)} records")
+        logger.debug("Usage meter flush checkpoint recorded")

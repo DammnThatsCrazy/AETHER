@@ -1,15 +1,13 @@
-"""
-Aether Backend — Repository Pattern
-Each service accesses data stores through repository classes that abstract
-query logic from business logic. Includes connection pooling, prepared
-statements, and write-ahead logging hooks.
-"""
+"""Aether Backend — Repository Pattern with durable SQLite storage."""
 
 from __future__ import annotations
 
-from abc import ABC, abstractmethod
-from dataclasses import dataclass, field
-from typing import Any, Generic, Optional, TypeVar
+import json
+import os
+import sqlite3
+from abc import ABC
+from pathlib import Path
+from typing import Any, Optional, TypeVar
 
 from shared.common.common import NotFoundError, utc_now
 from shared.cache.cache import CacheClient, CacheKey, TTL
@@ -18,23 +16,72 @@ from shared.events.events import Event, EventProducer, Topic
 from shared.logger.logger import get_logger
 
 logger = get_logger("aether.repository")
-
 T = TypeVar("T", bound=dict)
 
 
-# ═══════════════════════════════════════════════════════════════════════════
-# BASE REPOSITORY (TimescaleDB / relational)
-# ═══════════════════════════════════════════════════════════════════════════
+def _state_dir(component: str) -> Path:
+    base = Path(os.environ.get("XDG_STATE_HOME", Path.home() / ".local" / "state"))
+    path = base / "aether" / component
+    path.mkdir(parents=True, exist_ok=True)
+    return path
+
+
+def _repository_db_path() -> Path:
+    explicit = os.environ.get("AETHER_REPOSITORY_DB_PATH")
+    env = os.environ.get("AETHER_ENV", "local").lower()
+    if explicit:
+        path = Path(explicit)
+    elif env == "local":
+        path = _state_dir("repositories") / "repositories.sqlite3"
+    else:
+        raise RuntimeError(
+            "AETHER_REPOSITORY_DB_PATH must be set in non-local environments to enable durable repository storage."
+        )
+    path.parent.mkdir(parents=True, exist_ok=True)
+    return path
+
+
+class _RepositoryMirror(dict):
+    def __init__(self, repo: "BaseRepository"):
+        super().__init__()
+        self._repo = repo
+
+    def clear(self) -> None:
+        super().clear()
+        self._repo._clear_db()
+
 
 class BaseRepository(ABC):
-    """
-    Abstract base for relational repositories.
-    Stub uses in-memory dicts. Replace with asyncpg + PgBouncer pool.
-    """
+    """Durable SQLite-backed repository used by service-level repositories."""
 
     def __init__(self, table_name: str) -> None:
         self.table_name = table_name
-        self._store: dict[str, dict] = {}
+        self._db_path = _repository_db_path()
+        self._store = _RepositoryMirror(self)
+        self._init_db()
+        self._load_store()
+
+    def _connect(self) -> sqlite3.Connection:
+        conn = sqlite3.connect(self._db_path)
+        conn.row_factory = sqlite3.Row
+        conn.execute("PRAGMA journal_mode=WAL")
+        return conn
+
+    def _init_db(self) -> None:
+        with self._connect() as conn:
+            conn.execute(
+                f"CREATE TABLE IF NOT EXISTS {self.table_name} (id TEXT PRIMARY KEY, payload TEXT NOT NULL, created_at TEXT NOT NULL, updated_at TEXT NOT NULL)"
+            )
+
+    def _load_store(self) -> None:
+        with self._connect() as conn:
+            rows = conn.execute(f"SELECT id, payload FROM {self.table_name}").fetchall()
+        for row in rows:
+            self._store[row["id"]] = json.loads(row["payload"])
+
+    def _clear_db(self) -> None:
+        with self._connect() as conn:
+            conn.execute(f"DELETE FROM {self.table_name}")
 
     async def find_by_id(self, record_id: str) -> Optional[dict]:
         return self._store.get(record_id)
@@ -45,63 +92,49 @@ class BaseRepository(ABC):
             raise NotFoundError(self.table_name)
         return record
 
-    async def find_many(
-        self,
-        filters: Optional[dict[str, Any]] = None,
-        limit: int = 50,
-        offset: int = 0,
-        sort_by: str = "created_at",
-        sort_order: str = "desc",
-    ) -> list[dict]:
+    async def find_many(self, filters: Optional[dict[str, Any]] = None, limit: int = 50, offset: int = 0, sort_by: str = "created_at", sort_order: str = "desc") -> list[dict]:
         results = list(self._store.values())
         if filters:
-            results = [
-                r for r in results
-                if all(r.get(k) == v for k, v in filters.items())
-            ]
-        # Sort by field if it exists
+            results = [r for r in results if all(r.get(k) == v for k, v in filters.items())]
         reverse = sort_order == "desc"
         results.sort(key=lambda r: r.get(sort_by, ""), reverse=reverse)
-        return results[offset : offset + limit]
+        return results[offset: offset + limit]
 
     async def count(self, filters: Optional[dict[str, Any]] = None) -> int:
-        if not filters:
-            return len(self._store)
-        return len([
-            r for r in self._store.values()
-            if all(r.get(k) == v for k, v in filters.items())
-        ])
+        return len(await self.find_many(filters=filters, limit=10_000_000, offset=0, sort_by="created_at", sort_order="desc"))
 
     async def insert(self, record_id: str, data: dict) -> dict:
-        data["id"] = record_id
-        data["created_at"] = utc_now().isoformat()
-        data["updated_at"] = utc_now().isoformat()
-        self._store[record_id] = data
-        logger.info(f"INSERT {self.table_name} id={record_id}")
-        return data
+        now = utc_now().isoformat()
+        record = {**data, "id": record_id, "created_at": now, "updated_at": now}
+        self._store[record_id] = record
+        with self._connect() as conn:
+            conn.execute(
+                f"INSERT OR REPLACE INTO {self.table_name}(id, payload, created_at, updated_at) VALUES (?, ?, ?, ?)",
+                (record_id, json.dumps(record, default=str), now, now),
+            )
+        return record
 
     async def update(self, record_id: str, data: dict) -> dict:
         existing = await self.find_by_id_or_fail(record_id)
         existing.update(data)
         existing["updated_at"] = utc_now().isoformat()
-        logger.info(f"UPDATE {self.table_name} id={record_id}")
+        self._store[record_id] = existing
+        with self._connect() as conn:
+            conn.execute(
+                f"UPDATE {self.table_name} SET payload = ?, updated_at = ? WHERE id = ?",
+                (json.dumps(existing, default=str), existing["updated_at"], record_id),
+            )
         return existing
 
     async def delete(self, record_id: str) -> bool:
-        if record_id in self._store:
-            del self._store[record_id]
-            logger.info(f"DELETE {self.table_name} id={record_id}")
-            return True
-        return False
+        existed = record_id in self._store
+        self._store.pop(record_id, None)
+        with self._connect() as conn:
+            conn.execute(f"DELETE FROM {self.table_name} WHERE id = ?", (record_id,))
+        return existed
 
-
-# ═══════════════════════════════════════════════════════════════════════════
-# IDENTITY REPOSITORY (Neptune graph + TimescaleDB)
-# ═══════════════════════════════════════════════════════════════════════════
 
 class IdentityRepository:
-    """Manages user profiles in both the graph and relational store."""
-
     def __init__(self, graph: GraphClient, cache: CacheClient) -> None:
         self.graph = graph
         self.cache = cache
@@ -112,7 +145,6 @@ class IdentityRepository:
         cached = await self.cache.get_json(key)
         if cached:
             return cached
-
         profile = await self._profiles.find_by_id(user_id)
         if profile:
             await self.cache.set_json(key, profile, TTL.PROFILE)
@@ -120,88 +152,43 @@ class IdentityRepository:
 
     async def upsert_profile(self, tenant_id: str, user_id: str, data: dict) -> dict:
         existing = await self._profiles.find_by_id(user_id)
-        if existing:
-            profile = await self._profiles.update(user_id, data)
-        else:
-            profile = await self._profiles.insert(
-                user_id, {**data, "tenant_id": tenant_id}
-            )
-
-        vertex = Vertex(
-            vertex_type=VertexType.USER,
-            vertex_id=user_id,
-            properties={"tenant_id": tenant_id, **data},
-        )
+        profile = await (self._profiles.update(user_id, data) if existing else self._profiles.insert(user_id, {**data, "tenant_id": tenant_id}))
+        vertex = Vertex(vertex_type=VertexType.USER, vertex_id=user_id, properties={"tenant_id": tenant_id, **data})
         await self.graph.upsert_vertex(vertex)
         await self.cache.delete(CacheKey.profile(tenant_id, user_id))
         return profile
 
-    async def merge_identities(
-        self,
-        tenant_id: str,
-        primary_id: str,
-        secondary_id: str,
-    ) -> dict:
-        """Merge two user profiles into one (identity resolution)."""
+    async def merge_identities(self, tenant_id: str, primary_id: str, secondary_id: str) -> dict:
         primary = await self._profiles.find_by_id_or_fail(primary_id)
         secondary = await self._profiles.find_by_id_or_fail(secondary_id)
-
         for key, value in secondary.items():
             if key not in primary or primary[key] is None:
                 primary[key] = value
-
         await self._profiles.update(primary_id, primary)
         await self._profiles.delete(secondary_id)
-
-        edge = Edge(
-            edge_type=EdgeType.RESOLVED_AS,
-            from_vertex_id=secondary_id,
-            to_vertex_id=primary_id,
-            properties={"merged_at": utc_now().isoformat()},
-        )
+        edge = Edge(edge_type=EdgeType.RESOLVED_AS, from_vertex_id=secondary_id, to_vertex_id=primary_id, properties={"merged_at": utc_now().isoformat()})
         await self.graph.add_edge(edge)
-
         await self.cache.delete(CacheKey.profile(tenant_id, primary_id))
         await self.cache.delete(CacheKey.profile(tenant_id, secondary_id))
         return primary
 
     async def get_graph_neighbors(self, user_id: str) -> list[dict]:
         neighbors = await self.graph.get_neighbors(user_id, direction="out")
-        return [
-            {"id": v.vertex_id, "type": v.vertex_type, "properties": v.properties}
-            for v in neighbors
-        ]
+        return [{"id": v.vertex_id, "type": v.vertex_type, "properties": v.properties} for v in neighbors]
 
-
-# ═══════════════════════════════════════════════════════════════════════════
-# ANALYTICS REPOSITORY (TimescaleDB + Redis caching)
-# ═══════════════════════════════════════════════════════════════════════════
 
 class AnalyticsRepository:
-    """Query engine for dashboards — uses TimescaleDB with Redis query caching."""
-
     def __init__(self, cache: CacheClient) -> None:
         self.cache = cache
         self._events = _EventStore()
         self._sessions = _SessionStore()
 
-    async def query_events(
-        self,
-        tenant_id: str,
-        query_params: dict,
-        limit: int = 100,
-    ) -> list[dict]:
-        cache_key = CacheKey.analytics_query(
-            tenant_id, CacheKey.hash_query(str(query_params))
-        )
+    async def query_events(self, tenant_id: str, query_params: dict, limit: int = 100) -> list[dict]:
+        cache_key = CacheKey.analytics_query(tenant_id, CacheKey.hash_query(str(query_params)))
         cached = await self.cache.get_json(cache_key)
         if cached:
             return cached
-
-        results = await self._events.find_many(
-            filters={"tenant_id": tenant_id, **query_params},
-            limit=limit,
-        )
+        results = await self._events.find_many(filters={"tenant_id": tenant_id, **query_params}, limit=limit)
         await self.cache.set_json(cache_key, results, TTL.MEDIUM)
         return results
 
@@ -214,46 +201,22 @@ class AnalyticsRepository:
     async def dashboard_summary(self, tenant_id: str) -> dict:
         events = await self._events.count(filters={"tenant_id": tenant_id})
         sessions = await self._sessions.count(filters={"tenant_id": tenant_id})
-        return {
-            "period": "24h",
-            "total_events": events,
-            "total_sessions": sessions,
-            "unique_users": 0,
-            "top_event_types": [],
-        }
+        return {"period": "24h", "total_events": events, "total_sessions": sessions, "unique_users": 0, "top_event_types": []}
 
-
-# ═══════════════════════════════════════════════════════════════════════════
-# CAMPAIGN REPOSITORY
-# ═══════════════════════════════════════════════════════════════════════════
 
 class CampaignRepository(BaseRepository):
     def __init__(self) -> None:
         super().__init__("campaigns")
 
 
-# ═══════════════════════════════════════════════════════════════════════════
-# CONSENT REPOSITORY (DynamoDB-backed)
-# ═══════════════════════════════════════════════════════════════════════════
-
 class ConsentRepository(BaseRepository):
-    """
-    Consent records and data subject requests.
-    In production backed by DynamoDB for single-digit-ms reads.
-    """
     def __init__(self) -> None:
         super().__init__("consent_records")
 
     async def get_consent(self, tenant_id: str, user_id: str) -> Optional[dict]:
-        records = await self.find_many(
-            filters={"tenant_id": tenant_id, "user_id": user_id}, limit=1
-        )
+        records = await self.find_many(filters={"tenant_id": tenant_id, "user_id": user_id}, limit=1)
         return records[0] if records else None
 
-
-# ═══════════════════════════════════════════════════════════════════════════
-# NOTIFICATION REPOSITORY
-# ═══════════════════════════════════════════════════════════════════════════
 
 class WebhookRepository(BaseRepository):
     def __init__(self) -> None:
@@ -265,25 +228,15 @@ class AlertRepository(BaseRepository):
         super().__init__("alerts")
 
 
-# ═══════════════════════════════════════════════════════════════════════════
-# ADMIN REPOSITORY (DynamoDB-backed)
-# ═══════════════════════════════════════════════════════════════════════════
-
 class AdminRepository(BaseRepository):
-    """Tenant management, billing, API key records."""
     def __init__(self) -> None:
         super().__init__("tenants")
 
 
 class APIKeyRepository(BaseRepository):
-    """API key storage (hashed keys in production)."""
     def __init__(self) -> None:
         super().__init__("api_keys")
 
-
-# ═══════════════════════════════════════════════════════════════════════════
-# PRIVATE CONCRETE STORES (used by composite repos above)
-# ═══════════════════════════════════════════════════════════════════════════
 
 class _ProfileStore(BaseRepository):
     def __init__(self) -> None:

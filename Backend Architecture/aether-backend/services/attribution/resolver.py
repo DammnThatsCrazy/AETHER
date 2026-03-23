@@ -8,8 +8,8 @@ Design:
     - ``AttributionResolver`` is the primary entry point.  It accepts raw
       touchpoint dicts, converts them to ``Touchpoint`` objects, filters by
       the configured lookback window, and delegates to the selected model.
-    - ``JourneyStore`` is an in-memory touchpoint store for demo and
-      testing purposes (production: DynamoDB / ClickHouse).
+    - ``JourneyStore`` persists touchpoints durably in the shared repository
+      store so attribution history survives process restarts.
 
 Integration:
     Consumed by ``services.attribution.routes`` and by the reward-evaluation
@@ -19,11 +19,12 @@ Integration:
 from __future__ import annotations
 
 import logging
-from collections import defaultdict
+import os
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 from typing import Any, Optional
 
+from repositories.repos import BaseRepository
 from services.attribution.models import (
     AttributionModel,
     AttributionResult,
@@ -39,6 +40,13 @@ from services.attribution.models import (
 logger = logging.getLogger("aether.attribution.resolver")
 
 
+def _inmemory_journey_store_allowed() -> bool:
+    return (
+        os.getenv("AETHER_ENV", "local").lower() == "local"
+        or os.getenv("AETHER_ALLOW_INMEMORY_JOURNEY_STORE", "0") == "1"
+    )
+
+
 # ========================================================================
 # CONFIGURATION
 # ========================================================================
@@ -52,39 +60,38 @@ class AttributionConfig:
     min_touchpoints: int = 1
 
 
-# ========================================================================
-# IN-MEMORY JOURNEY STORE
-# ========================================================================
-
 class JourneyStore:
     """
-    In-memory touchpoint store keyed by user ID.
-
-    Production replacement: DynamoDB, ClickHouse, or a dedicated
-    time-series store.
+    Durable touchpoint store keyed by user ID.
     """
 
     def __init__(self) -> None:
-        self._store: dict[str, list[dict[str, Any]]] = defaultdict(list)
+        self._repo = BaseRepository("attribution_touchpoints")
 
-    def add(self, user_id: str, touchpoint: dict[str, Any]) -> None:
+    async def add(self, user_id: str, touchpoint: dict[str, Any]) -> None:
         """Append a raw touchpoint dict for a user."""
-        self._store[user_id].append(touchpoint)
+        ts = touchpoint.get("timestamp") or datetime.now(timezone.utc).isoformat()
+        touchpoint_id = f"{user_id}:{ts}:{touchpoint.get('channel', 'unknown')}:{touchpoint.get('source', 'unknown')}"
+        await self._repo.insert(touchpoint_id, {"user_id": user_id, **touchpoint})
 
-    def get(self, user_id: str) -> list[dict[str, Any]]:
+    async def get(self, user_id: str) -> list[dict[str, Any]]:
         """Return all stored touchpoints for a user (oldest first)."""
-        return list(self._store.get(user_id, []))
+        return await self._repo.find_many(filters={"user_id": user_id}, limit=10_000, sort_by="timestamp", sort_order="asc")
 
-    def clear(self, user_id: str) -> int:
+    async def clear(self, user_id: str) -> int:
         """Remove all touchpoints for a user.  Returns count removed."""
-        count = len(self._store.pop(user_id, []))
+        existing = await self._repo.find_many(filters={"user_id": user_id}, limit=10_000)
+        for record in existing:
+            await self._repo.delete(record["id"])
+        count = len(existing)
         return count
 
-    def count(self, user_id: str) -> int:
-        return len(self._store.get(user_id, []))
+    async def count(self, user_id: str) -> int:
+        return await self._repo.count(filters={"user_id": user_id})
 
-    def all_user_ids(self) -> list[str]:
-        return list(self._store.keys())
+    async def all_user_ids(self) -> list[str]:
+        rows = await self._repo.find_many(limit=100_000)
+        return sorted({row["user_id"] for row in rows if row.get("user_id")})
 
 
 # ========================================================================

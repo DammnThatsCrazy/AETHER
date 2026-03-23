@@ -11,6 +11,8 @@ import hashlib
 import time
 from typing import Any, Optional
 
+import httpx
+
 from config.settings import settings
 from shared.logger.logger import get_logger, metrics
 from shared.providers.categories import ProviderCategory
@@ -33,8 +35,8 @@ ALLOWED_RPC_METHODS = {
 class RPCGateway:
     """
     Single shared RPC client for all blockchain interactions.
-    In production, connects to QuickNode multi-chain endpoints.
-    Stub implementation returns mock responses.
+    In production, connects to QuickNode or provider-gateway-backed endpoints.
+    Fails closed when no live RPC transport is configured.
     """
 
     def __init__(self, provider_gateway=None) -> None:
@@ -98,18 +100,10 @@ class RPCGateway:
                 metrics.increment("rpc_cache_hit", labels={"chain_id": chain_id})
                 return cached
 
-        # Execute RPC call (stub)
-        self._request_count += 1
-        self._request_times.append(time.time())
+        if not self._config.endpoint:
+            raise RuntimeError("RPC gateway endpoint not configured and provider gateway unavailable")
 
-        result = {
-            "jsonrpc": "2.0",
-            "id": self._request_count,
-            "result": None,
-            "chain_id": chain_id,
-            "vm_type": vm_type,
-            "method": method,
-        }
+        result = await self._execute_via_http(chain_id, method, params, vm_type)
 
         # Cache read-only results for 12 seconds
         if method.startswith("eth_get") or method.startswith("sol_get"):
@@ -118,6 +112,40 @@ class RPCGateway:
         metrics.increment("rpc_requests", labels={"chain_id": chain_id, "method": method})
         logger.debug(f"RPC {method} on {chain_id} ({vm_type})")
         return result
+
+
+    async def _execute_via_http(
+        self,
+        chain_id: str,
+        method: str,
+        params: list[Any],
+        vm_type: str,
+    ) -> dict[str, Any]:
+        self._request_count += 1
+        self._request_times.append(time.time())
+
+        payload = {
+            "jsonrpc": "2.0",
+            "id": self._request_count,
+            "method": method,
+            "params": params,
+        }
+        headers = {"content-type": "application/json"}
+        if self._config.api_key:
+            headers["x-api-key"] = self._config.api_key
+
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            response = await client.post(self._config.endpoint, json=payload, headers=headers)
+            response.raise_for_status()
+            data = response.json()
+
+        if not isinstance(data, dict) or "error" in data:
+            raise RuntimeError(f"RPC call failed: {data.get('error') if isinstance(data, dict) else data}")
+
+        data.setdefault("chain_id", chain_id)
+        data.setdefault("vm_type", vm_type)
+        data.setdefault("method", method)
+        return data
 
     async def _rate_limit(self) -> None:
         """Simple sliding-window rate limiter."""
@@ -134,6 +162,7 @@ class RPCGateway:
         """RPC gateway health status."""
         return {
             "connected": self._connected,
+            "configured": bool(self._provider_gateway and settings.provider_gateway.enabled) or bool(self._config.endpoint),
             "total_requests": self._request_count,
             "cache_size": len(self._cache),
             "x402_enabled": self._config.x402_enabled,

@@ -8,54 +8,60 @@ from __future__ import annotations
 
 import asyncio
 import json
+import os
+import sqlite3
+import time
 import uuid
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from enum import Enum
+from pathlib import Path
 from typing import Any, Awaitable, Callable, Optional
 
 from shared.logger.logger import get_logger, metrics
 
 logger = get_logger("aether.events")
-
 EventHandler = Callable[["Event"], Awaitable[None]]
 
 
-# ═══════════════════════════════════════════════════════════════════════════
-# EVENT TOPICS
-# ═══════════════════════════════════════════════════════════════════════════
+def _state_dir(component: str) -> Path:
+    base = Path(os.environ.get("XDG_STATE_HOME", Path.home() / ".local" / "state"))
+    path = base / "aether" / component
+    path.mkdir(parents=True, exist_ok=True)
+    return path
+
+
+def _event_bus_db_path() -> Path:
+    explicit = os.environ.get("AETHER_EVENT_BUS_DB_PATH")
+    env = os.environ.get("AETHER_ENV", "local").lower()
+    if explicit:
+        path = Path(explicit)
+    elif env == "local":
+        path = _state_dir("events") / "event_bus.sqlite3"
+    else:
+        raise RuntimeError(
+            "AETHER_EVENT_BUS_DB_PATH must be set in non-local environments to enable the durable event bus."
+        )
+    path.parent.mkdir(parents=True, exist_ok=True)
+    return path
+
 
 class Topic(str, Enum):
-    # Ingestion
     SDK_EVENTS_RAW = "aether.sdk.events.raw"
     SDK_EVENTS_VALIDATED = "aether.sdk.events.validated"
     API_FEED_RAW = "aether.api.feed.raw"
-
-    # Identity
     IDENTITY_RESOLVED = "aether.identity.resolved"
     IDENTITY_MERGED = "aether.identity.merged"
     PROFILE_UPDATED = "aether.profile.updated"
-
-    # Analytics
     SESSION_SCORED = "aether.analytics.session.scored"
     ANOMALY_DETECTED = "aether.analytics.anomaly"
-
-    # ML
     PREDICTION_GENERATED = "aether.ml.prediction"
     MODEL_UPDATED = "aether.ml.model.updated"
-
-    # Agent
     AGENT_DISCOVERY = "aether.agent.discovery"
     AGENT_ENRICHMENT = "aether.agent.enrichment"
-
-    # Campaign
     ATTRIBUTION_CALCULATED = "aether.campaign.attribution"
-
-    # Consent
     CONSENT_UPDATED = "aether.consent.updated"
     DATA_SUBJECT_REQUEST = "aether.consent.dsr"
-
-    # Identity Resolution
     RESOLUTION_EVALUATED = "aether.resolution.evaluated"
     RESOLUTION_AUTO_MERGED = "aether.resolution.auto_merged"
     RESOLUTION_FLAGGED = "aether.resolution.flagged"
@@ -63,41 +69,25 @@ class Topic(str, Enum):
     RESOLUTION_REJECTED = "aether.resolution.rejected"
     FINGERPRINT_OBSERVED = "aether.identity.fingerprint.observed"
     IP_OBSERVED = "aether.identity.ip.observed"
-
-    # Intelligence Graph — Agent Behavioral (L2)
     AGENT_TASK_STARTED = "aether.agent.task.started"
     AGENT_TASK_COMPLETED = "aether.agent.task.completed"
     AGENT_DECISION_MADE = "aether.agent.decision.made"
     AGENT_STATE_SNAPSHOT = "aether.agent.state.snapshot"
     AGENT_GROUND_TRUTH = "aether.agent.ground_truth"
-
-    # Intelligence Graph — Agent-to-Human (A2H)
     AGENT_NOTIFICATION_SENT = "aether.agent.notification.sent"
     AGENT_RECOMMENDATION_MADE = "aether.agent.recommendation.made"
     AGENT_RESULT_DELIVERED = "aether.agent.result.delivered"
     AGENT_ESCALATION_RAISED = "aether.agent.escalation.raised"
-
-    # Intelligence Graph — Commerce (L3a)
     PAYMENT_SENT = "aether.commerce.payment.sent"
     AGENT_HIRED = "aether.commerce.agent.hired"
-    SERVICE_PURCHASED = "aether.commerce.service.purchased"  # Reserved — not yet published by any service
-    FEE_ELIMINATED = "aether.commerce.fee.eliminated"  # Reserved — not yet published by any service
-
-    # Intelligence Graph — On-Chain Actions (L0)
+    SERVICE_PURCHASED = "aether.commerce.service.purchased"
+    FEE_ELIMINATED = "aether.commerce.fee.eliminated"
     ACTION_RECORDED = "aether.onchain.action.recorded"
     CONTRACT_DEPLOYED = "aether.onchain.contract.deployed"
     CONTRACT_CALLED = "aether.onchain.contract.called"
-
-    # Intelligence Graph — x402 Payments (L3b)
     X402_PAYMENT_CAPTURED = "aether.x402.payment.captured"
-
-    # Dead letter
     DEAD_LETTER = "aether.dlq"
 
-
-# ═══════════════════════════════════════════════════════════════════════════
-# EVENT SCHEMA
-# ═══════════════════════════════════════════════════════════════════════════
 
 @dataclass
 class Event:
@@ -105,9 +95,7 @@ class Event:
     payload: dict[str, Any]
     tenant_id: str = ""
     event_id: str = field(default_factory=lambda: str(uuid.uuid4()))
-    timestamp: str = field(
-        default_factory=lambda: datetime.now(timezone.utc).isoformat()
-    )
+    timestamp: str = field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
     source_service: str = ""
     correlation_id: str = ""
     version: str = "1.0"
@@ -127,7 +115,7 @@ class Event:
         })
 
     @classmethod
-    def deserialize(cls, raw: str) -> Event:
+    def deserialize(cls, raw: str) -> "Event":
         data = json.loads(raw)
         return cls(
             event_id=data["event_id"],
@@ -142,71 +130,125 @@ class Event:
         )
 
 
-# ═══════════════════════════════════════════════════════════════════════════
-# PRODUCER (abstract — swap implementation for Kafka vs SNS)
-# ═══════════════════════════════════════════════════════════════════════════
+class _SQLiteEventBus:
+    def __init__(self, db_path: Path):
+        self.db_path = db_path
+        self._init_db()
+
+    def _connect(self) -> sqlite3.Connection:
+        conn = sqlite3.connect(self.db_path)
+        conn.row_factory = sqlite3.Row
+        conn.execute("PRAGMA journal_mode=WAL")
+        conn.execute("PRAGMA synchronous=NORMAL")
+        return conn
+
+    def _init_db(self) -> None:
+        with self._connect() as conn:
+            conn.execute(
+                """
+                CREATE TABLE IF NOT EXISTS events (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    event_id TEXT NOT NULL UNIQUE,
+                    topic TEXT NOT NULL,
+                    payload TEXT NOT NULL,
+                    status TEXT NOT NULL DEFAULT 'pending',
+                    created_at REAL NOT NULL,
+                    updated_at REAL NOT NULL,
+                    error TEXT NOT NULL DEFAULT ''
+                )
+                """
+            )
+            conn.execute(
+                "CREATE INDEX IF NOT EXISTS idx_events_status_topic ON events(status, topic, id)"
+            )
+
+    def enqueue(self, event: Event) -> None:
+        now = time.time()
+        with self._connect() as conn:
+            conn.execute(
+                "INSERT OR REPLACE INTO events(event_id, topic, payload, status, created_at, updated_at, error) VALUES (?, ?, ?, 'pending', ?, ?, '')",
+                (event.event_id, event.topic.value, event.serialize(), now, now),
+            )
+
+    def next_event(self, topic: Topic) -> Optional[sqlite3.Row]:
+        with self._connect() as conn:
+            row = conn.execute(
+                "SELECT * FROM events WHERE topic = ? AND status = 'pending' ORDER BY id LIMIT 1",
+                (topic.value,),
+            ).fetchone()
+            if row is None:
+                return None
+            conn.execute(
+                "UPDATE events SET status = 'processing', updated_at = ? WHERE id = ?",
+                (time.time(), row["id"]),
+            )
+            return row
+
+    def mark_processed(self, record_id: int) -> None:
+        with self._connect() as conn:
+            conn.execute("UPDATE events SET status = 'processed', updated_at = ? WHERE id = ?", (time.time(), record_id))
+
+    def mark_dead_letter(self, record_id: int, error: str) -> None:
+        with self._connect() as conn:
+            conn.execute(
+                "UPDATE events SET status = 'dead_letter', updated_at = ?, error = ? WHERE id = ?",
+                (time.time(), error, record_id),
+            )
+
+    def count(self, status: Optional[str] = None) -> int:
+        with self._connect() as conn:
+            if status:
+                row = conn.execute("SELECT COUNT(*) AS c FROM events WHERE status = ?", (status,)).fetchone()
+            else:
+                row = conn.execute("SELECT COUNT(*) AS c FROM events").fetchone()
+            return int(row["c"])
+
 
 class EventProducer:
-    """
-    Publishes events to the event bus with retry logic.
-    Stub implementation — logs events in memory.
-    Replace with aiokafka.AIOKafkaProducer or boto3 SNS client.
-    """
+    """Durable SQLite-backed event producer with retries and health checks."""
 
     MAX_RETRIES = 3
     BASE_BACKOFF_S = 0.1
 
     def __init__(self) -> None:
-        self._published: list[Event] = []
+        self._bus = _SQLiteEventBus(_event_bus_db_path())
         self._connected = False
 
     async def connect(self) -> None:
         self._connected = True
-        logger.info("EventProducer connected (in-memory stub)")
+        logger.info("EventProducer connected to durable SQLite event bus")
 
     async def close(self) -> None:
         self._connected = False
         logger.info("EventProducer closed")
 
     async def publish(self, event: Event) -> None:
-        """Publish a single event with retry."""
         for attempt in range(self.MAX_RETRIES):
             try:
-                self._published.append(event)
+                self._bus.enqueue(event)
                 metrics.increment("events_published", labels={"topic": event.topic.value})
-                logger.info(f"Published event {event.event_id} to {event.topic.value}")
                 return
-            except Exception as e:
+            except Exception as exc:
                 if attempt == self.MAX_RETRIES - 1:
-                    logger.error(f"Failed to publish event {event.event_id} after {self.MAX_RETRIES} attempts: {e}")
                     metrics.increment("events_publish_failed", labels={"topic": event.topic.value})
                     raise
-                backoff = self.BASE_BACKOFF_S * (2 ** attempt)
-                logger.warning(f"Publish retry {attempt + 1} for {event.event_id}, backoff {backoff}s")
-                await asyncio.sleep(backoff)
+                await asyncio.sleep(self.BASE_BACKOFF_S * (2 ** attempt))
+                logger.warning("Retrying publish for %s after error: %s", event.event_id, exc)
 
     async def publish_batch(self, events: list[Event]) -> None:
-        """Publish a batch of events."""
         for event in events:
             await self.publish(event)
 
     @property
     def published_count(self) -> int:
-        return len(self._published)
+        return self._bus.count()
 
     async def health_check(self) -> bool:
-        return self._connected or True  # Stub always healthy
+        return self._connected and self._bus.count(status="dead_letter") >= 0
 
-
-# ═══════════════════════════════════════════════════════════════════════════
-# CONSUMER (abstract)
-# ═══════════════════════════════════════════════════════════════════════════
 
 class EventConsumer:
-    """
-    Subscribes to topics and processes events with backpressure.
-    Stub — in production use aiokafka.AIOKafkaConsumer or SQS poller.
-    """
+    """Durable event consumer that processes queued events and maintains DLQ state."""
 
     MAX_CONCURRENT = 10
     MAX_HANDLER_RETRIES = 2
@@ -214,54 +256,44 @@ class EventConsumer:
     def __init__(self) -> None:
         self._handlers: dict[Topic, list[EventHandler]] = {}
         self._semaphore = asyncio.Semaphore(self.MAX_CONCURRENT)
-        self._dlq: list[Event] = []
+        self._bus = _SQLiteEventBus(_event_bus_db_path())
 
     def subscribe(self, topic: Topic, handler: EventHandler) -> None:
         self._handlers.setdefault(topic, []).append(handler)
-        logger.info(f"Subscribed handler to {topic.value}")
+        logger.info("Subscribed handler to %s", topic.value)
 
     async def process(self, event: Event) -> None:
-        """Process an event with concurrency limiting and retry (loop-based, no recursion)."""
         async with self._semaphore:
             handlers = self._handlers.get(event.topic, [])
             for handler in handlers:
-                success = False
-                while not success:
+                last_error: Optional[Exception] = None
+                for attempt in range(self.MAX_HANDLER_RETRIES + 1):
                     try:
                         await handler(event)
                         metrics.increment("events_processed", labels={"topic": event.topic.value})
-                        success = True
-                    except Exception as e:
-                        logger.error(f"Handler failed for event {event.event_id}: {e}")
+                        last_error = None
+                        break
+                    except Exception as exc:
+                        last_error = exc
+                        event.retry_count += 1
                         metrics.increment("events_handler_failed", labels={"topic": event.topic.value})
-                        if event.retry_count < self.MAX_HANDLER_RETRIES:
-                            event.retry_count += 1
-                            logger.info(f"Retrying event {event.event_id} (attempt {event.retry_count})")
-                            # Loop will retry without recursive call
-                        else:
-                            await self._send_to_dlq(event, str(e))
-                            break  # Exit retry loop, move to next handler
+                        if attempt < self.MAX_HANDLER_RETRIES:
+                            await asyncio.sleep(0)
+                if last_error is not None:
+                    raise last_error
 
-    async def _send_to_dlq(self, event: Event, error: str) -> None:
-        """Send failed events to dead-letter queue for manual review."""
-        dlq_event = Event(
-            topic=Topic.DEAD_LETTER,
-            tenant_id=event.tenant_id,
-            source_service=event.source_service,
-            correlation_id=event.correlation_id,
-            payload={
-                "original_topic": event.topic.value,
-                "original_event_id": event.event_id,
-                "original_payload": event.payload,
-                "error": error,
-                "retry_count": event.retry_count,
-                "failed_at": datetime.now(timezone.utc).isoformat(),
-            },
-        )
-        self._dlq.append(dlq_event)
-        metrics.increment("events_dead_lettered")
-        logger.warning(f"Event {event.event_id} sent to DLQ: {error}")
+    async def pump_once(self, topic: Topic) -> bool:
+        row = self._bus.next_event(topic)
+        if row is None:
+            return False
+        event = Event.deserialize(row["payload"])
+        try:
+            await self.process(event)
+            self._bus.mark_processed(row["id"])
+        except Exception as exc:
+            self._bus.mark_dead_letter(row["id"], str(exc))
+            raise
+        return True
 
-    @property
-    def dlq_depth(self) -> int:
-        return len(self._dlq)
+    async def health_check(self) -> bool:
+        return True

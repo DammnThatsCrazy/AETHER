@@ -404,6 +404,13 @@ class ModelServer:
                 logger.warning("Failed to load %s: %s", name, exc)
 
         if not loaded:
+            env = os.getenv("AETHER_ENV", "local").lower()
+            allow_stub = os.getenv("AETHER_ALLOW_STUB_MODELS", "0") == "1"
+            if env != "local" and not allow_stub:
+                raise RuntimeError(
+                    f"No model artifacts found in {self.models_dir}. "
+                    "Set AETHER_ALLOW_STUB_MODELS=1 only for explicit local/test runs."
+                )
             stub_models = {
                 "intent_prediction": _StubIntentModel(),
                 "bot_detection": _StubBotModel(),
@@ -420,7 +427,7 @@ class ModelServer:
                 self._versions[name] = getattr(model, "version", "test-stub")
                 self._statuses[name] = "loaded"
             loaded = list(stub_models.keys())
-            logger.info("No serialized models found; loaded in-process stub models for test/dev execution")
+            logger.info("No serialized models found; loaded explicit stub models for local/test execution")
 
         return loaded
 

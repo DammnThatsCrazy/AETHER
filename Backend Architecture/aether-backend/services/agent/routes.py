@@ -19,10 +19,13 @@ from datetime import datetime, timezone
 from difflib import SequenceMatcher
 from typing import Any, Optional
 
+import httpx
 from fastapi import APIRouter, Request
 from pydantic import BaseModel, Field
 
 from config.settings import settings
+from services.fraud.engine import FraudEngine
+from services.ml_serving.routes import _MODEL_ENDPOINTS, _get_client
 from shared.common.common import APIResponse, BadRequestError, NotFoundError
 from shared.events.events import Event, EventProducer, Topic
 from shared.graph.graph import Edge, EdgeType, GraphClient, Vertex, VertexType
@@ -31,6 +34,7 @@ from shared.logger.logger import get_logger, metrics
 from shared.observability import trace_request, emit_latency
 from shared.scoring.trust_score import TrustScoreComposite
 from shared.store import get_store
+from repositories.repos import BaseRepository
 
 logger = get_logger("aether.service.agent")
 router = APIRouter(prefix="/v1/agent", tags=["Agent"])
@@ -38,7 +42,6 @@ router = APIRouter(prefix="/v1/agent", tags=["Agent"])
 # Shared instances (in production, injected via dependency providers)
 _graph = GraphClient()
 _producer = EventProducer()
-_trust_scorer = TrustScoreComposite()
 
 VALID_WORKER_TYPES = [
     "web_crawler", "api_scanner", "social_listener",
@@ -263,10 +266,108 @@ class GroundTruthFeedback(BaseModel):
     )
 
 
-# In-memory stores (production: backed by TimescaleDB + Neptune)
-_registered_agents: dict[str, AgentRegistration] = {}
-_lifecycle_events: list[TaskLifecycleEvent] = []
-_feedback_records: list[GroundTruthFeedback] = []
+_registered_agents = BaseRepository("ig_registered_agents")
+_lifecycle_events = BaseRepository("ig_lifecycle_events")
+_feedback_records = BaseRepository("ig_feedback_records")
+
+
+class _TrustScoreMLAdapter:
+    async def predict(self, model_name: str, entity_id: str, features: dict[str, Any]) -> dict[str, Any]:
+        endpoint = _MODEL_ENDPOINTS.get(model_name, "/v1/predict/batch")
+        client = _get_client()
+
+        if model_name in ("intent_prediction", "bot_detection", "session_scorer"):
+            payload = {"session_id": entity_id, "features": features}
+        elif model_name in ("churn_prediction", "ltv_prediction"):
+            payload = {"identity_id": entity_id, "features": features}
+        else:
+            payload = {"model": model_name, "instances": [features]}
+
+        response = await client.post(endpoint, json=payload)
+        response.raise_for_status()
+        return response.json()
+
+
+class _AgentIdentityConfidenceAdapter:
+    async def get_confidence(self, entity_id: str, features: dict[str, Any]) -> float:
+        tenant_id = features.get("tenant_id")
+        if not tenant_id:
+            return 0.0
+
+        registration = await _registered_agents.find_by_id(f"{tenant_id}:{entity_id}")
+        if not registration:
+            return 0.0
+
+        owner_user_id = registration.get("owner_user_id")
+        if not owner_user_id:
+            return 0.0
+
+        owner_vertex = await _graph.get_vertex(owner_user_id)
+        launched_by_neighbors = await _graph.get_neighbors(entity_id, edge_type=EdgeType.LAUNCHED_BY, direction="out")
+        delegates_neighbors = await _graph.get_neighbors(entity_id, edge_type=EdgeType.DELEGATES, direction="in")
+
+        confidence = 0.55
+        if owner_vertex is not None:
+            confidence += 0.2
+        if any(vertex.vertex_id == owner_user_id for vertex in launched_by_neighbors):
+            confidence += 0.15
+        if any(vertex.vertex_id == owner_user_id for vertex in delegates_neighbors):
+            confidence += 0.1
+
+        return min(1.0, confidence)
+
+
+_trust_scorer = TrustScoreComposite(
+    ml_serving=_TrustScoreMLAdapter(),
+    fraud_engine=FraudEngine(),
+    resolution_engine=_AgentIdentityConfidenceAdapter(),
+)
+
+
+async def _build_trust_features(agent_id: str, tenant_id: str) -> dict[str, Any]:
+    registration = await _registered_agents.find_by_id(f"{tenant_id}:{agent_id}")
+    lifecycle_events = await _lifecycle_events.find_many(
+        filters={"agent_id": agent_id, "tenant_id": tenant_id},
+        limit=10_000,
+        sort_by="timestamp",
+        sort_order="asc",
+    )
+    feedback_records = await _feedback_records.find_many(
+        filters={"agent_id": agent_id, "tenant_id": tenant_id},
+        limit=10_000,
+        sort_by="timestamp",
+        sort_order="asc",
+    )
+
+    completed_events = [event for event in lifecycle_events if event.get("event_type") == "completed"]
+    verified_events = [event for event in lifecycle_events if event.get("event_type") == "verified"]
+    decision_events = [event for event in lifecycle_events if event.get("event_type") == "decision_made"]
+    confidence_values = [float(event.get("confidence", 0.0)) for event in lifecycle_events]
+    avg_confidence = sum(confidence_values) / len(confidence_values) if confidence_values else 0.0
+    avg_confidence_delta = (
+        sum(float(record.get("confidence_delta", 0.0)) for record in feedback_records) / len(feedback_records)
+        if feedback_records else 0.0
+    )
+    latest_state = lifecycle_events[-1]["state_snapshot"] if lifecycle_events else {}
+
+    return {
+        "tenant_id": tenant_id,
+        "event_type": "agent_trust_score",
+        "session_id": agent_id,
+        "channel": "agent",
+        "owner_user_id": registration.get("owner_user_id") if registration else None,
+        "agent_status": registration.get("status", "unknown") if registration else "unknown",
+        "capability_count": len(registration.get("capabilities", [])) if registration else 0,
+        "permission_count": len(registration.get("permissions", [])) if registration else 0,
+        "lifecycle_event_count": len(lifecycle_events),
+        "decision_count": len(decision_events),
+        "completed_task_count": len(completed_events),
+        "verified_task_count": len(verified_events),
+        "feedback_count": len(feedback_records),
+        "avg_confidence": round(avg_confidence, 4),
+        "avg_confidence_delta": round(avg_confidence_delta, 4),
+        "latest_state": latest_state,
+    }
 
 
 @router.post("/register")
@@ -310,7 +411,10 @@ async def register_agent(body: AgentRegistration, request: Request):
         properties={"permissions": ",".join(body.permissions)},
     ))
 
-    _registered_agents[f"{tenant_id}:{body.agent_id}"] = body
+    await _registered_agents.insert(
+        f"{tenant_id}:{body.agent_id}",
+        {"tenant_id": tenant_id, **body.model_dump()},
+    )
     metrics.increment("agents_registered")
     logger.info(f"Agent registered: {body.agent_id} (owner={body.owner_user_id})")
 
@@ -340,7 +444,8 @@ async def record_lifecycle_event(task_id: str, body: TaskLifecycleEvent, request
         source_service="agent",
     ))
 
-    _lifecycle_events.append(body)
+    event_id = f"{body.tenant_id}:{task_id}:{uuid.uuid4()}"
+    await _lifecycle_events.insert(event_id, body.model_dump())
     metrics.increment("agent_lifecycle_events", labels={"type": body.event_type})
     logger.info(f"Lifecycle event: task={task_id} type={body.event_type} agent={body.agent_id}")
 
@@ -363,7 +468,8 @@ async def record_decision(task_id: str, body: TaskLifecycleEvent, request: Reque
         source_service="agent",
     ))
 
-    _lifecycle_events.append(body)
+    event_id = f"{body.tenant_id}:{task_id}:{uuid.uuid4()}"
+    await _lifecycle_events.insert(event_id, body.model_dump())
     metrics.increment("agent_decisions_recorded")
 
     return APIResponse(data=body.model_dump()).to_dict()
@@ -380,12 +486,9 @@ async def submit_feedback(task_id: str, body: GroundTruthFeedback, request: Requ
 
     # Compute confidence_delta from lifecycle events (filtered by tenant)
     tenant_id = request.state.tenant.tenant_id
-    task_events = [
-        e for e in _lifecycle_events
-        if e.task_id == task_id and e.tenant_id == tenant_id
-    ]
+    task_events = await _lifecycle_events.find_many(filters={"task_id": task_id, "tenant_id": tenant_id}, limit=10_000, sort_by="timestamp", sort_order="asc")
     if task_events:
-        predicted_confidence = task_events[-1].confidence
+        predicted_confidence = task_events[-1].get("confidence", 0.0)
         # Use string similarity for near-misses instead of binary exact match
         similarity = SequenceMatcher(None, body.predicted_outcome, body.actual_outcome).ratio()
         body.confidence_delta = round(similarity - predicted_confidence, 4)
@@ -396,7 +499,8 @@ async def submit_feedback(task_id: str, body: GroundTruthFeedback, request: Requ
         source_service="agent",
     ))
 
-    _feedback_records.append(body)
+    feedback_id = f"{body.tenant_id}:{task_id}:{uuid.uuid4()}"
+    await _feedback_records.insert(feedback_id, body.model_dump())
     metrics.increment("agent_feedback_submitted", labels={"verified_by": body.verified_by})
     logger.info(
         f"Ground truth: task={task_id} delta={body.confidence_delta} "
@@ -447,10 +551,21 @@ async def get_agent_trust(agent_id: str, request: Request):
         raise BadRequestError("Intelligence Graph agent layer is not enabled")
     request.state.tenant.require_permission("agent:manage")
 
-    score = await _trust_scorer.compute(
-        entity_id=agent_id,
-        entity_type="agent",
-    )
+    tenant_id = request.state.tenant.tenant_id
+    registration = await _registered_agents.find_by_id(f"{tenant_id}:{agent_id}")
+    if registration is None:
+        raise NotFoundError("Agent")
+
+    features = await _build_trust_features(agent_id, tenant_id)
+
+    try:
+        score = await _trust_scorer.compute(
+            entity_id=agent_id,
+            entity_type="agent",
+            features=features,
+        )
+    except httpx.HTTPError as exc:
+        raise BadRequestError(f"Trust score upstream dependency failed: {exc}") from exc
 
     return APIResponse(data=score.to_dict()).to_dict()
 

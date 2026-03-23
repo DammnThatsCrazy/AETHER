@@ -7,7 +7,7 @@
 ```kotlin
 // build.gradle.kts
 dependencies {
-    implementation("io.aether:sdk-android:8.3.0")
+    implementation("io.aether:sdk-android:8.3.1")
 }
 ```
 
@@ -15,7 +15,7 @@ dependencies {
 
 ```groovy
 // build.gradle
-implementation 'io.aether:sdk-android:8.3.0'
+implementation 'io.aether:sdk-android:8.3.1'
 ```
 
 ## Quick Start

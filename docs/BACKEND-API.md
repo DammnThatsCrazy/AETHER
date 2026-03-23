@@ -12,7 +12,7 @@ All endpoints require an API key passed as:
 
 ## Event Ingestion
 
-### POST /v1/events
+### POST /v1/ingest/events
 
 Receives batched raw events from the Web SDK.
 
@@ -30,7 +30,7 @@ Receives batched raw events from the Web SDK.
       "userId": "user-123",
       "properties": { "buttonId": "cta-hero" },
       "context": {
-        "library": { "name": "@aether/sdk", "version": "7.0.0" },
+        "library": { "name": "@aether/sdk", "version": "8.3.1" },
         "fingerprint": { "id": "sha256-hash" },
         "locale": "en-US",
         "timezone": "America/New_York"
@@ -46,9 +46,9 @@ Receives batched raw events from the Web SDK.
 { "success": true, "accepted": 10 }
 ```
 
-### POST /v1/batch
+### POST /v1/ingest/events/batch
 
-Receives batched raw events from iOS and Android SDKs. Same schema as `/v1/events`.
+Receives batched raw events from SDK clients. Same normalized backend processing applies as `/v1/ingest/events`.
 
 **Backend Processing (applies to both endpoints):**
 - IP enrichment via MaxMind GeoLite2 (country, region, city, ASN, VPN/proxy detection)
@@ -184,7 +184,7 @@ Identifies a smart contract / protocol by address.
 
 ## ML & Classification
 
-### POST /v1/predict
+### POST /v1/ml/predict
 
 ML inference endpoint (replaces client-side edge-ml).
 
