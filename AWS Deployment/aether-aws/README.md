@@ -193,7 +193,7 @@ Cross-region replication is configured for S3, DynamoDB (global tables), RDS (sn
 
 ```
 aether-aws/
-  main.py                          # Demo runner -- displays full architecture + runs all ops
+  main.py                          # Demo runner -- supports explicit stub/live AWS selection
   pyproject.toml                   # Project metadata, dependencies, scripts
   config/
     aws_config.py                  # Central configuration (single source of truth)
@@ -265,7 +265,7 @@ pip install -e ".[dev]"
 Run the full architecture demo with stub mode (no AWS credentials required):
 
 ```bash
-AETHER_STUB_AWS=1 python3 main.py
+python3 main.py --stub-aws
 ```
 
 This prints the complete deployment architecture and executes all six operational scripts with illustrative data:
@@ -279,10 +279,10 @@ This prints the complete deployment architecture and executes all six operationa
 7. Budget configuration
 8. Disaster recovery runbook and drill
 
-To run against live AWS accounts, ensure valid credentials and omit the stub flag:
+To run against live AWS accounts, ensure valid credentials and use live mode explicitly:
 
 ```bash
-python3 main.py
+AETHER_STUB_AWS=0 python3 main.py --live-aws
 ```
 
 Or use the installed entry point:

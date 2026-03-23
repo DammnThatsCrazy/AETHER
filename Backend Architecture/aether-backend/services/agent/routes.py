@@ -31,6 +31,7 @@ from shared.logger.logger import get_logger, metrics
 from shared.observability import trace_request, emit_latency
 from shared.scoring.trust_score import TrustScoreComposite
 from shared.store import get_store
+from repositories.repos import BaseRepository
 
 logger = get_logger("aether.service.agent")
 router = APIRouter(prefix="/v1/agent", tags=["Agent"])
@@ -263,10 +264,9 @@ class GroundTruthFeedback(BaseModel):
     )
 
 
-# In-memory stores (production: backed by TimescaleDB + Neptune)
-_registered_agents: dict[str, AgentRegistration] = {}
-_lifecycle_events: list[TaskLifecycleEvent] = []
-_feedback_records: list[GroundTruthFeedback] = []
+_registered_agents = BaseRepository("ig_registered_agents")
+_lifecycle_events = BaseRepository("ig_lifecycle_events")
+_feedback_records = BaseRepository("ig_feedback_records")
 
 
 @router.post("/register")
@@ -310,7 +310,10 @@ async def register_agent(body: AgentRegistration, request: Request):
         properties={"permissions": ",".join(body.permissions)},
     ))
 
-    _registered_agents[f"{tenant_id}:{body.agent_id}"] = body
+    await _registered_agents.insert(
+        f"{tenant_id}:{body.agent_id}",
+        {"tenant_id": tenant_id, **body.model_dump()},
+    )
     metrics.increment("agents_registered")
     logger.info(f"Agent registered: {body.agent_id} (owner={body.owner_user_id})")
 
@@ -340,7 +343,8 @@ async def record_lifecycle_event(task_id: str, body: TaskLifecycleEvent, request
         source_service="agent",
     ))
 
-    _lifecycle_events.append(body)
+    event_id = f"{body.tenant_id}:{task_id}:{uuid.uuid4()}"
+    await _lifecycle_events.insert(event_id, body.model_dump())
     metrics.increment("agent_lifecycle_events", labels={"type": body.event_type})
     logger.info(f"Lifecycle event: task={task_id} type={body.event_type} agent={body.agent_id}")
 
@@ -363,7 +367,8 @@ async def record_decision(task_id: str, body: TaskLifecycleEvent, request: Reque
         source_service="agent",
     ))
 
-    _lifecycle_events.append(body)
+    event_id = f"{body.tenant_id}:{task_id}:{uuid.uuid4()}"
+    await _lifecycle_events.insert(event_id, body.model_dump())
     metrics.increment("agent_decisions_recorded")
 
     return APIResponse(data=body.model_dump()).to_dict()
@@ -380,12 +385,9 @@ async def submit_feedback(task_id: str, body: GroundTruthFeedback, request: Requ
 
     # Compute confidence_delta from lifecycle events (filtered by tenant)
     tenant_id = request.state.tenant.tenant_id
-    task_events = [
-        e for e in _lifecycle_events
-        if e.task_id == task_id and e.tenant_id == tenant_id
-    ]
+    task_events = await _lifecycle_events.find_many(filters={"task_id": task_id, "tenant_id": tenant_id}, limit=10_000, sort_by="timestamp", sort_order="asc")
     if task_events:
-        predicted_confidence = task_events[-1].confidence
+        predicted_confidence = task_events[-1].get("confidence", 0.0)
         # Use string similarity for near-misses instead of binary exact match
         similarity = SequenceMatcher(None, body.predicted_outcome, body.actual_outcome).ratio()
         body.confidence_delta = round(similarity - predicted_confidence, 4)
@@ -396,7 +398,8 @@ async def submit_feedback(task_id: str, body: GroundTruthFeedback, request: Requ
         source_service="agent",
     ))
 
-    _feedback_records.append(body)
+    feedback_id = f"{body.tenant_id}:{task_id}:{uuid.uuid4()}"
+    await _feedback_records.insert(feedback_id, body.model_dump())
     metrics.increment("agent_feedback_submitted", labels={"verified_by": body.verified_by})
     logger.info(
         f"Ground truth: task={task_id} delta={body.confidence_delta} "

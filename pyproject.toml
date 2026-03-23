@@ -88,7 +88,6 @@ testpaths = [
     "ML Models/aether-ml/tests",
 ]
 pythonpath = ["."]
-asyncio_mode = "auto"
 markers = [
     "asyncio: async test functions",
     "integration: integration tests requiring backend deps",

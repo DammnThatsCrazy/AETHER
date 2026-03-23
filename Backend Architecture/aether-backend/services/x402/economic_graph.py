@@ -12,6 +12,7 @@ from typing import Optional
 
 from shared.graph.graph import Edge, EdgeType, GraphClient, Vertex, VertexType
 from shared.logger.logger import get_logger, metrics
+from repositories.repos import BaseRepository
 
 from .models import CapturedX402Transaction, SpendingSummary, X402Node
 
@@ -28,66 +29,36 @@ class X402EconomicGraph:
 
     def __init__(self, graph_client: Optional[GraphClient] = None):
         self._graph = graph_client or GraphClient()
-        self._nodes: dict[str, X402Node] = {}
-        self._payments: list[CapturedX402Transaction] = []
+        self._payments = BaseRepository("x402_payments")
         self._snapshot_task: Optional[asyncio.Task] = None
         self._lock = asyncio.Lock()
-        self._recent_payments: dict[str, deque] = {}
 
     async def add_payment(self, tx: CapturedX402Transaction, tenant_id: str = "") -> None:
         """Add a captured x402 payment to the economic graph."""
         async with self._lock:
-            # Use tenant-prefixed keys for tenant isolation
-            payer_key = f"{tenant_id}:{tx.payer_agent_id}" if tenant_id else tx.payer_agent_id
-            payee_key = f"{tenant_id}:{tx.payee_service_id}" if tenant_id else tx.payee_service_id
-
-            # Update payer node
-            payer = self._nodes.setdefault(
-                payer_key,
-                X402Node(node_id=tx.payer_agent_id, node_type="agent"),
+            await self._payments.insert(
+                tx.capture_id,
+                {
+                    **tx.model_dump(),
+                    "tenant_id": tenant_id,
+                    "snapshot_status": "pending",
+                },
             )
-            payer.total_paid_usd += tx.amount_usd
-            payer.transaction_count += 1
-            payer.fee_eliminated_usd += tx.fee_eliminated_usd
-
-            # Track unique services on the node
-            if not hasattr(payer, '_seen_services') or not isinstance(payer._seen_services, set):
-                payer._seen_services = set()
-            if tx.payee_service_id not in payer._seen_services:
-                payer._seen_services.add(tx.payee_service_id)
-                payer.unique_services = len(payer._seen_services)
-
-            # Update payee node
-            payee = self._nodes.setdefault(
-                payee_key,
-                X402Node(node_id=tx.payee_service_id, node_type="service"),
-            )
-            payee.total_received_usd += tx.amount_usd
-            payee.transaction_count += 1
-
-            # Append to pending-flush buffer
-            self._payments.append(tx)
-
-            # Maintain per-agent bounded deque of last 20 payments
-            if payer_key not in self._recent_payments:
-                self._recent_payments[payer_key] = deque(maxlen=20)
-            self._recent_payments[payer_key].append(tx)
 
         metrics.increment("x402_graph_payments_added")
 
     async def snapshot_to_graph(self) -> int:
         """Flush in-memory economic graph to the persistent graph database."""
-        # Copy-and-swap: take a snapshot of pending payments under the lock
         async with self._lock:
-            payments_to_flush = list(self._payments)
-            self._payments.clear()
+            payments_to_flush = await self._payments.find_many(filters={"snapshot_status": "pending"}, limit=10_000, sort_by="created_at", sort_order="asc")
 
         edges_created = 0
-        last_processed_idx = 0
+        processed_ids: list[str] = []
 
         try:
-            for idx, tx in enumerate(payments_to_flush):
+            for raw in payments_to_flush:
                 try:
+                    tx = CapturedX402Transaction.model_validate(raw)
                     # Ensure payer (Agent) vertex exists
                     await self._graph.upsert_vertex(Vertex(
                         vertex_type=VertexType.AGENT,
@@ -128,64 +99,58 @@ class X402EconomicGraph:
                     ))
 
                     edges_created += 2
-                    last_processed_idx = idx + 1
+                    processed_ids.append(tx.capture_id)
                 except Exception as e:
                     logger.error(f"Graph mutation failed for payment {tx.capture_id}: {e}")
                     # Continue processing remaining payments
                     continue
         except Exception as e:
             logger.error(
-                f"Snapshot batch error after {last_processed_idx} of {len(payments_to_flush)} payments: {e}"
+                f"Snapshot batch error after {len(processed_ids)} of {len(payments_to_flush)} payments: {e}"
             )
-            # Re-enqueue unprocessed items
-            unprocessed = payments_to_flush[last_processed_idx:]
-            if unprocessed:
-                async with self._lock:
-                    self._payments = unprocessed + self._payments
-
-        snapshot_count = last_processed_idx
+        for capture_id in processed_ids:
+            await self._payments.update(capture_id, {"snapshot_status": "snapshotted"})
+        snapshot_count = len(processed_ids)
         logger.info(f"Economic graph snapshot: {snapshot_count} payments -> {edges_created} edges")
         metrics.increment("x402_graph_snapshots", labels={"edges": str(edges_created)})
         return edges_created
 
-    def get_spending_patterns(self, agent_id: str, tenant_id: str = "") -> SpendingSummary:
+    async def get_spending_patterns(self, agent_id: str, tenant_id: str = "") -> SpendingSummary:
         """Get spending patterns for an agent using node-level cumulative data."""
-        node_key = f"{tenant_id}:{agent_id}" if tenant_id else agent_id
-        node = self._nodes.get(node_key)
-        total_spent = node.total_paid_usd if node else 0.0
-        total_tx = node.transaction_count if node else 0
-        unique_services = node.unique_services if node else 0
-        fee_eliminated = node.fee_eliminated_usd if node else 0.0
-
-        # Get last 20 payments from bounded deque
-        recent = self._recent_payments.get(node_key, deque(maxlen=20))
+        filters = {"payer_agent_id": agent_id}
+        if tenant_id:
+            filters["tenant_id"] = tenant_id
+        recent = await self._payments.find_many(filters=filters, limit=20, sort_by="created_at", sort_order="desc")
+        total_spent = sum(p.get("amount_usd", 0.0) for p in recent)
+        total_tx = await self._payments.count(**filters)
+        unique_services = len({p.get("payee_service_id") for p in recent if p.get("payee_service_id")})
+        fee_eliminated = sum(p.get("fee_eliminated_usd", 0.0) for p in recent)
 
         return SpendingSummary(
             agent_id=agent_id,
             total_spent_usd=round(total_spent, 4),
             total_transactions=total_tx,
             unique_services=unique_services,
-            avg_payment_usd=round(total_spent / total_tx, 4) if total_tx > 0 else 0.0,
+            avg_payment_usd=round(total_spent / len(recent), 4) if recent else 0.0,
             fee_eliminated_usd=round(fee_eliminated, 4),
-            payments=[p.model_dump() for p in recent],
+            payments=recent,
         )
 
-    def get_graph_snapshot(self, tenant_id: str = "") -> dict:
+    async def get_graph_snapshot(self, tenant_id: str = "") -> dict:
         """Get current state of the economic graph."""
-        if tenant_id:
-            prefix = f"{tenant_id}:"
-            filtered_nodes = {
-                nid: n for nid, n in self._nodes.items() if nid.startswith(prefix)
-            }
-        else:
-            filtered_nodes = self._nodes
-
+        filters = {"tenant_id": tenant_id} if tenant_id else None
+        payments = await self._payments.find_many(filters=filters, limit=100_000)
+        payer_totals: dict[str, float] = {}
+        service_totals: dict[str, float] = {}
+        for payment in payments:
+            payer_totals[payment["payer_agent_id"]] = payer_totals.get(payment["payer_agent_id"], 0.0) + payment["amount_usd"]
+            service_totals[payment["payee_service_id"]] = service_totals.get(payment["payee_service_id"], 0.0) + payment["amount_usd"]
         return {
-            "nodes": {nid: n.model_dump() for nid, n in filtered_nodes.items()},
-            "node_count": len(filtered_nodes),
-            "pending_payments": len(self._payments),
-            "total_volume_usd": round(
-                sum(n.total_paid_usd for n in filtered_nodes.values() if n.node_type == "agent"),
-                2,
-            ),
+            "nodes": {
+                **{f"agent:{nid}": {"node_id": nid, "node_type": "agent", "total_paid_usd": round(total, 4)} for nid, total in payer_totals.items()},
+                **{f"service:{nid}": {"node_id": nid, "node_type": "service", "total_received_usd": round(total, 4)} for nid, total in service_totals.items()},
+            },
+            "node_count": len(payer_totals) + len(service_totals),
+            "pending_payments": len([p for p in payments if p.get("snapshot_status") == "pending"]),
+            "total_volume_usd": round(sum(p.get("amount_usd", 0.0) for p in payments), 2),
         }

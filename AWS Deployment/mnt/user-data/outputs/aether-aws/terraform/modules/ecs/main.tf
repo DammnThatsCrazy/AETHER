@@ -11,6 +11,7 @@ variable "public_subnet_ids" { type = list(string) }
 variable "private_subnet_ids" { type = list(string) }
 variable "image_tag" { type = string default = "latest" }
 variable "ecr_registry" { type = string }
+variable "acm_cert_arn" { type = string default = "" }
 variable "allowed_db_security_groups" {
   type    = list(string)
   default = []
@@ -84,7 +85,7 @@ resource "aws_lb_listener" "https" {
   port              = 443
   protocol          = "HTTPS"
   ssl_policy        = "ELBSecurityPolicy-TLS13-1-2-2021-06"
-  certificate_arn   = "arn:aws:acm:us-east-1:000000000000:certificate/placeholder"
+  certificate_arn   = var.acm_cert_arn
 
   default_action {
     type = "fixed-response"

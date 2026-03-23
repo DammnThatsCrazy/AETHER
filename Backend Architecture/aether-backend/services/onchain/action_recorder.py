@@ -12,6 +12,7 @@ from shared.events.events import Event, EventProducer, Topic
 from shared.graph.graph import Edge, EdgeType, GraphClient, Vertex, VertexType
 from shared.logger.logger import get_logger, metrics
 from shared.scoring.bytecode_risk import BytecodeRiskScorer
+from repositories.repos import BaseRepository
 
 from .models import ActionRecord, ActionType, ContractInfo
 
@@ -30,7 +31,7 @@ class ActionRecorder:
         self._graph = graph_client or GraphClient()
         self._producer = event_producer or EventProducer()
         self._bytecode_scorer = bytecode_scorer or BytecodeRiskScorer()
-        self._actions: list[ActionRecord] = []
+        self._actions = BaseRepository("onchain_actions")
 
     async def record(self, action: ActionRecord) -> ActionRecord:
         """Record an on-chain action, create graph entities, and assess risk."""
@@ -125,17 +126,19 @@ class ActionRecorder:
             source_service="onchain",
         ))
 
-        self._actions.append(action)
+        existing = await self._actions.find_by_id(action.action_id)
+        payload = action.model_dump()
+        if existing:
+            await self._actions.update(action.action_id, payload)
+        else:
+            await self._actions.insert(action.action_id, payload)
         metrics.increment("onchain_actions_recorded", labels={"type": action.action_type})
         logger.info(f"Action recorded: {action.action_id} ({action.action_type} on {action.chain_id})")
         return action
 
     async def get_agent_actions(self, agent_id: str) -> list[dict]:
         """Get all on-chain actions for an agent."""
-        return [
-            a.model_dump() for a in self._actions
-            if a.agent_id == agent_id
-        ]
+        return await self._actions.find_many(filters={"agent_id": agent_id}, limit=10_000, sort_by="timestamp", sort_order="asc")
 
     async def get_contract_info(self, contract_address: str) -> Optional[ContractInfo]:
         """Get contract details from the graph."""
@@ -143,10 +146,7 @@ class ActionRecorder:
         if not vertex or vertex.vertex_type != VertexType.CONTRACT:
             return None
 
-        call_count = len([
-            a for a in self._actions
-            if a.contract_address == contract_address and a.action_type == ActionType.CALL
-        ])
+        call_count = await self._actions.count(contract_address=contract_address, action_type=ActionType.CALL)
 
         return ContractInfo(
             address=contract_address,

@@ -19,6 +19,7 @@ Integration:
 from __future__ import annotations
 
 import logging
+import os
 from collections import defaultdict
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
@@ -37,6 +38,13 @@ from services.attribution.models import (
 )
 
 logger = logging.getLogger("aether.attribution.resolver")
+
+
+def _inmemory_journey_store_allowed() -> bool:
+    return (
+        os.getenv("AETHER_ENV", "local").lower() == "local"
+        or os.getenv("AETHER_ALLOW_INMEMORY_JOURNEY_STORE", "0") == "1"
+    )
 
 
 # ========================================================================
@@ -65,6 +73,11 @@ class JourneyStore:
     """
 
     def __init__(self) -> None:
+        if not _inmemory_journey_store_allowed():
+            raise RuntimeError(
+                "JourneyStore is disabled outside local mode. Configure a persistent attribution "
+                "store or set AETHER_ALLOW_INMEMORY_JOURNEY_STORE=1 for an explicit override."
+            )
         self._store: dict[str, list[dict[str, Any]]] = defaultdict(list)
 
     def add(self, user_id: str, touchpoint: dict[str, Any]) -> None:

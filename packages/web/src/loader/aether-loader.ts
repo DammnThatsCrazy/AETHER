@@ -306,4 +306,5 @@ if (typeof globalThis !== 'undefined') {
 }
 
 export default AetherLoader;
-export { AetherLoader, LoaderConfig, SDKManifest };
+export { AetherLoader };
+export type { LoaderConfig, SDKManifest };

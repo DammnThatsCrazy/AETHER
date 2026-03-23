@@ -4,7 +4,7 @@ Adjusts confidence thresholds and priority weights based on accumulated
 human review decisions.
 
 Architecture:
-  1. FeedbackStore — persists (task_id, worker_type, confidence, approved) records
+  1. FeedbackStore — persists (task_id, worker_type, confidence, approved) records to a durable SQLite ledger
   2. ThresholdTuner — per-worker exponential moving average that shifts the
      auto_accept / discard thresholds toward the empirical decision boundary
   3. PriorityBooster — adjusts task priority scores based on historical
@@ -12,7 +12,7 @@ Architecture:
 
 Integrations:
   - Called by AgentController.record_human_feedback()
-  - Reads/writes from the in-memory store (swap for Redis / DB in prod)
+  - Reads/writes from a durable SQLite store by default
   - Periodic refit (every N feedback events or on a schedule)
 """
 
@@ -20,8 +20,11 @@ from __future__ import annotations
 
 import logging
 import math
+import os
+import sqlite3
 import statistics
 from collections import defaultdict
+from pathlib import Path
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Optional
@@ -52,29 +55,76 @@ class FeedbackRecord:
 
 
 # ---------------------------------------------------------------------------
-# Feedback Store (in-memory; production: Redis / PostgreSQL)
+# Feedback Store
 # ---------------------------------------------------------------------------
 
+
+def _feedback_db_path() -> Path:
+    explicit = os.getenv("AETHER_FEEDBACK_DB_PATH")
+    env = os.getenv("AETHER_ENV", "local").lower()
+    if explicit:
+        path = Path(explicit)
+    elif env == "local":
+        path = Path(os.getenv("XDG_STATE_HOME", Path.home() / ".local" / "state")) / "aether" / "feedback" / "feedback.sqlite3"
+    else:
+        raise RuntimeError("AETHER_FEEDBACK_DB_PATH must be set in non-local environments to enable durable feedback learning")
+    path.parent.mkdir(parents=True, exist_ok=True)
+    return path
+
+
 class FeedbackStore:
-    """Append-only feedback log with per-worker-type indexing."""
+    """Append-only feedback log with per-worker indexing persisted in SQLite."""
 
     def __init__(self):
-        self._records: list[FeedbackRecord] = []
-        self._by_worker: dict[WorkerType, list[FeedbackRecord]] = defaultdict(list)
+        self._db_path = _feedback_db_path()
+        self._init_db()
+
+    def _connect(self) -> sqlite3.Connection:
+        conn = sqlite3.connect(self._db_path)
+        conn.row_factory = sqlite3.Row
+        conn.execute("PRAGMA journal_mode=WAL")
+        return conn
+
+    def _init_db(self) -> None:
+        with self._connect() as conn:
+            conn.execute("CREATE TABLE IF NOT EXISTS feedback_records (task_id TEXT PRIMARY KEY, worker_type TEXT NOT NULL, confidence REAL NOT NULL, approved INTEGER NOT NULL, notes TEXT NOT NULL, timestamp TEXT NOT NULL)")
 
     def add(self, record: FeedbackRecord) -> None:
-        self._records.append(record)
-        self._by_worker[record.worker_type].append(record)
+        with self._connect() as conn:
+            conn.execute(
+                "INSERT OR REPLACE INTO feedback_records(task_id, worker_type, confidence, approved, notes, timestamp) VALUES (?, ?, ?, ?, ?, ?)",
+                (record.task_id, record.worker_type.value, record.confidence, int(record.approved), record.notes, record.timestamp.isoformat()),
+            )
+
+    def _rows(self, worker_type: Optional[WorkerType] = None) -> list[sqlite3.Row]:
+        query = "SELECT * FROM feedback_records"
+        params: tuple = ()
+        if worker_type is not None:
+            query += " WHERE worker_type = ?"
+            params = (worker_type.value,)
+        with self._connect() as conn:
+            return conn.execute(query, params).fetchall()
 
     def get_all(self) -> list[FeedbackRecord]:
-        return list(self._records)
+        return [self._from_row(row) for row in self._rows()]
 
     def get_by_worker(self, wt: WorkerType) -> list[FeedbackRecord]:
-        return list(self._by_worker.get(wt, []))
+        return [self._from_row(row) for row in self._rows(wt)]
+
+    @staticmethod
+    def _from_row(row: sqlite3.Row) -> FeedbackRecord:
+        return FeedbackRecord(
+            task_id=row["task_id"],
+            worker_type=WorkerType(row["worker_type"]),
+            confidence=row["confidence"],
+            approved=bool(row["approved"]),
+            notes=row["notes"],
+            timestamp=datetime.fromisoformat(row["timestamp"]),
+        )
 
     @property
     def total_count(self) -> int:
-        return len(self._records)
+        return len(self._rows())
 
 
 # ---------------------------------------------------------------------------

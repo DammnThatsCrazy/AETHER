@@ -24,8 +24,16 @@ from shared.logger.logger import get_logger
 
 logger = get_logger("aether.shared.decorators")
 
-# Re-usable singleton — all routes share one validator instance.
-_api_key_validator = APIKeyValidator()
+# Re-usable validator accessor — initialization is deferred until first use so
+# modules that do not require auth at import time are not blocked by startup config.
+_api_key_validator: APIKeyValidator | None = None
+
+
+def _get_api_key_validator() -> APIKeyValidator:
+    global _api_key_validator
+    if _api_key_validator is None:
+        _api_key_validator = APIKeyValidator()
+    return _api_key_validator
 
 
 # ════════════════════════════════════════════════════════════════════════════
@@ -95,7 +103,7 @@ def require_permission(
             raise HTTPException(status_code=401, detail="Missing API key")
 
         try:
-            tenant = _api_key_validator.validate(x_api_key)
+            tenant = _get_api_key_validator().validate(x_api_key)
         except AetherError as exc:
             raise HTTPException(status_code=exc.code.value, detail=exc.message)
 

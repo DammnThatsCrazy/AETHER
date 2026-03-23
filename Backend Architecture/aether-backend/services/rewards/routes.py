@@ -41,6 +41,8 @@ from services.oracle.multichain_signer import (
     VMType,
 )
 from services.oracle.signer import OracleSigner, ProofConfig
+from services.fraud.engine import FraudEngine
+from services.attribution.resolver import AttributionResolver
 from services.rewards.eligibility import (
     Campaign,
     EligibilityEngine,
@@ -149,6 +151,8 @@ _oracle_config = ProofConfig(
 
 _multichain_oracle = MultiChainSigner(_multichain_config)
 _legacy_oracle = OracleSigner(_oracle_config)
+_fraud_engine = FraudEngine()
+_attribution_resolver = AttributionResolver()
 _engine = EligibilityEngine()
 _queue = RewardQueue(_legacy_oracle)
 
@@ -248,17 +252,14 @@ async def evaluate_event(body: EvaluateRequest):
     """
     Full reward-evaluation pipeline:
 
-    1. Compute a simulated fraud score.
-    2. Compute a simulated attribution weight.
+    1. Evaluate the event with the fraud engine.
+    2. Resolve attribution from the supplied journey touchpoints.
     3. Run the eligibility engine.
     4. If eligible, generate a multi-chain proof via the oracle signer.
     5. Enqueue the reward for tracking.
     """
-    # Step 1 -- Fraud scoring (simulated; production: call fraud engine)
-    fraud_score = _simulate_fraud_score(body.properties)
-
-    # Step 2 -- Attribution resolution (simulated; production: call attribution service)
-    attribution_weight = _simulate_attribution_weight(body.channel, body.properties)
+    fraud_score = await _evaluate_fraud_score(body)
+    attribution_weight = await _resolve_attribution_weight(body)
 
     # Step 3 -- Eligibility
     event_dict = {
@@ -445,45 +446,42 @@ async def get_reward_proof(reward_id: str):
 # INTERNAL HELPERS
 # ═══════════════════════════════════════════════════════════════════════════
 
-def _simulate_fraud_score(properties: dict) -> float:
-    """
-    Placeholder fraud scoring.
-
-    Production: call ``services.fraud.FraudEngine.score()`` or an ML
-    inference endpoint.
-    """
-    # Heuristic: presence of suspicious keys bumps the score
-    score = 0.0
-    if properties.get("vpn_detected"):
-        score += 25.0
-    if properties.get("bot_probability", 0) > 0.7:
-        score += 35.0
-    if properties.get("device_count", 1) > 5:
-        score += 15.0
-    return min(score, 100.0)
-
-
-def _simulate_attribution_weight(
-    channel: Optional[str],
-    properties: dict,
-) -> float:
-    """
-    Placeholder attribution resolution.
-
-    Production: call ``services.attribution.AttributionResolver.resolve()``.
-    """
-    base_weights: dict[str, float] = {
-        "organic": 0.9,
-        "social": 0.7,
-        "referral": 0.8,
-        "paid_search": 0.6,
-        "email": 0.5,
-        "direct": 1.0,
+async def _evaluate_fraud_score(body: EvaluateRequest) -> float:
+    event = {
+        "event_type": body.event_type,
+        "channel": body.channel,
+        "session_id": body.session_id,
+        "properties": body.properties,
     }
-    weight = base_weights.get(channel or "", 0.5)
-    # Boost by explicit override if present
-    weight = properties.get("attribution_weight_override", weight)
-    return min(max(float(weight), 0.0), 1.0)
+    context = {
+        "user_address": body.user_address,
+        "session_id": body.session_id,
+        **body.properties,
+    }
+    result = await _fraud_engine.evaluate(event, context)
+    return float(result.composite_score)
+
+
+async def _resolve_attribution_weight(body: EvaluateRequest) -> float:
+    raw_touchpoints = body.properties.get("touchpoints") or []
+    if not raw_touchpoints:
+        raw_touchpoints = [{
+            "channel": body.channel or "direct",
+            "source": body.properties.get("source", body.channel or "direct"),
+            "campaign": body.properties.get("campaign", ""),
+            "timestamp": body.properties.get("timestamp") or datetime.now(timezone.utc).isoformat(),
+            "event_type": body.event_type,
+            "properties": body.properties,
+        }]
+    result = await _attribution_resolver.resolve(
+        user_id=body.user_address or body.session_id or "anonymous",
+        event={"event_type": body.event_type, "properties": body.properties},
+        touchpoints=raw_touchpoints,
+        model_name=body.properties.get("attribution_model"),
+    )
+    if not result.credits:
+        return 0.0
+    return min(max(float(sum(c.weight for c in result.credits)), 0.0), 1.0)
 
 
 def _parse_optional_datetime(value: Optional[str]) -> Optional[datetime]:

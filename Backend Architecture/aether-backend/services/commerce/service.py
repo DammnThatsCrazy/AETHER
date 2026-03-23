@@ -11,6 +11,7 @@ from typing import Optional
 from shared.events.events import Event, EventProducer, Topic
 from shared.graph.graph import Edge, EdgeType, GraphClient, Vertex, VertexType
 from shared.logger.logger import get_logger, metrics
+from repositories.repos import BaseRepository
 
 from .models import AgentHireRecord, FeeEliminationReport, PaymentRecord
 
@@ -30,8 +31,8 @@ class CommerceService:
     ):
         self._graph = graph_client or GraphClient()
         self._producer = event_producer or EventProducer()
-        self._payments: list[PaymentRecord] = []
-        self._hires: list[AgentHireRecord] = []
+        self._payments = BaseRepository("commerce_payments")
+        self._hires = BaseRepository("commerce_hires")
 
     async def record_payment(self, payment: PaymentRecord, tenant_id: str = "") -> PaymentRecord:
         """Record a payment and create a PAYS edge in the graph."""
@@ -79,7 +80,12 @@ class CommerceService:
             source_service="commerce",
         ))
 
-        self._payments.append(payment)
+        existing = await self._payments.find_by_id(payment.payment_id)
+        payload = {**payment.model_dump(), "tenant_id": tenant_id}
+        if existing:
+            await self._payments.update(payment.payment_id, payload)
+        else:
+            await self._payments.insert(payment.payment_id, payload)
         metrics.increment("commerce_payments_recorded", labels={"method": payment.method})
         logger.info(f"Payment recorded: {payment.payment_id} ({payment.payer_type}->{payment.payee_type})")
         return payment
@@ -111,19 +117,21 @@ class CommerceService:
             source_service="commerce",
         ))
 
-        self._hires.append(hire)
+        existing = await self._hires.find_by_id(hire.hire_id)
+        payload = {**hire.model_dump(), "tenant_id": tenant_id}
+        if existing:
+            await self._hires.update(hire.hire_id, payload)
+        else:
+            await self._hires.insert(hire.hire_id, payload)
         metrics.increment("commerce_hires_recorded")
         logger.info(f"Agent hire recorded: {hire.hiring_agent_id} hired {hire.hired_agent_id}")
         return hire
 
     async def get_fee_elimination_report(self, period: str = "all", tenant_id: str = "") -> FeeEliminationReport:
         """Generate fee elimination report for a period."""
-        payments = self._payments
-        if tenant_id:
-            payments = [p for p in payments if getattr(p, 'tenant_id', '') == tenant_id]
-
-        total_volume = sum(p.amount for p in payments)
-        total_eliminated = sum(p.fee_eliminated_usd for p in payments)
+        payments = await self._payments.find_many(filters={"tenant_id": tenant_id} if tenant_id else None, limit=100_000)
+        total_volume = sum(p.get("amount", 0.0) for p in payments)
+        total_eliminated = sum(p.get("fee_eliminated_usd", 0.0) for p in payments)
         card_fees_would_be = round(total_volume * CARD_FEE_RATE, 2)
 
         return FeeEliminationReport(
@@ -137,17 +145,15 @@ class CommerceService:
 
     async def get_agent_spend(self, agent_id: str, tenant_id: str = "") -> dict:
         """Get spending history for an agent."""
-        agent_payments = [
-            p for p in self._payments
-            if p.payer_id == agent_id and p.payer_type == "agent"
-        ]
+        filters = {"payer_id": agent_id, "payer_type": "agent"}
         if tenant_id:
-            agent_payments = [p for p in agent_payments if getattr(p, 'tenant_id', '') == tenant_id]
+            filters["tenant_id"] = tenant_id
+        agent_payments = await self._payments.find_many(filters=filters, limit=10_000)
 
         return {
             "agent_id": agent_id,
-            "total_spent_usd": sum(p.amount for p in agent_payments),
-            "total_fees_eliminated_usd": sum(p.fee_eliminated_usd for p in agent_payments),
+            "total_spent_usd": sum(p.get("amount", 0.0) for p in agent_payments),
+            "total_fees_eliminated_usd": sum(p.get("fee_eliminated_usd", 0.0) for p in agent_payments),
             "transaction_count": len(agent_payments),
-            "payments": [p.model_dump() for p in agent_payments],
+            "payments": agent_payments,
         }
