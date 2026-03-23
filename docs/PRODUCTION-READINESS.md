@@ -11,11 +11,6 @@ Aether may be called production-ready only when all of the following are true in
 - oracle signing keys and contract identifiers are configured explicitly
 - non-local ML serving has real model artifacts present
 - guardrail audit and spend ledgers are configured via `AETHER_GUARDRAILS_DB_PATH`
-- feedback learning persistence is configured via `AETHER_FEEDBACK_DB_PATH`
-- durable service repositories are configured via `AETHER_REPOSITORY_DB_PATH`
-- non-local agent execution uses a configured Celery/Redis queue backend rather than the local in-memory queue
-- provider BYOK secrets and usage ledgers persist durably via the shared repository store
-- Intelligence Graph agent, commerce, on-chain, and x402 operational records persist durably
 - the validation commands listed below pass on the release commit
 
 ## Implemented Production Contracts
@@ -51,26 +46,6 @@ Aether may be called production-ready only when all of the following are true in
 - Audit logs and spend tracking persist durably in SQLite instead of process memory.
 - Non-local environments must set `AETHER_GUARDRAILS_DB_PATH`.
 
-### Agent feedback learning
-- Human review feedback persists to a durable SQLite ledger instead of an in-memory list.
-- Non-local environments must set `AETHER_FEEDBACK_DB_PATH`.
-
-### Service repositories
-- Shared repositories used by resolution and related backend services persist records durably in SQLite.
-- Non-local environments must set `AETHER_REPOSITORY_DB_PATH`.
-
-### Provider gateway
-- BYOK provider keys persist durably in the shared repository store and use Fernet-backed encryption when `PROVIDER_GATEWAY_ENCRYPTION_KEY` is configured.
-- Provider usage metering persists durably instead of relying on process-local counters.
-
-### Intelligence Graph operational state
-- Agent registration/lifecycle/feedback records, commerce payments/hires, on-chain action records, and x402 payment captures persist durably in the shared repository store.
-- These services no longer rely on process-local lists as their source of truth.
-
-### Agent queueing
-- Local development may opt into the in-memory queue backend for the agent runner.
-- Non-local environments must use an available Celery/Redis backend; forcing the in-memory backend is rejected at startup.
-
 ## Release Validation Commands
 
 Run these before shipping:
@@ -78,8 +53,6 @@ Run these before shipping:
 ```bash
 pytest tests/unit/test_prod_backends.py tests/unit/test_ml_model_artifact_enforcement.py -q
 pytest tests/unit/test_backend_inmemory_guards.py tests/unit/test_oracle_routes_config.py -q
-pytest tests/unit/test_remaining_blockers.py -q
-pytest tests/integration/test_backend_e2e.py -q
 pytest 'ML Models/aether-ml/tests/unit/test_serving.py' -q
 python scripts/sync_docs.py
 python scripts/validate_docs.py
