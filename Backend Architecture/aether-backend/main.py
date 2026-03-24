@@ -135,6 +135,8 @@ from services.oracle.routes import router as oracle_router
 from services.analytics_automation.routes import router as automation_router
 from services.diagnostics.routes import router as diagnostics_router
 from services.providers.routes import router as providers_router
+from services.lake.routes import router as lake_router
+from services.intelligence.routes import router as intelligence_router
 
 
 # ═══════════════════════════════════════════════════════════════════════
@@ -226,6 +228,8 @@ def create_app() -> FastAPI:
     app.include_router(automation_router)
     app.include_router(diagnostics_router)
     app.include_router(providers_router)
+    app.include_router(lake_router)
+    app.include_router(intelligence_router)
 
     # ── Intelligence Graph services (feature-flagged) ───────────
     ig = settings.intelligence_graph
