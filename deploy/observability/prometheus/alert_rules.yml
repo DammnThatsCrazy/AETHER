@@ -1,0 +1,96 @@
+groups:
+  - name: aether_service_health
+    rules:
+      - alert: AetherBackendDown
+        expr: up{job="aether-backend"} == 0
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Aether backend is down"
+          description: "Backend has been unreachable for 2+ minutes."
+
+      - alert: HighErrorRate
+        expr: rate(http_requests_total{status=~"5.."}[5m]) / rate(http_requests_total[5m]) > 0.05
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High 5xx error rate (>5%)"
+          description: "Error rate is {{ $value | humanizePercentage }} over the last 5 minutes."
+
+      - alert: HighLatency
+        expr: histogram_quantile(0.95, rate(http_request_duration_seconds_bucket[5m])) > 2
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "API p95 latency above 2s"
+          description: "p95 latency is {{ $value }}s."
+
+      - alert: RateLimitSpike
+        expr: rate(http_rate_limited[5m]) > 10
+        for: 3m
+        labels:
+          severity: info
+        annotations:
+          summary: "High rate limiting activity"
+          description: "{{ $value }} requests/sec being rate limited."
+
+  - name: aether_data_health
+    rules:
+      - alert: LakeIngestionFailure
+        expr: rate(lake_bronze_ingested[10m]) == 0 and rate(lake_ingest_api[10m]) > 0
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Lake ingestion receiving requests but not persisting"
+          description: "Ingest API is called but Bronze records are not being created."
+
+      - alert: LakeRollbackSpike
+        expr: rate(lake_bronze_rollback[5m]) > 0
+        for: 1m
+        labels:
+          severity: info
+        annotations:
+          summary: "Lake rollback detected"
+          description: "A source_tag rollback is in progress."
+
+      - alert: ProviderFailureSpike
+        expr: rate(provider_request{status="error"}[5m]) / rate(provider_request[5m]) > 0.3
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Provider {{ $labels.provider }} error rate >30%"
+          description: "{{ $labels.provider }} is failing at {{ $value | humanizePercentage }}."
+
+  - name: aether_intelligence_health
+    rules:
+      - alert: ExpectationContradictionSpike
+        expr: rate(expectation_contradictions_detected[5m]) > 5
+        for: 3m
+        labels:
+          severity: info
+        annotations:
+          summary: "High contradiction detection rate"
+          description: "{{ $value }} contradictions/sec detected."
+
+      - alert: FraudHeuristicFallback
+        expr: rate(rewards_fraud_heuristic_fallback[5m]) > 0
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Rewards using heuristic fallback in {{ $labels.env }}"
+          description: "ML serving unavailable — fraud scoring using rule-based heuristics."
+
+      - alert: ExtractionDefenseBlocked
+        expr: rate(extraction_defense_blocked[5m]) > 1
+        for: 3m
+        labels:
+          severity: info
+        annotations:
+          summary: "Extraction defense blocking requests"
+          description: "{{ $value }} requests/sec blocked by ML extraction defense."

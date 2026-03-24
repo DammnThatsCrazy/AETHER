@@ -248,8 +248,8 @@ async def evaluate_event(body: EvaluateRequest):
     """
     Full reward-evaluation pipeline:
 
-    1. Compute a simulated fraud score.
-    2. Compute a simulated attribution weight.
+    1. Compute fraud score (ML serving API with heuristic fallback).
+    2. Compute attribution weight (channel-based with service call when available).
     3. Run the eligibility engine.
     4. If eligible, generate a multi-chain proof via the oracle signer.
     5. Enqueue the reward for tracking.

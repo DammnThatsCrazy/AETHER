@@ -1,0 +1,75 @@
+{
+  "dashboard": {
+    "title": "Aether API Health",
+    "uid": "aether-api-health",
+    "tags": ["aether", "api", "health"],
+    "timezone": "utc",
+    "panels": [
+      {
+        "title": "Request Rate (req/s)",
+        "type": "timeseries",
+        "gridPos": {"h": 8, "w": 12, "x": 0, "y": 0},
+        "targets": [{"expr": "rate(http_requests_total[5m])", "legendFormat": "{{method}} {{path}}"}]
+      },
+      {
+        "title": "Error Rate (%)",
+        "type": "timeseries",
+        "gridPos": {"h": 8, "w": 12, "x": 12, "y": 0},
+        "targets": [{"expr": "rate(http_requests_total{status=~\"5..\"}[5m]) / rate(http_requests_total[5m]) * 100", "legendFormat": "5xx rate"}]
+      },
+      {
+        "title": "Response Latency p95 (ms)",
+        "type": "timeseries",
+        "gridPos": {"h": 8, "w": 12, "x": 0, "y": 8},
+        "targets": [{"expr": "histogram_quantile(0.95, rate(http_request_duration_seconds_bucket[5m])) * 1000", "legendFormat": "p95"}]
+      },
+      {
+        "title": "Health Check Status",
+        "type": "stat",
+        "gridPos": {"h": 4, "w": 6, "x": 12, "y": 8},
+        "targets": [{"expr": "up{job=\"aether-backend\"}", "legendFormat": "backend"}]
+      },
+      {
+        "title": "Rate Limited Requests",
+        "type": "timeseries",
+        "gridPos": {"h": 4, "w": 6, "x": 18, "y": 8},
+        "targets": [{"expr": "rate(http_rate_limited[5m])", "legendFormat": "rate limited"}]
+      },
+      {
+        "title": "Lake Ingestion Rate",
+        "type": "timeseries",
+        "gridPos": {"h": 8, "w": 12, "x": 0, "y": 16},
+        "targets": [{"expr": "rate(lake_bronze_ingested[5m])", "legendFormat": "{{source}}"}]
+      },
+      {
+        "title": "Lake Quality Status",
+        "type": "stat",
+        "gridPos": {"h": 8, "w": 12, "x": 12, "y": 16},
+        "targets": [
+          {"expr": "lake_bronze_dedup", "legendFormat": "dedup"},
+          {"expr": "lake_bronze_rollback", "legendFormat": "rollback"}
+        ]
+      },
+      {
+        "title": "Provider Request Rate",
+        "type": "timeseries",
+        "gridPos": {"h": 8, "w": 24, "x": 0, "y": 24},
+        "targets": [{"expr": "rate(provider_request[5m])", "legendFormat": "{{provider}} {{status}}"}]
+      },
+      {
+        "title": "Expectation Signals",
+        "type": "timeseries",
+        "gridPos": {"h": 8, "w": 12, "x": 0, "y": 32},
+        "targets": [{"expr": "rate(expectation_contradictions_detected[5m])", "legendFormat": "contradictions"}]
+      },
+      {
+        "title": "Population Groups Created",
+        "type": "timeseries",
+        "gridPos": {"h": 8, "w": 12, "x": 12, "y": 32},
+        "targets": [{"expr": "rate(population_created[5m])", "legendFormat": "{{type}}"}]
+      }
+    ],
+    "refresh": "30s",
+    "time": {"from": "now-1h", "to": "now"}
+  }
+}
