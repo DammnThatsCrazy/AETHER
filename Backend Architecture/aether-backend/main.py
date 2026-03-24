@@ -138,6 +138,7 @@ from services.providers.routes import router as providers_router
 from services.lake.routes import router as lake_router
 from services.intelligence.routes import router as intelligence_router
 from services.profile.routes import router as profile_router
+from services.population.routes import router as population_router
 
 
 # ═══════════════════════════════════════════════════════════════════════
@@ -232,6 +233,7 @@ def create_app() -> FastAPI:
     app.include_router(lake_router)
     app.include_router(intelligence_router)
     app.include_router(profile_router)
+    app.include_router(population_router)
 
     # ── Intelligence Graph services (feature-flagged) ───────────
     ig = settings.intelligence_graph
