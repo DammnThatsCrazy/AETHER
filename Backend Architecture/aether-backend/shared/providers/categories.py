@@ -38,6 +38,13 @@ class ProviderCategory(str, Enum):
     BLOCK_EXPLORER = "block_explorer"
     SOCIAL_API = "social_api"
     ANALYTICS_DATA = "analytics_data"
+    MARKET_DATA = "market_data"
+    PREDICTION_MARKET = "prediction_market"
+    WEB3_SOCIAL = "web3_social"
+    IDENTITY_ENRICHMENT = "identity_enrichment"
+    ONCHAIN_INTELLIGENCE = "onchain_intelligence"
+    TRADFI_DATA = "tradfi_data"
+    GOVERNANCE = "governance"
 
 
 def _require_httpx() -> None:
@@ -673,16 +680,269 @@ class FarcasterProvider(Provider):
 
 
 # ======================================================================
+# Category 8: Identity Enrichment Providers
+# ======================================================================
+
+
+class LensProtocolProvider(Provider):
+    """Lens Protocol — decentralized social graph via Lens API v2."""
+
+    def _base_url(self) -> str:
+        return self.config.endpoint or "https://api-v2.lens.dev"
+
+    async def execute(self, method: str, params: dict[str, Any]) -> ProviderResult:
+        start = time.perf_counter()
+        query = params.get("query", "")
+        variables = params.get("variables", {})
+        headers = {"Content-Type": "application/json"}
+        if self.config.api_key:
+            headers["x-access-token"] = self.config.api_key
+        self._request_count += 1
+        try:
+            result = await _http_post_json(
+                self._base_url(),
+                json_body={"query": query, "variables": variables},
+                headers=headers,
+            )
+            elapsed = (time.perf_counter() - start) * 1000
+            metrics.increment("provider_request", labels={"provider": self.name, "method": method, "status": "success"})
+            return ProviderResult(success=True, data=result, provider_name=self.name, latency_ms=elapsed)
+        except Exception as e:
+            elapsed = (time.perf_counter() - start) * 1000
+            logger.error(f"Lens Protocol error: {e}")
+            return ProviderResult(success=False, error=str(e), provider_name=self.name, latency_ms=elapsed)
+
+    async def health_check(self) -> ProviderStatus:
+        try:
+            result = await self.execute("health", {"query": "{ ping }"})
+            return ProviderStatus.HEALTHY if result.success else ProviderStatus.DEGRADED
+        except Exception:
+            return ProviderStatus.UNAVAILABLE
+
+
+class ENSProvider(Provider):
+    """ENS — Ethereum Name Service lookup via The Graph subgraph."""
+
+    def _base_url(self) -> str:
+        return self.config.endpoint or "https://api.thegraph.com/subgraphs/name/ensdomains/ens"
+
+    async def execute(self, method: str, params: dict[str, Any]) -> ProviderResult:
+        start = time.perf_counter()
+        query = params.get("query", "")
+        variables = params.get("variables", {})
+        self._request_count += 1
+        try:
+            result = await _http_post_json(
+                self._base_url(),
+                json_body={"query": query, "variables": variables},
+            )
+            elapsed = (time.perf_counter() - start) * 1000
+            metrics.increment("provider_request", labels={"provider": self.name, "method": method, "status": "success"})
+            return ProviderResult(success=True, data=result, provider_name=self.name, latency_ms=elapsed)
+        except Exception as e:
+            elapsed = (time.perf_counter() - start) * 1000
+            return ProviderResult(success=False, error=str(e), provider_name=self.name, latency_ms=elapsed)
+
+    async def health_check(self) -> ProviderStatus:
+        try:
+            result = await self.execute("health", {"query": '{ _meta { block { number } } }'})
+            return ProviderStatus.HEALTHY if result.success else ProviderStatus.DEGRADED
+        except Exception:
+            return ProviderStatus.UNAVAILABLE
+
+
+class GitHubProvider(Provider):
+    """GitHub — repository, org, and user event ingestion via REST API v3."""
+
+    def _base_url(self) -> str:
+        return self.config.endpoint or "https://api.github.com"
+
+    async def execute(self, method: str, params: dict[str, Any]) -> ProviderResult:
+        start = time.perf_counter()
+        if not self.config.api_key:
+            return ProviderResult(success=False, error="GitHub PAT not configured", provider_name=self.name, latency_ms=0.0)
+        path = params.get("path", "user")
+        url = f"{self._base_url()}/{path}"
+        headers = {"Authorization": f"Bearer {self.config.api_key}", "Accept": "application/vnd.github+json", "X-GitHub-Api-Version": "2022-11-28"}
+        self._request_count += 1
+        try:
+            result = await _http_get_json(url, params=params.get("query", {}), headers=headers)
+            elapsed = (time.perf_counter() - start) * 1000
+            metrics.increment("provider_request", labels={"provider": self.name, "method": method, "status": "success"})
+            return ProviderResult(success=True, data=result, provider_name=self.name, latency_ms=elapsed)
+        except Exception as e:
+            elapsed = (time.perf_counter() - start) * 1000
+            return ProviderResult(success=False, error=str(e), provider_name=self.name, latency_ms=elapsed)
+
+    async def health_check(self) -> ProviderStatus:
+        return ProviderStatus.HEALTHY if self.config.api_key else ProviderStatus.UNAVAILABLE
+
+
+# ======================================================================
+# Category 9: Governance Providers
+# ======================================================================
+
+
+class SnapshotProvider(Provider):
+    """Snapshot — governance proposals, votes, and spaces via GraphQL."""
+
+    def _base_url(self) -> str:
+        return self.config.endpoint or "https://hub.snapshot.org/graphql"
+
+    async def execute(self, method: str, params: dict[str, Any]) -> ProviderResult:
+        start = time.perf_counter()
+        query = params.get("query", "")
+        variables = params.get("variables", {})
+        self._request_count += 1
+        try:
+            result = await _http_post_json(
+                self._base_url(),
+                json_body={"query": query, "variables": variables},
+            )
+            elapsed = (time.perf_counter() - start) * 1000
+            metrics.increment("provider_request", labels={"provider": self.name, "method": method, "status": "success"})
+            return ProviderResult(success=True, data=result, provider_name=self.name, latency_ms=elapsed)
+        except Exception as e:
+            elapsed = (time.perf_counter() - start) * 1000
+            return ProviderResult(success=False, error=str(e), provider_name=self.name, latency_ms=elapsed)
+
+    async def health_check(self) -> ProviderStatus:
+        try:
+            result = await self.execute("health", {"query": "{ spaces(first: 1) { id } }"})
+            return ProviderStatus.HEALTHY if result.success else ProviderStatus.DEGRADED
+        except Exception:
+            return ProviderStatus.UNAVAILABLE
+
+
+# ======================================================================
+# Category 10: On-Chain Intelligence Providers (contract-gated)
+# ======================================================================
+
+
+class ChainalysisProvider(Provider):
+    """Chainalysis — on-chain risk and compliance data. Requires contract."""
+
+    def _base_url(self) -> str:
+        return self.config.endpoint or "https://api.chainalysis.com/api/risk/v2"
+
+    async def execute(self, method: str, params: dict[str, Any]) -> ProviderResult:
+        start = time.perf_counter()
+        if not self.config.api_key:
+            return ProviderResult(success=False, error="Chainalysis API key not configured (contract required)", provider_name=self.name, latency_ms=0.0)
+        path = params.get("path", "entities")
+        url = f"{self._base_url()}/{path}"
+        headers = {"Token": self.config.api_key, "Accept": "application/json"}
+        self._request_count += 1
+        try:
+            result = await _http_get_json(url, params=params.get("query", {}), headers=headers)
+            elapsed = (time.perf_counter() - start) * 1000
+            metrics.increment("provider_request", labels={"provider": self.name, "method": method, "status": "success"})
+            return ProviderResult(success=True, data=result, provider_name=self.name, latency_ms=elapsed)
+        except Exception as e:
+            elapsed = (time.perf_counter() - start) * 1000
+            return ProviderResult(success=False, error=str(e), provider_name=self.name, latency_ms=elapsed)
+
+    async def health_check(self) -> ProviderStatus:
+        return ProviderStatus.HEALTHY if self.config.api_key else ProviderStatus.UNAVAILABLE
+
+
+class NansenProvider(Provider):
+    """Nansen — wallet labels, smart money flows. Requires contract."""
+
+    def _base_url(self) -> str:
+        return self.config.endpoint or "https://api.nansen.ai/v1"
+
+    async def execute(self, method: str, params: dict[str, Any]) -> ProviderResult:
+        start = time.perf_counter()
+        if not self.config.api_key:
+            return ProviderResult(success=False, error="Nansen API key not configured (contract required)", provider_name=self.name, latency_ms=0.0)
+        path = params.get("path", "labels")
+        url = f"{self._base_url()}/{path}"
+        headers = {"Authorization": f"Bearer {self.config.api_key}"}
+        self._request_count += 1
+        try:
+            result = await _http_get_json(url, params=params.get("query", {}), headers=headers)
+            elapsed = (time.perf_counter() - start) * 1000
+            metrics.increment("provider_request", labels={"provider": self.name, "method": method, "status": "success"})
+            return ProviderResult(success=True, data=result, provider_name=self.name, latency_ms=elapsed)
+        except Exception as e:
+            elapsed = (time.perf_counter() - start) * 1000
+            return ProviderResult(success=False, error=str(e), provider_name=self.name, latency_ms=elapsed)
+
+    async def health_check(self) -> ProviderStatus:
+        return ProviderStatus.HEALTHY if self.config.api_key else ProviderStatus.UNAVAILABLE
+
+
+# ======================================================================
+# Category 11: TradFi Data Providers (contract-gated)
+# ======================================================================
+
+
+class MassiveProvider(Provider):
+    """Massive — alternative data for financial markets. Requires contract."""
+
+    def _base_url(self) -> str:
+        return self.config.endpoint or "https://api.massive.com/v1"
+
+    async def execute(self, method: str, params: dict[str, Any]) -> ProviderResult:
+        start = time.perf_counter()
+        if not self.config.api_key:
+            return ProviderResult(success=False, error="Massive API key not configured (contract required)", provider_name=self.name, latency_ms=0.0)
+        path = params.get("path", "datasets")
+        url = f"{self._base_url()}/{path}"
+        headers = {"Authorization": f"Bearer {self.config.api_key}"}
+        self._request_count += 1
+        try:
+            result = await _http_get_json(url, params=params.get("query", {}), headers=headers)
+            elapsed = (time.perf_counter() - start) * 1000
+            metrics.increment("provider_request", labels={"provider": self.name, "method": method, "status": "success"})
+            return ProviderResult(success=True, data=result, provider_name=self.name, latency_ms=elapsed)
+        except Exception as e:
+            elapsed = (time.perf_counter() - start) * 1000
+            return ProviderResult(success=False, error=str(e), provider_name=self.name, latency_ms=elapsed)
+
+    async def health_check(self) -> ProviderStatus:
+        return ProviderStatus.HEALTHY if self.config.api_key else ProviderStatus.UNAVAILABLE
+
+
+class DatabentoProvider(Provider):
+    """Databento — normalized market data across exchanges. Requires subscription."""
+
+    def _base_url(self) -> str:
+        return self.config.endpoint or "https://hist.databento.com/v0"
+
+    async def execute(self, method: str, params: dict[str, Any]) -> ProviderResult:
+        start = time.perf_counter()
+        if not self.config.api_key:
+            return ProviderResult(success=False, error="Databento API key not configured (subscription required)", provider_name=self.name, latency_ms=0.0)
+        path = params.get("path", "metadata.list_datasets")
+        url = f"{self._base_url()}/{path}"
+        headers = {"Authorization": f"Basic {self.config.api_key}", "Accept": "application/json"}
+        self._request_count += 1
+        try:
+            result = await _http_get_json(url, params=params.get("query", {}), headers=headers)
+            elapsed = (time.perf_counter() - start) * 1000
+            metrics.increment("provider_request", labels={"provider": self.name, "method": method, "status": "success"})
+            return ProviderResult(success=True, data=result, provider_name=self.name, latency_ms=elapsed)
+        except Exception as e:
+            elapsed = (time.perf_counter() - start) * 1000
+            return ProviderResult(success=False, error=str(e), provider_name=self.name, latency_ms=elapsed)
+
+    async def health_check(self) -> ProviderStatus:
+        return ProviderStatus.HEALTHY if self.config.api_key else ProviderStatus.UNAVAILABLE
+
+
+# ======================================================================
 # FACTORY: name -> Provider class mapping
 # ======================================================================
 
 PROVIDER_FACTORY: dict[str, type[Provider]] = {
-    # RPC
+    # Blockchain RPC
     "quicknode": QuickNodeProvider,
     "alchemy": AlchemyProvider,
     "infura": InfuraProvider,
     "custom_rpc": GenericRPCProvider,
-    # Explorer
+    # Block Explorer
     "etherscan": EtherscanProvider,
     "moralis": MoralisProvider,
     # Social
@@ -700,11 +960,30 @@ PROVIDER_FACTORY: dict[str, type[Provider]] = {
     "kalshi": KalshiProvider,
     # Web3 Social
     "farcaster": FarcasterProvider,
+    "lens": LensProtocolProvider,
+    # Identity Enrichment
+    "ens": ENSProvider,
+    "github": GitHubProvider,
+    # Governance
+    "snapshot": SnapshotProvider,
+    # On-Chain Intelligence (contract-gated)
+    "chainalysis": ChainalysisProvider,
+    "nansen": NansenProvider,
+    # TradFi Data (contract-gated)
+    "massive": MassiveProvider,
+    "databento": DatabentoProvider,
 }
 
 CATEGORY_PROVIDERS: dict[ProviderCategory, list[str]] = {
     ProviderCategory.BLOCKCHAIN_RPC: ["quicknode", "alchemy", "infura", "custom_rpc"],
     ProviderCategory.BLOCK_EXPLORER: ["etherscan", "moralis"],
-    ProviderCategory.SOCIAL_API: ["twitter", "reddit", "farcaster"],
-    ProviderCategory.ANALYTICS_DATA: ["dune", "defillama", "coingecko", "binance", "coinbase", "polymarket", "kalshi"],
+    ProviderCategory.SOCIAL_API: ["twitter", "reddit"],
+    ProviderCategory.ANALYTICS_DATA: ["dune"],
+    ProviderCategory.MARKET_DATA: ["defillama", "coingecko", "binance", "coinbase"],
+    ProviderCategory.PREDICTION_MARKET: ["polymarket", "kalshi"],
+    ProviderCategory.WEB3_SOCIAL: ["farcaster", "lens"],
+    ProviderCategory.IDENTITY_ENRICHMENT: ["ens", "github"],
+    ProviderCategory.GOVERNANCE: ["snapshot"],
+    ProviderCategory.ONCHAIN_INTELLIGENCE: ["chainalysis", "nansen"],
+    ProviderCategory.TRADFI_DATA: ["massive", "databento"],
 }
