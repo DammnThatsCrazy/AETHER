@@ -3,6 +3,10 @@ Profile Resolver — Canonical identity resolution across identifier types.
 
 Given any supported identifier (user_id, wallet, email, device, session, social handle),
 resolves to a canonical profile_id by querying existing identity and graph subsystems.
+
+**Tenant isolation**: All resolution is tenant-scoped. Graph queries filter by
+tenant_id to prevent cross-tenant data leakage. tenant_id is required on all
+public methods — calls without it are rejected fail-closed.
 """
 
 from __future__ import annotations
@@ -17,7 +21,11 @@ logger = get_logger("aether.profile.resolver")
 
 
 class ProfileResolver:
-    """Resolves any identifier to a canonical profile/user ID."""
+    """Resolves any identifier to a canonical profile/user ID.
+
+    All methods require tenant_id. Graph queries filter returned vertices
+    by tenant_id to enforce tenant isolation at the resolution layer.
+    """
 
     def __init__(self, graph: GraphClient, cache: CacheClient) -> None:
         self._graph = graph
@@ -26,6 +34,7 @@ class ProfileResolver:
     async def resolve(
         self,
         *,
+        tenant_id: str,
         user_id: Optional[str] = None,
         wallet_address: Optional[str] = None,
         email: Optional[str] = None,
@@ -36,14 +45,30 @@ class ProfileResolver:
     ) -> Optional[str]:
         """Resolve any identifier to a canonical user_id.
 
-        Checks graph relationships: wallet→user, device→user, session→user, email→user.
-        Returns the canonical user_id or None if not resolvable.
+        Args:
+            tenant_id: Required. Scopes resolution to a single tenant.
+            user_id: Direct user ID (returned immediately if provided).
+            wallet_address: Blockchain wallet address.
+            email: Email address (hashed in graph).
+            device_id: Device identifier.
+            session_id: Session identifier.
+            social_handle: Social media handle.
+            customer_id: External customer identifier.
+
+        Returns:
+            Canonical user_id or None if not resolvable within tenant scope.
+
+        Raises:
+            ValueError: If tenant_id is empty/missing.
         """
+        if not tenant_id:
+            raise ValueError("tenant_id is required for profile resolution")
+
         # Direct user_id
         if user_id:
             return user_id
 
-        # Try cache first for known mappings
+        # Try cache first for known mappings (tenant-scoped cache key)
         for id_type, id_value in [
             ("wallet", wallet_address),
             ("email", email),
@@ -55,21 +80,27 @@ class ProfileResolver:
             if not id_value:
                 continue
 
-            cache_key = f"aether:profile:resolve:{id_type}:{id_value}"
+            cache_key = f"aether:profile:resolve:{tenant_id}:{id_type}:{id_value}"
             cached = await self._cache.get(cache_key)
             if cached:
                 return cached
 
-            # Graph-based resolution
-            resolved = await self._resolve_via_graph(id_value, id_type)
+            # Graph-based resolution (tenant-scoped)
+            resolved = await self._resolve_via_graph(id_value, id_type, tenant_id)
             if resolved:
                 await self._cache.set(cache_key, resolved, ttl=TTL.PROFILE)
                 return resolved
 
         return None
 
-    async def _resolve_via_graph(self, identifier: str, id_type: str) -> Optional[str]:
-        """Traverse graph edges to find the owning User vertex."""
+    async def _resolve_via_graph(
+        self, identifier: str, id_type: str, tenant_id: str,
+    ) -> Optional[str]:
+        """Traverse graph edges to find the owning User vertex.
+
+        Only returns vertices whose properties include the matching tenant_id,
+        preventing cross-tenant resolution.
+        """
         edge_map = {
             "wallet": EdgeType.OWNS_WALLET,
             "email": EdgeType.HAS_EMAIL,
@@ -86,18 +117,35 @@ class ProfileResolver:
             )
             for v in neighbors:
                 if v.vertex_type == VertexType.USER:
-                    return v.vertex_id
+                    # Tenant isolation: only return if vertex belongs to this tenant
+                    if v.properties.get("tenant_id", tenant_id) == tenant_id:
+                        return v.vertex_id
 
-        # Fallback: try bidirectional search
+        # Fallback: try bidirectional search (still tenant-scoped)
         neighbors = await self._graph.get_neighbors(identifier, direction="both")
         for v in neighbors:
             if v.vertex_type == VertexType.USER:
-                return v.vertex_id
+                if v.properties.get("tenant_id", tenant_id) == tenant_id:
+                    return v.vertex_id
 
         return None
 
-    async def get_all_identifiers(self, user_id: str) -> dict:
-        """Get all known identifiers linked to a user."""
+    async def get_all_identifiers(self, user_id: str, tenant_id: str) -> dict:
+        """Get all known identifiers linked to a user.
+
+        Args:
+            user_id: The user to look up.
+            tenant_id: Required. Scopes results to a single tenant.
+
+        Returns:
+            Dict of identifier lists grouped by type.
+
+        Raises:
+            ValueError: If tenant_id is empty/missing.
+        """
+        if not tenant_id:
+            raise ValueError("tenant_id is required for identifier lookup")
+
         identifiers: dict[str, list[str]] = {
             "wallets": [],
             "emails": [],
@@ -109,6 +157,14 @@ class ProfileResolver:
 
         neighbors = await self._graph.get_neighbors(user_id, direction="both")
         for v in neighbors:
+            # Tenant isolation: skip vertices from other tenants
+            if v.properties.get("tenant_id", tenant_id) != tenant_id:
+                logger.warning(
+                    f"Skipped cross-tenant vertex {v.vertex_id} "
+                    f"(expected tenant={tenant_id})"
+                )
+                continue
+
             vtype = v.vertex_type
             if vtype == VertexType.WALLET:
                 identifiers["wallets"].append(v.vertex_id)

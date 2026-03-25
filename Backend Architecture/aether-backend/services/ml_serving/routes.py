@@ -26,6 +26,31 @@ from dependencies.providers import get_cache, get_producer
 logger = get_logger("aether.service.ml_serving")
 router = APIRouter(prefix="/v1/ml", tags=["ML Serving"])
 
+# Lazy-loaded extraction defense layer for post-response watermarking
+_defense_layer = None
+
+
+def _get_defense_layer():
+    """Get the extraction defense layer for post-response watermarking.
+
+    Returns None if defense is disabled or the module is not available.
+    Loaded once on first use.
+    """
+    global _defense_layer
+    if _defense_layer is not None:
+        return _defense_layer
+    try:
+        from config.settings import settings
+        if not settings.extraction_defense.enabled:
+            return None
+        from security.model_extraction_defense import ExtractionDefenseLayer
+        _defense_layer = ExtractionDefenseLayer.from_env()
+        logger.info("ML serving: extraction defense layer loaded for watermarking")
+    except (ImportError, Exception) as e:
+        logger.debug(f"Extraction defense not available for ML serving: {e}")
+        _defense_layer = None
+    return _defense_layer
+
 # ML serving API base URL — override via env var in production
 _ML_SERVING_URL = os.getenv("ML_SERVING_URL", "http://localhost:8080")
 
@@ -159,6 +184,19 @@ async def predict(
                 logger.error("ML serving returned invalid JSON for model %s", body.model_name)
                 raise ServiceUnavailableError("ML inference returned malformed response")
             latency_ms = (time.perf_counter() - t0) * 1000
+
+            # 2b. Apply post-response watermarking (extraction defense)
+            defense = _get_defense_layer()
+            if defense is not None:
+                api_key = request.headers.get("X-API-Key", "")
+                risk_score = getattr(request.state, "extraction_risk", 0.0)
+                post_result = defense.post_response(
+                    api_key=api_key,
+                    raw_output=ml_result,
+                    features=body.features,
+                    risk_score=risk_score,
+                )
+                ml_result = post_result.modified_output
 
             prediction = {
                 "model": body.model_name,

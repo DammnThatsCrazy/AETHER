@@ -173,7 +173,8 @@ async def get_identifiers(
     """All linked identifiers (wallets, emails, devices, sessions, social)."""
     request.state.tenant.require_permission("read")
 
-    identifiers = await resolver.get_all_identifiers(user_id)
+    tenant = request.state.tenant
+    identifiers = await resolver.get_all_identifiers(user_id, tenant_id=tenant.tenant_id)
     return APIResponse(data={"user_id": user_id, "identifiers": identifiers}).to_dict()
 
 
@@ -213,7 +214,9 @@ async def resolve_identifier(
     """
     request.state.tenant.require_permission("read")
 
+    tenant = request.state.tenant
     resolved = await resolver.resolve(
+        tenant_id=tenant.tenant_id,
         wallet_address=wallet,
         email=email,
         device_id=device,

@@ -10,6 +10,7 @@ import hashlib
 import hmac
 import json
 import base64
+import os
 import time
 from dataclasses import dataclass, field
 from typing import Any, Optional
@@ -79,25 +80,88 @@ class JWTHandler:
     """
     JWT encode/decode with algorithm selection.
 
-    Production: uses PyJWT library with RS256 support and proper validation.
+    Supported algorithms:
+      - HS256: Symmetric (shared secret). Default, used in local/dev.
+      - RS256: Asymmetric (RSA private key signs, public key verifies). Production.
+
+    Production: uses PyJWT library with full validation (exp, iat, iss, aud).
     Fallback: manual HS256 if PyJWT not installed (local dev only).
+
+    RS256 configuration:
+      - JWT_PRIVATE_KEY: PEM-encoded RSA private key (for signing)
+      - JWT_PUBLIC_KEY: PEM-encoded RSA public key (for verification)
+      - JWT_ALGORITHM: "RS256" (set in config or env)
+      - JWT_ISSUER: Expected issuer claim (optional)
+      - JWT_AUDIENCE: Expected audience claim (optional)
+
+    Migration safety:
+      When switching from HS256 to RS256, set JWT_ALGORITHM=RS256 and provide
+      RSA keys. The handler will accept both HS256 and RS256 tokens during
+      transition if PYJWT_AVAILABLE is True and JWT_ALLOW_HS256_FALLBACK=true.
     """
 
-    def __init__(self, secret: str = "", algorithm: str = "HS256"):
+    def __init__(
+        self,
+        secret: str = "",
+        algorithm: str = "",
+        private_key: str = "",
+        public_key: str = "",
+        issuer: str = "",
+        audience: str = "",
+        allow_hs256_fallback: bool = True,
+    ):
         self.secret = secret or settings.auth.jwt_secret
-        self.algorithm = algorithm
+        self.algorithm = algorithm or os.getenv("JWT_ALGORITHM", "HS256")
+        self.private_key = private_key or os.getenv("JWT_PRIVATE_KEY", "")
+        self.public_key = public_key or os.getenv("JWT_PUBLIC_KEY", "")
+        self.issuer = issuer or os.getenv("JWT_ISSUER", "")
+        self.audience = audience or os.getenv("JWT_AUDIENCE", "")
+        self.allow_hs256_fallback = allow_hs256_fallback
+
+    def _signing_key(self) -> str:
+        """Get the appropriate signing key based on algorithm."""
+        if self.algorithm == "RS256":
+            if not self.private_key:
+                raise UnauthorizedError("RS256 signing requires JWT_PRIVATE_KEY")
+            return self.private_key
+        return self.secret
+
+    def _verification_key(self) -> str:
+        """Get the appropriate verification key based on algorithm."""
+        if self.algorithm == "RS256":
+            if not self.public_key:
+                raise UnauthorizedError("RS256 verification requires JWT_PUBLIC_KEY")
+            return self.public_key
+        return self.secret
+
+    def _allowed_algorithms(self) -> list[str]:
+        """Get algorithms accepted for verification (migration safety)."""
+        if self.algorithm == "RS256" and self.allow_hs256_fallback:
+            return ["RS256", "HS256"]
+        return [self.algorithm]
 
     def encode(self, payload: dict) -> str:
-        """Encode a payload into a JWT string."""
+        """Encode a payload into a JWT string.
+
+        Uses RS256 with private key when configured, otherwise HS256.
+        Automatically adds exp, iat, iss, and aud claims if configured.
+        """
         if "exp" not in payload:
             payload["exp"] = int(time.time()) + settings.auth.jwt_expiry_minutes * 60
         if "iat" not in payload:
             payload["iat"] = int(time.time())
+        if self.issuer and "iss" not in payload:
+            payload["iss"] = self.issuer
+        if self.audience and "aud" not in payload:
+            payload["aud"] = self.audience
 
         if PYJWT_AVAILABLE:
-            return pyjwt.encode(payload, self.secret, algorithm=self.algorithm)
+            return pyjwt.encode(payload, self._signing_key(), algorithm=self.algorithm)
 
-        # Manual HS256 fallback (local dev only)
+        # Manual HS256 fallback (local dev only — RS256 requires PyJWT)
+        if self.algorithm == "RS256":
+            raise UnauthorizedError("RS256 requires PyJWT library: pip install PyJWT[crypto]")
+
         header = base64.urlsafe_b64encode(
             json.dumps({"alg": self.algorithm, "typ": "JWT"}).encode()
         ).rstrip(b"=").decode()
@@ -111,20 +175,50 @@ class JWTHandler:
         return f"{header}.{payload_b64}.{signature}"
 
     def decode(self, token: str) -> dict:
-        """Decode and verify a JWT. Returns the payload dict."""
+        """Decode and verify a JWT. Returns the payload dict.
+
+        For RS256: verifies with public key.
+        For HS256: verifies with shared secret.
+        During migration: accepts both algorithms if allow_hs256_fallback is True.
+        Validates exp, iat, and optionally iss/aud claims.
+        """
         if PYJWT_AVAILABLE:
+            # Determine verification key based on token's algorithm
+            options = {"require": ["exp", "iat"]}
+            kwargs: dict[str, Any] = {}
+            if self.issuer:
+                kwargs["issuer"] = self.issuer
+            if self.audience:
+                kwargs["audience"] = self.audience
+
+            # For RS256 primary with HS256 fallback during migration
+            algorithms = self._allowed_algorithms()
+            key = self._verification_key()
+
             try:
                 return pyjwt.decode(
-                    token, self.secret,
-                    algorithms=[self.algorithm],
-                    options={"require": ["exp", "iat"]},
+                    token, key, algorithms=algorithms, options=options, **kwargs,
                 )
+            except pyjwt.InvalidAlgorithmError:
+                # If RS256 verification failed, try HS256 fallback
+                if self.allow_hs256_fallback and self.algorithm == "RS256":
+                    try:
+                        return pyjwt.decode(
+                            token, self.secret, algorithms=["HS256"],
+                            options=options, **kwargs,
+                        )
+                    except pyjwt.InvalidTokenError as e:
+                        raise UnauthorizedError(f"Invalid token: {e}")
+                raise UnauthorizedError("Invalid token algorithm")
             except pyjwt.ExpiredSignatureError:
                 raise UnauthorizedError("Token expired")
             except pyjwt.InvalidTokenError as e:
                 raise UnauthorizedError(f"Invalid token: {e}")
 
-        # Manual HS256 fallback
+        # Manual HS256 fallback (no PyJWT — local dev only)
+        if self.algorithm == "RS256":
+            raise UnauthorizedError("RS256 requires PyJWT library: pip install PyJWT[crypto]")
+
         try:
             parts = token.split(".")
             if len(parts) != 3:

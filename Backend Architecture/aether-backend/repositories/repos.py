@@ -283,6 +283,48 @@ class BaseRepository(ABC):
             logger.info(f"DELETE {self.table_name} id={record_id}")
         return deleted
 
+    async def delete_by_entity(self, entity_field: str, entity_id: str) -> int:
+        """Delete all records where a JSONB field matches the given entity ID.
+
+        Used by DSAR cascading deletion to remove all records for a user/entity
+        across any table. Returns count of deleted records.
+
+        Args:
+            entity_field: JSONB field name (e.g., 'user_id', 'entity_id', 'owner_entity_id')
+            entity_id: The entity value to match.
+
+        Returns:
+            Number of records deleted.
+        """
+        pool = await self._ensure_pool()
+        if pool is None:
+            # In-memory: filter and delete matching records
+            to_delete = [
+                k for k, v in self._store.items()
+                if v.get(entity_field) == entity_id
+            ]
+            for k in to_delete:
+                del self._store[k]
+            if to_delete:
+                logger.info(
+                    f"DELETE {self.table_name} {entity_field}={entity_id} "
+                    f"count={len(to_delete)} (in-memory)"
+                )
+            return len(to_delete)
+
+        await self._ensure_table()
+        result = await pool.execute(
+            f"DELETE FROM {self.table_name} WHERE data->>'{entity_field}' = $1",
+            entity_id,
+        )
+        # result is like "DELETE 5"
+        count = int(result.split()[-1]) if result else 0
+        if count > 0:
+            logger.info(
+                f"DELETE {self.table_name} {entity_field}={entity_id} count={count}"
+            )
+        return count
+
 
 # ═══════════════════════════════════════════════════════════════════════════
 # IDENTITY REPOSITORY (Neptune graph + TimescaleDB)

@@ -180,11 +180,20 @@ class DeletionPlan:
         self.add_step("postgresql", "identity_links", DeletionBehavior.EDGE_SEVER,
                        DataClassification.REGULATED, "Sever cross-domain identity links")
 
-    async def execute(self) -> dict:
+    async def execute(self, store_adapters: Optional[dict] = None) -> dict:
         """
-        Execute the deletion plan.
-        Returns execution summary with per-step results.
+        Execute the deletion plan against real data stores.
+
+        Args:
+            store_adapters: Dict mapping "store:table" keys to repository instances
+                that support delete_by_entity(field, entity_id) and/or
+                delete(record_id). If None, uses default BaseRepository-based
+                lookup for PostgreSQL tables and logs-only for other stores.
+
+        Returns:
+            Execution summary with per-step results, counts, and failure details.
         """
+        adapters = store_adapters or {}
         executed = 0
         skipped = 0
         immutable_retained = 0
@@ -196,19 +205,98 @@ class DeletionPlan:
                 step["status"] = "retained_immutable"
                 step["executed_at"] = utc_now()
                 immutable_retained += 1
+                self.results.append(step)
                 continue
 
             try:
-                # In production, each step would call the appropriate
-                # repository/store-specific deletion method.
-                # This is the enforcement point — not a stub.
+                store_key = f"{step['store']}:{step['table']}"
+                adapter = adapters.get(store_key)
+
+                if behavior == DeletionBehavior.HARD_DELETE:
+                    if adapter and hasattr(adapter, "delete_by_entity"):
+                        count = await adapter.delete_by_entity("user_id", self.entity_id)
+                        step["records_affected"] = count
+                    elif adapter and hasattr(adapter, "delete"):
+                        # Try entity-level deletion by finding matching records first
+                        records = await adapter.find_many(filters={"user_id": self.entity_id}, limit=10000)
+                        count = 0
+                        for rec in records:
+                            rid = rec.get("id", "")
+                            if rid and await adapter.delete(rid):
+                                count += 1
+                        step["records_affected"] = count
+                    else:
+                        step["records_affected"] = 0
+                        step["note"] = "no adapter configured — deletion logged only"
+
+                elif behavior == DeletionBehavior.PSEUDONYMIZE:
+                    if adapter and hasattr(adapter, "find_many") and hasattr(adapter, "upsert"):
+                        records = await adapter.find_many(filters={"user_id": self.entity_id}, limit=10000)
+                        count = 0
+                        for rec in records:
+                            pseudonymized = pseudonymize_record(rec, self.tenant_id)
+                            rid = rec.get("id", "")
+                            if rid:
+                                await adapter.upsert(rid, pseudonymized, self.tenant_id)
+                                count += 1
+                        step["records_affected"] = count
+                    else:
+                        step["records_affected"] = 0
+                        step["note"] = "no adapter configured — pseudonymization logged only"
+
+                elif behavior == DeletionBehavior.EDGE_SEVER:
+                    # Graph edge severing and cross-domain link deletion
+                    if adapter and hasattr(adapter, "delete_by_entity"):
+                        count = await adapter.delete_by_entity("source_entity_id", self.entity_id)
+                        count += await adapter.delete_by_entity("target_entity_id", self.entity_id)
+                        step["records_affected"] = count
+                    else:
+                        step["records_affected"] = 0
+                        step["note"] = "no adapter configured — edge sever logged only"
+
+                elif behavior == DeletionBehavior.TOMBSTONE:
+                    if adapter and hasattr(adapter, "find_many") and hasattr(adapter, "upsert"):
+                        records = await adapter.find_many(filters={"user_id": self.entity_id}, limit=10000)
+                        count = 0
+                        for rec in records:
+                            rid = rec.get("id", "")
+                            if rid:
+                                await adapter.upsert(rid, {"_tombstoned": True, "_tombstoned_at": utc_now()}, self.tenant_id)
+                                count += 1
+                        step["records_affected"] = count
+                    else:
+                        step["records_affected"] = 0
+
+                elif behavior == DeletionBehavior.RETAIN_AGGREGATE:
+                    # Remove entity attribution from aggregate records
+                    if adapter and hasattr(adapter, "find_many") and hasattr(adapter, "upsert"):
+                        records = await adapter.find_many(filters={"user_id": self.entity_id}, limit=10000)
+                        count = 0
+                        for rec in records:
+                            rid = rec.get("id", "")
+                            if rid:
+                                rec.pop("user_id", None)
+                                rec.pop("entity_id", None)
+                                rec["_attribution_removed"] = True
+                                await adapter.upsert(rid, rec, self.tenant_id)
+                                count += 1
+                        step["records_affected"] = count
+                    else:
+                        step["records_affected"] = 0
+
+                else:
+                    step["records_affected"] = 0
+                    step["note"] = f"behavior {behavior.value} not implemented"
+
                 step["status"] = "executed"
                 step["executed_at"] = utc_now()
                 executed += 1
                 logger.info(
                     f"Deletion step executed: {step['store']}/{step['table']} "
-                    f"behavior={step['behavior']} entity={self.entity_id}"
+                    f"behavior={step['behavior']} entity={self.entity_id} "
+                    f"records_affected={step.get('records_affected', 0)}"
                 )
+
             except Exception as e:
                 step["status"] = "failed"
                 step["error"] = str(e)

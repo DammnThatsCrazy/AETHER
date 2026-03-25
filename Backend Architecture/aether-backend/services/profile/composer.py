@@ -64,7 +64,7 @@ class ProfileComposer:
             profile = {"user_id": user_id, "tenant_id": tenant_id, "status": "unknown"}
 
         # 2. All linked identifiers
-        identifiers = await self._resolver.get_all_identifiers(user_id)
+        identifiers = await self._resolver.get_all_identifiers(user_id, tenant_id=tenant_id)
 
         # 3. Consent status
         consent = await self._consent.get_consent(tenant_id, user_id)
