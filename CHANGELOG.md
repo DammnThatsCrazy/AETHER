@@ -6,6 +6,26 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ---
 
+## [v8.6.0] — 2026-03-25
+
+### Added
+
+- Profile 360 service — 8 endpoints for holistic entity omniview
+- Population Omniview — 12 endpoints for macro-to-micro group intelligence
+- Expectation Engine — 11 endpoints for negative-space intelligence
+- Behavioral Continuity & Friction — 5 endpoints, 10 signal families
+- RWA Intelligence Graph — 14 endpoints for tokenized asset intelligence
+- Grafana dashboards, Prometheus alert rules, WebSocket hardening
+- Population snapshot scheduling, ML drift monitoring
+
+### Changed
+
+- Service count: 24 → 29
+- Endpoint count: 165 → 184
+- All docs, READMEs, version headers updated to v8.6.0
+
+---
+
 ## [v8.5.0] — 2026-03-24
 
 ### Added

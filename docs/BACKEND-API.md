@@ -1,4 +1,4 @@
-# Aether Backend API v8.5.0 — Endpoint Specification
+# Aether Backend API v8.6.0 — Endpoint Specification
 
 ## Overview
 
@@ -666,6 +666,54 @@ Negative-space intelligence: what should have happened but did not. Detects abse
 **Every signal includes:** `expected`, `observed`, `baseline_source`, `confidence`, `explanation`, `is_source_silence`, `severity`, `source_tag`
 
 **Permissions:** `read` for queries, `write` for triggering scans
+
+---
+
+### Behavioral Continuity & Friction Service (v8.6.0)
+
+Derived signals from data Aether already collects. 10 signal families detecting intent residue, wallet friction, identity deltas, sequence scars, source shadow, and more.
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/v1/behavioral/entity/{id}` | Full behavioral scan (all 10 engines) |
+| GET | `/v1/behavioral/entity/{id}/signals` | Persisted signals filtered by `family` |
+| POST | `/v1/behavioral/scan/{id}` | Trigger full behavioral scan |
+| GET | `/v1/behavioral/summary` | Population behavioral signal distribution |
+| GET | `/v1/behavioral/registry` | Signal definitions and output contracts |
+
+**Signal families:** `intent_residue`, `wallet_friction`, `identity_delta`, `pre_post_continuity`, `sequence_scar`, `source_shadow`, `reward_near_miss`, `social_chain_lag`, `cex_dex_transition`, `behavioral_twin`
+
+**Permissions:** `read` for queries, `write` for triggering scans
+
+---
+
+### RWA Intelligence Graph Service (v8.6.0)
+
+Tokenized real-world asset observation, analysis, and scoring. Aether does NOT issue RWAs — this is intelligence only.
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| POST | `/v1/rwa/assets` | Register an RWA asset as intelligence object |
+| GET | `/v1/rwa/assets` | List assets with `asset_class` and `chain` filters |
+| GET | `/v1/rwa/assets/{id}` | Full asset details |
+| POST | `/v1/rwa/policies` | Register compliance/transfer-restriction policy |
+| GET | `/v1/rwa/assets/{id}/policies` | Policies for an asset |
+| POST | `/v1/rwa/simulate-transfer` | Simulate transfer policy check (whitelist, jurisdiction, holder cap, lockup, accreditation) |
+| POST | `/v1/rwa/cashflows` | Record cashflow event (coupon, dividend, redemption, NAV update, attestation, etc.) |
+| GET | `/v1/rwa/assets/{id}/cashflows` | Cashflow history filtered by `cashflow_type` |
+| GET | `/v1/rwa/exposure/{entity_id}` | RWA exposure for wallet/entity (direct + inferred + concentration) |
+| GET | `/v1/rwa/assets/{id}/reserve-credibility` | Reserve credibility score (attestation cadence + NAV freshness) |
+| GET | `/v1/rwa/assets/{id}/redemption-pressure` | Redemption pressure score |
+| POST | `/v1/rwa/holders` | Register holder record |
+| GET | `/v1/rwa/assets/{id}/holders` | Asset holder list |
+
+**Asset classes:** `tokenized_treasury`, `money_market_fund`, `private_credit`, `fund_interest`, `structured_credit`, `tokenized_deposit`, `real_estate`, `invoice_receivable`, `trade_finance`, `commodity`, `carbon_credit`, `tokenized_equity`, `tokenized_etf`
+
+**Policy types:** `whitelist`, `accreditation`, `jurisdiction`, `lockup`, `holder_cap`, `secondary_transfer`, `aml_kyc`
+
+**Permissions:** `write` for asset/policy/cashflow/holder creation, `read` for queries
+
+---
 
 All intelligence outputs are sourced from persisted lake data, graph relationships, and ML model scoring. No mock or synthetic data is returned.
 

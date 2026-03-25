@@ -1,4 +1,4 @@
-# Agent Controller v8.5.0
+# Agent Controller v8.6.0
 
 Central orchestrator for the Aether Agent Layer. The `AgentController` manages a priority task queue, dispatches work to registered workers, enforces guardrails on every execution, and integrates a feedback learning loop that tunes confidence thresholds and worker priorities over time.
 

@@ -1,6 +1,6 @@
 {
   "name": "aether-backend",
-  "version": "8.5.0",
+  "version": "8.6.0",
   "private": true,
   "description": "Aether Backend \u2014 Microservices for behavioral analytics, identity resolution, and ML serving",
   "workspaces": [

@@ -1,4 +1,4 @@
-# Aether Agent Layer v8.5.0
+# Aether Agent Layer v8.6.0
 
 Autonomous discovery and enrichment workers for the Aether platform.
 

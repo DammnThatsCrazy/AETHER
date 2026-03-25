@@ -1,5 +1,51 @@
 # Changelog
 
+## v8.6.0 — Intelligence Platform Completion (2026-03-25)
+
+### Profile 360
+- **NEW**: Holistic user/entity omniview composing all Aether subsystems
+- 8 endpoints: full profile, timeline, graph, intelligence, identifiers, provenance, resolver, lake data
+
+### Population Omniview Intelligence
+- **NEW**: Macro-to-micro group intelligence (segments, cohorts, clusters, communities)
+- 12 endpoints: summary, groups, trends, members, intelligence, compare, entity memberships, explain
+
+### Expectation Engine (Negative-Space Intelligence)
+- **NEW**: Detects what SHOULD have happened but did NOT
+- 11 endpoints: summary, contradictions, silence, group gaps, entity scan, explain, signals
+- 12 signal types including identity contradiction, broken sequence, source silence
+
+### Behavioral Continuity & Friction Layer
+- **NEW**: 10 derived signal families from existing data
+- Engines: intent residue, wallet friction, identity delta, pre/post continuity, sequence scars, source shadow, reward near-miss, social-chain lag, CEX-DEX transition, behavioral twins
+- 5 endpoints: entity scan, signals, trigger, summary, registry
+
+### RWA Intelligence Graph
+- **NEW**: Tokenized real-world asset observation, analysis, and scoring
+- 14 asset classes, 8 chain environments, 7 policy types, 13 cashflow types, 6 exposure types
+- Engines: exposure graph, policy simulation, reserve credibility, redemption pressure
+- 14 endpoints: assets CRUD, policies, simulate-transfer, cashflows, exposure, scoring, holders
+
+### Non-Blocking Productization
+- Grafana dashboard JSON (10 panels)
+- Prometheus alert rules (10 rules across 3 groups)
+- WebSocket chain listener with reconnect/backoff/health
+- Population snapshot scheduling
+- ML drift monitoring automation
+
+### Release Hardening
+- Fixed all stale comments/docstrings
+- Added 31 endpoints to BACKEND-API.md
+- Fixed version drift root cause in bump_version.py
+- Reconciled iOS/Android/DataIngestion/DataLake version numbers
+- Webhook delivery, export generation, Node.js ingestion explicitly dispositioned
+
+### Totals
+- **29 services**, **184 endpoints**, **24 provider connectors**
+- **106 tests passing**, CI green
+
+---
+
 ## v8.5.0 — Data Lake, Intelligence API, Provider Expansion (2026-03-24)
 
 ### Data Lake (Phase 2)

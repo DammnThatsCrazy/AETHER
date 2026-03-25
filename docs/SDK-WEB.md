@@ -1,4 +1,4 @@
-# Aether Web SDK v8.5.0 — Integration Guide
+# Aether Web SDK v8.6.0 — Integration Guide
 
 ## Installation
 

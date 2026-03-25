@@ -9,7 +9,7 @@ Aether is a **hybrid Python/FastAPI + Node/TypeScript** monorepo with three oper
 ```
 ┌─────────────────────────────┐     ┌──────────────────────────────────────┐
 │   Client SDKs               │     │   Python/FastAPI Backend              │
-│   (Web/iOS/Android/RN)      │     │   24 service routers + lake + intel  │
+│   (Web/iOS/Android/RN)      │     │   29 service routers + intelligence  │
 │                             │     │                                      │
 │   Raw events, fingerprints  │ ──> │   /v1/ingest/*    Event ingestion    │
 │   Wallet connections        │     │   /v1/lake/*      Data lake CRUD     │
@@ -21,6 +21,11 @@ Aether is a **hybrid Python/FastAPI + Node/TypeScript** monorepo with three oper
 ┌─────────────────────────────┐     │   /v1/agent/*     Agent orchestration│
 │   External Data Providers   │     │   /v1/rewards/*   On-chain rewards   │
 │   (24 connectors)           │ ──> │   /v1/analytics/* Dashboards/export  │
+│                             │     │   /v1/profile/*   Profile 360        │
+│                             │     │   /v1/population/* Group intelligence │
+│                             │     │   /v1/expectations/* Negative-space  │
+│                             │     │   /v1/behavioral/* Friction signals  │
+│                             │     │   /v1/rwa/*       RWA intelligence   │
 │   Market, social, on-chain  │     └──────────────────────────────────────┘
 │   TradFi, prediction mkts   │                    │
 │   Identity enrichment       │     ┌──────────────┴───────────────────────┐
@@ -141,7 +146,7 @@ curl http://localhost:8000/v1/health   # verify all dependencies healthy
 ## Project Structure
 
 ```
-Backend Architecture/aether-backend/   Python/FastAPI backend (24 services)
+Backend Architecture/aether-backend/   Python/FastAPI backend (29 services)
   services/
     ingestion/     SDK event ingestion + IP enrichment
     lake/          Data lake API (Bronze/Silver/Gold + audit + rollback)

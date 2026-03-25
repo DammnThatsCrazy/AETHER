@@ -1,4 +1,4 @@
-# Unified On-Chain Intelligence Graph v8.5.0
+# Unified On-Chain Intelligence Graph v8.6.0
 
 ## Overview
 

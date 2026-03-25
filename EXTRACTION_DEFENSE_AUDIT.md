@@ -1,4 +1,4 @@
-# Model Extraction Defense Audit — Aether Platform v8.5.0
+# Model Extraction Defense Audit — Aether Platform v8.6.0
 
 **Date:** 2026-03-17
 **Scope:** All ML inference code, API gateway, middleware, model wrappers, monitoring systems
