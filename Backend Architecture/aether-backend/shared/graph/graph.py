@@ -66,6 +66,26 @@ class VertexType:
     PAYMENT = "Payment"
     ACTION_RECORD = "ActionRecord"
 
+    # Web3 Coverage — Registry-native graph objects
+    CHAIN = "Chain"
+    TOKEN = "Token"
+    TOKEN_POSITION = "TokenPosition"
+    POOL = "Pool"
+    VAULT = "Vault"
+    MARKET = "Market"
+    STRATEGY = "Strategy"
+    APP = "App"
+    FRONTEND_DOMAIN = "FrontendDomain"
+    GOVERNANCE_SPACE = "GovernanceSpace"
+    GOVERNANCE_PROPOSAL = "GovernanceProposal"
+    BRIDGE_ROUTE = "BridgeRoute"
+    NFT_COLLECTION = "NftCollection"
+    DEPLOYER_ENTITY = "DeployerEntity"
+    MARKET_VENUE = "MarketVenue"
+    CONTRACT_SYSTEM = "ContractSystem"
+    PROTOCOL_VERSION = "ProtocolVersion"
+    UNKNOWN_CONTRACT = "UnknownContract"
+
 
 class EdgeType:
     HAS_SESSION = "HAS_SESSION"
@@ -114,6 +134,41 @@ class EdgeType:
 
     # Intelligence Graph — Action tracking
     PERFORMED_ACTION = "PERFORMED_ACTION"  # Agent → ActionRecord
+
+    # ── Web3 Coverage — Wallet ↔ Entity edges ──────────────────────────
+    USES_PROTOCOL = "USES_PROTOCOL"           # Wallet → Protocol
+    USES_APP = "USES_APP"                     # Wallet → App
+    TOUCHES_DOMAIN = "TOUCHES_DOMAIN"         # Wallet → FrontendDomain
+    HOLDS_TOKEN = "HOLDS_TOKEN"               # Wallet → Token
+    BRIDGES_VIA = "BRIDGES_VIA"               # Wallet → BridgeRoute
+    PARTICIPATES_IN = "PARTICIPATES_IN"       # Wallet → GovernanceSpace
+    VOTES_ON = "VOTES_ON"                     # Wallet → GovernanceProposal
+    DELEGATES_TO = "DELEGATES_TO"             # Wallet → Wallet (governance delegation)
+    LINKED_TO_SOCIAL = "LINKED_TO_SOCIAL"     # Wallet → User (social identity)
+    TRADED_ON = "TRADED_ON"                   # Wallet → MarketVenue
+    EXPOSED_TO = "EXPOSED_TO"                 # Profile/Wallet → Protocol/Token/Asset
+
+    # ── Web3 Coverage — Contract/Protocol topology ─────────────────────
+    INSTANCE_OF = "INSTANCE_OF"               # Contract → ContractSystem
+    PART_OF_SYSTEM = "PART_OF_SYSTEM"         # ContractSystem → Protocol
+    SUCCESSOR_OF = "SUCCESSOR_OF"             # ProtocolVersion → ProtocolVersion
+    MIGRATED_TO = "MIGRATED_TO"               # Contract → Contract (migration)
+    CONTROLS = "CONTROLS"                     # DeployerEntity → Contract
+    DEPLOYED_ON = "DEPLOYED_ON"               # Protocol/Contract → Chain
+
+    # ── Web3 Coverage — App/Frontend attribution ───────────────────────
+    FRONTS_PROTOCOL = "FRONTS_PROTOCOL"       # App/FrontendDomain → Protocol
+    ASSOCIATED_WITH = "ASSOCIATED_WITH"       # FrontendDomain → ContractSystem
+    SERVED_BY = "SERVED_BY"                   # Protocol → FrontendDomain
+
+    # ── Web3 Coverage — Market/Token edges ─────────────────────────────
+    TOKEN_OF = "TOKEN_OF"                     # Token → Protocol
+    TRADED_ON_VENUE = "TRADED_ON_VENUE"       # Token → MarketVenue
+    POOL_FOR = "POOL_FOR"                     # Pool → Token (pair tokens)
+    GOVERNED_BY_SPACE = "GOVERNED_BY_SPACE"   # Protocol → GovernanceSpace
+
+    # ── Web3 Coverage — Classification edges ───────────────────────────
+    LATER_CLASSIFIED_AS = "LATER_CLASSIFIED_AS"  # UnknownContract → Protocol/ContractSystem
 
 
 # ═══════════════════════════════════════════════════════════════════════════

@@ -9,7 +9,7 @@ Aether is a **hybrid Python/FastAPI + Node/TypeScript** monorepo with three oper
 ```
 ┌─────────────────────────────┐     ┌──────────────────────────────────────┐
 │   Client SDKs               │     │   Python/FastAPI Backend              │
-│   (Web/iOS/Android/RN)      │     │   29 service routers + intelligence  │
+│   (Web/iOS/Android/RN)      │     │   30 service routers + intelligence  │
 │                             │     │                                      │
 │   Raw events, fingerprints  │ ──> │   /v1/ingest/*    Event ingestion    │
 │   Wallet connections        │     │   /v1/lake/*      Data lake CRUD     │
@@ -146,7 +146,7 @@ curl http://localhost:8000/v1/health   # verify all dependencies healthy
 ## Project Structure
 
 ```
-Backend Architecture/aether-backend/   Python/FastAPI backend (29 services)
+Backend Architecture/aether-backend/   Python/FastAPI backend (30 services)
   services/
     ingestion/     SDK event ingestion + IP enrichment
     lake/          Data lake API (Bronze/Silver/Gold + audit + rollback)

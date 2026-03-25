@@ -719,6 +719,91 @@ All intelligence outputs are sourced from persisted lake data, graph relationshi
 
 ---
 
+### Web3 Coverage Service (v8.7.0)
+
+Registry-first Web3 intelligence system with canonical chain/protocol/app/domain/token registries, contract classification, migration tracking, and graph-native coverage spine.
+
+**Chain Registry**
+
+| Method | Path | Description |
+|--------|------|-------------|
+| `POST` | `/v1/web3/chains` | Register a chain |
+| `GET` | `/v1/web3/chains` | List chains (filter: `vm_family`) |
+| `GET` | `/v1/web3/chains/{chain_id}` | Get chain details |
+
+**Protocol Registry**
+
+| Method | Path | Description |
+|--------|------|-------------|
+| `POST` | `/v1/web3/protocols` | Register a protocol |
+| `GET` | `/v1/web3/protocols` | List protocols (filter: `family`, `chain`, search: `q`) |
+| `GET` | `/v1/web3/protocols/{protocol_id}` | Get protocol details |
+
+**Contract Registry**
+
+| Method | Path | Description |
+|--------|------|-------------|
+| `POST` | `/v1/web3/contracts` | Register a contract instance |
+| `GET` | `/v1/web3/contracts/{chain_id}/{address}` | Get contract details |
+| `GET` | `/v1/web3/contracts/unclassified` | List unclassified contracts |
+| `POST` | `/v1/web3/contracts/{chain_id}/{address}/reclassify` | Reclassify a contract |
+
+**Token Registry**
+
+| Method | Path | Description |
+|--------|------|-------------|
+| `POST` | `/v1/web3/tokens` | Register a token |
+| `GET` | `/v1/web3/tokens` | List tokens (filter: `chain_id`, `stablecoins`) |
+
+**App / Domain Registry**
+
+| Method | Path | Description |
+|--------|------|-------------|
+| `POST` | `/v1/web3/apps` | Register an app/dApp |
+| `GET` | `/v1/web3/apps` | List apps |
+| `POST` | `/v1/web3/domains` | Register a frontend domain |
+| `GET` | `/v1/web3/domains/{domain}` | Get domain attribution |
+
+**Governance Registry**
+
+| Method | Path | Description |
+|--------|------|-------------|
+| `POST` | `/v1/web3/governance/spaces` | Register a governance space |
+| `GET` | `/v1/web3/governance/spaces` | List governance spaces |
+
+**Classification**
+
+| Method | Path | Description |
+|--------|------|-------------|
+| `POST` | `/v1/web3/classify/contract` | Classify a contract address |
+| `POST` | `/v1/web3/classify/method` | Map method selector to canonical action |
+| `POST` | `/v1/web3/classify/domain` | Attribute a frontend domain |
+| `POST` | `/v1/web3/classify/observation` | Classify a full Web3 observation |
+
+**Observation Ingestion**
+
+| Method | Path | Description |
+|--------|------|-------------|
+| `POST` | `/v1/web3/observations/batch` | Bulk ingest Web3 observations (up to 500/batch) |
+
+**Migration Tracking**
+
+| Method | Path | Description |
+|--------|------|-------------|
+| `POST` | `/v1/web3/migrations` | Record a protocol migration |
+| `GET` | `/v1/web3/migrations/{protocol_id}` | List migrations for a protocol |
+| `POST` | `/v1/web3/migrations/detect` | Detect if a new contract is a migration |
+
+**Coverage & Administration**
+
+| Method | Path | Description |
+|--------|------|-------------|
+| `GET` | `/v1/web3/coverage/status` | Aggregated coverage status across all registries |
+| `GET` | `/v1/web3/coverage/health` | Quick health check (seeded/unseeded) |
+| `POST` | `/v1/web3/seed` | Seed registries with initial data (admin) |
+
+---
+
 ## Error Responses
 
 All endpoints return standard error format:
