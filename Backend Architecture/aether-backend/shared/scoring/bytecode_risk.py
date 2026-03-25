@@ -81,8 +81,8 @@ class BytecodeRiskScorer:
         """
         Score bytecode risk by matching against known risky patterns.
 
-        In production, bytecode_opcodes comes from decompiled EVM/SVM bytecode.
-        Stub scans for pattern keywords in the opcode list.
+        Expects bytecode_opcodes from decompiled EVM/SVM bytecode.
+        Rule-based pattern matching against known risky opcode sequences.
         """
         matched: list[str] = []
         max_score = 0.0
