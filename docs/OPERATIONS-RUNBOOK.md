@@ -1,6 +1,54 @@
-# Operations Runbook v8.7.0
+# Operations Runbook v9.0.0
 
 Operations guide for the Aether backend services.
+
+## Extraction Defense Mesh Operations
+
+### Enabling the Mesh
+
+Set `ENABLE_EXTRACTION_MESH=true` in environment. The mesh requires Redis for distributed budget enforcement in staging/production. In local mode, it falls back to in-memory counters.
+
+### Monitoring
+
+- **Dashboard**: `GET /v1/intelligence/extraction/overview` — system-wide overview
+- **Alerts**: `GET /v1/intelligence/extraction/alerts` — recent extraction alerts
+- **Actor profiles**: `GET /v1/intelligence/extraction/actor/{id}` — per-actor risk
+- **ML Serving**: `GET /v1/defense/metrics` — defense layer metrics
+
+### Alert Response
+
+| Alert | Action |
+|-------|--------|
+| Red band spike | Check `/v1/intelligence/extraction/alerts` for affected actors. Consider adding to blocklist. |
+| High block rate (>30%) | Verify thresholds aren't too aggressive. Check for false positives. |
+| Canary hit | Investigate the API key. Check lineage records for extraction patterns. |
+| Cluster escalation | Review linked identities in `/v1/intelligence/extraction/clusters`. |
+
+### Tuning
+
+- Budget limits are in `shared/rate_limit/budget_policies.py`
+- Signal weights are in `shared/scoring/extraction_score.py`
+- Band thresholds are in `shared/scoring/extraction_models.py`
+- Privileged callers: `EXTRACTION_PRIVILEGED_TENANTS`, `EXTRACTION_PRIVILEGED_API_KEYS`
+
+### Redis Key Schema
+
+All extraction mesh keys use prefix `aether:exbudget:`:
+- `aether:exbudget:{axis}:{id}:{window}:{bucket}` — budget counters
+- `aether:exbudget:fp:{axis}:{id}` — feature fingerprint HLL
+- `aether:exbudget:models:{axis}:{id}` — model enumeration sets
+- `aether:exhist:{actor_key}` — actor request history (2h TTL)
+
+### Failure Modes
+
+| Component | Failure | Behavior | Recovery |
+|-----------|---------|----------|----------|
+| Redis | Unreachable | Falls back to in-memory budgets | Auto-reconnect on next request |
+| Budget engine | Timeout | Request allowed (fail-open) | Redis recovery |
+| Expectation engine | Error | Signals empty, score defaults green | Automatic |
+| Policy engine | Error | Default allow policy | Automatic |
+
+---
 
 > **Infrastructure status:** All infrastructure backends are production-implemented: PostgreSQL (asyncpg) for repositories, Redis (redis.asyncio) for cache and rate limiting, Neptune (gremlinpython) for graph, Kafka (aiokafka) for events, Prometheus for metrics. In local development (`AETHER_ENV=local`), the system falls back to in-memory backends automatically. In staging/production, real backends are required — missing connections produce a `RuntimeError` at startup (fail-closed). See `PRODUCTION-READINESS.md` for the full deployment checklist.
 

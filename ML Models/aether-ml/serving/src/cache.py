@@ -395,3 +395,111 @@ class CacheKeyBuilder:
     @staticmethod
     def invalidation_pattern(model_name: str, prefix: str = 'aether:pred:') -> str:
         return f"{prefix}{model_name}:*"
+
+
+# =============================================================================
+# NEAR-DUPLICATE DETECTOR (Extraction Defense Mesh)
+# =============================================================================
+
+
+class NearDuplicateDetector:
+    """
+    Tracks request feature locality signatures to detect near-duplicate
+    queries indicative of extraction attempts (feature sweeps, boundary
+    probing, systematic exploration).
+
+    Maintains a sliding window of recent feature hashes per API key and
+    computes similarity metrics consumed by the extraction expectation engine.
+    """
+
+    def __init__(self, window_size: int = 200) -> None:
+        self._window_size = window_size
+        self._per_key_hashes: dict[str, list[str]] = {}
+        self._per_key_timestamps: dict[str, list[float]] = {}
+
+    def record(self, api_key: str, features: dict[str, Any]) -> dict[str, Any]:
+        """
+        Record a request and return near-duplicate analysis.
+
+        Returns:
+            Dict with duplicate_ratio, unique_ratio, locality_score,
+            and request_count for the current window.
+        """
+        import time as _time
+
+        feature_hash = self._hash_features(features)
+        now = _time.time()
+
+        if api_key not in self._per_key_hashes:
+            self._per_key_hashes[api_key] = []
+            self._per_key_timestamps[api_key] = []
+
+        hashes = self._per_key_hashes[api_key]
+        timestamps = self._per_key_timestamps[api_key]
+
+        hashes.append(feature_hash)
+        timestamps.append(now)
+
+        # Trim to window
+        if len(hashes) > self._window_size:
+            hashes[:] = hashes[-self._window_size:]
+            timestamps[:] = timestamps[-self._window_size:]
+
+        # Compute metrics
+        total = len(hashes)
+        unique = len(set(hashes))
+        duplicates = total - unique
+
+        return {
+            "duplicate_ratio": duplicates / max(total, 1),
+            "unique_ratio": unique / max(total, 1),
+            "request_count": total,
+            "feature_hash": feature_hash,
+        }
+
+    def get_locality_score(self, api_key: str) -> float:
+        """
+        Compute feature-space locality score for an API key.
+
+        Higher score (closer to 1.0) means queries are clustered in
+        a small region of feature space (potential boundary probing).
+        Lower score means queries are spread across the feature space
+        (potential coverage sweep).
+        """
+        hashes = self._per_key_hashes.get(api_key, [])
+        if len(hashes) < 5:
+            return 0.0
+
+        # Use hash prefix clustering as a proxy for feature-space locality
+        prefixes = [h[:4] for h in hashes[-50:]]
+        unique_prefixes = len(set(prefixes))
+        total = len(prefixes)
+
+        # Low unique prefix ratio = high locality (clustered)
+        # High unique prefix ratio = low locality (spread out)
+        return 1.0 - (unique_prefixes / max(total, 1))
+
+    def cleanup_expired(self, max_age_seconds: float = 600.0) -> int:
+        """Remove entries older than max_age_seconds."""
+        import time as _time
+        now = _time.time()
+        removed = 0
+
+        keys_to_remove = []
+        for api_key, timestamps in self._per_key_timestamps.items():
+            if timestamps and (now - timestamps[-1]) > max_age_seconds:
+                keys_to_remove.append(api_key)
+
+        for key in keys_to_remove:
+            del self._per_key_hashes[key]
+            del self._per_key_timestamps[key]
+            removed += 1
+
+        return removed
+
+    @staticmethod
+    def _hash_features(features: dict[str, Any]) -> str:
+        """Deterministic hash of feature dict."""
+        sorted_items = sorted(features.items(), key=lambda kv: kv[0])
+        raw = "|".join(f"{k}={_round_value(v)}" for k, v in sorted_items)
+        return hashlib.md5(raw.encode()).hexdigest()[:12]

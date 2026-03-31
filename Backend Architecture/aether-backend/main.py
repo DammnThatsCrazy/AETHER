@@ -137,6 +137,7 @@ from services.diagnostics.routes import router as diagnostics_router
 from services.providers.routes import router as providers_router
 from services.lake.routes import router as lake_router
 from services.intelligence.routes import router as intelligence_router
+from services.intelligence.extraction_intel import router as extraction_intel_router
 from services.profile.routes import router as profile_router
 from services.population.routes import router as population_router
 from services.expectations.routes import router as expectations_router
@@ -237,6 +238,7 @@ def create_app() -> FastAPI:
     app.include_router(providers_router)
     app.include_router(lake_router)
     app.include_router(intelligence_router)
+    app.include_router(extraction_intel_router)
     app.include_router(profile_router)
     app.include_router(population_router)
     app.include_router(expectations_router)

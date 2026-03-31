@@ -527,3 +527,133 @@ class MonitoringPipeline:
             f"{total_alerts} alerts raised"
         )
         return summary
+
+
+# =============================================================================
+# EXTRACTION DEFENSE MONITOR
+# =============================================================================
+
+
+class ExtractionDefenseMonitor:
+    """
+    Monitors extraction defense mesh health and effectiveness.
+
+    Extends the monitoring pipeline with:
+    - Query behavior drift (normal vs extraction-like patterns)
+    - Extraction signal histograms
+    - Policy action rates
+    - Batch misuse trends
+    - Cluster-level anomaly metrics
+    """
+
+    def __init__(self) -> None:
+        self._signal_history: list[dict[str, Any]] = []
+        self._policy_actions: dict[str, int] = {}
+        self._batch_requests: list[dict[str, Any]] = []
+        self._blocked_count: int = 0
+        self._total_count: int = 0
+
+    def record_extraction_event(
+        self,
+        risk_score: float,
+        band: str,
+        signals: list[dict[str, Any]],
+        policy_action: str,
+        model_name: str = "",
+        is_batch: bool = False,
+    ) -> None:
+        """Record an extraction defense event for monitoring."""
+        self._total_count += 1
+        self._policy_actions[policy_action] = self._policy_actions.get(policy_action, 0) + 1
+
+        if policy_action in ("deny", "restrict"):
+            self._blocked_count += 1
+
+        self._signal_history.append({
+            "risk_score": risk_score,
+            "band": band,
+            "signal_count": len(signals),
+            "policy_action": policy_action,
+            "model_name": model_name,
+            "timestamp": datetime.utcnow().isoformat(),
+        })
+
+        if is_batch:
+            self._batch_requests.append({
+                "model_name": model_name,
+                "policy_action": policy_action,
+                "timestamp": datetime.utcnow().isoformat(),
+            })
+
+        # Trim history
+        if len(self._signal_history) > 10000:
+            self._signal_history = self._signal_history[-5000:]
+        if len(self._batch_requests) > 1000:
+            self._batch_requests = self._batch_requests[-500:]
+
+    def get_summary(self) -> dict[str, Any]:
+        """Return extraction defense monitoring summary."""
+        recent = self._signal_history[-1000:]
+
+        band_distribution: dict[str, int] = {}
+        signal_counts: dict[str, int] = {}
+        for entry in recent:
+            band = entry.get("band", "unknown")
+            band_distribution[band] = band_distribution.get(band, 0) + 1
+
+        avg_risk = (
+            sum(e["risk_score"] for e in recent) / len(recent) if recent else 0.0
+        )
+
+        return {
+            "total_requests": self._total_count,
+            "blocked_requests": self._blocked_count,
+            "block_rate_pct": round(
+                self._blocked_count / max(self._total_count, 1) * 100, 2
+            ),
+            "policy_actions": dict(self._policy_actions),
+            "band_distribution": band_distribution,
+            "avg_risk_score": round(avg_risk, 2),
+            "batch_requests": len(self._batch_requests),
+            "recent_events": len(recent),
+        }
+
+    def check_anomalies(self) -> list[dict[str, Any]]:
+        """Check for extraction defense anomalies."""
+        alerts: list[dict[str, Any]] = []
+        recent = self._signal_history[-100:]
+
+        if not recent:
+            return alerts
+
+        # High block rate alert
+        recent_blocks = sum(
+            1 for e in recent if e.get("policy_action") in ("deny", "restrict")
+        )
+        block_rate = recent_blocks / len(recent)
+        if block_rate > 0.3:
+            alerts.append({
+                "type": "high_block_rate",
+                "value": round(block_rate * 100, 1),
+                "message": f"Block rate {block_rate:.0%} in last {len(recent)} requests",
+            })
+
+        # High average risk alert
+        avg_risk = sum(e["risk_score"] for e in recent) / len(recent)
+        if avg_risk > 40:
+            alerts.append({
+                "type": "elevated_risk",
+                "value": round(avg_risk, 1),
+                "message": f"Average risk score {avg_risk:.1f} in last {len(recent)} requests",
+            })
+
+        # Red band spike
+        red_count = sum(1 for e in recent if e.get("band") == "red")
+        if red_count > 5:
+            alerts.append({
+                "type": "red_band_spike",
+                "value": red_count,
+                "message": f"{red_count} red-band events in last {len(recent)} requests",
+            })
+
+        return alerts

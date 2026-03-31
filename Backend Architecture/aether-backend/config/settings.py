@@ -217,6 +217,37 @@ class ModelExtractionDefenseConfig:
     output_precision: int = _env_int("EXTRACTION_OUTPUT_PRECISION", 2)
 
 
+@dataclass(frozen=True)
+class ExtractionMeshConfig:
+    """Extraction Defense Mesh — distributed multi-identity defense layer."""
+    enabled: bool = _env_bool("ENABLE_EXTRACTION_MESH", False)
+    # Budget engine
+    budget_engine_enabled: bool = _env_bool("EXTRACTION_BUDGET_ENABLED", True)
+    # Expectation engine
+    expectation_engine_enabled: bool = _env_bool("EXTRACTION_EXPECTATION_ENABLED", True)
+    # Policy engine
+    policy_engine_enabled: bool = _env_bool("EXTRACTION_POLICY_ENABLED", True)
+    # Attribution / canary
+    attribution_enabled: bool = _env_bool("EXTRACTION_ATTRIBUTION_ENABLED", True)
+    canary_secret_seed: str = _env("EXTRACTION_CANARY_SEED", "aether-mesh-canary-seed")
+    # Telemetry
+    telemetry_enabled: bool = _env_bool("EXTRACTION_TELEMETRY_ENABLED", True)
+    # Privileged callers (comma-separated tenant IDs)
+    privileged_tenants: list[str] = field(default_factory=lambda: _env_list(
+        "EXTRACTION_PRIVILEGED_TENANTS", ""
+    ))
+    privileged_api_keys: list[str] = field(default_factory=lambda: _env_list(
+        "EXTRACTION_PRIVILEGED_API_KEYS", ""
+    ))
+    # Batch restriction
+    batch_internal_only: bool = _env_bool("EXTRACTION_BATCH_INTERNAL_ONLY", True)
+    # Disclosure defaults
+    default_output_precision: int = _env_int("EXTRACTION_OUTPUT_PRECISION", 2)
+    # Alerting thresholds
+    alert_on_orange: bool = _env_bool("EXTRACTION_ALERT_ON_ORANGE", True)
+    alert_on_red: bool = _env_bool("EXTRACTION_ALERT_ON_RED", True)
+
+
 # ---------------------------------------------------------------------------
 # Master settings
 # ---------------------------------------------------------------------------
@@ -249,6 +280,11 @@ class Settings:
     # Model Extraction Defense
     extraction_defense: ModelExtractionDefenseConfig = field(
         default_factory=ModelExtractionDefenseConfig,
+    )
+
+    # Extraction Defense Mesh
+    extraction_mesh: ExtractionMeshConfig = field(
+        default_factory=ExtractionMeshConfig,
     )
 
     def __post_init__(self):

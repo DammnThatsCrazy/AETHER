@@ -114,6 +114,16 @@ class Topic(str, Enum):
     # Intelligence Graph — x402 Payments (L3b)
     X402_PAYMENT_CAPTURED = "aether.x402.payment.captured"
 
+    # Extraction Defense Mesh
+    ML_EXTRACTION_REQUEST_SEEN = "aether.extraction.request.seen"
+    ML_EXTRACTION_IDENTITY_RESOLVED = "aether.extraction.identity.resolved"
+    ML_EXTRACTION_SIGNAL_COMPUTED = "aether.extraction.signal.computed"
+    ML_EXTRACTION_SCORE_UPDATED = "aether.extraction.score.updated"
+    ML_EXTRACTION_POLICY_APPLIED = "aether.extraction.policy.applied"
+    ML_EXTRACTION_CANARY_HIT = "aether.extraction.canary.hit"
+    ML_EXTRACTION_ALERT_OPENED = "aether.extraction.alert.opened"
+    ML_EXTRACTION_CLUSTER_ESCALATED = "aether.extraction.cluster.escalated"
+
     # Dead letter
     DEAD_LETTER = "aether.dlq"
 

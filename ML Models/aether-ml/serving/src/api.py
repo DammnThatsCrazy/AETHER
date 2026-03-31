@@ -703,11 +703,23 @@ async def extraction_defense_middleware(request: Request, call_next):
 
 
 def _apply_output_defense(request: Request, value: float, features: dict) -> float:
-    """Apply extraction defense perturbation + watermark to a scalar output.
+    """Apply extraction mesh disclosure control + legacy defense to a scalar output.
 
-    Returns the original value unchanged when the defense layer is disabled
-    or unavailable, so callers need no conditional logic.
+    Applies in order:
+    1. Extraction Mesh disclosure policy (rounding, bucketing, suppression)
+    2. Legacy defense perturbation + watermark (if enabled)
+
+    Returns the original value unchanged when no defense layer is active.
     """
+    # ── Extraction Mesh disclosure control (no perturbation) ─────────
+    disclosure = getattr(request.state, "extraction_disclosure", None)
+    if disclosure is not None:
+        value = disclosure.apply_confidence(value)
+        # If hidden, return sentinel (caller should omit the field)
+        if value == -1.0:
+            return 0.0  # Safe fallback for hidden mode
+
+    # ── Legacy defense (perturbation + watermark) ────────────────────
     defense = _get_defense_layer()
     if defense is None:
         return value
@@ -1031,13 +1043,43 @@ async def predict_attribution(req: AttributionRequest, request: Request) -> Attr
 async def batch_predict(req: BatchPredictionRequest, request: Request) -> BatchPredictionResponse:
     """Run batch prediction for any loaded model.
 
-    Accepts a list of feature dictionaries and returns predictions for all
-    instances in a single response.  Intended for moderate-size batches
-    (up to ~1 000 instances); for larger workloads use the offline
-    ``BatchPredictor``.
+    INTERNAL / PRIVILEGED ONLY. Non-privileged callers receive 403.
+    Enforces maximum batch rows by trust level and logs request coverage
+    statistics. For larger workloads use the offline ``BatchPredictor``.
     """
+    # ── Extraction Mesh: batch is internal-only ──────────────────────
+    disclosure = getattr(request.state, "extraction_disclosure", None)
+    if disclosure is not None and not disclosure.batch_allowed:
+        raise HTTPException(
+            status_code=403,
+            detail="Batch prediction is restricted to privileged callers",
+        )
+
+    # ── Batch privilege enforcement via header ───────────────────────
+    privileged_header = request.headers.get("X-Batch-Privilege", "")
+    is_privileged = privileged_header == "internal" or (
+        hasattr(request.state, "tenant")
+        and getattr(request.state.tenant, "role", None)
+        and request.state.tenant.role.value == "service"
+    )
+    if not is_privileged and os.getenv("EXTRACTION_BATCH_INTERNAL_ONLY", "true").lower() == "true":
+        raise HTTPException(
+            status_code=403,
+            detail="Batch prediction is restricted to internal/privileged callers",
+        )
+
     if not req.instances:
         raise HTTPException(status_code=400, detail="instances list must not be empty")
+
+    # ── Enforce max batch rows ───────────────────────────────────────
+    max_rows = 10000 if is_privileged else 0
+    if disclosure is not None:
+        max_rows = disclosure.max_batch_rows
+    if len(req.instances) > max_rows > 0:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Batch size {len(req.instances)} exceeds maximum {max_rows}",
+        )
 
     t0 = time.perf_counter()
     try:
@@ -1052,6 +1094,7 @@ async def batch_predict(req: BatchPredictionRequest, request: Request) -> BatchP
     risk_score = getattr(request.state, "extraction_risk", 0.0)
     api_key = request.headers.get("X-API-Key", "anon")
 
+    # ── Apply disclosure policy to batch results ─────────────────────
     results: list[dict[str, Any]] = []
     for idx, pred in enumerate(raw_predictions):
         if isinstance(pred, (np.integer,)):
@@ -1063,13 +1106,26 @@ async def batch_predict(req: BatchPredictionRequest, request: Request) -> BatchP
         else:
             value = pred
 
-        # Apply extraction defense to each prediction in the batch
+        # Apply disclosure control for privileged callers
+        if disclosure is not None and isinstance(value, (int, float)):
+            value = disclosure.apply_confidence(float(value))
+
+        # Apply legacy extraction defense
         if defense is not None and isinstance(value, (int, float, list)):
             features = req.instances[idx] if idx < len(req.instances) else {}
             post = defense.post_response(api_key, value, features, risk_score=risk_score)
             value = post.output
 
         results.append({"index": idx, "prediction": value})
+
+    # ── Log batch coverage statistics ────────────────────────────────
+    logger.info(
+        "Batch prediction: model=%s instances=%d privileged=%s api_key=%s",
+        req.model,
+        len(req.instances),
+        is_privileged,
+        api_key[:8] + "..." if api_key else "anon",
+    )
 
     latency_ms = (time.perf_counter() - t0) * 1000
     return BatchPredictionResponse(
