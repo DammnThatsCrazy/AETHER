@@ -1062,7 +1062,9 @@ async def batch_predict(req: BatchPredictionRequest, request: Request) -> BatchP
         and getattr(request.state.tenant, "role", None)
         and request.state.tenant.role.value == "service"
     )
-    if not is_privileged and os.getenv("EXTRACTION_BATCH_INTERNAL_ONLY", "true").lower() == "true":
+    # Only enforce batch restriction when extraction mesh is enabled
+    mesh_enabled = os.getenv("ENABLE_EXTRACTION_MESH", "false").lower() == "true"
+    if not is_privileged and mesh_enabled and os.getenv("EXTRACTION_BATCH_INTERNAL_ONLY", "true").lower() == "true":
         raise HTTPException(
             status_code=403,
             detail="Batch prediction is restricted to internal/privileged callers",
