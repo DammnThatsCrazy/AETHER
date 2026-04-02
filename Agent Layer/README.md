@@ -1,8 +1,164 @@
-# Aether Agent Layer v8.7.0
+# Aether Agent Layer vNext
 
-Autonomous discovery and enrichment workers for the Aether platform.
+Multi-controller internal autonomy architecture for the Aether platform.
 
-The Agent Layer deploys a pool of specialized workers that continuously discover, validate, and enrich entity data across web, social, on-chain, and API sources. An `AgentController` orchestrates the worker pool through a priority task queue, applying guardrails (rate limits, cost caps, PII detection, confidence gating, and a kill switch) to every execution. A feedback learning loop uses human review decisions to automatically tune confidence thresholds and worker priorities over time.
+The Agent Layer is the **warehouse operating system** for the internal intelligence graph — handling intake, routing, sorting, parsing, collecting, enriching, validating, staging, approving, committing, recovering, and briefing operators. This is for **internal team operations first**. It is not a user-facing assistant layer, not for graph clients, and may later be reduced and productized for external use.
+
+---
+
+## Architecture
+
+```
+  Governance Controller
+    |
+    +-- KIRA Controller (top orchestrator)
+         |
+         +-- Intake Controller .......... objective intake, dedupe, classification
+         +-- Discovery Controller ....... source-facing evidence collection
+         +-- Enrichment Controller ...... candidate fact generation, resolution
+         +-- Verification Controller .... evidence sufficiency, provenance, scoring
+         +-- Commit Controller .......... mutation staging, review batches, approval queue
+         +-- Recovery Controller ........ retry, fallback, rollback, checkpoint restore
+         +-- BOLT Controller ............ continuity, briefing, handoff, run history
+         +-- TRIGGER Controller ......... scheduling, wake engine, missed-fire handling
+         |
+         +-- LOOP (shared runtime behavior, NOT a controller)
+         +-- UNITS (optional identity + mascot layer)
+```
+
+### Design Principles
+
+- **Internal-first** — built for internal team operations, not end users
+- **Multi-controller hierarchy** — Governance > KIRA > Domain Controllers > Teams > Workers
+- **Durable objective runtime** — objectives, plans, and checkpoints persist across sessions
+- **Human approval required** — all graph mutations require staged review and human approval
+- **Aggressive LOOP** — continues useful work autonomously within policy and budget bounds
+- **CLI-first operations** — terminal dashboard and ASCII rendering as the primary surface
+- **UNITS optional** — identity/mascot layer is fully functional but never required
+
+---
+
+## Controller Set
+
+| Controller | Role |
+|------------|------|
+| **Governance** | Policy, budget ceilings, kill switch, audit invariants, conflict arbitration |
+| **KIRA** | Top orchestration: controller coordination, plan supervision, replan/escalate |
+| **Intake** | Objective intake, dedupe, normalization, severity classification |
+| **Discovery** | Source-facing evidence collection orchestration |
+| **Enrichment** | Candidate fact generation, entity resolution/reconciliation |
+| **Verification** | Evidence sufficiency, provenance, schema, consistency, quality scoring |
+| **Commit** | Staged mutations, review batches, approval queue, graph writes |
+| **Recovery** | Retry/fallback, compensation, rollback, stale objective repair |
+| **BOLT** | Continuity, checkpoints, briefing, handoff, run history, internal UI |
+| **TRIGGER** | Scheduling/wake engine, missed-fire handling, orphan cleanup |
+
+---
+
+## LOOP — Shared Runtime Behavior
+
+LOOP is **not a controller**. It is a runtime behavior shared across KIRA and domain controllers.
+
+LOOP is aggressive from day one:
+- Continues existing objectives
+- Reopens unresolved objectives
+- Creates low-risk maintenance objectives when policy allows
+- Revisits stale graph areas
+- Sleeps only when no productive next action exists
+
+LOOP stopping rules: policy ceiling, budget ceiling, awaiting human approval, unresolved conflict after allowed attempts, no productive next action, success criteria reached, diminishing value.
+
+---
+
+## BOLT — Continuity & Briefing
+
+BOLT is the continuity + briefing + internal operator signal runtime.
+
+BOLT owns: objective continuity across sessions, checkpoint records, brief records, operator summaries, handoff state, run history, session restore, internal feed/timeline, internal board/status generation.
+
+---
+
+## TRIGGER — Scheduling & Wake Engine
+
+TRIGGER is the unified scheduling + wake engine. Supports:
+- Cron/scheduled wakeups
+- Graph-state change wakeups
+- Provider/webhook wakeups
+- Queue/backlog condition wakeups
+- Stale-entity wakeups
+- Failed-objective retry wakeups
+- Operator/manual wakeups
+- Missed-fire handling and orphan cleanup
+
+---
+
+## UNITS — Optional Identity Layer
+
+UNITS is a fully real but fully optional identity + mascot layer.
+
+Modes:
+- **Pure work mode** — UNITS disabled, no identity rendering
+- **Identity-only mode** — unit IDs and designations active
+- **Identity + mascot presentation** — optional persona skins
+
+UNITS applies by default to controllers and teams. May optionally apply to objectives and workers.
+
+---
+
+## Commit / Approval Workflow
+
+**All graph mutations require human approval in vNext.**
+
+```
+  verify -> stage -> batch for review -> human approval -> commit -> done
+                                       \-> reject -> recover/defer
+```
+
+Mutation classification:
+| Class | Description | Review Grouping |
+|-------|-------------|-----------------|
+| 1 | Additive low-risk metadata | Grouped aggressively |
+| 2 | Enrichment updates to non-critical fields | Grouped aggressively |
+| 3 | Identity/merge/split/canonicalization | High visibility |
+| 4 | Destructive or rollback-sensitive | High visibility |
+| 5 | Policy-sensitive/high-impact | High visibility |
+
+---
+
+## Internal UI
+
+### CLI Dashboard
+
+```bash
+python -m agent_controller.cli dashboard    # Full ASCII dashboard
+python -m agent_controller.cli health       # Controller health JSON
+python -m agent_controller.cli objectives   # List objectives
+python -m agent_controller.cli review       # Pending review batches
+python -m agent_controller.cli timeline     # Recent events
+```
+
+Three required views:
+1. **Feed / Timeline** — objective events, checkpoints, briefs, review outcomes, alerts
+2. **Kanban / Objective Board** — open, blocked, awaiting review, sleeping, failed, completed
+3. **Controller Health Console** — controller status, queue depth, LOOP state, TRIGGER fires
+
+---
+
+## Data Models
+
+| Model | Description |
+|-------|-------------|
+| `Objective` | Top-level unit of agent work with goal, severity, policy scope, budget |
+| `Plan` | Ordered execution plan with steps assigned to controllers |
+| `PlanStep` | Single step within a plan with retry/compensation policies |
+| `EvidenceRecord` | Raw evidence captured during discovery |
+| `CandidateFact` | Derived fact pending verification |
+| `VerificationResult` | Outcome of verification checks |
+| `StagedMutation` | Proposed graph change awaiting review |
+| `ReviewBatch` | Grouped mutations for human review |
+| `CheckpointRecord` | Objective/plan progress snapshot |
+| `BriefRecord` | Operator-facing summary/alert |
+| `UnitIdentity` | UNITS identity record |
 
 ---
 
@@ -20,240 +176,13 @@ The Agent Layer deploys a pool of specialized workers that continuously discover
 
 ## Workers
 
-The layer ships with **10 workers** split across two categories.
+The layer preserves the existing **10 specialist workers** (5 discovery + 5 enrichment) as the execution fabric. Workers now operate under team-aware orchestration within domain controllers.
 
 ### Discovery Workers
-
-| Worker | Type Key | Description |
-|--------|----------|-------------|
-| **Web Crawler** | `web_crawler` | Targeted crawling of public pages related to tracked entities. Extracts metadata and entity mentions using BeautifulSoup4. |
-| **API Scanner** | `api_scanner` | Discovers and probes public REST / GraphQL / WebSocket endpoints. Extracts OpenAPI schemas and monitors for schema changes between scans. |
-| **Social Listener** | `social_listener` | Monitors Twitter/X, Reddit, and Discord for mentions of tracked entities. Includes per-mention sentiment extraction and spike detection. |
-| **Chain Monitor v2** | `chain_monitor_v2` | Watches wallet addresses and smart-contract events across 7 VM families (EVM, SVM, Bitcoin, MoveVM, NEAR, TVM, Cosmos). Detects large or unusual transactions and tracks DeFi positions across 150+ protocols. |
-| **Competitor Tracker** | `competitor_tracker` | Periodically crawls competitor homepages, pricing pages, and changelogs. Detects text diffs, extracts structured pricing data, and tracks hiring signals from job boards. |
+- Web Crawler, API Scanner, Social Listener, Chain Monitor v2 (7 VMs), Competitor Tracker
 
 ### Enrichment Workers
-
-| Worker | Type Key | Description |
-|--------|----------|-------------|
-| **Entity Resolver** | `entity_resolver` | Matches ambiguous entities across data sources using embedding similarity and LLM-hybrid confirmation strategies. |
-| **Profile Enricher** | `profile_enricher` | Aggregates firmographics, social profiles, funding data, and tech stack information into a canonical entity profile. Flags stale fields for re-enrichment. |
-| **Temporal Filler** | `temporal_filler` | Detects gaps in entity timelines and back-fills historical data points via interpolation or archival API queries. Assigns confidence based on source recency. |
-| **Semantic Tagger** | `semantic_tagger` | Assigns industry codes (SIC/NAICS), topic tags, and entity-type labels using rule-based or LLM classification aligned to a configurable ontology. |
-| **Quality Scorer** | `quality_scorer` | Evaluates entity record completeness, freshness, cross-field consistency, and source reliability. Writes a composite data-quality score (0--1) back to entity metadata. |
-
----
-
-## Architecture
-
-```
-                       +---------------------+
-                       |   AgentController    |
-                       |  (orchestrator)      |
-                       +----------+----------+
-                                  |
-           +----------------------+----------------------+
-           |                      |                      |
-   +-------v-------+    +--------v--------+    +--------v--------+
-   | Priority Queue |    |   Guardrails    |    | Feedback Loop   |
-   | (heapq / Celery|    | kill switch     |    | threshold tuner |
-   |  + Redis)      |    | rate limiter    |    | priority booster|
-   +-------+--------+    | cost monitor    |    +-----------------+
-           |              | PII detector    |
-           |              | confidence gate |
-           |              | audit logger    |
-           |              +-----------------+
-           v
-   +-------+--------+
-   | Worker Registry |
-   | (auto-discover) |
-   +-------+--------+
-           |
-     +-----+------+------+------+------ ... ------+
-     |            |       |      |                  |
-  +--v---+  +---v----+ +-v---+ +v---------+  +-----v------+
-  | Web  |  | API    | |Chain| |Social    |  | Quality    |
-  |Crawl-|  |Scanner | |Mon. | |Listener  |  | Scorer     |
-  |er    |  |        | |v2   | |          |  |            |
-  +------+  +--------+ |7 VMs| +----------+  +------------+
-                        +-----+
-```
-
-### Task Lifecycle
-
-```
-PENDING --> QUEUED --> RUNNING --> COMPLETED
-                          |            |
-                          |   conf < 0.7 --> HUMAN_REVIEW --> APPROVED / DISCARDED
-                          |   conf < 0.3 --> DISCARDED
-                          +-- error -------> FAILED
-```
-
-Every worker execution follows a five-step lifecycle managed by `BaseWorker.run()`:
-
-1. **Pre-checks** -- kill switch, rate limit, cost budget
-2. **Execute** -- worker-specific logic (`_execute`)
-3. **PII scan** -- flag any PII detected in result data
-4. **Post-checks** -- confidence gating (accept / human_review / discard)
-5. **Audit log** -- full provenance record for every action
-
----
-
-## Features
-
-- **Priority task queue** -- In-memory `heapq` for development; Celery + Redis with dedicated `discovery`, `enrichment`, and `default` queues in production.
-- **Auto-discovery registry** -- Workers are discovered at startup by walking the `workers/discovery/` and `workers/enrichment/` sub-packages. No manual registration needed.
-- **Entity resolution** -- LLM-hybrid matching strategy to deduplicate and link entities across sources.
-- **PII detection** -- Three-layer detection model: fast regex patterns, checksum validation (Luhn, SSN ranges), and optional spaCy NER for unstructured PII (names, addresses, dates of birth). Includes `scan()`, `contains_pii()`, and `redact()` methods.
-- **Guardrails** -- Kill switch, per-source sliding-window rate limiter, cost budget monitor, confidence gate, and immutable audit trail.
-- **Feedback learning loop** -- Human review decisions feed an EMA-based threshold tuner and a priority booster. Workers with high approval rates are automatically promoted; unreliable workers are deprioritized.
-- **Scheduling hooks** -- Built-in support for cron-triggered and event-driven task submission, integrable with Celery Beat or APScheduler.
-
----
-
-## Installation
-
-```bash
-# Clone the repository
-git clone <repo-url>
-cd "Agent Layer"
-
-# Core (no optional dependencies)
-pip install .
-
-# With Celery queue backend
-pip install ".[celery]"
-
-# With spaCy NER for PII detection
-pip install ".[ner]"
-python -m spacy download en_core_web_sm
-
-# Full production stack (Celery + spaCy + httpx + BeautifulSoup4)
-pip install ".[all]"
-python -m spacy download en_core_web_sm
-
-# Development / testing
-pip install ".[dev]"
-```
-
----
-
-## Quick Start
-
-### In-memory mode (no Redis required)
-
-```bash
-python main.py
-```
-
-This runs the full demo: registers all 10 workers, submits discovery and enrichment tasks, drains the queue, demonstrates the feedback loop, PII detection, the kill switch, and prints the audit trail.
-
-### Production mode (Celery + Redis)
-
-```bash
-# 1. Start Redis
-redis-server
-
-# 2. Start Celery workers (discovery + enrichment + default queues)
-celery -A queue.celery_app worker -l info -Q discovery,enrichment,default
-
-# 3. (Optional) Start the beat scheduler for cron tasks
-celery -A queue.celery_app beat -l info
-
-# 4. Submit tasks via the controller
-python -c "
-from config.settings import AgentLayerSettings, WorkerType, TaskPriority
-from models.core import AgentTask
-from agent_controller.controller import AgentController
-from workers.registry import discover_workers
-
-settings = AgentLayerSettings()
-controller = AgentController(settings)
-controller.register_workers(discover_workers(controller.guardrails))
-
-task_id = controller.submit_task(AgentTask(
-    worker_type=WorkerType.WEB_CRAWLER,
-    priority=TaskPriority.HIGH,
-    payload={'target_url': 'https://example.com', 'entity_id': 'company_001'},
-))
-print(f'Submitted: {task_id}')
-"
-```
-
----
-
-## Configuration Reference
-
-All configuration lives in `config/settings.py` as dataclasses with sensible defaults.
-
-### `AgentLayerSettings` (top-level)
-
-| Field | Type | Default | Description |
-|-------|------|---------|-------------|
-| `controller` | `ControllerConfig` | see below | Queue broker and worker pool settings |
-| `confidence` | `ConfidenceThresholds` | `auto_accept=0.7, discard=0.3` | Confidence gating thresholds |
-| `cost_controls` | `CostControls` | `$5/hr, $50/day` | Spend budget caps |
-| `rate_limits` | `list[RateLimitBudget]` | per-source defaults | Per-source call budgets |
-| `worker_pools` | `list[WorkerPoolConfig]` | one pool per WorkerType | Autoscale and retry settings |
-| `kill_switch_enabled` | `bool` | `False` | Emergency halt for all workers |
-
-### `ControllerConfig`
-
-| Field | Type | Default | Description |
-|-------|------|---------|-------------|
-| `task_queue_broker` | `str` | `redis://localhost:6379/0` | Celery broker URL |
-| `result_backend` | `str` | `redis://localhost:6379/1` | Celery result backend URL |
-| `max_concurrent_workers` | `int` | `20` | Maximum worker concurrency |
-| `scheduler_interval_seconds` | `int` | `60` | Scheduled task polling interval |
-| `feedback_learning_enabled` | `bool` | `True` | Enable/disable the feedback loop |
-
-### `ConfidenceThresholds`
-
-| Field | Type | Default | Description |
-|-------|------|---------|-------------|
-| `auto_accept` | `float` | `0.70` | Results at or above this confidence are accepted automatically |
-| `discard` | `float` | `0.30` | Results below this confidence are discarded |
-
-Results between `discard` and `auto_accept` are routed to human review.
-
-### `WorkerPoolConfig`
-
-| Field | Type | Default | Description |
-|-------|------|---------|-------------|
-| `worker_type` | `WorkerType` | -- | Which worker type this pool serves |
-| `min_instances` | `int` | `1` | Minimum number of worker instances |
-| `max_instances` | `int` | `10` | Maximum number of worker instances |
-| `autoscale_queue_threshold` | `int` | `50` | Scale up when queue depth exceeds this |
-| `timeout_seconds` | `int` | `300` | Per-task execution timeout |
-| `retry_max` | `int` | `3` | Maximum retry attempts |
-| `retry_backoff_seconds` | `int` | `30` | Backoff between retries |
-
-### `RateLimitBudget`
-
-| Field | Type | Default | Description |
-|-------|------|---------|-------------|
-| `source` | `str` | -- | Source key (e.g. `"etherscan"`, `"twitter_x"`) |
-| `max_calls_per_minute` | `int` | `60` | Sliding-window per-minute cap |
-| `max_calls_per_hour` | `int` | `1000` | Sliding-window per-hour cap |
-| `max_calls_per_day` | `int` | `10000` | Sliding-window per-day cap |
-
-### `TaskPriority`
-
-| Value | Name | Description |
-|-------|------|-------------|
-| `0` | `CRITICAL` | Immediate execution |
-| `1` | `HIGH` | Time-sensitive discovery |
-| `2` | `MEDIUM` | Standard enrichment |
-| `3` | `LOW` | Background enrichment |
-| `4` | `BACKGROUND` | Deferred quality checks |
-
-### Environment Variables
-
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `CELERY_BROKER_URL` | `redis://localhost:6379/0` | Override the Celery broker URL |
-| `CELERY_RESULT_BACKEND` | `redis://localhost:6379/1` | Override the Celery result backend URL |
-| `CELERY_CONCURRENCY` | `8` | Number of concurrent Celery worker threads |
+- Entity Resolver, Profile Enricher, Temporal Filler, Semantic Tagger, Quality Scorer
 
 ---
 
@@ -261,91 +190,100 @@ Results between `discard` and `auto_accept` are routed to human review.
 
 ```
 Agent Layer/
-├── main.py                          # Full demo entry point
-├── pyproject.toml                   # Package metadata and dependencies
+├── main.py                                # Demo entry point
+├── pyproject.toml                         # Package metadata
 ├── agent_controller/
-│   └── controller.py                # AgentController orchestrator
-├── config/
-│   └── settings.py                  # All configuration dataclasses
+│   ├── controller.py                      # Legacy AgentController (preserved)
+│   ├── governance.py                      # Governance Controller
+│   ├── kira.py                            # KIRA Controller
+│   ├── hub.py                             # Controller Hub (assembly)
+│   ├── cli.py                             # CLI interface
+│   ├── dashboard.py                       # ASCII dashboard rendering
+│   ├── controllers/
+│   │   ├── intake.py                      # Intake Controller
+│   │   ├── discovery.py                   # Discovery Controller
+│   │   ├── enrichment.py                  # Enrichment Controller
+│   │   ├── verification.py                # Verification Controller
+│   │   ├── commit.py                      # Commit Controller
+│   │   ├── recovery.py                    # Recovery Controller
+│   │   ├── bolt.py                        # BOLT Controller
+│   │   └── trigger.py                     # TRIGGER Controller
+│   ├── runtime/
+│   │   ├── objective_runtime.py           # Objective lifecycle management
+│   │   ├── loop_runtime.py                # LOOP shared behavior
+│   │   ├── checkpointing.py              # Checkpoint store
+│   │   ├── briefing.py                    # Brief records
+│   │   ├── review_batching.py            # Review batch builder
+│   │   └── unit_identity.py              # UNITS runtime integration
+│   └── planning/
+│       ├── objective_planner.py           # Plan generation
+│       ├── replanner.py                   # Replan on failure
+│       ├── routing_policy.py              # Step → controller routing
+│       └── stopping_policy.py             # LOOP stopping rules
 ├── models/
-│   └── core.py                      # AgentTask, TaskResult, AuditRecord, GraphEntity
+│   ├── core.py                            # AgentTask, TaskResult, AuditRecord
+│   ├── objectives.py                      # Objective, Plan, PlanStep
+│   ├── evidence.py                        # EvidenceRecord, CandidateFact, VerificationResult
+│   ├── mutations.py                       # StagedMutation, ReviewBatch
+│   └── units.py                           # UnitIdentity, UnitRegistry
+├── config/
+│   └── settings.py                        # Configuration dataclasses
 ├── guardrails/
-│   ├── guardrails.py                # Guardrails facade (kill switch, rate limiter, etc.)
-│   └── pii_model.py                 # Multi-layer PII detection model
+│   ├── guardrails.py                      # Guardrails facade (preserved)
+│   ├── pii_model.py                       # Multi-layer PII detection
+│   └── policy.py                          # Policy guardrails for controllers
 ├── feedback/
-│   └── learning.py                  # FeedbackLoop, ThresholdTuner, PriorityBooster
+│   └── learning.py                        # Feedback loop (preserved)
 ├── queue/
-│   ├── celery_app.py                # Celery application factory and configuration
-│   └── tasks.py                     # Celery task definitions and routing
-└── workers/
-    ├── base.py                      # BaseWorker abstract class
-    ├── registry.py                  # Auto-discovery and registration
-    ├── chain_monitor_v2.py              # Multi-chain monitor (7 VMs, 150+ DeFi protocols)
-    ├── discovery/
-    │   ├── web_crawler.py
-    │   ├── api_scanner.py
-    │   ├── social_listener.py
-    │   ├── chain_monitor.py             # Legacy EVM-only (superseded by chain_monitor_v2)
-    │   └── competitor_tracker.py
-    └── enrichment/
-        ├── entity_resolver.py
-        ├── profile_enricher.py
-        ├── temporal_filler.py
-        ├── semantic_tagger.py
-        └── quality_scorer.py
+│   ├── celery_app.py                      # Celery factory (preserved)
+│   ├── tasks.py                           # Celery task definitions (preserved)
+│   └── routing.py                         # Controller-aware queue routing
+├── workers/
+│   ├── base.py                            # BaseWorker (preserved)
+│   ├── registry.py                        # Auto-discovery (preserved)
+│   ├── chain_monitor_v2.py               # Multi-VM chain monitor
+│   └── teams/
+│       ├── discovery/                     # Discovery teams
+│       ├── enrichment/                    # Enrichment teams
+│       ├── verification/                  # Verification teams
+│       ├── recovery/                      # Recovery teams
+│       └── commit/                        # Commit support teams
+├── services/agent/
+│   ├── internal_ops.py                    # Internal operations service
+│   └── review_queue.py                    # Review queue service
+└── shared/
+    ├── graph/
+    │   ├── staging.py                     # Graph staging interface
+    │   └── conflicts.py                   # Conflict detection
+    └── events/
+        └── objective_events.py            # Internal event bus
 ```
 
 ---
 
-## Development
+## Repo Integration Boundaries
+
+The agent layer **owns**: ingest orchestration, source polling orchestration, entity discovery/reconciliation, enrichment orchestration, verification/scoring, mutation staging, commit approval workflows, recovery/rollback, stale-graph maintenance, operator briefing, internal UI state, policy/budget enforcement, objective/plan state, checkpointing, review batching, trigger routing, continuity/handoff state.
+
+The agent layer **does NOT own**: raw storage (PostgreSQL/Redis/S3/Neptune/Kafka), end-user graph product surfaces, tenant-facing assistant UX, generic provider adapter ownership, low-level lake CRUD, auth/tenancy/environment.
+
+---
+
+## Installation
 
 ```bash
-# Install dev dependencies
+# Core
+pip install .
+
+# With Celery queue backend
+pip install ".[celery]"
+
+# Full production stack
+pip install ".[all]"
+python -m spacy download en_core_web_sm
+
+# Development
 pip install ".[dev]"
-
-# Run tests
-pytest
-
-# Run tests with async support
-pytest --asyncio-mode=auto
-
-# Lint
-ruff check .
-
-# Format
-ruff format .
-
-# Type check
-mypy .
-```
-
-### Adding a New Worker
-
-1. Create a new module under `workers/discovery/` or `workers/enrichment/`.
-2. Subclass `BaseWorker` and set the `worker_type` and `data_source` class attributes.
-3. Implement the `_execute(task: AgentTask) -> TaskResult` method.
-4. Add the new type to `WorkerType` in `config/settings.py`.
-5. The registry will auto-discover the worker on the next startup.
-
-```python
-from config.settings import WorkerType
-from models.core import AgentTask, TaskResult
-from workers.base import BaseWorker
-
-
-class MyCustomWorker(BaseWorker):
-    worker_type = WorkerType.MY_CUSTOM_WORKER
-    data_source = "general_web"
-
-    def _execute(self, task: AgentTask) -> TaskResult:
-        # Your logic here
-        return TaskResult(
-            task_id=task.task_id,
-            worker_type=self.worker_type,
-            success=True,
-            confidence=0.85,
-            data={"key": "value"},
-        )
 ```
 
 ---

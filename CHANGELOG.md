@@ -6,6 +6,53 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ---
 
+## [vNext] — Unreleased
+
+### Added — Agent Layer: Multi-Controller Internal Autonomy Architecture
+- **Governance Controller** — top-level policy authority with budget ceilings, kill switch, audit invariants, conflict arbitration, and autonomy boundaries
+- **KIRA Controller** — top orchestration controller coordinating across all domain controllers with plan supervision, synthesis, and replan/escalation
+- **Intake Controller** — objective intake with dedupe, normalization, admission control, and severity classification
+- **Discovery Controller** — source-facing evidence collection orchestration with team routing and fallback
+- **Enrichment Controller** — candidate fact generation, entity resolution/reconciliation orchestration
+- **Verification Controller** — evidence sufficiency, provenance, schema, consistency, and quality scoring checks
+- **Commit Controller** — mutation staging, review batch building, internal approval queue, and graph write through explicit interfaces
+- **Recovery Controller** — retry/fallback, compensation, rollback orchestration, stale objective repair, checkpoint restoration
+- **BOLT Controller** — objective continuity across sessions, checkpoint records, brief records, operator summaries, handoff state, run history, session restore, internal feed/timeline
+- **TRIGGER Controller** — unified scheduling/wake engine with cron, graph-state, webhook, queue-condition, stale-entity, failed-retry, and manual wakeups; missed-fire handling; orphan cleanup
+- **LOOP runtime** — aggressive shared continuation behavior across KIRA and domain controllers with policy/budget/stopping enforcement
+- **UNITS identity layer** — fully functional but optional identity + mascot system for controllers, teams, and workers
+- **Durable objective runtime** — Objective, Plan, PlanStep lifecycle management replacing flat task-only model
+- **Evidence & verification pipeline** — EvidenceRecord, CandidateFact, VerificationResult data models
+- **Staged mutation review system** — StagedMutation, ReviewBatch with 5-class mutation classification; all classes require human approval
+- **Checkpointing & briefing** — CheckpointRecord, BriefRecord for continuity and operator communication
+- **CLI dashboard** — ASCII dashboard with Feed/Timeline, Kanban/Objective Board, and Controller Health Console views
+- **Internal Ops Service** — operator-facing service for objective submission, review management, and health monitoring
+- **Review Queue Service** — review workflow surface for human approval and commit coordination
+- **Graph staging interface** — explicit agent-layer interface for staging and committing approved mutations
+- **Internal event bus** — synchronous event channel for agent-layer events (objective, plan, step, mutation, trigger events)
+- **Policy guardrails** — controller-aware policy enforcement extending existing guardrails
+- **Controller Hub** — single assembly point wiring the full Governance > KIRA > Domain Controller hierarchy
+- **Worker teams** — bounded execution groups (discovery, enrichment, verification, recovery, commit) under domain controllers
+- **Queue routing** — controller-to-queue mapping for the multi-controller architecture
+
+### Changed
+- Agent Layer architecture: flat single-controller → multi-controller internal autonomy hierarchy
+- Task execution: task-only → objective + plan runtime with durable state
+- Routing: confidence-only → verification + staging + review batches
+- Scheduling: simple hooks → TRIGGER unified wake engine
+- Continuity: ad-hoc → BOLT checkpoint and briefing system
+- Worker pool: flat pool → controller + team-aware execution fabric
+- Internal UI: none → real CLI dashboard and ops console
+
+### Preserved
+- Queue backends (in-memory heapq for dev, Celery + Redis for production)
+- Worker lifecycle guardrails (kill switch, rate limiter, cost monitor, PII detector, confidence gate, audit logger)
+- Specialist workers (10 workers: 5 discovery + 5 enrichment) as the execution fabric
+- Feedback learning loop (EMA threshold tuner, priority booster)
+- Safety-first posture
+
+---
+
 ## [v8.7.0] — 2026-03-25
 
 ### Added

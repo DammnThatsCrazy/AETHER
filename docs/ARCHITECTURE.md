@@ -1,4 +1,4 @@
-# Aether v8.7.0 — Architecture Guide
+# Aether vNext — Architecture Guide
 
 ## Overview
 
@@ -443,3 +443,48 @@ All events — human and agent — flow through the existing Unified Pipeline vi
 ### Feature Flags
 
 All Intelligence Graph layers are **disabled by default** behind feature flags (`intelligence_graph.h2a.enabled`, `intelligence_graph.a2h.enabled`, `intelligence_graph.a2a.enabled`). See `docs/INTELLIGENCE-GRAPH.md` for the full specification, edge schemas, and rollout guide.
+
+---
+
+## Agent Layer — Multi-Controller Internal Autonomy Architecture
+
+The Agent Layer is the internal warehouse operating system for the intelligence graph. It handles intake, routing, discovery, enrichment, verification, staging, approval, commit, recovery, and operator briefing. This is for **internal team operations first** — not a user-facing assistant layer.
+
+### Controller Hierarchy
+
+```
+Governance Controller .............. policy, budget, kill switch, audit, arbitration
+  └── KIRA Controller .............. top orchestration, coordination, synthesis
+       ├── Intake Controller ....... objective intake, dedupe, classification
+       ├── Discovery Controller .... evidence collection, source polling
+       ├── Enrichment Controller ... fact generation, entity resolution
+       ├── Verification Controller . provenance, schema, quality scoring
+       ├── Commit Controller ....... mutation staging, review batches, approval
+       ├── Recovery Controller ..... retry, rollback, checkpoint restore
+       ├── BOLT Controller ......... continuity, briefing, handoff, run history
+       └── TRIGGER Controller ...... scheduling, wake engine, missed-fire handling
+```
+
+### Shared Runtime Behaviors
+
+- **LOOP** — Aggressive continuation behavior shared across KIRA and domain controllers. Continues objectives, revisits stale areas, creates maintenance work within policy bounds. Not a controller.
+- **UNITS** — Optional identity + mascot layer for controllers, teams, and workers. Fully functional but never required.
+
+### Commit / Approval Workflow
+
+All graph mutations require human approval in vNext. Mutations are classified (Class 1-5), staged, batched for review, and committed only after operator approval. High-risk mutations (Class 3-5) are surfaced with distinct visibility.
+
+### Internal UI
+
+CLI-first operational surface with three views:
+1. Feed / Timeline
+2. Kanban / Objective Board
+3. Controller Health Console
+
+### Repo Integration Boundaries
+
+The agent layer owns: ingest orchestration, discovery, enrichment, verification, mutation staging, commit approval, recovery, operator briefing, objective/plan state, checkpointing, review batching, trigger routing, continuity.
+
+The agent layer does NOT own: raw storage backends (PostgreSQL/Redis/S3/Neptune/Kafka), end-user graph surfaces, tenant-facing UX, provider adapters, lake CRUD, auth/tenancy.
+
+See `docs/AGENT-CONTROLLER.md` for the full specification and `Agent Layer/README.md` for implementation details.

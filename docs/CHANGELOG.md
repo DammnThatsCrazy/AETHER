@@ -1,5 +1,26 @@
 # Changelog
 
+## vNext — Agent Layer: Multi-Controller Internal Autonomy Architecture (Unreleased)
+
+### Architecture
+- Reworked agent layer from flat single-controller to multi-controller hierarchy: Governance > KIRA > Domain Controllers > Teams > Workers
+- 10 controllers: Governance, KIRA, Intake, Discovery, Enrichment, Verification, Commit, Recovery, BOLT, TRIGGER
+- LOOP: aggressive shared continuation runtime (not a controller) with policy/budget/stopping enforcement
+- UNITS: optional identity + mascot layer for controllers, teams, and workers
+- Durable objective runtime with Plan/PlanStep lifecycle
+- Staged mutation review system with 5-class classification — all mutations require human approval
+- BOLT: objective continuity, checkpointing, briefing, handoff, run history
+- TRIGGER: unified scheduling/wake engine with 7 trigger types, missed-fire handling, orphan cleanup
+- CLI dashboard: Feed/Timeline, Kanban/Objective Board, Controller Health Console
+- Internal event bus for agent-layer events
+- Graph staging interface for approved mutation commits
+- Controller Hub as single assembly/wiring point
+
+### Preserved
+- Queue backends (heapq + Celery/Redis), worker guardrails, specialist workers, feedback learning loop
+
+---
+
 ## v8.7.0 — Cross-Domain Intelligence, Web3 Coverage, Privacy Control Plane (2026-03-25)
 
 ### Web3 Coverage Service (NEW)
