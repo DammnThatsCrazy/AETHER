@@ -2,8 +2,8 @@
 // AETHER SDK — SESSION MANAGER
 // =============================================================================
 
-import type { Session, DeviceContext, CampaignContext } from '../types';
-import { generateId, now, storage, getDeviceContext, getCampaignContext } from '../utils';
+import type { Session, DeviceContext, CampaignContext } from './WebSDKTypes(CoreTypeDefinitions)';
+import { generateId, now, storage, getDeviceContext, getCampaignContext } from './SDKUtilityFunctions';
 
 const SESSION_KEY = 'session';
 const SESSION_TIMEOUT_MS = 30 * 60 * 1000; // 30 minutes

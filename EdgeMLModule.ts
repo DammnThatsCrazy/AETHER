@@ -3,7 +3,7 @@
 // Lightweight in-browser models for intent, bot detection, session scoring
 // =============================================================================
 
-import type { IntentVector, BotScore, BehaviorSignature, SessionScore } from '../types';
+import type { IntentVector, BotScore, BehaviorSignature, SessionScore } from './WebSDKTypes(CoreTypeDefinitions)';
 
 /** Behavioral signal accumulator for ML features */
 interface BehaviorAccumulator {

@@ -7,13 +7,13 @@
 
 ### Python/FastAPI Backend: FULLY IMPLEMENTED
 - **Entry:** `Backend Architecture/aether-backend/main.py`
-- **Services:** 22 routers (19 core + 3 feature-flagged Intelligence Graph)
-- **Endpoints:** 120+ with real implementations
+- **Services:** 31 routers (including core, Intelligence Graph, and Intelligence Layer services)
+- **Endpoints:** 246 with real implementations
 - **Status:** Production-grade with real backends (PostgreSQL, Redis, Kafka, Neptune)
 
-### Node/TypeScript Data Layer: PARTIAL
-- **Data Ingestion Layer** (`Data Ingestion Layer/`): TypeScript scaffolding only — types, config, utils, but no runnable ingestion service
-- **Data Lake Architecture** (`Data Lake Architecture/aether-Datalake-backend/`): Real ETL implementation — scheduler, Bronze→Silver→Gold pipelines, S3 integration
+### Node/TypeScript Data Layer: IMPLEMENTED
+- **Data Ingestion Layer** (`Data Ingestion Layer/`): Production sink implementations (Kafka via REST Proxy, ClickHouse via HTTP, S3 via HTTP PUT, Redis via RESP protocol) using Node.js built-in modules (node:http, node:net, node:zlib)
+- **Data Lake Architecture** (`Data Lake Architecture/aether-datalake-backend/`): Real ETL implementation — scheduler, Bronze→Silver→Gold pipelines, S3 integration
 
 ## B. Storage Reality
 
@@ -37,20 +37,20 @@
 - `POST /v1/ingest/events/batch` — batch up to 500 events
 - `POST /v1/ingest/feed` — external API feed
 
-### Provider Adapters (9 implemented)
-- QuickNode, Alchemy, Infura, Generic RPC (blockchain)
+### Provider Adapters (24 implemented)
+- QuickNode, Alchemy, Infura, Generic RPC (blockchain RPC)
 - Etherscan, Moralis (block explorer)
-- Twitter, Reddit (social)
-- Dune Analytics (analytics data)
-
-All use real httpx HTTP calls with health checks.
-
-### Missing Provider Paths (from docs)
+- Twitter/X, Reddit (social)
+- Dune Analytics (analytics)
 - DeFiLlama, CoinGecko, Binance, Coinbase (market data)
 - Polymarket, Kalshi (prediction markets)
-- Farcaster, Lens, GitHub (social/dev)
+- Farcaster, Lens Protocol (Web3 social)
+- ENS, GitHub (identity enrichment)
+- Snapshot (governance)
 - Chainalysis, Nansen (on-chain intelligence)
-- Massive, Databento (TradFi)
+- Massive, Databento (TradFi data)
+
+All use real httpx HTTP calls with health checks.
 
 ### ETL/Batch
 - Data Lake ETL scheduler: real TypeScript implementation
@@ -90,7 +90,7 @@ All use real httpx HTTP calls with health checks.
 ### Secrets: Generation script + rotation runbook
 
 ## What Was Preserved
-- All 22 FastAPI service routers
+- All 31 FastAPI service routers
 - All 11 ML model/scorer paths
 - Neptune graph with 4 relationship layers
 - All 9 provider adapters
@@ -112,7 +112,5 @@ All use real httpx HTTP calls with health checks.
 1. **ML model training artifacts** — requires mlflow + training data + compute
 2. **Cloud infrastructure** — requires AWS credentials for managed services
 3. **Production secrets** — requires secret manager deployment
-4. **Missing provider connectors** — DeFiLlama, CoinGecko, Binance, Coinbase, Polymarket, Kalshi, Farcaster, etc.
-5. **DynamoDB/OpenSearch/ClickHouse client code** — config exists but no implementation
-6. **Snowflake warehouse path** — not present in codebase
-7. **Node.js ingestion service** — scaffolding only, no runnable endpoints
+4. **DynamoDB/OpenSearch/ClickHouse client code** — config exists but no implementation
+5. **Snowflake warehouse path** — not present in codebase

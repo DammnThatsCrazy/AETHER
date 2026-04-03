@@ -2,8 +2,8 @@
 // AETHER SDK — CONSENT MODULE (GDPR / CCPA)
 // =============================================================================
 
-import type { ConsentState, ConsentConfig, ConsentBannerConfig, ConsentCallback } from '../types';
-import { storage, now } from '../utils';
+import type { ConsentState, ConsentConfig, ConsentBannerConfig, ConsentCallback } from './WebSDKTypes(CoreTypeDefinitions)';
+import { storage, now } from './SDKUtilityFunctions';
 
 const CONSENT_KEY = 'consent';
 

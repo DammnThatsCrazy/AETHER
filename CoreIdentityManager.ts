@@ -2,8 +2,8 @@
 // AETHER SDK — IDENTITY MANAGER
 // =============================================================================
 
-import type { Identity, IdentityData, UserTraits } from '../types';
-import { generateId, now, storage, cookies } from '../utils';
+import type { Identity, IdentityData, UserTraits } from './WebSDKTypes(CoreTypeDefinitions)';
+import { generateId, now, storage, cookies } from './SDKUtilityFunctions';
 
 const ANON_ID_KEY = 'anon_id';
 const IDENTITY_KEY = 'identity';

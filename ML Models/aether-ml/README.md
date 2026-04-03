@@ -1,6 +1,6 @@
 # Aether ML
 
-![Version](https://img.shields.io/badge/version-4.0.0-blue)
+![Version](https://img.shields.io/badge/version-8.7.0-blue)
 ![Python](https://img.shields.io/badge/python-%3E%3D3.10-brightgreen)
 ![PyTorch](https://img.shields.io/badge/PyTorch-2.2%2B-ee4c2c)
 ![TensorFlow](https://img.shields.io/badge/TensorFlow-2.15%2B-ff6f00)

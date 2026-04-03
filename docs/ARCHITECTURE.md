@@ -6,7 +6,7 @@ Aether is a **hybrid Python/FastAPI + Node/TypeScript** platform with three oper
 
 1. **SDK Plane** — Thin-client SDKs (Web, iOS, Android, React Native) collect raw events, fingerprints, wallet interactions, and session data. SDKs ship raw data to the backend.
 
-2. **Backend Plane** — Python/FastAPI with 32 service routers handling ingestion, identity, analytics, ML inference, graph, rewards, lake management, profile intelligence, population omniview, expectation engine, behavioral continuity, RWA intelligence, Web3 coverage, cross-domain TradFi/Web2 intelligence, extraction defense mesh, and privacy/policy control plane. Infrastructure: PostgreSQL (asyncpg), Redis (redis.asyncio), Neptune (gremlinpython), Kafka (aiokafka), S3, Prometheus.
+2. **Backend Plane** — Python/FastAPI with 31 service routers handling ingestion, identity, analytics, ML inference, graph, rewards, lake management, profile intelligence, population omniview, expectation engine, behavioral continuity, RWA intelligence, Web3 coverage, cross-domain TradFi/Web2 intelligence, extraction defense mesh, and privacy/policy control plane. Infrastructure: PostgreSQL (asyncpg), Redis (redis.asyncio), Neptune (gremlinpython), Kafka (aiokafka), S3, Prometheus.
 
 3. **Data Lake Plane** — Medallion architecture (Bronze/Silver/Gold) for raw data persistence, validation, feature materialization, and intelligence output generation. Lake data feeds ML training, graph mutations, and intelligence APIs.
 
@@ -64,7 +64,7 @@ The SDK also collects raw user interactions, device fingerprints, wallet events,
 ### Module Architecture (Web SDK)
 
 ```
-AetherSDK (index.ts) — v8.3.1
+AetherSDK (index.ts) — v8.7.0
 │
 ├── Core (always loaded)
 │   ├── EventQueue .............. Batch + offline queue (POST /v1/events)
@@ -367,7 +367,7 @@ All four SDKs expose the same core public API surface:
 | **Undo capability** | `RESOLVED_AS` edges store full signal snapshots. Merges can be reversed by restoring the secondary profile. |
 | **Privacy** | All PII (email, phone, IP) stored as SHA-256 hashes only. Raw values never persisted in graph or audit trail. |
 
-## Model Extraction Defense (v8.3.1)
+## Model Extraction Defense (v8.7.0)
 
 The ML serving pipeline is wrapped with a modular defense layer that protects against model extraction and knowledge distillation attacks.
 

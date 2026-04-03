@@ -267,7 +267,7 @@ class TestProfileResolverTenantIsolation:
             from shared.graph.graph import GraphClient
             resolver = ProfileResolver(GraphClient(), CacheClient())
             with pytest.raises(ValueError, match="tenant_id is required"):
-                asyncio.get_event_loop().run_until_complete(
+                asyncio.run(
                     resolver.resolve(tenant_id="", wallet_address="0xabc")
                 )
 
@@ -278,7 +278,7 @@ class TestProfileResolverTenantIsolation:
             from shared.graph.graph import GraphClient
             resolver = ProfileResolver(GraphClient(), CacheClient())
             with pytest.raises(ValueError, match="tenant_id is required"):
-                asyncio.get_event_loop().run_until_complete(
+                asyncio.run(
                     resolver.get_all_identifiers("user1", tenant_id="")
                 )
 

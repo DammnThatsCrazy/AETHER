@@ -2,7 +2,7 @@
 // AETHER SDK — UTILITY FUNCTIONS
 // =============================================================================
 
-import type { DeviceContext, CampaignContext, PageContext } from '../types';
+import type { DeviceContext, CampaignContext, PageContext } from './WebSDKTypes(CoreTypeDefinitions)';
 
 /** Generate a UUID v4 */
 export function generateId(): string {

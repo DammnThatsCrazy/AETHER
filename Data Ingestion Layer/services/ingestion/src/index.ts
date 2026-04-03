@@ -38,7 +38,7 @@ import { EventRouter, createSink } from '@aether/events';
 import { EventEnricher, DeadLetterQueue } from './event-enricher.js';
 import { validateBatchPayload, validateEvent } from './validator.js';
 
-const VERSION = '4.0.0';
+const VERSION = '8.7.0';
 const logger = createLogger('aether.ingestion');
 
 // Maximum request body size: 1 MB

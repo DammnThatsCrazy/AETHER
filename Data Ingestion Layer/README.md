@@ -319,7 +319,7 @@ Health check endpoint returning component-level status.
 ```json
 {
   "status": "healthy | degraded | unhealthy",
-  "version": "4.0.0",
+  "version": "8.7.0",
   "uptime": 12345,
   "timestamp": "2025-01-15T12:00:00.000Z",
   "checks": {
@@ -397,6 +397,7 @@ Data Ingestion Layer/
   event-enricher.ts    Enrichment pipeline and dead letter queue
   index.ts             Logger implementation
   tsconfig.json        Root TypeScript configuration
+  tsconfig.build.json  Build-specific TypeScript configuration
   package.json         Workspace root
 ```
 

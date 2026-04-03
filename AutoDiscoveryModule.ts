@@ -3,7 +3,7 @@
 // Automatic tracking of clicks, forms, scroll depth, rage clicks, dead clicks
 // =============================================================================
 
-import { throttle, isSensitiveField, maskSensitiveData } from '../utils';
+import { throttle, isSensitiveField, maskSensitiveData } from './SDKUtilityFunctions';
 
 export interface AutoDiscoveryCallbacks {
   onTrack: (event: string, properties: Record<string, unknown>) => void;

@@ -3,8 +3,8 @@
 // Deterministic A/B testing with variant assignment and exposure tracking
 // =============================================================================
 
-import type { ExperimentConfig, ExperimentAssignment } from '../types';
-import { storage } from '../utils';
+import type { ExperimentConfig, ExperimentAssignment } from './WebSDKTypes(CoreTypeDefinitions)';
+import { storage } from './SDKUtilityFunctions';
 
 const ASSIGNMENTS_KEY = 'experiments';
 

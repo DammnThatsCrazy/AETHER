@@ -19,6 +19,18 @@
 ### Preserved
 - Queue backends (heapq + Celery/Redis), worker guardrails, specialist workers, feedback learning loop
 
+### Production Hardening
+- Data Ingestion Layer: production sink implementations (Kafka via REST Proxy, ClickHouse via HTTP API, S3 via HTTP PUT, Redis via RESP protocol) using only Node.js built-in modules
+- Redis cache client: real RESP protocol client with connection management, pipelining, AUTH/SELECT, reconnect with exponential backoff
+- GeoIP resolver: local database file with binary search lookup and LRU cache (no per-event network calls)
+- Backend Dockerfile: multi-stage build, non-root user, healthcheck directive, production-only dependencies
+- Version alignment: all Data Ingestion sub-packages synced to v8.7.0, wildcard dependencies pinned
+- License unification: all sub-packages aligned to Proprietary license
+- Duplicate package name resolution: Data Lake renamed to `aether-datalake-backend`
+- Build infrastructure: missing `tsconfig.build.json` created, 644 lint issues auto-fixed
+- Test coverage expanded: auth middleware, tenant isolation, API contracts, cache layer tests added
+- Root SDK reference files: all broken imports fixed across 13 TypeScript files
+
 ---
 
 ## v8.7.0 — Cross-Domain Intelligence, Web3 Coverage, Privacy Control Plane (2026-03-25)

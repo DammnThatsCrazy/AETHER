@@ -135,7 +135,7 @@ Model artifacts require training run before serving. See `docs/ML-TRAINING-GUIDE
 # Local development (no infrastructure required)
 pip install -e ".[dev,backend]"
 export AETHER_ENV=local
-make test                              # 106 tests pass
+make test                              # 191+ tests pass
 
 # Staging with Docker
 cd deploy/staging
@@ -186,10 +186,24 @@ deploy/staging/                        Staging deployment package
   bootstrap.sh     One-command staging setup
   docker-compose.staging.yml
 
+Agent Layer/                           Autonomous agent workers
+  agent_controller/      Multi-controller autonomy hierarchy
+  workers/               10 specialist workers (discovery + enrichment)
+  guardrails/            PII detection, policy enforcement
+
+Data Ingestion Layer/                  Node.js event ingestion service
+  packages/              5 shared packages (common, auth, cache, events, logger)
+  services/ingestion/    HTTP ingestion server (port 3001)
+
+security/                              Model extraction defense
+  model_extraction_defense/  6-component defense layer
+
 scripts/                               Operational scripts
   generate_secrets.py    Production secret generation
+  bump_version.py        Atomic version bumping across all files
   validate_infra.py      Infrastructure validation
   validate_docs.py       Documentation version checks
+  sync_docs.py           Regenerate deterministic doc artifacts
 ```
 
 ## Documentation

@@ -10,17 +10,17 @@ import type {
   IntentCallback, BotCallback, SessionCallback, ConsentCallback,
   ExperimentConfig, ExperimentAssignment,
   ConsentState, ConsentBannerConfig, WalletInterface, ExperimentInterface, ConsentInterface,
-} from './types';
-import { EventQueue } from './core/event-queue';
-import { SessionManager } from './core/session';
-import { IdentityManager } from './core/identity';
-import { AutoDiscoveryModule } from './modules/auto-discovery';
-import { PerformanceModule } from './modules/performance';
-import { ExperimentsModule } from './modules/experiments';
-import { ConsentModule } from './consent';
-import { Web3Module } from './web3';
-import { EdgeMLModule } from './ml/edge-ml';
-import { generateId, now, getPageContext, getDeviceContext, getCampaignContext } from './utils';
+} from './WebSDKTypes(CoreTypeDefinitions)';
+import { EventQueue } from './CoreEventQueue';
+import { SessionManager } from './CoreSessionManager';
+import { IdentityManager } from './CoreIdentityManager';
+import { AutoDiscoveryModule } from './AutoDiscoveryModule';
+import { PerformanceModule } from './PerformanceModule';
+import { ExperimentsModule } from './ExperimentModule';
+import { ConsentModule } from './ConsentModule';
+import { Web3Module } from './Web3Module';
+import { EdgeMLModule } from './EdgeMLModule';
+import { generateId, now, getPageContext, getDeviceContext, getCampaignContext } from './SDKUtilityFunctions';
 
 const SDK_VERSION = '8.7.0';
 const DEFAULT_ENDPOINT = 'https://api.aether.network';
@@ -448,4 +448,4 @@ const aether = new AetherSDK();
 
 export default aether;
 export { AetherSDK };
-export type { AetherConfig, AetherSDKInterface } from './types';
+export type { AetherConfig, AetherSDKInterface } from './WebSDKTypes(CoreTypeDefinitions)';

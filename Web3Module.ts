@@ -3,7 +3,7 @@
 // Wallet tracking, chain detection, transaction monitoring
 // =============================================================================
 
-import type { WalletInfo, TransactionOptions } from '../types';
+import type { WalletInfo, TransactionOptions } from './WebSDKTypes(CoreTypeDefinitions)';
 
 export interface Web3Callbacks {
   onWalletEvent: (action: string, data: Record<string, unknown>) => void;

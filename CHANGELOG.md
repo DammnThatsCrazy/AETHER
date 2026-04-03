@@ -44,6 +44,21 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 - Worker pool: flat pool → controller + team-aware execution fabric
 - Internal UI: none → real CLI dashboard and ops console
 
+### Added — Production Hardening
+- **Data Ingestion Layer**: production sink implementations (Kafka via REST Proxy, ClickHouse via HTTP, S3 via HTTP PUT, Redis via RESP protocol) — all using `node:http`/`node:net` with zero external dependencies
+- **Redis cache client**: production RESP protocol client with connection management, pipelining, AUTH, reconnect backoff
+- **GeoIP resolver**: local database binary-search lookup with LRU cache — zero network calls per event
+- **Backend Dockerfile**: multi-stage build, non-root user, healthcheck, `.[backend]` only (no dev deps)
+- **ML serving healthcheck**: added to staging docker-compose
+- **Root SDK files**: fixed all broken imports across 13 legacy .ts files
+- **Version alignment**: all Data Ingestion sub-packages synced to v8.7.0, wildcard deps pinned
+- **License unification**: ML Models and Data Lake LICENSE files aligned to Proprietary (matching root)
+- **Duplicate resolution**: Data Lake package renamed from `aether-backend` to `aether-datalake-backend`
+- **Build fix**: created missing `tsconfig.build.json` for Data Ingestion Layer
+- **Lint cleanup**: 644 Python lint issues auto-fixed via ruff
+- **Version bump tooling**: `bump_version.py` and `validate_docs.py` now cover all sub-packages
+- **Test coverage**: added auth middleware, tenant isolation, API contract, and cache layer tests
+
 ### Preserved
 - Queue backends (in-memory heapq for dev, Celery + Redis for production)
 - Worker lifecycle guardrails (kill switch, rate limiter, cost monitor, PII detector, confidence gate, audit logger)

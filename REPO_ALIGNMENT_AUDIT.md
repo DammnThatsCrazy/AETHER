@@ -1,7 +1,7 @@
-# Aether Repository Alignment Audit v8.6.0
+# Aether Repository Alignment Audit v8.7.0
 
-**Audit Date:** 2026-03-25
-**Platform Version:** 8.6.0
+**Audit Date:** 2026-03-25 (updated 2026-04-03)
+**Platform Version:** 8.7.0
 **Auditor:** Automated full-repo alignment pass
 
 ---
@@ -10,9 +10,9 @@
 
 Full-repo alignment audit across every file, folder, module, language surface, config surface, test surface, documentation surface, and release surface. All identified drift has been corrected.
 
-**Platform Truth (v8.6.0):**
-- 29 backend services
-- 184 API endpoints
+**Platform Truth (v8.7.0):**
+- 31 backend services
+- 246 API endpoints
 - 24 provider connectors (all implemented)
 - 16 Python test files (106+ core + 153 ML tests)
 - 4 SDK platforms (Web, iOS, Android, React Native)
@@ -22,39 +22,39 @@ Full-repo alignment audit across every file, folder, module, language surface, c
 
 ## 1. Version Truth
 
-### Aligned at v8.6.0
+### Aligned at v8.7.0
 
 | File | Type | Version | Status |
 |------|------|---------|--------|
-| `pyproject.toml` (root) | Python | 8.6.0 | Aligned |
-| `package.json` (root) | Node | 8.6.0 | Aligned |
-| `packages/web/package.json` | Node | 8.6.0 | Aligned |
-| `packages/react-native/package.json` | Node | 8.6.0 | Aligned |
-| `Data Ingestion Layer/package.json` | Node | 8.6.0 | Aligned |
-| `Data Lake Architecture/.../package.json` | Node | 8.6.0 | Aligned |
-| `packages/ios/Package.swift` | Swift | 8.6.0 | Aligned |
-| `packages/android/build.gradle.kts` (Maven) | Kotlin | 8.6.0 | Aligned |
-| `packages/android/build.gradle.kts` (buildConfigField) | Kotlin | 8.6.0 | **Fixed** (was 4.0.0) |
-| `docs/ARCHITECTURE.md` | Doc | v8.6.0 | Aligned |
-| `docs/BACKEND-API.md` | Doc | v8.6.0 | Aligned |
-| `docs/SDK-WEB.md` | Doc | v8.6.0 | Aligned |
-| `docs/SDK-IOS.md` | Doc | v8.6.0 | Aligned |
-| `docs/SDK-ANDROID.md` | Doc | v8.6.0 | Aligned |
-| `docs/SDK-REACT-NATIVE.md` | Doc | v8.6.0 | Aligned |
-| `docs/IDENTITY-RESOLUTION.md` | Doc | v8.6.0 | Aligned |
-| `docs/INTELLIGENCE-GRAPH.md` | Doc | v8.6.0 | Aligned |
-| `docs/MODEL-EXTRACTION-DEFENSE.md` | Doc | v8.6.0 | Aligned |
-| `docs/AGENT-CONTROLLER.md` | Doc | v8.6.0 | Aligned |
-| `docs/OPERATIONS-RUNBOOK.md` | Doc | v8.6.0 | Aligned |
-| `docs/PRODUCTION-READINESS.md` | Doc | v8.6.0 | Aligned |
-| `Agent Layer/README.md` | Doc | v8.6.0 | Aligned |
-| `Data Ingestion Layer/README.md` | Doc | v8.6.0 | Aligned |
-| `Data Lake Architecture/README.md` | Doc | v8.6.0 | Aligned |
-| `AWS Deployment/aether-aws/README.md` | Doc | v8.6.0 | Aligned |
-| `cicd/aether-cicd/README.md` | Doc | v8.6.0 | Aligned |
-| `GDPR & SOC2/aether-compliance/README.md` | Doc | v8.6.0 | Aligned |
-| `CHANGELOG.md` (root) | Doc | v8.6.0 | Aligned |
-| `docs/CHANGELOG.md` | Doc | v8.6.0 | Aligned |
+| `pyproject.toml` (root) | Python | 8.7.0 | Aligned |
+| `package.json` (root) | Node | 8.7.0 | Aligned |
+| `packages/web/package.json` | Node | 8.7.0 | Aligned |
+| `packages/react-native/package.json` | Node | 8.7.0 | Aligned |
+| `Data Ingestion Layer/package.json` | Node | 8.7.0 | Aligned |
+| `Data Lake Architecture/.../package.json` | Node | 8.7.0 | Aligned |
+| `packages/ios/Package.swift` | Swift | 8.7.0 | Aligned |
+| `packages/android/build.gradle.kts` (Maven) | Kotlin | 8.7.0 | Aligned |
+| `packages/android/build.gradle.kts` (buildConfigField) | Kotlin | 8.7.0 | Aligned |
+| `docs/ARCHITECTURE.md` | Doc | v8.7.0 | Aligned |
+| `docs/BACKEND-API.md` | Doc | v8.7.0 | Aligned |
+| `docs/SDK-WEB.md` | Doc | v8.7.0 | Aligned |
+| `docs/SDK-IOS.md` | Doc | v8.7.0 | Aligned |
+| `docs/SDK-ANDROID.md` | Doc | v8.7.0 | Aligned |
+| `docs/SDK-REACT-NATIVE.md` | Doc | v8.7.0 | Aligned |
+| `docs/IDENTITY-RESOLUTION.md` | Doc | v8.7.0 | Aligned |
+| `docs/INTELLIGENCE-GRAPH.md` | Doc | v8.7.0 | Aligned |
+| `docs/MODEL-EXTRACTION-DEFENSE.md` | Doc | v8.7.0 | Aligned |
+| `docs/AGENT-CONTROLLER.md` | Doc | v8.7.0 | Aligned |
+| `docs/OPERATIONS-RUNBOOK.md` | Doc | v8.7.0 | Aligned |
+| `docs/PRODUCTION-READINESS.md` | Doc | v8.7.0 | Aligned |
+| `Agent Layer/README.md` | Doc | v8.7.0 | Aligned |
+| `Data Ingestion Layer/README.md` | Doc | v8.7.0 | Aligned |
+| `Data Lake Architecture/README.md` | Doc | v8.7.0 | Aligned |
+| `AWS Deployment/aether-aws/README.md` | Doc | v8.7.0 | Aligned |
+| `cicd/aether-cicd/README.md` | Doc | v8.7.0 | Aligned |
+| `GDPR & SOC2/aether-compliance/README.md` | Doc | v8.7.0 | Aligned |
+| `CHANGELOG.md` (root) | Doc | v8.7.0 | Aligned |
+| `docs/CHANGELOG.md` | Doc | v8.7.0 | Aligned |
 
 ### Independent Subsystem Versions (by design)
 
@@ -77,7 +77,7 @@ Full-repo alignment audit across every file, folder, module, language surface, c
 
 ## 2. Service Count Truth
 
-### 29 Backend Services (verified against code)
+### 31 Backend Services (verified against code)
 
 | # | Service | Prefix | Category |
 |---|---------|--------|----------|
@@ -110,14 +110,16 @@ Full-repo alignment audit across every file, folder, module, language surface, c
 | 27 | expectations | `/v1/expectations` | Intelligence Layer |
 | 28 | behavioral | `/v1/behavioral` | Intelligence Layer |
 | 29 | rwa | `/v1/rwa` | Intelligence Layer |
+| 30 | web3 | `/v1/web3` | Web3 Coverage |
+| 31 | crossdomain | `/v1/crossdomain` | Cross-Domain |
 
 ### Documents Fixed
 
 | Document | Was | Now |
 |----------|-----|-----|
-| `docs/ARCHITECTURE.md` | "24 service routers" | "29 service routers" |
-| `Backend Architecture/README.md` | "21 microservices", "95+ endpoints" | "29 microservices", "184 endpoints" |
-| `docs/PRODUCTION-READINESS.md` | "All 22 backend services" | "All 29 backend services" |
+| `docs/ARCHITECTURE.md` | "24 service routers" | "31 service routers" |
+| `Backend Architecture/README.md` | "21 microservices", "95+ endpoints" | "31 microservices", "246 endpoints" |
+| `docs/PRODUCTION-READINESS.md` | "All 22 backend services" | "All 31 backend services" |
 
 ---
 
@@ -246,7 +248,7 @@ Files like `cache.py`, `repos.py`, `graph.py`, `auth.py`, `events.py` exist at t
 
 The following services do not have dedicated test files:
 - Profile 360, Population Omniview, Expectation Engine, Behavioral, RWA Intelligence
-- These are v8.6.0 additions. Their API contracts are tested via the E2E test suite.
+- These are v8.7.0 additions. Their API contracts are tested via the E2E test suite.
 
 ---
 
@@ -258,7 +260,7 @@ The following services do not have dedicated test files:
 |-----|------|--------|
 | v8.4.0 | 2026-03-24 | Infrastructure replacement release |
 | v8.5.0 | 2026-03-24 | Intelligence Graph + Lake + Providers |
-| v8.6.0 | 2026-03-25 | Profile + Population + Expectations + Behavioral + RWA |
+| v8.7.0 | 2026-03-25 | Profile + Population + Expectations + Behavioral + RWA |
 
 ### GitHub Releases
 
@@ -266,11 +268,11 @@ All three releases created via `gh release create` with comprehensive release no
 
 ### CHANGELOG Alignment
 
-Both `CHANGELOG.md` (root) and `docs/CHANGELOG.md` contain matching v8.6.0 entries with accurate:
-- Service count: 29
-- Endpoint count: 184
+Both `CHANGELOG.md` (root) and `docs/CHANGELOG.md` contain matching v8.7.0 entries with accurate:
+- Service count: 31
+- Endpoint count: 246
 - Provider count: 24
-- New feature listings for all v8.6.0 additions
+- New feature listings for all v8.7.0 additions
 
 ---
 
@@ -278,10 +280,10 @@ Both `CHANGELOG.md` (root) and `docs/CHANGELOG.md` contain matching v8.6.0 entri
 
 | # | File | Issue | Fix |
 |---|------|-------|-----|
-| 1 | `packages/android/build.gradle.kts` | buildConfigField version 4.0.0 | Changed to 8.6.0 |
-| 2 | `docs/ARCHITECTURE.md` | "24 service routers" | Changed to "29 service routers" |
-| 3 | `Backend Architecture/README.md` | "21 microservices", "95+ endpoints" | Changed to "29 microservices", "184 endpoints" |
-| 4 | `docs/PRODUCTION-READINESS.md` | "All 22 backend services" | Changed to "All 29 backend services" |
+| 1 | `packages/android/build.gradle.kts` | buildConfigField version 4.0.0 | Changed to 8.7.0 |
+| 2 | `docs/ARCHITECTURE.md` | "24 service routers" | Changed to "31 service routers" |
+| 3 | `Backend Architecture/README.md` | "21 microservices", "95+ endpoints" | Changed to "31 microservices", "246 endpoints" |
+| 4 | `docs/PRODUCTION-READINESS.md` | "All 22 backend services" | Changed to "All 31 backend services" |
 | 5 | `docs/OPERATIONS-RUNBOOK.md` | Claimed infrastructure uses in-memory stubs | Updated to reflect real backends |
 | 6 | `docs/OPERATIONS-RUNBOOK.md` | Concurrency section referenced threading locks | Updated to reflect asyncpg/Redis concurrency |
 | 7 | `docs/INTELLIGENCE-GRAPH.md` | "in-memory stub (Neptune integration pending)" | Updated to "Neptune (gremlinpython) with in-memory fallback" |
@@ -297,8 +299,8 @@ Both `CHANGELOG.md` (root) and `docs/CHANGELOG.md` contain matching v8.6.0 entri
 | Backend Architecture root legacy files | P3 | `cache.py`, `repos.py` etc. at root — not imported, but could confuse new developers |
 | `mnt/user-data/outputs/` archive | P3 | Old stub copies — could be gitignored or documented |
 | ML Models README version | Info | aether-ml stays at 4.0.0 by design (independent package) |
-| Test coverage for v8.6.0 services | P2 | Profile, Population, Expectations, Behavioral, RWA need dedicated unit tests |
-| `Data Ingestion Layer/` TypeScript scaffolding | Info | Canonical runtime is Python backend; TS layer is SDK event processing |
+| Test coverage for v8.7.0 services | P2 | Profile, Population, Expectations, Behavioral, RWA need dedicated unit tests |
+| `Data Ingestion Layer/` TypeScript sink implementations | Info | Production sink implementations (Kafka, ClickHouse, S3, Redis) using Node.js built-in modules |
 
 ---
 

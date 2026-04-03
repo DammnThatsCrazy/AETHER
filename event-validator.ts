@@ -3,11 +3,35 @@
 // Schema validation, size enforcement, consent filtering, PII masking
 // =============================================================================
 
-import type { BaseEvent, BatchPayload, EventType, ProcessingConfig } from '@aether/common';
-import { ValidationError } from '@aether/common';
-import { createLogger } from '@aether/logger';
+import type { BaseEvent, EventType } from './WebSDKTypes(CoreTypeDefinitions)';
 
-const logger = createLogger('aether.ingestion.validator');
+// Stub types for server-side constructs not in the client SDK types
+interface BatchPayload {
+  batch: BaseEvent[];
+  sentAt: string;
+  context?: { library?: { name: string; version: string } };
+}
+
+interface ProcessingConfig {
+  maxBatchSize: number;
+  maxEventSizeBytes: number;
+}
+
+class ValidationError extends Error {
+  public details?: Record<string, unknown>;
+  constructor(message: string, details?: Record<string, unknown>) {
+    super(message);
+    this.name = 'ValidationError';
+    this.details = details;
+  }
+}
+
+// Stub logger (replaces @aether/logger)
+const logger = {
+  warn: (msg: string, meta?: Record<string, unknown>) => console.warn('[aether.ingestion.validator]', msg, meta),
+  info: (msg: string, meta?: Record<string, unknown>) => console.info('[aether.ingestion.validator]', msg, meta),
+  error: (msg: string, meta?: Record<string, unknown>) => console.error('[aether.ingestion.validator]', msg, meta),
+};
 
 const VALID_EVENT_TYPES: Set<EventType> = new Set([
   'track', 'page', 'screen', 'identify', 'conversion',

@@ -231,7 +231,7 @@ All event data flows through three progressively refined storage tiers:
 ```bash
 # Clone the repository
 git clone <repository-url>
-cd aether-Datalake-backend
+cd aether-datalake-backend
 
 # Install dependencies
 npm install
@@ -413,7 +413,7 @@ Configuration is managed through environment variables. See `.env.example` for t
 ### Project Structure
 
 ```
-aether-Datalake-backend/
+aether-datalake-backend/
   packages/
     common/              Shared utilities and config loaders
     logger/              Structured logging
@@ -502,4 +502,4 @@ npm run test:integration
 
 Proprietary -- Copyright (c) 2024 Aether Analytics. All rights reserved.
 
-See [LICENSE](./aether-Datalake-backend/LICENSE) for details.
+See [LICENSE](./aether-datalake-backend/LICENSE) for details.

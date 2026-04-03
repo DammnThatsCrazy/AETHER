@@ -1,4 +1,4 @@
-# Release Hardening Audit v8.5.0
+# Release Hardening Audit v8.7.0
 
 ## Issues Fixed
 
@@ -41,6 +41,6 @@ Added documentation for 31 new endpoints across 3 services:
 **Reason:** Export job tracking exists (idempotent, status-tracked) but no CSV/Parquet file creation. The Celery offload path exists. File generation requires storage (S3) integration for actual file persistence.
 **Status:** Not shipped in v8.5.0. Export status tracking works; file generation is a future enhancement.
 
-### Node.js Data Ingestion Service — EXPLICITLY NON-CANONICAL
-**Decision:** The Node.js Data Ingestion Layer (`Data Ingestion Layer/`) is scaffolding. The Python FastAPI backend (`Backend Architecture/aether-backend/`) is the canonical ingestion runtime. All 165 endpoints, all provider connectors, all lake management, and all intelligence outputs run through the Python backend.
-**Status:** Node.js scaffolding is retained for potential future use but is NOT the production ingestion path. The Python backend is canonical.
+### Node.js Data Ingestion Service — PRODUCTION IMPLEMENTATIONS
+**Decision:** The Node.js Data Ingestion Layer (`Data Ingestion Layer/`) now has production sink implementations (Kafka via REST Proxy, ClickHouse via HTTP, S3 via HTTP PUT, Redis via RESP protocol) using Node.js built-in modules (node:http, node:net, node:zlib). The Python FastAPI backend (`Backend Architecture/aether-backend/`) remains the canonical API runtime for all 246 endpoints, all provider connectors, all lake management, and all intelligence outputs.
+**Status:** Node.js ingestion sinks are production-ready. The Python backend remains the canonical API surface.
