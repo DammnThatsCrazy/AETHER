@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import threading
 import time
 import uuid
 from typing import Callable, Optional
@@ -56,16 +57,21 @@ _mesh_scorer = None
 _mesh_policy_engine = None
 _mesh_attribution = None
 _mesh_initialized = False
+_mesh_init_lock = threading.Lock()
 
 
 def _init_extraction_mesh():
-    """Lazy-init the extraction defense mesh components."""
+    """Lazy-init the extraction defense mesh components (thread-safe)."""
     global _mesh_budget_engine, _mesh_expectation_engine, _mesh_scorer
     global _mesh_policy_engine, _mesh_attribution, _mesh_initialized
 
     if _mesh_initialized:
         return
-    _mesh_initialized = True
+
+    with _mesh_init_lock:
+        if _mesh_initialized:
+            return
+        _mesh_initialized = True
 
     if not settings.extraction_mesh.enabled:
         return

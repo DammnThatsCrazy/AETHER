@@ -15,7 +15,6 @@ Routes:
 
 from __future__ import annotations
 
-import logging
 from typing import Any, Optional
 
 from fastapi import APIRouter, Depends, Query
@@ -23,8 +22,9 @@ from pydantic import BaseModel, Field
 
 from services.analytics_automation.pipeline import AnalyticsPipeline
 from shared.decorators import require_api_key_raw
+from shared.logger.logger import get_logger
 
-logger = logging.getLogger("aether.analytics_automation.routes")
+logger = get_logger("aether.analytics_automation.routes")
 
 router = APIRouter(prefix="/v1/automation", tags=["analytics_automation"])
 

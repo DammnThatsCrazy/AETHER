@@ -60,7 +60,7 @@ async def root():
     }
 
 
-@router.get("/v1/metrics")
+@router.get("/v1/metrics/json")
 async def get_metrics():
-    """Internal metrics endpoint."""
+    """Internal metrics endpoint (JSON format)."""
     return APIResponse(data=metrics.snapshot()).to_dict()
