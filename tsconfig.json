@@ -14,6 +14,7 @@
     "sourceMap": true
   },
   "references": [
-    { "path": "./packages/web" }
+    { "path": "./packages/web" },
+    { "path": "./packages/react-native" }
   ]
 }

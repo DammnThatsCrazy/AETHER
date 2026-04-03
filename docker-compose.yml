@@ -100,6 +100,10 @@ services:
       KAFKA_BOOTSTRAP_SERVERS: kafka:9092
       KAFKA_BROKERS: kafka:9092
       ML_SERVING_URL: http://ml-serving:8080
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET is required — run deploy/staging/bootstrap.sh or set manually}
+      BYOK_ENCRYPTION_KEY: ${BYOK_ENCRYPTION_KEY:-}
+      WATERMARK_SECRET_KEY: ${WATERMARK_SECRET_KEY:-}
+      CANARY_SECRET_SEED: ${CANARY_SECRET_SEED:-}
     command: uvicorn main:app --host 0.0.0.0 --port 8000
 
   ml-serving:
