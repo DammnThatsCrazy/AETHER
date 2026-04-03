@@ -30,7 +30,7 @@ Receives batched raw events from the Web SDK.
       "userId": "user-123",
       "properties": { "buttonId": "cta-hero" },
       "context": {
-        "library": { "name": "@aether/sdk", "version": "8.3.1" },
+        "library": { "name": "@aether/sdk", "version": "8.7.0" },
         "fingerprint": { "id": "sha256-hash" },
         "locale": "en-US",
         "timezone": "America/New_York"

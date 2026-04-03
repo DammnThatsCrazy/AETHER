@@ -22,7 +22,7 @@ import { Web3Module } from './web3';
 import { EdgeMLModule } from './ml/edge-ml';
 import { generateId, now, getPageContext, getDeviceContext, getCampaignContext } from './utils';
 
-const SDK_VERSION = '4.0.0';
+const SDK_VERSION = '8.7.0';
 const DEFAULT_ENDPOINT = 'https://api.aether.network';
 
 class AetherSDK implements AetherSDKInterface {

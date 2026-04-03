@@ -56,7 +56,7 @@ COPY packages/cache/tsconfig.json packages/cache/tsconfig.json
 COPY packages/events/tsconfig.json packages/events/tsconfig.json
 COPY services/ingestion/tsconfig.json services/ingestion/tsconfig.json
 
-RUN npx tsc -b tsconfig.json
+RUN npx tsc -b tsconfig.build.json
 
 # ---------------------------------------------------------------------------
 # Stage 4: Production — Minimal runtime image

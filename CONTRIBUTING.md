@@ -68,7 +68,7 @@ Follow conventional commits:
 See `docs/ARCHITECTURE.md` for system design. Key directories:
 
 ```
-Backend Architecture/aether-backend/   Python FastAPI backend (22 services)
+Backend Architecture/aether-backend/   Python FastAPI backend (31 services)
 ML Models/aether-ml/                   ML training + serving
 Agent Layer/                           Autonomous agent workers
 security/                              Model extraction defense
@@ -87,3 +87,10 @@ packages/                              Web, iOS, Android, React Native SDKs
 | Operations | `docs/OPERATIONS-RUNBOOK.md` |
 | Production Readiness | `docs/PRODUCTION-READINESS.md` |
 | Secret Rotation | `docs/SECRET-ROTATION.md` |
+
+## License
+
+This project is **proprietary and confidential**. See `LICENSE` for details.
+All contributions become property of Aether Platform under the same license terms.
+By submitting a contribution, you confirm you have the right to do so and agree
+to these terms.

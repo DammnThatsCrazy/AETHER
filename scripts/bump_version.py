@@ -31,9 +31,16 @@ ROOT = Path(__file__).resolve().parent.parent
 
 PACKAGE_JSONS = [
     ROOT / "package.json",
+    ROOT / "RootPackageSDK.json",
     ROOT / "packages" / "web" / "package.json",
     ROOT / "packages" / "react-native" / "package.json",
     ROOT / "Data Ingestion Layer" / "package.json",
+    ROOT / "Data Ingestion Layer" / "packages" / "common" / "package.json",
+    ROOT / "Data Ingestion Layer" / "packages" / "auth" / "package.json",
+    ROOT / "Data Ingestion Layer" / "packages" / "cache" / "package.json",
+    ROOT / "Data Ingestion Layer" / "packages" / "events" / "package.json",
+    ROOT / "Data Ingestion Layer" / "packages" / "logger" / "package.json",
+    ROOT / "Data Ingestion Layer" / "services" / "ingestion" / "package.json",
     ROOT / "Data Lake Architecture" / "aether-Datalake-backend" / "package.json",
 ]
 

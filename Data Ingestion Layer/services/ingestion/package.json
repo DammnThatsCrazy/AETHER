@@ -1,18 +1,19 @@
 {
   "name": "@aether/ingestion",
-  "version": "4.0.0",
+  "version": "8.7.0",
   "private": true,
   "main": "src/index.ts",
   "scripts": {
+    "build": "tsc -b",
     "dev": "tsx watch src/index.ts",
     "start": "node dist/index.js",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@aether/common": "*",
-    "@aether/logger": "*",
-    "@aether/auth": "*",
-    "@aether/cache": "*",
-    "@aether/events": "*"
+    "@aether/common": "8.7.0",
+    "@aether/logger": "8.7.0",
+    "@aether/auth": "8.7.0",
+    "@aether/cache": "8.7.0",
+    "@aether/events": "8.7.0"
   }
 }

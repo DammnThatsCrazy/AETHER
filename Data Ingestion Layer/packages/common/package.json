@@ -1,6 +1,6 @@
 {
   "name": "@aether/common",
-  "version": "4.0.0",
+  "version": "8.7.0",
   "private": true,
   "main": "src/index.ts",
   "types": "src/index.ts",

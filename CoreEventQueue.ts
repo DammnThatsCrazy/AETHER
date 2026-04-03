@@ -162,7 +162,7 @@ export class EventQueue {
       batch: events,
       sentAt: new Date().toISOString(),
       context: {
-        library: { name: '@aether/sdk', version: '__SDK_VERSION__' },
+        library: { name: '@aether/sdk', version: '8.7.0' },
       },
     });
 

@@ -1,5 +1,5 @@
 {
-  "name": "aether-backend",
+  "name": "aether-datalake-backend",
   "version": "8.7.0",
   "private": true,
   "description": "Aether Backend \u2014 Microservices for behavioral analytics, identity resolution, and ML serving",
