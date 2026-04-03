@@ -60,6 +60,8 @@ DOC_HEADERS = [
     ROOT / "docs" / "INTELLIGENCE-GRAPH.md",
     ROOT / "docs" / "MODEL-EXTRACTION-DEFENSE.md",
     ROOT / "docs" / "AGENT-CONTROLLER.md",
+    ROOT / "docs" / "PRODUCTION-READINESS.md",
+    ROOT / "docs" / "OPERATIONS-RUNBOOK.md",
     ROOT / "EXTRACTION_DEFENSE_AUDIT.md",
 ]
 

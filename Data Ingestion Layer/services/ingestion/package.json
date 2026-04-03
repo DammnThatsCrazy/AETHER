@@ -1,6 +1,6 @@
 {
   "name": "@aether/ingestion",
-  "version": "8.7.0",
+  "version": "8.7.1",
   "private": true,
   "main": "src/index.ts",
   "scripts": {
@@ -10,10 +10,10 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@aether/common": "8.7.0",
-    "@aether/logger": "8.7.0",
-    "@aether/auth": "8.7.0",
-    "@aether/cache": "8.7.0",
-    "@aether/events": "8.7.0"
+    "@aether/common": "8.7.1",
+    "@aether/logger": "8.7.1",
+    "@aether/auth": "8.7.1",
+    "@aether/cache": "8.7.1",
+    "@aether/events": "8.7.1"
   }
 }

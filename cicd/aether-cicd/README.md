@@ -1,4 +1,4 @@
-# Aether CI/CD Pipeline v8.7.0
+# Aether CI/CD Pipeline v8.7.1
 
 Modular, production-grade CI/CD pipeline for the **Aether platform** -- a monorepo spanning 5 SDK packages, 9 microservices, and shared infrastructure. Built in Python with a clean separation between configuration, quality gates, CI stages, CD stages, SDK release automation, and demo environment management.
 

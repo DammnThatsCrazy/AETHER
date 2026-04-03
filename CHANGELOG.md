@@ -68,6 +68,32 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ---
 
+## [v8.7.1] — 2026-04-03
+
+### Added — Production Hardening
+- **Data Ingestion Layer**: production sink implementations (Kafka via REST Proxy, ClickHouse via HTTP, S3 via HTTP PUT, Redis via RESP protocol) — zero external dependencies
+- **Redis cache client**: RESP protocol client with connection management, pipelining, AUTH, reconnect backoff
+- **GeoIP resolver**: local database binary-search lookup with LRU cache — zero per-event network calls
+- **Test coverage expanded**: 124 new tests (auth middleware, tenant isolation, API contracts, cache layer) — 315 core + 152 ML = 467 total
+
+### Fixed
+- Backend Dockerfile: multi-stage build, non-root user, healthcheck, production-only deps
+- Version drift: all Data Ingestion sub-packages synced to v8.7.1, wildcard deps pinned
+- License conflicts: ML Models and Data Lake LICENSE files aligned to Proprietary
+- Duplicate package name: Data Lake renamed `aether-backend` → `aether-datalake-backend`
+- Missing `tsconfig.build.json` for Data Ingestion Layer
+- Root SDK files: fixed all broken imports across 13 legacy .ts files
+- `__SDK_VERSION__` placeholder replaced with actual version in CoreEventQueue.ts
+- `sync_docs.py`: uses `git ls-files` for deterministic output across environments
+- 644 Python lint violations auto-fixed via ruff
+- ML serving healthcheck added to staging docker-compose
+- `bump_version.py` and `validate_docs.py` now cover all sub-packages
+
+### Removed
+- 9 junk/duplicate files from Data Ingestion Layer root (index copy.ts, index copy 2.ts, etc.)
+
+---
+
 ## [v8.7.0] — 2026-03-25
 
 ### Added

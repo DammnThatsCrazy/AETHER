@@ -33,6 +33,27 @@
 
 ---
 
+## v8.7.1 — Production Hardening (2026-04-03)
+
+### Infrastructure
+- Data Ingestion Layer: production sink implementations (Kafka via REST Proxy, ClickHouse via HTTP API, S3 via HTTP PUT, Redis via RESP protocol) using only Node.js built-in modules
+- Redis cache client: RESP protocol client with AUTH/SELECT, reconnect backoff, pipelining
+- GeoIP resolver: local database file with binary search and 50k-entry LRU cache
+- Backend Dockerfile: multi-stage build, non-root user, healthcheck, production-only deps
+
+### Testing
+- 124 new tests: auth middleware, tenant isolation, API contracts, cache layer
+- Total: 315 core + 152 ML = 467 tests, 0 failures
+
+### Fixes
+- Version alignment: all sub-packages synced, wildcard deps pinned, internal dep refs updated
+- License unification: all sub-packages aligned to Proprietary
+- Root SDK reference files: all broken imports fixed across 13 TypeScript files
+- `sync_docs.py` made deterministic via `git ls-files`
+- 644 lint issues auto-fixed, 9 junk files removed
+
+---
+
 ## v8.7.0 — Cross-Domain Intelligence, Web3 Coverage, Privacy Control Plane (2026-03-25)
 
 ### Web3 Coverage Service (NEW)

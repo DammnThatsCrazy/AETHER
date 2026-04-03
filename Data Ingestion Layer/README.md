@@ -1,4 +1,4 @@
-# Aether Data Ingestion Layer v8.7.0
+# Aether Data Ingestion Layer v8.7.1
 
 High-throughput event ingestion pipeline for the Aether behavioral analytics platform. Receives, validates, enriches, and routes client-side events from the Aether SDK to downstream storage and streaming sinks.
 

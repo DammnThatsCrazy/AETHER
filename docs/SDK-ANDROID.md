@@ -1,4 +1,4 @@
-# Aether Android SDK v8.7.0 — Integration Guide
+# Aether Android SDK v8.7.1 — Integration Guide
 
 ## Installation
 

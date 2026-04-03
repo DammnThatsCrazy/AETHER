@@ -1,6 +1,6 @@
 {
   "name": "@aether/react-native",
-  "version": "8.7.0",
+  "version": "8.7.1",
   "description": "Aether SDK for React Native \u2014 Unified bridge to native iOS/Android analytics",
   "main": "src/index.tsx",
   "types": "src/index.tsx",
