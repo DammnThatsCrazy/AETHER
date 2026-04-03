@@ -76,29 +76,31 @@ class IngestionServer {
 
     // Auth
     const keyStore = new InMemoryApiKeyStore();
-    // Add a dev key for testing: "ak_dev_test_key_aether_12345"
-    const devKeyRecord: ApiKeyRecord = {
-      key: 'ak_dev_test_key_aether_12345',
-      keyHash: '6a1cd7ac3b4bad7e2b9a682d00b920e514d3129a57115c2c414c393725bf96e9',
-      projectId: 'proj_dev_001',
-      projectName: 'Aether Development',
-      organizationId: 'org_aether_dev',
-      environment: 'development',
-      permissions: {
-        write: true,
-        read: true,
-        admin: false,
-      },
-      rateLimits: {
-        eventsPerSecond: 100,
-        eventsPerMinute: 5000,
-        batchSizeLimit: 500,
-        dailyEventLimit: 1_000_000,
-      },
-      createdAt: '2024-01-01T00:00:00.000Z',
-      isActive: true,
-    };
-    keyStore.addKey(devKeyRecord);
+    // Seed a development API key only in non-production environments
+    if (this.config.environment !== 'production' && this.config.environment !== 'staging') {
+      const devKeyRecord: ApiKeyRecord = {
+        key: 'ak_dev_test_key_aether_12345',
+        keyHash: '6a1cd7ac3b4bad7e2b9a682d00b920e514d3129a57115c2c414c393725bf96e9',
+        projectId: 'proj_dev_001',
+        projectName: 'Aether Development',
+        organizationId: 'org_aether_dev',
+        environment: 'development',
+        permissions: {
+          write: true,
+          read: true,
+          admin: false,
+        },
+        rateLimits: {
+          eventsPerSecond: 100,
+          eventsPerMinute: 5000,
+          batchSizeLimit: 500,
+          dailyEventLimit: 1_000_000,
+        },
+        createdAt: '2024-01-01T00:00:00.000Z',
+        isActive: true,
+      };
+      keyStore.addKey(devKeyRecord);
+    }
     this.apiKeyValidator = new ApiKeyValidator(keyStore);
 
     // Rate limiting
