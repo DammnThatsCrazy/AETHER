@@ -17,7 +17,7 @@ DOCS = ROOT / "docs"
 INDEX_PATH = DOCS / "REPO-INDEX.md"
 AUTOMATION_PATH = DOCS / "AUTOMATION.md"
 
-IGNORED_PARTS = {".git", "node_modules", "__pycache__", ".pytest_cache", ".venv", ".gradle"}
+IGNORED_PARTS = {".git", "node_modules", "__pycache__", ".pytest_cache", ".venv", ".gradle", "dist"}
 TOP_LEVEL_DOC_FOCUS = {
     "security",
     "scripts",
@@ -35,7 +35,10 @@ TOP_LEVEL_DOC_FOCUS = {
 
 
 def should_ignore(path: Path) -> bool:
-    return any(part in IGNORED_PARTS for part in path.parts)
+    return any(
+        part in IGNORED_PARTS or part.endswith(".egg-info")
+        for part in path.parts
+    )
 
 
 def collect_counts(base: Path) -> tuple[int, int]:
