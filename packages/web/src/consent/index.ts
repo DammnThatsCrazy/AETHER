@@ -83,9 +83,9 @@ export class ConsentModule {
     if (typeof document === 'undefined') return;
 
     const c = { ...this.config.bannerConfig, ...config };
-    const position = c.position ?? 'bottom';
-    const theme = c.theme ?? 'light';
-    const accent = c.accentColor ?? '#2E75B6';
+    const position = ['top', 'bottom'].includes(c.position ?? '') ? c.position! : 'bottom';
+    const theme = ['light', 'dark'].includes(c.theme ?? '') ? c.theme! : 'light';
+    const accent = /^#[0-9a-fA-F]{3,8}$/.test(c.accentColor ?? '') ? c.accentColor! : '#2E75B6';
 
     const banner = document.createElement('div');
     banner.id = 'aether-consent-banner';

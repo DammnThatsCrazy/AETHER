@@ -90,7 +90,7 @@ export function loadIngestionConfig(): IngestionConfig {
     host: env('HOST', '0.0.0.0'),
     environment,
     cors: {
-      origins: env('CORS_ORIGINS', '*').split(','),
+      origins: env('CORS_ORIGINS', 'http://localhost:3000,https://app.aether.io').split(','),
       methods: ['GET', 'POST', 'OPTIONS'],
       allowedHeaders: ['Content-Type', 'Authorization', 'X-Aether-SDK'],
       maxAge: 86400,

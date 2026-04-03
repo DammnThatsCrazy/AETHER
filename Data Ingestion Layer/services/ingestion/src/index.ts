@@ -610,11 +610,15 @@ class IngestionServer {
   /** Set CORS headers on the response */
   private setCorsHeaders(res: ServerResponse): void {
     const origins = this.config.cors.origins.join(', ');
-    res.setHeader('Access-Control-Allow-Origin', origins === '*' ? '*' : origins);
+    const isWildcard = origins.trim() === '*';
+    res.setHeader('Access-Control-Allow-Origin', isWildcard ? '*' : origins);
     res.setHeader('Access-Control-Allow-Methods', this.config.cors.methods.join(', '));
     res.setHeader('Access-Control-Allow-Headers', this.config.cors.allowedHeaders.join(', '));
     res.setHeader('Access-Control-Max-Age', String(this.config.cors.maxAge));
-    res.setHeader('Access-Control-Allow-Credentials', 'true');
+    // CORS spec: credentials must not be 'true' with wildcard origin
+    if (!isWildcard) {
+      res.setHeader('Access-Control-Allow-Credentials', 'true');
+    }
   }
 
   /** Send a JSON response */

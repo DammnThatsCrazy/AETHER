@@ -27,10 +27,19 @@ jobs:
         with:
           python-version: '3.11'
 
-      - name: Install dependencies
+      - name: Install Python dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install -e ".[dev,backend,agent,ml]"
+          pip install -e ".[dev,security,backend,agent,ml]"
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          cache: 'npm'
+
+      - name: Install Node dependencies
+        run: npm ci --ignore-scripts
 
       # ── Quality gates ──────────────────────────────────────────
 
@@ -51,6 +60,15 @@ jobs:
           python -m compileall security -q
           python -m compileall "Agent Layer" -q
           python -m compileall "Backend Architecture/aether-backend" -q
+
+      - name: TypeScript type check
+        run: npm run typecheck
+
+      - name: TypeScript build
+        run: npm run build
+
+      - name: TypeScript tests
+        run: npm run test
 
       - name: Check env vars documented
         run: |

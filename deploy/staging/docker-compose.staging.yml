@@ -22,7 +22,7 @@ services:
     environment:
       POSTGRES_DB: aether_staging
       POSTGRES_USER: aether
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-aether_staging_pw}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set}
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U aether -d aether_staging"]
       interval: 5s
@@ -36,9 +36,9 @@ services:
       - "6379:6379"
     volumes:
       - staging_redis:/data
-    command: redis-server --appendonly yes --requirepass ${REDIS_PASSWORD:-aether_staging_redis}
+    command: redis-server --appendonly yes --requirepass ${REDIS_PASSWORD:?REDIS_PASSWORD must be set}
     healthcheck:
-      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD:-aether_staging_redis}", "ping"]
+      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD:?REDIS_PASSWORD must be set}", "ping"]
       interval: 5s
       timeout: 3s
       retries: 5
@@ -87,15 +87,15 @@ services:
         condition: service_healthy
     environment:
       AETHER_ENV: staging
-      DATABASE_URL: postgresql://aether:${POSTGRES_PASSWORD:-aether_staging_pw}@postgres:5432/aether_staging
+      DATABASE_URL: postgresql://aether:${POSTGRES_PASSWORD}@postgres:5432/aether_staging
       REDIS_HOST: redis
       REDIS_PORT: "6379"
-      REDIS_PASSWORD: ${REDIS_PASSWORD:-aether_staging_redis}
+      REDIS_PASSWORD: ${REDIS_PASSWORD:?REDIS_PASSWORD must be set}
       KAFKA_BOOTSTRAP_SERVERS: kafka:9092
       JWT_SECRET: ${JWT_SECRET}
       BYOK_ENCRYPTION_KEY: ${BYOK_ENCRYPTION_KEY}
-      WATERMARK_SECRET_KEY: ${WATERMARK_SECRET_KEY:-aether-staging-watermark}
-      CANARY_SECRET_SEED: ${CANARY_SECRET_SEED:-aether-staging-canary}
+      WATERMARK_SECRET_KEY: ${WATERMARK_SECRET_KEY:?WATERMARK_SECRET_KEY must be set}
+      CANARY_SECRET_SEED: ${CANARY_SECRET_SEED:?CANARY_SECRET_SEED must be set}
       ML_SERVING_URL: http://ml-serving:8080
       ENABLE_EXTRACTION_DEFENSE: "true"
     command: uvicorn main:app --host 0.0.0.0 --port 8000 --workers 2
@@ -118,7 +118,7 @@ services:
     environment:
       AETHER_ENV: staging
       REDIS_HOST: redis
-      REDIS_PASSWORD: ${REDIS_PASSWORD:-aether_staging_redis}
+      REDIS_PASSWORD: ${REDIS_PASSWORD:?REDIS_PASSWORD must be set}
     command: uvicorn serving.src.api:app --host 0.0.0.0 --port 8080
     healthcheck:
       test: ["CMD-SHELL", "curl -sf http://localhost:8080/health || exit 1"]
@@ -136,6 +136,7 @@ services:
     volumes:
       - staging_prometheus:/prometheus
       - ./prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ../observability/prometheus/alert_rules.yml:/etc/prometheus/alert_rules.yml:ro
     restart: unless-stopped
 
 volumes:

@@ -53,6 +53,16 @@ fi
 export POSTGRES_PASSWORD="${POSTGRES_PASSWORD:-aether_staging_$(python3 -c "import secrets; print(secrets.token_hex(8))")}"
 export REDIS_PASSWORD="${REDIS_PASSWORD:-aether_staging_$(python3 -c "import secrets; print(secrets.token_hex(8))")}"
 
+if [ -z "${WATERMARK_SECRET_KEY:-}" ]; then
+    export WATERMARK_SECRET_KEY=$(python3 -c "import secrets; print(secrets.token_urlsafe(32))")
+    echo "  Generated WATERMARK_SECRET_KEY"
+fi
+
+if [ -z "${CANARY_SECRET_SEED:-}" ]; then
+    export CANARY_SECRET_SEED=$(python3 -c "import secrets; print(secrets.token_urlsafe(32))")
+    echo "  Generated CANARY_SECRET_SEED"
+fi
+
 echo "  ✓ All secrets ready"
 echo ""
 

@@ -80,8 +80,8 @@ services:
 
   backend:
     build:
-      context: "Backend Architecture/aether-backend"
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: "Backend Architecture/aether-backend/Dockerfile"
     ports:
       - "8000:8000"
     depends_on:
@@ -125,6 +125,8 @@ services:
       - "9090:9090"
     volumes:
       - prometheus_data:/prometheus
+      - ./deploy/staging/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./deploy/observability/prometheus/alert_rules.yml:/etc/prometheus/alert_rules.yml:ro
 
 volumes:
   postgres_data:
