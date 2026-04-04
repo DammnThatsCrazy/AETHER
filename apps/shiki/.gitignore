@@ -1,8 +1,5 @@
 node_modules/
 dist/
-*.js
-!vite.config.ts
-!vitest.*.config.ts
-!playwright.config.ts
-*.js.map
+src/**/*.js
+src/**/*.js.map
 .env.local
