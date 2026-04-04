@@ -3,6 +3,7 @@ import type { LiveEvent, EventFilter } from '@shiki/types';
 import { isLocalMocked } from '@shiki/lib/env';
 import { getMockEvents } from '@shiki/fixtures/events';
 import { useWebSocket } from '@shiki/hooks';
+import { api } from '@shiki/lib/api/endpoints';
 
 export function useLiveEvents() {
   const [events, setEvents] = useState<LiveEvent[]>([]);
@@ -33,6 +34,25 @@ export function useLiveEvents() {
     }, 2500);
 
     return () => clearInterval(interval);
+  }, []);
+
+  // In live mode, seed initial events from the API
+  useEffect(() => {
+    if (isLocalMocked()) return;
+
+    api.analytics.queryEvents({ limit: 50 })
+      .then((resp) => {
+        const eventsData = resp as { data: unknown[]; pagination?: { total: number; limit: number; has_more: boolean } };
+        const seeded = (eventsData.data ?? []).filter(
+          (e): e is LiveEvent => typeof e === 'object' && e !== null && 'id' in e,
+        );
+        if (seeded.length > 0) {
+          setEvents(seeded.slice(0, 200));
+        }
+      })
+      .catch(() => {
+        // Seed failure is non-fatal; WebSocket will populate events
+      });
   }, []);
 
   // In live mode, use WebSocket

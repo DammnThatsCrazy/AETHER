@@ -17,12 +17,14 @@ import {
   ScrollArea,
   GlyphIcon,
   TerminalSeparator,
+  LoadingState,
+  ErrorState,
 } from '@shiki/components/system';
 import { PageWrapper } from '@shiki/components/layout';
 import { cn, formatRelativeTime, formatCompactNumber, formatPercentage } from '@shiki/lib/utils';
 import { getEnvironment, getRuntimeMode } from '@shiki/lib/env';
-import { getMockMissionData } from '@shiki/fixtures/mission';
-import { getMockSystemHealth } from '@shiki/fixtures/health';
+import { useMissionData } from '@shiki/features/mission';
+import { useDiagnosticsData } from '@shiki/features/diagnostics';
 import type { KeyChange, Severity } from '@shiki/types';
 
 const SEVERITY_COLORS: Record<string, string> = {
@@ -68,9 +70,21 @@ function KeyChangeItem({ change }: { readonly change: KeyChange }) {
 export function MissionPage() {
   const environment = getEnvironment();
   const mode = getRuntimeMode();
-  const data = getMockMissionData();
-  const systemHealth = getMockSystemHealth();
+  const { data, isLoading, error } = useMissionData();
+  const { health: systemHealth, isLoading: healthLoading, error: healthError } = useDiagnosticsData();
   const [keyChangeTab, setKeyChangeTab] = useState<'1h' | '24h' | '7d'>('1h');
+
+  if (isLoading || healthLoading) {
+    return <PageWrapper title="Mission" subtitle="Executive command brief and system posture overview"><LoadingState lines={5} /></PageWrapper>;
+  }
+
+  if (error || healthError) {
+    return <PageWrapper title="Mission" subtitle="Executive command brief and system posture overview"><ErrorState message={error ?? healthError ?? 'Unknown error'} /></PageWrapper>;
+  }
+
+  if (!data || !systemHealth) {
+    return <PageWrapper title="Mission" subtitle="Executive command brief and system posture overview"><EmptyState title="No data available" /></PageWrapper>;
+  }
 
   const keyChangesMap: Record<string, readonly KeyChange[]> = {
     '1h': data.keyChanges1h,

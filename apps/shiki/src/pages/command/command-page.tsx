@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useMemo } from 'react';
 import { PageWrapper } from '@shiki/components/layout';
 import {
   Card,
@@ -22,13 +22,8 @@ import {
   ObjectiveBoard,
   ScheduleTable,
 } from '@shiki/components/controllers';
-import {
-  getMockControllers,
-  MOCK_OBJECTIVES,
-  MOCK_SCHEDULES,
-  MOCK_CHAR_STATUS,
-} from '@shiki/fixtures/controllers';
-import type { ControllerDisplayMode, Controller, ControllerObjective } from '@shiki/types';
+import { useCommandData } from '@shiki/features/command';
+import type { ControllerDisplayMode, Controller, ControllerObjective, CHARStatus } from '@shiki/types';
 import {
   CONTROLLER_FUNCTIONAL_NAMES,
   CONTROLLER_EXPRESSIVE_NAMES,
@@ -57,7 +52,7 @@ interface TimelineEntry {
 
 function buildTimelineFeed(
   controllers: readonly Controller[],
-  charStatus: typeof MOCK_CHAR_STATUS,
+  charStatus: CHARStatus,
   displayMode: ControllerDisplayMode,
 ): TimelineEntry[] {
   const controllerEntries: TimelineEntry[] = controllers.map((c) => {
@@ -100,12 +95,7 @@ function buildTimelineFeed(
 // ---------------------------------------------------------------------------
 
 export function CommandPage() {
-  const [displayMode, setDisplayMode] = useState<ControllerDisplayMode>('named');
-
-  const controllers = useMemo(() => getMockControllers(), []);
-  const charStatus = MOCK_CHAR_STATUS;
-  const objectives = MOCK_OBJECTIVES;
-  const schedules = MOCK_SCHEDULES;
+  const { controllers, objectives, schedules, charStatus, displayMode, setDisplayMode, isLoading } = useCommandData();
 
   // Derived data
   const blockedObjectives = useMemo(
@@ -124,9 +114,17 @@ export function CommandPage() {
   );
 
   const timelineFeed = useMemo(
-    () => buildTimelineFeed(controllers, charStatus, displayMode),
+    () => charStatus ? buildTimelineFeed(controllers, charStatus, displayMode) : [],
     [controllers, charStatus, displayMode],
   );
+
+  if (isLoading || !charStatus) {
+    return (
+      <PageWrapper title="Command" subtitle="Controller orchestration overview">
+        <div className="text-xs text-neutral-500 font-mono animate-pulse">Loading command data...</div>
+      </PageWrapper>
+    );
+  }
 
   return (
     <PageWrapper

@@ -3,10 +3,15 @@ import { createRoot } from 'react-dom/client';
 import { Providers } from './providers';
 import { AppRouter } from './router';
 import { log } from '@shiki/lib/logging';
-import { getEnvironment, getRuntimeMode } from '@shiki/lib/env';
+import { getEnvironment, getRuntimeMode, getStartupValidationSummary } from '@shiki/lib/env';
 import '@shiki/styles/index.css';
 
 log.info(`[SHIKI] Starting — env=${getEnvironment()} mode=${getRuntimeMode()}`);
+
+const validation = getStartupValidationSummary();
+if (!validation.ok) {
+  log.warn('[SHIKI] Environment validation issues:', { results: validation.results.filter(r => !r.valid) });
+}
 
 const root = document.getElementById('root');
 if (!root) throw new Error('Root element not found');

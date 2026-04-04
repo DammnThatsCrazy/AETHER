@@ -11,11 +11,11 @@ import { PageWrapper } from '@shiki/components/layout';
 import { cn, formatRelativeTime, formatTimestamp } from '@shiki/lib/utils';
 import { useAuth } from '@shiki/features/auth';
 import { usePermissions, PermissionGate } from '@shiki/features/permissions';
+import { useReviewData } from '@shiki/features/review';
 import type {
   ReviewBatch, ReviewItem, ReviewStatus, AuditEntry,
   ActionClass, ActionAttribution, GraphDiff,
 } from '@shiki/types';
-import { getMockReviewBatches, getMockAuditTrail } from '@shiki/fixtures/review';
 
 // ─── Status styling ────────────────────────────────────────────────────────
 
@@ -261,9 +261,11 @@ export function ReviewPage() {
   const { user } = useAuth();
   const permissions = usePermissions();
 
-  const [batches, setBatches] = useState<ReviewBatch[]>(() => [...getMockReviewBatches()] as ReviewBatch[]);
-  const [auditTrail, setAuditTrail] = useState<AuditEntry[]>(() => [...getMockAuditTrail()] as AuditEntry[]);
-  const [selectedBatchId, setSelectedBatchId] = useState<string | null>(null);
+  const {
+    batches, selectedBatch, selectedBatchId, setSelectedBatchId,
+    auditTrail, resolveItem, isLoading, error,
+  } = useReviewData();
+
   const [selectedItemId, setSelectedItemId] = useState<string | null>(null);
 
   const [actionModal, setActionModal] = useState<ActionModalState>({
@@ -274,7 +276,6 @@ export function ReviewPage() {
   });
   const [actionReason, setActionReason] = useState('');
 
-  const selectedBatch = batches.find(b => b.id === selectedBatchId) ?? null;
   const selectedItem = selectedBatch?.items.find(i => i.id === selectedItemId) ?? null;
   const batchAuditEntries = useMemo(
     () => auditTrail.filter(a => a.batchId === selectedBatchId).sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()),
@@ -294,7 +295,7 @@ export function ReviewPage() {
   const executeAction = useCallback(() => {
     if (!actionReason.trim()) return;
 
-    const { actionType, itemId, batchId } = actionModal;
+    const { actionType, itemId } = actionModal;
     const config = actionConfig[actionType];
     const now = new Date().toISOString();
 
@@ -309,53 +310,33 @@ export function ReviewPage() {
       correlationId: `corr-${actionType}-${Date.now()}`,
     };
 
-    // Update batch and item statuses
-    setBatches(prev =>
-      prev.map(batch => {
-        if (batch.id !== batchId) return batch;
-        const updatedItems = batch.items.map(item => {
-          if (item.id !== itemId) return item;
-          return {
-            ...item,
-            status: config.newStatus,
-            resolution: {
-              status: config.newStatus,
-              resolvedBy: attribution,
-              reason: actionReason,
-            },
-          } as ReviewItem;
-        });
-        // Update batch status if all items have same status
-        const allSame = updatedItems.every(i => i.status === config.newStatus);
-        return {
-          ...batch,
-          items: updatedItems,
-          status: allSame ? config.newStatus : batch.status,
-        } as ReviewBatch;
-      }),
-    );
-
-    // Find the current item to get previous status
-    const currentItem = batches
-      .find(b => b.id === batchId)
-      ?.items.find(i => i.id === itemId);
-
-    // Add audit entry
-    const newAudit: AuditEntry = {
-      id: `audit-${Date.now()}`,
-      action: actionType,
-      timestamp: now,
-      actor: attribution,
-      itemId,
-      batchId,
-      previousStatus: currentItem?.status ?? 'pending',
-      newStatus: config.newStatus,
-      reason: actionReason,
-    };
-
-    setAuditTrail(prev => [newAudit, ...prev]);
+    resolveItem(itemId, config.newStatus, actionReason, attribution);
     closeActionModal();
-  }, [actionModal, actionReason, user, batches, closeActionModal]);
+  }, [actionModal, actionReason, user, resolveItem, closeActionModal]);
+
+  if (isLoading) {
+    return (
+      <PageWrapper title="Review & Approval" subtitle="Loading...">
+        <Card>
+          <CardContent>
+            <div className="text-center py-8 text-text-secondary">Loading review data...</div>
+          </CardContent>
+        </Card>
+      </PageWrapper>
+    );
+  }
+
+  if (error) {
+    return (
+      <PageWrapper title="Review & Approval" subtitle="Error">
+        <Card>
+          <CardContent>
+            <div className="text-center py-8 text-danger">{error}</div>
+          </CardContent>
+        </Card>
+      </PageWrapper>
+    );
+  }
 
   return (
     <PageWrapper

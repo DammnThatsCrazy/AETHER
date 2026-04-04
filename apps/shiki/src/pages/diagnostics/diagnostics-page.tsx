@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useMemo } from 'react';
 import {
   Card, CardHeader, CardTitle, CardContent,
   Badge, SeverityBadge, StatusIndicator, Button,
@@ -9,8 +9,8 @@ import {
 import { PageWrapper } from '@shiki/components/layout';
 import { cn, formatRelativeTime, formatTimestamp } from '@shiki/lib/utils';
 import { usePermissions, PermissionGate } from '@shiki/features/permissions';
+import { useDiagnosticsData } from '@shiki/features/diagnostics';
 import type { ErrorFingerprint, Severity, DependencyHealth, CircuitBreakerState, AdapterReadiness, EnvValidation, LagMetric } from '@shiki/types';
-import { getMockSystemHealth } from '@shiki/fixtures/health';
 
 const SEVERITY_ORDER: readonly Severity[] = ['P0', 'P1', 'P2', 'P3', 'info'];
 
@@ -69,20 +69,8 @@ function LagCard({ title, lag }: { readonly title: string; readonly lag: LagMetr
 }
 
 export function DiagnosticsPage() {
-  const health = useMemo(() => getMockSystemHealth(), []);
+  const { health, isLoading, error, suppressError } = useDiagnosticsData();
   const { canDiagnose } = usePermissions();
-
-  const [fingerprints, setFingerprints] = useState<ErrorFingerprint[]>(
-    () => [...health.errorFingerprints] as ErrorFingerprint[],
-  );
-
-  const handleToggleSuppress = (fp: string) => {
-    setFingerprints(prev =>
-      prev.map(e =>
-        e.fingerprint === fp ? { ...e, suppressed: !e.suppressed } : e,
-      ),
-    );
-  };
 
   const fingerprintColumns = useMemo(() => [
     {
@@ -140,13 +128,49 @@ export function DiagnosticsPage() {
         >
           <Toggle
             checked={row.suppressed}
-            onChange={() => handleToggleSuppress(row.fingerprint)}
+            onChange={() => suppressError(row.fingerprint)}
             label={row.suppressed ? 'Suppressed' : 'Active'}
           />
         </PermissionGate>
       ),
     },
   ], [canDiagnose]);
+
+  if (isLoading) {
+    return (
+      <PageWrapper title="System Diagnostics" subtitle="Loading...">
+        <Card>
+          <CardContent>
+            <div className="text-center py-8 text-text-secondary">Loading diagnostics data...</div>
+          </CardContent>
+        </Card>
+      </PageWrapper>
+    );
+  }
+
+  if (error) {
+    return (
+      <PageWrapper title="System Diagnostics" subtitle="Error">
+        <Card>
+          <CardContent>
+            <div className="text-center py-8 text-danger">{error}</div>
+          </CardContent>
+        </Card>
+      </PageWrapper>
+    );
+  }
+
+  if (!health) {
+    return (
+      <PageWrapper title="System Diagnostics" subtitle="No data">
+        <Card>
+          <CardContent>
+            <div className="text-center py-8 text-text-secondary">No diagnostics data available.</div>
+          </CardContent>
+        </Card>
+      </PageWrapper>
+    );
+  }
 
   const overallStatus = health.overall.status;
 
@@ -318,7 +342,7 @@ export function DiagnosticsPage() {
               <ScrollArea maxHeight="400px">
                 <DataTable
                   columns={fingerprintColumns}
-                  data={fingerprints}
+                  data={health.errorFingerprints}
                   keyExtractor={(row) => row.fingerprint}
                 />
               </ScrollArea>

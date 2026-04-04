@@ -11,8 +11,8 @@ import { GraphCanvas } from '@shiki/components/graph/graph-canvas';
 import { GraphInspector } from '@shiki/components/graph/graph-inspector';
 import { GraphToolbar } from '@shiki/components/graph/graph-toolbar';
 import { GraphControls } from '@shiki/components/graph/graph-controls';
-import { getMockGraphData } from '@shiki/fixtures/graph';
-import type { GraphNode, GraphEdge, GraphCluster, GraphLayer, GraphOverlay, EntityType, GraphInspectorData } from '@shiki/types';
+import { useGraphData } from '@shiki/features/gouf';
+import type { GraphNode, GraphEdge, GraphCluster, GraphLayer, EntityType, GraphInspectorData } from '@shiki/types';
 
 // ---------------------------------------------------------------------------
 // Edge layer classification
@@ -147,15 +147,17 @@ const NODE_TABLE_COLUMNS = [
 // ---------------------------------------------------------------------------
 
 export function GoufPage() {
-  // ---- Source data ----
-  const rawData = useMemo(() => getMockGraphData(), []);
+  // ---- Source data (hook manages layer, overlay, visibility, and selection state) ----
+  const {
+    nodes, edges, clusters, isLoading,
+    activeLayer, setActiveLayer,
+    activeOverlay, setActiveOverlay,
+    visibleTypes, setVisibleTypes,
+    selectedNodeId, setSelectedNodeId,
+    selectedEdgeId, setSelectedEdgeId,
+  } = useGraphData();
 
-  // ---- Graph state ----
-  const [activeLayer, setActiveLayer] = useState<GraphLayer>('all');
-  const [visibleEntityTypes, setVisibleEntityTypes] = useState<EntityType[]>([
-    'customer', 'wallet', 'agent', 'protocol', 'contract', 'cluster',
-  ]);
-  const [activeOverlay, setActiveOverlay] = useState<GraphOverlay>('none');
+  // ---- Local UI state ----
   const [timeWindow, setTimeWindow] = useState('30d');
   const [viewMode, setViewMode] = useState<'graph' | 'table'>('graph');
 
@@ -176,40 +178,31 @@ export function GoufPage() {
   // ---- Node map ----
   const nodeMap = useMemo(() => {
     const map = new Map<string, GraphNode>();
-    for (const n of rawData.nodes) map.set(n.id, n);
+    for (const n of nodes) map.set(n.id, n);
     return map;
-  }, [rawData.nodes]);
+  }, [nodes]);
 
-  // ---- Filter nodes by visible entity types (external is always shown if any type shown) ----
-  const filteredNodes = useMemo(() => {
-    return rawData.nodes.filter((n) => {
-      if (n.type === 'external') return true;
-      return visibleEntityTypes.includes(n.type as EntityType);
-    });
-  }, [rawData.nodes, visibleEntityTypes]);
-
-  // ---- Filter edges by layer and visible nodes ----
+  // ---- Filter edges by layer (node-type filtering is handled by the hook) ----
+  const filteredNodes = nodes;
   const filteredEdges = useMemo(() => {
-    const visibleNodeIds = new Set(filteredNodes.map((n) => n.id));
-    return rawData.edges.filter((e) => {
-      if (!visibleNodeIds.has(e.source) || !visibleNodeIds.has(e.target)) return false;
-      if (activeLayer === 'all') return true;
+    if (activeLayer === 'all') return edges;
+    return edges.filter((e) => {
       const layer = classifyEdgeLayer(e, nodeMap);
       return layer === activeLayer;
     });
-  }, [rawData.edges, filteredNodes, activeLayer, nodeMap]);
+  }, [edges, activeLayer, nodeMap]);
 
   // ---- Highlighted nodes (neighborhood of selected) ----
   const highlightedNodeIds = useMemo(() => {
     if (!inspectorData || inspectorData.type !== 'node') return undefined;
     const nodeId = (inspectorData.data as GraphNode).id;
     const ids = new Set<string>([nodeId]);
-    for (const e of rawData.edges) {
+    for (const e of edges) {
       if (e.source === nodeId) ids.add(e.target);
       if (e.target === nodeId) ids.add(e.source);
     }
     return Array.from(ids);
-  }, [inspectorData, rawData.edges]);
+  }, [inspectorData, edges]);
 
   // ---- Cluster highlighting ----
   const [highlightedClusterIds, setHighlightedClusterIds] = useState<string[] | null>(null);
@@ -222,12 +215,12 @@ export function GoufPage() {
   // ---- Get neighbors for a node ----
   const getNeighbors = useCallback((nodeId: string): GraphNode[] => {
     const neighborIds = new Set<string>();
-    for (const e of rawData.edges) {
+    for (const e of edges) {
       if (e.source === nodeId) neighborIds.add(e.target);
       if (e.target === nodeId) neighborIds.add(e.source);
     }
-    return rawData.nodes.filter((n) => neighborIds.has(n.id));
-  }, [rawData]);
+    return nodes.filter((n) => neighborIds.has(n.id));
+  }, [edges, nodes]);
 
   // ---- Handle node selection ----
   const handleSelectNode = useCallback((node: GraphNode | null) => {
@@ -247,7 +240,7 @@ export function GoufPage() {
         return;
       }
       // Second node selected
-      const result = bfsShortestPath(pathSource, node.id, rawData.edges);
+      const result = bfsShortestPath(pathSource, node.id, edges);
       setPathResult(result);
       setPathSource(null);
       if (result) {
@@ -268,7 +261,7 @@ export function GoufPage() {
       data: node,
       neighbors: getNeighbors(node.id),
     });
-  }, [pathMode, pathSource, rawData.edges, getNeighbors]);
+  }, [pathMode, pathSource, edges, getNeighbors]);
 
   // ---- Handle edge selection ----
   const handleSelectEdge = useCallback((edge: GraphEdge | null) => {
@@ -288,13 +281,13 @@ export function GoufPage() {
 
   // ---- Toggle entity type ----
   const handleToggleEntityType = useCallback((type: EntityType) => {
-    setVisibleEntityTypes((prev) => {
+    setVisibleTypes((prev) => {
       if (prev.includes(type)) {
         return prev.filter((t) => t !== type);
       }
       return [...prev, type];
     });
-  }, []);
+  }, [setVisibleTypes]);
 
   // ---- Close inspector ----
   const handleCloseInspector = useCallback(() => {
@@ -364,6 +357,14 @@ export function GoufPage() {
     return ts.toISOString();
   }, [replayProgress, timeWindow]);
 
+  if (isLoading) {
+    return (
+      <PageWrapper title="GOUF" subtitle="Loading graph data...">
+        <div className="flex items-center justify-center py-24 text-text-muted">Loading...</div>
+      </PageWrapper>
+    );
+  }
+
   return (
     <PageWrapper
       title="GOUF"
@@ -397,7 +398,7 @@ export function GoufPage() {
       <GraphToolbar
         activeLayer={activeLayer}
         onLayerChange={setActiveLayer}
-        visibleEntityTypes={visibleEntityTypes}
+        visibleEntityTypes={visibleTypes}
         onToggleEntityType={handleToggleEntityType}
         activeOverlay={activeOverlay}
         onOverlayChange={setActiveOverlay}
@@ -475,11 +476,11 @@ export function GoufPage() {
               <CardTitle>Clusters</CardTitle>
             </CardHeader>
             <CardContent>
-              {rawData.clusters.length === 0 ? (
+              {clusters.length === 0 ? (
                 <EmptyState title="No clusters detected" />
               ) : (
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-                  {rawData.clusters.map((cluster) => (
+                  {clusters.map((cluster) => (
                     <button
                       key={cluster.id}
                       onClick={() => handleClusterClick(cluster)}

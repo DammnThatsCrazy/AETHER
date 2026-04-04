@@ -16,7 +16,7 @@ import {
 } from '@shiki/components/system';
 import { PageWrapper } from '@shiki/components/layout';
 import { EntityListTable } from '@shiki/components/entities';
-import { getMockEntities } from '@shiki/fixtures/entities';
+import { useEntityData } from '@shiki/features/entities';
 import { Entity360Page } from './entity-360';
 
 const ENTITY_TYPES: EntityType[] = [
@@ -46,7 +46,7 @@ export function EntitiesPage() {
   );
   const [selectedEntityId, setSelectedEntityId] = useState<string | null>(routeId ?? null);
 
-  const entities = useMemo(() => getMockEntities(activeType), [activeType]);
+  const { entities, isLoading } = useEntityData(activeType);
 
   const handleSelectEntity = useCallback(
     (entity: Entity) => {
@@ -80,14 +80,12 @@ export function EntitiesPage() {
     );
   }
 
-  // Entity type counts for the tabs
+  // Entity type counts – only the active type is known from the hook
   const typeCounts = useMemo(() => {
     const counts: Partial<Record<EntityType, number>> = {};
-    for (const t of ENTITY_TYPES) {
-      counts[t] = getMockEntities(t).length;
-    }
+    counts[activeType] = entities.length;
     return counts;
-  }, []);
+  }, [activeType, entities]);
 
   return (
     <PageWrapper title="Entities">
@@ -100,6 +98,10 @@ export function EntitiesPage() {
         </div>
 
         <TerminalSeparator />
+
+        {isLoading && (
+          <div className="text-xs text-neutral-500 font-mono animate-pulse">Loading entities...</div>
+        )}
 
         {/* Entity Type Selector */}
         <Tabs defaultValue={activeType} onValueChange={handleTypeChange}>
@@ -122,7 +124,7 @@ export function EntitiesPage() {
                 </CardHeader>
                 <CardContent>
                   <EntityListTable
-                    entities={type === activeType ? entities : getMockEntities(type)}
+                    entities={type === activeType ? entities : []}
                     onSelect={handleSelectEntity}
                   />
                 </CardContent>

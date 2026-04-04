@@ -35,8 +35,9 @@ async function request<T>(
   options?: RequestOptions,
 ): Promise<T> {
   const correlationId = generateCorrelationId();
-  const baseUrl = env.VITE_API_BASE_URL;
-  const url = `${baseUrl}${path}`;
+  // Use relative paths in browser — Vite proxy (dev) or nginx (prod) routes to backend.
+  // Absolute base URL used only for SSR or explicit override.
+  const url = path;
 
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',

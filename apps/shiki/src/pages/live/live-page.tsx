@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useCallback } from 'react';
 import {
   Card,
   CardHeader,
@@ -11,12 +11,13 @@ import {
   ScrollArea,
   Toggle,
   Input,
+  StatusIndicator,
 } from '@shiki/components/system';
 import { PageWrapper } from '@shiki/components/layout';
 import { cn, formatRelativeTime, formatTimestamp } from '@shiki/lib/utils';
 import { getEnvironment, getRuntimeMode } from '@shiki/lib/env';
 import { useDebounce } from '@shiki/hooks';
-import { getMockEvents, getMockEventStream } from '@shiki/fixtures/events';
+import { useLiveEvents } from '@shiki/features/live';
 import type { LiveEvent, LiveEventType, Severity } from '@shiki/types';
 
 const ALL_EVENT_TYPES: LiveEventType[] = [
@@ -209,58 +210,47 @@ export function LivePage() {
   const environment = getEnvironment();
   const mode = getRuntimeMode();
 
-  const [events, setEvents] = useState<LiveEvent[]>(() => getMockEvents());
-  const [isPaused, setIsPaused] = useState(false);
+  const {
+    events: filteredEvents,
+    allEvents,
+    pinnedEvents,
+    isPaused,
+    setIsPaused,
+    filter,
+    setFilter,
+    wsStatus,
+    totalCount,
+  } = useLiveEvents();
+
   const [expandedEventId, setExpandedEventId] = useState<string | null>(null);
 
-  // Filters
+  // Local UI state for filter controls
   const [activeTypes, setActiveTypes] = useState<Set<LiveEventType>>(new Set(ALL_EVENT_TYPES));
   const [activeSeverities, setActiveSeverities] = useState<Set<Severity>>(new Set(ALL_SEVERITIES));
   const [controllerFilter, setControllerFilter] = useState('');
   const [searchInput, setSearchInput] = useState('');
   const debouncedSearch = useDebounce(searchInput, 300);
 
-  const streamRef = useRef(getMockEventStream());
+  // Sync local filter UI state to the hook's setFilter
+  const syncFilter = useCallback((
+    types: Set<LiveEventType>,
+    severities: Set<Severity>,
+    controller: string,
+    search: string,
+  ) => {
+    setFilter({
+      types: types.size === ALL_EVENT_TYPES.length ? undefined : Array.from(types),
+      severities: severities.size === ALL_SEVERITIES.length ? undefined : Array.from(severities),
+      controllers: controller ? [controller] : undefined,
+      search: search || undefined,
+    });
+  }, [setFilter]);
 
-  // Simulate live event stream
-  useEffect(() => {
-    if (isPaused) return;
-
-    const interval = setInterval(() => {
-      const result = streamRef.current.next();
-      if (!result.done && result.value) {
-        setEvents(prev => [result.value as LiveEvent, ...prev].slice(0, 500));
-      }
-    }, 2000 + Math.random() * 1000);
-
-    return () => clearInterval(interval);
-  }, [isPaused]);
-
-  // Filter logic
-  const filteredEvents = events.filter(event => {
-    if (!activeTypes.has(event.type)) return false;
-    if (!activeSeverities.has(event.severity)) return false;
-    if (controllerFilter && event.controller !== controllerFilter) return false;
-    if (debouncedSearch) {
-      const search = debouncedSearch.toLowerCase();
-      const matches =
-        event.title.toLowerCase().includes(search) ||
-        event.description.toLowerCase().includes(search) ||
-        event.source.toLowerCase().includes(search) ||
-        (event.controller?.toLowerCase().includes(search) ?? false) ||
-        (event.entityId?.toLowerCase().includes(search) ?? false) ||
-        (event.traceId?.toLowerCase().includes(search) ?? false);
-      if (!matches) return false;
-    }
-    return true;
-  });
-
-  const pinnedEvents = filteredEvents.filter(e => e.pinned);
   const unpinnedEvents = filteredEvents.filter(e => !e.pinned);
 
-  // Unique controllers from events for filter dropdown
+  // Unique controllers from all events for filter dropdown
   const uniqueControllers = Array.from(
-    new Set(events.map(e => e.controller).filter(Boolean) as string[])
+    new Set(allEvents.map(e => e.controller).filter(Boolean) as string[])
   ).sort();
 
   const toggleType = useCallback((type: LiveEventType) => {
@@ -271,9 +261,10 @@ export function LivePage() {
       } else {
         next.add(type);
       }
+      syncFilter(next, activeSeverities, controllerFilter, debouncedSearch);
       return next;
     });
-  }, []);
+  }, [activeSeverities, controllerFilter, debouncedSearch, syncFilter]);
 
   const toggleSeverity = useCallback((sev: Severity) => {
     setActiveSeverities(prev => {
@@ -283,9 +274,10 @@ export function LivePage() {
       } else {
         next.add(sev);
       }
+      syncFilter(activeTypes, next, controllerFilter, debouncedSearch);
       return next;
     });
-  }, []);
+  }, [activeTypes, controllerFilter, debouncedSearch, syncFilter]);
 
   const handleToggleExpand = useCallback((eventId: string) => {
     setExpandedEventId(prev => prev === eventId ? null : eventId);
@@ -299,14 +291,14 @@ export function LivePage() {
         <div className="flex items-center gap-3">
           <div className="text-xs text-text-muted font-mono">
             {filteredEvents.length} events
-            {filteredEvents.length !== events.length && (
-              <span className="text-text-muted"> / {events.length} total</span>
+            {filteredEvents.length !== totalCount && (
+              <span className="text-text-muted"> / {totalCount} total</span>
             )}
           </div>
           <Button
             variant={isPaused ? 'primary' : 'secondary'}
             size="sm"
-            onClick={() => setIsPaused(p => !p)}
+            onClick={() => setIsPaused(!isPaused)}
           >
             {isPaused ? '\u25B6 Resume' : '\u23F8 Pause'}
           </Button>
@@ -316,6 +308,7 @@ export function LivePage() {
               LIVE
             </span>
           )}
+          <StatusIndicator status={wsStatus === 'connected' ? 'healthy' : wsStatus === 'connecting' ? 'degraded' : 'unknown'} />
         </div>
       }
     >
@@ -359,7 +352,7 @@ export function LivePage() {
               <select
                 className="text-xs bg-surface-sunken border border-border-subtle rounded px-2 py-1 text-text-primary"
                 value={controllerFilter}
-                onChange={e => setControllerFilter(e.target.value)}
+                onChange={e => { setControllerFilter(e.target.value); syncFilter(activeTypes, activeSeverities, e.target.value, debouncedSearch); }}
               >
                 <option value="">All Controllers</option>
                 {uniqueControllers.map(c => (
