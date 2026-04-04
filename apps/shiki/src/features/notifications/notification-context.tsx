@@ -91,30 +91,30 @@ function routeToExternalChannels(notification: ShikiNotification): void {
   }
 
   if (channels.includes('slack')) {
-    // Slack webhook delivery is handled server-side via the notification relay
-    // We dispatch an event so the adapter can pick it up
-    window.dispatchEvent(new CustomEvent('shiki:notification:slack', {
-      detail: {
-        title: notification.title,
-        body: notification.body,
-        severity: notification.severity,
-        deepLink: notification.deepLink,
-        // Redact sensitive details for external channels
-        what: notification.what,
-        why: notification.why,
-      },
-    }));
+    // Deliver via backend notification service
+    fetch('/v1/notifications/alerts', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        name: notification.title,
+        condition: `severity:${notification.severity}`,
+        channels: ['slack'],
+        recipients: [],
+      }),
+    }).catch(() => { /* Slack relay failure is non-blocking */ });
   }
 
   if (channels.includes('email')) {
-    window.dispatchEvent(new CustomEvent('shiki:notification:email', {
-      detail: {
-        title: notification.title,
-        body: notification.body,
-        severity: notification.severity,
-        deepLink: notification.deepLink,
-      },
-    }));
+    fetch('/v1/notifications/alerts', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        name: notification.title,
+        condition: `severity:${notification.severity}`,
+        channels: ['email'],
+        recipients: [],
+      }),
+    }).catch(() => { /* Email relay failure is non-blocking */ });
   }
 }
 
@@ -132,12 +132,46 @@ export function NotificationProvider({ children }: { readonly children: ReactNod
     isConnected: false,
   });
 
-  // Load mock notifications in local mode
+  // Load notifications — mock in local, real alerts in live mode
   useEffect(() => {
     if (isLocalMocked()) {
       dispatch({ type: 'BULK_ADD', notifications: MOCK_NOTIFICATIONS });
       dispatch({ type: 'SET_CONNECTED', connected: true });
+      return;
     }
+
+    // Live mode: fetch real alerts from backend
+    fetch('/v1/notifications/alerts')
+      .then(r => r.json())
+      .then((response: { data?: unknown[] }) => {
+        const alerts = Array.isArray(response.data) ? response.data : [];
+        const mapped: ShikiNotification[] = alerts.map((raw: unknown, idx: number) => {
+          const a = (raw && typeof raw === 'object' ? raw : {}) as Record<string, unknown>;
+          return {
+            id: String(a['id'] ?? `alert-${idx}`),
+            title: String(a['name'] ?? 'Alert'),
+            body: String(a['condition'] ?? ''),
+            severity: String(a['severity'] ?? 'info') as Severity,
+            class: 'alert' as const,
+            channels: ['in-app' as const],
+            timestamp: String(a['created_at'] ?? new Date().toISOString()),
+            read: false,
+            dismissed: false,
+            deepLink: '/diagnostics',
+            what: String(a['name'] ?? 'Alert triggered'),
+            why: String(a['condition'] ?? 'Condition met'),
+            impact: 'See diagnostics for details',
+            dedupeKey: `backend-alert-${a['id'] ?? idx}`,
+          };
+        });
+        if (mapped.length > 0) {
+          dispatch({ type: 'BULK_ADD', notifications: mapped });
+        }
+        dispatch({ type: 'SET_CONNECTED', connected: true });
+      })
+      .catch(() => {
+        dispatch({ type: 'SET_CONNECTED', connected: false });
+      });
   }, []);
 
   const escalationTimers = new Map<string, ReturnType<typeof setTimeout>>();
