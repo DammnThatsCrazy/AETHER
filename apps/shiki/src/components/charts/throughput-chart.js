@@ -1,5 +1,0 @@
-import { jsx as _jsx, jsxs as _jsxs } from "react/jsx-runtime";
-import { ResponsiveContainer, LineChart, Line, XAxis, YAxis, Tooltip as RechartsTooltip, CartesianGrid } from 'recharts';
-export function ThroughputChart({ data, height = 200, className }) {
-    return (_jsx("div", { className: className, children: _jsx(ResponsiveContainer, { width: "100%", height: height, children: _jsxs(LineChart, { data: [...data], children: [_jsx(CartesianGrid, { strokeDasharray: "3 3", stroke: "var(--color-border-subtle)" }), _jsx(XAxis, { dataKey: "time", tick: { fill: 'var(--color-text-muted)', fontSize: 10 } }), _jsx(YAxis, { tick: { fill: 'var(--color-text-muted)', fontSize: 10 } }), _jsx(RechartsTooltip, { contentStyle: { backgroundColor: 'var(--color-surface-overlay)', border: '1px solid var(--color-border-default)', borderRadius: 4, fontSize: 11 }, labelStyle: { color: 'var(--color-text-secondary)' } }), _jsx(Line, { type: "monotone", dataKey: "value", stroke: "var(--color-accent)", strokeWidth: 2, dot: false })] }) }) }));
-}
