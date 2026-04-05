@@ -16,8 +16,8 @@
     "typecheck": "tsc --noEmit --project packages/web/tsconfig.json && npm run typecheck --workspace=apps/shiki --if-present && npm run typecheck --workspace=packages/react-native --if-present",
     "clean": "rm -rf packages/*/dist packages/*/node_modules",
     "docs": "typedoc --entryPoints packages/web/src/index.ts --out docs/api",
-    "deps:circular": "madge --circular --extensions ts,tsx packages/web/src packages/react-native/src apps/shiki/src",
-    "deps:unused": "depcheck packages/web && depcheck packages/react-native && depcheck apps/shiki"
+    "deps:circular": "npx --yes madge@^7 --circular --extensions ts,tsx packages/web/src packages/react-native/src apps/shiki/src",
+    "deps:unused": "npx --yes depcheck@^1.4 packages/web && npx --yes depcheck@^1.4 packages/react-native && npx --yes depcheck@^1.4 apps/shiki"
   },
   "devDependencies": {
     "@types/node": "^20.0.0",
@@ -29,9 +29,7 @@
     "@rollup/plugin-typescript": "^11.0.0",
     "@rollup/plugin-terser": "^0.4.0",
     "@rollup/plugin-node-resolve": "^15.0.0",
-    "tslib": "^2.6.0",
-    "madge": "^7.0.0",
-    "depcheck": "^1.4.7"
+    "tslib": "^2.6.0"
   },
   "engines": {
     "node": ">=18.0.0"
