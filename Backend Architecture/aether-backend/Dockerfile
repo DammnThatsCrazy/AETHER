@@ -29,11 +29,19 @@ RUN groupadd --gid 1000 appuser && \
 COPY --from=builder /usr/local/lib/python3.11/site-packages /usr/local/lib/python3.11/site-packages
 COPY --from=builder /usr/local/bin /usr/local/bin
 
-# Copy application code (exclude tests, docs, node artifacts)
-COPY Backend\ Architecture/aether-backend/ ./Backend\ Architecture/aether-backend/
-COPY shared/ ./shared/
+# Copy application code
+# Build context is the repository root, so paths are relative to repo root.
+# The aether-backend/ tree provides main.py and the shared/ package used by
+# imports of the form `from shared.X import ...`. The top-level security/
+# package is consumed via `from security.X import ...`.
+COPY ["Backend Architecture/aether-backend/config/", "./config/"]
+COPY ["Backend Architecture/aether-backend/dependencies/", "./dependencies/"]
+COPY ["Backend Architecture/aether-backend/middleware/", "./middleware/"]
+COPY ["Backend Architecture/aether-backend/repositories/", "./repositories/"]
+COPY ["Backend Architecture/aether-backend/services/", "./services/"]
+COPY ["Backend Architecture/aether-backend/shared/", "./shared/"]
+COPY ["Backend Architecture/aether-backend/main.py", "./main.py"]
 COPY security/ ./security/
-COPY main.py .
 
 EXPOSE 8000
 

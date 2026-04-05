@@ -1,0 +1,74 @@
+# Dockerignore for Aether backend builds.
+# The Dockerfile uses the repository root as its build context, so this
+# excludes artifacts that do not need to be shipped into the image and
+# would otherwise bloat the context transfer on every build.
+
+# VCS + tooling
+.git/
+.github/
+.claude/
+.vscode/
+.idea/
+.pre-commit-config.yaml
+
+# Node / workspace artifacts
+node_modules/
+**/node_modules/
+packages/
+apps/
+playground/
+RootPackageSDK.json
+package-lock.json
+
+# Docs + release artifacts
+docs/
+CHANGELOG.md
+README.md
+CONTRIBUTING.md
+LICENSE
+*.md
+!Backend Architecture/aether-backend/**/*.md
+
+# Python byproducts
+**/__pycache__/
+**/*.pyc
+**/*.pyo
+**/.pytest_cache/
+**/.ruff_cache/
+**/.mypy_cache/
+*.egg-info/
+
+# Coverage + test output
+coverage/
+htmlcov/
+.coverage
+.coverage.*
+
+# OS + editor cruft
+.DS_Store
+Thumbs.db
+*.swp
+
+# Environment files (pyproject + security come in explicitly via the Dockerfile)
+.env
+.env.*
+!.env.example
+
+# Subsystems not needed for backend image
+ML Models/
+Agent Layer/
+Smart Contracts/
+Aether Mobile SDK/
+AWS Deployment/
+Data Ingestion Layer/
+Data Lake Architecture/
+GDPR & SOC2/
+tests/
+deploy/
+cicd/
+data-modules/
+
+# Tarballs / archives
+*.zip
+*.tar
+*.tar.gz
