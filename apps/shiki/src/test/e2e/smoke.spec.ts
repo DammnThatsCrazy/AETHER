@@ -33,7 +33,10 @@ test.describe('SHIKI Smoke Tests', () => {
 
   test('command page loads', async ({ page }) => {
     await page.goto('/command');
-    await expect(page.locator('text=Command')).toBeVisible();
+    // Scope to the page's H1 heading: 'text=Command' would otherwise also
+    // match the 'engineering command' role badge rendered in the top-bar
+    // on every authenticated page and trip Playwright's strict mode.
+    await expect(page.getByRole('heading', { name: 'Command', level: 1 })).toBeVisible();
   });
 
   test('diagnostics page loads', async ({ page }) => {
