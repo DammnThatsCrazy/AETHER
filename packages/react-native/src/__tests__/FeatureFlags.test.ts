@@ -1,19 +1,20 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
-// Mock `react-native` before importing the module under test. The mock
-// simulates the native module bridge and lets us verify the thin-bridge
-// contract without booting a real RN runtime.
-const nativeFlags = {
-  initialize: vi.fn(),
-  isEnabled: vi.fn(async (key: string) => key === 'on'),
-  getFlag: vi.fn(async (key: string) => ({ key, enabled: true, source: 'remote' as const })),
-  getValue: vi.fn(async (_k: string) => 'native-value'),
-  getAllFlags: vi.fn(async () => ({})),
-  setOverride: vi.fn(),
-  clearOverride: vi.fn(),
-  refresh: vi.fn(async () => undefined),
-  destroy: vi.fn(),
-};
+// vi.mock() is hoisted to the top of the file, so any state it captures
+// must be declared via vi.hoisted() to survive the hoisting reorder.
+const { nativeFlags } = vi.hoisted(() => ({
+  nativeFlags: {
+    initialize: vi.fn(),
+    isEnabled: vi.fn(async (key: string) => key === 'on'),
+    getFlag: vi.fn(async (key: string) => ({ key, enabled: true, source: 'remote' as const })),
+    getValue: vi.fn(async (_k: string) => 'native-value'),
+    getAllFlags: vi.fn(async () => ({})),
+    setOverride: vi.fn(),
+    clearOverride: vi.fn(),
+    refresh: vi.fn(async () => undefined),
+    destroy: vi.fn(),
+  },
+}));
 
 vi.mock('react-native', () => ({
   NativeModules: { AetherFeatureFlags: nativeFlags },
@@ -22,7 +23,6 @@ vi.mock('react-native', () => ({
 }));
 
 // Import after mock so the module binds to the mocked NativeModules.
-// eslint-disable-next-line import/first
 import { RNFeatureFlags } from '../modules/FeatureFlags';
 
 describe('RNFeatureFlags (RN thin bridge)', () => {
