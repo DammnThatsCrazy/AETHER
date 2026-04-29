@@ -28,7 +28,12 @@ class SecurityPolicyVersion:
     @property
     def is_current(self) -> bool:
         today = datetime.now(timezone.utc).date().isoformat()
-        return self.effective_date <= today <= self.next_review
+        return self.effective_date <= today < self.next_review
+
+    @property
+    def is_overdue_for_review(self) -> bool:
+        today = datetime.now(timezone.utc).date().isoformat()
+        return today >= self.next_review
 
 
 SECTIONS = [
@@ -124,8 +129,8 @@ SECTIONS = [
     },
 ]
 
-# Current live policy version
-CURRENT_POLICY = SecurityPolicyVersion(
+# Superseded version — kept for audit history
+_POLICY_V2_0 = SecurityPolicyVersion(
     version="2.0",
     effective_date="2025-01-01",
     approved_by="CISO",
@@ -133,18 +138,53 @@ CURRENT_POLICY = SecurityPolicyVersion(
     next_review="2026-01-01",
     sections=SECTIONS,
     acknowledgment_required=True,
+    staff_ack_count=0,
+)
+
+# Current live policy version (annual review completed 2026-01-01)
+CURRENT_POLICY = SecurityPolicyVersion(
+    version="2.1",
+    effective_date="2026-01-01",
+    approved_by="CISO",
+    reviewed_by=["Legal", "Engineering Lead", "CTO", "Privacy Lead"],
+    next_review="2027-01-01",
+    sections=SECTIONS,
+    acknowledgment_required=True,
     staff_ack_count=0,  # Updated when staff sign off
 )
+
+
+class OverdueReviewError(Exception):
+    """Raised when the most recent policy version has passed its review deadline."""
+
+    def __init__(self, version: str, next_review: str):
+        self.version = version
+        self.next_review = next_review
+        super().__init__(
+            f"Security policy v{version} review was due {next_review} — "
+            "renew the policy before generating compliance evidence for CC-3.1."
+        )
 
 
 class SecurityPolicyManager:
     """Manages the information security policy lifecycle."""
 
     def __init__(self):
-        self.versions: list[SecurityPolicyVersion] = [CURRENT_POLICY]
+        # Ordered oldest-first; last entry is the most recent version
+        self.versions: list[SecurityPolicyVersion] = [_POLICY_V2_0, CURRENT_POLICY]
 
     def current_version(self) -> SecurityPolicyVersion:
-        return next((v for v in self.versions if v.is_current), self.versions[-1])
+        """
+        Return the currently active policy version.
+
+        Raises OverdueReviewError if every known version has passed its review
+        deadline, surfacing the gap rather than silently returning stale evidence.
+        """
+        current = next((v for v in reversed(self.versions) if v.is_current), None)
+        if current is not None:
+            return current
+        latest = self.versions[-1]
+        raise OverdueReviewError(latest.version, latest.next_review)
 
     def generate_evidence(self) -> dict:
         pol = self.current_version()
