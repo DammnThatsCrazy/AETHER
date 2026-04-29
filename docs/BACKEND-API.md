@@ -10,6 +10,134 @@ All endpoints require an API key passed as:
 - Header: `Authorization: Bearer <api-key>`
 - Or query parameter: `?apiKey=<api-key>`
 
+Public paths (`/`, `/health`, `/v1/health`, `/v1/metrics`, `/docs`,
+`/openapi.json`, `/redoc`) bypass authentication and rate limiting.
+
+## Plans, Rate Limits & Quotas
+
+Aether uses four self-serve plans (P1–P4). The legacy
+`FREE`/`PRO`/`ENTERPRISE` tiers are retained only for backward-compatible
+key validation and are mapped to plans automatically (FREE→P1, PRO→P2,
+ENTERPRISE→P4).
+
+| Plan | Display Name        | Burst RPM | Monthly Quota | Member Cap | Services |
+|------|---------------------|-----------|---------------|------------|----------|
+| P1   | Hobbyist            | 100       | 25,000        | 1          | 10       |
+| P2   | Professional        | 500       | 100,000       | 3          | 19       |
+| P3   | Growth Intelligence | 1,200     | 250,000       | 5          | 29       |
+| P4   | Protocol Master     | 3,000     | 500,000       | 10         | 34       |
+
+**Burst RPM** is enforced per-tenant on a sliding minute window. All API
+keys belonging to one tenant share a single RPM pool.
+
+**Monthly quota** is a single pooled counter across all services. It
+never blocks: requests beyond the quota are flagged as overage and
+metered per-service for billing (see `OverageCalculator`).
+
+**Feature gating** rejects requests for services outside the tenant's
+plan with HTTP 403 and a structured `required_plan` upgrade message.
+
+### Response Headers
+
+Every successful response carries:
+
+| Header                | Description                                      |
+|-----------------------|--------------------------------------------------|
+| `X-RateLimit-Limit`   | Burst RPM limit for the tenant's plan            |
+| `X-RateLimit-Remaining` | RPM tokens remaining in the current minute     |
+| `X-RateLimit-Reset`   | Unix timestamp when the burst window resets      |
+| `X-Quota-Limit`       | Plan's monthly request quota                     |
+| `X-Quota-Used`        | Requests consumed in the current billing period  |
+| `X-Quota-Remaining`   | Requests remaining before overage starts         |
+| `X-Quota-Reset`       | ISO 8601 timestamp of next billing period start  |
+| `X-Quota-Overage`     | Present (`true`) only when the tenant is in overage |
+| `X-Access-Tier`       | Plan-specific access tier label for the matched service |
+
+### Error Envelopes
+
+| Status | `error` Code               | Source layer        |
+|--------|----------------------------|---------------------|
+| 401    | `unauthorized`             | Auth                |
+| 403    | `service_not_available`    | Feature gate        |
+| 429    | `rate_limit_exceeded`      | Burst RPM           |
+
+Example 429:
+```json
+{
+  "error": "rate_limit_exceeded",
+  "message": "Burst rate limit exceeded. Limit: 500 RPM.",
+  "retry_after_seconds": 12,
+  "plan_tier": "P2",
+  "upgrade_url": "/v1/admin/billing/upgrade"
+}
+```
+
+Example 403:
+```json
+{
+  "error": "service_not_available",
+  "message": "The Autonomy service requires Growth Intelligence (P3) or higher.",
+  "current_plan": "P1: Hobbyist",
+  "required_plan": "P3: Growth Intelligence",
+  "upgrade_url": "/v1/admin/billing/upgrade",
+  "service": "Autonomy",
+  "endpoint": "/v1/agent/tasks"
+}
+```
+
+## Billing Endpoints
+
+Both billing endpoints require the `billing` permission.
+
+### GET /v1/admin/tenants/{tenant_id}/billing
+
+Returns the current plan, monthly usage, overage line items, and
+projected period total. Pricing reflects the active `PRICING_OPTION`
+(`A` Market Entry, `B` Ideal/Fair, `C` Premium). Default: `B`.
+
+```json
+{
+  "tenant_id": "acme-corp",
+  "plan": {
+    "plan_id": "P2",
+    "display_name": "Professional",
+    "monthly_quota": 100000,
+    "burst_rpm": 500,
+    "member_cap": 3,
+    "service_count": 19,
+    "subscription_fee": "829",
+    "pricing_option": "B"
+  },
+  "usage": {
+    "billing_period": "2026-04",
+    "total_requests": 118000,
+    "included_quota": 100000,
+    "remaining": 0,
+    "overage_requests": 18000
+  },
+  "overage": {
+    "line_items": [
+      {
+        "service_name": "Unification",
+        "endpoint_pattern": "/v1/identity/*",
+        "overage_requests": 4500,
+        "price_per_1k": "1.00",
+        "pricing_option": "B",
+        "line_total": "4.50"
+      }
+    ],
+    "total": "6.04"
+  },
+  "projected_period_total": "835.04"
+}
+```
+
+### GET /v1/admin/tenants/{tenant_id}/billing/usage
+
+Returns a per-service usage breakdown for the current billing period
+including total requests, remaining included requests, and per-service
+overage counts.
+
 ## Event Ingestion
 
 ### POST /v1/events

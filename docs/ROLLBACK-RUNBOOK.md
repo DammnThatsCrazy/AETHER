@@ -163,7 +163,24 @@ redis-cli -h $REDIS_HOST -p $REDIS_PORT KEYS "aether:cache:*" | xargs redis-cli 
 redis-cli -h $REDIS_HOST -p $REDIS_PORT FLUSHDB
 ```
 
-**Warning:** Flushing Redis resets all rate limit counters and extraction defense budgets. Monitor for abuse spikes after flush.
+**Warning:** Flushing Redis resets all rate limit counters and extraction
+defense budgets, **including monthly quota counters and per-service overage
+tracking** (`rl:quota:*`, `rl:overage:*`). The `QuotaFlusher` snapshots
+to the `tenant_usage` PostgreSQL table every 60s, so any usage that has
+not yet been flushed will be lost. Before flushing in production, force
+an immediate snapshot:
+
+```python
+from dependencies.providers import get_registry
+await get_registry().quota_flusher.flush_once()
+```
+
+After flush, the current billing period's Redis counters restart at
+zero (PostgreSQL retains the durable record). Tenants previously past
+quota will see `X-Quota-Overage` clear on next request until they
+re-cross the threshold. Threshold notification deduplication
+(`rl:notified:*`) is also reset, so 80%/90%/100% notifications may
+re-fire.
 
 ### 5. Kafka Rollback
 

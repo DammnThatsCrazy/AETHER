@@ -6,6 +6,113 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ---
 
+## [Unreleased] — Self-Serve Plans P1-P4, Pooled Quota & Per-Service Overage
+
+### Added — Self-serve plans, monthly quotas, overage billing
+
+- **Four-plan model (P1-P4)** replacing the legacy FREE/PRO/ENTERPRISE
+  three-tier system. Plans are defined in
+  `Backend Architecture/aether-backend/shared/plans/catalog.py`:
+
+  | Plan | Burst RPM | Monthly Quota | Members | Services |
+  |------|-----------|---------------|---------|----------|
+  | P1 Hobbyist | 100 | 25,000 | 1 | 10 |
+  | P2 Professional | 500 | 100,000 | 3 | 19 |
+  | P3 Growth Intelligence | 1,200 | 250,000 | 5 | 29 |
+  | P4 Protocol Master | 3,000 | 500,000 | 10 | 34 |
+
+- **34-service registry** (`shared/plans/service_catalog.py`) with
+  pattern-based endpoint resolution and a per-plan access matrix that
+  drives feature gating across every Aether endpoint.
+- **Tenant-scoped burst RPM** (`shared/rate_limit/limiter.py`,
+  `BurstRateLimiter`) — atomic Redis Lua INCR+EXPIRE per tenant per
+  minute. Multiple API keys under one tenant share one RPM pool.
+- **Monthly quota engine** (`shared/rate_limit/quota.py`,
+  `QuotaEngine`) — pooled per-tenant counter with per-service overage
+  hash. Overage requests are NEVER blocked; they are flagged and
+  metered for billing. Background `QuotaFlusher` snapshots Redis to a
+  durable `tenant_usage` PostgreSQL table every 60s.
+- **Plan-based feature gate** (`shared/rate_limit/feature_gate.py`) —
+  rejects out-of-plan service calls with HTTP 403 and a structured
+  `required_plan` upgrade message.
+- **Per-service overage calculator** (`shared/billing/overage.py`,
+  `OverageCalculator`) — produces dollar-accurate `OverageInvoice`
+  records with line items, total overage, and projected period total
+  under the active `PRICING_OPTION` (A=Market Entry, B=Ideal/Fair,
+  C=Premium).
+- **Threshold notifications** (`shared/billing/notifications.py`,
+  `QuotaNotifier`) — fires `quota.threshold.80`, `quota.threshold.90`,
+  `quota.exhausted` exactly once per billing period (per-period
+  Redis-backed dedup). Daily overage summary helper for tenants in
+  overage. `burst.repeated_limit` event for sustained 429 spikes.
+- **`/v1/admin/tenants/{id}/billing`** — replaced the stub with real
+  data sourced from `OverageCalculator`. New
+  `/v1/admin/tenants/{id}/billing/usage` endpoint returns per-service
+  usage breakdown.
+- **Response headers** — every successful response now carries
+  `X-RateLimit-{Limit,Remaining,Reset}`, `X-Quota-{Limit,Used,Remaining,
+  Reset}`, optional `X-Quota-Overage: true`, and `X-Access-Tier`.
+- **Prometheus metrics** (`shared/rate_limit/metrics.py`) —
+  `aether_burst_rpm_*`, `aether_feature_gate_*`,
+  `aether_quota_{used,remaining,utilization}_*`,
+  `aether_overage_requests_total`, `aether_overage_cost_dollars`,
+  `aether_middleware_latency_seconds`, `aether_redis_fallback_total`.
+  Idempotent registration so re-imports during tests don't collide.
+- **Alert rules** — new `aether_rate_limiting` group in
+  `deploy/observability/prometheus/alert_rules.yml` covering quota 80%,
+  exhaustion, overage spikes, burst limit hits, feature-gate blocks,
+  Redis fallback, and middleware latency.
+- **Grafana dashboard** — `deploy/observability/grafana/rate-limiting.json`
+  with 9 panels (utilization, monthly trend, overage-by-service,
+  projected revenue, burst rejections, top blocked services, latency
+  heatmap, Redis health, plan distribution).
+- **Migrations** (`shared/billing/migrations.py`) — idempotent
+  `tenant_usage` and `overage_invoices` schema applied at startup.
+- **New env vars** — `PRICING_OPTION` (default `B`, validated A/B/C at
+  startup), `QUOTA_REDIS_TTL_DAYS` (default 35), `QUOTA_FLUSH_INTERVAL_S`
+  (default 60).
+
+### Changed
+
+- **Middleware ordering** (`middleware/middleware.py`) — refactored to
+  Auth → Burst RPM → Feature Gate → Monthly Quota → Extraction Defense
+  → handler. 429 from burst RPM and 403 from feature gate short-circuit
+  before quota is incremented, so blocked requests don't consume the
+  monthly counter.
+- **`TenantContext.plan_tier`** added (`shared/auth/auth.py`).
+  `APIKeyTier` is retained for backward compat and is mapped at auth
+  time (FREE→P1, PRO→P2, ENTERPRISE→P4).
+- **CORS `expose-headers`** in `main.py` extended to include the new
+  `X-Quota-*` and `X-Access-Tier` headers so browser clients can read
+  them.
+- **`TokenBucketLimiter` → `BurstRateLimiter`** — old class name kept
+  as an alias for one release of soft deprecation.
+
+### Deprecated
+
+- **Legacy `RateLimitConfig.{free,pro,enterprise}_rpm`** — retained on
+  the settings dataclass for compatibility but no longer consulted by
+  the limiter. Will be removed once all callers migrate to PlanTier.
+- **`APIKeyTier`** — to be removed in a future release once tenant
+  records carry `plan_tier` directly.
+
+### Migration Notes
+
+- Existing API keys continue to work; their legacy tier is mapped to a
+  PlanTier on auth. To assign a tenant to a specific plan, store
+  `plan_tier` (e.g. `"P3"`) alongside the existing `tier` field in the
+  API key cache record.
+- The `/v1/admin/tenants/{id}/billing` response shape changed from a
+  stub to the real schema documented in `docs/BACKEND-API.md`. Clients
+  that previously mocked the stub keys (`current_period_usage`,
+  `limits`) need to migrate to the new keys (`plan`, `usage`,
+  `overage`, `projected_period_total`).
+- After deploying, set `PRICING_OPTION` explicitly in production to
+  avoid relying on the default (`B`). The validator fails fast on
+  invalid values at startup.
+
+---
+
 ## [v8.8.0] — 2026-04-05
 
 ### Added — Production audit remediation (monorepo-wide)

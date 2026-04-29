@@ -24,7 +24,11 @@
 | **Repositories** | PostgreSQL via `asyncpg` | `DATABASE_URL` | ✅ |
 | **APIKeyValidator** | Redis hashed key lookup | `REDIS_HOST` | ✅ |
 | **BYOKKeyVault** | Fernet AES-128-CBC | `BYOK_ENCRYPTION_KEY` | ✅ |
-| **TokenBucketLimiter** | Redis INCR+EXPIRE | `REDIS_HOST` | ✅ |
+| **BurstRateLimiter** | Redis INCR+EXPIRE per-tenant minute window (P1-P4) | `REDIS_HOST` | ✅ |
+| **QuotaEngine** | Redis monthly counter + per-service overage hash | `REDIS_HOST`, `PRICING_OPTION` | ✅ |
+| **QuotaFlusher** | Redis → `tenant_usage` PostgreSQL snapshot loop | `DATABASE_URL`, `QUOTA_FLUSH_INTERVAL_S` | ✅ |
+| **FeatureGate** | In-memory plan ↔ service access matrix (34 services) | (none) | ✅ |
+| **OverageCalculator** | Per-service line items under active pricing option | `PRICING_OPTION` | ✅ |
 | **MetricsCollector** | Prometheus counters/histograms | (auto-detected) | ✅ |
 | **UsageMeter** | PostgreSQL flush | `DATABASE_URL` | ✅ |
 | **TrustScore** | ML serving API calls | `ML_SERVING_URL` | ✅ |
