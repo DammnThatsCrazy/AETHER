@@ -212,6 +212,12 @@ def create_app() -> FastAPI:
             "X-RateLimit-Limit",
             "X-RateLimit-Remaining",
             "X-RateLimit-Reset",
+            "X-Access-Tier",
+            "X-Quota-Limit",
+            "X-Quota-Used",
+            "X-Quota-Remaining",
+            "X-Quota-Reset",
+            "X-Quota-Overage",
         ],
     )
 

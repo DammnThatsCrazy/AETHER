@@ -94,3 +94,75 @@ groups:
         annotations:
           summary: "Extraction defense blocking requests"
           description: "{{ $value }} requests/sec blocked by ML extraction defense."
+
+  # ============================================================
+  # Aether Rate Limiting & Quota Alerts (self-serve plans P1-P4)
+  # ============================================================
+  - name: aether_rate_limiting
+    rules:
+      # --- Quota alerts ---
+      - alert: TenantQuota80Percent
+        expr: aether_quota_utilization_ratio > 0.8
+        for: 5m
+        labels:
+          severity: info
+        annotations:
+          summary: "Tenant {{ $labels.tenant_id }} at {{ $value | humanizePercentage }} of monthly quota"
+          description: "Plan {{ $labels.plan_tier }} tenant approaching quota limit."
+
+      - alert: TenantQuotaExhausted
+        expr: aether_quota_remaining_gauge == 0
+        for: 1m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Tenant {{ $labels.tenant_id }} ({{ $labels.plan_tier }}) entered overage billing"
+          description: "All subsequent requests will be metered at per-service overage rates."
+
+      - alert: TenantOverageSpike
+        expr: rate(aether_overage_requests_total[5m]) > 100
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Tenant {{ $labels.tenant_id }} overage rate >100 req/5min on {{ $labels.service }}"
+          description: "High overage consumption may indicate misconfigured integration or need for plan upgrade."
+
+      # --- Burst RPM alerts ---
+      - alert: BurstRateLimitHigh
+        expr: rate(aether_burst_rpm_rejected_total[5m]) > 10
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Tenant {{ $labels.tenant_id }} hitting burst RPM limit frequently"
+          description: "{{ $labels.plan_tier }} plan burst limit being hit. May need plan upgrade or client-side throttling."
+
+      # --- Feature gate alerts ---
+      - alert: FeatureGateBlocksHigh
+        expr: rate(aether_feature_gate_blocked_total[5m]) > 50
+        for: 10m
+        labels:
+          severity: info
+        annotations:
+          summary: "Tenant {{ $labels.tenant_id }} repeatedly blocked on {{ $labels.service }}"
+          description: "Possible upsell signal — tenant is calling services outside their plan."
+
+      # --- System health ---
+      - alert: RateLimitRedisFallbackActive
+        expr: rate(aether_redis_fallback_total[5m]) > 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Rate limiting Redis fallback active on {{ $labels.layer }}"
+          description: "Rate limiting enforcement is degraded. Burst RPM and quota metering may not be functioning."
+
+      - alert: RateLimitMiddlewareLatencyHigh
+        expr: histogram_quantile(0.99, rate(aether_middleware_latency_seconds_bucket[5m])) > 0.05
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Rate limiting middleware p99 latency >50ms on {{ $labels.layer }}"
+          description: "Middleware overhead is too high. Check Redis connectivity and load."

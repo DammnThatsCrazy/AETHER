@@ -32,9 +32,35 @@ class Role(str, Enum):
 
 
 class APIKeyTier(str, Enum):
+    """Legacy 3-tier model. Retained for backward-compatibility during migration.
+
+    New code should use PlanTier (P1-P4). See shared/plans/catalog.py.
+    """
     FREE = "free"
     PRO = "pro"
     ENTERPRISE = "enterprise"
+
+
+class PlanTier(str, Enum):
+    """Self-serve plan tiers (P1-P4)."""
+    P1_HOBBYIST = "P1"
+    P2_PROFESSIONAL = "P2"
+    P3_GROWTH_INTELLIGENCE = "P3"
+    P4_PROTOCOL_MASTER = "P4"
+
+
+# Mapping from legacy APIKeyTier -> PlanTier for backward compatibility.
+# FREE -> P1, PRO -> P2, ENTERPRISE -> P4 (P3 is new).
+_LEGACY_TIER_TO_PLAN = {
+    APIKeyTier.FREE: PlanTier.P1_HOBBYIST,
+    APIKeyTier.PRO: PlanTier.P2_PROFESSIONAL,
+    APIKeyTier.ENTERPRISE: PlanTier.P4_PROTOCOL_MASTER,
+}
+
+
+def legacy_tier_to_plan(tier: APIKeyTier) -> PlanTier:
+    """Map a legacy APIKeyTier to a PlanTier."""
+    return _LEGACY_TIER_TO_PLAN.get(tier, PlanTier.P1_HOBBYIST)
 
 
 @dataclass
@@ -44,6 +70,7 @@ class TenantContext:
     user_id: Optional[str] = None
     role: Role = Role.VIEWER
     api_key_tier: APIKeyTier = APIKeyTier.FREE
+    plan_tier: PlanTier = PlanTier.P1_HOBBYIST
     permissions: list[str] = field(default_factory=list)
 
     def has_permission(self, permission: str) -> bool:
@@ -357,10 +384,21 @@ class APIKeyValidator:
 
     @staticmethod
     def _build_context(key_data: dict) -> TenantContext:
+        api_key_tier = APIKeyTier(key_data.get("tier", "free"))
+        # plan_tier is preferred (P1-P4). Fall back to legacy tier mapping.
+        plan_raw = key_data.get("plan_tier")
+        if plan_raw:
+            try:
+                plan_tier = PlanTier(plan_raw)
+            except ValueError:
+                plan_tier = legacy_tier_to_plan(api_key_tier)
+        else:
+            plan_tier = legacy_tier_to_plan(api_key_tier)
         return TenantContext(
             tenant_id=key_data["tenant_id"],
             role=Role(key_data.get("role", "viewer")),
-            api_key_tier=APIKeyTier(key_data.get("tier", "free")),
+            api_key_tier=api_key_tier,
+            plan_tier=plan_tier,
             permissions=key_data.get("permissions", []),
         )
 

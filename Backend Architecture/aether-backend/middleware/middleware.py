@@ -1,8 +1,17 @@
 """
 Aether Backend — Middleware Stack
-Auth, request tracing, rate limiting, body limits, extraction defense,
-extraction defense mesh, and error handling middleware.
-Applied globally to the FastAPI app.
+
+Layered request processing in this order:
+    1. Lifecycle (correlation ID, tracing, timing)
+    2. Body size check (POST/PUT/PATCH only)
+    3. Auth (API key or JWT)        — sets request.state.tenant
+    4. Burst RPM (per-plan)         — 429 with Retry-After
+    5. Feature gate (per-plan)      — 403 with upgrade message
+    6. Monthly quota (meters only)  — sets X-Quota-* headers
+    7. Extraction Defense Mesh      — ML routes only (unchanged)
+    8. Route handler
+
+Public paths (health, docs) bypass everything from step 3 onward.
 """
 
 from __future__ import annotations
@@ -18,8 +27,13 @@ from fastapi import FastAPI, Request, Response
 from fastapi.responses import JSONResponse
 
 from shared.common.common import AetherError, UnauthorizedError
-from shared.auth.auth import JWTHandler, APIKeyValidator, TenantContext, Role
+from shared.auth.auth import (
+    APIKeyTier, APIKeyValidator, JWTHandler, PlanTier, Role, TenantContext,
+    legacy_tier_to_plan,
+)
 from shared.logger.logger import get_logger, set_request_context, metrics
+from shared.plans.catalog import PLAN_CATALOG
+from shared.rate_limit.feature_gate import PUBLIC_PATHS as _GATE_PUBLIC_PATHS
 from config.settings import settings
 from dependencies.providers import get_registry
 
@@ -111,8 +125,25 @@ def _get_mesh_components():
     )
 
 
-# Paths that skip auth
-_PUBLIC_PATHS = {"/health", "/v1/health", "/docs", "/openapi.json", "/redoc", "/"}
+# Paths that skip auth and all rate limiting / gating layers.
+# Sourced from the feature_gate constant so both layers stay consistent,
+# with /v1/metrics included (internal scrape endpoint).
+_PUBLIC_PATHS = set(_GATE_PUBLIC_PATHS) | {"/v1/metrics"}
+
+
+def _resolve_plan_tier(context: TenantContext) -> PlanTier:
+    """Pick the PlanTier for a tenant context.
+
+    Prefers the explicit plan_tier set during auth, falling back to a
+    legacy APIKeyTier mapping, and finally P1 for unknown values.
+    """
+    plan = getattr(context, "plan_tier", None)
+    if isinstance(plan, PlanTier):
+        return plan
+    legacy = getattr(context, "api_key_tier", None)
+    if isinstance(legacy, APIKeyTier):
+        return legacy_tier_to_plan(legacy)
+    return PlanTier.P1_HOBBYIST
 
 
 def register_middleware(app: FastAPI) -> None:
@@ -186,6 +217,12 @@ def register_middleware(app: FastAPI) -> None:
                         },
                     )
 
+        # Headers we accumulate from each enforcement layer to attach on the
+        # final response (or the early-exit error response).
+        rate_headers: dict[str, str] = {}
+        quota_headers: dict[str, str] = {}
+        access_tier_header: Optional[str] = None
+
         # --- Auth (skip public paths) ---
         if request.url.path not in _PUBLIC_PATHS:
             try:
@@ -196,35 +233,145 @@ def register_middleware(app: FastAPI) -> None:
             except AetherError as e:
                 return JSONResponse(status_code=e.code.value, content=e.to_dict())
             request.state.tenant = context
+            request.state.tenant_id = context.tenant_id
+            plan_tier = _resolve_plan_tier(context)
+            request.state.plan_tier = plan_tier
             set_request_context(
                 correlation_id=request_id,
                 tenant_id=context.tenant_id,
             )
 
-            # --- Rate limiting (async for Redis distributed limiting) ---
             api_key = (
                 request.headers.get("X-API-Key", "")
                 or request.headers.get("Authorization", "").replace("Bearer ", "")
             )
-            rl_result = await registry.rate_limiter.check_async(api_key, context.api_key_tier)
-            if not rl_result.allowed:
-                metrics.increment("http_rate_limited")
-                return JSONResponse(
-                    status_code=429,
-                    content={
-                        "error": {
-                            "code": 429,
-                            "message": "Rate limit exceeded",
-                            "details": {
-                                "retry_after_seconds": int(
-                                    rl_result.reset_at - time.time()
-                                )
-                            },
-                            "request_id": request_id,
-                        }
-                    },
-                    headers=rl_result.headers,
+
+            # --- Burst RPM (per-plan, per-tenant) ---
+            try:
+                rl_result = await registry.rate_limiter.check(
+                    context.tenant_id, plan_tier,
                 )
+            except (ConnectionError, TimeoutError) as e:
+                logger.warning(f"Burst limiter Redis unreachable: {e}")
+                metrics.increment("redis_fallback", labels={"layer": "burst"})
+                rl_result = None
+
+            if rl_result is not None:
+                rate_headers = {
+                    "X-RateLimit-Limit": str(rl_result.limit),
+                    "X-RateLimit-Remaining": str(max(0, rl_result.remaining)),
+                    "X-RateLimit-Reset": str(int(rl_result.reset_at)),
+                }
+                if not rl_result.allowed:
+                    metrics.increment("http_rate_limited")
+                    retry_after = (
+                        rl_result.retry_after
+                        if rl_result.retry_after is not None
+                        else max(1, int(rl_result.reset_at - time.time()))
+                    )
+                    return JSONResponse(
+                        status_code=429,
+                        content={
+                            "error": "rate_limit_exceeded",
+                            "message": (
+                                f"Burst rate limit exceeded. "
+                                f"Limit: {rl_result.limit} RPM."
+                            ),
+                            "retry_after_seconds": retry_after,
+                            "plan_tier": plan_tier.value,
+                            "upgrade_url": "/v1/admin/billing/upgrade",
+                            "request_id": request_id,
+                        },
+                        headers={
+                            **rate_headers,
+                            "Retry-After": str(retry_after),
+                            "X-RateLimit-Remaining": "0",
+                        },
+                    )
+
+            # --- Feature Gate (per-plan service access control) ---
+            feature_gate = getattr(registry, "feature_gate", None)
+            if feature_gate is not None:
+                gate_result = feature_gate.check_access(
+                    plan_tier, request.url.path,
+                )
+                if not gate_result.allowed:
+                    metrics.increment(
+                        "feature_gate_blocked",
+                        labels={
+                            "plan": plan_tier.value,
+                            "service": gate_result.service_name or "unknown",
+                        },
+                    )
+                    min_plan_tier = (
+                        gate_result.minimum_plan or PlanTier.P4_PROTOCOL_MASTER
+                    )
+                    min_plan = PLAN_CATALOG[min_plan_tier]
+                    current_plan = PLAN_CATALOG[plan_tier]
+                    return JSONResponse(
+                        status_code=403,
+                        content={
+                            "error": "service_not_available",
+                            "message": (
+                                f"The {gate_result.service_name} service "
+                                f"requires {min_plan.display_name} "
+                                f"({min_plan.plan_id}) or higher."
+                            ),
+                            "current_plan": (
+                                f"{current_plan.plan_id}: "
+                                f"{current_plan.display_name}"
+                            ),
+                            "required_plan": (
+                                f"{min_plan.plan_id}: {min_plan.display_name}"
+                            ),
+                            "upgrade_url": "/v1/admin/billing/upgrade",
+                            "service": gate_result.service_name,
+                            "endpoint": request.url.path,
+                            "request_id": request_id,
+                        },
+                        headers=rate_headers,
+                    )
+                access_tier_header = gate_result.access_tier
+
+            # --- Monthly Quota (meters only, never blocks) ---
+            quota_engine = getattr(registry, "quota_engine", None)
+            if quota_engine is not None:
+                try:
+                    quota_result = await quota_engine.check_and_increment(
+                        context.tenant_id, plan_tier, request.url.path,
+                    )
+                    quota_headers = {
+                        "X-Quota-Limit": str(quota_result.quota_limit),
+                        "X-Quota-Used": str(quota_result.quota_used),
+                        "X-Quota-Remaining": str(quota_result.remaining),
+                        "X-Quota-Reset": quota_result.reset,
+                    }
+                    if not quota_result.included:
+                        quota_headers["X-Quota-Overage"] = "true"
+                        metrics.increment(
+                            "overage_request",
+                            labels={
+                                "plan": plan_tier.value,
+                                "service": quota_result.overage_service or "unknown",
+                            },
+                        )
+                    request.state.quota_result = quota_result
+                    # Fire threshold notifications (best-effort)
+                    notifier = getattr(registry, "quota_notifier", None)
+                    if notifier is not None:
+                        try:
+                            await notifier.check_and_notify(
+                                context.tenant_id, plan_tier, quota_result,
+                            )
+                        except Exception as e:  # pragma: no cover — defensive
+                            logger.debug(f"Notifier dispatch error: {e}")
+                except (ConnectionError, TimeoutError) as e:
+                    logger.warning(f"Quota engine Redis unreachable: {e}")
+                    metrics.increment(
+                        "redis_fallback", labels={"layer": "quota"},
+                    )
+                except Exception as e:  # pragma: no cover — defensive
+                    logger.warning(f"Quota check error: {e}")
 
             # --- Extraction Defense Mesh (ML prediction routes) ---
             if request.url.path.startswith("/v1/ml/predict"):
@@ -298,6 +445,12 @@ def register_middleware(app: FastAPI) -> None:
         elapsed_ms = (time.perf_counter() - start) * 1000
         response.headers["X-Request-ID"] = request_id
         response.headers["X-Response-Time"] = f"{elapsed_ms:.1f}ms"
+        for name, value in rate_headers.items():
+            response.headers[name] = value
+        for name, value in quota_headers.items():
+            response.headers[name] = value
+        if access_tier_header:
+            response.headers["X-Access-Tier"] = access_tier_header
 
         metrics.observe("http_request_duration_ms", elapsed_ms, labels={
             "method": request.method, "status": str(response.status_code),
