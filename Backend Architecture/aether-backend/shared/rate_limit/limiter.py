@@ -1,11 +1,21 @@
 """
 Aether Shared — @aether/rate_limit
-Token bucket algorithm with per-tier limits and standard headers.
-Headers: X-RateLimit-Limit, X-RateLimit-Remaining, X-RateLimit-Reset
+Per-plan burst RPM enforcement (P1-P4) using a Redis sliding-minute window.
+
+Plan limits (from PLAN_CATALOG):
+  P1 Hobbyist            -> 100 RPM
+  P2 Professional        -> 500 RPM
+  P3 Growth Intelligence -> 1,200 RPM
+  P4 Protocol Master     -> 3,000 RPM
+
+Key change vs the legacy 3-tier limiter:
+  - Scoping is per-tenant (not per-API-key), so multiple keys under a
+    tenant share one RPM pool.
+  - Tier dimension is PlanTier instead of APIKeyTier.
 
 Backend:
-- AETHER_ENV=local → in-memory token buckets
-- AETHER_ENV=staging/production → Redis INCR+EXPIRE for distributed limiting
+  AETHER_ENV=local -> in-memory sliding window (per-process)
+  AETHER_ENV=staging/production -> Redis INCR+EXPIRE (distributed)
 """
 
 from __future__ import annotations
@@ -15,10 +25,11 @@ import time
 from dataclasses import dataclass
 from typing import Any, Optional
 
-from shared.auth.auth import APIKeyTier
+from shared.auth.auth import APIKeyTier, PlanTier, legacy_tier_to_plan
 from shared.common.common import RateLimitedError
 from shared.logger.logger import get_logger, metrics
-from config.settings import settings
+from shared.plans.catalog import PLAN_CATALOG
+from shared.rate_limit.metrics import BURST_REJECTED, BURST_TOTAL
 
 logger = get_logger("aether.rate_limit")
 
@@ -40,6 +51,7 @@ class RateLimitResult:
     limit: int
     remaining: int
     reset_at: float
+    retry_after: Optional[int] = None
 
     @property
     def headers(self) -> dict[str, str]:
@@ -50,19 +62,12 @@ class RateLimitResult:
         }
 
 
-class TokenBucketLimiter:
-    """
-    Rate limiter with per-tier limits.
+class BurstRateLimiter:
+    """Per-plan burst RPM limiter.
 
-    Production: Redis INCR+EXPIRE sliding window (distributed).
-    Local: in-memory token buckets (per-process).
+    Uses an atomic INCR + EXPIRE on a per-minute key. The key is scoped to
+    the tenant (not the API key) so all keys under one tenant share a pool.
     """
-
-    _TIER_LIMITS = {
-        APIKeyTier.FREE: settings.rate_limit.free_rpm,
-        APIKeyTier.PRO: settings.rate_limit.pro_rpm,
-        APIKeyTier.ENTERPRISE: settings.rate_limit.enterprise_rpm,
-    }
 
     def __init__(self, redis_client: Optional[Any] = None) -> None:
         self._buckets: dict[str, dict] = {}
@@ -78,30 +83,45 @@ class TokenBucketLimiter:
         if redis_host and REDIS_AVAILABLE:
             port = os.getenv("REDIS_PORT", "6379")
             password = os.getenv("REDIS_PASSWORD", "")
-            url = f"redis://:{password}@{redis_host}:{port}/1" if password else f"redis://{redis_host}:{port}/1"
+            url = (
+                f"redis://:{password}@{redis_host}:{port}/1"
+                if password
+                else f"redis://{redis_host}:{port}/1"
+            )
             try:
-                self._redis = aioredis.from_url(url, decode_responses=True, socket_timeout=5)  # type: ignore[union-attr]
+                self._redis = aioredis.from_url(  # type: ignore[union-attr]
+                    url, decode_responses=True, socket_timeout=5,
+                )
                 await self._redis.ping()
                 self._mode = "redis"
-                logger.info(f"RateLimiter connected (Redis: {redis_host})")
+                logger.info(f"BurstRateLimiter connected (Redis: {redis_host})")
             except Exception as e:
                 if _is_local_env():
-                    logger.warning(f"Redis not reachable for rate limiter ({e}) — in-memory")
+                    logger.warning(
+                        f"Redis not reachable for rate limiter ({e}) — in-memory"
+                    )
                     self._redis = None
                 else:
-                    raise RuntimeError(f"Redis required for production rate limiting: {e}")
+                    raise RuntimeError(
+                        f"Redis required for production rate limiting: {e}"
+                    )
 
-    def _get_limit(self, tier: APIKeyTier) -> int:
-        return self._TIER_LIMITS.get(tier, 60)
+    @staticmethod
+    def _limit_for(plan_tier: PlanTier) -> int:
+        return PLAN_CATALOG[plan_tier].burst_rpm
 
-    async def check_async(self, api_key: str, tier: APIKeyTier = APIKeyTier.FREE) -> RateLimitResult:
-        """Async check — uses Redis if available, else in-memory."""
-        if self._redis:
-            return await self._check_redis(api_key, tier)
-        return self.check(api_key, tier)
+    @staticmethod
+    def _coerce_plan(tier: PlanTier | APIKeyTier | None) -> PlanTier:
+        if tier is None:
+            return PlanTier.P1_HOBBYIST
+        if isinstance(tier, PlanTier):
+            return tier
+        if isinstance(tier, APIKeyTier):
+            return legacy_tier_to_plan(tier)
+        return PlanTier.P1_HOBBYIST
 
-    # Lua script: atomic increment-and-check to prevent TOCTOU race conditions.
-    # Returns [allowed (0/1), current_count] in a single Redis round-trip.
+    # Lua script: atomic INCR + EXPIRE that prevents TOCTOU races.
+    # Returns [allowed (0/1), current_count].
     _RATE_LIMIT_LUA = """
 local count = redis.call('INCR', KEYS[1])
 if count == 1 then
@@ -115,52 +135,136 @@ else
 end
 """
 
-    async def _check_redis(self, api_key: str, tier: APIKeyTier) -> RateLimitResult:
-        """Redis sliding window using atomic Lua INCR+check."""
+    async def check(
+        self,
+        tenant_id: str,
+        plan_tier: PlanTier | APIKeyTier | None = None,
+    ) -> RateLimitResult:
+        """Increment the per-tenant minute counter and return the verdict."""
+        plan = self._coerce_plan(plan_tier)
+        if self._redis:
+            return await self._check_redis(tenant_id, plan)
+        return self._check_memory(tenant_id, plan)
+
+    # Backward-compatible alias for existing callers.
+    async def check_async(
+        self,
+        identifier: str,
+        plan_tier: PlanTier | APIKeyTier | None = None,
+    ) -> RateLimitResult:
+        return await self.check(identifier, plan_tier)
+
+    async def _check_redis(
+        self, tenant_id: str, plan: PlanTier,
+    ) -> RateLimitResult:
         now = time.time()
-        limit = self._get_limit(tier)
+        limit = self._limit_for(plan)
         window = 60
-        key = f"aether:ratelimit:{api_key}:{int(now // window)}"
-        reset_at = (int(now // window) + 1) * window
+        minute_ts = int(now // window)
+        key = f"rl:burst:{tenant_id}:{minute_ts}"
+        reset_at = (minute_ts + 1) * window
         try:
             result = await self._redis.eval(
-                self._RATE_LIMIT_LUA, 1, key, str(limit), str(window + 1)
+                self._RATE_LIMIT_LUA, 1, key, str(limit), str(window + 60),
             )
             allowed = bool(result[0])
             count = int(result[1])
             remaining = max(0, limit - count)
+            self._emit_metrics(tenant_id, plan, allowed)
             if not allowed:
-                metrics.increment("rate_limit_exceeded", labels={"tier": tier.value})
-                return RateLimitResult(allowed=False, limit=limit, remaining=0, reset_at=reset_at)
-            return RateLimitResult(allowed=True, limit=limit, remaining=remaining, reset_at=reset_at)
+                metrics.increment(
+                    "rate_limit_exceeded", labels={"plan": plan.value},
+                )
+                retry_after = max(1, int(reset_at - now))
+                return RateLimitResult(
+                    allowed=False,
+                    limit=limit,
+                    remaining=0,
+                    reset_at=reset_at,
+                    retry_after=retry_after,
+                )
+            return RateLimitResult(
+                allowed=True,
+                limit=limit,
+                remaining=remaining,
+                reset_at=reset_at,
+                retry_after=None,
+            )
         except Exception as e:
-            logger.error(f"Redis rate limit error: {e} — falling back to in-memory")
-            return self.check(api_key, tier)
+            logger.error(
+                f"Redis rate limit error: {e} — falling back to in-memory",
+            )
+            return self._check_memory(tenant_id, plan)
 
-    def check(self, api_key: str, tier: APIKeyTier = APIKeyTier.FREE) -> RateLimitResult:
-        """Synchronous in-memory check."""
+    @staticmethod
+    def _emit_metrics(tenant_id: str, plan: PlanTier, allowed: bool) -> None:
+        status = "allowed" if allowed else "rejected"
+        try:
+            BURST_TOTAL.labels(
+                tenant_id=tenant_id, plan_tier=plan.value, status=status,
+            ).inc()
+            if not allowed:
+                BURST_REJECTED.labels(
+                    tenant_id=tenant_id, plan_tier=plan.value,
+                ).inc()
+        except Exception:
+            pass
+
+    def _check_memory(self, tenant_id: str, plan: PlanTier) -> RateLimitResult:
         now = time.time()
-        limit = self._get_limit(tier)
+        limit = self._limit_for(plan)
         window = 60.0
-        bucket = self._buckets.get(api_key)
-        if bucket is None or (now - bucket["last_refill"]) >= window:
-            self._buckets[api_key] = {"tokens": limit - 1, "last_refill": now}
-            return RateLimitResult(allowed=True, limit=limit, remaining=limit - 1, reset_at=now + window)
-        if bucket["tokens"] <= 0:
-            reset_at = bucket["last_refill"] + window
-            metrics.increment("rate_limit_exceeded", labels={"tier": tier.value})
-            return RateLimitResult(allowed=False, limit=limit, remaining=0, reset_at=reset_at)
-        bucket["tokens"] -= 1
-        return RateLimitResult(allowed=True, limit=limit, remaining=bucket["tokens"], reset_at=bucket["last_refill"] + window)
+        bucket = self._buckets.get(tenant_id)
+        if bucket is None or (now - bucket["window_start"]) >= window:
+            self._buckets[tenant_id] = {"count": 1, "window_start": now}
+            self._emit_metrics(tenant_id, plan, allowed=True)
+            return RateLimitResult(
+                allowed=True,
+                limit=limit,
+                remaining=limit - 1,
+                reset_at=now + window,
+                retry_after=None,
+            )
+        bucket["count"] += 1
+        reset_at = bucket["window_start"] + window
+        if bucket["count"] > limit:
+            metrics.increment(
+                "rate_limit_exceeded", labels={"plan": plan.value},
+            )
+            self._emit_metrics(tenant_id, plan, allowed=False)
+            retry_after = max(1, int(reset_at - now))
+            return RateLimitResult(
+                allowed=False,
+                limit=limit,
+                remaining=0,
+                reset_at=reset_at,
+                retry_after=retry_after,
+            )
+        self._emit_metrics(tenant_id, plan, allowed=True)
+        return RateLimitResult(
+            allowed=True,
+            limit=limit,
+            remaining=max(0, limit - bucket["count"]),
+            reset_at=reset_at,
+            retry_after=None,
+        )
 
-    def enforce(self, api_key: str, tier: APIKeyTier = APIKeyTier.FREE) -> RateLimitResult:
-        """Check rate limit and raise if exceeded."""
-        result = self.check(api_key, tier)
+    def enforce(
+        self, tenant_id: str, plan_tier: PlanTier | APIKeyTier | None = None,
+    ) -> RateLimitResult:
+        """Synchronous in-memory check that raises on exceedance."""
+        plan = self._coerce_plan(plan_tier)
+        result = self._check_memory(tenant_id, plan)
         if not result.allowed:
-            retry_after = int(result.reset_at - time.time())
+            retry_after = result.retry_after or int(result.reset_at - time.time())
             raise RateLimitedError(retry_after=max(1, retry_after))
         return result
 
     @property
     def mode(self) -> str:
         return self._mode
+
+
+# Backward-compat alias so existing imports of TokenBucketLimiter continue to
+# work. New code should use BurstRateLimiter.
+TokenBucketLimiter = BurstRateLimiter

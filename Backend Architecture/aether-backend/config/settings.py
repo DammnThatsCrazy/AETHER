@@ -112,7 +112,17 @@ class EventBusConfig:
 
 @dataclass(frozen=True)
 class RateLimitConfig:
-    """Token bucket defaults per API key tier."""
+    """Self-serve plan rate limiting configuration.
+
+    Burst RPM limits are sourced from shared.plans.catalog.PLAN_CATALOG —
+    P1=100, P2=500, P3=1200, P4=3000. The legacy free_rpm/pro_rpm/
+    enterprise_rpm fields are deprecated and will be removed once all
+    callers migrate to PlanTier.
+    """
+    pricing_option: str = _env("PRICING_OPTION", "B")
+    quota_redis_ttl_days: int = _env_int("QUOTA_REDIS_TTL_DAYS", 35)
+    quota_flush_interval_s: int = _env_int("QUOTA_FLUSH_INTERVAL_S", 60)
+    # Deprecated: legacy 3-tier RPM limits. Removed in step 03.
     free_rpm: int = 60
     pro_rpm: int = 600
     enterprise_rpm: int = 6000
@@ -292,6 +302,11 @@ class Settings:
     )
 
     def __post_init__(self):
+        if self.rate_limit.pricing_option not in ("A", "B", "C"):
+            raise RuntimeError(
+                f"PRICING_OPTION must be one of A, B, C "
+                f"(got: {self.rate_limit.pricing_option!r})"
+            )
         if self.env != Environment.LOCAL and self.auth.jwt_secret == "change-me-in-production":
             raise RuntimeError("JWT_SECRET must be set in non-local environments")
         if (

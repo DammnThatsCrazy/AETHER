@@ -1,0 +1,155 @@
+{
+  "dashboard": {
+    "title": "Aether Rate Limiting & Usage",
+    "uid": "aether-rate-limiting",
+    "tags": ["aether", "rate-limiting", "billing", "quota"],
+    "timezone": "utc",
+    "schemaVersion": 38,
+    "version": 1,
+    "refresh": "30s",
+    "templating": {
+      "list": [
+        {
+          "name": "tenant_id",
+          "type": "query",
+          "datasource": "Prometheus",
+          "query": "label_values(aether_quota_used_gauge, tenant_id)",
+          "multi": true,
+          "includeAll": true,
+          "current": {"text": "All", "value": "$__all"}
+        },
+        {
+          "name": "plan_tier",
+          "type": "custom",
+          "query": "P1, P2, P3, P4",
+          "multi": true,
+          "includeAll": true,
+          "current": {"text": "All", "value": "$__all"}
+        }
+      ]
+    },
+    "panels": [
+      {
+        "id": 1,
+        "title": "Quota Utilization by Tenant",
+        "type": "bargauge",
+        "gridPos": {"h": 9, "w": 12, "x": 0, "y": 0},
+        "fieldConfig": {
+          "defaults": {
+            "min": 0,
+            "max": 1,
+            "unit": "percentunit",
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {"color": "green", "value": null},
+                {"color": "yellow", "value": 0.8},
+                {"color": "red", "value": 1.0}
+              ]
+            }
+          }
+        },
+        "targets": [{
+          "expr": "aether_quota_utilization_ratio{tenant_id=~\"$tenant_id\", plan_tier=~\"$plan_tier\"}",
+          "legendFormat": "{{tenant_id}} ({{plan_tier}})"
+        }]
+      },
+      {
+        "id": 2,
+        "title": "Monthly Usage Trend",
+        "type": "timeseries",
+        "gridPos": {"h": 9, "w": 12, "x": 12, "y": 0},
+        "targets": [{
+          "expr": "aether_quota_used_gauge{tenant_id=~\"$tenant_id\", plan_tier=~\"$plan_tier\"}",
+          "legendFormat": "{{tenant_id}} ({{plan_tier}})"
+        }]
+      },
+      {
+        "id": 3,
+        "title": "Overage Requests by Service",
+        "type": "barchart",
+        "gridPos": {"h": 9, "w": 12, "x": 0, "y": 9},
+        "options": {"stacking": {"mode": "normal"}},
+        "targets": [{
+          "expr": "sum by (service) (increase(aether_overage_requests_total{tenant_id=~\"$tenant_id\", plan_tier=~\"$plan_tier\"}[1h]))",
+          "legendFormat": "{{service}}"
+        }]
+      },
+      {
+        "id": 4,
+        "title": "Overage Revenue (Projected, $)",
+        "type": "stat",
+        "gridPos": {"h": 9, "w": 12, "x": 12, "y": 9},
+        "fieldConfig": {
+          "defaults": {"unit": "currencyUSD"}
+        },
+        "targets": [{
+          "expr": "sum by (tenant_id) (aether_overage_cost_dollars{tenant_id=~\"$tenant_id\"})",
+          "legendFormat": "{{tenant_id}}"
+        }]
+      },
+      {
+        "id": 5,
+        "title": "Burst RPM Rejections",
+        "type": "timeseries",
+        "gridPos": {"h": 8, "w": 12, "x": 0, "y": 18},
+        "targets": [{
+          "expr": "sum by (tenant_id, plan_tier) (rate(aether_burst_rpm_rejected_total{tenant_id=~\"$tenant_id\", plan_tier=~\"$plan_tier\"}[1m]))",
+          "legendFormat": "{{tenant_id}} ({{plan_tier}})"
+        }]
+      },
+      {
+        "id": 6,
+        "title": "Top Feature Gate Blocks",
+        "type": "table",
+        "gridPos": {"h": 8, "w": 12, "x": 12, "y": 18},
+        "targets": [{
+          "expr": "topk(10, sum by (tenant_id, service, required_plan) (increase(aether_feature_gate_blocked_total{tenant_id=~\"$tenant_id\", plan_tier=~\"$plan_tier\"}[24h])))",
+          "format": "table",
+          "instant": true
+        }]
+      },
+      {
+        "id": 7,
+        "title": "Middleware Latency",
+        "type": "heatmap",
+        "gridPos": {"h": 8, "w": 12, "x": 0, "y": 26},
+        "targets": [{
+          "expr": "sum by (le, layer) (rate(aether_middleware_latency_seconds_bucket[5m]))",
+          "legendFormat": "{{layer}}"
+        }]
+      },
+      {
+        "id": 8,
+        "title": "Redis Health (Fallback Events)",
+        "type": "stat",
+        "gridPos": {"h": 4, "w": 6, "x": 12, "y": 26},
+        "fieldConfig": {
+          "defaults": {
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {"color": "green", "value": null},
+                {"color": "red", "value": 1}
+              ]
+            }
+          }
+        },
+        "targets": [{
+          "expr": "sum(rate(aether_redis_fallback_total[5m]))",
+          "legendFormat": "fallbacks/sec"
+        }]
+      },
+      {
+        "id": 9,
+        "title": "Plan Distribution",
+        "type": "piechart",
+        "gridPos": {"h": 4, "w": 6, "x": 18, "y": 26},
+        "targets": [{
+          "expr": "count by (plan_tier) (aether_quota_used_gauge)",
+          "legendFormat": "{{plan_tier}}"
+        }]
+      }
+    ]
+  }
+}

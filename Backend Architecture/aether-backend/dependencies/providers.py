@@ -12,7 +12,10 @@ from config.settings import settings
 from shared.cache.cache import CacheClient
 from shared.events.events import EventProducer, EventConsumer
 from shared.graph.graph import GraphClient
-from shared.rate_limit.limiter import TokenBucketLimiter
+from shared.rate_limit.limiter import BurstRateLimiter
+from shared.rate_limit.quota import QuotaEngine
+from shared.rate_limit.quota_flush import QuotaFlusher
+from shared.rate_limit.feature_gate import FeatureGate
 from shared.auth.auth import JWTHandler, APIKeyValidator
 from shared.logger.logger import get_logger
 from shared.providers.key_vault import BYOKKeyVault
@@ -34,7 +37,11 @@ class ResourceRegistry:
         self.graph = GraphClient()
         self.producer = EventProducer()
         self.consumer = EventConsumer()
-        self.rate_limiter = TokenBucketLimiter()
+        self.rate_limiter = BurstRateLimiter()
+        self.quota_engine = QuotaEngine()
+        self.quota_flusher = QuotaFlusher()
+        self.feature_gate = FeatureGate()
+        self.quota_notifier = None  # Set during startup once notifier available
         self.jwt_handler = JWTHandler()
         self.api_key_validator = APIKeyValidator()
         self._started = False
@@ -46,20 +53,46 @@ class ResourceRegistry:
         await self.graph.connect()
         await self.producer.connect()
         await self.rate_limiter.connect()
+        await self.quota_engine.connect()
+        # Share Redis client with the quota flusher
+        if self.quota_engine._redis is not None:
+            self.quota_flusher.set_redis(self.quota_engine._redis)
         # Inject cache into API key validator for async lookups
         self.api_key_validator._cache = self.cache
         # Initialize database connection pool
         try:
             from repositories.repos import get_pool
-            await get_pool()
+            pool = await get_pool()
+            if pool is not None:
+                from shared.billing.migrations import ensure_billing_tables
+                await ensure_billing_tables(pool)
         except Exception as e:
             logger.warning(f"Database pool initialization: {e}")
+        # Wire the quota notifier (best-effort)
+        try:
+            from shared.billing.notifications import QuotaNotifier
+            self.quota_notifier = QuotaNotifier(
+                redis_client=self.quota_engine._redis,
+            )
+        except Exception as e:  # pragma: no cover — defensive
+            logger.debug(f"QuotaNotifier setup skipped: {e}")
+        # Start the periodic quota flusher
+        try:
+            self.quota_flusher.start(
+                interval_s=settings.rate_limit.quota_flush_interval_s,
+            )
+        except Exception as e:  # pragma: no cover — defensive
+            logger.debug(f"QuotaFlusher start skipped: {e}")
         self._started = True
         logger.info("All shared resources initialized")
 
     async def shutdown(self) -> None:
         """Gracefully close all connections."""
         logger.info("Shutting down shared resources...")
+        try:
+            self.quota_flusher.stop()
+        except Exception:
+            pass
         await self.producer.close()
         await self.graph.close()
         await self.cache.close()
@@ -130,8 +163,16 @@ def get_consumer() -> EventConsumer:
     return get_registry().consumer
 
 
-def get_rate_limiter() -> TokenBucketLimiter:
+def get_rate_limiter() -> BurstRateLimiter:
     return get_registry().rate_limiter
+
+
+def get_quota_engine() -> QuotaEngine:
+    return get_registry().quota_engine
+
+
+def get_feature_gate() -> FeatureGate:
+    return get_registry().feature_gate
 
 
 def get_jwt_handler() -> JWTHandler:
