@@ -1,5 +1,52 @@
 # Changelog
 
+## Unreleased — Self-Serve Plans P1-P4, Pooled Quota & Per-Service Overage
+
+### Plans, rate limiting, billing
+- **P1-P4 self-serve plans** replace FREE/PRO/ENTERPRISE. Limits: P1
+  100 RPM / 25K mo, P2 500 / 100K, P3 1,200 / 250K, P4 3,000 / 500K.
+  Catalog in `shared/plans/catalog.py`.
+- **34-service registry** with pattern-matched endpoint resolution and
+  per-plan access matrix in `shared/plans/service_catalog.py`.
+- **Tenant-scoped burst RPM** (`BurstRateLimiter`) — atomic Redis Lua
+  INCR+EXPIRE per tenant per minute; multiple keys under one tenant
+  share the pool.
+- **Monthly pooled quota engine** (`QuotaEngine`) — per-service overage
+  tracking via Redis hash; never blocks, only meters. Background
+  `QuotaFlusher` snapshots Redis to durable `tenant_usage` PostgreSQL
+  table every 60s.
+- **Plan-based feature gate** — out-of-plan service calls return HTTP
+  403 with structured `required_plan` upgrade message.
+- **Per-service overage calculator** — dollar-accurate `OverageInvoice`
+  records under three pricing options (A=Market Entry, B=Ideal/Fair,
+  C=Premium) selected by `PRICING_OPTION` env var.
+- **Threshold notifications** with per-period dedup: `quota.threshold.80`,
+  `quota.threshold.90`, `quota.exhausted`, `quota.overage.daily_summary`,
+  `burst.repeated_limit`.
+- **Real billing endpoints** — `GET /v1/admin/tenants/{id}/billing`
+  returns the new shape with plan/usage/overage/projected total;
+  `GET /v1/admin/tenants/{id}/billing/usage` returns per-service
+  breakdown.
+- **Response headers** — `X-RateLimit-*`, `X-Quota-*`,
+  `X-Quota-Overage`, `X-Access-Tier` on every successful response.
+- **Prometheus metrics**, alert rules group `aether_rate_limiting`,
+  and Grafana dashboard `rate-limiting.json` (9 panels).
+- **Idempotent migrations** for `tenant_usage` and `overage_invoices`
+  applied at startup.
+- **New env vars**: `PRICING_OPTION` (A/B/C, default B),
+  `QUOTA_REDIS_TTL_DAYS` (35), `QUOTA_FLUSH_INTERVAL_S` (60).
+
+### Migration notes
+- Existing API keys keep working; their legacy tier is mapped to a
+  PlanTier at auth (FREE→P1, PRO→P2, ENTERPRISE→P4). Store explicit
+  `plan_tier` on the key record to assign P3 or override.
+- Billing endpoint response shape changed from stub to real schema —
+  see `docs/BACKEND-API.md`.
+- Set `PRICING_OPTION` explicitly in production. The startup validator
+  fails fast on invalid values.
+
+---
+
 ## v8.8.0 — SDK Alignment, Agent Layer Multi-Controller, Commerce Control Plane, Audit Remediation (2026-04-05)
 
 ### Production audit remediation (monorepo-wide)

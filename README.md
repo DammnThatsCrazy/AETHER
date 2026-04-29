@@ -248,7 +248,9 @@ Backend Architecture/aether-backend/   Python/FastAPI backend (35 routers, 246+ 
     providers/       24 provider adapters (11 categories)
     auth/            API key validation + JWT + tenant context
     scoring/         Trust score + bytecode risk + extraction score
-    rate_limit/      Token-bucket distributed budget enforcement
+    rate_limit/      Burst RPM (P1-P4), monthly quota engine, feature gate, metrics
+    plans/           Plan catalog (P1-P4) + 34-service registry + endpoint resolver
+    billing/         Per-service overage calculator + threshold notifications
     privacy/         PII detection + retention + redaction
 
 packages/                              Client SDKs + shared contracts

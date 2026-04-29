@@ -101,6 +101,70 @@ All extraction mesh keys use prefix `aether:exbudget:`:
 | `REDIS_HOST` | `localhost` | All caching |
 | `KAFKA_BROKERS` | `localhost:9092` | Event bus |
 | `ENABLE_EXTRACTION_DEFENSE` | `false` | ML Serving |
+| `PRICING_OPTION` | `B` | Backend (A/B/C — Market Entry / Ideal / Premium) |
+| `QUOTA_REDIS_TTL_DAYS` | `35` | Backend (retention for `rl:quota:*` and `rl:overage:*`) |
+| `QUOTA_FLUSH_INTERVAL_S` | `60` | Backend (Redis → `tenant_usage` flush cadence) |
+
+---
+
+## Self-Serve Plans & Rate Limiting
+
+Aether enforces three layers in the middleware chain (auth → burst RPM →
+feature gate → monthly quota → handler). All four self-serve plans
+(P1-P4) share one configuration; pricing is selected globally via
+`PRICING_OPTION`.
+
+### Per-Plan Limits
+
+| Plan | Burst RPM | Monthly Quota | Members | Services |
+|------|-----------|---------------|---------|----------|
+| P1 Hobbyist | 100 | 25,000 | 1 | 10 |
+| P2 Professional | 500 | 100,000 | 3 | 19 |
+| P3 Growth Intelligence | 1,200 | 250,000 | 5 | 29 |
+| P4 Protocol Master | 3,000 | 500,000 | 10 | 34 |
+
+### Redis Key Schema (rate limiting)
+
+| Key | Type | TTL | Purpose |
+|-----|------|-----|---------|
+| `rl:burst:{tenant_id}:{minute_ts}` | INCR | 120s | Burst RPM counter |
+| `rl:quota:{tenant_id}:{YYYY-MM}` | INCR | 35 days | Monthly request counter |
+| `rl:overage:{tenant_id}:{YYYY-MM}` | HASH | 35 days | Per-service overage counts |
+| `rl:notified:{tenant_id}:{YYYY-MM}` | SET | 35 days | Threshold notification dedup |
+
+### Quota Flusher
+
+A background task in `dependencies/providers.py` calls
+`QuotaFlusher.flush_once()` every `QUOTA_FLUSH_INTERVAL_S` seconds. It
+upserts each Redis quota counter into the `tenant_usage` PostgreSQL
+table (created idempotently on first run by `quota_flush.py`).
+
+To trigger an immediate flush during an incident:
+```python
+from dependencies.providers import get_registry
+await get_registry().quota_flusher.flush_once()
+```
+
+### Failure Modes
+
+| Layer | Redis down | Behavior |
+|-------|-----------|----------|
+| Burst RPM | Unreachable | Fail open + `aether_redis_fallback{layer="burst"}` increments |
+| Feature gate | N/A (in-memory) | Always available |
+| Monthly quota | Unreachable | Fail open + `aether_redis_fallback{layer="quota"}` increments |
+
+The `RateLimitRedisFallbackActive` alert fires within 1 minute of any
+fallback event. While Redis is degraded, billing data is captured
+in-memory only and is **not durable** until Redis returns.
+
+### Switching Pricing Options
+
+`PRICING_OPTION` is read once at startup. To switch:
+1. Update env var (e.g. `PRICING_OPTION=C`).
+2. Restart all backend pods. The validator in `Settings.__post_init__`
+   raises if the value is not `A`, `B`, or `C`.
+3. Existing in-flight overage Redis counts are unaffected; only the
+   `OverageCalculator` rate sheet changes.
 
 ---
 
