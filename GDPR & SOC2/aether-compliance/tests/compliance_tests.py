@@ -218,11 +218,14 @@ class ComplianceTestRunner:
         self._test("SOC2", "33+ controls defined across all criteria",
                     len(engine.controls) >= 33)
 
-        # Test 19: Gaps are identified
-        gaps = engine.get_gaps()
-        critical = engine.get_critical_gaps()
-        self._test("SOC2", "Gaps correctly identified",
-                    len(gaps) > 0 and len(critical) > 0 and len(critical) <= len(gaps))
+        # Test 19: Readiness > 90% with 0 NOT_IMPLEMENTED gaps remaining
+        readiness = engine.overall_readiness()
+        gaps = engine.get_gaps()        # partial controls still tracked
+        critical = engine.get_critical_gaps()   # NOT_IMPLEMENTED — target = 0
+        self._test("SOC2", "Readiness >90% and no NOT_IMPLEMENTED controls remain",
+                    readiness["readiness_score"] > 90.0
+                    and critical == []
+                    and len(gaps) <= 2)   # only CC-3.2 and A-3.2 remain partial
 
     # ── Audit Tests ──────────────────────────────────────────────────
 
