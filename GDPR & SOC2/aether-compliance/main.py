@@ -320,7 +320,7 @@ def main():
 
     # P-2.2: Annual Privacy Review
     apr = AnnualPrivacyReviewProcess()
-    apr_review = apr.run_demo_review(2025)
+    apr_review = apr.run_demo_review(2026)
     ev = apr.generate_evidence()
     print(f"  [P-2.2]  {ev['artifact']} — {ev['review_areas']} areas, {ev['total_checklist_items']} checklist items — {ev['status']}")
 
@@ -374,7 +374,7 @@ def main():
     audit.log_dsr("t1", "user-2", "erasure", "dsr_002")
     audit.log_agent_action("t1", "agent-1", "task-001", "churn_predict", {"user_id": "u1"}, {"score": 0.82}, 0.95, "churn-xgb-v3")
     audit.log_agent_action("t1", "agent-2", "task-002", "journey_predict", {"session": "s1"}, {"next": "checkout"}, 0.88, "journey-tft-v2")
-    audit.log_access_review("security-lead", "2025-Q4",
+    audit.log_access_review("security-lead", "2026-Q1",
                             [{"type": "unused_account", "count": 2}],
                             ["Disabled 2 inactive accounts"])
 
@@ -388,7 +388,7 @@ def main():
     header("11. QUARTERLY IAM ACCESS REVIEW")
 
     reviewer = AccessReviewer()
-    report = reviewer.run_review("2025-Q4", "security-lead")
+    report = reviewer.run_review("2026-Q1", "security-lead")
 
     # ═══════════════════════════════════════════════════════════════════
     # 11. POLICY DOCUMENTS
@@ -420,7 +420,7 @@ def main():
     print("  -- GDPR --")
     print("  + 7 Data Protection Controls   — IP anonymization, vectorization, pseudonymization, minimization, encryption, access")
     print("  + 6 Data Subject Rights         — Art. 15-21 with cascading deletion across 7 stores")
-    print("  + 3 Consent Purposes            — analytics, marketing, web3 (independent, audited, DNT-aware)")
+    print(f"  + {len(CONSENT_CONFIG.purposes)} Consent Purposes            — {', '.join(CONSENT_CONFIG.purposes)} (independent, audited, DNT-aware)")
     print("  + 72h Breach Notification        — 8-step incident response pipeline (Art. 33/34)")
     print(f"  + {len(PROCESSING_ACTIVITIES)} Processing Activities     — ROPA register with legal basis and recipients (Art. 30)")
     print(f"  + {len(CROSS_BORDER_TRANSFERS)} Cross-Border Transfers    — SCCs + TIA for each transfer (Ch. V)")
