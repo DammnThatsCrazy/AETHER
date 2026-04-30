@@ -254,7 +254,13 @@ async def update_plan_tier(tenant_id: str, plan_tier: str) -> None:
 # ---------------------------------------------------------------------------
 
 async def record_webhook_event_once(event_id: str, event_type: str) -> bool:
-    """Record a webhook event ID. Return True if newly recorded, False if dup."""
+    """Record a webhook event ID. Return True if newly recorded, False if dup.
+
+    Raises on DB errors so callers can return 5xx and Stripe will retry.
+    Silently swallowing failures here would cause the webhook route to ack
+    the event as a duplicate, dropping real first-time deliveries during
+    transient database outages.
+    """
     if not event_id:
         return False
     pool = await get_pool()
@@ -268,21 +274,35 @@ async def record_webhook_event_once(event_id: str, event_type: str) -> bool:
             "processed_at": now,
         }
         return True
+    result = await pool.execute(
+        """
+        INSERT INTO stripe_webhook_events (event_id, event_type)
+        VALUES ($1, $2)
+        ON CONFLICT (event_id) DO NOTHING
+        """,
+        event_id, event_type,
+    )
+    # asyncpg returns "INSERT 0 1" when a row was inserted, "INSERT 0 0"
+    # when ON CONFLICT skipped it.
+    return result.endswith(" 1")
+
+
+async def delete_webhook_event(event_id: str) -> None:
+    """Remove a recorded webhook event ID. Used to release the idempotency
+    claim when the handler fails so Stripe retries can re-process the event.
+    """
+    if not event_id:
+        return
+    pool = await get_pool()
+    if pool is None:
+        _mem_webhook_events.pop(event_id, None)
+        return
     try:
-        result = await pool.execute(
-            """
-            INSERT INTO stripe_webhook_events (event_id, event_type)
-            VALUES ($1, $2)
-            ON CONFLICT (event_id) DO NOTHING
-            """,
-            event_id, event_type,
+        await pool.execute(
+            "DELETE FROM stripe_webhook_events WHERE event_id=$1", event_id,
         )
-        # asyncpg returns "INSERT 0 1" when a row was inserted, "INSERT 0 0"
-        # when ON CONFLICT skipped it.
-        return result.endswith(" 1")
     except Exception as e:
-        logger.warning(f"record_webhook_event_once failed: {e}")
-        return False
+        logger.warning(f"delete_webhook_event failed: {e}")
 
 
 # ---------------------------------------------------------------------------
@@ -510,6 +530,7 @@ __all__ = [
     "update_subscription_state",
     "update_plan_tier",
     "record_webhook_event_once",
+    "delete_webhook_event",
     "upsert_invoice",
     "list_invoices",
     "get_invoice",

@@ -423,3 +423,118 @@ class TestOverageInvoice:
                     )
                 )
             assert "overage" in str(exc.value).lower()
+
+
+# ---------------------------------------------------------------------------
+# Regression: webhook idempotency claim is released on handler failure
+# ---------------------------------------------------------------------------
+
+
+class TestWebhookIdempotencyOnFailure:
+    def test_delete_webhook_event_releases_claim(self, monkeypatch):
+        _set_env(monkeypatch, AETHER_ENV="local", JWT_SECRET="x")
+        with backend_path():
+            _reload_settings()
+            from shared.billing import stripe_repository
+            stripe_repository._reset_in_memory_for_tests()
+            assert asyncio.run(
+                stripe_repository.record_webhook_event_once("evt_x", "x")
+            ) is True
+            # Releasing the claim allows the same event_id to be re-processed.
+            asyncio.run(stripe_repository.delete_webhook_event("evt_x"))
+            assert asyncio.run(
+                stripe_repository.record_webhook_event_once("evt_x", "x")
+            ) is True
+
+    def test_record_event_raises_on_db_error(self, monkeypatch):
+        """A DB failure inside record_webhook_event_once must raise so the
+        webhook route can return 5xx and Stripe will retry, instead of
+        ack-ing as a duplicate.
+        """
+        _set_env(monkeypatch, AETHER_ENV="local", JWT_SECRET="x")
+        with backend_path():
+            _reload_settings()
+            from shared.billing import stripe_repository
+
+            class _FailingPool:
+                async def execute(self, *args, **kwargs):
+                    raise RuntimeError("simulated DB outage")
+
+            async def _get_failing_pool():
+                return _FailingPool()
+
+            monkeypatch.setattr(stripe_repository, "get_pool", _get_failing_pool)
+            with pytest.raises(RuntimeError):
+                asyncio.run(
+                    stripe_repository.record_webhook_event_once("evt_db", "x")
+                )
+
+
+# ---------------------------------------------------------------------------
+# Regression: cross-tenant overage uses the BILLED tenant's plan_tier
+# ---------------------------------------------------------------------------
+
+
+class TestOveragePlanTierResolution:
+    def test_resolve_plan_tier_for_other_tenant_uses_billing_account(
+        self, monkeypatch,
+    ):
+        _set_env(monkeypatch, AETHER_ENV="local", JWT_SECRET="x")
+        with backend_path():
+            _reload_settings()
+            from shared.billing import stripe_repository
+            stripe_repository._reset_in_memory_for_tests()
+            # Billed tenant is on P4.
+            asyncio.run(stripe_repository.update_plan_tier("billed-tenant", "P4"))
+
+            from shared.auth.auth import (
+                APIKeyTier, PlanTier, Role, TenantContext,
+            )
+            routes = importlib.import_module("services.admin.routes")
+
+            class _Req:
+                pass
+
+            req = _Req()
+            req.state = type("S", (), {})()
+            req.state.tenant = TenantContext(
+                tenant_id="admin-tenant",
+                role=Role.ADMIN,
+                api_key_tier=APIKeyTier.PRO,
+                plan_tier=PlanTier.P2_PROFESSIONAL,  # caller's plan
+                permissions=["billing", "admin"],
+            )
+            plan = asyncio.run(
+                routes._resolve_plan_tier_for_tenant(req, "billed-tenant")
+            )
+            # Must NOT inherit the caller's P2 plan; must read billed P4.
+            assert plan == PlanTier.P4_PROTOCOL_MASTER
+
+    def test_resolve_plan_tier_for_self_uses_request_context(self, monkeypatch):
+        _set_env(monkeypatch, AETHER_ENV="local", JWT_SECRET="x")
+        with backend_path():
+            _reload_settings()
+            from shared.billing import stripe_repository
+            stripe_repository._reset_in_memory_for_tests()
+
+            from shared.auth.auth import (
+                APIKeyTier, PlanTier, Role, TenantContext,
+            )
+            routes = importlib.import_module("services.admin.routes")
+
+            class _Req:
+                pass
+
+            req = _Req()
+            req.state = type("S", (), {})()
+            req.state.tenant = TenantContext(
+                tenant_id="self-tenant",
+                role=Role.EDITOR,
+                api_key_tier=APIKeyTier.PRO,
+                plan_tier=PlanTier.P3_GROWTH_INTELLIGENCE,
+                permissions=["billing"],
+            )
+            plan = asyncio.run(
+                routes._resolve_plan_tier_for_tenant(req, "self-tenant")
+            )
+            assert plan == PlanTier.P3_GROWTH_INTELLIGENCE

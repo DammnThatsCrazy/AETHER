@@ -61,6 +61,33 @@ def _current_period() -> str:
     return datetime.now(timezone.utc).strftime("%Y-%m")
 
 
+async def _resolve_plan_tier_for_tenant(
+    request: Request, tenant_id: str,
+) -> PlanTier:
+    """Pick the PlanTier for an arbitrary tenant_id (used for billing).
+
+    For self-tenant requests, falls back to the auth context's plan_tier
+    (matches existing /billing endpoints). For cross-tenant admin requests,
+    reads the authoritative plan_tier from tenant_billing_accounts so quota
+    and pricing reflect the BILLED tenant, not the caller.
+    """
+    caller = getattr(request.state, "tenant", None)
+    if caller is not None and getattr(caller, "tenant_id", "") == tenant_id:
+        return _resolve_plan_tier(request)
+    try:
+        from shared.billing import stripe_repository
+        account = await stripe_repository.get_billing_account(tenant_id)
+    except Exception as e:
+        logger.debug(f"plan_tier lookup for {tenant_id} failed: {e}")
+        account = None
+    if account and account.get("plan_tier"):
+        try:
+            return PlanTier(account["plan_tier"])
+        except ValueError:
+            pass
+    return PlanTier.P1_HOBBYIST
+
+
 class TenantCreate(BaseModel):
     name: str
     plan: str = Field(default="free", pattern="^(free|pro|enterprise)$")
@@ -430,7 +457,10 @@ async def create_overage_invoice(
             "Set STRIPE_OVERAGE_PRICE_ID to enable Stripe-charged overage."
         )
 
-    plan_tier = _resolve_plan_tier(request)
+    # Use the BILLED tenant's plan_tier, not the caller's. Cross-tenant admin
+    # access is permitted by _enforce_tenant_scope, but overage quota and
+    # pricing must reflect the target tenant.
+    plan_tier = await _resolve_plan_tier_for_tenant(request, tenant_id)
     plan = PLAN_CATALOG[plan_tier]
     period = body.billing_period or _current_period()
 
@@ -800,9 +830,22 @@ async def stripe_webhook(request: Request):
         else getattr(getattr(event, "data", None), "object", {}) or {}
     )
 
-    is_new = await stripe_repository.record_webhook_event_once(
-        event_id or "", event_type or "",
-    )
+    # Idempotency claim: insert the event_id row first. If the insert fails
+    # (transient DB error) the helper raises and we return 5xx so Stripe
+    # retries — never silently drop a real first-time event.
+    try:
+        is_new = await stripe_repository.record_webhook_event_once(
+            event_id or "", event_type or "",
+        )
+    except Exception as e:
+        logger.warning(
+            f"Failed to claim Stripe webhook idempotency row for {event_id}: {e}"
+        )
+        return JSONResponse(
+            status_code=500,
+            content={"error": {"code": 500,
+                               "message": "Webhook idempotency store unavailable"}},
+        )
     if not is_new:
         return APIResponse(data={
             "received": True,
@@ -810,6 +853,9 @@ async def stripe_webhook(request: Request):
             "duplicate": True,
         }).to_dict()
 
+    # On handler failure, release the claim so Stripe retries can re-process
+    # this event. Without the release, transient handler errors would leave
+    # tenant plan/invoice state permanently stale.
     try:
         if event_type == "checkout.session.completed":
             await _handle_checkout_session_completed(data_obj)
@@ -830,8 +876,17 @@ async def stripe_webhook(request: Request):
         else:
             logger.debug(f"Unhandled Stripe event: {event_type}")
     except Exception as e:
-        logger.warning(f"Error handling Stripe event {event_type} ({event_id}): {e}")
-        # Surface 500 so Stripe retries the webhook.
+        logger.warning(
+            f"Error handling Stripe event {event_type} ({event_id}): {e}"
+        )
+        # Release the idempotency claim so Stripe's retry can re-attempt.
+        try:
+            await stripe_repository.delete_webhook_event(event_id or "")
+        except Exception as cleanup_err:  # pragma: no cover — best-effort
+            logger.warning(
+                f"Failed to release webhook idempotency claim {event_id}: "
+                f"{cleanup_err}"
+            )
         return JSONResponse(
             status_code=500,
             content={
