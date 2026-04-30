@@ -11,7 +11,7 @@ The Agent Layer is the **warehouse operating system** for the internal intellige
 ```
   Governance Controller
     |
-    +-- KIRA Controller (top orchestrator)
+    +-- Nous Controller (top orchestrator)
          |
          +-- Intake Controller .......... objective intake, dedupe, classification
          +-- Discovery Controller ....... source-facing evidence collection
@@ -19,22 +19,22 @@ The Agent Layer is the **warehouse operating system** for the internal intellige
          +-- Verification Controller .... evidence sufficiency, provenance, scoring
          +-- Commit Controller .......... mutation staging, review batches, approval queue
          +-- Recovery Controller ........ retry, fallback, rollback, checkpoint restore
-         +-- BOLT Controller ............ continuity, briefing, handoff, run history
-         +-- TRIGGER Controller ......... scheduling, wake engine, missed-fire handling
+         +-- Kinesis Controller ........ continuity, briefing, handoff, run history
+         +-- Catalyst Controller ......... scheduling, wake engine, missed-fire handling
          |
-         +-- LOOP (shared runtime behavior, NOT a controller)
-         +-- UNITS (optional identity + mascot layer)
+         +-- Cycle (shared runtime behavior, NOT a controller)
+         +-- Atoms (optional identity + mascot layer)
 ```
 
 ### Design Principles
 
 - **Internal-first** — built for internal team operations, not end users
-- **Multi-controller hierarchy** — Governance > KIRA > Domain Controllers > Teams > Workers
+- **Multi-controller hierarchy** — Governance > Nous > Domain Controllers > Teams > Workers
 - **Durable objective runtime** — objectives, plans, and checkpoints persist across sessions
 - **Human approval required** — all graph mutations require staged review and human approval
-- **Aggressive LOOP** — continues useful work autonomously within policy and budget bounds
+- **Aggressive Cycle** — continues useful work autonomously within policy and budget bounds
 - **CLI-first operations** — terminal dashboard and ASCII rendering as the primary surface
-- **UNITS optional** — identity/mascot layer is fully functional but never required
+- **Atoms optional** — identity/mascot layer is fully functional but never required
 
 ---
 
@@ -43,44 +43,44 @@ The Agent Layer is the **warehouse operating system** for the internal intellige
 | Controller | Role |
 |------------|------|
 | **Governance** | Policy, budget ceilings, kill switch, audit invariants, conflict arbitration |
-| **KIRA** | Top orchestration: controller coordination, plan supervision, replan/escalate |
+| **Nous** | Top orchestration: controller coordination, plan supervision, replan/escalate |
 | **Intake** | Objective intake, dedupe, normalization, severity classification |
 | **Discovery** | Source-facing evidence collection orchestration |
 | **Enrichment** | Candidate fact generation, entity resolution/reconciliation |
 | **Verification** | Evidence sufficiency, provenance, schema, consistency, quality scoring |
 | **Commit** | Staged mutations, review batches, approval queue, graph writes |
 | **Recovery** | Retry/fallback, compensation, rollback, stale objective repair |
-| **BOLT** | Continuity, checkpoints, briefing, handoff, run history, internal UI |
-| **TRIGGER** | Scheduling/wake engine, missed-fire handling, orphan cleanup |
+| **Kinesis** | Continuity, checkpoints, briefing, handoff, run history, internal UI |
+| **Catalyst** | Scheduling/wake engine, missed-fire handling, orphan cleanup |
 
 ---
 
-## LOOP — Shared Runtime Behavior
+## Cycle — Shared Runtime Behavior
 
-LOOP is **not a controller**. It is a runtime behavior shared across KIRA and domain controllers.
+Cycle is **not a controller**. It is a runtime behavior shared across Nous and domain controllers.
 
-LOOP is aggressive from day one:
+Cycle is aggressive from day one:
 - Continues existing objectives
 - Reopens unresolved objectives
 - Creates low-risk maintenance objectives when policy allows
 - Revisits stale graph areas
 - Sleeps only when no productive next action exists
 
-LOOP stopping rules: policy ceiling, budget ceiling, awaiting human approval, unresolved conflict after allowed attempts, no productive next action, success criteria reached, diminishing value.
+Cycle stopping rules: policy ceiling, budget ceiling, awaiting human approval, unresolved conflict after allowed attempts, no productive next action, success criteria reached, diminishing value.
 
 ---
 
-## BOLT — Continuity & Briefing
+## Kinesis — Continuity & Briefing
 
-BOLT is the continuity + briefing + internal operator signal runtime.
+Kinesis is the continuity + briefing + internal operator signal runtime.
 
-BOLT owns: objective continuity across sessions, checkpoint records, brief records, operator summaries, handoff state, run history, session restore, internal feed/timeline, internal board/status generation.
+Kinesis owns: objective continuity across sessions, checkpoint records, brief records, operator summaries, handoff state, run history, session restore, internal feed/timeline, internal board/status generation.
 
 ---
 
-## TRIGGER — Scheduling & Wake Engine
+## Catalyst — Scheduling & Wake Engine
 
-TRIGGER is the unified scheduling + wake engine. Supports:
+Catalyst is the unified scheduling + wake engine. Supports:
 - Cron/scheduled wakeups
 - Graph-state change wakeups
 - Provider/webhook wakeups
@@ -92,16 +92,16 @@ TRIGGER is the unified scheduling + wake engine. Supports:
 
 ---
 
-## UNITS — Optional Identity Layer
+## Atoms — Optional Identity Layer
 
-UNITS is a fully real but fully optional identity + mascot layer.
+Atoms is a fully real but fully optional identity + mascot layer.
 
 Modes:
-- **Pure work mode** — UNITS disabled, no identity rendering
+- **Pure work mode** — Atoms disabled, no identity rendering
 - **Identity-only mode** — unit IDs and designations active
 - **Identity + mascot presentation** — optional persona skins
 
-UNITS applies by default to controllers and teams. May optionally apply to objectives and workers.
+Atoms applies by default to controllers and teams. May optionally apply to objectives and workers.
 
 ---
 
@@ -140,7 +140,7 @@ python -m agent_controller.cli timeline     # Recent events
 Three required views:
 1. **Feed / Timeline** — objective events, checkpoints, briefs, review outcomes, alerts
 2. **Kanban / Objective Board** — open, blocked, awaiting review, sleeping, failed, completed
-3. **Controller Health Console** — controller status, queue depth, LOOP state, TRIGGER fires
+3. **Controller Health Console** — controller status, queue depth, Cycle state, Catalyst fires
 
 ---
 
@@ -158,7 +158,7 @@ Three required views:
 | `ReviewBatch` | Grouped mutations for human review |
 | `CheckpointRecord` | Objective/plan progress snapshot |
 | `BriefRecord` | Operator-facing summary/alert |
-| `UnitIdentity` | UNITS identity record |
+| `AtomIdentity` | Atoms identity record |
 
 ---
 
@@ -195,7 +195,7 @@ Agent Layer/
 ├── agent_controller/
 │   ├── controller.py                      # Legacy AgentController (preserved)
 │   ├── governance.py                      # Governance Controller
-│   ├── kira.py                            # KIRA Controller
+│   ├── nous.py                            # Nous Controller
 │   ├── hub.py                             # Controller Hub (assembly)
 │   ├── cli.py                             # CLI interface
 │   ├── dashboard.py                       # ASCII dashboard rendering
@@ -206,26 +206,26 @@ Agent Layer/
 │   │   ├── verification.py                # Verification Controller
 │   │   ├── commit.py                      # Commit Controller
 │   │   ├── recovery.py                    # Recovery Controller
-│   │   ├── bolt.py                        # BOLT Controller
-│   │   └── trigger.py                     # TRIGGER Controller
+│   │   ├── kinesis.py                     # Kinesis Controller
+│   │   └── catalyst.py                    # Catalyst Controller
 │   ├── runtime/
 │   │   ├── objective_runtime.py           # Objective lifecycle management
-│   │   ├── loop_runtime.py                # LOOP shared behavior
+│   │   ├── cycle_runtime.py               # Cycle shared behavior
 │   │   ├── checkpointing.py              # Checkpoint store
 │   │   ├── briefing.py                    # Brief records
 │   │   ├── review_batching.py            # Review batch builder
-│   │   └── unit_identity.py              # UNITS runtime integration
+│   │   └── atom_identity.py              # Atoms runtime integration
 │   └── planning/
 │       ├── objective_planner.py           # Plan generation
 │       ├── replanner.py                   # Replan on failure
 │       ├── routing_policy.py              # Step → controller routing
-│       └── stopping_policy.py             # LOOP stopping rules
+│       └── stopping_policy.py             # Cycle stopping rules
 ├── models/
 │   ├── core.py                            # AgentTask, TaskResult, AuditRecord
 │   ├── objectives.py                      # Objective, Plan, PlanStep
 │   ├── evidence.py                        # EvidenceRecord, CandidateFact, VerificationResult
 │   ├── mutations.py                       # StagedMutation, ReviewBatch
-│   └── units.py                           # UnitIdentity, UnitRegistry
+│   └── atoms.py                           # AtomIdentity, AtomRegistry
 ├── config/
 │   └── settings.py                        # Configuration dataclasses
 ├── guardrails/
@@ -263,7 +263,7 @@ Agent Layer/
 
 ## Repo Integration Boundaries
 
-The agent layer **owns**: ingest orchestration, source polling orchestration, entity discovery/reconciliation, enrichment orchestration, verification/scoring, mutation staging, commit approval workflows, recovery/rollback, stale-graph maintenance, operator briefing, internal UI state, policy/budget enforcement, objective/plan state, checkpointing, review batching, trigger routing, continuity/handoff state.
+The agent layer **owns**: ingest orchestration, source polling orchestration, entity discovery/reconciliation, enrichment orchestration, verification/scoring, mutation staging, commit approval workflows, recovery/rollback, stale-graph maintenance, operator briefing, internal UI state, policy/budget enforcement, objective/plan state, checkpointing, review batching, catalyst routing, continuity/handoff state.
 
 The agent layer **does NOT own**: raw storage (PostgreSQL/Redis/S3/Neptune/Kafka), end-user graph product surfaces, tenant-facing assistant UX, generic provider adapter ownership, low-level lake CRUD, auth/tenancy/environment.
 

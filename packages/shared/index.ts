@@ -1,5 +1,5 @@
 // =============================================================================
-// AETHER SDK — Shared Contracts (canonical source of truth)
+// Aether SDK — Shared Contracts (canonical source of truth)
 // All SDK packages (web, ios, android, react-native) MUST align to these.
 // =============================================================================
 

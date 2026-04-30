@@ -1,5 +1,5 @@
 // =============================================================================
-// AETHER SDK — E-COMMERCE MODULE (React Native) — Thin Native Bridge
+// Aether SDK — E-COMMERCE MODULE (React Native) — Thin Native Bridge
 // Delegates all e-commerce tracking to NativeModules.AetherEcommerce
 // =============================================================================
 

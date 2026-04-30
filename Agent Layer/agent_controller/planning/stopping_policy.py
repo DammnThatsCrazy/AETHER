@@ -1,6 +1,6 @@
 """
 Aether Agent Layer — Stopping Policy
-Defines when LOOP and controllers should stop, sleep, or pause.
+Defines when Cycle and controllers should stop, sleep, or pause.
 Implements the required stopping rules for the agent layer.
 """
 
@@ -10,7 +10,7 @@ import logging
 from dataclasses import dataclass
 from typing import Optional
 
-from agent_controller.runtime.loop_runtime import LoopState, StopReason
+from agent_controller.runtime.cycle_runtime import CycleState, StopReason
 
 logger = logging.getLogger("aether.planning.stopping")
 
@@ -27,17 +27,17 @@ class StoppingConfig:
 
 class StoppingPolicy:
     """
-    Evaluates whether LOOP or a controller should stop.
-    Can be used as a LOOP stop hook or called directly by controllers.
+    Evaluates whether Cycle or a controller should stop.
+    Can be used as a Cycle stop hook or called directly by controllers.
     """
 
     def __init__(self, config: StoppingConfig | None = None):
         self.config = config or StoppingConfig()
         self._marginal_values: list[float] = []
 
-    def evaluate(self, state: LoopState) -> Optional[StopReason]:
+    def evaluate(self, state: CycleState) -> Optional[StopReason]:
         """
-        Check all stopping conditions. Returns a StopReason if the loop
+        Check all stopping conditions. Returns a StopReason if the cycle
         should stop, or None if it should continue.
         """
         if state.budget_spent >= self.config.max_budget_usd:
@@ -68,6 +68,6 @@ class StoppingPolicy:
         recent = self._marginal_values[-5:]
         return all(v < self.config.min_marginal_value for v in recent)
 
-    def as_loop_hook(self):
-        """Return this policy as a LOOP stop hook function."""
+    def as_cycle_hook(self):
+        """Return this policy as a Cycle stop hook function."""
         return self.evaluate

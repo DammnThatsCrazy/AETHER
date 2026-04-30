@@ -1,5 +1,5 @@
 // =============================================================================
-// AETHER SDK — MOVE VM PROVIDER (SUI)
+// Aether SDK — MOVE VM PROVIDER (SUI)
 // SUI Wallet, Ethos, Martian, Surf detection
 // =============================================================================
 

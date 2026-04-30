@@ -1,5 +1,5 @@
 // =============================================================================
-// AETHER INGESTION — EVENT ENRICHMENT PIPELINE
+// Aether INGESTION — EVENT ENRICHMENT PIPELINE
 // Server-side enrichment: GeoIP, UA parsing, IP anonymization, metadata
 // =============================================================================
 

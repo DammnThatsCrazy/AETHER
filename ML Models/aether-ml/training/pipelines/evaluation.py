@@ -351,7 +351,7 @@ class ModelEvaluator:
         """
         lines: list[str] = []
         lines.append("=" * 70)
-        lines.append("AETHER ML - MODEL EVALUATION REPORT")
+        lines.append("Aether ML - MODEL EVALUATION REPORT")
         lines.append(f"Generated: {time.strftime('%Y-%m-%d %H:%M:%S UTC', time.gmtime())}")
         lines.append("=" * 70)
         lines.append("")

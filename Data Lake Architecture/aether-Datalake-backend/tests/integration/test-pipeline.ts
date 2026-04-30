@@ -1,5 +1,5 @@
 // =============================================================================
-// AETHER INGESTION — INTEGRATION TESTS
+// Aether INGESTION — INTEGRATION TESTS
 // End-to-end pipeline tests with all components wired together
 // =============================================================================
 

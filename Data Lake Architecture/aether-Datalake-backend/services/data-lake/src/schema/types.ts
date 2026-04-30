@@ -1,5 +1,5 @@
 // =============================================================================
-// AETHER DATA LAKE — TYPE DEFINITIONS
+// Aether DATA LAKE — TYPE DEFINITIONS
 // Medallion architecture types: Bronze (raw) → Silver (clean) → Gold (aggregated)
 // =============================================================================
 

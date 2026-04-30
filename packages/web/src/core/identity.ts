@@ -1,5 +1,5 @@
 // =============================================================================
-// AETHER SDK — IDENTITY MANAGER (MULTI-WALLET)
+// Aether SDK — IDENTITY MANAGER (MULTI-WALLET)
 // Supports linking multiple wallets across EVM, SVM, BTC, SUI, NEAR, TRON, Cosmos
 // =============================================================================
 

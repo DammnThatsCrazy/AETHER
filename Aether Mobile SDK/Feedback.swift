@@ -1,5 +1,5 @@
 // =============================================================================
-// AETHER SDK — FEEDBACK MODULE (iOS)
+// Aether SDK — FEEDBACK MODULE (iOS)
 // In-app surveys: NPS, CSAT, CES, custom questions
 // =============================================================================
 

@@ -1,5 +1,5 @@
 // =============================================================================
-// AETHER SDK — CONSENT MODULE (GDPR / CCPA)
+// Aether SDK — CONSENT MODULE (GDPR / CCPA)
 // =============================================================================
 
 import type { ConsentState, ConsentConfig, ConsentBannerConfig, ConsentCallback } from './WebSDKTypes(CoreTypeDefinitions)';

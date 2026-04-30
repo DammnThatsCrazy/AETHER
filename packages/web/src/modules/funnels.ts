@@ -1,5 +1,5 @@
 // =============================================================================
-// AETHER SDK — FUNNEL MODULE (Tier 2 Thin Client)
+// Aether SDK — FUNNEL MODULE (Tier 2 Thin Client)
 // Tags events with funnel metadata from server config.
 // No client-side funnel matching, no step tracking, no drop-off analysis.
 // =============================================================================

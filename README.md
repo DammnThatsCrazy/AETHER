@@ -51,10 +51,10 @@ Aether is a **hybrid Python/FastAPI + Node/TypeScript** monorepo with four opera
 └─────────────────────────────┘     │   /v1/automation/*   Pipeline metrics    │
                                     │   /v1/diagnostics/*  System diagnostics  │
 ┌─────────────────────────────┐     │   — feature-flagged (Day-1 GA):          │
-│   Shiki Operator Console    │     │   /v1/commerce/*     Commerce events     │
-│   (@aether/shiki, React)    │ ──> │   /v1/onchain/*      On-chain capture    │
+│   Kyber Operator Console    │     │   /v1/commerce/*     Commerce events     │
+│   (@aether/kyber, React)    │ ──> │   /v1/onchain/*      On-chain capture    │
 │   Review / Mission / Live   │     │   /v1/x402/*         x402 protocol       │
-│   GOUF / Lab / Diagnostics  │     │   /v1/commerce-cp/*  Control plane       │
+│   Noesis / Lab / Diagnostics  │     │   /v1/commerce-cp/*  Control plane       │
 │   Command / Entities        │     │   /v1/approvals/*    Approval workflow   │
 └─────────────────────────────┘     │   /v1/entitlements/* Entitlement service │
                                     └──────────────────────────────────────────┘
@@ -172,13 +172,13 @@ pip install -e ".[dev,backend,agent,ml]"
 npm ci                                 # install TypeScript workspaces
 export AETHER_ENV=local
 make test                              # Python tests (163 unit + integration + security)
-npm test                               # JS tests (web + react-native + shiki, 89 tests)
+npm test                               # JS tests (web + react-native + kyber, 89 tests)
 
 # Full-stack Docker compose
-docker compose up -d                   # postgres, redis, kafka, clickhouse, backend, ml-serving, shiki, prometheus
+docker compose up -d                   # postgres, redis, kafka, clickhouse, backend, ml-serving, kyber, prometheus
 curl http://localhost:8000/v1/health   # backend
 curl http://localhost:8080/health      # ml-serving
-curl http://localhost:8081/health      # shiki operator console
+curl http://localhost:8081/health      # kyber operator console
 
 # Staging
 cd deploy/staging
@@ -189,7 +189,7 @@ cd deploy/staging
 
 ```
           ┌─────────────────┐
-          │   Shiki (8081)  │  ◄──── operator console (React SPA via nginx)
+          │   Kyber (8081)  │  ◄──── operator console (React SPA via nginx)
           └────────┬────────┘
                    │
         ┌──────────┴──────────┐
@@ -263,8 +263,8 @@ packages/                              Client SDKs + shared contracts
   react-native/    @aether/react-native — thin native bridge
 
 apps/                                  First-party applications
-  shiki/           @aether/shiki — operator control surface (React + Vite)
-                   Mission · Live · GOUF · Entities · Command · Diagnostics
+  kyber/           @aether/kyber — operator control surface (React + Vite)
+                   Mission · Live · Noesis · Entities · Command · Diagnostics
                    · Review · Lab; Playwright E2E + vitest unit/component/integ
 
 ML Models/aether-ml/                   ML training + serving
@@ -276,9 +276,9 @@ ML Models/aether-ml/                   ML training + serving
   docker/          Multi-stage Dockerfile (serving · features · monitoring)
 
 Agent Layer/                           Autonomous agent workers
-  agent_controller/  Multi-controller autonomy: Governance > KIRA > domain
+  agent_controller/  Multi-controller autonomy: Governance > Nous > domain
                      controllers (Intake, Discovery, Enrichment, Verification,
-                     Commit, Recovery, BOLT, TRIGGER) + LOOP runtime + UNITS
+                     Commit, Recovery, Kinesis, Catalyst) + Cycle runtime + Atoms
   workers/           10 specialist workers (5 discovery + 5 enrichment)
   guardrails/        PII detection, policy enforcement, kill switch
 
@@ -327,7 +327,7 @@ tests/                                 Python test suite (163+ tests)
 
 .github/workflows/                     CI/CD workflows
   repo-health.yml  Validate: lint, typecheck, build, test, madge, docs drift
-  shiki-e2e.yml    Path-scoped Playwright E2E for apps/shiki + packages/shared
+  kyber-e2e.yml    Path-scoped Playwright E2E for apps/kyber + packages/shared
 ```
 
 ## Documentation

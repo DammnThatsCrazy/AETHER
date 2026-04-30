@@ -1,5 +1,5 @@
 // =============================================================================
-// AETHER BACKEND — EVENT BUS & SINK ROUTER
+// Aether BACKEND — EVENT BUS & SINK ROUTER
 // Fan-out enriched events to multiple downstream sinks concurrently
 // =============================================================================
 

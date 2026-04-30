@@ -1,5 +1,5 @@
 // =============================================================================
-// AETHER SDK — DEVICE FINGERPRINT COLLECTOR
+// Aether SDK — DEVICE FINGERPRINT COLLECTOR
 // Generates a stable device fingerprint from browser signals.
 // Only the hash is sent to backend — raw signals never leave the client.
 // =============================================================================

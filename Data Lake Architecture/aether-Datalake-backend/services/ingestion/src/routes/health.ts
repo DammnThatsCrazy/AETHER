@@ -1,5 +1,5 @@
 // =============================================================================
-// AETHER INGESTION — HEALTH & METRICS ROUTES
+// Aether INGESTION — HEALTH & METRICS ROUTES
 // GET /health, GET /metrics, GET /status
 // =============================================================================
 

@@ -1,5 +1,5 @@
 // =============================================================================
-// AETHER DATA LAKE — CLICKHOUSE DDL GENERATOR
+// Aether DATA LAKE — CLICKHOUSE DDL GENERATOR
 // Generates CREATE TABLE, ALTER TABLE, materialized views, and migration SQL
 // from the declarative TableDefinition schema
 // =============================================================================
@@ -56,7 +56,7 @@ export function generateCreateDatabase(): string {
 export function generateFullDDL(): string {
   const sections: string[] = [
     '-- =============================================================================',
-    '-- AETHER DATA LAKE — COMPLETE CLICKHOUSE SCHEMA',
+    '-- Aether DATA LAKE — COMPLETE CLICKHOUSE SCHEMA',
     `-- Generated: ${new Date().toISOString()}`,
     '-- =============================================================================',
     '',

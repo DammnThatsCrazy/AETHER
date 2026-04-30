@@ -454,21 +454,21 @@ The Agent Layer is the internal warehouse operating system for the intelligence 
 
 ```
 Governance Controller .............. policy, budget, kill switch, audit, arbitration
-  └── KIRA Controller .............. top orchestration, coordination, synthesis
+  └── Nous Controller .............. top orchestration, coordination, synthesis
        ├── Intake Controller ....... objective intake, dedupe, classification
        ├── Discovery Controller .... evidence collection, source polling
        ├── Enrichment Controller ... fact generation, entity resolution
        ├── Verification Controller . provenance, schema, quality scoring
        ├── Commit Controller ....... mutation staging, review batches, approval
        ├── Recovery Controller ..... retry, rollback, checkpoint restore
-       ├── BOLT Controller ......... continuity, briefing, handoff, run history
-       └── TRIGGER Controller ...... scheduling, wake engine, missed-fire handling
+       ├── Kinesis Controller ......... continuity, briefing, handoff, run history
+       └── Catalyst Controller ...... scheduling, wake engine, missed-fire handling
 ```
 
 ### Shared Runtime Behaviors
 
-- **LOOP** — Aggressive continuation behavior shared across KIRA and domain controllers. Continues objectives, revisits stale areas, creates maintenance work within policy bounds. Not a controller.
-- **UNITS** — Optional identity + mascot layer for controllers, teams, and workers. Fully functional but never required.
+- **Cycle** — Aggressive continuation behavior shared across Nous and domain controllers. Continues objectives, revisits stale areas, creates maintenance work within policy bounds. Not a controller.
+- **Atoms** — Optional identity + mascot layer for controllers, teams, and workers. Fully functional but never required.
 
 ### Commit / Approval Workflow
 

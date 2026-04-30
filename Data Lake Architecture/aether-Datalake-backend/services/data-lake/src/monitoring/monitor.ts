@@ -1,5 +1,5 @@
 // =============================================================================
-// AETHER DATA LAKE — MONITORING & OBSERVABILITY
+// Aether DATA LAKE — MONITORING & OBSERVABILITY
 // Pipeline health tracking, SLA enforcement, data freshness monitoring,
 // throughput metrics, alerting, and Prometheus-compatible metric export
 // =============================================================================

@@ -1,5 +1,5 @@
 // =============================================================================
-// AETHER SDK — EVM PROVIDER (EIP-6963 + Legacy window.ethereum)
+// Aether SDK — EVM PROVIDER (EIP-6963 + Legacy window.ethereum)
 // Multi-wallet detection: MetaMask, Coinbase, Brave, Rainbow, Rabby, Trust,
 // Frame, Zerion, OKX, Ledger Live, Trezor, GridPlus
 // =============================================================================

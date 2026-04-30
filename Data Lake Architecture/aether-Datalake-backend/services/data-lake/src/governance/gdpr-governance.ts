@@ -1,5 +1,5 @@
 // =============================================================================
-// AETHER DATA LAKE — GDPR GOVERNANCE LAYER
+// Aether DATA LAKE — GDPR GOVERNANCE LAYER
 // Data subject rights enforcement: deletion, anonymization, access requests,
 // consent audit trails, and retention policy compliance across all tiers
 // =============================================================================

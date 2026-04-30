@@ -1,5 +1,5 @@
 # =============================================================================
-# AETHER INGESTION SERVICE — Multi-stage Docker Build
+# Aether INGESTION SERVICE — Multi-stage Docker Build
 # =============================================================================
 
 # --- Stage 1: Build ---

@@ -1,5 +1,5 @@
 // =============================================================================
-// AETHER SDK — E-COMMERCE MODULE (Android)
+// Aether SDK — E-COMMERCE MODULE (Android)
 // Revenue tracking: product views, cart, checkout funnel, purchases
 // =============================================================================
 

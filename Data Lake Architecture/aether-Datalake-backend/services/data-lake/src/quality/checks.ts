@@ -1,5 +1,5 @@
 // =============================================================================
-// AETHER DATA LAKE — DATA QUALITY FRAMEWORK
+// Aether DATA LAKE — DATA QUALITY FRAMEWORK
 // Automated quality checks: completeness, freshness, volume anomalies,
 // schema compliance, uniqueness, and distribution monitoring
 // =============================================================================

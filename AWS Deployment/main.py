@@ -116,7 +116,7 @@ def show_terraform_modules():
 
 
 def main():
-    print_header("AETHER AWS DEPLOYMENT ARCHITECTURE — FULL DEMO")
+    print_header("Aether AWS DEPLOYMENT ARCHITECTURE — FULL DEMO")
 
     # Architecture overview
     show_account_structure()

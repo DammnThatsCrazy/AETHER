@@ -1,5 +1,5 @@
 // =============================================================================
-// AETHER BACKEND — AUTHENTICATION & API KEY MANAGEMENT
+// Aether BACKEND — AUTHENTICATION & API KEY MANAGEMENT
 // Validates API keys, resolves projects, enforces rate limits
 // =============================================================================
 

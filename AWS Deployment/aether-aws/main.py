@@ -235,7 +235,7 @@ def main(argv: list[str] | None = None) -> None:
     args = parse_args(argv)
     stub_mode = configure_stub_mode(args)
 
-    print_header("AETHER AWS DEPLOYMENT ARCHITECTURE -- FULL DEMO")
+    print_header("Aether AWS DEPLOYMENT ARCHITECTURE -- FULL DEMO")
     print(f"  AWS mode: {'stub/demo' if stub_mode else 'live'}")
     if not stub_mode:
         print("  Live AWS mode selected -- ensure credentials and target account access are configured.")

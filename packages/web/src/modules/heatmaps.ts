@@ -1,5 +1,5 @@
 // =============================================================================
-// AETHER SDK — HEATMAP MODULE (Tier 2 Thin Client)
+// Aether SDK — HEATMAP MODULE (Tier 2 Thin Client)
 // Ships raw coordinate events to backend. No grid building, no aggregation.
 // =============================================================================
 

@@ -1,5 +1,5 @@
 // =============================================================================
-// AETHER SDK — BITCOIN TRACKER (Tier 2 Thin Client)
+// Aether SDK — BITCOIN TRACKER (Tier 2 Thin Client)
 // Ships raw transaction data to backend. No UTXO tracking, no fee analytics.
 // =============================================================================
 

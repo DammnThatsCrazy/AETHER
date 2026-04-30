@@ -1,5 +1,5 @@
 // =============================================================================
-// AETHER SDK — MAIN CLASS (Tier 2 Thin Client)
+// Aether SDK — MAIN CLASS (Tier 2 Thin Client)
 // Public API orchestrating: identity, session, events, web3, commerce,
 // agent, x402.
 //

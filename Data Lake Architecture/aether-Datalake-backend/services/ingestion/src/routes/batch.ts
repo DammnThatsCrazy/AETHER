@@ -1,5 +1,5 @@
 // =============================================================================
-// AETHER INGESTION — BATCH ROUTE
+// Aether INGESTION — BATCH ROUTE
 // POST /v1/batch — Primary event ingestion endpoint
 // =============================================================================
 

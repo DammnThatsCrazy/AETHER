@@ -1,7 +1,7 @@
 """
 Aether Agent Layer — Replanner
 Handles plan failures by generating revised plans, reassigning steps,
-or escalating to KIRA for cross-controller coordination.
+or escalating to Nous for cross-controller coordination.
 """
 
 from __future__ import annotations

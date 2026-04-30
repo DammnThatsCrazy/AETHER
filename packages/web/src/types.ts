@@ -1,5 +1,5 @@
 // =============================================================================
-// AETHER SDK — CORE TYPE DEFINITIONS (web package)
+// Aether SDK — CORE TYPE DEFINITIONS (web package)
 //
 // These types MIRROR the canonical contracts in packages/shared/*.ts.
 // Keep in sync with: packages/shared/{events,consent,wallet,identity,

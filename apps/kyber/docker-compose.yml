@@ -1,0 +1,35 @@
+version: '3.8'
+
+services:
+  kyber:
+    build:
+      context: ../..
+      dockerfile: apps/kyber/Dockerfile
+    ports:
+      - "5174:8080"
+    environment:
+      - BACKEND_URL=http://aether-backend:8000
+    depends_on:
+      aether-backend:
+        condition: service_healthy
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 3s
+      retries: 3
+
+  aether-backend:
+    build:
+      context: ../../Backend Architecture/aether-backend
+      dockerfile: Dockerfile
+    ports:
+      - "8000:8000"
+    env_file:
+      - ../../.env
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/v1/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped

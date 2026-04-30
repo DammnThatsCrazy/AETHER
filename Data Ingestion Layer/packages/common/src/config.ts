@@ -1,5 +1,5 @@
 // =============================================================================
-// AETHER BACKEND — CONFIGURATION LOADER
+// Aether BACKEND — CONFIGURATION LOADER
 // Environment-aware config with type-safe defaults and validation
 // =============================================================================
 

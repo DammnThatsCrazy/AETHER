@@ -481,7 +481,7 @@ async def create_overage_invoice(
             "idempotent": True,
         }).to_dict()
 
-    # Reuse existing AETHER overage calculation as the source of truth.
+    # Reuse existing Aether overage calculation as the source of truth.
     redis_client = None
     db_pool = None
     try:
@@ -574,7 +574,7 @@ async def create_overage_invoice(
 
 # Plans considered "active" enough to apply the requested price as plan_tier.
 _ACTIVE_SUBSCRIPTION_STATUSES = {"active", "trialing"}
-# Statuses where AETHER access should be downgraded to P1.
+# Statuses where Aether access should be downgraded to P1.
 _DOWNGRADE_SUBSCRIPTION_STATUSES = {"canceled", "unpaid", "incomplete_expired"}
 
 
@@ -667,7 +667,7 @@ def _extract_invoice_payload(
 async def _resolve_tenant_for_event(
     obj: dict[str, Any],
 ) -> Optional[str]:
-    """Find the AETHER tenant_id for a Stripe object (subscription / invoice)."""
+    """Find the Aether tenant_id for a Stripe object (subscription / invoice)."""
     metadata = obj.get("metadata") or {}
     if metadata.get("tenant_id"):
         return metadata["tenant_id"]
@@ -809,7 +809,7 @@ async def _handle_invoice_event(
 async def stripe_webhook(request: Request):
     """Stripe webhook endpoint.
 
-    Public from the AETHER auth layer (added to PUBLIC_PATHS) but protected
+    Public from the Aether auth layer (added to PUBLIC_PATHS) but protected
     by Stripe-Signature verification. Idempotent: each event_id is processed
     at most once.
     """

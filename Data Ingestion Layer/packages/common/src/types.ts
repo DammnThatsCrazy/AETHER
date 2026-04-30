@@ -1,5 +1,5 @@
 // =============================================================================
-// AETHER BACKEND — SHARED TYPE DEFINITIONS
+// Aether BACKEND — SHARED TYPE DEFINITIONS
 // Server-side mirrors of SDK types + backend-specific extensions
 // =============================================================================
 

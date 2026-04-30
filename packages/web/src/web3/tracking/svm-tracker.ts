@@ -1,5 +1,5 @@
 // =============================================================================
-// AETHER SDK — SOLANA (SVM) TRACKER (Tier 2 Thin Client)
+// Aether SDK — SOLANA (SVM) TRACKER (Tier 2 Thin Client)
 // Ships raw transaction data to backend. No program detection, no analytics.
 // =============================================================================
 

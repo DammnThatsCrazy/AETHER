@@ -4,11 +4,11 @@ Terminal-first ASCII dashboard with three required views:
 
 1. Feed / Timeline — objective events, checkpoints, briefs, review outcomes, alerts
 2. Kanban / Objective Board — open, blocked, awaiting review, sleeping, failed, completed
-3. Controller Health Console — controller status, team saturation, queue depth, triggers
+3. Controller Health Console — controller status, team saturation, queue depth, catalysts
 
 Supports:
-- Optional UNIT rendering (when UNITS enabled)
-- Pure work mode (when UNITS disabled)
+- Optional Atom rendering (when Atoms enabled)
+- Pure work mode (when Atoms disabled)
 """
 
 from __future__ import annotations
@@ -72,7 +72,7 @@ def render_timeline(events: list[dict[str, Any]], limit: int = 20) -> str:
 # View 2: Kanban / Objective Board
 # ======================================================================
 
-def render_kanban(objectives: list[dict[str, Any]], units_enabled: bool = False) -> str:
+def render_kanban(objectives: list[dict[str, Any]], atoms_enabled: bool = False) -> str:
     """Render the kanban/objective board view."""
     columns = {
         "OPEN": [],
@@ -119,7 +119,7 @@ def render_kanban(objectives: list[dict[str, Any]], units_enabled: bool = False)
 # View 3: Controller Health Console
 # ======================================================================
 
-def render_controller_health(health: dict[str, Any], units_enabled: bool = False) -> str:
+def render_controller_health(health: dict[str, Any], atoms_enabled: bool = False) -> str:
     """Render the controller health console view."""
     lines = []
     for name, data in health.items():
@@ -133,7 +133,7 @@ def render_controller_health(health: dict[str, Any], units_enabled: bool = False
         details = []
         for key in ["active_objectives", "total_evidence", "total_facts",
                      "total_verifications", "pending_mutations", "open_batches",
-                     "active_triggers", "total_checkpoints", "total_briefs",
+                     "active_catalysts", "total_checkpoints", "total_briefs",
                      "known_goals", "recoveries_performed"]:
             if key in data:
                 short_key = key.replace("total_", "").replace("active_", "")
@@ -142,22 +142,22 @@ def render_controller_health(health: dict[str, Any], units_enabled: bool = False
         detail_str = " | ".join(details[:4]) if details else ""
         lines.append(f"  {icon} {controller:<14} {detail_str}")
 
-    # LOOP state
-    loop_data = health.get("loop", {})
-    if loop_data:
-        loop_status = "stopped" if loop_data.get("is_stopped") else "running"
-        budget = loop_data.get("budget_spent", 0)
-        budget_limit = loop_data.get("budget_limit", 0)
-        actions = loop_data.get("actions_taken", 0)
+    # Cycle state
+    cycle_data = health.get("cycle", {})
+    if cycle_data:
+        cycle_status = "stopped" if cycle_data.get("is_stopped") else "running"
+        budget = cycle_data.get("budget_spent", 0)
+        budget_limit = cycle_data.get("budget_limit", 0)
+        actions = cycle_data.get("actions_taken", 0)
         lines.append("")
-        lines.append(f"  LOOP: {loop_status} | actions={actions} | budget=${budget:.2f}/${budget_limit:.2f}")
+        lines.append(f"  CYCLE: {cycle_status} | actions={actions} | budget=${budget:.2f}/${budget_limit:.2f}")
 
-    # UNITS
-    units = health.get("units", {})
-    if units.get("enabled"):
-        lines.append(f"  UNITS: enabled ({units.get('count', 0)} registered)")
+    # Atoms
+    atoms = health.get("atoms", {})
+    if atoms.get("enabled"):
+        lines.append(f"  ATOMS: enabled ({atoms.get('count', 0)} registered)")
     else:
-        lines.append("  UNITS: disabled (pure work mode)")
+        lines.append("  ATOMS: disabled (pure work mode)")
 
     return _box("CONTROLLER HEALTH CONSOLE", lines)
 
@@ -170,17 +170,17 @@ def render_dashboard(
     events: list[dict[str, Any]],
     objectives: list[dict[str, Any]],
     health: dict[str, Any],
-    units_enabled: bool = False,
+    atoms_enabled: bool = False,
 ) -> str:
     """Render the full three-panel ASCII dashboard."""
     now = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
-    header = _box("AETHER AGENT LAYER — INTERNAL OPS DASHBOARD", [
+    header = _box("Aether AGENT LAYER — INTERNAL OPS DASHBOARD", [
         f"  Timestamp: {now}",
-        f"  Mode: {'UNITS enabled' if units_enabled else 'Pure work mode'}",
+        f"  Mode: {'Atoms enabled' if atoms_enabled else 'Pure work mode'}",
     ])
 
     timeline = render_timeline(events)
-    kanban = render_kanban(objectives, units_enabled)
-    console = render_controller_health(health, units_enabled)
+    kanban = render_kanban(objectives, atoms_enabled)
+    console = render_controller_health(health, atoms_enabled)
 
     return "\n\n".join([header, timeline, kanban, console])

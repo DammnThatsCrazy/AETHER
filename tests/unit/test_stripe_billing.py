@@ -1,4 +1,4 @@
-"""Tests for AETHER's Stripe Billing integration.
+"""Tests for Aether's Stripe Billing integration.
 
 Covers:
   - Stripe Price ID <-> PlanTier mapping

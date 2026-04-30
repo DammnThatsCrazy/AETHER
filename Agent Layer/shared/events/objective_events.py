@@ -1,7 +1,7 @@
 """
 Aether Agent Layer — Objective Events
 Event bus for internal agent layer events. Controllers and runtimes
-publish events here; BOLT, TRIGGER, and the CLI dashboard subscribe.
+publish events here; Kinesis, Catalyst, and the CLI dashboard subscribe.
 
 This does NOT replace Kafka for external event streaming —
 it is the internal agent-layer event channel only.
@@ -41,8 +41,8 @@ class EventType(str, Enum):
     CHECKPOINT_SAVED = "checkpoint.saved"
     BRIEF_CREATED = "brief.created"
     CONTROLLER_ALERT = "controller.alert"
-    TRIGGER_FIRED = "trigger.fired"
-    LOOP_STOPPED = "loop.stopped"
+    CATALYST_FIRED = "catalyst.fired"
+    CYCLE_STOPPED = "cycle.stopped"
     RECOVERY_STARTED = "recovery.started"
 
 

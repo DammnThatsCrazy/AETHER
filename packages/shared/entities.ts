@@ -1,5 +1,5 @@
 // =============================================================================
-// AETHER SDK — Shared Entity Model
+// Aether SDK — Shared Entity Model
 // Canonical entities the SDK may reference. Mirrors backend VertexType enum
 // in Backend Architecture/aether-backend/shared/graph/graph.py.
 // See docs/source-of-truth/ENTITY_MODEL.md.

@@ -1,5 +1,5 @@
 // =============================================================================
-// AETHER SDK — WEB3 MODULE
+// Aether SDK — WEB3 MODULE
 // Wallet tracking, chain detection, transaction monitoring
 // =============================================================================
 

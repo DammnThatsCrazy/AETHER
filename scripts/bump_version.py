@@ -11,7 +11,7 @@ Usage:
 
 Files updated:
     - pyproject.toml (root)
-    - package.json (root, packages/web, packages/react-native, apps/shiki,
+    - package.json (root, packages/web, packages/react-native, apps/kyber,
       Data Ingestion Layer, Data Lake Architecture)
     - All docs/*.md headers containing version numbers
     - EXTRACTION_DEFENSE_AUDIT.md
@@ -35,7 +35,7 @@ PACKAGE_JSONS = [
     ROOT / "packages" / "shared" / "package.json",
     ROOT / "packages" / "web" / "package.json",
     ROOT / "packages" / "react-native" / "package.json",
-    ROOT / "apps" / "shiki" / "package.json",
+    ROOT / "apps" / "kyber" / "package.json",
     ROOT / "Data Ingestion Layer" / "package.json",
     ROOT / "Data Ingestion Layer" / "packages" / "common" / "package.json",
     ROOT / "Data Ingestion Layer" / "packages" / "auth" / "package.json",

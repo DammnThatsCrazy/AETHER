@@ -1,5 +1,5 @@
 // =============================================================================
-// AETHER SDK — Shared Event Envelope & Registry
+// Aether SDK — Shared Event Envelope & Registry
 // Canonical shapes every SDK emits and every ingestion validator accepts.
 // See docs/source-of-truth/EVENT_REGISTRY.md and INGESTION_CONTRACT.md.
 // =============================================================================

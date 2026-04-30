@@ -441,7 +441,7 @@ Checks if a user is eligible for a specific reward.
   "reason": "completed_3_transactions",
   "expiresAt": "2026-04-01T00:00:00Z",
   "amount": "100",
-  "token": "AETHER"
+  "token": "Aether"
 }
 ```
 

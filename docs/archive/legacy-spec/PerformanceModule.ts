@@ -1,5 +1,5 @@
 // =============================================================================
-// AETHER SDK — PERFORMANCE MODULE
+// Aether SDK — PERFORMANCE MODULE
 // Core Web Vitals (LCP, FID, CLS), resource timing, JS error tracking
 // =============================================================================
 

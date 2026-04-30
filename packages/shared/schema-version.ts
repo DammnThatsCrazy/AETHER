@@ -1,5 +1,5 @@
 // =============================================================================
-// AETHER SDK — Shared Schema Version
+// Aether SDK — Shared Schema Version
 // Canonical contract version used by Web, iOS, Android, and React Native SDKs.
 // Any breaking change to shared/*.ts MUST bump CONTRACT_SCHEMA_VERSION.
 // =============================================================================

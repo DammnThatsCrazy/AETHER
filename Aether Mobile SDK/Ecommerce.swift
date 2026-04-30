@@ -1,5 +1,5 @@
 // =============================================================================
-// AETHER SDK — E-COMMERCE MODULE (iOS)
+// Aether SDK — E-COMMERCE MODULE (iOS)
 // Revenue tracking: product views, cart, checkout funnel, purchases
 // =============================================================================
 

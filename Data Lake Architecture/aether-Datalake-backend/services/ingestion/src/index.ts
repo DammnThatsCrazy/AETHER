@@ -1,5 +1,5 @@
 // =============================================================================
-// AETHER INGESTION SERVICE — MAIN ENTRY POINT
+// Aether INGESTION SERVICE — MAIN ENTRY POINT
 // High-throughput HTTP event ingestion server
 //
 // Architecture:

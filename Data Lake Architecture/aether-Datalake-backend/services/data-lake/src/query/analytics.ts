@@ -1,5 +1,5 @@
 // =============================================================================
-// AETHER DATA LAKE — QUERY LAYER
+// Aether DATA LAKE — QUERY LAYER
 // ClickHouse query builder and pre-built analytics queries powering
 // dashboards, APIs, and downstream ML feature reads
 // =============================================================================

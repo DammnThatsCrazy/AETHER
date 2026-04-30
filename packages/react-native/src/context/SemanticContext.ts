@@ -1,5 +1,5 @@
 // =============================================================================
-// AETHER SDK — REACT NATIVE SEMANTIC CONTEXT (Thin Client)
+// Aether SDK — REACT NATIVE SEMANTIC CONTEXT (Thin Client)
 // Tier 1 context only — backend handles enrichment
 // =============================================================================
 

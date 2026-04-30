@@ -1,0 +1,80 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+@import "./tokens.css";
+
+@layer base {
+  * {
+    @apply border-border-default;
+  }
+
+  body {
+    @apply bg-surface-base text-text-primary font-mono antialiased;
+  }
+
+  /* Reduced motion support */
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+      scroll-behavior: auto !important;
+    }
+  }
+}
+
+@layer components {
+  .kyber-card {
+    @apply rounded-md border border-border-default bg-surface-raised p-4;
+  }
+
+  .kyber-panel {
+    @apply rounded-lg border border-border-default bg-surface-overlay p-6;
+  }
+
+  .kyber-badge {
+    @apply inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium;
+  }
+
+  .kyber-severity-p0 {
+    @apply bg-danger/20 text-danger border border-danger/30;
+  }
+  .kyber-severity-p1 {
+    @apply bg-warning/20 text-warning border border-warning/30;
+  }
+  .kyber-severity-p2 {
+    @apply bg-info/20 text-info border border-info/30;
+  }
+  .kyber-severity-p3 {
+    @apply bg-accent/20 text-accent border border-accent/30;
+  }
+  .kyber-severity-info {
+    @apply bg-surface-raised text-text-secondary border border-border-default;
+  }
+
+  .kyber-glyph {
+    @apply font-mono text-xs leading-none;
+  }
+
+  .kyber-terminal-separator {
+    @apply border-t border-border-subtle my-2 opacity-40;
+  }
+}
+
+/* Scrollbar styling */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--color-border-default);
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--color-text-secondary);
+}

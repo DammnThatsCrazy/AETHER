@@ -1,5 +1,5 @@
 // =============================================================================
-// AETHER COMMON — TYPE DEFINITIONS
+// Aether COMMON — TYPE DEFINITIONS
 // Shared across ingestion, data lake, and all services
 // =============================================================================
 

@@ -1,5 +1,5 @@
 // =============================================================================
-// AETHER INGESTION — PROCESSING PIPELINE
+// Aether INGESTION — PROCESSING PIPELINE
 // Orchestrates: Parse → Validate → Deduplicate → Enrich → Route to Sinks
 // =============================================================================
 

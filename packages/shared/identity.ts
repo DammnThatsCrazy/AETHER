@@ -1,5 +1,5 @@
 // =============================================================================
-// AETHER SDK — Shared Identity Contract
+// Aether SDK — Shared Identity Contract
 // Inputs the SDK supplies to backend identity resolution:
 //   anonymous_id, user_id, device_id, wallet_address, email, phone.
 // See docs/source-of-truth/ENTITY_MODEL.md §Identity.

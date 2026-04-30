@@ -1,5 +1,5 @@
 // =============================================================================
-// AETHER SDK — BASE VM PROVIDER
+// Aether SDK — BASE VM PROVIDER
 // Shared abstract base for all non-EVM VM providers
 // =============================================================================
 

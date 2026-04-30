@@ -196,7 +196,7 @@ async def create_checkout_session(
     """Create a Stripe subscription Checkout Session for a plan_tier.
 
     Metadata always includes tenant_id, requested_plan_tier, and (when known)
-    contact_email so the webhook can resolve the AETHER tenant on completion.
+    contact_email so the webhook can resolve the Aether tenant on completion.
     """
     if plan_tier not in PLAN_CATALOG:
         raise BadRequestError(f"Unknown plan_tier: {plan_tier!r}")

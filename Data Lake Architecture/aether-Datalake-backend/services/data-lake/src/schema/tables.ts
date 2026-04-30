@@ -1,5 +1,5 @@
 // =============================================================================
-// AETHER DATA LAKE — TABLE DEFINITIONS
+// Aether DATA LAKE — TABLE DEFINITIONS
 // Complete schema for all medallion tiers:
 //   Bronze: Raw ingested events (append-only, JSONL on S3)
 //   Silver: Cleaned, deduplicated, enriched events (Parquet on S3 + ClickHouse)

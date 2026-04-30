@@ -1,5 +1,5 @@
 // =============================================================================
-// AETHER SDK — EVENT QUEUE (BATCH, FLUSH, RETRY, OFFLINE PERSISTENCE)
+// Aether SDK — EVENT QUEUE (BATCH, FLUSH, RETRY, OFFLINE PERSISTENCE)
 // =============================================================================
 
 import type { AetherEvent, RetryConfig, ConsentState } from './WebSDKTypes(CoreTypeDefinitions)';

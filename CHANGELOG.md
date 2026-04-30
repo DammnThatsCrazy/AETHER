@@ -121,12 +121,12 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
   npm workspace with its own `package.json`, `exports` map, and
   `"@aether/shared": "*"` dependency in `packages/react-native`. Replaces
   fragile `../../../shared/` relative imports.
-- **Shiki E2E workflow** — dedicated `.github/workflows/shiki-e2e.yml`
-  gate with path-scoped triggers (`apps/shiki/**`, `packages/shared/**`),
+- **Kyber E2E workflow** — dedicated `.github/workflows/kyber-e2e.yml`
+  gate with path-scoped triggers (`apps/kyber/**`, `packages/shared/**`),
   runs component + integration + Playwright E2E against a live dev server,
   uploads `playwright-report/` artifact on failure.
 - **Circular-dependency CI gate** — `npx madge --circular` across
-  `packages/web/src`, `packages/react-native/src`, `apps/shiki/src` on
+  `packages/web/src`, `packages/react-native/src`, `apps/kyber/src` on
   every push.
 - **React Native test suite** — real vitest suite mocking NativeModules via
   `vi.hoisted()` (8 tests covering FeatureFlags + Ecommerce bridges);
@@ -134,7 +134,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 - **`.dockerignore`** at repo root — strips `.git/`, `node_modules/`,
   unrelated subsystems, docs, and archives from every backend build
   context.
-- **Shiki service in `docker-compose.yml`** — host port `8081:8080`
+- **Kyber service in `docker-compose.yml`** — host port `8081:8080`
   (container nginx on 8080) with wget-based `/health` check, removing
   the prior latent port collision with `ml-serving`.
 - **`target: serving`** pinned for `ml-serving` in root + staging compose,
@@ -156,7 +156,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
   `../../ML Models/aether-ml` with `target: serving`.
 - **`vi.mock` hoisting ReferenceError** in RN test suite (vitest strict
   hoisting TDZ bug) — migrated shared mock state to `vi.hoisted()`.
-- **Shiki E2E `text=Command` locator collision** — strict-mode violation
+- **Kyber E2E `text=Command` locator collision** — strict-mode violation
   with the top-bar role badge containing "engineering command"; scoped
   to `getByRole('heading', { name: 'Command', level: 1 })`.
 - **Backend orphan `main.py`** at `Backend Architecture/main.py`
@@ -168,14 +168,14 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 - **Version floor** raised across the monorepo: Python `requires-python`
   to `>=3.10` (matches `ML Models/aether-ml`), `ruff target-version` to
   `py310`.
-- **License field** added to every package (`apps/shiki`,
+- **License field** added to every package (`apps/kyber`,
   `Data Ingestion Layer`, `Data Lake Architecture/aether-Datalake-backend`,
   `playground`) — all now aligned to SPDX `UNLICENSED`.
 - **`RootPackageSDK.json`** removed (stale duplicate of the root
   `package.json` diverging from the authoritative workspace list).
-- **`apps/shiki` version** aligned to platform version (was `0.1.0`).
+- **`apps/kyber` version** aligned to platform version (was `0.1.0`).
 - **`bump_version.py` + `validate_docs.py`** now cover
-  `packages/shared/package.json`, `apps/shiki/package.json`, plus the
+  `packages/shared/package.json`, `apps/kyber/package.json`, plus the
   rollback, migration, and smoke-test runbook headers.
 - **CI path parameterization** — `BACKEND_DIR`, `ML_DIR`, `AGENT_DIR`
   hoisted to an `env:` block in `repo-health.yml` and variables in the
@@ -236,17 +236,17 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ### Added — Agent Layer: Multi-Controller Internal Autonomy Architecture
 - **Governance Controller** — top-level policy authority with budget ceilings, kill switch, audit invariants, conflict arbitration, and autonomy boundaries
-- **KIRA Controller** — top orchestration controller coordinating across all domain controllers with plan supervision, synthesis, and replan/escalation
+- **Nous Controller** — top orchestration controller coordinating across all domain controllers with plan supervision, synthesis, and replan/escalation
 - **Intake Controller** — objective intake with dedupe, normalization, admission control, and severity classification
 - **Discovery Controller** — source-facing evidence collection orchestration with team routing and fallback
 - **Enrichment Controller** — candidate fact generation, entity resolution/reconciliation orchestration
 - **Verification Controller** — evidence sufficiency, provenance, schema, consistency, and quality scoring checks
 - **Commit Controller** — mutation staging, review batch building, internal approval queue, and graph write through explicit interfaces
 - **Recovery Controller** — retry/fallback, compensation, rollback orchestration, stale objective repair, checkpoint restoration
-- **BOLT Controller** — objective continuity across sessions, checkpoint records, brief records, operator summaries, handoff state, run history, session restore, internal feed/timeline
-- **TRIGGER Controller** — unified scheduling/wake engine with cron, graph-state, webhook, queue-condition, stale-entity, failed-retry, and manual wakeups; missed-fire handling; orphan cleanup
-- **LOOP runtime** — aggressive shared continuation behavior across KIRA and domain controllers with policy/budget/stopping enforcement
-- **UNITS identity layer** — fully functional but optional identity + mascot system for controllers, teams, and workers
+- **Kinesis Controller** — objective continuity across sessions, checkpoint records, brief records, operator summaries, handoff state, run history, session restore, internal feed/timeline
+- **Catalyst Controller** — unified scheduling/wake engine with cron, graph-state, webhook, queue-condition, stale-entity, failed-retry, and manual wakeups; missed-fire handling; orphan cleanup
+- **Cycle runtime** — aggressive shared continuation behavior across Nous and domain controllers with policy/budget/stopping enforcement
+- **Atoms identity layer** — fully functional but optional identity + mascot system for controllers, teams, and workers
 - **Durable objective runtime** — Objective, Plan, PlanStep lifecycle management replacing flat task-only model
 - **Evidence & verification pipeline** — EvidenceRecord, CandidateFact, VerificationResult data models
 - **Staged mutation review system** — StagedMutation, ReviewBatch with 5-class mutation classification; all classes require human approval
@@ -257,7 +257,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 - **Graph staging interface** — explicit agent-layer interface for staging and committing approved mutations
 - **Internal event bus** — synchronous event channel for agent-layer events (objective, plan, step, mutation, trigger events)
 - **Policy guardrails** — controller-aware policy enforcement extending existing guardrails
-- **Controller Hub** — single assembly point wiring the full Governance > KIRA > Domain Controller hierarchy
+- **Controller Hub** — single assembly point wiring the full Governance > Nous > Domain Controller hierarchy
 - **Worker teams** — bounded execution groups (discovery, enrichment, verification, recovery, commit) under domain controllers
 - **Queue routing** — controller-to-queue mapping for the multi-controller architecture
 
@@ -265,8 +265,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 - Agent Layer architecture: flat single-controller → multi-controller internal autonomy hierarchy
 - Task execution: task-only → objective + plan runtime with durable state
 - Routing: confidence-only → verification + staging + review batches
-- Scheduling: simple hooks → TRIGGER unified wake engine
-- Continuity: ad-hoc → BOLT checkpoint and briefing system
+- Scheduling: simple hooks → Catalyst unified wake engine
+- Continuity: ad-hoc → Kinesis checkpoint and briefing system
 - Worker pool: flat pool → controller + team-aware execution fabric
 - Internal UI: none → real CLI dashboard and ops console
 

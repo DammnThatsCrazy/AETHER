@@ -1,5 +1,5 @@
 // =============================================================================
-// AETHER DATA LAKE — BACKFILL & REPLAY MANAGER
+// Aether DATA LAKE — BACKFILL & REPLAY MANAGER
 // Reprocesses historical data from Bronze through Silver and Gold tiers.
 // Supports partition-level replay, schema migration backfills,
 // full re-ingestion from S3, and incremental catchup

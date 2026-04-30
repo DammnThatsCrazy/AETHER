@@ -1,5 +1,5 @@
 // =============================================================================
-// AETHER SDK — FEATURE FLAGS MODULE (React Native) — Thin Native Bridge
+// Aether SDK — FEATURE FLAGS MODULE (React Native) — Thin Native Bridge
 // Delegates all feature flag evaluation to NativeModules.AetherFeatureFlags
 // =============================================================================
 

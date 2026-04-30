@@ -1,5 +1,5 @@
 // =============================================================================
-// AETHER INGESTION — UNIT TESTS
+// Aether INGESTION — UNIT TESTS
 // Tests for validation, enrichment, pipeline, auth, and metrics
 // =============================================================================
 

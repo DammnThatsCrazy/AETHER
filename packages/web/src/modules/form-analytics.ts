@@ -1,5 +1,5 @@
 // =============================================================================
-// AETHER SDK — FORM ANALYTICS MODULE (Tier 2 Thin Client)
+// Aether SDK — FORM ANALYTICS MODULE (Tier 2 Thin Client)
 // Ships raw field-level events to backend. No abandonment detection,
 // no hesitation analysis, no field-level analytics.
 // =============================================================================

@@ -2,7 +2,7 @@
 
 **Status:** Day-1 GA (feature-flagged via `COMMERCE_CONTROL_PLANE_ENABLED=true`)
 **Layer:** L3b+ (extends existing x402 capture L3b)
-**Surface:** Backend (`services/x402/`), SHIKI (`features/approvals`, `components/commerce`)
+**Surface:** Backend (`services/x402/`), Kyber (`features/approvals`, `components/commerce`)
 
 ---
 
@@ -16,7 +16,7 @@ The Agentic Commerce control plane upgrades Aether's existing x402 capture subsy
 - Tracks settlement through a finite state machine.
 - Mints time-bound entitlements and grants access.
 - Persists the full lifecycle in Neptune via deterministic graph mutations.
-- Exposes SHIKI operator actions (approve/reject/escalate/revoke, inspect, replay).
+- Exposes Kyber operator actions (approve/reject/escalate/revoke, inspect, replay).
 - Emits 28+ typed events for lake / analytics / audit consumers.
 
 ## 2. Full lifecycle
@@ -34,14 +34,14 @@ one or more graph vertices/edges, and is traceable via `GET /v1/x402/explain/{ch
 - Mandatory approval on every spend class.
 - USDC on Base (`eip155:8453`) + USDC on Solana (`solana:mainnet`).
 - Local facilitator + Circle v2 facilitator.
-- Full SHIKI Review tab for approval queue.
+- Full Kyber Review tab for approval queue.
 - Full explainability via lifecycle trace endpoint.
 
 ## 4. Architecture
 
 ```
                               ┌──────────────────────────┐
-  SHIKI Review/Command/GOUF → │  /v1/approvals/*         │ ──┐
+  Kyber Review/Command/Noesis → │  /v1/approvals/*         │ ──┐
                               │  /v1/x402/challenge      │   │
                               │  /v1/x402/verify         │   │
                               │  /v1/x402/access/grant   │   │
@@ -132,7 +132,7 @@ All commerce events published under `aether.commerce.*` topic namespace on the e
 | `/v1/diagnostics/commerce/health` | GET | Subsystem health |
 | `/v1/diagnostics/commerce/stuck-approvals` | GET | Past-SLA approvals |
 
-## 10. SHIKI integration
+## 10. Kyber integration
 
 - **Review page:** "Commerce Approvals" tab exposing `ApprovalQueue` component with approve/reject/escalate/revoke actions (gated on `canApprove`).
 - **All pages:** `LifecycleTraceView` component for evidence inspection.
@@ -141,11 +141,11 @@ All commerce events published under `aether.commerce.*` topic namespace on the e
 - **Fixtures:** `fixtures/commerce.ts` (deterministic for mock/Lab mode).
 - **Hooks:** `features/approvals`, `features/commerce`, `features/entitlements`.
 
-All SHIKI actions hit real backend APIs and emit real events. In mock mode (`VITE_AETHER_RUNTIME=local-mocked`) fixtures are used deterministically.
+All Kyber actions hit real backend APIs and emit real events. In mock mode (`VITE_KYBER_ENV=local-mocked`) fixtures are used deterministically.
 
 ## 11. Operator runbook (stuck approval)
 
-1. Open SHIKI Review → Commerce Approvals tab.
+1. Open Kyber Review → Commerce Approvals tab.
 2. Filter by status=`pending` or `assigned`.
 3. Click approval row → see evidence bundle, policy decision, requester history.
 4. Either approve with reason, reject with reason, or escalate.
@@ -165,16 +165,16 @@ All SHIKI actions hit real backend APIs and emit real events. In mock mode (`VIT
 ## 13. Testing
 
 - Backend: `tests/commerce/test_lifecycle.py` (11 integration tests) + `tests/commerce/test_units.py` (10 unit tests) — **21 passing**.
-- SHIKI: `src/test/unit/commerce-schemas.test.ts` (16 schema tests) + `src/test/component/commerce.test.tsx` (11 component tests) — **27 passing**.
-- Full suites: backend (21), SHIKI (79 total including 52 prior).
+- Kyber: `src/test/unit/commerce-schemas.test.ts` (16 schema tests) + `src/test/component/commerce.test.tsx` (11 component tests) — **27 passing**.
+- Full suites: backend (21), Kyber (79 total including 52 prior).
 
 Run:
 ```bash
 # Backend
 cd "Backend Architecture/aether-backend" && python -m pytest tests/commerce/ -v --asyncio-mode=auto
 
-# SHIKI
-cd apps/shiki && npx vitest run
+# Kyber
+cd apps/kyber && npx vitest run
 ```
 
 ## 14. What's deferred (out of Day-1)

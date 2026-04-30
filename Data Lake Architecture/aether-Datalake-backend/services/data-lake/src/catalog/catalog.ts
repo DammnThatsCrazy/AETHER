@@ -1,5 +1,5 @@
 // =============================================================================
-// AETHER DATA LAKE — DATA CATALOG
+// Aether DATA LAKE — DATA CATALOG
 // Schema registry, lineage graph, metadata management, and discovery
 // Central source of truth for all tables, columns, and data lineage
 // =============================================================================

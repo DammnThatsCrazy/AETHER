@@ -140,7 +140,7 @@ class Topic(str, Enum):
     COMMERCE_ACCESS_DENIED = "aether.commerce.access.denied"
     COMMERCE_POLICY_DENIED = "aether.commerce.policy.denied"
     COMMERCE_FACILITATOR_ROUTE_SELECTED = "aether.commerce.facilitator.route_selected"
-    COMMERCE_SHIKI_ACTION_LOGGED = "aether.commerce.shiki.action_logged"
+    COMMERCE_KYBER_ACTION_LOGGED = "aether.commerce.kyber.action_logged"
     COMMERCE_OPERATOR_ACTION_LOGGED = "aether.commerce.operator.action_logged"
     COMMERCE_REPLAY_EXECUTED = "aether.commerce.replay.executed"
     COMMERCE_RECONCILIATION_TASK_CREATED = "aether.commerce.reconciliation.task_created"

@@ -1,5 +1,5 @@
 // =============================================================================
-// AETHER SDK — iOS Tiered Semantic Context
+// Aether SDK — iOS Tiered Semantic Context
 // Enriches every event with layered context based on consent + configuration.
 // Tier 1: Essential (always) → Tier 2: Functional → Tier 3: Rich
 // =============================================================================

@@ -7,17 +7,17 @@
     "packages/shared",
     "packages/web",
     "packages/react-native",
-    "apps/shiki"
+    "apps/kyber"
   ],
   "scripts": {
     "build": "npm run build --workspaces --if-present",
     "test": "npm run test --workspaces --if-present",
     "lint": "npm run lint --workspaces --if-present",
-    "typecheck": "tsc --noEmit --project packages/web/tsconfig.json && npm run typecheck --workspace=apps/shiki --if-present && npm run typecheck --workspace=packages/react-native --if-present",
+    "typecheck": "tsc --noEmit --project packages/web/tsconfig.json && npm run typecheck --workspace=apps/kyber --if-present && npm run typecheck --workspace=packages/react-native --if-present",
     "clean": "rm -rf packages/*/dist packages/*/node_modules",
     "docs": "typedoc --entryPoints packages/web/src/index.ts --out docs/api",
-    "deps:circular": "npx --yes madge@^7 --circular --extensions ts,tsx packages/web/src packages/react-native/src apps/shiki/src",
-    "deps:unused": "npx --yes depcheck@^1.4 packages/web && npx --yes depcheck@^1.4 packages/react-native && npx --yes depcheck@^1.4 apps/shiki"
+    "deps:circular": "npx --yes madge@^7 --circular --extensions ts,tsx packages/web/src packages/react-native/src apps/kyber/src",
+    "deps:unused": "npx --yes depcheck@^1.4 packages/web && npx --yes depcheck@^1.4 packages/react-native && npx --yes depcheck@^1.4 apps/kyber"
   },
   "devDependencies": {
     "@types/node": "^20.0.0",

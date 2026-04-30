@@ -122,10 +122,10 @@ services:
       REDIS_HOST: redis
     command: uvicorn serving.src.api:app --host 0.0.0.0 --port 8080
 
-  shiki:
+  kyber:
     build:
       context: .
-      dockerfile: apps/shiki/Dockerfile
+      dockerfile: apps/kyber/Dockerfile
     # Host port 8081 avoids collision with ml-serving on 8080.
     # Container still listens on 8080 internally (nginx default).
     ports:

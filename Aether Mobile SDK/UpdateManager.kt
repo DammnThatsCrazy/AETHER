@@ -1,5 +1,5 @@
 // =============================================================================
-// AETHER SDK — Android OTA Update Manager (v5.0.0)
+// Aether SDK — Android OTA Update Manager (v5.0.0)
 // Fetches remote manifest, syncs OTA data modules (chain registry, protocols,
 // wallet labels, wallet classification) without requiring SDK reinstall.
 // Runs entirely on Dispatchers.IO — never blocks the main thread.

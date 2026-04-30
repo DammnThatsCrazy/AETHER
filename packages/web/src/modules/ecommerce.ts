@@ -1,5 +1,5 @@
 // =============================================================================
-// AETHER SDK — E-COMMERCE MODULE (Tier 2 Thin Client)
+// Aether SDK — E-COMMERCE MODULE (Tier 2 Thin Client)
 // Ships raw e-commerce events to backend. No cart state, no funnel logic.
 // =============================================================================
 

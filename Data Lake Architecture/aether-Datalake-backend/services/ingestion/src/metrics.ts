@@ -1,5 +1,5 @@
 // =============================================================================
-// AETHER INGESTION — METRICS COLLECTOR
+// Aether INGESTION — METRICS COLLECTOR
 // In-process counters, histograms, and Prometheus-compatible export
 // =============================================================================
 

@@ -1,5 +1,5 @@
 // =============================================================================
-// AETHER SDK — React Native Bridge
+// Aether SDK — React Native Bridge
 // Unified JS API bridging to native iOS/Android modules
 // =============================================================================
 

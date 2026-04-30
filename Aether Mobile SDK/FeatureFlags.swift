@@ -1,5 +1,5 @@
 // =============================================================================
-// AETHER SDK — FEATURE FLAGS MODULE (iOS)
+// Aether SDK — FEATURE FLAGS MODULE (iOS)
 // Client-side feature flag evaluation with remote configuration
 // =============================================================================
 

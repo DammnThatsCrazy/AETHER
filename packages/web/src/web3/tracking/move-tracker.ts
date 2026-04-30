@@ -1,5 +1,5 @@
 // =============================================================================
-// AETHER SDK — MOVE VM (SUI) TRACKER (Tier 2 Thin Client)
+// Aether SDK — MOVE VM (SUI) TRACKER (Tier 2 Thin Client)
 // Ships raw transaction data to backend. No protocol detection, no analytics.
 // =============================================================================
 

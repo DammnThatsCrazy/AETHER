@@ -278,7 +278,7 @@ class StripeBillingConfig:
     Settings.__post_init__). In AETHER_ENV=local, missing values are tolerated
     and admin Stripe routes return mocked URLs.
 
-    overage_price_id is OPTIONAL. It is only required when charging AETHER
+    overage_price_id is OPTIONAL. It is only required when charging Aether
     overage through Stripe invoices. When absent, Stripe overage invoicing is
     disabled and existing internal overage calculation remains authoritative.
     """

@@ -1,5 +1,5 @@
 // =============================================================================
-// AETHER BACKEND — CACHE CLIENT
+// Aether BACKEND — CACHE CLIENT
 // Redis-backed caching, real-time counters, deduplication, and pub/sub
 // =============================================================================
 
