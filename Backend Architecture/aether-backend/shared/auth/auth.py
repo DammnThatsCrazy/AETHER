@@ -362,7 +362,9 @@ class APIKeyValidator:
         if self._environment == Environment.LOCAL:
             key_data = _LOCAL_STUB_KEYS.get(api_key)
             if key_data:
-                return self._build_context(key_data)
+                ctx = self._build_context(key_data)
+                ctx = await _maybe_apply_billing_plan_tier(ctx)
+                return ctx
 
         # Reject stub keys outside LOCAL
         if api_key in _LOCAL_STUB_KEYS:
@@ -380,27 +382,63 @@ class APIKeyValidator:
         if not key_data:
             raise UnauthorizedError("Invalid API key")
 
-        return self._build_context(key_data)
+        ctx = self._build_context(key_data)
+        ctx = await _maybe_apply_billing_plan_tier(ctx)
+        return ctx
 
     @staticmethod
-    def _build_context(key_data: dict) -> TenantContext:
-        api_key_tier = APIKeyTier(key_data.get("tier", "free"))
-        # plan_tier is preferred (P1-P4). Fall back to legacy tier mapping.
-        plan_raw = key_data.get("plan_tier")
-        if plan_raw:
-            try:
-                plan_tier = PlanTier(plan_raw)
-            except ValueError:
-                plan_tier = legacy_tier_to_plan(api_key_tier)
-        else:
+    def _build_context(key_data: dict) -> TenantContext:  # noqa: D401
+        """See module-level helper below for billing-account override."""
+        return _build_context_from_key_data(key_data)
+
+
+def _build_context_from_key_data(key_data: dict) -> TenantContext:
+    api_key_tier = APIKeyTier(key_data.get("tier", "free"))
+    # plan_tier is preferred (P1-P4). Fall back to legacy tier mapping.
+    plan_raw = key_data.get("plan_tier")
+    if plan_raw:
+        try:
+            plan_tier = PlanTier(plan_raw)
+        except ValueError:
             plan_tier = legacy_tier_to_plan(api_key_tier)
-        return TenantContext(
-            tenant_id=key_data["tenant_id"],
-            role=Role(key_data.get("role", "viewer")),
-            api_key_tier=api_key_tier,
-            plan_tier=plan_tier,
-            permissions=key_data.get("permissions", []),
-        )
+    else:
+        plan_tier = legacy_tier_to_plan(api_key_tier)
+    return TenantContext(
+        tenant_id=key_data["tenant_id"],
+        role=Role(key_data.get("role", "viewer")),
+        api_key_tier=api_key_tier,
+        plan_tier=plan_tier,
+        permissions=key_data.get("permissions", []),
+    )
+
+
+async def _maybe_apply_billing_plan_tier(ctx: TenantContext) -> TenantContext:
+    """If a tenant_billing_accounts row exists with a more recent plan_tier
+    than the cached API-key data, apply it.
+
+    This ensures Stripe subscription updates take effect even if a cached
+    API key entry was created before the subscription change. Best-effort:
+    any failure leaves the original context intact.
+    """
+    if not ctx.tenant_id:
+        return ctx
+    try:
+        from shared.billing import stripe_repository
+        account = await stripe_repository.get_billing_account(ctx.tenant_id)
+        if not account:
+            return ctx
+        billing_plan = account.get("plan_tier")
+        if not billing_plan:
+            return ctx
+        try:
+            plan = PlanTier(billing_plan)
+        except ValueError:
+            return ctx
+        if plan != ctx.plan_tier:
+            ctx.plan_tier = plan
+    except Exception:
+        return ctx
+    return ctx
 
 
 # ═══════════════════════════════════════════════════════════════════════════

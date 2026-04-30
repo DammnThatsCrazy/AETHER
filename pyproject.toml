@@ -63,6 +63,11 @@ backend = [
     "eth-account>=0.11.0",
 ]
 
+# Backend with Stripe Billing integration
+backend-stripe = [
+    "stripe>=10.0.0",
+]
+
 # ML model training and serving
 ml = [
     "scikit-learn>=1.4.0",
@@ -84,7 +89,7 @@ dev = [
 
 # Everything
 all = [
-    "aether[security,agent,backend,ml,dev]",
+    "aether[security,agent,backend,backend-stripe,ml,dev]",
 ]
 
 # ---------------------------------------------------------------------------

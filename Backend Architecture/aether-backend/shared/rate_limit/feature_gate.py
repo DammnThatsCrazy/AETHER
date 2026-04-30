@@ -26,6 +26,10 @@ PUBLIC_PATHS: frozenset[str] = frozenset({
     "/docs",
     "/openapi.json",
     "/redoc",
+    # Stripe webhook: protected by Stripe-Signature verification, not by
+    # AETHER API keys. The route handler verifies the signature before
+    # processing the payload.
+    "/v1/admin/billing/stripe/webhook",
 })
 
 
