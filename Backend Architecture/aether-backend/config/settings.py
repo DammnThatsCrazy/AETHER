@@ -263,6 +263,52 @@ class ExtractionMeshConfig:
 
 
 # ---------------------------------------------------------------------------
+# Stripe Billing
+# ---------------------------------------------------------------------------
+
+@dataclass(frozen=True)
+class StripeBillingConfig:
+    """Stripe Billing integration configuration.
+
+    All Price IDs map to entries in shared.plans.catalog.PLAN_CATALOG. Pricing
+    amounts are NOT duplicated here — only the Stripe Price IDs themselves.
+
+    In non-local environments with enabled=True, secret_key, webhook_secret,
+    price_p1..price_p4, and checkout/portal URLs are required (validated in
+    Settings.__post_init__). In AETHER_ENV=local, missing values are tolerated
+    and admin Stripe routes return mocked URLs.
+
+    overage_price_id is OPTIONAL. It is only required when charging AETHER
+    overage through Stripe invoices. When absent, Stripe overage invoicing is
+    disabled and existing internal overage calculation remains authoritative.
+    """
+    enabled: bool = _env_bool("STRIPE_BILLING_ENABLED", False)
+    secret_key: str = _env("STRIPE_SECRET_KEY", "")
+    webhook_secret: str = _env("STRIPE_WEBHOOK_SECRET", "")
+    price_p1: str = _env("STRIPE_PRICE_P1", "")
+    price_p2: str = _env("STRIPE_PRICE_P2", "")
+    price_p3: str = _env("STRIPE_PRICE_P3", "")
+    price_p4: str = _env("STRIPE_PRICE_P4", "")
+    overage_price_id: str = _env("STRIPE_OVERAGE_PRICE_ID", "")
+    checkout_success_url: str = _env(
+        "STRIPE_CHECKOUT_SUCCESS_URL",
+        "http://localhost:3000/billing/success?session_id={CHECKOUT_SESSION_ID}",
+    )
+    checkout_cancel_url: str = _env(
+        "STRIPE_CHECKOUT_CANCEL_URL",
+        "http://localhost:3000/billing/cancel",
+    )
+    portal_return_url: str = _env(
+        "STRIPE_PORTAL_RETURN_URL",
+        "http://localhost:3000/billing",
+    )
+
+    @property
+    def overage_invoicing_enabled(self) -> bool:
+        return bool(self.overage_price_id)
+
+
+# ---------------------------------------------------------------------------
 # Master settings
 # ---------------------------------------------------------------------------
 
@@ -301,6 +347,9 @@ class Settings:
         default_factory=ExtractionMeshConfig,
     )
 
+    # Stripe Billing
+    stripe_billing: StripeBillingConfig = field(default_factory=StripeBillingConfig)
+
     def __post_init__(self):
         if self.rate_limit.pricing_option not in ("A", "B", "C"):
             raise RuntimeError(
@@ -328,6 +377,33 @@ class Settings:
                 "WATERMARK_SECRET_KEY must be changed from default when "
                 "extraction defense is enabled in non-local environments"
             )
+        # Stripe Billing: required vars in non-local when enabled.
+        if self.stripe_billing.enabled and self.env != Environment.LOCAL:
+            sb = self.stripe_billing
+            missing: list[str] = []
+            if not sb.secret_key:
+                missing.append("STRIPE_SECRET_KEY")
+            if not sb.webhook_secret:
+                missing.append("STRIPE_WEBHOOK_SECRET")
+            if not sb.price_p1:
+                missing.append("STRIPE_PRICE_P1")
+            if not sb.price_p2:
+                missing.append("STRIPE_PRICE_P2")
+            if not sb.price_p3:
+                missing.append("STRIPE_PRICE_P3")
+            if not sb.price_p4:
+                missing.append("STRIPE_PRICE_P4")
+            if not sb.checkout_success_url:
+                missing.append("STRIPE_CHECKOUT_SUCCESS_URL")
+            if not sb.checkout_cancel_url:
+                missing.append("STRIPE_CHECKOUT_CANCEL_URL")
+            if not sb.portal_return_url:
+                missing.append("STRIPE_PORTAL_RETURN_URL")
+            if missing:
+                raise RuntimeError(
+                    "Stripe Billing is enabled but required env vars are missing "
+                    f"in non-local environment: {', '.join(missing)}"
+                )
 
     @property
     def is_production(self) -> bool:
