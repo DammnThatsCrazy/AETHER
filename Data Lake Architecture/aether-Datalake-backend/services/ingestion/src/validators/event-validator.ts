@@ -1,5 +1,5 @@
 // =============================================================================
-// AETHER INGESTION — EVENT VALIDATION
+// Aether INGESTION — EVENT VALIDATION
 // Schema validation, size enforcement, consent filtering, PII masking
 // =============================================================================
 

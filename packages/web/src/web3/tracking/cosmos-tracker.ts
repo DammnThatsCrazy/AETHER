@@ -1,5 +1,5 @@
 // =============================================================================
-// AETHER SDK — COSMOS / SEI TRACKER (Tier 2 Thin Client)
+// Aether SDK — COSMOS / SEI TRACKER (Tier 2 Thin Client)
 // Ships raw transaction data to backend. No IBC detection, no analytics.
 // =============================================================================
 

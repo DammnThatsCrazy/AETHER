@@ -1,5 +1,5 @@
 // =============================================================================
-// AETHER SDK — Shared Commerce / Access Contract
+// Aether SDK — Shared Commerce / Access Contract
 // Unifies Web2 (fiat/stripe/invoice), Web3 (onchain), and x402 flows under a
 // single "business event + optional rail" model.
 // See docs/source-of-truth/ENTITY_MODEL.md §Commerce.

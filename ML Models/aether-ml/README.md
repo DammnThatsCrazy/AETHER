@@ -55,7 +55,7 @@ Production-grade machine learning system powering Aether's behavioral analytics,
 ## Architecture
 
 ```
-                          AETHER ML PIPELINE
+                          Aether ML PIPELINE
  ===================================================================
 
   Raw Events              Feature Layer              Model Training

@@ -1,5 +1,5 @@
 // =============================================================================
-// AETHER SDK — Shared Feedback/Survey Types
+// Aether SDK — Shared Feedback/Survey Types
 // Canonical type definitions used by Web, iOS, Android, and React Native SDKs
 // =============================================================================
 

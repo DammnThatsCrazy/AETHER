@@ -1,5 +1,5 @@
 // =============================================================================
-// AETHER SDK — MAIN CLASS
+// Aether SDK — MAIN CLASS
 // Public API orchestrating all modules: identity, session, events, ML, web3
 // =============================================================================
 

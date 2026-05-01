@@ -120,7 +120,7 @@ class ObjectiveRuntime:
         )
 
     # ------------------------------------------------------------------
-    # Queries for LOOP and controllers
+    # Queries for Cycle and controllers
     # ------------------------------------------------------------------
 
     @property

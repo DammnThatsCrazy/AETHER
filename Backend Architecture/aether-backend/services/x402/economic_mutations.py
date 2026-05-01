@@ -3,7 +3,7 @@ Aether Service — Economic Graph Mutations
 Deterministic graph builders that persist commerce lifecycle objects into
 the Intelligence Graph. Each mutation is idempotent and tenant-isolated.
 
-Downstream: these writes are consumed by GOUF (graph UI), Entities (economic
+Downstream: these writes are consumed by Noesis (graph UI), Entities (economic
 profile), Review (evidence panel), and the explainability endpoint.
 """
 

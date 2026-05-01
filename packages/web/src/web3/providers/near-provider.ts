@@ -1,5 +1,5 @@
 // =============================================================================
-// AETHER SDK — NEAR PROTOCOL PROVIDER
+// Aether SDK — NEAR PROTOCOL PROVIDER
 // NEAR Wallet, MyNearWallet, Meteor wallet detection
 // =============================================================================
 

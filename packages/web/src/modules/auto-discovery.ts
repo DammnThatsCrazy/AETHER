@@ -1,5 +1,5 @@
 // =============================================================================
-// AETHER SDK — AUTO-DISCOVERY MODULE (Tier 2 Thin Client)
+// Aether SDK — AUTO-DISCOVERY MODULE (Tier 2 Thin Client)
 // Minimal click tracker. Ships raw click data to backend.
 // No rage click detection, no dead click detection, no scroll tracking.
 // =============================================================================

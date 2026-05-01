@@ -54,15 +54,15 @@
 - **Backend Docker buildable**: repaired broken `COPY` paths in `Backend Architecture/aether-backend/Dockerfile`; added `.dockerignore` to strip unrelated subsystems from every backend build context.
 - **ml-serving stage pinned**: `target: serving` added to both root and staging docker-compose so Docker no longer builds the default-last `monitoring` stage that lacked the `serving/` module.
 - **Staging compose context fix**: staging ml-serving now points at `../../ML Models/aether-ml` (where the ML Dockerfile's relative COPY instructions resolve).
-- **Shiki service added to docker-compose** with host port 8081→8080 (no ml-serving collision) and wget `/health` check.
+- **Kyber service added to docker-compose** with host port 8081→8080 (no ml-serving collision) and wget `/health` check.
 - **Python version floor** raised to `>=3.10` across root + ML subsystems; ruff `target-version = py310`.
 - **React Native test suite**: real vitest suite with hoisted NativeModule mocks (replaced placeholder `echo` script); 8 tests passing.
-- **Shiki E2E workflow**: new path-scoped `.github/workflows/shiki-e2e.yml` running component + integration + Playwright on every apps/shiki or packages/shared change; strict-mode locator collision fixed (`text=Command` → `getByRole('heading', {level: 1})`).
+- **Kyber E2E workflow**: new path-scoped `.github/workflows/kyber-e2e.yml` running component + integration + Playwright on every apps/kyber or packages/shared change; strict-mode locator collision fixed (`text=Command` → `getByRole('heading', {level: 1})`).
 - **Circular-dependency CI gate** via `npx madge --circular`.
 - **CI path parameterization**: `BACKEND_DIR`, `ML_DIR`, `AGENT_DIR` hoisted to env/vars in `repo-health.yml` and `Makefile`.
 - **License parity**: every package.json aligned to `UNLICENSED`.
 - **Stale removals**: `RootPackageSDK.json` (duplicate manifest) and `Backend Architecture/main.py` (stale 10-service entrypoint) deleted.
-- **Release tooling**: `bump_version.py` + `validate_docs.py` now cover `packages/shared`, `apps/shiki`, and the rollback/migration/smoke-test runbook headers.
+- **Release tooling**: `bump_version.py` + `validate_docs.py` now cover `packages/shared`, `apps/kyber`, and the rollback/migration/smoke-test runbook headers.
 
 ---
 
@@ -81,7 +81,7 @@
 - **Entitlement service** with TTL expiry, SIWX binding hook, reuse tracking, and revocation.
 - **Approval workflow FSM** with priority-based SLA (5m/15m/1h/4h), auto-expiry, escalation chain, evidence bundles, deterministic replay.
 
-### SHIKI integration
+### Kyber integration
 - New **Commerce Approvals** tab on Review page with real approve/reject/escalate/revoke actions wired through PermissionGate.
 - New adapter `lib/api/commerce.ts`, schemas `lib/schemas/commerce.ts`, fixtures `fixtures/commerce.ts`.
 - New feature hooks `features/approvals`, `features/commerce`, `features/entitlements` with mocked/live mode parity.
@@ -92,7 +92,7 @@
 
 ### Tests
 - Backend: 21 passing commerce tests (11 lifecycle integration + 10 unit).
-- SHIKI: 27 new commerce tests (16 schema + 11 component) — 79/79 total SHIKI tests passing.
+- Kyber: 27 new commerce tests (16 schema + 11 component) — 79/79 total Kyber tests passing.
 
 ### Feature flags
 - `COMMERCE_CONTROL_PLANE_ENABLED=true`, `COMMERCE_APPROVAL_REQUIRED_ALL=true`, `COMMERCE_V2_PROTOCOL=true`.
@@ -101,21 +101,21 @@
 - `docs/COMMERCE-CONTROL-PLANE.md`, `docs/APPROVAL-MODEL.md`, `docs/STABLECOIN-RAILS.md`, `docs/COMMERCE-OPERATOR-RUNBOOK.md`, `docs/AGENTIC_COMMERCE_BUILD_SPEC.md`, `docs/X402_AUDIT_REPORT.md`.
 
 ### Preserved
-- Legacy x402 capture endpoints + models unchanged. Neptune/GraphClient, Kafka, lake tiers, SHIKI adapter pattern untouched.
+- Legacy x402 capture endpoints + models unchanged. Neptune/GraphClient, Kafka, lake tiers, Kyber adapter pattern untouched.
 
 ---
 
 ## vNext — Agent Layer: Multi-Controller Internal Autonomy Architecture (Unreleased)
 
 ### Architecture
-- Reworked agent layer from flat single-controller to multi-controller hierarchy: Governance > KIRA > Domain Controllers > Teams > Workers
-- 10 controllers: Governance, KIRA, Intake, Discovery, Enrichment, Verification, Commit, Recovery, BOLT, TRIGGER
-- LOOP: aggressive shared continuation runtime (not a controller) with policy/budget/stopping enforcement
-- UNITS: optional identity + mascot layer for controllers, teams, and workers
+- Reworked agent layer from flat single-controller to multi-controller hierarchy: Governance > Nous > Domain Controllers > Teams > Workers
+- 10 controllers: Governance, Nous, Intake, Discovery, Enrichment, Verification, Commit, Recovery, Kinesis, Catalyst
+- Cycle: aggressive shared continuation runtime (not a controller) with policy/budget/stopping enforcement
+- Atoms: optional identity + mascot layer for controllers, teams, and workers
 - Durable objective runtime with Plan/PlanStep lifecycle
 - Staged mutation review system with 5-class classification — all mutations require human approval
-- BOLT: objective continuity, checkpointing, briefing, handoff, run history
-- TRIGGER: unified scheduling/wake engine with 7 trigger types, missed-fire handling, orphan cleanup
+- Kinesis: objective continuity, checkpointing, briefing, handoff, run history
+- Catalyst: unified scheduling/wake engine with 7 trigger types, missed-fire handling, orphan cleanup
 - CLI dashboard: Feed/Timeline, Kanban/Objective Board, Controller Health Console
 - Internal event bus for agent-layer events
 - Graph staging interface for approved mutation commits

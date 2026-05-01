@@ -2,10 +2,10 @@
 
 ## 1. Stuck approval (past SLA)
 
-**Symptom:** SHIKI Mission → Approval Backlog Summary shows items near/past SLA.
+**Symptom:** Kyber Mission → Approval Backlog Summary shows items near/past SLA.
 
 **Steps:**
-1. SHIKI Command → Commerce Subsystem → Approval Backlog.
+1. Kyber Command → Commerce Subsystem → Approval Backlog.
 2. Filter queue by `status=assigned` or `status=pending`.
 3. If unassigned: `POST /v1/approvals/{id}/assign` with new approver.
 4. If assigned but idle: escalate with `POST /v1/approvals/{id}/decide action=escalate`.
@@ -32,7 +32,7 @@
 
 ## 4. Duplicate payment detected
 
-**Symptom:** `commerce_duplicate_payment_detected_total` metric rising, or SHIKI alert.
+**Symptom:** `commerce_duplicate_payment_detected_total` metric rising, or Kyber alert.
 
 **Steps:**
 1. Idempotency store returns cached result → client sees deterministic replay.
@@ -53,7 +53,7 @@
 **Symptom:** `COMMERCE_APPROVAL_OVERRIDE` audit entry surfaces.
 
 **Steps:**
-1. SHIKI Review → filter by `is_override=true`.
+1. Kyber Review → filter by `is_override=true`.
 2. Validate override reason, approver scope.
 3. If unauthorized: escalate to admin.
 

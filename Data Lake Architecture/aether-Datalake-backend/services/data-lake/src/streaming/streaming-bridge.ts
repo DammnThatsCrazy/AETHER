@@ -1,5 +1,5 @@
 // =============================================================================
-// AETHER DATA LAKE — STREAMING BRIDGE
+// Aether DATA LAKE — STREAMING BRIDGE
 // Kafka consumer → Bronze tier S3 writer with exactly-once semantics,
 // backpressure management, and automatic micro-batch flushing
 // =============================================================================

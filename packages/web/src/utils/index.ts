@@ -1,5 +1,5 @@
 // =============================================================================
-// AETHER SDK — UTILITY FUNCTIONS
+// Aether SDK — UTILITY FUNCTIONS
 // =============================================================================
 
 import type { DeviceContext, CampaignContext, PageContext } from '../types';

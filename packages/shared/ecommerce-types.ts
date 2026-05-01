@@ -1,5 +1,5 @@
 // =============================================================================
-// AETHER SDK — Shared E-Commerce Types
+// Aether SDK — Shared E-Commerce Types
 // Canonical type definitions used by Web, iOS, Android, and React Native SDKs
 // =============================================================================
 

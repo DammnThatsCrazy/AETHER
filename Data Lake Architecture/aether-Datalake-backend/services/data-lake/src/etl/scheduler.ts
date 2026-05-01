@@ -1,5 +1,5 @@
 // =============================================================================
-// AETHER DATA LAKE — ETL SCHEDULER
+// Aether DATA LAKE — ETL SCHEDULER
 // Cron-based orchestration: discovers unprocessed partitions and runs
 // Bronze→Silver and Silver→Gold pipelines on schedule
 // =============================================================================

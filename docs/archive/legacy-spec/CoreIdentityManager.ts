@@ -1,5 +1,5 @@
 // =============================================================================
-// AETHER SDK — IDENTITY MANAGER
+// Aether SDK — IDENTITY MANAGER
 // =============================================================================
 
 import type { Identity, IdentityData, UserTraits } from './WebSDKTypes(CoreTypeDefinitions)';

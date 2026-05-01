@@ -1,5 +1,5 @@
 // =============================================================================
-// AETHER SDK — LOADER BUILD CONFIG
+// Aether SDK — LOADER BUILD CONFIG
 // Separate Rollup config for the CDN auto-loader (~3KB minified+gzipped)
 // Output: dist/loader.js (UMD) + dist/loader.mjs (ESM)
 // =============================================================================

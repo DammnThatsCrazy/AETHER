@@ -204,7 +204,7 @@ def demo_change_detection() -> None:
 # --------------------------------------------------------------------------- #
 
 def main() -> None:
-    print_header("AETHER CI/CD PIPELINE -- FULL DEMO")
+    print_header("Aether CI/CD PIPELINE -- FULL DEMO")
 
     # 1. Configuration overview
     demo_pipeline_config()

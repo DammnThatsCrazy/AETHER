@@ -8,7 +8,7 @@ git clone https://github.com/DammnThatsCrazy/Aether.git
 cd Aether
 pip install -e ".[dev,backend,ml]"
 
-# Install Node workspace deps (shared, web, react-native, shiki)
+# Install Node workspace deps (shared, web, react-native, kyber)
 npm ci
 
 # Run tests
@@ -23,14 +23,14 @@ export AETHER_ENV=local
 make serve-backend          # backend → http://localhost:8000
 make serve-ml               # ML serving → http://localhost:8080
 
-# Optional: start the Shiki operator control surface
-cd apps/shiki && npm run dev   # → http://localhost:5174
+# Optional: start the Kyber operator control surface
+cd apps/kyber && npm run dev   # → http://localhost:5174
 
-# Full stack via docker compose (backend + ml + shiki + infra)
+# Full stack via docker compose (backend + ml + kyber + infra)
 docker compose up -d
 # → backend   http://localhost:8000
 # → ml-serving http://localhost:8080
-# → shiki     http://localhost:8081   (host port 8081 -> container 8080)
+# → kyber     http://localhost:8081   (host port 8081 -> container 8080)
 ```
 
 ## Environment
@@ -94,7 +94,7 @@ packages/web/                          Web SDK (@aether/web)
 packages/react-native/                 React Native SDK (@aether/react-native)
 packages/ios/                          Native iOS SDK
 packages/android/                      Native Android SDK
-apps/shiki/                            Internal operator control surface (React SPA)
+apps/kyber/                            Internal operator control surface (React SPA)
 ```
 
 ## Subsystem Documentation

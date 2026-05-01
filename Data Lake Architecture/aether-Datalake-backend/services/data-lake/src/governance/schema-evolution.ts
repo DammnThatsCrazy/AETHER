@@ -1,5 +1,5 @@
 // =============================================================================
-// AETHER DATA LAKE — SCHEMA EVOLUTION MANAGER
+// Aether DATA LAKE — SCHEMA EVOLUTION MANAGER
 // Manages backward-compatible schema changes, migration tracking,
 // column additions/deprecations, and type promotions across medallion tiers
 // =============================================================================

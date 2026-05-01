@@ -63,7 +63,7 @@ def header(title: str):
 
 
 def main():
-    header("AETHER COMPLIANCE FRAMEWORK — FULL DEMO")
+    header("Aether COMPLIANCE FRAMEWORK — FULL DEMO")
     print("  Aether operates as a Data Processor on behalf of Customers (Data Controllers)")
     print("  who are responsible for obtaining end-user consent and providing privacy notices.")
     print()

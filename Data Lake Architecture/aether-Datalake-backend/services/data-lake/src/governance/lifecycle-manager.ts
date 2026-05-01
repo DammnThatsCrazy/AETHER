@@ -1,5 +1,5 @@
 // =============================================================================
-// AETHER DATA LAKE — RETENTION & LIFECYCLE MANAGER
+// Aether DATA LAKE — RETENTION & LIFECYCLE MANAGER
 // Automated data expiry, tiered storage transitions (S3 IA/Glacier),
 // partition pruning, and compliance-aware retention enforcement
 // =============================================================================

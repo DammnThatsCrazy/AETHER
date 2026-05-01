@@ -27,7 +27,7 @@ from services.x402.facilitators import seed_facilitators_and_assets
 await seed_facilitators_and_assets(tenant_id)
 ```
 
-Or via SHIKI admin action: `POST /v1/x402/resources/seed` (requires `resources:admin`).
+Or via Kyber admin action: `POST /v1/x402/resources/seed` (requires `resources:admin`).
 
 ## Verification flow
 

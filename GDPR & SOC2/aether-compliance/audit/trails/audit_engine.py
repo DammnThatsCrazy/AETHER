@@ -67,7 +67,7 @@ class AuditAction(str, Enum):
     COMMERCE_FACILITATOR_REGISTERED = "commerce_facilitator_registered"
     COMMERCE_TREASURY_UPDATED = "commerce_treasury_updated"
     COMMERCE_POLICY_UPDATED = "commerce_policy_updated"
-    COMMERCE_SHIKI_ACTION = "commerce_shiki_action"
+    COMMERCE_KYBER_ACTION = "commerce_kyber_action"
     COMMERCE_OVERRIDE = "commerce_override"
 
 

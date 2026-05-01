@@ -1,5 +1,5 @@
 // =============================================================================
-// AETHER SDK — SESSION MANAGER
+// Aether SDK — SESSION MANAGER
 // =============================================================================
 
 import type { Session, DeviceContext, CampaignContext } from '../types';

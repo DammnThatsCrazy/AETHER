@@ -1,5 +1,5 @@
 # =============================================================================
-# AETHER DATA INGESTION LAYER — Docker Compose
+# Aether DATA INGESTION LAYER — Docker Compose
 # =============================================================================
 
 version: '3.8'

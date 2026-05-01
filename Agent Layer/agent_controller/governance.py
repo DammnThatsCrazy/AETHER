@@ -4,7 +4,7 @@ Top-level authority over the agent layer. Enforces policy, budget ceilings,
 kill switch, audit invariants, approval governance, conflict arbitration,
 and autonomy boundaries.
 
-Hierarchy: Governance -> KIRA -> Domain Controllers -> Teams -> Workers
+Hierarchy: Governance -> Nous -> Domain Controllers -> Teams -> Workers
 """
 
 from __future__ import annotations

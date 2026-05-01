@@ -1,5 +1,5 @@
 // =============================================================================
-// AETHER SDK — FEATURE FLAGS MODULE (Android)
+// Aether SDK — FEATURE FLAGS MODULE (Android)
 // Client-side feature flag evaluation with remote configuration
 // =============================================================================
 

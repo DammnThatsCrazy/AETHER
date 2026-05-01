@@ -1,5 +1,5 @@
 // =============================================================================
-// AETHER SDK — TRON (TVM) TRACKER (Tier 2 Thin Client)
+// Aether SDK — TRON (TVM) TRACKER (Tier 2 Thin Client)
 // Ships raw transaction data to backend. No energy/bandwidth analytics.
 // =============================================================================
 

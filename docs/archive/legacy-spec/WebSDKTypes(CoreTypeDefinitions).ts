@@ -1,5 +1,5 @@
 // =============================================================================
-// AETHER SDK — CORE TYPE DEFINITIONS
+// Aether SDK — CORE TYPE DEFINITIONS
 // =============================================================================
 
 /** SDK configuration passed to Aether.init() */

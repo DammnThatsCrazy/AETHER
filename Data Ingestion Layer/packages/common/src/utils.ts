@@ -1,5 +1,5 @@
 // =============================================================================
-// AETHER BACKEND — SHARED UTILITIES
+// Aether BACKEND — SHARED UTILITIES
 // =============================================================================
 
 import { createHash, randomUUID } from 'node:crypto';

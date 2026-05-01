@@ -1,7 +1,7 @@
 """
 Aether Agent Layer — Intake Controller
 Handles objective intake: dedupe, normalization, admission control,
-severity classification, and routing into KIRA.
+severity classification, and routing into Nous.
 """
 
 from __future__ import annotations
@@ -18,7 +18,7 @@ class IntakeController:
     """
     First-contact controller for new objectives. Normalizes input,
     deduplicates against existing objectives, classifies severity,
-    and routes admitted objectives to KIRA for planning.
+    and routes admitted objectives to Nous for planning.
     """
 
     def __init__(self, objective_runtime: Any):

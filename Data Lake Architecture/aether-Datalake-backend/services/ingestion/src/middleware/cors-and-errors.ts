@@ -1,5 +1,5 @@
 // =============================================================================
-// AETHER INGESTION — CORS MIDDLEWARE
+// Aether INGESTION — CORS MIDDLEWARE
 // =============================================================================
 
 import type { IncomingMessage, ServerResponse } from 'node:http';

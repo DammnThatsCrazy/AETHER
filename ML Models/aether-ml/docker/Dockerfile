@@ -1,5 +1,5 @@
 # =============================================================================
-# AETHER ML — Multi-stage Dockerfile
+# Aether ML — Multi-stage Dockerfile
 # Stages: base, training, serving, features, monitoring
 #
 # Build examples:

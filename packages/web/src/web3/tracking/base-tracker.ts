@@ -1,5 +1,5 @@
 // =============================================================================
-// AETHER SDK — BASE VM TRACKER (Tier 2 Thin Client)
+// Aether SDK — BASE VM TRACKER (Tier 2 Thin Client)
 // Minimal base for all VM trackers — raw data emission only.
 // =============================================================================
 

@@ -1,5 +1,5 @@
 // =============================================================================
-// AETHER SDK — FEEDBACK MODULE (React Native) — Thin Native Bridge
+// Aether SDK — FEEDBACK MODULE (React Native) — Thin Native Bridge
 // Delegates all survey/feedback operations to NativeModules.AetherFeedback
 // =============================================================================
 

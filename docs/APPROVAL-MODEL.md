@@ -28,7 +28,7 @@ Configurable per tenant via `ApprovalService` SLA_SECONDS dict.
 3. **Authorization flow** (`control_plane.py:authorize_payment`): hard-fails if `approval.status != APPROVED`.
 4. **Graph writes** (`economic_mutations.py`): `GRANTS_ACCESS_TO` edge never written without approval reference.
 
-## Operator actions (SHIKI Review page)
+## Operator actions (Kyber Review page)
 
 | Action | Permission | Result |
 |---|---|---|
@@ -59,4 +59,4 @@ Returned by `GET /v1/approvals/{id}/evidence`:
 - Policy decision with rationale + active rules
 - Payment requirement (challenge)
 
-Used by SHIKI Review → Commerce Approvals tab for operator inspection before decision.
+Used by Kyber Review → Commerce Approvals tab for operator inspection before decision.

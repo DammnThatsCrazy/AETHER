@@ -1,5 +1,5 @@
 // =============================================================================
-// AETHER DATA LAKE — SERVICE ENTRY POINT
+// Aether DATA LAKE — SERVICE ENTRY POINT
 // Initializes storage, catalog, ETL scheduler, quality runner, compaction,
 // and exposes HTTP endpoints for management, health, and ad-hoc queries
 // =============================================================================

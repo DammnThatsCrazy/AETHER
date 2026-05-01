@@ -1,5 +1,5 @@
 // =============================================================================
-// AETHER SDK — Shared Feature Flag Types
+// Aether SDK — Shared Feature Flag Types
 // Canonical type definitions used by Web, iOS, Android, and React Native SDKs
 // =============================================================================
 

@@ -2,7 +2,7 @@
 Aether Service — Agentic Commerce Canonical Domain Models
 Shared across control plane, approvals, verification, settlement, entitlements,
 policy engine, resources, facilitators, and treasury. Wire-level schemas for
-events, graph mutations, and SHIKI adapters.
+events, graph mutations, and Kyber adapters.
 
 All models are Pydantic v2 compatible and tenant-isolated via tenant_id field.
 """

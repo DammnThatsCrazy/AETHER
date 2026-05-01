@@ -1,5 +1,5 @@
 // =============================================================================
-// AETHER SDK — CDN AUTO-LOADER v5.0
+// Aether SDK — CDN AUTO-LOADER v5.0
 // Lightweight (~3KB) loader at stable URL that dynamically loads the latest SDK
 // URL: cdn.aether.network/sdk/v5/loader.js
 // =============================================================================

@@ -118,7 +118,7 @@ def run_checks() -> None:
         ROOT / "packages" / "shared" / "package.json",
         ROOT / "packages" / "web" / "package.json",
         ROOT / "packages" / "react-native" / "package.json",
-        ROOT / "apps" / "shiki" / "package.json",
+        ROOT / "apps" / "kyber" / "package.json",
         ROOT / "Data Ingestion Layer" / "package.json",
         ROOT / "Data Ingestion Layer" / "packages" / "common" / "package.json",
         ROOT / "Data Ingestion Layer" / "packages" / "auth" / "package.json",

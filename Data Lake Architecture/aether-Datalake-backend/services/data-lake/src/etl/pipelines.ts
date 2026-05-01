@@ -1,5 +1,5 @@
 // =============================================================================
-// AETHER DATA LAKE — ETL PIPELINES
+// Aether DATA LAKE — ETL PIPELINES
 // Medallion tier transformations:
 //   Bronze → Silver: Dedup, schema enforcement, field extraction, sessionization
 //   Silver → Gold:   Aggregation, feature computation, attribution

@@ -9,21 +9,21 @@
 
 ## 1. Executive Summary
 
-Aether already has a capture-side x402 subsystem (L3b) and a commerce layer (L3a) that observe and record payments into a graph. This spec upgrades both into a **graph-native commerce control plane** that issues challenges, governs spend via mandatory approvals, verifies and settles payments, mints entitlements, and grants access — all surfaced through SHIKI as the operator command surface.
+Aether already has a capture-side x402 subsystem (L3b) and a commerce layer (L3a) that observe and record payments into a graph. This spec upgrades both into a **graph-native commerce control plane** that issues challenges, governs spend via mandatory approvals, verifies and settles payments, mints entitlements, and grants access — all surfaced through Kyber as the operator command surface.
 
 **What changes:**
 - `services/x402` becomes a full control plane (challenge → verify → settle → entitle → grant) on top of existing capture code.
 - `services/commerce` gains economic analytics, policy evaluation, and treasury/budget modeling.
 - `shared/graph` adds 18 new vertex types and 22 new edge types formalizing the full commerce lifecycle.
 - A new `services/x402/approvals.py` implements mandatory operator approval for every spend class.
-- SHIKI's 8 existing pages each gain real, audited, RBAC-gated economic actions wired to new `lib/api/commerce.ts`, `approvals.ts`, `entitlements.ts`, `resources.ts` adapters with Zod schemas.
+- Kyber's 8 existing pages each gain real, audited, RBAC-gated economic actions wired to new `lib/api/commerce.ts`, `approvals.ts`, `entitlements.ts`, `resources.ts` adapters with Zod schemas.
 - The lake gains Silver/Gold tables for the full commerce lifecycle, deterministically rebuildable into graph state.
 - Stablecoin intelligence covers USDC/Base and USDC/Solana at GA with an extensible asset/network/facilitator registry.
 
 **What does NOT change:**
 - Neptune/GraphClient is preserved.
 - Kafka topics are extended, not replaced.
-- SHIKI's architecture (lib/api adapters, Zod, feature-hooks, PermissionGate, mocked/live modes, Lab replay) is preserved as-is.
+- Kyber's architecture (lib/api adapters, Zod, feature-hooks, PermissionGate, mocked/live modes, Lab replay) is preserved as-is.
 - Existing capture endpoints remain for backward compatibility with v1 x402 ingestion.
 - Existing commerce `PaymentRecord` / `AgentHireRecord` models remain as legacy entry points; new flows use canonical internal schemas.
 
@@ -33,7 +33,7 @@ Aether already has a capture-side x402 subsystem (L3b) and a commerce layer (L3a
 - Mandatory approval on every spend class, configurable but defaulted-on.
 - USDC on Base + Solana with facilitator-aware verification and local verification fallback.
 - Payment-Identifier idempotency and SIWX-backed entitlement reuse.
-- Full lifecycle persistence, SHIKI operator actions on all 8 pages, compliance audit coverage, diagnostics/replay/reconciliation tooling.
+- Full lifecycle persistence, Kyber operator actions on all 8 pages, compliance audit coverage, diagnostics/replay/reconciliation tooling.
 
 **Out of Day-1 scope (architected, not shipped):**
 - External third-party paid resource providers (second wave).
@@ -57,7 +57,7 @@ Aether already has a capture-side x402 subsystem (L3b) and a commerce layer (L3a
 | `shared/graph/graph.py` | VertexType/EdgeType enums, GraphClient, Gremlin queries | Extended with 18 vertex types + 22 edge types |
 | `shared/events/events.py` | `Topic` enum, `EventProducer` | Extended with 24 new commerce lifecycle topics |
 | `middleware/middleware.py` | Auth + rate-limit + extraction defense | Gains optional `challenge_middleware` hook for protected resources |
-| SHIKI `lib/api`, `lib/schemas`, feature hooks, PermissionGate | Centralized adapter pattern with Zod validation | Reused verbatim; new adapters added under same patterns |
+| Kyber `lib/api`, `lib/schemas`, feature hooks, PermissionGate | Centralized adapter pattern with Zod validation | Reused verbatim; new adapters added under same patterns |
 
 ### 2.2 New (additive)
 
@@ -86,7 +86,7 @@ Aether already has a capture-side x402 subsystem (L3b) and a commerce layer (L3a
 |---|---|
 | x402 = **observer** that captures headers | x402 = **control plane** that issues challenges + captures legacy headers |
 | Graph = **projection** of past payments | Graph = **source of truth** for lifecycle state (challenge/approval/grant/settle) |
-| SHIKI = **dashboard** | SHIKI = **operator command surface** with audited actions |
+| Kyber = **dashboard** | Kyber = **operator command surface** with audited actions |
 | Commerce = **record-keeping** | Commerce = **governed workflow** with mandatory approvals |
 | Approval = N/A | Approval = **first-class domain** across all layers |
 
@@ -148,7 +148,7 @@ Aether already has a capture-side x402 subsystem (L3b) and a commerce layer (L3a
 - `economic_schemas.py` — NEW. Pydantic event payload schemas.
 
 **`shared/auth/` (extend)**
-- `auth.py` — ADD scopes: `commerce:challenge`, `commerce:verify`, `commerce:settle`, `commerce:approve`, `commerce:admin`, `commerce:review`, `commerce:policy`, `approvals:read`, `approvals:write`, `entitlements:read`, `entitlements:write`, `resources:admin`. Add SHIKI roles: `viewer`, `operator`, `approver`, `admin`.
+- `auth.py` — ADD scopes: `commerce:challenge`, `commerce:verify`, `commerce:settle`, `commerce:approve`, `commerce:admin`, `commerce:review`, `commerce:policy`, `approvals:read`, `approvals:write`, `entitlements:read`, `entitlements:write`, `resources:admin`. Add Kyber roles: `viewer`, `operator`, `approver`, `admin`.
 
 **`repositories/` (extend)**
 - `challenges_repo.py`, `approvals_repo.py`, `entitlements_repo.py`, `settlements_repo.py`, `resources_repo.py`, `policies_repo.py`, `facilitators_repo.py`. All Postgres-backed with tenant isolation.
@@ -159,7 +159,7 @@ Aether already has a capture-side x402 subsystem (L3b) and a commerce layer (L3a
 **`middleware/middleware.py` (extend)**
 - Wire `ChallengeMiddleware` as optional hook before route dispatch for registered protected resources.
 
-### 3.2 SHIKI — `apps/shiki/`
+### 3.2 Kyber — `apps/kyber/`
 
 **New feature modules (`src/features/`)**
 - `commerce/` — hooks for revenue, treasury, spend timeline.
@@ -186,7 +186,7 @@ Aether already has a capture-side x402 subsystem (L3b) and a commerce layer (L3a
 - `commerce.ts`, `approvals.ts`, `entitlements.ts`, `resources.ts`, `settlement.ts` — deterministic scenarios for Lab replay and tests.
 
 **Page extensions (`src/pages/`)**
-- No new top-level pages. Existing 8 pages (Mission, Live, GOUF, Entities, Command, Diagnostics, Review, Lab) each gain commerce-aware panels per §8.
+- No new top-level pages. Existing 8 pages (Mission, Live, Noesis, Entities, Command, Diagnostics, Review, Lab) each gain commerce-aware panels per §8.
 
 ### 3.3 Docs — `docs/`
 
@@ -194,7 +194,7 @@ Aether already has a capture-side x402 subsystem (L3b) and a commerce layer (L3a
 - `docs/APPROVAL-MODEL.md` — operator workflows
 - `docs/PROTECTED-RESOURCES.md` — registration guide
 - `docs/STABLECOIN-RAILS.md` — asset/network/facilitator matrix
-- `docs/SHIKI-OPERATOR-GUIDE.md` — operator handbook
+- `docs/Kyber-OPERATOR-GUIDE.md` — operator handbook
 - `docs/SUPPORT-DEBUG-GUIDE.md` — incident playbook
 - `docs/INTELLIGENCE-GRAPH.md` — amend with L3b control-plane additions
 
@@ -263,22 +263,22 @@ Existing edges (`PAYS`, `CONSUMES`, `HIRED`, `DELEGATES`, `LAUNCHED_BY`, etc.) r
 
 | Query | Reader | Purpose |
 |---|---|---|
-| `trace_payment_lifecycle(challenge_id)` | SHIKI GOUF, Review | full lifecycle trace for one payment |
-| `agent_entitlements(agent_id)` | SHIKI Entities, SDK preflight | active entitlements per agent |
-| `service_revenue(service_id, window)` | SHIKI Entities, Mission | revenue rollup |
-| `cluster_spend(cluster_id)` | SHIKI Entities, Diagnostics | cluster anomaly detection |
-| `policy_chain(resource_id)` | SHIKI Entities, explainability | which policies fire |
-| `facilitator_performance(facilitator_id)` | SHIKI Command, Diagnostics | facilitator reliability |
-| `approval_backlog(tenant_id)` | SHIKI Command, Mission | queue size + latency |
+| `trace_payment_lifecycle(challenge_id)` | Kyber Noesis, Review | full lifecycle trace for one payment |
+| `agent_entitlements(agent_id)` | Kyber Entities, SDK preflight | active entitlements per agent |
+| `service_revenue(service_id, window)` | Kyber Entities, Mission | revenue rollup |
+| `cluster_spend(cluster_id)` | Kyber Entities, Diagnostics | cluster anomaly detection |
+| `policy_chain(resource_id)` | Kyber Entities, explainability | which policies fire |
+| `facilitator_performance(facilitator_id)` | Kyber Command, Diagnostics | facilitator reliability |
+| `approval_backlog(tenant_id)` | Kyber Command, Mission | queue size + latency |
 
-### 4.4 SHIKI visualization mapping
+### 4.4 Kyber visualization mapping
 
-| Graph object | SHIKI rendering |
+| Graph object | Kyber rendering |
 |---|---|
-| PAYMENT_REQUIREMENT | GOUF node, Review detail card, Mission recommendation |
-| APPROVAL_REQUEST | GOUF node, Review queue item, Command backlog |
-| ENTITLEMENT | Entities timeline, GOUF node, Entity 360 |
-| SETTLEMENT | Diagnostics strip, GOUF edge, Entity history |
+| PAYMENT_REQUIREMENT | Noesis node, Review detail card, Mission recommendation |
+| APPROVAL_REQUEST | Noesis node, Review queue item, Command backlog |
+| ENTITLEMENT | Entities timeline, Noesis node, Entity 360 |
+| SETTLEMENT | Diagnostics strip, Noesis edge, Entity history |
 | POLICY_DECISION | Explainability drawer across Review/Diagnostics/Entities |
 | FACILITATOR | Command subsystem card, Diagnostics health |
 | TREASURY | Entities (tenant view), Mission treasury panel |
@@ -404,13 +404,13 @@ All follow existing `aether.<domain>.<entity>.<action>` convention.
 
 | Topic | Producer | Consumers |
 |---|---|---|
-| `aether.commerce.challenge.issued` | control_plane | lake, graph_mutations, analytics, SHIKI stream |
+| `aether.commerce.challenge.issued` | control_plane | lake, graph_mutations, analytics, Kyber stream |
 | `aether.commerce.requirement.generated` | control_plane | lake |
-| `aether.commerce.approval.requested` | approvals | lake, SHIKI Command/Mission |
-| `aether.commerce.approval.assigned` | approvals | lake, SHIKI |
+| `aether.commerce.approval.requested` | approvals | lake, Kyber Command/Mission |
+| `aether.commerce.approval.assigned` | approvals | lake, Kyber |
 | `aether.commerce.approval.approved` | approvals | control_plane, lake, audit |
 | `aether.commerce.approval.rejected` | approvals | control_plane, lake, audit |
-| `aether.commerce.approval.escalated` | approvals | lake, SHIKI |
+| `aether.commerce.approval.escalated` | approvals | lake, Kyber |
 | `aether.commerce.approval.expired` | approvals | lake, diagnostics |
 | `aether.commerce.approval.revoked` | approvals | control_plane, lake, audit |
 | `aether.commerce.payment.submitted` | control_plane | verification |
@@ -418,7 +418,7 @@ All follow existing `aether.<domain>.<entity>.<action>` convention.
 | `aether.commerce.verification.succeeded` | verification | settlement, lake |
 | `aether.commerce.verification.failed` | verification | diagnostics, lake |
 | `aether.commerce.settlement.started` | settlement | lake |
-| `aether.commerce.settlement.pending` | settlement | lake, SHIKI |
+| `aether.commerce.settlement.pending` | settlement | lake, Kyber |
 | `aether.commerce.settlement.completed` | settlement | entitlements, lake |
 | `aether.commerce.settlement.failed` | settlement | diagnostics, lake |
 | `aether.commerce.entitlement.granted` | entitlements | control_plane, lake |
@@ -429,10 +429,10 @@ All follow existing `aether.<domain>.<entity>.<action>` convention.
 | `aether.commerce.access.denied` | control_plane | diagnostics, lake, audit |
 | `aether.commerce.policy.denied` | policies | diagnostics, audit |
 | `aether.commerce.facilitator.route_selected` | facilitators | lake |
-| `aether.commerce.shiki.action_logged` | shiki_api | audit, lake |
+| `aether.commerce.kyber.action_logged` | kyber_api | audit, lake |
 | `aether.commerce.operator.action_logged` | any | audit, lake |
 | `aether.commerce.replay.executed` | lab/approvals | audit |
-| `aether.commerce.reconciliation.task_created` | settlement/diagnostics | SHIKI Diagnostics |
+| `aether.commerce.reconciliation.task_created` | settlement/diagnostics | Kyber Diagnostics |
 | `aether.commerce.reconciliation.task_resolved` | diagnostics | lake, audit |
 
 ### 6.2 Event Schemas (`shared/events/economic_schemas.py`)
@@ -511,12 +511,12 @@ ApprovalRequest {
 
 - Queue backed by Postgres with Redis index for fast filter/sort.
 - Default assignment: round-robin within approver pool, with capacity limits.
-- Manual assignment from SHIKI Command/Review.
+- Manual assignment from Kyber Command/Review.
 - SLA: `normal` expires in 1h, `high` in 15m, `critical` in 5m. Configurable per tenant.
 
 ### 7.5 Decision inputs
 
-Approver sees in SHIKI Review:
+Approver sees in Kyber Review:
 - Challenge detail + resource detail
 - Policy decision chain with rationale
 - Budget/treasury impact preview
@@ -532,7 +532,7 @@ Approver sees in SHIKI Review:
 - Requires `commerce:admin` scope
 - Always audited with reason
 - Always emits `approval.approved` event with `override=true` flag
-- Flagged in SHIKI Review with distinct visual treatment
+- Flagged in Kyber Review with distinct visual treatment
 
 ### 7.7 Replay
 
@@ -562,7 +562,7 @@ Approved requests can be revoked before settlement. Revoke:
 
 ---
 
-## 8. SHIKI Integration Specification by Page
+## 8. Kyber Integration Specification by Page
 
 All pages follow: feature module → data hook → adapter → Zod schema → PermissionGate → action handler → real API → real event → audit. Degrades read-only if permission insufficient. Production default is observer posture.
 
@@ -585,7 +585,7 @@ Empty/error/loading: skeleton cards; error states show retry + link to Diagnosti
 | Inline payment/approval | `features/approvals` | `lib/api/approvals.ts` | `approvals:write` | Approve/reject directly from stream row |
 | Pivot | existing | existing | N/A | Jump to Review/Diagnostics/Entity detail |
 
-### 8.3 GOUF (Graph Operator UI)
+### 8.3 Noesis (Graph Operator UI)
 
 | Panel | Feature module | Adapter | Permission | Actions |
 |---|---|---|---|---|
@@ -642,11 +642,11 @@ Empty/error/loading: skeleton cards; error states show retry + link to Diagnosti
 | Evidence Export | `features/approvals` | `lib/api/approvals.ts` | `approvals:read` | Export bundle for audit |
 | Parity Check | existing | all adapters | `commerce:read` | Mock vs live parity tests |
 
-### 8.9 SHIKI technical integration rules (applied to all)
+### 8.9 Kyber technical integration rules (applied to all)
 
 - Every adapter call passes through Zod validation at response boundary.
 - Every mutation passes through PermissionGate.
-- Every action emits `aether.commerce.shiki.action_logged` event with: `page`, `action`, `actor_id`, `tenant_id`, `target_id`, `result`.
+- Every action emits `aether.commerce.kyber.action_logged` event with: `page`, `action`, `actor_id`, `tenant_id`, `target_id`, `result`.
 - Mock mode: uses fixtures in `src/fixtures/commerce.ts` etc., no network.
 - Staging: hits staging backend, real data, non-production events.
 - Production: defaults to observer posture; action permissions must be explicitly granted via RBAC.
@@ -712,7 +712,7 @@ Both support facilitator-delegated verification as primary with local verificati
 - `entitlements:read`, `entitlements:write`
 - `resources:admin`
 
-### 10.2 SHIKI roles
+### 10.2 Kyber roles
 
 | Role | Scopes |
 |---|---|
@@ -742,7 +742,7 @@ Cascade: user DSR → user's agents → agents' entitlements/approvals → pseud
 
 ### 10.5 Audit actions (`audit_engine.py`)
 
-Add: `CHALLENGE_ISSUED`, `APPROVAL_REQUESTED`, `APPROVAL_DECIDED`, `APPROVAL_OVERRIDE`, `APPROVAL_REVOKED`, `VERIFICATION_COMPLETED`, `SETTLEMENT_COMPLETED`, `ENTITLEMENT_MINTED`, `ENTITLEMENT_REVOKED`, `ACCESS_GRANTED`, `ACCESS_DENIED`, `POLICY_DENIED`, `RESOURCE_REGISTERED`, `RESOURCE_UPDATED`, `FACILITATOR_REGISTERED`, `TREASURY_UPDATED`, `POLICY_UPDATED`, `SHIKI_ACTION`, `COMMERCE_OVERRIDE`.
+Add: `CHALLENGE_ISSUED`, `APPROVAL_REQUESTED`, `APPROVAL_DECIDED`, `APPROVAL_OVERRIDE`, `APPROVAL_REVOKED`, `VERIFICATION_COMPLETED`, `SETTLEMENT_COMPLETED`, `ENTITLEMENT_MINTED`, `ENTITLEMENT_REVOKED`, `ACCESS_GRANTED`, `ACCESS_DENIED`, `POLICY_DENIED`, `RESOURCE_REGISTERED`, `RESOURCE_UPDATED`, `FACILITATOR_REGISTERED`, `TREASURY_UPDATED`, `POLICY_UPDATED`, `KYBER_ACTION`, `COMMERCE_OVERRIDE`.
 
 Every transition persists to audit store with actor, timestamp, tenant, correlation_id, before/after state.
 
@@ -842,7 +842,7 @@ Nightly job: `reconcile_commerce(tenant_id)`:
 2. Replays into temp graph
 3. Diffs against production graph
 4. Writes drift records to `commerce_reconciliation_tasks`
-5. Surfaces in SHIKI Diagnostics
+5. Surfaces in Kyber Diagnostics
 
 ### 11.9 Retry / dead-letter
 
@@ -861,12 +861,12 @@ Every support-required question in §17 has a direct diagnostic path:
 | Who approved/rejected? | approval.decided_by, audit record |
 | Why retried? | settlement retries[] on receipt |
 | Why entitlement reused/expired? | entitlement.reuse_count, .expires_at, audit |
-| Why SHIKI escalated? | event `approval.escalated` with reason |
+| Why Kyber escalated? | event `approval.escalated` with reason |
 | Which policy fired? | policy_decision.active_rules[] |
 | Which facilitator/network/asset? | route on authorization |
 | Settlement pending/failed? | settlement.state + retries |
 | What graph state written? | `GET /v1/x402/explain/{id}` returns graph diff |
-| SHIKI mock vs live? | event carries `shiki_mode` field |
+| Kyber mock vs live? | event carries `kyber_mode` field |
 
 ### 11.11 Runbooks
 
@@ -926,12 +926,12 @@ See §14.
 - API schema contracts (OpenAPI snapshot + breaking-change detection)
 - Event schema contracts (version pinning + forward compatibility)
 - SDK compatibility (web, react-native, iOS, android)
-- SHIKI adapter Zod parity
+- Kyber adapter Zod parity
 - Permission enforcement per route
 
-### 12.4 SHIKI tests (`apps/shiki/src/test/`)
+### 12.4 Kyber tests (`apps/kyber/src/test/`)
 
-Per page (Mission, Live, GOUF, Entities, Command, Diagnostics, Review, Lab):
+Per page (Mission, Live, Noesis, Entities, Command, Diagnostics, Review, Lab):
 - Action-capable panels render with correct permissions
 - Inline action states (loading/success/error/denied)
 - Mock vs live parity
@@ -944,7 +944,7 @@ Specific flows:
 - Review: approve, reject, escalate, annotate
 - Diagnostics: resolve, replay, recheck
 - Entities: policy edit, entitlement revoke
-- GOUF: graph action, hold application
+- Noesis: graph action, hold application
 - Mission/Live: inline actions
 - Lab: replay determinism, evidence export
 
@@ -955,8 +955,8 @@ Specific flows:
 - `e2e_mandatory_approval_flow.py` — approval gates every spend class
 - `e2e_a2h_escalation.py` — agent escalates to human
 - `e2e_team_policy_propagation.py` — admin policy changes cascade
-- `e2e_shiki_action_full_trace.py` — SHIKI action → backend effect → audit → graph
-- `e2e_evidence_trail.py` — evidence consistent across Review/Diagnostics/Entities/GOUF
+- `e2e_kyber_action_full_trace.py` — Kyber action → backend effect → audit → graph
+- `e2e_evidence_trail.py` — evidence consistent across Review/Diagnostics/Entities/Noesis
 
 ### 12.6 Regression / perf / failure tests
 
@@ -976,11 +976,11 @@ Specific flows:
 - Integration: 100% of lifecycle paths
 - E2E: 100% of locked requirements
 - Contract: 100% of new API/event schemas
-- SHIKI: 100% of action-capable panels
+- Kyber: 100% of action-capable panels
 
 ### 12.8 CI enforcement
 
-All tests must pass in CI before merge. Contract tests block breaking changes. SHIKI Playwright must pass on mock + staging.
+All tests must pass in CI before merge. Contract tests block breaking changes. Kyber Playwright must pass on mock + staging.
 
 
 ---
@@ -995,7 +995,7 @@ All tests must pass in CI before merge. Contract tests block breaking changes. S
 - `COMMERCE_FACILITATOR_VERIFY_ENABLED` (per-facilitator)
 - `COMMERCE_LOCAL_VERIFY_FALLBACK` (default true)
 - `COMMERCE_V2_PROTOCOL` (default true for new challenges)
-- `COMMERCE_SHIKI_ACTIONS_ENABLED` (per-role, per-page)
+- `COMMERCE_KYBER_ACTIONS_ENABLED` (per-role, per-page)
 - `IG_X402_LAYER` (existing, kept on)
 
 ### 13.2 Phased rollout
@@ -1009,25 +1009,25 @@ All tests must pass in CI before merge. Contract tests block breaking changes. S
 **Phase 1 — Internal tenant, mock facilitators (Week 1)**
 - Flag on for internal dev tenant.
 - Mock facilitator for local verification.
-- SHIKI in mock mode.
+- Kyber in mock mode.
 - Full lifecycle exercised via e2e tests.
 
 **Phase 2 — Internal tenant, real Base/Solana verifiers (Week 2)**
 - Real verifiers wired.
 - Facilitator registry seeded.
-- SHIKI staging mode.
+- Kyber staging mode.
 - Diagnostics + reconciliation validated.
 
 **Phase 3 — Pilot tenant (Week 3)**
 - One friendly pilot tenant onboarded.
 - All Aether-native protected resources registered.
 - Mandatory approval enforced.
-- SHIKI operator training.
+- Kyber operator training.
 
 **Phase 4 — GA (Week 4)**
 - Flag enabled for all tenants.
 - All protected resources covered.
-- SHIKI action RBAC deployed.
+- Kyber action RBAC deployed.
 - Runbooks published.
 
 **Phase 5 — External providers (post-GA)**
@@ -1069,10 +1069,10 @@ All tests must pass in CI before merge. Contract tests block breaking changes. S
 | Facilitator outage halts paid flows | High | Multi-facilitator failover, local verification fallback, circuit breakers |
 | Graph write volume spikes | Med | Batch graph mutations, existing 30s snapshot cadence preserved, backpressure |
 | Duplicate payments | High | Payment-Identifier idempotency + Redis TTL + SIWX nonces + FSM idempotency |
-| SHIKI action loops (unintended cascading approvals) | Med | Idempotent action keys, confirm-before-write on graph mutations, replay isolation |
+| Kyber action loops (unintended cascading approvals) | Med | Idempotent action keys, confirm-before-write on graph mutations, replay isolation |
 | Reconciliation drift between graph and lake | Med | Nightly job, drift metric, Diagnostics surface, deterministic rebuild |
 | Legacy v1 capture drift | Med | Keep legacy path functional; back-compat tests; canonicalize via `control_plane.handle_legacy_capture` |
-| RBAC gaps in SHIKI | High | PermissionGate on every panel, production default observer, test coverage of denied paths |
+| RBAC gaps in Kyber | High | PermissionGate on every panel, production default observer, test coverage of denied paths |
 | Override abuse | High | Admin-only scope, mandatory reason, audit trail, Command alert |
 | Approval backlog stalls | High | SLA alerts, escalation chain, backlog gauges, auto-expiry |
 | Cross-tenant leakage | Critical | Tenant-prefixed graph keys, repo-level tenant filters, integration test |
@@ -1096,7 +1096,7 @@ All tests must pass in CI before merge. Contract tests block breaking changes. S
 6. **Facilitator cost model** — Do we charge per verification, or absorb? Affects treasury accounting.
 7. **Entitlement TTL defaults** — 1h? 1 day? Per-resource configurable? *(Recommendation: per-resource, defaulted to 15m for ephemeral, 24h for subscription.)*
 8. **SIWX scope** — Which chains/wallets for SIWX reuse at GA? *(Recommendation: Base + Solana only at GA, matching rail scope.)*
-9. **Operator training requirement** — Is live SHIKI action access gated on training certification?
+9. **Operator training requirement** — Is live Kyber action access gated on training certification?
 10. **Evidence bundle retention** — 90 days? 1 year? Audit requirement dictates.
 11. **Cross-tenant analytics** — Allowed for global Aether ops? If yes, what anonymization?
 12. **External provider integration priority** — Which external providers first in second wave?
@@ -1122,8 +1122,8 @@ The Agentic Commerce Day-1 build is complete only when **every** item below is t
 - [ ] Graph state is deterministically rebuildable from Silver tables.
 - [ ] Every lifecycle transition emits a typed event with correlation_id.
 
-**SHIKI**
-- [ ] All 8 SHIKI pages expose real, audited commerce actions per §8.
+**Kyber**
+- [ ] All 8 Kyber pages expose real, audited commerce actions per §8.
 - [ ] Every action hits a real API, emits a real event, writes an audit entry.
 - [ ] PermissionGate enforced on every action; production defaults to observer.
 - [ ] Mock/staging/live parity validated by Lab tests.
@@ -1149,7 +1149,7 @@ The Agentic Commerce Day-1 build is complete only when **every** item below is t
 - [ ] Config changes audited.
 
 **Docs**
-- [ ] `COMMERCE-CONTROL-PLANE.md`, `APPROVAL-MODEL.md`, `PROTECTED-RESOURCES.md`, `STABLECOIN-RAILS.md`, `SHIKI-OPERATOR-GUIDE.md`, `SUPPORT-DEBUG-GUIDE.md` all published.
+- [ ] `COMMERCE-CONTROL-PLANE.md`, `APPROVAL-MODEL.md`, `PROTECTED-RESOURCES.md`, `STABLECOIN-RAILS.md`, `Kyber-OPERATOR-GUIDE.md`, `SUPPORT-DEBUG-GUIDE.md` all published.
 - [ ] `INTELLIGENCE-GRAPH.md` amended with L3b control plane.
 - [ ] CHANGELOG updated with migration notes.
 - [ ] No documentation drift from code.
@@ -1159,7 +1159,7 @@ The Agentic Commerce Day-1 build is complete only when **every** item below is t
 - [ ] All integration lifecycle paths tested.
 - [ ] All e2e locked-requirement flows tested.
 - [ ] Contract tests pin API/event schemas.
-- [ ] SHIKI Playwright covers all action-capable panels.
+- [ ] Kyber Playwright covers all action-capable panels.
 - [ ] All tests pass in CI.
 
 **Rollout**

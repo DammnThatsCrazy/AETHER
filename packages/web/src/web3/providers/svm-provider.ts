@@ -1,5 +1,5 @@
 // =============================================================================
-// AETHER SDK — SOLANA (SVM) PROVIDER
+// Aether SDK — SOLANA (SVM) PROVIDER
 // Phantom, Solflare, Backpack, Solana Wallet Standard
 // =============================================================================
 

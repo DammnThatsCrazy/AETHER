@@ -1,5 +1,5 @@
 // =============================================================================
-// AETHER SDK — EVM TRACKER (Tier 2 Thin Client)
+// Aether SDK — EVM TRACKER (Tier 2 Thin Client)
 // Keeps METHOD_SELECTORS for basic tx naming. Ships raw data to backend.
 // No gas analytics, no whale detection, no DeFi classification.
 // =============================================================================

@@ -1,5 +1,5 @@
 // =============================================================================
-// AETHER SDK — EVENT QUEUE (BATCH, FLUSH, RETRY, OFFLINE PERSISTENCE)
+// Aether SDK — EVENT QUEUE (BATCH, FLUSH, RETRY, OFFLINE PERSISTENCE)
 // Updated for multi-VM Web3 event types
 // =============================================================================
 

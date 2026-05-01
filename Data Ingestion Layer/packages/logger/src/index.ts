@@ -1,5 +1,5 @@
 // =============================================================================
-// AETHER BACKEND — STRUCTURED LOGGER
+// Aether BACKEND — STRUCTURED LOGGER
 // Pino-based structured logging with request context and child loggers
 // =============================================================================
 

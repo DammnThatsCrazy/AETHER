@@ -1,6 +1,6 @@
-# Stripe Billing — AETHER P1–P4 Integration
+# Stripe Billing — Aether P1–P4 Integration
 
-This document describes how AETHER integrates Stripe Billing with the
+This document describes how Aether integrates Stripe Billing with the
 existing P1–P4 plan catalog (`shared/plans/catalog.py`), auth middleware,
 Redis-backed rate limiting, monthly quota metering, and overage logic.
 
@@ -15,14 +15,14 @@ already consumes.
 
 Before turning `STRIPE_BILLING_ENABLED=true` in dev/staging/production:
 
-1. **Create Stripe Products & recurring Prices** for each AETHER plan:
+1. **Create Stripe Products & recurring Prices** for each Aether plan:
    - **P1 Hobbyist** → recurring subscription Price
    - **P2 Professional** → recurring subscription Price
    - **P3 Growth Intelligence** → recurring subscription Price
    - **P4 Protocol Master** → recurring subscription Price
 
    Pricing amounts (Option A / B / C) live in
-   `shared/plans/catalog.py::PLAN_CATALOG`. AETHER does **not** ship hard-coded
+   `shared/plans/catalog.py::PLAN_CATALOG`. Aether does **not** ship hard-coded
    Stripe Price IDs; the operator must paste them into env vars below.
 
 2. **Set the Price IDs in env**:
@@ -33,12 +33,12 @@ Before turning `STRIPE_BILLING_ENABLED=true` in dev/staging/production:
    STRIPE_PRICE_P4=price_xxx_p4
    ```
 
-3. **(Optional) Overage Price** — only if you want to charge AETHER overage
+3. **(Optional) Overage Price** — only if you want to charge Aether overage
    usage through Stripe invoices:
    ```env
    STRIPE_OVERAGE_PRICE_ID=price_xxx_overage
    ```
-   When unset, Stripe overage invoicing is disabled and AETHER continues to
+   When unset, Stripe overage invoicing is disabled and Aether continues to
    use its existing internal overage calculation (`shared/billing/overage.py`)
    for the `/v1/admin/tenants/{id}/billing` projection.
 
@@ -60,7 +60,7 @@ Before turning `STRIPE_BILLING_ENABLED=true` in dev/staging/production:
    - Use Stripe **test mode** keys.
    - Forward events with the Stripe CLI:
      `stripe listen --forward-to localhost:8000/v1/admin/billing/stripe/webhook`
-   - Run AETHER with `AETHER_ENV=local`. If Stripe keys/Price IDs are missing,
+   - Run Aether with `AETHER_ENV=local`. If Stripe keys/Price IDs are missing,
      the Checkout/Portal endpoints return mocked URLs instead of failing
      (see "Local mocked mode" below).
 
@@ -89,7 +89,7 @@ In **local** mode, they may be unset.
 ## API surface
 
 All routes (except the webhook) require the existing `billing` permission and
-go through normal AETHER auth, rate-limit, and quota middleware.
+go through normal Aether auth, rate-limit, and quota middleware.
 
 | Method | Route | Notes |
 | --- | --- | --- |
@@ -98,7 +98,7 @@ go through normal AETHER auth, rate-limit, and quota middleware.
 | `GET`  | `/v1/admin/tenants/{tenant_id}/billing/invoices` | Locally synced Stripe invoices for the tenant. |
 | `GET`  | `/v1/admin/tenants/{tenant_id}/billing/invoices/{invoice_id}` | One locally synced invoice (tenant-scoped). |
 | `POST` | `/v1/admin/tenants/{tenant_id}/billing/overage-invoice` | Creates a Stripe overage invoice. Disabled when `STRIPE_OVERAGE_PRICE_ID` is unset. Idempotent on `(tenant_id, billing_period)`. |
-| `POST` | `/v1/admin/billing/stripe/webhook` | Stripe webhook ingress. Public from AETHER auth (added to `PUBLIC_PATHS`); protected by `Stripe-Signature` verification. |
+| `POST` | `/v1/admin/billing/stripe/webhook` | Stripe webhook ingress. Public from Aether auth (added to `PUBLIC_PATHS`); protected by `Stripe-Signature` verification. |
 
 ---
 
@@ -153,20 +153,20 @@ Schema is created idempotently by
 - `stripe_overage_invoice_attempts` — idempotent record of Stripe overage
   invoicing attempts, keyed by `(tenant_id, billing_period)`.
 
-Existing `overage_invoices` (internal AETHER projection) is preserved.
+Existing `overage_invoices` (internal Aether projection) is preserved.
 
 ---
 
 ## Overage charging
 
-- `STRIPE_OVERAGE_PRICE_ID` **unset** → existing AETHER overage calculation
+- `STRIPE_OVERAGE_PRICE_ID` **unset** → existing Aether overage calculation
   remains the source of truth. The internal projection at
   `/v1/admin/tenants/{id}/billing` is unchanged. The Stripe overage endpoint
   returns a clear `400` error.
 - `STRIPE_OVERAGE_PRICE_ID` **set** → operators can call
-  `POST /v1/admin/tenants/{id}/billing/overage-invoice` to push the AETHER
+  `POST /v1/admin/tenants/{id}/billing/overage-invoice` to push the Aether
   overage amount into a Stripe invoice item + invoice. The endpoint is
   idempotent on `(tenant_id, billing_period)` to prevent double-charging.
 
-The Stripe path **uses the AETHER overage calculation** to determine the
+The Stripe path **uses the Aether overage calculation** to determine the
 amount; pricing is not duplicated.

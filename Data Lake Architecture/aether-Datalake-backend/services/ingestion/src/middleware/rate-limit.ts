@@ -1,5 +1,5 @@
 // =============================================================================
-// AETHER INGESTION — RATE LIMITING MIDDLEWARE
+// Aether INGESTION — RATE LIMITING MIDDLEWARE
 // Token bucket rate limiter per API key with configurable limits
 // =============================================================================
 

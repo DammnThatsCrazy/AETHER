@@ -1,7 +1,7 @@
 .PHONY: setup test test-unit test-integration lint format train serve docker-up docker-down export clean help
 
 # ─────────────────────────────────────────────────────────────
-# AETHER ML — Development Makefile
+# Aether ML — Development Makefile
 # ─────────────────────────────────────────────────────────────
 
 PYTHON := python

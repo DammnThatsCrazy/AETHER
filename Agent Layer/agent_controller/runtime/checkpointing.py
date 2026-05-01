@@ -1,7 +1,7 @@
 """
 Aether Agent Layer — Checkpointing Runtime
 Manages checkpoint records for objective/plan progress tracking.
-Used by BOLT for continuity across sessions and process restarts.
+Used by Kinesis for continuity across sessions and process restarts.
 """
 
 from __future__ import annotations

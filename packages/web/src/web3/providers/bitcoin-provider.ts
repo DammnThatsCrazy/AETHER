@@ -1,5 +1,5 @@
 // =============================================================================
-// AETHER SDK — BITCOIN PROVIDER
+// Aether SDK — BITCOIN PROVIDER
 // UniSat, Xverse, Leather, OKX BTC wallet detection
 // =============================================================================
 

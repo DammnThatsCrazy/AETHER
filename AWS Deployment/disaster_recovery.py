@@ -294,7 +294,7 @@ def execute_dr_failover(scope: FailoverScope = FailoverScope.REGION) -> Recovery
 def print_dr_runbook():
     """Print the DR runbook for operators."""
     print(f"\n{'═' * 60}")
-    print("  AETHER DISASTER RECOVERY RUNBOOK")
+    print("  Aether DISASTER RECOVERY RUNBOOK")
     print(f"{'═' * 60}")
     print(f"  RPO: {DR.rpo_hours} hour(s)  |  RTO: {DR.rto_hours} hours")
     print(f"  DR Region: {DR.dr_region}")

@@ -1,5 +1,5 @@
 /**
- * AETHER INGESTION SERVER
+ * Aether INGESTION SERVER
  * High-performance HTTP server for event ingestion.
  *
  * Endpoints:

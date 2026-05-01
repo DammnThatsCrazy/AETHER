@@ -1,5 +1,5 @@
 // =============================================================================
-// AETHER SDK — REWARD CLIENT (Tier 2 Thin Client)
+// Aether SDK — REWARD CLIENT (Tier 2 Thin Client)
 // Thin claim-only stub. All eligibility checks, proof generation,
 // and campaign management handled by backend.
 // =============================================================================

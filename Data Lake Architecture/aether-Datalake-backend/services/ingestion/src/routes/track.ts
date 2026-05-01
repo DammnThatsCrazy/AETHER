@@ -1,5 +1,5 @@
 // =============================================================================
-// AETHER INGESTION — SINGLE-EVENT ROUTES
+// Aether INGESTION — SINGLE-EVENT ROUTES
 // POST /v1/track, POST /v1/page, POST /v1/identify, POST /v1/conversion
 // Convenience endpoints that wrap events into batch format
 // =============================================================================

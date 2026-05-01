@@ -3,7 +3,7 @@ Aether Service — x402 Commerce Control Plane
 Orchestrates the full lifecycle:
   request → challenge → policy → approval → verify → settle → entitle → grant → fulfill
 
-This is the central backend that SHIKI actions and SDK calls route through.
+This is the central backend that Kyber actions and SDK calls route through.
 Every lifecycle stage is persisted, emits events, and writes graph state.
 """
 

@@ -1,5 +1,5 @@
 // =============================================================================
-// AETHER SDK — TRAFFIC SOURCE TRACKER (Tier 2 Thin Client)
+// Aether SDK — TRAFFIC SOURCE TRACKER (Tier 2 Thin Client)
 // Reads raw referrer, URL params, and click IDs. Ships to backend.
 // No source classification, no channel grouping, no regex matching.
 // =============================================================================

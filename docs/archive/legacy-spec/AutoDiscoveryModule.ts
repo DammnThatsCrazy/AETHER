@@ -1,5 +1,5 @@
 // =============================================================================
-// AETHER SDK — AUTO-DISCOVERY MODULE
+// Aether SDK — AUTO-DISCOVERY MODULE
 // Automatic tracking of clicks, forms, scroll depth, rage clicks, dead clicks
 // =============================================================================
 

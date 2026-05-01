@@ -1,7 +1,7 @@
 """
 Aether Agent Layer — Briefing Runtime
 Manages brief records for operator communication.
-Used by BOLT for internal summaries, handoff state, and run history.
+Used by Kinesis for internal summaries, handoff state, and run history.
 """
 
 from __future__ import annotations

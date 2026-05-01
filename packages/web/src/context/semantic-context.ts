@@ -1,5 +1,5 @@
 // =============================================================================
-// AETHER SDK — SEMANTIC CONTEXT (Tier 2 Thin Client)
+// Aether SDK — SEMANTIC CONTEXT (Tier 2 Thin Client)
 // Tier 1 only: device type, viewport, page URL, timestamp, referrer, session ID.
 // Backend handles Tier 2/3 enrichment.
 // =============================================================================

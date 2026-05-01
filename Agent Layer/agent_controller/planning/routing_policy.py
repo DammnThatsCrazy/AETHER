@@ -35,8 +35,8 @@ class RoutingPolicy:
             "verification": ["evidence_check", "provenance", "schema_check", "scoring"],
             "commit": ["staging", "batch_review", "approval_queue", "graph_write"],
             "recovery": ["retry", "fallback", "compensation", "rollback", "checkpoint_restore"],
-            "bolt": ["continuity", "briefing", "handoff", "run_history"],
-            "trigger": ["scheduling", "wake_routing", "missed_fire", "orphan_cleanup"],
+            "kinesis": ["continuity", "briefing", "handoff", "run_history"],
+            "catalyst": ["scheduling", "wake_routing", "missed_fire", "orphan_cleanup"],
         }
         self._team_load: dict[str, int] = {}
 

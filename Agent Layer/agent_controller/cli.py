@@ -26,7 +26,7 @@ def cmd_dashboard(hub: ControllerHub, args: argparse.Namespace) -> None:
     events = ops.recent_timeline(20)
     objectives = ops.list_objectives()
     health = hub.controller_health()
-    print(render_dashboard(events, objectives, health, hub.unit_registry.enabled))
+    print(render_dashboard(events, objectives, health, hub.atom_registry.enabled))
 
 
 def cmd_health(hub: ControllerHub, args: argparse.Namespace) -> None:

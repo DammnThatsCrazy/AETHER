@@ -1,5 +1,5 @@
 // =============================================================================
-// AETHER DATA LAKE — S3 STORAGE LAYER
+// Aether DATA LAKE — S3 STORAGE LAYER
 // Partitioned read/write operations, file listing, lifecycle management
 // Supports Bronze (JSONL/gzip), Silver (Parquet/snappy), Gold (Parquet/zstd)
 // =============================================================================

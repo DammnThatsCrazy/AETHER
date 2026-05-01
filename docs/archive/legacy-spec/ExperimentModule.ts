@@ -1,5 +1,5 @@
 // =============================================================================
-// AETHER SDK — EXPERIMENTS MODULE
+// Aether SDK — EXPERIMENTS MODULE
 // Deterministic A/B testing with variant assignment and exposure tracking
 // =============================================================================
 

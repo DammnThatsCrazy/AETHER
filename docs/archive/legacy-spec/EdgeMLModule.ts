@@ -1,5 +1,5 @@
 // =============================================================================
-// AETHER SDK — EDGE ML MODULE
+// Aether SDK — EDGE ML MODULE
 // Lightweight in-browser models for intent, bot detection, session scoring
 // =============================================================================
 

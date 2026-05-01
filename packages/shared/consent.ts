@@ -1,5 +1,5 @@
 // =============================================================================
-// AETHER SDK — Shared Consent Contract
+// Aether SDK — Shared Consent Contract
 // Canonical consent purposes gated by the ingestion validator and by the
 // per-SDK event queues. See docs/source-of-truth/CONSENT_MODEL.md.
 // =============================================================================

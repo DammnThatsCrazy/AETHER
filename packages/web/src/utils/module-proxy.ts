@@ -1,5 +1,5 @@
 // =============================================================================
-// AETHER SDK — MODULE PROXY UTILITY
+// Aether SDK — MODULE PROXY UTILITY
 // Creates a proxy that delegates method calls to an underlying module instance.
 // Replaces verbose null-safe delegation boilerplate in SDK sub-interfaces.
 // =============================================================================

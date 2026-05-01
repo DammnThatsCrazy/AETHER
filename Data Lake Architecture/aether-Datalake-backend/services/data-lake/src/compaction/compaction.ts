@@ -1,5 +1,5 @@
 // =============================================================================
-// AETHER DATA LAKE — COMPACTION SERVICE
+// Aether DATA LAKE — COMPACTION SERVICE
 // Merges small files ("small file problem") into optimally-sized files
 // per partition to improve query performance and reduce S3 list overhead
 // =============================================================================

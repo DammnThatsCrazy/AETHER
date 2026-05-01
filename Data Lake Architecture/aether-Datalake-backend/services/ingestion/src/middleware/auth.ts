@@ -1,5 +1,5 @@
 // =============================================================================
-// AETHER INGESTION — AUTHENTICATION MIDDLEWARE
+// Aether INGESTION — AUTHENTICATION MIDDLEWARE
 // Extracts + validates API key, attaches project context to request
 // =============================================================================
 

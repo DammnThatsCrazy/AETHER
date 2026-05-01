@@ -1,5 +1,5 @@
 // =============================================================================
-// AETHER SDK — Android (Kotlin)
+// Aether SDK — Android (Kotlin)
 // Core analytics, identity, session, consent, lifecycle tracking
 // =============================================================================
 

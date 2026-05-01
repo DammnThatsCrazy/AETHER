@@ -1,5 +1,5 @@
 // =============================================================================
-// AETHER SDK — WEB3 MODULE (Tier 2 Thin Client)
+// Aether SDK — WEB3 MODULE (Tier 2 Thin Client)
 // Simplified orchestrator: wallet detection (7 VM providers),
 // connect/disconnect events, raw transaction shipping to backend.
 // No DeFi classification, no portfolio aggregation, no wallet classification.

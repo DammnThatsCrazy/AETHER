@@ -14,8 +14,8 @@ CONTROLLER_QUEUE_MAP: dict[str, str] = {
     "verification": "verification",
     "commit": "commit",
     "recovery": "recovery",
-    "bolt": "default",
-    "trigger": "default",
+    "kinesis": "default",
+    "catalyst": "default",
 }
 
 

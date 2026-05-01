@@ -1,5 +1,5 @@
 // =============================================================================
-// AETHER SDK — FEATURE FLAGS MODULE (Tier 2 Thin Client)
+// Aether SDK — FEATURE FLAGS MODULE (Tier 2 Thin Client)
 // Cache-only layer: fetches flags from backend, caches in memory + localStorage.
 // No local evaluation, no override logic, no stale-while-revalidate complexity.
 // =============================================================================
