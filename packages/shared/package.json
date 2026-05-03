@@ -21,5 +21,8 @@
     "!*.test.ts",
     "!*.spec.ts"
   ],
+  "scripts": {
+    "test": "vitest run"
+  },
   "license": "UNLICENSED"
 }

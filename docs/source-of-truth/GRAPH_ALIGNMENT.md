@@ -53,6 +53,22 @@ The `rail` field on payment events selects the downstream processing path
 - **A2A** edges (agent → agent, agent → service) are backend-inferred from
   payment + task events. The SDK does not emit A2A directly.
 
+## Economic Observability extensions
+
+Defined in `packages/shared/economic.ts` and re-exported from `@aether/shared`.
+All fields are **optional** and additive — no migration is required.
+
+| Primitive                | Where it attaches                        |
+|--------------------------|-------------------------------------------|
+| `EconomicPayload`        | Optional `economic` block on any Action  |
+| `Authorization`          | Optional `authorization` block on Action / Agent |
+| `Handshake`              | New node — `Action → initiates → Handshake → resolves_to → Action` |
+| `ResourceNode`           | New node — generic `campaign / ad_account / bank_account / api / model` |
+| `flow_ref`, `interaction_mode`, `economic_involved`, `outcome` | Optional Relationship/edge fields |
+| `EconomicState`          | Derived state — never persisted; computed via `aggregateEconomicState` |
+
+See [`docs/ECONOMIC-OBSERVABILITY.md`](../ECONOMIC-OBSERVABILITY.md).
+
 ## Activation flags
 
 Event emission is always allowed client-side. Backend processing into the
