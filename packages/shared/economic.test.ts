@@ -71,6 +71,12 @@ describe('validateEconomicPayload', () => {
     }
   });
 
+  it('accepts the canonical Aether rails (fiat | invoice | onchain | x402 | internal_credit)', () => {
+    for (const rail of ['fiat', 'invoice', 'onchain', 'x402', 'internal_credit'] as const) {
+      expect(validateEconomicPayload({ ...valid, rail })).toMatchObject({ rail });
+    }
+  });
+
   it('does not hardcode the currency list', () => {
     expect(validateEconomicPayload({ ...valid, currency: 'XBT' })).toMatchObject({ currency: 'XBT' });
     expect(validateEconomicPayload({ ...valid, currency: 'USDC' })).toMatchObject({
@@ -293,7 +299,7 @@ describe('aggregateEconomicState', () => {
     expect(aggregateEconomicState([a(), a()])).toEqual({});
   });
 
-  it('sums spend and revenue separately', () => {
+  it('sums spend and revenue separately for a single currency', () => {
     const actions: EconomicActionLike[] = [
       a({
         amount: 10,
@@ -320,10 +326,87 @@ describe('aggregateEconomicState', () => {
         rail: 'stripe',
       }),
     ];
-    expect(aggregateEconomicState(actions)).toEqual({
-      total_spend: 15,
-      total_revenue: 50,
+    const state = aggregateEconomicState(actions);
+    expect(state.currency).toBe('USD');
+    expect(state.total_spend).toBe(15);
+    expect(state.total_revenue).toBe(50);
+    expect(state.byCurrency).toEqual({ USD: { total_spend: 15, total_revenue: 50 } });
+  });
+
+  it('keeps mixed-currency totals separate and omits flat scalars', () => {
+    const actions: EconomicActionLike[] = [
+      a({
+        amount: 10,
+        currency: 'USD',
+        direction: 'pay',
+        counterparty_type: 'service',
+        counterparty_id: 's1',
+        rail: 'stripe',
+      }),
+      a({
+        amount: 8,
+        currency: 'EUR',
+        direction: 'pay',
+        counterparty_type: 'service',
+        counterparty_id: 's2',
+        rail: 'stripe',
+      }),
+      a({
+        amount: 50,
+        currency: 'EUR',
+        direction: 'receive',
+        counterparty_type: 'platform',
+        counterparty_id: 'p1',
+        rail: 'stripe',
+      }),
+    ];
+    const state = aggregateEconomicState(actions);
+    expect(state.currency).toBeUndefined();
+    expect(state.total_spend).toBeUndefined();
+    expect(state.total_revenue).toBeUndefined();
+    expect(state.spend_rate).toBeUndefined();
+    expect(state.unit_cost).toBeUndefined();
+    expect(state.byCurrency).toEqual({
+      USD: { total_spend: 10, total_revenue: 0 },
+      EUR: { total_spend: 8, total_revenue: 50 },
     });
+  });
+
+  it('computes per-currency spend_rate and unit_cost in the byCurrency slice', () => {
+    const actions: EconomicActionLike[] = [
+      a({
+        amount: 60,
+        currency: 'USD',
+        direction: 'pay',
+        counterparty_type: 'service',
+        counterparty_id: 's1',
+        rail: 'stripe',
+      }),
+      a({
+        amount: 30,
+        currency: 'EUR',
+        direction: 'pay',
+        counterparty_type: 'service',
+        counterparty_id: 's2',
+        rail: 'stripe',
+      }),
+    ];
+    const state = aggregateEconomicState(actions, { windowMs: 60_000, units: 3 });
+    expect(state.byCurrency?.['USD']).toEqual({
+      total_spend: 60,
+      total_revenue: 0,
+      spend_rate: 1, // 60 / 60s
+      unit_cost: 20, // 60 / 3
+    });
+    expect(state.byCurrency?.['EUR']).toEqual({
+      total_spend: 30,
+      total_revenue: 0,
+      spend_rate: 0.5,
+      unit_cost: 10,
+    });
+    // Flat scalars are absent on mixed-currency input.
+    expect(state.spend_rate).toBeUndefined();
+    expect(state.unit_cost).toBeUndefined();
   });
 
   it('computes spend_rate when windowMs is provided', () => {
@@ -382,7 +465,11 @@ describe('aggregateEconomicState', () => {
         rail: 'stripe',
       }),
     ];
-    expect(aggregateEconomicState(actions)).toEqual({ total_spend: 0, total_revenue: 0 });
+    const state = aggregateEconomicState(actions);
+    expect(state.currency).toBe('USD');
+    expect(state.total_spend).toBe(0);
+    expect(state.total_revenue).toBe(0);
+    expect(state.byCurrency).toEqual({ USD: { total_spend: 0, total_revenue: 0 } });
   });
 
   it('runs in O(n) — sanity check on 10k actions', () => {

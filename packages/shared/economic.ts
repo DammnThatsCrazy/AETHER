@@ -31,8 +31,26 @@ export type EconomicDirection = 'pay' | 'receive';
 /** Counterparty taxonomy at the agentic-commerce level. */
 export type EconomicCounterpartyType = 'agent' | 'service' | 'platform';
 
-/** Transport rail for the value transfer. */
-export type EconomicRail = 'stripe' | 'bank' | 'crypto' | 'internal';
+/**
+ * Transport rail for the value transfer.
+ *
+ * Accepts the agentic-commerce vocabulary (`stripe | bank | crypto | internal`)
+ * AND the canonical Aether rails declared in `packages/shared/provenance.ts`
+ * (`fiat | invoice | onchain | x402 | internal_credit`). Keeping the union open
+ * here is what makes the EconomicPayload truly drop-in: existing
+ * `payment_*` events whose `rail` is e.g. `x402` or `onchain` continue to
+ * validate without any caller changes.
+ */
+export type EconomicRail =
+  | 'stripe'
+  | 'bank'
+  | 'crypto'
+  | 'internal'
+  | 'fiat'
+  | 'invoice'
+  | 'onchain'
+  | 'x402'
+  | 'internal_credit';
 
 /**
  * Economic block embeddable on any canonical Action / event. Fully optional;
@@ -58,6 +76,11 @@ const ECONOMIC_RAILS: ReadonlySet<EconomicRail> = new Set([
   'bank',
   'crypto',
   'internal',
+  'fiat',
+  'invoice',
+  'onchain',
+  'x402',
+  'internal_credit',
 ]);
 
 // ---------------------------------------------------------------------------
@@ -199,15 +222,37 @@ export interface EconomicActionLike {
   authorization?: Authorization;
 }
 
+/** Per-currency aggregate slice. */
+export interface EconomicCurrencyTotals {
+  total_spend: number;
+  total_revenue: number;
+  /** Spend per second over the optional aggregation window. */
+  spend_rate?: number;
+  /** Spend per delivered unit when the caller supplies `units`. */
+  unit_cost?: number;
+}
+
 /**
  * Derived economic aggregate. NEVER persisted directly — always computed
  * from the underlying Actions via `aggregateEconomicState`.
+ *
+ * Currency handling: amounts are aggregated **per currency** in `byCurrency`.
+ * The flat scalar fields (`total_spend`, `total_revenue`, `spend_rate`,
+ * `unit_cost`) are populated **only when every contributing Action shares a
+ * single currency**, in which case they refer to that currency. When the
+ * input mixes currencies the flat fields are left undefined to prevent
+ * financially incorrect cross-currency totals from leaking into dashboards
+ * or downstream decisions.
  */
 export interface EconomicState {
   spend_rate?: number;
   total_spend?: number;
   total_revenue?: number;
   unit_cost?: number;
+  /** Per-currency breakdown. Always populated when any Action carried an economic block. */
+  byCurrency?: Record<string, EconomicCurrencyTotals>;
+  /** The single currency all contributing Actions used; absent on mixed-currency input. */
+  currency?: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -290,9 +335,10 @@ export function validateEconomicPayload(value: unknown): EconomicPayload {
     });
   }
   if (typeof v.rail !== 'string' || !ECONOMIC_RAILS.has(v.rail as EconomicRail)) {
-    throw new EconomicValidationError('rail must be "stripe" | "bank" | "crypto" | "internal"', {
-      rail: v.rail,
-    });
+    throw new EconomicValidationError(
+      'rail must be one of stripe|bank|crypto|internal|fiat|invoice|onchain|x402|internal_credit',
+      { rail: v.rail },
+    );
   }
 
   return {
@@ -561,39 +607,63 @@ export interface AggregateOptions {
  *
  * Rules:
  *  - Actions without an `economic` block are ignored.
+ *  - Amounts are summed **per currency** to avoid financially incorrect
+ *    cross-currency totals.
  *  - direction === 'pay'     contributes to total_spend
  *  - direction === 'receive' contributes to total_revenue
  *  - spend_rate  = total_spend / (windowMs / 1000) when windowMs > 0
  *  - unit_cost   = total_spend / units            when units > 0
+ *  - Flat scalar fields on the returned state (`total_spend`,
+ *    `total_revenue`, `spend_rate`, `unit_cost`, `currency`) are populated
+ *    only when every contributing Action shares a single currency.
+ *    Multi-currency inputs always populate `byCurrency` only.
  */
 export function aggregateEconomicState(
   actions: ReadonlyArray<EconomicActionLike>,
   options: AggregateOptions = {},
 ): EconomicState {
-  let totalSpend = 0;
-  let totalRevenue = 0;
+  const byCurrency: Record<string, EconomicCurrencyTotals> = {};
   let sawAny = false;
 
   for (const action of actions) {
     const econ = action.economic;
     if (!econ) continue;
     sawAny = true;
-    if (econ.direction === 'pay') totalSpend += econ.amount;
-    else totalRevenue += econ.amount;
+
+    let slot = byCurrency[econ.currency];
+    if (!slot) {
+      slot = { total_spend: 0, total_revenue: 0 };
+      byCurrency[econ.currency] = slot;
+    }
+    if (econ.direction === 'pay') slot.total_spend += econ.amount;
+    else slot.total_revenue += econ.amount;
   }
 
   if (!sawAny) return {};
 
-  const state: EconomicState = {
-    total_spend: totalSpend,
-    total_revenue: totalRevenue,
-  };
+  const windowSeconds =
+    options.windowMs !== undefined && options.windowMs > 0
+      ? options.windowMs / 1000
+      : undefined;
+  const units =
+    options.units !== undefined && options.units > 0 ? options.units : undefined;
 
-  if (options.windowMs !== undefined && options.windowMs > 0) {
-    state.spend_rate = totalSpend / (options.windowMs / 1000);
+  for (const slot of Object.values(byCurrency)) {
+    if (windowSeconds !== undefined) slot.spend_rate = slot.total_spend / windowSeconds;
+    if (units !== undefined) slot.unit_cost = slot.total_spend / units;
   }
-  if (options.units !== undefined && options.units > 0) {
-    state.unit_cost = totalSpend / options.units;
+
+  const currencies = Object.keys(byCurrency);
+  const state: EconomicState = { byCurrency };
+
+  if (currencies.length === 1) {
+    const single = currencies[0]!;
+    const slot = byCurrency[single]!;
+    state.currency = single;
+    state.total_spend = slot.total_spend;
+    state.total_revenue = slot.total_revenue;
+    if (slot.spend_rate !== undefined) state.spend_rate = slot.spend_rate;
+    if (slot.unit_cost !== undefined) state.unit_cost = slot.unit_cost;
   }
 
   return state;
