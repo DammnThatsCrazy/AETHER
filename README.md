@@ -146,6 +146,58 @@ All connectors use real httpx HTTP calls. Unconfigured providers report `not_con
 
 **V1 activation:** Intelligence Graph services are available and can be enabled per-environment via `IG_AGENT_LAYER=true`, `IG_COMMERCE_LAYER=true`, `IG_ONCHAIN_LAYER=true`, `IG_X402_LAYER=true`. Graph mutations are fueled by the lake Silver/Gold tiers, not ad-hoc scripts.
 
+## Economic Observability
+
+Aether's graph model carries first-class agentic transaction awareness — payments, spend, revenue, and protocol-level handshakes — without adding a new graph layer. Every primitive is additive and optional, so existing events, edges, and state continue to validate unchanged. See [`docs/ECONOMIC-OBSERVABILITY.md`](docs/ECONOMIC-OBSERVABILITY.md) for the full spec.
+
+**What you get:**
+
+- `EconomicPayload` — embeddable `{ amount, currency, direction, counterparty_type, counterparty_id, rail }` block on any Action.
+- `Handshake` — minimal `pending → paid | failed` node modelling x402-style payment handshakes (indexed by `request_id`).
+- `ResourceNode` — single generic resource (campaign, ad_account, bank_account, api, model) with extensible `metadata`.
+- `RelationshipExtensions` — `flow_ref`, `interaction_mode` (H2H / H2A / A2A / A2H), `economic_involved`, and causal `outcome`.
+- `EconomicState` — derived `{ spend_rate, total_spend, total_revenue, unit_cost }`, computed from Actions in O(n).
+- `Authorization` — embedded `{ source, scope, limit }` for human/org/policy authorization.
+
+**Example: Action carrying spend**
+
+```ts
+import type { EconomicPayload } from '@aether/shared';
+
+const economic: EconomicPayload = {
+  amount: 0.05,
+  currency: 'USD',
+  direction: 'pay',
+  counterparty_type: 'service',
+  counterparty_id: 'svc_x402_demo',
+  rail: 'internal',
+};
+
+aether.track('agent_task', { taskId: 't1', agent, status: 'completed', economic });
+```
+
+**Handshake flow (x402-style):**
+
+```
+Buyer Agent ──GET──▶ Paid API
+            ◀─402 ── (Handshake { id, required_amount, status: pending })
+Buyer Agent ──pay──▶ Paid API
+            ◀─200── (Handshake { status: paid }, resolves_to → payment Action)
+```
+
+**A2A payment example:**
+
+```ts
+import { createHandshake, transitionHandshake } from '@aether/shared';
+
+let hs = createHandshake({
+  id: 'hs_1', request_id: 'req_1', required_amount: 0.05, timestamp: Date.now(),
+});
+hs = transitionHandshake(hs, 'paid'); // pending → paid
+```
+
+End-to-end examples (campaign spend → revenue, agent paying API, A2A transfer) live in [`docs/examples/economic/`](docs/examples/economic/).
+
 ## ML Models (11)
 
 | Model | Type | Status |
@@ -337,6 +389,7 @@ tests/                                 Python test suite (163+ tests)
 | [Architecture](docs/ARCHITECTURE.md) | System design, hybrid architecture, data flow |
 | [Backend API](docs/BACKEND-API.md) | All API endpoints with request/response examples |
 | [Intelligence Graph](docs/INTELLIGENCE-GRAPH.md) | Graph layers, edge types, scoring, V1 activation |
+| [Economic Observability](docs/ECONOMIC-OBSERVABILITY.md) | Economic primitives: Action.economic, Handshake, ResourceNode, derived state |
 | [Identity Resolution](docs/IDENTITY-RESOLUTION.md) | Cross-device matching algorithms |
 | [ML Training Guide](docs/ML-TRAINING-GUIDE.md) | Model training, artifacts, ingestion readiness |
 | [Production Readiness](docs/PRODUCTION-READINESS.md) | Infrastructure status, deployment prerequisites |

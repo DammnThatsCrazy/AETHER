@@ -6,6 +6,57 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ---
 
+## [Unreleased] — Economic Observability Primitives
+
+### Added — Agentic transaction awareness on the existing graph
+
+- **Added economic observability primitives** in `packages/shared/economic.ts`,
+  re-exported from `@aether/shared`. Surface includes:
+  - `EconomicPayload` — embeddable `{ amount, currency, direction,
+    counterparty_type, counterparty_id, rail }` block on any Action.
+  - `Authorization` — embedded `{ source, scope, limit }` for human / org /
+    policy authorization on Actions or Agents.
+  - `RelationshipExtensions` — optional `flow_ref`, `interaction_mode`
+    (`H2H | H2A | A2A | A2H`), `economic_involved`, and causal
+    `outcome` fields on edges.
+  - `EconomicState` — derived `{ spend_rate, total_spend, total_revenue,
+    unit_cost }` aggregate over Actions. Computed lazily; never persisted.
+  - `aggregateEconomicState(actions, options)` — O(n) reducer with optional
+    `windowMs` (for spend_rate) and `units` (for unit_cost).
+- **Introduced `Handshake` node** — the only new node added by this layer.
+  Models x402-style payment request → resolve handshakes with a strict
+  `pending → paid | failed` lifecycle and is indexed by `request_id`.
+  Edges: `Action → initiates → Handshake` and
+  `Handshake → resolves_to → Action`.
+- **Introduced unified `ResourceNode`** — single generic resource node
+  (`campaign | ad_account | bank_account | api | model`) with an extensible
+  `metadata` map, replacing the need for multiple specialised node types.
+- **Extended Action and Relationship models** with optional `economic` and
+  `authorization` fields (Action) and `flow_ref`, `interaction_mode`,
+  `economic_involved`, `outcome` (Relationship). All fields optional;
+  existing data remains valid.
+- **Validation + structured errors**: `validateEconomicPayload`,
+  `validateHandshake`, `validateResourceNode`,
+  `validateRelationshipExtensions`, `validateAuthorization`,
+  `assertHandshakeTransition`, `transitionHandshake`,
+  `assertHandshakeReference`, `assertActionReference`. New error classes
+  `EconomicValidationError`, `HandshakeStateError`,
+  `RelationshipIntegrityError` carry stable `code` + `details` fields for
+  log enrichment.
+- **Tests**: `packages/shared/economic.test.ts` adds 51 unit + integration
+  tests covering payload validation, handshake transitions, resource
+  typing, relationship extensions, state aggregation, referential
+  integrity, full A2A payment flow, H2A → A2A authorized spend, spend →
+  revenue outcome linkage, zero-value transactions, failed payments,
+  missing counterparties, and partial flows.
+- **Docs**: new `docs/ECONOMIC-OBSERVABILITY.md` spec, runnable examples in
+  `docs/examples/economic/` (agent paying API, campaign spend → revenue,
+  A2A transfer), and an "Economic Observability" section in the README.
+- **Compatibility**: **backward compatible — no migration required**. Every
+  new field is optional; no existing schema, API, or graph query changes.
+
+---
+
 ## [Unreleased] — Self-Serve Plans P1-P4, Pooled Quota & Per-Service Overage
 
 ### Added — Self-serve plans, monthly quotas, overage billing

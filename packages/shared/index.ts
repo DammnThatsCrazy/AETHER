@@ -13,6 +13,7 @@ export * from './commerce';
 export * from './agent';
 export * from './events';
 export * from './capabilities';
+export * from './economic';
 
 // Existing partial contracts (already referenced by RN SDK).
 export * from './ecommerce-types';
