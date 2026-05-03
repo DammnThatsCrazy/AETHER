@@ -14,7 +14,7 @@ about money flowing through agentic flows.
 
 | Primitive                | Kind          | Purpose                                                                  |
 | ------------------------ | ------------- | ------------------------------------------------------------------------ |
-| `EconomicPayload`        | extension     | Embeddable economic block on any Action.                                 |
+| `EconomicPayload`        | extension     | Embeddable economic block on any Action. `rail` accepts both the agentic-commerce vocabulary (`stripe \| bank \| crypto \| internal`) and the canonical Aether rails declared in `provenance.ts` (`fiat \| invoice \| onchain \| x402 \| internal_credit`). |
 | `Handshake`              | new node      | x402-style payment request / resolve handshake.                          |
 | `ResourceNode`           | new node      | Unified generic resource (campaign, ad_account, bank_account, api, model). |
 | `RelationshipExtensions` | extension     | `flow_ref`, `interaction_mode`, `economic_involved`, `outcome`.          |
@@ -204,10 +204,17 @@ Errors expose:
 in **O(n)** with no joins or graph traversal. Rules:
 
 - Actions without an `economic` block are ignored.
+- Amounts are summed **per currency** in `byCurrency` to prevent financially
+  incorrect cross-currency totals.
 - `direction === 'pay'` accumulates into `total_spend`.
 - `direction === 'receive'` accumulates into `total_revenue`.
 - `spend_rate = total_spend / (windowMs / 1000)` when `windowMs > 0`.
 - `unit_cost  = total_spend / units` when `units > 0`.
+- Flat scalar fields (`total_spend`, `total_revenue`, `spend_rate`,
+  `unit_cost`, `currency`) are populated **only when every contributing
+  Action shares a single currency**. Mixed-currency inputs only populate
+  `byCurrency`, so callers cannot accidentally read summed-across-currencies
+  numbers.
 
 The state is **never persisted directly** — always recompute from Actions.
 
@@ -281,6 +288,15 @@ interface State {
     total_spend?: number;
     total_revenue?: number;
     unit_cost?: number;
+    /** Always populated when any Action carried an economic block. */
+    byCurrency?: Record<string, {
+      total_spend: number;
+      total_revenue: number;
+      spend_rate?: number;
+      unit_cost?: number;
+    }>;
+    /** Single shared currency; absent on mixed-currency input. */
+    currency?: string;
   };
 }
 ```
