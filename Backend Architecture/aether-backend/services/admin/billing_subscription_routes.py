@@ -4,7 +4,7 @@ Aether Service — Admin Billing Subscription
 Subscription mutations on top of the existing read-only
 GET /v1/admin/tenants/{tenant_id}/billing endpoint. Wraps the
 shared.billing.stripe_repository helpers so KYBER's commerce surface can
-change plans, cancel, reactivate, and list invoices without touching Stripe
+change plans, cancel, and reactivate subscriptions without touching Stripe
 directly from the operator UI.
 
 Endpoints:
@@ -12,8 +12,9 @@ Endpoints:
     POST   /v1/admin/tenants/{tenant_id}/billing/subscription/change-plan
     POST   /v1/admin/tenants/{tenant_id}/billing/subscription/cancel
     POST   /v1/admin/tenants/{tenant_id}/billing/subscription/reactivate
-    GET    /v1/admin/tenants/{tenant_id}/billing/invoices
-    GET    /v1/admin/tenants/{tenant_id}/billing/invoices/{invoice_id}
+
+Invoice listing/detail is served by services.admin.routes — this module
+only adds the subscription mutations.
 """
 
 from __future__ import annotations
@@ -24,6 +25,7 @@ from typing import Any, Optional
 from fastapi import APIRouter, Request
 from pydantic import BaseModel, Field
 
+from services.admin.routes import _enforce_tenant_scope
 from shared.auth.auth import PlanTier
 from shared.billing import stripe_repository
 from shared.common.common import APIResponse, BadRequestError, NotFoundError
@@ -69,6 +71,7 @@ async def _require_account(tenant_id: str) -> dict[str, Any]:
 async def get_subscription(tenant_id: str, request: Request):
     """Return the current subscription state."""
     request.state.tenant.require_permission("billing")
+    _enforce_tenant_scope(request, tenant_id)
     account = await _require_account(tenant_id)
     return APIResponse(data={
         "tenant_id": tenant_id,
@@ -86,6 +89,7 @@ async def get_subscription(tenant_id: str, request: Request):
 async def change_plan(tenant_id: str, body: ChangePlanRequest, request: Request):
     """Move a tenant to a different plan tier."""
     request.state.tenant.require_permission("billing")
+    _enforce_tenant_scope(request, tenant_id)
 
     if body.plan_tier not in VALID_PLAN_TIERS:
         raise BadRequestError(
@@ -109,6 +113,7 @@ async def change_plan(tenant_id: str, body: ChangePlanRequest, request: Request)
 async def cancel_subscription(tenant_id: str, body: CancelSubscriptionRequest, request: Request):
     """Cancel the subscription (default: at end of current period)."""
     request.state.tenant.require_permission("billing")
+    _enforce_tenant_scope(request, tenant_id)
 
     if body.reason not in VALID_CANCEL_REASONS:
         raise BadRequestError(
@@ -141,6 +146,7 @@ async def cancel_subscription(tenant_id: str, body: CancelSubscriptionRequest, r
 async def reactivate_subscription(tenant_id: str, body: ReactivateSubscriptionRequest, request: Request):
     """Reactivate a canceling subscription. No-op if already active."""
     request.state.tenant.require_permission("billing")
+    _enforce_tenant_scope(request, tenant_id)
     account = await _require_account(tenant_id)
     current = account.get("subscription_status")
 
@@ -166,27 +172,3 @@ async def reactivate_subscription(tenant_id: str, body: ReactivateSubscriptionRe
     }).to_dict()
 
 
-@router.get("/{tenant_id}/billing/invoices")
-async def list_invoices(
-    tenant_id: str,
-    request: Request,
-    limit: int = 50,
-    status: str = "",
-):
-    """List invoices for the tenant."""
-    request.state.tenant.require_permission("billing")
-    invoices = await stripe_repository.list_invoices(tenant_id=tenant_id, limit=limit)
-    if status:
-        invoices = [i for i in invoices if str(i.get("status", "")) == status]
-    return APIResponse(data={"invoices": invoices, "count": len(invoices)}).to_dict()
-
-
-@router.get("/{tenant_id}/billing/invoices/{invoice_id}")
-async def get_invoice(tenant_id: str, invoice_id: str, request: Request):
-    request.state.tenant.require_permission("billing")
-    invoice = await stripe_repository.get_invoice(
-        tenant_id=tenant_id, stripe_invoice_id=invoice_id,
-    )
-    if not invoice:
-        raise NotFoundError(f"Invoice not found: {invoice_id}")
-    return APIResponse(data=invoice).to_dict()

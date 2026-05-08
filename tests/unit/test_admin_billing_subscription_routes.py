@@ -47,8 +47,19 @@ def billing_routes(monkeypatch):
         yield mod
 
 
-def make_request(tenant_id: str = "t-001"):
-    tenant = SimpleNamespace(tenant_id=tenant_id, require_permission=lambda perm: None)
+def make_request(tenant_id: str = "t-001", role: str = "admin"):
+    """Build a request whose tenant_id matches the path tenant by default.
+
+    Pass a different `tenant_id` (or set role!="admin") to simulate a
+    cross-tenant call that should be rejected by `_enforce_tenant_scope`.
+    """
+    role_obj = SimpleNamespace(value=role)
+    tenant = SimpleNamespace(
+        tenant_id=tenant_id,
+        role=role_obj,
+        require_permission=lambda perm: None,
+        has_permission=lambda perm: role == "admin",
+    )
     return SimpleNamespace(state=SimpleNamespace(tenant=tenant))
 
 
@@ -158,45 +169,39 @@ async def test_reactivate_active_subscription_is_noop(billing_routes):
 
 
 @pytest.mark.asyncio
-async def test_list_invoices_filtered_by_status(billing_routes):
-    await seed_account()
-    from shared.billing import stripe_repository
-    await stripe_repository.upsert_invoice({
-        "tenant_id": "t-001",
-        "stripe_invoice_id": "in_1",
-        "status": "paid",
-        "amount_due_cents": 100,
-    })
-    await stripe_repository.upsert_invoice({
-        "tenant_id": "t-001",
-        "stripe_invoice_id": "in_2",
-        "status": "open",
-        "amount_due_cents": 200,
-    })
-
-    res = await billing_routes.list_invoices("t-001", make_request())
-    assert res["data"]["count"] == 2
-
-    paid = await billing_routes.list_invoices("t-001", make_request(), status="paid")
-    assert paid["data"]["count"] == 1
-
-
-@pytest.mark.asyncio
-async def test_get_invoice(billing_routes):
-    await seed_account()
-    from shared.billing import stripe_repository
-    await stripe_repository.upsert_invoice({
-        "tenant_id": "t-001",
-        "stripe_invoice_id": "in_42",
-        "status": "paid",
-    })
-    res = await billing_routes.get_invoice("t-001", "in_42", make_request())
-    assert res["data"]["stripe_invoice_id"] == "in_42"
-
-
-@pytest.mark.asyncio
-async def test_get_invoice_404(billing_routes):
-    await seed_account()
+async def test_get_subscription_rejects_cross_tenant_call(billing_routes):
+    """Non-admin caller from t-002 cannot read t-001's subscription."""
+    await seed_account(tenant_id="t-001")
+    cross_tenant_req = make_request(tenant_id="t-002", role="member")
     with pytest.raises(Exception) as exc:
-        await billing_routes.get_invoice("t-001", "missing", make_request())
-    assert "not found" in str(exc.value).lower()
+        await billing_routes.get_subscription("t-001", cross_tenant_req)
+    assert "denied" in str(exc.value).lower()
+
+
+@pytest.mark.asyncio
+async def test_change_plan_rejects_cross_tenant_call(billing_routes):
+    await seed_account(tenant_id="t-001")
+    cross_tenant_req = make_request(tenant_id="t-002", role="member")
+    body = billing_routes.ChangePlanRequest(plan_tier="P2")
+    with pytest.raises(Exception) as exc:
+        await billing_routes.change_plan("t-001", body, cross_tenant_req)
+    assert "denied" in str(exc.value).lower()
+
+
+@pytest.mark.asyncio
+async def test_cancel_rejects_cross_tenant_call(billing_routes):
+    await seed_account(tenant_id="t-001")
+    cross_tenant_req = make_request(tenant_id="t-002", role="member")
+    body = billing_routes.CancelSubscriptionRequest()
+    with pytest.raises(Exception) as exc:
+        await billing_routes.cancel_subscription("t-001", body, cross_tenant_req)
+    assert "denied" in str(exc.value).lower()
+
+
+@pytest.mark.asyncio
+async def test_admin_role_may_act_cross_tenant(billing_routes):
+    """Callers with admin role bypass tenant scoping (matches existing helper)."""
+    await seed_account(tenant_id="t-001")
+    admin_req = make_request(tenant_id="t-admin", role="admin")
+    res = await billing_routes.get_subscription("t-001", admin_req)
+    assert res["data"]["tenant_id"] == "t-001"
