@@ -541,3 +541,446 @@ class _EventStore(BaseRepository):
 class _SessionStore(BaseRepository):
     def __init__(self) -> None:
         super().__init__("sessions")
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# PROFILE 360 — MULTI-ENTITY / DELEGATION / FLOWS / BEHAVIOR (additive)
+# ═══════════════════════════════════════════════════════════════════════════
+#
+# These repositories layer on top of the existing IdentityRepository without
+# disturbing it. They use the same JSONB-backed BaseRepository pattern so they
+# work in both the in-memory local mode and production PostgreSQL.
+#
+# Tables auto-created on first use:
+#   entities              — humans, agents, organizations, system actors
+#   identity_clusters     — multiple identifiers per entity
+#   agent_configs         — user/org-owned LLM agents (config + ownership)
+#   agent_executions      — execution log with reasoning / confidence
+#   delegations           — scoped, time-bound, revocable permissions
+#   wallets               — owned wallets per entity
+#   assets                — token / nft / fiat / credit catalog
+#   transfers             — financial flows attributed to actor + agent + event
+#   behavior_profiles     — derived: automation_ratio, decision_latency, etc.
+#   journey_chains        — cross-journey memory links
+# ═══════════════════════════════════════════════════════════════════════════
+
+
+class EntityRepository(BaseRepository):
+    """Multi-entity identity: humans, agents, organizations, system actors.
+
+    Existing IdentityRepository profile rows continue to work unchanged. New
+    code paths upsert here too; the entity_id is the canonical reference for
+    delegation, flows, behavior, and the Profile 360 graph extensions.
+    """
+
+    VALID_TYPES = ("human", "agent", "organization", "system")
+
+    def __init__(self) -> None:
+        super().__init__("entities")
+
+    async def create_entity(
+        self,
+        entity_id: str,
+        tenant_id: str,
+        entity_type: str,
+        display_name: str = "",
+        parent_entity_id: Optional[str] = None,
+        metadata: Optional[dict] = None,
+    ) -> dict:
+        if entity_type not in self.VALID_TYPES:
+            from shared.common.common import BadRequestError
+            raise BadRequestError(
+                f"Invalid entity_type: {entity_type}. Must be one of {self.VALID_TYPES}"
+            )
+        return await self.insert(entity_id, {
+            "entity_id": entity_id,
+            "tenant_id": tenant_id,
+            "entity_type": entity_type,
+            "display_name": display_name,
+            "parent_entity_id": parent_entity_id,
+            "metadata": metadata or {},
+        })
+
+    async def list_by_tenant(
+        self, tenant_id: str, entity_type: Optional[str] = None, limit: int = 100,
+    ) -> list[dict]:
+        filters: dict[str, Any] = {"tenant_id": tenant_id}
+        if entity_type:
+            filters["entity_type"] = entity_type
+        return await self.find_many(filters=filters, limit=limit)
+
+
+class IdentityClusterRepository(BaseRepository):
+    """Multiple identifiers (wallet, email, device, social, etc.) per entity."""
+
+    def __init__(self) -> None:
+        super().__init__("identity_clusters")
+
+    async def link(
+        self,
+        cluster_id: str,
+        entity_id: str,
+        tenant_id: str,
+        identifier_type: str,
+        identifier_value: str,
+        confidence: float = 1.0,
+        provenance: Optional[dict] = None,
+    ) -> dict:
+        return await self.insert(cluster_id, {
+            "cluster_id": cluster_id,
+            "entity_id": entity_id,
+            "tenant_id": tenant_id,
+            "identifier_type": identifier_type,
+            "identifier_value": identifier_value,
+            "confidence": confidence,
+            "linked_at": utc_now().isoformat(),
+            "unlinked_at": None,
+            "provenance": provenance or {},
+        })
+
+    async def unlink(self, cluster_id: str) -> Optional[dict]:
+        record = await self.find_by_id(cluster_id)
+        if record is None:
+            return None
+        record["unlinked_at"] = utc_now().isoformat()
+        return await self.update(cluster_id, record)
+
+    async def list_for_entity(self, entity_id: str) -> list[dict]:
+        results = await self.find_many(
+            filters={"entity_id": entity_id}, limit=500,
+        )
+        return [r for r in results if not r.get("unlinked_at")]
+
+
+class AgentConfigRepository(BaseRepository):
+    """Configuration for user/org-owned LLM agents (distinct from system workers)."""
+
+    def __init__(self) -> None:
+        super().__init__("agent_configs")
+
+    async def register(
+        self,
+        agent_id: str,
+        owner_entity_id: str,
+        tenant_id: str,
+        model: str,
+        tools: Optional[list] = None,
+        constraints: Optional[dict] = None,
+        risk_tolerance: str = "medium",
+    ) -> dict:
+        return await self.insert(agent_id, {
+            "agent_id": agent_id,
+            "owner_entity_id": owner_entity_id,
+            "tenant_id": tenant_id,
+            "model": model,
+            "tools": tools or [],
+            "constraints": constraints or {},
+            "risk_tolerance": risk_tolerance,
+            "policy_version": 1,
+        })
+
+    async def list_for_owner(self, owner_entity_id: str) -> list[dict]:
+        return await self.find_many(
+            filters={"owner_entity_id": owner_entity_id}, limit=200,
+        )
+
+
+class AgentExecutionRepository(BaseRepository):
+    """Per-execution log with reasoning, confidence, policy log."""
+
+    def __init__(self) -> None:
+        super().__init__("agent_executions")
+
+    async def record(
+        self,
+        execution_id: str,
+        agent_id: str,
+        tenant_id: str,
+        delegation_id: Optional[str],
+        triggered_by_event_id: Optional[str],
+        status: str,
+        reasoning: str = "",
+        confidence: float = 0.0,
+        policy_log: Optional[dict] = None,
+        input_snapshot: Optional[dict] = None,
+        output: Optional[dict] = None,
+        error: Optional[dict] = None,
+        started_at: Optional[str] = None,
+        ended_at: Optional[str] = None,
+    ) -> dict:
+        now = utc_now().isoformat()
+        return await self.insert(execution_id, {
+            "execution_id": execution_id,
+            "agent_id": agent_id,
+            "tenant_id": tenant_id,
+            "delegation_id": delegation_id,
+            "triggered_by_event_id": triggered_by_event_id,
+            "status": status,
+            "reasoning": reasoning,
+            "confidence": confidence,
+            "policy_log": policy_log or {},
+            "input_snapshot": input_snapshot or {},
+            "output": output,
+            "error": error,
+            "started_at": started_at or now,
+            "ended_at": ended_at,
+        })
+
+    async def list_for_agent(self, agent_id: str, limit: int = 50) -> list[dict]:
+        return await self.find_many(
+            filters={"agent_id": agent_id}, limit=limit,
+        )
+
+    async def list_failed(self, tenant_id: str, limit: int = 50) -> list[dict]:
+        results = await self.find_many(
+            filters={"tenant_id": tenant_id, "status": "failed"}, limit=limit,
+        )
+        return results
+
+
+class DelegationRepository(BaseRepository):
+    """Scoped, time-bound, revocable entity-to-entity delegations.
+
+    Hot-path lookup `active_for(grantee_entity_id)` is cached in Redis with a
+    60-second TTL, invalidated on grant/revoke. The DelegationProjector worker
+    mirrors active rows to Neptune as DELEGATES edges for graph traversal.
+    """
+
+    def __init__(self, cache: Optional[CacheClient] = None) -> None:
+        super().__init__("delegations")
+        self._cache = cache
+
+    async def grant(
+        self,
+        delegation_id: str,
+        tenant_id: str,
+        grantor_entity_id: str,
+        grantee_entity_id: str,
+        scope: dict,
+        starts_at: Optional[str] = None,
+        ends_at: Optional[str] = None,
+        metadata: Optional[dict] = None,
+    ) -> dict:
+        record = await self.insert(delegation_id, {
+            "delegation_id": delegation_id,
+            "tenant_id": tenant_id,
+            "grantor_entity_id": grantor_entity_id,
+            "grantee_entity_id": grantee_entity_id,
+            "scope": scope,
+            "starts_at": starts_at or utc_now().isoformat(),
+            "ends_at": ends_at,
+            "revoked_at": None,
+            "revoked_by_entity_id": None,
+            "metadata": metadata or {},
+        })
+        await self._invalidate_cache(grantee_entity_id)
+        return record
+
+    async def revoke(
+        self, delegation_id: str, revoked_by_entity_id: str,
+    ) -> Optional[dict]:
+        record = await self.find_by_id(delegation_id)
+        if record is None or record.get("revoked_at"):
+            return record
+        record["revoked_at"] = utc_now().isoformat()
+        record["revoked_by_entity_id"] = revoked_by_entity_id
+        updated = await self.update(delegation_id, record)
+        await self._invalidate_cache(record["grantee_entity_id"])
+        return updated
+
+    async def active_for(self, grantee_entity_id: str) -> list[dict]:
+        """Return every currently-active delegation for an entity.
+
+        Cached for 60s; invalidated on grant/revoke. The caller iterates and
+        applies scope checks; this repo does no policy interpretation.
+        """
+        cache_key = f"delegations:active:{grantee_entity_id}"
+        if self._cache is not None:
+            cached = await self._cache.get_json(cache_key)
+            if cached is not None:
+                return cached
+
+        all_for_grantee = await self.find_many(
+            filters={"grantee_entity_id": grantee_entity_id}, limit=200,
+        )
+        now_iso = utc_now().isoformat()
+        active = [
+            d for d in all_for_grantee
+            if not d.get("revoked_at")
+            and (d.get("starts_at") or "") <= now_iso
+            and (not d.get("ends_at") or d["ends_at"] > now_iso)
+        ]
+
+        if self._cache is not None:
+            await self._cache.set_json(cache_key, active, TTL.SHORT)
+        return active
+
+    async def _invalidate_cache(self, grantee_entity_id: str) -> None:
+        if self._cache is not None:
+            await self._cache.delete(f"delegations:active:{grantee_entity_id}")
+
+
+class WalletRepository(BaseRepository):
+    """Wallets owned by an entity (an entity may own many)."""
+
+    def __init__(self) -> None:
+        super().__init__("entity_wallets")
+
+    async def link_wallet(
+        self,
+        wallet_id: str,
+        owner_entity_id: str,
+        tenant_id: str,
+        chain: str,
+        address: str,
+    ) -> dict:
+        return await self.insert(wallet_id, {
+            "wallet_id": wallet_id,
+            "owner_entity_id": owner_entity_id,
+            "tenant_id": tenant_id,
+            "chain": chain,
+            "address": address,
+            "linked_at": utc_now().isoformat(),
+        })
+
+
+class AssetRepository(BaseRepository):
+    """Asset catalog: tokens, NFTs, fiat units, credits."""
+
+    def __init__(self) -> None:
+        super().__init__("assets")
+
+
+class TransferRepository(BaseRepository):
+    """Asset movements between entities, attributed to actor + agent + event."""
+
+    def __init__(self) -> None:
+        super().__init__("transfers")
+
+    async def record_transfer(
+        self,
+        transfer_id: str,
+        tenant_id: str,
+        from_entity_id: str,
+        to_entity_id: str,
+        asset_id: str,
+        amount: str,
+        attributed_agent_id: Optional[str] = None,
+        attributed_event_id: Optional[str] = None,
+        delegation_id: Optional[str] = None,
+        tx_hash: Optional[str] = None,
+        metadata: Optional[dict] = None,
+    ) -> dict:
+        return await self.insert(transfer_id, {
+            "transfer_id": transfer_id,
+            "tenant_id": tenant_id,
+            "from_entity_id": from_entity_id,
+            "to_entity_id": to_entity_id,
+            "asset_id": asset_id,
+            "amount": str(amount),
+            "occurred_at": utc_now().isoformat(),
+            "attributed_agent_id": attributed_agent_id,
+            "attributed_event_id": attributed_event_id,
+            "delegation_id": delegation_id,
+            "tx_hash": tx_hash,
+            "metadata": metadata or {},
+        })
+
+    async def list_for_entity(
+        self, entity_id: str, limit: int = 100,
+    ) -> list[dict]:
+        # Two queries because find_many takes equality filters only;
+        # union is fine for our scale.
+        as_from = await self.find_many(
+            filters={"from_entity_id": entity_id}, limit=limit,
+        )
+        as_to = await self.find_many(
+            filters={"to_entity_id": entity_id}, limit=limit,
+        )
+        seen: set[str] = set()
+        merged: list[dict] = []
+        for r in (*as_from, *as_to):
+            tid = r.get("transfer_id") or r.get("id")
+            if tid and tid not in seen:
+                seen.add(tid)
+                merged.append(r)
+        merged.sort(key=lambda r: r.get("occurred_at", ""), reverse=True)
+        return merged[:limit]
+
+
+class BehaviorProfileRepository(BaseRepository):
+    """Derived behavior snapshots: automation_ratio, decision_latency, etc.
+
+    Recomputed by the BehaviorScorer / RiskScorer / IntentInferrer workers.
+    Profile 360 endpoints read the latest snapshot per entity.
+    """
+
+    def __init__(self) -> None:
+        super().__init__("behavior_profiles")
+
+    async def upsert_snapshot(
+        self,
+        entity_id: str,
+        tenant_id: str,
+        window_start: str,
+        window_end: str,
+        automation_ratio: float = 0.0,
+        decision_latency_ms: int = 0,
+        top_patterns: Optional[list] = None,
+        anomaly_flags: Optional[list] = None,
+        risk_score: float = 0.0,
+        predicted_next: Optional[dict] = None,
+    ) -> dict:
+        snapshot = {
+            "entity_id": entity_id,
+            "tenant_id": tenant_id,
+            "window_start": window_start,
+            "window_end": window_end,
+            "automation_ratio": automation_ratio,
+            "decision_latency_ms": decision_latency_ms,
+            "top_patterns": top_patterns or [],
+            "anomaly_flags": anomaly_flags or [],
+            "risk_score": risk_score,
+            "predicted_next": predicted_next or {},
+            "computed_at": utc_now().isoformat(),
+        }
+        # One row per entity (latest snapshot wins). Use entity_id as key.
+        existing = await self.find_by_id(entity_id)
+        if existing:
+            return await self.update(entity_id, snapshot)
+        return await self.insert(entity_id, snapshot)
+
+
+class JourneyChainRepository(BaseRepository):
+    """Cross-journey memory: link multiple journeys for one entity over time."""
+
+    def __init__(self) -> None:
+        super().__init__("journey_chains")
+
+    async def upsert_chain(
+        self,
+        chain_id: str,
+        entity_id: str,
+        tenant_id: str,
+        first_journey_id: str,
+        last_journey_id: str,
+        journey_count: int,
+        spans_started_at: str,
+        spans_last_seen_at: str,
+        historical_context: Optional[dict] = None,
+    ) -> dict:
+        record = {
+            "chain_id": chain_id,
+            "entity_id": entity_id,
+            "tenant_id": tenant_id,
+            "first_journey_id": first_journey_id,
+            "last_journey_id": last_journey_id,
+            "journey_count": journey_count,
+            "spans_started_at": spans_started_at,
+            "spans_last_seen_at": spans_last_seen_at,
+            "historical_context": historical_context or {},
+        }
+        existing = await self.find_by_id(chain_id)
+        if existing:
+            return await self.update(chain_id, record)
+        return await self.insert(chain_id, record)

@@ -279,3 +279,113 @@ class DataDrivenModel(AttributionModel):
         size_factor = 1.0 - math.exp(-0.5 * len(indices))
         diversity_factor = len(channels) / max(len(indices), 1)
         return size_factor * (0.6 + 0.4 * diversity_factor)
+
+
+# ========================================================================
+# PROFILE 360 — ACTOR-WEIGHTED + EXPOSURE-AWARE MODELS (additive)
+# ========================================================================
+#
+# These two models extend the existing registry to support the Profile 360
+# spec: human-vs-agent credit splitting and impression-aware credit when
+# touchpoints carry exposure metadata in their `properties` block.
+#
+# Hints read from Touchpoint.properties:
+#   - actor_type: "human" | "agent"        (ActorWeightedModel)
+#   - is_impression: bool                  (ExposureAwareModel)
+#   - viewable_dwell_ms: int               (ExposureAwareModel)
+# Touchpoints lacking these hints fall back to the model's default behavior.
+
+class ActorWeightedModel(AttributionModel):
+    """U-shaped distribution that further splits each touchpoint's weight
+    between human and agent actors.
+
+    A touchpoint with `properties.actor_type == "agent"` is multiplied by
+    `agent_weight`; "human" is multiplied by `human_weight`. Weights are
+    re-normalized at the end so the result still sums to 1.0.
+    """
+
+    name = "actor_weighted"
+
+    def __init__(
+        self,
+        human_weight: float = 0.7,
+        agent_weight: float = 0.3,
+        first_weight: float = 0.40,
+        last_weight: float = 0.40,
+    ) -> None:
+        self.human_weight = human_weight
+        self.agent_weight = agent_weight
+        self.first_weight = first_weight
+        self.last_weight = last_weight
+
+    def _actor_factor(self, tp: Touchpoint) -> float:
+        actor_type = (tp.properties or {}).get("actor_type")
+        if actor_type == "agent":
+            return self.agent_weight
+        if actor_type == "human":
+            return self.human_weight
+        return 1.0  # unknown actor — neutral
+
+    async def attribute(self, touchpoints: list[Touchpoint]) -> AttributionResult:
+        n = len(touchpoints)
+        if n == 1:
+            base = [1.0]
+        elif n == 2:
+            base = [self.first_weight, self.last_weight]
+        else:
+            middle_total = 1.0 - self.first_weight - self.last_weight
+            middle_each = middle_total / (n - 2)
+            base = [self.first_weight] + [middle_each] * (n - 2) + [self.last_weight]
+        weighted = [b * self._actor_factor(tp) for b, tp in zip(base, touchpoints)]
+        return self._build_result(touchpoints, weighted)
+
+
+class ExposureAwareModel(AttributionModel):
+    """U-shaped attribution that includes viewable impressions alongside clicks.
+
+    Impressions (touchpoints with `is_impression=True`) only contribute when
+    `viewable_dwell_ms >= dwell_threshold_ms`. Eligible impressions get
+    `impression_weight` of a click's credit; clicks keep their full weight.
+    """
+
+    name = "exposure_aware"
+
+    def __init__(
+        self,
+        first_weight: float = 0.40,
+        last_weight: float = 0.40,
+        impression_weight: float = 0.5,
+        dwell_threshold_ms: int = 1000,
+    ) -> None:
+        self.first_weight = first_weight
+        self.last_weight = last_weight
+        self.impression_weight = impression_weight
+        self.dwell_threshold_ms = dwell_threshold_ms
+
+    def _eligible(self, tp: Touchpoint) -> bool:
+        props = tp.properties or {}
+        if not props.get("is_impression"):
+            return True  # clicks always eligible
+        return int(props.get("viewable_dwell_ms", 0)) >= self.dwell_threshold_ms
+
+    def _impression_multiplier(self, tp: Touchpoint) -> float:
+        if (tp.properties or {}).get("is_impression"):
+            return self.impression_weight
+        return 1.0
+
+    async def attribute(self, touchpoints: list[Touchpoint]) -> AttributionResult:
+        eligible = [tp for tp in touchpoints if self._eligible(tp)]
+        if not eligible:
+            return await LastTouchModel().attribute(touchpoints)
+
+        n = len(eligible)
+        if n == 1:
+            base = [1.0]
+        elif n == 2:
+            base = [self.first_weight, self.last_weight]
+        else:
+            middle_total = 1.0 - self.first_weight - self.last_weight
+            middle_each = middle_total / (n - 2)
+            base = [self.first_weight] + [middle_each] * (n - 2) + [self.last_weight]
+        weighted = [b * self._impression_multiplier(tp) for b, tp in zip(base, eligible)]
+        return self._build_result(eligible, weighted)

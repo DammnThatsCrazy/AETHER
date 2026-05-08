@@ -62,6 +62,16 @@ class VertexType:
     CONTRACT = "Contract"
     PROTOCOL = "Protocol"
 
+    # ── Profile 360 — Multi-Entity Identity (additive) ───────────────────
+    # Generic abstractions used by the Profile 360 layer. Existing services
+    # may keep using USER / AGENT / LEGAL_ENTITY directly; the new
+    # services/entities, services/delegation, services/flows layers prefer
+    # ENTITY / ORGANIZATION / ASSET / DELEGATION for cross-type queries.
+    ENTITY = "Entity"
+    ORGANIZATION = "Organization"
+    ASSET = "Asset"
+    DELEGATION = "Delegation"
+
     # Intelligence Graph — Record nodes
     PAYMENT = "Payment"
     ACTION_RECORD = "ActionRecord"
@@ -150,6 +160,16 @@ class EdgeType:
     LAUNCHED_BY = "LAUNCHED_BY"           # Agent → User who created it
     DELEGATES = "DELEGATES"               # User → Agent (task delegation)
     INTERACTS_WITH = "INTERACTS_WITH"     # User → Protocol
+
+    # ── Profile 360 — Generic relationship edges (additive) ──────────────
+    # Time-aware, metadata-bearing edges used by Profile 360. Properties
+    # carried on every instance: tenant_id, valid_from, valid_to, scope_hash.
+    OWNS = "OWNS"                         # Entity → Wallet|Agent|Asset (generic)
+    MEMBER_OF = "MEMBER_OF"               # Entity → Organization (generic)
+    GRANTED_BY = "GRANTED_BY"             # Delegation → Entity (grantor)
+    GRANTED_TO = "GRANTED_TO"             # Delegation → Entity (grantee)
+    EXECUTED = "EXECUTED"                 # Agent → AgentExecution
+    TRANSFERRED = "TRANSFERRED"           # Entity → Entity (financial flow, with asset_id)
 
     # Intelligence Graph — Economic edges
     PAYS = "PAYS"                         # Agent/User → Agent/Service
