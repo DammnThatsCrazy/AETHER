@@ -148,6 +148,7 @@ from services.web3.routes import router as web3_router
 from services.crossdomain.routes import router as crossdomain_router
 from services.agent.teams_routes import router as agent_teams_router
 from services.agent.feedback_routes import router as agent_feedback_router
+from services.agent.scoring_routes import router as scoring_router
 
 
 # ═══════════════════════════════════════════════════════════════════════
@@ -257,6 +258,7 @@ def create_app() -> FastAPI:
     app.include_router(crossdomain_router)
     app.include_router(agent_teams_router)
     app.include_router(agent_feedback_router)
+    app.include_router(scoring_router)
 
     # ── Intelligence Graph services (feature-flagged) ───────────
     ig = settings.intelligence_graph
