@@ -152,6 +152,8 @@ from services.agent.scoring_routes import router as scoring_router
 from services.diagnostics.queue_routes import router as diagnostics_queue_router
 from services.diagnostics.observability_routes import router as diagnostics_observability_router
 from services.diagnostics.guardrails_routes import router as guardrails_router
+from services.consent.audit_routes import router as audit_router
+from services.admin.billing_subscription_routes import router as admin_billing_subscription_router
 
 # Profile 360 (additive — multi-entity identity, delegation, flows, behavior, realtime)
 from services.entities.routes import router as entities_router
@@ -283,6 +285,8 @@ def create_app() -> FastAPI:
     app.include_router(diagnostics_queue_router)
     app.include_router(diagnostics_observability_router)
     app.include_router(guardrails_router)
+    app.include_router(audit_router)
+    app.include_router(admin_billing_subscription_router)
 
     # ── Profile 360 (additive) ─────────────────────────────────────────
     app.include_router(entities_router)
