@@ -146,6 +146,12 @@ from services.behavioral.routes import router as behavioral_router
 from services.rwa.routes import router as rwa_router
 from services.web3.routes import router as web3_router
 from services.crossdomain.routes import router as crossdomain_router
+from services.agent.teams_routes import router as agent_teams_router
+from services.agent.feedback_routes import router as agent_feedback_router
+from services.agent.scoring_routes import router as scoring_router
+from services.diagnostics.queue_routes import router as diagnostics_queue_router
+from services.diagnostics.observability_routes import router as diagnostics_observability_router
+from services.diagnostics.guardrails_routes import router as guardrails_router
 
 # Profile 360 (additive — multi-entity identity, delegation, flows, behavior, realtime)
 from services.entities.routes import router as entities_router
@@ -271,6 +277,12 @@ def create_app() -> FastAPI:
     app.include_router(rwa_router)
     app.include_router(web3_router)
     app.include_router(crossdomain_router)
+    app.include_router(agent_teams_router)
+    app.include_router(agent_feedback_router)
+    app.include_router(scoring_router)
+    app.include_router(diagnostics_queue_router)
+    app.include_router(diagnostics_observability_router)
+    app.include_router(guardrails_router)
 
     # ── Profile 360 (additive) ─────────────────────────────────────────
     app.include_router(entities_router)
