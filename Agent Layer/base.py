@@ -29,6 +29,12 @@ class BaseWorker(ABC):
     worker_type: WorkerType
     data_source: str  # maps to a RateLimitBudget.source key
 
+    # Optional sink for agent_intelligence trace (multi-actor journey v1).
+    # Set on the class or instance to a callable accepting kwargs:
+    #   event_id, event_date, agent_id, reasoning_text, tool_calls, prompt_hash
+    # Production wires this to the journey-service IcebergSnapshotWriter.
+    reasoning_sink = None
+
     def __init__(self, guardrails: Guardrails):
         self.guardrails = guardrails
 
@@ -79,7 +85,34 @@ class BaseWorker(ABC):
         # 5 — Audit trail
         self._log_audit(task, action=disposition, confidence=result.confidence)
 
+        # 6 — Emit agent_intelligence trace for multi-actor journey v1.
+        # Best-effort; never fails the task on emit error.
+        self._emit_reasoning(task, result)
+
         return result
+
+    # ------------------------------------------------------------------
+    # Multi-actor journey v1 — agent_intelligence emit
+    # ------------------------------------------------------------------
+
+    def _emit_reasoning(self, task: AgentTask, result: TaskResult) -> None:
+        sink = getattr(self, "reasoning_sink", None) or getattr(type(self), "reasoning_sink", None)
+        if sink is None:
+            return
+        # Pull reasoning + tool calls off the result if the worker chose to
+        # populate them; otherwise emit a minimal trace from audit fields.
+        data = getattr(result, "data", {}) or {}
+        try:
+            sink(
+                event_id=getattr(task, "triggering_event_id", task.task_id),
+                event_date=str(getattr(task, "created_at", "") or "")[:10],
+                agent_id=str(self.worker_type),
+                reasoning_text=str(data.get("reasoning") or ""),
+                tool_calls=list(data.get("tool_calls") or []),
+                prompt_hash=str(data.get("prompt_hash") or ""),
+            )
+        except Exception:               # noqa: BLE001
+            logger.exception(f"reasoning_sink failed for task {task.task_id}")
 
     # ------------------------------------------------------------------
     # Subclasses implement this

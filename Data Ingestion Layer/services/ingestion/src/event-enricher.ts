@@ -7,6 +7,8 @@ import type { BaseEvent, EnrichedEvent, EventEnrichment, GeoData, ParsedUserAgen
 import { anonymizeIp, partitionKey, now } from '@aether/common';
 import { createLogger } from '@aether/logger';
 import { readFileSync } from 'node:fs';
+import { ActorResolver, type ResolvedActor } from './actor_resolver';
+import { DelegationGuard, DelegationDenied } from './delegation_guard';
 
 const logger = createLogger('aether.ingestion.enricher');
 const PIPELINE_VERSION = '8.7.1';
@@ -15,6 +17,10 @@ export interface EnrichmentConfig {
   enrichGeo: boolean;
   enrichUA: boolean;
   anonymizeIp: boolean;
+  /** When provided, every event is stamped with actor_id + actor_kind. */
+  resolveActor?: boolean;
+  /** When provided + an event carries delegationId, scope is verified. */
+  enforceDelegation?: boolean;
 }
 
 // =============================================================================
@@ -255,9 +261,75 @@ function resolveGeoIp(ip: string): GeoData | undefined {
 
 export class EventEnricher {
   private config: EnrichmentConfig;
+  private actorResolver?: ActorResolver;
+  private delegationGuard?: DelegationGuard;
 
-  constructor(config: EnrichmentConfig) {
+  constructor(
+    config: EnrichmentConfig,
+    deps?: { actorResolver?: ActorResolver; delegationGuard?: DelegationGuard },
+  ) {
     this.config = config;
+    this.actorResolver = deps?.actorResolver;
+    this.delegationGuard = deps?.delegationGuard;
+  }
+
+  /** Async variant — required when resolveActor / enforceDelegation are on. */
+  async enrichAsync(
+    events: BaseEvent[],
+    projectId: string,
+    clientIp: string,
+    authActor?: { actorId: string; kind: 'human' | 'agent' | 'system'; identifier: string },
+  ): Promise<EnrichedEvent[]> {
+    const sync = this.enrich(events, projectId, clientIp);
+    if (!this.config.resolveActor || !this.actorResolver) return sync;
+
+    const out: EnrichedEvent[] = [];
+    for (let i = 0; i < events.length; i++) {
+      const ev = events[i];
+      const ctx = (ev.context as Record<string, unknown>) || {};
+      const actor: ResolvedActor = await this.actorResolver.resolve({
+        explicitActorId: typeof ctx.actorId === 'string' ? ctx.actorId : undefined,
+        explicitActorKind: typeof ctx.actorKind === 'string' ? ctx.actorKind as 'human' | 'agent' | 'system' : undefined,
+        apiKeyActor: authActor,
+        userId: ev.userId,
+        anonymousId: ev.anonymousId,
+        eventType: ev.type,
+        tenantId: typeof ctx.tenantId === 'string' ? ctx.tenantId : undefined,
+        orgId: typeof ctx.orgId === 'string' ? ctx.orgId : undefined,
+      });
+
+      let delegationStamp: { delegationId: string; scope: string[] } | undefined;
+      if (this.config.enforceDelegation && this.delegationGuard && typeof ctx.delegationId === 'string') {
+        const requiredScope = Array.isArray(ctx.delegationScope)
+          ? (ctx.delegationScope as string[])
+          : [ev.type];
+        try {
+          const grant = await this.delegationGuard.authorize({
+            delegateeActorId: actor.actorId,
+            requiredScope,
+            delegationId: ctx.delegationId as string,
+          });
+          delegationStamp = { delegationId: grant.delegationId, scope: grant.scope };
+        } catch (e) {
+          if (e instanceof DelegationDenied) {
+            logger.warn('event:dropped:delegation_denied', { eventId: ev.id, actor: actor.actorId });
+            continue;            // drop the event
+          }
+          throw e;
+        }
+      }
+
+      out.push({
+        ...sync[i],
+        context: {
+          ...sync[i].context,
+          actorId: actor.actorId,
+          actorKind: actor.kind,
+          ...(delegationStamp ? { delegationId: delegationStamp.delegationId, delegationScope: delegationStamp.scope } : {}),
+        } as EnrichedEvent['context'],
+      });
+    }
+    return out;
   }
 
   /** Enrich a batch of validated events */

@@ -122,6 +122,34 @@ services:
       REDIS_HOST: redis
     command: uvicorn serving.src.api:app --host 0.0.0.0 --port 8080
 
+  journey-service:
+    build:
+      context: "Backend Architecture/services/journey-service"
+      dockerfile: Dockerfile
+    ports:
+      - "8090:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+      clickhouse:
+        condition: service_started
+    env_file: .env
+    environment:
+      AETHER_ENV: staging
+      DATABASE_URL: postgresql://aether:aether_dev_password@postgres:5432/aether
+      REDIS_HOST: redis
+      REDIS_PORT: "6379"
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      CLICKHOUSE_HOST: clickhouse
+      CLICKHOUSE_PORT: "9000"
+      JOURNEY_CONSUMER_AUTOSTART: "1"
+      ICEBERG_CATALOG_URI: ${ICEBERG_CATALOG_URI:-}
+      ICEBERG_S3_BUCKET:   ${ICEBERG_S3_BUCKET:-aether-snapshots-dev}
+
   kyber:
     build:
       context: .

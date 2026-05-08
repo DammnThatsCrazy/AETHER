@@ -29,6 +29,10 @@ class VertexType:
     COMPANY = "Company"
     CAMPAIGN = "Campaign"
     EXTERNAL_DATA = "ExternalData"
+    # Multi-actor journey v1
+    ACTOR = "Actor"
+    JOURNEY = "Journey"
+    DELEGATION = "Delegation"
 
 
 class EdgeType:
@@ -40,6 +44,18 @@ class EdgeType:
     ATTRIBUTED_TO = "ATTRIBUTED_TO"
     RESOLVED_AS = "RESOLVED_AS"
     ENRICHED_BY = "ENRICHED_BY"
+    # Multi-actor journey v1
+    REPRESENTS = "REPRESENTS"          # Actor -> User (typed projection)
+    OWNS = "OWNS"                      # Actor -> Actor
+    DELEGATES_TO = "DELEGATES_TO"      # Actor -> Actor
+    MANAGES = "MANAGES"                # Actor -> Actor
+    COLLABORATES_WITH = "COLLABORATES_WITH"
+    HAS_JOURNEY = "HAS_JOURNEY"        # Actor -> Journey
+    CONTAINS_SESSION = "CONTAINS_SESSION"  # Journey -> Session
+    PRECEDED_BY = "PRECEDED_BY"        # Journey -> Journey
+    CONTINUED_FROM = "CONTINUED_FROM"  # Journey -> Journey
+    TRIGGERED_BY = "TRIGGERED_BY"      # Event -> Event (causality)
+    INFLUENCED_BY = "INFLUENCED_BY"    # Event -> Event (causality)
 
 
 # ═══════════════════════════════════════════════════════════════════════════
