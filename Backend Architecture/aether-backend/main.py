@@ -154,6 +154,15 @@ from services.diagnostics.observability_routes import router as diagnostics_obse
 from services.diagnostics.guardrails_routes import router as guardrails_router
 from services.consent.audit_routes import router as audit_router
 
+# Profile 360 (additive — multi-entity identity, delegation, flows, behavior, realtime)
+from services.entities.routes import router as entities_router
+from services.delegation.routes import router as delegation_router
+from services.flows.routes import router as flows_router
+from services.behavior.routes import router as behavior_router
+from services.agent.user_agents import router as user_agents_router
+from services.realtime.routes import router as realtime_router
+from services.profile360_workers import attach_profile360_workers
+
 
 # ═══════════════════════════════════════════════════════════════════════
 # LIFESPAN — startup / shutdown hooks
@@ -168,6 +177,15 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     """
     registry = get_registry()
     await registry.startup()
+
+    # Profile 360 — attach derived workers to the shared consumer.
+    # Strictly additive: workers consume new topics + a few existing ones,
+    # write to new tables only, and never mutate existing service state.
+    try:
+        attach_profile360_workers(registry.consumer, registry.graph)
+        await registry.consumer.start()
+    except Exception as e:  # pragma: no cover — defensive
+        logger.warning(f"Profile 360 worker wiring skipped: {e}")
 
     # Provider Gateway (feature-flagged)
     from dependencies.providers import _init_provider_gateway
@@ -267,6 +285,14 @@ def create_app() -> FastAPI:
     app.include_router(diagnostics_observability_router)
     app.include_router(guardrails_router)
     app.include_router(audit_router)
+
+    # ── Profile 360 (additive) ─────────────────────────────────────────
+    app.include_router(entities_router)
+    app.include_router(delegation_router)
+    app.include_router(flows_router)
+    app.include_router(behavior_router)
+    app.include_router(user_agents_router)
+    app.include_router(realtime_router)
 
     # ── Intelligence Graph services (feature-flagged) ───────────
     ig = settings.intelligence_graph

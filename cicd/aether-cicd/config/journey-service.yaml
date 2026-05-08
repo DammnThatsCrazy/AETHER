@@ -1,0 +1,53 @@
+# =============================================================================
+# Aether journey-service — CI/CD descriptor
+# =============================================================================
+service: journey-service
+language: python
+python_version: "3.11"
+
+build:
+  dockerfile: "Backend Architecture/services/journey-service/Dockerfile"
+  context: "Backend Architecture/services/journey-service"
+  image: aether/journey-service
+
+test:
+  unit:
+    command: pytest -q "Backend Architecture/services/journey-service/tests"
+  integration:
+    command: pytest -q "tests/integration/journey"
+
+deploy:
+  staging:
+    replicas: 2
+    cpu: "500m"
+    memory: "1Gi"
+    env:
+      JOURNEY_CONSUMER_AUTOSTART: "1"
+  production:
+    replicas: 4
+    cpu: "1000m"
+    memory: "2Gi"
+    autoscale:
+      min: 4
+      max: 16
+      target_cpu_percent: 70
+
+dependencies:
+  - postgres
+  - redis
+  - kafka
+  - clickhouse
+  - neptune
+
+migrations:
+  postgres:
+    - "Backend Architecture/migrations/2026_05_actors_journeys.sql"
+  clickhouse:
+    - "Data Lake Architecture/aether-Datalake-backend/services/data-lake/src/schema/migrations/2026_05_event_extension.sql"
+
+observability:
+  metrics_port: 8080
+  health_path: /health
+  slo:
+    p99_event_processing_ms: 250
+    error_rate_pct: 0.5

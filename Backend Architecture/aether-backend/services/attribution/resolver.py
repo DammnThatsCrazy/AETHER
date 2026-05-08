@@ -26,9 +26,11 @@ from datetime import datetime, timedelta, timezone
 from typing import Any, Optional
 
 from services.attribution.models import (
+    ActorWeightedModel,
     AttributionModel,
     AttributionResult,
     DataDrivenModel,
+    ExposureAwareModel,
     FirstTouchModel,
     LastTouchModel,
     LinearModel,
@@ -137,6 +139,8 @@ class AttributionResolver:
             TimeDecayModel(),
             PositionBasedModel(),
             DataDrivenModel(),
+            ActorWeightedModel(),
+            ExposureAwareModel(),
         ]
         for model in defaults:
             self._models[model.name] = model

@@ -133,6 +133,48 @@ export interface LibraryContext {
   version: string;
 }
 
+// ---------------------------------------------------------------------------
+// Multi-actor journey v1 — optional event-completeness fields.
+// All optional → existing SDKs keep working unchanged.
+// ---------------------------------------------------------------------------
+
+export type ActorKind = 'human' | 'agent' | 'system';
+
+export interface ImpressionRecord {
+  surface: string;          // e.g. 'home_feed', 'product_grid'
+  itemId: string;
+  position?: number;
+  viewableMs?: number;
+  viewportPct?: number;
+  clicked?: boolean;
+}
+
+export interface IntentHint {
+  predictedGoal: string;
+  confidence: number;       // 0..1
+}
+
+export interface FrictionRecord {
+  errorCode?: string;
+  retryCount?: number;
+  latencyMs?: number;
+  [k: string]: string | number | undefined;
+}
+
+export interface EngagementRecord {
+  depth?: number;
+  dwellMs?: number;
+  scrollPct?: number;
+  [k: string]: number | undefined;
+}
+
+export interface DataQualityRecord {
+  completeness?: number;    // 0..1
+  freshness?: number;       // 0..1
+  sourceTrust?: number;     // 0..1
+  [k: string]: number | undefined;
+}
+
 export interface EventContext {
   library: LibraryContext;
   page?: PageContext;
@@ -148,6 +190,24 @@ export interface EventContext {
   /** Optional tenant/org binding for B2B + hybrid companies. */
   tenantId?: string;
   orgId?: string;
+
+  // -- multi-actor journey v1 ------------------------------------------------
+  /** Resolved or SDK-provided actor performing the event. */
+  actorId?: string;
+  actorKind?: ActorKind;
+  /** When an actor acts on behalf of another (e.g. agent → human owner). */
+  beneficiaryActorId?: string;
+
+  /** Active delegation grant covering this action, if any. */
+  delegationId?: string;
+  delegationScope?: string[];
+
+  /** Identity-stitching metadata. */
+  identityConfidence?: number;          // 0..1
+  identitySignals?: string[];           // e.g. ['login','wallet_match','cookie']
+
+  /** Impressions seen but not necessarily clicked (exposure-aware attribution). */
+  impressions?: ImpressionRecord[];
 }
 
 /** The canonical event envelope every SDK emits. */
