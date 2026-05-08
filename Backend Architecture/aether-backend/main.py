@@ -152,6 +152,7 @@ from services.agent.scoring_routes import router as scoring_router
 from services.diagnostics.queue_routes import router as diagnostics_queue_router
 from services.diagnostics.observability_routes import router as diagnostics_observability_router
 from services.diagnostics.guardrails_routes import router as guardrails_router
+from services.consent.audit_routes import router as audit_router
 
 
 # ═══════════════════════════════════════════════════════════════════════
@@ -265,6 +266,7 @@ def create_app() -> FastAPI:
     app.include_router(diagnostics_queue_router)
     app.include_router(diagnostics_observability_router)
     app.include_router(guardrails_router)
+    app.include_router(audit_router)
 
     # ── Intelligence Graph services (feature-flagged) ───────────
     ig = settings.intelligence_graph
