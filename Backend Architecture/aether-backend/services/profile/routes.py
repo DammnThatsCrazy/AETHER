@@ -27,7 +27,16 @@ from shared.cache.cache import CacheClient
 from shared.graph.graph import GraphClient
 from shared.logger.logger import get_logger, metrics
 from dependencies.providers import get_cache, get_graph
-from repositories.repos import IdentityRepository, AnalyticsRepository, ConsentRepository
+from repositories.repos import (
+    AgentConfigRepository,
+    AgentExecutionRepository,
+    AnalyticsRepository,
+    BehaviorProfileRepository,
+    ConsentRepository,
+    DelegationRepository,
+    IdentityRepository,
+    TransferRepository,
+)
 from repositories.lake import gold_identity, gold_market, gold_onchain, gold_social
 from services.profile.resolver import ProfileResolver
 from services.profile.composer import ProfileComposer
@@ -229,6 +238,130 @@ async def resolve_identifier(
         raise NotFoundError("No profile found for the given identifier")
 
     return APIResponse(data={"resolved_user_id": resolved}).to_dict()
+
+
+# ── Profile 360 sub-resources (additive) ──────────────────────────────
+#
+# These endpoints layer Profile 360 dimensions onto the existing entity
+# (user_id) URL space. They reuse the new repositories directly so they
+# work in both the in-memory dev mode and production. Existing endpoints
+# above are unchanged.
+
+_user_agent_repo = AgentConfigRepository()
+_user_exec_repo = AgentExecutionRepository()
+_transfer_repo = TransferRepository()
+_behavior_repo = BehaviorProfileRepository()
+_delegation_repo: Optional[DelegationRepository] = None
+
+
+def _get_delegation_repo(cache: CacheClient = Depends(get_cache)) -> DelegationRepository:
+    global _delegation_repo
+    if _delegation_repo is None:
+        _delegation_repo = DelegationRepository(cache=cache)
+    return _delegation_repo
+
+
+@router.get("/{user_id}/agents")
+async def get_owned_agents(user_id: str, request: Request):
+    """User/org-owned LLM agents whose owner_entity_id matches this profile."""
+    request.state.tenant.require_permission("read")
+    rows = await _user_agent_repo.list_for_owner(user_id)
+    rows = [r for r in rows if r.get("tenant_id") == request.state.tenant.tenant_id]
+    return APIResponse(data={"user_id": user_id, "agents": rows, "count": len(rows)}).to_dict()
+
+
+@router.get("/{user_id}/delegations")
+async def get_delegations(
+    user_id: str,
+    request: Request,
+    role: str = Query("both", description="grantor | grantee | both"),
+    active: bool = Query(True),
+    repo: DelegationRepository = Depends(_get_delegation_repo),
+):
+    """Delegations granted by, or received by, this entity."""
+    tenant = request.state.tenant
+    tenant.require_permission("read")
+    granted: list = []
+    received: list = []
+    if role in ("grantor", "both"):
+        granted = await repo.find_many(
+            filters={"grantor_entity_id": user_id}, limit=200,
+        )
+        granted = [r for r in granted if r.get("tenant_id") == tenant.tenant_id]
+    if role in ("grantee", "both"):
+        received = (
+            await repo.active_for(user_id) if active
+            else await repo.find_many(filters={"grantee_entity_id": user_id}, limit=200)
+        )
+        received = [r for r in received if r.get("tenant_id") == tenant.tenant_id]
+    return APIResponse(data={
+        "user_id": user_id,
+        "granted": granted,
+        "received": received,
+    }).to_dict()
+
+
+@router.get("/{user_id}/flows")
+async def get_flows(
+    user_id: str,
+    request: Request,
+    limit: int = Query(100, ge=1, le=500),
+):
+    """Asset transfers in or out of this entity."""
+    tenant = request.state.tenant
+    tenant.require_permission("read")
+    rows = await _transfer_repo.list_for_entity(user_id, limit=limit)
+    rows = [r for r in rows if r.get("tenant_id") == tenant.tenant_id]
+    return APIResponse(data={
+        "user_id": user_id,
+        "transfers": rows,
+        "count": len(rows),
+    }).to_dict()
+
+
+@router.get("/{user_id}/behavior")
+async def get_behavior(user_id: str, request: Request):
+    """Latest derived behavior snapshot (automation_ratio, decision_latency, ...)."""
+    tenant = request.state.tenant
+    tenant.require_permission("read")
+    record = await _behavior_repo.find_by_id(user_id)
+    if record is None or record.get("tenant_id") != tenant.tenant_id:
+        # Return an empty-but-shaped response rather than 404 — derived data
+        # may simply not have been computed yet.
+        return APIResponse(data={
+            "user_id": user_id,
+            "snapshot": None,
+            "computed": False,
+        }).to_dict()
+    return APIResponse(data={
+        "user_id": user_id,
+        "snapshot": record,
+        "computed": True,
+    }).to_dict()
+
+
+@router.get("/{user_id}/predictions")
+async def get_predictions(user_id: str, request: Request):
+    """Next-likely-action and risk-flag projections (derived).
+
+    Reads from the behavior_profiles snapshot's predicted_next + anomaly_flags.
+    """
+    tenant = request.state.tenant
+    tenant.require_permission("read")
+    record = await _behavior_repo.find_by_id(user_id)
+    if record is None or record.get("tenant_id") != tenant.tenant_id:
+        return APIResponse(data={
+            "user_id": user_id,
+            "predicted_next": None,
+            "risk_flags": [],
+            "risk_score": 0.0,
+        }).to_dict()
+    return APIResponse(data={
+        "user_id": user_id,
+        "predicted_next": record.get("predicted_next") or {},
+        "risk_flags": record.get("anomaly_flags") or [],
+        "risk_score": record.get("risk_score") or 0.0,
+    }).to_dict()
 
 
 # ── Lake Data by Domain ──────────────────────────────────────────────
