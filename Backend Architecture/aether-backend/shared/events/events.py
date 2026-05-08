@@ -156,6 +156,29 @@ class Topic(str, Enum):
     ML_EXTRACTION_ALERT_OPENED = "aether.extraction.alert.opened"
     ML_EXTRACTION_CLUSTER_ESCALATED = "aether.extraction.cluster.escalated"
 
+    # ── Profile 360 — Multi-Entity, Delegation, Flows, Behavior (additive) ─
+    # All new topics; no existing topic is renamed or repurposed.
+    ENTITY_CREATED = "aether.entity.created"
+    ENTITY_UPDATED = "aether.entity.updated"
+    ENTITY_IDENTIFIER_LINKED = "aether.entity.identifier.linked"
+    ENTITY_IDENTIFIER_UNLINKED = "aether.entity.identifier.unlinked"
+    ENTITY_MEMBERSHIP_ADDED = "aether.entity.membership.added"
+
+    DELEGATION_CREATED = "aether.delegation.created"
+    DELEGATION_REVOKED = "aether.delegation.revoked"
+    DELEGATION_VALIDATED = "aether.delegation.validated"
+    DELEGATION_REJECTED = "aether.delegation.rejected"
+
+    FLOW_TRANSFER = "aether.flow.transfer"
+    FLOW_WALLET_LINKED = "aether.flow.wallet.linked"
+
+    AGENT_EXECUTION_STARTED = "aether.agent.execution.started"
+    AGENT_EXECUTION_COMPLETED = "aether.agent.execution.completed"
+    AGENT_EXECUTION_FAILED = "aether.agent.execution.failed"
+    AGENT_EXECUTION_RECOVERED = "aether.agent.execution.recovered"
+
+    BEHAVIOR_PROFILE_UPDATED = "aether.behavior.profile.updated"
+
     # Dead letter
     DEAD_LETTER = "aether.dlq"
 
@@ -163,6 +186,50 @@ class Topic(str, Enum):
 # ═══════════════════════════════════════════════════════════════════════════
 # EVENT SCHEMA
 # ═══════════════════════════════════════════════════════════════════════════
+
+# ─────────────────────────────────────────────────────────────────────────
+# Schema v2 envelope blocks (additive, all optional)
+#
+# Every block is None-able. Old producers keep emitting events with
+# version="1.0" and only `payload`; consumers continue to read the same
+# fields. New producers may set version="2.0" and populate any subset of
+# the v2 blocks below — they ride alongside the original payload.
+#
+# Consumers that don't know about v2 simply ignore the new top-level keys.
+# ─────────────────────────────────────────────────────────────────────────
+
+
+@dataclass
+class EventEnvelopeV2:
+    """Profile 360 v2 envelope — every field optional, additive only."""
+    actor: Optional[dict[str, Any]] = None              # {entity_id, entity_type}
+    beneficiary: Optional[dict[str, Any]] = None        # {entity_id, entity_type}
+    attribution: Optional[dict[str, Any]] = None        # {source, campaign, touch_model, exposure_aware}
+    state_snapshot: Optional[dict[str, Any]] = None     # {user_state_hash, system_state_hash, snapshot_ref_s3}
+    temporal_context: Optional[dict[str, Any]] = None   # {since_session_start_ms, since_last_event_ms, journey_chain_id}
+    causality: Optional[dict[str, Any]] = None          # {triggered_by_event_id, dependency_event_ids[], causal_score}
+    decision_context: Optional[dict[str, Any]] = None   # {options_shown[], chosen, ranking_model_version}
+    exposure: Optional[dict[str, Any]] = None           # {impressions[], dwell_ms[], visible_pct[]}
+    friction: Optional[dict[str, Any]] = None           # {errors[], retries, latency_ms}
+    engagement: Optional[dict[str, Any]] = None         # {depth, scroll_pct, time_on_event_ms}
+    intent: Optional[dict[str, Any]] = None             # {predicted_goal, model_version, confidence}
+    environment: Optional[dict[str, Any]] = None        # {device, os, network, geo_region}
+    identity_confidence: Optional[float] = None
+    delegation: Optional[dict[str, Any]] = None         # {delegation_id, scope, granted_by_entity_id}
+    agent_intelligence: Optional[dict[str, Any]] = None # {agent_id, reasoning, confidence, policy_log_ref}
+    economic_context: Optional[dict[str, Any]] = None   # {price, currency, discounts[], total}
+    system_actions: Optional[dict[str, Any]] = None     # {recommendations[], ranking[], chosen_index}
+    consent: Optional[dict[str, Any]] = None            # {consent_id, purposes[], granted_at}
+    data_quality: Optional[dict[str, Any]] = None       # {ingestion_lag_ms, source_reliability, schema_version}
+
+    def to_dict(self) -> dict[str, Any]:
+        result: dict[str, Any] = {}
+        for fname in self.__dataclass_fields__:
+            value = getattr(self, fname)
+            if value is not None:
+                result[fname] = value
+        return result
+
 
 @dataclass
 class Event:
@@ -177,9 +244,16 @@ class Event:
     correlation_id: str = ""
     version: str = "1.0"
     retry_count: int = 0
+    envelope: Optional[EventEnvelopeV2] = None  # v2 enrichment (optional)
+
+    def with_v2(self, envelope: EventEnvelopeV2) -> "Event":
+        """Attach a v2 envelope and bump the schema version."""
+        self.envelope = envelope
+        self.version = "2.0"
+        return self
 
     def serialize(self) -> str:
-        return json.dumps({
+        out: dict[str, Any] = {
             "event_id": self.event_id,
             "topic": self.topic.value,
             "version": self.version,
@@ -189,11 +263,23 @@ class Event:
             "correlation_id": self.correlation_id,
             "payload": self.payload,
             "retry_count": self.retry_count,
-        })
+        }
+        if self.envelope is not None:
+            out["envelope"] = self.envelope.to_dict()
+        return json.dumps(out)
 
     @classmethod
     def deserialize(cls, raw: str) -> Event:
         data = json.loads(raw)
+        envelope_data = data.get("envelope")
+        envelope = (
+            EventEnvelopeV2(**{
+                k: v for k, v in envelope_data.items()
+                if k in EventEnvelopeV2.__dataclass_fields__
+            })
+            if envelope_data
+            else None
+        )
         return cls(
             event_id=data["event_id"],
             topic=Topic(data["topic"]),
@@ -204,6 +290,7 @@ class Event:
             correlation_id=data.get("correlation_id", ""),
             payload=data["payload"],
             retry_count=data.get("retry_count", 0),
+            envelope=envelope,
         )
 
 
