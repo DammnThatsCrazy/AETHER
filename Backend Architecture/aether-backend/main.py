@@ -149,6 +149,9 @@ from services.crossdomain.routes import router as crossdomain_router
 from services.agent.teams_routes import router as agent_teams_router
 from services.agent.feedback_routes import router as agent_feedback_router
 from services.agent.scoring_routes import router as scoring_router
+from services.diagnostics.queue_routes import router as diagnostics_queue_router
+from services.diagnostics.observability_routes import router as diagnostics_observability_router
+from services.diagnostics.guardrails_routes import router as guardrails_router
 
 
 # ═══════════════════════════════════════════════════════════════════════
@@ -259,6 +262,9 @@ def create_app() -> FastAPI:
     app.include_router(agent_teams_router)
     app.include_router(agent_feedback_router)
     app.include_router(scoring_router)
+    app.include_router(diagnostics_queue_router)
+    app.include_router(diagnostics_observability_router)
+    app.include_router(guardrails_router)
 
     # ── Intelligence Graph services (feature-flagged) ───────────
     ig = settings.intelligence_graph
