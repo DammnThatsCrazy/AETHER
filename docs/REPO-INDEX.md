@@ -50,6 +50,7 @@ The following authored docs are expected to stay aligned with code changes:
 - `PRODUCTION-READINESS.md`
 - `ROLLBACK-RUNBOOK.md`
 - `SECRET-ROTATION.md`
+- `SEMANTIC-CONTEXT-INTELLIGENCE.md`
 - `SMOKE-TEST-CHECKLIST.md`
 - `STABLECOIN-RAILS.md`
 - `STRIPE-BILLING.md`
