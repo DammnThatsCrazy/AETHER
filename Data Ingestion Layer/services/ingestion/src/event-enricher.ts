@@ -286,7 +286,7 @@ export class EventEnricher {
     const out: EnrichedEvent[] = [];
     for (let i = 0; i < events.length; i++) {
       const ev = events[i];
-      const ctx = (ev.context as Record<string, unknown>) || {};
+      const ctx = (ev.context as unknown as Record<string, unknown>) || {};
       const actor: ResolvedActor = await this.actorResolver.resolve({
         explicitActorId: typeof ctx.actorId === 'string' ? ctx.actorId : undefined,
         explicitActorKind: typeof ctx.actorKind === 'string' ? ctx.actorKind as 'human' | 'agent' | 'system' : undefined,
