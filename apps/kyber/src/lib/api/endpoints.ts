@@ -305,6 +305,36 @@ export const api = {
     },
   },
 
+  // ── Profile360 normalized surfaces ──
+  profile360: {
+    full: (entityType: string, entityId: string) =>
+      restClient.get(`/v1/profile360/${entityType}/${entityId}?include=identity,system,financial,graph,timeline,analytics,debug`, apiResponseSchema(z.unknown()))
+        .then(r => r.data),
+
+    graph: (entityType: string, entityId: string, params?: { cursor?: string; limit?: number; start?: string; end?: string }) => {
+      const qs = new URLSearchParams();
+      if (params?.cursor) qs.set('cursor', params.cursor);
+      if (params?.limit) qs.set('limit', String(params.limit));
+      if (params?.start) qs.set('start', params.start);
+      if (params?.end) qs.set('end', params.end);
+      const query = qs.toString();
+      return restClient.get(`/v1/profile360/${entityType}/${entityId}/graph${query ? `?${query}` : ''}`, apiResponseSchema(z.unknown()))
+        .then(r => r.data);
+    },
+
+    timeline: (entityType: string, entityId: string, params?: { cursor?: string; limit?: number; start?: string; end?: string; type?: string }) => {
+      const qs = new URLSearchParams();
+      if (params?.cursor) qs.set('cursor', params.cursor);
+      if (params?.limit) qs.set('limit', String(params.limit));
+      if (params?.start) qs.set('start', params.start);
+      if (params?.end) qs.set('end', params.end);
+      if (params?.type) qs.set('type', params.type);
+      const query = qs.toString();
+      return restClient.get(`/v1/profile360/${entityType}/${entityId}/timeline${query ? `?${query}` : ''}`, apiResponseSchema(z.unknown()))
+        .then(r => r.data);
+    },
+  },
+
   // ── Identity ──
   identity: {
     getProfile: (userId: string) =>
