@@ -8,3 +8,4 @@ export * from './events';
 export * from './graph';
 export * from './review';
 export * from './health';
+export * from './profile360';
