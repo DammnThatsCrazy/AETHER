@@ -20,19 +20,41 @@ import { useEntityData } from '@kyber/features/entities';
 import { Entity360Page } from './entity-360';
 
 const ENTITY_TYPES: EntityType[] = [
+  'human',
   'customer',
-  'wallet',
   'agent',
+  'organization',
+  'wallet',
+  'journey',
+  'session',
   'protocol',
+  'platform',
+  'device',
+  'browser',
+  'reward',
+  'financial_activity',
+  'delegation',
+  'relationship',
   'contract',
   'cluster',
 ];
 
 const ENTITY_TYPE_LABELS: Record<EntityType, string> = {
+  human: 'Humans',
   customer: 'Customers',
-  wallet: 'Wallets',
   agent: 'Agents',
+  organization: 'Organizations',
+  wallet: 'Wallets',
+  journey: 'Journeys',
+  session: 'Sessions',
   protocol: 'Protocols',
+  platform: 'Platforms',
+  device: 'Devices',
+  browser: 'Browsers',
+  reward: 'Rewards',
+  financial_activity: 'Financial',
+  delegation: 'Delegations',
+  relationship: 'Relationships',
   contract: 'Contracts',
   cluster: 'Clusters',
 };

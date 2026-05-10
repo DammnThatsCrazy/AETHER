@@ -10,7 +10,7 @@ export const healthStatusSchema = z.object({
 
 export const severitySchema = z.enum(['P0', 'P1', 'P2', 'P3', 'info']);
 
-export const entityTypeSchema = z.enum(['customer', 'wallet', 'agent', 'protocol', 'contract', 'cluster']);
+export const entityTypeSchema = z.enum(['human', 'customer', 'agent', 'organization', 'wallet', 'journey', 'session', 'protocol', 'platform', 'device', 'browser', 'reward', 'financial_activity', 'delegation', 'relationship', 'contract', 'cluster']);
 
 export const paginatedResponseSchema = <T extends z.ZodType>(itemSchema: T) =>
   z.object({
