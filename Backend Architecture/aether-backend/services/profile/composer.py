@@ -20,6 +20,7 @@ from repositories.lake import (
     silver_identity, silver_onchain, silver_social,
 )
 from services.profile.resolver import ProfileResolver
+from services.profile.economic import AgentProfile360EconomicComposer
 
 logger = get_logger("aether.profile.composer")
 
@@ -82,6 +83,7 @@ class ProfileComposer:
         self._cache = cache
         self._resolver = resolver
         self._scorer = TrustScoreComposite()
+        self._agent_economic = AgentProfile360EconomicComposer()
 
     async def get_full_profile(
         self,
@@ -91,6 +93,7 @@ class ProfileComposer:
         include_graph: bool = True,
         include_intelligence: bool = True,
         include_lake: bool = True,
+        include_agent_economic: bool = False,
         timeline_limit: int = 50,
         graph_depth: int = 1,
     ) -> dict:
@@ -128,6 +131,16 @@ class ProfileComposer:
         if include_lake:
             lake_data = await self._compose_lake_data(user_id)
 
+        # 8. Agent economic Profile360 telemetry (opt-in/additive).
+        # Uses the same profile_id value as agent_id when callers are composing
+        # an agent profile; human/user profile responses remain unchanged unless
+        # this flag is enabled by an agent route.
+        agent_economic = {}
+        if include_agent_economic:
+            agent_economic = await self._agent_economic.compose(
+                agent_id=user_id, tenant_id=tenant_id, limit=timeline_limit
+            )
+
         metrics.increment("profile_360_composed")
         return {
             "profile_id": user_id,
@@ -139,12 +152,13 @@ class ProfileComposer:
             "graph": graph_context,
             "intelligence": intelligence,
             "lake": lake_data,
+            "agent_economic": agent_economic,
             "computed_at": now,
             "provenance": {
                 "source": "profile_360_composer",
                 "subsystems_queried": [
                     "identity", "graph", "analytics", "consent",
-                    "lake_gold", "trust_scorer",
+                    "lake_gold", "trust_scorer", "agent_economic",
                 ],
             },
         }

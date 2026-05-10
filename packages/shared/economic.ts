@@ -688,3 +688,338 @@ export function createHandshake(
 export function createResourceNode(input: ResourceNode): ResourceNode {
   return validateResourceNode(input);
 }
+
+// ---------------------------------------------------------------------------
+// 12. Economic graph layer — frontend-ready agent economy entities
+// ---------------------------------------------------------------------------
+
+export type EconomicSettlementStatus =
+  | 'quoted'
+  | 'evaluating'
+  | 'authorized'
+  | 'pending'
+  | 'settled'
+  | 'failed'
+  | 'timeout'
+  | 'abandoned';
+
+export type EconomicResourceType =
+  | 'inference'
+  | 'gpu_compute'
+  | 'api_access'
+  | 'dataset'
+  | 'memory_retrieval'
+  | 'execution_right'
+  | 'orchestration_service'
+  | 'agent_service';
+
+export interface PaymentIntent {
+  id: string;
+  agent_id: string;
+  amount: number;
+  currency: string;
+  provider: string;
+  protocol?: string;
+  endpoint?: string;
+  capability_requested?: string;
+  settlement_status: EconomicSettlementStatus;
+  retry_count: number;
+  timestamp: number;
+  resource_id?: string;
+  facilitator_id?: string;
+  authorization_id?: string;
+  execution_id?: string;
+  abandoned_reason?: string;
+  metadata?: Record<string, unknown>;
+}
+
+export interface SettlementEvent {
+  id: string;
+  intent_id: string;
+  agent_id: string;
+  status: EconomicSettlementStatus;
+  amount: number;
+  currency: string;
+  provider?: string;
+  protocol?: string;
+  facilitator_id?: string;
+  retry_count?: number;
+  failure_reason?: string;
+  tx_hash?: string;
+  timestamp: number;
+  metadata?: Record<string, unknown>;
+}
+
+export interface EconomicResource {
+  id: string;
+  type: EconomicResourceType;
+  provider: string;
+  capability: string;
+  protocol?: string;
+  endpoint?: string;
+  pricing?: Record<string, unknown>;
+  metadata?: Record<string, unknown>;
+}
+
+export interface Facilitator {
+  id: string;
+  name: string;
+  type: 'x402' | 'payment' | 'trust_broker' | 'authorization' | 'settlement' | 'other';
+  protocols?: string[];
+  trust_score?: number;
+  metadata?: Record<string, unknown>;
+}
+
+export interface AgentEconomicIdentity {
+  agent_id: string;
+  recurring_spend: Record<string, EconomicCurrencyTotals>;
+  provider_preferences: Array<{ id: string; count: number }>;
+  capability_preferences: Array<{ id: string; count: number }>;
+  execution_dependencies: string[];
+  trust_relationships: string[];
+  protocol_affinity: Array<{ id: string; count: number }>;
+  pricing_tolerance?: Record<string, unknown>;
+  specialization_patterns: string[];
+  failure_rates: Record<string, number>;
+  computed_at: number;
+}
+
+export interface AgentProfile360Telemetry {
+  agent_id: string;
+  identity: Record<string, unknown>;
+  behavioral: Record<string, unknown>;
+  economic: Record<string, unknown>;
+  communication: Record<string, unknown>;
+  delegation: Record<string, unknown>;
+  trust: Record<string, unknown>;
+  temporal: Record<string, unknown>;
+  graph: {
+    nodes: Array<{ id: string; type: string; properties?: Record<string, unknown> }>;
+    edges: Array<{ from: string; to: string; type: EconomicRelationshipType; properties?: Record<string, unknown> }>;
+  };
+  computed_at: number;
+}
+
+export type EconomicRelationshipType =
+  | 'PAYS_FOR'
+  | 'PURCHASES_EXECUTION_FROM'
+  | 'SETTLED_VIA'
+  | 'REQUESTED_QUOTE_FROM'
+  | 'ABANDONED_DUE_TO_COST'
+  | 'RELIES_ON_PROVIDER'
+  | 'USES_PROTOCOL'
+  | 'USES_APPLICATION'
+  | 'USES_EMAIL_SERVICE'
+  | 'DELEGATES_TO'
+  | 'SPECIALIZES_IN'
+  | 'COMMUNICATES_WITH'
+  | 'EXECUTED_ON'
+  | 'AUTHORIZED_BY'
+  | 'QUOTED_AS'
+  | 'EVALUATED_AS'
+  | 'SETTLED_AS'
+  | 'RESULTED_IN_EXECUTION'
+  | 'RESULTED_IN_OUTCOME';
+
+export type EconomicStateTransition =
+  | 'intent'
+  | 'quote'
+  | 'evaluation'
+  | 'authorization'
+  | 'settlement'
+  | 'execution'
+  | 'outcome';
+
+export interface EconomicFlowStep {
+  state: EconomicStateTransition;
+  node_id: string;
+  timestamp: number;
+  status?: string;
+  edge_type?: EconomicRelationshipType;
+  metadata?: Record<string, unknown>;
+}
+
+const ECONOMIC_SETTLEMENT_STATUSES: ReadonlySet<EconomicSettlementStatus> = new Set([
+  'quoted',
+  'evaluating',
+  'authorized',
+  'pending',
+  'settled',
+  'failed',
+  'timeout',
+  'abandoned',
+]);
+
+const ECONOMIC_RESOURCE_TYPES: ReadonlySet<EconomicResourceType> = new Set([
+  'inference',
+  'gpu_compute',
+  'api_access',
+  'dataset',
+  'memory_retrieval',
+  'execution_right',
+  'orchestration_service',
+  'agent_service',
+]);
+
+export function validatePaymentIntent(value: unknown): PaymentIntent {
+  if (value === null || typeof value !== 'object') {
+    throw new EconomicValidationError('payment intent must be an object', { value });
+  }
+  const v = value as Record<string, unknown>;
+  if (!isNonEmptyString(v.id)) throw new EconomicValidationError('payment intent.id must be non-empty');
+  if (!isNonEmptyString(v.agent_id)) throw new EconomicValidationError('payment intent.agent_id must be non-empty');
+  if (!isFiniteNumber(v.amount) || v.amount < 0) throw new EconomicValidationError('payment intent.amount must be >= 0');
+  if (!isNonEmptyString(v.currency)) throw new EconomicValidationError('payment intent.currency must be non-empty');
+  if (!isNonEmptyString(v.provider)) throw new EconomicValidationError('payment intent.provider must be non-empty');
+  if (typeof v.settlement_status !== 'string' || !ECONOMIC_SETTLEMENT_STATUSES.has(v.settlement_status as EconomicSettlementStatus)) {
+    throw new EconomicValidationError('payment intent.settlement_status is invalid', { settlement_status: v.settlement_status });
+  }
+  if (!Number.isInteger(v.retry_count) || (v.retry_count as number) < 0) {
+    throw new EconomicValidationError('payment intent.retry_count must be an integer >= 0');
+  }
+  if (!isFiniteNumber(v.timestamp)) throw new EconomicValidationError('payment intent.timestamp must be a finite number');
+  return v as unknown as PaymentIntent;
+}
+
+export function validateSettlementEvent(value: unknown): SettlementEvent {
+  if (value === null || typeof value !== 'object') {
+    throw new EconomicValidationError('settlement event must be an object', { value });
+  }
+  const v = value as Record<string, unknown>;
+  if (!isNonEmptyString(v.id)) throw new EconomicValidationError('settlement event.id must be non-empty');
+  if (!isNonEmptyString(v.intent_id)) throw new EconomicValidationError('settlement event.intent_id must be non-empty');
+  if (!isNonEmptyString(v.agent_id)) throw new EconomicValidationError('settlement event.agent_id must be non-empty');
+  if (typeof v.status !== 'string' || !ECONOMIC_SETTLEMENT_STATUSES.has(v.status as EconomicSettlementStatus)) {
+    throw new EconomicValidationError('settlement event.status is invalid', { status: v.status });
+  }
+  if (!isFiniteNumber(v.amount) || v.amount < 0) throw new EconomicValidationError('settlement event.amount must be >= 0');
+  if (!isNonEmptyString(v.currency)) throw new EconomicValidationError('settlement event.currency must be non-empty');
+  if (!isFiniteNumber(v.timestamp)) throw new EconomicValidationError('settlement event.timestamp must be finite');
+  return v as unknown as SettlementEvent;
+}
+
+export function validateEconomicResource(value: unknown): EconomicResource {
+  if (value === null || typeof value !== 'object') {
+    throw new EconomicValidationError('economic resource must be an object', { value });
+  }
+  const v = value as Record<string, unknown>;
+  if (!isNonEmptyString(v.id)) throw new EconomicValidationError('economic resource.id must be non-empty');
+  if (typeof v.type !== 'string' || !ECONOMIC_RESOURCE_TYPES.has(v.type as EconomicResourceType)) {
+    throw new EconomicValidationError('economic resource.type is invalid', { type: v.type });
+  }
+  if (!isNonEmptyString(v.provider)) throw new EconomicValidationError('economic resource.provider must be non-empty');
+  if (!isNonEmptyString(v.capability)) throw new EconomicValidationError('economic resource.capability must be non-empty');
+  return v as unknown as EconomicResource;
+}
+
+export function buildEconomicFlow(
+  intent: PaymentIntent,
+  settlements: ReadonlyArray<SettlementEvent> = [],
+  extraSteps: ReadonlyArray<EconomicFlowStep> = [],
+): EconomicFlowStep[] {
+  const steps: EconomicFlowStep[] = [
+    {
+      state: 'intent',
+      node_id: intent.id,
+      timestamp: intent.timestamp,
+      status: intent.settlement_status,
+    },
+  ];
+  if (intent.provider) {
+    steps.push({
+      state: 'quote',
+      node_id: intent.provider,
+      timestamp: intent.timestamp,
+      status: intent.settlement_status,
+      edge_type: 'REQUESTED_QUOTE_FROM',
+    });
+  }
+  if (intent.authorization_id) {
+    steps.push({
+      state: 'authorization',
+      node_id: intent.authorization_id,
+      timestamp: intent.timestamp,
+      status: 'authorized',
+      edge_type: 'AUTHORIZED_BY',
+    });
+  }
+  for (const settlement of settlements) {
+    steps.push({
+      state: 'settlement',
+      node_id: settlement.id,
+      timestamp: settlement.timestamp,
+      status: settlement.status,
+      edge_type: 'SETTLED_AS',
+    });
+  }
+  if (intent.execution_id) {
+    steps.push({
+      state: 'execution',
+      node_id: intent.execution_id,
+      timestamp: intent.timestamp,
+      status: intent.settlement_status,
+      edge_type: 'RESULTED_IN_EXECUTION',
+    });
+  }
+  steps.push(...extraSteps);
+  const order: Record<EconomicStateTransition, number> = {
+    intent: 0,
+    quote: 1,
+    evaluation: 2,
+    authorization: 3,
+    settlement: 4,
+    execution: 5,
+    outcome: 6,
+  };
+  return steps.sort((a, b) => order[a.state] - order[b.state] || a.timestamp - b.timestamp);
+}
+
+export function deriveAgentEconomicIdentity(
+  agentId: string,
+  intents: ReadonlyArray<PaymentIntent>,
+  settlements: ReadonlyArray<SettlementEvent> = [],
+  computedAt: number = Date.now(),
+): AgentEconomicIdentity {
+  const recurring_spend: Record<string, EconomicCurrencyTotals> = {};
+  const providerCounts = new Map<string, number>();
+  const capabilityCounts = new Map<string, number>();
+  const protocolCounts = new Map<string, number>();
+  const failures = new Map<string, { total: number; failed: number }>();
+
+  for (const intent of intents) {
+    const currency = intent.currency;
+    const slot = recurring_spend[currency] ?? { total_spend: 0, total_revenue: 0 };
+    if (intent.settlement_status === 'settled') slot.total_spend += intent.amount;
+    recurring_spend[currency] = slot;
+    if (intent.provider) providerCounts.set(intent.provider, (providerCounts.get(intent.provider) ?? 0) + 1);
+    if (intent.capability_requested) capabilityCounts.set(intent.capability_requested, (capabilityCounts.get(intent.capability_requested) ?? 0) + 1);
+    if (intent.protocol) protocolCounts.set(intent.protocol, (protocolCounts.get(intent.protocol) ?? 0) + 1);
+  }
+
+  for (const settlement of settlements) {
+    const key = settlement.provider || settlement.facilitator_id || 'unknown';
+    const slot = failures.get(key) ?? { total: 0, failed: 0 };
+    slot.total += 1;
+    if (settlement.status === 'failed' || settlement.status === 'timeout') slot.failed += 1;
+    failures.set(key, slot);
+  }
+
+  const ranked = (m: Map<string, number>) => [...m.entries()]
+    .sort((a, b) => b[1] - a[1])
+    .map(([id, count]) => ({ id, count }));
+
+  return {
+    agent_id: agentId,
+    recurring_spend,
+    provider_preferences: ranked(providerCounts),
+    capability_preferences: ranked(capabilityCounts),
+    execution_dependencies: ranked(providerCounts).map((x) => x.id),
+    trust_relationships: ranked(providerCounts).slice(0, 5).map((x) => x.id),
+    protocol_affinity: ranked(protocolCounts),
+    specialization_patterns: ranked(capabilityCounts).map((x) => x.id),
+    failure_rates: Object.fromEntries(
+      [...failures.entries()].map(([key, value]) => [key, value.total === 0 ? 0 : value.failed / value.total]),
+    ),
+    computed_at: computedAt,
+  };
+}

@@ -21,7 +21,7 @@ from repositories.repos import (
 
 
 def _run(coro):
-    return asyncio.get_event_loop().run_until_complete(coro)
+    return asyncio.run(coro)
 
 
 def test_entity_create_and_list():

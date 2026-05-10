@@ -114,6 +114,15 @@ class VertexType:
     SECTOR = "Sector"
     CORPORATE_ACTION = "CorporateAction"
 
+    # ── Economic Graph Layer — Agent economies (additive) ──────────────
+    # These nodes model autonomous agents as economic actors without
+    # replacing the existing commerce control-plane vertices below.
+    PAYMENT_INTENT = "PaymentIntent"
+    SETTLEMENT_EVENT = "SettlementEvent"
+    ECONOMIC_RESOURCE = "EconomicResource"
+    AGENT_ECONOMIC_IDENTITY = "AgentEconomicIdentity"
+    AGENT_PROFILE360 = "AgentProfile360"
+
     # ── Agentic Commerce — Control Plane vertices ──────────────────────
     PAYMENT_REQUIREMENT = "PaymentRequirement"
     PAYMENT_AUTHORIZATION = "PaymentAuthorization"
@@ -274,6 +283,26 @@ class EdgeType:
     # ── Cross-Domain — Identity fusion ─────────────────────────────────
     OVERLAPS_WITH = "OVERLAPS_WITH"           # Profile → Profile (cross-domain identity)
     LINKED_VIA = "LINKED_VIA"                 # Entity → Entity (with link_signal property)
+
+    # ── Economic Graph Layer — Agent economies (additive) ──────────────
+    PAYS_FOR = "PAYS_FOR"                         # Agent → EconomicResource|PaymentIntent
+    PURCHASES_EXECUTION_FROM = "PURCHASES_EXECUTION_FROM"  # Agent → Provider/Agent/Service
+    SETTLED_VIA = "SETTLED_VIA"                   # PaymentIntent/SettlementEvent → Facilitator
+    REQUESTED_QUOTE_FROM = "REQUESTED_QUOTE_FROM"  # PaymentIntent → Provider/Facilitator
+    ABANDONED_DUE_TO_COST = "ABANDONED_DUE_TO_COST"  # Agent/PaymentIntent → EconomicResource
+    RELIES_ON_PROVIDER = "RELIES_ON_PROVIDER"     # Agent/Profile → Service/Provider
+    USES_APPLICATION = "USES_APPLICATION"         # Agent/Profile → App/Application
+    USES_EMAIL_SERVICE = "USES_EMAIL_SERVICE"     # Agent/Profile → Service/Email domain
+    SPECIALIZES_IN = "SPECIALIZES_IN"             # Agent/Profile → Capability/EconomicResource
+    COMMUNICATES_WITH = "COMMUNICATES_WITH"       # Agent/Profile → Entity/Service/Agent
+    EXECUTED_ON = "EXECUTED_ON"                   # Execution/Action → Provider/Resource
+    ECONOMICALLY_IDENTIFIED_AS = "ECONOMICALLY_IDENTIFIED_AS"  # Agent → AgentEconomicIdentity
+    PROFILED_AS = "PROFILED_AS"                   # Agent/Entity → AgentProfile360
+    QUOTED_AS = "QUOTED_AS"                       # PaymentIntent → PaymentRequirement/Quote
+    EVALUATED_AS = "EVALUATED_AS"                 # PaymentIntent → PolicyDecision
+    SETTLED_AS = "SETTLED_AS"                     # PaymentIntent → SettlementEvent
+    RESULTED_IN_EXECUTION = "RESULTED_IN_EXECUTION"  # SettlementEvent → Execution/ActionRecord
+    RESULTED_IN_OUTCOME = "RESULTED_IN_OUTCOME"   # Execution/ActionRecord → Event/Fulfillment
 
     # ── Agentic Commerce — Control Plane edges ─────────────────────────
     REQUIRES_PAYMENT = "REQUIRES_PAYMENT"         # ProtectedResource → PaymentRequirement
