@@ -41,6 +41,7 @@ const ENTITY_TYPES: EntityType[] = [
 
 const ENTITY_TYPE_LABELS: Record<EntityType, string> = {
   human: 'Humans',
+const ENTITY_TYPE_LABELS: Partial<Record<EntityType, string>> = {
   customer: 'Customers',
   agent: 'Agents',
   organization: 'Organizations',
@@ -115,7 +116,7 @@ export function EntitiesPage() {
         <div className="flex items-center justify-between">
           <h1 className="text-lg font-bold text-neutral-100">Entities</h1>
           <span className="text-xs text-neutral-500 font-mono">
-            {entities.length} {ENTITY_TYPE_LABELS[activeType].toLowerCase()}
+            {entities.length} {(ENTITY_TYPE_LABELS[activeType] ?? activeType).toLowerCase()}
           </span>
         </div>
 
@@ -130,7 +131,7 @@ export function EntitiesPage() {
           <TabsList>
             {ENTITY_TYPES.map((type) => (
               <TabsTrigger key={type} value={type}>
-                {ENTITY_TYPE_LABELS[type]}
+                {ENTITY_TYPE_LABELS[type] ?? type}
                 <Badge variant="default" className="ml-1.5 text-xs">
                   {typeCounts[type] ?? 0}
                 </Badge>
@@ -142,7 +143,7 @@ export function EntitiesPage() {
             <TabsContent key={type} value={type}>
               <Card>
                 <CardHeader>
-                  <CardTitle>{ENTITY_TYPE_LABELS[type]}</CardTitle>
+                  <CardTitle>{ENTITY_TYPE_LABELS[type] ?? type}</CardTitle>
                 </CardHeader>
                 <CardContent>
                   <EntityListTable

@@ -1,25 +1,6 @@
 import type { Severity, HealthStatus } from './common';
 
-export type EntityType =
-  | 'human'
-  | 'customer'
-  | 'agent'
-  | 'organization'
-  | 'wallet'
-  | 'journey'
-  | 'session'
-  | 'protocol'
-  | 'platform'
-  | 'device'
-  | 'browser'
-  | 'reward'
-  | 'financial_activity'
-  | 'delegation'
-  | 'relationship'
-  | 'contract'
-  | 'cluster';
-
-export type Profile360ViewId = 'identity' | 'system' | 'financial' | 'graph' | 'analytics' | 'debug';
+export type EntityType = 'customer' | 'human' | 'wallet' | 'agent' | 'organization' | 'protocol' | 'contract' | 'cluster' | 'journey' | 'delegation' | 'session' | 'platform' | 'browser' | 'device' | 'transaction' | 'execution_trace';
 
 export interface Entity {
   readonly id: string;
