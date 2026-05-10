@@ -39,6 +39,8 @@ const ENTITY_TYPES: EntityType[] = [
   'cluster',
 ];
 
+const ENTITY_TYPE_LABELS: Record<EntityType, string> = {
+  human: 'Humans',
 const ENTITY_TYPE_LABELS: Partial<Record<EntityType, string>> = {
   customer: 'Customers',
   agent: 'Agents',
