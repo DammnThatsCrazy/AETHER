@@ -1,5 +1,5 @@
 import { createStore, useStore } from '@kyber/state';
-import type { Entity, Profile360DrillItem, Profile360Graph, Profile360LiveMessage, Profile360Payload, Profile360State, TimelineEvent } from '@kyber/types';
+import type { Entity, Profile360PanelDrillItem, Profile360Graph, Profile360LiveMessage, Profile360Payload, Profile360State, TimelineEvent } from '@kyber/types';
 
 const initialState: Profile360State = {
   entities: {},
@@ -35,7 +35,7 @@ export const profile360Actions = {
   upsertGraph(entityId: string, graph: Profile360Graph) {
     profile360Store.setState((state) => ({ ...state, graphs: { ...state.graphs, [entityId]: graph } }));
   },
-  pushDrill(item: Omit<Profile360DrillItem, 'depth' | 'openedAt'>) {
+  pushDrill(item: Omit<Profile360PanelDrillItem, 'depth' | 'openedAt'>) {
     profile360Store.setState((state) => ({
       ...state,
       drillStack: [

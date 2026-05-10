@@ -60,6 +60,33 @@ function normalizeEdge(input: unknown, index: number): GraphEdge {
   };
 }
 
+function normalizeProfile360Payload(raw: Record<string, unknown>, fallbackId: string, fallbackType: Profile360EntityType): Profile360Payload | null {
+  const entityRaw = asRecord(raw.entity);
+  if (!entityRaw.id && !raw.sections && !raw.graph && !raw.timeline) return null;
+  const entity = normalizeEntity(entityRaw.id ? entityRaw : raw, fallbackId, fallbackType);
+  const graphRaw = asRecord(raw.graph);
+  const timelineRaw = Array.isArray(raw.timeline) ? raw.timeline : [];
+  const audit = asRecord(raw.alignment_audit ?? raw.alignmentAudit);
+  const tenantId = raw.tenant_id ? String(raw.tenant_id) : raw.tenantId ? String(raw.tenantId) : undefined;
+  const surface = raw.surface === 'kyber_internal' || raw.surface === 'end_user' ? raw.surface : undefined;
+  const visibility = raw.visibility === 'internal_full' || raw.visibility === 'redacted' ? raw.visibility : undefined;
+  return {
+    entity,
+    ...(tenantId ? { tenantId } : {}),
+    ...(surface ? { surface } : {}),
+    ...(visibility ? { visibility } : {}),
+    sections: asRecord(raw.sections) as Profile360Payload['sections'],
+    timeline: timelineRaw.map((event, index) => toTimelineEvent(event, `evt-${index}`)),
+    graph: {
+      nodes: (Array.isArray(graphRaw.nodes) ? graphRaw.nodes : []).map(normalizeNode),
+      edges: (Array.isArray(graphRaw.edges) ? graphRaw.edges : []).map(normalizeEdge),
+      alignmentAudit: asRecord(graphRaw.alignment_audit ?? graphRaw.alignmentAudit),
+    },
+    alignmentAudit: audit,
+    raw,
+  };
+}
+
 function buildSections(entity: Entity, raw: Record<string, unknown>): Profile360Payload['sections'] {
   const intelligence = asRecord(raw.intelligence ?? entity.metadata.intelligence);
   const behavioral = asRecord(raw.behavioral ?? entity.metadata.behavioral);
@@ -125,6 +152,11 @@ async function fetchProfile360(type: Profile360EntityType, id: string): Promise<
     api.behavioral.entity(id).catch(() => ({})),
   ]);
 
+  const normalized = normalizeProfile360Payload(asRecord(profile), id, type);
+  if (normalized) {
+    return normalized;
+  }
+
   const raw: Record<string, unknown> = { ...asRecord(profile), behavioral };
   const graphRaw = asRecord(graphResponse);
   const rawNodes = (Array.isArray(graphRaw.nodes) ? graphRaw.nodes : Array.isArray(graphRaw.connections) ? graphRaw.connections : []) as unknown[];
@@ -136,7 +168,11 @@ async function fetchProfile360(type: Profile360EntityType, id: string): Promise<
     entity,
     sections: buildSections(entity, raw),
     timeline: events.map((event, index) => toTimelineEvent(event, `evt-${index}`)),
-    graph: { nodes: rawNodes.map(normalizeNode), edges: rawEdges.map(normalizeEdge) },
+    graph: {
+      nodes: rawNodes.map(normalizeNode),
+      edges: rawEdges.map(normalizeEdge),
+      alignmentAudit: asRecord(graphRaw.alignment_audit ?? graphRaw.alignmentAudit),
+    },
     raw,
   };
 }

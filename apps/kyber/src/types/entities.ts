@@ -1,6 +1,6 @@
 import type { Severity, HealthStatus } from './common';
 
-export type EntityType = 'customer' | 'human' | 'wallet' | 'agent' | 'organization' | 'protocol' | 'contract' | 'cluster' | 'journey' | 'delegation' | 'session' | 'platform' | 'browser' | 'device' | 'transaction' | 'execution_trace';
+export type EntityType = 'customer' | 'human' | 'wallet' | 'agent' | 'organization' | 'protocol' | 'contract' | 'cluster' | 'journey' | 'delegation' | 'session' | 'platform' | 'browser' | 'device' | 'transaction' | 'execution_trace' | 'reward' | 'financial_activity' | 'relationship';
 
 export interface Entity {
   readonly id: string;
