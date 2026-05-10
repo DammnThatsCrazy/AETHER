@@ -128,3 +128,10 @@ Profile360State
 - Continue supporting legacy profile, graph, timeline, behavioral, intelligence, and agent endpoints as fallback adapters.
 - Emit websocket messages with `{ entityId, event, node, edge, patch }` to update the existing store without custom per-message code.
 - Include drill references in each section as `{ id, type, label, metadata }` for automatic panel and route linking.
+
+## Tenant and Surface Alignment Audit
+
+- Kyber uses the internal `/v1/profile360/:entityType/:entityId` surface and expects `surface: "kyber_internal"` with `visibility: "internal_full"`; this route is intentionally broader than any end-user profile presentation.
+- Every Profile360 graph/timeline/profile read is scoped by the authenticated tenant from `request.state.tenant.tenant_id`; Kyber may inspect all Profile360 dimensions, but only for the active client/tenant.
+- Backend graph composition returns an `alignment_audit` object that records the tenant, excluded cross-tenant neighbors, legacy unscoped graph neighbors, and the sections returned to Kyber.
+- Future end-user front ends should not reuse the Kyber route directly. They should call a redacted Profile360 projection that omits debug/audit internals and applies product-specific presentation rules.

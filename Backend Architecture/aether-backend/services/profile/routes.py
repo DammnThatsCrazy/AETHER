@@ -43,6 +43,7 @@ from services.profile.composer import ProfileComposer
 
 logger = get_logger("aether.service.profile")
 router = APIRouter(prefix="/v1/profile", tags=["Profile 360"])
+profile360_router = APIRouter(prefix="/v1/profile360", tags=["Profile360 Kyber"])
 
 # Lazy-initialized singleton
 _composer: Optional[ProfileComposer] = None
@@ -151,7 +152,8 @@ async def get_graph_context(
     """Graph relationships around the user."""
     request.state.tenant.require_permission("read")
 
-    graph_data = await composer._compose_graph(user_id)
+    tenant = request.state.tenant
+    graph_data = await composer._compose_graph(user_id, tenant_id=tenant.tenant_id)
     return APIResponse(data={"user_id": user_id, **graph_data}).to_dict()
 
 
@@ -238,6 +240,94 @@ async def resolve_identifier(
         raise NotFoundError("No profile found for the given identifier")
 
     return APIResponse(data={"resolved_user_id": resolved}).to_dict()
+
+
+# ── Profile360 normalized Kyber surfaces ────────────────────────────
+
+def _parse_include(include: str) -> list[str]:
+    return [part.strip() for part in include.split(",") if part.strip()]
+
+
+@profile360_router.get("/{entity_type}/{entity_id}")
+async def get_profile360_surface(
+    entity_type: str,
+    entity_id: str,
+    request: Request,
+    composer: ProfileComposer = Depends(_get_composer),
+    include: str = Query(
+        "identity,system,financial,graph,timeline,analytics,debug",
+        description="Comma-separated Kyber Profile360 sections to include",
+    ),
+    timeline_limit: int = Query(250, ge=1, le=1000),
+    graph_limit: int = Query(750, ge=1, le=1000),
+):
+    """Normalized internal Profile360 payload for Kyber.
+
+    Kyber is an internal control surface and receives the full tenant-scoped
+    Profile360 view plus alignment audit metadata. End-user profile surfaces
+    should call a separate redacted endpoint rather than this internal route.
+    """
+    tenant = request.state.tenant
+    tenant.require_permission("read")
+    result = await composer.get_profile360_surface(
+        entity_type=entity_type,
+        entity_id=entity_id,
+        tenant_id=tenant.tenant_id,
+        include=_parse_include(include),
+        timeline_limit=timeline_limit,
+        graph_limit=graph_limit,
+    )
+    metrics.increment("profile360_kyber_surface_view")
+    return APIResponse(data=result).to_dict()
+
+
+@profile360_router.get("/{entity_type}/{entity_id}/graph")
+async def get_profile360_graph(
+    entity_type: str,
+    entity_id: str,
+    request: Request,
+    composer: ProfileComposer = Depends(_get_composer),
+    limit: int = Query(750, ge=1, le=1000),
+):
+    """Tenant-scoped Profile360 graph chunk normalized for Kyber."""
+    tenant = request.state.tenant
+    tenant.require_permission("read")
+    graph = await composer._compose_graph(entity_id, tenant_id=tenant.tenant_id, limit=limit)
+    return APIResponse(data={
+        "entity_id": entity_id,
+        "entity_type": entity_type,
+        "tenant_id": tenant.tenant_id,
+        "surface": "kyber_internal",
+        **graph,
+    }).to_dict()
+
+
+@profile360_router.get("/{entity_type}/{entity_id}/timeline")
+async def get_profile360_timeline(
+    entity_type: str,
+    entity_id: str,
+    request: Request,
+    composer: ProfileComposer = Depends(_get_composer),
+    limit: int = Query(250, ge=1, le=1000),
+    type: Optional[str] = Query(None),
+):
+    """Tenant-scoped normalized Profile360 event timeline for Kyber."""
+    tenant = request.state.tenant
+    tenant.require_permission("read")
+    events = await composer.get_timeline(
+        user_id=entity_id,
+        tenant_id=tenant.tenant_id,
+        limit=limit,
+        event_type=type,
+    )
+    return APIResponse(data={
+        "entity_id": entity_id,
+        "entity_type": entity_type,
+        "tenant_id": tenant.tenant_id,
+        "surface": "kyber_internal",
+        "events": events,
+        "count": len(events),
+    }).to_dict()
 
 
 # ── Profile 360 sub-resources (additive) ──────────────────────────────
