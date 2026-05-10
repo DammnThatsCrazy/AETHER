@@ -13,6 +13,7 @@ const CommandPage = lazy(() => import('@kyber/pages/command').then(m => ({ defau
 const DiagnosticsPage = lazy(() => import('@kyber/pages/diagnostics').then(m => ({ default: m.DiagnosticsPage })));
 const ReviewPage = lazy(() => import('@kyber/pages/review').then(m => ({ default: m.ReviewPage })));
 const LabPage = lazy(() => import('@kyber/pages/lab').then(m => ({ default: m.LabPage })));
+const Profile360Page = lazy(() => import('@kyber/pages/profile360').then(m => ({ default: m.Profile360Page })));
 
 function PageSuspense({ children }: { readonly children: React.ReactNode }) {
   return (
@@ -35,6 +36,7 @@ export function AppRouter() {
           <Route path="/noesis" element={<PageSuspense><NoesisPage /></PageSuspense>} />
           <Route path="/entities" element={<PageSuspense><EntitiesPage /></PageSuspense>} />
           <Route path="/entities/:type/:id" element={<PageSuspense><EntitiesPage /></PageSuspense>} />
+          <Route path="/profile360/:type/:id" element={<PageSuspense><Profile360Page /></PageSuspense>} />
           <Route path="/command" element={<PageSuspense><CommandPage /></PageSuspense>} />
           <Route path="/diagnostics" element={<PageSuspense><DiagnosticsPage /></PageSuspense>} />
           <Route path="/review" element={<PageSuspense><ReviewPage /></PageSuspense>} />

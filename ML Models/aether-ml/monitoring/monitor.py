@@ -11,84 +11,14 @@ from typing import Any, NamedTuple
 
 import numpy as np
 
-
 logger = logging.getLogger("aether.monitoring")
 
 
-class _StatTestResult(NamedTuple):
-    """Minimal scipy-compatible result for local statistical fallbacks."""
-
-    statistic: float
-    pvalue: float
-
-
-class _LinregressResult(NamedTuple):
-    """Minimal scipy-compatible linear regression result."""
-
-    slope: float
-    intercept: float
-    rvalue: float
-    pvalue: float
-    stderr: float
-
-
-class _StatsFallback:
-    """Small NumPy-only subset used when scipy is not installed.
-
-    The extraction monitoring tests only need to import this module, but keeping
-    these deterministic approximations lets drift and performance monitoring run
-    in lightweight CI environments that install the root test dependencies
-    without the full ML optional dependency group.
-    """
-
-    @staticmethod
-    def ks_2samp(reference: np.ndarray, current: np.ndarray) -> _StatTestResult:
-        ref = np.sort(np.asarray(reference, dtype=float))
-        cur = np.sort(np.asarray(current, dtype=float))
-        if len(ref) == 0 or len(cur) == 0:
-            return _StatTestResult(0.0, 1.0)
-
-        values = np.sort(np.concatenate([ref, cur]))
-        ref_cdf = np.searchsorted(ref, values, side="right") / len(ref)
-        cur_cdf = np.searchsorted(cur, values, side="right") / len(cur)
-        statistic = float(np.max(np.abs(ref_cdf - cur_cdf)))
-        effective_n = len(ref) * len(cur) / (len(ref) + len(cur))
-        pvalue = min(1.0, max(0.0, 2.0 * np.exp(-2.0 * effective_n * statistic**2)))
-        return _StatTestResult(statistic, pvalue)
-
-    @staticmethod
-    def chisquare(observed: np.ndarray, f_exp: np.ndarray) -> tuple[float, float]:
-        obs = np.asarray(observed, dtype=float)
-        exp = np.clip(np.asarray(f_exp, dtype=float), 1e-10, None)
-        chi2 = float(np.sum((obs - exp) ** 2 / exp))
-        # Wilson-Hilferty normal approximation for chi-squared survival.
-        dof = max(len(obs) - 1, 1)
-        z = ((chi2 / dof) ** (1 / 3) - (1 - 2 / (9 * dof))) / sqrt(2 / (9 * dof))
-        pvalue = 0.5 * (1 - erf(z / sqrt(2)))
-        return chi2, min(1.0, max(0.0, pvalue))
-
-    @staticmethod
-    def linregress(x: np.ndarray, y: np.ndarray) -> _LinregressResult:
-        x_arr = np.asarray(x, dtype=float)
-        y_arr = np.asarray(y, dtype=float)
-        if len(x_arr) < 2:
-            return _LinregressResult(0.0, float(y_arr[0]) if len(y_arr) else 0.0, 0.0, 1.0, 0.0)
-
-        slope, intercept = np.polyfit(x_arr, y_arr, 1)
-        if np.std(x_arr) == 0 or np.std(y_arr) == 0:
-            rvalue = 0.0
-        else:
-            rvalue = float(np.corrcoef(x_arr, y_arr)[0, 1])
-        predicted = slope * x_arr + intercept
-        residual = y_arr - predicted
-        stderr = float(np.sqrt(np.sum(residual**2) / max(len(x_arr) - 2, 1)))
-        return _LinregressResult(float(slope), float(intercept), rvalue, 1.0, stderr)
-
-
-if find_spec("scipy") is not None and find_spec("scipy.stats") is not None:
+def _scipy_stats() -> Any:
+    """Import scipy.stats only for monitoring checks that need it."""
     from scipy import stats
-else:
-    stats = _StatsFallback()
+
+    return stats
 
 
 # =============================================================================
@@ -180,7 +110,7 @@ class DriftDetector:
         Returns:
             Tuple of (statistic, p_value).
         """
-        result = stats.ks_2samp(reference, current)
+        result = _scipy_stats().ks_2samp(reference, current)
         return round(float(result.statistic), 6), round(float(result.pvalue), 6)
 
     def compute_js_divergence(
@@ -227,7 +157,7 @@ class DriftDetector:
         return round(js, 6)
 
     def compute_chi_squared(
-        self, reference: pd.Series, current: pd.Series
+        self, reference: Any, current: Any
     ) -> tuple[float, float]:
         """Chi-squared test for categorical features.
 
@@ -253,8 +183,11 @@ class DriftDetector:
         # Normalise to proportions for the expected distribution
         ref_expected = ref_freq / ref_freq.sum() if ref_freq.sum() > 0 else ref_freq
 
+        stats = _scipy_stats()
         try:
-            chi2, p_value = stats.chisquare(cur_freq, f_exp=ref_expected * cur_freq.sum() + 1e-10)
+            chi2, p_value = stats.chisquare(
+                cur_freq, f_exp=ref_expected * cur_freq.sum() + 1e-10
+            )
         except Exception:
             chi2, p_value = 0.0, 1.0
 
@@ -262,8 +195,8 @@ class DriftDetector:
 
     def detect_drift(
         self,
-        reference_df: pd.DataFrame,
-        current_df: pd.DataFrame,
+        reference_df: Any,
+        current_df: Any,
         numeric_features: list[str],
         categorical_features: list[str] | None = None,
     ) -> list[DriftResult]:
@@ -463,7 +396,7 @@ class PerformanceMonitor:
 
         x = np.arange(len(values), dtype=float)
         y = np.array(values, dtype=float)
-        slope, _intercept, _r, _p, _se = stats.linregress(x, y)
+        slope, _intercept, _r, _p, _se = _scipy_stats().linregress(x, y)
 
         if abs(slope) < 1e-6:
             direction = "stable"
@@ -499,8 +432,8 @@ class MonitoringPipeline:
 
     def run(
         self,
-        reference_data: dict[str, pd.DataFrame],
-        current_data: dict[str, pd.DataFrame],
+        reference_data: dict[str, Any],
+        current_data: dict[str, Any],
         model_metrics: dict[str, dict[str, Any]],
     ) -> dict[str, Any]:
         """Run full monitoring pipeline across models.
@@ -673,7 +606,6 @@ class ExtractionDefenseMonitor:
         recent = self._signal_history[-1000:]
 
         band_distribution: dict[str, int] = {}
-        signal_counts: dict[str, int] = {}
         for entry in recent:
             band = entry.get("band", "unknown")
             band_distribution[band] = band_distribution.get(band, 0) + 1
