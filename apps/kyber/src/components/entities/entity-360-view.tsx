@@ -7,6 +7,7 @@ import type {
   EntityRecommendation,
   EntityNote,
   EntityNeighborhood,
+  Profile360DrillItem,
 } from '@kyber/types';
 import {
   Card,
@@ -34,6 +35,10 @@ import { cn, formatRelativeTime, formatTimestamp } from '@kyber/lib/utils';
 import { PermissionGate } from '@kyber/features/permissions';
 import { EntityScoreCard } from './entity-score-card';
 import { NeedsHelpPanel } from './needs-help-panel';
+import { Profile360SummaryCard } from './profile360-summary-card';
+import { Profile360DrillStack } from './profile360-drill-stack';
+import { Profile360Views, RealtimeEventIntelligenceFeed } from './profile360-surfaces';
+import { getAnalytics, getProfile360Summary, getRelationships } from './profile360-utils';
 
 interface Entity360ViewProps {
   readonly entity: Entity;
@@ -58,28 +63,47 @@ export function Entity360View({
 }: Entity360ViewProps) {
   const [noteModalOpen, setNoteModalOpen] = useState(false);
   const [newNoteContent, setNewNoteContent] = useState('');
+  const [drillStack, setDrillStack] = useState<Profile360DrillItem[]>([]);
 
   const connectedEntities = useMemo(() => {
     if (!neighborhood) return [];
     return neighborhood.nodes.filter((n) => n.id !== entity.id);
   }, [neighborhood, entity.id]);
 
+  const profile360Summary = useMemo(() => getProfile360Summary(entity, timeline, neighborhood), [entity, timeline, neighborhood]);
+  const profile360Relationships = useMemo(() => getRelationships(entity, neighborhood), [entity, neighborhood]);
+  const profile360Analytics = useMemo(() => getAnalytics(entity, timeline, neighborhood), [entity, timeline, neighborhood]);
+  const pushDrill = (item: Profile360DrillItem) => {
+    setDrillStack((prev) => [...prev, item]);
+  };
+
   return (
     <div className="space-y-4">
-      {/* Header */}
       <div className="flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          {onBack && (
-            <Button variant="ghost" onClick={onBack} className="text-sm">
-              &larr; Back
-            </Button>
-          )}
-          <h2 className="text-xl font-bold text-neutral-100">{entity.displayLabel}</h2>
-          <Badge variant="default">{entity.type}</Badge>
-          <StatusIndicator status={entity.health.status} />
-          {entity.needsHelp && <Badge variant="danger">NEEDS HELP</Badge>}
-        </div>
-        <span className="text-xs text-neutral-500 font-mono">{entity.id}</span>
+        {onBack && (
+          <Button variant="ghost" onClick={onBack} className="text-sm">
+            &larr; Back
+          </Button>
+        )}
+        <span className="text-xs text-neutral-500 font-mono">Profile360 / compact drillable identity</span>
+      </div>
+
+      <Profile360SummaryCard entity={entity} summary={profile360Summary} />
+      <Profile360DrillStack
+        stack={drillStack}
+        onPop={() => setDrillStack((prev) => prev.slice(0, -1))}
+        onReset={() => setDrillStack([])}
+      />
+      <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_360px]">
+        <Profile360Views
+          entity={entity}
+          timeline={timeline}
+          neighborhood={neighborhood}
+          analytics={profile360Analytics}
+          relationships={profile360Relationships}
+          onDrill={pushDrill}
+        />
+        <RealtimeEventIntelligenceFeed events={timeline} onDrill={pushDrill} />
       </div>
 
       <TerminalSeparator />
