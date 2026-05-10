@@ -221,6 +221,7 @@ class EventEnvelopeV2:
     system_actions: Optional[dict[str, Any]] = None     # {recommendations[], ranking[], chosen_index}
     consent: Optional[dict[str, Any]] = None            # {consent_id, purposes[], granted_at}
     data_quality: Optional[dict[str, Any]] = None       # {ingestion_lag_ms, source_reliability, schema_version}
+    semantic_context: Optional[dict[str, Any]] = None   # SemanticContextEnvelope payload (additive)
 
     def to_dict(self) -> dict[str, Any]:
         result: dict[str, Any] = {}

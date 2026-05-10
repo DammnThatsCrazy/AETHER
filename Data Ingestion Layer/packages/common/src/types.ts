@@ -106,6 +106,8 @@ export interface BatchPayload {
 // =============================================================================
 
 export interface EnrichedEvent extends BaseEvent {
+  /** Optional backend-owned semantic envelope; SDK producers do not emit this. */
+  semanticContext?: SemanticContextEnvelope;
   /** Server-assigned receive timestamp */
   receivedAt: string;
   /** Server-assigned processing timestamp */
@@ -152,6 +154,84 @@ export interface ParsedUserAgent {
   osVersion: string;
   device: string;
   isBot: boolean;
+}
+
+
+// =============================================================================
+// SEMANTIC CONTEXT INTELLIGENCE LAYER (backend-owned, additive)
+// =============================================================================
+
+export type SemanticLayer =
+  | 'pulse'
+  | 'session'
+  | 'semantic'
+  | 'workflow'
+  | 'relational'
+  | 'behavioral'
+  | 'architectural'
+  | 'systemic';
+
+export type SemanticPersistenceClass =
+  | 'transient'
+  | 'short_ttl'
+  | 'medium_ttl'
+  | 'long_decaying'
+  | 'summarized'
+  | 'ephemeral_deep';
+
+export type SemanticRelationshipKind =
+  | 'USES'
+  | 'MODIFIES'
+  | 'INFLUENCES'
+  | 'DERIVES_FROM'
+  | 'CO_OCCURS_WITH'
+  | 'DEPENDS_ON'
+  | 'FREQUENTLY_PRECEDES'
+  | 'CAUSED_DRIFT_IN'
+  | 'SEMANTICALLY_SIMILAR'
+  | 'WORKFLOW_PARTNER';
+
+export interface SemanticRelationshipRef {
+  kind: SemanticRelationshipKind;
+  target_ref: string;
+  strength: number;
+  confidence: number;
+  graph_edge_ref?: string;
+  expires_at?: string;
+}
+
+export interface SemanticDelta {
+  field: string;
+  operation: string;
+  summary: string;
+  confidence: number;
+}
+
+export interface SemanticPersistencePolicy {
+  class: SemanticPersistenceClass;
+  ttl_seconds: number | null;
+  decay_rate: number;
+  summarize_after_seconds?: number;
+  max_relationship_refs: number;
+  max_payload_keys: number;
+}
+
+export interface SemanticContextEnvelope {
+  schema_version: string;
+  primary_layer: SemanticLayer;
+  layers: SemanticLayer[];
+  confidence: number;
+  temporal_weight: number;
+  recency_score: number;
+  stable_hash: string;
+  persistence: SemanticPersistencePolicy;
+  relationship_refs?: SemanticRelationshipRef[];
+  semantic_deltas?: SemanticDelta[];
+  compressed_payload?: Record<string, unknown>;
+  workflow_refs?: string[];
+  episode_refs?: string[];
+  enrichment?: Record<string, unknown>;
+  vector_ref?: string;
 }
 
 // =============================================================================
