@@ -19,6 +19,77 @@ export interface Entity {
   readonly metadata: Record<string, unknown>;
 }
 
+export interface Profile360Metric {
+  readonly label: string;
+  readonly value: string | number;
+  readonly tone?: 'default' | 'good' | 'warn' | 'bad' | 'info' | undefined;
+  readonly detail?: string | undefined;
+}
+
+export interface Profile360Summary {
+  readonly status?: string | undefined;
+  readonly lastSeen?: string | undefined;
+  readonly walletCount: number;
+  readonly agentCount: number;
+  readonly trust: number;
+  readonly risk: number;
+  readonly primaryMetrics: readonly Profile360Metric[];
+  readonly secondaryMetrics: readonly Profile360Metric[];
+}
+
+export type Profile360DrillKind = EntityType | 'transaction' | 'event' | 'execution_trace' | 'flow' | 'analytics';
+
+export interface Profile360DrillItem {
+  readonly id: string;
+  readonly kind: Profile360DrillKind;
+  readonly label: string;
+  readonly subtitle?: string | undefined;
+  readonly parentId?: string | undefined;
+  readonly timestamp?: string | undefined;
+  readonly entityId?: string | undefined;
+  readonly metadata: Record<string, unknown>;
+}
+
+export interface Profile360Relationship {
+  readonly id: string;
+  readonly sourceId: string;
+  readonly targetId: string;
+  readonly targetType: EntityType | 'external';
+  readonly targetLabel: string;
+  readonly relationshipType: string;
+  readonly strength: number;
+  readonly trustScore?: number | undefined;
+  readonly riskScore?: number | undefined;
+  readonly firstSeen?: string | undefined;
+  readonly lastSeen?: string | undefined;
+  readonly metadata: Record<string, unknown>;
+}
+
+export interface Profile360Analytics {
+  readonly activeHours: readonly Profile360Metric[];
+  readonly regions: readonly Profile360Metric[];
+  readonly devices: readonly Profile360Metric[];
+  readonly browsers: readonly Profile360Metric[];
+  readonly protocols: readonly Profile360Metric[];
+  readonly platforms: readonly Profile360Metric[];
+  readonly spendingPatterns: readonly Profile360Metric[];
+  readonly rewardOpportunities: readonly Profile360Metric[];
+  readonly trustSignals: readonly Profile360Metric[];
+  readonly anomalyIndicators: readonly Profile360Metric[];
+}
+
+export interface Profile360StateSlice {
+  readonly entitiesById: Record<string, Entity>;
+  readonly graphNodesById: Record<string, GraphNode>;
+  readonly graphEdgesById: Record<string, GraphEdge>;
+  readonly timelineByEntityId: Record<string, readonly TimelineEvent[]>;
+  readonly drillStack: readonly Profile360DrillItem[];
+  readonly analyticsByEntityId: Record<string, Profile360Analytics>;
+  readonly eventFeedsByEntityId: Record<string, readonly TimelineEvent[]>;
+  readonly activeSessionIds: readonly string[];
+  readonly streamStatus: 'idle' | 'connecting' | 'connected' | 'degraded';
+}
+
 export interface NeedsHelpCard {
   readonly entityId: string;
   readonly entityType: EntityType;
@@ -48,6 +119,10 @@ export interface TimelineEvent {
   readonly severity: Severity;
   readonly controller?: string | undefined;
   readonly traceId?: string | undefined;
+  readonly entityId?: string | undefined;
+  readonly relatedEntityIds?: readonly string[] | undefined;
+  readonly causalityId?: string | undefined;
+  readonly parentEventId?: string | undefined;
   readonly metadata: Record<string, unknown>;
 }
 

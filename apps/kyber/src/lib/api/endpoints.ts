@@ -4,7 +4,7 @@
  * Extract `.data` for the actual payload.
  */
 import { z } from 'zod';
-import { restClient } from '@kyber/lib/api';
+import { restClient } from './rest/client';
 import { log } from '@kyber/lib/logging';
 
 // ─── Response wrapper ────────────────────────────────────────────

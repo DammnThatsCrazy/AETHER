@@ -14,7 +14,7 @@ const LAYERS: { value: GraphLayer; label: string }[] = [
   { value: 'a2a', label: 'A2A' },
 ];
 
-const ENTITY_TYPES: EntityType[] = ['customer', 'wallet', 'agent', 'protocol', 'contract', 'cluster'];
+const ENTITY_TYPES: EntityType[] = ['human', 'customer', 'agent', 'organization', 'wallet', 'journey', 'session', 'protocol', 'platform', 'device', 'browser', 'reward', 'financial_activity', 'delegation', 'relationship', 'contract', 'cluster'];
 
 const OVERLAY_OPTIONS = [
   { value: 'none', label: 'No Overlay' },
