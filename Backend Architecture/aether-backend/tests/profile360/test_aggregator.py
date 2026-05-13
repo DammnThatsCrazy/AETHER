@@ -1,0 +1,289 @@
+"""Profile360Aggregator unit tests.
+
+Verifies that the drill-down aggregator:
+  * Returns the normalized envelope shape for every dimension
+  * Filters cross-tenant rows
+  * Degrades to empty items on repository failures (does not raise)
+  * Aggregates inflow/outflow correctly
+  * Aggregates platform / protocol breakdowns from analytics events
+  * Resolves drill targets and respects tenant isolation
+"""
+
+from __future__ import annotations
+
+import asyncio
+import os
+import sys
+
+os.environ.setdefault("AETHER_ENV", "local")
+
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..")))
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "..")))
+
+from services.profile.aggregator import Profile360Aggregator
+
+
+def _run(coro):
+    return asyncio.run(coro)
+
+
+# ── In-memory stub repositories ──────────────────────────────────────
+
+
+class _Repo:
+    """Minimal stand-in matching the BaseRepository surface the aggregator uses."""
+
+    def __init__(self, rows=None):
+        self._rows = list(rows or [])
+
+    async def find_by_id(self, record_id):
+        for r in self._rows:
+            if r.get("id") == record_id or r.get("entity_id") == record_id \
+                    or r.get("wallet_id") == record_id or r.get("transfer_id") == record_id \
+                    or r.get("delegation_id") == record_id or r.get("chain_id") == record_id \
+                    or r.get("intent_id") == record_id or r.get("execution_id") == record_id \
+                    or r.get("agent_id") == record_id or r.get("settlement_id") == record_id:
+                return r
+        return None
+
+    async def find_many(self, filters=None, limit=50, **_):
+        f = filters or {}
+        out = [r for r in self._rows if all(r.get(k) == v for k, v in f.items())]
+        return out[:limit]
+
+    async def list_for_owner(self, owner_id):
+        return await self.find_many(filters={"owner_entity_id": owner_id}, limit=200)
+
+    async def list_for_entity(self, entity_id, limit=100):
+        return [
+            r for r in self._rows
+            if r.get("from_entity_id") == entity_id or r.get("to_entity_id") == entity_id
+        ][:limit]
+
+    async def list_for_agent(self, agent_id, limit=50):
+        return [r for r in self._rows if r.get("agent_id") == agent_id][:limit]
+
+
+class _Analytics:
+    def __init__(self, events):
+        self._events = list(events)
+
+    async def query_events(self, tenant_id, filters, limit=50):
+        out = []
+        for e in self._events:
+            if filters.get("user_id") and (e.get("properties") or {}).get("user_id") != filters["user_id"] \
+                    and e.get("user_id") != filters["user_id"]:
+                continue
+            out.append(e)
+        return out[:limit]
+
+
+def _make_aggregator(*, tenant="t-a", entity="user-1"):
+    agents = _Repo([
+        {"id": "a-1", "agent_id": "a-1", "owner_entity_id": entity, "tenant_id": tenant, "model": "gpt"},
+        {"id": "a-2", "agent_id": "a-2", "owner_entity_id": entity, "tenant_id": "t-other", "model": "gpt"},
+    ])
+    wallets = _Repo([
+        {"id": "w-1", "wallet_id": "w-1", "owner_entity_id": entity, "tenant_id": tenant, "chain": "evm", "address": "0xabc", "linked_at": "2026-01-01T00:00:00Z"},
+        {"id": "w-2", "wallet_id": "w-2", "owner_entity_id": entity, "tenant_id": tenant, "chain": "solana", "address": "sol123", "linked_at": "2026-02-01T00:00:00Z"},
+        {"id": "w-x", "wallet_id": "w-x", "owner_entity_id": entity, "tenant_id": "t-other", "chain": "evm", "address": "0xleak"},
+    ])
+    transfers = _Repo([
+        {"id": "tr-1", "transfer_id": "tr-1", "tenant_id": tenant, "from_entity_id": "other", "to_entity_id": entity, "amount": "100", "asset_id": "USD", "occurred_at": "2026-03-01T00:00:00Z"},
+        {"id": "tr-2", "transfer_id": "tr-2", "tenant_id": tenant, "from_entity_id": entity, "to_entity_id": "other", "amount": "40", "asset_id": "USD", "occurred_at": "2026-03-02T00:00:00Z"},
+        {"id": "tr-3", "transfer_id": "tr-3", "tenant_id": "t-other", "from_entity_id": entity, "to_entity_id": "leak", "amount": "999", "asset_id": "USD"},
+    ])
+    delegations = _Repo([
+        {"id": "d-1", "delegation_id": "d-1", "tenant_id": tenant, "grantor_entity_id": entity, "grantee_entity_id": "a-1", "scope": {"actions": ["pay"]}, "starts_at": "2026-01-01T00:00:00Z", "ends_at": None, "revoked_at": None},
+        {"id": "d-2", "delegation_id": "d-2", "tenant_id": tenant, "grantor_entity_id": "boss", "grantee_entity_id": entity, "scope": {"actions": ["read"]}, "starts_at": "2026-01-01T00:00:00Z", "revoked_at": "2026-04-01T00:00:00Z"},
+    ])
+    behavior = _Repo([
+        {"id": entity, "entity_id": entity, "tenant_id": tenant, "automation_ratio": 0.42, "decision_latency_ms": 150, "risk_score": 0.15, "anomaly_flags": []},
+    ])
+    chains = _Repo([
+        {"id": "c-1", "chain_id": "c-1", "entity_id": entity, "tenant_id": tenant, "first_journey_id": "j1", "last_journey_id": "j5", "journey_count": 5, "spans_started_at": "2026-01-01", "spans_last_seen_at": "2026-04-01"},
+    ])
+    intents = _Repo([
+        {"id": "i-1", "intent_id": "i-1", "tenant_id": tenant, "agent_id": entity, "protocol": "x402", "amount": "5"},
+        {"id": "i-2", "intent_id": "i-2", "tenant_id": tenant, "agent_id": entity, "protocol": "stripe", "amount": "10"},
+    ])
+    settlements = _Repo([
+        {"id": "s-1", "settlement_id": "s-1", "tenant_id": tenant, "agent_id": entity, "amount": "9.50"},
+    ])
+    execs = _Repo([
+        {"id": "e-1", "execution_id": "e-1", "tenant_id": tenant, "agent_id": entity, "status": "completed"},
+    ])
+    entities = _Repo([
+        {"id": entity, "entity_id": entity, "tenant_id": tenant, "entity_type": "human", "display_name": "Alice"},
+    ])
+    clusters = _Repo([
+        {"id": "cl-1", "cluster_id": "cl-1", "tenant_id": tenant, "entity_id": entity, "identifier_type": "device", "identifier_value": "device-A", "confidence": 0.95, "linked_at": "2026-01-01T00:00:00Z"},
+    ])
+
+    class _ClustersWrapper(_Repo):
+        async def list_for_entity(self, eid):
+            return [r for r in self._rows if r.get("entity_id") == eid]
+
+    clusters = _ClustersWrapper([
+        {"id": "cl-1", "cluster_id": "cl-1", "tenant_id": tenant, "entity_id": entity, "identifier_type": "device", "identifier_value": "device-A", "confidence": 0.95, "linked_at": "2026-01-01T00:00:00Z"},
+    ])
+
+    assets = _Repo([])
+
+    analytics = _Analytics([
+        {"id": "evt1", "event_type": "page_view", "user_id": entity, "created_at": "2026-04-01T00:00:00Z",
+         "properties": {"user_id": entity, "platform": "ios", "device_id": "device-A", "session_id": "s1", "protocol": "web"}},
+        {"id": "evt2", "event_type": "page_view", "user_id": entity, "created_at": "2026-04-02T00:00:00Z",
+         "properties": {"user_id": entity, "platform": "ios", "device_id": "device-A", "session_id": "s1"}},
+        {"id": "evt3", "event_type": "click", "user_id": entity, "created_at": "2026-04-03T00:00:00Z",
+         "properties": {"user_id": entity, "platform": "web", "device_id": "device-B", "session_id": "s2"}},
+        {"id": "evt4", "event_type": "reward_granted", "user_id": entity, "created_at": "2026-04-04T00:00:00Z",
+         "properties": {"user_id": entity, "value": 5.0, "currency": "USD", "reason": "weekly"}},
+    ])
+
+    return Profile360Aggregator(
+        entity_repo=entities,
+        cluster_repo=clusters,
+        delegation_repo=delegations,
+        wallet_repo=wallets,
+        asset_repo=assets,
+        transfer_repo=transfers,
+        agent_config_repo=agents,
+        agent_exec_repo=execs,
+        behavior_repo=behavior,
+        journey_chain_repo=chains,
+        payment_intent_repo=intents,
+        settlement_repo=settlements,
+        analytics_repo=analytics,
+    )
+
+
+# ── Tests ───────────────────────────────────────────────────────────
+
+
+def test_summary_envelope_and_tenant_isolation():
+    agg = _make_aggregator()
+    out = _run(agg.summary("user-1", "t-a"))
+    assert out["entity_id"] == "user-1"
+    assert out["tenant_id"] == "t-a"
+    assert out["kind"] == "summary"
+    snap = out["snapshot"]
+    # cross-tenant agent / wallet / transfer are filtered out
+    assert snap["counts"]["agents"] == 1
+    assert snap["counts"]["wallets"] == 2
+    assert snap["counts"]["transfers"] == 2
+    assert snap["counts"]["delegations_granted"] == 1
+    assert snap["counts"]["delegations_received"] == 1
+    assert snap["counts"]["active_delegations_received"] == 0  # revoked
+    assert snap["financials"]["inflow_total"] == 100.0
+    assert snap["financials"]["outflow_total"] == 40.0
+    assert snap["financials"]["net"] == 60.0
+    assert snap["behavior"]["automation_ratio"] == 0.42
+    assert snap["behavior"]["computed"] is True
+    assert "agents" in snap["links"]
+
+
+def test_wallets_endpoint_filters_cross_tenant():
+    agg = _make_aggregator()
+    out = _run(agg.wallets("user-1", "t-a"))
+    ids = {i["id"] for i in out["items"]}
+    assert ids == {"w-1", "w-2"}
+    assert out["summary"]["chains"] == ["evm", "solana"]
+    assert out["pagination"]["count"] == 2
+
+
+def test_relationships_includes_typed_edges():
+    agg = _make_aggregator()
+    out = _run(agg.relationships("user-1", "t-a"))
+    types = {(r["type"], r["subType"]) for r in out["items"]}
+    assert ("ownership", "owns_agent") in types
+    assert ("ownership", "owns_wallet") in types
+    assert ("delegation", "grants") in types
+    assert ("delegation", "receives") in types
+    assert ("financial_flow", "transfer_counterparty") in types
+    # Counterparty surfaces the other party only
+    counterparties = [r for r in out["items"] if r["subType"] == "transfer_counterparty"]
+    assert counterparties[0]["to"] == "other"
+
+
+def test_financials_aggregates_inflow_outflow_and_settlements():
+    agg = _make_aggregator()
+    out = _run(agg.financials("user-1", "t-a"))
+    assert out["summary"]["inflow_total"] == 100.0
+    assert out["summary"]["outflow_total"] == 40.0
+    assert out["summary"]["net"] == 60.0
+    assert out["summary"]["settlement_count"] == 1
+    assert abs(out["summary"]["settled_total"] - 9.5) < 1e-6
+    assert all(i["type"] == "transfer" for i in out["items"])
+
+
+def test_platforms_and_protocols_breakdown_from_events():
+    agg = _make_aggregator()
+    plats = _run(agg.platforms("user-1", "t-a"))
+    pids = {i["id"]: i["interactionCount"] for i in plats["items"]}
+    assert pids == {"ios": 2, "web": 1}
+    protos = _run(agg.protocols("user-1", "t-a"))
+    pids = {i["id"] for i in protos["items"]}
+    # event-stream protocol "web" plus intent-stream protocols x402+stripe
+    assert {"web", "x402", "stripe"}.issubset(pids)
+
+
+def test_sessions_and_devices_merge_sources():
+    agg = _make_aggregator()
+    sessions = _run(agg.sessions("user-1", "t-a"))
+    sids = {i["id"] for i in sessions["items"]}
+    assert sids == {"s1", "s2"}
+    devices = _run(agg.devices("user-1", "t-a"))
+    dids = {i["id"]: i["source"] for i in devices["items"]}
+    # device-A is in the cluster repo → identity_cluster
+    assert dids["device-A"] == "identity_cluster"
+    # device-B only shows up in events → observed
+    assert dids["device-B"] == "observed"
+
+
+def test_journeys_and_rewards():
+    agg = _make_aggregator()
+    chains = _run(agg.journeys("user-1", "t-a"))
+    assert len(chains["items"]) == 1
+    assert chains["items"][0]["journeyCount"] == 5
+
+    rewards = _run(agg.rewards("user-1", "t-a"))
+    assert rewards["summary"]["reward_count"] == 1
+    assert rewards["summary"]["total_value"] == 5.0
+
+
+def test_drill_resolves_known_object_and_404s_other_tenant():
+    agg = _make_aggregator()
+    found = _run(agg.drill("user-1", "t-a", "wallet", "w-1"))
+    assert found["found"] is True
+    assert found["object"]["wallet_id"] == "w-1"
+
+    not_found = _run(agg.drill("user-1", "t-a", "wallet", "w-x"))
+    assert not_found["found"] is False
+
+    missing = _run(agg.drill("user-1", "t-a", "wallet", "does-not-exist"))
+    assert missing["found"] is False
+
+
+def test_aggregator_degrades_on_repo_failure_without_raising():
+    """A failing dependency must produce an empty dimension, not a 500."""
+
+    class _Boom:
+        async def find_many(self, *a, **kw):
+            raise RuntimeError("simulated outage")
+
+        async def list_for_entity(self, *a, **kw):
+            raise RuntimeError("simulated outage")
+
+        async def list_for_owner(self, *a, **kw):
+            raise RuntimeError("simulated outage")
+
+        async def find_by_id(self, *a, **kw):
+            raise RuntimeError("simulated outage")
+
+    agg = _make_aggregator()
+    # Swap the wallet repo for one that always fails.
+    agg._wallets = _Boom()  # type: ignore[attr-defined]
+    out = _run(agg.wallets("user-1", "t-a"))
+    assert out["items"] == []
+    assert out["pagination"]["count"] == 0
