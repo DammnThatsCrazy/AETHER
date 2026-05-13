@@ -29,7 +29,6 @@ TOP_LEVEL_DOC_FOCUS = {
     "cicd",
     "ML Models",
     "Agent Layer",
-    "Aether Mobile SDK",
     "Data Ingestion Layer",
     "Smart Contracts",
     "AWS Deployment",
