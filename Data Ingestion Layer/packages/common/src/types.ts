@@ -121,6 +121,8 @@ export interface EnrichedEvent extends BaseEvent {
 }
 
 export interface EventEnrichment {
+  /** Normalized autonomous-agent economic telemetry derived from properties. */
+  economic?: EconomicTelemetry;
   /** GeoIP resolved location */
   geo?: GeoData;
   /** Anonymized IP address */
@@ -133,6 +135,24 @@ export interface EventEnrichment {
   pipelineVersion: string;
   /** Processing duration in ms */
   processingDurationMs?: number;
+}
+
+export interface EconomicTelemetry {
+  intentId?: string;
+  settlementEventId?: string;
+  amount?: number;
+  currency?: string;
+  provider?: string;
+  protocol?: string;
+  endpoint?: string;
+  capabilityRequested?: string;
+  settlementStatus?: string;
+  retryCount?: number;
+  resourceId?: string;
+  facilitatorId?: string;
+  authorizationId?: string;
+  executionId?: string;
+  abandonedReason?: string;
 }
 
 export interface GeoData {

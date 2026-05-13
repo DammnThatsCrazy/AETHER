@@ -5,13 +5,20 @@ from __future__ import annotations
 import logging
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Any
+from importlib.util import find_spec
+from math import erf, sqrt
+from typing import Any, NamedTuple
 
 import numpy as np
-import pandas as pd
-from scipy import stats
 
 logger = logging.getLogger("aether.monitoring")
+
+
+def _scipy_stats() -> Any:
+    """Import scipy.stats only for monitoring checks that need it."""
+    from scipy import stats
+
+    return stats
 
 
 # =============================================================================
@@ -103,7 +110,7 @@ class DriftDetector:
         Returns:
             Tuple of (statistic, p_value).
         """
-        result = stats.ks_2samp(reference, current)
+        result = _scipy_stats().ks_2samp(reference, current)
         return round(float(result.statistic), 6), round(float(result.pvalue), 6)
 
     def compute_js_divergence(
@@ -150,7 +157,7 @@ class DriftDetector:
         return round(js, 6)
 
     def compute_chi_squared(
-        self, reference: pd.Series, current: pd.Series
+        self, reference: Any, current: Any
     ) -> tuple[float, float]:
         """Chi-squared test for categorical features.
 
@@ -176,8 +183,11 @@ class DriftDetector:
         # Normalise to proportions for the expected distribution
         ref_expected = ref_freq / ref_freq.sum() if ref_freq.sum() > 0 else ref_freq
 
+        stats = _scipy_stats()
         try:
-            chi2, p_value = stats.chisquare(cur_freq, f_exp=ref_expected * cur_freq.sum() + 1e-10)
+            chi2, p_value = stats.chisquare(
+                cur_freq, f_exp=ref_expected * cur_freq.sum() + 1e-10
+            )
         except Exception:
             chi2, p_value = 0.0, 1.0
 
@@ -185,8 +195,8 @@ class DriftDetector:
 
     def detect_drift(
         self,
-        reference_df: pd.DataFrame,
-        current_df: pd.DataFrame,
+        reference_df: Any,
+        current_df: Any,
         numeric_features: list[str],
         categorical_features: list[str] | None = None,
     ) -> list[DriftResult]:
@@ -386,7 +396,7 @@ class PerformanceMonitor:
 
         x = np.arange(len(values), dtype=float)
         y = np.array(values, dtype=float)
-        slope, _intercept, _r, _p, _se = stats.linregress(x, y)
+        slope, _intercept, _r, _p, _se = _scipy_stats().linregress(x, y)
 
         if abs(slope) < 1e-6:
             direction = "stable"
@@ -422,8 +432,8 @@ class MonitoringPipeline:
 
     def run(
         self,
-        reference_data: dict[str, pd.DataFrame],
-        current_data: dict[str, pd.DataFrame],
+        reference_data: dict[str, Any],
+        current_data: dict[str, Any],
         model_metrics: dict[str, dict[str, Any]],
     ) -> dict[str, Any]:
         """Run full monitoring pipeline across models.
@@ -596,7 +606,6 @@ class ExtractionDefenseMonitor:
         recent = self._signal_history[-1000:]
 
         band_distribution: dict[str, int] = {}
-        signal_counts: dict[str, int] = {}
         for entry in recent:
             band = entry.get("band", "unknown")
             band_distribution[band] = band_distribution.get(band, 0) + 1

@@ -22,6 +22,8 @@ import {
   assertActionReference,
   assertHandshakeReference,
   assertHandshakeTransition,
+  buildEconomicFlow,
+  deriveAgentEconomicIdentity,
   createHandshake,
   createResourceNode,
   EconomicValidationError,
@@ -31,6 +33,9 @@ import {
   transitionHandshake,
   validateAuthorization,
   validateEconomicPayload,
+  validateEconomicResource,
+  validatePaymentIntent,
+  validateSettlementEvent,
   validateHandshake,
   validateRelationshipExtensions,
   validateResourceNode,
@@ -38,9 +43,11 @@ import {
 import type {
   EconomicActionLike,
   EconomicPayload,
+  PaymentIntent,
   Handshake,
   RelationshipExtensions,
   ResourceNode,
+  SettlementEvent,
 } from './economic';
 
 // ---------------------------------------------------------------------------
@@ -677,5 +684,79 @@ describe('integration: full flows', () => {
         rail: 'internal',
       }),
     ).toThrow(EconomicValidationError);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Economic graph layer / Profile360 telemetry
+// ---------------------------------------------------------------------------
+
+describe('Economic graph layer entities', () => {
+  const intent: PaymentIntent = {
+    id: 'pi_1',
+    agent_id: 'agent_1',
+    amount: 2.5,
+    currency: 'USDC',
+    provider: 'provider_gpu_1',
+    protocol: 'x402',
+    endpoint: 'https://compute.example/x402',
+    capability_requested: 'gpu_compute',
+    settlement_status: 'settled',
+    retry_count: 1,
+    timestamp: 1714600000000,
+    authorization_id: 'auth_1',
+    execution_id: 'exec_1',
+  };
+
+  const settlement: SettlementEvent = {
+    id: 'se_1',
+    intent_id: 'pi_1',
+    agent_id: 'agent_1',
+    status: 'settled',
+    amount: 2.5,
+    currency: 'USDC',
+    provider: 'provider_gpu_1',
+    protocol: 'x402',
+    facilitator_id: 'fac_1',
+    timestamp: 1714600000100,
+  };
+
+  it('validates payment intents, settlement events, and economic resources', () => {
+    expect(validatePaymentIntent(intent)).toEqual(intent);
+    expect(validateSettlementEvent(settlement)).toEqual(settlement);
+    expect(validateEconomicResource({
+      id: 'res_gpu',
+      type: 'gpu_compute',
+      provider: 'provider_gpu_1',
+      capability: 'batch_inference',
+    })).toMatchObject({ type: 'gpu_compute' });
+  });
+
+  it('rejects malformed economic graph entities', () => {
+    expect(() => validatePaymentIntent({ ...intent, retry_count: -1 })).toThrow(EconomicValidationError);
+    expect(() => validateSettlementEvent({ ...settlement, status: 'lost' })).toThrow(EconomicValidationError);
+    expect(() => validateEconomicResource({ id: 'bad', type: 'server', provider: 'p', capability: 'c' })).toThrow(EconomicValidationError);
+  });
+
+  it('builds a queryable economic state transition flow', () => {
+    const flow = buildEconomicFlow(intent, [settlement], [
+      { state: 'outcome', node_id: 'outcome_1', timestamp: 1714600000200, status: 'success' },
+    ]);
+    expect(flow.map((step) => step.state)).toEqual([
+      'intent',
+      'quote',
+      'authorization',
+      'settlement',
+      'execution',
+      'outcome',
+    ]);
+  });
+
+  it('derives an agent economic identity from normalized telemetry', () => {
+    const identity = deriveAgentEconomicIdentity('agent_1', [intent], [settlement], 1714600000300);
+    expect(identity.recurring_spend.USDC.total_spend).toBe(2.5);
+    expect(identity.provider_preferences[0]).toEqual({ id: 'provider_gpu_1', count: 1 });
+    expect(identity.protocol_affinity[0]).toEqual({ id: 'x402', count: 1 });
+    expect(identity.specialization_patterns).toContain('gpu_compute');
   });
 });

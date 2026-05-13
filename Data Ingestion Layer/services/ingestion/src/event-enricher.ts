@@ -3,7 +3,7 @@
 // Server-side enrichment: GeoIP, UA parsing, IP anonymization, metadata
 // =============================================================================
 
-import type { BaseEvent, EnrichedEvent, EventEnrichment, GeoData, ParsedUserAgent } from '@aether/common';
+import type { BaseEvent, EconomicTelemetry, EnrichedEvent, EventEnrichment, GeoData, ParsedUserAgent } from '@aether/common';
 import { anonymizeIp, partitionKey, now } from '@aether/common';
 import { createLogger } from '@aether/logger';
 import { readFileSync } from 'node:fs';
@@ -83,6 +83,40 @@ function parseUserAgent(ua?: string): ParsedUserAgent | undefined {
   else if (/mobile|iphone|ipod|android|blackberry|opera mini|iemobile/i.test(ua)) result.device = 'mobile';
 
   return result;
+}
+
+
+function normalizeEconomicTelemetry(properties?: Record<string, unknown>): EconomicTelemetry | undefined {
+  if (!properties) return undefined;
+  const economic = typeof properties.economic === 'object' && properties.economic !== null
+    ? properties.economic as Record<string, unknown>
+    : properties;
+  const amount = typeof economic.amount === 'number' && Number.isFinite(economic.amount)
+    ? economic.amount
+    : undefined;
+  const retryCount = Number.isInteger(economic.retry_count)
+    ? economic.retry_count as number
+    : Number.isInteger(economic.retryCount)
+      ? economic.retryCount as number
+      : undefined;
+  const telemetry: EconomicTelemetry = {
+    intentId: typeof economic.intent_id === 'string' ? economic.intent_id : typeof economic.intentId === 'string' ? economic.intentId : undefined,
+    settlementEventId: typeof economic.settlement_event_id === 'string' ? economic.settlement_event_id : typeof economic.settlementEventId === 'string' ? economic.settlementEventId : undefined,
+    amount,
+    currency: typeof economic.currency === 'string' ? economic.currency : undefined,
+    provider: typeof economic.provider === 'string' ? economic.provider : undefined,
+    protocol: typeof economic.protocol === 'string' ? economic.protocol : undefined,
+    endpoint: typeof economic.endpoint === 'string' ? economic.endpoint : undefined,
+    capabilityRequested: typeof economic.capability_requested === 'string' ? economic.capability_requested : typeof economic.capabilityRequested === 'string' ? economic.capabilityRequested : undefined,
+    settlementStatus: typeof economic.settlement_status === 'string' ? economic.settlement_status : typeof economic.settlementStatus === 'string' ? economic.settlementStatus : undefined,
+    retryCount,
+    resourceId: typeof economic.resource_id === 'string' ? economic.resource_id : typeof economic.resourceId === 'string' ? economic.resourceId : undefined,
+    facilitatorId: typeof economic.facilitator_id === 'string' ? economic.facilitator_id : typeof economic.facilitatorId === 'string' ? economic.facilitatorId : undefined,
+    authorizationId: typeof economic.authorization_id === 'string' ? economic.authorization_id : typeof economic.authorizationId === 'string' ? economic.authorizationId : undefined,
+    executionId: typeof economic.execution_id === 'string' ? economic.execution_id : typeof economic.executionId === 'string' ? economic.executionId : undefined,
+    abandonedReason: typeof economic.abandoned_reason === 'string' ? economic.abandoned_reason : typeof economic.abandonedReason === 'string' ? economic.abandonedReason : undefined,
+  };
+  return Object.values(telemetry).some(value => value !== undefined) ? telemetry : undefined;
 }
 
 // =============================================================================
@@ -359,6 +393,11 @@ export class EventEnricher {
         if (enrichment.parsedUA?.isBot) {
           enrichment.botProbability = 0.95;
         }
+      }
+
+      const economic = normalizeEconomicTelemetry(event.properties);
+      if (economic) {
+        enrichment.economic = economic;
       }
 
       // Build enriched event

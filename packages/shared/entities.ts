@@ -31,7 +31,14 @@ export type EntityKind =
   | 'protocol'
   // Agent plane (optional)
   | 'agent'
-  | 'service';
+  | 'service'
+  // Economic graph layer (optional/additive)
+  | 'payment_intent'
+  | 'settlement_event'
+  | 'economic_resource'
+  | 'facilitator'
+  | 'agent_economic_identity'
+  | 'agent_profile360';
 
 /** Lightweight reference emitted in event properties. */
 export interface EntityRef {

@@ -5,6 +5,7 @@ export const ROUTES = {
   NOESIS: '/noesis',
   ENTITIES: '/entities',
   ENTITY_DETAIL: '/entities/:type/:id',
+  PROFILE360_DETAIL: '/profile360/:type/:id',
   COMMAND: '/command',
   DIAGNOSTICS: '/diagnostics',
   REVIEW: '/review',
@@ -18,4 +19,8 @@ export function entityDetailPath(type: string, id: string): string {
 
 export function reviewBatchPath(batchId: string): string {
   return `/review/${batchId}`;
+}
+
+export function profile360Path(type: string, id: string): string {
+  return `/profile360/${type}/${id}`;
 }

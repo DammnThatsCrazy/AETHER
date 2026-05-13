@@ -4,7 +4,7 @@
  * Extract `.data` for the actual payload.
  */
 import { z } from 'zod';
-import { restClient } from '@kyber/lib/api';
+import { restClient } from './rest/client';
 import { log } from '@kyber/lib/logging';
 
 // ─── Response wrapper ────────────────────────────────────────────
@@ -301,6 +301,36 @@ export const api = {
       if (params.email) qs.set('email', params.email);
       if (params.device) qs.set('device', params.device);
       return restClient.get(`/v1/profile/resolve?${qs.toString()}`, apiResponseSchema(z.object({ resolved_user_id: z.string() })))
+        .then(r => r.data);
+    },
+  },
+
+  // ── Profile360 normalized surfaces ──
+  profile360: {
+    full: (entityType: string, entityId: string) =>
+      restClient.get(`/v1/profile360/${entityType}/${entityId}?include=identity,system,financial,graph,timeline,analytics,debug`, apiResponseSchema(z.unknown()))
+        .then(r => r.data),
+
+    graph: (entityType: string, entityId: string, params?: { cursor?: string; limit?: number; start?: string; end?: string }) => {
+      const qs = new URLSearchParams();
+      if (params?.cursor) qs.set('cursor', params.cursor);
+      if (params?.limit) qs.set('limit', String(params.limit));
+      if (params?.start) qs.set('start', params.start);
+      if (params?.end) qs.set('end', params.end);
+      const query = qs.toString();
+      return restClient.get(`/v1/profile360/${entityType}/${entityId}/graph${query ? `?${query}` : ''}`, apiResponseSchema(z.unknown()))
+        .then(r => r.data);
+    },
+
+    timeline: (entityType: string, entityId: string, params?: { cursor?: string; limit?: number; start?: string; end?: string; type?: string }) => {
+      const qs = new URLSearchParams();
+      if (params?.cursor) qs.set('cursor', params.cursor);
+      if (params?.limit) qs.set('limit', String(params.limit));
+      if (params?.start) qs.set('start', params.start);
+      if (params?.end) qs.set('end', params.end);
+      if (params?.type) qs.set('type', params.type);
+      const query = qs.toString();
+      return restClient.get(`/v1/profile360/${entityType}/${entityId}/timeline${query ? `?${query}` : ''}`, apiResponseSchema(z.unknown()))
         .then(r => r.data);
     },
   },

@@ -13,6 +13,25 @@ import os
 import sys
 import types
 
+# Python 3.14 no longer auto-creates a main-thread event loop for
+# asyncio.get_event_loop(). Several legacy Profile360 smoke tests still use
+# that pattern, so keep the tests version-portable until they are migrated to
+# pytest-asyncio/asyncio.run.
+import asyncio
+
+
+class _CompatEventLoopPolicy(asyncio.DefaultEventLoopPolicy):
+    def get_event_loop(self):  # type: ignore[override]
+        try:
+            return super().get_event_loop()
+        except RuntimeError:
+            loop = self.new_event_loop()
+            self.set_event_loop(loop)
+            return loop
+
+
+asyncio.set_event_loop_policy(_CompatEventLoopPolicy())
+
 
 def _stub_jwt_and_crypto() -> None:
     """Forcibly install lightweight stubs for jwt + cryptography.

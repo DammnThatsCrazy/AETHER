@@ -984,3 +984,238 @@ class JourneyChainRepository(BaseRepository):
         if existing:
             return await self.update(chain_id, record)
         return await self.insert(chain_id, record)
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# ECONOMIC GRAPH LAYER — Agent economies and Profile360 telemetry (additive)
+# ═══════════════════════════════════════════════════════════════════════════
+
+
+class PaymentIntentRepository(BaseRepository):
+    """Pre-execution economic decisions made by autonomous agents.
+
+    PaymentIntent rows intentionally model more than successful payments: quote
+    requests, retries, budget evaluation, abandonment, and compute/API purchase
+    attempts all live here so the graph can trace intent -> quote -> evaluation
+    -> authorization -> settlement -> execution -> outcome.
+    """
+
+    def __init__(self) -> None:
+        super().__init__("payment_intents")
+
+    async def record_intent(
+        self,
+        intent_id: str,
+        tenant_id: str,
+        agent_id: str,
+        amount: str,
+        currency: str,
+        provider: str,
+        protocol: str = "",
+        endpoint: str = "",
+        capability_requested: str = "",
+        settlement_status: str = "pending",
+        retry_count: int = 0,
+        resource_id: Optional[str] = None,
+        facilitator_id: Optional[str] = None,
+        quote_id: Optional[str] = None,
+        authorization_id: Optional[str] = None,
+        execution_id: Optional[str] = None,
+        abandoned_reason: Optional[str] = None,
+        metadata: Optional[dict] = None,
+        occurred_at: Optional[str] = None,
+    ) -> dict:
+        return await self.insert(intent_id, {
+            "intent_id": intent_id,
+            "tenant_id": tenant_id,
+            "agent_id": agent_id,
+            "amount": str(amount),
+            "currency": currency,
+            "provider": provider,
+            "protocol": protocol,
+            "endpoint": endpoint,
+            "capability_requested": capability_requested,
+            "settlement_status": settlement_status,
+            "retry_count": retry_count,
+            "resource_id": resource_id,
+            "facilitator_id": facilitator_id,
+            "quote_id": quote_id,
+            "authorization_id": authorization_id,
+            "execution_id": execution_id,
+            "abandoned_reason": abandoned_reason,
+            "occurred_at": occurred_at or utc_now().isoformat(),
+            "metadata": metadata or {},
+        })
+
+    async def list_for_agent(self, agent_id: str, limit: int = 100) -> list[dict]:
+        rows = await self.find_many(filters={"agent_id": agent_id}, limit=limit)
+        rows.sort(key=lambda r: r.get("occurred_at", ""), reverse=True)
+        return rows[:limit]
+
+
+class SettlementEventRepository(BaseRepository):
+    """Settlement attempts and terminal outcomes for PaymentIntent records."""
+
+    def __init__(self) -> None:
+        super().__init__("settlement_events")
+
+    async def record_event(
+        self,
+        settlement_event_id: str,
+        tenant_id: str,
+        intent_id: str,
+        agent_id: str,
+        status: str,
+        amount: str,
+        currency: str,
+        provider: str = "",
+        protocol: str = "",
+        facilitator_id: Optional[str] = None,
+        retry_count: int = 0,
+        failure_reason: Optional[str] = None,
+        tx_hash: Optional[str] = None,
+        metadata: Optional[dict] = None,
+        occurred_at: Optional[str] = None,
+    ) -> dict:
+        return await self.insert(settlement_event_id, {
+            "settlement_event_id": settlement_event_id,
+            "tenant_id": tenant_id,
+            "intent_id": intent_id,
+            "agent_id": agent_id,
+            "status": status,
+            "amount": str(amount),
+            "currency": currency,
+            "provider": provider,
+            "protocol": protocol,
+            "facilitator_id": facilitator_id,
+            "retry_count": retry_count,
+            "failure_reason": failure_reason,
+            "tx_hash": tx_hash,
+            "occurred_at": occurred_at or utc_now().isoformat(),
+            "metadata": metadata or {},
+        })
+
+    async def list_for_intent(self, intent_id: str, limit: int = 100) -> list[dict]:
+        rows = await self.find_many(filters={"intent_id": intent_id}, limit=limit)
+        rows.sort(key=lambda r: r.get("occurred_at", ""), reverse=True)
+        return rows[:limit]
+
+    async def list_for_agent(self, agent_id: str, limit: int = 100) -> list[dict]:
+        rows = await self.find_many(filters={"agent_id": agent_id}, limit=limit)
+        rows.sort(key=lambda r: r.get("occurred_at", ""), reverse=True)
+        return rows[:limit]
+
+
+class EconomicResourceRepository(BaseRepository):
+    """Purchasable capabilities: inference, GPU compute, APIs, data, memory."""
+
+    VALID_RESOURCE_TYPES = (
+        "inference", "gpu_compute", "api_access", "dataset", "memory_retrieval",
+        "execution_right", "orchestration_service", "agent_service",
+    )
+
+    def __init__(self) -> None:
+        super().__init__("economic_resources")
+
+    async def upsert_resource(
+        self,
+        resource_id: str,
+        tenant_id: str,
+        resource_type: str,
+        provider: str,
+        capability: str,
+        protocol: str = "",
+        endpoint: str = "",
+        pricing: Optional[dict] = None,
+        metadata: Optional[dict] = None,
+    ) -> dict:
+        record = {
+            "resource_id": resource_id,
+            "tenant_id": tenant_id,
+            "resource_type": resource_type,
+            "provider": provider,
+            "capability": capability,
+            "protocol": protocol,
+            "endpoint": endpoint,
+            "pricing": pricing or {},
+            "metadata": metadata or {},
+            "updated_at": utc_now().isoformat(),
+        }
+        existing = await self.find_by_id(resource_id)
+        if existing:
+            return await self.update(resource_id, record)
+        return await self.insert(resource_id, record)
+
+
+class FacilitatorRepository(BaseRepository):
+    """Payment facilitators, x402 facilitators, trust brokers, authorization rails."""
+
+    def __init__(self) -> None:
+        super().__init__("facilitators")
+
+    async def upsert_facilitator(
+        self,
+        facilitator_id: str,
+        tenant_id: str,
+        name: str,
+        facilitator_type: str,
+        protocols: Optional[list] = None,
+        trust_score: float = 0.0,
+        metadata: Optional[dict] = None,
+    ) -> dict:
+        record = {
+            "facilitator_id": facilitator_id,
+            "tenant_id": tenant_id,
+            "name": name,
+            "facilitator_type": facilitator_type,
+            "protocols": protocols or [],
+            "trust_score": trust_score,
+            "metadata": metadata or {},
+            "updated_at": utc_now().isoformat(),
+        }
+        existing = await self.find_by_id(facilitator_id)
+        if existing:
+            return await self.update(facilitator_id, record)
+        return await self.insert(facilitator_id, record)
+
+
+class AgentEconomicIdentityRepository(BaseRepository):
+    """Derived long-running economic identity for an autonomous agent."""
+
+    def __init__(self) -> None:
+        super().__init__("agent_economic_identities")
+
+    async def upsert_identity(
+        self,
+        agent_id: str,
+        tenant_id: str,
+        recurring_spend: Optional[dict] = None,
+        provider_preferences: Optional[list] = None,
+        capability_preferences: Optional[list] = None,
+        execution_dependencies: Optional[list] = None,
+        trust_relationships: Optional[list] = None,
+        protocol_affinity: Optional[list] = None,
+        pricing_tolerance: Optional[dict] = None,
+        specialization_patterns: Optional[list] = None,
+        failure_rates: Optional[dict] = None,
+        metadata: Optional[dict] = None,
+    ) -> dict:
+        record = {
+            "agent_id": agent_id,
+            "tenant_id": tenant_id,
+            "recurring_spend": recurring_spend or {},
+            "provider_preferences": provider_preferences or [],
+            "capability_preferences": capability_preferences or [],
+            "execution_dependencies": execution_dependencies or [],
+            "trust_relationships": trust_relationships or [],
+            "protocol_affinity": protocol_affinity or [],
+            "pricing_tolerance": pricing_tolerance or {},
+            "specialization_patterns": specialization_patterns or [],
+            "failure_rates": failure_rates or {},
+            "metadata": metadata or {},
+            "computed_at": utc_now().isoformat(),
+        }
+        existing = await self.find_by_id(agent_id)
+        if existing:
+            return await self.update(agent_id, record)
+        return await self.insert(agent_id, record)
