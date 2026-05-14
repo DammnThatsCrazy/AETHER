@@ -265,6 +265,61 @@ def test_drill_resolves_known_object_and_404s_other_tenant():
     assert missing["found"] is False
 
 
+def test_summary_masks_cross_tenant_entity_record():
+    """find_by_id is not tenant-scoped; a same-id row owned by another
+    tenant must not leak its display_name / metadata via /summary."""
+    agg = _make_aggregator()
+    # Replace the entity repo with a row that exists under a foreign tenant.
+    agg._entities = _Repo([  # type: ignore[attr-defined]
+        {"id": "user-1", "entity_id": "user-1", "tenant_id": "t-other",
+         "entity_type": "human", "display_name": "Foreign Tenant Alice",
+         "metadata": {"secret": "should-not-leak"}},
+    ])
+    out = _run(agg.summary("user-1", "t-a"))
+    entity = out["snapshot"]["entity"]
+    # Tenant guard tripped → entity reported as unknown, no foreign fields surfaced.
+    assert entity["known"] is False
+    assert entity["displayLabel"] == "user-1"
+    assert entity["type"] == "unknown"
+    assert "Foreign Tenant Alice" not in str(out)
+    assert "should-not-leak" not in str(out)
+
+
+def test_devices_and_sessions_read_top_level_device_id():
+    """Canonical SDK events normalized by services/ingestion store device_id
+    at the top level, not inside properties. The aggregator must read both."""
+
+    class _AnalyticsTopLevel:
+        async def query_events(self, tenant_id, filters, limit=50):
+            # Top-level device_id / platform / session_id, NO properties duplicate.
+            return [
+                {"id": "ev1", "event_type": "page_view", "user_id": "user-1",
+                 "device_id": "top-level-device", "platform": "ios",
+                 "session_id": "s-top", "created_at": "2026-04-01T00:00:00Z",
+                 "properties": {"user_id": "user-1"}},
+                {"id": "ev2", "event_type": "click", "user_id": "user-1",
+                 "device_id": "top-level-device", "platform": "ios",
+                 "session_id": "s-top", "created_at": "2026-04-02T00:00:00Z",
+                 "properties": {"user_id": "user-1"}},
+            ]
+
+    agg = _make_aggregator()
+    agg._analytics = _AnalyticsTopLevel()  # type: ignore[attr-defined]
+    # No identity-cluster entry for this device, so it must arrive via the
+    # observed path only.
+    agg._clusters = _Repo([])  # type: ignore[attr-defined]
+
+    devices = _run(agg.devices("user-1", "t-a"))
+    ids = {i["id"]: i["source"] for i in devices["items"]}
+    assert "top-level-device" in ids
+    assert ids["top-level-device"] == "observed"
+
+    sessions = _run(agg.sessions("user-1", "t-a"))
+    rollup = next(i for i in sessions["items"] if i["id"] == "s-top")
+    assert "top-level-device" in rollup["devices"]
+    assert "ios" in rollup["platforms"]
+
+
 def test_aggregator_degrades_on_repo_failure_without_raising():
     """A failing dependency must produce an empty dimension, not a 500."""
 

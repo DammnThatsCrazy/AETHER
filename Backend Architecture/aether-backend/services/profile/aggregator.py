@@ -267,7 +267,9 @@ class Profile360Aggregator:
                 ("platforms", "platform"), ("devices", "device_id"),
                 ("user_agents", "user_agent"),
             ):
-                v = props.get(key)
+                # Canonical SDK events keep these at the top level; fall back
+                # so the session rollup is correct for both payload shapes.
+                v = props.get(key) or e.get(key)
                 if v:
                     slot[src].add(v)
 
@@ -326,7 +328,10 @@ class Profile360Aggregator:
                 tenant_id, {"user_id": entity_id}, limit=limit * 5,
             ))
             for e in events:
-                did = (e.get("properties") or {}).get("device_id")
+                # Canonical SDK events normalized by services/ingestion store
+                # device_id at the top level, not inside properties. Read both
+                # so custom properties-based payloads still work.
+                did = (e.get("properties") or {}).get("device_id") or e.get("device_id")
                 if did:
                     observed_counts[did] += 1
 
@@ -719,6 +724,11 @@ class Profile360Aggregator:
             _safe("summary.execs", self._agent_execs.find_many(filters={"agent_id": entity_id}, limit=100)),
         )
         entity, agents, wallets, transfers, deleg_out, deleg_in, behavior, chains, execs = results
+        # Tenant guard on the entity row too — find_by_id is not tenant-scoped,
+        # so a foreign-tenant entity with this id would otherwise leak its
+        # display_name / metadata into the summary response.
+        if isinstance(entity, dict) and entity.get("tenant_id") not in (None, "", tenant_id):
+            entity = None
         entity = entity if isinstance(entity, dict) else None
         agents = _tenant_filter(agents or [], tenant_id)
         wallets = _tenant_filter(wallets or [], tenant_id)
