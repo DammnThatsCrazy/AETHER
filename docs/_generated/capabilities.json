@@ -40,7 +40,7 @@
     },
     {
       "name": "featureFlags",
-      "type": "{ key: string",
+      "type": "{ key: string; enabled: boolean; value?: unknown }[]",
       "optional": true,
       "description": "Optional backend-delivered feature flags (opaque to SDK)."
     }

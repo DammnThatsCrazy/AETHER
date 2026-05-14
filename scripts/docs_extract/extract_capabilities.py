@@ -39,21 +39,19 @@ ROOT = Path(__file__).resolve().parent.parent.parent
 CAPS_TS = ROOT / "packages" / "shared" / "capabilities.ts"
 OUTPUT = ROOT / "docs" / "_generated" / "capabilities.json"
 
-# Match a TypeScript interface block, capturing the body between braces.
-INTERFACE_RE = re.compile(
-    r"export interface (\w+)\s*\{([^}]+)\}", re.DOTALL
-)
+# Match the header `export interface NAME {`. The body itself is then
+# extracted via a balance-aware scan rather than a regex, because TS
+# interfaces routinely contain nested inline object types (e.g.
+# ``featureFlags?: { key: string; enabled: boolean }[]``) that a
+# ``[^}]+`` group would mis-match.
+INTERFACE_HEADER_RE = re.compile(r"export interface (\w+)\s*\{")
 
-# Match a single field with its preceding JSDoc-style comment (if any).
-# Three forms recognised:
-#   /** description */
-#   field: Type;
-#   field?: Type;
-FIELD_RE = re.compile(
-    r"(?:/\*\*\s*(.*?)\s*\*/\s*)?"
-    r"^\s*([a-zA-Z_][a-zA-Z0-9_]*)(\??)\s*:\s*([^;]+);",
-    re.MULTILINE | re.DOTALL,
-)
+# JSDoc immediately preceding a field: ``/** description */``.
+JSDOC_RE = re.compile(r"/\*\*\s*(.*?)\s*\*/", re.DOTALL)
+
+# Field declaration: ``name(?)?: <type>``. The type runs until the
+# semicolon at brace depth zero — extracted by ``_split_fields`` below.
+FIELD_HEAD_RE = re.compile(r"^\s*([a-zA-Z_][a-zA-Z0-9_]*)(\??)\s*:\s*(.*)$", re.DOTALL)
 
 # In GraphLayerFlags, each line has an inline comment like
 # "agent: boolean; // IG_AGENT_LAYER (L2)".
@@ -66,6 +64,107 @@ LAYER_LINE_RE = re.compile(
 LAYER_META_RE = re.compile(r"(IG_[A-Z0-9_]+)(?:\s*\((L[\dab]+)\))?")
 
 
+def _read_interface_body(text: str, name: str) -> str | None:
+    """Return the body of `export interface NAME { ... }` or None.
+
+    Walks the source character-by-character starting from the opening
+    brace, tracking brace depth so that nested ``{ ... }`` inside type
+    expressions is treated as part of the body rather than as a closer.
+    """
+    for m in INTERFACE_HEADER_RE.finditer(text):
+        if m.group(1) != name:
+            continue
+        i = m.end()  # position just after the `{`
+        depth = 1
+        start = i
+        while i < len(text) and depth > 0:
+            ch = text[i]
+            if ch == "{":
+                depth += 1
+            elif ch == "}":
+                depth -= 1
+                if depth == 0:
+                    return text[start:i]
+            i += 1
+        # Reached EOF before matching close — malformed source.
+        return None
+    return None
+
+
+def _split_fields(body: str) -> list[tuple[str, str]]:
+    """Split an interface body into (raw_chunk, terminator) tuples.
+
+    Each chunk is the text up to a semicolon at brace/bracket/angle
+    depth zero. Comments are preserved on the chunk so the field
+    parser can pick up any preceding JSDoc.
+    """
+    chunks: list[tuple[str, str]] = []
+    buf: list[str] = []
+    depth = 0
+    i = 0
+    n = len(body)
+    while i < n:
+        ch = body[i]
+        if ch in "{[<":
+            depth += 1
+        elif ch in "}]>":
+            depth -= 1
+        elif ch == ";" and depth == 0:
+            chunks.append(("".join(buf), ";"))
+            buf = []
+            i += 1
+            continue
+        elif ch == "/" and i + 1 < n and body[i + 1] == "*":
+            # Skip block-comment content but preserve it in buf so the
+            # preceding-JSDoc parser still works.
+            end = body.find("*/", i + 2)
+            if end == -1:
+                end = n
+            else:
+                end += 2
+            buf.append(body[i:end])
+            i = end
+            continue
+        elif ch == "/" and i + 1 < n and body[i + 1] == "/":
+            # Line comment — also preserve.
+            end = body.find("\n", i)
+            if end == -1:
+                end = n
+            buf.append(body[i:end])
+            i = end
+            continue
+        buf.append(ch)
+        i += 1
+    tail = "".join(buf).strip()
+    if tail:
+        chunks.append((tail, ""))  # no trailing `;`
+    return chunks
+
+
+def _parse_field(chunk: str) -> dict | None:
+    """Parse one ``[/** doc */] name(?)?: <type>`` chunk."""
+    doc = ""
+    doc_match = JSDOC_RE.search(chunk)
+    if doc_match:
+        doc = re.sub(r"\s+", " ", doc_match.group(1).replace("*", "").strip())
+        chunk = chunk[doc_match.end():]
+
+    # Strip line comments and trailing whitespace lines.
+    chunk = re.sub(r"//[^\n]*", "", chunk).strip()
+    if not chunk:
+        return None
+
+    head = FIELD_HEAD_RE.match(chunk)
+    if not head:
+        return None
+    return {
+        "name": head.group(1),
+        "type": head.group(3).strip(),
+        "optional": head.group(2) == "?",
+        "description": doc,
+    }
+
+
 def read_version() -> str:
     text = (ROOT / "pyproject.toml").read_text()
     match = re.search(r'^version\s*=\s*"([^"]+)"', text, re.MULTILINE)
@@ -73,23 +172,19 @@ def read_version() -> str:
 
 
 def find_interface_body(text: str, name: str) -> str:
-    for type_name, body in INTERFACE_RE.findall(text):
-        if type_name == name:
-            return body
-    raise ValueError(f"could not locate `export interface {name}` in capabilities.ts")
+    body = _read_interface_body(text, name)
+    if body is None:
+        raise ValueError(f"could not locate `export interface {name}` in capabilities.ts")
+    return body
 
 
 def parse_manifest_fields(text: str) -> list[dict]:
     body = find_interface_body(text, "CapabilityManifest")
     fields: list[dict] = []
-    for doc, name, opt, ts_type in FIELD_RE.findall(body):
-        clean_doc = re.sub(r"\s+", " ", doc.replace("*", "").strip()) if doc else ""
-        fields.append({
-            "name": name,
-            "type": ts_type.strip(),
-            "optional": opt == "?",
-            "description": clean_doc,
-        })
+    for chunk, _ in _split_fields(body):
+        parsed = _parse_field(chunk)
+        if parsed is not None:
+            fields.append(parsed)
     return fields
 
 
