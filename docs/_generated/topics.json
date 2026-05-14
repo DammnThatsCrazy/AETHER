@@ -1,0 +1,845 @@
+{
+  "version": "8.8.0",
+  "generated_from": "Backend Architecture/aether-backend/shared/events/events.py",
+  "sections": [
+    {
+      "name": "Ingestion",
+      "topics": [
+        {
+          "member": "SDK_EVENTS_RAW",
+          "value": "aether.sdk.events.raw"
+        },
+        {
+          "member": "SDK_EVENTS_VALIDATED",
+          "value": "aether.sdk.events.validated"
+        },
+        {
+          "member": "API_FEED_RAW",
+          "value": "aether.api.feed.raw"
+        }
+      ]
+    },
+    {
+      "name": "Identity",
+      "topics": [
+        {
+          "member": "IDENTITY_RESOLVED",
+          "value": "aether.identity.resolved"
+        },
+        {
+          "member": "IDENTITY_MERGED",
+          "value": "aether.identity.merged"
+        },
+        {
+          "member": "PROFILE_UPDATED",
+          "value": "aether.profile.updated"
+        }
+      ]
+    },
+    {
+      "name": "Analytics",
+      "topics": [
+        {
+          "member": "SESSION_SCORED",
+          "value": "aether.analytics.session.scored"
+        },
+        {
+          "member": "ANOMALY_DETECTED",
+          "value": "aether.analytics.anomaly"
+        }
+      ]
+    },
+    {
+      "name": "ML",
+      "topics": [
+        {
+          "member": "PREDICTION_GENERATED",
+          "value": "aether.ml.prediction"
+        },
+        {
+          "member": "MODEL_UPDATED",
+          "value": "aether.ml.model.updated"
+        }
+      ]
+    },
+    {
+      "name": "Agent",
+      "topics": [
+        {
+          "member": "AGENT_DISCOVERY",
+          "value": "aether.agent.discovery"
+        },
+        {
+          "member": "AGENT_ENRICHMENT",
+          "value": "aether.agent.enrichment"
+        }
+      ]
+    },
+    {
+      "name": "Campaign",
+      "topics": [
+        {
+          "member": "ATTRIBUTION_CALCULATED",
+          "value": "aether.campaign.attribution"
+        }
+      ]
+    },
+    {
+      "name": "Consent",
+      "topics": [
+        {
+          "member": "CONSENT_UPDATED",
+          "value": "aether.consent.updated"
+        },
+        {
+          "member": "DATA_SUBJECT_REQUEST",
+          "value": "aether.consent.dsr"
+        }
+      ]
+    },
+    {
+      "name": "Identity Resolution",
+      "topics": [
+        {
+          "member": "RESOLUTION_EVALUATED",
+          "value": "aether.resolution.evaluated"
+        },
+        {
+          "member": "RESOLUTION_AUTO_MERGED",
+          "value": "aether.resolution.auto_merged"
+        },
+        {
+          "member": "RESOLUTION_FLAGGED",
+          "value": "aether.resolution.flagged"
+        },
+        {
+          "member": "RESOLUTION_APPROVED",
+          "value": "aether.resolution.approved"
+        },
+        {
+          "member": "RESOLUTION_REJECTED",
+          "value": "aether.resolution.rejected"
+        },
+        {
+          "member": "FINGERPRINT_OBSERVED",
+          "value": "aether.identity.fingerprint.observed"
+        },
+        {
+          "member": "IP_OBSERVED",
+          "value": "aether.identity.ip.observed"
+        }
+      ]
+    },
+    {
+      "name": "Intelligence Graph \u2014 Agent Behavioral (L2)",
+      "topics": [
+        {
+          "member": "AGENT_TASK_STARTED",
+          "value": "aether.agent.task.started"
+        },
+        {
+          "member": "AGENT_TASK_COMPLETED",
+          "value": "aether.agent.task.completed"
+        },
+        {
+          "member": "AGENT_DECISION_MADE",
+          "value": "aether.agent.decision.made"
+        },
+        {
+          "member": "AGENT_STATE_SNAPSHOT",
+          "value": "aether.agent.state.snapshot"
+        },
+        {
+          "member": "AGENT_GROUND_TRUTH",
+          "value": "aether.agent.ground_truth"
+        }
+      ]
+    },
+    {
+      "name": "Intelligence Graph \u2014 Agent-to-Human (A2H)",
+      "topics": [
+        {
+          "member": "AGENT_NOTIFICATION_SENT",
+          "value": "aether.agent.notification.sent"
+        },
+        {
+          "member": "AGENT_RECOMMENDATION_MADE",
+          "value": "aether.agent.recommendation.made"
+        },
+        {
+          "member": "AGENT_RESULT_DELIVERED",
+          "value": "aether.agent.result.delivered"
+        },
+        {
+          "member": "AGENT_ESCALATION_RAISED",
+          "value": "aether.agent.escalation.raised"
+        }
+      ]
+    },
+    {
+      "name": "Intelligence Graph \u2014 Commerce (L3a)",
+      "topics": [
+        {
+          "member": "PAYMENT_SENT",
+          "value": "aether.commerce.payment.sent"
+        },
+        {
+          "member": "AGENT_HIRED",
+          "value": "aether.commerce.agent.hired"
+        },
+        {
+          "member": "SERVICE_PURCHASED",
+          "value": "aether.commerce.service.purchased"
+        },
+        {
+          "member": "FEE_ELIMINATED",
+          "value": "aether.commerce.fee.eliminated"
+        }
+      ]
+    },
+    {
+      "name": "Intelligence Graph \u2014 On-Chain Actions (L0)",
+      "topics": [
+        {
+          "member": "ACTION_RECORDED",
+          "value": "aether.onchain.action.recorded"
+        },
+        {
+          "member": "CONTRACT_DEPLOYED",
+          "value": "aether.onchain.contract.deployed"
+        },
+        {
+          "member": "CONTRACT_CALLED",
+          "value": "aether.onchain.contract.called"
+        }
+      ]
+    },
+    {
+      "name": "Intelligence Graph \u2014 x402 Payments (L3b)",
+      "topics": [
+        {
+          "member": "X402_PAYMENT_CAPTURED",
+          "value": "aether.x402.payment.captured"
+        }
+      ]
+    },
+    {
+      "name": "Intelligence Graph \u2014 Agentic Commerce Control Plane (L3b+)",
+      "topics": [
+        {
+          "member": "COMMERCE_CHALLENGE_ISSUED",
+          "value": "aether.commerce.challenge.issued"
+        },
+        {
+          "member": "COMMERCE_REQUIREMENT_GENERATED",
+          "value": "aether.commerce.requirement.generated"
+        },
+        {
+          "member": "COMMERCE_APPROVAL_REQUESTED",
+          "value": "aether.commerce.approval.requested"
+        },
+        {
+          "member": "COMMERCE_APPROVAL_ASSIGNED",
+          "value": "aether.commerce.approval.assigned"
+        },
+        {
+          "member": "COMMERCE_APPROVAL_APPROVED",
+          "value": "aether.commerce.approval.approved"
+        },
+        {
+          "member": "COMMERCE_APPROVAL_REJECTED",
+          "value": "aether.commerce.approval.rejected"
+        },
+        {
+          "member": "COMMERCE_APPROVAL_ESCALATED",
+          "value": "aether.commerce.approval.escalated"
+        },
+        {
+          "member": "COMMERCE_APPROVAL_EXPIRED",
+          "value": "aether.commerce.approval.expired"
+        },
+        {
+          "member": "COMMERCE_APPROVAL_REVOKED",
+          "value": "aether.commerce.approval.revoked"
+        },
+        {
+          "member": "COMMERCE_PAYMENT_SUBMITTED",
+          "value": "aether.commerce.payment.submitted"
+        },
+        {
+          "member": "COMMERCE_VERIFICATION_STARTED",
+          "value": "aether.commerce.verification.started"
+        },
+        {
+          "member": "COMMERCE_VERIFICATION_SUCCEEDED",
+          "value": "aether.commerce.verification.succeeded"
+        },
+        {
+          "member": "COMMERCE_VERIFICATION_FAILED",
+          "value": "aether.commerce.verification.failed"
+        },
+        {
+          "member": "COMMERCE_SETTLEMENT_STARTED",
+          "value": "aether.commerce.settlement.started"
+        },
+        {
+          "member": "COMMERCE_SETTLEMENT_PENDING",
+          "value": "aether.commerce.settlement.pending"
+        },
+        {
+          "member": "COMMERCE_SETTLEMENT_COMPLETED",
+          "value": "aether.commerce.settlement.completed"
+        },
+        {
+          "member": "COMMERCE_SETTLEMENT_FAILED",
+          "value": "aether.commerce.settlement.failed"
+        },
+        {
+          "member": "COMMERCE_ENTITLEMENT_GRANTED",
+          "value": "aether.commerce.entitlement.granted"
+        },
+        {
+          "member": "COMMERCE_ENTITLEMENT_REUSED",
+          "value": "aether.commerce.entitlement.reused"
+        },
+        {
+          "member": "COMMERCE_ENTITLEMENT_REVOKED",
+          "value": "aether.commerce.entitlement.revoked"
+        },
+        {
+          "member": "COMMERCE_ENTITLEMENT_EXPIRED",
+          "value": "aether.commerce.entitlement.expired"
+        },
+        {
+          "member": "COMMERCE_ACCESS_GRANTED",
+          "value": "aether.commerce.access.granted"
+        },
+        {
+          "member": "COMMERCE_ACCESS_DENIED",
+          "value": "aether.commerce.access.denied"
+        },
+        {
+          "member": "COMMERCE_POLICY_DENIED",
+          "value": "aether.commerce.policy.denied"
+        },
+        {
+          "member": "COMMERCE_FACILITATOR_ROUTE_SELECTED",
+          "value": "aether.commerce.facilitator.route_selected"
+        },
+        {
+          "member": "COMMERCE_KYBER_ACTION_LOGGED",
+          "value": "aether.commerce.kyber.action_logged"
+        },
+        {
+          "member": "COMMERCE_OPERATOR_ACTION_LOGGED",
+          "value": "aether.commerce.operator.action_logged"
+        },
+        {
+          "member": "COMMERCE_REPLAY_EXECUTED",
+          "value": "aether.commerce.replay.executed"
+        },
+        {
+          "member": "COMMERCE_RECONCILIATION_TASK_CREATED",
+          "value": "aether.commerce.reconciliation.task_created"
+        },
+        {
+          "member": "COMMERCE_RECONCILIATION_TASK_RESOLVED",
+          "value": "aether.commerce.reconciliation.task_resolved"
+        }
+      ]
+    },
+    {
+      "name": "Extraction Defense Mesh",
+      "topics": [
+        {
+          "member": "ML_EXTRACTION_REQUEST_SEEN",
+          "value": "aether.extraction.request.seen"
+        },
+        {
+          "member": "ML_EXTRACTION_IDENTITY_RESOLVED",
+          "value": "aether.extraction.identity.resolved"
+        },
+        {
+          "member": "ML_EXTRACTION_SIGNAL_COMPUTED",
+          "value": "aether.extraction.signal.computed"
+        },
+        {
+          "member": "ML_EXTRACTION_SCORE_UPDATED",
+          "value": "aether.extraction.score.updated"
+        },
+        {
+          "member": "ML_EXTRACTION_POLICY_APPLIED",
+          "value": "aether.extraction.policy.applied"
+        },
+        {
+          "member": "ML_EXTRACTION_CANARY_HIT",
+          "value": "aether.extraction.canary.hit"
+        },
+        {
+          "member": "ML_EXTRACTION_ALERT_OPENED",
+          "value": "aether.extraction.alert.opened"
+        },
+        {
+          "member": "ML_EXTRACTION_CLUSTER_ESCALATED",
+          "value": "aether.extraction.cluster.escalated"
+        }
+      ]
+    },
+    {
+      "name": "\u2500\u2500 Profile 360 \u2014 Multi-Entity, Delegation, Flows, Behavior (additive) \u2500",
+      "topics": [
+        {
+          "member": "ENTITY_CREATED",
+          "value": "aether.entity.created"
+        },
+        {
+          "member": "ENTITY_UPDATED",
+          "value": "aether.entity.updated"
+        },
+        {
+          "member": "ENTITY_IDENTIFIER_LINKED",
+          "value": "aether.entity.identifier.linked"
+        },
+        {
+          "member": "ENTITY_IDENTIFIER_UNLINKED",
+          "value": "aether.entity.identifier.unlinked"
+        },
+        {
+          "member": "ENTITY_MEMBERSHIP_ADDED",
+          "value": "aether.entity.membership.added"
+        },
+        {
+          "member": "DELEGATION_CREATED",
+          "value": "aether.delegation.created"
+        },
+        {
+          "member": "DELEGATION_REVOKED",
+          "value": "aether.delegation.revoked"
+        },
+        {
+          "member": "DELEGATION_VALIDATED",
+          "value": "aether.delegation.validated"
+        },
+        {
+          "member": "DELEGATION_REJECTED",
+          "value": "aether.delegation.rejected"
+        },
+        {
+          "member": "FLOW_TRANSFER",
+          "value": "aether.flow.transfer"
+        },
+        {
+          "member": "FLOW_WALLET_LINKED",
+          "value": "aether.flow.wallet.linked"
+        },
+        {
+          "member": "AGENT_EXECUTION_STARTED",
+          "value": "aether.agent.execution.started"
+        },
+        {
+          "member": "AGENT_EXECUTION_COMPLETED",
+          "value": "aether.agent.execution.completed"
+        },
+        {
+          "member": "AGENT_EXECUTION_FAILED",
+          "value": "aether.agent.execution.failed"
+        },
+        {
+          "member": "AGENT_EXECUTION_RECOVERED",
+          "value": "aether.agent.execution.recovered"
+        },
+        {
+          "member": "BEHAVIOR_PROFILE_UPDATED",
+          "value": "aether.behavior.profile.updated"
+        }
+      ]
+    },
+    {
+      "name": "Dead letter",
+      "topics": [
+        {
+          "member": "DEAD_LETTER",
+          "value": "aether.dlq"
+        }
+      ]
+    }
+  ],
+  "all_topics": [
+    {
+      "member": "SDK_EVENTS_RAW",
+      "value": "aether.sdk.events.raw"
+    },
+    {
+      "member": "SDK_EVENTS_VALIDATED",
+      "value": "aether.sdk.events.validated"
+    },
+    {
+      "member": "API_FEED_RAW",
+      "value": "aether.api.feed.raw"
+    },
+    {
+      "member": "IDENTITY_RESOLVED",
+      "value": "aether.identity.resolved"
+    },
+    {
+      "member": "IDENTITY_MERGED",
+      "value": "aether.identity.merged"
+    },
+    {
+      "member": "PROFILE_UPDATED",
+      "value": "aether.profile.updated"
+    },
+    {
+      "member": "SESSION_SCORED",
+      "value": "aether.analytics.session.scored"
+    },
+    {
+      "member": "ANOMALY_DETECTED",
+      "value": "aether.analytics.anomaly"
+    },
+    {
+      "member": "PREDICTION_GENERATED",
+      "value": "aether.ml.prediction"
+    },
+    {
+      "member": "MODEL_UPDATED",
+      "value": "aether.ml.model.updated"
+    },
+    {
+      "member": "AGENT_DISCOVERY",
+      "value": "aether.agent.discovery"
+    },
+    {
+      "member": "AGENT_ENRICHMENT",
+      "value": "aether.agent.enrichment"
+    },
+    {
+      "member": "ATTRIBUTION_CALCULATED",
+      "value": "aether.campaign.attribution"
+    },
+    {
+      "member": "CONSENT_UPDATED",
+      "value": "aether.consent.updated"
+    },
+    {
+      "member": "DATA_SUBJECT_REQUEST",
+      "value": "aether.consent.dsr"
+    },
+    {
+      "member": "RESOLUTION_EVALUATED",
+      "value": "aether.resolution.evaluated"
+    },
+    {
+      "member": "RESOLUTION_AUTO_MERGED",
+      "value": "aether.resolution.auto_merged"
+    },
+    {
+      "member": "RESOLUTION_FLAGGED",
+      "value": "aether.resolution.flagged"
+    },
+    {
+      "member": "RESOLUTION_APPROVED",
+      "value": "aether.resolution.approved"
+    },
+    {
+      "member": "RESOLUTION_REJECTED",
+      "value": "aether.resolution.rejected"
+    },
+    {
+      "member": "FINGERPRINT_OBSERVED",
+      "value": "aether.identity.fingerprint.observed"
+    },
+    {
+      "member": "IP_OBSERVED",
+      "value": "aether.identity.ip.observed"
+    },
+    {
+      "member": "AGENT_TASK_STARTED",
+      "value": "aether.agent.task.started"
+    },
+    {
+      "member": "AGENT_TASK_COMPLETED",
+      "value": "aether.agent.task.completed"
+    },
+    {
+      "member": "AGENT_DECISION_MADE",
+      "value": "aether.agent.decision.made"
+    },
+    {
+      "member": "AGENT_STATE_SNAPSHOT",
+      "value": "aether.agent.state.snapshot"
+    },
+    {
+      "member": "AGENT_GROUND_TRUTH",
+      "value": "aether.agent.ground_truth"
+    },
+    {
+      "member": "AGENT_NOTIFICATION_SENT",
+      "value": "aether.agent.notification.sent"
+    },
+    {
+      "member": "AGENT_RECOMMENDATION_MADE",
+      "value": "aether.agent.recommendation.made"
+    },
+    {
+      "member": "AGENT_RESULT_DELIVERED",
+      "value": "aether.agent.result.delivered"
+    },
+    {
+      "member": "AGENT_ESCALATION_RAISED",
+      "value": "aether.agent.escalation.raised"
+    },
+    {
+      "member": "PAYMENT_SENT",
+      "value": "aether.commerce.payment.sent"
+    },
+    {
+      "member": "AGENT_HIRED",
+      "value": "aether.commerce.agent.hired"
+    },
+    {
+      "member": "SERVICE_PURCHASED",
+      "value": "aether.commerce.service.purchased"
+    },
+    {
+      "member": "FEE_ELIMINATED",
+      "value": "aether.commerce.fee.eliminated"
+    },
+    {
+      "member": "ACTION_RECORDED",
+      "value": "aether.onchain.action.recorded"
+    },
+    {
+      "member": "CONTRACT_DEPLOYED",
+      "value": "aether.onchain.contract.deployed"
+    },
+    {
+      "member": "CONTRACT_CALLED",
+      "value": "aether.onchain.contract.called"
+    },
+    {
+      "member": "X402_PAYMENT_CAPTURED",
+      "value": "aether.x402.payment.captured"
+    },
+    {
+      "member": "COMMERCE_CHALLENGE_ISSUED",
+      "value": "aether.commerce.challenge.issued"
+    },
+    {
+      "member": "COMMERCE_REQUIREMENT_GENERATED",
+      "value": "aether.commerce.requirement.generated"
+    },
+    {
+      "member": "COMMERCE_APPROVAL_REQUESTED",
+      "value": "aether.commerce.approval.requested"
+    },
+    {
+      "member": "COMMERCE_APPROVAL_ASSIGNED",
+      "value": "aether.commerce.approval.assigned"
+    },
+    {
+      "member": "COMMERCE_APPROVAL_APPROVED",
+      "value": "aether.commerce.approval.approved"
+    },
+    {
+      "member": "COMMERCE_APPROVAL_REJECTED",
+      "value": "aether.commerce.approval.rejected"
+    },
+    {
+      "member": "COMMERCE_APPROVAL_ESCALATED",
+      "value": "aether.commerce.approval.escalated"
+    },
+    {
+      "member": "COMMERCE_APPROVAL_EXPIRED",
+      "value": "aether.commerce.approval.expired"
+    },
+    {
+      "member": "COMMERCE_APPROVAL_REVOKED",
+      "value": "aether.commerce.approval.revoked"
+    },
+    {
+      "member": "COMMERCE_PAYMENT_SUBMITTED",
+      "value": "aether.commerce.payment.submitted"
+    },
+    {
+      "member": "COMMERCE_VERIFICATION_STARTED",
+      "value": "aether.commerce.verification.started"
+    },
+    {
+      "member": "COMMERCE_VERIFICATION_SUCCEEDED",
+      "value": "aether.commerce.verification.succeeded"
+    },
+    {
+      "member": "COMMERCE_VERIFICATION_FAILED",
+      "value": "aether.commerce.verification.failed"
+    },
+    {
+      "member": "COMMERCE_SETTLEMENT_STARTED",
+      "value": "aether.commerce.settlement.started"
+    },
+    {
+      "member": "COMMERCE_SETTLEMENT_PENDING",
+      "value": "aether.commerce.settlement.pending"
+    },
+    {
+      "member": "COMMERCE_SETTLEMENT_COMPLETED",
+      "value": "aether.commerce.settlement.completed"
+    },
+    {
+      "member": "COMMERCE_SETTLEMENT_FAILED",
+      "value": "aether.commerce.settlement.failed"
+    },
+    {
+      "member": "COMMERCE_ENTITLEMENT_GRANTED",
+      "value": "aether.commerce.entitlement.granted"
+    },
+    {
+      "member": "COMMERCE_ENTITLEMENT_REUSED",
+      "value": "aether.commerce.entitlement.reused"
+    },
+    {
+      "member": "COMMERCE_ENTITLEMENT_REVOKED",
+      "value": "aether.commerce.entitlement.revoked"
+    },
+    {
+      "member": "COMMERCE_ENTITLEMENT_EXPIRED",
+      "value": "aether.commerce.entitlement.expired"
+    },
+    {
+      "member": "COMMERCE_ACCESS_GRANTED",
+      "value": "aether.commerce.access.granted"
+    },
+    {
+      "member": "COMMERCE_ACCESS_DENIED",
+      "value": "aether.commerce.access.denied"
+    },
+    {
+      "member": "COMMERCE_POLICY_DENIED",
+      "value": "aether.commerce.policy.denied"
+    },
+    {
+      "member": "COMMERCE_FACILITATOR_ROUTE_SELECTED",
+      "value": "aether.commerce.facilitator.route_selected"
+    },
+    {
+      "member": "COMMERCE_KYBER_ACTION_LOGGED",
+      "value": "aether.commerce.kyber.action_logged"
+    },
+    {
+      "member": "COMMERCE_OPERATOR_ACTION_LOGGED",
+      "value": "aether.commerce.operator.action_logged"
+    },
+    {
+      "member": "COMMERCE_REPLAY_EXECUTED",
+      "value": "aether.commerce.replay.executed"
+    },
+    {
+      "member": "COMMERCE_RECONCILIATION_TASK_CREATED",
+      "value": "aether.commerce.reconciliation.task_created"
+    },
+    {
+      "member": "COMMERCE_RECONCILIATION_TASK_RESOLVED",
+      "value": "aether.commerce.reconciliation.task_resolved"
+    },
+    {
+      "member": "ML_EXTRACTION_REQUEST_SEEN",
+      "value": "aether.extraction.request.seen"
+    },
+    {
+      "member": "ML_EXTRACTION_IDENTITY_RESOLVED",
+      "value": "aether.extraction.identity.resolved"
+    },
+    {
+      "member": "ML_EXTRACTION_SIGNAL_COMPUTED",
+      "value": "aether.extraction.signal.computed"
+    },
+    {
+      "member": "ML_EXTRACTION_SCORE_UPDATED",
+      "value": "aether.extraction.score.updated"
+    },
+    {
+      "member": "ML_EXTRACTION_POLICY_APPLIED",
+      "value": "aether.extraction.policy.applied"
+    },
+    {
+      "member": "ML_EXTRACTION_CANARY_HIT",
+      "value": "aether.extraction.canary.hit"
+    },
+    {
+      "member": "ML_EXTRACTION_ALERT_OPENED",
+      "value": "aether.extraction.alert.opened"
+    },
+    {
+      "member": "ML_EXTRACTION_CLUSTER_ESCALATED",
+      "value": "aether.extraction.cluster.escalated"
+    },
+    {
+      "member": "ENTITY_CREATED",
+      "value": "aether.entity.created"
+    },
+    {
+      "member": "ENTITY_UPDATED",
+      "value": "aether.entity.updated"
+    },
+    {
+      "member": "ENTITY_IDENTIFIER_LINKED",
+      "value": "aether.entity.identifier.linked"
+    },
+    {
+      "member": "ENTITY_IDENTIFIER_UNLINKED",
+      "value": "aether.entity.identifier.unlinked"
+    },
+    {
+      "member": "ENTITY_MEMBERSHIP_ADDED",
+      "value": "aether.entity.membership.added"
+    },
+    {
+      "member": "DELEGATION_CREATED",
+      "value": "aether.delegation.created"
+    },
+    {
+      "member": "DELEGATION_REVOKED",
+      "value": "aether.delegation.revoked"
+    },
+    {
+      "member": "DELEGATION_VALIDATED",
+      "value": "aether.delegation.validated"
+    },
+    {
+      "member": "DELEGATION_REJECTED",
+      "value": "aether.delegation.rejected"
+    },
+    {
+      "member": "FLOW_TRANSFER",
+      "value": "aether.flow.transfer"
+    },
+    {
+      "member": "FLOW_WALLET_LINKED",
+      "value": "aether.flow.wallet.linked"
+    },
+    {
+      "member": "AGENT_EXECUTION_STARTED",
+      "value": "aether.agent.execution.started"
+    },
+    {
+      "member": "AGENT_EXECUTION_COMPLETED",
+      "value": "aether.agent.execution.completed"
+    },
+    {
+      "member": "AGENT_EXECUTION_FAILED",
+      "value": "aether.agent.execution.failed"
+    },
+    {
+      "member": "AGENT_EXECUTION_RECOVERED",
+      "value": "aether.agent.execution.recovered"
+    },
+    {
+      "member": "BEHAVIOR_PROFILE_UPDATED",
+      "value": "aether.behavior.profile.updated"
+    },
+    {
+      "member": "DEAD_LETTER",
+      "value": "aether.dlq"
+    }
+  ]
+}
