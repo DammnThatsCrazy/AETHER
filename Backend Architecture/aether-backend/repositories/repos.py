@@ -214,6 +214,15 @@ class BaseRepository(ABC):
         idx = 1
         if filters:
             for key, value in filters.items():
+                # `tenant_id=None` / `""` is the canonical way to request
+                # legacy unscoped rows — pre-multi-tenant data that was
+                # inserted before the tenant column existed. Emit a literal
+                # IS NULL OR = '' predicate so those rows remain reachable
+                # for callers that need to merge them with current-tenant
+                # results (e.g. Profile360Aggregator._scoped_find_many).
+                if key == "tenant_id" and value in (None, ""):
+                    conditions.append("(tenant_id IS NULL OR tenant_id = '')")
+                    continue
                 if key == "tenant_id":
                     conditions.append(f"tenant_id = ${idx}")
                 else:
@@ -249,6 +258,10 @@ class BaseRepository(ABC):
         idx = 1
         if filters:
             for key, value in filters.items():
+                # See find_many: tenant_id=None/'' matches legacy unscoped rows.
+                if key == "tenant_id" and value in (None, ""):
+                    conditions.append("(tenant_id IS NULL OR tenant_id = '')")
+                    continue
                 if key == "tenant_id":
                     conditions.append(f"tenant_id = ${idx}")
                 else:
