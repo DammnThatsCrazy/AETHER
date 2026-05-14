@@ -52,6 +52,12 @@ jobs:
       - name: Validate documentation versions
         run: python scripts/validate_docs.py
 
+      - name: Validate documentation frontmatter
+        # Exits 1 only on INVALID frontmatter. Files without frontmatter are
+        # warned (back-fill in progress) and the script exits 0. See
+        # scripts/docs_schema.json for the canonical schema.
+        run: python scripts/validate_frontmatter.py
+
       - name: Regenerate generated docs
         run: python scripts/sync_docs.py
 

@@ -1,3 +1,20 @@
+---
+title: Aether Android SDK — Integration Guide
+slug: sdks/android
+section: sdks
+visibility: P
+audience: [dev-junior, dev-senior]
+status: stable
+since_version: "8.8.0"
+source_files:
+  - packages/android/src/main/java/com/aether/sdk/Aether.kt
+  - packages/shared/events.ts
+  - packages/shared/consent.ts
+canonical_owner: sdk@aether
+estimated_read_minutes: 10
+toc_depth: 3
+---
+
 # Aether Android SDK v8.8.0 — Integration Guide
 
 ## Installation

@@ -1,3 +1,20 @@
+---
+title: Aether React Native SDK — Integration Guide
+slug: sdks/react-native
+section: sdks
+visibility: P
+audience: [dev-junior, dev-senior]
+status: stable
+since_version: "8.8.0"
+source_files:
+  - packages/react-native/src/index.tsx
+  - packages/shared/events.ts
+  - packages/shared/consent.ts
+canonical_owner: sdk@aether
+estimated_read_minutes: 9
+toc_depth: 3
+---
+
 # Aether React Native SDK v8.8.0 — Integration Guide
 
 ## Installation

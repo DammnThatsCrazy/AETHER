@@ -1,3 +1,18 @@
+---
+title: Events / Kafka Subsystem
+slug: data/kafka
+section: data
+visibility: P
+audience: [dev-senior, architect, ops]
+status: stable
+since_version: "8.8.0"
+source_files:
+  - Backend Architecture/aether-backend/shared/events/events.py
+canonical_owner: backend@aether
+estimated_read_minutes: 4
+toc_depth: 3
+---
+
 # Events / Kafka Subsystem
 
 ## Architecture
