@@ -320,6 +320,94 @@ def test_devices_and_sessions_read_top_level_device_id():
     assert "ios" in rollup["platforms"]
 
 
+def test_protocols_total_interactions_includes_intent_merge():
+    """summary.total_interactions must reflect both event-stream and
+    payment-intent protocol items, including the case where the tenant has
+    no protocol events at all and only intents contribute."""
+
+    class _NoEvents:
+        async def query_events(self, tenant_id, filters, limit=50):
+            return []
+
+    intents_only = _Repo([
+        {"id": "i-only-1", "intent_id": "i-only-1", "tenant_id": "t-a",
+         "agent_id": "user-1", "protocol": "x402"},
+        {"id": "i-only-2", "intent_id": "i-only-2", "tenant_id": "t-a",
+         "agent_id": "user-1", "protocol": "x402"},
+        {"id": "i-only-3", "intent_id": "i-only-3", "tenant_id": "t-a",
+         "agent_id": "user-1", "protocol": "stripe"},
+    ])
+    agg = _make_aggregator()
+    agg._analytics = _NoEvents()  # type: ignore[attr-defined]
+    agg._intents = intents_only   # type: ignore[attr-defined]
+
+    out = _run(agg.protocols("user-1", "t-a"))
+    items_total = sum(i["interactionCount"] for i in out["items"])
+    assert items_total == 3
+    assert out["summary"]["total_interactions"] == items_total
+    assert out["summary"]["protocol_count"] == len(out["items"])
+    # Items list and rollup must agree, otherwise the frontend drilldown
+    # contradicts the dashboard summary.
+    assert out["summary"]["total_interactions"] > 0
+
+
+def test_protocols_total_interactions_merges_event_and_intent_counts():
+    """When both events and intents contribute to the same protocol the
+    total must equal the sum of merged interactionCount, not the
+    event-only baseline."""
+    agg = _make_aggregator()
+    # Event stream provides 1 'web' protocol interaction; intents provide
+    # x402 + stripe. The merge increments / adds entries — totals must reflect that.
+    out = _run(agg.protocols("user-1", "t-a"))
+    items_total = sum(i["interactionCount"] for i in out["items"])
+    assert out["summary"]["total_interactions"] == items_total
+
+
+def test_summary_excludes_expired_and_future_delegations_from_active_counts():
+    """active_delegations_* must honor starts_at / ends_at, matching
+    DelegationRepository.active_for."""
+    past = "2020-01-01T00:00:00Z"
+    future = "2099-01-01T00:00:00Z"
+    delegations = _Repo([
+        # 1: not yet started — future starts_at
+        {"id": "d-future", "delegation_id": "d-future", "tenant_id": "t-a",
+         "grantor_entity_id": "user-1", "grantee_entity_id": "a-1",
+         "scope": {"actions": ["pay"]}, "starts_at": future, "ends_at": None,
+         "revoked_at": None},
+        # 2: expired — ends_at in the past
+        {"id": "d-expired", "delegation_id": "d-expired", "tenant_id": "t-a",
+         "grantor_entity_id": "user-1", "grantee_entity_id": "a-2",
+         "scope": {"actions": ["pay"]}, "starts_at": past, "ends_at": past,
+         "revoked_at": None},
+        # 3: genuinely active
+        {"id": "d-active", "delegation_id": "d-active", "tenant_id": "t-a",
+         "grantor_entity_id": "user-1", "grantee_entity_id": "a-3",
+         "scope": {"actions": ["pay"]}, "starts_at": past, "ends_at": future,
+         "revoked_at": None},
+        # 4: received and active
+        {"id": "d-in", "delegation_id": "d-in", "tenant_id": "t-a",
+         "grantor_entity_id": "boss", "grantee_entity_id": "user-1",
+         "scope": {"actions": ["read"]}, "starts_at": past, "ends_at": future,
+         "revoked_at": None},
+        # 5: received but expired
+        {"id": "d-in-exp", "delegation_id": "d-in-exp", "tenant_id": "t-a",
+         "grantor_entity_id": "boss", "grantee_entity_id": "user-1",
+         "scope": {"actions": ["read"]}, "starts_at": past, "ends_at": past,
+         "revoked_at": None},
+    ])
+    agg = _make_aggregator()
+    agg._delegations = delegations  # type: ignore[attr-defined]
+
+    out = _run(agg.summary("user-1", "t-a"))
+    counts = out["snapshot"]["counts"]
+    # Total still includes everything (all non-revoked rows in the repo)
+    assert counts["delegations_granted"] == 3
+    assert counts["delegations_received"] == 2
+    # But only the time-window-valid ones are reported as active.
+    assert counts["active_delegations_granted"] == 1
+    assert counts["active_delegations_received"] == 1
+
+
 def test_aggregator_degrades_on_repo_failure_without_raising():
     """A failing dependency must produce an empty dimension, not a 500."""
 

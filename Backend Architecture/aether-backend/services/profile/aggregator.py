@@ -400,7 +400,16 @@ class Profile360Aggregator:
         events_break["items"] = sorted(
             events_break["items"], key=lambda r: r.get("interactionCount", 0), reverse=True,
         )[:limit]
+        # Recompute rollups after the intent merge so summary stays consistent
+        # with the items list — _attribution_breakdown computed these from the
+        # event stream only, and we've now added / incremented intent-derived
+        # entries that must be reflected in both protocols count and total.
         events_break["summary"]["protocols"] = len(events_break["items"])
+        events_break["summary"]["protocol_count"] = len(events_break["items"])
+        events_break["summary"]["total_interactions"] = sum(
+            i.get("interactionCount", 0) for i in events_break["items"]
+        )
+        events_break["pagination"] = _paginate(events_break["items"], limit)
         events_break["provenance"]["sources"].append("payment_intents")
         return events_break
 
@@ -740,8 +749,24 @@ class Profile360Aggregator:
 
         inflow = sum(_safe_float(t.get("amount")) for t in transfers if t.get("to_entity_id") == entity_id)
         outflow = sum(_safe_float(t.get("amount")) for t in transfers if t.get("from_entity_id") == entity_id)
-        active_deleg_in = [d for d in deleg_in if not d.get("revoked_at")]
-        active_deleg_out = [d for d in deleg_out if not d.get("revoked_at")]
+        # Match DelegationRepository.active_for: a delegation is active iff it
+        # is not revoked AND starts_at has passed AND ends_at is unset or in
+        # the future. Without the time-window predicate, /summary inflated
+        # active_delegations_* by including expired or not-yet-started grants.
+        now_iso = utc_now().isoformat()
+
+        def _is_active(d: dict) -> bool:
+            if d.get("revoked_at"):
+                return False
+            if (d.get("starts_at") or "") > now_iso:
+                return False
+            ends = d.get("ends_at")
+            if ends and ends <= now_iso:
+                return False
+            return True
+
+        active_deleg_in = [d for d in deleg_in if _is_active(d)]
+        active_deleg_out = [d for d in deleg_out if _is_active(d)]
 
         bx = behavior if isinstance(behavior, dict) and behavior.get("tenant_id") in (None, "", tenant_id) else None
         snapshot = {
