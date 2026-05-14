@@ -161,3 +161,51 @@ def test_capabilities_handles_digit_in_layer_name(cap):
     payload = cap.build_payload(text)
     layer_names = [l["name"] for l in payload["graph_layers"]]
     assert layer_names == ["x402"]
+
+
+def test_capabilities_preserves_inline_object_types(cap):
+    """Regression for codex review on PR #70: the old `[^;]+` regex
+    stopped at the first `;` inside an inline object type, truncating
+    ``featureFlags?: { key: string; enabled: boolean; value?: unknown }[]``
+    to ``{ key: string``. The brace-aware parser must capture the full
+    type string."""
+    text = (
+        "export interface CapabilityManifest {\n"
+        "  featureFlags?: { key: string; enabled: boolean; value?: unknown }[];\n"
+        "  scalar: string;\n"
+        "}\n"
+        "export interface GraphLayerFlags { foo: boolean; }\n"
+    )
+    payload = cap.build_payload(text)
+    by_name = {f["name"]: f for f in payload["manifest_fields"]}
+    assert "featureFlags" in by_name
+    assert by_name["featureFlags"]["type"] == (
+        "{ key: string; enabled: boolean; value?: unknown }[]"
+    )
+    assert by_name["featureFlags"]["optional"] is True
+    # The non-nested sibling must still be parsed.
+    assert by_name["scalar"]["type"] == "string"
+
+
+def test_capabilities_real_source_featureFlags_intact(cap):
+    """End-to-end: the canonical capabilities.ts produces a complete
+    featureFlags type, not the truncated `{ key: string`."""
+    text = (ROOT / "packages" / "shared" / "capabilities.ts").read_text(encoding="utf-8")
+    payload = cap.build_payload(text)
+    by_name = {f["name"]: f for f in payload["manifest_fields"]}
+    assert "featureFlags" in by_name
+    type_str = by_name["featureFlags"]["type"]
+    # Must include all three nested members + the trailing `[]`.
+    assert "key:" in type_str
+    assert "enabled:" in type_str
+    assert "value?:" in type_str
+    assert type_str.rstrip().endswith("[]")
+
+
+def test_capabilities_split_fields_respects_brace_depth(cap):
+    """White-box test of the helper: semicolons inside `{}`, `[]`, and
+    `<>` must not split a field."""
+    chunks = cap._split_fields(" a: { b: string; c: number; }; d: T<E; F>; ")
+    # Two `;`-terminated chunks expected.
+    chunk_texts = [c[0].strip() for c in chunks]
+    assert chunk_texts == ["a: { b: string; c: number; }", "d: T<E; F>"]
