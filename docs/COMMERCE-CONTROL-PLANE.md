@@ -8,7 +8,8 @@ status: stable
 since_version: "8.8.0"
 source_files:
   - Backend Architecture/aether-backend/services/x402/commerce_routes.py
-  - Backend Architecture/aether-backend/services/x402/approvals_routes.py
+  - Backend Architecture/aether-backend/services/x402/approvals.py
+  - Backend Architecture/aether-backend/services/x402/control_plane.py
 canonical_owner: commerce@aether
 estimated_read_minutes: 8
 toc_depth: 3

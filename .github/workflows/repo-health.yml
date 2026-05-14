@@ -59,6 +59,25 @@ jobs:
         # schema and docs/_templates/page.template.mdx for new pages.
         run: python scripts/validate_frontmatter.py
 
+      - name: Detect doc source drift
+        # Hard-fails if a doc's `source_files:` frontmatter references a
+        # path that doesn't exist (renamed or deleted module). Staleness
+        # is advisory until `last_synced_commit` rollout completes.
+        run: python scripts/docs_drift.py
+
+      - name: Regenerate docs/_generated artifacts
+        # Re-derives env.json, events.json, etc. from canonical sources.
+        # The drift check below ensures the committed artifacts match.
+        run: python scripts/docs_extract/run_all.py
+
+      - name: Fail on uncommitted _generated drift
+        run: |
+          if [ -n "$(git status --porcelain docs/_generated/)" ]; then
+            echo 'docs/_generated/*.json drift detected. Run: make extract-docs'
+            git diff -- docs/_generated/
+            exit 1
+          fi
+
       - name: Regenerate generated docs
         run: python scripts/sync_docs.py
 
