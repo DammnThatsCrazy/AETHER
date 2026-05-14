@@ -1,3 +1,17 @@
+---
+title: Production Readiness Review
+slug: operations/production-readiness
+section: operations
+visibility: I
+audience: [ops, architect]
+status: stable
+since_version: "8.8.0"
+source_files:
+  - AWS Deployment/main.tf
+canonical_owner: platform@aether
+estimated_read_minutes: 6
+toc_depth: 3
+---
 # Production Readiness Review v8.8.0
 
 ## Status: Infrastructure Integrated, Operational Prerequisites Remain

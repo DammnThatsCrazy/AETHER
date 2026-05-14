@@ -1,3 +1,17 @@
+---
+title: Aether Backend API — Endpoint Specification
+slug: api/backend-reference
+section: api
+visibility: P
+audience: [dev-junior, dev-senior, architect]
+status: stable
+since_version: "8.8.0"
+source_files:
+  - Backend Architecture/aether-backend/services/
+canonical_owner: backend@aether
+estimated_read_minutes: 60
+toc_depth: 3
+---
 # Aether Backend API v8.8.0 — Endpoint Specification
 
 ## Overview

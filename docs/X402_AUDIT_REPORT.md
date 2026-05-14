@@ -1,3 +1,17 @@
+---
+title: x402 Protocol Support Audit
+slug: security/x402-audit
+section: security
+visibility: P
+audience: [security, architect, compliance]
+status: stable
+since_version: "8.8.0"
+source_files:
+  - Backend Architecture/aether-backend/services/x402/
+canonical_owner: security@aether
+estimated_read_minutes: 12
+toc_depth: 3
+---
 # x402 Protocol Support Audit — Aether Repository
 
 **Date:** 2026-04-04

@@ -1,3 +1,17 @@
+---
+title: Changelog
+slug: changelog
+section: changelog
+visibility: P
+audience: [dev-junior, dev-senior, ops]
+status: stable
+since_version: "8.8.0"
+source_files:
+  - CHANGELOG.md
+canonical_owner: release@aether
+estimated_read_minutes: 10
+toc_depth: 3
+---
 # Changelog
 
 ## Unreleased — Self-Serve Plans P1-P4, Pooled Quota & Per-Service Overage

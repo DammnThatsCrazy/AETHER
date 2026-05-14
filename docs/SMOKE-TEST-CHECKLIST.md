@@ -1,3 +1,17 @@
+---
+title: Smoke Test & Post-Deploy Verification Checklist
+slug: operations/smoke-tests
+section: operations
+visibility: I
+audience: [ops]
+status: stable
+since_version: "8.8.0"
+source_files:
+  - deploy/staging/bootstrap.sh
+canonical_owner: platform@aether
+estimated_read_minutes: 10
+toc_depth: 3
+---
 # Smoke Test & Post-Deploy Verification Checklist — Aether Platform v8.8.0
 
 Run after every deployment. Failures in the **Smoke Tests** section are rollback triggers. Failures in **Extended Verification** may be acceptable depending on context.

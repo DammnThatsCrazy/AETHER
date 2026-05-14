@@ -1,3 +1,19 @@
+---
+title: Profile 360 Aggregation Layer
+slug: api/profile-360-aggregation
+section: api
+visibility: P
+audience: [dev-senior, architect]
+status: stable
+since_version: "8.8.0"
+source_files:
+  - Backend Architecture/aether-backend/services/profile/aggregator.py
+  - Backend Architecture/aether-backend/services/profile/routes.py
+canonical_owner: backend@aether
+estimated_read_minutes: 8
+toc_depth: 3
+---
+
 # Profile 360 Aggregation Layer
 
 The Profile 360 aggregation layer is the frontend-facing read API for any

@@ -1,3 +1,18 @@
+---
+title: Operations Runbook
+slug: operations/runbook
+section: operations
+visibility: I
+audience: [ops]
+status: stable
+since_version: "8.8.0"
+source_files:
+  - Backend Architecture/aether-backend/main.py
+  - deploy/staging/bootstrap.sh
+canonical_owner: platform@aether
+estimated_read_minutes: 12
+toc_depth: 3
+---
 # Operations Runbook v8.8.0
 
 Operations guide for the Aether backend services.

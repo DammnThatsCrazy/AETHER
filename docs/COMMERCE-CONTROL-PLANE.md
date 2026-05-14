@@ -1,3 +1,18 @@
+---
+title: Agentic Commerce — Control Plane
+slug: api/commerce-control-plane
+section: api
+visibility: P
+audience: [architect, dev-senior]
+status: stable
+since_version: "8.8.0"
+source_files:
+  - Backend Architecture/aether-backend/services/x402/commerce_routes.py
+  - Backend Architecture/aether-backend/services/x402/approvals_routes.py
+canonical_owner: commerce@aether
+estimated_read_minutes: 8
+toc_depth: 3
+---
 # Aether Agentic Commerce — Control Plane
 
 **Status:** Day-1 GA (feature-flagged via `COMMERCE_CONTROL_PLANE_ENABLED=true`)

@@ -1,3 +1,18 @@
+---
+title: Unified Intelligence Graph
+slug: concepts/intelligence-graph
+section: concepts
+visibility: P
+audience: [architect, dev-senior, ai]
+status: stable
+since_version: "8.8.0"
+source_files:
+  - Backend Architecture/aether-backend/shared/graph/
+  - docs/source-of-truth/GRAPH_ALIGNMENT.md
+canonical_owner: graph@aether
+estimated_read_minutes: 15
+toc_depth: 3
+---
 # Unified On-Chain Intelligence Graph v8.8.0
 
 ## Overview

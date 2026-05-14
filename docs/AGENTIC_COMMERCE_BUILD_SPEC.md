@@ -1,3 +1,18 @@
+---
+title: Agentic Commerce — Day-1 Build Specification
+slug: concepts/agentic-commerce-spec
+section: concepts
+visibility: I
+audience: [architect, dev-senior, ai]
+status: stable
+since_version: "8.8.0"
+source_files:
+  - Backend Architecture/aether-backend/services/commerce/
+  - Backend Architecture/aether-backend/services/x402/
+canonical_owner: commerce@aether
+estimated_read_minutes: 45
+toc_depth: 3
+---
 # Aether Agentic Commerce — Day-1 Build Specification
 
 **Document:** Production build spec for extending Aether's x402/commerce/graph foundation into a fully productized Aether-native Agentic Commerce control plane.
