@@ -154,3 +154,95 @@ def test_commits_touching_after_returns_empty_for_unknown_sha(dd):
 
 def test_commits_touching_after_returns_empty_for_no_paths(dd):
     assert dd.commits_touching_after("abc1234", []) == []
+
+
+# --- stamp_doc / --update mode -------------------------------------------
+
+
+def test_stamp_doc_adds_last_synced_commit_when_missing(dd, tmp_path):
+    p = tmp_path / "doc.md"
+    p.write_text(
+        "---\n"
+        "title: T\n"
+        "source_files:\n"
+        "  - README.md\n"
+        "---\n"
+        "body\n"
+    )
+    changed = dd.stamp_doc(p, "abc1234")
+    assert changed is True
+    fm = dd.extract_frontmatter(p.read_text())
+    assert fm["last_synced_commit"] == "abc1234"
+
+
+def test_stamp_doc_replaces_existing_last_synced_commit(dd, tmp_path):
+    p = tmp_path / "doc.md"
+    p.write_text(
+        "---\n"
+        "title: T\n"
+        "source_files:\n"
+        "  - README.md\n"
+        "last_synced_commit: old1234\n"
+        "---\n"
+        "body\n"
+    )
+    changed = dd.stamp_doc(p, "new5678")
+    assert changed is True
+    fm = dd.extract_frontmatter(p.read_text())
+    assert fm["last_synced_commit"] == "new5678"
+
+
+def test_stamp_doc_is_idempotent_when_sha_matches(dd, tmp_path):
+    p = tmp_path / "doc.md"
+    p.write_text(
+        "---\n"
+        "title: T\n"
+        "source_files:\n"
+        "  - README.md\n"
+        "last_synced_commit: abc1234\n"
+        "---\n"
+        "body\n"
+    )
+    before = p.read_text()
+    changed = dd.stamp_doc(p, "abc1234")
+    assert changed is False
+    assert p.read_text() == before
+
+
+def test_stamp_doc_skips_docs_with_no_source_files(dd, tmp_path):
+    p = tmp_path / "doc.md"
+    p.write_text("---\ntitle: T\n---\nbody\n")
+    before = p.read_text()
+    changed = dd.stamp_doc(p, "abc1234")
+    assert changed is False
+    assert p.read_text() == before
+
+
+def test_stamp_doc_skips_docs_with_no_frontmatter(dd, tmp_path):
+    p = tmp_path / "doc.md"
+    p.write_text("just body, no fm")
+    before = p.read_text()
+    changed = dd.stamp_doc(p, "abc1234")
+    assert changed is False
+    assert p.read_text() == before
+
+
+def test_stamp_doc_preserves_body_content(dd, tmp_path):
+    p = tmp_path / "doc.md"
+    body = "\n# Title\n\nSome content here.\n\n## Section\n\nMore.\n"
+    p.write_text(
+        "---\n"
+        "title: T\n"
+        "source_files:\n"
+        "  - README.md\n"
+        "---" + body
+    )
+    dd.stamp_doc(p, "abc1234")
+    assert body in p.read_text()
+
+
+def test_head_sha_returns_string_in_real_repo(dd):
+    sha = dd.head_sha()
+    assert sha is not None
+    assert len(sha) >= 7
+    assert all(c in "0123456789abcdef" for c in sha)
