@@ -119,6 +119,28 @@ def reset_in_memory_stores() -> None:
     _IN_MEMORY_STORES.clear()
 
 
+def _matches_filters(row: dict, filters: dict) -> bool:
+    """In-memory equivalent of the SQL find_many predicate.
+
+    Most filter keys use straight equality (mirroring `data->>'key' = $n`).
+    `tenant_id=None` (or `""`) is special-cased to match legacy unscoped
+    rows where the column is NULL or empty — exactly mirroring the SQL
+    branch's `(tenant_id IS NULL OR tenant_id = '')`. Without this, the
+    Profile 360 aggregator's legacy pass would drop blank-tenant rows
+    when running on the in-memory backend even though Postgres returns
+    them, leaving the two backends inconsistent.
+    """
+    for key, value in filters.items():
+        if key == "tenant_id" and value in (None, ""):
+            actual = row.get("tenant_id")
+            if actual not in (None, ""):
+                return False
+            continue
+        if row.get(key) != value:
+            return False
+    return True
+
+
 class BaseRepository(ABC):
     """
     Base for relational repositories.
@@ -201,7 +223,7 @@ class BaseRepository(ABC):
             if filters:
                 results = [
                     r for r in results
-                    if all(r.get(k) == v for k, v in filters.items())
+                    if _matches_filters(r, filters)
                 ]
             reverse = sort_order == "desc"
             results.sort(key=lambda r: r.get(sort_by, ""), reverse=reverse)
@@ -249,7 +271,7 @@ class BaseRepository(ABC):
                 return len(self._store)
             return len([
                 r for r in self._store.values()
-                if all(r.get(k) == v for k, v in filters.items())
+                if _matches_filters(r, filters)
             ])
 
         await self._ensure_table()
