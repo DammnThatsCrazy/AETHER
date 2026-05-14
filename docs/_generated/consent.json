@@ -1,0 +1,35 @@
+{
+  "version": "8.8.0",
+  "generated_from": "packages/shared/consent.ts",
+  "purposes": [
+    {
+      "name": "analytics",
+      "description": "track/page/screen/identify/heartbeat/error/performance/conversion"
+    },
+    {
+      "name": "marketing",
+      "description": "conversion/experiment/campaign-derived attribution"
+    },
+    {
+      "name": "web3",
+      "description": "wallet, transaction, on-chain action, token/nft/defi signals"
+    },
+    {
+      "name": "agent",
+      "description": "agent_task, agent_decision, A2H notifications"
+    },
+    {
+      "name": "commerce",
+      "description": "payment, approval, entitlement, access, x402"
+    }
+  ],
+  "state_fields": [
+    "analytics",
+    "marketing",
+    "web3",
+    "agent",
+    "commerce",
+    "updatedAt",
+    "policyVersion"
+  ]
+}
