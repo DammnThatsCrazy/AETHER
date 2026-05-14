@@ -86,18 +86,20 @@ def extract_frontmatter(text: str) -> dict[str, Any] | None:
     return data if isinstance(data, dict) else None
 
 
-def last_commit_touching(paths: list[str]) -> str | None:
-    """Return the short SHA of the most recent commit that touched any of `paths`.
+def commits_touching_after(declared: str, paths: list[str]) -> list[str]:
+    """Return short SHAs of commits that touched any of `paths` after `declared`.
 
-    Returns None if no commit history exists for any of the paths (e.g.
-    they are all freshly created and not yet committed).
+    Uses ``git log <declared>..HEAD -- <paths>``. If `declared` is unknown
+    to git (e.g. force-push removed it), returns an empty list so the
+    caller can skip drift detection rather than false-positive.
     """
-    if not paths:
-        return None
-    cmd = ["git", "log", "-1", "--format=%h", "--"] + paths
+    if not paths or not declared:
+        return []
+    cmd = ["git", "log", f"{declared}..HEAD", "--format=%h", "--"] + paths
     result = subprocess.run(cmd, capture_output=True, text=True, cwd=ROOT)
-    sha = result.stdout.strip()
-    return sha or None
+    if result.returncode != 0:
+        return []
+    return [line for line in result.stdout.splitlines() if line]
 
 
 def check_doc(path: Path) -> dict:
@@ -105,7 +107,7 @@ def check_doc(path: Path) -> dict:
 
     Keys:
       missing_paths: list[str]   — paths declared in source_files that don't exist
-      stale: bool                — last_synced_commit differs from most recent source commit
+      stale: bool                — sources have new commits since last_synced_commit
       stale_detail: str | None   — human-readable explanation when stale
     """
     try:
@@ -128,12 +130,20 @@ def check_doc(path: Path) -> dict:
     detail: str | None = None
     declared = fm.get("last_synced_commit")
     if declared and not missing:
-        latest = last_commit_touching([s for s in sources if (ROOT / s).exists()])
-        if latest and not latest.startswith(declared) and not declared.startswith(latest):
+        # Drift = any commit touched a declared source AFTER the sync stamp.
+        # Equality is the wrong check: `last_synced_commit` is the commit
+        # the doc was reviewed at, not necessarily the most recent commit
+        # that touched the sources. A freshly-stamped doc whose sources
+        # are older than the stamp should NOT be flagged stale.
+        present_sources = [s for s in sources if (ROOT / s).exists()]
+        newer = commits_touching_after(declared, present_sources)
+        if newer:
             stale = True
             detail = (
-                f"last_synced_commit={declared}, but sources last modified at "
-                f"{latest}. Re-review and update last_synced_commit."
+                f"last_synced_commit={declared}; sources have been modified "
+                f"in {len(newer)} commit(s) since: "
+                f"{', '.join(newer[:3])}{'...' if len(newer) > 3 else ''}. "
+                f"Re-review and update last_synced_commit."
             )
 
     return {

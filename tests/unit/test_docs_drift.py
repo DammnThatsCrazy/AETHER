@@ -92,3 +92,65 @@ def test_check_doc_real_doc_with_real_sources(dd):
         pytest.skip("SDK-WEB.md not present")
     r = dd.check_doc(p)
     assert r["missing_paths"] == []
+
+
+# --- staleness comparison logic -------------------------------------------
+
+
+def test_check_doc_not_stale_when_no_commits_after_sync(dd, tmp_path, monkeypatch):
+    """A freshly-stamped doc whose sources haven't changed since the stamp
+    must NOT be flagged stale, even if the stamp doesn't match the
+    most-recent commit that ever touched the sources.
+
+    Regression for codex review of PR #70: the equality check
+    ``latest == declared`` was incorrect.
+    """
+    monkeypatch.setattr(dd, "commits_touching_after", lambda declared, paths: [])
+    p = tmp_path / "doc.md"
+    p.write_text(
+        "---\n"
+        "title: T\n"
+        "source_files:\n"
+        "  - README.md\n"
+        "last_synced_commit: abc1234\n"
+        "---\n"
+        "body\n"
+    )
+    r = dd.check_doc(p)
+    assert r["stale"] is False
+    assert r["missing_paths"] == []
+
+
+def test_check_doc_stale_when_commits_after_sync(dd, tmp_path, monkeypatch):
+    """Any commit that touched a source AFTER last_synced_commit means
+    the doc must be reviewed."""
+    monkeypatch.setattr(
+        dd,
+        "commits_touching_after",
+        lambda declared, paths: ["new1234", "new5678"],
+    )
+    p = tmp_path / "doc.md"
+    p.write_text(
+        "---\n"
+        "title: T\n"
+        "source_files:\n"
+        "  - README.md\n"
+        "last_synced_commit: abc1234\n"
+        "---\n"
+        "body\n"
+    )
+    r = dd.check_doc(p)
+    assert r["stale"] is True
+    assert "new1234" in r["stale_detail"]
+    assert "abc1234" in r["stale_detail"]
+
+
+def test_commits_touching_after_returns_empty_for_unknown_sha(dd):
+    """If the declared SHA isn't in git history, drift check should
+    skip rather than crash (graceful degradation)."""
+    result = dd.commits_touching_after("zzzzzzz", ["README.md"])
+    assert result == []
+
+
+def test_commits_touching_after_returns_empty_for_no_paths(dd):
+    assert dd.commits_touching_after("abc1234", []) == []
