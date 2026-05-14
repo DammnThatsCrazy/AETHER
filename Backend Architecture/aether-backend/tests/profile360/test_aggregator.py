@@ -587,6 +587,91 @@ def test_aggregator_with_default_repos_sees_writes_via_route_repos():
     assert fins["summary"]["inflow_total"] == 50.0
 
 
+def test_wallets_does_not_truncate_when_other_tenant_has_many_rows():
+    """Old code post-filtered by tenant after applying `limit` to find_many,
+    so when a foreign tenant had many rows under the same owner_entity_id
+    the page filled up with foreign rows that all got dropped, returning
+    an empty list to the caller even though the requested tenant had
+    matching rows. The fix: tenant_id is part of the find_many filter."""
+    foreign = [
+        {"id": f"w-foreign-{i}", "wallet_id": f"w-foreign-{i}",
+         "owner_entity_id": "user-1", "tenant_id": "t-other",
+         "chain": "evm", "address": f"0xforeign{i}"}
+        for i in range(50)
+    ]
+    own = [
+        {"id": f"w-own-{i}", "wallet_id": f"w-own-{i}",
+         "owner_entity_id": "user-1", "tenant_id": "t-a",
+         "chain": "evm", "address": f"0xown{i}"}
+        for i in range(3)
+    ]
+    agg = _make_aggregator()
+    agg._wallets = _Repo(foreign + own)  # type: ignore[attr-defined]
+    out = _run(agg.wallets("user-1", "t-a", limit=10))
+    ids = {i["id"] for i in out["items"]}
+    assert ids == {"w-own-0", "w-own-1", "w-own-2"}
+    assert out["summary"]["wallet_count"] == 3
+
+
+def test_summary_does_not_lose_active_delegations_to_other_tenant_truncation():
+    """Same truncation bug applied to /summary's active_delegations_*
+    counts: a tenant with thousands of foreign-tenant delegations under the
+    same grantee_entity_id would crowd out the page and report 0 active
+    delegations for the requested tenant."""
+    foreign = [
+        {"id": f"d-foreign-{i}", "delegation_id": f"d-foreign-{i}",
+         "tenant_id": "t-other", "grantor_entity_id": "boss",
+         "grantee_entity_id": "user-1",
+         "scope": {}, "starts_at": "2020-01-01T00:00:00Z",
+         "ends_at": "2099-01-01T00:00:00Z", "revoked_at": None}
+        for i in range(300)
+    ]
+    own = [
+        {"id": "d-own", "delegation_id": "d-own",
+         "tenant_id": "t-a", "grantor_entity_id": "boss",
+         "grantee_entity_id": "user-1",
+         "scope": {}, "starts_at": "2020-01-01T00:00:00Z",
+         "ends_at": "2099-01-01T00:00:00Z", "revoked_at": None},
+    ]
+    agg = _make_aggregator()
+    agg._delegations = _Repo(foreign + own)  # type: ignore[attr-defined]
+    out = _run(agg.summary("user-1", "t-a"))
+    counts = out["snapshot"]["counts"]
+    assert counts["delegations_received"] == 1
+    assert counts["active_delegations_received"] == 1
+
+
+def test_financials_transfers_not_truncated_by_other_tenant_rows():
+    """The transfer list_for_entity helper made one un-tenant-scoped
+    find_many call per direction. With many same-id foreign-tenant
+    transfers, the requested tenant's rows would be dropped after limit
+    truncation. Aggregator now uses an explicit tenant-scoped query."""
+    foreign = [
+        {"id": f"tr-foreign-{i}", "transfer_id": f"tr-foreign-{i}",
+         "tenant_id": "t-other", "from_entity_id": "x",
+         "to_entity_id": "user-1", "asset_id": "USD",
+         "amount": "1", "occurred_at": "2026-01-01T00:00:00Z"}
+        for i in range(60)
+    ]
+    own = [
+        {"id": "tr-own-in", "transfer_id": "tr-own-in",
+         "tenant_id": "t-a", "from_entity_id": "x",
+         "to_entity_id": "user-1", "asset_id": "USD",
+         "amount": "100", "occurred_at": "2026-04-01T00:00:00Z"},
+        {"id": "tr-own-out", "transfer_id": "tr-own-out",
+         "tenant_id": "t-a", "from_entity_id": "user-1",
+         "to_entity_id": "y", "asset_id": "USD",
+         "amount": "40", "occurred_at": "2026-04-02T00:00:00Z"},
+    ]
+    agg = _make_aggregator()
+    agg._transfers = _Repo(foreign + own)  # type: ignore[attr-defined]
+    out = _run(agg.financials("user-1", "t-a", limit=10))
+    assert out["summary"]["inflow_total"] == 100.0
+    assert out["summary"]["outflow_total"] == 40.0
+    ids = {i["id"] for i in out["items"]}
+    assert ids == {"tr-own-in", "tr-own-out"}
+
+
 def test_aggregator_degrades_on_repo_failure_without_raising():
     """A failing dependency must produce an empty dimension, not a 500."""
 

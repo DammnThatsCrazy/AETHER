@@ -65,6 +65,22 @@ def _tenant_filter(rows: list[dict], tenant_id: str) -> list[dict]:
     return out
 
 
+def _scoped(tenant_id: str, **filters) -> dict:
+    """Return a find_many filter dict that includes tenant_id.
+
+    The aggregator MUST push tenant_id into the query itself, not only
+    post-filter the result. Otherwise a `find_many(filters=..., limit=N)`
+    call returns the first N rows across *all* tenants and only then drops
+    the foreign ones, which silently truncates results when another tenant
+    has many rows for the same entity_id (e.g. a shared owner_entity_id
+    across tenants). Always combine this with `_tenant_filter` on the
+    returned rows as defense-in-depth — `_tenant_filter` is now mostly a
+    no-op for properly tenanted rows but still captures any legacy
+    unscoped data the in-memory store might emit.
+    """
+    return {**filters, "tenant_id": tenant_id}
+
+
 def _ts(row: dict, *keys: str) -> Optional[str]:
     for k in keys:
         v = row.get(k)
@@ -208,7 +224,7 @@ class Profile360Aggregator:
 
     async def wallets(self, entity_id: str, tenant_id: str, limit: int = 100) -> dict:
         rows = await _safe("wallets.list", self._wallets.find_many(
-            filters={"owner_entity_id": entity_id}, limit=limit,
+            filters=_scoped(tenant_id, owner_entity_id=entity_id), limit=limit,
         ))
         rows = _tenant_filter(rows, tenant_id)
         items = [
@@ -301,7 +317,12 @@ class Profile360Aggregator:
     async def devices(self, entity_id: str, tenant_id: str, limit: int = 100) -> dict:
         # Devices come from two sources: identity clusters (deterministic links)
         # and analytics events (observed device_id attributions). We merge.
-        clusters = await _safe("devices.clusters", self._clusters.list_for_entity(entity_id))
+        # Inline find_many (instead of cluster_repo.list_for_entity) so the
+        # query is tenant-scoped before `limit` truncates.
+        clusters = await _safe("devices.clusters", self._clusters.find_many(
+            filters=_scoped(tenant_id, entity_id=entity_id), limit=500,
+        ))
+        clusters = [c for c in clusters if not c.get("unlinked_at")]
         clusters = _tenant_filter(clusters, tenant_id)
 
         cluster_items: dict[str, dict] = {}
@@ -375,7 +396,7 @@ class Profile360Aggregator:
         )
 
         intents = await _safe("protocols.intents", self._intents.find_many(
-            filters={"agent_id": entity_id}, limit=200,
+            filters=_scoped(tenant_id, agent_id=entity_id), limit=200,
         ))
         intents = _tenant_filter(intents, tenant_id)
         counter: Counter[str] = Counter()
@@ -451,7 +472,7 @@ class Profile360Aggregator:
 
     async def journeys(self, entity_id: str, tenant_id: str, limit: int = 50) -> dict:
         rows = await _safe("journeys.chains", self._journeys.find_many(
-            filters={"entity_id": entity_id}, limit=limit,
+            filters=_scoped(tenant_id, entity_id=entity_id), limit=limit,
         ))
         rows = _tenant_filter(rows, tenant_id)
         items = [
@@ -518,19 +539,43 @@ class Profile360Aggregator:
         }
         return _envelope(entity_id, tenant_id, "rewards", items, summary, limit, ["analytics_events"])
 
-    async def financials(self, entity_id: str, tenant_id: str, limit: int = 200) -> dict:
-        transfers = await _safe("financials.transfers", self._transfers.list_for_entity(
-            entity_id, limit=limit,
+    async def _transfers_for_entity(
+        self, entity_id: str, tenant_id: str, limit: int,
+    ) -> list[dict]:
+        """Tenant-scoped transfer list (both directions, deduped, newest first).
+
+        Replaces TransferRepository.list_for_entity for aggregator use because
+        list_for_entity does not pass a tenant filter into find_many — without
+        the filter, an unrelated tenant with many transfers for the same id
+        could fill the page and crowd out the requested tenant's rows.
+        """
+        as_from = await _safe("financials.transfers.from", self._transfers.find_many(
+            filters=_scoped(tenant_id, from_entity_id=entity_id), limit=limit,
         ))
+        as_to = await _safe("financials.transfers.to", self._transfers.find_many(
+            filters=_scoped(tenant_id, to_entity_id=entity_id), limit=limit,
+        ))
+        seen: set[str] = set()
+        merged: list[dict] = []
+        for r in (*as_from, *as_to):
+            tid = r.get("transfer_id") or r.get("id")
+            if tid and tid not in seen:
+                seen.add(tid)
+                merged.append(r)
+        merged.sort(key=lambda r: r.get("occurred_at", ""), reverse=True)
+        return merged[:limit]
+
+    async def financials(self, entity_id: str, tenant_id: str, limit: int = 200) -> dict:
+        transfers = await self._transfers_for_entity(entity_id, tenant_id, limit=limit)
         transfers = _tenant_filter(transfers, tenant_id)
 
         intents = await _safe("financials.intents", self._intents.find_many(
-            filters={"agent_id": entity_id}, limit=limit,
+            filters=_scoped(tenant_id, agent_id=entity_id), limit=limit,
         ))
         intents = _tenant_filter(intents, tenant_id)
 
         settlements = await _safe("financials.settlements", self._settlements.find_many(
-            filters={"agent_id": entity_id}, limit=limit,
+            filters=_scoped(tenant_id, agent_id=entity_id), limit=limit,
         ))
         settlements = _tenant_filter(settlements, tenant_id)
 
@@ -599,7 +644,9 @@ class Profile360Aggregator:
             return True
 
         # Ownership: agents owned by this entity
-        owned = await _safe("rel.agents", self._agent_configs.list_for_owner(entity_id))
+        owned = await _safe("rel.agents", self._agent_configs.find_many(
+            filters=_scoped(tenant_id, owner_entity_id=entity_id), limit=limit,
+        ))
         owned = _tenant_filter(owned, tenant_id)
         for r in owned:
             rels.append({
@@ -619,7 +666,7 @@ class Profile360Aggregator:
 
         # Ownership: wallets
         wallets = await _safe("rel.wallets", self._wallets.find_many(
-            filters={"owner_entity_id": entity_id}, limit=limit,
+            filters=_scoped(tenant_id, owner_entity_id=entity_id), limit=limit,
         ))
         wallets = _tenant_filter(wallets, tenant_id)
         for w in wallets:
@@ -640,7 +687,7 @@ class Profile360Aggregator:
 
         # Delegation (granted out)
         granted = await _safe("rel.delegations.out", self._delegations.find_many(
-            filters={"grantor_entity_id": entity_id}, limit=limit,
+            filters=_scoped(tenant_id, grantor_entity_id=entity_id), limit=limit,
         ))
         granted = _tenant_filter(granted, tenant_id)
         for d in granted:
@@ -667,7 +714,7 @@ class Profile360Aggregator:
 
         # Delegation (received in)
         received = await _safe("rel.delegations.in", self._delegations.find_many(
-            filters={"grantee_entity_id": entity_id}, limit=limit,
+            filters=_scoped(tenant_id, grantee_entity_id=entity_id), limit=limit,
         ))
         received = _tenant_filter(received, tenant_id)
         for d in received:
@@ -693,7 +740,7 @@ class Profile360Aggregator:
             })
 
         # Transfer counterparties — surface other entities financially linked
-        transfers = await _safe("rel.transfers", self._transfers.list_for_entity(entity_id, limit=limit))
+        transfers = await self._transfers_for_entity(entity_id, tenant_id, limit=limit)
         transfers = _tenant_filter(transfers, tenant_id)
         counterparties: Counter[str] = Counter()
         for t in transfers:
@@ -736,14 +783,20 @@ class Profile360Aggregator:
         """
         results = await asyncio.gather(
             _safe("summary.entity", self._entities.find_by_id(entity_id)),
-            _safe("summary.agents", self._agent_configs.list_for_owner(entity_id)),
-            _safe("summary.wallets", self._wallets.find_many(filters={"owner_entity_id": entity_id}, limit=200)),
-            _safe("summary.transfers", self._transfers.list_for_entity(entity_id, limit=500)),
-            _safe("summary.deleg.out", self._delegations.find_many(filters={"grantor_entity_id": entity_id}, limit=200)),
-            _safe("summary.deleg.in", self._delegations.find_many(filters={"grantee_entity_id": entity_id}, limit=200)),
+            _safe("summary.agents", self._agent_configs.find_many(
+                filters=_scoped(tenant_id, owner_entity_id=entity_id), limit=200)),
+            _safe("summary.wallets", self._wallets.find_many(
+                filters=_scoped(tenant_id, owner_entity_id=entity_id), limit=200)),
+            self._transfers_for_entity(entity_id, tenant_id, limit=500),
+            _safe("summary.deleg.out", self._delegations.find_many(
+                filters=_scoped(tenant_id, grantor_entity_id=entity_id), limit=200)),
+            _safe("summary.deleg.in", self._delegations.find_many(
+                filters=_scoped(tenant_id, grantee_entity_id=entity_id), limit=200)),
             _safe("summary.behavior", self._behavior.find_by_id(entity_id)),
-            _safe("summary.chains", self._journeys.find_many(filters={"entity_id": entity_id}, limit=50)),
-            _safe("summary.execs", self._agent_execs.find_many(filters={"agent_id": entity_id}, limit=100)),
+            _safe("summary.chains", self._journeys.find_many(
+                filters=_scoped(tenant_id, entity_id=entity_id), limit=50)),
+            _safe("summary.execs", self._agent_execs.find_many(
+                filters=_scoped(tenant_id, agent_id=entity_id), limit=100)),
         )
         entity, agents, wallets, transfers, deleg_out, deleg_in, behavior, chains, execs = results
         # Tenant guard on the entity row too — find_by_id is not tenant-scoped,
@@ -863,15 +916,21 @@ class Profile360Aggregator:
         if ot in ("agent", "agent_config"):
             record = await _safe("drill.agent", self._agent_configs.find_by_id(object_id))
             if record and record.get("tenant_id") in (None, "", tenant_id):
-                execs = await _safe("drill.execs", self._agent_execs.list_for_agent(object_id, limit=20))
+                execs = await _safe("drill.execs", self._agent_execs.find_many(
+                    filters=_scoped(tenant_id, agent_id=object_id), limit=20,
+                ))
                 related["executions"] = [_drill_ref(e, "agent_execution", "execution_id") for e in _tenant_filter(execs, tenant_id)]
-                intents = await _safe("drill.intents", self._intents.find_many(filters={"agent_id": object_id}, limit=20))
+                intents = await _safe("drill.intents", self._intents.find_many(
+                    filters=_scoped(tenant_id, agent_id=object_id), limit=20,
+                ))
                 related["payment_intents"] = [_drill_ref(i, "payment_intent", "intent_id") for i in _tenant_filter(intents, tenant_id)]
 
         elif ot in ("wallet",):
             record = await _safe("drill.wallet", self._wallets.find_by_id(object_id))
             if record and record.get("tenant_id") in (None, "", tenant_id):
-                transfers = await _safe("drill.transfers", self._transfers.list_for_entity(record.get("owner_entity_id"), limit=20))
+                transfers = await self._transfers_for_entity(
+                    record.get("owner_entity_id") or "", tenant_id, limit=20,
+                )
                 related["transfers"] = [_drill_ref(t, "transfer", "transfer_id") for t in _tenant_filter(transfers, tenant_id)]
 
         elif ot in ("delegation",):
