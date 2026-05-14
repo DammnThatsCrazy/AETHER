@@ -6,16 +6,13 @@ docs/ (excluding archive/ and _generated/). For each file:
 
   - If the file has YAML frontmatter (delimited by lines of exactly ---),
     parse and validate it against the schema.
-  - If the file does not have frontmatter, emit a WARNING (does not fail).
-
-This staged rollout lets us land the validator and the schema today, then
-back-fill frontmatter on existing docs incrementally without blocking PRs.
-Once back-fill is complete, the missing-frontmatter warning is promoted to
-an error in a follow-up change.
+  - If the file does not have frontmatter, fail (back-fill is complete as
+    of slice 3 — all authored docs are required to declare visibility,
+    audience, etc.).
 
 Exit codes:
-  0  all frontmatter present in checked files is valid
-  1  one or more files have invalid frontmatter
+  0  every checked file has valid frontmatter
+  1  one or more files have invalid or missing frontmatter
 """
 
 from __future__ import annotations
@@ -174,7 +171,6 @@ def main() -> int:
     docs = tracked_docs()
 
     errors: list[str] = []
-    warnings: list[str] = []
     validated = 0
 
     for path in docs:
@@ -192,7 +188,10 @@ def main() -> int:
             continue
 
         if data is None:
-            warnings.append(f"{rel}: no frontmatter (back-fill pending)")
+            errors.append(
+                f"{rel}: missing frontmatter. "
+                f"Use docs/_templates/page.template.mdx as a starter."
+            )
             continue
 
         try:
@@ -204,17 +203,11 @@ def main() -> int:
         validated += 1
 
     print(f"Frontmatter validator: {len(docs)} files scanned, {validated} validated, "
-          f"{len(warnings)} pending back-fill, {len(errors)} invalid.")
-
-    if warnings:
-        print()
-        print("Pending back-fill (no frontmatter yet — not an error during rollout):")
-        for w in warnings:
-            print(f"  - {w}")
+          f"{len(errors)} errors.")
 
     if errors:
         print()
-        print("INVALID frontmatter:")
+        print("ERRORS:")
         for e in errors:
             print(f"  - {e}")
         return 1

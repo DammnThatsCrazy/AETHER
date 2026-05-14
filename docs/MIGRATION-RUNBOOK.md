@@ -1,3 +1,17 @@
+---
+title: Migration Runbook
+slug: operations/migration
+section: operations
+visibility: I
+audience: [ops]
+status: stable
+since_version: "8.8.0"
+source_files:
+  - Backend Architecture/migrations/
+canonical_owner: platform@aether
+estimated_read_minutes: 8
+toc_depth: 3
+---
 # Migration Runbook — Aether Platform v8.8.0
 
 Procedures for deploying new versions of the Aether platform with zero or minimal downtime. Covers database migrations, service rollouts, and phased traffic shifting.

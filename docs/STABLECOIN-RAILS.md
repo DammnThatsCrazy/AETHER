@@ -1,3 +1,17 @@
+---
+title: Stablecoin Rails
+slug: concepts/stablecoin-rails
+section: concepts
+visibility: P
+audience: [dev-senior, architect]
+status: stable
+since_version: "8.8.0"
+source_files:
+  - packages/shared/economic.ts
+canonical_owner: commerce@aether
+estimated_read_minutes: 2
+toc_depth: 3
+---
 # Stablecoin Rails — Day-1 GA
 
 ## Supported assets

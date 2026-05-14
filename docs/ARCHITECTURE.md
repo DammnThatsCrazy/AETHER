@@ -1,3 +1,19 @@
+---
+title: Aether Architecture Guide
+slug: architecture/system-map
+section: architecture
+visibility: P
+audience: [architect, dev-senior, security]
+status: stable
+since_version: "8.8.0"
+source_files:
+  - Backend Architecture/aether-backend/main.py
+  - Backend Architecture/aether-backend/middleware/middleware.py
+  - packages/shared/
+canonical_owner: platform@aether
+estimated_read_minutes: 20
+toc_depth: 3
+---
 # Aether vNext — Architecture Guide
 
 ## Overview

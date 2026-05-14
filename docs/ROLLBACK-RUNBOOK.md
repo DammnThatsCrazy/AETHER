@@ -1,3 +1,17 @@
+---
+title: Rollback Runbook
+slug: operations/rollback
+section: operations
+visibility: I
+audience: [ops]
+status: stable
+since_version: "8.8.0"
+source_files:
+  - cicd/aether-cicd/stages/cd/
+canonical_owner: platform@aether
+estimated_read_minutes: 10
+toc_depth: 3
+---
 # Rollback Runbook — Aether Platform v8.8.0
 
 Step-by-step procedures for rolling back the Aether platform after a failed deployment or production incident.

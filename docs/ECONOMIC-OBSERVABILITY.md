@@ -1,3 +1,17 @@
+---
+title: Economic Observability
+slug: concepts/economic-observability
+section: concepts
+visibility: P
+audience: [dev-senior, architect, ai]
+status: stable
+since_version: "8.8.0"
+source_files:
+  - packages/shared/economic.ts
+canonical_owner: platform@aether
+estimated_read_minutes: 10
+toc_depth: 3
+---
 # Economic Observability
 
 Aether's economic observability layer adds agentic transaction awareness to the
