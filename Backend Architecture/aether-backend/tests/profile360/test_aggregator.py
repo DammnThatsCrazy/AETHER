@@ -672,6 +672,97 @@ def test_financials_transfers_not_truncated_by_other_tenant_rows():
     assert ids == {"tr-own-in", "tr-own-out"}
 
 
+def test_aggregator_preserves_legacy_unscoped_rows():
+    """Pre-multi-tenant production rows (tenant_id NULL or '') were
+    intentionally admitted by _tenant_filter. The earlier fix that pushed
+    tenant_id into find_many would otherwise have made them disappear
+    from /v1/profile/{id}/{wallets,transfers,delegations,…}. The
+    aggregator now fans out a primary tenant-scoped query AND a legacy
+    `tenant_id=None` query, then merges, so legacy data stays visible
+    until ops backfill the column."""
+    legacy_wallet = {
+        "id": "w-legacy", "wallet_id": "w-legacy",
+        "owner_entity_id": "user-1",  # tenant_id intentionally omitted
+        "chain": "evm", "address": "0xlegacy",
+        "linked_at": "2024-01-01T00:00:00Z",
+    }
+    own_wallet = {
+        "id": "w-own", "wallet_id": "w-own",
+        "owner_entity_id": "user-1", "tenant_id": "t-a",
+        "chain": "evm", "address": "0xown",
+        "linked_at": "2026-01-01T00:00:00Z",
+    }
+    foreign_wallet = {
+        "id": "w-foreign", "wallet_id": "w-foreign",
+        "owner_entity_id": "user-1", "tenant_id": "t-other",
+        "chain": "evm", "address": "0xforeign",
+    }
+    agg = _make_aggregator()
+    agg._wallets = _Repo([foreign_wallet, legacy_wallet, own_wallet])  # type: ignore[attr-defined]
+    out = _run(agg.wallets("user-1", "t-a"))
+    ids = {i["id"] for i in out["items"]}
+    assert "w-own" in ids
+    assert "w-legacy" in ids   # legacy row still visible
+    assert "w-foreign" not in ids
+
+
+def test_aggregator_legacy_rows_survive_truncation_under_load():
+    """Even when the current tenant fills the page, a small number of
+    legacy unscoped rows should still surface (they come from a separate
+    query whose own slice is up to `limit`, then we merge and truncate
+    sorted by recency). Conversely, foreign-tenant rows never appear."""
+    own = [
+        {"id": f"w-own-{i}", "wallet_id": f"w-own-{i}",
+         "owner_entity_id": "user-1", "tenant_id": "t-a",
+         "chain": "evm", "address": f"0xown{i}",
+         "linked_at": f"2026-0{(i % 9) + 1}-01T00:00:00Z",
+         "created_at": f"2026-0{(i % 9) + 1}-01T00:00:00Z"}
+        for i in range(20)
+    ]
+    legacy = [
+        {"id": "w-legacy", "wallet_id": "w-legacy",
+         "owner_entity_id": "user-1",  # no tenant
+         "chain": "solana", "address": "legacy",
+         "linked_at": "2099-01-01T00:00:00Z",
+         "created_at": "2099-01-01T00:00:00Z"},  # newest, must appear
+    ]
+    foreign = [
+        {"id": f"w-foreign-{i}", "wallet_id": f"w-foreign-{i}",
+         "owner_entity_id": "user-1", "tenant_id": "t-other",
+         "chain": "evm", "address": f"0xforeign{i}"}
+        for i in range(50)
+    ]
+    agg = _make_aggregator()
+    agg._wallets = _Repo(foreign + own + legacy)  # type: ignore[attr-defined]
+    out = _run(agg.wallets("user-1", "t-a", limit=10))
+    ids = {i["id"] for i in out["items"]}
+    assert "w-legacy" in ids
+    assert not any(i.startswith("w-foreign") for i in ids)
+
+
+def test_base_repository_supports_legacy_tenant_filter():
+    """BaseRepository.find_many must treat tenant_id=None as a request to
+    match legacy unscoped rows. In-memory dict path matches missing keys
+    naturally; the SQL path special-cases the filter to emit
+    (tenant_id IS NULL OR tenant_id = '')."""
+    from repositories.repos import BaseRepository, reset_in_memory_stores
+
+    class _T(BaseRepository):
+        def __init__(self):
+            super().__init__("test_legacy_filter")
+
+    reset_in_memory_stores()
+    repo = _T()
+    _run(repo.insert("scoped", {"tenant_id": "t-a", "owner_entity_id": "u"}))
+    _run(repo.insert("legacy", {"owner_entity_id": "u"}))  # no tenant_id
+    _run(repo.insert("foreign", {"tenant_id": "t-other", "owner_entity_id": "u"}))
+
+    scoped = _run(repo.find_many(filters={"tenant_id": "t-a", "owner_entity_id": "u"}))
+    legacy = _run(repo.find_many(filters={"tenant_id": None, "owner_entity_id": "u"}))
+    assert {r.get("id") for r in scoped} == {"scoped"}
+    assert {r.get("id") for r in legacy} == {"legacy"}
+
+
 def test_aggregator_degrades_on_repo_failure_without_raising():
     """A failing dependency must produce an empty dimension, not a 500."""
 
