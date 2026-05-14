@@ -1,3 +1,20 @@
+---
+title: Aether Web SDK — Integration Guide
+slug: sdks/web
+section: sdks
+visibility: P
+audience: [dev-junior, dev-senior]
+status: stable
+since_version: "8.8.0"
+source_files:
+  - packages/web/src/index.ts
+  - packages/shared/events.ts
+  - packages/shared/consent.ts
+canonical_owner: sdk@aether
+estimated_read_minutes: 12
+toc_depth: 3
+---
+
 # Aether Web SDK v8.8.0 — Integration Guide
 
 ## Installation
