@@ -408,6 +408,103 @@ def test_summary_excludes_expired_and_future_delegations_from_active_counts():
     assert counts["active_delegations_received"] == 1
 
 
+def test_drill_rejects_unrelated_same_tenant_object():
+    """The drill endpoint lives under /v1/profile/{entity}/drill/..., so
+    a wallet that belongs to another entity in the same tenant must NOT
+    be returned. Otherwise tenant-mates can enumerate each other's
+    wallets / delegations / transfers by id."""
+    agg = _make_aggregator()
+    # Inject a wallet owned by Bob (same tenant) and try to drill from Alice.
+    agg._wallets = _Repo([  # type: ignore[attr-defined]
+        {"id": "bob-wallet", "wallet_id": "bob-wallet",
+         "owner_entity_id": "bob", "tenant_id": "t-a",
+         "chain": "evm", "address": "0xbob"},
+        {"id": "alice-wallet", "wallet_id": "alice-wallet",
+         "owner_entity_id": "user-1", "tenant_id": "t-a",
+         "chain": "evm", "address": "0xalice"},
+    ])
+    bobs = _run(agg.drill("user-1", "t-a", "wallet", "bob-wallet"))
+    assert bobs["found"] is False
+    assert bobs["object"] is None
+    alices = _run(agg.drill("user-1", "t-a", "wallet", "alice-wallet"))
+    assert alices["found"] is True
+
+
+def test_drill_rejects_unrelated_delegation_transfer_execution():
+    """Same association guard for delegations, transfers, executions, and
+    journey chains — drill must require profile membership, not just
+    tenant match."""
+    agg = _make_aggregator()
+    agg._delegations = _Repo([  # type: ignore[attr-defined]
+        {"id": "d-other", "delegation_id": "d-other", "tenant_id": "t-a",
+         "grantor_entity_id": "bob", "grantee_entity_id": "carol",
+         "scope": {}, "revoked_at": None},
+    ])
+    agg._transfers = _Repo([  # type: ignore[attr-defined]
+        {"id": "tr-other", "transfer_id": "tr-other", "tenant_id": "t-a",
+         "from_entity_id": "bob", "to_entity_id": "carol",
+         "amount": "5", "asset_id": "USD"},
+    ])
+    agg._agent_execs = _Repo([  # type: ignore[attr-defined]
+        {"id": "ex-other", "execution_id": "ex-other", "tenant_id": "t-a",
+         "agent_id": "bob-agent", "status": "completed"},
+    ])
+    agg._journeys = _Repo([  # type: ignore[attr-defined]
+        {"id": "c-other", "chain_id": "c-other", "tenant_id": "t-a",
+         "entity_id": "bob"},
+    ])
+
+    for ot, oid in [
+        ("delegation", "d-other"),
+        ("transfer", "tr-other"),
+        ("agent_execution", "ex-other"),
+        ("journey", "c-other"),
+    ]:
+        out = _run(agg.drill("user-1", "t-a", ot, oid))
+        assert out["found"] is False, f"drill leaked {ot}/{oid}"
+
+
+def test_relationships_active_flag_honors_delegation_time_window():
+    """Each delegation edge's `active` flag must match the canonical
+    DelegationRepository.active_for predicate (not revoked AND in
+    starts_at..ends_at window) so the relationship list agrees with
+    the /summary counts."""
+    past = "2020-01-01T00:00:00Z"
+    future = "2099-01-01T00:00:00Z"
+    delegations = _Repo([
+        # granted but not yet started
+        {"id": "d-future", "delegation_id": "d-future", "tenant_id": "t-a",
+         "grantor_entity_id": "user-1", "grantee_entity_id": "x",
+         "scope": {}, "starts_at": future, "ends_at": None, "revoked_at": None},
+        # granted and expired
+        {"id": "d-expired", "delegation_id": "d-expired", "tenant_id": "t-a",
+         "grantor_entity_id": "user-1", "grantee_entity_id": "y",
+         "scope": {}, "starts_at": past, "ends_at": past, "revoked_at": None},
+        # granted and currently active
+        {"id": "d-active-out", "delegation_id": "d-active-out", "tenant_id": "t-a",
+         "grantor_entity_id": "user-1", "grantee_entity_id": "z",
+         "scope": {}, "starts_at": past, "ends_at": future, "revoked_at": None},
+        # received and active
+        {"id": "d-active-in", "delegation_id": "d-active-in", "tenant_id": "t-a",
+         "grantor_entity_id": "boss", "grantee_entity_id": "user-1",
+         "scope": {}, "starts_at": past, "ends_at": future, "revoked_at": None},
+        # received and expired
+        {"id": "d-expired-in", "delegation_id": "d-expired-in", "tenant_id": "t-a",
+         "grantor_entity_id": "boss", "grantee_entity_id": "user-1",
+         "scope": {}, "starts_at": past, "ends_at": past, "revoked_at": None},
+    ])
+    agg = _make_aggregator()
+    agg._delegations = delegations  # type: ignore[attr-defined]
+
+    out = _run(agg.relationships("user-1", "t-a"))
+    by_id = {r["id"].split(":", 1)[1]: r for r in out["items"] if r["type"] == "delegation"}
+    assert by_id["d-active-out"]["active"] is True
+    assert by_id["d-active-in"]["active"] is True
+    assert by_id["d-future"]["active"] is False
+    assert by_id["d-expired"]["active"] is False
+    assert by_id["d-expired-in"]["active"] is False
+
+
 def test_aggregator_degrades_on_repo_failure_without_raising():
     """A failing dependency must produce an empty dimension, not a 500."""
 

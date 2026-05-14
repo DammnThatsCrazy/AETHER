@@ -584,6 +584,19 @@ class Profile360Aggregator:
     async def relationships(self, entity_id: str, tenant_id: str, limit: int = 200) -> dict:
         """Typed normalized relationship list across delegation, ownership, flows."""
         rels: list[dict] = []
+        # Single now-anchor so the predicate is identical for in/out and stays
+        # in lock-step with /summary's count math.
+        now_iso = utc_now().isoformat()
+
+        def _delegation_active(d: dict) -> bool:
+            if d.get("revoked_at"):
+                return False
+            if (d.get("starts_at") or "") > now_iso:
+                return False
+            ends = d.get("ends_at")
+            if ends and ends <= now_iso:
+                return False
+            return True
 
         # Ownership: agents owned by this entity
         owned = await _safe("rel.agents", self._agent_configs.list_for_owner(entity_id))
@@ -641,7 +654,7 @@ class Profile360Aggregator:
                 "displayLabel": f"delegates to {d.get('grantee_entity_id')}",
                 "strength": 1.0,
                 "confidence": 1.0,
-                "active": not d.get("revoked_at"),
+                "active": _delegation_active(d),
                 "scope": d.get("scope"),
                 "timestamps": {
                     "startsAt": d.get("starts_at"),
@@ -668,7 +681,7 @@ class Profile360Aggregator:
                 "displayLabel": f"acts on behalf of {d.get('grantor_entity_id')}",
                 "strength": 1.0,
                 "confidence": 1.0,
-                "active": not d.get("revoked_at"),
+                "active": _delegation_active(d),
                 "scope": d.get("scope"),
                 "timestamps": {
                     "startsAt": d.get("starts_at"),
@@ -889,17 +902,14 @@ class Profile360Aggregator:
             record = None
 
         if not record or record.get("tenant_id") not in (None, "", tenant_id):
-            return {
-                "entity_id": entity_id,
-                "tenant_id": tenant_id,
-                "kind": "drill",
-                "object_type": object_type,
-                "object_id": object_id,
-                "found": False,
-                "object": None,
-                "related": {},
-                "computed_at": utc_now().isoformat(),
-            }
+            return _drill_not_found(entity_id, tenant_id, object_type, object_id)
+
+        # This route is profile-scoped: the drilled object must be related to
+        # the requesting entity_id, otherwise tenant-mates could enumerate each
+        # other's wallets / delegations / transfers by id. Apply per-type
+        # association checks.
+        if not _drill_belongs_to_profile(ot, record, entity_id):
+            return _drill_not_found(entity_id, tenant_id, object_type, object_id)
 
         return {
             "entity_id": entity_id,
@@ -912,6 +922,61 @@ class Profile360Aggregator:
             "related": related,
             "computed_at": utc_now().isoformat(),
         }
+
+
+def _drill_not_found(entity_id: str, tenant_id: str, object_type: str, object_id: str) -> dict:
+    return {
+        "entity_id": entity_id,
+        "tenant_id": tenant_id,
+        "kind": "drill",
+        "object_type": object_type,
+        "object_id": object_id,
+        "found": False,
+        "object": None,
+        "related": {},
+        "computed_at": utc_now().isoformat(),
+    }
+
+
+def _drill_belongs_to_profile(ot: str, record: dict, entity_id: str) -> bool:
+    """Profile-scoped association guard for the drill endpoint.
+
+    The drill route lives under /v1/profile/{entity_id}/drill/..., so the
+    drilled object must be related to entity_id. Otherwise a caller with
+    tenant-scoped read access could enumerate other entities' private
+    objects (wallets, delegations, transfers, executions, ...) just by
+    guessing ids. Each branch encodes the canonical relationship for that
+    object type — owner_entity_id for assets, grantor/grantee for
+    delegations, agent_id for agent-owned objects, from/to for transfers,
+    etc.
+    """
+    if not record:
+        return False
+
+    if ot in ("agent", "agent_config"):
+        return record.get("owner_entity_id") == entity_id or record.get("agent_id") == entity_id
+    if ot == "wallet":
+        return record.get("owner_entity_id") == entity_id
+    if ot == "delegation":
+        return entity_id in (record.get("grantor_entity_id"), record.get("grantee_entity_id"))
+    if ot in ("transfer", "flow"):
+        return entity_id in (record.get("from_entity_id"), record.get("to_entity_id"))
+    if ot in ("entity", "human", "organization", "org"):
+        return record.get("entity_id") == entity_id or record.get("id") == entity_id
+    if ot in ("journey", "journey_chain", "chain"):
+        return record.get("entity_id") == entity_id
+    if ot in ("payment_intent", "intent"):
+        return record.get("agent_id") == entity_id
+    if ot == "settlement":
+        return record.get("agent_id") == entity_id
+    if ot in ("agent_execution", "execution"):
+        return record.get("agent_id") == entity_id
+    # Asset is a catalog entry (token/NFT/fiat) shared across entities; gating
+    # by entity ownership would always fail. Permit it only when something in
+    # the row carries the requesting entity (custom catalogs may store owner).
+    if ot == "asset":
+        return record.get("owner_entity_id") in (None, entity_id)
+    return False
 
 
 def _safe_float(v: Any) -> float:
