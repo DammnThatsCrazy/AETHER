@@ -98,17 +98,42 @@ async def close_pool() -> None:
 # BASE REPOSITORY — auto-selects PostgreSQL or in-memory
 # ═══════════════════════════════════════════════════════════════════════════
 
+# Shared in-memory backing stores keyed by table_name.
+#
+# Without this, each BaseRepository instance owns a private `_store`. Routes
+# that hold module-level repo singletons (services/flows/routes.py,
+# services/entities/routes.py, services/agent/user_agents.py, etc.) would
+# write into their own copies, and Profile360Aggregator — which constructs
+# its own repos — would never observe writes made through the canonical
+# routes when AETHER_ENV=local (no Postgres). Sharing a dict per table makes
+# the in-memory backend behave like a real database for cross-module reads.
+_IN_MEMORY_STORES: dict[str, dict[str, dict]] = {}
+
+
+def reset_in_memory_stores() -> None:
+    """Test helper: drop every in-memory backing store.
+
+    Production code uses Postgres; the in-memory backend is local/dev-only.
+    Tests that need isolated state can call this from their fixtures.
+    """
+    _IN_MEMORY_STORES.clear()
+
+
 class BaseRepository(ABC):
     """
     Base for relational repositories.
 
     Production: asyncpg queries against PostgreSQL (auto-creates table).
-    Local: in-memory dicts for development.
+    Local: in-memory dicts for development, shared across instances of the
+    same table so route-level singletons and the Profile 360 aggregator
+    observe one consistent view.
     """
 
     def __init__(self, table_name: str) -> None:
         self.table_name = table_name
-        self._store: dict[str, dict] = {}  # in-memory fallback
+        # All instances of a given table share the same dict so writes by one
+        # singleton are visible to another (see _IN_MEMORY_STORES docstring).
+        self._store: dict[str, dict] = _IN_MEMORY_STORES.setdefault(table_name, {})
         self._pool: Optional[Any] = None
         self._table_ensured = False
 
@@ -434,8 +459,12 @@ class AnalyticsRepository:
         query_params: dict,
         limit: int = 100,
     ) -> list[dict]:
+        # Cache key must include `limit` — without it, a /sessions?limit=1 call
+        # would otherwise serve its 1-event result to /platforms, /protocols,
+        # /devices, /rewards (all of which call with the same {user_id} filter
+        # but larger limits), making the rollups undercount.
         cache_key = CacheKey.analytics_query(
-            tenant_id, CacheKey.hash_query(str(query_params))
+            tenant_id, CacheKey.hash_query(f"{query_params}|limit={limit}")
         )
         cached = await self.cache.get_json(cache_key)
         if cached:

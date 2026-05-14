@@ -40,6 +40,7 @@ from repositories.repos import (
 from repositories.lake import gold_identity, gold_market, gold_onchain, gold_social
 from services.profile.resolver import ProfileResolver
 from services.profile.composer import ProfileComposer
+from services.profile.aggregator import Profile360Aggregator
 
 logger = get_logger("aether.service.profile")
 router = APIRouter(prefix="/v1/profile", tags=["Profile 360"])
@@ -452,6 +453,202 @@ async def get_predictions(user_id: str, request: Request):
         "risk_flags": record.get("anomaly_flags") or [],
         "risk_score": record.get("risk_score") or 0.0,
     }).to_dict()
+
+
+# ── Profile 360 Aggregation Layer (drill-down endpoints) ────────────
+#
+# These endpoints are powered by Profile360Aggregator and return the
+# normalized "frontend-ready" shape documented in
+# docs/PROFILE-360-AGGREGATION.md. They are additive: existing routes above
+# are unchanged. Frontends should prefer these routes when building a
+# Profile 360 view because they pre-compute counts, summaries, and drill
+# refs so the UI does not need to join across services.
+
+_aggregator: Optional[Profile360Aggregator] = None
+
+
+def _get_aggregator(
+    graph: GraphClient = Depends(get_graph),
+    cache: CacheClient = Depends(get_cache),
+) -> Profile360Aggregator:
+    global _aggregator
+    if _aggregator is None:
+        from repositories.repos import (
+            DelegationRepository as _DR,
+            AnalyticsRepository as _AR,
+            IdentityRepository as _IR,
+        )
+        _aggregator = Profile360Aggregator(
+            delegation_repo=_DR(cache=cache),
+            analytics_repo=_AR(cache),
+            identity_repo=_IR(graph, cache),
+            graph=graph,
+        )
+    return _aggregator
+
+
+@router.get("/{user_id}/summary")
+async def get_profile_summary(
+    user_id: str,
+    request: Request,
+    agg: Profile360Aggregator = Depends(_get_aggregator),
+):
+    """Dashboard-ready concise snapshot.
+
+    One call to power an entire profile header / tile bank. Pre-computes
+    counts, financial rollups, latest behavior, and drill links for every
+    Profile 360 dimension. Frontends should call this first and lazy-load
+    individual drill endpoints on demand.
+    """
+    tenant = request.state.tenant
+    tenant.require_permission("read")
+    data = await agg.summary(entity_id=user_id, tenant_id=tenant.tenant_id)
+    metrics.increment("profile_360_summary")
+    return APIResponse(data=data).to_dict()
+
+
+@router.get("/{user_id}/wallets")
+async def get_profile_wallets(
+    user_id: str,
+    request: Request,
+    agg: Profile360Aggregator = Depends(_get_aggregator),
+    limit: int = Query(100, ge=1, le=500),
+):
+    """Wallets owned by this entity (across all chains)."""
+    tenant = request.state.tenant
+    tenant.require_permission("read")
+    return APIResponse(data=await agg.wallets(user_id, tenant.tenant_id, limit=limit)).to_dict()
+
+
+@router.get("/{user_id}/sessions")
+async def get_profile_sessions(
+    user_id: str,
+    request: Request,
+    agg: Profile360Aggregator = Depends(_get_aggregator),
+    limit: int = Query(100, ge=1, le=500),
+):
+    """Recent sessions with platform / device / event-count rollups."""
+    tenant = request.state.tenant
+    tenant.require_permission("read")
+    return APIResponse(data=await agg.sessions(user_id, tenant.tenant_id, limit=limit)).to_dict()
+
+
+@router.get("/{user_id}/devices")
+async def get_profile_devices(
+    user_id: str,
+    request: Request,
+    agg: Profile360Aggregator = Depends(_get_aggregator),
+    limit: int = Query(100, ge=1, le=500),
+):
+    """Devices linked deterministically (identity cluster) or observed in events."""
+    tenant = request.state.tenant
+    tenant.require_permission("read")
+    return APIResponse(data=await agg.devices(user_id, tenant.tenant_id, limit=limit)).to_dict()
+
+
+@router.get("/{user_id}/platforms")
+async def get_profile_platforms(
+    user_id: str,
+    request: Request,
+    agg: Profile360Aggregator = Depends(_get_aggregator),
+    limit: int = Query(50, ge=1, le=200),
+):
+    """Platform attribution breakdown from the event stream."""
+    tenant = request.state.tenant
+    tenant.require_permission("read")
+    return APIResponse(data=await agg.platforms(user_id, tenant.tenant_id, limit=limit)).to_dict()
+
+
+@router.get("/{user_id}/protocols")
+async def get_profile_protocols(
+    user_id: str,
+    request: Request,
+    agg: Profile360Aggregator = Depends(_get_aggregator),
+    limit: int = Query(50, ge=1, le=200),
+):
+    """Protocol interactions from the event stream and economic graph."""
+    tenant = request.state.tenant
+    tenant.require_permission("read")
+    return APIResponse(data=await agg.protocols(user_id, tenant.tenant_id, limit=limit)).to_dict()
+
+
+@router.get("/{user_id}/journeys")
+async def get_profile_journeys(
+    user_id: str,
+    request: Request,
+    agg: Profile360Aggregator = Depends(_get_aggregator),
+    limit: int = Query(50, ge=1, le=200),
+):
+    """Cross-session journey chains for this entity."""
+    tenant = request.state.tenant
+    tenant.require_permission("read")
+    return APIResponse(data=await agg.journeys(user_id, tenant.tenant_id, limit=limit)).to_dict()
+
+
+@router.get("/{user_id}/rewards")
+async def get_profile_rewards(
+    user_id: str,
+    request: Request,
+    agg: Profile360Aggregator = Depends(_get_aggregator),
+    limit: int = Query(100, ge=1, le=500),
+):
+    """Reward events earned by this entity."""
+    tenant = request.state.tenant
+    tenant.require_permission("read")
+    return APIResponse(data=await agg.rewards(user_id, tenant.tenant_id, limit=limit)).to_dict()
+
+
+@router.get("/{user_id}/financials")
+async def get_profile_financials(
+    user_id: str,
+    request: Request,
+    agg: Profile360Aggregator = Depends(_get_aggregator),
+    limit: int = Query(200, ge=1, le=500),
+):
+    """Aggregated financial summary: inflows, outflows, settlements, recent transfers."""
+    tenant = request.state.tenant
+    tenant.require_permission("read")
+    return APIResponse(data=await agg.financials(user_id, tenant.tenant_id, limit=limit)).to_dict()
+
+
+@router.get("/{user_id}/relationships")
+async def get_profile_relationships(
+    user_id: str,
+    request: Request,
+    agg: Profile360Aggregator = Depends(_get_aggregator),
+    limit: int = Query(200, ge=1, le=500),
+):
+    """Typed normalized relationship list (ownership, delegation, financial flow)."""
+    tenant = request.state.tenant
+    tenant.require_permission("read")
+    return APIResponse(data=await agg.relationships(user_id, tenant.tenant_id, limit=limit)).to_dict()
+
+
+@router.get("/{user_id}/drill/{object_type}/{object_id}")
+async def drill_into_object(
+    user_id: str,
+    object_type: str,
+    object_id: str,
+    request: Request,
+    agg: Profile360Aggregator = Depends(_get_aggregator),
+):
+    """Generic deep drill into any related Profile 360 object.
+
+    Supports object_type in:
+        agent, wallet, delegation, transfer, asset, entity,
+        journey, payment_intent, settlement, agent_execution
+    """
+    tenant = request.state.tenant
+    tenant.require_permission("read")
+    data = await agg.drill(
+        entity_id=user_id,
+        tenant_id=tenant.tenant_id,
+        object_type=object_type,
+        object_id=object_id,
+    )
+    if not data.get("found"):
+        raise NotFoundError(f"{object_type}/{object_id} not found in tenant scope")
+    return APIResponse(data=data).to_dict()
 
 
 # ── Lake Data by Domain ──────────────────────────────────────────────
