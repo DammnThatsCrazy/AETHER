@@ -28,6 +28,7 @@ GENERATORS = [
     "extract_consent",
     "extract_entities",
     "extract_capabilities",
+    "extract_plans",
 ]
 
 
