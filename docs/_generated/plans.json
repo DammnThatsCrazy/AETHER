@@ -1,0 +1,66 @@
+{
+  "version": "8.8.0",
+  "generated_from": "Backend Architecture/aether-backend/shared/plans/catalog.py",
+  "plans": [
+    {
+      "plan_id": "P1",
+      "display_name": "Hobbyist",
+      "target_user": "Solo Devs",
+      "monthly_quota": 25000,
+      "member_cap": 1,
+      "burst_rpm": 100,
+      "blended_overage_per_1k": "12.50",
+      "service_count": 10,
+      "pricing": {
+        "option_a": "99",
+        "option_b": "299",
+        "option_c": "449"
+      }
+    },
+    {
+      "plan_id": "P2",
+      "display_name": "Professional",
+      "target_user": "Small Teams",
+      "monthly_quota": 100000,
+      "member_cap": 3,
+      "burst_rpm": 500,
+      "blended_overage_per_1k": "16.60",
+      "service_count": 19,
+      "pricing": {
+        "option_a": "499",
+        "option_b": "829",
+        "option_c": "1219"
+      }
+    },
+    {
+      "plan_id": "P3",
+      "display_name": "Growth Intelligence",
+      "target_user": "Scale-ups",
+      "monthly_quota": 250000,
+      "member_cap": 5,
+      "burst_rpm": 1200,
+      "blended_overage_per_1k": "28.70",
+      "service_count": 29,
+      "pricing": {
+        "option_a": "1499",
+        "option_b": "2869",
+        "option_c": "4239"
+      }
+    },
+    {
+      "plan_id": "P4",
+      "display_name": "Protocol Master",
+      "target_user": "Orgs",
+      "monthly_quota": 500000,
+      "member_cap": 10,
+      "burst_rpm": 3000,
+      "blended_overage_per_1k": "35.00",
+      "service_count": 34,
+      "pricing": {
+        "option_a": "3999",
+        "option_b": "8519",
+        "option_c": "12499"
+      }
+    }
+  ]
+}
