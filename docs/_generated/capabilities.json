@@ -1,0 +1,80 @@
+{
+  "version": "8.8.0",
+  "generated_from": "packages/shared/capabilities.ts",
+  "manifest_fields": [
+    {
+      "name": "schemaVersion",
+      "type": "string",
+      "optional": false,
+      "description": ""
+    },
+    {
+      "name": "activeFamilies",
+      "type": "EventFamily[]",
+      "optional": false,
+      "description": "Which event families the backend is currently ingesting."
+    },
+    {
+      "name": "supportedPurposes",
+      "type": "ConsentPurpose[]",
+      "optional": false,
+      "description": "Which consent purposes the backend recognizes."
+    },
+    {
+      "name": "activeRails",
+      "type": "Rail[]",
+      "optional": false,
+      "description": "Which payment rails the commerce plane accepts."
+    },
+    {
+      "name": "supportedVMs",
+      "type": "VMType[]",
+      "optional": false,
+      "description": "Which VMs the wallet/transaction pipeline currently supports."
+    },
+    {
+      "name": "layers",
+      "type": "GraphLayerFlags",
+      "optional": false,
+      "description": "Intelligence Graph layer activations."
+    },
+    {
+      "name": "featureFlags",
+      "type": "{ key: string",
+      "optional": true,
+      "description": "Optional backend-delivered feature flags (opaque to SDK)."
+    }
+  ],
+  "graph_layers": [
+    {
+      "name": "agent",
+      "flag": "IG_AGENT_LAYER",
+      "level": "L2",
+      "optional": false
+    },
+    {
+      "name": "commerce",
+      "flag": "IG_COMMERCE_LAYER",
+      "level": "L3a",
+      "optional": false
+    },
+    {
+      "name": "x402",
+      "flag": "IG_X402_LAYER",
+      "level": "L3b",
+      "optional": false
+    },
+    {
+      "name": "onchain",
+      "flag": "IG_ONCHAIN_LAYER",
+      "level": "L0",
+      "optional": false
+    },
+    {
+      "name": "trust_scoring",
+      "flag": "",
+      "level": "",
+      "optional": true
+    }
+  ]
+}

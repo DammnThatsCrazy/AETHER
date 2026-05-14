@@ -25,6 +25,9 @@ PKG = ROOT / "scripts" / "docs_extract"
 GENERATORS = [
     "extract_env",
     "extract_events",
+    "extract_consent",
+    "extract_entities",
+    "extract_capabilities",
 ]
 
 
