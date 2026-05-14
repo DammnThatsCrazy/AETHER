@@ -505,6 +505,88 @@ def test_relationships_active_flag_honors_delegation_time_window():
     assert by_id["d-expired-in"]["active"] is False
 
 
+def test_analytics_query_cache_isolates_by_limit():
+    """AnalyticsRepository.query_events must not collide cache entries when
+    the same {user_id} filter is requested with different limits. A
+    sessions?limit=1 call previously poisoned platforms/protocols/devices
+    cache entries, causing rollups to undercount."""
+    from repositories.repos import AnalyticsRepository, reset_in_memory_stores
+
+    class _InMemCache:
+        def __init__(self):
+            self._d: dict = {}
+        async def get_json(self, k):
+            return self._d.get(k)
+        async def set_json(self, k, v, ttl=None):
+            self._d[k] = v
+
+    reset_in_memory_stores()
+    cache = _InMemCache()
+    repo = AnalyticsRepository(cache)
+    for i in range(5):
+        _run(repo.record_event(f"evt-{i}", {
+            "tenant_id": "t", "user_id": "u", "event_type": "x", "id": f"evt-{i}",
+        }))
+
+    small = _run(repo.query_events("t", {"user_id": "u"}, limit=1))
+    assert len(small) == 1
+    # Same filter, bigger limit — bug would have returned the cached len==1.
+    big = _run(repo.query_events("t", {"user_id": "u"}, limit=5))
+    assert len(big) == 5
+
+
+def test_repositories_share_in_memory_store_across_instances():
+    """Route-level repo singletons and aggregator-owned repos must observe
+    the same in-memory state, otherwise data written through /v1/flows is
+    invisible to /v1/profile/{id}/wallets in AETHER_ENV=local."""
+    from repositories.repos import WalletRepository, reset_in_memory_stores
+
+    reset_in_memory_stores()
+    route_instance = WalletRepository()
+    _run(route_instance.link_wallet(
+        wallet_id="shared-wallet",
+        owner_entity_id="alice",
+        tenant_id="t",
+        chain="evm",
+        address="0xshared",
+    ))
+    aggregator_instance = WalletRepository()
+    rows = _run(aggregator_instance.find_many(
+        filters={"owner_entity_id": "alice"}, limit=10,
+    ))
+    assert len(rows) == 1
+    assert rows[0]["wallet_id"] == "shared-wallet"
+
+
+def test_aggregator_with_default_repos_sees_writes_via_route_repos():
+    """End-to-end: a wallet linked through WalletRepository (as /v1/flows
+    does) must be visible to a Profile360Aggregator that constructed its
+    own repos (the default path used when no override is supplied)."""
+    from repositories.repos import (
+        WalletRepository, TransferRepository, reset_in_memory_stores,
+    )
+
+    reset_in_memory_stores()
+    _run(WalletRepository().link_wallet(
+        wallet_id="w-shared",
+        owner_entity_id="user-1",
+        tenant_id="t-a",
+        chain="evm",
+        address="0xshared",
+    ))
+    _run(TransferRepository().record_transfer(
+        transfer_id="tr-shared", tenant_id="t-a",
+        from_entity_id="other", to_entity_id="user-1",
+        asset_id="USD", amount="50",
+    ))
+
+    agg = Profile360Aggregator()
+    wallets = _run(agg.wallets("user-1", "t-a"))
+    fins = _run(agg.financials("user-1", "t-a"))
+    assert any(w["id"] == "w-shared" for w in wallets["items"])
+    assert fins["summary"]["inflow_total"] == 50.0
+
+
 def test_aggregator_degrades_on_repo_failure_without_raising():
     """A failing dependency must produce an empty dimension, not a 500."""
 
