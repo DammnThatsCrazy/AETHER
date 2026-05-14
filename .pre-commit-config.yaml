@@ -15,6 +15,41 @@ repos:
         always_run: true
         stages: [commit]
 
+      # Frontmatter schema check on docs/*.md - blocks commits that add
+      # invalid or missing frontmatter (back-fill complete as of slice 3).
+      - id: validate-frontmatter
+        name: Validate doc YAML frontmatter
+        entry: python scripts/validate_frontmatter.py
+        language: python
+        pass_filenames: false
+        additional_dependencies: ["PyYAML>=6.0"]
+        files: '^docs/.*\.(md|mdx)$'
+        stages: [commit]
+
+      # Source-path drift - fails when a doc's source_files: points to a
+      # missing path (typically: a renamed or deleted module). Staleness
+      # is advisory until --strict rollout.
+      - id: docs-drift
+        name: Check doc source paths exist
+        entry: python scripts/docs_drift.py
+        language: python
+        pass_filenames: false
+        additional_dependencies: ["PyYAML>=6.0"]
+        files: '^(docs/.*\.(md|mdx)|scripts/docs_drift\.py)$'
+        stages: [commit]
+
+      # Re-derive docs/_generated/*.json - blocks commits that change a
+      # canonical source without also committing the regenerated JSON.
+      # The hook regenerates first, then checks git status; any drift
+      # fails the commit so the dev knows to `git add docs/_generated/`.
+      - id: extract-docs
+        name: Regenerate docs/_generated artifacts
+        entry: bash -c 'python scripts/docs_extract/run_all.py >/dev/null && if [ -n "$(git status --porcelain docs/_generated/)" ]; then echo "docs/_generated drifted — run \"make extract-docs\" then git add docs/_generated/"; git status --porcelain docs/_generated/; exit 1; fi'
+        language: system
+        pass_filenames: false
+        files: '^(packages/shared/.*\.ts|\.env\.example|Backend Architecture/aether-backend/shared/(plans/catalog|providers/categories|events/events)\.py|scripts/docs_extract/.*\.py)$'
+        stages: [commit]
+
   # Python linting
   - repo: https://github.com/astral-sh/ruff-pre-commit
     rev: v0.4.0
