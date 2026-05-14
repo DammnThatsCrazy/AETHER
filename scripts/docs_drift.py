@@ -8,19 +8,21 @@ For every authored doc with ``source_files:`` frontmatter, this script:
      renamed or deleted without updating the doc.
 
   2. If the doc also declares ``last_synced_commit: <sha>``, compares
-     that SHA against the most-recent git SHA that touched the
-     declared source files. If the source has been modified since,
-     the doc is stale.
+     against ``git log <sha>..HEAD -- <source_files>``. Any commit in
+     that range means the doc is stale.
 
 By default the script exits 0 even when staleness is detected — this is
-the advisory phase. A follow-up change will introduce ``--strict`` and
-wire it into CI once authors have stamped ``last_synced_commit`` on the
-docs they own. Hard errors (missing source paths) ALWAYS fail; those
+the advisory phase. ``--strict`` promotes staleness to a fatal error
+for use in CI once authors are stamping ``last_synced_commit`` on docs
+they own. Hard errors (missing source paths) ALWAYS fail; those
 indicate broken metadata regardless of rollout phase.
 
 Modes:
-  python scripts/docs_drift.py            # walk + report (advisory)
-  python scripts/docs_drift.py --strict   # exit 1 on any drift
+  python scripts/docs_drift.py             # walk + report (advisory)
+  python scripts/docs_drift.py --strict    # exit 1 on any drift
+  python scripts/docs_drift.py --update    # rewrite last_synced_commit
+                                           # on every doc with source_files
+                                           # to the current HEAD SHA
 
 Exit codes:
   0  no missing paths; staleness reported as warnings (or strict mode passed)
@@ -154,6 +156,64 @@ def check_doc(path: Path) -> dict:
     }
 
 
+def head_sha() -> str | None:
+    """Return the abbreviated SHA of the current HEAD, or None on error."""
+    result = subprocess.run(
+        ["git", "rev-parse", "--short", "HEAD"],
+        capture_output=True,
+        text=True,
+        cwd=ROOT,
+    )
+    if result.returncode != 0:
+        return None
+    sha = result.stdout.strip()
+    return sha or None
+
+
+def stamp_doc(path: Path, sha: str) -> bool:
+    """Write ``last_synced_commit: <sha>`` into the frontmatter of one doc.
+
+    Returns True if the file was modified. No-op (returns False) if the
+    doc has no frontmatter, no ``source_files`` block, or already has
+    the correct ``last_synced_commit:`` line.
+    """
+    text = path.read_text(encoding="utf-8")
+    fm = extract_frontmatter(text)
+    if fm is None:
+        return False
+    if not fm.get("source_files"):
+        return False
+    if fm.get("last_synced_commit") == sha:
+        return False
+
+    # Locate the frontmatter block bounds (already known to start with `---\n`).
+    end = text.find("\n---", 4)
+    if end < 0:
+        return False
+    fm_text = text[4:end]
+    rest = text[end:]  # starts with the trailing `\n---`
+
+    new_line = f"last_synced_commit: {sha}"
+    if "last_synced_commit:" in fm_text:
+        # Replace the existing line.
+        import re as _re
+        fm_text = _re.sub(
+            r"^last_synced_commit:.*$",
+            new_line,
+            fm_text,
+            count=1,
+            flags=_re.MULTILINE,
+        )
+    else:
+        # Append after the last frontmatter line.
+        fm_text = fm_text.rstrip() + "\n" + new_line + "\n"
+        # Normalise — the closing `\n---` will be prefixed by stamped fm_text.
+        fm_text = fm_text.rstrip("\n")
+
+    path.write_text("---\n" + fm_text + rest, encoding="utf-8")
+    return True
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
@@ -161,7 +221,29 @@ def main() -> int:
         action="store_true",
         help="Exit 1 on any drift (default: missing paths only).",
     )
+    parser.add_argument(
+        "--update",
+        action="store_true",
+        help=(
+            "Rewrite last_synced_commit: <HEAD> on every doc with "
+            "source_files. Use after a focused authoring pass to stamp "
+            "each updated doc."
+        ),
+    )
     args = parser.parse_args()
+
+    if args.update:
+        sha = head_sha()
+        if not sha:
+            print("error: cannot read HEAD SHA — is this a git repo?", file=sys.stderr)
+            return 1
+        updated = 0
+        for path in tracked_docs():
+            if stamp_doc(path, sha):
+                updated += 1
+                print(f"  stamped {path.relative_to(ROOT)} -> {sha}")
+        print(f"docs_drift --update: stamped {updated} docs at {sha}.")
+        return 0
 
     reports = [check_doc(p) for p in tracked_docs()]
 
