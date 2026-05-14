@@ -48,7 +48,20 @@ class _Repo:
 
     async def find_many(self, filters=None, limit=50, **_):
         f = filters or {}
-        out = [r for r in self._rows if all(r.get(k) == v for k, v in f.items())]
+
+        def _matches(row):
+            for k, v in f.items():
+                # Mirror BaseRepository._matches_filters: tenant_id=None/''
+                # matches legacy unscoped rows (None / '' / missing).
+                if k == "tenant_id" and v in (None, ""):
+                    if row.get("tenant_id") not in (None, ""):
+                        return False
+                    continue
+                if row.get(k) != v:
+                    return False
+            return True
+
+        out = [r for r in self._rows if _matches(r)]
         return out[:limit]
 
     async def list_for_owner(self, owner_id):
@@ -761,6 +774,55 @@ def test_base_repository_supports_legacy_tenant_filter():
     legacy = _run(repo.find_many(filters={"tenant_id": None, "owner_entity_id": "u"}))
     assert {r.get("id") for r in scoped} == {"scoped"}
     assert {r.get("id") for r in legacy} == {"legacy"}
+
+
+def test_base_repository_legacy_filter_matches_blank_string_tenant_in_memory():
+    """A legacy row stored with tenant_id='' (blank string) must match
+    tenant_id=None filter in the in-memory backend, mirroring the SQL
+    branch's `(tenant_id IS NULL OR tenant_id = '')` predicate. Without
+    this, Profile 360 would drop blank-tenant rows in AETHER_ENV=local
+    even though they appear in Postgres."""
+    from repositories.repos import BaseRepository, reset_in_memory_stores
+
+    class _T(BaseRepository):
+        def __init__(self):
+            super().__init__("test_legacy_blank_tenant")
+
+    reset_in_memory_stores()
+    repo = _T()
+    _run(repo.insert("blank", {"tenant_id": "", "owner_entity_id": "u"}))
+    _run(repo.insert("null", {"owner_entity_id": "u"}))  # tenant_id absent
+    _run(repo.insert("scoped", {"tenant_id": "t-a", "owner_entity_id": "u"}))
+
+    legacy = _run(repo.find_many(filters={"tenant_id": None, "owner_entity_id": "u"}))
+    blank_filter = _run(repo.find_many(filters={"tenant_id": "", "owner_entity_id": "u"}))
+    assert {r.get("id") for r in legacy} == {"blank", "null"}
+    assert {r.get("id") for r in blank_filter} == {"blank", "null"}
+    # count() shares the same predicate.
+    assert _run(repo.count(filters={"tenant_id": None, "owner_entity_id": "u"})) == 2
+
+
+def test_aggregator_preserves_blank_string_tenant_rows():
+    """End-to-end: a wallet stored with tenant_id='' must still appear in
+    /v1/profile/{id}/wallets when running on the in-memory backend, just
+    like a NULL-tenant row would in Postgres."""
+    blank_wallet = {
+        "id": "w-blank", "wallet_id": "w-blank",
+        "owner_entity_id": "user-1", "tenant_id": "",  # explicit empty string
+        "chain": "evm", "address": "0xblank",
+        "linked_at": "2025-01-01T00:00:00Z",
+    }
+    own_wallet = {
+        "id": "w-own", "wallet_id": "w-own",
+        "owner_entity_id": "user-1", "tenant_id": "t-a",
+        "chain": "evm", "address": "0xown",
+        "linked_at": "2026-01-01T00:00:00Z",
+    }
+    agg = _make_aggregator()
+    agg._wallets = _Repo([blank_wallet, own_wallet])  # type: ignore[attr-defined]
+    out = _run(agg.wallets("user-1", "t-a"))
+    ids = {i["id"] for i in out["items"]}
+    assert ids == {"w-blank", "w-own"}
 
 
 def test_aggregator_degrades_on_repo_failure_without_raising():
