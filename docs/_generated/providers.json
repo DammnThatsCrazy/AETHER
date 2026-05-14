@@ -1,0 +1,312 @@
+{
+  "version": "8.8.0",
+  "generated_from": "Backend Architecture/aether-backend/shared/providers/categories.py",
+  "category_enum_values": [
+    {
+      "name": "BLOCKCHAIN_RPC",
+      "value": "blockchain_rpc"
+    },
+    {
+      "name": "BLOCK_EXPLORER",
+      "value": "block_explorer"
+    },
+    {
+      "name": "SOCIAL_API",
+      "value": "social_api"
+    },
+    {
+      "name": "ANALYTICS_DATA",
+      "value": "analytics_data"
+    },
+    {
+      "name": "MARKET_DATA",
+      "value": "market_data"
+    },
+    {
+      "name": "PREDICTION_MARKET",
+      "value": "prediction_market"
+    },
+    {
+      "name": "WEB3_SOCIAL",
+      "value": "web3_social"
+    },
+    {
+      "name": "IDENTITY_ENRICHMENT",
+      "value": "identity_enrichment"
+    },
+    {
+      "name": "ONCHAIN_INTELLIGENCE",
+      "value": "onchain_intelligence"
+    },
+    {
+      "name": "TRADFI_DATA",
+      "value": "tradfi_data"
+    },
+    {
+      "name": "GOVERNANCE",
+      "value": "governance"
+    }
+  ],
+  "categories": [
+    {
+      "enum_name": "BLOCKCHAIN_RPC",
+      "value": "blockchain_rpc",
+      "providers": [
+        {
+          "name": "quicknode",
+          "class": "QuickNodeProvider"
+        },
+        {
+          "name": "alchemy",
+          "class": "AlchemyProvider"
+        },
+        {
+          "name": "infura",
+          "class": "InfuraProvider"
+        },
+        {
+          "name": "custom_rpc",
+          "class": "GenericRPCProvider"
+        }
+      ]
+    },
+    {
+      "enum_name": "BLOCK_EXPLORER",
+      "value": "block_explorer",
+      "providers": [
+        {
+          "name": "etherscan",
+          "class": "EtherscanProvider"
+        },
+        {
+          "name": "moralis",
+          "class": "MoralisProvider"
+        }
+      ]
+    },
+    {
+      "enum_name": "SOCIAL_API",
+      "value": "social_api",
+      "providers": [
+        {
+          "name": "twitter",
+          "class": "TwitterProvider"
+        },
+        {
+          "name": "reddit",
+          "class": "RedditProvider"
+        }
+      ]
+    },
+    {
+      "enum_name": "ANALYTICS_DATA",
+      "value": "analytics_data",
+      "providers": [
+        {
+          "name": "dune",
+          "class": "DuneAnalyticsProvider"
+        }
+      ]
+    },
+    {
+      "enum_name": "MARKET_DATA",
+      "value": "market_data",
+      "providers": [
+        {
+          "name": "defillama",
+          "class": "DeFiLlamaProvider"
+        },
+        {
+          "name": "coingecko",
+          "class": "CoinGeckoProvider"
+        },
+        {
+          "name": "binance",
+          "class": "BinanceProvider"
+        },
+        {
+          "name": "coinbase",
+          "class": "CoinbaseProvider"
+        }
+      ]
+    },
+    {
+      "enum_name": "PREDICTION_MARKET",
+      "value": "prediction_market",
+      "providers": [
+        {
+          "name": "polymarket",
+          "class": "PolymarketProvider"
+        },
+        {
+          "name": "kalshi",
+          "class": "KalshiProvider"
+        }
+      ]
+    },
+    {
+      "enum_name": "WEB3_SOCIAL",
+      "value": "web3_social",
+      "providers": [
+        {
+          "name": "farcaster",
+          "class": "FarcasterProvider"
+        },
+        {
+          "name": "lens",
+          "class": "LensProtocolProvider"
+        }
+      ]
+    },
+    {
+      "enum_name": "IDENTITY_ENRICHMENT",
+      "value": "identity_enrichment",
+      "providers": [
+        {
+          "name": "ens",
+          "class": "ENSProvider"
+        },
+        {
+          "name": "github",
+          "class": "GitHubProvider"
+        }
+      ]
+    },
+    {
+      "enum_name": "GOVERNANCE",
+      "value": "governance",
+      "providers": [
+        {
+          "name": "snapshot",
+          "class": "SnapshotProvider"
+        }
+      ]
+    },
+    {
+      "enum_name": "ONCHAIN_INTELLIGENCE",
+      "value": "onchain_intelligence",
+      "providers": [
+        {
+          "name": "chainalysis",
+          "class": "ChainalysisProvider"
+        },
+        {
+          "name": "nansen",
+          "class": "NansenProvider"
+        }
+      ]
+    },
+    {
+      "enum_name": "TRADFI_DATA",
+      "value": "tradfi_data",
+      "providers": [
+        {
+          "name": "massive",
+          "class": "MassiveProvider"
+        },
+        {
+          "name": "databento",
+          "class": "DatabentoProvider"
+        }
+      ]
+    }
+  ],
+  "all_providers": [
+    {
+      "name": "quicknode",
+      "class": "QuickNodeProvider"
+    },
+    {
+      "name": "alchemy",
+      "class": "AlchemyProvider"
+    },
+    {
+      "name": "infura",
+      "class": "InfuraProvider"
+    },
+    {
+      "name": "custom_rpc",
+      "class": "GenericRPCProvider"
+    },
+    {
+      "name": "etherscan",
+      "class": "EtherscanProvider"
+    },
+    {
+      "name": "moralis",
+      "class": "MoralisProvider"
+    },
+    {
+      "name": "twitter",
+      "class": "TwitterProvider"
+    },
+    {
+      "name": "reddit",
+      "class": "RedditProvider"
+    },
+    {
+      "name": "dune",
+      "class": "DuneAnalyticsProvider"
+    },
+    {
+      "name": "defillama",
+      "class": "DeFiLlamaProvider"
+    },
+    {
+      "name": "coingecko",
+      "class": "CoinGeckoProvider"
+    },
+    {
+      "name": "binance",
+      "class": "BinanceProvider"
+    },
+    {
+      "name": "coinbase",
+      "class": "CoinbaseProvider"
+    },
+    {
+      "name": "polymarket",
+      "class": "PolymarketProvider"
+    },
+    {
+      "name": "kalshi",
+      "class": "KalshiProvider"
+    },
+    {
+      "name": "farcaster",
+      "class": "FarcasterProvider"
+    },
+    {
+      "name": "lens",
+      "class": "LensProtocolProvider"
+    },
+    {
+      "name": "ens",
+      "class": "ENSProvider"
+    },
+    {
+      "name": "github",
+      "class": "GitHubProvider"
+    },
+    {
+      "name": "snapshot",
+      "class": "SnapshotProvider"
+    },
+    {
+      "name": "chainalysis",
+      "class": "ChainalysisProvider"
+    },
+    {
+      "name": "nansen",
+      "class": "NansenProvider"
+    },
+    {
+      "name": "massive",
+      "class": "MassiveProvider"
+    },
+    {
+      "name": "databento",
+      "class": "DatabentoProvider"
+    }
+  ]
+}
