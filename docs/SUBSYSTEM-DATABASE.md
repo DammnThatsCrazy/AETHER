@@ -1,3 +1,19 @@
+---
+title: PostgreSQL / Repository Subsystem
+slug: data/postgres
+section: data
+visibility: P
+audience: [dev-senior, architect, ops]
+status: stable
+since_version: "8.8.0"
+source_files:
+  - Backend Architecture/aether-backend/repositories/repos.py
+  - Backend Architecture/aether-backend/repositories/lake.py
+canonical_owner: backend@aether
+estimated_read_minutes: 5
+toc_depth: 3
+---
+
 # PostgreSQL / Repository Subsystem
 
 ## Architecture
