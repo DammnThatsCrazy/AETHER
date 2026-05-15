@@ -45,13 +45,17 @@ repos:
 
       # Re-derive docs/_generated/*.json - blocks commits that change a
       # canonical source without also committing the regenerated JSON.
-      # The hook regenerates first, then checks git status; any drift
-      # fails the commit so the dev knows to `git add docs/_generated/`.
+      # The hook regenerates, then fails only on UNSTAGED drift — i.e.
+      # output that differs from what the dev staged. The normal flow
+      # (make extract-docs, git add docs/_generated/, commit) passes:
+      # the deterministic regen reproduces the staged bytes exactly, so
+      # there's no unstaged diff. `git status --porcelain` would have
+      # mis-fired here because it also reports staged entries.
       # pyproject.toml is included because every generator stamps the
       # artifact with the platform version read from it.
       - id: extract-docs
         name: Regenerate docs/_generated artifacts
-        entry: bash -c 'python scripts/docs_extract/run_all.py >/dev/null && if [ -n "$(git status --porcelain docs/_generated/)" ]; then echo "docs/_generated drifted — run \"make extract-docs\" then git add docs/_generated/"; git status --porcelain docs/_generated/; exit 1; fi'
+        entry: bash -c 'python scripts/docs_extract/run_all.py >/dev/null && if ! git diff --quiet -- docs/_generated/ || [ -n "$(git ls-files --others --exclude-standard docs/_generated/)" ]; then echo "docs/_generated drifted — run \"make extract-docs\" then git add docs/_generated/"; git status --porcelain docs/_generated/; exit 1; fi'
         language: system
         pass_filenames: false
         files: '^(packages/shared/.*\.ts|\.env\.example|pyproject\.toml|Backend Architecture/aether-backend/shared/(plans/catalog|providers/categories|events/events)\.py|scripts/docs_extract/.*\.py)$'
