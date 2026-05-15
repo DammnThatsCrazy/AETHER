@@ -116,6 +116,7 @@ docs: ## Run the full documentation pipeline (extract + sync + validate + drift)
 	python scripts/validate_docs.py
 	python scripts/validate_frontmatter.py
 	python scripts/docs_drift.py
+	python scripts/validate_contracts.py
 
 bump-version: ## Bump version across all files (usage: make bump-version V=8.4.0)
 	@if [ -z "$(V)" ]; then echo "Usage: make bump-version V=8.4.0"; exit 1; fi

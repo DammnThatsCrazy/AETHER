@@ -9,16 +9,18 @@ since_version: "8.8.0"
 source_files:
   - scripts/validate_docs.py
   - scripts/validate_frontmatter.py
+  - scripts/validate_contracts.py
   - scripts/docs_drift.py
   - scripts/sync_docs.py
   - scripts/docs_extract/run_all.py
   - scripts/docs_schema.json
+  - Makefile
   - .pre-commit-config.yaml
   - .github/workflows/repo-health.yml
 canonical_owner: platform@aether
 estimated_read_minutes: 8
 toc_depth: 3
-last_synced_commit: 5f3c961
+last_synced_commit: 0845740
 ---
 
 # Documentation Pipeline
@@ -56,6 +58,7 @@ This page is `I`.
 |--------|-----|
 | `scripts/validate_docs.py` | Version-drift check across package manifests, changelogs, doc headers. |
 | `scripts/validate_frontmatter.py` | Validates every `docs/**/*.{md,mdx}` against `docs_schema.json`. Fails on invalid **or** missing frontmatter. |
+| `scripts/validate_contracts.py` | Cross-checks the generated artifacts: every event's consent purpose + family must exist in the canonical contracts. Catches cross-file drift the per-file generators can't. |
 | `scripts/docs_drift.py` | For each page with `source_files:`, verifies the paths exist (fatal if not) and — when `last_synced_commit:` is set — flags staleness. `--update` re-stamps every page at HEAD. |
 | `scripts/sync_docs.py` | Regenerates `docs/REPO-INDEX.md` and `docs/AUTOMATION.md` from the live tree. |
 | `scripts/docs_extract/run_all.py` | Runs every generator (see below). |
