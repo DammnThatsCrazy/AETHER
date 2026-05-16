@@ -170,10 +170,10 @@ export function useGraphData() {
       };
 
       // 2. Delegation records → H2A / A2H / A2A edges
+      // GET /v1/delegations returns { delegations: rows, count: N } (list shape).
       try {
         const delData = await api.graph.delegations({ limit: 500 });
-        const rawDels: unknown[] = [...(delData.granted ?? []), ...(delData.received ?? [])];
-        rawDels.forEach((d, i) => addEdge(mapDelegationEdge(d, i)));
+        delData.delegations.forEach((d, i) => addEdge(mapDelegationEdge(d, i)));
       } catch { /* delegation endpoint may be empty or unavailable */ }
 
       // 3. Identity links for a sample of entities → H2H edges

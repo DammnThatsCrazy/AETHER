@@ -209,7 +209,22 @@ export interface RelationshipsResponse {
   readonly relationship_summary?: RelationshipSummary;
 }
 
+/**
+ * Response shape from GET /v1/delegations (list endpoint, with optional
+ * grantor= or grantee= filter).  Backend returns a flat list + count.
+ * Use delegations_granted / delegations_received (in Profile360SubResources)
+ * for the per-profile split that comes from the profile-scoped route.
+ */
 export interface DelegationsResponse {
+  readonly delegations: DelegationRecord[];
+  readonly count: number;
+}
+
+/**
+ * Per-profile delegation split — returned by profile-scoped delegation routes.
+ * Separate from DelegationsResponse (list) because the shapes differ.
+ */
+export interface ProfileDelegationsResponse {
   readonly entity_id: string;
   readonly granted: DelegationRecord[];
   readonly received: DelegationRecord[];
