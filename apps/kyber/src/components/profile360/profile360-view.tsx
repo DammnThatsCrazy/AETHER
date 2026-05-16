@@ -8,6 +8,13 @@ import { Profile360DrillStack } from './profile360-drill-stack';
 import { Profile360GraphPanel } from './profile360-graph-panel';
 import { Profile360SectionGrid } from './profile360-section-grid';
 import { Profile360TimelinePanel } from './profile360-timeline-panel';
+import {
+  Profile360SessionsPanel,
+  Profile360JourneysPanel,
+  Profile360WalletsPanel,
+  Profile360BehavioralPanel,
+  Profile360AttributionPanel,
+} from './profile360-contextual-panels';
 
 interface Profile360ViewProps {
   readonly type: Profile360EntityType;
@@ -19,6 +26,11 @@ const views: { id: Profile360ViewId; label: string }[] = [
   { id: 'identity', label: 'Identity' },
   { id: 'system', label: 'System' },
   { id: 'financial', label: 'Financial' },
+  { id: 'sessions', label: 'Sessions' },
+  { id: 'journeys', label: 'Journeys' },
+  { id: 'wallets', label: 'Web3' },
+  { id: 'behavioral', label: 'Behavioral' },
+  { id: 'attribution', label: 'Attribution' },
   { id: 'graph', label: 'Graph' },
   { id: 'timeline', label: 'Timeline' },
   { id: 'analytics', label: 'Analytics' },
@@ -108,6 +120,11 @@ export function Profile360View({ type, id, onBack }: Profile360ViewProps) {
         <TabsContent value="identity"><Profile360SectionGrid sections={sections.identity ?? []} onDrill={onDrill} /></TabsContent>
         <TabsContent value="system"><Profile360SectionGrid sections={sections.system ?? []} onDrill={onDrill} /></TabsContent>
         <TabsContent value="financial"><Profile360SectionGrid sections={sections.financial ?? []} onDrill={onDrill} /></TabsContent>
+        <TabsContent value="sessions"><Profile360SessionsPanel sections={sections.sessions ?? []} /></TabsContent>
+        <TabsContent value="journeys"><Profile360JourneysPanel sections={sections.journeys ?? []} /></TabsContent>
+        <TabsContent value="wallets"><Profile360WalletsPanel sections={sections.wallets ?? []} /></TabsContent>
+        <TabsContent value="behavioral"><Profile360BehavioralPanel sections={sections.behavioral ?? []} /></TabsContent>
+        <TabsContent value="attribution"><Profile360AttributionPanel sections={sections.attribution ?? []} /></TabsContent>
         <TabsContent value="graph"><Profile360GraphPanel graph={graph} highlightedNodeIds={highlightedNodeIds} onHighlight={actions.highlightNodes} onDrill={onDrill} /></TabsContent>
         <TabsContent value="timeline"><Profile360TimelinePanel events={timeline} onHighlight={actions.highlightNodes} onDrill={onDrill} /></TabsContent>
         <TabsContent value="analytics"><Profile360SectionGrid sections={sections.analytics ?? []} onDrill={onDrill} /></TabsContent>

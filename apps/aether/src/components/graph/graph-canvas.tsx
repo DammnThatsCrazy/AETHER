@@ -64,8 +64,10 @@ export function GraphCanvas({
   const cyRef = useRef<Core | null>(null);
   const onSelectNodeRef = useRef(onSelectNode);
   const onSelectEdgeRef = useRef(onSelectEdge);
+  const overlayRef = useRef(overlay);
   onSelectNodeRef.current = onSelectNode;
   onSelectEdgeRef.current = onSelectEdge;
+  overlayRef.current = overlay;
 
   useEffect(() => {
     if (!containerRef.current) return;
@@ -149,6 +151,18 @@ export function GraphCanvas({
         onSelectEdgeRef.current?.(null);
       }
     });
+
+    // Re-apply overlay immediately so colors survive canvas rebuilds triggered by layer changes
+    const currentOverlay = overlayRef.current;
+    if (currentOverlay !== 'none') {
+      cy.batch(() => {
+        cy.nodes().forEach(node => {
+          const d = node.data();
+          if (currentOverlay === 'trust') node.style('background-color', trustColor(d.trustScore as number | undefined));
+          else node.style('background-color', riskColor(d.riskScore as number | undefined));
+        });
+      });
+    }
 
     cyRef.current = cy;
     return () => { cy.destroy(); cyRef.current = null; };
