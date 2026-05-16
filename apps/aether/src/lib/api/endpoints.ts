@@ -360,19 +360,19 @@ export const api = {
   web3: {
     chains: {
       list: (params?: { vm_family?: string; limit?: number }) =>
-        restClient.get(`/v1/web3/chains${buildQS({ ...params })}`, wrap(z.array(unknownSchema))).then(r => r.data),
+        restClient.get(`/v1/web3/chains${buildQS({ ...params })}`, wrap(z.object({ chains: z.array(unknownSchema), count: z.number() }))).then(r => r.data.chains),
       get: (chainId: string) =>
         restClient.get(`/v1/web3/chains/${chainId}`, wrap(unknownSchema)).then(r => r.data),
     },
     protocols: {
       list: (params?: { family?: string; chain?: string; q?: string; limit?: number }) =>
-        restClient.get(`/v1/web3/protocols${buildQS({ ...params })}`, wrap(z.array(unknownSchema))).then(r => r.data),
+        restClient.get(`/v1/web3/protocols${buildQS({ ...params })}`, wrap(z.object({ protocols: z.array(unknownSchema), count: z.number() }))).then(r => r.data.protocols),
       get: (protocolId: string) =>
         restClient.get(`/v1/web3/protocols/${protocolId}`, wrap(unknownSchema)).then(r => r.data),
     },
     tokens: {
       list: (params?: { chain_id?: string; stablecoins?: boolean; limit?: number }) =>
-        restClient.get(`/v1/web3/tokens${buildQS({ ...params })}`, wrap(z.array(unknownSchema))).then(r => r.data),
+        restClient.get(`/v1/web3/tokens${buildQS({ ...params })}`, wrap(z.object({ tokens: z.array(unknownSchema), count: z.number() }))).then(r => r.data.tokens),
     },
     contracts: {
       get: (chainId: string, address: string) =>
@@ -437,13 +437,13 @@ export const api = {
   flows: {
     wallets: {
       list: (entityId: string, limit = 50) =>
-        restClient.get(`/v1/flows/wallets${buildQS({ entity_id: entityId, limit })}`, wrap(z.array(unknownSchema))).then(r => r.data),
+        restClient.get(`/v1/flows/wallets${buildQS({ entity_id: entityId, limit })}`, wrap(z.object({ entity_id: z.string(), wallets: z.array(unknownSchema), count: z.number() }))).then(r => r.data.wallets),
       link: (wallet: { owner_entity_id: string; chain: string; address: string }) =>
         restClient.post('/v1/flows/wallets', wrap(unknownSchema), wallet).then(r => r.data),
     },
     transfers: {
       list: (entityId: string, limit = 50) =>
-        restClient.get(`/v1/flows/transfers${buildQS({ entity_id: entityId, limit })}`, wrap(z.array(unknownSchema))).then(r => r.data),
+        restClient.get(`/v1/flows/transfers${buildQS({ entity_id: entityId, limit })}`, wrap(z.object({ entity_id: z.string(), transfers: z.array(unknownSchema), count: z.number() }))).then(r => r.data.transfers),
       record: (transfer: { from_entity_id: string; to_entity_id: string; asset_id: string; amount: number; [k: string]: unknown }) =>
         restClient.post('/v1/flows/transfers', wrap(unknownSchema), transfer).then(r => r.data),
     },
