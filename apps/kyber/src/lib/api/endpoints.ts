@@ -144,7 +144,7 @@ export const api = {
       `/v1/analytics/ws/events${buildQS({ ...params })}` as string,
 
     sources: () =>
-      restClient.get('/v1/analytics/sources', wrap(z.array(unknownSchema))).then(r => r.data),
+      restClient.get('/v1/analytics/sources', wrap(unknownSchema)).then(r => r.data),
 
     getSource: (sourceId: string) =>
       restClient.get(`/v1/analytics/sources/${sourceId}`, wrap(unknownSchema)).then(r => r.data),
@@ -542,7 +542,7 @@ export const api = {
       restClient.delete(`/v1/attribution/journey/${userId}`, wrap(unknownSchema)),
 
     models: () =>
-      restClient.get('/v1/attribution/models', wrap(z.array(unknownSchema))).then(r => r.data),
+      restClient.get('/v1/attribution/models', wrap(unknownSchema)).then(r => r.data),
   },
 
   // ── Consent ────────────────────────────────────────────────────────────────
@@ -629,7 +629,7 @@ export const api = {
   // ── ML Serving ─────────────────────────────────────────────────────────────
   ml: {
     models: () =>
-      restClient.get('/v1/ml/models', wrap(z.array(unknownSchema))).then(r => r.data),
+      restClient.get('/v1/ml/models', wrap(z.object({ models: z.array(unknownSchema) }))).then(r => r.data.models),
 
     predict: (modelName: string, entityId: string, features?: Record<string, unknown>, useCache = true) =>
       restClient.post('/v1/ml/predict', wrap(unknownSchema), { model_name: modelName, entity_id: entityId, features: features ?? {}, use_cache: useCache }).then(r => r.data),
@@ -707,7 +707,7 @@ export const api = {
       restClient.get('/v1/providers/health', wrap(unknownSchema)).then(r => r.data),
 
     categories: () =>
-      restClient.get('/v1/providers/categories', wrap(z.array(unknownSchema))).then(r => r.data),
+      restClient.get('/v1/providers/categories', wrap(unknownSchema)).then(r => r.data),
 
     test: (params: { category: string; method: string; params: Record<string, unknown>; preferred_provider?: string }) =>
       restClient.post('/v1/providers/test', wrap(unknownSchema), params).then(r => r.data),
@@ -735,7 +735,7 @@ export const api = {
   web3: {
     chains: {
       list: (params?: { vm_family?: string; limit?: number }) =>
-        restClient.get(`/v1/web3/chains${buildQS({ ...params })}`, wrap(z.array(unknownSchema))).then(r => r.data),
+        restClient.get(`/v1/web3/chains${buildQS({ ...params })}`, wrap(z.object({ chains: z.array(unknownSchema), count: z.number() }))).then(r => r.data.chains),
       get: (chainId: string) =>
         restClient.get(`/v1/web3/chains/${chainId}`, wrap(unknownSchema)).then(r => r.data),
       register: (chain: Record<string, unknown>) =>
@@ -743,7 +743,7 @@ export const api = {
     },
     protocols: {
       list: (params?: { family?: string; chain?: string; q?: string; limit?: number }) =>
-        restClient.get(`/v1/web3/protocols${buildQS({ ...params })}`, wrap(z.array(unknownSchema))).then(r => r.data),
+        restClient.get(`/v1/web3/protocols${buildQS({ ...params })}`, wrap(z.object({ protocols: z.array(unknownSchema), count: z.number() }))).then(r => r.data.protocols),
       get: (protocolId: string) =>
         restClient.get(`/v1/web3/protocols/${protocolId}`, wrap(unknownSchema)).then(r => r.data),
       register: (protocol: Record<string, unknown>) =>
@@ -753,7 +753,7 @@ export const api = {
       get: (chainId: string, address: string) =>
         restClient.get(`/v1/web3/contracts/${chainId}/${address}`, wrap(unknownSchema)).then(r => r.data),
       unclassified: (params?: { chain_id?: string; limit?: number }) =>
-        restClient.get(`/v1/web3/contracts/unclassified${buildQS({ ...params })}`, wrap(z.array(unknownSchema))).then(r => r.data),
+        restClient.get(`/v1/web3/contracts/unclassified${buildQS({ ...params })}`, wrap(z.object({ contracts: z.array(unknownSchema), count: z.number() }))).then(r => r.data.contracts),
       register: (contract: Record<string, unknown>) =>
         restClient.post('/v1/web3/contracts', wrap(unknownSchema), contract).then(r => r.data),
       reclassify: (chainId: string, address: string, body: Record<string, unknown>) =>
@@ -761,13 +761,13 @@ export const api = {
     },
     tokens: {
       list: (params?: { chain_id?: string; stablecoins?: boolean; limit?: number }) =>
-        restClient.get(`/v1/web3/tokens${buildQS({ ...params })}`, wrap(z.array(unknownSchema))).then(r => r.data),
+        restClient.get(`/v1/web3/tokens${buildQS({ ...params })}`, wrap(z.object({ tokens: z.array(unknownSchema), count: z.number() }))).then(r => r.data.tokens),
       register: (token: Record<string, unknown>) =>
         restClient.post('/v1/web3/tokens', wrap(unknownSchema), token).then(r => r.data),
     },
     apps: {
       list: (limit = 50) =>
-        restClient.get(`/v1/web3/apps?limit=${limit}`, wrap(z.array(unknownSchema))).then(r => r.data),
+        restClient.get(`/v1/web3/apps?limit=${limit}`, wrap(z.object({ apps: z.array(unknownSchema), count: z.number() }))).then(r => r.data.apps),
       register: (app: Record<string, unknown>) =>
         restClient.post('/v1/web3/apps', wrap(unknownSchema), app).then(r => r.data),
     },
@@ -779,7 +779,7 @@ export const api = {
     },
     governance: {
       listSpaces: (params?: { protocol_id?: string; limit?: number }) =>
-        restClient.get(`/v1/web3/governance/spaces${buildQS({ ...params })}`, wrap(z.array(unknownSchema))).then(r => r.data),
+        restClient.get(`/v1/web3/governance/spaces${buildQS({ ...params })}`, wrap(z.object({ spaces: z.array(unknownSchema), count: z.number() }))).then(r => r.data.spaces),
       registerSpace: (space: Record<string, unknown>) =>
         restClient.post('/v1/web3/governance/spaces', wrap(unknownSchema), space).then(r => r.data),
     },
@@ -799,7 +799,7 @@ export const api = {
     },
     migrations: {
       list: (protocolId: string, limit = 50) =>
-        restClient.get(`/v1/web3/migrations/${protocolId}?limit=${limit}`, wrap(z.array(unknownSchema))).then(r => r.data),
+        restClient.get(`/v1/web3/migrations/${protocolId}?limit=${limit}`, wrap(z.object({ protocol_id: z.string(), migrations: z.array(unknownSchema), count: z.number() }))).then(r => r.data.migrations),
       record: (migration: Record<string, unknown>) =>
         restClient.post('/v1/web3/migrations', wrap(unknownSchema), migration).then(r => r.data),
       detect: (protocolId: string, address: string, chainId: string) =>
@@ -819,7 +819,7 @@ export const api = {
       restClient.post('/v1/onchain/actions', wrap(unknownSchema), action).then(r => r.data),
 
     agentActions: (agentId: string) =>
-      restClient.get(`/v1/onchain/actions/${agentId}`, wrap(z.array(unknownSchema))).then(r => r.data),
+      restClient.get(`/v1/onchain/actions/${agentId}`, wrap(z.object({ agent_id: z.string(), actions: z.array(unknownSchema), count: z.number() }))).then(r => r.data.actions),
 
     getContract: (address: string) =>
       restClient.get(`/v1/onchain/contracts/${address}`, wrap(unknownSchema)).then(r => r.data),
@@ -852,13 +852,13 @@ export const api = {
       record: (transfer: { from_entity_id: string; to_entity_id: string; asset_id: string; amount: number; [k: string]: unknown }) =>
         restClient.post('/v1/flows/transfers', wrap(unknownSchema), transfer).then(r => r.data),
       list: (entityId: string, limit = 50) =>
-        restClient.get(`/v1/flows/transfers${buildQS({ entity_id: entityId, limit })}`, wrap(z.array(unknownSchema))).then(r => r.data),
+        restClient.get(`/v1/flows/transfers${buildQS({ entity_id: entityId, limit })}`, wrap(z.object({ entity_id: z.string(), transfers: z.array(unknownSchema), count: z.number() }))).then(r => r.data.transfers),
     },
     wallets: {
       link: (wallet: { owner_entity_id: string; chain: string; address: string }) =>
         restClient.post('/v1/flows/wallets', wrap(unknownSchema), wallet).then(r => r.data),
       list: (entityId: string, limit = 50) =>
-        restClient.get(`/v1/flows/wallets${buildQS({ entity_id: entityId, limit })}`, wrap(z.array(unknownSchema))).then(r => r.data),
+        restClient.get(`/v1/flows/wallets${buildQS({ entity_id: entityId, limit })}`, wrap(z.object({ entity_id: z.string(), wallets: z.array(unknownSchema), count: z.number() }))).then(r => r.data.wallets),
     },
     assets: {
       register: (asset: { asset_type: string; chain: string; symbol: string; [k: string]: unknown }) =>
@@ -872,15 +872,15 @@ export const api = {
   rwa: {
     assets: {
       list: (params?: { asset_class?: string; chain?: string; limit?: number }) =>
-        restClient.get(`/v1/rwa/assets${buildQS({ ...params })}`, wrap(z.array(unknownSchema))).then(r => r.data),
+        restClient.get(`/v1/rwa/assets${buildQS({ ...params })}`, wrap(z.object({ assets: z.array(unknownSchema), count: z.number() }))).then(r => r.data.assets),
       get: (assetId: string) =>
         restClient.get(`/v1/rwa/assets/${assetId}`, wrap(unknownSchema)).then(r => r.data),
       create: (asset: Record<string, unknown>) =>
         restClient.post('/v1/rwa/assets', wrap(unknownSchema), asset).then(r => r.data),
       holders: (assetId: string, limit = 50) =>
-        restClient.get(`/v1/rwa/assets/${assetId}/holders?limit=${limit}`, wrap(z.array(unknownSchema))).then(r => r.data),
+        restClient.get(`/v1/rwa/assets/${assetId}/holders?limit=${limit}`, wrap(z.object({ asset_id: z.string(), holders: z.array(unknownSchema), count: z.number() }))).then(r => r.data.holders),
       cashflows: (assetId: string, params?: { cashflow_type?: string; limit?: number }) =>
-        restClient.get(`/v1/rwa/assets/${assetId}/cashflows${buildQS({ ...params })}`, wrap(z.array(unknownSchema))).then(r => r.data),
+        restClient.get(`/v1/rwa/assets/${assetId}/cashflows${buildQS({ ...params })}`, wrap(z.object({ asset_id: z.string(), cashflows: z.array(unknownSchema), count: z.number() }))).then(r => r.data.cashflows),
       reserveCredibility: (assetId: string) =>
         restClient.get(`/v1/rwa/assets/${assetId}/reserve-credibility`, wrap(unknownSchema)).then(r => r.data),
       redemptionPressure: (assetId: string) =>
@@ -890,7 +890,7 @@ export const api = {
       create: (policy: Record<string, unknown>) =>
         restClient.post('/v1/rwa/policies', wrap(unknownSchema), policy).then(r => r.data),
       forAsset: (assetId: string) =>
-        restClient.get(`/v1/rwa/assets/${assetId}/policies`, wrap(z.array(unknownSchema))).then(r => r.data),
+        restClient.get(`/v1/rwa/assets/${assetId}/policies`, wrap(z.object({ asset_id: z.string(), policies: z.array(unknownSchema), count: z.number() }))).then(r => r.data.policies),
     },
     simulateTransfer: (params: { asset_id: string; from_entity: string; to_entity: string; amount: number }) =>
       restClient.post('/v1/rwa/simulate-transfer', wrap(unknownSchema), params).then(r => r.data),
@@ -906,7 +906,7 @@ export const api = {
   crossdomain: {
     institutions: {
       list: (params?: { institution_type?: string; q?: string; limit?: number }) =>
-        restClient.get(`/v1/crossdomain/institutions${buildQS({ ...params })}`, wrap(z.array(unknownSchema))).then(r => r.data),
+        restClient.get(`/v1/crossdomain/institutions${buildQS({ ...params })}`, wrap(z.object({ institutions: z.array(unknownSchema), count: z.number() }))).then(r => r.data.institutions),
       get: (id: string) =>
         restClient.get(`/v1/crossdomain/institutions/${id}`, wrap(unknownSchema)).then(r => r.data),
       register: (institution: Record<string, unknown>) =>
@@ -914,17 +914,17 @@ export const api = {
     },
     accounts: {
       list: (params?: { owner?: string; institution?: string; account_type?: string; limit?: number }) =>
-        restClient.get(`/v1/crossdomain/accounts${buildQS({ ...params })}`, wrap(z.array(unknownSchema))).then(r => r.data),
+        restClient.get(`/v1/crossdomain/accounts${buildQS({ ...params })}`, wrap(z.object({ accounts: z.array(unknownSchema), count: z.number() }))).then(r => r.data.accounts),
       get: (id: string) =>
         restClient.get(`/v1/crossdomain/accounts/${id}`, wrap(unknownSchema)).then(r => r.data),
       positions: (id: string, limit = 50) =>
-        restClient.get(`/v1/crossdomain/accounts/${id}/positions?limit=${limit}`, wrap(z.array(unknownSchema))).then(r => r.data),
+        restClient.get(`/v1/crossdomain/accounts/${id}/positions?limit=${limit}`, wrap(z.object({ account_id: z.string(), positions: z.array(unknownSchema), count: z.number() }))).then(r => r.data.positions),
       register: (account: Record<string, unknown>) =>
         restClient.post('/v1/crossdomain/accounts', wrap(unknownSchema), account).then(r => r.data),
     },
     instruments: {
       list: (params?: { instrument_type?: string; issuer?: string; q?: string; limit?: number }) =>
-        restClient.get(`/v1/crossdomain/instruments${buildQS({ ...params })}`, wrap(z.array(unknownSchema))).then(r => r.data),
+        restClient.get(`/v1/crossdomain/instruments${buildQS({ ...params })}`, wrap(z.object({ instruments: z.array(unknownSchema), count: z.number() }))).then(r => r.data.instruments),
       get: (id: string) =>
         restClient.get(`/v1/crossdomain/instruments/${id}`, wrap(unknownSchema)).then(r => r.data),
       bySymbol: (symbol: string) =>
@@ -934,15 +934,15 @@ export const api = {
     },
     orders: {
       list: (accountId: string, limit = 50) =>
-        restClient.get(`/v1/crossdomain/orders/${accountId}?limit=${limit}`, wrap(z.array(unknownSchema))).then(r => r.data),
+        restClient.get(`/v1/crossdomain/orders/${accountId}?limit=${limit}`, wrap(z.object({ account_id: z.string(), orders: z.array(unknownSchema), count: z.number() }))).then(r => r.data.orders),
       record: (order: Record<string, unknown>) =>
         restClient.post('/v1/crossdomain/orders', wrap(unknownSchema), order).then(r => r.data),
     },
     executions: {
       byOrder: (orderId: string, limit = 50) =>
-        restClient.get(`/v1/crossdomain/executions/order/${orderId}?limit=${limit}`, wrap(z.array(unknownSchema))).then(r => r.data),
+        restClient.get(`/v1/crossdomain/executions/order/${orderId}?limit=${limit}`, wrap(z.object({ order_id: z.string(), executions: z.array(unknownSchema), count: z.number() }))).then(r => r.data.executions),
       byAccount: (accountId: string, limit = 50) =>
-        restClient.get(`/v1/crossdomain/executions/account/${accountId}?limit=${limit}`, wrap(z.array(unknownSchema))).then(r => r.data),
+        restClient.get(`/v1/crossdomain/executions/account/${accountId}?limit=${limit}`, wrap(z.object({ account_id: z.string(), executions: z.array(unknownSchema), count: z.number() }))).then(r => r.data.executions),
       record: (execution: Record<string, unknown>) =>
         restClient.post('/v1/crossdomain/executions', wrap(unknownSchema), execution).then(r => r.data),
     },
@@ -954,29 +954,29 @@ export const api = {
     },
     cashMovements: {
       list: (accountId: string, limit = 50) =>
-        restClient.get(`/v1/crossdomain/cash-movements/${accountId}?limit=${limit}`, wrap(z.array(unknownSchema))).then(r => r.data),
+        restClient.get(`/v1/crossdomain/cash-movements/${accountId}?limit=${limit}`, wrap(z.object({ account_id: z.string(), movements: z.array(unknownSchema), count: z.number() }))).then(r => r.data.movements),
       record: (movement: Record<string, unknown>) =>
         restClient.post('/v1/crossdomain/cash-movements', wrap(unknownSchema), movement).then(r => r.data),
     },
     compliance: {
       listActions: (entityId: string, limit = 50) =>
-        restClient.get(`/v1/crossdomain/compliance/actions/${entityId}?limit=${limit}`, wrap(z.array(unknownSchema))).then(r => r.data),
+        restClient.get(`/v1/crossdomain/compliance/actions/${entityId}?limit=${limit}`, wrap(z.object({ entity_id: z.string(), actions: z.array(unknownSchema), count: z.number() }))).then(r => r.data.actions),
       recordAction: (action: Record<string, unknown>) =>
         restClient.post('/v1/crossdomain/compliance/actions', wrap(unknownSchema), action).then(r => r.data),
     },
     events: {
       byEntity: (entityId: string, limit = 50) =>
-        restClient.get(`/v1/crossdomain/events/entity/${entityId}?limit=${limit}`, wrap(z.array(unknownSchema))).then(r => r.data),
+        restClient.get(`/v1/crossdomain/events/entity/${entityId}?limit=${limit}`, wrap(z.object({ entity_id: z.string(), events: z.array(unknownSchema), count: z.number() }))).then(r => r.data.events),
       byInstrument: (instrumentId: string, limit = 50) =>
-        restClient.get(`/v1/crossdomain/events/instrument/${instrumentId}?limit=${limit}`, wrap(z.array(unknownSchema))).then(r => r.data),
+        restClient.get(`/v1/crossdomain/events/instrument/${instrumentId}?limit=${limit}`, wrap(z.object({ instrument_id: z.string(), events: z.array(unknownSchema), count: z.number() }))).then(r => r.data.events),
       record: (event: Record<string, unknown>) =>
         restClient.post('/v1/crossdomain/events', wrap(unknownSchema), event).then(r => r.data),
     },
     links: {
       list: (entityId: string, limit = 50) =>
-        restClient.get(`/v1/crossdomain/links/${entityId}?limit=${limit}`, wrap(z.array(unknownSchema))).then(r => r.data),
+        restClient.get(`/v1/crossdomain/links/${entityId}?limit=${limit}`, wrap(z.object({ entity_id: z.string(), links: z.array(unknownSchema), count: z.number() }))).then(r => r.data.links),
       highConfidence: (params?: { min_confidence?: number; limit?: number }) =>
-        restClient.get(`/v1/crossdomain/links/high-confidence${buildQS({ ...params })}`, wrap(z.array(unknownSchema))).then(r => r.data),
+        restClient.get(`/v1/crossdomain/links/high-confidence${buildQS({ ...params })}`, wrap(z.object({ links: z.array(unknownSchema), count: z.number(), min_confidence: z.number() }))).then(r => r.data.links),
       create: (link: Record<string, unknown>) =>
         restClient.post('/v1/crossdomain/links', wrap(unknownSchema), link).then(r => r.data),
     },
@@ -1040,7 +1040,7 @@ export const api = {
       usage: (tenantId: string) =>
         restClient.get(`/v1/admin/tenants/${tenantId}/billing/usage`, wrap(unknownSchema)).then(r => r.data),
       invoices: (tenantId: string, limit = 10) =>
-        restClient.get(`/v1/admin/tenants/${tenantId}/billing/invoices?limit=${limit}`, wrap(z.array(unknownSchema))).then(r => r.data),
+        restClient.get(`/v1/admin/tenants/${tenantId}/billing/invoices?limit=${limit}`, wrap(z.object({ tenant_id: z.string(), invoices: z.array(unknownSchema), count: z.number() }))).then(r => r.data.invoices),
       getInvoice: (tenantId: string, invoiceId: string) =>
         restClient.get(`/v1/admin/tenants/${tenantId}/billing/invoices/${invoiceId}`, wrap(unknownSchema)).then(r => r.data),
       createCheckoutSession: (tenantId: string, params: Record<string, unknown>) =>
@@ -1105,7 +1105,7 @@ export const api = {
 
     /** All identity links for an entity — across all tenants. */
     links: (entityId: string, params?: { limit?: number }) =>
-      restClient.get(`/v1/crossdomain/links/${entityId}${buildQS({ ...params })}`, wrap(z.array(unknownSchema))).then(r => r.data),
+      restClient.get(`/v1/crossdomain/links/${entityId}${buildQS({ ...params })}`, wrap(z.object({ entity_id: z.string(), links: z.array(unknownSchema), count: z.number() }))).then(r => r.data.links),
 
     /**
      * Global high-confidence links — the strongest cross-entity connections
@@ -1113,7 +1113,7 @@ export const api = {
      * Use to surface "same_person" or "shared_wallet" clusters at scale.
      */
     highConfidenceLinks: (minConfidence = 0.8, limit = 50) =>
-      restClient.get(`/v1/crossdomain/links/high-confidence?min_confidence=${minConfidence}&limit=${limit}`, wrap(z.array(unknownSchema))).then(r => r.data),
+      restClient.get(`/v1/crossdomain/links/high-confidence?min_confidence=${minConfidence}&limit=${limit}`, wrap(z.object({ links: z.array(unknownSchema), count: z.number(), min_confidence: z.number() }))).then(r => r.data.links),
 
     /** All delegation records (grantor or grantee) — H→A, H→H, A→A chains across tenants. */
     delegations: (params: { grantor?: string; grantee?: string; active?: boolean; limit?: number }) =>
