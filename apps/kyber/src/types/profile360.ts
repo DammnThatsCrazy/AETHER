@@ -2,7 +2,7 @@ import type { Entity, EntityType, GraphEdge, GraphNode, TimelineEvent } from './
 
 export type Profile360EntityType = EntityType | 'human' | 'organization' | 'journey' | 'delegation' | 'session' | 'platform' | 'browser' | 'device' | 'transaction' | 'execution_trace' | 'reward' | 'financial_activity' | 'relationship';
 
-export type Profile360ViewId = 'identity' | 'system' | 'financial' | 'graph' | 'timeline' | 'analytics' | 'debug';
+export type Profile360ViewId = 'identity' | 'system' | 'financial' | 'graph' | 'timeline' | 'analytics' | 'debug' | 'sessions' | 'journeys' | 'wallets' | 'behavioral' | 'attribution';
 
 export interface Profile360Reference {
   readonly id: string;
