@@ -223,6 +223,16 @@ export interface BehavioralSignal {
   readonly is_source_silence: boolean;
   readonly entity_id: string;
   readonly timestamp?: string;
+  // Additional fields present in backend expectations/models.py
+  readonly entity_type?: string;
+  readonly source_tag?: string;
+  readonly population_id?: string;
+  readonly window_start?: string;
+  readonly window_end?: string;
+  readonly metadata?: Record<string, unknown>;
+  readonly status?: string;
+  readonly created_at?: string;
+  readonly updated_at?: string;
 }
 
 export interface WhyExplanation {
@@ -276,6 +286,13 @@ export interface Touchpoint {
   readonly event_type: string;
   readonly timestamp: string;
   readonly properties?: Record<string, unknown>;
+}
+
+/** Response from GET /v1/attribution/journey/{user_id} */
+export interface AttributionJourney {
+  readonly user_id: string;
+  readonly touchpoint_count: number;
+  readonly touchpoints: Touchpoint[];
 }
 
 // ── Web3 Wallet Profile ───────────────────────────────────────────────────────
