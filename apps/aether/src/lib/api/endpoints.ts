@@ -1,7 +1,19 @@
 /**
- * AETHER customer API endpoints.
- * Covers: Profile & Identity, Consent & Privacy, Rewards & Campaigns, Web3 & On-Chain.
- * All REST responses are wrapped in { data, status, timestamp }.
+ * AETHER tenant API endpoints.
+ *
+ * Covers the full contextual data surface for a tenant's users:
+ *   - Profile & Identity (all sub-resources: sessions, devices, platforms,
+ *     wallets (Web3), financials (Web2+Web3), journeys, loyalty, intelligence)
+ *   - Consent & Privacy
+ *   - Rewards & Campaigns (funnel, drop-off, attribution "where")
+ *   - Behavioural "Why" (signals, expectations, explain)
+ *   - Graph & Relationships (H2H / H2A / A2H / A2A edges, delegation chains,
+ *     identity clusters, collective tissue)
+ *   - Web3 & On-Chain (wallet balances + tx history, protocols, oracle, x402)
+ *   - Ingestion (SDK event capture)
+ *
+ * Kyber is the all-tenant aggregated layer; Aether is what the tenant sees
+ * about their own users.
  */
 import { z } from 'zod';
 import { restClient } from './rest/client';
@@ -21,42 +33,114 @@ const buildQS = (params: Record<string, string | number | boolean | undefined>) 
   return s ? `?${s}` : '';
 };
 
-// ─── Shared schemas ───────────────────────────────────────────────────────────
-const profileSchema = z.object({
-  user_id: z.string().optional(),
-  events: z.array(z.unknown()).optional(),
-  connections: z.array(z.unknown()).optional(),
-  timeline: z.array(z.unknown()).optional(),
-  identifiers: z.array(z.unknown()).optional(),
-}).passthrough();
-
-// ─── Customer API ─────────────────────────────────────────────────────────────
+// ─── API ─────────────────────────────────────────────────────────────────────
 export const api = {
 
-  // ── Profile & Identity ─────────────────────────────────────────────────────
+  // ── Profile — full + all contextual sub-resources ─────────────────────────
   profile: {
-    me: () =>
-      restClient.get('/v1/profile/me', wrap(profileSchema)).then(r => r.data),
+    /** Full holistic profile — identity, consent, timeline, graph, intelligence, lake data. */
+    full: (userId: string, opts?: { timeline_limit?: number }) =>
+      restClient.get(`/v1/profile/${userId}?include_timeline=true&include_graph=true&include_intelligence=true&include_lake=true${opts?.timeline_limit ? `&timeline_limit=${opts.timeline_limit}` : ''}`, wrap(unknownSchema)).then(r => r.data),
 
-    full: (userId: string) =>
-      restClient.get(`/v1/profile/${userId}?include_timeline=true&include_graph=true`, wrap(profileSchema)).then(r => r.data),
+    /** Dashboard-ready snapshot — frequency, recency, top events, loyalty tier, risk scores. */
+    summary: (userId: string) =>
+      restClient.get(`/v1/profile/${userId}/summary`, wrap(unknownSchema)).then(r => r.data),
 
-    timeline: (userId: string, limit = 50) =>
-      restClient.get(`/v1/profile/${userId}/timeline?limit=${limit}`, wrap(z.object({
-        user_id: z.string(), events: z.array(z.unknown()), count: z.number(),
-      }))).then(r => r.data),
+    /** Chronological event stream. */
+    timeline: (userId: string, params?: { limit?: number; event_type?: string }) =>
+      restClient.get(`/v1/profile/${userId}/timeline${buildQS({ ...params })}`, wrap(z.object({ user_id: z.string(), events: z.array(z.unknown()), count: z.number() }))).then(r => r.data),
 
+    /** Graph neighbourhood — identity links, ownership, delegation edges. */
     graph: (userId: string) =>
       restClient.get(`/v1/profile/${userId}/graph`, wrap(unknownSchema)).then(r => r.data),
 
-    resolve: (params: { wallet?: string; email?: string; device?: string }) =>
+    /**
+     * Session rollups for the user — device type, OS, browser, platform,
+     * geo (country/region/city, VPN/proxy flags), entry/exit URL, referrer,
+     * UTM/campaign context, duration and page-view counts.
+     */
+    sessions: (userId: string, limit = 20) =>
+      restClient.get(`/v1/profile/${userId}/sessions?limit=${limit}`, wrap(unknownSchema)).then(r => r.data),
+
+    /** Observed devices — deterministic logins + probabilistic fingerprint matches. */
+    devices: (userId: string) =>
+      restClient.get(`/v1/profile/${userId}/devices`, wrap(unknownSchema)).then(r => r.data),
+
+    /** Platform distribution — web / iOS / Android / SDK / API broken down by event count. */
+    platforms: (userId: string) =>
+      restClient.get(`/v1/profile/${userId}/platforms`, wrap(unknownSchema)).then(r => r.data),
+
+    /** Cross-session journey chains — steps, drop-off flags, campaign linkage ("where"). */
+    journeys: (userId: string) =>
+      restClient.get(`/v1/profile/${userId}/journeys`, wrap(unknownSchema)).then(r => r.data),
+
+    /**
+     * Web3 wallet profiles for every wallet linked to the user.
+     * Each wallet entry includes: token balances, recent on-chain transactions,
+     * protocol interactions (DEX swaps, lending, staking, governance votes),
+     * NFT holdings, wallet risk score, and Web3 loyalty signals.
+     */
+    wallets: (userId: string) =>
+      restClient.get(`/v1/profile/${userId}/wallets`, wrap(unknownSchema)).then(r => r.data),
+
+    /** All identifiers — wallets, emails, device IDs, session IDs, social handles, customer IDs. */
+    identifiers: (userId: string) =>
+      restClient.get(`/v1/profile/${userId}/identifiers`, wrap(unknownSchema)).then(r => r.data),
+
+    /**
+     * Loyalty & rewards — tier (bronze/silver/gold/platinum/diamond),
+     * points balance, rewards earned/claimed, campaigns participated,
+     * lifetime value, first/last activity.  Web2 + Web3 rewards unified.
+     */
+    rewards: (userId: string) =>
+      restClient.get(`/v1/profile/${userId}/rewards`, wrap(unknownSchema)).then(r => r.data),
+
+    /**
+     * Financial profile (Web2 + Web3 unified):
+     *   Web2 — payment history, subscription value, refunds, LTV
+     *   Web3 — on-chain inflows/outflows by asset, transfers, LP positions,
+     *           settlements, top counterparties and protocol spend
+     */
+    financials: (userId: string) =>
+      restClient.get(`/v1/profile/${userId}/financials`, wrap(unknownSchema)).then(r => r.data),
+
+    /**
+     * Typed relationship edges for this entity:
+     * H2H (referrals, commerce), H2A (delegation, agent hiring),
+     * A2H (agent notifies/purchases for human), A2A (agent pipelines).
+     * Each edge carries relation_type, weight, confidence, volume_usd.
+     */
+    relationships: (userId: string) =>
+      restClient.get(`/v1/profile/${userId}/relationships`, wrap(unknownSchema)).then(r => r.data),
+
+    /** Protocol interactions derived from event stream + economic graph. */
+    protocols: (userId: string) =>
+      restClient.get(`/v1/profile/${userId}/protocols`, wrap(unknownSchema)).then(r => r.data),
+
+    /** Intelligence layer — risk score, trust score, anomaly score, ML feature values. */
+    intelligence: (userId: string) =>
+      restClient.get(`/v1/profile/${userId}/intelligence`, wrap(unknownSchema)).then(r => r.data),
+
+    /** Data provenance — source attribution for every data point in the profile. */
+    provenance: (userId: string) =>
+      restClient.get(`/v1/profile/${userId}/provenance`, wrap(unknownSchema)).then(r => r.data),
+
+    /** Deep-drill on any linked object (e.g. a specific wallet, journey, device). */
+    drill: (userId: string, objectType: string, objectId: string) =>
+      restClient.get(`/v1/profile/${userId}/drill/${objectType}/${objectId}`, wrap(unknownSchema)).then(r => r.data),
+
+    /** Gold-tier data lake view for a specific domain. */
+    lake: (userId: string, domain: 'identity' | 'market' | 'onchain' | 'social') =>
+      restClient.get(`/v1/profile/${userId}/lake/${domain}`, wrap(unknownSchema)).then(r => r.data),
+
+    resolve: (params: { wallet?: string; email?: string; device?: string; session?: string; social?: string; customer?: string }) =>
       restClient.get(`/v1/profile/resolve${buildQS(params)}`, wrap(z.object({ resolved_user_id: z.string() }))).then(r => r.data),
   },
 
-  // ── Profile360 normalized view ─────────────────────────────────────────────
+  // ── Profile360 normalized surfaces ─────────────────────────────────────────
   profile360: {
     full: (entityType: string, entityId: string) =>
-      restClient.get(`/v1/profile360/${entityType}/${entityId}?include=identity,financial,graph,timeline`, wrap(unknownSchema)).then(r => r.data),
+      restClient.get(`/v1/profile360/${entityType}/${entityId}?include=identity,financial,graph,timeline,analytics`, wrap(unknownSchema)).then(r => r.data),
 
     graph: (entityType: string, entityId: string, params?: { cursor?: string; limit?: number }) =>
       restClient.get(`/v1/profile360/${entityType}/${entityId}/graph${buildQS({ ...params })}`, wrap(unknownSchema)).then(r => r.data),
@@ -68,16 +152,102 @@ export const api = {
   // ── Identity ───────────────────────────────────────────────────────────────
   identity: {
     getProfile: (userId: string) =>
-      restClient.get(`/v1/identity/profiles/${userId}`, wrap(profileSchema)).then(r => r.data),
+      restClient.get(`/v1/identity/profiles/${userId}`, wrap(unknownSchema)).then(r => r.data),
 
     graphNeighborhood: (userId: string) =>
-      restClient.get(`/v1/identity/profiles/${userId}/graph`, wrap(z.object({ user_id: z.string(), connections: z.array(z.unknown()) }).passthrough())).then(r => r.data),
+      restClient.get(`/v1/identity/profiles/${userId}/graph`, wrap(unknownSchema)).then(r => r.data),
   },
 
-  // ── Resolution (read-only — identity cluster lookup) ──────────────────────
+  // ── Resolution (identity cluster — read-only for tenants) ─────────────────
   resolution: {
     cluster: (userId: string) =>
       restClient.get(`/v1/resolution/cluster/${userId}`, wrap(unknownSchema)).then(r => r.data),
+  },
+
+  // ── Graph & Relationships (H2H / H2A / A2H / A2A) ─────────────────────────
+  graph: {
+    /**
+     * Entity graph for the user — nodes and edges covering all H2H, H2A, A2H
+     * and A2A relationships: ownership, delegation, commerce, referral,
+     * identity links, and financial flows.
+     */
+    entityGraph: (entityId: string) =>
+      restClient.get(`/v1/entities/${entityId}/graph`, wrap(unknownSchema)).then(r => r.data),
+
+    /**
+     * Identity cluster — entities probabilistically resolved to the same
+     * real-world actor, with shared tissue (devices, IPs, wallets, campaigns).
+     */
+    cluster: (entityId: string) =>
+      restClient.get(`/v1/resolution/cluster/${entityId}`, wrap(unknownSchema)).then(r => r.data),
+
+    /**
+     * Identity links for an entity — H2H same-person, shares_device, shares_wallet.
+     * Each link has interaction_class, weight, and confidence.
+     */
+    links: (entityId: string, limit = 50) =>
+      restClient.get(`/v1/crossdomain/links/${entityId}?limit=${limit}`, wrap(z.array(unknownSchema))).then(r => r.data),
+
+    /**
+     * All delegation records involving this entity (as grantor or grantee).
+     * Exposes H→A grants, H→H sub-delegation, and A→A pipelines.
+     */
+    delegations: (params: { grantor?: string; grantee?: string; active?: boolean; limit?: number }) =>
+      restClient.get(`/v1/delegations${buildQS({ ...params })}`, wrap(unknownSchema)).then(r => r.data),
+
+    /** Validate whether a delegated action is in scope for a grantee. */
+    validateDelegation: (params: { grantee_entity_id: string; action: string; resource: string; amount?: number }) =>
+      restClient.post('/v1/delegations/validate', wrap(unknownSchema), params).then(r => r.data),
+
+    /** Cross-domain fusion profile — unified view across Web2, Web3, and institutional data. */
+    fusionProfile: (entityId: string) =>
+      restClient.get(`/v1/crossdomain/fusion/profile/${entityId}`, wrap(unknownSchema)).then(r => r.data),
+
+    /** Financial exposure across all domains. */
+    fusionExposure: (entityId: string) =>
+      restClient.get(`/v1/crossdomain/fusion/exposure/${entityId}`, wrap(unknownSchema)).then(r => r.data),
+  },
+
+  // ── Behavioural "Why" ──────────────────────────────────────────────────────
+  behavioral: {
+    /** Full behavioural scan across all signal families. */
+    entity: (entityId: string) =>
+      restClient.get(`/v1/behavioral/entity/${entityId}`, wrap(unknownSchema)).then(r => r.data),
+
+    /** Signals filtered by family (intent_residue, wallet_friction, continuity, etc). */
+    signals: (entityId: string, params?: { family?: string; limit?: number }) =>
+      restClient.get(`/v1/behavioral/entity/${entityId}/signals${buildQS({ ...params })}`, wrap(z.object({ entity_id: z.string(), signals: z.array(z.unknown()), count: z.number() }))).then(r => r.data),
+
+    /** Trigger a full behavioural re-scan. */
+    scan: (entityId: string) =>
+      restClient.post(`/v1/behavioral/scan/${entityId}`, wrap(unknownSchema)).then(r => r.data),
+
+    /** Latest behaviour snapshot. */
+    snapshot: (entityId: string) =>
+      restClient.get(`/v1/behavior/${entityId}`, wrap(unknownSchema)).then(r => r.data),
+
+    /** Historical behaviour snapshots. */
+    history: (entityId: string, params?: { window?: string; limit?: number }) =>
+      restClient.get(`/v1/behavior/${entityId}/history${buildQS({ ...params })}`, wrap(unknownSchema)).then(r => r.data),
+  },
+
+  // ── Expectations ("Why is this entity unusual?") ───────────────────────────
+  expectations: {
+    entity: (entityId: string) =>
+      restClient.get(`/v1/expectations/entity/${entityId}`, wrap(unknownSchema)).then(r => r.data),
+
+    signals: (entityId: string, params?: { signal_type?: string; limit?: number }) =>
+      restClient.get(`/v1/expectations/entity/${entityId}/signals${buildQS({ ...params })}`, wrap(unknownSchema)).then(r => r.data),
+
+    /** Human-readable explanation of why this entity is anomalous. */
+    explain: (entityId: string) =>
+      restClient.get(`/v1/expectations/entity/${entityId}/explain`, wrap(unknownSchema)).then(r => r.data),
+
+    scan: (entityId: string) =>
+      restClient.post(`/v1/expectations/scan/${entityId}`, wrap(unknownSchema)).then(r => r.data),
+
+    getSignal: (signalId: string) =>
+      restClient.get(`/v1/expectations/signal/${signalId}`, wrap(unknownSchema)).then(r => r.data),
   },
 
   // ── Consent & Privacy ──────────────────────────────────────────────────────
@@ -110,6 +280,26 @@ export const api = {
 
     get: (campaignId: string) =>
       restClient.get(`/v1/campaigns/${campaignId}`, wrap(unknownSchema)).then(r => r.data),
+
+    create: (campaign: Record<string, unknown>) =>
+      restClient.post('/v1/campaigns', wrap(unknownSchema), campaign).then(r => r.data),
+
+    update: (campaignId: string, updates: Record<string, unknown>) =>
+      restClient.patch(`/v1/campaigns/${campaignId}`, wrap(unknownSchema), updates).then(r => r.data),
+
+    delete: (campaignId: string) =>
+      restClient.delete(`/v1/campaigns/${campaignId}`, wrap(z.object({ deleted: z.boolean() }))),
+
+    touchpoint: (campaignId: string, tp: { channel?: string; source?: string; user_id?: string; session_id?: string; event_type?: string; is_conversion?: boolean; revenue_usd?: number; timestamp?: string; properties?: Record<string, unknown> }) =>
+      restClient.post(`/v1/campaigns/${campaignId}/touchpoints`, wrap(unknownSchema), tp).then(r => r.data),
+
+    /**
+     * Multi-touch attribution — surfaces the "where" of a conversion.
+     * Models: multi_touch | first_touch | last_touch | linear | time_decay.
+     * Returns weighted credits per channel/source/campaign.
+     */
+    attribution: (campaignId: string, params?: { model?: string; start_date?: string; end_date?: string }) =>
+      restClient.get(`/v1/campaigns/${campaignId}/attribution${buildQS({ ...params })}`, wrap(unknownSchema)).then(r => r.data),
   },
 
   // ── Rewards ────────────────────────────────────────────────────────────────
@@ -123,23 +313,42 @@ export const api = {
     getCampaign: (campaignId: string) =>
       restClient.get(`/v1/rewards/campaigns/${campaignId}`, wrap(unknownSchema)).then(r => r.data),
 
+    /** User reward history by wallet address — balances, earned, claimed, proofs. */
     userRewards: (address: string) =>
       restClient.get(`/v1/rewards/user/${address}`, wrap(unknownSchema)).then(r => r.data),
 
+    /** Reward proof for on-chain claim. */
     getProof: (rewardId: string) =>
       restClient.get(`/v1/rewards/proof/${rewardId}`, wrap(unknownSchema)).then(r => r.data),
+
+    queueStats: () =>
+      restClient.get('/v1/rewards/queue/stats', wrap(unknownSchema)).then(r => r.data),
   },
 
-  // ── Attribution (touchpoint recording for campaigns) ───────────────────────
+  // ── Attribution "Where" ───────────────────────────────────────────────────
   attribution: {
-    recordTouchpoint: (touchpoint: { user_id: string; channel: string; source: string; campaign?: string; event_type: string; timestamp: string; properties?: Record<string, unknown> }) =>
-      restClient.post('/v1/attribution/touchpoints', wrap(unknownSchema), touchpoint).then(r => r.data),
+    /**
+     * Resolve attribution for a specific conversion event.
+     * Returns fractional credits per channel/source/campaign.
+     * model defaults to 'multi_touch' if omitted.
+     */
+    resolve: (params: { user_id: string; event: Record<string, unknown>; model?: string; touchpoints?: unknown[] }) =>
+      restClient.post('/v1/attribution/resolve', wrap(unknownSchema), params).then(r => r.data),
+
+    recordTouchpoint: (tp: { user_id: string; channel: string; source: string; campaign?: string; event_type: string; timestamp: string; properties?: Record<string, unknown> }) =>
+      restClient.post('/v1/attribution/touchpoints', wrap(unknownSchema), tp).then(r => r.data),
 
     journey: (userId: string) =>
       restClient.get(`/v1/attribution/journey/${userId}`, wrap(unknownSchema)).then(r => r.data),
+
+    clearJourney: (userId: string) =>
+      restClient.delete(`/v1/attribution/journey/${userId}`, wrap(unknownSchema)),
+
+    models: () =>
+      restClient.get('/v1/attribution/models', wrap(z.array(unknownSchema))).then(r => r.data),
   },
 
-  // ── Web3 (read-oriented customer subset) ──────────────────────────────────
+  // ── Web3 & On-Chain ────────────────────────────────────────────────────────
   web3: {
     chains: {
       list: (params?: { vm_family?: string; limit?: number }) =>
@@ -175,11 +384,12 @@ export const api = {
     },
   },
 
-  // ── On-Chain ───────────────────────────────────────────────────────────────
   onchain: {
+    /** On-chain actions for an agent — purchases, contract calls, transfers. */
     agentActions: (agentId: string) =>
       restClient.get(`/v1/onchain/actions/${agentId}`, wrap(z.array(unknownSchema))).then(r => r.data),
 
+    /** Contract metadata — ABI classification, protocol mapping, risk flags. */
     getContract: (address: string) =>
       restClient.get(`/v1/onchain/contracts/${address}`, wrap(unknownSchema)).then(r => r.data),
 
@@ -226,6 +436,8 @@ export const api = {
     transfers: {
       list: (entityId: string, limit = 50) =>
         restClient.get(`/v1/flows/transfers${buildQS({ entity_id: entityId, limit })}`, wrap(z.array(unknownSchema))).then(r => r.data),
+      record: (transfer: { from_entity_id: string; to_entity_id: string; asset_id: string; amount: number; [k: string]: unknown }) =>
+        restClient.post('/v1/flows/transfers', wrap(unknownSchema), transfer).then(r => r.data),
     },
     assets: {
       get: (assetId: string) =>
@@ -233,7 +445,58 @@ export const api = {
     },
   },
 
-  // ── Providers (health + categories — customer-safe subset) ────────────────
+  // ── Intelligence (wallet risk + entity cluster) ────────────────────────────
+  intelligence: {
+    walletRisk: (address: string) =>
+      restClient.get(`/v1/intelligence/wallet/${address}/risk`, wrap(unknownSchema)).then(r => r.data),
+
+    walletProfile: (address: string) =>
+      restClient.get(`/v1/intelligence/wallet/${address}/profile`, wrap(unknownSchema)).then(r => r.data),
+
+    entityCluster: (entityId: string) =>
+      restClient.get(`/v1/intelligence/entity/${entityId}/cluster`, wrap(unknownSchema)).then(r => r.data),
+  },
+
+  // ── Analytics ─────────────────────────────────────────────────────────────
+  analytics: {
+    dashboardSummary: () =>
+      restClient.get('/v1/analytics/dashboard/summary', wrap(unknownSchema)).then(r => r.data),
+
+    queryEvents: (query: { event_type?: string; start_date?: string; end_date?: string; user_id?: string; session_id?: string; limit?: number }) =>
+      restClient.post('/v1/analytics/events/query', wrap(z.object({
+        data: z.array(z.unknown()),
+        pagination: z.object({ total: z.number(), limit: z.number(), has_more: z.boolean() }).optional(),
+      }).passthrough()), query).then(r => r.data),
+
+    graphql: (query: string, variables?: Record<string, unknown>) =>
+      restClient.post('/v1/analytics/graphql', wrap(z.object({
+        data: z.unknown().nullable(),
+        errors: z.array(z.object({ message: z.string() }).passthrough()).optional().nullable(),
+      })), { query, variables }).then(r => r.data),
+
+    export: (params: { format?: 'csv' | 'json' | 'parquet'; start_date?: string; end_date?: string; event_type?: string }) =>
+      restClient.post('/v1/analytics/export', wrap(z.object({ export_id: z.string(), status: z.string() })), params).then(r => r.data),
+
+    exportStatus: (exportId: string) =>
+      restClient.get(`/v1/analytics/export/${exportId}`, wrap(z.object({ export_id: z.string(), status: z.string(), download_url: z.string().optional() }))).then(r => r.data),
+  },
+
+  // ── Automation (campaign metrics + platform overview) ──────────────────────
+  automation: {
+    metrics: (campaignId: string, hours = 24) =>
+      restClient.get(`/v1/automation/metrics/${campaignId}?hours=${hours}`, wrap(unknownSchema)).then(r => r.data),
+
+    overview: (hours = 24) =>
+      restClient.get(`/v1/automation/overview?hours=${hours}`, wrap(unknownSchema)).then(r => r.data),
+
+    insights: () =>
+      restClient.get('/v1/automation/insights', wrap(unknownSchema)).then(r => r.data),
+
+    ingest: (event: { type: string; campaign_id?: string; user?: Record<string, unknown>; wallet_address?: string; timestamp?: string; properties?: Record<string, unknown> }) =>
+      restClient.post('/v1/automation/ingest', wrap(unknownSchema), event).then(r => r.data),
+  },
+
+  // ── Providers (tenant-safe subset) ────────────────────────────────────────
   providers: {
     health: () =>
       restClient.get('/v1/providers/health', wrap(unknownSchema)).then(r => r.data),
@@ -249,6 +512,17 @@ export const api = {
 
     batch: (events: unknown[]) =>
       restClient.post('/v1/ingest/events/batch', wrap(unknownSchema), { events }).then(r => r.data),
+
+    feed: (feed: { source: string; entity_type: string; data: Record<string, unknown> }) =>
+      restClient.post('/v1/ingest/feed', wrap(unknownSchema), feed).then(r => r.data),
+  },
+
+  // ── Realtime (SSE / WebSocket URLs) ───────────────────────────────────────
+  realtime: {
+    sseUrl: (entityId?: string) =>
+      `/v1/realtime/sse${entityId ? `?entity_id=${encodeURIComponent(entityId)}` : ''}` as string,
+    wsUrl: (entityId?: string) =>
+      `/v1/realtime/ws${entityId ? `?entity_id=${encodeURIComponent(entityId)}` : ''}` as string,
   },
 };
 

@@ -147,7 +147,7 @@ async function fetchProfile360(type: Profile360EntityType, id: string): Promise<
 
   const [profile, timelineResponse, graphResponse, behavioral] = await Promise.all([
     api.profile360.full(type, id).catch(() => api.profile.full(id)),
-    api.profile360.timeline(type, id, { limit: 250 }).catch(() => api.profile.timeline(id, 250)).catch(() => ({ events: [] })),
+    api.profile360.timeline(type, id, { limit: 250 }).catch(() => api.profile.timeline(id, { limit: 250 })).catch(() => ({ events: [] })),
     api.profile360.graph(type, id, { limit: 750 }).catch(() => api.profile.graph(id)).catch(() => ({ nodes: [], edges: [] })),
     api.behavioral.entity(id).catch(() => ({})),
   ]);

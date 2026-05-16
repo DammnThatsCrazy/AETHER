@@ -14,6 +14,8 @@ export * from './agent';
 export * from './events';
 export * from './capabilities';
 export * from './economic';
+export * from './contextual';
+export * from './graph-relationships';
 
 // Existing partial contracts (already referenced by RN SDK).
 export * from './ecommerce-types';
