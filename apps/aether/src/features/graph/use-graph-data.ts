@@ -2,42 +2,7 @@ import { useState, useEffect, useMemo, useCallback } from 'react';
 import { api } from '@aether-app/lib/api/endpoints';
 import type { GraphNode, GraphEdge } from '@aether-app/components/graph/graph-canvas';
 
-// ── GraphQL query — returns tenant-scoped graph ───────────────────────────────
-
-const GRAPH_QUERY = `
-  query TenantGraph {
-    graph {
-      nodes { id type label x y properties }
-      edges { id source target type weight properties }
-      clusters { id label nodeIds }
-    }
-  }
-`;
-
-// ── Response types ─────────────────────────────────────────────────────────────
-
-interface GqlNode {
-  id: string;
-  type?: string;
-  label?: string;
-  properties?: Record<string, unknown>;
-  [k: string]: unknown;
-}
-
-interface GqlEdge {
-  id?: string;
-  source: string;
-  target: string;
-  type?: string;
-  weight?: number;
-  properties?: Record<string, unknown>;
-}
-
-interface GqlCluster {
-  id: string;
-  label?: string;
-  nodeIds: string[];
-}
+// ── Types ──────────────────────────────────────────────────────────────────────
 
 export interface GraphCluster {
   id: string;
@@ -46,7 +11,14 @@ export interface GraphCluster {
   size: number;
 }
 
-// ── Interaction class from edge type ─────────────────────────────────────────
+export type GraphLayer = 'all' | 'H2H' | 'H2A' | 'A2H' | 'A2A';
+export type GraphOverlay = 'none' | 'trust' | 'risk';
+
+// ── Helpers ────────────────────────────────────────────────────────────────────
+
+function asRecord(v: unknown): Record<string, unknown> {
+  return v !== null && typeof v === 'object' ? (v as Record<string, unknown>) : {};
+}
 
 function interactionClass(edgeType: string | undefined): string {
   if (!edgeType) return 'H2H';
@@ -57,38 +29,82 @@ function interactionClass(edgeType: string | undefined): string {
   return 'H2H';
 }
 
-// ── Mappers ───────────────────────────────────────────────────────────────────
+// ── Mappers ────────────────────────────────────────────────────────────────────
 
-function mapNode(raw: GqlNode): GraphNode {
-  const props = raw.properties ?? {};
+function mapNode(raw: unknown): GraphNode {
+  const r = asRecord(raw);
+  const props = asRecord(r.properties ?? r.metadata);
+  const trustRaw = props.trust_score ?? r.trust_score;
+  const riskRaw = props.risk_score ?? r.risk_score;
+  const id = String(r.id ?? r.entity_id ?? '');
   return {
-    id: raw.id,
-    label: raw.label ?? raw.id,
-    kind: raw.type ?? 'unknown',
-    ...(typeof props.trust_score === 'number' ? { trustScore: props.trust_score } : {}),
-    ...(typeof props.risk_score === 'number' ? { riskScore: props.risk_score } : {}),
+    id,
+    label: String(r.label ?? r.name ?? r.display_name ?? id),
+    kind: String(r.type ?? r.kind ?? r.entity_type ?? 'unknown'),
+    ...(typeof trustRaw === 'number' ? { trustScore: trustRaw } : {}),
+    ...(typeof riskRaw === 'number' ? { riskScore: riskRaw } : {}),
     metadata: props,
   };
 }
 
-function mapEdge(raw: GqlEdge, idx: number): GraphEdge {
+function mapDelegationEdge(raw: unknown, idx: number): GraphEdge | null {
+  const r = asRecord(raw);
+  const source = String(r.grantor_entity_id ?? r.grantor_id ?? r.source ?? '');
+  const target = String(r.grantee_entity_id ?? r.grantee_id ?? r.target ?? '');
+  if (!source || !target) return null;
+  const edgeType = String(r.relation_type ?? r.type ?? 'H2A');
   return {
-    id: raw.id ?? `edge-${idx}`,
-    source: raw.source,
-    target: raw.target,
-    relationType: raw.type ?? 'unknown',
-    interactionClass: interactionClass(raw.type),
-    weight: raw.weight ?? 1,
-    metadata: raw.properties ?? {},
+    id: String(r.id ?? r.delegation_id ?? `del-${idx}`),
+    source,
+    target,
+    relationType: edgeType,
+    interactionClass: interactionClass(edgeType),
+    weight: typeof r.weight === 'number' ? r.weight : 1,
+    metadata: asRecord(r.properties ?? r.metadata),
   };
 }
 
-// ── Layer filter ──────────────────────────────────────────────────────────────
+function mapLinkEdge(raw: unknown, entityId: string, idx: number): GraphEdge | null {
+  const r = asRecord(raw);
+  const otherId = String(r.entity_id ?? r.linked_entity_id ?? r.target_entity_id ?? '');
+  if (!otherId || otherId === entityId) return null;
+  const edgeType = String(r.relation_type ?? r.interaction_class ?? r.link_type ?? 'H2H');
+  const confidence = typeof r.confidence === 'number' ? r.confidence : 0.5;
+  return {
+    id: String(r.id ?? r.link_id ?? `link-${entityId}-${idx}`),
+    source: entityId,
+    target: otherId,
+    relationType: edgeType,
+    interactionClass: interactionClass(edgeType),
+    weight: typeof r.weight === 'number' ? r.weight : confidence,
+    metadata: asRecord(r.properties ?? r.metadata),
+  };
+}
 
-export type GraphLayer = 'all' | 'H2H' | 'H2A' | 'A2H' | 'A2A';
-export type GraphOverlay = 'none' | 'trust' | 'risk';
+// ── Cluster derivation from entity properties ─────────────────────────────────
 
-// ── BFS shortest path ─────────────────────────────────────────────────────────
+function deriveClusters(rawEntities: unknown[]): GraphCluster[] {
+  const byCluster = new Map<string, string[]>();
+  for (const raw of rawEntities) {
+    const r = asRecord(raw);
+    const props = asRecord(r.properties ?? r.metadata);
+    const clusterId = String(props.cluster_id ?? r.cluster_id ?? '');
+    const entityId = String(r.id ?? r.entity_id ?? '');
+    if (!clusterId || !entityId) continue;
+    if (!byCluster.has(clusterId)) byCluster.set(clusterId, []);
+    byCluster.get(clusterId)!.push(entityId);
+  }
+  return Array.from(byCluster.entries())
+    .filter(([, ids]) => ids.length > 1)
+    .map(([id, nodeIds]) => ({
+      id,
+      label: `Cluster ${id.slice(0, 6)}`,
+      nodeIds,
+      size: nodeIds.length,
+    }));
+}
+
+// ── BFS shortest path ──────────────────────────────────────────────────────────
 
 export function bfsPath(
   startId: string,
@@ -121,7 +137,9 @@ export function bfsPath(
   return null;
 }
 
-// ── Hook ──────────────────────────────────────────────────────────────────────
+// ── Hook ───────────────────────────────────────────────────────────────────────
+
+const ENTITY_LINK_SAMPLE = 30;
 
 export function useGraphData() {
   const [allNodes, setAllNodes] = useState<GraphNode[]>([]);
@@ -136,22 +154,68 @@ export function useGraphData() {
   const [selectedEdgeId, setSelectedEdgeId] = useState<string | null>(null);
 
   useEffect(() => {
+    let cancelled = false;
     setIsLoading(true);
     setError(null);
-    api.analytics.graphql(GRAPH_QUERY)
-      .then(resp => {
-        const r = resp as { data: { graph?: { nodes?: GqlNode[]; edges?: GqlEdge[]; clusters?: GqlCluster[] } } | null; errors?: { message: string }[] | null };
-        if (r.errors?.length) throw new Error(r.errors[0]?.message ?? 'Graph query error');
-        const g = r.data?.graph;
-        setAllNodes((g?.nodes ?? []).map(mapNode));
-        setAllEdges((g?.edges ?? []).map(mapEdge));
-        setClusters((g?.clusters ?? []).map(c => ({ id: c.id, label: c.label ?? c.id, nodeIds: c.nodeIds, size: c.nodeIds.length })));
+
+    async function fetchGraph(): Promise<{ nodes: GraphNode[]; edges: GraphEdge[]; clusters: GraphCluster[] }> {
+      // 1. All entities → nodes
+      const entitiesData = await api.entities.list({ limit: 200 });
+      const rawEntities: unknown[] = entitiesData.entities;
+      const nodes = rawEntities.map(mapNode).filter(n => n.id.length > 0);
+
+      const edgeMap = new Map<string, GraphEdge>();
+      const addEdge = (e: GraphEdge | null) => {
+        if (e && !edgeMap.has(e.id)) edgeMap.set(e.id, e);
+      };
+
+      // 2. Delegation records → H2A / A2H / A2A edges
+      try {
+        const delData = await api.graph.delegations({ limit: 500 });
+        let rawDels: unknown[] = [];
+        if (Array.isArray(delData)) {
+          rawDels = delData;
+        } else if (typeof delData === 'object' && delData !== null) {
+          const dr = delData as Record<string, unknown>;
+          if (Array.isArray(dr.delegations)) rawDels = dr.delegations;
+          else if (Array.isArray(dr.items)) rawDels = dr.items;
+        }
+        rawDels.forEach((d, i) => addEdge(mapDelegationEdge(d, i)));
+      } catch { /* delegation endpoint may be empty or unavailable */ }
+
+      // 3. Identity links for a sample of entities → H2H edges
+      const sampleIds = nodes.slice(0, ENTITY_LINK_SAMPLE).map(n => n.id);
+      const linkResults = await Promise.allSettled(
+        sampleIds.map(id => api.graph.links(id, 50)),
+      );
+      linkResults.forEach((result, i) => {
+        if (result.status !== 'fulfilled') return;
+        const entityId = sampleIds[i];
+        if (!entityId) return;
+        result.value.forEach((l, j) => addEdge(mapLinkEdge(l, entityId, j)));
+      });
+
+      // 4. Clusters derived from entity-level cluster_id property
+      const derivedClusters = deriveClusters(rawEntities);
+
+      return { nodes, edges: Array.from(edgeMap.values()), clusters: derivedClusters };
+    }
+
+    fetchGraph()
+      .then(({ nodes, edges, clusters }) => {
+        if (cancelled) return;
+        setAllNodes(nodes);
+        setAllEdges(edges);
+        setClusters(clusters);
         setIsLoading(false);
       })
       .catch(err => {
+        if (cancelled) return;
         setError(err instanceof Error ? err.message : 'Failed to load graph');
         setIsLoading(false);
       });
+
+    return () => { cancelled = true; };
   }, []);
 
   const nodes = useMemo(() => allNodes, [allNodes]);
