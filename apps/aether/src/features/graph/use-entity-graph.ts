@@ -51,7 +51,7 @@ export function useDelegations(params: {
 }) {
   const id = params.grantor ?? params.grantee ?? '';
   return useQuery({
-    key: key('delegations', id, `${params.grantor ?? ''}:${params.grantee ?? ''}:${params.active ?? ''}`),
+    key: key('delegations', id, `${params.grantor ?? ''}:${params.grantee ?? ''}:${params.active ?? ''}:${params.limit ?? ''}`),
     fetcher: () => api.graph.delegations(params),
     staleTime: STALE,
     enabled: !!(params.grantor || params.grantee),
