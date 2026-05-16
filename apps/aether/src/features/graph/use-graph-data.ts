@@ -172,14 +172,7 @@ export function useGraphData() {
       // 2. Delegation records → H2A / A2H / A2A edges
       try {
         const delData = await api.graph.delegations({ limit: 500 });
-        let rawDels: unknown[] = [];
-        if (Array.isArray(delData)) {
-          rawDels = delData;
-        } else if (typeof delData === 'object' && delData !== null) {
-          const dr = delData as Record<string, unknown>;
-          if (Array.isArray(dr.delegations)) rawDels = dr.delegations;
-          else if (Array.isArray(dr.items)) rawDels = dr.items;
-        }
+        const rawDels: unknown[] = [...(delData.granted ?? []), ...(delData.received ?? [])];
         rawDels.forEach((d, i) => addEdge(mapDelegationEdge(d, i)));
       } catch { /* delegation endpoint may be empty or unavailable */ }
 
