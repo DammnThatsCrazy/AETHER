@@ -485,7 +485,7 @@ function FinancialsTab({ userId }: { userId: string }) {
 function BehavioralTab({ userId }: { userId: string }) {
   const { data: behavData, isLoading: bl, error: be } = useUserBehavioral(userId);
   const { data: whyData, isLoading: wl, error: we } = useUserWhyExplain(userId);
-  const signals = asList(asRecord(behavData).signals ?? (behavData as unknown[]));
+  const signals = asList(behavData?.signals);
   const why = asRecord(whyData);
   const topSignals = asList(why.top_signals);
 
@@ -562,7 +562,7 @@ function BehavioralTab({ userId }: { userId: string }) {
 
 function AttributionTab({ userId }: { userId: string }) {
   const { data, isLoading, error } = useUserAttributionJourney(userId);
-  const touchpoints = asList(asRecord(data).touchpoints ?? (data as unknown[]));
+  const touchpoints = asList(data?.touchpoints);
 
   type Row = Record<string, unknown>;
 
