@@ -1,30 +1,35 @@
 /**
- * KYBER API Endpoints — maps to real Aether backend routes.
- * All responses are wrapped in { data, status, timestamp }.
- * Extract `.data` for the actual payload.
+ * KYBER API Endpoints — full coverage of the Aether backend.
+ * All REST responses are wrapped in { data, status, timestamp }.
+ * Each method extracts `.data` automatically unless noted.
  */
 import { z } from 'zod';
 import { restClient } from './rest/client';
 import { log } from '@kyber/lib/logging';
 
-// ─── Response wrapper ────────────────────────────────────────────
-const apiResponseSchema = <T extends z.ZodType>(dataSchema: T) =>
-  z.object({
-    data: dataSchema,
-    status: z.string(),
-    timestamp: z.string(),
-  });
+// ─── Response wrapper ────────────────────────────────────────────────────────
+const wrap = <T extends z.ZodType>(dataSchema: T) =>
+  z.object({ data: dataSchema, status: z.string(), timestamp: z.string() });
 
-// ─── Shared schemas ──────────────────────────────────────────────
-const healthCheckSchema = z.object({
+// ─── Common primitives ───────────────────────────────────────────────────────
+const unknownSchema = z.unknown();
+const listOf = (item: z.ZodType) => z.object({ data: z.array(item), total: z.number(), has_more: z.boolean().optional() });
+
+const buildQS = (params: Record<string, string | number | boolean | undefined>) => {
+  const qs = new URLSearchParams();
+  for (const [k, v] of Object.entries(params)) {
+    if (v !== undefined) qs.set(k, String(v));
+  }
+  const s = qs.toString();
+  return s ? `?${s}` : '';
+};
+
+// ─── Shared schemas ───────────────────────────────────────────────────────────
+const healthSchema = z.object({
   status: z.string(),
   uptime: z.number().optional(),
   version: z.string().optional(),
-  services: z.record(z.object({
-    status: z.string(),
-    latency_ms: z.number().optional(),
-    error: z.string().optional().nullable(),
-  })).optional(),
+  services: z.record(z.object({ status: z.string(), latency_ms: z.number().optional(), error: z.string().optional().nullable() }).passthrough()).optional(),
   timestamp: z.string().optional(),
 }).passthrough();
 
@@ -48,13 +53,6 @@ const circuitBreakerSchema = z.record(z.object({
   next_retry: z.string().optional().nullable(),
 }).passthrough());
 
-const dashboardSummarySchema = z.object({
-  sessions_last_24h: z.number().optional(),
-  events_last_24h: z.number().optional(),
-  unique_users_last_24h: z.number().optional(),
-  top_events: z.array(z.object({ name: z.string(), count: z.number() })).optional(),
-}).passthrough();
-
 const alertSchema = z.object({
   id: z.string().optional(),
   name: z.string(),
@@ -65,17 +63,11 @@ const alertSchema = z.object({
   created_at: z.string().optional(),
 }).passthrough();
 
-const agentStatusSchema = z.object({
-  active_workers: z.number().optional(),
-  queued_tasks: z.number().optional(),
-  completed_tasks: z.number().optional(),
-  failed_tasks: z.number().optional(),
-  kill_switch: z.boolean().optional(),
-  workers: z.array(z.object({
-    worker_type: z.string(),
-    status: z.string(),
-    current_task: z.string().optional().nullable(),
-  }).passthrough()).optional(),
+const webhookSchema = z.object({
+  id: z.string().optional(),
+  url: z.string(),
+  events: z.array(z.string()),
+  active: z.boolean().optional(),
 }).passthrough();
 
 const taskSchema = z.object({
@@ -90,34 +82,6 @@ const taskSchema = z.object({
   error: z.string().optional().nullable(),
 }).passthrough();
 
-const auditRecordSchema = z.object({
-  records: z.array(z.unknown()),
-  total: z.number(),
-});
-
-const entityClusterSchema = z.object({
-  entity_id: z.string(),
-  cluster_size: z.number(),
-  linked_entities: z.array(z.object({
-    id: z.string(),
-    type: z.string(),
-    properties: z.record(z.unknown()).optional(),
-  }).passthrough()),
-  identity_features: z.array(z.unknown()).optional(),
-  computed_at: z.string(),
-}).passthrough();
-
-const walletProfileSchema = z.object({
-  wallet_address: z.string(),
-  risk: z.record(z.unknown()).optional(),
-  features: z.record(z.unknown()).optional(),
-  graph: z.object({
-    neighbor_count: z.number(),
-    neighbors: z.array(z.object({ id: z.string(), type: z.string() }).passthrough()),
-  }).optional(),
-  computed_at: z.string(),
-}).passthrough();
-
 const profileSchema = z.object({
   user_id: z.string().optional(),
   events: z.array(z.unknown()).optional(),
@@ -127,354 +91,368 @@ const profileSchema = z.object({
   identifiers: z.array(z.unknown()).optional(),
 }).passthrough();
 
-const webhookSchema = z.object({
-  id: z.string().optional(),
-  url: z.string(),
-  events: z.array(z.string()),
-  active: z.boolean().optional(),
-}).passthrough();
-
-const populationSummarySchema = z.object({
-  total_groups: z.number().optional(),
-  total_members: z.number().optional(),
-  by_type: z.record(z.number()).optional(),
-  computed_at: z.string().optional(),
-}).passthrough();
-
-const behavioralSummarySchema = z.object({
-  total_signals: z.number().optional(),
-  by_family: z.record(z.number()).optional(),
-  top_families: z.array(z.unknown()).optional(),
-  computed_at: z.string().optional(),
-}).passthrough();
-
-const diagnosticReportSchema = z.object({
-  health: healthCheckSchema.optional(),
-  errors: z.array(errorEntrySchema).optional(),
-  circuit_breakers: circuitBreakerSchema.optional(),
-  services: z.record(z.unknown()).optional(),
-}).passthrough();
-
-const alertsListSchema = z.object({
-  alerts: z.array(alertSchema),
-  count: z.number(),
-  queried_at: z.string().optional(),
-});
-
-const eventsQuerySchema = z.object({
-  data: z.array(z.unknown()),
-  pagination: z.object({
-    total: z.number(),
-    limit: z.number(),
-    has_more: z.boolean(),
-  }).optional(),
-}).passthrough();
-
-const graphqlResponseSchema = z.object({
-  data: z.unknown().nullable(),
-  errors: z.array(z.object({ message: z.string() }).passthrough()).optional().nullable(),
-});
-
-// ─── API Client ──────────────────────────────────────────────────
-
+// ─── API ─────────────────────────────────────────────────────────────────────
 export const api = {
-  // ── Analytics ──
+
+  // ── Analytics ──────────────────────────────────────────────────────────────
   analytics: {
     dashboardSummary: () =>
-      restClient.get('/v1/analytics/dashboard/summary', apiResponseSchema(dashboardSummarySchema))
-        .then(r => r.data),
+      restClient.get('/v1/analytics/dashboard/summary', wrap(z.object({
+        sessions_last_24h: z.number().optional(),
+        events_last_24h: z.number().optional(),
+        unique_users_last_24h: z.number().optional(),
+        top_events: z.array(z.object({ name: z.string(), count: z.number() })).optional(),
+      }).passthrough())).then(r => r.data),
 
     queryEvents: (query: { event_type?: string; start_date?: string; end_date?: string; limit?: number }) =>
-      restClient.post('/v1/analytics/events/query', apiResponseSchema(eventsQuerySchema), query)
-        .then(r => r.data),
+      restClient.post('/v1/analytics/events/query', wrap(z.object({
+        data: z.array(z.unknown()),
+        pagination: z.object({ total: z.number(), limit: z.number(), has_more: z.boolean() }).optional(),
+      }).passthrough()), query).then(r => r.data),
 
     getEvent: (eventId: string) =>
-      restClient.get(`/v1/analytics/events/${eventId}`, apiResponseSchema(z.unknown()))
-        .then(r => r.data),
+      restClient.get(`/v1/analytics/events/${eventId}`, wrap(unknownSchema)).then(r => r.data),
 
     graphql: (query: string, variables?: Record<string, unknown>) =>
-      restClient.post('/v1/analytics/graphql', apiResponseSchema(graphqlResponseSchema), { query, variables })
-        .then(r => r.data),
+      restClient.post('/v1/analytics/graphql', wrap(z.object({
+        data: z.unknown().nullable(),
+        errors: z.array(z.object({ message: z.string() }).passthrough()).optional().nullable(),
+      })), { query, variables }).then(r => r.data),
+
+    sources: () =>
+      restClient.get('/v1/analytics/sources', wrap(z.array(unknownSchema))).then(r => r.data),
+
+    getSource: (sourceId: string) =>
+      restClient.get(`/v1/analytics/sources/${sourceId}`, wrap(unknownSchema)).then(r => r.data),
+
+    channels: () =>
+      restClient.get('/v1/analytics/channels', wrap(unknownSchema)).then(r => r.data),
   },
 
-  // ── Diagnostics ──
+  // ── Diagnostics ────────────────────────────────────────────────────────────
   diagnostics: {
     health: () =>
-      restClient.get('/v1/diagnostics/health', apiResponseSchema(healthCheckSchema))
-        .then(r => r.data),
+      restClient.get('/v1/diagnostics/health', wrap(healthSchema)).then(r => r.data),
 
-    errors: (params?: { severity?: string; limit?: number; resolved?: boolean }) => {
-      const qs = new URLSearchParams();
-      if (params?.severity) qs.set('severity', params.severity);
-      if (params?.limit) qs.set('limit', String(params.limit));
-      if (params?.resolved !== undefined) qs.set('resolved', String(params.resolved));
-      const query = qs.toString();
-      return restClient.get(`/v1/diagnostics/errors${query ? `?${query}` : ''}`, apiResponseSchema(z.object({ errors: z.array(errorEntrySchema), count: z.number() })))
-        .then(r => r.data);
-    },
+    errors: (params?: { severity?: string; limit?: number; resolved?: boolean }) =>
+      restClient.get(`/v1/diagnostics/errors${buildQS({ ...params })}`, wrap(z.object({
+        errors: z.array(errorEntrySchema), count: z.number(),
+      }))).then(r => r.data),
 
     report: () =>
-      restClient.get('/v1/diagnostics/report', apiResponseSchema(diagnosticReportSchema))
-        .then(r => r.data),
+      restClient.get('/v1/diagnostics/report', wrap(z.object({
+        health: healthSchema.optional(),
+        errors: z.array(errorEntrySchema).optional(),
+        circuit_breakers: circuitBreakerSchema.optional(),
+        services: z.record(z.unknown()).optional(),
+      }).passthrough())).then(r => r.data),
 
     resolveError: (fingerprint: string) =>
-      restClient.post(`/v1/diagnostics/errors/${fingerprint}/resolve`, apiResponseSchema(z.object({ fingerprint: z.string(), resolved: z.boolean() }))),
+      restClient.post(`/v1/diagnostics/errors/${fingerprint}/resolve`, wrap(z.object({ fingerprint: z.string(), resolved: z.boolean() }))),
 
     suppressError: (fingerprint: string) =>
-      restClient.post(`/v1/diagnostics/errors/${fingerprint}/suppress`, apiResponseSchema(z.object({ fingerprint: z.string(), suppressed: z.boolean() }))),
+      restClient.post(`/v1/diagnostics/errors/${fingerprint}/suppress`, wrap(z.object({ fingerprint: z.string(), suppressed: z.boolean() }))),
 
     circuitBreakers: () =>
-      restClient.get('/v1/diagnostics/circuit-breakers', apiResponseSchema(circuitBreakerSchema))
-        .then(r => r.data),
+      restClient.get('/v1/diagnostics/circuit-breakers', wrap(circuitBreakerSchema)).then(r => r.data),
   },
 
-  // ── Intelligence ──
+  // ── Intelligence ───────────────────────────────────────────────────────────
   intelligence: {
     alerts: (limit = 50) =>
-      restClient.get(`/v1/intelligence/alerts?limit=${limit}`, apiResponseSchema(alertsListSchema))
-        .then(r => r.data),
+      restClient.get(`/v1/intelligence/alerts?limit=${limit}`, wrap(z.object({ alerts: z.array(alertSchema), count: z.number(), queried_at: z.string().optional() }))).then(r => r.data),
 
     walletRisk: (address: string) =>
-      restClient.get(`/v1/intelligence/wallet/${address}/risk`, apiResponseSchema(z.unknown()))
-        .then(r => r.data),
+      restClient.get(`/v1/intelligence/wallet/${address}/risk`, wrap(unknownSchema)).then(r => r.data),
 
     walletProfile: (address: string) =>
-      restClient.get(`/v1/intelligence/wallet/${address}/profile`, apiResponseSchema(walletProfileSchema))
-        .then(r => r.data),
+      restClient.get(`/v1/intelligence/wallet/${address}/profile`, wrap(z.object({
+        wallet_address: z.string(),
+        risk: z.record(z.unknown()).optional(),
+        features: z.record(z.unknown()).optional(),
+        graph: z.object({ neighbor_count: z.number(), neighbors: z.array(z.object({ id: z.string(), type: z.string() }).passthrough()) }).optional(),
+        computed_at: z.string(),
+      }).passthrough())).then(r => r.data),
 
     entityCluster: (entityId: string) =>
-      restClient.get(`/v1/intelligence/entity/${entityId}/cluster`, apiResponseSchema(entityClusterSchema))
-        .then(r => r.data),
+      restClient.get(`/v1/intelligence/entity/${entityId}/cluster`, wrap(z.object({
+        entity_id: z.string(),
+        cluster_size: z.number(),
+        linked_entities: z.array(z.object({ id: z.string(), type: z.string(), properties: z.record(z.unknown()).optional() }).passthrough()),
+        identity_features: z.array(z.unknown()).optional(),
+        computed_at: z.string(),
+      }).passthrough())).then(r => r.data),
 
     protocolAnalytics: (protocolId: string) =>
-      restClient.get(`/v1/intelligence/protocol/${protocolId}/analytics`, apiResponseSchema(z.unknown()))
-        .then(r => r.data),
+      restClient.get(`/v1/intelligence/protocol/${protocolId}/analytics`, wrap(unknownSchema)).then(r => r.data),
   },
 
-  // ── Agent / Controllers ──
+  // ── Agent / Controllers ────────────────────────────────────────────────────
   agent: {
     status: () =>
-      restClient.get('/v1/agent/status', apiResponseSchema(agentStatusSchema))
-        .then(r => r.data),
+      restClient.get('/v1/agent/status', wrap(z.object({
+        active_workers: z.number().optional(),
+        queued_tasks: z.number().optional(),
+        completed_tasks: z.number().optional(),
+        failed_tasks: z.number().optional(),
+        kill_switch: z.boolean().optional(),
+        workers: z.array(z.object({ worker_type: z.string(), status: z.string(), current_task: z.string().optional().nullable() }).passthrough()).optional(),
+      }).passthrough())).then(r => r.data),
 
-    tasks: (taskId?: string) =>
-      taskId
-        ? restClient.get(`/v1/agent/tasks/${taskId}`, apiResponseSchema(taskSchema)).then(r => r.data)
-        : restClient.get('/v1/agent/audit', apiResponseSchema(auditRecordSchema)).then(r => r.data),
+    getTask: (taskId: string) =>
+      restClient.get(`/v1/agent/tasks/${taskId}`, wrap(taskSchema)).then(r => r.data),
 
     audit: (limit = 50) =>
-      restClient.get(`/v1/agent/audit?limit=${limit}`, apiResponseSchema(auditRecordSchema))
-        .then(r => r.data),
+      restClient.get(`/v1/agent/audit?limit=${limit}`, wrap(z.object({ records: z.array(z.unknown()), total: z.number() }))).then(r => r.data),
 
     submitTask: (workerType: string, priority: string, payload: Record<string, unknown>) =>
-      restClient.post('/v1/agent/tasks', apiResponseSchema(taskSchema), { worker_type: workerType, priority, payload }),
+      restClient.post('/v1/agent/tasks', wrap(taskSchema), { worker_type: workerType, priority, payload }),
 
     killSwitch: (action: string) =>
-      restClient.post('/v1/agent/kill-switch', apiResponseSchema(z.object({ kill_switch: z.boolean(), action: z.string() })), { action }),
+      restClient.post('/v1/agent/kill-switch', wrap(z.object({ kill_switch: z.boolean(), action: z.string() })), { action }),
 
     agentGraph: (agentId: string, layer = 'all') =>
-      restClient.get(`/v1/agent/${agentId}/graph?layer=${layer}`, apiResponseSchema(z.unknown()))
-        .then(r => r.data),
+      restClient.get(`/v1/agent/${agentId}/graph?layer=${layer}`, wrap(unknownSchema)).then(r => r.data),
 
     agentTrust: (agentId: string) =>
-      restClient.get(`/v1/agent/${agentId}/trust`, apiResponseSchema(z.unknown()))
-        .then(r => r.data),
+      restClient.get(`/v1/agent/${agentId}/trust`, wrap(unknownSchema)).then(r => r.data),
   },
 
-  // ── Profile 360 ──
+  // ── Profile 360 ────────────────────────────────────────────────────────────
   profile: {
     full: (userId: string) =>
-      restClient.get(`/v1/profile/${userId}?include_timeline=true&include_graph=true&include_intelligence=true`, apiResponseSchema(profileSchema))
-        .then(r => r.data),
+      restClient.get(`/v1/profile/${userId}?include_timeline=true&include_graph=true&include_intelligence=true`, wrap(profileSchema)).then(r => r.data),
 
     timeline: (userId: string, limit = 100) =>
-      restClient.get(`/v1/profile/${userId}/timeline?limit=${limit}`, apiResponseSchema(z.object({ user_id: z.string(), events: z.array(z.unknown()), count: z.number() })))
-        .then(r => r.data),
+      restClient.get(`/v1/profile/${userId}/timeline?limit=${limit}`, wrap(z.object({ user_id: z.string(), events: z.array(z.unknown()), count: z.number() }))).then(r => r.data),
 
     graph: (userId: string) =>
-      restClient.get(`/v1/profile/${userId}/graph`, apiResponseSchema(z.unknown()))
-        .then(r => r.data),
+      restClient.get(`/v1/profile/${userId}/graph`, wrap(unknownSchema)).then(r => r.data),
 
-    resolve: (params: { wallet?: string; email?: string; device?: string }) => {
-      const qs = new URLSearchParams();
-      if (params.wallet) qs.set('wallet', params.wallet);
-      if (params.email) qs.set('email', params.email);
-      if (params.device) qs.set('device', params.device);
-      return restClient.get(`/v1/profile/resolve?${qs.toString()}`, apiResponseSchema(z.object({ resolved_user_id: z.string() })))
-        .then(r => r.data);
-    },
+    resolve: (params: { wallet?: string; email?: string; device?: string }) =>
+      restClient.get(`/v1/profile/resolve${buildQS(params)}`, wrap(z.object({ resolved_user_id: z.string() }))).then(r => r.data),
   },
 
-  // ── Profile360 normalized surfaces ──
+  // ── Profile360 normalized surfaces ─────────────────────────────────────────
   profile360: {
     full: (entityType: string, entityId: string) =>
-      restClient.get(`/v1/profile360/${entityType}/${entityId}?include=identity,system,financial,graph,timeline,analytics,debug`, apiResponseSchema(z.unknown()))
-        .then(r => r.data),
+      restClient.get(`/v1/profile360/${entityType}/${entityId}?include=identity,system,financial,graph,timeline,analytics,debug`, wrap(unknownSchema)).then(r => r.data),
 
-    graph: (entityType: string, entityId: string, params?: { cursor?: string; limit?: number; start?: string; end?: string }) => {
-      const qs = new URLSearchParams();
-      if (params?.cursor) qs.set('cursor', params.cursor);
-      if (params?.limit) qs.set('limit', String(params.limit));
-      if (params?.start) qs.set('start', params.start);
-      if (params?.end) qs.set('end', params.end);
-      const query = qs.toString();
-      return restClient.get(`/v1/profile360/${entityType}/${entityId}/graph${query ? `?${query}` : ''}`, apiResponseSchema(z.unknown()))
-        .then(r => r.data);
-    },
+    graph: (entityType: string, entityId: string, params?: { cursor?: string; limit?: number; start?: string; end?: string }) =>
+      restClient.get(`/v1/profile360/${entityType}/${entityId}/graph${buildQS({ ...params })}`, wrap(unknownSchema)).then(r => r.data),
 
-    timeline: (entityType: string, entityId: string, params?: { cursor?: string; limit?: number; start?: string; end?: string; type?: string }) => {
-      const qs = new URLSearchParams();
-      if (params?.cursor) qs.set('cursor', params.cursor);
-      if (params?.limit) qs.set('limit', String(params.limit));
-      if (params?.start) qs.set('start', params.start);
-      if (params?.end) qs.set('end', params.end);
-      if (params?.type) qs.set('type', params.type);
-      const query = qs.toString();
-      return restClient.get(`/v1/profile360/${entityType}/${entityId}/timeline${query ? `?${query}` : ''}`, apiResponseSchema(z.unknown()))
-        .then(r => r.data);
-    },
+    timeline: (entityType: string, entityId: string, params?: { cursor?: string; limit?: number; start?: string; end?: string; type?: string }) =>
+      restClient.get(`/v1/profile360/${entityType}/${entityId}/timeline${buildQS({ ...params })}`, wrap(unknownSchema)).then(r => r.data),
   },
 
-  // ── Identity ──
+  // ── Identity ───────────────────────────────────────────────────────────────
   identity: {
     getProfile: (userId: string) =>
-      restClient.get(`/v1/identity/profiles/${userId}`, apiResponseSchema(profileSchema))
-        .then(r => r.data),
+      restClient.get(`/v1/identity/profiles/${userId}`, wrap(profileSchema)).then(r => r.data),
+
+    createProfile: (profile: Record<string, unknown>) =>
+      restClient.post('/v1/identity/profiles', wrap(profileSchema), profile).then(r => r.data),
+
+    updateProfile: (userId: string, updates: Record<string, unknown>) =>
+      restClient.put(`/v1/identity/profiles/${userId}`, wrap(profileSchema), updates).then(r => r.data),
+
+    mergeProfiles: (primaryId: string, secondaryId: string) =>
+      restClient.post('/v1/identity/merge', wrap(unknownSchema), { primary_id: primaryId, secondary_id: secondaryId }).then(r => r.data),
 
     graphNeighborhood: (userId: string) =>
-      restClient.get(`/v1/identity/profiles/${userId}/graph`, apiResponseSchema(z.object({ user_id: z.string(), connections: z.array(z.unknown()) }).passthrough()))
-        .then(r => r.data),
+      restClient.get(`/v1/identity/profiles/${userId}/graph`, wrap(z.object({ user_id: z.string(), connections: z.array(z.unknown()) }).passthrough())).then(r => r.data),
   },
 
-  // ── Notifications ──
-  notifications: {
-    listAlerts: () =>
-      restClient.get('/v1/notifications/alerts', apiResponseSchema(z.array(alertSchema)))
-        .then(r => r.data),
+  // ── Resolution ─────────────────────────────────────────────────────────────
+  resolution: {
+    cluster: (userId: string) =>
+      restClient.get(`/v1/resolution/cluster/${userId}`, wrap(unknownSchema)).then(r => r.data),
 
-    createAlert: (alert: { name: string; condition: string; channels: string[]; recipients?: string[] }) =>
-      restClient.post('/v1/notifications/alerts', apiResponseSchema(alertSchema), alert),
+    pending: (limit = 50) =>
+      restClient.get(`/v1/resolution/pending?limit=${limit}`, wrap(unknownSchema)).then(r => r.data),
 
-    listWebhooks: () =>
-      restClient.get('/v1/notifications/webhooks', apiResponseSchema(z.array(webhookSchema)))
-        .then(r => r.data),
+    approve: (decisionId: string) =>
+      restClient.post(`/v1/resolution/pending/${decisionId}/approve`, wrap(unknownSchema)),
 
-    createWebhook: (webhook: { url: string; events: string[]; secret?: string }) =>
-      restClient.post('/v1/notifications/webhooks', apiResponseSchema(webhookSchema), webhook),
+    reject: (decisionId: string) =>
+      restClient.post(`/v1/resolution/pending/${decisionId}/reject`, wrap(unknownSchema)),
 
-    deleteWebhook: (webhookId: string) =>
-      restClient.delete(`/v1/notifications/webhooks/${webhookId}`, apiResponseSchema(z.object({ deleted: z.boolean() }))),
+    audit: (decisionId: string) =>
+      restClient.get(`/v1/resolution/audit/${decisionId}`, wrap(unknownSchema)).then(r => r.data),
+
+    getConfig: () =>
+      restClient.get('/v1/resolution/config', wrap(unknownSchema)).then(r => r.data),
+
+    updateConfig: (config: Record<string, unknown>) =>
+      restClient.put('/v1/resolution/config', wrap(unknownSchema), config).then(r => r.data),
+
+    runBatch: () =>
+      restClient.post('/v1/resolution/batch', wrap(unknownSchema)),
   },
 
-  // ── Population ──
-  population: {
-    summary: () =>
-      restClient.get('/v1/population/summary', apiResponseSchema(populationSummarySchema))
-        .then(r => r.data),
-
-    groups: (type?: string, limit = 50) => {
-      const qs = new URLSearchParams();
-      if (type) qs.set('population_type', type);
-      qs.set('limit', String(limit));
-      return restClient.get(`/v1/population/groups?${qs.toString()}`, apiResponseSchema(z.object({ groups: z.array(z.unknown()), count: z.number() })))
-        .then(r => r.data);
-    },
-  },
-
-  // ── Behavioral ──
-  behavioral: {
-    summary: () =>
-      restClient.get('/v1/behavioral/summary', apiResponseSchema(behavioralSummarySchema))
-        .then(r => r.data),
-
-    entity: (entityId: string) =>
-      restClient.get(`/v1/behavioral/entity/${entityId}`, apiResponseSchema(z.unknown()))
-        .then(r => r.data),
-
-    signals: (entityId: string, limit = 50) =>
-      restClient.get(`/v1/behavioral/entity/${entityId}/signals?limit=${limit}`, apiResponseSchema(z.object({ entity_id: z.string(), signals: z.array(z.unknown()), count: z.number() })))
-        .then(r => r.data),
-  },
-
-  // ── Automation overview ──
-  automation: {
-    overview: () =>
-      restClient.get('/v1/automation/overview', apiResponseSchema(z.unknown()))
-        .then(r => r.data),
-
-    insights: () =>
-      restClient.get('/v1/automation/insights', apiResponseSchema(z.unknown()))
-        .then(r => r.data),
-  },
-
-  // ── Entities ──
+  // ── Entities ───────────────────────────────────────────────────────────────
   entities: {
-    list: (params?: { type?: string; limit?: number; offset?: number }) => {
-      const qs = new URLSearchParams();
-      if (params?.type) qs.set('type', params.type);
-      if (params?.limit !== undefined) qs.set('limit', String(params.limit));
-      if (params?.offset !== undefined) qs.set('offset', String(params.offset));
-      const suffix = qs.toString() ? `?${qs.toString()}` : '';
-      return restClient.get(`/v1/entities${suffix}`, apiResponseSchema(z.object({
-        entities: z.array(z.unknown()),
-        total: z.number(),
-        has_more: z.boolean().optional(),
-      }))).then(r => r.data);
-    },
+    list: (params?: { type?: string; limit?: number; offset?: number }) =>
+      restClient.get(`/v1/entities${buildQS({ ...params })}`, wrap(z.object({ entities: z.array(z.unknown()), total: z.number(), has_more: z.boolean().optional() }))).then(r => r.data),
 
     get: (entityId: string) =>
-      restClient.get(`/v1/entities/${entityId}`, apiResponseSchema(z.unknown()))
-        .then(r => r.data),
+      restClient.get(`/v1/entities/${entityId}`, wrap(unknownSchema)).then(r => r.data),
 
     getGraph: (entityId: string) =>
-      restClient.get(`/v1/entities/${entityId}/graph`, apiResponseSchema(z.unknown()))
-        .then(r => r.data),
+      restClient.get(`/v1/entities/${entityId}/graph`, wrap(unknownSchema)).then(r => r.data),
 
-    search: (query: string, type?: string, limit = 20) => {
-      const qs = new URLSearchParams({ q: query, limit: String(limit) });
-      if (type) qs.set('type', type);
-      return restClient.get(`/v1/entities/search?${qs.toString()}`, apiResponseSchema(z.object({
-        results: z.array(z.unknown()),
-        total: z.number(),
-      }))).then(r => r.data);
-    },
+    search: (query: string, type?: string, limit = 20) =>
+      restClient.get(`/v1/entities/search${buildQS({ q: query, type, limit })}`, wrap(z.object({ results: z.array(z.unknown()), total: z.number() }))).then(r => r.data),
   },
 
-  // ── Campaigns ──
+  // ── Notifications ──────────────────────────────────────────────────────────
+  notifications: {
+    listAlerts: () =>
+      restClient.get('/v1/notifications/alerts', wrap(z.array(alertSchema))).then(r => r.data),
+
+    createAlert: (alert: { name: string; condition: string; channels: string[]; recipients?: string[] }) =>
+      restClient.post('/v1/notifications/alerts', wrap(alertSchema), alert),
+
+    listWebhooks: () =>
+      restClient.get('/v1/notifications/webhooks', wrap(z.array(webhookSchema))).then(r => r.data),
+
+    createWebhook: (webhook: { url: string; events: string[]; secret?: string }) =>
+      restClient.post('/v1/notifications/webhooks', wrap(webhookSchema), webhook),
+
+    deleteWebhook: (webhookId: string) =>
+      restClient.delete(`/v1/notifications/webhooks/${webhookId}`, wrap(z.object({ deleted: z.boolean() }))),
+  },
+
+  // ── Population ─────────────────────────────────────────────────────────────
+  population: {
+    summary: () =>
+      restClient.get('/v1/population/summary', wrap(z.object({
+        total_groups: z.number().optional(), total_members: z.number().optional(),
+        by_type: z.record(z.number()).optional(), computed_at: z.string().optional(),
+      }).passthrough())).then(r => r.data),
+
+    groups: (type?: string, limit = 50) =>
+      restClient.get(`/v1/population/groups${buildQS({ population_type: type, limit })}`, wrap(z.object({ groups: z.array(z.unknown()), count: z.number() }))).then(r => r.data),
+  },
+
+  // ── Behavioral ─────────────────────────────────────────────────────────────
+  behavioral: {
+    summary: () =>
+      restClient.get('/v1/behavioral/summary', wrap(z.object({
+        total_signals: z.number().optional(), by_family: z.record(z.number()).optional(),
+        top_families: z.array(z.unknown()).optional(), computed_at: z.string().optional(),
+      }).passthrough())).then(r => r.data),
+
+    scan: (entityId: string) =>
+      restClient.post(`/v1/behavioral/scan/${entityId}`, wrap(unknownSchema)).then(r => r.data),
+
+    entity: (entityId: string) =>
+      restClient.get(`/v1/behavioral/entity/${entityId}`, wrap(unknownSchema)).then(r => r.data),
+
+    signals: (entityId: string, limit = 50) =>
+      restClient.get(`/v1/behavioral/entity/${entityId}/signals?limit=${limit}`, wrap(z.object({ entity_id: z.string(), signals: z.array(z.unknown()), count: z.number() }))).then(r => r.data),
+  },
+
+  // ── Behavior (snapshot history) ────────────────────────────────────────────
+  behavior: {
+    latest: (entityId: string) =>
+      restClient.get(`/v1/behavior/${entityId}`, wrap(unknownSchema)).then(r => r.data),
+
+    history: (entityId: string, params?: { window?: string; limit?: number }) =>
+      restClient.get(`/v1/behavior/${entityId}/history${buildQS({ ...params })}`, wrap(unknownSchema)).then(r => r.data),
+  },
+
+  // ── Expectations ───────────────────────────────────────────────────────────
+  expectations: {
+    summary: () =>
+      restClient.get('/v1/expectations/summary', wrap(unknownSchema)).then(r => r.data),
+
+    contradictions: (limit = 50) =>
+      restClient.get(`/v1/expectations/contradictions?limit=${limit}`, wrap(unknownSchema)).then(r => r.data),
+
+    silence: () =>
+      restClient.get('/v1/expectations/silence', wrap(unknownSchema)).then(r => r.data),
+
+    group: (populationId: string) =>
+      restClient.get(`/v1/expectations/group/${populationId}`, wrap(unknownSchema)).then(r => r.data),
+
+    groupGaps: (populationId: string) =>
+      restClient.get(`/v1/expectations/group/${populationId}/gaps`, wrap(unknownSchema)).then(r => r.data),
+
+    entity: (entityId: string) =>
+      restClient.get(`/v1/expectations/entity/${entityId}`, wrap(unknownSchema)).then(r => r.data),
+
+    entitySignals: (entityId: string, params?: { signal_type?: string; limit?: number }) =>
+      restClient.get(`/v1/expectations/entity/${entityId}/signals${buildQS({ ...params })}`, wrap(unknownSchema)).then(r => r.data),
+
+    explain: (entityId: string) =>
+      restClient.get(`/v1/expectations/entity/${entityId}/explain`, wrap(unknownSchema)).then(r => r.data),
+
+    scan: (entityId: string) =>
+      restClient.post(`/v1/expectations/scan/${entityId}`, wrap(unknownSchema)).then(r => r.data),
+
+    getSignal: (signalId: string) =>
+      restClient.get(`/v1/expectations/signal/${signalId}`, wrap(unknownSchema)).then(r => r.data),
+  },
+
+  // ── Automation ─────────────────────────────────────────────────────────────
+  automation: {
+    ingest: (event: { type: string; campaign_id?: string; user?: Record<string, unknown>; wallet_address?: string; timestamp?: string; properties?: Record<string, unknown> }) =>
+      restClient.post('/v1/automation/ingest', wrap(unknownSchema), event).then(r => r.data),
+
+    metrics: (campaignId: string, hours = 24) =>
+      restClient.get(`/v1/automation/metrics/${campaignId}?hours=${hours}`, wrap(unknownSchema)).then(r => r.data),
+
+    overview: (hours = 24) =>
+      restClient.get(`/v1/automation/overview?hours=${hours}`, wrap(unknownSchema)).then(r => r.data),
+
+    insights: () =>
+      restClient.get('/v1/automation/insights', wrap(unknownSchema)).then(r => r.data),
+
+    report: (campaignId: string) =>
+      restClient.post(`/v1/automation/report/${campaignId}`, wrap(unknownSchema)).then(r => r.data),
+  },
+
+  // ── Campaigns ──────────────────────────────────────────────────────────────
   campaigns: {
-    list: (params?: { status?: string; limit?: number; offset?: number }) => {
-      const qs = new URLSearchParams();
-      if (params?.status) qs.set('status', params.status);
-      if (params?.limit !== undefined) qs.set('limit', String(params.limit));
-      if (params?.offset !== undefined) qs.set('offset', String(params.offset));
-      const suffix = qs.toString() ? `?${qs.toString()}` : '';
-      return restClient.get(`/v1/campaigns${suffix}`, apiResponseSchema(z.object({
-        campaigns: z.array(z.unknown()),
-        total: z.number(),
-      }))).then(r => r.data);
-    },
+    list: (params?: { status?: string; limit?: number; offset?: number }) =>
+      restClient.get(`/v1/campaigns${buildQS({ ...params })}`, wrap(z.object({ campaigns: z.array(z.unknown()), total: z.number() }))).then(r => r.data),
 
     get: (campaignId: string) =>
-      restClient.get(`/v1/campaigns/${campaignId}`, apiResponseSchema(z.unknown()))
-        .then(r => r.data),
+      restClient.get(`/v1/campaigns/${campaignId}`, wrap(unknownSchema)).then(r => r.data),
 
     create: (campaign: Record<string, unknown>) =>
-      restClient.post('/v1/campaigns', apiResponseSchema(z.unknown()), campaign)
-        .then(r => r.data),
+      restClient.post('/v1/campaigns', wrap(unknownSchema), campaign).then(r => r.data),
 
     update: (campaignId: string, updates: Record<string, unknown>) =>
-      restClient.put(`/v1/campaigns/${campaignId}`, apiResponseSchema(z.unknown()), updates)
-        .then(r => r.data),
+      restClient.put(`/v1/campaigns/${campaignId}`, wrap(unknownSchema), updates).then(r => r.data),
 
     attribution: (campaignId: string) =>
-      restClient.get(`/v1/campaigns/${campaignId}/attribution`, apiResponseSchema(z.unknown()))
-        .then(r => r.data),
+      restClient.get(`/v1/campaigns/${campaignId}/attribution`, wrap(unknownSchema)).then(r => r.data),
   },
 
-  // ── Consent ──
+  // ── Attribution ────────────────────────────────────────────────────────────
+  attribution: {
+    resolve: (params: { user_id: string; event: Record<string, unknown>; model?: string; touchpoints?: unknown[] }) =>
+      restClient.post('/v1/attribution/resolve', wrap(unknownSchema), params).then(r => r.data),
+
+    recordTouchpoint: (touchpoint: { user_id: string; channel: string; source: string; campaign?: string; event_type: string; timestamp: string; properties?: Record<string, unknown> }) =>
+      restClient.post('/v1/attribution/touchpoints', wrap(unknownSchema), touchpoint).then(r => r.data),
+
+    journey: (userId: string) =>
+      restClient.get(`/v1/attribution/journey/${userId}`, wrap(unknownSchema)).then(r => r.data),
+
+    clearJourney: (userId: string) =>
+      restClient.delete(`/v1/attribution/journey/${userId}`, wrap(unknownSchema)),
+
+    models: () =>
+      restClient.get('/v1/attribution/models', wrap(z.array(unknownSchema))).then(r => r.data),
+  },
+
+  // ── Consent ────────────────────────────────────────────────────────────────
   consent: {
     getProfile: (userId: string) =>
-      restClient.get(`/v1/consent/${userId}`, apiResponseSchema(z.object({
+      restClient.get(`/v1/consent/${userId}`, wrap(z.object({
         user_id: z.string(),
         purposes: z.record(z.boolean()),
         updated_at: z.string().optional(),
@@ -482,111 +460,519 @@ export const api = {
       }).passthrough())).then(r => r.data),
 
     update: (userId: string, purposes: Record<string, boolean>) =>
-      restClient.post(`/v1/consent/${userId}`, apiResponseSchema(z.unknown()), { purposes }),
+      restClient.post(`/v1/consent/${userId}`, wrap(unknownSchema), { purposes }),
 
-    listDsrRequests: (params?: { status?: string; limit?: number }) => {
-      const qs = new URLSearchParams();
-      if (params?.status) qs.set('status', params.status);
-      if (params?.limit !== undefined) qs.set('limit', String(params.limit));
-      const suffix = qs.toString() ? `?${qs.toString()}` : '';
-      return restClient.get(`/v1/consent/dsr${suffix}`, apiResponseSchema(z.object({
-        requests: z.array(z.unknown()),
-        count: z.number(),
-      }))).then(r => r.data);
-    },
+    listDsrRequests: (params?: { status?: string; limit?: number }) =>
+      restClient.get(`/v1/consent/dsr${buildQS({ ...params })}`, wrap(z.object({ requests: z.array(z.unknown()), count: z.number() }))).then(r => r.data),
 
     getDsrRequest: (requestId: string) =>
-      restClient.get(`/v1/consent/dsr/${requestId}`, apiResponseSchema(z.unknown()))
-        .then(r => r.data),
+      restClient.get(`/v1/consent/dsr/${requestId}`, wrap(unknownSchema)).then(r => r.data),
 
     completeDsr: (requestId: string, notes?: string) =>
-      restClient.post(`/v1/consent/dsr/${requestId}/complete`, apiResponseSchema(z.unknown()), { notes }),
+      restClient.post(`/v1/consent/dsr/${requestId}/complete`, wrap(unknownSchema), { notes }),
   },
 
-  // ── Scoring / Trust ──
-  scoring: {
-    getEntityScore: (entityId: string) =>
-      restClient.get(`/v1/scoring/entity/${entityId}`, apiResponseSchema(z.object({
-        entity_id: z.string(),
-        trust_score: z.number(),
-        risk_score: z.number(),
-        anomaly_score: z.number(),
-        computed_at: z.string(),
-        features: z.record(z.unknown()).optional(),
-        explanation: z.array(z.unknown()).optional(),
-      }).passthrough())).then(r => r.data),
-
-    getWalletScore: (address: string) =>
-      restClient.get(`/v1/scoring/wallet/${address}`, apiResponseSchema(z.unknown()))
-        .then(r => r.data),
-
-    batch: (entityIds: readonly string[]) =>
-      restClient.post('/v1/scoring/batch', apiResponseSchema(z.object({
-        scores: z.array(z.unknown()),
-        computed_at: z.string(),
-      })), { entity_ids: entityIds }).then(r => r.data),
-  },
-
-  // ── Rewards ──
+  // ── Rewards ────────────────────────────────────────────────────────────────
   rewards: {
-    listCampaigns: (params?: { status?: string; limit?: number }) => {
-      const qs = new URLSearchParams();
-      if (params?.status) qs.set('status', params.status);
-      if (params?.limit !== undefined) qs.set('limit', String(params.limit));
-      const suffix = qs.toString() ? `?${qs.toString()}` : '';
-      return restClient.get(`/v1/rewards/campaigns${suffix}`, apiResponseSchema(z.object({
-        campaigns: z.array(z.unknown()),
-        count: z.number(),
-      }))).then(r => r.data);
-    },
+    evaluate: (event: { event_type: string; user_address: string; channel?: string; session_id?: string; properties?: Record<string, unknown> }) =>
+      restClient.post('/v1/rewards/evaluate', wrap(unknownSchema), event).then(r => r.data),
 
-    checkEligibility: (userId: string, campaignId: string) =>
-      restClient.post('/v1/rewards/eligibility', apiResponseSchema(z.object({
-        eligible: z.boolean(),
-        reason: z.string().optional(),
-        amount: z.number().optional(),
-        currency: z.string().optional(),
-      }).passthrough()), { user_id: userId, campaign_id: campaignId }).then(r => r.data),
+    listCampaigns: (params?: { status?: string; limit?: number }) =>
+      restClient.get(`/v1/rewards/campaigns${buildQS({ ...params })}`, wrap(z.object({ campaigns: z.array(z.unknown()), count: z.number() }))).then(r => r.data),
 
-    claimReward: (userId: string, campaignId: string, walletAddress: string) =>
-      restClient.post('/v1/rewards/claim', apiResponseSchema(z.object({
-        claim_id: z.string(),
-        status: z.string(),
-        tx_hash: z.string().optional(),
-      }).passthrough()), { user_id: userId, campaign_id: campaignId, wallet_address: walletAddress })
-        .then(r => r.data),
+    getCampaign: (campaignId: string) =>
+      restClient.get(`/v1/rewards/campaigns/${campaignId}`, wrap(unknownSchema)).then(r => r.data),
 
-    listClaims: (userId: string) =>
-      restClient.get(`/v1/rewards/claims?user_id=${encodeURIComponent(userId)}`, apiResponseSchema(z.object({
-        claims: z.array(z.unknown()),
-        count: z.number(),
-      }))).then(r => r.data),
+    createCampaign: (campaign: Record<string, unknown>) =>
+      restClient.post('/v1/rewards/campaigns', wrap(unknownSchema), campaign).then(r => r.data),
+
+    queueStats: () =>
+      restClient.get('/v1/rewards/queue/stats', wrap(unknownSchema)).then(r => r.data),
+
+    userRewards: (address: string) =>
+      restClient.get(`/v1/rewards/user/${address}`, wrap(unknownSchema)).then(r => r.data),
+
+    processQueue: () =>
+      restClient.post('/v1/rewards/process', wrap(unknownSchema)).then(r => r.data),
+
+    getProof: (rewardId: string) =>
+      restClient.get(`/v1/rewards/proof/${rewardId}`, wrap(unknownSchema)).then(r => r.data),
   },
 
-  // ── Oracle (proof generation / verification) ──
+  // ── Oracle (proof generation / verification) ───────────────────────────────
   oracle: {
     generateProof: (params: { entity_id: string; data_type: string; chain: string }) =>
-      restClient.post('/v1/oracle/proof', apiResponseSchema(z.object({
-        proof_id: z.string(),
-        proof: z.string(),
-        chain: z.string(),
-        expires_at: z.string().optional(),
+      restClient.post('/v1/oracle/proof', wrap(z.object({
+        proof_id: z.string(), proof: z.string(), chain: z.string(), expires_at: z.string().optional(),
       }).passthrough()), params).then(r => r.data),
 
     verifyProof: (proofId: string, proof: string) =>
-      restClient.post('/v1/oracle/verify', apiResponseSchema(z.object({
-        verified: z.boolean(),
-        proof_id: z.string(),
-        verified_at: z.string().optional(),
+      restClient.post('/v1/oracle/verify', wrap(z.object({
+        verified: z.boolean(), proof_id: z.string(), verified_at: z.string().optional(),
       }).passthrough()), { proof_id: proofId, proof }).then(r => r.data),
 
     getStatus: (proofId: string) =>
-      restClient.get(`/v1/oracle/proof/${proofId}`, apiResponseSchema(z.unknown()))
-        .then(r => r.data),
+      restClient.get(`/v1/oracle/proof/${proofId}`, wrap(unknownSchema)).then(r => r.data),
+  },
+
+  // ── Scoring (via ML serving) ────────────────────────────────────────────────
+  scoring: {
+    entityScore: (entityId: string, features?: Record<string, unknown>) =>
+      restClient.post('/v1/ml/predict', wrap(unknownSchema), { model_name: 'trust_scoring', entity_id: entityId, features: features ?? {}, use_cache: true }).then(r => r.data),
+
+    walletScore: (address: string) =>
+      restClient.get(`/v1/intelligence/wallet/${address}/risk`, wrap(unknownSchema)).then(r => r.data),
+
+    batch: (entityIds: readonly string[]) =>
+      restClient.post('/v1/ml/predict/batch', wrap(z.object({ scores: z.array(z.unknown()), computed_at: z.string() })), { model_name: 'trust_scoring', entities: entityIds.map(id => ({ entity_id: id, features: {}, use_cache: true })) }).then(r => r.data),
+
+    features: (entityId: string) =>
+      restClient.get(`/v1/ml/features/${entityId}`, wrap(unknownSchema)).then(r => r.data),
+  },
+
+  // ── ML Serving ─────────────────────────────────────────────────────────────
+  ml: {
+    models: () =>
+      restClient.get('/v1/ml/models', wrap(z.array(unknownSchema))).then(r => r.data),
+
+    predict: (modelName: string, entityId: string, features?: Record<string, unknown>, useCache = true) =>
+      restClient.post('/v1/ml/predict', wrap(unknownSchema), { model_name: modelName, entity_id: entityId, features: features ?? {}, use_cache: useCache }).then(r => r.data),
+
+    predictBatch: (modelName: string, entities: Array<{ entity_id: string; features?: Record<string, unknown> }>) =>
+      restClient.post('/v1/ml/predict/batch', wrap(unknownSchema), { model_name: modelName, entities }).then(r => r.data),
+
+    features: (entityId: string) =>
+      restClient.get(`/v1/ml/features/${entityId}`, wrap(unknownSchema)).then(r => r.data),
+  },
+
+  // ── Fraud ──────────────────────────────────────────────────────────────────
+  fraud: {
+    evaluate: (event: Record<string, unknown>, context?: Record<string, unknown>) =>
+      restClient.post('/v1/fraud/evaluate', wrap(unknownSchema), { event, context }).then(r => r.data),
+
+    evaluateBatch: (events: unknown[]) =>
+      restClient.post('/v1/fraud/evaluate/batch', wrap(unknownSchema), { events }).then(r => r.data),
+
+    getConfig: () =>
+      restClient.get('/v1/fraud/config', wrap(unknownSchema)).then(r => r.data),
+
+    updateConfig: (config: Record<string, unknown>) =>
+      restClient.put('/v1/fraud/config', wrap(unknownSchema), config).then(r => r.data),
+
+    stats: () =>
+      restClient.get('/v1/fraud/stats', wrap(unknownSchema)).then(r => r.data),
+  },
+
+  // ── Traffic ────────────────────────────────────────────────────────────────
+  traffic: {
+    reportSource: (source: { session_id: string; source: string; timestamp: string; [k: string]: unknown }) =>
+      restClient.post('/v1/track/traffic-source', wrap(unknownSchema), source).then(r => r.data),
+
+    trackEvent: (event: { type: string; session_id: string; timestamp: string; data?: Record<string, unknown> }) =>
+      restClient.post('/v1/track/events', wrap(unknownSchema), event).then(r => r.data),
+  },
+
+  // ── Delegation ─────────────────────────────────────────────────────────────
+  delegation: {
+    grant: (delegation: { grantor_entity_id: string; grantee_entity_id: string; scope: string[]; starts_at?: string; ends_at?: string }) =>
+      restClient.post('/v1/delegations', wrap(unknownSchema), delegation).then(r => r.data),
+
+    get: (delegationId: string) =>
+      restClient.get(`/v1/delegations/${delegationId}`, wrap(unknownSchema)).then(r => r.data),
+
+    revoke: (delegationId: string) =>
+      restClient.post(`/v1/delegations/${delegationId}/revoke`, wrap(unknownSchema)).then(r => r.data),
+
+    list: (params?: { grantor?: string; grantee?: string; active?: boolean; limit?: number }) =>
+      restClient.get(`/v1/delegations${buildQS({ ...params })}`, wrap(unknownSchema)).then(r => r.data),
+
+    validate: (params: { grantee_entity_id: string; action: string; resource: string; amount?: number }) =>
+      restClient.post('/v1/delegations/validate', wrap(unknownSchema), params).then(r => r.data),
+  },
+
+  // ── Providers (BYOK) ───────────────────────────────────────────────────────
+  providers: {
+    storeKey: (key: { provider_name: string; api_key: string; endpoint?: string }) =>
+      restClient.post('/v1/providers/keys', wrap(unknownSchema), key).then(r => r.data),
+
+    listKeys: () =>
+      restClient.get('/v1/providers/keys', wrap(z.array(unknownSchema))).then(r => r.data),
+
+    deleteKey: (provider: string) =>
+      restClient.delete(`/v1/providers/keys/${provider}`, wrap(unknownSchema)),
+
+    usage: (params?: { category?: string; provider_name?: string }) =>
+      restClient.get(`/v1/providers/usage${buildQS({ ...params })}`, wrap(unknownSchema)).then(r => r.data),
+
+    usageSummary: () =>
+      restClient.get('/v1/providers/usage/summary', wrap(unknownSchema)).then(r => r.data),
+
+    health: () =>
+      restClient.get('/v1/providers/health', wrap(unknownSchema)).then(r => r.data),
+
+    categories: () =>
+      restClient.get('/v1/providers/categories', wrap(z.array(unknownSchema))).then(r => r.data),
+
+    test: (params: { category: string; method: string; params: Record<string, unknown>; preferred_provider?: string }) =>
+      restClient.post('/v1/providers/test', wrap(unknownSchema), params).then(r => r.data),
+  },
+
+  // ── Realtime (returns URLs for EventSource / WebSocket) ────────────────────
+  realtime: {
+    sseUrl: (entityId?: string) => `/v1/realtime/sse${entityId ? `?entity_id=${encodeURIComponent(entityId)}` : ''}`,
+    wsUrl: (entityId?: string) => `/v1/realtime/ws${entityId ? `?entity_id=${encodeURIComponent(entityId)}` : ''}`,
+  },
+
+  // ── Ingestion ──────────────────────────────────────────────────────────────
+  ingest: {
+    event: (event: { event_type: string; session_id: string; properties?: Record<string, unknown>; timestamp?: string; user_id?: string; device_id?: string }) =>
+      restClient.post('/v1/ingest/events', wrap(unknownSchema), event).then(r => r.data),
+
+    batch: (events: unknown[]) =>
+      restClient.post('/v1/ingest/events/batch', wrap(unknownSchema), { events }).then(r => r.data),
+
+    feed: (feed: { source: string; entity_type: string; data: Record<string, unknown> }) =>
+      restClient.post('/v1/ingest/feed', wrap(unknownSchema), feed).then(r => r.data),
+  },
+
+  // ── Web3 ───────────────────────────────────────────────────────────────────
+  web3: {
+    chains: {
+      list: (params?: { vm_family?: string; limit?: number }) =>
+        restClient.get(`/v1/web3/chains${buildQS({ ...params })}`, wrap(z.array(unknownSchema))).then(r => r.data),
+      get: (chainId: string) =>
+        restClient.get(`/v1/web3/chains/${chainId}`, wrap(unknownSchema)).then(r => r.data),
+      register: (chain: Record<string, unknown>) =>
+        restClient.post('/v1/web3/chains', wrap(unknownSchema), chain).then(r => r.data),
+    },
+    protocols: {
+      list: (params?: { family?: string; chain?: string; q?: string; limit?: number }) =>
+        restClient.get(`/v1/web3/protocols${buildQS({ ...params })}`, wrap(z.array(unknownSchema))).then(r => r.data),
+      get: (protocolId: string) =>
+        restClient.get(`/v1/web3/protocols/${protocolId}`, wrap(unknownSchema)).then(r => r.data),
+      register: (protocol: Record<string, unknown>) =>
+        restClient.post('/v1/web3/protocols', wrap(unknownSchema), protocol).then(r => r.data),
+    },
+    contracts: {
+      get: (chainId: string, address: string) =>
+        restClient.get(`/v1/web3/contracts/${chainId}/${address}`, wrap(unknownSchema)).then(r => r.data),
+      unclassified: (params?: { chain_id?: string; limit?: number }) =>
+        restClient.get(`/v1/web3/contracts/unclassified${buildQS({ ...params })}`, wrap(z.array(unknownSchema))).then(r => r.data),
+      register: (contract: Record<string, unknown>) =>
+        restClient.post('/v1/web3/contracts', wrap(unknownSchema), contract).then(r => r.data),
+      reclassify: (chainId: string, address: string, body: Record<string, unknown>) =>
+        restClient.post(`/v1/web3/contracts/${chainId}/${address}/reclassify`, wrap(unknownSchema), body).then(r => r.data),
+    },
+    tokens: {
+      list: (params?: { chain_id?: string; stablecoins?: boolean; limit?: number }) =>
+        restClient.get(`/v1/web3/tokens${buildQS({ ...params })}`, wrap(z.array(unknownSchema))).then(r => r.data),
+      register: (token: Record<string, unknown>) =>
+        restClient.post('/v1/web3/tokens', wrap(unknownSchema), token).then(r => r.data),
+    },
+    apps: {
+      list: (limit = 50) =>
+        restClient.get(`/v1/web3/apps?limit=${limit}`, wrap(z.array(unknownSchema))).then(r => r.data),
+      register: (app: Record<string, unknown>) =>
+        restClient.post('/v1/web3/apps', wrap(unknownSchema), app).then(r => r.data),
+    },
+    domains: {
+      get: (domain: string) =>
+        restClient.get(`/v1/web3/domains/${encodeURIComponent(domain)}`, wrap(unknownSchema)).then(r => r.data),
+      register: (domain: Record<string, unknown>) =>
+        restClient.post('/v1/web3/domains', wrap(unknownSchema), domain).then(r => r.data),
+    },
+    governance: {
+      listSpaces: (params?: { protocol_id?: string; limit?: number }) =>
+        restClient.get(`/v1/web3/governance/spaces${buildQS({ ...params })}`, wrap(z.array(unknownSchema))).then(r => r.data),
+      registerSpace: (space: Record<string, unknown>) =>
+        restClient.post('/v1/web3/governance/spaces', wrap(unknownSchema), space).then(r => r.data),
+    },
+    classify: {
+      contract: (chainId: string, address: string) =>
+        restClient.post('/v1/web3/classify/contract', wrap(unknownSchema), { chain_id: chainId, address }).then(r => r.data),
+      method: (selector: string) =>
+        restClient.post('/v1/web3/classify/method', wrap(unknownSchema), { selector }).then(r => r.data),
+      domain: (domain: string) =>
+        restClient.post('/v1/web3/classify/domain', wrap(unknownSchema), { domain }).then(r => r.data),
+      observation: (observation: Record<string, unknown>, buildGraph = false) =>
+        restClient.post('/v1/web3/classify/observation', wrap(unknownSchema), { ...observation, build_graph: buildGraph }).then(r => r.data),
+    },
+    observations: {
+      batch: (observations: unknown[], buildGraph = false, source?: string, sourceTag?: string) =>
+        restClient.post('/v1/web3/observations/batch', wrap(unknownSchema), { observations, build_graph: buildGraph, source, source_tag: sourceTag }).then(r => r.data),
+    },
+    migrations: {
+      list: (protocolId: string, limit = 50) =>
+        restClient.get(`/v1/web3/migrations/${protocolId}?limit=${limit}`, wrap(z.array(unknownSchema))).then(r => r.data),
+      record: (migration: Record<string, unknown>) =>
+        restClient.post('/v1/web3/migrations', wrap(unknownSchema), migration).then(r => r.data),
+      detect: (protocolId: string, address: string, chainId: string) =>
+        restClient.post('/v1/web3/migrations/detect', wrap(unknownSchema), { protocol_id: protocolId, address, chain_id: chainId }).then(r => r.data),
+    },
+    coverage: {
+      status: () =>
+        restClient.get('/v1/web3/coverage/status', wrap(unknownSchema)).then(r => r.data),
+      health: () =>
+        restClient.get('/v1/web3/coverage/health', wrap(unknownSchema)).then(r => r.data),
+    },
+  },
+
+  // ── On-Chain ───────────────────────────────────────────────────────────────
+  onchain: {
+    recordAction: (action: Record<string, unknown>) =>
+      restClient.post('/v1/onchain/actions', wrap(unknownSchema), action).then(r => r.data),
+
+    agentActions: (agentId: string) =>
+      restClient.get(`/v1/onchain/actions/${agentId}`, wrap(z.array(unknownSchema))).then(r => r.data),
+
+    getContract: (address: string) =>
+      restClient.get(`/v1/onchain/contracts/${address}`, wrap(unknownSchema)).then(r => r.data),
+
+    configureListener: (config: Record<string, unknown>) =>
+      restClient.post('/v1/onchain/listener/configure', wrap(unknownSchema), config).then(r => r.data),
+
+    rpcHealth: () =>
+      restClient.get('/v1/onchain/rpc/health', wrap(unknownSchema)).then(r => r.data),
+  },
+
+  // ── x402 (HTTP Payment Tracking) ──────────────────────────────────────────
+  x402: {
+    capture: (transaction: Record<string, unknown>) =>
+      restClient.post('/v1/x402/capture', wrap(unknownSchema), transaction).then(r => r.data),
+
+    graph: () =>
+      restClient.get('/v1/x402/graph', wrap(unknownSchema)).then(r => r.data),
+
+    agentHistory: (agentId: string) =>
+      restClient.get(`/v1/x402/agent/${agentId}`, wrap(unknownSchema)).then(r => r.data),
+
+    snapshotGraph: () =>
+      restClient.post('/v1/x402/graph/snapshot', wrap(unknownSchema)).then(r => r.data),
+  },
+
+  // ── Flows (transfers / wallets / assets) ───────────────────────────────────
+  flows: {
+    transfers: {
+      record: (transfer: { from_entity_id: string; to_entity_id: string; asset_id: string; amount: number; [k: string]: unknown }) =>
+        restClient.post('/v1/flows/transfers', wrap(unknownSchema), transfer).then(r => r.data),
+      list: (entityId: string, limit = 50) =>
+        restClient.get(`/v1/flows/transfers${buildQS({ entity_id: entityId, limit })}`, wrap(z.array(unknownSchema))).then(r => r.data),
+    },
+    wallets: {
+      link: (wallet: { owner_entity_id: string; chain: string; address: string }) =>
+        restClient.post('/v1/flows/wallets', wrap(unknownSchema), wallet).then(r => r.data),
+      list: (entityId: string, limit = 50) =>
+        restClient.get(`/v1/flows/wallets${buildQS({ entity_id: entityId, limit })}`, wrap(z.array(unknownSchema))).then(r => r.data),
+    },
+    assets: {
+      register: (asset: { asset_type: string; chain: string; symbol: string; [k: string]: unknown }) =>
+        restClient.post('/v1/flows/assets', wrap(unknownSchema), asset).then(r => r.data),
+      get: (assetId: string) =>
+        restClient.get(`/v1/flows/assets/${assetId}`, wrap(unknownSchema)).then(r => r.data),
+    },
+  },
+
+  // ── RWA (Real-World Assets) ────────────────────────────────────────────────
+  rwa: {
+    assets: {
+      list: (params?: { asset_class?: string; chain?: string; limit?: number }) =>
+        restClient.get(`/v1/rwa/assets${buildQS({ ...params })}`, wrap(z.array(unknownSchema))).then(r => r.data),
+      get: (assetId: string) =>
+        restClient.get(`/v1/rwa/assets/${assetId}`, wrap(unknownSchema)).then(r => r.data),
+      create: (asset: Record<string, unknown>) =>
+        restClient.post('/v1/rwa/assets', wrap(unknownSchema), asset).then(r => r.data),
+      holders: (assetId: string, limit = 50) =>
+        restClient.get(`/v1/rwa/assets/${assetId}/holders?limit=${limit}`, wrap(z.array(unknownSchema))).then(r => r.data),
+      cashflows: (assetId: string, params?: { cashflow_type?: string; limit?: number }) =>
+        restClient.get(`/v1/rwa/assets/${assetId}/cashflows${buildQS({ ...params })}`, wrap(z.array(unknownSchema))).then(r => r.data),
+      reserveCredibility: (assetId: string) =>
+        restClient.get(`/v1/rwa/assets/${assetId}/reserve-credibility`, wrap(unknownSchema)).then(r => r.data),
+      redemptionPressure: (assetId: string) =>
+        restClient.get(`/v1/rwa/assets/${assetId}/redemption-pressure`, wrap(unknownSchema)).then(r => r.data),
+    },
+    policies: {
+      create: (policy: Record<string, unknown>) =>
+        restClient.post('/v1/rwa/policies', wrap(unknownSchema), policy).then(r => r.data),
+      forAsset: (assetId: string) =>
+        restClient.get(`/v1/rwa/assets/${assetId}/policies`, wrap(z.array(unknownSchema))).then(r => r.data),
+    },
+    simulateTransfer: (params: { asset_id: string; from_entity: string; to_entity: string; amount: number }) =>
+      restClient.post('/v1/rwa/simulate-transfer', wrap(unknownSchema), params).then(r => r.data),
+    recordCashflow: (cashflow: Record<string, unknown>) =>
+      restClient.post('/v1/rwa/cashflows', wrap(unknownSchema), cashflow).then(r => r.data),
+    exposure: (entityId: string, params?: { entity_type?: string; include_inferred?: boolean; include_beneficial?: boolean }) =>
+      restClient.get(`/v1/rwa/exposure/${entityId}${buildQS({ ...params })}`, wrap(unknownSchema)).then(r => r.data),
+    registerHolder: (holder: Record<string, unknown>) =>
+      restClient.post('/v1/rwa/holders', wrap(unknownSchema), holder).then(r => r.data),
+  },
+
+  // ── Cross-Domain ───────────────────────────────────────────────────────────
+  crossdomain: {
+    institutions: {
+      list: (params?: { institution_type?: string; q?: string; limit?: number }) =>
+        restClient.get(`/v1/crossdomain/institutions${buildQS({ ...params })}`, wrap(z.array(unknownSchema))).then(r => r.data),
+      get: (id: string) =>
+        restClient.get(`/v1/crossdomain/institutions/${id}`, wrap(unknownSchema)).then(r => r.data),
+      register: (institution: Record<string, unknown>) =>
+        restClient.post('/v1/crossdomain/institutions', wrap(unknownSchema), institution).then(r => r.data),
+    },
+    accounts: {
+      list: (params?: { owner?: string; institution?: string; account_type?: string; limit?: number }) =>
+        restClient.get(`/v1/crossdomain/accounts${buildQS({ ...params })}`, wrap(z.array(unknownSchema))).then(r => r.data),
+      get: (id: string) =>
+        restClient.get(`/v1/crossdomain/accounts/${id}`, wrap(unknownSchema)).then(r => r.data),
+      positions: (id: string, limit = 50) =>
+        restClient.get(`/v1/crossdomain/accounts/${id}/positions?limit=${limit}`, wrap(z.array(unknownSchema))).then(r => r.data),
+      register: (account: Record<string, unknown>) =>
+        restClient.post('/v1/crossdomain/accounts', wrap(unknownSchema), account).then(r => r.data),
+    },
+    instruments: {
+      list: (params?: { instrument_type?: string; issuer?: string; q?: string; limit?: number }) =>
+        restClient.get(`/v1/crossdomain/instruments${buildQS({ ...params })}`, wrap(z.array(unknownSchema))).then(r => r.data),
+      get: (id: string) =>
+        restClient.get(`/v1/crossdomain/instruments/${id}`, wrap(unknownSchema)).then(r => r.data),
+      bySymbol: (symbol: string) =>
+        restClient.get(`/v1/crossdomain/instruments/symbol/${encodeURIComponent(symbol)}`, wrap(unknownSchema)).then(r => r.data),
+      register: (instrument: Record<string, unknown>) =>
+        restClient.post('/v1/crossdomain/instruments', wrap(unknownSchema), instrument).then(r => r.data),
+    },
+    orders: {
+      list: (accountId: string, limit = 50) =>
+        restClient.get(`/v1/crossdomain/orders/${accountId}?limit=${limit}`, wrap(z.array(unknownSchema))).then(r => r.data),
+      record: (order: Record<string, unknown>) =>
+        restClient.post('/v1/crossdomain/orders', wrap(unknownSchema), order).then(r => r.data),
+    },
+    executions: {
+      byOrder: (orderId: string, limit = 50) =>
+        restClient.get(`/v1/crossdomain/executions/order/${orderId}?limit=${limit}`, wrap(z.array(unknownSchema))).then(r => r.data),
+      byAccount: (accountId: string, limit = 50) =>
+        restClient.get(`/v1/crossdomain/executions/account/${accountId}?limit=${limit}`, wrap(z.array(unknownSchema))).then(r => r.data),
+      record: (execution: Record<string, unknown>) =>
+        restClient.post('/v1/crossdomain/executions', wrap(unknownSchema), execution).then(r => r.data),
+    },
+    balances: {
+      latest: (accountId: string) =>
+        restClient.get(`/v1/crossdomain/balances/${accountId}/latest`, wrap(unknownSchema)).then(r => r.data),
+      record: (balance: Record<string, unknown>) =>
+        restClient.post('/v1/crossdomain/balances', wrap(unknownSchema), balance).then(r => r.data),
+    },
+    cashMovements: {
+      list: (accountId: string, limit = 50) =>
+        restClient.get(`/v1/crossdomain/cash-movements/${accountId}?limit=${limit}`, wrap(z.array(unknownSchema))).then(r => r.data),
+      record: (movement: Record<string, unknown>) =>
+        restClient.post('/v1/crossdomain/cash-movements', wrap(unknownSchema), movement).then(r => r.data),
+    },
+    compliance: {
+      listActions: (entityId: string, limit = 50) =>
+        restClient.get(`/v1/crossdomain/compliance/actions/${entityId}?limit=${limit}`, wrap(z.array(unknownSchema))).then(r => r.data),
+      recordAction: (action: Record<string, unknown>) =>
+        restClient.post('/v1/crossdomain/compliance/actions', wrap(unknownSchema), action).then(r => r.data),
+    },
+    events: {
+      byEntity: (entityId: string, limit = 50) =>
+        restClient.get(`/v1/crossdomain/events/entity/${entityId}?limit=${limit}`, wrap(z.array(unknownSchema))).then(r => r.data),
+      byInstrument: (instrumentId: string, limit = 50) =>
+        restClient.get(`/v1/crossdomain/events/instrument/${instrumentId}?limit=${limit}`, wrap(z.array(unknownSchema))).then(r => r.data),
+      record: (event: Record<string, unknown>) =>
+        restClient.post('/v1/crossdomain/events', wrap(unknownSchema), event).then(r => r.data),
+    },
+    links: {
+      list: (entityId: string, limit = 50) =>
+        restClient.get(`/v1/crossdomain/links/${entityId}?limit=${limit}`, wrap(z.array(unknownSchema))).then(r => r.data),
+      highConfidence: (params?: { min_confidence?: number; limit?: number }) =>
+        restClient.get(`/v1/crossdomain/links/high-confidence${buildQS({ ...params })}`, wrap(z.array(unknownSchema))).then(r => r.data),
+      create: (link: Record<string, unknown>) =>
+        restClient.post('/v1/crossdomain/links', wrap(unknownSchema), link).then(r => r.data),
+    },
+    fusion: {
+      exposure: (entityId: string) =>
+        restClient.get(`/v1/crossdomain/fusion/exposure/${entityId}`, wrap(unknownSchema)).then(r => r.data),
+      profile: (entityId: string) =>
+        restClient.get(`/v1/crossdomain/fusion/profile/${entityId}`, wrap(unknownSchema)).then(r => r.data),
+    },
+    coverage: {
+      status: () => restClient.get('/v1/crossdomain/coverage/status', wrap(unknownSchema)).then(r => r.data),
+      health: () => restClient.get('/v1/crossdomain/coverage/health', wrap(unknownSchema)).then(r => r.data),
+    },
+  },
+
+  // ── Lake (data lake) ───────────────────────────────────────────────────────
+  lake: {
+    ingest: (params: { domain: string; source: string; source_tag: string; records: unknown[] }) =>
+      restClient.post('/v1/lake/ingest', wrap(unknownSchema), params).then(r => r.data),
+
+    rollback: (params: { domain: string; source_tag: string; tiers?: string[] }) =>
+      restClient.post('/v1/lake/rollback', wrap(unknownSchema), params).then(r => r.data),
+
+    audit: (domain: string, sourceTag: string) =>
+      restClient.get(`/v1/lake/audit/${domain}/${encodeURIComponent(sourceTag)}`, wrap(unknownSchema)).then(r => r.data),
+
+    materialize: (params: { domain: string; entity_id: string; metric: string; value: unknown; [k: string]: unknown }) =>
+      restClient.post('/v1/lake/materialize', wrap(unknownSchema), params).then(r => r.data),
+
+    gold: (domain: string, entityId: string) =>
+      restClient.get(`/v1/lake/gold/${domain}/${entityId}`, wrap(unknownSchema)).then(r => r.data),
+
+    quality: (domain: string) =>
+      restClient.get(`/v1/lake/quality/${domain}`, wrap(unknownSchema)).then(r => r.data),
+
+    status: () =>
+      restClient.get('/v1/lake/status', wrap(unknownSchema)).then(r => r.data),
+  },
+
+  // ── Admin (tenant / billing) ───────────────────────────────────────────────
+  admin: {
+    tenants: {
+      create: (tenant: { name: string; plan: string; contact_email: string; settings?: Record<string, unknown> }) =>
+        restClient.post('/v1/admin/tenants', wrap(unknownSchema), tenant).then(r => r.data),
+      get: (tenantId: string) =>
+        restClient.get(`/v1/admin/tenants/${tenantId}`, wrap(unknownSchema)).then(r => r.data),
+      update: (tenantId: string, updates: Record<string, unknown>) =>
+        restClient.patch(`/v1/admin/tenants/${tenantId}`, wrap(unknownSchema), updates).then(r => r.data),
+    },
+    apiKeys: {
+      create: (tenantId: string, key: { name: string; scopes?: string[] }) =>
+        restClient.post(`/v1/admin/tenants/${tenantId}/api-keys`, wrap(unknownSchema), key).then(r => r.data),
+      list: (tenantId: string) =>
+        restClient.get(`/v1/admin/tenants/${tenantId}/api-keys`, wrap(z.array(unknownSchema))).then(r => r.data),
+      revoke: (keyId: string) =>
+        restClient.delete(`/v1/admin/api-keys/${keyId}`, wrap(z.object({ revoked: z.boolean() }))),
+    },
+    billing: {
+      info: (tenantId: string) =>
+        restClient.get(`/v1/admin/tenants/${tenantId}/billing`, wrap(unknownSchema)).then(r => r.data),
+      usage: (tenantId: string) =>
+        restClient.get(`/v1/admin/tenants/${tenantId}/billing/usage`, wrap(unknownSchema)).then(r => r.data),
+      invoices: (tenantId: string, limit = 10) =>
+        restClient.get(`/v1/admin/tenants/${tenantId}/billing/invoices?limit=${limit}`, wrap(z.array(unknownSchema))).then(r => r.data),
+      getInvoice: (tenantId: string, invoiceId: string) =>
+        restClient.get(`/v1/admin/tenants/${tenantId}/billing/invoices/${invoiceId}`, wrap(unknownSchema)).then(r => r.data),
+      createCheckoutSession: (tenantId: string, params: Record<string, unknown>) =>
+        restClient.post(`/v1/admin/tenants/${tenantId}/billing/checkout-session`, wrap(unknownSchema), params).then(r => r.data),
+      createPortalSession: (tenantId: string) =>
+        restClient.post(`/v1/admin/tenants/${tenantId}/billing/portal-session`, wrap(unknownSchema)).then(r => r.data),
+      createOverageInvoice: (tenantId: string, params: Record<string, unknown>) =>
+        restClient.post(`/v1/admin/tenants/${tenantId}/billing/overage-invoice`, wrap(unknownSchema), params).then(r => r.data),
+    },
+  },
+
+  // ── Commerce ───────────────────────────────────────────────────────────────
+  commerce: {
+    recordPayment: (payment: Record<string, unknown>) =>
+      restClient.post('/v1/commerce/payments', wrap(unknownSchema), payment).then(r => r.data),
+
+    recordHire: (hire: Record<string, unknown>) =>
+      restClient.post('/v1/commerce/hires', wrap(unknownSchema), hire).then(r => r.data),
+
+    feesReport: (period?: string) =>
+      restClient.get(`/v1/commerce/fees/report${period ? `?period=${period}` : ''}`, wrap(unknownSchema)).then(r => r.data),
+
+    agentSpend: (agentId: string) =>
+      restClient.get(`/v1/commerce/agent/${agentId}/spend`, wrap(unknownSchema)).then(r => r.data),
   },
 };
 
-// Helper to safely call API with fallback
+// ─── Utility: call API with a typed fallback ─────────────────────────────────
 export async function apiCall<T>(
   fetcher: () => Promise<T>,
   fallback: T,
