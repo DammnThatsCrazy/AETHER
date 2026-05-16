@@ -194,7 +194,7 @@ export const api = {
      * Each link has interaction_class, weight, and confidence.
      */
     links: (entityId: string, limit = 50) =>
-      restClient.get(`/v1/crossdomain/links/${entityId}?limit=${limit}`, wrap(z.array(unknownSchema))).then(r => r.data),
+      restClient.get(`/v1/crossdomain/links/${entityId}?limit=${limit}`, wrap(z.object({ entity_id: z.string(), links: z.array(unknownSchema), count: z.number() }))).then(r => r.data.links),
 
     /**
      * All delegation records involving this entity (as grantor or grantee).
@@ -353,7 +353,7 @@ export const api = {
       restClient.delete(`/v1/attribution/journey/${userId}`, wrap(unknownSchema)),
 
     models: () =>
-      restClient.get('/v1/attribution/models', wrap(z.array(unknownSchema))).then(r => r.data),
+      restClient.get('/v1/attribution/models', wrap(unknownSchema)).then(r => r.data),
   },
 
   // ── Web3 & On-Chain ────────────────────────────────────────────────────────
@@ -384,7 +384,7 @@ export const api = {
     },
     governance: {
       listSpaces: (params?: { protocol_id?: string; limit?: number }) =>
-        restClient.get(`/v1/web3/governance/spaces${buildQS({ ...params })}`, wrap(z.array(unknownSchema))).then(r => r.data),
+        restClient.get(`/v1/web3/governance/spaces${buildQS({ ...params })}`, wrap(z.object({ spaces: z.array(unknownSchema), count: z.number() }))).then(r => r.data.spaces),
     },
     classify: {
       observation: (observation: Record<string, unknown>) =>
@@ -395,7 +395,7 @@ export const api = {
   onchain: {
     /** On-chain actions for an agent — purchases, contract calls, transfers. */
     agentActions: (agentId: string) =>
-      restClient.get(`/v1/onchain/actions/${agentId}`, wrap(z.array(unknownSchema))).then(r => r.data),
+      restClient.get(`/v1/onchain/actions/${agentId}`, wrap(z.object({ agent_id: z.string(), actions: z.array(unknownSchema), count: z.number() }))).then(r => r.data.actions),
 
     /** Contract metadata — ABI classification, protocol mapping, risk flags. */
     getContract: (address: string) =>
@@ -510,7 +510,7 @@ export const api = {
       restClient.get('/v1/providers/health', wrap(unknownSchema)).then(r => r.data),
 
     categories: () =>
-      restClient.get('/v1/providers/categories', wrap(z.array(unknownSchema))).then(r => r.data),
+      restClient.get('/v1/providers/categories', wrap(unknownSchema)).then(r => r.data),
   },
 
   // ── Ingestion (SDK event capture) ─────────────────────────────────────────
