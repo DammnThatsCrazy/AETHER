@@ -159,3 +159,39 @@ export function useUserCluster(userId: string) {
     enabled: !!userId,
   });
 }
+
+/** Chronological event stream with optional type filter and limit. */
+export function useUserTimeline(
+  userId: string,
+  params?: { limit?: number; event_type?: string },
+) {
+  return useQuery({
+    key: key(userId, `timeline:${params?.event_type ?? ''}:${params?.limit ?? ''}`),
+    fetcher: () => api.profile.timeline(userId, params),
+    staleTime: STALE,
+    enabled: !!userId,
+  });
+}
+
+/** Data provenance — source attribution for every data point in the profile. */
+export function useUserProvenance(userId: string) {
+  return useQuery({
+    key: key(userId, 'provenance'),
+    fetcher: () => api.profile.provenance(userId),
+    staleTime: STALE,
+    enabled: !!userId,
+  });
+}
+
+/** Gold-tier data lake view for a specific domain (identity | market | onchain | social). */
+export function useUserLake(
+  userId: string,
+  domain: 'identity' | 'market' | 'onchain' | 'social',
+) {
+  return useQuery({
+    key: key(userId, `lake:${domain}`),
+    fetcher: () => api.profile.lake(userId, domain),
+    staleTime: STALE,
+    enabled: !!userId,
+  });
+}
