@@ -104,7 +104,14 @@ export const api = {
         top_events: z.array(z.object({ name: z.string(), count: z.number() })).optional(),
       }).passthrough())).then(r => r.data),
 
-    queryEvents: (query: { event_type?: string; start_date?: string; end_date?: string; limit?: number }) =>
+    queryEvents: (query: {
+      event_type?: string;
+      start_date?: string;
+      end_date?: string;
+      user_id?: string;
+      session_id?: string;
+      limit?: number;
+    }) =>
       restClient.post('/v1/analytics/events/query', wrap(z.object({
         data: z.array(z.unknown()),
         pagination: z.object({ total: z.number(), limit: z.number(), has_more: z.boolean() }).optional(),
@@ -118,6 +125,15 @@ export const api = {
         data: z.unknown().nullable(),
         errors: z.array(z.object({ message: z.string() }).passthrough()).optional().nullable(),
       })), { query, variables }).then(r => r.data),
+
+    export: (params: { format?: 'csv' | 'json' | 'parquet'; start_date?: string; end_date?: string; event_type?: string }) =>
+      restClient.post('/v1/analytics/export', wrap(z.object({ export_id: z.string(), status: z.string() })), params).then(r => r.data),
+
+    exportStatus: (exportId: string) =>
+      restClient.get(`/v1/analytics/export/${exportId}`, wrap(z.object({ export_id: z.string(), status: z.string(), download_url: z.string().optional() }))).then(r => r.data),
+
+    wsUrl: (params?: { tenant_id?: string; event_type?: string }) =>
+      `/v1/analytics/ws/events${buildQS({ ...params })}` as string,
 
     sources: () =>
       restClient.get('/v1/analytics/sources', wrap(z.array(unknownSchema))).then(r => r.data),
@@ -218,18 +234,91 @@ export const api = {
       restClient.get(`/v1/agent/${agentId}/trust`, wrap(unknownSchema)).then(r => r.data),
   },
 
-  // ── Profile 360 ────────────────────────────────────────────────────────────
+  // ── Profile — full + all contextual sub-resources ─────────────────────────
   profile: {
-    full: (userId: string) =>
-      restClient.get(`/v1/profile/${userId}?include_timeline=true&include_graph=true&include_intelligence=true`, wrap(profileSchema)).then(r => r.data),
+    /** Full holistic profile — identity, consent, timeline, graph, intelligence, lake data. */
+    full: (userId: string, opts?: { timeline_limit?: number }) =>
+      restClient.get(`/v1/profile/${userId}?include_timeline=true&include_graph=true&include_intelligence=true&include_lake=true${opts?.timeline_limit ? `&timeline_limit=${opts.timeline_limit}` : ''}`, wrap(profileSchema)).then(r => r.data),
 
-    timeline: (userId: string, limit = 100) =>
-      restClient.get(`/v1/profile/${userId}/timeline?limit=${limit}`, wrap(z.object({ user_id: z.string(), events: z.array(z.unknown()), count: z.number() }))).then(r => r.data),
+    /** Dashboard-ready snapshot — frequency, recency, top events, loyalty tier, risk scores. */
+    summary: (userId: string) =>
+      restClient.get(`/v1/profile/${userId}/summary`, wrap(unknownSchema)).then(r => r.data),
 
+    /** Chronological event stream for the user. */
+    timeline: (userId: string, params?: { limit?: number; event_type?: string }) =>
+      restClient.get(`/v1/profile/${userId}/timeline${buildQS({ ...params })}`, wrap(z.object({ user_id: z.string(), events: z.array(z.unknown()), count: z.number() }))).then(r => r.data),
+
+    /** Graph neighbourhood — identity links, ownership, delegation edges. */
     graph: (userId: string) =>
       restClient.get(`/v1/profile/${userId}/graph`, wrap(unknownSchema)).then(r => r.data),
 
-    resolve: (params: { wallet?: string; email?: string; device?: string }) =>
+    /** Session rollups — device type, OS, browser, platform, geo, entry/exit URL, duration. */
+    sessions: (userId: string, limit = 20) =>
+      restClient.get(`/v1/profile/${userId}/sessions?limit=${limit}`, wrap(unknownSchema)).then(r => r.data),
+
+    /** Observed devices — deterministic + probabilistic fingerprint matches. */
+    devices: (userId: string) =>
+      restClient.get(`/v1/profile/${userId}/devices`, wrap(unknownSchema)).then(r => r.data),
+
+    /** Platform distribution — web / iOS / Android / SDK / API with event counts. */
+    platforms: (userId: string) =>
+      restClient.get(`/v1/profile/${userId}/platforms`, wrap(unknownSchema)).then(r => r.data),
+
+    /** Cross-session journey chains — steps, drop-off flags, campaign linkage. */
+    journeys: (userId: string) =>
+      restClient.get(`/v1/profile/${userId}/journeys`, wrap(unknownSchema)).then(r => r.data),
+
+    /**
+     * Web3 wallet profiles — for every wallet linked to the user:
+     * balances by token, recent transactions, protocol interactions,
+     * on-chain loyalty signals, and wallet risk scores.
+     */
+    wallets: (userId: string) =>
+      restClient.get(`/v1/profile/${userId}/wallets`, wrap(unknownSchema)).then(r => r.data),
+
+    /** All identifiers — wallets, emails, device IDs, session IDs, social handles. */
+    identifiers: (userId: string) =>
+      restClient.get(`/v1/profile/${userId}/identifiers`, wrap(unknownSchema)).then(r => r.data),
+
+    /**
+     * Earned rewards, redeemed rewards, loyalty tier, points balance,
+     * campaign participation history, and lifetime value (Web2 + Web3 unified).
+     */
+    rewards: (userId: string) =>
+      restClient.get(`/v1/profile/${userId}/rewards`, wrap(unknownSchema)).then(r => r.data),
+
+    /**
+     * Financial profile — Web2 payments + Web3 on-chain flows unified:
+     * inflows, outflows, settlements, transfers by asset, top counterparties.
+     */
+    financials: (userId: string) =>
+      restClient.get(`/v1/profile/${userId}/financials`, wrap(unknownSchema)).then(r => r.data),
+
+    /** Typed relationship edges — ownership, delegation, H2H/H2A/A2H/A2A flows. */
+    relationships: (userId: string) =>
+      restClient.get(`/v1/profile/${userId}/relationships`, wrap(unknownSchema)).then(r => r.data),
+
+    /** Protocol interactions derived from event stream + economic graph. */
+    protocols: (userId: string) =>
+      restClient.get(`/v1/profile/${userId}/protocols`, wrap(unknownSchema)).then(r => r.data),
+
+    /** Intelligence layer — risk scores, trust scores, anomaly scores, model features. */
+    intelligence: (userId: string) =>
+      restClient.get(`/v1/profile/${userId}/intelligence`, wrap(unknownSchema)).then(r => r.data),
+
+    /** Data provenance — source attribution for every data point in the profile. */
+    provenance: (userId: string) =>
+      restClient.get(`/v1/profile/${userId}/provenance`, wrap(unknownSchema)).then(r => r.data),
+
+    /** Generic deep-drill on any linked object (e.g. a specific wallet, journey, device). */
+    drill: (userId: string, objectType: string, objectId: string) =>
+      restClient.get(`/v1/profile/${userId}/drill/${objectType}/${objectId}`, wrap(unknownSchema)).then(r => r.data),
+
+    /** Gold-tier data lake view for a specific domain (identity | market | onchain | social). */
+    lake: (userId: string, domain: 'identity' | 'market' | 'onchain' | 'social') =>
+      restClient.get(`/v1/profile/${userId}/lake/${domain}`, wrap(unknownSchema)).then(r => r.data),
+
+    resolve: (params: { wallet?: string; email?: string; device?: string; session?: string; social?: string; customer?: string }) =>
       restClient.get(`/v1/profile/resolve${buildQS(params)}`, wrap(z.object({ resolved_user_id: z.string() }))).then(r => r.data),
   },
 
@@ -349,8 +438,12 @@ export const api = {
     entity: (entityId: string) =>
       restClient.get(`/v1/behavioral/entity/${entityId}`, wrap(unknownSchema)).then(r => r.data),
 
-    signals: (entityId: string, limit = 50) =>
-      restClient.get(`/v1/behavioral/entity/${entityId}/signals?limit=${limit}`, wrap(z.object({ entity_id: z.string(), signals: z.array(z.unknown()), count: z.number() }))).then(r => r.data),
+    signals: (entityId: string, params?: { family?: string; limit?: number }) =>
+      restClient.get(`/v1/behavioral/entity/${entityId}/signals${buildQS({ ...params })}`, wrap(z.object({ entity_id: z.string(), signals: z.array(z.unknown()), count: z.number() }))).then(r => r.data),
+
+    /** Signal registry — definitions, families, source events, outputs, consumers. */
+    registry: () =>
+      restClient.get('/v1/behavioral/registry', wrap(unknownSchema)).then(r => r.data),
   },
 
   // ── Behavior (snapshot history) ────────────────────────────────────────────
@@ -425,10 +518,17 @@ export const api = {
       restClient.post('/v1/campaigns', wrap(unknownSchema), campaign).then(r => r.data),
 
     update: (campaignId: string, updates: Record<string, unknown>) =>
-      restClient.put(`/v1/campaigns/${campaignId}`, wrap(unknownSchema), updates).then(r => r.data),
+      restClient.patch(`/v1/campaigns/${campaignId}`, wrap(unknownSchema), updates).then(r => r.data),
 
-    attribution: (campaignId: string) =>
-      restClient.get(`/v1/campaigns/${campaignId}/attribution`, wrap(unknownSchema)).then(r => r.data),
+    delete: (campaignId: string) =>
+      restClient.delete(`/v1/campaigns/${campaignId}`, wrap(z.object({ deleted: z.boolean() }))),
+
+    touchpoint: (campaignId: string, tp: { channel?: string; source?: string; user_id?: string; session_id?: string; event_type?: string; is_conversion?: boolean; revenue_usd?: number; timestamp?: string; properties?: Record<string, unknown> }) =>
+      restClient.post(`/v1/campaigns/${campaignId}/touchpoints`, wrap(unknownSchema), tp).then(r => r.data),
+
+    /** Multi-touch attribution — models: multi_touch | first_touch | last_touch | linear | time_decay */
+    attribution: (campaignId: string, params?: { model?: string; start_date?: string; end_date?: string }) =>
+      restClient.get(`/v1/campaigns/${campaignId}/attribution${buildQS({ ...params })}`, wrap(unknownSchema)).then(r => r.data),
   },
 
   // ── Attribution ────────────────────────────────────────────────────────────
@@ -954,6 +1054,97 @@ export const api = {
       createOverageInvoice: (tenantId: string, params: Record<string, unknown>) =>
         restClient.post(`/v1/admin/tenants/${tenantId}/billing/overage-invoice`, wrap(unknownSchema), params).then(r => r.data),
     },
+  },
+
+  // ── Graph — Kyber sees the COMBINED graph of ALL tenants ──────────────────
+  //
+  // Kyber has omniscient scope: every entity, every tenant, every connection.
+  // Aether (tenant layer) sees only its own users.
+  //
+  // Interaction classes on edges:
+  //   H2H — human ↔ human   (referrals, commerce, social, identity links)
+  //   H2A — human → agent   (delegation, hiring, configuration)
+  //   A2H — agent → human   (purchases on behalf, notifications, reporting)
+  //   A2A — agent ↔ agent   (sub-delegation, pipeline calls, A2A payments)
+  graph: {
+    /**
+     * Full entity graph rooted at entityId across ALL tenants.
+     * Nodes: human, agent, wallet, device, org, contract.
+     * Edges typed with interaction_class (H2H/H2A/A2H/A2A) and
+     * relation_type (owns, delegates_to, buys_from, transfers_to, same_person…).
+     */
+    entityGraph: (entityId: string) =>
+      restClient.get(`/v1/entities/${entityId}/graph`, wrap(unknownSchema)).then(r => r.data),
+
+    /**
+     * Search all entities across tenants — the global entity registry.
+     * Returns nodes with kind, trust_score, cluster_id.
+     */
+    searchEntities: (query: string, type?: string, limit = 50) =>
+      restClient.get(`/v1/entities/search${buildQS({ q: query, type, limit })}`, wrap(z.object({ results: z.array(z.unknown()), total: z.number() }))).then(r => r.data),
+
+    /**
+     * Identity cluster for an entity — all probabilistically co-resolved
+     * actors, with shared devices, IPs, wallets, and campaigns that form
+     * the "collective tissue" between them.
+     */
+    cluster: (entityId: string) =>
+      restClient.get(`/v1/intelligence/entity/${entityId}/cluster`, wrap(unknownSchema)).then(r => r.data),
+
+    /** Resolution cluster — admin view with merge confidence and pending decisions. */
+    resolutionCluster: (userId: string) =>
+      restClient.get(`/v1/resolution/cluster/${userId}`, wrap(unknownSchema)).then(r => r.data),
+
+    /**
+     * Cross-domain fusion profile — unified view of an entity spanning Web2,
+     * Web3, and institutional data across ALL tenants.
+     * Exposes H2H commerce flows, A2A pipelines, and H2A delegation in one payload.
+     */
+    fusionProfile: (entityId: string) =>
+      restClient.get(`/v1/crossdomain/fusion/profile/${entityId}`, wrap(unknownSchema)).then(r => r.data),
+
+    /** Aggregate financial exposure across all domains (cross-tenant). */
+    fusionExposure: (entityId: string) =>
+      restClient.get(`/v1/crossdomain/fusion/exposure/${entityId}`, wrap(unknownSchema)).then(r => r.data),
+
+    /** All identity links for an entity — across all tenants. */
+    links: (entityId: string, params?: { limit?: number }) =>
+      restClient.get(`/v1/crossdomain/links/${entityId}${buildQS({ ...params })}`, wrap(z.array(unknownSchema))).then(r => r.data),
+
+    /**
+     * Global high-confidence links — the strongest cross-entity connections
+     * in the entire network regardless of tenant boundary.
+     * Use to surface "same_person" or "shared_wallet" clusters at scale.
+     */
+    highConfidenceLinks: (minConfidence = 0.8, limit = 50) =>
+      restClient.get(`/v1/crossdomain/links/high-confidence?min_confidence=${minConfidence}&limit=${limit}`, wrap(z.array(unknownSchema))).then(r => r.data),
+
+    /** All delegation records (grantor or grantee) — H→A, H→H, A→A chains across tenants. */
+    delegations: (params: { grantor?: string; grantee?: string; active?: boolean; limit?: number }) =>
+      restClient.get(`/v1/delegations${buildQS({ ...params })}`, wrap(unknownSchema)).then(r => r.data),
+
+    validateDelegation: (params: { grantee_entity_id: string; action: string; resource: string; amount?: number }) =>
+      restClient.post('/v1/delegations/validate', wrap(unknownSchema), params).then(r => r.data),
+
+    /**
+     * Wallet intelligence — risk scores, features, graph neighbourhood for
+     * an on-chain address.  Works across all tenants who have ingested this wallet.
+     */
+    walletProfile: (address: string) =>
+      restClient.get(`/v1/intelligence/wallet/${address}/profile`, wrap(unknownSchema)).then(r => r.data),
+
+    walletRisk: (address: string) =>
+      restClient.get(`/v1/intelligence/wallet/${address}/risk`, wrap(unknownSchema)).then(r => r.data),
+
+    /**
+     * x402 economic graph — global agent payment flows and net settlement
+     * positions across the entire Aether network.
+     */
+    x402Graph: () =>
+      restClient.get('/v1/x402/graph', wrap(unknownSchema)).then(r => r.data),
+
+    agentX402: (agentId: string) =>
+      restClient.get(`/v1/x402/agent/${agentId}`, wrap(unknownSchema)).then(r => r.data),
   },
 
   // ── Commerce ───────────────────────────────────────────────────────────────
