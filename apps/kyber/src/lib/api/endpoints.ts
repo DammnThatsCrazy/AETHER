@@ -406,6 +406,184 @@ export const api = {
       restClient.get('/v1/automation/insights', apiResponseSchema(z.unknown()))
         .then(r => r.data),
   },
+
+  // ── Entities ──
+  entities: {
+    list: (params?: { type?: string; limit?: number; offset?: number }) => {
+      const qs = new URLSearchParams();
+      if (params?.type) qs.set('type', params.type);
+      if (params?.limit !== undefined) qs.set('limit', String(params.limit));
+      if (params?.offset !== undefined) qs.set('offset', String(params.offset));
+      const suffix = qs.toString() ? `?${qs.toString()}` : '';
+      return restClient.get(`/v1/entities${suffix}`, apiResponseSchema(z.object({
+        entities: z.array(z.unknown()),
+        total: z.number(),
+        has_more: z.boolean().optional(),
+      }))).then(r => r.data);
+    },
+
+    get: (entityId: string) =>
+      restClient.get(`/v1/entities/${entityId}`, apiResponseSchema(z.unknown()))
+        .then(r => r.data),
+
+    getGraph: (entityId: string) =>
+      restClient.get(`/v1/entities/${entityId}/graph`, apiResponseSchema(z.unknown()))
+        .then(r => r.data),
+
+    search: (query: string, type?: string, limit = 20) => {
+      const qs = new URLSearchParams({ q: query, limit: String(limit) });
+      if (type) qs.set('type', type);
+      return restClient.get(`/v1/entities/search?${qs.toString()}`, apiResponseSchema(z.object({
+        results: z.array(z.unknown()),
+        total: z.number(),
+      }))).then(r => r.data);
+    },
+  },
+
+  // ── Campaigns ──
+  campaigns: {
+    list: (params?: { status?: string; limit?: number; offset?: number }) => {
+      const qs = new URLSearchParams();
+      if (params?.status) qs.set('status', params.status);
+      if (params?.limit !== undefined) qs.set('limit', String(params.limit));
+      if (params?.offset !== undefined) qs.set('offset', String(params.offset));
+      const suffix = qs.toString() ? `?${qs.toString()}` : '';
+      return restClient.get(`/v1/campaigns${suffix}`, apiResponseSchema(z.object({
+        campaigns: z.array(z.unknown()),
+        total: z.number(),
+      }))).then(r => r.data);
+    },
+
+    get: (campaignId: string) =>
+      restClient.get(`/v1/campaigns/${campaignId}`, apiResponseSchema(z.unknown()))
+        .then(r => r.data),
+
+    create: (campaign: Record<string, unknown>) =>
+      restClient.post('/v1/campaigns', apiResponseSchema(z.unknown()), campaign)
+        .then(r => r.data),
+
+    update: (campaignId: string, updates: Record<string, unknown>) =>
+      restClient.put(`/v1/campaigns/${campaignId}`, apiResponseSchema(z.unknown()), updates)
+        .then(r => r.data),
+
+    attribution: (campaignId: string) =>
+      restClient.get(`/v1/campaigns/${campaignId}/attribution`, apiResponseSchema(z.unknown()))
+        .then(r => r.data),
+  },
+
+  // ── Consent ──
+  consent: {
+    getProfile: (userId: string) =>
+      restClient.get(`/v1/consent/${userId}`, apiResponseSchema(z.object({
+        user_id: z.string(),
+        purposes: z.record(z.boolean()),
+        updated_at: z.string().optional(),
+        version: z.string().optional(),
+      }).passthrough())).then(r => r.data),
+
+    update: (userId: string, purposes: Record<string, boolean>) =>
+      restClient.post(`/v1/consent/${userId}`, apiResponseSchema(z.unknown()), { purposes }),
+
+    listDsrRequests: (params?: { status?: string; limit?: number }) => {
+      const qs = new URLSearchParams();
+      if (params?.status) qs.set('status', params.status);
+      if (params?.limit !== undefined) qs.set('limit', String(params.limit));
+      const suffix = qs.toString() ? `?${qs.toString()}` : '';
+      return restClient.get(`/v1/consent/dsr${suffix}`, apiResponseSchema(z.object({
+        requests: z.array(z.unknown()),
+        count: z.number(),
+      }))).then(r => r.data);
+    },
+
+    getDsrRequest: (requestId: string) =>
+      restClient.get(`/v1/consent/dsr/${requestId}`, apiResponseSchema(z.unknown()))
+        .then(r => r.data),
+
+    completeDsr: (requestId: string, notes?: string) =>
+      restClient.post(`/v1/consent/dsr/${requestId}/complete`, apiResponseSchema(z.unknown()), { notes }),
+  },
+
+  // ── Scoring / Trust ──
+  scoring: {
+    getEntityScore: (entityId: string) =>
+      restClient.get(`/v1/scoring/entity/${entityId}`, apiResponseSchema(z.object({
+        entity_id: z.string(),
+        trust_score: z.number(),
+        risk_score: z.number(),
+        anomaly_score: z.number(),
+        computed_at: z.string(),
+        features: z.record(z.unknown()).optional(),
+        explanation: z.array(z.unknown()).optional(),
+      }).passthrough())).then(r => r.data),
+
+    getWalletScore: (address: string) =>
+      restClient.get(`/v1/scoring/wallet/${address}`, apiResponseSchema(z.unknown()))
+        .then(r => r.data),
+
+    batch: (entityIds: readonly string[]) =>
+      restClient.post('/v1/scoring/batch', apiResponseSchema(z.object({
+        scores: z.array(z.unknown()),
+        computed_at: z.string(),
+      })), { entity_ids: entityIds }).then(r => r.data),
+  },
+
+  // ── Rewards ──
+  rewards: {
+    listCampaigns: (params?: { status?: string; limit?: number }) => {
+      const qs = new URLSearchParams();
+      if (params?.status) qs.set('status', params.status);
+      if (params?.limit !== undefined) qs.set('limit', String(params.limit));
+      const suffix = qs.toString() ? `?${qs.toString()}` : '';
+      return restClient.get(`/v1/rewards/campaigns${suffix}`, apiResponseSchema(z.object({
+        campaigns: z.array(z.unknown()),
+        count: z.number(),
+      }))).then(r => r.data);
+    },
+
+    checkEligibility: (userId: string, campaignId: string) =>
+      restClient.post('/v1/rewards/eligibility', apiResponseSchema(z.object({
+        eligible: z.boolean(),
+        reason: z.string().optional(),
+        amount: z.number().optional(),
+        currency: z.string().optional(),
+      }).passthrough()), { user_id: userId, campaign_id: campaignId }).then(r => r.data),
+
+    claimReward: (userId: string, campaignId: string, walletAddress: string) =>
+      restClient.post('/v1/rewards/claim', apiResponseSchema(z.object({
+        claim_id: z.string(),
+        status: z.string(),
+        tx_hash: z.string().optional(),
+      }).passthrough()), { user_id: userId, campaign_id: campaignId, wallet_address: walletAddress })
+        .then(r => r.data),
+
+    listClaims: (userId: string) =>
+      restClient.get(`/v1/rewards/claims?user_id=${encodeURIComponent(userId)}`, apiResponseSchema(z.object({
+        claims: z.array(z.unknown()),
+        count: z.number(),
+      }))).then(r => r.data),
+  },
+
+  // ── Oracle (proof generation / verification) ──
+  oracle: {
+    generateProof: (params: { entity_id: string; data_type: string; chain: string }) =>
+      restClient.post('/v1/oracle/proof', apiResponseSchema(z.object({
+        proof_id: z.string(),
+        proof: z.string(),
+        chain: z.string(),
+        expires_at: z.string().optional(),
+      }).passthrough()), params).then(r => r.data),
+
+    verifyProof: (proofId: string, proof: string) =>
+      restClient.post('/v1/oracle/verify', apiResponseSchema(z.object({
+        verified: z.boolean(),
+        proof_id: z.string(),
+        verified_at: z.string().optional(),
+      }).passthrough()), { proof_id: proofId, proof }).then(r => r.data),
+
+    getStatus: (proofId: string) =>
+      restClient.get(`/v1/oracle/proof/${proofId}`, apiResponseSchema(z.unknown()))
+        .then(r => r.data),
+  },
 };
 
 // Helper to safely call API with fallback
