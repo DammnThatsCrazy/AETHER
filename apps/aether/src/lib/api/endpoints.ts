@@ -517,6 +517,21 @@ export const api = {
       restClient.post('/v1/ingest/feed', wrap(unknownSchema), feed).then(r => r.data),
   },
 
+  // ── Entities (user/agent listing + search for tenant scope) ──────────────
+  entities: {
+    /** List entities scoped to this tenant. type='user' returns all tracked users. */
+    list: (params?: { type?: string; limit?: number; offset?: number; order_by?: string }) =>
+      restClient.get(`/v1/entities${buildQS({ ...params })}`, wrap(z.object({ entities: z.array(z.unknown()), total: z.number() }))).then(r => r.data),
+
+    /** Full-text search across entity fields — name, email, wallet address, device ID. */
+    search: (q: string, type?: string, limit = 50) =>
+      restClient.get(`/v1/entities/search${buildQS({ q, type, limit })}`, wrap(z.object({ results: z.array(z.unknown()), total: z.number() }))).then(r => r.data),
+
+    /** Single entity summary. */
+    get: (entityId: string) =>
+      restClient.get(`/v1/entities/${entityId}`, wrap(unknownSchema)).then(r => r.data),
+  },
+
   // ── Realtime (SSE / WebSocket URLs) ───────────────────────────────────────
   realtime: {
     sseUrl: (entityId?: string) =>

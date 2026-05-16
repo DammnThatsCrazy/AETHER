@@ -4,6 +4,7 @@ import type { ReactNode } from 'react';
 interface BadgeProps {
   readonly children: ReactNode;
   readonly variant?: 'default' | 'accent' | 'success' | 'warning' | 'danger' | 'info' | undefined;
+  readonly size?: 'sm' | 'md' | undefined;
   readonly className?: string | undefined;
 }
 
@@ -16,9 +17,9 @@ const variants: Record<string, string> = {
   info: 'bg-info/20 text-info border-info/30',
 };
 
-export function Badge({ children, variant = 'default', className }: BadgeProps) {
+export function Badge({ children, variant = 'default', size, className }: BadgeProps) {
   return (
-    <span className={cn('ui-badge border', variants[variant], className)}>
+    <span className={cn('ui-badge border', variants[variant], size === 'sm' && 'text-[10px] px-1.5 py-0.5 leading-none', className)}>
       {children}
     </span>
   );
