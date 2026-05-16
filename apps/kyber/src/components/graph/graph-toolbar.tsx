@@ -1,5 +1,5 @@
 import { cn } from '@kyber/lib/utils';
-import { Button, Toggle, Select, Badge } from '@kyber/components/system';
+import { Button, Toggle, Select, Badge } from '@aether/ui';
 import type { GraphLayer, GraphOverlay, EntityType } from '@kyber/types';
 
 // ---------------------------------------------------------------------------

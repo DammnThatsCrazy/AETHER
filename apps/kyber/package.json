@@ -20,6 +20,7 @@
     "health": "tsx src/lib/health/startup-check.ts"
   },
   "dependencies": {
+    "@aether/ui": "*",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
     "react-router-dom": "^7.0.0",

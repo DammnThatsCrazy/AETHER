@@ -19,7 +19,7 @@ import {
   TerminalSeparator,
   LoadingState,
   ErrorState,
-} from '@kyber/components/system';
+} from '@aether/ui';
 import { PageWrapper } from '@kyber/components/layout';
 import { cn, formatRelativeTime, formatCompactNumber, formatPercentage } from '@kyber/lib/utils';
 import { getEnvironment, getRuntimeMode } from '@kyber/lib/env';

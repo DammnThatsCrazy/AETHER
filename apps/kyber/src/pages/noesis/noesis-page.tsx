@@ -4,7 +4,7 @@ import {
   Badge, Button, ScrollArea, DataTable,
   Tabs, TabsList, TabsTrigger, TabsContent,
   EmptyState,
-} from '@kyber/components/system';
+} from '@aether/ui';
 import { PageWrapper } from '@kyber/components/layout';
 import { cn } from '@kyber/lib/utils';
 import { GraphCanvas } from '@kyber/components/graph/graph-canvas';

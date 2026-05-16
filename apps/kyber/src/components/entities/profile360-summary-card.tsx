@@ -1,5 +1,5 @@
 import type { Entity, Profile360Summary } from '@kyber/types';
-import { Badge, Card, CardContent, StatusIndicator } from '@kyber/components/system';
+import { Badge, Card, CardContent, StatusIndicator } from '@aether/ui';
 import { cn, formatRelativeTime } from '@kyber/lib/utils';
 
 interface Profile360SummaryCardProps {

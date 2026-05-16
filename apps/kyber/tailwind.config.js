@@ -1,35 +1,15 @@
 /** @type {import('tailwindcss').Config} */
 export default {
-  content: ['./index.html', './src/**/*.{ts,tsx}'],
+  presets: [require('@aether/ui/tailwind.preset')],
+  content: [
+    './index.html',
+    './src/**/*.{ts,tsx}',
+    '../../packages/ui/src/**/*.{ts,tsx}',
+  ],
   darkMode: 'class',
   theme: {
     extend: {
       colors: {
-        surface: {
-          base: 'var(--color-surface-base)',
-          raised: 'var(--color-surface-raised)',
-          overlay: 'var(--color-surface-overlay)',
-          sunken: 'var(--color-surface-sunken)',
-        },
-        border: {
-          default: 'var(--color-border-default)',
-          subtle: 'var(--color-border-subtle)',
-          focus: 'var(--color-border-focus)',
-        },
-        text: {
-          primary: 'var(--color-text-primary)',
-          secondary: 'var(--color-text-secondary)',
-          muted: 'var(--color-text-muted)',
-          inverse: 'var(--color-text-inverse)',
-        },
-        accent: {
-          DEFAULT: 'var(--color-accent)',
-          hover: 'var(--color-accent-hover)',
-        },
-        success: 'var(--color-success)',
-        warning: 'var(--color-warning)',
-        danger: 'var(--color-danger)',
-        info: 'var(--color-info)',
         ctrl: {
           governance: 'var(--color-ctrl-governance)',
           char: 'var(--color-ctrl-char)',
@@ -65,10 +45,6 @@ export default {
           selected: 'var(--color-graph-selected)',
           path: 'var(--color-graph-path)',
         },
-      },
-      fontFamily: {
-        mono: ['JetBrains Mono', 'Fira Code', 'SF Mono', 'Consolas', 'ui-monospace', 'monospace'],
-        sans: ['Inter', 'system-ui', '-apple-system', 'sans-serif'],
       },
     },
   },

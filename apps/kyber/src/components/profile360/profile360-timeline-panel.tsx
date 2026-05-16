@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { Badge, Button, Card, CardContent, CardHeader, CardTitle, Input } from '@kyber/components/system';
+import { Badge, Button, Card, CardContent, CardHeader, CardTitle, Input } from '@aether/ui';
 import { EventTimeline } from '@kyber/components/timelines';
 import type { Profile360Reference, TimelineEvent } from '@kyber/types';
 

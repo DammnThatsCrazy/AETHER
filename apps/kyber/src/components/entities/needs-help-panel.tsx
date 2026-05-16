@@ -1,5 +1,5 @@
 import type { NeedsHelpCard } from '@kyber/types';
-import { Card, CardHeader, CardTitle, CardContent, SeverityBadge, Badge } from '@kyber/components/system';
+import { Card, CardHeader, CardTitle, CardContent, SeverityBadge, Badge } from '@aether/ui';
 import { formatRelativeTime } from '@kyber/lib/utils';
 
 interface NeedsHelpPanelProps {

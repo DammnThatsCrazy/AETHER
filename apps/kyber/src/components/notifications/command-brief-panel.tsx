@@ -1,4 +1,4 @@
-import { Card, CardHeader, CardTitle, CardContent, TerminalSeparator } from '@kyber/components/system';
+import { Card, CardHeader, CardTitle, CardContent, TerminalSeparator } from '@aether/ui';
 
 interface CommandBriefPanelProps {
   readonly brief: string;

@@ -13,7 +13,7 @@ import {
   TabsTrigger,
   TabsContent,
   TerminalSeparator,
-} from '@kyber/components/system';
+} from '@aether/ui';
 import { PageWrapper } from '@kyber/components/layout';
 import { EntityListTable } from '@kyber/components/entities';
 import { useEntityData } from '@kyber/features/entities';

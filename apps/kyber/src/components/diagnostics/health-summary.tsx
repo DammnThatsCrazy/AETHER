@@ -1,4 +1,4 @@
-import { StatusIndicator, Card, CardContent } from '@kyber/components/system';
+import { StatusIndicator, Card, CardContent } from '@aether/ui';
 import { AsciiStatusGlyph } from '@kyber/components/ascii';
 import type { HealthStatus } from '@kyber/types';
 

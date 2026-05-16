@@ -1,5 +1,5 @@
 import { useNotifications } from '@kyber/features/notifications';
-import { Card, CardHeader, CardTitle, CardContent, Badge, ScrollArea, EmptyState, Button } from '@kyber/components/system';
+import { Card, CardHeader, CardTitle, CardContent, Badge, ScrollArea, EmptyState, Button } from '@aether/ui';
 import { formatRelativeTime } from '@kyber/lib/utils';
 import { useNavigate } from 'react-router-dom';
 

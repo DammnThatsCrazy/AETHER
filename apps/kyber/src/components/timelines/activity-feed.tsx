@@ -1,4 +1,4 @@
-import { ScrollArea, Badge, GlyphIcon } from '@kyber/components/system';
+import { ScrollArea, Badge, GlyphIcon } from '@aether/ui';
 import { formatRelativeTime } from '@kyber/lib/utils';
 
 interface FeedItem {

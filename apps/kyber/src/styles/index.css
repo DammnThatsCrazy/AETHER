@@ -1,6 +1,7 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+@import '@aether/ui/styles/tokens.css';
 @import "./tokens.css";
 
 @layer base {
@@ -26,16 +27,16 @@
 }
 
 @layer components {
-  .kyber-card {
+  .ui-card {
     @apply rounded-md border border-border-default bg-surface-raised p-4;
+  }
+
+  .ui-badge {
+    @apply inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium;
   }
 
   .kyber-panel {
     @apply rounded-lg border border-border-default bg-surface-overlay p-6;
-  }
-
-  .kyber-badge {
-    @apply inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium;
   }
 
   .kyber-severity-p0 {
@@ -52,14 +53,6 @@
   }
   .kyber-severity-info {
     @apply bg-surface-raised text-text-secondary border border-border-default;
-  }
-
-  .kyber-glyph {
-    @apply font-mono text-xs leading-none;
-  }
-
-  .kyber-terminal-separator {
-    @apply border-t border-border-subtle my-2 opacity-40;
   }
 }
 

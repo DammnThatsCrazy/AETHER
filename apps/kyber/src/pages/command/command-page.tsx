@@ -14,7 +14,7 @@ import {
   ScrollArea,
   TerminalSeparator,
   EmptyState,
-} from '@kyber/components/system';
+} from '@aether/ui';
 import { cn, formatRelativeTime } from '@kyber/lib/utils';
 import {
   CHARStatusPanel,

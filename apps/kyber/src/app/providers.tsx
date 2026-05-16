@@ -2,7 +2,7 @@ import type { ReactNode } from 'react';
 import { BrowserRouter } from 'react-router-dom';
 import { AuthProvider } from '@kyber/features/auth';
 import { NotificationProvider } from '@kyber/features/notifications';
-import { ThemeProvider } from '@kyber/hooks/use-theme';
+import { ThemeProvider } from '@aether/ui';
 import { ErrorBoundary } from './error-boundary';
 
 interface ProvidersProps {
@@ -13,7 +13,7 @@ export function Providers({ children }: ProvidersProps) {
   return (
     <ErrorBoundary>
       <BrowserRouter>
-        <ThemeProvider>
+        <ThemeProvider storageKey="kyber-theme">
           <AuthProvider>
             <NotificationProvider>
               {children}

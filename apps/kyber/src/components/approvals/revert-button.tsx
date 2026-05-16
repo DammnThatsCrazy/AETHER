@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Button } from '@kyber/components/system';
+import { Button } from '@aether/ui';
 import { ApprovalModal } from './approval-modal';
 import { PermissionGate } from '@kyber/features/permissions';
 import type { ReviewStatus, ActionAttribution } from '@kyber/types';

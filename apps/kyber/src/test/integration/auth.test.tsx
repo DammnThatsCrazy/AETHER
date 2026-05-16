@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { AuthProvider, useAuth } from '@kyber/features/auth';
-import { ThemeProvider } from '@kyber/hooks/use-theme';
+import { ThemeProvider } from '@aether/ui';
 import { NotificationProvider } from '@kyber/features/notifications';
 
 // In local-mocked mode (default VITE_KYBER_ENV), mock auth auto-logs in

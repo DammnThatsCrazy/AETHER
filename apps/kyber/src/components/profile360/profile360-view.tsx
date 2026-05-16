@@ -1,6 +1,6 @@
 import { useCallback, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Badge, Button, Card, CardContent, CardHeader, CardTitle, EmptyState, LoadingState, StatusIndicator, Tabs, TabsContent, TabsList, TabsTrigger, TerminalSeparator } from '@kyber/components/system';
+import { Badge, Button, Card, CardContent, CardHeader, CardTitle, EmptyState, LoadingState, StatusIndicator, Tabs, TabsContent, TabsList, TabsTrigger, TerminalSeparator } from '@aether/ui';
 import { useProfile360 } from '@kyber/features/profile360';
 import type { Profile360EntityType, Profile360Reference, Profile360ViewId } from '@kyber/types';
 import { entityDetailPath, profile360Path } from '@kyber/routes';

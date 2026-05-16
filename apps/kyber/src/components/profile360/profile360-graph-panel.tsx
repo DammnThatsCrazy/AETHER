@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { Badge, Button, Card, CardContent, CardHeader, CardTitle, Input, Select } from '@kyber/components/system';
+import { Badge, Button, Card, CardContent, CardHeader, CardTitle, Input, Select } from '@aether/ui';
 import { GraphCanvas } from '@kyber/components/graph';
 import type { GraphEdge, GraphNode, GraphOverlay, Profile360Graph, Profile360Reference } from '@kyber/types';
 
