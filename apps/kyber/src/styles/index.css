@@ -1,8 +1,9 @@
+@import '@aether/ui/styles/tokens.css';
+@import "./tokens.css";
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
-@import '@aether/ui/styles/tokens.css';
-@import "./tokens.css";
 
 @layer base {
   * {
