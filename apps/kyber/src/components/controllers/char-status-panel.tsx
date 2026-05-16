@@ -1,5 +1,5 @@
 import type { CHARStatus } from '@kyber/types';
-import { Card, CardContent, Badge, TerminalSeparator } from '@kyber/components/system';
+import { Card, CardContent, Badge, TerminalSeparator } from '@aether/ui';
 import { cn, formatRelativeTime, formatTimestamp } from '@kyber/lib/utils';
 
 interface CHARStatusPanelProps {

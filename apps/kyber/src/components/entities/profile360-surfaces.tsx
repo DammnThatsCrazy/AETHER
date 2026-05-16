@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import type { Entity, EntityNeighborhood, Profile360Analytics, Profile360DrillItem, Profile360Metric, Profile360Relationship, TimelineEvent } from '@kyber/types';
-import { Badge, Button, Card, CardContent, CardHeader, CardTitle, Input, Tabs, TabsContent, TabsList, TabsTrigger } from '@kyber/components/system';
+import { Badge, Button, Card, CardContent, CardHeader, CardTitle, Input, Tabs, TabsContent, TabsList, TabsTrigger } from '@aether/ui';
 import { GraphCanvas } from '@kyber/components/graph';
 import { cn, formatRelativeTime } from '@kyber/lib/utils';
 import { eventToDrillItem, relationshipToDrillItem } from './profile360-utils';

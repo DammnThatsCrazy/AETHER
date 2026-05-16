@@ -6,7 +6,7 @@ import {
   ScrollArea, GlyphIcon, TerminalSeparator,
   Modal, ModalHeader, ModalBody, ModalFooter,
   EmptyState,
-} from '@kyber/components/system';
+} from '@aether/ui';
 import { PageWrapper } from '@kyber/components/layout';
 import { cn, formatRelativeTime, formatTimestamp } from '@kyber/lib/utils';
 import { useAuth } from '@kyber/features/auth';

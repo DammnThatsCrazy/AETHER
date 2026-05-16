@@ -1,5 +1,5 @@
 import { Component, type ReactNode, type ErrorInfo } from 'react';
-import { ErrorState } from '@kyber/components/system';
+import { ErrorState } from '@aether/ui';
 import { log } from '@kyber/lib/logging';
 
 interface Props {

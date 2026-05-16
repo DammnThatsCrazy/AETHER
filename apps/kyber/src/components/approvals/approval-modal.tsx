@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Modal, ModalHeader, ModalBody, ModalFooter, Button, Input } from '@kyber/components/system';
+import { Modal, ModalHeader, ModalBody, ModalFooter, Button, Input } from '@aether/ui';
 import type { ReviewStatus } from '@kyber/types';
 import { useAuth } from '@kyber/features/auth';
 import { getEnvironment } from '@kyber/lib/env';

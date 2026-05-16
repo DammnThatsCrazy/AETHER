@@ -1,4 +1,4 @@
-import { Card, CardContent, Badge } from '@kyber/components/system';
+import { Card, CardContent, Badge } from '@aether/ui';
 import type { CircuitBreakerState } from '@kyber/types';
 import { formatRelativeTime } from '@kyber/lib/utils';
 

@@ -1,5 +1,5 @@
 import { useNotifications } from '@kyber/features/notifications';
-import { Card, CardHeader, CardTitle, CardContent, SeverityBadge, Badge, ScrollArea, EmptyState } from '@kyber/components/system';
+import { Card, CardHeader, CardTitle, CardContent, SeverityBadge, Badge, ScrollArea, EmptyState } from '@aether/ui';
 import { formatRelativeTime } from '@kyber/lib/utils';
 
 export function AlertCenter() {

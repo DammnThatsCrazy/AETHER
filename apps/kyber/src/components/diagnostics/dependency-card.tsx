@@ -1,4 +1,4 @@
-import { Card, CardContent, StatusIndicator, Badge } from '@kyber/components/system';
+import { Card, CardContent, StatusIndicator, Badge } from '@aether/ui';
 import type { DependencyHealth } from '@kyber/types';
 import { formatDuration } from '@kyber/lib/utils';
 

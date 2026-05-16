@@ -30,7 +30,7 @@ import {
   ModalFooter,
   Input,
   TerminalSeparator,
-} from '@kyber/components/system';
+} from '@aether/ui';
 import { cn, formatRelativeTime, formatTimestamp } from '@kyber/lib/utils';
 import { PermissionGate } from '@kyber/features/permissions';
 import { EntityScoreCard } from './entity-score-card';

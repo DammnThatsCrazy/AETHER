@@ -1,6 +1,6 @@
 import { useAuth } from '@kyber/features/auth';
 import { getEnvironment, getRuntimeMode } from '@kyber/lib/env';
-import { EnvironmentBadge, Badge } from '@kyber/components/system';
+import { EnvironmentBadge, Badge } from '@aether/ui';
 import { useNotifications } from '@kyber/features/notifications';
 
 export function TopBar() {

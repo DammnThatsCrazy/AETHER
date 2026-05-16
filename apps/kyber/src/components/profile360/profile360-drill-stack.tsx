@@ -1,4 +1,4 @@
-import { Badge, Button, Card, CardContent, CardHeader, CardTitle, ScrollArea } from '@kyber/components/system';
+import { Badge, Button, Card, CardContent, CardHeader, CardTitle, ScrollArea } from '@aether/ui';
 import { formatRelativeTime } from '@kyber/lib/utils';
 import { useProfile360Store, profile360Actions } from '@kyber/features/profile360';
 import type { Profile360Reference } from '@kyber/types';

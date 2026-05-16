@@ -2,7 +2,7 @@ import { Routes, Route, Navigate } from 'react-router-dom';
 import { lazy, Suspense } from 'react';
 import { RequireAuth } from '@kyber/features/auth';
 import { AppShell } from '@kyber/components/layout';
-import { LoadingState } from '@kyber/components/system';
+import { LoadingState } from '@aether/ui';
 import { ErrorBoundary } from './error-boundary';
 
 const MissionPage = lazy(() => import('@kyber/pages/mission').then(m => ({ default: m.MissionPage })));

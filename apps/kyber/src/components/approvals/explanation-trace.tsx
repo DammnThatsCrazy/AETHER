@@ -1,4 +1,4 @@
-import { Card, CardHeader, CardTitle, CardContent, GlyphIcon } from '@kyber/components/system';
+import { Card, CardHeader, CardTitle, CardContent, GlyphIcon } from '@aether/ui';
 import { cn } from '@kyber/lib/utils';
 
 interface ExplanationTraceProps {

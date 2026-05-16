@@ -1,5 +1,5 @@
 import type { Profile360DrillItem } from '@kyber/types';
-import { Badge, Button, Card, CardContent, CardHeader, CardTitle } from '@kyber/components/system';
+import { Badge, Button, Card, CardContent, CardHeader, CardTitle } from '@aether/ui';
 import { formatRelativeTime } from '@kyber/lib/utils';
 
 interface Profile360DrillStackProps {

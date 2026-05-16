@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useNotifications } from './notification-context';
-import { Card, CardHeader, CardTitle, CardContent, Button, SeverityBadge, Badge, EmptyState, ScrollArea, Tabs, TabsList, TabsTrigger, TabsContent } from '@kyber/components/system';
+import { Card, CardHeader, CardTitle, CardContent, Button, SeverityBadge, Badge, EmptyState, ScrollArea, Tabs, TabsList, TabsTrigger, TabsContent } from '@aether/ui';
 import { formatRelativeTime } from '@kyber/lib/utils';
 import type { KyberNotification } from '@kyber/types';
 
