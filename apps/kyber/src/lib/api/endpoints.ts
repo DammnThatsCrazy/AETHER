@@ -680,7 +680,7 @@ export const api = {
       restClient.post(`/v1/delegations/${delegationId}/revoke`, wrap(unknownSchema)).then(r => r.data),
 
     list: (params?: { grantor?: string; grantee?: string; active?: boolean; limit?: number }) =>
-      restClient.get(`/v1/delegations${buildQS({ ...params })}`, wrap(unknownSchema)).then(r => r.data),
+      restClient.get(`/v1/delegations${buildQS({ ...params })}`, wrap(unknownSchema)).then(r => r.data as DelegationsResponse),
 
     validate: (params: { grantee_entity_id: string; action: string; resource: string; amount?: number }) =>
       restClient.post('/v1/delegations/validate', wrap(unknownSchema), params).then(r => r.data),

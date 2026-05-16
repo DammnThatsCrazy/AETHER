@@ -36,7 +36,8 @@ export type {
   Profile360Surface, Profile360Visibility, Profile360EntityType,
   Profile360Identity, Profile360SubResources, Profile360Response,
   SessionsResponse, DevicesResponse, JourneysResponse, WalletsResponse,
-  RelationshipsResponse, DelegationsResponse, TimelineResponse, LakeResponse,
+  RelationshipsResponse, DelegationsResponse, ProfileDelegationsResponse,
+  TimelineResponse, LakeResponse,
 } from '@aether/shared';
 
 export type AetherEnvironment = 'local-mocked' | 'local-live' | 'staging' | 'production';
