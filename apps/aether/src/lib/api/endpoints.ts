@@ -201,7 +201,7 @@ export const api = {
      * Exposes H→A grants, H→H sub-delegation, and A→A pipelines.
      */
     delegations: (params: { grantor?: string; grantee?: string; active?: boolean; limit?: number }) =>
-      restClient.get(`/v1/delegations${buildQS({ ...params })}`, wrap(unknownSchema)).then(r => r.data),
+      restClient.get(`/v1/delegations${buildQS({ ...params })}`, wrap(unknownSchema)).then(r => r.data as DelegationsResponse),
 
     /** Validate whether a delegated action is in scope for a grantee. */
     validateDelegation: (params: { grantee_entity_id: string; action: string; resource: string; amount?: number }) =>

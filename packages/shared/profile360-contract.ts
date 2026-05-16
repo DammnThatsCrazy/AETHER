@@ -205,6 +205,8 @@ export interface RelationshipsResponse {
   readonly outbound: RelationshipEdge[];
   readonly inbound: RelationshipEdge[];
   readonly total: number;
+  /** Aggregate breakdown by interaction class / relation type — same route as relationships */
+  readonly relationship_summary?: RelationshipSummary;
 }
 
 export interface DelegationsResponse {
