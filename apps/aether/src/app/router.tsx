@@ -8,6 +8,7 @@ import { ErrorBoundary } from './error-boundary';
 const UsersPage = lazy(() => import('@aether-app/pages/users').then(m => ({ default: m.UsersPage })));
 const UserProfilePage = lazy(() => import('@aether-app/pages/user-profile').then(m => ({ default: m.UserProfilePage })));
 const CampaignsPage = lazy(() => import('@aether-app/pages/campaigns').then(m => ({ default: m.CampaignsPage })));
+const GraphPage = lazy(() => import('@aether-app/pages/graph').then(m => ({ default: m.GraphPage })));
 
 function PageSuspense({ children }: { readonly children: React.ReactNode }) {
   return (
@@ -28,6 +29,7 @@ export function AppRouter() {
           <Route path="/users" element={<PageSuspense><UsersPage /></PageSuspense>} />
           <Route path="/users/:id" element={<PageSuspense><UserProfilePage /></PageSuspense>} />
           <Route path="/campaigns" element={<PageSuspense><CampaignsPage /></PageSuspense>} />
+          <Route path="/graph" element={<PageSuspense><GraphPage /></PageSuspense>} />
           <Route path="*" element={<Navigate to="/users" replace />} />
         </Routes>
       </AppShell>
