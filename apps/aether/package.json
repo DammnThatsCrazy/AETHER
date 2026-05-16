@@ -13,6 +13,7 @@
     "format:check": "prettier --check 'src/**/*.{ts,tsx,css}'"
   },
   "dependencies": {
+    "@aether/shared": "*",
     "@aether/ui": "*",
     "cytoscape": "^3.30.0",
     "react": "^19.0.0",

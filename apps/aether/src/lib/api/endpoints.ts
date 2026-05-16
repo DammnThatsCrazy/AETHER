@@ -17,6 +17,14 @@
  */
 import { z } from 'zod';
 import { restClient } from './rest/client';
+import type {
+  SessionsResponse, DevicesResponse, JourneysResponse, WalletsResponse,
+  RelationshipsResponse, DelegationsResponse,
+  UnifiedFinancialProfile, IntelligenceProfile,
+  WalletRiskProfile, Web3WalletProfile, EntityCluster,
+  AttributionJourney, WhyExplanation, BehavioralSignal,
+  Profile360Response, EntityGraph,
+} from '@aether/shared';
 
 // ─── Response wrapper ────────────────────────────────────────────────────────
 const wrap = <T extends z.ZodType>(dataSchema: T) =>
@@ -60,11 +68,11 @@ export const api = {
      * UTM/campaign context, duration and page-view counts.
      */
     sessions: (userId: string, limit = 20) =>
-      restClient.get(`/v1/profile/${userId}/sessions?limit=${limit}`, wrap(unknownSchema)).then(r => r.data),
+      restClient.get(`/v1/profile/${userId}/sessions?limit=${limit}`, wrap(unknownSchema)).then(r => r.data as SessionsResponse),
 
     /** Observed devices — deterministic logins + probabilistic fingerprint matches. */
     devices: (userId: string) =>
-      restClient.get(`/v1/profile/${userId}/devices`, wrap(unknownSchema)).then(r => r.data),
+      restClient.get(`/v1/profile/${userId}/devices`, wrap(unknownSchema)).then(r => r.data as DevicesResponse),
 
     /** Platform distribution — web / iOS / Android / SDK / API broken down by event count. */
     platforms: (userId: string) =>
@@ -72,7 +80,7 @@ export const api = {
 
     /** Cross-session journey chains — steps, drop-off flags, campaign linkage ("where"). */
     journeys: (userId: string) =>
-      restClient.get(`/v1/profile/${userId}/journeys`, wrap(unknownSchema)).then(r => r.data),
+      restClient.get(`/v1/profile/${userId}/journeys`, wrap(unknownSchema)).then(r => r.data as JourneysResponse),
 
     /**
      * Web3 wallet profiles for every wallet linked to the user.
@@ -81,7 +89,7 @@ export const api = {
      * NFT holdings, wallet risk score, and Web3 loyalty signals.
      */
     wallets: (userId: string) =>
-      restClient.get(`/v1/profile/${userId}/wallets`, wrap(unknownSchema)).then(r => r.data),
+      restClient.get(`/v1/profile/${userId}/wallets`, wrap(unknownSchema)).then(r => r.data as WalletsResponse),
 
     /** All identifiers — wallets, emails, device IDs, session IDs, social handles, customer IDs. */
     identifiers: (userId: string) =>
@@ -102,7 +110,7 @@ export const api = {
      *           settlements, top counterparties and protocol spend
      */
     financials: (userId: string) =>
-      restClient.get(`/v1/profile/${userId}/financials`, wrap(unknownSchema)).then(r => r.data),
+      restClient.get(`/v1/profile/${userId}/financials`, wrap(unknownSchema)).then(r => r.data as UnifiedFinancialProfile),
 
     /**
      * Typed relationship edges for this entity:
@@ -111,7 +119,7 @@ export const api = {
      * Each edge carries relation_type, weight, confidence, volume_usd.
      */
     relationships: (userId: string) =>
-      restClient.get(`/v1/profile/${userId}/relationships`, wrap(unknownSchema)).then(r => r.data),
+      restClient.get(`/v1/profile/${userId}/relationships`, wrap(unknownSchema)).then(r => r.data as RelationshipsResponse),
 
     /** Protocol interactions derived from event stream + economic graph. */
     protocols: (userId: string) =>
@@ -119,7 +127,7 @@ export const api = {
 
     /** Intelligence layer — risk score, trust score, anomaly score, ML feature values. */
     intelligence: (userId: string) =>
-      restClient.get(`/v1/profile/${userId}/intelligence`, wrap(unknownSchema)).then(r => r.data),
+      restClient.get(`/v1/profile/${userId}/intelligence`, wrap(unknownSchema)).then(r => r.data as IntelligenceProfile),
 
     /** Data provenance — source attribution for every data point in the profile. */
     provenance: (userId: string) =>
@@ -140,7 +148,7 @@ export const api = {
   // ── Profile360 normalized surfaces ─────────────────────────────────────────
   profile360: {
     full: (entityType: string, entityId: string) =>
-      restClient.get(`/v1/profile360/${entityType}/${entityId}?include=identity,financial,graph,timeline,analytics`, wrap(unknownSchema)).then(r => r.data),
+      restClient.get(`/v1/profile360/${entityType}/${entityId}?include=identity,financial,graph,timeline,analytics`, wrap(unknownSchema)).then(r => r.data as Profile360Response),
 
     graph: (entityType: string, entityId: string, params?: { cursor?: string; limit?: number }) =>
       restClient.get(`/v1/profile360/${entityType}/${entityId}/graph${buildQS({ ...params })}`, wrap(unknownSchema)).then(r => r.data),
@@ -172,14 +180,14 @@ export const api = {
      * identity links, and financial flows.
      */
     entityGraph: (entityId: string) =>
-      restClient.get(`/v1/entities/${entityId}/graph`, wrap(unknownSchema)).then(r => r.data),
+      restClient.get(`/v1/entities/${entityId}/graph`, wrap(unknownSchema)).then(r => r.data as EntityGraph),
 
     /**
      * Identity cluster — entities probabilistically resolved to the same
      * real-world actor, with shared tissue (devices, IPs, wallets, campaigns).
      */
     cluster: (entityId: string) =>
-      restClient.get(`/v1/resolution/cluster/${entityId}`, wrap(unknownSchema)).then(r => r.data),
+      restClient.get(`/v1/resolution/cluster/${entityId}`, wrap(unknownSchema)).then(r => r.data as EntityCluster),
 
     /**
      * Identity links for an entity — H2H same-person, shares_device, shares_wallet.
@@ -212,11 +220,11 @@ export const api = {
   behavioral: {
     /** Full behavioural scan across all signal families. */
     entity: (entityId: string) =>
-      restClient.get(`/v1/behavioral/entity/${entityId}`, wrap(unknownSchema)).then(r => r.data),
+      restClient.get(`/v1/behavioral/entity/${entityId}`, wrap(unknownSchema)).then(r => r.data as { entity_id: string; signals: BehavioralSignal[] }),
 
     /** Signals filtered by family (intent_residue, wallet_friction, continuity, etc). */
     signals: (entityId: string, params?: { family?: string; limit?: number }) =>
-      restClient.get(`/v1/behavioral/entity/${entityId}/signals${buildQS({ ...params })}`, wrap(z.object({ entity_id: z.string(), signals: z.array(z.unknown()), count: z.number() }))).then(r => r.data),
+      restClient.get(`/v1/behavioral/entity/${entityId}/signals${buildQS({ ...params })}`, wrap(z.object({ entity_id: z.string(), signals: z.array(z.unknown()), count: z.number() }))).then(r => r.data as { entity_id: string; signals: BehavioralSignal[]; count: number }),
 
     /** Trigger a full behavioural re-scan. */
     scan: (entityId: string) =>
@@ -241,7 +249,7 @@ export const api = {
 
     /** Human-readable explanation of why this entity is anomalous. */
     explain: (entityId: string) =>
-      restClient.get(`/v1/expectations/entity/${entityId}/explain`, wrap(unknownSchema)).then(r => r.data),
+      restClient.get(`/v1/expectations/entity/${entityId}/explain`, wrap(unknownSchema)).then(r => r.data as WhyExplanation),
 
     scan: (entityId: string) =>
       restClient.post(`/v1/expectations/scan/${entityId}`, wrap(unknownSchema)).then(r => r.data),
@@ -339,7 +347,7 @@ export const api = {
       restClient.post('/v1/attribution/touchpoints', wrap(unknownSchema), tp).then(r => r.data),
 
     journey: (userId: string) =>
-      restClient.get(`/v1/attribution/journey/${userId}`, wrap(unknownSchema)).then(r => r.data),
+      restClient.get(`/v1/attribution/journey/${userId}`, wrap(unknownSchema)).then(r => r.data as AttributionJourney),
 
     clearJourney: (userId: string) =>
       restClient.delete(`/v1/attribution/journey/${userId}`, wrap(unknownSchema)),
@@ -448,13 +456,13 @@ export const api = {
   // ── Intelligence (wallet risk + entity cluster) ────────────────────────────
   intelligence: {
     walletRisk: (address: string) =>
-      restClient.get(`/v1/intelligence/wallet/${address}/risk`, wrap(unknownSchema)).then(r => r.data),
+      restClient.get(`/v1/intelligence/wallet/${address}/risk`, wrap(unknownSchema)).then(r => r.data as WalletRiskProfile),
 
     walletProfile: (address: string) =>
-      restClient.get(`/v1/intelligence/wallet/${address}/profile`, wrap(unknownSchema)).then(r => r.data),
+      restClient.get(`/v1/intelligence/wallet/${address}/profile`, wrap(unknownSchema)).then(r => r.data as Web3WalletProfile),
 
     entityCluster: (entityId: string) =>
-      restClient.get(`/v1/intelligence/entity/${entityId}/cluster`, wrap(unknownSchema)).then(r => r.data),
+      restClient.get(`/v1/intelligence/entity/${entityId}/cluster`, wrap(unknownSchema)).then(r => r.data as EntityCluster),
   },
 
   // ── Analytics ─────────────────────────────────────────────────────────────

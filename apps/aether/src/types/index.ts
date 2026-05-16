@@ -9,7 +9,7 @@ export type {
   // Behavioural "Why"
   SignalFamily, SignalType, SignalSeverity, BehavioralSignal, WhyExplanation,
   // Attribution "Where"
-  AttributionModel, AttributionCredit, AttributionResolution, Touchpoint,
+  AttributionModel, AttributionCredit, AttributionResolution, Touchpoint, AttributionJourney,
   // Web3 wallet
   WalletType, TokenBalance, OnChainTransaction, ProtocolInteraction, Web3LoyaltySignals, Web3WalletProfile,
   // Loyalty
@@ -23,6 +23,20 @@ export type {
   IdentifierSet, FlowSummary,
   EntityProfile, ClusterMember, EntityCluster, CollectiveTissue,
   GraphEntityNode, EntityGraph, RelationshipSummary,
+} from '@aether/shared';
+
+export type {
+  // Intelligence & risk
+  MLFeature, PredictedNextEvent, IntelligenceProfile, WalletRiskProfile,
+  // Financials (Web2 + Web3)
+  Web2PaymentRecord, Web2FinancialProfile,
+  LPPosition, StakingPosition, ProtocolSpend, CounterpartyFlow,
+  Web3OnChainFinancials, UnifiedFinancialProfile,
+  // Profile360 canonical contract
+  Profile360Surface, Profile360Visibility, Profile360EntityType,
+  Profile360Identity, Profile360SubResources, Profile360Response,
+  SessionsResponse, DevicesResponse, JourneysResponse, WalletsResponse,
+  RelationshipsResponse, DelegationsResponse, TimelineResponse, LakeResponse,
 } from '@aether/shared';
 
 export type AetherEnvironment = 'local-mocked' | 'local-live' | 'staging' | 'production';
