@@ -49,7 +49,7 @@ export function useProfile360Timeline(
   params?: { cursor?: string; limit?: number; type?: string },
 ) {
   return useQuery({
-    key: key(entityType, entityId, `timeline:${params?.type ?? ''}:${params?.limit ?? ''}`),
+    key: key(entityType, entityId, `timeline:${params?.type ?? ''}:${params?.cursor ?? ''}:${params?.limit ?? ''}`),
     fetcher: () => api.profile360.timeline(entityType, entityId, params),
     staleTime: STALE,
     enabled: !!(entityType && entityId),
