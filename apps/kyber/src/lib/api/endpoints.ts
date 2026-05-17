@@ -1177,6 +1177,93 @@ export const api = {
     }) => restClient.post(`/v1/investigations/${caseId}/annotations`, unknownSchema, body),
   },
 
+  // ── Graph Intelligence (GraphTraversalEngine-backed routes) ──────────────
+  graphIntelligence: {
+    traverse: (body: {
+      tenantId: string;
+      start: { kind: string; id: string; label?: string };
+      depth: number;
+      direction?: 'in' | 'out' | 'both';
+      limit?: number;
+    }) => restClient.post('/v1/graph/traverse', unknownSchema, body),
+
+    path: (body: {
+      tenantId: string;
+      from: { kind: string; id: string; label?: string };
+      to: { kind: string; id: string; label?: string };
+      maxDepth?: number;
+    }) => restClient.post('/v1/graph/path', unknownSchema, body),
+
+    temporal: (body: {
+      tenantId: string;
+      anchor: { kind: string; id: string; label?: string };
+      asOf: string;
+      depth?: number;
+    }) => restClient.post('/v1/graph/temporal', unknownSchema, body),
+
+    overlay: (body: {
+      tenantId: string;
+      overlays: string[];
+      limit?: number;
+    }) => restClient.post('/v1/graph/overlay', unknownSchema, body),
+
+    filter: (body: {
+      tenantId: string;
+      filter: Record<string, unknown>;
+      limit?: number;
+    }) => restClient.post('/v1/graph/filter', unknownSchema, body),
+  },
+
+  // ── Entity Intelligence (profile, timeline, relationships) ─────────────────
+  entityIntelligence: {
+    profile: (body: {
+      tenantId: string;
+      entity: { kind: string; id: string };
+      dimensions?: string[];
+      consistency?: string;
+    }) => restClient.post('/v1/entities/profile', unknownSchema, body),
+
+    timeline: (body: {
+      tenantId: string;
+      entity: { kind: string; id: string };
+      fromTime?: string;
+      toTime?: string;
+      limit?: number;
+      cursor?: string;
+    }) => restClient.post('/v1/entities/timeline/query', unknownSchema, body),
+
+    relationships: (body: {
+      tenantId: string;
+      entity: { kind: string; id: string };
+      relationshipTypes?: string[];
+      minScore?: number;
+      depth?: number;
+      limit?: number;
+      cursor?: string;
+    }) => restClient.post('/v1/entities/relationships/query', unknownSchema, body),
+  },
+
+  // ── Event Replay (Bronze-tier source_tag replay) ───────────────────────────
+  eventReplay: {
+    submit: (body: {
+      tenantId: string;
+      sourceTag: string;
+      fromTime: string;
+      toTime?: string;
+      eventTypes?: string[];
+      dryRun?: boolean;
+    }) => restClient.post('/v1/events/replay', unknownSchema, body),
+
+    getJob: (jobId: string, tenantId: string) =>
+      restClient.get(`/v1/events/replay/${jobId}${buildQS({ tenantId })}`, unknownSchema),
+
+    listJobs: (tenantId: string, limit = 50) =>
+      restClient.get(`/v1/events/replay${buildQS({ tenantId, limit })}`, unknownSchema),
+
+    cancel: (jobId: string, tenantId: string) =>
+      restClient.post(`/v1/events/replay/${jobId}/cancel`, unknownSchema, { tenantId }),
+  },
+
   // ── Governance (policy decisions + audit — operator view) ─────────────────
   governance: {
     evaluate: (body: {

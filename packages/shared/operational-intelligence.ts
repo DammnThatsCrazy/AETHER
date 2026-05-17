@@ -423,3 +423,32 @@ export interface GovernanceDecision {
   explanation: ExplainabilityMetadata;
   evaluatedAt: string;
 }
+
+// ---------------------------------------------------------------------------
+// Event Replay API
+// ---------------------------------------------------------------------------
+
+export interface ReplayRequest extends TenantScopedRequest {
+  sourceTag: string;
+  fromTime: string;
+  toTime?: string;
+  eventTypes?: string[];
+  dryRun?: boolean;
+}
+
+export type ReplayJobStatus = 'queued' | 'running' | 'completed' | 'failed' | 'cancelled';
+
+export interface ReplayJobResponse {
+  id: string;
+  tenantId: string;
+  sourceTag: string;
+  fromTime: string;
+  toTime?: string;
+  eventTypes?: string[];
+  dryRun: boolean;
+  status: ReplayJobStatus;
+  cursor?: string;
+  submittedAt: string;
+  completedAt?: string;
+  totalReplayed: number;
+}
