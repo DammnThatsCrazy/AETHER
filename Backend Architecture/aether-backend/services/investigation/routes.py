@@ -14,11 +14,13 @@ import uuid
 from datetime import datetime, timezone
 from typing import Any, Literal, Optional
 
-from fastapi import APIRouter, Depends, Query, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel, Field
 
 from shared.common.common import APIResponse, ForbiddenError, NotFoundError
+from shared.events.events import Event, EventProducer, Topic
 from shared.logger.logger import get_logger, metrics
+from dependencies.providers import get_producer
 from services.operational_intelligence.models import (
     EntityRef,
     EvidenceRef,
@@ -34,6 +36,14 @@ from repositories.repos import InvestigationRepository
 logger = get_logger("aether.service.investigation")
 
 router = APIRouter(prefix="/v1/investigations", tags=["Investigations"])
+
+_VALID_TRANSITIONS: dict[str, frozenset[str]] = {
+    "open":      frozenset({"triage", "active", "escalated", "closed"}),
+    "triage":    frozenset({"active", "escalated", "closed"}),
+    "active":    frozenset({"escalated", "closed"}),
+    "escalated": frozenset({"closed"}),
+    "closed":    frozenset(),
+}
 
 _repo = InvestigationRepository()
 
@@ -89,6 +99,7 @@ class AddAnnotationRequest(TenantScopedRequest):
 async def create_case(
     body: CreateCaseRequest,
     request: Request,
+    producer: EventProducer = Depends(get_producer),
 ) -> InvestigationCase:
     """Create a new investigation case with status 'open'."""
     _require(request, body.tenantId, "write")
@@ -111,6 +122,11 @@ async def create_case(
     result = await _repo.create(case_dict)
     logger.info("investigation_case_created", extra={"case_id": case.id, "tenant_id": case.tenantId})
     metrics.increment("investigation_case_created")
+    await producer.publish(Event(
+        topic=Topic.INVESTIGATION_CASE_CREATED,
+        tenant_id=case.tenantId,
+        payload={"case_id": case.id, "title": case.title, "status": case.status},
+    ))
     return InvestigationCase(**result)
 
 
@@ -144,11 +160,17 @@ async def transition_status(
     case_id: str,
     body: StatusTransitionRequest,
     request: Request,
+    producer: EventProducer = Depends(get_producer),
 ) -> InvestigationCase:
-    """Transition an investigation case to a new status (any → any for MVP)."""
+    """Transition an investigation case status using the enforced state machine."""
     _require(request, body.tenantId, "write")
     row = await _get_case(case_id, body.tenantId)
     previous = row.get("status")
+    if body.status not in _VALID_TRANSITIONS.get(previous or "open", frozenset()):
+        raise HTTPException(
+            status_code=422,
+            detail=f"Invalid status transition: {previous!r} → {body.status!r}",
+        )
     updated = await _repo.update(case_id, {"status": body.status, "updatedAt": _utc_now()})
     logger.info(
         "investigation_status_transitioned",
@@ -160,6 +182,11 @@ async def transition_status(
         },
     )
     metrics.increment("investigation_status_transitioned")
+    await producer.publish(Event(
+        topic=Topic.INVESTIGATION_STATUS_CHANGED,
+        tenant_id=body.tenantId,
+        payload={"case_id": case_id, "from": previous, "to": body.status},
+    ))
     return InvestigationCase(**updated)
 
 
@@ -168,6 +195,7 @@ async def add_evidence(
     case_id: str,
     body: AddEvidenceRequest,
     request: Request,
+    producer: EventProducer = Depends(get_producer),
 ) -> InvestigationCase:
     """Append one or more EvidenceRef entries to an investigation case."""
     _require(request, body.tenantId, "write")
@@ -180,6 +208,11 @@ async def add_evidence(
         extra={"case_id": case_id, "count": len(body.evidence)},
     )
     metrics.increment("investigation_evidence_added")
+    await producer.publish(Event(
+        topic=Topic.INVESTIGATION_CASE_UPDATED,
+        tenant_id=body.tenantId,
+        payload={"case_id": case_id, "update": "evidence_added", "count": len(body.evidence)},
+    ))
     return InvestigationCase(**updated)
 
 
@@ -188,6 +221,7 @@ async def add_annotation(
     case_id: str,
     body: AddAnnotationRequest,
     request: Request,
+    producer: EventProducer = Depends(get_producer),
 ) -> InvestigationCase:
     """Add a new annotation authored by the specified user to an investigation case."""
     _require(request, body.tenantId, "write")
@@ -208,4 +242,9 @@ async def add_annotation(
         extra={"case_id": case_id, "annotation_id": annotation.id},
     )
     metrics.increment("investigation_annotation_added")
+    await producer.publish(Event(
+        topic=Topic.INVESTIGATION_CASE_UPDATED,
+        tenant_id=body.tenantId,
+        payload={"case_id": case_id, "update": "annotation_added", "annotation_id": annotation.id},
+    ))
     return InvestigationCase(**updated)

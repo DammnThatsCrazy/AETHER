@@ -69,45 +69,53 @@ def _eval_body(mod, tenant_id="t-001", context=None):
     )
 
 
+class _NoOpProducer:
+    async def publish(self, *args, **kwargs):
+        pass
+
+
+_producer = _NoOpProducer()
+
+
 # ── Tests ─────────────────────────────────────────────────────────────────────
 
 def test_evaluate_allows_by_default(mod):
-    decision = asyncio.run(mod.evaluate_decision(_eval_body(mod), make_req()))
+    decision = asyncio.run(mod.evaluate_decision(_eval_body(mod), make_req(), _producer))
     assert decision.allowed is True
     assert decision.id is not None
     assert decision.tenantId == "t-001"
 
 
 def test_evaluate_denies_when_context_has_deny(mod):
-    decision = asyncio.run(mod.evaluate_decision(_eval_body(mod, context={"deny": True}), make_req()))
+    decision = asyncio.run(mod.evaluate_decision(_eval_body(mod, context={"deny": True}), make_req(), _producer))
     assert decision.allowed is False
 
 
 def test_list_decisions_filters_by_tenant(mod):
-    asyncio.run(mod.evaluate_decision(_eval_body(mod, tenant_id="t-001"), make_req("t-001")))
-    asyncio.run(mod.evaluate_decision(_eval_body(mod, tenant_id="t-002"), make_req("t-002")))
+    asyncio.run(mod.evaluate_decision(_eval_body(mod, tenant_id="t-001"), make_req("t-001"), _producer))
+    asyncio.run(mod.evaluate_decision(_eval_body(mod, tenant_id="t-002"), make_req("t-002"), _producer))
     results = asyncio.run(mod.list_decisions(make_req("t-001"), tenantId="t-001", principal_id=None, allowed=None, limit=50))
     assert len(results) == 1
     assert results[0].tenantId == "t-001"
 
 
 def test_get_decision_returns_decision(mod):
-    created = asyncio.run(mod.evaluate_decision(_eval_body(mod), make_req()))
+    created = asyncio.run(mod.evaluate_decision(_eval_body(mod), make_req(), _producer))
     fetched = asyncio.run(mod.get_decision(created.id, make_req(), tenantId="t-001"))
     assert fetched.id == created.id
     assert fetched.action == "data:read"
 
 
 def test_get_decision_wrong_tenant_raises_404(mod):
-    created = asyncio.run(mod.evaluate_decision(_eval_body(mod, tenant_id="t-001"), make_req("t-001")))
+    created = asyncio.run(mod.evaluate_decision(_eval_body(mod, tenant_id="t-001"), make_req("t-001"), _producer))
     with pytest.raises(Exception) as exc:
         asyncio.run(mod.get_decision(created.id, make_req("t-002"), tenantId="t-002"))
     assert "not found" in str(exc.value).lower()
 
 
 def test_audit_returns_decisions(mod):
-    asyncio.run(mod.evaluate_decision(_eval_body(mod), make_req()))
-    asyncio.run(mod.evaluate_decision(_eval_body(mod, context={"deny": True}), make_req()))
+    asyncio.run(mod.evaluate_decision(_eval_body(mod), make_req(), _producer))
+    asyncio.run(mod.evaluate_decision(_eval_body(mod, context={"deny": True}), make_req(), _producer))
     results = asyncio.run(mod.audit_trail(make_req(), tenantId="t-001", limit=100, principal_id=None))
     assert len(results) == 2
     allowed_values = {d.allowed for d in results}

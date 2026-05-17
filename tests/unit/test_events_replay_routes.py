@@ -68,10 +68,18 @@ def _replay_body(mod, tenant_id="t-001", source_tag="bronze.events"):
     )
 
 
+class _NoOpProducer:
+    async def publish(self, *args, **kwargs):
+        pass
+
+
+_producer = _NoOpProducer()
+
+
 # ── Tests ─────────────────────────────────────────────────────────────────────
 
 def test_submit_replay_creates_queued_job(mod):
-    job = asyncio.run(mod.submit_replay(_replay_body(mod), make_req()))
+    job = asyncio.run(mod.submit_replay(_replay_body(mod), make_req(), _producer))
     assert job.status == "queued"
     assert job.totalReplayed == 0
     assert job.tenantId == "t-001"
@@ -79,29 +87,29 @@ def test_submit_replay_creates_queued_job(mod):
 
 
 def test_get_replay_job_returns_job(mod):
-    created = asyncio.run(mod.submit_replay(_replay_body(mod), make_req()))
+    created = asyncio.run(mod.submit_replay(_replay_body(mod), make_req(), _producer))
     fetched = asyncio.run(mod.get_replay_job(created.id, make_req(), tenantId="t-001"))
     assert fetched.id == created.id
     assert fetched.sourceTag == "bronze.events"
 
 
 def test_get_replay_job_wrong_tenant_raises_404(mod):
-    created = asyncio.run(mod.submit_replay(_replay_body(mod, tenant_id="t-001"), make_req("t-001")))
+    created = asyncio.run(mod.submit_replay(_replay_body(mod, tenant_id="t-001"), make_req("t-001"), _producer))
     with pytest.raises(Exception) as exc:
         asyncio.run(mod.get_replay_job(created.id, make_req("t-002"), tenantId="t-002"))
     assert "not found" in str(exc.value).lower()
 
 
 def test_list_replay_jobs_by_tenant(mod):
-    asyncio.run(mod.submit_replay(_replay_body(mod, tenant_id="t-001"), make_req("t-001")))
-    asyncio.run(mod.submit_replay(_replay_body(mod, tenant_id="t-002"), make_req("t-002")))
+    asyncio.run(mod.submit_replay(_replay_body(mod, tenant_id="t-001"), make_req("t-001"), _producer))
+    asyncio.run(mod.submit_replay(_replay_body(mod, tenant_id="t-002"), make_req("t-002"), _producer))
     results = asyncio.run(mod.list_replay_jobs(make_req("t-001"), tenantId="t-001", limit=50))
     assert len(results) == 1
     assert results[0].tenantId == "t-001"
 
 
 def test_cancel_replay_job_sets_cancelled(mod):
-    created = asyncio.run(mod.submit_replay(_replay_body(mod), make_req()))
-    cancelled = asyncio.run(mod.cancel_replay_job(created.id, make_req(), tenantId="t-001"))
+    created = asyncio.run(mod.submit_replay(_replay_body(mod), make_req(), _producer))
+    cancelled = asyncio.run(mod.cancel_replay_job(created.id, make_req(), tenantId="t-001", producer=_producer))
     assert cancelled.status == "cancelled"
     assert cancelled.completedAt is not None

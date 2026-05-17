@@ -17,7 +17,9 @@ from fastapi import APIRouter, Depends, Query, Request
 from pydantic import BaseModel, Field
 
 from shared.common.common import APIResponse, ForbiddenError, NotFoundError
+from shared.events.events import Event, EventProducer, Topic
 from shared.logger.logger import get_logger, metrics
+from dependencies.providers import get_producer
 from services.operational_intelligence.models import (
     EntityRef,
     EvidenceRef,
@@ -28,17 +30,18 @@ from services.operational_intelligence.models import (
     EventPipelineEnvelope,
     TenantScopedRequest,
 )
-from repositories.repos import EventReplayRepository
+from repositories.repos import EventReplayRepository, EventEnvelopeRepository
 
 logger = get_logger("aether.service.events")
 
 router = APIRouter(prefix="/v1/events", tags=["Event Replay"])
 
-# ── In-memory store for ingested events (kept as-is, not repo-backed yet) ─────
+# ── In-memory hot cache (write-through to _envelope_repo for durability) ──────
 
 _EVENTS: dict[str, dict] = {}
 
 _repo = EventReplayRepository()
+_envelope_repo = EventEnvelopeRepository()
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
@@ -85,6 +88,7 @@ class ReplayJobResponse(BaseModel):
 async def submit_replay(
     body: ReplayRequest,
     request: Request,
+    producer: EventProducer = Depends(get_producer),
 ) -> ReplayJobResponse:
     """Submit a new event replay job sourced from the given Bronze-tier tag.
 
@@ -117,6 +121,11 @@ async def submit_replay(
         },
     )
     metrics.increment("event_replay_submitted")
+    await producer.publish(Event(
+        topic=Topic.EVENT_REPLAY_SUBMITTED,
+        tenant_id=body.tenantId,
+        payload={"job_id": result["id"], "source_tag": body.sourceTag},
+    ))
     return ReplayJobResponse(**result)
 
 
@@ -151,6 +160,7 @@ async def cancel_replay_job(
     job_id: str,
     request: Request,
     tenantId: str = Query(...),
+    producer: EventProducer = Depends(get_producer),
 ) -> ReplayJobResponse:
     """Cancel a queued or in-progress replay job."""
     _require(request, tenantId, "write")
@@ -161,6 +171,11 @@ async def cancel_replay_job(
     updated = await _repo.update(job_id, {"status": "cancelled", "completedAt": completed_at})
     logger.info("event_replay_cancelled", extra={"job_id": job_id, "tenant_id": tenantId})
     metrics.increment("event_replay_cancelled")
+    await producer.publish(Event(
+        topic=Topic.EVENT_REPLAY_CANCELLED,
+        tenant_id=tenantId,
+        payload={"job_id": job_id},
+    ))
     return ReplayJobResponse(**updated)
 
 
@@ -171,10 +186,12 @@ async def ingest_event(
 ) -> dict[str, Any]:
     """Ingest a single EventPipelineEnvelope (used by the replay feed to re-introduce events).
 
-    Validates tenant isolation before accepting the event into the in-memory store.
+    Persists to durable storage and keeps an in-process hot cache for the replay worker.
     """
     _require(request, envelope.tenantId, "write")
-    _EVENTS[envelope.id] = envelope.model_dump()
+    envelope_dict = envelope.model_dump()
+    await _envelope_repo.create(envelope_dict)
+    _EVENTS[envelope.id] = envelope_dict
     logger.info(
         "event_replay_ingested",
         extra={"event_id": envelope.id, "type": envelope.type, "tenant_id": envelope.tenantId},

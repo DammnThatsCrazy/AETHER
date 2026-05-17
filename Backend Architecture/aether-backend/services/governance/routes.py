@@ -16,7 +16,9 @@ from fastapi import APIRouter, Depends, Query, Request
 from pydantic import BaseModel, Field
 
 from shared.common.common import APIResponse, ForbiddenError, NotFoundError
+from shared.events.events import Event, EventProducer, Topic
 from shared.logger.logger import get_logger, metrics
+from dependencies.providers import get_producer
 from services.operational_intelligence.models import (
     EntityRef,
     EvidenceRef,
@@ -72,6 +74,7 @@ class PolicyEvaluationRequest(TenantScopedRequest):
 async def evaluate_decision(
     body: PolicyEvaluationRequest,
     request: Request,
+    producer: EventProducer = Depends(get_producer),
 ) -> GovernanceDecision:
     """Evaluate a policy decision for the given principal, action, and resource.
 
@@ -109,6 +112,7 @@ async def evaluate_decision(
     )
     decision_dict = decision.model_dump()
     decision_dict["tenant_id"] = decision.tenantId  # repo filter key
+    decision_dict["principal_id"] = body.principal.id  # flat key for list_by_tenant filter
     result = await _repo.create(decision_dict)
     logger.info(
         "governance_decision_evaluated",
@@ -120,6 +124,11 @@ async def evaluate_decision(
         },
     )
     metrics.increment("governance_decision_evaluated")
+    await producer.publish(Event(
+        topic=Topic.GOVERNANCE_DECISION_EVALUATED,
+        tenant_id=body.tenantId,
+        payload={"decision_id": decision.id, "allowed": allowed, "action": body.action},
+    ))
     return GovernanceDecision(**result)
 
 

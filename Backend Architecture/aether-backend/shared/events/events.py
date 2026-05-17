@@ -179,6 +179,14 @@ class Topic(str, Enum):
 
     BEHAVIOR_PROFILE_UPDATED = "aether.behavior.profile.updated"
 
+    INVESTIGATION_CASE_CREATED = "aether.investigation.case.created"
+    INVESTIGATION_CASE_UPDATED = "aether.investigation.case.updated"
+    INVESTIGATION_STATUS_CHANGED = "aether.investigation.status.changed"
+    GOVERNANCE_DECISION_EVALUATED = "aether.governance.decision.evaluated"
+    EVENT_REPLAY_SUBMITTED = "aether.event.replay.submitted"
+    EVENT_REPLAY_COMPLETED = "aether.event.replay.completed"
+    EVENT_REPLAY_CANCELLED = "aether.event.replay.cancelled"
+
     # Dead letter
     DEAD_LETTER = "aether.dlq"
 

@@ -59,6 +59,14 @@ def make_req(tenant_id: str = "t-001"):
     )
 
 
+class _NoOpProducer:
+    async def publish(self, *args, **kwargs):
+        pass
+
+
+_producer = _NoOpProducer()
+
+
 def _create_body(mod, tenant_id="t-001", title="Test Case", created_by="user_1"):
     return mod.CreateCaseRequest(tenantId=tenant_id, title=title, createdBy=created_by)
 
@@ -67,7 +75,7 @@ def _create_body(mod, tenant_id="t-001", title="Test Case", created_by="user_1")
 
 def test_create_investigation_returns_open_case(mod):
     body = _create_body(mod)
-    case = asyncio.run(mod.create_case(body, make_req()))
+    case = asyncio.run(mod.create_case(body, make_req(), _producer))
     assert case.status == "open"
     assert case.tenantId == "t-001"
     assert case.title == "Test Case"
@@ -75,21 +83,22 @@ def test_create_investigation_returns_open_case(mod):
 
 
 def test_list_investigations_filters_by_tenant(mod):
-    asyncio.run(mod.create_case(_create_body(mod, tenant_id="t-001", title="A"), make_req("t-001")))
-    asyncio.run(mod.create_case(_create_body(mod, tenant_id="t-002", title="B"), make_req("t-002")))
+    asyncio.run(mod.create_case(_create_body(mod, tenant_id="t-001", title="A"), make_req("t-001"), _producer))
+    asyncio.run(mod.create_case(_create_body(mod, tenant_id="t-002", title="B"), make_req("t-002"), _producer))
     results = asyncio.run(mod.list_cases(make_req("t-001"), tenantId="t-001", status=None, limit=50))
     assert len(results) == 1
     assert results[0].tenantId == "t-001"
 
 
 def test_list_investigations_filters_by_status(mod):
-    asyncio.run(mod.create_case(_create_body(mod, title="Open1"), make_req()))
-    case2 = asyncio.run(mod.create_case(_create_body(mod, title="Open2"), make_req()))
+    asyncio.run(mod.create_case(_create_body(mod, title="Open1"), make_req(), _producer))
+    case2 = asyncio.run(mod.create_case(_create_body(mod, title="Open2"), make_req(), _producer))
     asyncio.run(
         mod.transition_status(
             case2.id,
             mod.StatusTransitionRequest(tenantId="t-001", status="closed"),
             make_req(),
+            _producer,
         )
     )
     open_cases = asyncio.run(mod.list_cases(make_req(), tenantId="t-001", status="open", limit=50))
@@ -98,26 +107,27 @@ def test_list_investigations_filters_by_status(mod):
 
 
 def test_get_investigation_returns_case(mod):
-    created = asyncio.run(mod.create_case(_create_body(mod), make_req()))
+    created = asyncio.run(mod.create_case(_create_body(mod), make_req(), _producer))
     fetched = asyncio.run(mod.get_case(created.id, make_req(), tenantId="t-001"))
     assert fetched.id == created.id
     assert fetched.title == "Test Case"
 
 
 def test_get_investigation_wrong_tenant_raises_404(mod):
-    created = asyncio.run(mod.create_case(_create_body(mod, tenant_id="t-001"), make_req("t-001")))
+    created = asyncio.run(mod.create_case(_create_body(mod, tenant_id="t-001"), make_req("t-001"), _producer))
     with pytest.raises(Exception) as exc:
         asyncio.run(mod.get_case(created.id, make_req("t-002"), tenantId="t-002"))
     assert "not found" in str(exc.value).lower()
 
 
 def test_transition_status_updates_status(mod):
-    created = asyncio.run(mod.create_case(_create_body(mod), make_req()))
+    created = asyncio.run(mod.create_case(_create_body(mod), make_req(), _producer))
     updated = asyncio.run(
         mod.transition_status(
             created.id,
             mod.StatusTransitionRequest(tenantId="t-001", status="active"),
             make_req(),
+            _producer,
         )
     )
     assert updated.status == "active"
@@ -125,24 +135,24 @@ def test_transition_status_updates_status(mod):
 
 
 def test_add_evidence_appends_to_case(mod):
-    created = asyncio.run(mod.create_case(_create_body(mod), make_req()))
+    created = asyncio.run(mod.create_case(_create_body(mod), make_req(), _producer))
     evidence_body = mod.AddEvidenceRequest(
         tenantId="t-001",
         evidence=[mod.EvidenceRef(id="ev-1", type="event", source="stream-a")],
     )
-    updated = asyncio.run(mod.add_evidence(created.id, evidence_body, make_req()))
+    updated = asyncio.run(mod.add_evidence(created.id, evidence_body, make_req(), _producer))
     assert len(updated.evidence) == 1
     assert updated.evidence[0].id == "ev-1"
 
 
 def test_add_annotation_creates_annotation(mod):
-    created = asyncio.run(mod.create_case(_create_body(mod), make_req()))
+    created = asyncio.run(mod.create_case(_create_body(mod), make_req(), _producer))
     annotation_body = mod.AddAnnotationRequest(
         tenantId="t-001",
         body="Suspicious pattern observed",
         authorId="analyst_1",
     )
-    updated = asyncio.run(mod.add_annotation(created.id, annotation_body, make_req()))
+    updated = asyncio.run(mod.add_annotation(created.id, annotation_body, make_req(), _producer))
     assert len(updated.annotations) == 1
     ann = updated.annotations[0]
     assert ann.id is not None
