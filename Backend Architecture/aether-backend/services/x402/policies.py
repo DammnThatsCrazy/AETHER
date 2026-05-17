@@ -79,9 +79,25 @@ class PolicyEngine:
         active_rules.append("asset_compatibility")
         active_rules.append("chain_compatibility")
 
-        # 2. Budget policy (if set for requester)
-        # Simple inline check: budgets are per-tenant; skipped if no policy present.
-        # Placeholder for hook: this will be extended to query budget_policies table.
+        # 2. Budget policy — per-transaction cap enforced if a policy exists for this requester
+        budget_policy = await self._store.get_budget_policy(tenant_id, requester_id)
+        if budget_policy is not None and budget_policy.per_transaction_cap_usd > 0:
+            if amount_usd > budget_policy.per_transaction_cap_usd:
+                decision = PolicyDecision(
+                    tenant_id=tenant_id,
+                    challenge_id=challenge_id,
+                    outcome=PolicyOutcome.DENY,
+                    active_rules=["budget_per_transaction_cap"],
+                    denial_reason=(
+                        f"Amount ${amount_usd:.2f} exceeds per-transaction cap "
+                        f"${budget_policy.per_transaction_cap_usd:.2f} for {requester_id}"
+                    ),
+                    requires_approval=False,
+                    rationale=f"Budget policy {budget_policy.policy_id} active for {requester_id}",
+                )
+                await self._store.put_policy_decision(decision)
+                return decision
+            active_rules.append("budget_per_transaction_cap")
 
         # 3. Price sanity
         if amount_usd != resource.price_usd:

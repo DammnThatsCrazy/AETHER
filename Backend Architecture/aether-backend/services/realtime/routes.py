@@ -41,6 +41,21 @@ from services.operational_intelligence.models import (
 logger = get_logger("aether.service.realtime")
 router = APIRouter(prefix="/v1/realtime", tags=["Profile 360 / Realtime"])
 
+# Minimum permission required to subscribe to each named channel.
+# Channels not listed default to "read".
+_CHANNEL_PERMISSIONS: dict[str, str] = {
+    "investigation.workspace": "write",
+    "agent.coordination":      "write",
+    "governance.audit":        "read",
+    "tenant.alerts":           "read",
+    "tenant.events":           "read",
+    "entity.profile":          "read",
+    "entity.relationships":    "read",
+    "journey.timeline":        "read",
+    "cluster.membership":      "read",
+    "web3.wallets":            "read",
+}
+
 
 def _utc_now() -> str:
     return datetime.now(timezone.utc).isoformat()
@@ -197,6 +212,22 @@ async def ws_channel_subscribe(websocket: WebSocket) -> None:
                 "error": {"code": "forbidden", "message": "tenantId mismatch", "requestId": sub.requestId},
             })
             return
+
+        # Per-channel permission check before subscribing
+        for ch in sub.channels:
+            required = _CHANNEL_PERMISSIONS.get(ch, "read")
+            if not tenant.has_permission(required):
+                await websocket.send_json({
+                    "action": "ack",
+                    "requestId": sub.requestId,
+                    "accepted": False,
+                    "error": {
+                        "code": "forbidden",
+                        "message": f"insufficient permission for channel {ch!r} (requires {required!r})",
+                        "requestId": sub.requestId,
+                    },
+                })
+                return
 
         new_channels = [ch for ch in sub.channels if ch not in active_queues]
         if new_channels:

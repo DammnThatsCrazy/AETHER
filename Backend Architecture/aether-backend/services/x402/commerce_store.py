@@ -88,6 +88,7 @@ class CommerceStore:
         self.grants = TenantCollection("grant_id")
         self.fulfillments = TenantCollection("fulfillment_id")
         self.treasuries = TenantCollection("tenant_id")  # one per tenant
+        self.budget_policies = TenantCollection("policy_id")
 
     # ── Resource registry ────────────────────────────────────────────
 
@@ -228,6 +229,19 @@ class CommerceStore:
     async def put_treasury(self, t: Treasury) -> Treasury:
         async with self._lock:
             return self.treasuries.put(t.tenant_id, t)
+
+    # ── Budget policies ──────────────────────────────────────────────
+
+    async def put_budget_policy(self, policy: "BudgetPolicy") -> "BudgetPolicy":
+        async with self._lock:
+            return self.budget_policies.put(policy.tenant_id, policy)
+
+    async def get_budget_policy(self, tenant_id: str, subject_id: str) -> "Optional[BudgetPolicy]":
+        all_policies = self.budget_policies.list(tenant_id, active=True)
+        return next((p for p in all_policies if p.subject_id == subject_id), None)
+
+    async def list_budget_policies(self, tenant_id: str) -> "list[BudgetPolicy]":
+        return self.budget_policies.list(tenant_id, active=True)
 
 
 # Module-level singleton store

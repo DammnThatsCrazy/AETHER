@@ -328,6 +328,54 @@ async def quote_price(resource_id: str, request: Request, plan: Optional[str] = 
         raise HTTPException(status_code=404, detail=str(e))
 
 
+# ─── Budget Policies ────────────────────────────────────────────────────
+
+class _BudgetPolicyCreate(BaseModel):
+    subject_id: str
+    subject_type: str = "agent"
+    daily_cap_usd: float = 100.0
+    monthly_cap_usd: float = 1000.0
+    per_transaction_cap_usd: float = 50.0
+
+
+@router.post("/policies/budget")
+async def create_budget_policy(body: _BudgetPolicyCreate, request: Request):
+    """Create or replace a spending budget policy for an agent or user."""
+    _require_perm(request, "x402:write")
+    from .commerce_models import BudgetPolicy
+    store = get_commerce_store()
+    policy = BudgetPolicy(
+        tenant_id=_tenant_id(request),
+        subject_id=body.subject_id,
+        subject_type=body.subject_type,
+        daily_cap_usd=body.daily_cap_usd,
+        monthly_cap_usd=body.monthly_cap_usd,
+        per_transaction_cap_usd=body.per_transaction_cap_usd,
+    )
+    result = await store.put_budget_policy(policy)
+    return APIResponse(data=result.model_dump()).to_dict()
+
+
+@router.get("/policies/budget")
+async def list_budget_policies(request: Request):
+    """List all active budget policies for the authenticated tenant."""
+    _require_perm(request, "x402:read")
+    store = get_commerce_store()
+    policies = await store.list_budget_policies(_tenant_id(request))
+    return APIResponse(data=[p.model_dump() for p in policies]).to_dict()
+
+
+@router.get("/policies/budget/{subject_id}")
+async def get_budget_policy(subject_id: str, request: Request):
+    """Get the active budget policy for a specific agent or user."""
+    _require_perm(request, "x402:read")
+    store = get_commerce_store()
+    policy = await store.get_budget_policy(_tenant_id(request), subject_id)
+    if policy is None:
+        raise HTTPException(status_code=404, detail=f"No budget policy for subject {subject_id!r}")
+    return APIResponse(data=policy.model_dump()).to_dict()
+
+
 # ─── Approvals ─────────────────────────────────────────────────────────
 
 approvals_router = APIRouter(prefix="/v1/approvals", tags=["approvals"])
