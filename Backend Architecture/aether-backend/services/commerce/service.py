@@ -72,12 +72,37 @@ class CommerceService:
         )
         await self._graph.add_edge(edge)
 
-        # Publish event
+        # Publish payment event
         await self._producer.publish(Event(
             topic=Topic.PAYMENT_SENT,
             payload=payment.model_dump(),
             source_service="commerce",
         ))
+        # Publish fee elimination event when crypto savings occur
+        if payment.fee_eliminated_usd > 0:
+            await self._producer.publish(Event(
+                topic=Topic.FEE_ELIMINATED,
+                payload={
+                    "payment_id": payment.payment_id,
+                    "fee_eliminated_usd": payment.fee_eliminated_usd,
+                    "method": payment.method,
+                    "payer_id": payment.payer_id,
+                },
+                source_service="commerce",
+            ))
+        # Publish service purchase event when payee is a service
+        if payment.payee_type == "service":
+            await self._producer.publish(Event(
+                topic=Topic.SERVICE_PURCHASED,
+                payload={
+                    "payment_id": payment.payment_id,
+                    "service_id": payment.payee_id,
+                    "amount": payment.amount,
+                    "currency": payment.currency,
+                    "method": payment.method,
+                },
+                source_service="commerce",
+            ))
 
         self._payments.append(payment)
         metrics.increment("commerce_payments_recorded", labels={"method": payment.method})
