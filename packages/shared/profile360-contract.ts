@@ -157,48 +157,73 @@ export interface Profile360SubResources {
  * Used by both Kyber and Aether to type the result of any profile lookup.
  *
  * GET /v1/profile360/{entity_type}/{entity_id}
- * GET /v1/profile/{user_id}                    (legacy, same shape)
+ *
+ * Backend shape (composer.get_profile360_surface):
+ *   entity, tenant_id, surface, visibility, sections, timeline, graph, raw, alignment_audit
+ *
+ * `identity` and `sub_resources` are conceptual groupings documented in Profile360Identity
+ * and Profile360SubResources — the backend surfaces their contents via `entity` and `sections`.
  */
 export interface Profile360Response {
-  readonly entity_id: string;
-  readonly entity_type: Profile360EntityType;
+  /** Entity identity block — id, type, name, trust/risk/anomaly scores, tags, metadata. */
+  readonly entity: Record<string, unknown>;
   readonly tenant_id: string;
   readonly surface: Profile360Surface;
   readonly visibility?: Profile360Visibility;
-  readonly identity: Profile360Identity;
-  readonly sub_resources: Profile360SubResources;
+  /**
+   * Keyed sections returned for the requested surface.
+   * kyber_internal: identity | system | financial | analytics | debug
+   * Each section: { id, title, data }
+   */
+  readonly sections?: Record<string, { readonly id: string; readonly title: string; readonly data: Record<string, unknown> }>;
+  readonly timeline?: unknown[];
+  readonly graph?: EntityGraph;
   /** Raw backend payload — available in kyber_internal surface only */
   readonly raw?: Record<string, unknown>;
-  readonly computed_at: string;
+  readonly alignment_audit?: Record<string, unknown>;
+  readonly computed_at?: string;
+  /** @deprecated Access entity identity via entity.id / entity.type instead */
+  readonly entity_id?: string;
+  /** @deprecated Access entity identity via entity.type instead */
+  readonly entity_type?: Profile360EntityType;
+  /** @deprecated Sub-resource data is in sections; fetch individual routes for typed arrays */
+  readonly identity?: Profile360Identity;
+  /** @deprecated Sub-resource data is in sections; fetch individual routes for typed arrays */
+  readonly sub_resources?: Profile360SubResources;
 }
 
-// ── Sub-resource endpoint response wrappers ───────────────────────────────────
-// These type the direct JSON responses from individual sub-resource routes,
-// each of which wraps its payload in { status, data, timestamp }.
+// ── Sub-resource wire envelope ────────────────────────────────────────────────
 
-export interface SessionsResponse {
-  readonly user_id: string;
-  readonly sessions: SessionSummary[];
-  readonly count: number;
+/**
+ * Actual JSON shape returned by every profile sub-resource endpoint:
+ *   GET /v1/profile/{id}/sessions|devices|wallets|journeys|relationships|financials
+ *
+ * The backend aggregator wraps items in this envelope. Access items via `.items`,
+ * not the old `.sessions` / `.devices` / `.wallets` field names.
+ */
+export interface SubResourceEnvelope {
+  readonly entity_id: string;
+  readonly tenant_id?: string;
+  /** Discriminator — "sessions" | "devices" | "wallets" | "journeys" | "relationships" | "financials" */
+  readonly kind: string;
+  /** The array of enriched items for this sub-resource. */
+  readonly items: unknown[];
+  readonly summary?: Record<string, unknown>;
+  readonly pagination?: {
+    readonly total?: number;
+    readonly limit?: number;
+    readonly offset?: number;
+    readonly has_more?: boolean;
+  };
+  readonly computed_at?: string;
+  readonly provenance?: Provenance;
 }
 
-export interface DevicesResponse {
-  readonly user_id: string;
-  readonly devices: DeviceSummary[];
-  readonly count: number;
-}
-
-export interface JourneysResponse {
-  readonly user_id: string;
-  readonly journeys: UserJourney[];
-  readonly count: number;
-}
-
-export interface WalletsResponse {
-  readonly user_id: string;
-  readonly wallets: Web3WalletProfile[];
-  readonly count: number;
-}
+/** Sub-resource endpoint response shapes — wire format uses SubResourceEnvelope. */
+export type SessionsResponse = SubResourceEnvelope;
+export type DevicesResponse = SubResourceEnvelope;
+export type JourneysResponse = SubResourceEnvelope;
+export type WalletsResponse = SubResourceEnvelope;
 
 export interface RelationshipsResponse {
   readonly entity_id: string;
