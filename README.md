@@ -18,6 +18,7 @@ orchestration.
 - [`docs/source-of-truth/INGESTION_CONTRACT.md`](docs/source-of-truth/INGESTION_CONTRACT.md) — `POST /v1/batch`
 - [`docs/source-of-truth/ENTITY_MODEL.md`](docs/source-of-truth/ENTITY_MODEL.md) — entities shared across Web2 + Web3
 - [`docs/source-of-truth/PLATFORM_PARITY.md`](docs/source-of-truth/PLATFORM_PARITY.md) — tiers A/B/C
+- [`docs/architecture/BACKEND_INTELLIGENCE_ARCHITECTURE.md`](docs/architecture/BACKEND_INTELLIGENCE_ARCHITECTURE.md) — additive backend intelligence architecture blueprint
 
 ## Architecture
 
