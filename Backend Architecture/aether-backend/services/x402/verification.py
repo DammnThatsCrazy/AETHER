@@ -9,8 +9,8 @@ Day-1 chains: USDC on Base (eip155:8453), USDC on Solana (solana:mainnet).
 
 from __future__ import annotations
 
-import math
 import re
+from decimal import Decimal, ROUND_CEILING
 from typing import Optional
 
 import httpx
@@ -181,7 +181,10 @@ class VerificationEngine:
             return True, None
 
         decimals = _ASSET_DECIMALS.get(authorization.asset_symbol, 6)
-        atomic_amount = str(int(math.ceil(authorization.amount_usd * (10 ** decimals))))
+        atomic_amount = str(int(
+            (Decimal(str(authorization.amount_usd)) * Decimal(10 ** decimals))
+            .to_integral_value(rounding=ROUND_CEILING)
+        ))
         network = _CHAIN_TO_NETWORK.get(authorization.chain, authorization.chain)
         asset_contract = _ASSET_CONTRACT.get(
             (authorization.asset_symbol, authorization.chain), ""
