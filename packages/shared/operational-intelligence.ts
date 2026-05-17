@@ -246,6 +246,17 @@ export interface TemporalGraphRequest extends TenantScopedRequest {
   filter?: GraphQueryFilter;
 }
 
+export interface GraphOverlayRequest extends TenantScopedRequest {
+  graph?: GraphQueryFilter;
+  overlays: string[];
+  limit?: number;
+}
+
+export interface GraphFilterRequest extends TenantScopedRequest {
+  filter: GraphQueryFilter;
+  limit?: number;
+}
+
 export interface GraphResult {
   nodes: GraphNode[];
   edges: GraphEdge[];
