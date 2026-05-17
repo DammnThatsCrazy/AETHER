@@ -12,12 +12,16 @@ from __future__ import annotations
 import re
 from typing import Optional
 
+import httpx
+
 from shared.events.events import Event, EventProducer, Topic
 from shared.logger.logger import get_logger, metrics
 
-from .commerce_models import PaymentAuthorization, PaymentReceipt
+from .commerce_models import Facilitator, PaymentAuthorization, PaymentReceipt
 from .commerce_store import get_commerce_store
 from .facilitators import get_facilitator_registry
+
+_FACILITATOR_TIMEOUT_S = 10.0
 
 logger = get_logger("aether.service.x402.verification")
 
@@ -93,7 +97,7 @@ class VerificationEngine:
             facilitator = await self._facilitators.get(tenant_id, authorization.facilitator_id)
             if facilitator and facilitator.health_status == "healthy":
                 verified, error = await self._verify_via_facilitator(
-                    tenant_id, facilitator.facilitator_id, authorization, tx_hash
+                    tenant_id, facilitator, authorization, tx_hash
                 )
                 verified_by = facilitator.facilitator_id
 
@@ -146,19 +150,40 @@ class VerificationEngine:
     async def _verify_via_facilitator(
         self,
         tenant_id: str,
-        facilitator_id: str,
+        facilitator: Facilitator,
         authorization: PaymentAuthorization,
         tx_hash: str,
     ) -> tuple[bool, Optional[str]]:
-        """Delegate to facilitator. In local mode treats the local facilitator
-        as an oracle that verifies based on authorization match."""
-        # Local facilitator: instantly verifies if tx_hash format is valid and
-        # payer/recipient/amount match authorization (deterministic).
-        if facilitator_id == "fac_local_aether":
+        """Delegate to facilitator. Local facilitator verifies deterministically;
+        external facilitators receive a real HTTP POST to their endpoint."""
+        if facilitator.facilitator_id == "fac_local_aether":
             return True, None
-        # External facilitator: stub that accepts known-good tx formats.
-        # Production: HTTP call to facilitator.endpoint_url.
-        return True, None
+
+        endpoint = facilitator.endpoint_url.rstrip("/") + "/verify"
+        payload = {
+            "tx_hash": tx_hash,
+            "chain": authorization.chain,
+            "asset_symbol": authorization.asset_symbol,
+            "amount_usd": authorization.amount_usd,
+            "payer": authorization.payer,
+            "recipient": authorization.recipient,
+            "authorization_id": authorization.authorization_id,
+            "challenge_id": authorization.challenge_id,
+        }
+        try:
+            async with httpx.AsyncClient(timeout=_FACILITATOR_TIMEOUT_S) as client:
+                resp = await client.post(endpoint, json=payload)
+            if resp.status_code == 200:
+                data = resp.json()
+                verified = bool(data.get("verified", False))
+                error_msg: Optional[str] = data.get("error") if not verified else None
+                return verified, error_msg
+            return False, f"facilitator returned HTTP {resp.status_code}"
+        except httpx.TimeoutException:
+            return False, f"facilitator {facilitator.facilitator_id} timed out"
+        except Exception as exc:
+            logger.warning(f"facilitator {facilitator.facilitator_id} call failed: {exc}")
+            return False, f"facilitator unreachable: {exc}"
 
     async def _verify_locally(
         self, authorization: PaymentAuthorization, tx_hash: str

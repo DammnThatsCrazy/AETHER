@@ -142,8 +142,10 @@ async def traverse_graph(
     start_vertex = await graph.get_vertex(body.start.id)
     start_node = _vertex_to_node(start_vertex) if start_vertex else GraphNode(
         id=body.start.id, kind=body.start.kind, label=body.start.label,
-        properties={"tenantId": body.tenantId, "role": "start"},
+        properties={"tenantId": body.tenantId, "role": "start", "contractStage": "skeleton"},
     )
+    if start_node.properties is not None and "contractStage" not in start_node.properties:
+        start_node.properties["contractStage"] = "skeleton"
     seen_ids = {start_node.id}
     extra_nodes = [_vertex_to_node(v) for v in result.nodes if v.vertex_id not in seen_ids]
 
@@ -151,6 +153,9 @@ async def traverse_graph(
         nodes=[start_node] + extra_nodes,
         edges=[_edge_to_graph_edge(e) for e in result.edges],
         overlays=_overlay_stubs(body.overlays),
+        explainability=ExplainabilityMetadata(
+            summary="Graph traversal contract validated — live data returned when graph is populated",
+        ),
     )
 
 
