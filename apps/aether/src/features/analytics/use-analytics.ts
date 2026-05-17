@@ -36,7 +36,7 @@ export function useAnalyticsGraphql() {
 
 export function useExportEvents() {
   return useMutation({
-    mutationFn: (params: { format?: 'csv' | 'json' | 'parquet'; start_date?: string; end_date?: string; event_type?: string }) =>
+    mutationFn: (params: { format?: 'csv' | 'json' | 'parquet'; query?: { event_type?: string; start_date?: string; end_date?: string; user_id?: string; session_id?: string; limit?: number } }) =>
       api.analytics.export(params),
   });
 }
