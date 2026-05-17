@@ -14,6 +14,15 @@ const DiagnosticsPage = lazy(() => import('@kyber/pages/diagnostics').then(m => 
 const ReviewPage = lazy(() => import('@kyber/pages/review').then(m => ({ default: m.ReviewPage })));
 const LabPage = lazy(() => import('@kyber/pages/lab').then(m => ({ default: m.LabPage })));
 const Profile360Page = lazy(() => import('@kyber/pages/profile360').then(m => ({ default: m.Profile360Page })));
+const AgentPage = lazy(() => import('@kyber/pages/agent').then(m => ({ default: m.AgentPage })));
+const ResolutionPage = lazy(() => import('@kyber/pages/resolution').then(m => ({ default: m.ResolutionPage })));
+const FraudPage = lazy(() => import('@kyber/pages/fraud').then(m => ({ default: m.FraudPage })));
+const ConsentPage = lazy(() => import('@kyber/pages/consent').then(m => ({ default: m.ConsentPage })));
+const RewardsPage = lazy(() => import('@kyber/pages/rewards').then(m => ({ default: m.RewardsPage })));
+const PopulationPage = lazy(() => import('@kyber/pages/population').then(m => ({ default: m.PopulationPage })));
+const Web3Page = lazy(() => import('@kyber/pages/web3').then(m => ({ default: m.Web3Page })));
+const LakePage = lazy(() => import('@kyber/pages/lake').then(m => ({ default: m.LakePage })));
+const AdminPage = lazy(() => import('@kyber/pages/admin').then(m => ({ default: m.AdminPage })));
 
 function PageSuspense({ children }: { readonly children: React.ReactNode }) {
   return (
@@ -38,7 +47,17 @@ export function AppRouter() {
           <Route path="/entities/:type/:id" element={<PageSuspense><EntitiesPage /></PageSuspense>} />
           <Route path="/profile360/:type/:id" element={<PageSuspense><Profile360Page /></PageSuspense>} />
           <Route path="/command" element={<PageSuspense><CommandPage /></PageSuspense>} />
+          <Route path="/agent" element={<PageSuspense><AgentPage /></PageSuspense>} />
+          <Route path="/resolution" element={<PageSuspense><ResolutionPage /></PageSuspense>} />
           <Route path="/diagnostics" element={<PageSuspense><DiagnosticsPage /></PageSuspense>} />
+          <Route path="/fraud" element={<PageSuspense><FraudPage /></PageSuspense>} />
+          <Route path="/consent" element={<PageSuspense><ConsentPage /></PageSuspense>} />
+          <Route path="/rewards" element={<PageSuspense><RewardsPage /></PageSuspense>} />
+          <Route path="/population" element={<PageSuspense><PopulationPage /></PageSuspense>} />
+          <Route path="/web3" element={<PageSuspense><Web3Page /></PageSuspense>} />
+          <Route path="/lake" element={<PageSuspense><LakePage /></PageSuspense>} />
+          <Route path="/admin" element={<PageSuspense><AdminPage /></PageSuspense>} />
+          <Route path="/admin/:tenantId" element={<PageSuspense><AdminPage /></PageSuspense>} />
           <Route path="/review" element={<PageSuspense><ReviewPage /></PageSuspense>} />
           <Route path="/review/:batchId" element={<PageSuspense><ReviewPage /></PageSuspense>} />
           <Route path="/lab" element={<PageSuspense><LabPage /></PageSuspense>} />

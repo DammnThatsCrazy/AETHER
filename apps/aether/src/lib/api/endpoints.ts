@@ -194,7 +194,7 @@ export const api = {
      * Each link has interaction_class, weight, and confidence.
      */
     links: (entityId: string, limit = 50) =>
-      restClient.get(`/v1/crossdomain/links/${entityId}?limit=${limit}`, wrap(z.array(unknownSchema))).then(r => r.data),
+      restClient.get(`/v1/crossdomain/links/${entityId}?limit=${limit}`, wrap(z.object({ entity_id: z.string(), links: z.array(unknownSchema), count: z.number() }))).then(r => r.data.links),
 
     /**
      * All delegation records involving this entity (as grantor or grantee).
@@ -353,26 +353,26 @@ export const api = {
       restClient.delete(`/v1/attribution/journey/${userId}`, wrap(unknownSchema)),
 
     models: () =>
-      restClient.get('/v1/attribution/models', wrap(z.array(unknownSchema))).then(r => r.data),
+      restClient.get('/v1/attribution/models', wrap(unknownSchema)).then(r => r.data),
   },
 
   // ── Web3 & On-Chain ────────────────────────────────────────────────────────
   web3: {
     chains: {
       list: (params?: { vm_family?: string; limit?: number }) =>
-        restClient.get(`/v1/web3/chains${buildQS({ ...params })}`, wrap(z.array(unknownSchema))).then(r => r.data),
+        restClient.get(`/v1/web3/chains${buildQS({ ...params })}`, wrap(z.object({ chains: z.array(unknownSchema), count: z.number() }))).then(r => r.data.chains),
       get: (chainId: string) =>
         restClient.get(`/v1/web3/chains/${chainId}`, wrap(unknownSchema)).then(r => r.data),
     },
     protocols: {
       list: (params?: { family?: string; chain?: string; q?: string; limit?: number }) =>
-        restClient.get(`/v1/web3/protocols${buildQS({ ...params })}`, wrap(z.array(unknownSchema))).then(r => r.data),
+        restClient.get(`/v1/web3/protocols${buildQS({ ...params })}`, wrap(z.object({ protocols: z.array(unknownSchema), count: z.number() }))).then(r => r.data.protocols),
       get: (protocolId: string) =>
         restClient.get(`/v1/web3/protocols/${protocolId}`, wrap(unknownSchema)).then(r => r.data),
     },
     tokens: {
       list: (params?: { chain_id?: string; stablecoins?: boolean; limit?: number }) =>
-        restClient.get(`/v1/web3/tokens${buildQS({ ...params })}`, wrap(z.array(unknownSchema))).then(r => r.data),
+        restClient.get(`/v1/web3/tokens${buildQS({ ...params })}`, wrap(z.object({ tokens: z.array(unknownSchema), count: z.number() }))).then(r => r.data.tokens),
     },
     contracts: {
       get: (chainId: string, address: string) =>
@@ -384,7 +384,7 @@ export const api = {
     },
     governance: {
       listSpaces: (params?: { protocol_id?: string; limit?: number }) =>
-        restClient.get(`/v1/web3/governance/spaces${buildQS({ ...params })}`, wrap(z.array(unknownSchema))).then(r => r.data),
+        restClient.get(`/v1/web3/governance/spaces${buildQS({ ...params })}`, wrap(z.object({ spaces: z.array(unknownSchema), count: z.number() }))).then(r => r.data.spaces),
     },
     classify: {
       observation: (observation: Record<string, unknown>) =>
@@ -395,7 +395,7 @@ export const api = {
   onchain: {
     /** On-chain actions for an agent — purchases, contract calls, transfers. */
     agentActions: (agentId: string) =>
-      restClient.get(`/v1/onchain/actions/${agentId}`, wrap(z.array(unknownSchema))).then(r => r.data),
+      restClient.get(`/v1/onchain/actions/${agentId}`, wrap(z.object({ agent_id: z.string(), actions: z.array(unknownSchema), count: z.number() }))).then(r => r.data.actions),
 
     /** Contract metadata — ABI classification, protocol mapping, risk flags. */
     getContract: (address: string) =>
@@ -437,13 +437,13 @@ export const api = {
   flows: {
     wallets: {
       list: (entityId: string, limit = 50) =>
-        restClient.get(`/v1/flows/wallets${buildQS({ entity_id: entityId, limit })}`, wrap(z.array(unknownSchema))).then(r => r.data),
+        restClient.get(`/v1/flows/wallets${buildQS({ entity_id: entityId, limit })}`, wrap(z.object({ entity_id: z.string(), wallets: z.array(unknownSchema), count: z.number() }))).then(r => r.data.wallets),
       link: (wallet: { owner_entity_id: string; chain: string; address: string }) =>
         restClient.post('/v1/flows/wallets', wrap(unknownSchema), wallet).then(r => r.data),
     },
     transfers: {
       list: (entityId: string, limit = 50) =>
-        restClient.get(`/v1/flows/transfers${buildQS({ entity_id: entityId, limit })}`, wrap(z.array(unknownSchema))).then(r => r.data),
+        restClient.get(`/v1/flows/transfers${buildQS({ entity_id: entityId, limit })}`, wrap(z.object({ entity_id: z.string(), transfers: z.array(unknownSchema), count: z.number() }))).then(r => r.data.transfers),
       record: (transfer: { from_entity_id: string; to_entity_id: string; asset_id: string; amount: number; [k: string]: unknown }) =>
         restClient.post('/v1/flows/transfers', wrap(unknownSchema), transfer).then(r => r.data),
     },
@@ -510,7 +510,7 @@ export const api = {
       restClient.get('/v1/providers/health', wrap(unknownSchema)).then(r => r.data),
 
     categories: () =>
-      restClient.get('/v1/providers/categories', wrap(z.array(unknownSchema))).then(r => r.data),
+      restClient.get('/v1/providers/categories', wrap(unknownSchema)).then(r => r.data),
   },
 
   // ── Ingestion (SDK event capture) ─────────────────────────────────────────
