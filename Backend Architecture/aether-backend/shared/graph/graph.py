@@ -444,6 +444,24 @@ class _InMemoryGraphBackend:
                         results.append(target)
         return results
 
+    async def get_edges(
+        self, vertex_id: str, edge_type: Optional[str] = None, direction: str = "out",
+    ) -> list["Edge"]:
+        results: list[Edge] = []
+        for edge in self._edges:
+            touches = False
+            if direction == "out" and edge.from_vertex_id == vertex_id:
+                touches = True
+            elif direction == "in" and edge.to_vertex_id == vertex_id:
+                touches = True
+            elif direction == "both" and (
+                edge.from_vertex_id == vertex_id or edge.to_vertex_id == vertex_id
+            ):
+                touches = True
+            if touches and (edge_type is None or edge.edge_type == edge_type):
+                results.append(edge)
+        return results
+
     async def query(self, gremlin: str) -> list[dict]:
         logger.debug(f"In-memory graph QUERY (no-op): {gremlin[:80]}...")
         return []
@@ -566,6 +584,46 @@ class _NeptuneGraphBackend:
             logger.error(f"Neptune get_neighbors error for {vertex_id}: {e}")
         return results
 
+    async def get_edges(
+        self, vertex_id: str, edge_type: Optional[str] = None, direction: str = "out",
+    ) -> list["Edge"]:
+        g = await self._ensure_connected()
+        results: list[Edge] = []
+        try:
+            dirs: list[tuple[str, Any]] = []
+            if direction in ("out", "both"):
+                dirs.append(("out", g.V(vertex_id).outE()))
+            if direction in ("in", "both"):
+                dirs.append(("in", g.V(vertex_id).inE()))
+            for _dir, trav in dirs:
+                if edge_type:
+                    trav = trav.hasLabel(edge_type)
+                edge_maps = (
+                    trav.project("lbl", "props", "from_id", "to_id")
+                    .by(T.label)
+                    .by(__.valueMap())
+                    .by(__.outV().id())
+                    .by(__.inV().id())
+                    .toList()
+                )
+                for em in edge_maps:
+                    raw_props: dict = em.get("props", {})
+                    props = {
+                        k: v[0] if isinstance(v, list) and len(v) == 1 else v
+                        for k, v in raw_props.items()
+                    }
+                    created = str(props.pop("created_at", ""))
+                    results.append(Edge(
+                        edge_type=str(em["lbl"]),
+                        from_vertex_id=str(em["from_id"]),
+                        to_vertex_id=str(em["to_id"]),
+                        properties=props,
+                        created_at=created,
+                    ))
+        except Exception as e:
+            logger.error(f"Neptune get_edges error for {vertex_id}: {e}")
+        return results
+
     async def query(self, gremlin: str) -> list[dict]:
         g = await self._ensure_connected()
         try:
@@ -685,6 +743,16 @@ class GraphClient:
         if self._backend is None:
             await self.connect()
         return await self._backend.get_neighbors(vertex_id, edge_type, direction)  # type: ignore[union-attr]
+
+    async def get_edges(
+        self,
+        vertex_id: str,
+        edge_type: Optional[str] = None,
+        direction: str = "out",
+    ) -> list[Edge]:
+        if self._backend is None:
+            await self.connect()
+        return await self._backend.get_edges(vertex_id, edge_type, direction)  # type: ignore[union-attr]
 
     async def query(self, gremlin: str) -> list[dict]:
         if self._backend is None:

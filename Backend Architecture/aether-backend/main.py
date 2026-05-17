@@ -163,6 +163,7 @@ from services.behavior.routes import router as behavior_router
 from services.agent.user_agents import router as user_agents_router
 from services.realtime.routes import router as realtime_router
 from services.operational_intelligence.routes import router as operational_graph_router
+from services.entity_intelligence.routes import router as entity_intelligence_router
 from services.profile360_workers import attach_profile360_workers
 
 
@@ -298,6 +299,7 @@ def create_app() -> FastAPI:
     app.include_router(user_agents_router)
     app.include_router(realtime_router)
     app.include_router(operational_graph_router)
+    app.include_router(entity_intelligence_router)
 
     # ── Intelligence Graph services (feature-flagged) ───────────
     ig = settings.intelligence_graph
