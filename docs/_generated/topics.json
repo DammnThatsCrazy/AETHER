@@ -451,6 +451,34 @@
         {
           "member": "BEHAVIOR_PROFILE_UPDATED",
           "value": "aether.behavior.profile.updated"
+        },
+        {
+          "member": "INVESTIGATION_CASE_CREATED",
+          "value": "aether.investigation.case.created"
+        },
+        {
+          "member": "INVESTIGATION_CASE_UPDATED",
+          "value": "aether.investigation.case.updated"
+        },
+        {
+          "member": "INVESTIGATION_STATUS_CHANGED",
+          "value": "aether.investigation.status.changed"
+        },
+        {
+          "member": "GOVERNANCE_DECISION_EVALUATED",
+          "value": "aether.governance.decision.evaluated"
+        },
+        {
+          "member": "EVENT_REPLAY_SUBMITTED",
+          "value": "aether.event.replay.submitted"
+        },
+        {
+          "member": "EVENT_REPLAY_COMPLETED",
+          "value": "aether.event.replay.completed"
+        },
+        {
+          "member": "EVENT_REPLAY_CANCELLED",
+          "value": "aether.event.replay.cancelled"
         }
       ]
     },
@@ -836,6 +864,34 @@
     {
       "member": "BEHAVIOR_PROFILE_UPDATED",
       "value": "aether.behavior.profile.updated"
+    },
+    {
+      "member": "INVESTIGATION_CASE_CREATED",
+      "value": "aether.investigation.case.created"
+    },
+    {
+      "member": "INVESTIGATION_CASE_UPDATED",
+      "value": "aether.investigation.case.updated"
+    },
+    {
+      "member": "INVESTIGATION_STATUS_CHANGED",
+      "value": "aether.investigation.status.changed"
+    },
+    {
+      "member": "GOVERNANCE_DECISION_EVALUATED",
+      "value": "aether.governance.decision.evaluated"
+    },
+    {
+      "member": "EVENT_REPLAY_SUBMITTED",
+      "value": "aether.event.replay.submitted"
+    },
+    {
+      "member": "EVENT_REPLAY_COMPLETED",
+      "value": "aether.event.replay.completed"
+    },
+    {
+      "member": "EVENT_REPLAY_CANCELLED",
+      "value": "aether.event.replay.cancelled"
     },
     {
       "member": "DEAD_LETTER",

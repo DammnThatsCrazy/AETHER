@@ -2,7 +2,7 @@
 from __future__ import annotations
 import asyncio
 from datetime import datetime, timezone
-from shared.logger.logger import get_logger
+from shared.logger.logger import get_logger, metrics
 
 logger = get_logger("aether.events.worker")
 
@@ -26,17 +26,27 @@ async def _process_job(repo, job: dict) -> None:
     now = datetime.now(timezone.utc).isoformat()
     try:
         await repo.update(job_id, {"status": "running", "updatedAt": now})
-        # Bronze-tier replay: find replayable events from _EVENTS store
         from services.events.routes import _EVENTS
-        source_tag = job.get("sourceTag", "")
-        from_time = job.get("fromTime", "")
-        to_time = job.get("toTime")
+        source_tag: str = job.get("sourceTag", "")
+        from_time: str = job.get("fromTime", "")
+        to_time: str | None = job.get("toTime")
+        event_types: list[str] = job.get("eventTypes") or []
         replayed = 0
         for env in list(_EVENTS.values()):
-            if env.get("replayable") and env.get("tenantId") == job.get("tenantId"):
-                if env.get("occurredAt", "") >= from_time:
-                    if to_time is None or env.get("occurredAt", "") <= to_time:
-                        replayed += 1
+            if not env.get("replayable"):
+                continue
+            if env.get("tenantId") != job.get("tenantId"):
+                continue
+            if source_tag and source_tag not in (env.get("tags") or []):
+                continue
+            if event_types and env.get("type") not in event_types:
+                continue
+            occurred = env.get("occurredAt", "")
+            if from_time and occurred < from_time:
+                continue
+            if to_time and occurred > to_time:
+                continue
+            replayed += 1
         await repo.update(job_id, {
             "status": "completed",
             "totalReplayed": replayed,
@@ -44,9 +54,11 @@ async def _process_job(repo, job: dict) -> None:
             "updatedAt": datetime.now(timezone.utc).isoformat(),
         })
         logger.info("replay_job_completed job_id=%s replayed=%d", job_id, replayed)
+        metrics.increment("event_replay_job_completed")
     except Exception as exc:
         logger.error("replay_job_failed job_id=%s error=%s", job_id, exc)
         await repo.update(job_id, {
             "status": "failed",
             "completedAt": datetime.now(timezone.utc).isoformat(),
         })
+        metrics.increment("event_replay_job_failed")

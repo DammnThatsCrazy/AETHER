@@ -17,7 +17,9 @@ from fastapi import APIRouter, Depends, Query, Request
 from pydantic import BaseModel, Field
 
 from shared.common.common import APIResponse, ForbiddenError, NotFoundError
+from shared.events.events import Event, EventProducer, Topic
 from shared.logger.logger import get_logger, metrics
+from dependencies.providers import get_producer
 from services.operational_intelligence.models import (
     EntityRef,
     EvidenceRef,
@@ -85,6 +87,7 @@ class ReplayJobResponse(BaseModel):
 async def submit_replay(
     body: ReplayRequest,
     request: Request,
+    producer: EventProducer = Depends(get_producer),
 ) -> ReplayJobResponse:
     """Submit a new event replay job sourced from the given Bronze-tier tag.
 
@@ -117,6 +120,11 @@ async def submit_replay(
         },
     )
     metrics.increment("event_replay_submitted")
+    await producer.publish(Event(
+        topic=Topic.EVENT_REPLAY_SUBMITTED,
+        tenant_id=body.tenantId,
+        payload={"job_id": result["id"], "source_tag": body.sourceTag},
+    ))
     return ReplayJobResponse(**result)
 
 
@@ -151,6 +159,7 @@ async def cancel_replay_job(
     job_id: str,
     request: Request,
     tenantId: str = Query(...),
+    producer: EventProducer = Depends(get_producer),
 ) -> ReplayJobResponse:
     """Cancel a queued or in-progress replay job."""
     _require(request, tenantId, "write")
@@ -161,6 +170,11 @@ async def cancel_replay_job(
     updated = await _repo.update(job_id, {"status": "cancelled", "completedAt": completed_at})
     logger.info("event_replay_cancelled", extra={"job_id": job_id, "tenant_id": tenantId})
     metrics.increment("event_replay_cancelled")
+    await producer.publish(Event(
+        topic=Topic.EVENT_REPLAY_CANCELLED,
+        tenant_id=tenantId,
+        payload={"job_id": job_id},
+    ))
     return ReplayJobResponse(**updated)
 
 

@@ -41,6 +41,13 @@ _CHANNEL_TOPICS: tuple[Topic, ...] = (
     Topic.AGENT_STATE_SNAPSHOT,
     Topic.AGENT_ESCALATION_RAISED,
     Topic.BEHAVIOR_PROFILE_UPDATED,
+    Topic.INVESTIGATION_CASE_CREATED,
+    Topic.INVESTIGATION_CASE_UPDATED,
+    Topic.INVESTIGATION_STATUS_CHANGED,
+    Topic.GOVERNANCE_DECISION_EVALUATED,
+    Topic.EVENT_REPLAY_SUBMITTED,
+    Topic.EVENT_REPLAY_COMPLETED,
+    Topic.EVENT_REPLAY_CANCELLED,
     Topic.ML_EXTRACTION_ALERT_OPENED,
     Topic.ML_EXTRACTION_CLUSTER_ESCALATED,
     Topic.ML_EXTRACTION_IDENTITY_RESOLVED,
@@ -59,6 +66,9 @@ _CHANNEL_MAP: list[tuple[str, str]] = [
     ("agent", "agent.coordination"),
     ("wallet", "web3.wallets"),
     ("flow.wallet", "web3.wallets"),
+    ("investigation", "investigation.workspace"),
+    ("governance", "governance.audit"),
+    ("event.replay", "tenant.events"),
     ("behavior", "journey.timeline"),
     ("journey", "journey.timeline"),
     ("identity", "entity.profile"),
@@ -99,8 +109,8 @@ class ChannelHub:
         for topic in _CHANNEL_TOPICS:
             try:
                 consumer.subscribe(topic, self._on_event)
-            except Exception:  # pragma: no cover
-                pass
+            except Exception as exc:  # pragma: no cover
+                logger.warning("ChannelHub: failed to subscribe topic %s: %s", topic, exc)
         self._wired = True
         logger.info("ChannelHub attached to %d topics", len(_CHANNEL_TOPICS))
 
