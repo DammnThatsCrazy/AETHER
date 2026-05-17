@@ -1143,6 +1143,64 @@ export const api = {
       restClient.get(`/v1/x402/agent/${agentId}`, wrap(unknownSchema)).then(r => r.data),
   },
 
+  // ── Investigations (case management — cross-tenant operator view) ──────────
+  investigations: {
+    create: (body: {
+      tenantId: string;
+      title: string;
+      subjects?: Array<{ kind: string; id: string }>;
+      createdBy: string;
+    }) => restClient.post('/v1/investigations', unknownSchema, body),
+
+    list: (tenantId: string, params?: { status?: string; limit?: number }) =>
+      restClient.get(`/v1/investigations${buildQS({ tenantId, ...params })}`, unknownSchema),
+
+    get: (caseId: string, tenantId: string) =>
+      restClient.get(`/v1/investigations/${caseId}${buildQS({ tenantId })}`, unknownSchema),
+
+    transitionStatus: (caseId: string, body: {
+      tenantId: string;
+      status: 'open' | 'triage' | 'active' | 'escalated' | 'closed';
+      reason?: string;
+    }) => restClient.patch(`/v1/investigations/${caseId}/status`, unknownSchema, body),
+
+    addEvidence: (caseId: string, body: {
+      tenantId: string;
+      evidence: Array<{ id: string; type: string; source: string }>;
+    }) => restClient.post(`/v1/investigations/${caseId}/evidence`, unknownSchema, body),
+
+    addAnnotation: (caseId: string, body: {
+      tenantId: string;
+      body: string;
+      authorId: string;
+      entityRefs?: Array<{ kind: string; id: string }>;
+    }) => restClient.post(`/v1/investigations/${caseId}/annotations`, unknownSchema, body),
+  },
+
+  // ── Governance (policy decisions + audit — operator view) ─────────────────
+  governance: {
+    evaluate: (body: {
+      tenantId: string;
+      principal: { kind: string; id: string };
+      action: string;
+      resource: { kind: string; id: string };
+      context?: Record<string, unknown>;
+      policyIds?: string[];
+    }) => restClient.post('/v1/governance/decisions/evaluate', unknownSchema, body),
+
+    listDecisions: (tenantId: string, params?: {
+      principal_id?: string;
+      allowed?: boolean;
+      limit?: number;
+    }) => restClient.get(`/v1/governance/decisions${buildQS({ tenantId, ...params })}`, unknownSchema),
+
+    getDecision: (decisionId: string, tenantId: string) =>
+      restClient.get(`/v1/governance/decisions/${decisionId}${buildQS({ tenantId })}`, unknownSchema),
+
+    audit: (tenantId: string, params?: { limit?: number; principal_id?: string }) =>
+      restClient.get(`/v1/governance/audit${buildQS({ tenantId, ...params })}`, unknownSchema),
+  },
+
   // ── Commerce ───────────────────────────────────────────────────────────────
   commerce: {
     recordPayment: (payment: Record<string, unknown>) =>

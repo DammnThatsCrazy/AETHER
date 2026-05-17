@@ -29,14 +29,13 @@ from services.operational_intelligence.models import (
     EventPipelineEnvelope,
     TenantScopedRequest,
 )
+from repositories.repos import InvestigationRepository
 
 logger = get_logger("aether.service.investigation")
 
 router = APIRouter(prefix="/v1/investigations", tags=["Investigations"])
 
-# ── In-memory store ───────────────────────────────────────────────────────────
-
-_STORE: dict[str, InvestigationCase] = {}
+_repo = InvestigationRepository()
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
@@ -52,11 +51,11 @@ def _require(request: Request, tenant_id: str, permission: str = "read") -> None
         raise ForbiddenError("tenantId does not match authenticated tenant")
 
 
-def _get_case(case_id: str, tenant_id: str) -> InvestigationCase:
-    case = _STORE.get(case_id)
-    if case is None or case.tenantId != tenant_id:
+async def _get_case(case_id: str, tenant_id: str) -> dict:
+    row = await _repo.find_by_id(case_id)
+    if row is None or row.get("tenantId") != tenant_id:
         raise NotFoundError(f"InvestigationCase {case_id!r} not found")
-    return case
+    return row
 
 
 # ── Request models ────────────────────────────────────────────────────────────
@@ -107,10 +106,12 @@ async def create_case(
         createdAt=now,
         updatedAt=now,
     )
-    _STORE[case.id] = case
+    case_dict = case.model_dump()
+    case_dict["tenant_id"] = case.tenantId  # repo filter key
+    result = await _repo.create(case_dict)
     logger.info("investigation_case_created", extra={"case_id": case.id, "tenant_id": case.tenantId})
     metrics.increment("investigation_case_created")
-    return case
+    return InvestigationCase(**result)
 
 
 @router.get("", response_model=list[InvestigationCase])
@@ -122,11 +123,8 @@ async def list_cases(
 ) -> list[InvestigationCase]:
     """List investigation cases for the authenticated tenant, optionally filtered by status."""
     _require(request, tenantId, "read")
-    results = [
-        c for c in _STORE.values()
-        if c.tenantId == tenantId and (status is None or c.status == status)
-    ]
-    return results[:limit]
+    rows = await _repo.list_by_tenant(tenantId, status=status, limit=limit)
+    return [InvestigationCase(**r) for r in rows]
 
 
 @router.get("/{case_id}", response_model=InvestigationCase)
@@ -137,7 +135,8 @@ async def get_case(
 ) -> InvestigationCase:
     """Retrieve a single investigation case by ID."""
     _require(request, tenantId, "read")
-    return _get_case(case_id, tenantId)
+    row = await _get_case(case_id, tenantId)
+    return InvestigationCase(**row)
 
 
 @router.patch("/{case_id}/status", response_model=InvestigationCase)
@@ -148,10 +147,9 @@ async def transition_status(
 ) -> InvestigationCase:
     """Transition an investigation case to a new status (any → any for MVP)."""
     _require(request, body.tenantId, "write")
-    case = _get_case(case_id, body.tenantId)
-    previous = case.status
-    case.status = body.status  # type: ignore[assignment]
-    case.updatedAt = _utc_now()
+    row = await _get_case(case_id, body.tenantId)
+    previous = row.get("status")
+    updated = await _repo.update(case_id, {"status": body.status, "updatedAt": _utc_now()})
     logger.info(
         "investigation_status_transitioned",
         extra={
@@ -162,7 +160,7 @@ async def transition_status(
         },
     )
     metrics.increment("investigation_status_transitioned")
-    return case
+    return InvestigationCase(**updated)
 
 
 @router.post("/{case_id}/evidence", response_model=InvestigationCase)
@@ -173,15 +171,16 @@ async def add_evidence(
 ) -> InvestigationCase:
     """Append one or more EvidenceRef entries to an investigation case."""
     _require(request, body.tenantId, "write")
-    case = _get_case(case_id, body.tenantId)
-    case.evidence.extend(body.evidence)
-    case.updatedAt = _utc_now()
+    row = await _get_case(case_id, body.tenantId)
+    existing_evidence = row.get("evidence") or []
+    new_evidence = existing_evidence + [e.model_dump() for e in body.evidence]
+    updated = await _repo.update(case_id, {"evidence": new_evidence, "updatedAt": _utc_now()})
     logger.info(
         "investigation_evidence_added",
         extra={"case_id": case_id, "count": len(body.evidence)},
     )
     metrics.increment("investigation_evidence_added")
-    return case
+    return InvestigationCase(**updated)
 
 
 @router.post("/{case_id}/annotations", response_model=InvestigationCase)
@@ -192,7 +191,7 @@ async def add_annotation(
 ) -> InvestigationCase:
     """Add a new annotation authored by the specified user to an investigation case."""
     _require(request, body.tenantId, "write")
-    case = _get_case(case_id, body.tenantId)
+    row = await _get_case(case_id, body.tenantId)
     annotation = InvestigationAnnotation(
         id=str(uuid.uuid4()),
         authorId=body.authorId,
@@ -201,11 +200,12 @@ async def add_annotation(
         evidenceRefs=body.evidenceRefs or None,
         createdAt=_utc_now(),
     )
-    case.annotations.append(annotation)
-    case.updatedAt = _utc_now()
+    existing_annotations = row.get("annotations") or []
+    new_annotations = existing_annotations + [annotation.model_dump()]
+    updated = await _repo.update(case_id, {"annotations": new_annotations, "updatedAt": _utc_now()})
     logger.info(
         "investigation_annotation_added",
         extra={"case_id": case_id, "annotation_id": annotation.id},
     )
     metrics.increment("investigation_annotation_added")
-    return case
+    return InvestigationCase(**updated)

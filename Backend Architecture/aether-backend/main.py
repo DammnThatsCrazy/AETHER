@@ -98,6 +98,7 @@ Routes:
 
 from __future__ import annotations
 
+import asyncio
 import sys
 import os
 from contextlib import asynccontextmanager
@@ -184,6 +185,9 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     registry = get_registry()
     await registry.startup()
 
+    from services.events.worker import start_replay_worker
+    replay_worker_task = asyncio.create_task(start_replay_worker())
+
     # Profile 360 — attach derived workers to the shared consumer.
     # Strictly additive: workers consume new topics + a few existing ones,
     # write to new tables only, and never mutate existing service state.
@@ -210,6 +214,11 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
 
     # Graceful shutdown: drain connections and close backends
     logger.info("Initiating graceful shutdown...")
+    replay_worker_task.cancel()
+    try:
+        await replay_worker_task
+    except asyncio.CancelledError:
+        pass
     if provider_gateway:
         await provider_gateway.shutdown()
     await registry.shutdown()
