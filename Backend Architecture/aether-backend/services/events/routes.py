@@ -28,15 +28,17 @@ from services.operational_intelligence.models import (
     EventPipelineEnvelope,
     TenantScopedRequest,
 )
+from repositories.repos import EventReplayRepository
 
 logger = get_logger("aether.service.events")
 
 router = APIRouter(prefix="/v1/events", tags=["Event Replay"])
 
-# ── In-memory stores ──────────────────────────────────────────────────────────
+# ── In-memory store for ingested events (kept as-is, not repo-backed yet) ─────
 
-_REPLAY_JOBS: dict[str, dict] = {}
-_EVENTS: dict[str, EventPipelineEnvelope] = {}
+_EVENTS: dict[str, dict] = {}
+
+_repo = EventReplayRepository()
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
@@ -50,13 +52,6 @@ def _require(request: Request, tenant_id: str, permission: str = "read") -> None
     tenant.require_permission(permission)
     if tenant_id != tenant.tenant_id:
         raise ForbiddenError("tenantId does not match authenticated tenant")
-
-
-def _get_job(job_id: str, tenant_id: str) -> dict:
-    job = _REPLAY_JOBS.get(job_id)
-    if job is None or job["tenantId"] != tenant_id:
-        raise NotFoundError(f"Replay job {job_id!r} not found")
-    return job
 
 
 # ── Request / Response models ─────────────────────────────────────────────────
@@ -96,7 +91,7 @@ async def submit_replay(
     The job is created with status 'queued' and can be polled via GET /v1/events/replay/{job_id}.
     """
     _require(request, body.tenantId, "write")
-    job: dict = {
+    job_dict: dict = {
         "id": str(uuid.uuid4()),
         "tenantId": body.tenantId,
         "sourceTag": body.sourceTag,
@@ -110,18 +105,19 @@ async def submit_replay(
         "completedAt": None,
         "totalReplayed": 0,
     }
-    _REPLAY_JOBS[job["id"]] = job
+    job_dict["tenant_id"] = job_dict["tenantId"]  # repo filter key
+    result = await _repo.create(job_dict)
     logger.info(
         "event_replay_submitted",
         extra={
-            "job_id": job["id"],
+            "job_id": result["id"],
             "tenant_id": body.tenantId,
             "source_tag": body.sourceTag,
             "dry_run": body.dryRun,
         },
     )
     metrics.increment("event_replay_submitted")
-    return ReplayJobResponse(**job)
+    return ReplayJobResponse(**result)
 
 
 @router.get("/replay", response_model=list[ReplayJobResponse])
@@ -132,8 +128,8 @@ async def list_replay_jobs(
 ) -> list[ReplayJobResponse]:
     """List all replay jobs for the authenticated tenant."""
     _require(request, tenantId, "read")
-    results = [j for j in _REPLAY_JOBS.values() if j["tenantId"] == tenantId]
-    return [ReplayJobResponse(**j) for j in results[:limit]]
+    rows = await _repo.list_by_tenant(tenantId, limit=limit)
+    return [ReplayJobResponse(**r) for r in rows]
 
 
 @router.get("/replay/{job_id}", response_model=ReplayJobResponse)
@@ -144,8 +140,10 @@ async def get_replay_job(
 ) -> ReplayJobResponse:
     """Get the current status of a specific replay job."""
     _require(request, tenantId, "read")
-    job = _get_job(job_id, tenantId)
-    return ReplayJobResponse(**job)
+    row = await _repo.find_by_id(job_id)
+    if row is None or row.get("tenantId") != tenantId:
+        raise NotFoundError(f"Replay job {job_id!r} not found")
+    return ReplayJobResponse(**row)
 
 
 @router.post("/replay/{job_id}/cancel", response_model=ReplayJobResponse)
@@ -156,12 +154,14 @@ async def cancel_replay_job(
 ) -> ReplayJobResponse:
     """Cancel a queued or in-progress replay job."""
     _require(request, tenantId, "write")
-    job = _get_job(job_id, tenantId)
-    job["status"] = "cancelled"
-    job["completedAt"] = _utc_now()
+    row = await _repo.find_by_id(job_id)
+    if row is None or row.get("tenantId") != tenantId:
+        raise NotFoundError(f"Replay job {job_id!r} not found")
+    completed_at = _utc_now()
+    updated = await _repo.update(job_id, {"status": "cancelled", "completedAt": completed_at})
     logger.info("event_replay_cancelled", extra={"job_id": job_id, "tenant_id": tenantId})
     metrics.increment("event_replay_cancelled")
-    return ReplayJobResponse(**job)
+    return ReplayJobResponse(**updated)
 
 
 @router.post("/ingest")
@@ -174,7 +174,7 @@ async def ingest_event(
     Validates tenant isolation before accepting the event into the in-memory store.
     """
     _require(request, envelope.tenantId, "write")
-    _EVENTS[envelope.id] = envelope
+    _EVENTS[envelope.id] = envelope.model_dump()
     logger.info(
         "event_replay_ingested",
         extra={"event_id": envelope.id, "type": envelope.type, "tenant_id": envelope.tenantId},

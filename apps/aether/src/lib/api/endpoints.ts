@@ -545,6 +545,7 @@ export const api = {
       `/v1/realtime/sse${entityId ? `?entity_id=${encodeURIComponent(entityId)}` : ''}` as string,
     wsUrl: (entityId?: string) =>
       `/v1/realtime/ws${entityId ? `?entity_id=${encodeURIComponent(entityId)}` : ''}` as string,
+    wsSubscribeUrl: () => '/v1/realtime/ws/subscribe' as string,
   },
 
   // ── Graph Intelligence (GraphTraversalEngine-backed routes) ───────────────

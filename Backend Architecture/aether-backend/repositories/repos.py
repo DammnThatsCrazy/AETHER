@@ -1283,3 +1283,64 @@ class AgentEconomicIdentityRepository(BaseRepository):
         if existing:
             return await self.update(agent_id, record)
         return await self.insert(agent_id, record)
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# OPERATIONAL INTELLIGENCE REPOSITORIES
+# ═══════════════════════════════════════════════════════════════════════════
+
+
+class InvestigationRepository(BaseRepository):
+    def __init__(self) -> None:
+        super().__init__("investigations")
+
+    async def create(self, case: dict) -> dict:
+        return await self.insert(case["id"], case)
+
+    async def list_by_tenant(
+        self,
+        tenant_id: str,
+        status: Optional[str] = None,
+        limit: int = 50,
+    ) -> list[dict]:
+        filters: dict[str, Any] = {"tenant_id": tenant_id}
+        if status:
+            filters["status"] = status
+        return await self.find_many(filters=filters, limit=limit)
+
+
+class GovernanceRepository(BaseRepository):
+    def __init__(self) -> None:
+        super().__init__("governance_decisions")
+
+    async def create(self, decision: dict) -> dict:
+        return await self.insert(decision["id"], decision)
+
+    async def list_by_tenant(
+        self,
+        tenant_id: str,
+        principal_id: Optional[str] = None,
+        allowed: Optional[bool] = None,
+        limit: int = 50,
+    ) -> list[dict]:
+        filters: dict[str, Any] = {"tenant_id": tenant_id}
+        if principal_id:
+            filters["principal_id"] = principal_id
+        results = await self.find_many(filters=filters, limit=limit * 2)
+        if allowed is not None:
+            results = [r for r in results if r.get("allowed") == allowed]
+        return results[:limit]
+
+
+class EventReplayRepository(BaseRepository):
+    def __init__(self) -> None:
+        super().__init__("event_replay_jobs")
+
+    async def create(self, job: dict) -> dict:
+        return await self.insert(job["id"], job)
+
+    async def list_by_tenant(self, tenant_id: str, limit: int = 50) -> list[dict]:
+        return await self.find_many(filters={"tenant_id": tenant_id}, limit=limit)
+
+    async def list_queued(self, limit: int = 50) -> list[dict]:
+        return await self.find_many(filters={"status": "queued"}, limit=limit)

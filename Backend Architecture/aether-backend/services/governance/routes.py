@@ -27,14 +27,13 @@ from services.operational_intelligence.models import (
     EventPipelineEnvelope,
     TenantScopedRequest,
 )
+from repositories.repos import GovernanceRepository
 
 logger = get_logger("aether.service.governance")
 
 router = APIRouter(prefix="/v1/governance", tags=["Governance"])
 
-# ── In-memory store ───────────────────────────────────────────────────────────
-
-_DECISIONS: dict[str, GovernanceDecision] = {}
+_repo = GovernanceRepository()
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
@@ -50,11 +49,11 @@ def _require(request: Request, tenant_id: str, permission: str = "read") -> None
         raise ForbiddenError("tenantId does not match authenticated tenant")
 
 
-def _get_decision(decision_id: str, tenant_id: str) -> GovernanceDecision:
-    decision = _DECISIONS.get(decision_id)
-    if decision is None or decision.tenantId != tenant_id:
+async def _get_decision(decision_id: str, tenant_id: str) -> dict:
+    row = await _repo.find_by_id(decision_id)
+    if row is None or row.get("tenantId") != tenant_id:
         raise NotFoundError(f"GovernanceDecision {decision_id!r} not found")
-    return decision
+    return row
 
 
 # ── Request models ────────────────────────────────────────────────────────────
@@ -108,7 +107,9 @@ async def evaluate_decision(
         explanation=explanation,
         evaluatedAt=_utc_now(),
     )
-    _DECISIONS[decision.id] = decision
+    decision_dict = decision.model_dump()
+    decision_dict["tenant_id"] = decision.tenantId  # repo filter key
+    result = await _repo.create(decision_dict)
     logger.info(
         "governance_decision_evaluated",
         extra={
@@ -119,7 +120,7 @@ async def evaluate_decision(
         },
     )
     metrics.increment("governance_decision_evaluated")
-    return decision
+    return GovernanceDecision(**result)
 
 
 @router.get("/decisions", response_model=list[GovernanceDecision])
@@ -132,13 +133,8 @@ async def list_decisions(
 ) -> list[GovernanceDecision]:
     """List governance decisions for the authenticated tenant with optional filters."""
     _require(request, tenantId, "read")
-    results = [
-        d for d in _DECISIONS.values()
-        if d.tenantId == tenantId
-        and (principal_id is None or d.principal.id == principal_id)
-        and (allowed is None or d.allowed == allowed)
-    ]
-    return results[:limit]
+    rows = await _repo.list_by_tenant(tenantId, principal_id=principal_id, allowed=allowed, limit=limit)
+    return [GovernanceDecision(**r) for r in rows]
 
 
 @router.get("/decisions/{decision_id}", response_model=GovernanceDecision)
@@ -149,7 +145,8 @@ async def get_decision(
 ) -> GovernanceDecision:
     """Retrieve a specific governance decision by ID."""
     _require(request, tenantId, "read")
-    return _get_decision(decision_id, tenantId)
+    row = await _get_decision(decision_id, tenantId)
+    return GovernanceDecision(**row)
 
 
 @router.get("/audit", response_model=list[GovernanceDecision])
@@ -161,10 +158,6 @@ async def audit_trail(
 ) -> list[GovernanceDecision]:
     """Return the audit trail of governance decisions for the authenticated tenant."""
     _require(request, tenantId, "read")
-    results = [
-        d for d in _DECISIONS.values()
-        if d.tenantId == tenantId
-        and (principal_id is None or d.principal.id == principal_id)
-    ]
+    rows = await _repo.list_by_tenant(tenantId, principal_id=principal_id, limit=limit)
     metrics.increment("governance_audit_read")
-    return results[:limit]
+    return [GovernanceDecision(**r) for r in rows]
