@@ -30,17 +30,18 @@ from services.operational_intelligence.models import (
     EventPipelineEnvelope,
     TenantScopedRequest,
 )
-from repositories.repos import EventReplayRepository
+from repositories.repos import EventReplayRepository, EventEnvelopeRepository
 
 logger = get_logger("aether.service.events")
 
 router = APIRouter(prefix="/v1/events", tags=["Event Replay"])
 
-# ── In-memory store for ingested events (kept as-is, not repo-backed yet) ─────
+# ── In-memory hot cache (write-through to _envelope_repo for durability) ──────
 
 _EVENTS: dict[str, dict] = {}
 
 _repo = EventReplayRepository()
+_envelope_repo = EventEnvelopeRepository()
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
@@ -185,10 +186,12 @@ async def ingest_event(
 ) -> dict[str, Any]:
     """Ingest a single EventPipelineEnvelope (used by the replay feed to re-introduce events).
 
-    Validates tenant isolation before accepting the event into the in-memory store.
+    Persists to durable storage and keeps an in-process hot cache for the replay worker.
     """
     _require(request, envelope.tenantId, "write")
-    _EVENTS[envelope.id] = envelope.model_dump()
+    envelope_dict = envelope.model_dump()
+    await _envelope_repo.create(envelope_dict)
+    _EVENTS[envelope.id] = envelope_dict
     logger.info(
         "event_replay_ingested",
         extra={"event_id": envelope.id, "type": envelope.type, "tenant_id": envelope.tenantId},

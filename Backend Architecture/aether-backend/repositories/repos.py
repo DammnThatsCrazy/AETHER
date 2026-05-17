@@ -1344,3 +1344,35 @@ class EventReplayRepository(BaseRepository):
 
     async def list_queued(self, limit: int = 50) -> list[dict]:
         return await self.find_many(filters={"status": "queued"}, limit=limit)
+
+
+class EventEnvelopeRepository(BaseRepository):
+    """Durable store for ingested EventPipelineEnvelopes available for replay."""
+
+    def __init__(self) -> None:
+        super().__init__("event_envelopes")
+
+    async def create(self, envelope: dict) -> dict:
+        return await self.insert(envelope["id"], envelope)
+
+    async def list_replayable(
+        self,
+        tenant_id: str,
+        source_tag: str = "",
+        event_types: Optional[list[str]] = None,
+        from_time: str = "",
+        to_time: Optional[str] = None,
+        limit: int = 1000,
+    ) -> list[dict]:
+        results = await self.find_many(
+            filters={"tenantId": tenant_id, "replayable": True}, limit=limit
+        )
+        if source_tag:
+            results = [r for r in results if source_tag in (r.get("tags") or [])]
+        if event_types:
+            results = [r for r in results if r.get("type") in event_types]
+        if from_time:
+            results = [r for r in results if r.get("occurredAt", "") >= from_time]
+        if to_time:
+            results = [r for r in results if r.get("occurredAt", "") <= to_time]
+        return results

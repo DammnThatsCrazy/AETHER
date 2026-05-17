@@ -60,6 +60,7 @@ The following authored docs are expected to stay aligned with code changes:
 - `MIGRATION-v7.md`
 - `ML-TRAINING-GUIDE.md`
 - `MODEL-EXTRACTION-DEFENSE.md`
+- `OPERATIONAL-INTELLIGENCE-AUDIT.md`
 - `OPERATIONS-RUNBOOK.md`
 - `PRODUCTION-READINESS.md`
 - `PROFILE-360-AGGREGATION.md`

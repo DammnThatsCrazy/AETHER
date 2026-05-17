@@ -14,7 +14,7 @@ import uuid
 from datetime import datetime, timezone
 from typing import Any, Literal, Optional
 
-from fastapi import APIRouter, Depends, Query, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel, Field
 
 from shared.common.common import APIResponse, ForbiddenError, NotFoundError
@@ -36,6 +36,14 @@ from repositories.repos import InvestigationRepository
 logger = get_logger("aether.service.investigation")
 
 router = APIRouter(prefix="/v1/investigations", tags=["Investigations"])
+
+_VALID_TRANSITIONS: dict[str, frozenset[str]] = {
+    "open":      frozenset({"triage", "active", "escalated", "closed"}),
+    "triage":    frozenset({"active", "escalated", "closed"}),
+    "active":    frozenset({"escalated", "closed"}),
+    "escalated": frozenset({"closed"}),
+    "closed":    frozenset(),
+}
 
 _repo = InvestigationRepository()
 
@@ -154,10 +162,15 @@ async def transition_status(
     request: Request,
     producer: EventProducer = Depends(get_producer),
 ) -> InvestigationCase:
-    """Transition an investigation case to a new status (any → any for MVP)."""
+    """Transition an investigation case status using the enforced state machine."""
     _require(request, body.tenantId, "write")
     row = await _get_case(case_id, body.tenantId)
     previous = row.get("status")
+    if body.status not in _VALID_TRANSITIONS.get(previous or "open", frozenset()):
+        raise HTTPException(
+            status_code=422,
+            detail=f"Invalid status transition: {previous!r} → {body.status!r}",
+        )
     updated = await _repo.update(case_id, {"status": body.status, "updatedAt": _utc_now()})
     logger.info(
         "investigation_status_transitioned",
