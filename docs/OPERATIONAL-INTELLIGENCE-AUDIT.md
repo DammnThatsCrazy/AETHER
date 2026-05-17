@@ -1,10 +1,10 @@
 ---
 title: Operational Intelligence — Stub vs. Production Audit
-description: Comprehensive audit of PRs #107–#115 identifying stubbed components, productization gaps, and the remediation plan to restore production/deployment/compliance alignment.
-version: "1.0"
-visibility: internal
-audience: [engineering, platform]
-status: active
+slug: operations/operational-intelligence-audit
+section: operations
+visibility: I
+audience: [dev-senior, architect, ops]
+status: stable
 source_files:
   - Backend Architecture/aether-backend/services/investigation/routes.py
   - Backend Architecture/aether-backend/services/governance/routes.py
