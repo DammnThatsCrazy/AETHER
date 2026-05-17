@@ -1,3 +1,15 @@
+---
+title: Aether Backend Intelligence Architecture Blueprint
+slug: architecture/backend-intelligence
+section: architecture
+visibility: I
+audience: [architect, dev-senior]
+status: experimental
+canonical_owner: platform@aether
+estimated_read_minutes: 30
+toc_depth: 4
+---
+
 # Aether Backend Intelligence Architecture Blueprint
 
 This document is an additive architecture reference for evolving Aether and Kyber
