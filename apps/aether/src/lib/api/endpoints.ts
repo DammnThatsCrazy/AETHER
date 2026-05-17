@@ -546,6 +546,151 @@ export const api = {
     wsUrl: (entityId?: string) =>
       `/v1/realtime/ws${entityId ? `?entity_id=${encodeURIComponent(entityId)}` : ''}` as string,
   },
+
+  // ── Graph Intelligence (GraphTraversalEngine-backed routes) ───────────────
+  graphIntelligence: {
+    traverse: (body: {
+      tenantId: string;
+      start: { kind: string; id: string; label?: string };
+      depth: number;
+      direction?: 'in' | 'out' | 'both';
+      limit?: number;
+    }) => restClient.post('/v1/graph/traverse', unknownSchema, body),
+
+    path: (body: {
+      tenantId: string;
+      from: { kind: string; id: string; label?: string };
+      to: { kind: string; id: string; label?: string };
+      maxDepth?: number;
+    }) => restClient.post('/v1/graph/path', unknownSchema, body),
+
+    temporal: (body: {
+      tenantId: string;
+      anchor: { kind: string; id: string; label?: string };
+      asOf: string;
+      depth?: number;
+    }) => restClient.post('/v1/graph/temporal', unknownSchema, body),
+
+    overlay: (body: {
+      tenantId: string;
+      overlays: string[];
+      limit?: number;
+    }) => restClient.post('/v1/graph/overlay', unknownSchema, body),
+
+    filter: (body: {
+      tenantId: string;
+      filter: Record<string, unknown>;
+      limit?: number;
+    }) => restClient.post('/v1/graph/filter', unknownSchema, body),
+  },
+
+  // ── Entity Intelligence (profile, timeline, relationships) ─────────────────
+  entityIntelligence: {
+    profile: (body: {
+      tenantId: string;
+      entity: { kind: string; id: string };
+      dimensions?: string[];
+      consistency?: string;
+    }) => restClient.post('/v1/entities/profile', unknownSchema, body),
+
+    timeline: (body: {
+      tenantId: string;
+      entity: { kind: string; id: string };
+      fromTime?: string;
+      toTime?: string;
+      limit?: number;
+      cursor?: string;
+    }) => restClient.post('/v1/entities/timeline/query', unknownSchema, body),
+
+    relationships: (body: {
+      tenantId: string;
+      entity: { kind: string; id: string };
+      relationshipTypes?: string[];
+      minScore?: number;
+      depth?: number;
+      limit?: number;
+      cursor?: string;
+    }) => restClient.post('/v1/entities/relationships/query', unknownSchema, body),
+  },
+
+  // ── Investigations (case management) ──────────────────────────────────────
+  investigations: {
+    create: (body: {
+      tenantId: string;
+      title: string;
+      subjects?: Array<{ kind: string; id: string }>;
+      createdBy: string;
+    }) => restClient.post('/v1/investigations', unknownSchema, body),
+
+    list: (tenantId: string, status?: string, limit = 50) =>
+      restClient.get(`/v1/investigations${buildQS({ tenantId, status, limit })}`, unknownSchema),
+
+    get: (caseId: string, tenantId: string) =>
+      restClient.get(`/v1/investigations/${caseId}${buildQS({ tenantId })}`, unknownSchema),
+
+    transitionStatus: (caseId: string, body: {
+      tenantId: string;
+      status: 'open' | 'triage' | 'active' | 'escalated' | 'closed';
+      reason?: string;
+    }) => restClient.patch(`/v1/investigations/${caseId}/status`, unknownSchema, body),
+
+    addEvidence: (caseId: string, body: {
+      tenantId: string;
+      evidence: Array<{ id: string; type: string; source: string }>;
+    }) => restClient.post(`/v1/investigations/${caseId}/evidence`, unknownSchema, body),
+
+    addAnnotation: (caseId: string, body: {
+      tenantId: string;
+      body: string;
+      authorId: string;
+      entityRefs?: Array<{ kind: string; id: string }>;
+    }) => restClient.post(`/v1/investigations/${caseId}/annotations`, unknownSchema, body),
+  },
+
+  // ── Governance (policy decisions + audit) ─────────────────────────────────
+  governance: {
+    evaluate: (body: {
+      tenantId: string;
+      principal: { kind: string; id: string };
+      action: string;
+      resource: { kind: string; id: string };
+      context?: Record<string, unknown>;
+      policyIds?: string[];
+    }) => restClient.post('/v1/governance/decisions/evaluate', unknownSchema, body),
+
+    listDecisions: (tenantId: string, params?: {
+      principal_id?: string;
+      allowed?: boolean;
+      limit?: number;
+    }) => restClient.get(`/v1/governance/decisions${buildQS({ tenantId, ...params })}`, unknownSchema),
+
+    getDecision: (decisionId: string, tenantId: string) =>
+      restClient.get(`/v1/governance/decisions/${decisionId}${buildQS({ tenantId })}`, unknownSchema),
+
+    audit: (tenantId: string, limit = 100, principal_id?: string) =>
+      restClient.get(`/v1/governance/audit${buildQS({ tenantId, limit, principal_id })}`, unknownSchema),
+  },
+
+  // ── Event Replay (Bronze-tier source_tag replay) ───────────────────────────
+  eventReplay: {
+    submit: (body: {
+      tenantId: string;
+      sourceTag: string;
+      fromTime: string;
+      toTime?: string;
+      eventTypes?: string[];
+      dryRun?: boolean;
+    }) => restClient.post('/v1/events/replay', unknownSchema, body),
+
+    getJob: (jobId: string, tenantId: string) =>
+      restClient.get(`/v1/events/replay/${jobId}${buildQS({ tenantId })}`, unknownSchema),
+
+    listJobs: (tenantId: string, limit = 50) =>
+      restClient.get(`/v1/events/replay${buildQS({ tenantId, limit })}`, unknownSchema),
+
+    cancel: (jobId: string, tenantId: string) =>
+      restClient.post(`/v1/events/replay/${jobId}/cancel`, unknownSchema, { tenantId }),
+  },
 };
 
 // ─── Utility: call API with typed fallback ────────────────────────────────────
