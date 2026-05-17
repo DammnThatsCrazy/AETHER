@@ -17,3 +17,4 @@ If another doc contradicts a file in this directory, this directory wins.
 | `PLATFORM_PARITY.md` | Which capabilities are Tier A / B / C |
 | `CAPABILITY_MANIFEST.md` | `/v1/config` contract |
 | `GRAPH_ALIGNMENT.md` | Which SDK events feed which graph layer |
+| `BACKEND_INTELLIGENCE_ARCHITECTURE.md` | Additive backend target architecture, service boundaries, graph/event/realtime/API contracts, and operational roadmap |
