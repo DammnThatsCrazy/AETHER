@@ -2,7 +2,7 @@
 # =============================================================================
 # Aether Platform — Kafka Topic Provisioning
 #
-# Creates all topics with explicit partition counts and retention settings.
+# Creates all 110 topics with explicit partition counts and retention settings.
 # Safe to re-run: uses --if-not-exists on creation.
 #
 # Usage (against local Docker Compose):
@@ -139,11 +139,29 @@ _create aether.behavior.session.started     6 ${TWO_WEEKS_MS}
 _create aether.behavior.session.ended       6 ${TWO_WEEKS_MS}
 _create aether.behavior.event.recorded      6 ${TWO_WEEKS_MS}
 _create aether.behavior.pattern.detected    6 ${TWO_WEEKS_MS}
+_create aether.behavior.profile.updated     6 ${TWO_WEEKS_MS}
 _create aether.journey.started              6 ${TWO_WEEKS_MS}
 _create aether.journey.actor.joined         6 ${TWO_WEEKS_MS}
 _create aether.journey.actor.left           6 ${TWO_WEEKS_MS}
 _create aether.journey.converted            6 ${TWO_WEEKS_MS}
 _create aether.journey.abandoned            6 ${TWO_WEEKS_MS}
+
+# ── Agent Execution (standard, 14-day) ───────────────────────────
+_create aether.agent.execution.started    6 ${TWO_WEEKS_MS}
+_create aether.agent.execution.completed  6 ${TWO_WEEKS_MS}
+_create aether.agent.execution.failed     6 ${TWO_WEEKS_MS}
+_create aether.agent.execution.recovered  6 ${TWO_WEEKS_MS}
+
+# ── Investigation & Governance (standard, 14-day) ─────────────────
+_create aether.investigation.case.created    6 ${TWO_WEEKS_MS}
+_create aether.investigation.case.updated    6 ${TWO_WEEKS_MS}
+_create aether.investigation.status.changed  6 ${TWO_WEEKS_MS}
+_create aether.governance.decision.evaluated 6 ${TWO_WEEKS_MS}
+
+# ── Event Replay (standard, 14-day) ──────────────────────────────
+_create aether.event.replay.submitted  6 ${TWO_WEEKS_MS}
+_create aether.event.replay.completed  6 ${TWO_WEEKS_MS}
+_create aether.event.replay.cancelled  6 ${TWO_WEEKS_MS}
 
 # ── Consent & DSR (audit, 90-day) ────────────────────────────────
 _create aether.consent.updated      3 ${NINETY_DAY_MS}
@@ -158,6 +176,9 @@ _create aether.extraction.policy.applied        3 ${NINETY_DAY_MS}
 _create aether.extraction.canary.hit            3 ${NINETY_DAY_MS}
 _create aether.extraction.alert.opened          3 ${NINETY_DAY_MS}
 _create aether.extraction.cluster.escalated     3 ${NINETY_DAY_MS}
+
+# ── Dead Letter Queue (operational, 14-day) ───────────────────────
+_create aether.dlq                              3 ${TWO_WEEKS_MS}
 
 echo ""
 echo "Topic provisioning complete. Listing topics:"

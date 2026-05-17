@@ -449,8 +449,44 @@
           "value": "aether.agent.execution.recovered"
         },
         {
+          "member": "BEHAVIOR_SESSION_STARTED",
+          "value": "aether.behavior.session.started"
+        },
+        {
+          "member": "BEHAVIOR_SESSION_ENDED",
+          "value": "aether.behavior.session.ended"
+        },
+        {
+          "member": "BEHAVIOR_EVENT_RECORDED",
+          "value": "aether.behavior.event.recorded"
+        },
+        {
+          "member": "BEHAVIOR_PATTERN_DETECTED",
+          "value": "aether.behavior.pattern.detected"
+        },
+        {
           "member": "BEHAVIOR_PROFILE_UPDATED",
           "value": "aether.behavior.profile.updated"
+        },
+        {
+          "member": "JOURNEY_STARTED",
+          "value": "aether.journey.started"
+        },
+        {
+          "member": "JOURNEY_ACTOR_JOINED",
+          "value": "aether.journey.actor.joined"
+        },
+        {
+          "member": "JOURNEY_ACTOR_LEFT",
+          "value": "aether.journey.actor.left"
+        },
+        {
+          "member": "JOURNEY_CONVERTED",
+          "value": "aether.journey.converted"
+        },
+        {
+          "member": "JOURNEY_ABANDONED",
+          "value": "aether.journey.abandoned"
         },
         {
           "member": "INVESTIGATION_CASE_CREATED",
@@ -862,8 +898,44 @@
       "value": "aether.agent.execution.recovered"
     },
     {
+      "member": "BEHAVIOR_SESSION_STARTED",
+      "value": "aether.behavior.session.started"
+    },
+    {
+      "member": "BEHAVIOR_SESSION_ENDED",
+      "value": "aether.behavior.session.ended"
+    },
+    {
+      "member": "BEHAVIOR_EVENT_RECORDED",
+      "value": "aether.behavior.event.recorded"
+    },
+    {
+      "member": "BEHAVIOR_PATTERN_DETECTED",
+      "value": "aether.behavior.pattern.detected"
+    },
+    {
       "member": "BEHAVIOR_PROFILE_UPDATED",
       "value": "aether.behavior.profile.updated"
+    },
+    {
+      "member": "JOURNEY_STARTED",
+      "value": "aether.journey.started"
+    },
+    {
+      "member": "JOURNEY_ACTOR_JOINED",
+      "value": "aether.journey.actor.joined"
+    },
+    {
+      "member": "JOURNEY_ACTOR_LEFT",
+      "value": "aether.journey.actor.left"
+    },
+    {
+      "member": "JOURNEY_CONVERTED",
+      "value": "aether.journey.converted"
+    },
+    {
+      "member": "JOURNEY_ABANDONED",
+      "value": "aether.journey.abandoned"
     },
     {
       "member": "INVESTIGATION_CASE_CREATED",
