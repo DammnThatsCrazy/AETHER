@@ -9,6 +9,7 @@ Day-1 chains: USDC on Base (eip155:8453), USDC on Solana (solana:mainnet).
 
 from __future__ import annotations
 
+import math
 import re
 from typing import Optional
 
@@ -22,6 +23,26 @@ from .commerce_store import get_commerce_store
 from .facilitators import get_facilitator_registry
 
 _FACILITATOR_TIMEOUT_S = 10.0
+
+# x402 network names (chain ID → x402 network identifier)
+_CHAIN_TO_NETWORK: dict[str, str] = {
+    "eip155:8453":   "base-mainnet",
+    "eip155:84532":  "base-sepolia",
+    "solana:mainnet": "solana-mainnet",
+    "solana:devnet":  "solana-devnet",
+}
+
+# ERC-20 / SPL contract addresses for supported stablecoins
+_ASSET_CONTRACT: dict[tuple[str, str], str] = {
+    ("USDC", "eip155:8453"):    "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
+    ("USDC", "eip155:84532"):   "0x036CbD53842c5426634e7929541eC2318f3dCF7e",
+    ("USDC", "solana:mainnet"): "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
+}
+
+# Decimal places for each supported asset
+_ASSET_DECIMALS: dict[str, int] = {
+    "USDC": 6,
+}
 
 logger = get_logger("aether.service.x402.verification")
 
@@ -159,24 +180,46 @@ class VerificationEngine:
         if facilitator.facilitator_id == "fac_local_aether":
             return True, None
 
+        decimals = _ASSET_DECIMALS.get(authorization.asset_symbol, 6)
+        atomic_amount = str(int(math.ceil(authorization.amount_usd * (10 ** decimals))))
+        network = _CHAIN_TO_NETWORK.get(authorization.chain, authorization.chain)
+        asset_contract = _ASSET_CONTRACT.get(
+            (authorization.asset_symbol, authorization.chain), ""
+        )
+        payment_requirements = [{
+            "scheme": "exact",
+            "network": network,
+            "maxAmountRequired": atomic_amount,
+            "resource": "",
+            "description": "",
+            "mimeType": "",
+            "payTo": authorization.recipient,
+            "maxTimeoutSeconds": 300,
+            "asset": asset_contract,
+            "extra": {},
+        }]
+
+        if authorization.signed_payload:
+            body = {
+                "payment": authorization.signed_payload,
+                "paymentRequirements": payment_requirements,
+            }
+        else:
+            body = {
+                "payment": tx_hash,
+                "paymentRequirements": payment_requirements,
+            }
+
         endpoint = facilitator.endpoint_url.rstrip("/") + "/verify"
-        payload = {
-            "tx_hash": tx_hash,
-            "chain": authorization.chain,
-            "asset_symbol": authorization.asset_symbol,
-            "amount_usd": authorization.amount_usd,
-            "payer": authorization.payer,
-            "recipient": authorization.recipient,
-            "authorization_id": authorization.authorization_id,
-            "challenge_id": authorization.challenge_id,
-        }
         try:
             async with httpx.AsyncClient(timeout=_FACILITATOR_TIMEOUT_S) as client:
-                resp = await client.post(endpoint, json=payload)
+                resp = await client.post(endpoint, json=body)
             if resp.status_code == 200:
                 data = resp.json()
-                verified = bool(data.get("verified", False))
-                error_msg: Optional[str] = data.get("error") if not verified else None
+                verified = bool(data.get("isValid", data.get("verified", False)))
+                error_msg: Optional[str] = (
+                    data.get("invalidReason") or data.get("error")
+                ) if not verified else None
                 return verified, error_msg
             return False, f"facilitator returned HTTP {resp.status_code}"
         except httpx.TimeoutException:
