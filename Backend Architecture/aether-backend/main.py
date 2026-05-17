@@ -165,6 +165,9 @@ from services.realtime.routes import router as realtime_router
 from services.operational_intelligence.routes import router as operational_graph_router
 from services.entity_intelligence.routes import router as entity_intelligence_router
 from services.profile360_workers import attach_profile360_workers
+from services.investigation.routes import router as investigation_router
+from services.governance.routes import router as governance_router
+from services.events.routes import router as events_router
 
 
 # ═══════════════════════════════════════════════════════════════════════
@@ -300,6 +303,9 @@ def create_app() -> FastAPI:
     app.include_router(realtime_router)
     app.include_router(operational_graph_router)
     app.include_router(entity_intelligence_router)
+    app.include_router(investigation_router)
+    app.include_router(governance_router)
+    app.include_router(events_router)
 
     # ── Intelligence Graph services (feature-flagged) ───────────
     ig = settings.intelligence_graph
