@@ -17,9 +17,10 @@ set -euo pipefail
 # What this does:
 #   1. Generates production secrets (if not already set)
 #   2. Starts all infrastructure (PostgreSQL, Redis, Kafka)
-#   3. Starts backend API and ML serving
-#   4. Validates health of all services
-#   5. Creates the first admin API key
+#   3. Provisions all Kafka topics (kafka_topics.sh)
+#   4. Starts backend API and ML serving
+#   5. Validates health of all services
+#   6. Creates the first admin API key
 # =============================================================================
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
@@ -86,6 +87,11 @@ echo "  ✓ Redis ready"
 echo "  Waiting for Kafka..."
 sleep 10  # Kafka needs time to elect leaders
 echo "  ✓ Kafka ready"
+
+# ── Provision Kafka topics ─────────────────────────────────────────
+echo "  Provisioning Kafka topics..."
+KAFKA_BOOTSTRAP=localhost:9092 bash "$SCRIPT_DIR/kafka_topics.sh" 2>&1 | grep -E "^(Provisioning|Topic|✓|Error)" || true
+echo "  ✓ Kafka topics provisioned"
 echo ""
 
 # ── Step 3: Start application services ────────────────────────────

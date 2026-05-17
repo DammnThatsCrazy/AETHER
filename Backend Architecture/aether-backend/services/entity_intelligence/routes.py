@@ -162,17 +162,44 @@ async def entity_profile(
             "edge_type_distribution": edge_type_counts,
         }
 
-    # Behavioural dimension — placeholder from vertex properties
+    # Behavioural dimension — from vertex properties
     if not requested_dims or "behavioral" in requested_dims:
         dimensions["behavioral"] = {
             k: v for k, v in vertex.properties.items()
             if k in ("session_count", "event_count", "last_active", "activity_score")
         }
 
-    # All other requested dimensions — return structured placeholder
+    # Device dimension — from vertex properties
+    if not requested_dims or "device" in requested_dims:
+        dimensions["device"] = {
+            k: v for k, v in vertex.properties.items()
+            if k in ("device_type", "user_agent", "os", "browser", "is_mobile", "device_id")
+        }
+
+    # Geographic dimension — from vertex properties
+    if not requested_dims or "geographic" in requested_dims:
+        dimensions["geographic"] = {
+            k: v for k, v in vertex.properties.items()
+            if k in ("country", "region", "city", "ip", "timezone", "latitude", "longitude")
+        }
+
+    # Wallet dimension — from OWNS_WALLET / HAS_WALLET / FLOW_WALLET_LINKED edges
+    _WALLET_EDGE_TYPES = {"OWNS_WALLET", "HAS_WALLET", "FLOW_WALLET_LINKED"}
+    if not requested_dims or "wallet" in requested_dims:
+        wallet_edges = await graph.get_edges(body.entity.id, direction="both")
+        wallet_addresses = [
+            e.to_vertex_id if e.from_vertex_id == body.entity.id else e.from_vertex_id
+            for e in wallet_edges
+            if e.edge_type in _WALLET_EDGE_TYPES
+        ]
+        dimensions["wallet"] = {"addresses": wallet_addresses, "count": len(wallet_addresses)}
+
+    # All other requested dimensions — extract from vertex properties by prefix
     for dim in requested_dims:
         if dim not in dimensions:
-            dimensions[dim] = {}
+            prefix = f"{dim}_"
+            extracted = {k[len(prefix):]: v for k, v in vertex.properties.items() if k.startswith(prefix)}
+            dimensions[dim] = extracted
 
     # Trust/risk composite from stored vertex properties
     scores: list[IntelligenceScore] = []

@@ -27,11 +27,15 @@ Endpoints:
 
 from __future__ import annotations
 
+import hashlib
 from typing import Optional
 
-from fastapi import APIRouter, Request, Query
+from fastapi import APIRouter, Depends, Request, Query
 
+from dependencies.providers import get_producer
 from shared.common.common import APIResponse, NotFoundError, utc_now
+from shared.events.events import Event, Topic
+from shared.events.producer import EventProducer
 from shared.logger.logger import get_logger, metrics
 from services.population.models import PopulationCreate, MembershipAdd, PopulationType
 from services.population.registry import population_repo, membership_repo
@@ -174,7 +178,12 @@ async def get_members(
 
 
 @router.post("/groups/{population_id}/members")
-async def add_members(population_id: str, body: MembershipAdd, request: Request):
+async def add_members(
+    population_id: str,
+    body: MembershipAdd,
+    request: Request,
+    producer: EventProducer = Depends(get_producer),
+):
     """Add members to a group with basis, confidence, and provenance."""
     tenant = request.state.tenant
     tenant.require_permission("write")
@@ -198,6 +207,21 @@ async def add_members(population_id: str, body: MembershipAdd, request: Request)
     # Update member count on group
     total = await membership_repo.count(filters={"population_id": population_id})
     await population_repo.update(population_id, {"member_count": total})
+
+    for entity_id in body.entity_ids:
+        await producer.publish(Event(
+            topic=Topic.ENTITY_MEMBERSHIP_ADDED,
+            tenant_id=tenant.tenant_id,
+            payload={
+                "entity_id": entity_id,
+                "entity_type": body.entity_type,
+                "population_id": population_id,
+                "population_type": group.get("population_type", ""),
+                "basis": body.basis,
+                "confidence": body.confidence,
+                "source_tag": body.source_tag,
+            },
+        ))
 
     metrics.increment("population_members_added", labels={"type": group.get("population_type", "")})
     return APIResponse(data={
@@ -309,7 +333,6 @@ async def explain_membership(entity_id: str, population_id: str, request: Reques
     """Explain why an entity is in a specific group: basis, confidence, reason, provenance."""
     request.state.tenant.require_permission("read")
 
-    import hashlib
     record_id = hashlib.sha256(f"{population_id}:{entity_id}".encode()).hexdigest()[:24]
     membership = await membership_repo.find_by_id(record_id)
 

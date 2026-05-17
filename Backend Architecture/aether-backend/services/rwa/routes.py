@@ -32,6 +32,7 @@ Holders:
 
 from __future__ import annotations
 
+import uuid
 from typing import Optional
 
 from fastapi import APIRouter, Request, Query
@@ -214,7 +215,6 @@ async def register_holder(body: HolderCreate, request: Request):
     """Register a holder record for an asset."""
     tenant = request.state.tenant
     tenant.require_permission("write")
-    import uuid
     record = {
         "id": str(uuid.uuid4()),
         "asset_id": body.asset_id,
