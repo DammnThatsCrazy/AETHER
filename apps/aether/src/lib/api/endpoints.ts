@@ -692,6 +692,135 @@ export const api = {
     cancel: (jobId: string, tenantId: string) =>
       restClient.post(`/v1/events/replay/${jobId}/cancel`, unknownSchema, { tenantId }),
   },
+
+  // ── Notifications (webhooks + alert rules) ────────────────────────────────
+  notifications: {
+    /** List all webhook configs for this tenant. */
+    webhooks: (tenantId: string, limit = 50) =>
+      restClient.get(`/v1/notifications/webhooks${buildQS({ tenant_id: tenantId, limit })}`, wrap(unknownSchema)).then(r => r.data),
+
+    /** Register a new webhook. */
+    createWebhook: (body: Record<string, unknown>) =>
+      restClient.post('/v1/notifications/webhooks', wrap(unknownSchema), body).then(r => r.data),
+
+    /** List all alert rules for this tenant. */
+    alerts: (tenantId: string, limit = 50) =>
+      restClient.get(`/v1/notifications/alerts${buildQS({ tenant_id: tenantId, limit })}`, wrap(unknownSchema)).then(r => r.data),
+
+    /** Create a new alert rule. */
+    createAlert: (body: Record<string, unknown>) =>
+      restClient.post('/v1/notifications/alerts', wrap(unknownSchema), body).then(r => r.data),
+  },
+
+  // ── Behavior Profile (read-side snapshots) ────────────────────────────────
+  behavior: {
+    /** Latest behavior snapshot for an entity. */
+    profile: (entityId: string) =>
+      restClient.get(`/v1/behavior/${entityId}`, wrap(unknownSchema)).then(r => r.data),
+
+    /** Historical behavior snapshots. */
+    history: (entityId: string, window = '7d', limit = 50) =>
+      restClient.get(`/v1/behavior/${entityId}/history${buildQS({ window, limit })}`, wrap(unknownSchema)).then(r => r.data),
+  },
+
+  // ── Population Intelligence (macro / meso / micro) ────────────────────────
+  population: {
+    /** Macro overview: group counts by type, total tracked memberships, top groups. */
+    summary: (tenantId: string) =>
+      restClient.get(`/v1/population/summary${buildQS({ tenant_id: tenantId })}`, wrap(unknownSchema)).then(r => r.data),
+
+    /** List all population groups, optionally filtered by type. */
+    groups: (tenantId: string, limit = 50) =>
+      restClient.get(`/v1/population/groups${buildQS({ tenant_id: tenantId, limit })}`, wrap(unknownSchema)).then(r => r.data),
+
+    /** Create a new population group (segment, cohort, cluster, community, etc.). */
+    createGroup: (body: Record<string, unknown>) =>
+      restClient.post('/v1/population/groups', wrap(unknownSchema), body).then(r => r.data),
+
+    /** Get group details including definition, metadata, and member count. */
+    group: (id: string, tenantId: string) =>
+      restClient.get(`/v1/population/groups/${id}${buildQS({ tenant_id: tenantId })}`, wrap(unknownSchema)).then(r => r.data),
+
+    /** List members of a group with confidence and membership evidence. */
+    groupMembers: (id: string, tenantId: string, limit = 50) =>
+      restClient.get(`/v1/population/groups/${id}/members${buildQS({ tenant_id: tenantId, limit })}`, wrap(unknownSchema)).then(r => r.data),
+
+    /** Get all groups an entity belongs to with confidence and basis. */
+    entityMemberships: (entityId: string, tenantId: string) =>
+      restClient.get(`/v1/population/entity/${entityId}/memberships${buildQS({ tenant_id: tenantId })}`, wrap(unknownSchema)).then(r => r.data),
+  },
+
+  // ── Agent Tasks ───────────────────────────────────────────────────────────
+  agent: {
+    /** List recent agent tasks for this tenant. */
+    tasks: (tenantId: string, status?: string, limit = 50) =>
+      restClient.get(`/v1/agent/tasks${buildQS({ tenant_id: tenantId, status, limit })}`, wrap(unknownSchema)).then(r => r.data),
+
+    /** Submit a new task to the agent controller. */
+    createTask: (body: Record<string, unknown>) =>
+      restClient.post('/v1/agent/tasks', wrap(unknownSchema), body).then(r => r.data),
+
+    /** Get task status and result. */
+    task: (taskId: string) =>
+      restClient.get(`/v1/agent/tasks/${taskId}`, wrap(unknownSchema)).then(r => r.data),
+
+    /** Record a task lifecycle event (started, tool_called, decision_made, completed, verified). */
+    taskLifecycle: (taskId: string, body: Record<string, unknown>) =>
+      restClient.post(`/v1/agent/tasks/${taskId}/lifecycle`, wrap(unknownSchema), body).then(r => r.data),
+  },
+
+  // ── RWA Intelligence ──────────────────────────────────────────────────────
+  rwa: {
+    /** List registered RWA assets for this tenant. */
+    assets: (tenantId: string, limit = 50) =>
+      restClient.get(`/v1/rwa/assets${buildQS({ tenant_id: tenantId, limit })}`, wrap(unknownSchema)).then(r => r.data),
+
+    /** Register a tokenized real-world asset as an intelligence object. */
+    createAsset: (body: Record<string, unknown>) =>
+      restClient.post('/v1/rwa/assets', wrap(unknownSchema), body).then(r => r.data),
+
+    /** Get full asset details. */
+    asset: (id: string) =>
+      restClient.get(`/v1/rwa/assets/${id}`, wrap(unknownSchema)).then(r => r.data),
+
+    /** Get RWA exposure for an entity across all assets. */
+    exposure: (entityId: string) =>
+      restClient.get(`/v1/rwa/exposure/${entityId}`, wrap(unknownSchema)).then(r => r.data),
+  },
+
+  // ── Delegations ───────────────────────────────────────────────────────────
+  delegations: {
+    /** List delegations for this tenant (filterable by grantor, grantee, active). */
+    list: (tenantId: string, limit = 50) =>
+      restClient.get(`/v1/delegations${buildQS({ tenant_id: tenantId, limit })}`, wrap(unknownSchema)).then(r => r.data),
+
+    /** Grant a new delegation. */
+    create: (body: Record<string, unknown>) =>
+      restClient.post('/v1/delegations', wrap(unknownSchema), body).then(r => r.data),
+
+    /** Read a single delegation by ID. */
+    get: (id: string, tenantId: string) =>
+      restClient.get(`/v1/delegations/${id}${buildQS({ tenant_id: tenantId })}`, wrap(unknownSchema)).then(r => r.data),
+  },
+
+  // ── Commerce ──────────────────────────────────────────────────────────────
+  commerce: {
+    /** Record a commerce payment between entities. */
+    recordPayment: (payment: Record<string, unknown>) =>
+      restClient.post('/v1/commerce/payments', wrap(unknownSchema), payment).then(r => r.data),
+
+    /** Record an agent hire transaction. */
+    recordHire: (hire: Record<string, unknown>) =>
+      restClient.post('/v1/commerce/hires', wrap(unknownSchema), hire).then(r => r.data),
+
+    /** Fee report for a given period. */
+    feesReport: (period?: string) =>
+      restClient.get(`/v1/commerce/fees/report${period ? `?period=${period}` : ''}`, wrap(unknownSchema)).then(r => r.data),
+
+    /** Commerce spend breakdown for an agent. */
+    agentSpend: (agentId: string) =>
+      restClient.get(`/v1/commerce/agent/${agentId}/spend`, wrap(unknownSchema)).then(r => r.data),
+  },
 };
 
 // ─── Utility: call API with typed fallback ────────────────────────────────────
