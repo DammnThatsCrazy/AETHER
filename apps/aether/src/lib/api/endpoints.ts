@@ -407,18 +407,17 @@ export const api = {
 
   // ── Oracle (proof generation / verification) ───────────────────────────────
   oracle: {
-    generateProof: (params: { entity_id: string; data_type: string; chain: string }) =>
-      restClient.post('/v1/oracle/proof', wrap(z.object({
-        proof_id: z.string(), proof: z.string(), chain: z.string(), expires_at: z.string().optional(),
+    generateProof: (params: { user: string; action_type: string; amount_wei: number }) =>
+      restClient.post('/v1/oracle/proof/generate', wrap(z.object({
+        user: z.string(), action_type: z.string(), amount_wei: z.number(),
+        nonce: z.string(), expiry: z.number(), chain_id: z.number(),
+        contract_address: z.string(), signature: z.string(), message_hash: z.string(),
       }).passthrough()), params).then(r => r.data),
 
-    verifyProof: (proofId: string, proof: string) =>
-      restClient.post('/v1/oracle/verify', wrap(z.object({
-        verified: z.boolean(), proof_id: z.string(), verified_at: z.string().optional(),
-      }).passthrough()), { proof_id: proofId, proof }).then(r => r.data),
-
-    getStatus: (proofId: string) =>
-      restClient.get(`/v1/oracle/proof/${proofId}`, wrap(unknownSchema)).then(r => r.data),
+    verifyProof: (params: { user: string; action_type: string; amount_wei: number; nonce: string; expiry: number; chain_id: number; contract_address: string; signature: string; message_hash: string }) =>
+      restClient.post('/v1/oracle/proof/verify', wrap(z.object({
+        verified: z.boolean(), verified_at: z.string().optional(),
+      }).passthrough()), params).then(r => r.data),
   },
 
   // ── x402 (HTTP payment tracking) ──────────────────────────────────────────
@@ -482,7 +481,7 @@ export const api = {
         errors: z.array(z.object({ message: z.string() }).passthrough()).optional().nullable(),
       })), { query, variables }).then(r => r.data),
 
-    export: (params: { format?: 'csv' | 'json' | 'parquet'; start_date?: string; end_date?: string; event_type?: string }) =>
+    export: (params: { format?: 'csv' | 'json' | 'parquet'; query?: { event_type?: string; start_date?: string; end_date?: string; user_id?: string; session_id?: string; limit?: number } }) =>
       restClient.post('/v1/analytics/export', wrap(z.object({ export_id: z.string(), status: z.string() })), params).then(r => r.data),
 
     exportStatus: (exportId: string) =>
