@@ -191,8 +191,8 @@ function SessionsTab({ userId }: { userId: string }) {
   const { data, isLoading, error } = useUserSessions(userId, 30);
   const { data: devicesData, isLoading: dl } = useUserDevices(userId);
 
-  const sessions = asList(asRecord(data).sessions ?? data);
-  const devices = asList(asRecord(devicesData).devices ?? devicesData);
+  const sessions = asList(asRecord(data).items ?? asRecord(data).sessions ?? data);
+  const devices = asList(asRecord(devicesData).items ?? asRecord(devicesData).devices ?? devicesData);
 
   type SessionRow = Record<string, unknown>;
 
@@ -250,7 +250,7 @@ function SessionsTab({ userId }: { userId: string }) {
 
 function JourneysTab({ userId }: { userId: string }) {
   const { data, isLoading, error } = useUserJourneys(userId);
-  const journeys = asList(asRecord(data).journeys ?? data);
+  const journeys = asList(asRecord(data).items ?? asRecord(data).journeys ?? data);
 
   type JourneyRow = Record<string, unknown>;
 
@@ -314,7 +314,7 @@ function JourneysTab({ userId }: { userId: string }) {
 
 function WalletsTab({ userId }: { userId: string }) {
   const { data, isLoading, error } = useUserWallets(userId);
-  const wallets = asList(asRecord(data).wallets ?? data);
+  const wallets = asList(asRecord(data).items ?? asRecord(data).wallets ?? data);
 
   type Row = Record<string, unknown>;
 
