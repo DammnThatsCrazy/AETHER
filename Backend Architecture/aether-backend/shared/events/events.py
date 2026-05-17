@@ -103,8 +103,8 @@ class Topic(str, Enum):
     # Intelligence Graph — Commerce (L3a)
     PAYMENT_SENT = "aether.commerce.payment.sent"
     AGENT_HIRED = "aether.commerce.agent.hired"
-    SERVICE_PURCHASED = "aether.commerce.service.purchased"  # Reserved — not yet published by any service
-    FEE_ELIMINATED = "aether.commerce.fee.eliminated"  # Reserved — not yet published by any service
+    SERVICE_PURCHASED = "aether.commerce.service.purchased"
+    FEE_ELIMINATED = "aether.commerce.fee.eliminated"
 
     # Intelligence Graph — On-Chain Actions (L0)
     ACTION_RECORDED = "aether.onchain.action.recorded"

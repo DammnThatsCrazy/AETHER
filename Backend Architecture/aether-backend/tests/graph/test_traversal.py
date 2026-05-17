@@ -17,8 +17,8 @@ async def _build_client(*vertices: Vertex, edges: list[Edge] | None = None) -> G
     return client
 
 
-def _v(vid: str, vtype: str = "User", **props) -> Vertex:
-    return Vertex(vertex_type=vtype, vertex_id=vid, properties=props)
+def _v(vid: str, vtype: str = "User", created_at: str = "2020-01-01T00:00:00+00:00", **props) -> Vertex:
+    return Vertex(vertex_type=vtype, vertex_id=vid, properties=props, created_at=created_at)
 
 
 def _e(from_id: str, to_id: str, etype: str = "RELATED", created_at: str = "2024-01-01T00:00:00+00:00") -> Edge:
