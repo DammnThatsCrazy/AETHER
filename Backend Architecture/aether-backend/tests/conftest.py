@@ -15,10 +15,20 @@ from __future__ import annotations
 
 import asyncio
 import inspect
+import os
+import sys
 from collections.abc import Mapping
 from typing import Any
 
 import pytest
+
+
+# Make backend packages importable even when a sub-suite is executed directly.
+BACKEND_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+REPO_ROOT = os.path.abspath(os.path.join(BACKEND_ROOT, "..", ".."))
+for path in (BACKEND_ROOT, REPO_ROOT):
+    if path not in sys.path:
+        sys.path.insert(0, path)
 
 
 def _has_pytest_asyncio(pytestconfig: pytest.Config) -> bool:
