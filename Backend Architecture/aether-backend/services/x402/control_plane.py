@@ -355,7 +355,7 @@ class X402ControlPlane:
             raise ControlPlaneError("Authorization not found", "AUTH_NOT_FOUND", 404)
 
         # Idempotency check by payment_identifier
-        existing = self._idempotency.lookup(tenant_id, auth.payment_identifier)
+        existing = await self._idempotency.lookup(tenant_id, auth.payment_identifier)
         if existing:
             logger.info(f"idempotent replay: {auth.payment_identifier}")
             return existing
@@ -380,7 +380,7 @@ class X402ControlPlane:
                 "receipt_id": receipt.receipt_id,
                 "error": receipt.verification_error,
             }
-            self._idempotency.record(tenant_id, auth.payment_identifier, result)
+            await self._idempotency.record(tenant_id, auth.payment_identifier, result)
             return result
 
         settlement = await self._settle.start(tenant_id, receipt, auth.facilitator_id)
@@ -406,7 +406,7 @@ class X402ControlPlane:
             "entitlement_id": entitlement.entitlement_id,
             "expires_at": entitlement.expires_at,
         }
-        self._idempotency.record(tenant_id, auth.payment_identifier, result)
+        await self._idempotency.record(tenant_id, auth.payment_identifier, result)
         return result
 
     async def grant_access(

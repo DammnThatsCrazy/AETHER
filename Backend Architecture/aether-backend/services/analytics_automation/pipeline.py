@@ -13,6 +13,7 @@ This is the "brain" that connects analytics to automated rewards.
 from __future__ import annotations
 
 import logging
+import os
 from collections import defaultdict
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
@@ -600,6 +601,40 @@ class AnalyticsPipeline:
 
         return window
 
+    @staticmethod
+    async def _compute_fraud_score(props: dict[str, Any]) -> float:
+        """Compute fraud score via ML serving API; fall back to rule-based heuristics."""
+        ml_url = os.getenv("ML_SERVING_URL", "")
+        if ml_url:
+            try:
+                import httpx
+                async with httpx.AsyncClient(timeout=5.0) as client:
+                    resp = await client.post(
+                        f"{ml_url}/v1/predict",
+                        json={"type": "bot", "signals": props},
+                    )
+                    if resp.status_code == 200:
+                        prediction = resp.json().get("data", {}).get("prediction", {})
+                        return min(prediction.get("confidence", 0.0) * 100.0, 100.0)
+            except Exception as exc:  # noqa: BLE001
+                logger.warning("ML fraud scoring unavailable: %s — using heuristics", exc)
+
+        env = os.getenv("AETHER_ENV", "local").lower()
+        if env not in ("local", "test"):
+            logger.warning(
+                "DEGRADED: fraud scoring using heuristic fallback in %s environment. "
+                "Set ML_SERVING_URL to enable ML-backed scoring.",
+                env,
+            )
+        score = 0.0
+        if props.get("vpn_detected"):
+            score += 25.0
+        if props.get("bot_probability", 0) > 0.7:
+            score += 35.0
+        if props.get("device_count", 1) > 5:
+            score += 15.0
+        return min(score, 100.0)
+
     async def _evaluate_reward(
         self,
         event: dict[str, Any],
@@ -608,8 +643,11 @@ class AnalyticsPipeline:
     ) -> dict[str, Any]:
         """Evaluate whether an event should trigger a reward.
 
-        In production this would call the fraud detection service, attribution
-        engine, and eligibility engine. Here we simulate the pipeline stages.
+        Pipeline stages:
+          1. Fraud pre-check — uses pre-computed score in event payload when
+             available (set by upstream ingestion), otherwise calls ML serving.
+          2. Attribution — user must be attributable to the campaign.
+          3. Eligibility — reward amount must be determinable.
         """
         result: dict[str, Any] = {
             "triggered": False,
@@ -617,9 +655,10 @@ class AnalyticsPipeline:
             "reward_id": None,
         }
 
-        # Stage 1: Fraud pre-check (simplified)
+        # Stage 1: Fraud pre-check
         props = event.get("properties", {})
-        fraud_score = props.get("fraud_score", 0.0)
+        raw_score = props.get("fraud_score")
+        fraud_score = float(raw_score) if raw_score is not None else await self._compute_fraud_score(props)
         if fraud_score > 0.8:
             window.fraud_blocked_count += 1
             self._campaign_totals[campaign_id]["fraud_blocked"] += 1
