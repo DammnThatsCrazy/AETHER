@@ -40,22 +40,24 @@ def _reset():
 
 # ─── Idempotency store ────────────────────────────────────────────────
 
-def test_idempotency_record_and_lookup():
+@pytest.mark.asyncio
+async def test_idempotency_record_and_lookup():
     from services.x402.idempotency import IdempotencyStore
 
     store = IdempotencyStore(ttl_seconds=60)
-    store.record("t1", "pay_123", {"ok": True})
-    assert store.lookup("t1", "pay_123") == {"ok": True}
-    assert store.lookup("t1", "pay_456") is None
-    assert store.lookup("t2", "pay_123") is None  # tenant isolation
+    await store.record("t1", "pay_123", {"ok": True})
+    assert await store.lookup("t1", "pay_123") == {"ok": True}
+    assert await store.lookup("t1", "pay_456") is None
+    assert await store.lookup("t2", "pay_123") is None  # tenant isolation
 
 
-def test_idempotency_ttl_expiry():
+@pytest.mark.asyncio
+async def test_idempotency_ttl_expiry():
     from services.x402.idempotency import IdempotencyStore
 
     store = IdempotencyStore(ttl_seconds=-1)  # already expired
-    store.record("t1", "pay_123", {"ok": True})
-    assert store.lookup("t1", "pay_123") is None
+    await store.record("t1", "pay_123", {"ok": True})
+    assert await store.lookup("t1", "pay_123") is None
 
 
 # ─── Pricing engine ───────────────────────────────────────────────────
