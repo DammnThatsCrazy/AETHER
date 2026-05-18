@@ -147,59 +147,63 @@ async def entity_profile(
     requested_dims = body.dimensions or []
     dimensions: dict[str, Any] = {}
 
-    # Relationship dimension — 1-hop neighbours summary
+    # Fetch edges once for all dimensions that need graph traversal
+    _EDGE_DIMS = {"relationship", "wallet"}
+    needs_edges = not requested_dims or bool(_EDGE_DIMS & set(requested_dims))
+    all_edges: list = await graph.get_edges(body.entity.id, direction="both") if needs_edges else []
+
+    # Relationship dimension
     if not requested_dims or "relationship" in requested_dims:
-        edges = await graph.get_edges(body.entity.id, direction="both")
-        in_count = sum(1 for e in edges if e.to_vertex_id == body.entity.id)
-        out_count = sum(1 for e in edges if e.from_vertex_id == body.entity.id)
+        in_count = sum(1 for e in all_edges if e.to_vertex_id == body.entity.id)
+        out_count = sum(1 for e in all_edges if e.from_vertex_id == body.entity.id)
         edge_type_counts: dict[str, int] = {}
-        for e in edges:
+        for e in all_edges:
             edge_type_counts[e.edge_type] = edge_type_counts.get(e.edge_type, 0) + 1
         dimensions["relationship"] = {
             "inbound_count": in_count,
             "outbound_count": out_count,
-            "total_edges": len(edges),
+            "total_edges": len(all_edges),
             "edge_type_distribution": edge_type_counts,
         }
 
-    # Behavioural dimension — from vertex properties
+    # Behavioral dimension
     if not requested_dims or "behavioral" in requested_dims:
         dimensions["behavioral"] = {
             k: v for k, v in vertex.properties.items()
             if k in ("session_count", "event_count", "last_active", "activity_score")
         }
 
-    # Device dimension — from vertex properties
+    # Device dimension
     if not requested_dims or "device" in requested_dims:
         dimensions["device"] = {
             k: v for k, v in vertex.properties.items()
             if k in ("device_type", "user_agent", "os", "browser", "is_mobile", "device_id")
         }
 
-    # Geographic dimension — from vertex properties
+    # Geographic dimension
     if not requested_dims or "geographic" in requested_dims:
         dimensions["geographic"] = {
             k: v for k, v in vertex.properties.items()
             if k in ("country", "region", "city", "ip", "timezone", "latitude", "longitude")
         }
 
-    # Wallet dimension — from OWNS_WALLET / HAS_WALLET / FLOW_WALLET_LINKED edges
-    _WALLET_EDGE_TYPES = {"OWNS_WALLET", "HAS_WALLET", "FLOW_WALLET_LINKED"}
+    # Wallet dimension — linked wallet vertices via ownership edges
     if not requested_dims or "wallet" in requested_dims:
-        wallet_edges = await graph.get_edges(body.entity.id, direction="both")
-        wallet_addresses = [
-            e.to_vertex_id if e.from_vertex_id == body.entity.id else e.from_vertex_id
-            for e in wallet_edges
-            if e.edge_type in _WALLET_EDGE_TYPES
+        wallet_edge_types = {"OWNS_WALLET", "HAS_WALLET", "FLOW_WALLET_LINKED"}
+        wallet_ids = [
+            e.to_vertex_id for e in all_edges
+            if e.from_vertex_id == body.entity.id and e.edge_type in wallet_edge_types
         ]
-        dimensions["wallet"] = {"addresses": wallet_addresses, "count": len(wallet_addresses)}
+        dimensions["wallet"] = {"wallet_count": len(wallet_ids), "wallet_ids": wallet_ids}
 
-    # All other requested dimensions — extract from vertex properties by prefix
+    # Any remaining requested dimensions: extract vertex properties with a matching prefix
     for dim in requested_dims:
         if dim not in dimensions:
             prefix = f"{dim}_"
-            extracted = {k[len(prefix):]: v for k, v in vertex.properties.items() if k.startswith(prefix)}
-            dimensions[dim] = extracted
+            dimensions[dim] = {
+                k[len(prefix):]: v for k, v in vertex.properties.items()
+                if k.startswith(prefix)
+            }
 
     # Trust/risk composite from stored vertex properties
     scores: list[IntelligenceScore] = []
