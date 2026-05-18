@@ -40,6 +40,10 @@ export function isLocalMocked() {
   return env.VITE_AETHER_ENV === 'local-mocked';
 }
 
+export function isProduction() {
+  return env.VITE_AETHER_ENV === 'production';
+}
+
 export function isMockAuthAllowed() {
   return env.VITE_AETHER_ENV === 'local-mocked' || env.VITE_AETHER_ENV === 'local-live';
 }
