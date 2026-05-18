@@ -59,6 +59,16 @@ async def _process_job(repo, envelope_repo, producer, job: dict) -> None:
             "completedAt": datetime.now(timezone.utc).isoformat(),
             "updatedAt": datetime.now(timezone.utc).isoformat(),
         })
+        try:
+            await producer.publish(Event(
+                topic=Topic.EVENT_REPLAY_COMPLETED,
+                tenant_id=job.get("tenantId", ""),
+                payload={"job_id": job_id, "total_replayed": replayed, "dry_run": dry_run},
+            ))
+        except Exception as notify_exc:
+            # Replay succeeded — don't let a transient notification failure
+            # overwrite the completed status or mask the success.
+            logger.warning("replay_completion_notify_failed job_id=%s error=%s", job_id, notify_exc)
         logger.info(
             "replay_job_completed job_id=%s replayed=%d dry_run=%s",
             job_id, replayed, dry_run,
