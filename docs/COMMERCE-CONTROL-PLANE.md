@@ -13,7 +13,7 @@ source_files:
 canonical_owner: commerce@aether
 estimated_read_minutes: 8
 toc_depth: 3
-last_synced_commit: b41baa4
+last_synced_commit: bbbb603
 ---
 # Aether Agentic Commerce — Control Plane
 
@@ -103,7 +103,7 @@ one or more graph vertices/edges, and is traceable via `GET /v1/x402/explain/{ch
 | `services/x402/settlement.py` | Settlement FSM (pending→verifying→settled/failed) |
 | `services/x402/entitlements.py` | Entitlement mint/lookup/reuse/revoke |
 | `services/x402/pricing.py` | Price resolution with plan discounts |
-| `services/x402/idempotency.py` | Payment-Identifier dedupe with TTL |
+| `services/x402/idempotency.py` | Payment-Identifier dedupe — in-memory (local) or Redis-backed (staging/prod), async API |
 | `services/x402/economic_mutations.py` | Deterministic graph writers |
 | `services/x402/commerce_routes.py` | FastAPI routes (control plane, approvals, entitlements, diagnostics) |
 

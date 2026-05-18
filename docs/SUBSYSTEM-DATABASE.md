@@ -12,7 +12,7 @@ source_files:
 canonical_owner: backend@aether
 estimated_read_minutes: 5
 toc_depth: 3
-last_synced_commit: b41baa4
+last_synced_commit: bbbb603
 ---
 
 # PostgreSQL / Repository Subsystem
@@ -58,6 +58,10 @@ Tables are created automatically on first access. No migration tool is required 
 | `tenants` | `AdminRepository` | Admin service |
 | `api_keys` | `APIKeyRepository` | Admin service |
 | `provider_usage` | `UsageMeter` | Provider gateway |
+| `investigations` | `InvestigationRepository` | Investigation service |
+| `governance_decisions` | `GovernanceRepository` | Governance service |
+| `event_replay_jobs` | `EventReplayRepository` | Events replay worker |
+| `event_envelopes` | `EventEnvelopeRepository` | Events service |
 
 ## Environment Variables
 

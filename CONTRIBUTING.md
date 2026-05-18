@@ -8,7 +8,7 @@ git clone https://github.com/DammnThatsCrazy/Aether.git
 cd Aether
 pip install -e ".[dev,backend,ml]"
 
-# Install Node workspace deps (shared, web, react-native, kyber)
+# Install Node workspace deps (shared, ui, web, react-native, kyber, aether)
 npm ci
 
 # Run tests
@@ -26,11 +26,15 @@ make serve-ml               # ML serving → http://localhost:8080
 # Optional: start the Kyber operator control surface
 cd apps/kyber && npm run dev   # → http://localhost:5174
 
+# Optional: start the Aether customer app
+cd apps/aether && npm run dev  # → http://localhost:5175
+
 # Full stack via docker compose (backend + ml + kyber + infra)
 docker compose up -d
-# → backend   http://localhost:8000
+# → backend    http://localhost:8000
 # → ml-serving http://localhost:8080
-# → kyber     http://localhost:8081   (host port 8081 -> container 8080)
+# → kyber      http://localhost:8081  (host port 8081 → container 8080)
+# apps/aether is dev-only; run separately: cd apps/aether && npm run dev
 ```
 
 ## Environment
@@ -85,16 +89,18 @@ Follow conventional commits:
 See `docs/ARCHITECTURE.md` for system design. Key directories:
 
 ```
-Backend Architecture/aether-backend/   Python FastAPI backend (31 services)
+Backend Architecture/aether-backend/   Python FastAPI backend (55 routers)
 ML Models/aether-ml/                   ML training + serving
 Agent Layer/                           Autonomous agent workers
 security/                              Model extraction defense
 packages/shared/                       Canonical TypeScript contracts (@aether/shared)
+packages/ui/                           Shared React component library (@aether/ui)
 packages/web/                          Web SDK (@aether/web)
 packages/react-native/                 React Native SDK (@aether/react-native)
 packages/ios/                          Native iOS SDK
 packages/android/                      Native Android SDK
-apps/kyber/                            Internal operator control surface (React SPA)
+apps/kyber/                            Operator control surface (React SPA, port 5174)
+apps/aether/                           Customer web app (React SPA, port 5175)
 ```
 
 ## Subsystem Documentation

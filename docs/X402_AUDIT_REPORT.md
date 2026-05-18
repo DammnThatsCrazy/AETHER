@@ -11,7 +11,7 @@ source_files:
 canonical_owner: security@aether
 estimated_read_minutes: 12
 toc_depth: 3
-last_synced_commit: b41baa4
+last_synced_commit: bbbb603
 ---
 # x402 Protocol Support Audit — Aether Repository
 
@@ -75,9 +75,10 @@ This is not speculative or merely extensible infrastructure. The x402 support is
 | **Fee elimination tracking** | Implemented | `interceptor.py:30` — 2.9% card fee rate, computed per transaction |
 | **Agent→Tool→Paid Resource** | Implemented | `CONSUMES` edges track API URL + method; `PAYS` edges track amount/token/chain |
 | **Commerce layer (broader)** | Implemented | `services/commerce/` — `PaymentRecord` with method enum including `x402` |
-| **Facilitator / Institution** | Partial | `VertexType.INSTITUTION` exists with types (payment_processor, custodian, etc.) but no x402-specific facilitator role |
-| **Settlement state machine** | Partial | `PaymentResponse.verified` + `settled_at` capture settlement, but no multi-state lifecycle (pending→clearing→settled→failed) |
-| **On-chain verification** | Partial | `oracle/verifier.py` verifies reward proofs via ecrecover, but x402 payment proof on-chain verification is not implemented |
+| **Facilitator / Institution** | Implemented | `services/x402/facilitators.py` — `FacilitatorRegistry` with per-chain facilitator lookup; `services/x402/verification.py` — `VerificationEngine` delegates to external facilitator via HTTP (x402 wire format) with local USDC fallback |
+| **Payment deduplication (idempotency)** | Implemented | `services/x402/idempotency.py` — async `_InMemoryIdempotencyStore` (local) + `_RedisIdempotencyStore` (staging/production, key: `aether:x402:idempotency:{tenant_id}:{payment_identifier}`); multi-instance safe |
+| **Settlement state machine** | Implemented | `services/x402/settlement.py` — multi-state lifecycle (pending → clearing → settled / failed); `SettlementEngine.start()` transitions `PaymentReceipt` through states |
+| **On-chain verification** | Partial | `services/x402/verification.py` — facilitator-delegated verification implemented for USDC/Base and USDC/Solana; direct on-chain ecrecover for arbitrary chains is not yet implemented |
 | **Entitlement / access gating** | Latent | Reward eligibility engine exists (`services/rewards/eligibility.py`) but x402 does not gate access — it is observational/capture-only |
 | **HTTP 402 response middleware** | Missing | No middleware that *returns* HTTP 402 to clients; x402 is capture-side only, not challenge-side |
 
@@ -203,8 +204,13 @@ Aether's x402 support is **capture-side**: it observes and records x402 transact
 | File | Role |
 |---|---|
 | `Backend Architecture/aether-backend/services/x402/models.py` | PaymentTerms, PaymentProof, PaymentResponse, CapturedX402Transaction, X402Node, SpendingSummary |
+| `Backend Architecture/aether-backend/services/x402/commerce_models.py` | Facilitator, PaymentAuthorization, PaymentReceipt — commerce control plane types |
 | `Backend Architecture/aether-backend/services/x402/interceptor.py` | X402Interceptor — header parsing, capture, event publishing |
 | `Backend Architecture/aether-backend/services/x402/economic_graph.py` | X402EconomicGraph — in-memory subgraph, Neptune snapshots, spending patterns |
+| `Backend Architecture/aether-backend/services/x402/facilitators.py` | FacilitatorRegistry — per-chain facilitator lookup and HTTP endpoint resolution |
+| `Backend Architecture/aether-backend/services/x402/verification.py` | VerificationEngine — facilitator-delegated verification (x402 wire format) + USDC/Base, USDC/Solana local fallback |
+| `Backend Architecture/aether-backend/services/x402/idempotency.py` | Async idempotency store — in-memory (local) or Redis-backed (staging/prod) deduplication |
+| `Backend Architecture/aether-backend/services/x402/settlement.py` | SettlementEngine — multi-state settlement lifecycle (pending → clearing → settled / failed) |
 | `Backend Architecture/aether-backend/services/x402/routes.py` | FastAPI routes: /v1/x402/capture, /graph, /agent/{id}, /graph/snapshot |
 
 ### Graph Layer
@@ -269,9 +275,13 @@ Aether has a **production-grade x402 capture and analytics subsystem** that:
 6. **Scopes** access via dedicated `x402:read`/`x402:write` permissions
 7. **Isolates** data per tenant for multi-tenancy
 
-The **two gaps** preventing a "fully implemented end-to-end x402" classification are:
+**Update (post-audit):** The facilitator, idempotency, and settlement gaps identified in the original audit have been closed:
+- `FacilitatorRegistry` + `VerificationEngine` implement facilitator-aware verification with x402 wire format
+- `SettlementEngine` implements the full pending → clearing → settled / failed state machine
+- Idempotency store is now Redis-backed in staging/production for multi-instance safety
 
-1. **No challenge-side middleware** — Aether does not return HTTP 402 responses or gate access behind x402 payment verification. It is an observer/recorder, not a facilitator.
-2. **No on-chain payment proof verification** — The `PaymentProof.tx_hash` is stored but not verified against a blockchain. The oracle verifier exists but is wired to reward proofs, not x402 proofs.
+The **one remaining gap** is:
 
-These gaps are architectural choices (Aether is an intelligence platform, not a payment gateway), but they mean Aether cannot independently enforce the x402 protocol — it relies on external facilitators for the challenge/verification steps.
+1. **No challenge-side middleware** — Aether does not return HTTP 402 responses or gate access behind payment verification. It is an observer/recorder, not a payment gateway. This is an architectural choice, not an oversight.
+
+Direct on-chain ecrecover verification for arbitrary chains is also absent; verification is delegated to external facilitators for all chains except as a local fallback path for USDC/Base and USDC/Solana.
