@@ -6,48 +6,148 @@
 @tailwind utilities;
 
 @layer base {
-  * {
-    @apply border-border-default;
+  *, *::before, *::after { box-sizing: border-box; }
+
+  html {
+    font-feature-settings: 'ss01', 'cv11';
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
   }
 
   body {
-    @apply bg-surface-base text-text-primary font-sans antialiased;
+    @apply bg-surface-base text-text-primary font-sans;
+    font-feature-settings: 'ss01', 'cv11';
   }
 
   @media (prefers-reduced-motion: reduce) {
-    *,
-    *::before,
-    *::after {
+    *, *::before, *::after {
       animation-duration: 0.01ms !important;
       animation-iteration-count: 1 !important;
       transition-duration: 0.01ms !important;
-      scroll-behavior: auto !important;
     }
+  }
+
+  /* Focus ring */
+  :focus-visible {
+    outline: none;
+    box-shadow: inset 0 0 0 1px #2563eb;
+    border-radius: 4px;
   }
 }
 
 @layer components {
-  .ui-card {
-    @apply rounded-md border border-border-default bg-surface-raised p-4;
+  /* ── Scrollbar ──────────────────────────────────────────── */
+  ::-webkit-scrollbar          { width: 5px; height: 5px; }
+  ::-webkit-scrollbar-track    { background: transparent; }
+  ::-webkit-scrollbar-thumb    { background: var(--color-border-default); border-radius: 3px; }
+  ::-webkit-scrollbar-thumb:hover { background: var(--color-text-muted); }
+
+  /* ── Eyebrow label ──────────────────────────────────────── */
+  .label-eyebrow {
+    @apply font-sans text-2xs font-medium tracking-eyebrow uppercase text-text-muted;
   }
 
-  .ui-badge {
-    @apply inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium;
+  /* ── Stat number ────────────────────────────────────────── */
+  .stat-value {
+    @apply font-mono text-2xl font-semibold tabular-nums text-text-primary tracking-tight;
   }
-}
 
-/* Scrollbar styling */
-::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
-}
-::-webkit-scrollbar-track {
-  background: transparent;
-}
-::-webkit-scrollbar-thumb {
-  background: var(--color-border-default);
-  border-radius: 3px;
-}
-::-webkit-scrollbar-thumb:hover {
-  background: var(--color-text-secondary);
+  /* ── Panel shells ───────────────────────────────────────── */
+  .panel {
+    @apply bg-surface-raised border border-border-default rounded;
+  }
+
+  .panel-header {
+    @apply flex items-center justify-between px-4 py-3 border-b border-border-subtle;
+  }
+
+  .panel-title {
+    @apply text-sm font-medium text-text-primary;
+  }
+
+  /* ── Terminal separator ─────────────────────────────────── */
+  .tsep {
+    @apply flex items-center gap-2 my-1;
+  }
+  .tsep-rule {
+    @apply flex-1 border-t border-border-default opacity-50;
+  }
+  .tsep-label {
+    @apply text-2xs font-medium tracking-eyebrow uppercase text-text-muted;
+  }
+
+  /* ── Badge base ─────────────────────────────────────────── */
+  .badge-base {
+    @apply inline-flex items-center border font-medium;
+  }
+
+  /* ── Kbd ────────────────────────────────────────────────── */
+  .kbd {
+    @apply font-mono text-2xs border border-border-default rounded px-1.5 py-px text-text-muted;
+    padding-top: 2px;
+    padding-bottom: 2px;
+  }
+
+  /* ── Trust bar ──────────────────────────────────────────── */
+  .trust-bar {
+    @apply flex items-center gap-2;
+  }
+  .trust-track {
+    @apply flex-1 h-1 bg-surface-overlay rounded-pill overflow-hidden;
+  }
+  .trust-fill {
+    @apply h-full rounded-pill;
+  }
+
+  /* ── Live pulse dot ─────────────────────────────────────── */
+  .live-dot {
+    @apply w-2 h-2 rounded-pill bg-verdant animate-pulse-live;
+  }
+
+  /* ── Table base ─────────────────────────────────────────── */
+  .data-row {
+    @apply flex items-center border-b border-border-subtle hover:bg-surface-overlay transition-colors cursor-pointer;
+  }
+
+  /* ── Skeleton shimmer ───────────────────────────────────── */
+  .shimmer {
+    background: linear-gradient(
+      90deg,
+      var(--color-surface-raised) 0%,
+      var(--color-surface-overlay) 50%,
+      var(--color-surface-raised) 100%
+    );
+    background-size: 200% 100%;
+    animation: skeleton 1.5s ease-in-out infinite;
+  }
+
+  /* ── Severity left border ───────────────────────────────── */
+  .sev-p0 { border-left-color: #dc2626; }
+  .sev-p1 { border-left-color: #d97706; }
+  .sev-p2 { border-left-color: #2563eb; }
+  .sev-p3 { border-left-color: #6b8aa3; }
+
+  /* ── Graph canvas ───────────────────────────────────────── */
+  .graph-canvas {
+    @apply w-full h-full bg-surface-base;
+  }
+
+  /* ── Evidence border ────────────────────────────────────── */
+  .evidence-item {
+    @apply border-l-2 border-border-default pl-3 py-1.5 bg-surface-overlay rounded-r;
+  }
+
+  /* ── Inline code ────────────────────────────────────────── */
+  code {
+    @apply font-mono text-xs bg-surface-overlay px-1 rounded text-text-accent;
+  }
+
+  pre code {
+    @apply bg-transparent px-0;
+  }
+
+  pre {
+    @apply bg-deep-stone-dark border border-border-default rounded p-4 font-mono text-xs text-text-primary overflow-x-auto;
+  }
 }
