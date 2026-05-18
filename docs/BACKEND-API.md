@@ -1555,44 +1555,43 @@ Human → Agent delegation records — tracks what each agent is authorized to d
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
-| POST | `/v1/delegations` | Record a new delegation grant |
-| GET | `/v1/delegations` | List delegation records for the tenant |
+| POST | `/v1/delegations` | Record a new delegation grant (grantor, grantee, scope, optional time bounds) |
+| GET | `/v1/delegations` | List delegation records; filter by `grantor`, `grantee`, `active` |
 | GET | `/v1/delegations/{id}` | Get delegation details |
-| PATCH | `/v1/delegations/{id}/revoke` | Revoke a delegation |
+| POST | `/v1/delegations/{id}/revoke` | Revoke a delegation (publishes `aether.delegation.revoked`) |
+| POST | `/v1/delegations/validate` | Validate whether a delegation is currently active and in-scope |
 
-**Permissions:** `write` for grants/revoke, `read` for queries
+**Permissions:** `write` for grants/revoke/validate, `read` for queries
 
 ---
 
 ### Flows Service (v8.8.0)
 
-Multi-step flow definitions and execution tracking — journeys, onboarding, and conversion funnels.
+Value-flow primitives — asset transfers between entities, wallet links, and asset registry. Writes graph edges (`TRANSFERRED`, `OWNS`) and publishes flow events.
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
-| POST | `/v1/flows` | Define a new flow |
-| GET | `/v1/flows` | List flows |
-| GET | `/v1/flows/{id}` | Get flow definition |
-| POST | `/v1/flows/{id}/steps` | Record a step completion |
-| GET | `/v1/flows/{id}/progress/{entity_id}` | Get entity progress through a flow |
+| POST | `/v1/flows/transfers` | Record an asset transfer between two entities (projects `TRANSFERRED` edge to graph) |
+| GET | `/v1/flows/transfers` | List transfers for an entity (`entity_id` query param required) |
+| POST | `/v1/flows/wallets` | Link a wallet address to an owner entity (projects `OWNS` edge to graph) |
+| GET | `/v1/flows/wallets` | List wallets linked to an entity (`entity_id` query param required) |
+| POST | `/v1/flows/assets` | Register a new trackable asset |
+| GET | `/v1/flows/assets/{asset_id}` | Get asset details |
 
-**Permissions:** `write` for definitions/steps, `read` for queries
+**Permissions:** `write` for record/link/register, `read` for list/get
 
 ---
 
 ### Behavior Service (v8.8.0)
 
-Session-level behavioral signals — session start/end, pattern detection, and behavioral event recording.
+Read-side behavioral profile output computed by the `BehaviorScorer` Profile 360 worker. Snapshots are written by the worker; this service exposes them for query.
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
-| POST | `/v1/behavior/sessions` | Start a behavior session |
-| PATCH | `/v1/behavior/sessions/{id}/end` | End a behavior session |
-| POST | `/v1/behavior/sessions/{id}/events` | Record a behavioral event within a session |
-| GET | `/v1/behavior/sessions/{id}/patterns` | Get detected behavioral patterns for a session |
-| GET | `/v1/behavior/entity/{entity_id}` | Get aggregated behavioral profile for an entity |
+| GET | `/v1/behavior/{entity_id}` | Latest behavior snapshot for an entity (session patterns, anomaly flags, risk signals) |
+| GET | `/v1/behavior/{entity_id}/history` | Historical behavior snapshots; `window` (e.g. `7d`) and `limit` query params |
 
-**Permissions:** `write` for recording, `read` for queries
+**Permissions:** `read`
 
 ---
 
