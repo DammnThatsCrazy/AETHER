@@ -39,7 +39,7 @@ _session_chain: dict[str, list[str]] = defaultdict(list)
 
 def _entity_from_event(event: Event) -> Optional[str]:
     p = event.payload or {}
-    for key in ("entity_id", "agent_id", "user_id", "owner_entity_id", "grantee_entity_id"):
+    for key in ("entity_id", "agent_id", "user_id", "actor_id", "owner_entity_id", "grantee_entity_id"):
         v = p.get(key)
         if isinstance(v, str) and v:
             return v
