@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { getAccessToken } from '@aether-app/features/auth';
 import { env, getEnvironment } from '@aether-app/lib/env';
+import { log } from '@aether-app/lib/logging';
 
 export class RestClientError extends Error {
   constructor(
@@ -34,6 +35,7 @@ async function request<T>(
   options?: RequestOptions,
 ): Promise<T> {
   const correlationId = generateCorrelationId();
+  const startTime = performance.now();
   const url = path;
 
   const headers: Record<string, string> = {
@@ -60,8 +62,11 @@ async function request<T>(
       signal: options?.signal ?? controller.signal,
     });
 
+    const duration = Math.round(performance.now() - startTime);
+
     if (!response.ok) {
       const errorBody = await response.json().catch(() => ({})) as Record<string, unknown>;
+      log.warn(`[REST] ${method} ${path} -> ${response.status} (${duration}ms)`, { correlationId });
       throw new RestClientError(
         String(errorBody['message'] ?? response.statusText),
         response.status,
@@ -70,11 +75,13 @@ async function request<T>(
       );
     }
 
+    log.info(`[REST] ${method} ${path} -> ${response.status} (${duration}ms)`, { correlationId });
+
     const json: unknown = await response.json();
     const parsed = schema.safeParse(json);
 
     if (!parsed.success) {
-      console.error(`[REST] Schema validation failed for ${path}`, parsed.error.issues);
+      log.error(`[REST] Schema validation failed for ${path}`, { issues: parsed.error.issues, correlationId });
       throw new RestClientError(
         `Response validation failed: ${parsed.error.issues.map(i => i.message).join(', ')}`,
         response.status,

@@ -1,5 +1,6 @@
 import { Component, type ReactNode, type ErrorInfo } from 'react';
 import { ErrorState } from '@aether/ui';
+import { log } from '@aether-app/lib/logging';
 
 interface Props {
   readonly children: ReactNode;
@@ -23,7 +24,7 @@ export class ErrorBoundary extends Component<Props, State> {
   }
 
   componentDidCatch(error: Error, info: ErrorInfo): void {
-    console.error('[ErrorBoundary]', error.message, info.componentStack);
+    log.error('[ErrorBoundary]', { message: error.message, componentStack: info.componentStack });
     this.props.onError?.(error, info);
   }
 
