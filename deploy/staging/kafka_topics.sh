@@ -66,7 +66,11 @@ _create aether.analytics.session.scored 6 ${TWO_WEEKS_MS}
 _create aether.analytics.anomaly        6 ${TWO_WEEKS_MS}
 _create aether.ml.prediction            6 ${TWO_WEEKS_MS}
 _create aether.ml.model.updated         3 ${TWO_WEEKS_MS}
-_create aether.campaign.attribution     6 ${TWO_WEEKS_MS}
+_create aether.campaign.attribution              6 ${TWO_WEEKS_MS}
+_create aether.campaign.created                  6 ${TWO_WEEKS_MS}
+_create aether.campaign.updated                  6 ${TWO_WEEKS_MS}
+_create aether.campaign.deleted                  6 ${TWO_WEEKS_MS}
+_create aether.campaign.touchpoint.recorded      6 ${TWO_WEEKS_MS}
 
 # ── Agent (standard, 14-day) ─────────────────────────────────────
 _create aether.agent.discovery              6 ${TWO_WEEKS_MS}
