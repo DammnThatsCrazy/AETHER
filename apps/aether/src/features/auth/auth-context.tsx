@@ -1,4 +1,4 @@
-import { createContext, useContext, useCallback, useReducer, useEffect, type ReactNode } from 'react';
+import { createContext, useContext, useCallback, useReducer, useEffect, useRef, type ReactNode } from 'react';
 import type { AuthState, AetherUser, AuthTokens } from '@aether-app/types';
 import { isMockAuthAllowed, isLocalMocked } from '@aether-app/lib/env';
 
@@ -62,6 +62,19 @@ async function generatePKCEChallenge(verifier: string): Promise<string> {
     .replace(/=+$/, '');
 }
 
+function decodeUser(tokens: AuthTokens): AetherUser {
+  const claims = JSON.parse(atob(tokens.idToken.split('.')[1] ?? '{}')) as Record<string, unknown>;
+  return {
+    id: String(claims['sub'] ?? ''),
+    email: String(claims['email'] ?? ''),
+    displayName: String(claims['name'] ?? claims['email'] ?? ''),
+    avatarUrl: typeof claims['picture'] === 'string' ? claims['picture'] : undefined,
+  };
+}
+
+// How many seconds before expiry to trigger a silent refresh.
+const REFRESH_SKEW_S = 300;
+
 export function AuthProvider({ children }: { readonly children: ReactNode }) {
   const [state, dispatch] = useReducer(authReducer, {
     isAuthenticated: false,
@@ -69,6 +82,42 @@ export function AuthProvider({ children }: { readonly children: ReactNode }) {
     isLoading: true,
     error: null,
   });
+
+  const refreshTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  function scheduleRefresh(tokens: AuthTokens): void {
+    if (refreshTimerRef.current !== null) clearTimeout(refreshTimerRef.current);
+    const msUntilRefresh = (tokens.expiresAt - REFRESH_SKEW_S) * 1000 - Date.now();
+    if (msUntilRefresh <= 0) {
+      void silentRefresh();
+      return;
+    }
+    refreshTimerRef.current = setTimeout(() => { void silentRefresh(); }, msUntilRefresh);
+  }
+
+  async function silentRefresh(): Promise<void> {
+    if (!currentTokens?.refreshToken) {
+      currentTokens = null;
+      dispatch({ type: 'AUTH_LOGOUT' });
+      return;
+    }
+    try {
+      const response = await fetch('/v1/auth/refresh', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ refresh_token: currentTokens.refreshToken }),
+      });
+      if (!response.ok) throw new Error('Refresh failed');
+      const tokens = (await response.json()) as AuthTokens;
+      currentTokens = tokens;
+      scheduleRefresh(tokens);
+      dispatch({ type: 'AUTH_SUCCESS', user: decodeUser(tokens), tokens });
+    } catch {
+      currentTokens = null;
+      if (refreshTimerRef.current !== null) clearTimeout(refreshTimerRef.current);
+      dispatch({ type: 'AUTH_LOGOUT' });
+    }
+  }
 
   useEffect(() => {
     if (isLocalMocked()) {
@@ -83,8 +132,12 @@ export function AuthProvider({ children }: { readonly children: ReactNode }) {
         dispatch({ type: 'AUTH_FAILURE', error: String(err) });
       });
     } else {
-      dispatch({ type: 'AUTH_FAILURE', error: null });
+      checkSession();
     }
+
+    return () => {
+      if (refreshTimerRef.current !== null) clearTimeout(refreshTimerRef.current);
+    };
   }, []);
 
   async function handleOIDCCallback(code: string): Promise<void> {
@@ -105,19 +158,26 @@ export function AuthProvider({ children }: { readonly children: ReactNode }) {
       currentTokens = tokens;
       sessionStorage.removeItem('aether_pkce_verifier');
 
-      const claims = JSON.parse(atob(tokens.idToken.split('.')[1] ?? '{}')) as Record<string, unknown>;
-      const user: AetherUser = {
-        id: String(claims['sub'] ?? ''),
-        email: String(claims['email'] ?? ''),
-        displayName: String(claims['name'] ?? claims['email'] ?? ''),
-        avatarUrl: typeof claims['picture'] === 'string' ? claims['picture'] : undefined,
-      };
-
-      dispatch({ type: 'AUTH_SUCCESS', user, tokens });
+      scheduleRefresh(tokens);
+      dispatch({ type: 'AUTH_SUCCESS', user: decodeUser(tokens), tokens });
       window.history.replaceState({}, '', window.location.pathname);
     } catch (err) {
       dispatch({ type: 'AUTH_FAILURE', error: err instanceof Error ? err.message : 'Auth failed' });
     }
+  }
+
+  function checkSession(): void {
+    if (currentTokens && currentTokens.expiresAt > Date.now() / 1000) {
+      try {
+        dispatch({ type: 'AUTH_SUCCESS', user: decodeUser(currentTokens), tokens: currentTokens });
+        scheduleRefresh(currentTokens);
+        return;
+      } catch {
+        // Malformed token — fall through to login required
+      }
+    }
+    currentTokens = null;
+    dispatch({ type: 'AUTH_FAILURE', error: null });
   }
 
   const login = useCallback(async () => {
@@ -156,6 +216,7 @@ export function AuthProvider({ children }: { readonly children: ReactNode }) {
 
   const logout = useCallback(async () => {
     currentTokens = null;
+    if (refreshTimerRef.current !== null) clearTimeout(refreshTimerRef.current);
     dispatch({ type: 'AUTH_LOGOUT' });
 
     if (!isMockAuthAllowed()) {

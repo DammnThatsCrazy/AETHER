@@ -1,0 +1,63 @@
+name: Aether Unit Tests
+
+# CI gate for the Aether customer-facing web app.
+# Runs Vitest unit and integration tests.
+#
+# Triggers:
+#   - Every push to main (guard main-branch regressions).
+#   - Pull requests that touch apps/aether/** or packages/ui/** so that
+#     changes to the shared component library are validated against
+#     the customer app without running the full suite on every unrelated change.
+#   - Manual dispatch via the Actions tab.
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'apps/aether/**'
+      - 'packages/ui/**'
+      - 'packages/shared/**'
+      - '.github/workflows/aether-test.yml'
+  pull_request:
+    paths:
+      - 'apps/aether/**'
+      - 'packages/ui/**'
+      - 'packages/shared/**'
+      - '.github/workflows/aether-test.yml'
+  workflow_dispatch:
+
+concurrency:
+  group: aether-test-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          cache: 'npm'
+
+      - name: Install Node dependencies
+        run: npm ci --ignore-scripts
+
+      - name: Type check
+        run: npm run typecheck
+        working-directory: apps/aether
+
+      - name: Run unit and integration tests
+        run: npm test
+        working-directory: apps/aether
+
+      - name: Upload coverage report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: aether-coverage
+          path: apps/aether/coverage/
+          retention-days: 7

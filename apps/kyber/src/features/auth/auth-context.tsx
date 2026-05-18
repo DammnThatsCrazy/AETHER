@@ -1,4 +1,4 @@
-import { createContext, useContext, useCallback, useReducer, useEffect, type ReactNode } from 'react';
+import { createContext, useContext, useCallback, useReducer, useEffect, useRef, type ReactNode } from 'react';
 import type { AuthState, KyberUser, KyberRole, AuthTokens } from '@kyber/types';
 import { isMockAuthAllowed, isLocalMocked } from '@kyber/lib/env';
 import { MOCK_USERS } from '@kyber/fixtures/auth';
@@ -72,6 +72,22 @@ function mapClaimsToRole(groups: readonly string[]): KyberRole {
   return 'kyber_observer';
 }
 
+function decodeUser(tokens: AuthTokens): KyberUser {
+  const claims = JSON.parse(atob(tokens.idToken.split('.')[1] ?? '{}')) as Record<string, unknown>;
+  const groups = (claims['groups'] as string[] | undefined) ?? [];
+  return {
+    id: String(claims['sub'] ?? ''),
+    email: String(claims['email'] ?? ''),
+    displayName: String(claims['name'] ?? claims['email'] ?? ''),
+    role: mapClaimsToRole(groups),
+    groups,
+    avatarUrl: typeof claims['picture'] === 'string' ? claims['picture'] : undefined,
+  };
+}
+
+// How many seconds before expiry to trigger a silent refresh.
+const REFRESH_SKEW_S = 300;
+
 export function AuthProvider({ children }: { readonly children: ReactNode }) {
   const [state, dispatch] = useReducer(authReducer, {
     isAuthenticated: false,
@@ -79,6 +95,42 @@ export function AuthProvider({ children }: { readonly children: ReactNode }) {
     isLoading: true,
     error: null,
   });
+
+  const refreshTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  function scheduleRefresh(tokens: AuthTokens): void {
+    if (refreshTimerRef.current !== null) clearTimeout(refreshTimerRef.current);
+    const msUntilRefresh = (tokens.expiresAt - REFRESH_SKEW_S) * 1000 - Date.now();
+    if (msUntilRefresh <= 0) {
+      void silentRefresh();
+      return;
+    }
+    refreshTimerRef.current = setTimeout(() => { void silentRefresh(); }, msUntilRefresh);
+  }
+
+  async function silentRefresh(): Promise<void> {
+    if (!currentTokens?.refreshToken) {
+      currentTokens = null;
+      dispatch({ type: 'AUTH_LOGOUT' });
+      return;
+    }
+    try {
+      const response = await fetch('/api/v1/auth/refresh', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ refresh_token: currentTokens.refreshToken }),
+      });
+      if (!response.ok) throw new Error('Refresh failed');
+      const tokens = (await response.json()) as AuthTokens;
+      currentTokens = tokens;
+      scheduleRefresh(tokens);
+      dispatch({ type: 'AUTH_SUCCESS', user: decodeUser(tokens), tokens });
+    } catch {
+      currentTokens = null;
+      if (refreshTimerRef.current !== null) clearTimeout(refreshTimerRef.current);
+      dispatch({ type: 'AUTH_LOGOUT' });
+    }
+  }
 
   useEffect(() => {
     // Auto-login in local mocked mode
@@ -96,9 +148,12 @@ export function AuthProvider({ children }: { readonly children: ReactNode }) {
         dispatch({ type: 'AUTH_FAILURE', error: String(err) });
       });
     } else {
-      // Check existing session
       checkSession();
     }
+
+    return () => {
+      if (refreshTimerRef.current !== null) clearTimeout(refreshTimerRef.current);
+    };
   }, []);
 
   async function handleOIDCCallback(code: string): Promise<void> {
@@ -107,7 +162,6 @@ export function AuthProvider({ children }: { readonly children: ReactNode }) {
       const verifier = sessionStorage.getItem('kyber_pkce_verifier');
       if (!verifier) throw new Error('Missing PKCE verifier');
 
-      // Exchange code for tokens via backend
       const response = await fetch('/api/v1/auth/token', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -120,19 +174,8 @@ export function AuthProvider({ children }: { readonly children: ReactNode }) {
       currentTokens = tokens;
       sessionStorage.removeItem('kyber_pkce_verifier');
 
-      // Decode ID token claims
-      const claims = JSON.parse(atob(tokens.idToken.split('.')[1] ?? '{}')) as Record<string, unknown>;
-      const groups = (claims['groups'] as string[] | undefined) ?? [];
-      const user: KyberUser = {
-        id: String(claims['sub'] ?? ''),
-        email: String(claims['email'] ?? ''),
-        displayName: String(claims['name'] ?? claims['email'] ?? ''),
-        role: mapClaimsToRole(groups),
-        groups,
-        avatarUrl: typeof claims['picture'] === 'string' ? claims['picture'] : undefined,
-      };
-
-      dispatch({ type: 'AUTH_SUCCESS', user, tokens });
+      scheduleRefresh(tokens);
+      dispatch({ type: 'AUTH_SUCCESS', user: decodeUser(tokens), tokens });
 
       // Clean URL
       window.history.replaceState({}, '', window.location.pathname);
@@ -142,10 +185,16 @@ export function AuthProvider({ children }: { readonly children: ReactNode }) {
   }
 
   function checkSession(): void {
-    // If we have tokens in memory and they're not expired, restore session
     if (currentTokens && currentTokens.expiresAt > Date.now() / 1000) {
-      // Session exists but we'd need to decode — for now mark as needing login
+      try {
+        dispatch({ type: 'AUTH_SUCCESS', user: decodeUser(currentTokens), tokens: currentTokens });
+        scheduleRefresh(currentTokens);
+        return;
+      } catch {
+        // Malformed token — fall through to login required
+      }
     }
+    currentTokens = null;
     dispatch({ type: 'AUTH_FAILURE', error: null });
   }
 
@@ -186,6 +235,7 @@ export function AuthProvider({ children }: { readonly children: ReactNode }) {
 
   const logout = useCallback(async () => {
     currentTokens = null;
+    if (refreshTimerRef.current !== null) clearTimeout(refreshTimerRef.current);
     dispatch({ type: 'AUTH_LOGOUT' });
 
     if (!isMockAuthAllowed()) {
