@@ -81,6 +81,22 @@
         {
           "member": "ATTRIBUTION_CALCULATED",
           "value": "aether.campaign.attribution"
+        },
+        {
+          "member": "CAMPAIGN_CREATED",
+          "value": "aether.campaign.created"
+        },
+        {
+          "member": "CAMPAIGN_UPDATED",
+          "value": "aether.campaign.updated"
+        },
+        {
+          "member": "CAMPAIGN_DELETED",
+          "value": "aether.campaign.deleted"
+        },
+        {
+          "member": "TOUCHPOINT_RECORDED",
+          "value": "aether.campaign.touchpoint.recorded"
         }
       ]
     },
@@ -580,6 +596,22 @@
     {
       "member": "ATTRIBUTION_CALCULATED",
       "value": "aether.campaign.attribution"
+    },
+    {
+      "member": "CAMPAIGN_CREATED",
+      "value": "aether.campaign.created"
+    },
+    {
+      "member": "CAMPAIGN_UPDATED",
+      "value": "aether.campaign.updated"
+    },
+    {
+      "member": "CAMPAIGN_DELETED",
+      "value": "aether.campaign.deleted"
+    },
+    {
+      "member": "TOUCHPOINT_RECORDED",
+      "value": "aether.campaign.touchpoint.recorded"
     },
     {
       "member": "CONSENT_UPDATED",

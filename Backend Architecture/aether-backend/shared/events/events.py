@@ -73,6 +73,10 @@ class Topic(str, Enum):
 
     # Campaign
     ATTRIBUTION_CALCULATED = "aether.campaign.attribution"
+    CAMPAIGN_CREATED = "aether.campaign.created"
+    CAMPAIGN_UPDATED = "aether.campaign.updated"
+    CAMPAIGN_DELETED = "aether.campaign.deleted"
+    TOUCHPOINT_RECORDED = "aether.campaign.touchpoint.recorded"
 
     # Consent
     CONSENT_UPDATED = "aether.consent.updated"
