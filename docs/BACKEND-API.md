@@ -11,7 +11,7 @@ source_files:
 canonical_owner: backend@aether
 estimated_read_minutes: 60
 toc_depth: 3
-last_synced_commit: b41baa4
+last_synced_commit: bbbb603
 ---
 # Aether Backend API v8.8.0 — Endpoint Specification
 
@@ -1480,6 +1480,119 @@ Cursors are monotonic strings in the format `<wall-clock-ms>:<sequence>` (e.g. `
 |------|--------|
 | `4401` | Unauthenticated — no tenant context on the connection |
 | `4403` | Forbidden — tenant lacks `read` permission |
+
+### Campaign Management Service (v8.8.0)
+
+Multi-channel campaign management with attribution and touchpoint tracking.
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/v1/campaigns` | List campaigns for the tenant |
+| POST | `/v1/campaigns` | Create a campaign |
+| GET | `/v1/campaigns/{id}` | Get campaign details |
+| PATCH | `/v1/campaigns/{id}` | Update campaign fields |
+| DELETE | `/v1/campaigns/{id}` | Delete a campaign |
+| GET | `/v1/campaigns/{id}/attribution` | Multi-touch attribution for a campaign |
+| POST | `/v1/campaigns/{id}/touchpoints` | Record a campaign touchpoint (publishes `aether.campaign.touchpoint.recorded`) |
+
+**Permissions:** `write` for create/update/delete, `read` for queries
+
+---
+
+### Entity Intelligence Service (v8.8.0)
+
+Deep entity profiling — aggregates identity, graph, temporal, financial, and behavioral dimensions into a unified entity profile.
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| POST | `/v1/entities/profile` | Build a full multi-dimensional entity profile (identity, device, geo, wallet, behavior dimensions) |
+| POST | `/v1/entities/timeline/query` | Query temporal event timeline for an entity with filters and pagination |
+| POST | `/v1/entities/relationships/query` | Query graph relationships for an entity (H2H, H2A, A2H, A2A layers) |
+
+**Permissions:** `read`
+
+---
+
+### Entities CRUD Service (v8.8.0)
+
+Core entity management — create, resolve, and manage entity records and cluster membership.
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| POST | `/v1/entities` | Create a new entity record |
+| GET | `/v1/entities` | List entities with optional filters |
+| GET | `/v1/entities/{id}` | Get entity details |
+| PATCH | `/v1/entities/{id}` | Update entity fields |
+| POST | `/v1/entities/{id}/identifiers` | Add identifiers (email, phone, wallet, device) to an entity |
+| DELETE | `/v1/entities/{id}/identifiers/{cluster_id}` | Remove an identifier from an entity |
+| GET | `/v1/entities/{id}/identifiers` | List all identifiers linked to an entity |
+| POST | `/v1/entities/{id}/membership` | Add an entity to a population group |
+
+**Permissions:** `write` for mutations, `read` for queries
+
+---
+
+### Operational Intelligence / Graph Service (v8.8.0)
+
+Graph traversal, overlay, and analytics over the unified Neptune-backed intelligence graph.
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| POST | `/v1/graph/traverse` | BFS traversal from a root vertex with depth and edge-type filters |
+| POST | `/v1/graph/path` | Shortest-path query between two vertices |
+| POST | `/v1/graph/temporal` | Temporal BFS — traverse graph edges within a time window |
+| POST | `/v1/graph/overlay` | Fetch all vertices filtered by type, tenant, and optional property predicates |
+| POST | `/v1/graph/filter` | Filter vertices by risk level, relationship type, or custom property |
+| GET | `/v1/graph/contracts` | List active smart-contract vertices in the graph |
+
+**Permissions:** `read`. Neptune-backed in staging/production; in-memory backend in local mode.
+
+---
+
+### Delegation Service (v8.8.0)
+
+Human → Agent delegation records — tracks what each agent is authorized to do and on whose behalf.
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| POST | `/v1/delegations` | Record a new delegation grant |
+| GET | `/v1/delegations` | List delegation records for the tenant |
+| GET | `/v1/delegations/{id}` | Get delegation details |
+| PATCH | `/v1/delegations/{id}/revoke` | Revoke a delegation |
+
+**Permissions:** `write` for grants/revoke, `read` for queries
+
+---
+
+### Flows Service (v8.8.0)
+
+Multi-step flow definitions and execution tracking — journeys, onboarding, and conversion funnels.
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| POST | `/v1/flows` | Define a new flow |
+| GET | `/v1/flows` | List flows |
+| GET | `/v1/flows/{id}` | Get flow definition |
+| POST | `/v1/flows/{id}/steps` | Record a step completion |
+| GET | `/v1/flows/{id}/progress/{entity_id}` | Get entity progress through a flow |
+
+**Permissions:** `write` for definitions/steps, `read` for queries
+
+---
+
+### Behavior Service (v8.8.0)
+
+Session-level behavioral signals — session start/end, pattern detection, and behavioral event recording.
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| POST | `/v1/behavior/sessions` | Start a behavior session |
+| PATCH | `/v1/behavior/sessions/{id}/end` | End a behavior session |
+| POST | `/v1/behavior/sessions/{id}/events` | Record a behavioral event within a session |
+| GET | `/v1/behavior/sessions/{id}/patterns` | Get detected behavioral patterns for a session |
+| GET | `/v1/behavior/entity/{entity_id}` | Get aggregated behavioral profile for an entity |
+
+**Permissions:** `write` for recording, `read` for queries
 
 ---
 

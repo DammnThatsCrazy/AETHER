@@ -11,7 +11,7 @@ source_files:
 canonical_owner: backend@aether
 estimated_read_minutes: 4
 toc_depth: 3
-last_synced_commit: b41baa4
+last_synced_commit: bbbb603
 ---
 
 # Events / Kafka Subsystem
@@ -29,7 +29,7 @@ The event bus provides publish/subscribe messaging for cross-service communicati
 - `EventProducer` — Publishes events to Kafka topics with retry logic.
 - `EventConsumer` — Subscribes to topics with consumer groups and backpressure.
 - `Event` — Serializable event schema with topic, payload, tenant_id, correlation_id.
-- `Topic` — Enum of all event topics (40+ topics across 8 categories).
+- `Topic` — Enum of all event topics (114 topics across 17 sections).
 
 ## Environment Variables
 

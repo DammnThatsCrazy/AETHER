@@ -11,7 +11,7 @@ source_files:
 canonical_owner: platform@aether
 estimated_read_minutes: 10
 toc_depth: 3
-last_synced_commit: b41baa4
+last_synced_commit: bbbb603
 ---
 # Smoke Test & Post-Deploy Verification Checklist — Aether Platform v8.8.0
 
@@ -118,6 +118,7 @@ curl -sf ${BASE_URL}/v1/health | jq '.dependencies'
 - [ ] Redis connection responsive
 - [ ] Neptune graph (if enabled) reachable
 - [ ] Kafka broker (if enabled) connected
+- [ ] Kafka topics provisioned — run `deploy/staging/kafka_topics.sh` if missing (114 topics, idempotent via `--if-not-exists`)
 
 ### 6. Metrics Endpoint
 

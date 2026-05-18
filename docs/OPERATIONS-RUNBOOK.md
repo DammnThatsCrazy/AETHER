@@ -12,7 +12,7 @@ source_files:
 canonical_owner: platform@aether
 estimated_read_minutes: 12
 toc_depth: 3
-last_synced_commit: b41baa4
+last_synced_commit: bbbb603
 ---
 # Operations Runbook v8.8.0
 
@@ -202,6 +202,15 @@ in-memory only and is **not durable** until Redis returns.
 2. If `status: "failed"`, check backend logs for `Export query failed for job`
 3. Verify Redis connectivity (exports depend on query cache)
 4. Re-submit export — idempotency returns existing completed jobs
+
+### Kafka Topic Provisioning
+
+All 114 Kafka topics are provisioned by `deploy/staging/kafka_topics.sh`, called automatically from `bootstrap.sh` after leader election. If topics are missing:
+
+1. Run `deploy/staging/kafka_topics.sh` manually — it uses `--if-not-exists` so re-running is safe
+2. Required env var: `KAFKA_BOOTSTRAP` (default: `localhost:9092`)
+3. Partitions: 12 for high-throughput topics, 6 for standard, 3 for audit
+4. Retention: 7 days (standard), 14 days (high-throughput), 90 days (audit)
 
 ### Kafka Backlog
 
