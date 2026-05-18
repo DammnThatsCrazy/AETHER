@@ -177,7 +177,17 @@ class Topic(str, Enum):
     AGENT_EXECUTION_FAILED = "aether.agent.execution.failed"
     AGENT_EXECUTION_RECOVERED = "aether.agent.execution.recovered"
 
+    BEHAVIOR_SESSION_STARTED = "aether.behavior.session.started"
+    BEHAVIOR_SESSION_ENDED = "aether.behavior.session.ended"
+    BEHAVIOR_EVENT_RECORDED = "aether.behavior.event.recorded"
+    BEHAVIOR_PATTERN_DETECTED = "aether.behavior.pattern.detected"
     BEHAVIOR_PROFILE_UPDATED = "aether.behavior.profile.updated"
+
+    JOURNEY_STARTED = "aether.journey.started"
+    JOURNEY_ACTOR_JOINED = "aether.journey.actor.joined"
+    JOURNEY_ACTOR_LEFT = "aether.journey.actor.left"
+    JOURNEY_CONVERTED = "aether.journey.converted"
+    JOURNEY_ABANDONED = "aether.journey.abandoned"
 
     INVESTIGATION_CASE_CREATED = "aether.investigation.case.created"
     INVESTIGATION_CASE_UPDATED = "aether.investigation.case.updated"

@@ -462,6 +462,9 @@ class _InMemoryGraphBackend:
                 results.append(edge)
         return results
 
+    async def get_all_vertices(self, limit: int = 1000) -> list["Vertex"]:
+        return list(self._vertices.values())[:limit]
+
     async def query(self, gremlin: str) -> list[dict]:
         logger.debug(f"In-memory graph QUERY (no-op): {gremlin[:80]}...")
         return []
@@ -624,6 +627,24 @@ class _NeptuneGraphBackend:
             logger.error(f"Neptune get_edges error for {vertex_id}: {e}")
         return results
 
+    async def get_all_vertices(self, limit: int = 1000) -> list["Vertex"]:
+        g = await self._ensure_connected()
+        results: list[Vertex] = []
+        try:
+            for v_map in g.V().limit(limit).valueMap(True).toList():
+                results.append(Vertex(
+                    vertex_type=str(v_map.get(T.label, "unknown")),
+                    vertex_id=str(v_map.get(T.id, "")),
+                    properties={
+                        k: v[0] if isinstance(v, list) and len(v) == 1 else v
+                        for k, v in v_map.items()
+                        if k not in (T.id, T.label)
+                    },
+                ))
+        except Exception as e:
+            logger.error(f"Neptune get_all_vertices error: {e}")
+        return results
+
     async def query(self, gremlin: str) -> list[dict]:
         g = await self._ensure_connected()
         try:
@@ -753,6 +774,11 @@ class GraphClient:
         if self._backend is None:
             await self.connect()
         return await self._backend.get_edges(vertex_id, edge_type, direction)  # type: ignore[union-attr]
+
+    async def get_all_vertices(self, limit: int = 1000) -> list[Vertex]:
+        if self._backend is None:
+            await self.connect()
+        return await self._backend.get_all_vertices(limit)  # type: ignore[union-attr]
 
     async def query(self, gremlin: str) -> list[dict]:
         if self._backend is None:

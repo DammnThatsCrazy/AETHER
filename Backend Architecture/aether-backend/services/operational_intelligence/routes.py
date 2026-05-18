@@ -235,9 +235,20 @@ async def graph_overlay(
     """Apply overlay metadata (risk/trust/attribution) to a graph view."""
     _require_read(request, body.tenantId)
     metrics.increment("graph_overlay")
-    # Overlay materialisation (per-node scoring) is wired once scoring engines
-    # are connected. Return validated overlay stubs in the interim.
-    return GraphResult(nodes=[], edges=[], overlays=_overlay_stubs(body.overlays))
+
+    all_verts = await graph.get_all_vertices(limit=body.limit)
+    result = TraversalResult(nodes=all_verts, edges=[])
+    if body.graph:
+        result = _filter_result(result, body.graph)
+
+    return GraphResult(
+        nodes=[_vertex_to_node(v) for v in result.nodes],
+        edges=[],
+        overlays=_overlay_stubs(body.overlays),
+        explainability=ExplainabilityMetadata(
+            summary="Overlay scores are placeholder — scoring engines connect in a future release",
+        ),
+    )
 
 
 @router.post("/filter", response_model=GraphResult)
@@ -249,9 +260,17 @@ async def graph_filter(
     """Filter graph nodes/edges by kind, edge type, time range, or properties."""
     _require_read(request, body.tenantId)
     metrics.increment("graph_filter")
-    # Property-keyed global filtering requires a graph index (Neptune property index
-    # or Memgraph label index). Return empty result until index is wired.
-    return GraphResult(nodes=[], edges=[])
+
+    all_verts = await graph.get_all_vertices(limit=body.limit)
+    all_edges: list = []
+    for v in all_verts:
+        all_edges.extend(await graph.get_edges(v.vertex_id, direction="out"))
+
+    result = _filter_result(TraversalResult(nodes=all_verts, edges=all_edges), body.filter)
+    return GraphResult(
+        nodes=[_vertex_to_node(v) for v in result.nodes],
+        edges=[_edge_to_graph_edge(e) for e in result.edges],
+    )
 
 
 @router.get("/contracts")
