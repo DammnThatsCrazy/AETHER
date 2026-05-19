@@ -22,6 +22,7 @@ import pytest
 ROOT = Path(__file__).resolve().parents[2]
 BACKEND_ROOT = ROOT / "Backend Architecture" / "aether-backend"
 
+_STUBBED: list[str] = []
 for _mod in ("jwt", "cryptography", "cryptography.hazmat",
              "cryptography.hazmat.primitives",
              "cryptography.hazmat.primitives.asymmetric",
@@ -31,9 +32,20 @@ for _mod in ("jwt", "cryptography", "cryptography.hazmat",
              "cryptography.hazmat._oid"):
     if _mod not in sys.modules:
         sys.modules[_mod] = MagicMock()
+        _STUBBED.append(_mod)
 
 if str(BACKEND_ROOT) not in sys.path:
     sys.path.insert(0, str(BACKEND_ROOT))
+
+
+@pytest.fixture(scope="module", autouse=True)
+def _remove_crypto_stubs():
+    yield
+    for mod in _STUBBED:
+        sys.modules.pop(mod, None)
+    for name in list(sys.modules):
+        if name == "shared.auth" or name.startswith("shared.auth."):
+            sys.modules.pop(name, None)
 
 
 # ---------------------------------------------------------------------------

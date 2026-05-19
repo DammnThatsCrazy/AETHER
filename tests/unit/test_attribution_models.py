@@ -20,8 +20,11 @@ ROOT = Path(__file__).resolve().parents[2]
 BACKEND_ROOT = ROOT / "Backend Architecture" / "aether-backend"
 
 # shared/__init__.py → shared.decorators → shared.auth.auth → jwt.
-# The jwt package on this runner has a broken _cffi_backend.
-# Pre-stub it so the import chain resolves without crypto hardware.
+# Stub missing crypto modules so the import chain resolves on runners where
+# _cffi_backend is absent. Track which stubs we add so the module-scope
+# fixture can remove them after our tests finish (prevents bleed into
+# test_auth_middleware.py which needs real jwt).
+_STUBBED: list[str] = []
 for _mod in ("jwt", "cryptography", "cryptography.hazmat",
              "cryptography.hazmat.primitives",
              "cryptography.hazmat.primitives.asymmetric",
@@ -31,6 +34,7 @@ for _mod in ("jwt", "cryptography", "cryptography.hazmat",
              "cryptography.hazmat._oid"):
     if _mod not in sys.modules:
         sys.modules[_mod] = MagicMock()
+        _STUBBED.append(_mod)
 
 if str(BACKEND_ROOT) not in sys.path:
     sys.path.insert(0, str(BACKEND_ROOT))
@@ -47,6 +51,28 @@ from services.attribution.models import (  # noqa: E402
     TimeDecayModel,
     Touchpoint,
 )
+
+
+# ---------------------------------------------------------------------------
+# Fixtures
+# ---------------------------------------------------------------------------
+
+@pytest.fixture(scope="module", autouse=True)
+def _remove_crypto_stubs():
+    """Remove jwt/crypto stubs and auth modules after this module's tests.
+
+    Clears only jwt + shared.auth.* so that test_auth_middleware (which comes
+    alphabetically after us) re-imports shared.auth.auth fresh and picks up
+    the real jwt library.  Other cached shared.* modules (billing, rate_limit,
+    etc.) are intentionally left in sys.modules so later test files that do
+    lazy imports of those modules continue to work.
+    """
+    yield
+    for mod in _STUBBED:
+        sys.modules.pop(mod, None)
+    for name in list(sys.modules):
+        if name == "shared.auth" or name.startswith("shared.auth."):
+            sys.modules.pop(name, None)
 
 
 # ---------------------------------------------------------------------------
