@@ -189,7 +189,8 @@ class QuickNodeConfig:
 class ProviderGatewayConfig:
     """Multi-provider abstraction with BYOK support and automatic failover."""
     enabled: bool = _env_bool("PROVIDER_GATEWAY_ENABLED", False)
-    encryption_key: str = _env("PROVIDER_GATEWAY_ENCRYPTION_KEY", "")
+    # BYOK_ENCRYPTION_KEY is the canonical name; PROVIDER_GATEWAY_ENCRYPTION_KEY is a legacy alias.
+    encryption_key: str = _env("BYOK_ENCRYPTION_KEY", "") or _env("PROVIDER_GATEWAY_ENCRYPTION_KEY", "")
     # Additional provider API keys (system defaults)
     alchemy_api_key: str = _env("ALCHEMY_API_KEY", "")
     alchemy_endpoint: str = _env("ALCHEMY_ENDPOINT", "")
@@ -380,8 +381,8 @@ class Settings:
         # regardless of whether the Provider Gateway is explicitly enabled.
         if _is_prod and not self.provider_gateway.encryption_key:
             raise RuntimeError(
-                "PROVIDER_GATEWAY_ENCRYPTION_KEY (BYOK vault key) must be set in "
-                "production. Generate one with: python scripts/generate_secrets.py"
+                "BYOK_ENCRYPTION_KEY (BYOK vault key) must be set in production. "
+                "Generate one with: python scripts/generate_secrets.py"
             )
 
         # ── Provider Gateway encryption key ───────────────────────────────────
@@ -391,7 +392,7 @@ class Settings:
             and not self.provider_gateway.encryption_key
         ):
             raise RuntimeError(
-                "PROVIDER_GATEWAY_ENCRYPTION_KEY must be set when "
+                "BYOK_ENCRYPTION_KEY must be set when "
                 "Provider Gateway is enabled in non-local environments"
             )
 

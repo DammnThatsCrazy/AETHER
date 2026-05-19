@@ -310,6 +310,7 @@ def create_app() -> FastAPI:
     app.include_router(investigation_router)
     app.include_router(governance_router)
     app.include_router(events_router)
+    app.include_router(user_agents_router)  # Profile 360: user/org-owned agents (always-on)
 
     # ── Intelligence Graph services (feature-flagged) ───────────
     ig = settings.intelligence_graph
@@ -320,7 +321,6 @@ def create_app() -> FastAPI:
         app.include_router(agent_teams_router)
         app.include_router(agent_feedback_router)
         app.include_router(scoring_router)
-        app.include_router(user_agents_router)
         logger.info("Intelligence Graph: Agent layer (L2) mounted")
     else:
         logger.info(
