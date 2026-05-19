@@ -1,3 +1,19 @@
+---
+title: Identity Resolution
+slug: concepts/identity-resolution
+section: concepts
+visibility: P
+audience: [dev-senior, architect]
+status: stable
+since_version: "8.8.0"
+source_files:
+  - Backend Architecture/aether-backend/services/identity/
+  - packages/shared/identity.ts
+canonical_owner: identity@aether
+estimated_read_minutes: 12
+toc_depth: 3
+last_synced_commit: b41baa4
+---
 # Aether Identity Resolution v8.8.0 — Technical Guide
 
 ## Overview

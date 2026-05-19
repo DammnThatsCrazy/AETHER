@@ -98,17 +98,64 @@ async def close_pool() -> None:
 # BASE REPOSITORY — auto-selects PostgreSQL or in-memory
 # ═══════════════════════════════════════════════════════════════════════════
 
+# Shared in-memory backing stores keyed by table_name.
+#
+# Without this, each BaseRepository instance owns a private `_store`. Routes
+# that hold module-level repo singletons (services/flows/routes.py,
+# services/entities/routes.py, services/agent/user_agents.py, etc.) would
+# write into their own copies, and Profile360Aggregator — which constructs
+# its own repos — would never observe writes made through the canonical
+# routes when AETHER_ENV=local (no Postgres). Sharing a dict per table makes
+# the in-memory backend behave like a real database for cross-module reads.
+_IN_MEMORY_STORES: dict[str, dict[str, dict]] = {}
+
+
+def reset_in_memory_stores() -> None:
+    """Test helper: drop every in-memory backing store.
+
+    Production code uses Postgres; the in-memory backend is local/dev-only.
+    Tests that need isolated state can call this from their fixtures.
+    """
+    _IN_MEMORY_STORES.clear()
+
+
+def _matches_filters(row: dict, filters: dict) -> bool:
+    """In-memory equivalent of the SQL find_many predicate.
+
+    Most filter keys use straight equality (mirroring `data->>'key' = $n`).
+    `tenant_id=None` (or `""`) is special-cased to match legacy unscoped
+    rows where the column is NULL or empty — exactly mirroring the SQL
+    branch's `(tenant_id IS NULL OR tenant_id = '')`. Without this, the
+    Profile 360 aggregator's legacy pass would drop blank-tenant rows
+    when running on the in-memory backend even though Postgres returns
+    them, leaving the two backends inconsistent.
+    """
+    for key, value in filters.items():
+        if key == "tenant_id" and value in (None, ""):
+            actual = row.get("tenant_id")
+            if actual not in (None, ""):
+                return False
+            continue
+        if row.get(key) != value:
+            return False
+    return True
+
+
 class BaseRepository(ABC):
     """
     Base for relational repositories.
 
     Production: asyncpg queries against PostgreSQL (auto-creates table).
-    Local: in-memory dicts for development.
+    Local: in-memory dicts for development, shared across instances of the
+    same table so route-level singletons and the Profile 360 aggregator
+    observe one consistent view.
     """
 
     def __init__(self, table_name: str) -> None:
         self.table_name = table_name
-        self._store: dict[str, dict] = {}  # in-memory fallback
+        # All instances of a given table share the same dict so writes by one
+        # singleton are visible to another (see _IN_MEMORY_STORES docstring).
+        self._store: dict[str, dict] = _IN_MEMORY_STORES.setdefault(table_name, {})
         self._pool: Optional[Any] = None
         self._table_ensured = False
 
@@ -176,7 +223,7 @@ class BaseRepository(ABC):
             if filters:
                 results = [
                     r for r in results
-                    if all(r.get(k) == v for k, v in filters.items())
+                    if _matches_filters(r, filters)
                 ]
             reverse = sort_order == "desc"
             results.sort(key=lambda r: r.get(sort_by, ""), reverse=reverse)
@@ -189,6 +236,15 @@ class BaseRepository(ABC):
         idx = 1
         if filters:
             for key, value in filters.items():
+                # `tenant_id=None` / `""` is the canonical way to request
+                # legacy unscoped rows — pre-multi-tenant data that was
+                # inserted before the tenant column existed. Emit a literal
+                # IS NULL OR = '' predicate so those rows remain reachable
+                # for callers that need to merge them with current-tenant
+                # results (e.g. Profile360Aggregator._scoped_find_many).
+                if key == "tenant_id" and value in (None, ""):
+                    conditions.append("(tenant_id IS NULL OR tenant_id = '')")
+                    continue
                 if key == "tenant_id":
                     conditions.append(f"tenant_id = ${idx}")
                 else:
@@ -215,7 +271,7 @@ class BaseRepository(ABC):
                 return len(self._store)
             return len([
                 r for r in self._store.values()
-                if all(r.get(k) == v for k, v in filters.items())
+                if _matches_filters(r, filters)
             ])
 
         await self._ensure_table()
@@ -224,6 +280,10 @@ class BaseRepository(ABC):
         idx = 1
         if filters:
             for key, value in filters.items():
+                # See find_many: tenant_id=None/'' matches legacy unscoped rows.
+                if key == "tenant_id" and value in (None, ""):
+                    conditions.append("(tenant_id IS NULL OR tenant_id = '')")
+                    continue
                 if key == "tenant_id":
                     conditions.append(f"tenant_id = ${idx}")
                 else:
@@ -434,8 +494,12 @@ class AnalyticsRepository:
         query_params: dict,
         limit: int = 100,
     ) -> list[dict]:
+        # Cache key must include `limit` — without it, a /sessions?limit=1 call
+        # would otherwise serve its 1-event result to /platforms, /protocols,
+        # /devices, /rewards (all of which call with the same {user_id} filter
+        # but larger limits), making the rollups undercount.
         cache_key = CacheKey.analytics_query(
-            tenant_id, CacheKey.hash_query(str(query_params))
+            tenant_id, CacheKey.hash_query(f"{query_params}|limit={limit}")
         )
         cached = await self.cache.get_json(cache_key)
         if cached:
@@ -1219,3 +1283,96 @@ class AgentEconomicIdentityRepository(BaseRepository):
         if existing:
             return await self.update(agent_id, record)
         return await self.insert(agent_id, record)
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# OPERATIONAL INTELLIGENCE REPOSITORIES
+# ═══════════════════════════════════════════════════════════════════════════
+
+
+class InvestigationRepository(BaseRepository):
+    def __init__(self) -> None:
+        super().__init__("investigations")
+
+    async def create(self, case: dict) -> dict:
+        return await self.insert(case["id"], case)
+
+    async def list_by_tenant(
+        self,
+        tenant_id: str,
+        status: Optional[str] = None,
+        limit: int = 50,
+    ) -> list[dict]:
+        filters: dict[str, Any] = {"tenant_id": tenant_id}
+        if status:
+            filters["status"] = status
+        return await self.find_many(filters=filters, limit=limit)
+
+
+class GovernanceRepository(BaseRepository):
+    def __init__(self) -> None:
+        super().__init__("governance_decisions")
+
+    async def create(self, decision: dict) -> dict:
+        return await self.insert(decision["id"], decision)
+
+    async def list_by_tenant(
+        self,
+        tenant_id: str,
+        principal_id: Optional[str] = None,
+        allowed: Optional[bool] = None,
+        limit: int = 50,
+    ) -> list[dict]:
+        filters: dict[str, Any] = {"tenant_id": tenant_id}
+        if principal_id:
+            filters["principal_id"] = principal_id
+        results = await self.find_many(filters=filters, limit=limit * 2)
+        if allowed is not None:
+            results = [r for r in results if r.get("allowed") == allowed]
+        return results[:limit]
+
+
+class EventReplayRepository(BaseRepository):
+    def __init__(self) -> None:
+        super().__init__("event_replay_jobs")
+
+    async def create(self, job: dict) -> dict:
+        return await self.insert(job["id"], job)
+
+    async def list_by_tenant(self, tenant_id: str, limit: int = 50) -> list[dict]:
+        return await self.find_many(filters={"tenant_id": tenant_id}, limit=limit)
+
+    async def list_queued(self, limit: int = 50) -> list[dict]:
+        return await self.find_many(filters={"status": "queued"}, limit=limit)
+
+
+class EventEnvelopeRepository(BaseRepository):
+    """Durable store for ingested EventPipelineEnvelopes available for replay."""
+
+    def __init__(self) -> None:
+        super().__init__("event_envelopes")
+
+    async def create(self, envelope: dict) -> dict:
+        return await self.insert(envelope["id"], envelope)
+
+    async def list_replayable(
+        self,
+        tenant_id: str,
+        source_tag: str = "",
+        event_types: Optional[list[str]] = None,
+        from_time: str = "",
+        to_time: Optional[str] = None,
+        limit: int = 1000,
+    ) -> list[dict]:
+        results = await self.find_many(
+            filters={"tenantId": tenant_id, "replayable": True}, limit=limit
+        )
+        if source_tag:
+            results = [r for r in results if source_tag in (r.get("tags") or [])]
+        if event_types:
+            results = [r for r in results if r.get("type") in event_types]
+        if from_time:
+            results = [r for r in results if r.get("occurredAt", "") >= from_time]
+        if to_time:
+            results = [r for r in results if r.get("occurredAt", "") <= to_time]
+        return results

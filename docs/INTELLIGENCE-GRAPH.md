@@ -1,3 +1,19 @@
+---
+title: Unified Intelligence Graph
+slug: concepts/intelligence-graph
+section: concepts
+visibility: P
+audience: [architect, dev-senior, ai]
+status: stable
+since_version: "8.8.0"
+source_files:
+  - Backend Architecture/aether-backend/shared/graph/
+  - docs/source-of-truth/GRAPH_ALIGNMENT.md
+canonical_owner: graph@aether
+estimated_read_minutes: 15
+toc_depth: 3
+last_synced_commit: bbbb603
+---
 # Unified On-Chain Intelligence Graph v8.8.0
 
 ## Overview
@@ -200,6 +216,19 @@ New columns: `agent_task_frequency`, `avg_confidence_delta`, `hiring_depth`, `x4
 | `POST` | `/v1/x402/capture` | Capture an x402 payment header from an HTTP exchange |
 | `GET` | `/v1/x402/graph` | Retrieve the economic graph of x402 payment flows |
 | `GET` | `/v1/x402/agent/{id}` | x402 payment history and service consumption for an agent |
+
+### Operational Intelligence / Graph Traversal (v8.8.0)
+
+Full graph traversal, path-finding, and overlay services via `GraphTraversalEngine` in `shared/graph/traversal.py`. In-memory backend (local) and Neptune (staging/production) use identical interfaces.
+
+| Method | Path | Description |
+|--------|------|-------------|
+| `POST` | `/v1/graph/traverse` | BFS traversal from a root vertex — depth, edge-type, and tenant-scope filters |
+| `POST` | `/v1/graph/path` | Shortest-path (Dijkstra) between two vertices |
+| `POST` | `/v1/graph/temporal` | Temporal BFS — traverse edges created within a time window |
+| `POST` | `/v1/graph/overlay` | Fetch all vertices matching type/tenant predicates (uses `get_all_vertices()`) |
+| `POST` | `/v1/graph/filter` | Filter vertices by risk level, relationship type, or property predicate |
+| `GET` | `/v1/graph/contracts` | List smart-contract vertices visible in the tenant's graph |
 
 ### Agent Extensions
 

@@ -1,6 +1,6 @@
 import { useState, useCallback } from 'react';
 import { PageWrapper } from '@kyber/components/layout';
-import { Card, CardHeader, CardTitle, CardContent, Button, Badge, Tabs, TabsList, TabsTrigger, TabsContent, EmptyState, ScrollArea, Select, Input, TerminalSeparator } from '@kyber/components/system';
+import { Card, CardHeader, CardTitle, CardContent, Button, Badge, Tabs, TabsList, TabsTrigger, TabsContent, EmptyState, ScrollArea, Select, Input, TerminalSeparator } from '@aether/ui';
 import { getRuntimeMode, getEnvironment } from '@kyber/lib/env';
 import { getMockEvents } from '@kyber/fixtures/events';
 import { getMockEntities } from '@kyber/fixtures/entities';

@@ -1,3 +1,18 @@
+---
+title: Smoke Test & Post-Deploy Verification Checklist
+slug: operations/smoke-tests
+section: operations
+visibility: I
+audience: [ops]
+status: stable
+since_version: "8.8.0"
+source_files:
+  - deploy/staging/bootstrap.sh
+canonical_owner: platform@aether
+estimated_read_minutes: 10
+toc_depth: 3
+last_synced_commit: bbbb603
+---
 # Smoke Test & Post-Deploy Verification Checklist — Aether Platform v8.8.0
 
 Run after every deployment. Failures in the **Smoke Tests** section are rollback triggers. Failures in **Extended Verification** may be acceptable depending on context.
@@ -103,6 +118,7 @@ curl -sf ${BASE_URL}/v1/health | jq '.dependencies'
 - [ ] Redis connection responsive
 - [ ] Neptune graph (if enabled) reachable
 - [ ] Kafka broker (if enabled) connected
+- [ ] Kafka topics provisioned — run `deploy/staging/kafka_topics.sh` if missing (114 topics, idempotent via `--if-not-exists`)
 
 ### 6. Metrics Endpoint
 

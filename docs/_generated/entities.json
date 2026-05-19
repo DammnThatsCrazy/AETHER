@@ -1,0 +1,90 @@
+{
+  "version": "8.8.0",
+  "generated_from": "packages/shared/entities.ts",
+  "planes": [
+    {
+      "name": "Core (always present)",
+      "kinds": [
+        "tenant",
+        "org",
+        "user",
+        "session",
+        "device",
+        "application"
+      ]
+    },
+    {
+      "name": "Access plane",
+      "kinds": [
+        "resource",
+        "approval",
+        "entitlement"
+      ]
+    },
+    {
+      "name": "Commerce plane",
+      "kinds": [
+        "payment",
+        "invoice",
+        "subscription",
+        "plan"
+      ]
+    },
+    {
+      "name": "Web3 plane (optional)",
+      "kinds": [
+        "wallet",
+        "contract",
+        "chain",
+        "token",
+        "protocol"
+      ]
+    },
+    {
+      "name": "Agent plane (optional)",
+      "kinds": [
+        "agent",
+        "service"
+      ]
+    },
+    {
+      "name": "Economic graph layer (optional/additive)",
+      "kinds": [
+        "payment_intent",
+        "settlement_event",
+        "economic_resource",
+        "facilitator",
+        "agent_economic_identity",
+        "agent_profile360"
+      ]
+    }
+  ],
+  "all_kinds": [
+    "tenant",
+    "org",
+    "user",
+    "session",
+    "device",
+    "application",
+    "resource",
+    "approval",
+    "entitlement",
+    "payment",
+    "invoice",
+    "subscription",
+    "plan",
+    "wallet",
+    "contract",
+    "chain",
+    "token",
+    "protocol",
+    "agent",
+    "service",
+    "payment_intent",
+    "settlement_event",
+    "economic_resource",
+    "facilitator",
+    "agent_economic_identity",
+    "agent_profile360"
+  ]
+}

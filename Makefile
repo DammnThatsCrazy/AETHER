@@ -14,7 +14,7 @@
         lint format typecheck \
         serve-backend serve-ml \
         docker-up docker-down docker-logs \
-        clean validate-docs bump-version help
+        clean validate-docs validate-frontmatter extract-docs docs-drift docs-stamp docs bump-version help
 
 # Centralized subsystem paths — single place to rename if directories move.
 BACKEND_DIR := Backend Architecture/aether-backend
@@ -97,6 +97,26 @@ docker-logs: ## Tail logs from all docker services
 
 validate-docs: ## Check for version drift across docs
 	python scripts/validate_docs.py
+
+validate-frontmatter: ## Validate YAML frontmatter on docs/*.md against scripts/docs_schema.json
+	python scripts/validate_frontmatter.py
+
+extract-docs: ## Regenerate docs/_generated/*.json from canonical sources
+	python scripts/docs_extract/run_all.py
+
+docs-drift: ## Detect drift between doc source_files frontmatter and the repo
+	python scripts/docs_drift.py
+
+docs-stamp: ## Stamp last_synced_commit on every doc with source_files (after a re-review pass)
+	python scripts/docs_drift.py --update
+
+docs: ## Run the full documentation pipeline (extract + sync + validate + drift)
+	python scripts/docs_extract/run_all.py
+	python scripts/sync_docs.py
+	python scripts/validate_docs.py
+	python scripts/validate_frontmatter.py
+	python scripts/docs_drift.py
+	python scripts/validate_contracts.py
 
 bump-version: ## Bump version across all files (usage: make bump-version V=8.4.0)
 	@if [ -z "$(V)" ]; then echo "Usage: make bump-version V=8.4.0"; exit 1; fi

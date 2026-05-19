@@ -73,6 +73,10 @@ class Topic(str, Enum):
 
     # Campaign
     ATTRIBUTION_CALCULATED = "aether.campaign.attribution"
+    CAMPAIGN_CREATED = "aether.campaign.created"
+    CAMPAIGN_UPDATED = "aether.campaign.updated"
+    CAMPAIGN_DELETED = "aether.campaign.deleted"
+    TOUCHPOINT_RECORDED = "aether.campaign.touchpoint.recorded"
 
     # Consent
     CONSENT_UPDATED = "aether.consent.updated"
@@ -103,8 +107,8 @@ class Topic(str, Enum):
     # Intelligence Graph — Commerce (L3a)
     PAYMENT_SENT = "aether.commerce.payment.sent"
     AGENT_HIRED = "aether.commerce.agent.hired"
-    SERVICE_PURCHASED = "aether.commerce.service.purchased"  # Reserved — not yet published by any service
-    FEE_ELIMINATED = "aether.commerce.fee.eliminated"  # Reserved — not yet published by any service
+    SERVICE_PURCHASED = "aether.commerce.service.purchased"
+    FEE_ELIMINATED = "aether.commerce.fee.eliminated"
 
     # Intelligence Graph — On-Chain Actions (L0)
     ACTION_RECORDED = "aether.onchain.action.recorded"
@@ -177,7 +181,25 @@ class Topic(str, Enum):
     AGENT_EXECUTION_FAILED = "aether.agent.execution.failed"
     AGENT_EXECUTION_RECOVERED = "aether.agent.execution.recovered"
 
+    BEHAVIOR_SESSION_STARTED = "aether.behavior.session.started"
+    BEHAVIOR_SESSION_ENDED = "aether.behavior.session.ended"
+    BEHAVIOR_EVENT_RECORDED = "aether.behavior.event.recorded"
+    BEHAVIOR_PATTERN_DETECTED = "aether.behavior.pattern.detected"
     BEHAVIOR_PROFILE_UPDATED = "aether.behavior.profile.updated"
+
+    JOURNEY_STARTED = "aether.journey.started"
+    JOURNEY_ACTOR_JOINED = "aether.journey.actor.joined"
+    JOURNEY_ACTOR_LEFT = "aether.journey.actor.left"
+    JOURNEY_CONVERTED = "aether.journey.converted"
+    JOURNEY_ABANDONED = "aether.journey.abandoned"
+
+    INVESTIGATION_CASE_CREATED = "aether.investigation.case.created"
+    INVESTIGATION_CASE_UPDATED = "aether.investigation.case.updated"
+    INVESTIGATION_STATUS_CHANGED = "aether.investigation.status.changed"
+    GOVERNANCE_DECISION_EVALUATED = "aether.governance.decision.evaluated"
+    EVENT_REPLAY_SUBMITTED = "aether.event.replay.submitted"
+    EVENT_REPLAY_COMPLETED = "aether.event.replay.completed"
+    EVENT_REPLAY_CANCELLED = "aether.event.replay.cancelled"
 
     # Dead letter
     DEAD_LETTER = "aether.dlq"

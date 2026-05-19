@@ -1,3 +1,19 @@
+---
+title: Profile360 Frontend Architecture
+slug: architecture/profile360-frontend
+section: architecture
+visibility: I
+audience: [dev-senior, architect]
+status: stable
+since_version: "8.8.0"
+source_files:
+  - apps/kyber/src/components/profile360/
+  - apps/kyber/src/features/profile360/
+canonical_owner: frontend@aether
+estimated_read_minutes: 10
+toc_depth: 3
+last_synced_commit: bbbb603
+---
 # Aether Profile360 Frontend Architecture
 
 This document records the incremental Profile360 migration for the existing Kyber/Aether frontend. It intentionally preserves the current compact entity-card, Entity 360 page, timeline, graph, connections, and event-feed UX while making every backend identity, graph, temporal, financial, reward, delegation, and execution-trace datum surfaceable.

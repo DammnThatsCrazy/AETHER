@@ -1,6 +1,6 @@
 import type { ControllerSchedule, ControllerDisplayMode, ControllerName } from '@kyber/types';
 import { CONTROLLER_FUNCTIONAL_NAMES, CONTROLLER_EXPRESSIVE_NAMES } from '@kyber/types';
-import { Badge, DataTable, Toggle } from '@kyber/components/system';
+import { Badge, DataTable, Toggle } from '@aether/ui';
 import { cn, formatRelativeTime, formatTimestamp } from '@kyber/lib/utils';
 
 interface ScheduleTableProps {

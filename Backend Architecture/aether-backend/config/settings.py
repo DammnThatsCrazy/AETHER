@@ -189,7 +189,8 @@ class QuickNodeConfig:
 class ProviderGatewayConfig:
     """Multi-provider abstraction with BYOK support and automatic failover."""
     enabled: bool = _env_bool("PROVIDER_GATEWAY_ENABLED", False)
-    encryption_key: str = _env("PROVIDER_GATEWAY_ENCRYPTION_KEY", "")
+    # BYOK_ENCRYPTION_KEY is the canonical name; PROVIDER_GATEWAY_ENCRYPTION_KEY is a legacy alias.
+    encryption_key: str = _env("BYOK_ENCRYPTION_KEY", "") or _env("PROVIDER_GATEWAY_ENCRYPTION_KEY", "")
     # Additional provider API keys (system defaults)
     alchemy_api_key: str = _env("ALCHEMY_API_KEY", "")
     alchemy_endpoint: str = _env("ALCHEMY_ENDPOINT", "")
@@ -351,25 +352,54 @@ class Settings:
     stripe_billing: StripeBillingConfig = field(default_factory=StripeBillingConfig)
 
     def __post_init__(self):
+        _is_non_local = self.env != Environment.LOCAL
+        _is_prod = self.env == Environment.PRODUCTION
+
+        # ── Pricing option ────────────────────────────────────────────────────
         if self.rate_limit.pricing_option not in ("A", "B", "C"):
             raise RuntimeError(
                 f"PRICING_OPTION must be one of A, B, C "
                 f"(got: {self.rate_limit.pricing_option!r})"
             )
-        if self.env != Environment.LOCAL and self.auth.jwt_secret == "change-me-in-production":
-            raise RuntimeError("JWT_SECRET must be set in non-local environments")
+
+        # ── JWT secret ────────────────────────────────────────────────────────
+        if _is_non_local and self.auth.jwt_secret == "change-me-in-production":
+            raise RuntimeError(
+                "JWT_SECRET must be set in non-local environments. "
+                "Generate one with: python scripts/generate_secrets.py"
+            )
+
+        # ── Database URL ──────────────────────────────────────────────────────
+        if _is_non_local and not _env("DATABASE_URL"):
+            raise RuntimeError(
+                "DATABASE_URL must be set in non-local environments. "
+                "Example: postgresql://aether:pass@db:5432/aether"
+            )
+
+        # ── BYOK encryption key ────────────────────────────────────────────────
+        # Required in production so the BYOK vault is always encrypted at rest,
+        # regardless of whether the Provider Gateway is explicitly enabled.
+        if _is_prod and not self.provider_gateway.encryption_key:
+            raise RuntimeError(
+                "BYOK_ENCRYPTION_KEY (BYOK vault key) must be set in production. "
+                "Generate one with: python scripts/generate_secrets.py"
+            )
+
+        # ── Provider Gateway encryption key ───────────────────────────────────
         if (
             self.provider_gateway.enabled
-            and self.env != Environment.LOCAL
+            and _is_non_local
             and not self.provider_gateway.encryption_key
         ):
             raise RuntimeError(
-                "PROVIDER_GATEWAY_ENCRYPTION_KEY must be set when "
+                "BYOK_ENCRYPTION_KEY must be set when "
                 "Provider Gateway is enabled in non-local environments"
             )
+
+        # ── Extraction defense secrets ────────────────────────────────────────
         if (
             self.extraction_defense.enabled
-            and self.env != Environment.LOCAL
+            and _is_non_local
             and self.extraction_defense.watermark_secret_key
             == "aether-wm-default-change-me"
         ):
@@ -377,8 +407,32 @@ class Settings:
                 "WATERMARK_SECRET_KEY must be changed from default when "
                 "extraction defense is enabled in non-local environments"
             )
-        # Stripe Billing: required vars in non-local when enabled.
-        if self.stripe_billing.enabled and self.env != Environment.LOCAL:
+        if (
+            self.extraction_defense.enabled
+            and _is_non_local
+            and self.extraction_defense.canary_secret_seed
+            == "aether-canary-seed-change-me"
+        ):
+            raise RuntimeError(
+                "CANARY_SECRET_SEED must be changed from default when "
+                "extraction defense is enabled in non-local environments"
+            )
+
+        # ── Neptune ──────────────────────────────────────────────────────────
+        # Neptune requires AWS infrastructure. In non-local envs where the
+        # endpoint is still the placeholder "localhost", emit a clear warning so
+        # operators know graph-layer features will be disabled.
+        if _is_non_local and self.neptune.endpoint in ("localhost", ""):
+            import logging as _logging
+            _logging.getLogger("aether.settings").warning(
+                "NEPTUNE_ENDPOINT is not configured (still 'localhost'). "
+                "Graph intelligence features (H2H/H2A/A2H/A2A) will be "
+                "unavailable until AWS Neptune is provisioned and "
+                "NEPTUNE_ENDPOINT is set."
+            )
+
+        # ── Stripe Billing: required vars in non-local when enabled ───────────
+        if self.stripe_billing.enabled and _is_non_local:
             sb = self.stripe_billing
             missing: list[str] = []
             if not sb.secret_key:

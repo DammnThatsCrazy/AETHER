@@ -1,5 +1,5 @@
 import { cn, formatRelativeTime } from '@kyber/lib/utils';
-import { Card, CardHeader, CardTitle, CardContent, CardFooter, Badge, StatusIndicator } from '@kyber/components/system';
+import { Card, CardHeader, CardTitle, CardContent, CardFooter, Badge, StatusIndicator } from '@aether/ui';
 import type {
   Controller,
   ControllerDisplayMode,

@@ -1,5 +1,5 @@
 import type { TimelineEvent } from '@kyber/types';
-import { SeverityBadge, Badge, ScrollArea } from '@kyber/components/system';
+import { SeverityBadge, Badge, ScrollArea } from '@aether/ui';
 import { formatRelativeTime } from '@kyber/lib/utils';
 import { cn } from '@kyber/lib/utils';
 

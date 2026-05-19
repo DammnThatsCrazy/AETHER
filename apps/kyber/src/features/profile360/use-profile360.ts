@@ -87,18 +87,203 @@ function normalizeProfile360Payload(raw: Record<string, unknown>, fallbackId: st
   };
 }
 
+function refs(values: unknown[], fallbackType: Profile360EntityType): readonly Profile360Reference[] {
+  return values.slice(0, 12).map((item, i) => {
+    const v = asRecord(item);
+    const id = String(v.id ?? v.entity_id ?? v.wallet_address ?? v.session_id ?? `${fallbackType}-${i}`);
+    return { id, type: (v.type ?? v.entity_type ?? fallbackType) as Profile360EntityType, label: String(v.label ?? v.name ?? v.display_name ?? id), metadata: v };
+  });
+}
+
+function buildSessionsSections(raw: Record<string, unknown>): readonly Profile360Section[] {
+  const sessData = asRecord(raw.sessions_data);
+  const devData = asRecord(raw.devices_data);
+  const rawSessions: unknown[] = Array.isArray(sessData.sessions) ? sessData.sessions : Array.isArray(sessData.items) ? sessData.items : Array.isArray(sessData.data) ? sessData.data : [];
+  const rawDevices: unknown[] = Array.isArray(devData.devices) ? devData.devices : Array.isArray(devData.items) ? devData.items : Array.isArray(devData.data) ? devData.data : [];
+
+  let vpnCount = 0; let torCount = 0; let durationSum = 0;
+  const platformCounts = new Map<string, number>();
+  for (const s of rawSessions) {
+    const sr = asRecord(s);
+    const geo = asRecord(sr.geo ?? sr.location);
+    if (Boolean(sr.vpn ?? sr.is_vpn ?? geo.vpn)) vpnCount++;
+    if (Boolean(sr.tor ?? sr.is_tor ?? geo.tor)) torCount++;
+    durationSum += typeof sr.duration_seconds === 'number' ? sr.duration_seconds : typeof sr.duration === 'number' ? sr.duration : 0;
+    const plat = String(sr.platform ?? sr.device_type ?? 'web');
+    platformCounts.set(plat, (platformCounts.get(plat) ?? 0) + 1);
+  }
+  const topPlatform = [...platformCounts.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] ?? '—';
+  const avgDuration = rawSessions.length > 0 ? Math.round(durationSum / rawSessions.length) : 0;
+
+  return [
+    {
+      id: 'sessions-overview',
+      title: 'Session intelligence',
+      summary: 'Recent sessions — device, OS, browser, platform, geo (VPN/proxy/Tor flags), entry/exit URL, referrer, UTM/campaign context, duration, page-view count.',
+      metrics: [
+        { id: 'sessions', label: 'Sessions', value: rawSessions.length },
+        { id: 'vpn', label: 'VPN/Proxy', value: vpnCount, tone: vpnCount > 0 ? 'warning' : 'default' },
+        { id: 'tor', label: 'Tor', value: torCount, tone: torCount > 0 ? 'danger' : 'default' },
+        { id: 'avg-dur', label: 'Avg duration', value: `${avgDuration}s` },
+        { id: 'top-platform', label: 'Top platform', value: topPlatform },
+        { id: 'devices', label: 'Devices', value: rawDevices.length },
+      ],
+      references: refs(rawSessions, 'session'),
+      data: { sessions: rawSessions, devices: rawDevices, raw_sessions: sessData, raw_devices: devData },
+    },
+  ];
+}
+
+function buildJourneysSections(raw: Record<string, unknown>): readonly Profile360Section[] {
+  const jData = asRecord(raw.journeys_data);
+  const rawJourneys: unknown[] = Array.isArray(jData.journeys) ? jData.journeys : Array.isArray(jData.items) ? jData.items : Array.isArray(jData.data) ? jData.data : [];
+
+  let completedCount = 0; let abandonedCount = 0; let totalSteps = 0;
+  const campaignSet = new Set<string>();
+  for (const j of rawJourneys) {
+    const jr = asRecord(j);
+    if (Boolean(jr.completed ?? jr.converted)) completedCount++;
+    if (Boolean(jr.abandoned ?? jr.dropped)) abandonedCount++;
+    const steps = Array.isArray(jr.steps) ? jr.steps : [];
+    totalSteps += steps.length;
+    const cid = String(jr.campaign_id ?? jr.campaign ?? '');
+    if (cid) campaignSet.add(cid);
+  }
+  const completionRate = rawJourneys.length > 0 ? Math.round((completedCount / rawJourneys.length) * 100) : 0;
+  const abandonRate = rawJourneys.length > 0 ? Math.round((abandonedCount / rawJourneys.length) * 100) : 0;
+
+  return [
+    {
+      id: 'journeys-overview',
+      title: 'Journey intelligence',
+      summary: 'Cross-session journey chains — steps, conversion, drop-off rates, abandonment flags, and campaign linkage ("where" attribution).',
+      metrics: [
+        { id: 'journeys', label: 'Journeys', value: rawJourneys.length },
+        { id: 'completed', label: 'Completed', value: completedCount, tone: completedCount > 0 ? 'good' : 'default' },
+        { id: 'abandoned', label: 'Abandoned', value: abandonedCount, tone: abandonedCount > 0 ? 'warning' : 'default' },
+        { id: 'completion-rate', label: 'Completion %', value: completionRate, unit: '%', tone: completionRate > 60 ? 'good' : completionRate > 30 ? 'warning' : 'danger' },
+        { id: 'abandon-rate', label: 'Abandon %', value: abandonRate, unit: '%', tone: abandonRate > 40 ? 'danger' : 'default' },
+        { id: 'avg-steps', label: 'Avg steps', value: rawJourneys.length > 0 ? Math.round(totalSteps / rawJourneys.length) : 0 },
+        { id: 'campaigns', label: 'Campaigns', value: campaignSet.size },
+      ],
+      references: refs(rawJourneys, 'journey'),
+      data: { journeys: rawJourneys, raw: jData },
+    },
+  ];
+}
+
+function buildWalletsSections(raw: Record<string, unknown>): readonly Profile360Section[] {
+  const wData = asRecord(raw.wallets_data);
+  const rawWallets: unknown[] = Array.isArray(wData.wallets) ? wData.wallets : Array.isArray(wData.items) ? wData.items : Array.isArray(wData.data) ? wData.data : [];
+
+  let totalUsd = 0; let txCount = 0;
+  for (const w of rawWallets) {
+    const wr = asRecord(w);
+    if (typeof wr.total_usd === 'number') totalUsd += wr.total_usd;
+    else if (typeof wr.balance_usd === 'number') totalUsd += wr.balance_usd;
+    const txs = Array.isArray(wr.recent_transactions) ? wr.recent_transactions : Array.isArray(wr.transactions) ? wr.transactions : [];
+    txCount += txs.length;
+  }
+
+  return [
+    {
+      id: 'wallets-overview',
+      title: 'Web3 wallet profiles',
+      summary: 'Linked wallets — token balances (USD), recent on-chain transactions, protocol interactions (DEX swaps, lending, staking, governance), NFT holdings, and Web3 loyalty signals.',
+      metrics: [
+        { id: 'wallets', label: 'Wallets', value: rawWallets.length },
+        { id: 'total-usd', label: 'Total USD', value: totalUsd > 0 ? `$${(totalUsd / 1000).toFixed(1)}k` : '—' },
+        { id: 'tx-count', label: 'Transactions', value: txCount },
+      ],
+      references: rawWallets.slice(0, 12).map((w, i) => {
+        const wr = asRecord(w);
+        const addr = String(wr.wallet_address ?? wr.address ?? wr.id ?? `wallet-${i}`);
+        const chain = String(wr.chain ?? wr.network ?? '');
+        return { id: addr, type: 'wallet' as Profile360EntityType, label: `${addr.slice(0, 8)}…${addr.slice(-4)}${chain ? ` (${chain})` : ''}`, metadata: wr };
+      }),
+      data: { wallets: rawWallets, raw: wData },
+    },
+  ];
+}
+
+function buildBehavioralSections(raw: Record<string, unknown>, entity: Entity): readonly Profile360Section[] {
+  const bData = asRecord(raw.behavioral ?? raw.behavioral_data);
+  const sigData = asRecord(raw.signals_data);
+  const signals: unknown[] = Array.isArray(sigData.signals) ? sigData.signals : Array.isArray(bData.signals) ? bData.signals : [];
+
+  const familyCounts = new Map<string, number>();
+  let highSeverity = 0;
+  for (const s of signals) {
+    const sr = asRecord(s);
+    const fam = String(sr.family ?? sr.signal_family ?? 'other');
+    familyCounts.set(fam, (familyCounts.get(fam) ?? 0) + 1);
+    const sev = String(sr.severity ?? sr.level ?? '');
+    if (sev === 'high' || sev === 'critical') highSeverity++;
+  }
+
+  const intentScore = Number(asRecord(bData.scores ?? bData).intent_score ?? bData.intent ?? 0);
+  const frictionScore = Number(asRecord(bData.scores ?? bData).friction_score ?? bData.friction ?? 0);
+  const continuityScore = Number(asRecord(bData.scores ?? bData).continuity_score ?? bData.continuity ?? 0);
+
+  return [
+    {
+      id: 'behavioral-signals',
+      title: 'Behavioral "Why" intelligence',
+      summary: 'Signal families explaining entity behavior — intent residue, wallet friction, continuity, trust decay, cross-domain correlation. Human-readable explanations of anomalous patterns.',
+      metrics: [
+        { id: 'signals', label: 'Signals', value: signals.length },
+        { id: 'high-sev', label: 'High severity', value: highSeverity, tone: highSeverity > 0 ? 'danger' : 'default' },
+        { id: 'families', label: 'Families', value: familyCounts.size },
+        { id: 'intent', label: 'Intent score', value: intentScore > 0 ? intentScore.toFixed(2) : '—', tone: intentScore > 0.7 ? 'good' : intentScore > 0.4 ? 'warning' : 'default' },
+        { id: 'friction', label: 'Friction', value: frictionScore > 0 ? frictionScore.toFixed(2) : '—', tone: frictionScore > 0.6 ? 'danger' : 'default' },
+        { id: 'continuity', label: 'Continuity', value: continuityScore > 0 ? continuityScore.toFixed(2) : '—', tone: continuityScore > 0.7 ? 'good' : 'warning' },
+        { id: 'trust', label: 'Trust', value: Math.round(entity.trustScore * 100), unit: '%', tone: entity.trustScore > 0.75 ? 'good' : 'warning' },
+        { id: 'anomaly', label: 'Anomaly', value: Math.round(entity.anomalyScore * 100), unit: '%', tone: entity.anomalyScore > 0.55 ? 'danger' : 'default' },
+      ],
+      references: refs(signals, 'human'),
+      data: { signals, family_counts: Object.fromEntries(familyCounts), behavioral: bData },
+    },
+  ];
+}
+
+function buildAttributionSections(raw: Record<string, unknown>): readonly Profile360Section[] {
+  const attrData = asRecord(raw.attribution_data);
+  const touchpoints: unknown[] = Array.isArray(attrData.touchpoints) ? attrData.touchpoints : Array.isArray(attrData.items) ? attrData.items : [];
+
+  const channelCredit = new Map<string, number>();
+  let totalConversions = 0;
+  for (const tp of touchpoints) {
+    const tpr = asRecord(tp);
+    const channel = String(tpr.channel ?? tpr.source ?? 'direct');
+    const credit = typeof tpr.credit === 'number' ? tpr.credit : typeof tpr.attribution_credit === 'number' ? tpr.attribution_credit : 0;
+    channelCredit.set(channel, (channelCredit.get(channel) ?? 0) + credit);
+    if (Boolean(tpr.is_conversion ?? tpr.converted)) totalConversions++;
+  }
+  const topChannel = [...channelCredit.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] ?? '—';
+
+  return [
+    {
+      id: 'attribution-journey',
+      title: 'Attribution "Where" intelligence',
+      summary: 'Multi-touch attribution journey — weighted credit per channel/source/campaign. Surfaces where users came from, which touchpoints influenced conversion, and campaign ROI.',
+      metrics: [
+        { id: 'touchpoints', label: 'Touchpoints', value: touchpoints.length },
+        { id: 'conversions', label: 'Conversions', value: totalConversions, tone: totalConversions > 0 ? 'good' : 'default' },
+        { id: 'channels', label: 'Channels', value: channelCredit.size },
+        { id: 'top-channel', label: 'Top channel', value: topChannel },
+      ],
+      references: refs(touchpoints, 'journey'),
+      data: { touchpoints, channel_credit: Object.fromEntries(channelCredit), raw: attrData },
+    },
+  ];
+}
+
 function buildSections(entity: Entity, raw: Record<string, unknown>): Profile360Payload['sections'] {
   const intelligence = asRecord(raw.intelligence ?? entity.metadata.intelligence);
   const behavioral = asRecord(raw.behavioral ?? entity.metadata.behavioral);
   const financial = asRecord(raw.financial ?? raw.wallet ?? entity.metadata.wallet);
   const system = asRecord(raw.system ?? raw.runtime ?? raw.device);
   const analytics = asRecord(raw.analytics ?? raw.attribution ?? raw.summary);
-
-  const references = (values: unknown[], fallbackType: Profile360EntityType): readonly Profile360Reference[] => values.slice(0, 12).map((item, i) => {
-    const value = asRecord(item);
-    const refId = String(value.id ?? value.entity_id ?? value.wallet_address ?? `${fallbackType}-${i}`);
-    return { id: refId, type: (value.type ?? value.entity_type ?? fallbackType) as Profile360EntityType, label: String(value.label ?? value.name ?? refId), metadata: value };
-  });
 
   return {
     identity: [
@@ -111,24 +296,29 @@ function buildSections(entity: Entity, raw: Record<string, unknown>): Profile360
           { id: 'risk', label: 'Risk', value: Math.round(entity.riskScore * 100), unit: '%', tone: entity.riskScore > 0.55 ? 'danger' : 'default' },
           { id: 'anomaly', label: 'Anomaly', value: Math.round(entity.anomalyScore * 100), unit: '%', tone: entity.anomalyScore > 0.55 ? 'warning' : 'default' },
         ],
-        references: references([...(Array.isArray(raw.identifiers) ? raw.identifiers : []), ...(Array.isArray(raw.connections) ? raw.connections : [])], 'human'),
+        references: refs([...(Array.isArray(raw.identifiers) ? raw.identifiers : []), ...(Array.isArray(raw.connections) ? raw.connections : [])], 'human'),
         data: intelligence,
       },
     ],
     system: [
-      { id: 'system-runtime', title: 'System footprint', summary: 'Device/browser/platform attribution, sessions, uptime, active hours, and automation context.', data: system, references: references(Array.isArray(raw.sessions) ? raw.sessions : [], 'session') },
-      { id: 'automation', title: 'Automation behavior', summary: 'Agent ownership, permissions, delegations, protocol usage, and active execution windows.', data: behavioral, references: references(Array.isArray(raw.agents) ? raw.agents : [], 'agent') },
+      { id: 'system-runtime', title: 'System footprint', summary: 'Device/browser/platform attribution, sessions, uptime, active hours, and automation context.', data: system, references: refs(Array.isArray(raw.sessions) ? raw.sessions : [], 'session') },
+      { id: 'automation', title: 'Automation behavior', summary: 'Agent ownership, permissions, delegations, protocol usage, and active execution windows.', data: behavioral, references: refs(Array.isArray(raw.agents) ? raw.agents : [], 'agent') },
     ],
     financial: [
-      { id: 'wallet-flows', title: 'Wallet flows', summary: 'Balances, rewards, spending behavior, treasury movements, and protocol interactions.', data: financial, references: references(Array.isArray(raw.wallets) ? raw.wallets : [], 'wallet') },
-      { id: 'rewards', title: 'Rewards and incentives', summary: 'Reward accruals, claims, attribution, and linked journeys.', data: asRecord(raw.rewards), references: references(Array.isArray(raw.transactions) ? raw.transactions : [], 'transaction') },
+      { id: 'wallet-flows', title: 'Wallet flows', summary: 'Balances, rewards, spending behavior, treasury movements, and protocol interactions.', data: financial, references: refs(Array.isArray(raw.wallets) ? raw.wallets : [], 'wallet') },
+      { id: 'rewards', title: 'Rewards and incentives', summary: 'Reward accruals, claims, attribution, and linked journeys.', data: asRecord(raw.rewards), references: refs(Array.isArray(raw.transactions) ? raw.transactions : [], 'transaction') },
     ],
     analytics: [
-      { id: 'behavioral-intelligence', title: 'Behavioral intelligence', summary: 'Active hours, regions, cohort behavior, platform usage, automation ratio, and trust/risk drivers.', data: analytics, references: references(Array.isArray(raw.journeys) ? raw.journeys : [], 'journey') },
+      { id: 'behavioral-intelligence', title: 'Behavioral intelligence', summary: 'Active hours, regions, cohort behavior, platform usage, automation ratio, and trust/risk drivers.', data: analytics, references: refs(Array.isArray(raw.journeys) ? raw.journeys : [], 'journey') },
     ],
     debug: [
-      { id: 'raw-payload', title: 'Raw normalized payload', summary: 'Backend payload, drill references, causality IDs, execution traces, and diagnostics for wiring.', data: raw, references: references(Array.isArray(raw.traces) ? raw.traces : [], 'execution_trace') },
+      { id: 'raw-payload', title: 'Raw normalized payload', summary: 'Backend payload, drill references, causality IDs, execution traces, and diagnostics for wiring.', data: raw, references: refs(Array.isArray(raw.traces) ? raw.traces : [], 'execution_trace') },
     ],
+    sessions: buildSessionsSections(raw),
+    journeys: buildJourneysSections(raw),
+    wallets: buildWalletsSections(raw),
+    behavioral: buildBehavioralSections(raw, entity),
+    attribution: buildAttributionSections(raw),
   };
 }
 
@@ -145,19 +335,37 @@ async function fetchProfile360(type: Profile360EntityType, id: string): Promise<
     };
   }
 
-  const [profile, timelineResponse, graphResponse, behavioral] = await Promise.all([
+  const [profile, timelineResponse, graphResponse, behavioral, sessions, devices, journeys, wallets, attributionJourney, signals] = await Promise.all([
     api.profile360.full(type, id).catch(() => api.profile.full(id)),
-    api.profile360.timeline(type, id, { limit: 250 }).catch(() => api.profile.timeline(id, 250)).catch(() => ({ events: [] })),
+    api.profile360.timeline(type, id, { limit: 250 }).catch(() => api.profile.timeline(id, { limit: 250 })).catch(() => ({ events: [] })),
     api.profile360.graph(type, id, { limit: 750 }).catch(() => api.profile.graph(id)).catch(() => ({ nodes: [], edges: [] })),
     api.behavioral.entity(id).catch(() => ({})),
+    api.profile.sessions(id, 30).catch(() => ({})),
+    api.profile.devices(id).catch(() => ({})),
+    api.profile.journeys(id).catch(() => ({})),
+    api.profile.wallets(id).catch(() => ({})),
+    api.attribution.journey(id).catch(() => ({})),
+    api.behavioral.signals(id).catch(() => ({ signals: [] })),
   ]);
 
   const normalized = normalizeProfile360Payload(asRecord(profile), id, type);
   if (normalized) {
-    return normalized;
+    return {
+      ...normalized,
+      raw: {
+        ...asRecord(normalized.raw),
+        sessions_data: sessions,
+        devices_data: devices,
+        journeys_data: journeys,
+        wallets_data: wallets,
+        attribution_data: attributionJourney,
+        signals_data: signals,
+        behavioral: behavioral,
+      },
+    };
   }
 
-  const raw: Record<string, unknown> = { ...asRecord(profile), behavioral };
+  const raw: Record<string, unknown> = { ...asRecord(profile), behavioral, sessions_data: sessions, devices_data: devices, journeys_data: journeys, wallets_data: wallets, attribution_data: attributionJourney, signals_data: signals };
   const graphRaw = asRecord(graphResponse);
   const rawNodes = (Array.isArray(graphRaw.nodes) ? graphRaw.nodes : Array.isArray(graphRaw.connections) ? graphRaw.connections : []) as unknown[];
   const rawEdges = (Array.isArray(graphRaw.edges) ? graphRaw.edges : []) as unknown[];

@@ -1,3 +1,20 @@
+---
+title: Agent Controller — Multi-Controller Architecture
+slug: ai/agent-controller
+section: ai
+visibility: P
+audience: [architect, ai]
+status: stable
+since_version: "8.8.0"
+source_files:
+  - Agent Layer/agent_controller/governance.py
+  - Agent Layer/agent_controller/nous.py
+  - Agent Layer/agent_controller/runtime/cycle_runtime.py
+canonical_owner: agent@aether
+estimated_read_minutes: 12
+toc_depth: 3
+last_synced_commit: b41baa4
+---
 # Agent Controller — Multi-Controller Architecture
 
 > **vNext** — Internal Autonomy Architecture

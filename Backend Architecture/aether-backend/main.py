@@ -98,6 +98,7 @@ Routes:
 
 from __future__ import annotations
 
+import asyncio
 import sys
 import os
 from contextlib import asynccontextmanager
@@ -123,7 +124,6 @@ from services.ingestion.routes import router as ingestion_router
 from services.identity.routes import router as identity_router
 from services.analytics.routes import router as analytics_router
 from services.ml_serving.routes import router as ml_router
-from services.agent.routes import router as agent_router
 from services.campaign.routes import router as campaign_router
 from services.consent.routes import router as consent_router
 from services.notification.routes import router as notification_router
@@ -162,7 +162,12 @@ from services.flows.routes import router as flows_router
 from services.behavior.routes import router as behavior_router
 from services.agent.user_agents import router as user_agents_router
 from services.realtime.routes import router as realtime_router
+from services.operational_intelligence.routes import router as operational_graph_router
+from services.entity_intelligence.routes import router as entity_intelligence_router
 from services.profile360_workers import attach_profile360_workers
+from services.investigation.routes import router as investigation_router
+from services.governance.routes import router as governance_router
+from services.events.routes import router as events_router
 
 
 # ═══════════════════════════════════════════════════════════════════════
@@ -178,6 +183,9 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     """
     registry = get_registry()
     await registry.startup()
+
+    from services.events.worker import start_replay_worker
+    replay_worker_task = asyncio.create_task(start_replay_worker())
 
     # Profile 360 — attach derived workers to the shared consumer.
     # Strictly additive: workers consume new topics + a few existing ones,
@@ -205,6 +213,11 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
 
     # Graceful shutdown: drain connections and close backends
     logger.info("Initiating graceful shutdown...")
+    replay_worker_task.cancel()
+    try:
+        await replay_worker_task
+    except asyncio.CancelledError:
+        pass
     if provider_gateway:
         await provider_gateway.shutdown()
     await registry.shutdown()
@@ -256,7 +269,6 @@ def create_app() -> FastAPI:
     app.include_router(identity_router)
     app.include_router(analytics_router)
     app.include_router(ml_router)
-    app.include_router(agent_router)
     app.include_router(campaign_router)
     app.include_router(consent_router)
     app.include_router(notification_router)
@@ -280,9 +292,7 @@ def create_app() -> FastAPI:
     app.include_router(rwa_router)
     app.include_router(web3_router)
     app.include_router(crossdomain_router)
-    app.include_router(agent_teams_router)
-    app.include_router(agent_feedback_router)
-    app.include_router(scoring_router)
+    # agent sub-routers are only mounted when agent layer is enabled (see below)
     app.include_router(diagnostics_queue_router)
     app.include_router(diagnostics_observability_router)
     app.include_router(guardrails_router)
@@ -294,11 +304,28 @@ def create_app() -> FastAPI:
     app.include_router(delegation_router)
     app.include_router(flows_router)
     app.include_router(behavior_router)
-    app.include_router(user_agents_router)
     app.include_router(realtime_router)
+    app.include_router(operational_graph_router)
+    app.include_router(entity_intelligence_router)
+    app.include_router(investigation_router)
+    app.include_router(governance_router)
+    app.include_router(events_router)
+    app.include_router(user_agents_router)  # Profile 360: user/org-owned agents (always-on)
 
     # ── Intelligence Graph services (feature-flagged) ───────────
     ig = settings.intelligence_graph
+
+    if ig.enable_agent_layer:
+        from services.agent.routes import router as agent_router
+        app.include_router(agent_router)
+        app.include_router(agent_teams_router)
+        app.include_router(agent_feedback_router)
+        app.include_router(scoring_router)
+        logger.info("Intelligence Graph: Agent layer (L2) mounted")
+    else:
+        logger.info(
+            "Intelligence Graph: Agent layer disabled (set IG_AGENT_LAYER=true to enable)"
+        )
 
     if ig.enable_commerce_layer:
         from services.commerce.routes import router as commerce_router

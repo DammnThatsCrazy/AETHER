@@ -1,4 +1,4 @@
-import { Card, CardContent } from '@kyber/components/system';
+import { Card, CardContent } from '@aether/ui';
 import { cn } from '@kyber/lib/utils';
 
 interface EntityScoreCardProps {

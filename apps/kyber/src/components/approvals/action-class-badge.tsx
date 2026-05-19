@@ -1,4 +1,4 @@
-import { Badge } from '@kyber/components/system';
+import { Badge } from '@aether/ui';
 import type { ActionClass } from '@kyber/types';
 
 const CLASS_LABELS: Record<ActionClass, { label: string; variant: 'default' | 'success' | 'info' | 'warning' | 'danger' | 'accent' }> = {

@@ -3,7 +3,7 @@ import {
   Card, CardHeader, CardTitle, CardContent,
   Badge, Button, ScrollArea,
   Tabs, TabsList, TabsTrigger, TabsContent,
-} from '@kyber/components/system';
+} from '@aether/ui';
 import type { GraphNode, GraphEdge, GraphCluster, GraphInspectorData } from '@kyber/types';
 
 // ---------------------------------------------------------------------------

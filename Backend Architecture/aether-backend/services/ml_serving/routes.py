@@ -120,7 +120,12 @@ async def list_models(request: Request):
 
     return APIResponse(data={
         "models": [
-            {"name": m, "status": "unknown", "version": "n/a"}
+            {
+                "name": m,
+                "status": "not_trained",
+                "version": "n/a",
+                "message": "ML serving backend unreachable. Run training pipelines first. See docs/ML-TRAINING-GUIDE.md.",
+            }
             for m in AVAILABLE_MODELS
         ]
     }).to_dict()
@@ -220,6 +225,12 @@ async def predict(
             metrics.increment("ml_predictions", labels={"model": body.model_name})
             return APIResponse(data={**prediction, "cached": False}).to_dict()
 
+        if resp.status_code == 404:
+            raise ServiceUnavailableError(
+                f"Model '{body.model_name}' is not yet available. "
+                "Training pipelines must be run before inference is possible. "
+                "See docs/ML-TRAINING-GUIDE.md for instructions."
+            )
         logger.warning(
             "ML serving API returned %d for model %s",
             resp.status_code, body.model_name,
@@ -231,7 +242,8 @@ async def predict(
     except httpx.RequestError as exc:
         logger.error("ML serving API unreachable: %s", exc)
         raise ServiceUnavailableError(
-            "ML inference backend is temporarily unavailable"
+            "ML inference backend is not reachable. "
+            "Ensure ML_SERVING_URL is set correctly and the ml-serving container is running."
         )
 
 
@@ -267,6 +279,12 @@ async def predict_batch(body: BatchPredictionRequest, request: Request):
                 "count": ml_result.get("count", len(body.entities)),
             }).to_dict()
 
+        if resp.status_code == 404:
+            raise ServiceUnavailableError(
+                f"Model '{body.model_name}' is not yet available. "
+                "Run training pipelines before serving batch inference. "
+                "See docs/ML-TRAINING-GUIDE.md."
+            )
         raise ServiceUnavailableError(
             f"ML serving API returned {resp.status_code}"
         )
@@ -274,7 +292,8 @@ async def predict_batch(body: BatchPredictionRequest, request: Request):
     except httpx.RequestError as exc:
         logger.error("ML serving API unreachable for batch: %s", exc)
         raise ServiceUnavailableError(
-            "ML inference backend is temporarily unavailable"
+            "ML inference backend is not reachable. "
+            "Ensure ML_SERVING_URL is set correctly and the ml-serving container is running."
         )
 
 

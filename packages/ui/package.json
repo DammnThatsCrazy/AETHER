@@ -1,0 +1,23 @@
+{
+  "name": "@aether/ui",
+  "version": "8.8.0",
+  "private": true,
+  "type": "module",
+  "main": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts",
+    "./query": "./src/query/index.ts",
+    "./styles/*": "./src/styles/*",
+    "./tailwind.preset": "./tailwind.preset.js"
+  },
+  "peerDependencies": {
+    "react": ">=19.0.0"
+  },
+  "dependencies": {
+    "clsx": "^2.1.0",
+    "tailwind-merge": "^2.6.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.4.0"
+  }
+}

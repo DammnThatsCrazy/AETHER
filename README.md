@@ -18,6 +18,7 @@ orchestration.
 - [`docs/source-of-truth/INGESTION_CONTRACT.md`](docs/source-of-truth/INGESTION_CONTRACT.md) — `POST /v1/batch`
 - [`docs/source-of-truth/ENTITY_MODEL.md`](docs/source-of-truth/ENTITY_MODEL.md) — entities shared across Web2 + Web3
 - [`docs/source-of-truth/PLATFORM_PARITY.md`](docs/source-of-truth/PLATFORM_PARITY.md) — tiers A/B/C
+- [`docs/architecture/BACKEND_INTELLIGENCE_ARCHITECTURE.md`](docs/architecture/BACKEND_INTELLIGENCE_ARCHITECTURE.md) — additive backend intelligence architecture blueprint
 
 ## Architecture
 
@@ -26,7 +27,7 @@ Aether is a **hybrid Python/FastAPI + Node/TypeScript** monorepo with four opera
 ```
 ┌─────────────────────────────┐     ┌──────────────────────────────────────────┐
 │   Client SDKs (@aether/*)   │     │   Python/FastAPI Backend                  │
-│   web · ios · android · rn  │     │   35 service routers (28 core + 7 gated) │
+│   web · ios · android · rn  │     │   55 service routers (48 core + 7 gated) │
 │   shared contracts          │     │                                          │
 │                             │     │   /v1/ingest/*       Event ingestion     │
 │   Raw events, fingerprints  │ ──> │   /v1/lake/*         Data lake CRUD      │
@@ -56,8 +57,12 @@ Aether is a **hybrid Python/FastAPI + Node/TypeScript** monorepo with four opera
 │   Review / Mission / Live   │     │   /v1/x402/*         x402 protocol       │
 │   Noesis / Lab / Diagnostics  │     │   /v1/commerce-cp/*  Control plane       │
 │   Command / Entities        │     │   /v1/approvals/*    Approval workflow   │
-└─────────────────────────────┘     │   /v1/entitlements/* Entitlement service │
-                                    └──────────────────────────────────────────┘
+├─────────────────────────────┤     │   /v1/entitlements/* Entitlement service │
+│   Aether Customer App       │     └──────────────────────────────────────────┘
+│   (@aether/aether, React)   │ ──>
+│   Home / Account / Commerce │
+│   Auth (PKCE OIDC)          │
+└─────────────────────────────┘
                                                       │
                                     ┌─────────────────┴────────────────────────┐
                                     │   Infrastructure                         │
@@ -94,7 +99,7 @@ Provider connectors (24) → POST /v1/lake/ingest → Bronze (raw, immutable)
 | **PostgreSQL** | asyncpg | Lake tiers, repos, model registry | `DATABASE_URL` |
 | **Redis** | redis.asyncio | Cache, features, rate limiting, auth | `REDIS_HOST` |
 | **Neptune** | gremlinpython | Intelligence graph (4 relationship layers) | `NEPTUNE_ENDPOINT` |
-| **Kafka** | aiokafka | Event streaming (40+ topics) | `KAFKA_BOOTSTRAP_SERVERS` |
+| **Kafka** | aiokafka | Event streaming (114 topics) | `KAFKA_BOOTSTRAP_SERVERS` |
 | **S3** | boto3 | Model artifacts, lake objects | AWS credentials |
 | **Prometheus** | prometheus_client | Metrics at `/v1/metrics` | Auto-detected |
 
@@ -224,13 +229,14 @@ pip install -e ".[dev,backend,agent,ml]"
 npm ci                                 # install TypeScript workspaces
 export AETHER_ENV=local
 make test                              # Python tests (163 unit + integration + security)
-npm test                               # JS tests (web + react-native + kyber, 89 tests)
+npm test                               # JS tests (web + react-native + kyber, 89 tests total)
 
 # Full-stack Docker compose
 docker compose up -d                   # postgres, redis, kafka, clickhouse, backend, ml-serving, kyber, prometheus
 curl http://localhost:8000/v1/health   # backend
 curl http://localhost:8080/health      # ml-serving
 curl http://localhost:8081/health      # kyber operator console
+# apps/aether runs separately (dev-only): cd apps/aether && npm run dev  # → http://localhost:5175
 
 # Staging
 cd deploy/staging
@@ -240,19 +246,21 @@ cd deploy/staging
 ### Deployment Topology
 
 ```
-          ┌─────────────────┐
-          │   Kyber (8081)  │  ◄──── operator console (React SPA via nginx)
-          └────────┬────────┘
-                   │
-        ┌──────────┴──────────┐
-        │   Backend (8000)    │  ◄──── FastAPI · 35 routers · JWT auth · tenants
-        └──┬──────────────┬───┘
-           │              │
-  ┌────────┴─────┐  ┌─────┴───────────┐
-  │ ml-serving   │  │ Infrastructure   │
-  │ (8080)       │  │ postgres · redis │
+  ┌─────────────────┐  ┌───────────────────────┐
+  │   Kyber (8081)  │  │  Aether App (:5175)   │
+  │  operator SPA   │  │  customer SPA (dev)   │
+  └────────┬────────┘  └──────────┬────────────┘
+           └──────────┬───────────┘
+                      │
+        ┌─────────────┴───────────┐
+        │   Backend (8000)        │  ◄──── FastAPI · 55 routers · JWT auth · tenants
+        └──┬──────────────────┬───┘
+           │                  │
+  ┌────────┴─────┐  ┌─────────┴────────┐
+  │ ml-serving   │  │ Infrastructure    │
+  │ (8080)       │  │ postgres · redis  │
   │ FastAPI infer│  │ kafka · clickhouse│
-  └──────────────┘  │ prometheus (9090)│
+  └──────────────┘  │ prometheus (9090) │
                     └───────────────────┘
 ```
 
@@ -305,10 +313,13 @@ Backend Architecture/aether-backend/   Python/FastAPI backend (35 routers, 246+ 
     billing/         Per-service overage calculator + threshold notifications
     privacy/         PII detection + retention + redaction
 
-packages/                              Client SDKs + shared contracts
+packages/                              Client SDKs + shared contracts + UI
   shared/          @aether/shared — canonical TypeScript contracts (events,
                    consent, wallet, identity, entities, commerce, agent,
                    capabilities, provenance, schema-version)
+  ui/              @aether/ui — shared React component library (21 components,
+                   design tokens, Tailwind preset, query layer, cn utility,
+                   ThemeProvider); used by both Kyber and Aether
   web/             @aether/web — Web SDK (rollup → CJS/ESM/DTS)
   ios/             AetherSDK — Swift SPM package
   android/         io.aether:sdk-android — Kotlin
@@ -318,6 +329,8 @@ apps/                                  First-party applications
   kyber/           @aether/kyber — operator control surface (React + Vite)
                    Mission · Live · Noesis · Entities · Command · Diagnostics
                    · Review · Lab; Playwright E2E + vitest unit/component/integ
+  aether/          @aether/aether — customer-facing web app (React + Vite)
+                   Auth (PKCE OIDC) · Home · port 5175 · imports @aether/ui
 
 ML Models/aether-ml/                   ML training + serving
   training/        9 model training pipelines

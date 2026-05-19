@@ -1,3 +1,18 @@
+---
+title: Secret Rotation Runbook
+slug: security/secret-rotation
+section: security
+visibility: I
+audience: [security, ops]
+status: stable
+since_version: "8.8.0"
+source_files:
+  - scripts/generate_secrets.py
+canonical_owner: security@aether
+estimated_read_minutes: 2
+toc_depth: 3
+last_synced_commit: b41baa4
+---
 # Secret Rotation Runbook
 
 Procedures for rotating production secrets without downtime.

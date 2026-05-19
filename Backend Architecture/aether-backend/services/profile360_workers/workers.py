@@ -39,7 +39,7 @@ _session_chain: dict[str, list[str]] = defaultdict(list)
 
 def _entity_from_event(event: Event) -> Optional[str]:
     p = event.payload or {}
-    for key in ("entity_id", "agent_id", "user_id", "owner_entity_id", "grantee_entity_id"):
+    for key in ("entity_id", "agent_id", "user_id", "actor_id", "owner_entity_id", "grantee_entity_id"):
         v = p.get(key)
         if isinstance(v, str) and v:
             return v
@@ -306,6 +306,16 @@ def attach_profile360_workers(consumer: EventConsumer, graph: GraphClient) -> No
         Topic.FLOW_TRANSFER,
         Topic.ENTITY_UPDATED,
         Topic.DELEGATION_VALIDATED,
+        # Behavior and journey tracking events (published by SDK/ingestion layer)
+        Topic.BEHAVIOR_SESSION_STARTED,
+        Topic.BEHAVIOR_SESSION_ENDED,
+        Topic.BEHAVIOR_EVENT_RECORDED,
+        Topic.BEHAVIOR_PATTERN_DETECTED,
+        Topic.JOURNEY_STARTED,
+        Topic.JOURNEY_ACTOR_JOINED,
+        Topic.JOURNEY_ACTOR_LEFT,
+        Topic.JOURNEY_CONVERTED,
+        Topic.JOURNEY_ABANDONED,
     )
     for t in broad_topics:
         consumer.subscribe(t, behavior.handle)

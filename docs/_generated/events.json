@@ -1,0 +1,179 @@
+{
+  "version": "8.8.0",
+  "generated_from": "packages/shared/events.ts",
+  "schema_version": "1.0.0",
+  "families": [
+    "core",
+    "identity",
+    "consent",
+    "commerce",
+    "wallet",
+    "agent",
+    "x402"
+  ],
+  "consent_purposes": [
+    "agent",
+    "analytics",
+    "commerce",
+    "marketing",
+    "web3"
+  ],
+  "events": [
+    {
+      "name": "track",
+      "family": "core",
+      "consent_purpose": "analytics",
+      "section_comment": "Core analytics"
+    },
+    {
+      "name": "page",
+      "family": "core",
+      "consent_purpose": "analytics",
+      "section_comment": "Core analytics"
+    },
+    {
+      "name": "screen",
+      "family": "core",
+      "consent_purpose": "analytics",
+      "section_comment": "Core analytics"
+    },
+    {
+      "name": "heartbeat",
+      "family": "core",
+      "consent_purpose": "analytics",
+      "section_comment": "Core analytics"
+    },
+    {
+      "name": "error",
+      "family": "core",
+      "consent_purpose": "analytics",
+      "section_comment": "Core analytics"
+    },
+    {
+      "name": "performance",
+      "family": "core",
+      "consent_purpose": "analytics",
+      "section_comment": "Core analytics"
+    },
+    {
+      "name": "experiment",
+      "family": "core",
+      "consent_purpose": "marketing",
+      "section_comment": "Core analytics"
+    },
+    {
+      "name": "identify",
+      "family": "identity",
+      "consent_purpose": "analytics",
+      "section_comment": "Identity"
+    },
+    {
+      "name": "consent",
+      "family": "consent",
+      "consent_purpose": "analytics",
+      "section_comment": "Identity"
+    },
+    {
+      "name": "conversion",
+      "family": "commerce",
+      "consent_purpose": "marketing",
+      "section_comment": "Commerce / access (Web2 + Web3 unified)"
+    },
+    {
+      "name": "payment_initiated",
+      "family": "commerce",
+      "consent_purpose": "commerce",
+      "section_comment": "Commerce / access (Web2 + Web3 unified)"
+    },
+    {
+      "name": "payment_completed",
+      "family": "commerce",
+      "consent_purpose": "commerce",
+      "section_comment": "Commerce / access (Web2 + Web3 unified)"
+    },
+    {
+      "name": "payment_failed",
+      "family": "commerce",
+      "consent_purpose": "commerce",
+      "section_comment": "Commerce / access (Web2 + Web3 unified)"
+    },
+    {
+      "name": "approval_requested",
+      "family": "commerce",
+      "consent_purpose": "commerce",
+      "section_comment": "Commerce / access (Web2 + Web3 unified)"
+    },
+    {
+      "name": "approval_resolved",
+      "family": "commerce",
+      "consent_purpose": "commerce",
+      "section_comment": "Commerce / access (Web2 + Web3 unified)"
+    },
+    {
+      "name": "entitlement_granted",
+      "family": "commerce",
+      "consent_purpose": "commerce",
+      "section_comment": "Commerce / access (Web2 + Web3 unified)"
+    },
+    {
+      "name": "entitlement_revoked",
+      "family": "commerce",
+      "consent_purpose": "commerce",
+      "section_comment": "Commerce / access (Web2 + Web3 unified)"
+    },
+    {
+      "name": "access_granted",
+      "family": "commerce",
+      "consent_purpose": "commerce",
+      "section_comment": "Commerce / access (Web2 + Web3 unified)"
+    },
+    {
+      "name": "access_denied",
+      "family": "commerce",
+      "consent_purpose": "commerce",
+      "section_comment": "Commerce / access (Web2 + Web3 unified)"
+    },
+    {
+      "name": "wallet",
+      "family": "wallet",
+      "consent_purpose": "web3",
+      "section_comment": "Wallet / on-chain (optional)"
+    },
+    {
+      "name": "transaction",
+      "family": "wallet",
+      "consent_purpose": "web3",
+      "section_comment": "Wallet / on-chain (optional)"
+    },
+    {
+      "name": "contract_action",
+      "family": "wallet",
+      "consent_purpose": "web3",
+      "section_comment": "Wallet / on-chain (optional)"
+    },
+    {
+      "name": "agent_task",
+      "family": "agent",
+      "consent_purpose": "agent",
+      "section_comment": "Agent (optional)"
+    },
+    {
+      "name": "agent_decision",
+      "family": "agent",
+      "consent_purpose": "agent",
+      "section_comment": "Agent (optional)"
+    },
+    {
+      "name": "a2h_interaction",
+      "family": "agent",
+      "consent_purpose": "agent",
+      "section_comment": "Agent (optional)"
+    },
+    {
+      "name": "x402_payment",
+      "family": "x402",
+      "consent_purpose": "commerce",
+      "section_comment": "x402 (optional)"
+    }
+  ]
+}

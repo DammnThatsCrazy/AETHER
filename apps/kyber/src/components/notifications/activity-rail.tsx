@@ -1,5 +1,5 @@
 import { useNotifications } from '@kyber/features/notifications';
-import { ScrollArea, Badge } from '@kyber/components/system';
+import { ScrollArea, Badge } from '@aether/ui';
 import { formatRelativeTime } from '@kyber/lib/utils';
 
 export function ActivityRail() {

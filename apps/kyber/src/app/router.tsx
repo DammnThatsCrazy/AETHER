@@ -2,7 +2,8 @@ import { Routes, Route, Navigate } from 'react-router-dom';
 import { lazy, Suspense } from 'react';
 import { RequireAuth } from '@kyber/features/auth';
 import { AppShell } from '@kyber/components/layout';
-import { LoadingState } from '@kyber/components/system';
+import { LoadingState } from '@aether/ui';
+import { CallbackPage } from '@kyber/pages/callback';
 import { ErrorBoundary } from './error-boundary';
 
 const MissionPage = lazy(() => import('@kyber/pages/mission').then(m => ({ default: m.MissionPage })));
@@ -27,24 +28,35 @@ function PageSuspense({ children }: { readonly children: React.ReactNode }) {
 
 export function AppRouter() {
   return (
-    <RequireAuth>
-      <AppShell>
-        <Routes>
-          <Route path="/" element={<Navigate to="/mission" replace />} />
-          <Route path="/mission" element={<PageSuspense><MissionPage /></PageSuspense>} />
-          <Route path="/live" element={<PageSuspense><LivePage /></PageSuspense>} />
-          <Route path="/noesis" element={<PageSuspense><NoesisPage /></PageSuspense>} />
-          <Route path="/entities" element={<PageSuspense><EntitiesPage /></PageSuspense>} />
-          <Route path="/entities/:type/:id" element={<PageSuspense><EntitiesPage /></PageSuspense>} />
-          <Route path="/profile360/:type/:id" element={<PageSuspense><Profile360Page /></PageSuspense>} />
-          <Route path="/command" element={<PageSuspense><CommandPage /></PageSuspense>} />
-          <Route path="/diagnostics" element={<PageSuspense><DiagnosticsPage /></PageSuspense>} />
-          <Route path="/review" element={<PageSuspense><ReviewPage /></PageSuspense>} />
-          <Route path="/review/:batchId" element={<PageSuspense><ReviewPage /></PageSuspense>} />
-          <Route path="/lab" element={<PageSuspense><LabPage /></PageSuspense>} />
-          <Route path="*" element={<Navigate to="/mission" replace />} />
-        </Routes>
-      </AppShell>
-    </RequireAuth>
+    <Routes>
+      {/* Auth0 callback — outside RequireAuth so it's accessible during the login flow */}
+      <Route path="/callback" element={<CallbackPage />} />
+
+      {/* All other routes require authentication */}
+      <Route
+        path="*"
+        element={
+          <RequireAuth>
+            <AppShell>
+              <Routes>
+                <Route path="/" element={<Navigate to="/mission" replace />} />
+                <Route path="/mission" element={<PageSuspense><MissionPage /></PageSuspense>} />
+                <Route path="/live" element={<PageSuspense><LivePage /></PageSuspense>} />
+                <Route path="/noesis" element={<PageSuspense><NoesisPage /></PageSuspense>} />
+                <Route path="/entities" element={<PageSuspense><EntitiesPage /></PageSuspense>} />
+                <Route path="/entities/:type/:id" element={<PageSuspense><EntitiesPage /></PageSuspense>} />
+                <Route path="/profile360/:type/:id" element={<PageSuspense><Profile360Page /></PageSuspense>} />
+                <Route path="/command" element={<PageSuspense><CommandPage /></PageSuspense>} />
+                <Route path="/diagnostics" element={<PageSuspense><DiagnosticsPage /></PageSuspense>} />
+                <Route path="/review" element={<PageSuspense><ReviewPage /></PageSuspense>} />
+                <Route path="/review/:batchId" element={<PageSuspense><ReviewPage /></PageSuspense>} />
+                <Route path="/lab" element={<PageSuspense><LabPage /></PageSuspense>} />
+                <Route path="*" element={<Navigate to="/mission" replace />} />
+              </Routes>
+            </AppShell>
+          </RequireAuth>
+        }
+      />
+    </Routes>
   );
 }

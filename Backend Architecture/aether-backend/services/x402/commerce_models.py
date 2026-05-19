@@ -254,6 +254,7 @@ class PaymentAuthorization(BaseModel):
     payer: str  # wallet address
     facilitator_id: str
     authorized_at: str = Field(default_factory=_now_iso)
+    signed_payload: Optional[str] = None  # raw X-Payment header value (base64 PaymentPayload)
 
 
 # ─── Verification / Payment Receipt ───────────────────────────────────

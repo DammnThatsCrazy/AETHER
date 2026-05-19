@@ -1,3 +1,21 @@
+---
+title: Aether iOS SDK — Integration Guide
+slug: sdks/ios
+section: sdks
+visibility: P
+audience: [dev-junior, dev-senior]
+status: stable
+since_version: "8.8.0"
+source_files:
+  - packages/ios/Sources/AetherSDK/Aether.swift
+  - packages/shared/events.ts
+  - packages/shared/consent.ts
+canonical_owner: sdk@aether
+estimated_read_minutes: 10
+toc_depth: 3
+last_synced_commit: bbbb603
+---
+
 # Aether iOS SDK v8.8.0 — Integration Guide
 
 ## Installation

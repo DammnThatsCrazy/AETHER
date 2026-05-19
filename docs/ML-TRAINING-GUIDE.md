@@ -1,3 +1,18 @@
+---
+title: ML Model Training Guide
+slug: ai/ml-training
+section: ai
+visibility: P
+audience: [ai, dev-senior]
+status: stable
+since_version: "8.8.0"
+source_files:
+  - ML Models/aether-ml/training/
+canonical_owner: ml@aether
+estimated_read_minutes: 4
+toc_depth: 3
+last_synced_commit: b41baa4
+---
 # ML Model Training Guide
 
 ## Overview

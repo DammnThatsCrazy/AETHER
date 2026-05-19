@@ -1,12 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { render, screen } from '@testing-library/react';
-import { Badge } from '@kyber/components/system/badge';
-import { Button } from '@kyber/components/system/button';
-import { EmptyState } from '@kyber/components/system/empty-state';
-import { ErrorState } from '@kyber/components/system/error-state';
-import { LoadingState } from '@kyber/components/system/loading-state';
-import { Skeleton } from '@kyber/components/system/skeleton';
-import { StatusIndicator } from '@kyber/components/system/status-indicator';
+import { Badge, Button, EmptyState, ErrorState, LoadingState, Skeleton, StatusIndicator } from '@aether/ui';
 
 describe('Badge', () => {
   it('renders children', () => {

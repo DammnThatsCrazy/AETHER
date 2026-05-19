@@ -27,8 +27,17 @@ module.exports = {
   networks: {
     // Local development network (default)
     hardhat: {},
+    localhost: {
+      url: "http://127.0.0.1:8545",
+    },
 
     // ── Mainnet chains ──────────────────────────────────────────────
+    mainnet: {
+      url: process.env.ETHEREUM_RPC || "https://eth.llamarpc.com",
+      accounts: process.env.DEPLOYER_KEY ? [process.env.DEPLOYER_KEY] : [],
+      chainId: 1,
+    },
+    // Legacy alias kept for backward compat with multichain_deployer.py
     ethereum: {
       url: process.env.ETHEREUM_RPC || "https://eth.llamarpc.com",
       accounts: process.env.DEPLOYER_KEY ? [process.env.DEPLOYER_KEY] : [],
@@ -54,15 +63,49 @@ module.exports = {
       accounts: process.env.DEPLOYER_KEY ? [process.env.DEPLOYER_KEY] : [],
       chainId: 10,
     },
+
+    // ── Testnet chains ──────────────────────────────────────────────
+    sepolia: {
+      url: process.env.ETHEREUM_TESTNET_RPC || "https://rpc.sepolia.org",
+      accounts: process.env.DEPLOYER_KEY ? [process.env.DEPLOYER_KEY] : [],
+      chainId: 11155111,
+    },
+    amoy: {
+      url: process.env.POLYGON_TESTNET_RPC || "https://rpc-amoy.polygon.technology",
+      accounts: process.env.DEPLOYER_KEY ? [process.env.DEPLOYER_KEY] : [],
+      chainId: 80002,
+    },
+    arbitrumSepolia: {
+      url: process.env.ARBITRUM_TESTNET_RPC || "https://sepolia-rollup.arbitrum.io/rpc",
+      accounts: process.env.DEPLOYER_KEY ? [process.env.DEPLOYER_KEY] : [],
+      chainId: 421614,
+    },
+    baseSepolia: {
+      url: process.env.BASE_TESTNET_RPC || "https://sepolia.base.org",
+      accounts: process.env.DEPLOYER_KEY ? [process.env.DEPLOYER_KEY] : [],
+      chainId: 84532,
+    },
+    optimismSepolia: {
+      url: process.env.OPTIMISM_TESTNET_RPC || "https://sepolia.optimism.io",
+      accounts: process.env.DEPLOYER_KEY ? [process.env.DEPLOYER_KEY] : [],
+      chainId: 11155420,
+    },
   },
 
   etherscan: {
     apiKey: {
+      // Mainnets
       mainnet: process.env.ETHERSCAN_KEY || "",
       polygon: process.env.POLYGONSCAN_KEY || "",
       arbitrumOne: process.env.ARBISCAN_KEY || "",
       base: process.env.BASESCAN_KEY || "",
       optimisticEthereum: process.env.OPTIMISM_ETHERSCAN_KEY || "",
+      // Testnets (use same keys — Etherscan API keys work across testnet/mainnet)
+      sepolia: process.env.ETHERSCAN_KEY || "",
+      polygonAmoy: process.env.POLYGONSCAN_KEY || "",
+      arbitrumSepolia: process.env.ARBISCAN_KEY || "",
+      baseSepolia: process.env.BASESCAN_KEY || "",
+      optimismSepolia: process.env.OPTIMISM_ETHERSCAN_KEY || "",
     },
   },
 

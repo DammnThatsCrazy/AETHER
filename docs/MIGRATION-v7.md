@@ -1,3 +1,18 @@
+---
+title: SDK Migration Guide — v6.x to v7.0
+slug: sdks/migration-v7
+section: sdks
+visibility: P
+audience: [dev-junior, dev-senior]
+status: deprecated
+since_version: "8.8.0"
+source_files:
+  - packages/shared/schema-version.ts
+canonical_owner: sdk@aether
+estimated_read_minutes: 8
+toc_depth: 3
+last_synced_commit: b41baa4
+---
 # Migration Guide: Aether SDK v6.x to v7.0.0
 
 ## Overview

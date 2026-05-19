@@ -1,3 +1,20 @@
+---
+title: Agentic Commerce — Control Plane
+slug: api/commerce-control-plane
+section: api
+visibility: P
+audience: [architect, dev-senior]
+status: stable
+since_version: "8.8.0"
+source_files:
+  - Backend Architecture/aether-backend/services/x402/commerce_routes.py
+  - Backend Architecture/aether-backend/services/x402/approvals.py
+  - Backend Architecture/aether-backend/services/x402/control_plane.py
+canonical_owner: commerce@aether
+estimated_read_minutes: 8
+toc_depth: 3
+last_synced_commit: bbbb603
+---
 # Aether Agentic Commerce — Control Plane
 
 **Status:** Day-1 GA (feature-flagged via `COMMERCE_CONTROL_PLANE_ENABLED=true`)
@@ -86,7 +103,7 @@ one or more graph vertices/edges, and is traceable via `GET /v1/x402/explain/{ch
 | `services/x402/settlement.py` | Settlement FSM (pending→verifying→settled/failed) |
 | `services/x402/entitlements.py` | Entitlement mint/lookup/reuse/revoke |
 | `services/x402/pricing.py` | Price resolution with plan discounts |
-| `services/x402/idempotency.py` | Payment-Identifier dedupe with TTL |
+| `services/x402/idempotency.py` | Payment-Identifier dedupe — in-memory (local) or Redis-backed (staging/prod), async API |
 | `services/x402/economic_mutations.py` | Deterministic graph writers |
 | `services/x402/commerce_routes.py` | FastAPI routes (control plane, approvals, entitlements, diagnostics) |
 

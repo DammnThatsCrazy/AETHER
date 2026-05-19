@@ -5,7 +5,7 @@
 // =============================================================================
 
 import type { ConsentState } from './consent';
-import type { Provenance } from './provenance';
+import type { ActorKind, Provenance } from './provenance';
 
 // ---------------------------------------------------------------------------
 // Event families
@@ -138,7 +138,7 @@ export interface LibraryContext {
 // All optional → existing SDKs keep working unchanged.
 // ---------------------------------------------------------------------------
 
-export type ActorKind = 'human' | 'agent' | 'system';
+export type { ActorKind };
 
 export interface ImpressionRecord {
   surface: string;          // e.g. 'home_feed', 'product_grid'

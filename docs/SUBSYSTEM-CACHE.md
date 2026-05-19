@@ -1,3 +1,19 @@
+---
+title: Cache / Redis Subsystem
+slug: data/cache
+section: data
+visibility: P
+audience: [dev-senior, architect, ops]
+status: stable
+since_version: "8.8.0"
+source_files:
+  - Backend Architecture/aether-backend/shared/cache/cache.py
+canonical_owner: backend@aether
+estimated_read_minutes: 4
+toc_depth: 3
+last_synced_commit: b41baa4
+---
+
 # Cache / Redis Subsystem
 
 ## Architecture

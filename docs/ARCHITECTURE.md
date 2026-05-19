@@ -1,14 +1,33 @@
+---
+title: Aether Architecture Guide
+slug: architecture/system-map
+section: architecture
+visibility: P
+audience: [architect, dev-senior, security]
+status: stable
+since_version: "8.8.0"
+source_files:
+  - Backend Architecture/aether-backend/main.py
+  - Backend Architecture/aether-backend/middleware/middleware.py
+  - packages/shared/
+canonical_owner: platform@aether
+estimated_read_minutes: 20
+toc_depth: 3
+last_synced_commit: bbbb603
+---
 # Aether vNext — Architecture Guide
 
 ## Overview
 
-Aether is a **hybrid Python/FastAPI + Node/TypeScript** platform with three operational planes:
+Aether is a **hybrid Python/FastAPI + Node/TypeScript** platform with four operational planes:
 
 1. **SDK Plane** — Thin-client SDKs (Web, iOS, Android, React Native) collect raw events, fingerprints, wallet interactions, and session data. SDKs ship raw data to the backend.
 
-2. **Backend Plane** — Python/FastAPI with 31 service routers handling ingestion, identity, analytics, ML inference, graph, rewards, lake management, profile intelligence, population omniview, expectation engine, behavioral continuity, RWA intelligence, Web3 coverage, cross-domain TradFi/Web2 intelligence, extraction defense mesh, and privacy/policy control plane. Infrastructure: PostgreSQL (asyncpg), Redis (redis.asyncio), Neptune (gremlinpython), Kafka (aiokafka), S3, Prometheus.
+2. **Backend Plane** — Python/FastAPI with 55 service routers (48 core + 7 feature-flagged) handling ingestion, identity, analytics, ML inference, graph, rewards, lake management, profile intelligence, population omniview, expectation engine, behavioral continuity, RWA intelligence, Web3 coverage, cross-domain TradFi/Web2 intelligence, extraction defense mesh, and privacy/policy control plane. Infrastructure: PostgreSQL (asyncpg), Redis (redis.asyncio), Neptune (gremlinpython), Kafka (aiokafka, 114 topics), S3, Prometheus.
 
 3. **Data Lake Plane** — Medallion architecture (Bronze/Silver/Gold) for raw data persistence, validation, feature materialization, and intelligence output generation. Lake data feeds ML training, graph mutations, and intelligence APIs.
+
+4. **Frontend Plane** — Two React/Vite SPAs backed by the same `@aether/ui` shared component library (`packages/ui`). **Kyber** (`apps/kyber`, port 5174) is the internal operator control surface — investigation, live monitoring, entity management, and approvals. **Aether** (`apps/aether`, port 5175) is the customer-facing web app — account management and commerce. Both apps use PKCE OIDC auth and communicate exclusively with the backend REST API.
 
 ### Data Flow
 

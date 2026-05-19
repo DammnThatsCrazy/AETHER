@@ -74,10 +74,9 @@ class SourceClassifier:
         "x.com": "twitter", "mobile.twitter.com": "twitter",
         # LinkedIn
         "linkedin.com": "linkedin", "lnkd.in": "linkedin",
-        "www.linkedin.com": "linkedin",
         # Reddit
         "reddit.com": "reddit", "old.reddit.com": "reddit",
-        "www.reddit.com": "reddit", "out.reddit.com": "reddit",
+        "out.reddit.com": "reddit",
         # TikTok
         "tiktok.com": "tiktok", "vm.tiktok.com": "tiktok",
         # YouTube
@@ -113,15 +112,15 @@ class SourceClassifier:
 
     # Search engine domains → source name
     SEARCH_DOMAINS: dict[str, str] = {
-        "google.com": "google", "www.google.com": "google",
+        "google.com": "google",
         "google.co.uk": "google", "google.ca": "google",
         "google.com.au": "google", "google.de": "google",
         "google.fr": "google", "google.co.jp": "google",
         "google.co.in": "google", "google.com.br": "google",
-        "bing.com": "bing", "www.bing.com": "bing",
+        "bing.com": "bing",
         "yahoo.com": "yahoo", "search.yahoo.com": "yahoo",
         "duckduckgo.com": "duckduckgo",
-        "baidu.com": "baidu", "www.baidu.com": "baidu",
+        "baidu.com": "baidu",
         "yandex.ru": "yandex", "yandex.com": "yandex",
         "ecosia.org": "ecosia",
         "ask.com": "ask",
@@ -274,7 +273,7 @@ class SourceClassifier:
             return self.SEARCH_DOMAINS[domain]
 
         # Handle google.* TLD variants (google.es, google.it, etc.)
-        if domain.startswith("google.") or domain.startswith("www.google."):
+        if domain.startswith("google."):
             return "google"
 
         return None
@@ -302,7 +301,5 @@ class SourceClassifier:
             return ""
         domain = domain.lower().strip()
         if domain.startswith("www."):
-            # Keep www. variants that are in lookup tables (e.g., www.google.com)
-            # but also check without www.
-            pass
+            domain = domain[4:]
         return domain

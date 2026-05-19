@@ -52,6 +52,38 @@ jobs:
       - name: Validate documentation versions
         run: python scripts/validate_docs.py
 
+      - name: Validate documentation frontmatter
+        # Fails on invalid OR missing frontmatter. Back-fill is complete as
+        # of slice 3 (every tracked doc under docs/ declares visibility,
+        # audience, etc.). See scripts/docs_schema.json for the canonical
+        # schema and docs/_templates/page.template.mdx for new pages.
+        run: python scripts/validate_frontmatter.py
+
+      - name: Detect doc source drift
+        # Hard-fails if a doc's `source_files:` frontmatter references a
+        # path that doesn't exist (renamed or deleted module). Staleness
+        # is advisory until `last_synced_commit` rollout completes.
+        run: python scripts/docs_drift.py
+
+      - name: Regenerate docs/_generated artifacts
+        # Re-derives env.json, events.json, etc. from canonical sources.
+        # The drift check below ensures the committed artifacts match.
+        run: python scripts/docs_extract/run_all.py
+
+      - name: Validate contract cross-consistency
+        # Cross-checks the generated artifacts: every event's consent
+        # purpose + family must exist in the canonical contracts. Runs
+        # after the generators so it sees fresh JSON.
+        run: python scripts/validate_contracts.py
+
+      - name: Fail on uncommitted _generated drift
+        run: |
+          if [ -n "$(git status --porcelain docs/_generated/)" ]; then
+            echo 'docs/_generated/*.json drift detected. Run: make extract-docs'
+            git diff -- docs/_generated/
+            exit 1
+          fi
+
       - name: Regenerate generated docs
         run: python scripts/sync_docs.py
 

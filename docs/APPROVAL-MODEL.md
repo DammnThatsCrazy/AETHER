@@ -1,3 +1,18 @@
+---
+title: Agentic Commerce — Approval Model
+slug: ai/approval-model
+section: ai
+visibility: P
+audience: [architect, dev-senior]
+status: stable
+since_version: "8.8.0"
+source_files:
+  - Backend Architecture/aether-backend/services/x402/commerce_routes.py
+canonical_owner: commerce@aether
+estimated_read_minutes: 4
+toc_depth: 3
+last_synced_commit: b41baa4
+---
 # Agentic Commerce — Approval Model
 
 **Locked requirement:** Mandatory approval on ALL spend classes at Day-1 GA.

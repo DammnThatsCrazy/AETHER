@@ -107,6 +107,12 @@ async def create_campaign(
         **body.model_dump(),
         "status": "active",
     })
+    await producer.publish(Event(
+        topic=Topic.CAMPAIGN_CREATED,
+        tenant_id=tenant.tenant_id,
+        source_service="campaign",
+        payload={"campaign_id": campaign_id, **body.model_dump()},
+    ))
     metrics.increment("campaigns_created")
     return APIResponse(data=campaign).to_dict()
 
@@ -123,18 +129,39 @@ async def get_campaign(campaign_id: str, request: Request):
 
 @router.patch("/{campaign_id}")
 async def update_campaign(
-    campaign_id: str, body: CampaignUpdate, request: Request
+    campaign_id: str,
+    body: CampaignUpdate,
+    request: Request,
+    producer: EventProducer = Depends(get_producer),
 ):
-    request.state.tenant.require_permission("campaign:manage")
+    tenant = request.state.tenant
+    tenant.require_permission("campaign:manage")
     campaign = await _repo.update(campaign_id, body.model_dump(exclude_none=True))
+    await producer.publish(Event(
+        topic=Topic.CAMPAIGN_UPDATED,
+        tenant_id=tenant.tenant_id,
+        source_service="campaign",
+        payload={"campaign_id": campaign_id, **body.model_dump(exclude_none=True)},
+    ))
     metrics.increment("campaigns_updated")
     return APIResponse(data=campaign).to_dict()
 
 
 @router.delete("/{campaign_id}")
-async def delete_campaign(campaign_id: str, request: Request):
-    request.state.tenant.require_permission("campaign:manage")
+async def delete_campaign(
+    campaign_id: str,
+    request: Request,
+    producer: EventProducer = Depends(get_producer),
+):
+    tenant = request.state.tenant
+    tenant.require_permission("campaign:manage")
     await _repo.delete(campaign_id)
+    await producer.publish(Event(
+        topic=Topic.CAMPAIGN_DELETED,
+        tenant_id=tenant.tenant_id,
+        source_service="campaign",
+        payload={"campaign_id": campaign_id},
+    ))
     metrics.increment("campaigns_deleted")
     return APIResponse(data={"deleted": True}).to_dict()
 

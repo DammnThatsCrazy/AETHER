@@ -1,3 +1,19 @@
+---
+title: Stripe Billing — P1–P4 Integration
+slug: concepts/stripe-billing
+section: concepts
+visibility: P
+audience: [dev-senior, ops, buyer]
+status: stable
+since_version: "8.8.0"
+source_files:
+  - Backend Architecture/aether-backend/shared/billing/stripe_client.py
+  - Backend Architecture/aether-backend/shared/plans/catalog.py
+canonical_owner: billing@aether
+estimated_read_minutes: 6
+toc_depth: 3
+last_synced_commit: b41baa4
+---
 # Stripe Billing — Aether P1–P4 Integration
 
 This document describes how Aether integrates Stripe Billing with the

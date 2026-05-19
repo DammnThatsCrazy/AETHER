@@ -8,14 +8,14 @@ interface NavItem {
 }
 
 const NAV_ITEMS: NavItem[] = [
-  { path: '/mission', label: 'Mission', glyph: '\u25C8' },
-  { path: '/live', label: 'Live', glyph: '\u25C9' },
-  { path: '/noesis', label: 'Noesis', glyph: '\u2B22' },
-  { path: '/entities', label: 'Entities', glyph: '\u2B21' },
-  { path: '/command', label: 'Command', glyph: '\u2318' },
-  { path: '/diagnostics', label: 'Diagnostics', glyph: '\u2699' },
-  { path: '/review', label: 'Review', glyph: '\u2713' },
-  { path: '/lab', label: 'Lab', glyph: '\u2697' },
+  { path: '/mission',     label: 'Mission',     glyph: '◈' },
+  { path: '/live',        label: 'Live',        glyph: '◉' },
+  { path: '/command',     label: 'Command',     glyph: '⌘' },
+  { path: '/review',      label: 'Review',      glyph: '✓' },
+  { path: '/entities',    label: 'Entities',    glyph: '⬡' },
+  { path: '/noesis',      label: 'Noesis',      glyph: '⬢' },
+  { path: '/diagnostics', label: 'Diagnostics', glyph: '⚙' },
+  { path: '/lab',         label: 'Lab',         glyph: '⚗' },
 ];
 
 export function Sidebar() {
@@ -32,7 +32,7 @@ export function Sidebar() {
             to={item.path}
             className={({ isActive }) =>
               cn(
-                'flex items-center gap-3 px-4 py-2 text-xs font-medium transition-colors',
+                'flex items-center gap-3 px-4 py-1.5 text-xs font-medium transition-colors',
                 isActive
                   ? 'text-accent bg-accent/10 border-r-2 border-accent'
                   : 'text-text-secondary hover:text-text-primary hover:bg-surface-raised',

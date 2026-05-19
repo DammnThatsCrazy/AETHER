@@ -5,7 +5,7 @@ import {
   Tabs, TabsList, TabsTrigger, TabsContent,
   DataTable, GlyphIcon, TerminalSeparator, Toggle,
   ScrollArea,
-} from '@kyber/components/system';
+} from '@aether/ui';
 import { PageWrapper } from '@kyber/components/layout';
 import { cn, formatRelativeTime, formatTimestamp } from '@kyber/lib/utils';
 import { usePermissions, PermissionGate } from '@kyber/features/permissions';

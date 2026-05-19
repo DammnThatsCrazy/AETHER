@@ -14,6 +14,12 @@ export * from './agent';
 export * from './events';
 export * from './capabilities';
 export * from './economic';
+export * from './contextual';
+export * from './graph-relationships';
+export * from './intelligence';
+export * from './financials';
+export * from './profile360-contract';
+export * from './operational-intelligence';
 
 // Existing partial contracts (already referenced by RN SDK).
 export * from './ecommerce-types';

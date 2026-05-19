@@ -1,3 +1,19 @@
+---
+title: Semantic Context Intelligence Layer
+slug: ai/semantic-context
+section: ai
+visibility: P
+audience: [architect, ai, dev-senior]
+status: stable
+since_version: "8.8.0"
+source_files:
+  - Backend Architecture/aether-backend/shared/semantic_context.py
+  - Data Ingestion Layer/services/ingestion/src/event-enricher.ts
+canonical_owner: ai@aether
+estimated_read_minutes: 15
+toc_depth: 3
+last_synced_commit: b41baa4
+---
 # Semantic Context Intelligence Layer
 
 ## 1. Architectural analysis of current AETHER systems

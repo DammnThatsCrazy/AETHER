@@ -20,7 +20,7 @@ export function validateEnvironment(): ValidationResult[] {
     valid: true,
   });
 
-  // OIDC required in non-local environments
+  // OIDC / Auth0 required in non-local environments
   const oidcRequired = isProduction() || environment === 'staging';
   results.push({
     variable: 'VITE_OIDC_AUTHORITY',
@@ -36,6 +36,22 @@ export function validateEnvironment(): ValidationResult[] {
     present: !!env.VITE_OIDC_CLIENT_ID,
     valid: oidcRequired ? !!env.VITE_OIDC_CLIENT_ID : true,
     message: oidcRequired && !env.VITE_OIDC_CLIENT_ID ? 'OIDC client ID required for non-local environments' : undefined,
+  });
+
+  results.push({
+    variable: 'VITE_AUTH0_DOMAIN',
+    required: oidcRequired,
+    present: !!env.VITE_AUTH0_DOMAIN,
+    valid: oidcRequired ? !!env.VITE_AUTH0_DOMAIN : true,
+    message: oidcRequired && !env.VITE_AUTH0_DOMAIN ? 'Auth0 domain required for non-local environments' : undefined,
+  });
+
+  results.push({
+    variable: 'VITE_AUTH0_CLIENT_ID',
+    required: oidcRequired,
+    present: !!env.VITE_AUTH0_CLIENT_ID,
+    valid: oidcRequired ? !!env.VITE_AUTH0_CLIENT_ID : true,
+    message: oidcRequired && !env.VITE_AUTH0_CLIENT_ID ? 'Auth0 client ID required for non-local environments' : undefined,
   });
 
   results.push({

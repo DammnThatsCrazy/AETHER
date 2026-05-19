@@ -1,5 +1,5 @@
 import { cn, formatTimestamp } from '@kyber/lib/utils';
-import { Button, Select } from '@kyber/components/system';
+import { Button, Select } from '@aether/ui';
 
 // ---------------------------------------------------------------------------
 // Speed options

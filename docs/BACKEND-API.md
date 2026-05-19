@@ -1,3 +1,18 @@
+---
+title: Aether Backend API — Endpoint Specification
+slug: api/backend-reference
+section: api
+visibility: P
+audience: [dev-junior, dev-senior, architect]
+status: stable
+since_version: "8.8.0"
+source_files:
+  - Backend Architecture/aether-backend/services/
+canonical_owner: backend@aether
+estimated_read_minutes: 60
+toc_depth: 3
+last_synced_commit: bbbb603
+---
 # Aether Backend API v8.8.0 — Endpoint Specification
 
 ## Overview
@@ -1004,6 +1019,579 @@ Unified cross-domain business, TradFi, and Web intelligence graph with financial
 | `GET` | `/v1/crossdomain/fusion/profile/{entity_id}` | Unified cross-domain profile |
 | `GET` | `/v1/crossdomain/coverage/status` | Coverage status across registries |
 | `GET` | `/v1/crossdomain/coverage/health` | Quick health check |
+
+---
+
+### Event Replay Service (v8.8.0)
+
+Replay Bronze-tier events back through the pipeline and ingest individual `EventPipelineEnvelope` records.
+
+#### POST /v1/events/replay
+
+Submit a new event replay job sourced from a Bronze-tier `sourceTag`. Returns immediately with status `queued`.
+
+**Permissions:** `write`
+
+**Request:**
+```json
+{
+  "tenantId": "acme-corp",
+  "sourceTag": "onchain-2026-03",
+  "fromTime": "2026-03-01T00:00:00Z",
+  "toTime": "2026-03-31T23:59:59Z",
+  "eventTypes": ["wallet.transfer", "wallet.swap"],
+  "dryRun": false
+}
+```
+
+**Response:** `200 OK`
+```json
+{
+  "id": "job-uuid-v4",
+  "tenantId": "acme-corp",
+  "sourceTag": "onchain-2026-03",
+  "fromTime": "2026-03-01T00:00:00Z",
+  "toTime": "2026-03-31T23:59:59Z",
+  "eventTypes": ["wallet.transfer", "wallet.swap"],
+  "dryRun": false,
+  "status": "queued",
+  "cursor": null,
+  "submittedAt": "2026-05-17T10:00:00.000Z",
+  "completedAt": null,
+  "totalReplayed": 0
+}
+```
+
+**`status` values:** `queued` | `running` | `completed` | `failed` | `cancelled`
+
+#### GET /v1/events/replay
+
+List all replay jobs for the authenticated tenant.
+
+**Permissions:** `read`
+
+**Query Parameters:**
+- `tenantId` (required)
+- `limit` (optional, default: 50, max: 500)
+
+**Response:** `200 OK` — array of `ReplayJobResponse` objects (same shape as POST response above).
+
+#### GET /v1/events/replay/{job_id}
+
+Get the current status and progress of a specific replay job.
+
+**Permissions:** `read`
+
+**Query Parameters:** `tenantId` (required)
+
+**Response:** `200 OK` — single `ReplayJobResponse` object.
+
+#### POST /v1/events/replay/{job_id}/cancel
+
+Cancel a queued or running replay job. Sets `status` to `cancelled` and records `completedAt`.
+
+**Permissions:** `write`
+
+**Query Parameters:** `tenantId` (required)
+
+**Response:** `200 OK` — updated `ReplayJobResponse` with `status: "cancelled"`.
+
+#### POST /v1/events/ingest
+
+Ingest a single `EventPipelineEnvelope` (used by the replay feed to re-introduce events into the processing pipeline). Enforces tenant isolation before accepting.
+
+**Permissions:** `write`
+
+**Request:** Full `EventPipelineEnvelope` object:
+```json
+{
+  "id": "evt-uuid-v4",
+  "type": "entity.updated",
+  "tenantId": "acme-corp",
+  "orgId": "org-1",
+  "occurredAt": "2026-03-15T08:30:00Z",
+  "ingestedAt": "2026-03-15T08:30:01Z",
+  "schemaVersion": "1.0.0",
+  "source": "replay-feed",
+  "subject": { "id": "entity-123", "kind": "wallet" },
+  "correlationId": "corr-abc",
+  "causationId": null,
+  "replayable": true,
+  "payload": {}
+}
+```
+
+**Response:** `200 OK`
+```json
+{ "ingested": true, "id": "evt-uuid-v4" }
+```
+
+---
+
+### Governance Service (v8.8.0)
+
+Policy decision evaluation and audit trail for `GovernanceDecision` records.
+
+#### POST /v1/governance/decisions/evaluate
+
+Evaluate a policy decision for the given principal, action, and resource. The decision is stored for audit purposes and returned immediately.
+
+**Permissions:** `write`
+
+**Request:**
+```json
+{
+  "tenantId": "acme-corp",
+  "principal": { "id": "user-123", "kind": "individual" },
+  "action": "transfer.approve",
+  "resource": { "id": "asset-456", "kind": "rwa_asset" },
+  "context": { "jurisdiction": "US", "amount": 50000 },
+  "policyIds": ["policy-kyc-us", "policy-aml-threshold"]
+}
+```
+
+**Response:** `200 OK`
+```json
+{
+  "id": "decision-uuid-v4",
+  "tenantId": "acme-corp",
+  "principal": { "id": "user-123", "kind": "individual" },
+  "action": "transfer.approve",
+  "resource": { "id": "asset-456", "kind": "rwa_asset" },
+  "allowed": true,
+  "policies": ["policy-kyc-us", "policy-aml-threshold"],
+  "obligations": null,
+  "explanation": {
+    "summary": "Policies evaluated: policy-kyc-us, policy-aml-threshold",
+    "features": null,
+    "evidence": [],
+    "lineageEventIds": null,
+    "policyIds": ["policy-kyc-us", "policy-aml-threshold"]
+  },
+  "evaluatedAt": "2026-05-17T10:00:00.000Z"
+}
+```
+
+To force a deny, include `"deny": true` in `context`.
+
+#### GET /v1/governance/decisions
+
+List governance decisions for the authenticated tenant with optional filters.
+
+**Permissions:** `read`
+
+**Query Parameters:**
+- `tenantId` (required)
+- `principal_id` (optional) — filter by principal entity ID
+- `allowed` (optional, boolean) — filter by outcome
+- `limit` (optional, default: 50, max: 500)
+
+**Response:** `200 OK` — array of `GovernanceDecision` objects.
+
+#### GET /v1/governance/decisions/{decision_id}
+
+Retrieve a specific governance decision by ID.
+
+**Permissions:** `read`
+
+**Query Parameters:** `tenantId` (required)
+
+**Response:** `200 OK` — single `GovernanceDecision` object.
+
+#### GET /v1/governance/audit
+
+Return the full audit trail of governance decisions for the authenticated tenant. Ordered by `evaluatedAt` descending.
+
+**Permissions:** `read`
+
+**Query Parameters:**
+- `tenantId` (required)
+- `principal_id` (optional) — filter by principal entity ID
+- `limit` (optional, default: 100, max: 500)
+
+**Response:** `200 OK` — array of `GovernanceDecision` objects (same shape as above).
+
+---
+
+### Investigations Service (v8.8.0)
+
+Case management for `InvestigationCase` records, including evidence and annotation workflows.
+
+**`status` values:** `open` | `triage` | `active` | `escalated` | `closed`
+
+#### POST /v1/investigations
+
+Create a new investigation case. Initial status is always `open`.
+
+**Permissions:** `write`
+
+**Request:**
+```json
+{
+  "tenantId": "acme-corp",
+  "title": "Suspicious wallet cluster — March 2026",
+  "subjects": [
+    { "id": "wallet-0x1234", "kind": "wallet" },
+    { "id": "wallet-0x5678", "kind": "wallet" }
+  ],
+  "createdBy": "analyst-user-id"
+}
+```
+
+**Response:** `200 OK`
+```json
+{
+  "id": "case-uuid-v4",
+  "tenantId": "acme-corp",
+  "title": "Suspicious wallet cluster — March 2026",
+  "status": "open",
+  "subjects": [
+    { "id": "wallet-0x1234", "kind": "wallet" },
+    { "id": "wallet-0x5678", "kind": "wallet" }
+  ],
+  "graphStateId": null,
+  "evidence": [],
+  "annotations": [],
+  "createdBy": "analyst-user-id",
+  "createdAt": "2026-05-17T10:00:00.000Z",
+  "updatedAt": "2026-05-17T10:00:00.000Z"
+}
+```
+
+#### GET /v1/investigations
+
+List investigation cases for the authenticated tenant, optionally filtered by status.
+
+**Permissions:** `read`
+
+**Query Parameters:**
+- `tenantId` (required)
+- `status` (optional) — filter by case status
+- `limit` (optional, default: 50, max: 500)
+
+**Response:** `200 OK` — array of `InvestigationCase` objects.
+
+#### GET /v1/investigations/{case_id}
+
+Retrieve a single investigation case by ID.
+
+**Permissions:** `read`
+
+**Query Parameters:** `tenantId` (required)
+
+**Response:** `200 OK` — single `InvestigationCase` object (same shape as POST response above).
+
+#### PATCH /v1/investigations/{case_id}/status
+
+Transition an investigation case to a new status. Any → any transitions are permitted for MVP.
+
+**Permissions:** `write`
+
+**Request:**
+```json
+{
+  "tenantId": "acme-corp",
+  "status": "active",
+  "reason": "Escalated after graph traversal confirmed link to known fraud ring"
+}
+```
+
+**Response:** `200 OK` — updated `InvestigationCase` object with new `status` and `updatedAt`.
+
+#### POST /v1/investigations/{case_id}/evidence
+
+Append one or more `EvidenceRef` entries to an investigation case.
+
+**Permissions:** `write`
+
+**Request:**
+```json
+{
+  "tenantId": "acme-corp",
+  "evidence": [
+    {
+      "id": "ev-uuid-1",
+      "type": "transaction",
+      "source": "onchain-indexer",
+      "observedAt": "2026-03-15T08:00:00Z",
+      "confidence": 0.95,
+      "uri": "https://etherscan.io/tx/0xabc..."
+    }
+  ]
+}
+```
+
+**`EvidenceRef.type` values:** `event` | `entity` | `relationship` | `document` | `transaction` | `model_output` | `annotation`
+
+**Response:** `200 OK` — updated `InvestigationCase` with the new evidence appended to `evidence[]`.
+
+#### POST /v1/investigations/{case_id}/annotations
+
+Add a new annotation to an investigation case.
+
+**Permissions:** `write`
+
+**Request:**
+```json
+{
+  "tenantId": "acme-corp",
+  "authorId": "analyst-user-id",
+  "body": "Confirmed entity cluster overlaps with the March 2026 RWA fraud pattern.",
+  "entityRefs": [{ "id": "wallet-0x1234", "kind": "wallet" }],
+  "evidenceRefs": [{ "id": "ev-uuid-1", "type": "transaction", "source": "onchain-indexer" }]
+}
+```
+
+**Response:** `200 OK` — updated `InvestigationCase` with the new annotation appended to `annotations[]`.
+
+**`InvestigationAnnotation` shape:**
+```json
+{
+  "id": "annotation-uuid-v4",
+  "authorId": "analyst-user-id",
+  "body": "Confirmed entity cluster overlaps with the March 2026 RWA fraud pattern.",
+  "entityRefs": [{ "id": "wallet-0x1234", "kind": "wallet" }],
+  "evidenceRefs": [{ "id": "ev-uuid-1", "type": "transaction", "source": "onchain-indexer" }],
+  "createdAt": "2026-05-17T10:05:00.000Z"
+}
+```
+
+---
+
+### Realtime WebSocket — Channel Protocol (v8.8.0)
+
+**`WS /v1/realtime/ws/subscribe`**
+
+Multi-channel WebSocket endpoint implementing the full `RealtimeSubscribeMessage` contract from `packages/shared/operational-intelligence.ts`. Authentication is enforced via the upstream middleware; `read` permission is required.
+
+#### Connection
+
+Connect with no query parameters. The server does **not** send a hello frame — the client must send a `subscribe` message to begin receiving events.
+
+#### Client → Server Messages
+
+**Subscribe**
+```json
+{
+  "action": "subscribe",
+  "requestId": "req-uuid-1",
+  "tenantId": "acme-corp",
+  "channels": ["entity.profile", "investigation.workspace", "governance.audit"],
+  "filters": {
+    "entityIds": ["wallet-0x1234"],
+    "investigationIds": ["case-uuid-v4"]
+  },
+  "cursor": "1747476000000:42"
+}
+```
+
+- `requestId` — caller-generated; echoed back in the `ack`.
+- `channels` — one or more `RealtimeChannel` values (see list below).
+- `filters` — optional; narrows events delivered on subscribed channels.
+- `cursor` — optional; opaque cursor from a previous session for forward-compat resume (server accepts and acks; replay is deferred).
+
+**Unsubscribe**
+```json
+{
+  "action": "unsubscribe",
+  "requestId": "req-uuid-2",
+  "channels": ["governance.audit"]
+}
+```
+
+#### Server → Client Messages
+
+**Ack** (sent immediately after each `subscribe` or on validation failure)
+```json
+{
+  "action": "ack",
+  "requestId": "req-uuid-1",
+  "accepted": true,
+  "cursor": "1747476000000:42"
+}
+```
+
+On failure:
+```json
+{
+  "action": "ack",
+  "requestId": "req-uuid-1",
+  "accepted": false,
+  "error": {
+    "code": "forbidden",
+    "message": "tenantId mismatch",
+    "requestId": "req-uuid-1"
+  }
+}
+```
+
+**Event** (one frame per qualifying event)
+```json
+{
+  "action": "event",
+  "channel": "entity.profile",
+  "cursor": "1747476300000:1",
+  "event": {
+    "id": "evt-uuid-v4",
+    "type": "entity.updated",
+    "tenantId": "acme-corp",
+    "occurredAt": "2026-05-17T10:05:00Z",
+    "ingestedAt": "2026-05-17T10:05:00.050Z",
+    "schemaVersion": "1.0.0",
+    "source": "intelligence-engine",
+    "subject": { "id": "wallet-0x1234", "kind": "wallet" },
+    "replayable": true,
+    "payload": {}
+  }
+}
+```
+
+**Heartbeat** (sent every ~15 seconds when no event is available)
+```json
+{
+  "action": "heartbeat",
+  "serverTime": "2026-05-17T10:05:15.000Z"
+}
+```
+
+#### Cursor Format
+
+Cursors are monotonic strings in the format `<wall-clock-ms>:<sequence>` (e.g. `"1747476000000:42"`). Pass the last received cursor in a subsequent `subscribe` message to signal resume intent. Server-side replay is deferred; the cursor is accepted and echoed in the ack for forward compatibility.
+
+#### Available Channels
+
+| Channel | Description |
+|---------|-------------|
+| `tenant.events` | All events for the tenant |
+| `tenant.graph` | Graph mutation events |
+| `tenant.alerts` | Anomaly and risk alerts |
+| `entity.profile` | Entity profile updates |
+| `entity.relationships` | Relationship change events |
+| `journey.timeline` | Journey state and timeline updates |
+| `cluster.membership` | Cluster membership changes |
+| `investigation.workspace` | Investigation case updates |
+| `governance.audit` | Governance decision evaluations |
+| `agent.coordination` | Agent coordination events |
+| `web3.wallets` | Web3 wallet events |
+
+#### Close Codes
+
+| Code | Reason |
+|------|--------|
+| `4401` | Unauthenticated — no tenant context on the connection |
+| `4403` | Forbidden — tenant lacks `read` permission |
+
+### Campaign Management Service (v8.8.0)
+
+Multi-channel campaign management with attribution and touchpoint tracking.
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/v1/campaigns` | List campaigns for the tenant |
+| POST | `/v1/campaigns` | Create a campaign |
+| GET | `/v1/campaigns/{id}` | Get campaign details |
+| PATCH | `/v1/campaigns/{id}` | Update campaign fields |
+| DELETE | `/v1/campaigns/{id}` | Delete a campaign |
+| GET | `/v1/campaigns/{id}/attribution` | Multi-touch attribution for a campaign |
+| POST | `/v1/campaigns/{id}/touchpoints` | Record a campaign touchpoint (publishes `aether.campaign.touchpoint.recorded`) |
+
+**Permissions:** `write` for create/update/delete, `read` for queries
+
+---
+
+### Entity Intelligence Service (v8.8.0)
+
+Deep entity profiling — aggregates identity, graph, temporal, financial, and behavioral dimensions into a unified entity profile.
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| POST | `/v1/entities/profile` | Build a full multi-dimensional entity profile (identity, device, geo, wallet, behavior dimensions) |
+| POST | `/v1/entities/timeline/query` | Query temporal event timeline for an entity with filters and pagination |
+| POST | `/v1/entities/relationships/query` | Query graph relationships for an entity (H2H, H2A, A2H, A2A layers) |
+
+**Permissions:** `read`
+
+---
+
+### Entities CRUD Service (v8.8.0)
+
+Core entity management — create, resolve, and manage entity records and cluster membership.
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| POST | `/v1/entities` | Create a new entity record |
+| GET | `/v1/entities` | List entities with optional filters |
+| GET | `/v1/entities/{id}` | Get entity details |
+| PATCH | `/v1/entities/{id}` | Update entity fields |
+| POST | `/v1/entities/{id}/identifiers` | Add identifiers (email, phone, wallet, device) to an entity |
+| DELETE | `/v1/entities/{id}/identifiers/{cluster_id}` | Remove an identifier from an entity |
+| GET | `/v1/entities/{id}/identifiers` | List all identifiers linked to an entity |
+| POST | `/v1/entities/{id}/membership` | Add an entity to a population group |
+
+**Permissions:** `write` for mutations, `read` for queries
+
+---
+
+### Operational Intelligence / Graph Service (v8.8.0)
+
+Graph traversal, overlay, and analytics over the unified Neptune-backed intelligence graph.
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| POST | `/v1/graph/traverse` | BFS traversal from a root vertex with depth and edge-type filters |
+| POST | `/v1/graph/path` | Shortest-path query between two vertices |
+| POST | `/v1/graph/temporal` | Temporal BFS — traverse graph edges within a time window |
+| POST | `/v1/graph/overlay` | Fetch all vertices filtered by type, tenant, and optional property predicates |
+| POST | `/v1/graph/filter` | Filter vertices by risk level, relationship type, or custom property |
+| GET | `/v1/graph/contracts` | List active smart-contract vertices in the graph |
+
+**Permissions:** `read`. Neptune-backed in staging/production; in-memory backend in local mode.
+
+---
+
+### Delegation Service (v8.8.0)
+
+Human → Agent delegation records — tracks what each agent is authorized to do and on whose behalf.
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| POST | `/v1/delegations` | Record a new delegation grant (grantor, grantee, scope, optional time bounds) |
+| GET | `/v1/delegations` | List delegation records; filter by `grantor`, `grantee`, `active` |
+| GET | `/v1/delegations/{id}` | Get delegation details |
+| POST | `/v1/delegations/{id}/revoke` | Revoke a delegation (publishes `aether.delegation.revoked`) |
+| POST | `/v1/delegations/validate` | Validate whether a delegation is currently active and in-scope |
+
+**Permissions:** `write` for grants/revoke/validate, `read` for queries
+
+---
+
+### Flows Service (v8.8.0)
+
+Value-flow primitives — asset transfers between entities, wallet links, and asset registry. Writes graph edges (`TRANSFERRED`, `OWNS`) and publishes flow events.
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| POST | `/v1/flows/transfers` | Record an asset transfer between two entities (projects `TRANSFERRED` edge to graph) |
+| GET | `/v1/flows/transfers` | List transfers for an entity (`entity_id` query param required) |
+| POST | `/v1/flows/wallets` | Link a wallet address to an owner entity (projects `OWNS` edge to graph) |
+| GET | `/v1/flows/wallets` | List wallets linked to an entity (`entity_id` query param required) |
+| POST | `/v1/flows/assets` | Register a new trackable asset |
+| GET | `/v1/flows/assets/{asset_id}` | Get asset details |
+
+**Permissions:** `write` for record/link/register, `read` for list/get
+
+---
+
+### Behavior Service (v8.8.0)
+
+Read-side behavioral profile output computed by the `BehaviorScorer` Profile 360 worker. Snapshots are written by the worker; this service exposes them for query.
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/v1/behavior/{entity_id}` | Latest behavior snapshot for an entity (session patterns, anomaly flags, risk signals) |
+| GET | `/v1/behavior/{entity_id}/history` | Historical behavior snapshots; `window` (e.g. `7d`) and `limit` query params |
+
+**Permissions:** `read`
 
 ---
 

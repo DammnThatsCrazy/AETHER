@@ -1,5 +1,5 @@
 import type { Entity } from '@kyber/types';
-import { Badge, StatusIndicator } from '@kyber/components/system';
+import { Badge, StatusIndicator } from '@aether/ui';
 import { cn, formatRelativeTime } from '@kyber/lib/utils';
 
 interface EntityListTableProps {
