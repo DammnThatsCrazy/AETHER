@@ -1,0 +1,141 @@
+{
+  "uid": "aether-ml-models",
+  "title": "ML Models",
+  "tags": ["aether", "ml", "inference"],
+  "schemaVersion": 36,
+  "version": 1,
+  "timezone": "utc",
+  "time": {"from": "now-1h", "to": "now"},
+  "refresh": "30s",
+  "templating": {
+    "list": [
+      {
+        "name": "datasource",
+        "type": "datasource",
+        "pluginId": "prometheus",
+        "label": "Datasource"
+      },
+      {
+        "name": "model",
+        "type": "query",
+        "label": "Model",
+        "datasource": {"type": "prometheus", "uid": "${datasource}"},
+        "definition": "label_values(ml_predictions_total, model)",
+        "query": "label_values(ml_predictions_total, model)",
+        "multi": true,
+        "includeAll": true
+      }
+    ]
+  },
+  "panels": [
+    {
+      "id": 1,
+      "title": "Prediction Requests/sec by Model",
+      "type": "timeseries",
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 0},
+      "datasource": {"type": "prometheus", "uid": "${datasource}"},
+      "targets": [
+        {
+          "expr": "sum by (model) (rate(ml_predictions_total{model=~\"$model\"}[5m]))",
+          "legendFormat": "{{model}}"
+        }
+      ],
+      "fieldConfig": {"defaults": {"unit": "reqps"}}
+    },
+    {
+      "id": 2,
+      "title": "Cache Hit Rate",
+      "type": "timeseries",
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 0},
+      "datasource": {"type": "prometheus", "uid": "${datasource}"},
+      "targets": [
+        {
+          "expr": "sum by (model) (rate(ml_cache_hit_total{model=~\"$model\"}[5m])) / sum by (model) (rate(ml_predictions_total{model=~\"$model\"}[5m])) * 100",
+          "legendFormat": "{{model}} cache hit %"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "min": 0,
+          "max": 100
+        }
+      }
+    },
+    {
+      "id": 3,
+      "title": "Inference Latency p95 (ms)",
+      "type": "timeseries",
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 8},
+      "datasource": {"type": "prometheus", "uid": "${datasource}"},
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.95, sum by (model, le) (rate(ml_inference_duration_seconds_bucket{model=~\"$model\"}[5m]))) * 1000",
+          "legendFormat": "{{model}} p95"
+        }
+      ],
+      "fieldConfig": {"defaults": {"unit": "ms"}}
+    },
+    {
+      "id": 4,
+      "title": "ML Backend Availability",
+      "type": "stat",
+      "gridPos": {"h": 4, "w": 6, "x": 12, "y": 8},
+      "datasource": {"type": "prometheus", "uid": "${datasource}"},
+      "targets": [
+        {
+          "expr": "up{job=\"aether-ml-serving\"} * 100",
+          "legendFormat": "ML serving"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"color": "red", "value": null},
+              {"color": "green", "value": 100}
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": 5,
+      "title": "Batch Predictions/sec by Model",
+      "type": "timeseries",
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 16},
+      "datasource": {"type": "prometheus", "uid": "${datasource}"},
+      "targets": [
+        {
+          "expr": "sum by (model) (rate(ml_batch_predictions_total{model=~\"$model\"}[5m]))",
+          "legendFormat": "{{model}} batch"
+        }
+      ],
+      "fieldConfig": {"defaults": {"unit": "reqps"}}
+    },
+    {
+      "id": 6,
+      "title": "Model Request Count (24h)",
+      "type": "table",
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 16},
+      "datasource": {"type": "prometheus", "uid": "${datasource}"},
+      "targets": [
+        {
+          "expr": "sum by (model) (increase(ml_predictions_total{model=~\"$model\"}[24h]))",
+          "legendFormat": "{{model}}",
+          "instant": true
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {"unit": "short"},
+        "overrides": [
+          {"matcher": {"id": "byName", "options": "model"}, "properties": [{"id": "displayName", "value": "Model"}]},
+          {"matcher": {"id": "byName", "options": "Value"}, "properties": [{"id": "displayName", "value": "Requests (24h)"}]}
+        ]
+      },
+      "transformations": [{"id": "sortBy", "options": {"fields": [{"desc": true, "displayName": "Requests (24h)"}]}}]
+    }
+  ]
+}

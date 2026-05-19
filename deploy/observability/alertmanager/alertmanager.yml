@@ -1,0 +1,45 @@
+global:
+  resolve_timeout: 5m
+  pagerduty_url: 'https://events.pagerduty.com/v2/enqueue'
+
+route:
+  group_by: ['alertname', 'service']
+  group_wait: 30s
+  group_interval: 5m
+  repeat_interval: 4h
+  receiver: 'pagerduty-critical'
+  routes:
+    - match:
+        severity: critical
+      receiver: 'pagerduty-critical'
+      continue: true
+    - match:
+        severity: warning
+      receiver: 'slack-warnings'
+    - match:
+        alertname: TenantQuota80Percent
+      receiver: 'slack-warnings'
+
+receivers:
+  - name: 'pagerduty-critical'
+    pagerduty_configs:
+      - routing_key: '${PAGERDUTY_ROUTING_KEY}'
+        description: '{{ .CommonAnnotations.summary }}'
+        details:
+          firing: '{{ .Alerts.Firing | len }}'
+          service: '{{ .CommonLabels.service }}'
+          environment: '{{ .CommonLabels.environment }}'
+
+  - name: 'slack-warnings'
+    slack_configs:
+      - api_url: '${SLACK_WEBHOOK_URL}'
+        channel: '#aether-alerts'
+        text: '{{ range .Alerts }}{{ .Annotations.summary }}\n{{ end }}'
+        title: '[{{ .Status | toUpper }}] {{ .CommonLabels.alertname }}'
+
+inhibit_rules:
+  - source_match:
+      severity: 'critical'
+    target_match:
+      severity: 'warning'
+    equal: ['alertname', 'service']
