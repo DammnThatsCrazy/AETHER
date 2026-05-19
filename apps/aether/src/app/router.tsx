@@ -3,6 +3,7 @@ import { Routes, Route, Navigate } from 'react-router-dom';
 import { LoadingState } from '@aether/ui';
 import { RequireAuth } from '@aether-app/features/auth';
 import { AppShell } from '@aether-app/components/app-shell';
+import { CallbackPage } from '@aether-app/pages/callback';
 import { ErrorBoundary } from './error-boundary';
 
 const UsersPage = lazy(() => import('@aether-app/pages/users').then(m => ({ default: m.UsersPage })));
@@ -22,17 +23,28 @@ function PageSuspense({ children }: { readonly children: React.ReactNode }) {
 
 export function AppRouter() {
   return (
-    <RequireAuth>
-      <AppShell>
-        <Routes>
-          <Route path="/" element={<Navigate to="/users" replace />} />
-          <Route path="/users" element={<PageSuspense><UsersPage /></PageSuspense>} />
-          <Route path="/users/:id" element={<PageSuspense><UserProfilePage /></PageSuspense>} />
-          <Route path="/campaigns" element={<PageSuspense><CampaignsPage /></PageSuspense>} />
-          <Route path="/graph" element={<PageSuspense><GraphPage /></PageSuspense>} />
-          <Route path="*" element={<Navigate to="/users" replace />} />
-        </Routes>
-      </AppShell>
-    </RequireAuth>
+    <Routes>
+      {/* Auth0 callback — outside RequireAuth so it's accessible during the login flow */}
+      <Route path="/callback" element={<CallbackPage />} />
+
+      {/* All other routes require authentication */}
+      <Route
+        path="*"
+        element={
+          <RequireAuth>
+            <AppShell>
+              <Routes>
+                <Route path="/" element={<Navigate to="/users" replace />} />
+                <Route path="/users" element={<PageSuspense><UsersPage /></PageSuspense>} />
+                <Route path="/users/:id" element={<PageSuspense><UserProfilePage /></PageSuspense>} />
+                <Route path="/campaigns" element={<PageSuspense><CampaignsPage /></PageSuspense>} />
+                <Route path="/graph" element={<PageSuspense><GraphPage /></PageSuspense>} />
+                <Route path="*" element={<Navigate to="/users" replace />} />
+              </Routes>
+            </AppShell>
+          </RequireAuth>
+        }
+      />
+    </Routes>
   );
 }

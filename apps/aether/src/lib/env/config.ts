@@ -7,6 +7,11 @@ const envSchema = z.object({
   VITE_OIDC_CLIENT_ID: z.string().optional(),
   VITE_OIDC_REDIRECT_URI: z.string().url().optional(),
   VITE_OIDC_SCOPE: z.string().default('openid profile email'),
+  VITE_AUTH0_DOMAIN: z.string().optional(),
+  VITE_AUTH0_CLIENT_ID: z.string().optional(),
+  VITE_AUTH0_AUDIENCE: z.string().optional(),
+  VITE_AUTH0_REDIRECT_URI: z.string().url().optional(),
+  VITE_AUTH0_LOGOUT_URI: z.string().url().optional(),
 });
 
 export type EnvConfig = z.infer<typeof envSchema>;
