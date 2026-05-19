@@ -1,0 +1,57 @@
+# ============================================================================
+# AETHER — Terraform variable values example
+# Copy to terraform.tfvars and fill in your values.
+# Do NOT commit terraform.tfvars — it is gitignored.
+# ============================================================================
+
+# Core
+environment = "production"
+aws_region  = "us-east-1"
+project     = "AETHER"
+
+# Domain & TLS  — fill in your ACM cert ARN
+domain_name         = "api.aether.io"
+acm_certificate_arn = "arn:aws:acm:us-east-1:ACCOUNT_ID:certificate/CERTIFICATE-ID"
+
+# Monitoring
+alert_email = "ops@yourcompany.com"
+
+# Network
+vpc_cidr              = "10.0.0.0/16"
+enable_nat_gateway_ha = false   # set true in production if budget allows
+
+# RDS
+db_instance_class        = "db.t3.medium"
+db_name                  = "aether"
+db_multi_az              = true
+db_allocated_storage     = 100
+db_max_allocated_storage = 500
+
+# ElastiCache Redis
+redis_node_type       = "cache.t3.micro"
+redis_num_cache_nodes = 1
+
+# MSK Kafka
+msk_broker_instance_type = "kafka.m5.large"
+msk_kafka_version        = "3.5.1"
+msk_broker_count         = 3
+msk_broker_volume_size   = 100
+
+# ECS — Backend
+ecs_backend_cpu          = 1024
+ecs_backend_memory       = 2048
+ecs_backend_min_capacity = 1
+ecs_backend_max_capacity = 10
+
+# ECS — ML Serving
+ecs_ml_cpu          = 2048
+ecs_ml_memory       = 4096
+ecs_ml_min_capacity = 1
+ecs_ml_max_capacity = 10
+
+# Neptune
+neptune_instance_class = "db.r6g.large"
+neptune_cluster_size   = 1
+
+# Logs
+log_retention_days = 30
