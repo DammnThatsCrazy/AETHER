@@ -35,6 +35,7 @@ def test_shared_store_rejects_inmemory_outside_local(monkeypatch):
     monkeypatch.setenv("AETHER_ENV", "production")
     monkeypatch.setenv("JWT_SECRET", "test-secret")
     monkeypatch.setenv("DATABASE_URL", "postgresql://aether:test@localhost:5432/aether")
+    monkeypatch.setenv("BYOK_ENCRYPTION_KEY", "test-byok-key-for-testing")
     monkeypatch.delenv("REDIS_HOST", raising=False)
     monkeypatch.delenv("AETHER_ALLOW_INMEMORY_STORE", raising=False)
 
@@ -50,6 +51,7 @@ def test_journey_store_rejects_inmemory_outside_local(monkeypatch):
     monkeypatch.setenv("AETHER_ENV", "production")
     monkeypatch.setenv("JWT_SECRET", "test-secret")
     monkeypatch.setenv("DATABASE_URL", "postgresql://aether:test@localhost:5432/aether")
+    monkeypatch.setenv("BYOK_ENCRYPTION_KEY", "test-byok-key-for-testing")
     monkeypatch.delenv("AETHER_ALLOW_INMEMORY_JOURNEY_STORE", raising=False)
 
     with backend_module_path():
