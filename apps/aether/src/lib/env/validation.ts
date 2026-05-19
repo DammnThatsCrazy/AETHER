@@ -37,6 +37,22 @@ export function validateEnvironment(): ValidationResult[] {
   });
 
   results.push({
+    variable: 'VITE_AUTH0_DOMAIN',
+    required: oidcRequired,
+    present: !!env.VITE_AUTH0_DOMAIN,
+    valid: oidcRequired ? !!env.VITE_AUTH0_DOMAIN : true,
+    message: oidcRequired && !env.VITE_AUTH0_DOMAIN ? 'Auth0 domain required for non-local environments' : undefined,
+  });
+
+  results.push({
+    variable: 'VITE_AUTH0_CLIENT_ID',
+    required: oidcRequired,
+    present: !!env.VITE_AUTH0_CLIENT_ID,
+    valid: oidcRequired ? !!env.VITE_AUTH0_CLIENT_ID : true,
+    message: oidcRequired && !env.VITE_AUTH0_CLIENT_ID ? 'Auth0 client ID required for non-local environments' : undefined,
+  });
+
+  results.push({
     variable: 'VITE_API_BASE_URL',
     required: environment !== 'local-mocked',
     present: !!env.VITE_API_BASE_URL,

@@ -3,6 +3,7 @@ import { BrowserRouter } from 'react-router-dom';
 import { AuthProvider } from '@kyber/features/auth';
 import { NotificationProvider } from '@kyber/features/notifications';
 import { ThemeProvider } from '@aether/ui';
+import { AetherAuth0Provider } from '@kyber/lib/auth/auth0-provider';
 import { ErrorBoundary } from './error-boundary';
 
 interface ProvidersProps {
@@ -12,15 +13,17 @@ interface ProvidersProps {
 export function Providers({ children }: ProvidersProps) {
   return (
     <ErrorBoundary>
-      <BrowserRouter>
-        <ThemeProvider storageKey="kyber-theme">
-          <AuthProvider>
-            <NotificationProvider>
-              {children}
-            </NotificationProvider>
-          </AuthProvider>
-        </ThemeProvider>
-      </BrowserRouter>
+      <AetherAuth0Provider>
+        <BrowserRouter>
+          <ThemeProvider storageKey="kyber-theme">
+            <AuthProvider>
+              <NotificationProvider>
+                {children}
+              </NotificationProvider>
+            </AuthProvider>
+          </ThemeProvider>
+        </BrowserRouter>
+      </AetherAuth0Provider>
     </ErrorBoundary>
   );
 }
