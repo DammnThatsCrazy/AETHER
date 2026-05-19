@@ -124,7 +124,6 @@ from services.ingestion.routes import router as ingestion_router
 from services.identity.routes import router as identity_router
 from services.analytics.routes import router as analytics_router
 from services.ml_serving.routes import router as ml_router
-from services.agent.routes import router as agent_router
 from services.campaign.routes import router as campaign_router
 from services.consent.routes import router as consent_router
 from services.notification.routes import router as notification_router
@@ -270,7 +269,6 @@ def create_app() -> FastAPI:
     app.include_router(identity_router)
     app.include_router(analytics_router)
     app.include_router(ml_router)
-    app.include_router(agent_router)
     app.include_router(campaign_router)
     app.include_router(consent_router)
     app.include_router(notification_router)
@@ -294,9 +292,7 @@ def create_app() -> FastAPI:
     app.include_router(rwa_router)
     app.include_router(web3_router)
     app.include_router(crossdomain_router)
-    app.include_router(agent_teams_router)
-    app.include_router(agent_feedback_router)
-    app.include_router(scoring_router)
+    # agent sub-routers are only mounted when agent layer is enabled (see below)
     app.include_router(diagnostics_queue_router)
     app.include_router(diagnostics_observability_router)
     app.include_router(guardrails_router)
@@ -308,7 +304,6 @@ def create_app() -> FastAPI:
     app.include_router(delegation_router)
     app.include_router(flows_router)
     app.include_router(behavior_router)
-    app.include_router(user_agents_router)
     app.include_router(realtime_router)
     app.include_router(operational_graph_router)
     app.include_router(entity_intelligence_router)
@@ -318,6 +313,19 @@ def create_app() -> FastAPI:
 
     # ── Intelligence Graph services (feature-flagged) ───────────
     ig = settings.intelligence_graph
+
+    if ig.enable_agent_layer:
+        from services.agent.routes import router as agent_router
+        app.include_router(agent_router)
+        app.include_router(agent_teams_router)
+        app.include_router(agent_feedback_router)
+        app.include_router(scoring_router)
+        app.include_router(user_agents_router)
+        logger.info("Intelligence Graph: Agent layer (L2) mounted")
+    else:
+        logger.info(
+            "Intelligence Graph: Agent layer disabled (set IG_AGENT_LAYER=true to enable)"
+        )
 
     if ig.enable_commerce_layer:
         from services.commerce.routes import router as commerce_router
