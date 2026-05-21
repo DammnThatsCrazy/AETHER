@@ -9,6 +9,18 @@
 // also be made in packages/shared and bump CONTRACT_SCHEMA_VERSION.
 // =============================================================================
 
+/**
+ * Identity resolved from a prior device/session via wallet address lookup.
+ * Returned by POST /sdk/identity/resolve when a known wallet is recognized.
+ */
+export interface ResolvedIdentity {
+  userId?: string;
+  anonymousId: string;
+  traits?: Record<string, unknown>;
+  wallets?: ConnectedWallet[];
+  resolvedAt: string;
+}
+
 /** SDK configuration passed to Aether.init() */
 export interface AetherConfig {
   /** API key from the Aether dashboard (required) */
@@ -27,6 +39,17 @@ export interface AetherConfig {
   privacy?: PrivacyConfig;
   /** Advanced performance settings */
   advanced?: AdvancedConfig;
+  /**
+   * Automatically attempt to resolve a prior user journey when a wallet
+   * connects. Calls POST /sdk/identity/resolve with the wallet address.
+   * Defaults to true.
+   */
+  autoResumeJourney?: boolean;
+  /**
+   * Called when a prior journey is detected and resumed on this device.
+   * Receives the merged identity from the backend.
+   */
+  onJourneyResumed?: (identity: ResolvedIdentity) => void;
 }
 
 /**

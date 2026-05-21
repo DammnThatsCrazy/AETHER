@@ -33,7 +33,9 @@ data class AetherConfig(
     val batchSize: Int = 10,
     val flushIntervalMs: Long = 5000L,
     val modules: ModuleConfig = ModuleConfig(),
-    val privacy: PrivacyConfig = PrivacyConfig()
+    val privacy: PrivacyConfig = PrivacyConfig(),
+    val autoResumeJourney: Boolean = true,
+    val onJourneyResumed: ((resolvedAnonymousId: String, resolvedUserId: String?) -> Unit)? = null
 ) {
     enum class Environment { PRODUCTION, STAGING, DEVELOPMENT }
 }
@@ -85,6 +87,7 @@ object Aether : DefaultLifecycleObserver {
     private var sessionId: String = UUID.randomUUID().toString()
     private var anonymousId: String = ""
     private var userId: String? = null
+    private var walletAddress: String? = null
     private var traits: MutableMap<String, Any?> = mutableMapOf()
     private var screenCount = 0
     private var eventCount = 0
@@ -117,6 +120,7 @@ object Aether : DefaultLifecycleObserver {
         this.prefs = application.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
         this.anonymousId = loadOrCreateAnonymousId()
         this.userId = prefs?.getString("userId", null)
+        this.walletAddress = prefs?.getString("walletAddress", null)
         this.sessionId = UUID.randomUUID().toString()
 
         // Lifecycle tracking
@@ -141,6 +145,10 @@ object Aether : DefaultLifecycleObserver {
         log("Aether Android SDK initialized (v$VERSION)")
 
         fetchConfig()
+
+        if (config.autoResumeJourney) {
+            walletAddress?.let { addr -> scope.launch { checkWalletIdentityResolution(addr) } }
+        }
     }
 
     fun track(event: String, properties: Map<String, Any?> = emptyMap()) {
@@ -166,6 +174,10 @@ object Aether : DefaultLifecycleObserver {
     fun hydrateIdentity(data: IdentityData) {
         data.userId?.let { userId = it }
         traits.putAll(data.traits)
+        data.walletAddress?.let {
+            walletAddress = it
+            prefs?.edit()?.putString("walletAddress", it)?.apply()
+        }
 
         val props = mutableMapOf<String, Any?>(
             "userId" to (userId ?: ""),
@@ -247,10 +259,15 @@ object Aether : DefaultLifecycleObserver {
     // =========================================================================
 
     fun walletConnected(address: String, walletType: String = "unknown", chainId: String = "unknown") {
+        walletAddress = address
+        prefs?.edit()?.putString("walletAddress", address)?.apply()
         enqueueEvent("wallet", mapOf(
             "action" to "connect", "address" to address,
             "walletType" to walletType, "chainId" to chainId
         ))
+        if (config?.autoResumeJourney == true) {
+            scope.launch { checkWalletIdentityResolution(address) }
+        }
     }
 
     fun walletDisconnected(address: String) {
@@ -470,6 +487,49 @@ object Aether : DefaultLifecycleObserver {
             } catch (_: Exception) {}
             defaultHandler?.uncaughtException(thread, throwable)
         }
+    }
+
+    private suspend fun checkWalletIdentityResolution(address: String) = withContext(Dispatchers.IO) {
+        val cfg = config ?: return@withContext
+        try {
+            val url = URL("${cfg.endpoint}/sdk/identity/resolve")
+            val connection = url.openConnection() as HttpURLConnection
+            connection.requestMethod = "POST"
+            connection.setRequestProperty("Content-Type", "application/json")
+            connection.setRequestProperty("x-api-key", cfg.apiKey)
+            connection.doOutput = true
+            connection.connectTimeout = 5000
+            connection.readTimeout = 5000
+
+            val body = JSONObject().apply {
+                put("wallets", JSONArray().apply { put(JSONObject().apply { put("address", address); put("vm", "evm") }) })
+                put("anonymousId", anonymousId)
+                put("fingerprint", fingerprintId)
+            }
+
+            connection.outputStream.use { it.write(body.toString().toByteArray()) }
+
+            if (connection.responseCode != 200) { connection.disconnect(); return@withContext }
+
+            val response = JSONObject(connection.inputStream.bufferedReader().readText())
+            connection.disconnect()
+
+            if (!response.optBoolean("resolved")) return@withContext
+
+            val identity = response.optJSONObject("identity") ?: return@withContext
+            val resolvedAnonymousId = identity.optString("anonymousId")
+            val resolvedUserId = identity.optString("userId").takeIf { it.isNotEmpty() }
+
+            if (resolvedAnonymousId.isEmpty() || resolvedAnonymousId == anonymousId) return@withContext
+
+            resolvedUserId?.let { uid -> userId = uid; prefs?.edit()?.putString("userId", uid)?.apply() }
+            enqueueEvent("journey_resumed", mapOf(
+                "resolvedAnonymousId" to resolvedAnonymousId,
+                "resolvedUserId" to (resolvedUserId ?: "")
+            ))
+            log("Journey resumed from prior device via wallet resolution")
+            cfg.onJourneyResumed?.invoke(resolvedAnonymousId, resolvedUserId)
+        } catch (_: Exception) { }
     }
 
     private fun log(message: String) {
