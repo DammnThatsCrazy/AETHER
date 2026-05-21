@@ -12,7 +12,7 @@
 import type {
   AetherConfig, AetherSDKInterface, AetherPlugin,
   IdentityData, Identity, WalletInfo, TransactionOptions,
-  VMType, ConsentCallback, ConnectedWallet,
+  VMType, ConsentCallback, ConnectedWallet, ResolvedIdentity,
   ConsentState, ConsentBannerConfig, WalletInterface, ConsentInterface,
   CommerceInterface, AgentInterface, X402Interface,
 } from './types';
@@ -241,10 +241,10 @@ class AetherSDK implements AetherSDKInterface {
       return this.web3Module?.getInfo() ?? null;
     },
     getWallets: (): ConnectedWallet[] => {
-      return [];
+      return this.identityManager?.getWallets() ?? [];
     },
-    getWalletsByVM: (_vm: VMType): ConnectedWallet[] => {
-      return [];
+    getWalletsByVM: (vm: VMType): ConnectedWallet[] => {
+      return this.identityManager?.getWalletsByVM(vm) ?? [];
     },
     transaction: (txHash: string, options?: TransactionOptions) => {
       this.web3Module?.transaction(txHash, options);
@@ -427,6 +427,14 @@ class AetherSDK implements AetherSDKInterface {
 
     this.sessionManager.start();
 
+    // Cross-device: resolve identity for wallets carried over from a prior session
+    if (config.autoResumeJourney !== false) {
+      const priorWallets = this.identityManager.getWallets();
+      if (priorWallets.length > 0) {
+        this.checkWalletIdentityResolution(priorWallets).catch(() => {});
+      }
+    }
+
     // Reward client — thin claim-only stub
     this.rewardClient = createRewardClient({
       endpoint,
@@ -439,7 +447,16 @@ class AetherSDK implements AetherSDKInterface {
         modules.moveTracking || modules.nearTracking || modules.tronTracking || modules.cosmosTracking) {
       this.web3Module = new Web3Module(
         {
-          onWalletEvent: (action, data) => this.enqueueEvent('wallet', { action, ...data }),
+          onWalletEvent: (action, data) => {
+            this.enqueueEvent('wallet', { action, ...data });
+            if (action === 'connect' && config.autoResumeJourney !== false) {
+              const address = data['address'] as string | undefined;
+              const vm = data['vm'] as VMType | undefined;
+              if (address && vm) {
+                this.checkWalletIdentityResolution([{ address, vm }]).catch(() => {});
+              }
+            }
+          },
           onTransaction: (txHash, data) => this.enqueueEvent('transaction', { txHash, ...data }),
         },
         {
@@ -538,6 +555,58 @@ class AetherSDK implements AetherSDKInterface {
 
     this.eventQueue.enqueue(event as any);
     this.log('debug', `Event: ${type}`, properties);
+  }
+
+  private async checkWalletIdentityResolution(wallets: { address: string; vm: VMType }[]): Promise<void> {
+    if (!this.config || !this.identityManager) return;
+
+    const endpoint = this.config.endpoint ?? DEFAULT_ENDPOINT;
+    const currentAnonymousId = this.identityManager.getIdentity().anonymousId;
+
+    const body = {
+      wallets: wallets.map((w) => ({ address: w.address, vm: w.vm })),
+      anonymousId: currentAnonymousId,
+      fingerprint: this.fingerprintCollector?.getFingerprintId() ?? null,
+    };
+
+    let resolved: ResolvedIdentity | null = null;
+    try {
+      const res = await fetch(`${endpoint}/sdk/identity/resolve`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-api-key': this.config.apiKey,
+        },
+        body: JSON.stringify(body),
+      });
+
+      if (!res.ok) return;
+      const data = await res.json() as { resolved: boolean; identity?: ResolvedIdentity };
+      if (!data.resolved || !data.identity) return;
+
+      // Resolved identity is from a different anonymous session — merge it
+      if (data.identity.anonymousId !== currentAnonymousId) {
+        resolved = data.identity;
+      }
+    } catch {
+      return;
+    }
+
+    if (!resolved) return;
+
+    this.identityManager.hydrateIdentity({
+      userId: resolved.userId,
+      traits: resolved.traits as Record<string, string> | undefined,
+      wallets: resolved.wallets,
+    });
+
+    this.enqueueEvent('journey_resumed', {
+      resolvedAnonymousId: resolved.anonymousId,
+      resolvedUserId: resolved.userId ?? null,
+    });
+
+    this.log('info', 'Journey resumed from prior device via wallet resolution');
+    this.config.onJourneyResumed?.(resolved);
   }
 
   private setupSPATracking(): void {

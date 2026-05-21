@@ -18,6 +18,8 @@ public struct AetherConfig {
     public var privacy: PrivacyConfig = PrivacyConfig()
     public var batchSize: Int = 10
     public var flushInterval: TimeInterval = 5.0
+    public var autoResumeJourney: Bool = true
+    public var onJourneyResumed: ((_ resolvedAnonymousId: String, _ resolvedUserId: String?) -> Void)? = nil
 
     public init(apiKey: String) {
         self.apiKey = apiKey
@@ -150,6 +152,7 @@ public final class Aether {
     private var sessionId: String = UUID().uuidString
     private var anonymousId: String = ""
     private var userId: String?
+    private var walletAddress: String?
     private var traits: [String: AnyCodable] = [:]
     private var flushTimer: Timer?
     private var sessionStart: Date = Date()
@@ -182,6 +185,7 @@ public final class Aether {
 
         self.config = config
         self.anonymousId = loadOrCreateAnonymousId()
+        self.walletAddress = defaults.string(forKey: "walletAddress")
         self.sessionId = UUID().uuidString
         self.sessionStart = Date()
 
@@ -204,6 +208,10 @@ public final class Aether {
         log("Aether iOS SDK initialized (v7.0.0)")
 
         fetchConfig()
+
+        if config.autoResumeJourney, let addr = walletAddress {
+            checkWalletIdentityResolution(address: addr)
+        }
     }
 
     public func track(_ event: String, properties: [String: AnyCodable] = [:]) {
@@ -225,6 +233,10 @@ public final class Aether {
     public func hydrateIdentity(_ data: IdentityData) {
         if let userId = data.userId { self.userId = userId }
         if let traits = data.traits { self.traits.merge(traits) { _, new in new } }
+        if let addr = data.walletAddress {
+            walletAddress = addr
+            defaults.set(addr, forKey: "walletAddress")
+        }
 
         enqueueEvent(type: .identify, properties: [
             "userId": AnyCodable(userId ?? ""),
@@ -300,12 +312,17 @@ public final class Aether {
     // MARK: - Wallet Tracking
 
     public func walletConnected(address: String, walletType: String? = nil, chainId: String? = nil) {
+        walletAddress = address
+        defaults.set(address, forKey: "walletAddress")
         enqueueEvent(type: .wallet, properties: [
             "action": AnyCodable("connect"),
             "address": AnyCodable(address),
             "walletType": AnyCodable(walletType ?? "unknown"),
             "chainId": AnyCodable(chainId ?? "unknown")
         ])
+        if config?.autoResumeJourney == true {
+            checkWalletIdentityResolution(address: address)
+        }
     }
 
     public func walletDisconnected(address: String) {
@@ -336,7 +353,7 @@ public final class Aether {
         ["analytics", "marketing", "web3", "agent", "commerce"]
 
     public func grantConsent(categories: [String]) {
-        consentState = categories
+        consentState = Array(Set(consentState + categories))
         enqueueEvent(type: .consent, properties: [
             "action": AnyCodable("grant"),
             "categories": AnyCodable(categories)
@@ -499,6 +516,53 @@ public final class Aether {
             self?.sessionStart = Date()
             self?.track("app_foreground")
         }
+    }
+
+    private func checkWalletIdentityResolution(address: String) {
+        guard let cfg = config,
+              let url = URL(string: "\(cfg.endpoint)/sdk/identity/resolve") else { return }
+
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.setValue(cfg.apiKey, forHTTPHeaderField: "x-api-key")
+        request.timeoutInterval = 5.0
+
+        let body: [String: Any] = [
+            "wallets": [["address": address, "vm": "evm"]],
+            "anonymousId": anonymousId,
+            "fingerprint": fingerprintId
+        ]
+        request.httpBody = try? JSONSerialization.data(withJSONObject: body)
+
+        URLSession.shared.dataTask(with: request) { [weak self] data, response, _ in
+            guard let self = self,
+                  let data = data,
+                  let httpResponse = response as? HTTPURLResponse,
+                  httpResponse.statusCode == 200,
+                  let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+                  let resolved = json["resolved"] as? Bool, resolved,
+                  let identity = json["identity"] as? [String: Any] else { return }
+
+            let resolvedAnonymousId = identity["anonymousId"] as? String ?? ""
+            let resolvedUserId = identity["userId"] as? String
+
+            guard !resolvedAnonymousId.isEmpty, resolvedAnonymousId != self.anonymousId else { return }
+
+            self.serialQueue.async {
+                if let uid = resolvedUserId {
+                    self.userId = uid
+                    self.defaults.set(uid, forKey: "userId")
+                }
+                self.enqueueEvent(type: .track, properties: [
+                    "event": AnyCodable("journey_resumed"),
+                    "resolvedAnonymousId": AnyCodable(resolvedAnonymousId),
+                    "resolvedUserId": AnyCodable(resolvedUserId ?? "")
+                ])
+                self.log("Journey resumed from prior device via wallet resolution")
+                cfg.onJourneyResumed?(resolvedAnonymousId, resolvedUserId)
+            }
+        }.resume()
     }
 
     private func log(_ message: String) {
