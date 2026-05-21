@@ -32,7 +32,7 @@ jobs:
     name: Build & Push images
     runs-on: ubuntu-latest
     outputs:
-      image_tag: ${{ steps.tag.outputs.tag }}
+      image_tag:    ${{ steps.tag.outputs.tag }}
       ecr_registry: ${{ steps.ecr-login.outputs.registry }}
 
     steps:
@@ -55,7 +55,8 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      # Backend — build context is repo root (Dockerfile COPYs from repo-relative paths)
+      # ── Backend ────────────────────────────────────────────────────────────
+      # Build context is repo root (Dockerfile COPYs from repo-relative paths)
       - name: Build & push aether-backend
         uses: docker/build-push-action@v5
         with:
@@ -68,7 +69,7 @@ jobs:
           cache-from: type=gha,scope=backend
           cache-to:   type=gha,scope=backend,mode=max
 
-      # ML serving — context is the ML directory; uses the "serving" build stage
+      # ── ML serving ─────────────────────────────────────────────────────────
       - name: Build & push aether-ml-serving
         uses: docker/build-push-action@v5
         with:
@@ -81,6 +82,49 @@ jobs:
             ${{ steps.ecr-login.outputs.registry }}/aether-ml-serving:latest
           cache-from: type=gha,scope=ml-serving
           cache-to:   type=gha,scope=ml-serving,mode=max
+
+      # ── Aether SPA ─────────────────────────────────────────────────────────
+      # Auth0 config is baked into the Vite bundle at build time.
+      # VITE_AUTH0_CLIENT_ID comes from the Terraform output:
+      #   terraform output -raw aether_client_id
+      # Set it as a GitHub Actions variable (AETHER_AUTH0_CLIENT_ID) per environment.
+      - name: Build & push aether-ui
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: apps/aether/Dockerfile
+          push: true
+          tags: |
+            ${{ steps.ecr-login.outputs.registry }}/aether-aether:${{ steps.tag.outputs.tag }}
+            ${{ steps.ecr-login.outputs.registry }}/aether-aether:latest
+          build-args: |
+            VITE_AUTH0_DOMAIN=${{ vars.AUTH0_DOMAIN }}
+            VITE_AUTH0_CLIENT_ID=${{ vars.AETHER_AUTH0_CLIENT_ID }}
+            VITE_AUTH0_AUDIENCE=${{ vars.AUTH0_AUDIENCE }}
+            VITE_API_BASE_URL=${{ vars.AETHER_API_BASE_URL }}
+          cache-from: type=gha,scope=aether-ui
+          cache-to:   type=gha,scope=aether-ui,mode=max
+
+      # ── Kyber SPA ──────────────────────────────────────────────────────────
+      # VITE_AUTH0_CLIENT_ID comes from: terraform output -raw kyber_client_id
+      # Set it as KYBER_AUTH0_CLIENT_ID GitHub Actions variable per environment.
+      - name: Build & push kyber-ui
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: apps/kyber/Dockerfile
+          push: true
+          tags: |
+            ${{ steps.ecr-login.outputs.registry }}/aether-kyber:${{ steps.tag.outputs.tag }}
+            ${{ steps.ecr-login.outputs.registry }}/aether-kyber:latest
+          build-args: |
+            VITE_AUTH0_DOMAIN=${{ vars.AUTH0_DOMAIN }}
+            VITE_AUTH0_CLIENT_ID=${{ vars.KYBER_AUTH0_CLIENT_ID }}
+            VITE_AUTH0_AUDIENCE=${{ vars.AUTH0_AUDIENCE }}
+            VITE_API_BASE_URL=${{ vars.KYBER_API_BASE_URL }}
+            VITE_WS_BASE_URL=${{ vars.KYBER_WS_BASE_URL }}
+          cache-from: type=gha,scope=kyber-ui
+          cache-to:   type=gha,scope=kyber-ui,mode=max
 
   # ─────────────────────────────────────────────────────────────────────────
   # 2. Force new ECS deployments and wait for stability
@@ -104,23 +148,33 @@ jobs:
       - name: Force new deployments
         run: |
           CLUSTER="AETHER-${ENV}"
-          for svc in "AETHER-${ENV}-backend" "AETHER-${ENV}-ml-serving"; do
+          for svc in \
+            "AETHER-${ENV}-backend" \
+            "AETHER-${ENV}-ml-serving" \
+            "AETHER-${ENV}-aether-ui" \
+            "AETHER-${ENV}-kyber-ui"; do
             echo "Deploying ${svc} to cluster ${CLUSTER}..."
             aws ecs update-service \
               --cluster "$CLUSTER" \
               --service "$svc" \
               --force-new-deployment \
-              --region "${{ env.AWS_REGION }}"
+              --region "${{ env.AWS_REGION }}" || \
+            echo "::warning::Service ${svc} not found — skipping (not yet provisioned)"
           done
 
       - name: Wait for services to stabilise
-        # Timeout: 10 minutes (600 seconds via aws-cli default)
         run: |
           CLUSTER="AETHER-${ENV}"
-          aws ecs wait services-stable \
-            --cluster "$CLUSTER" \
-            --services "AETHER-${ENV}-backend" "AETHER-${ENV}-ml-serving" \
-            --region "${{ env.AWS_REGION }}"
+          # Collect only services that exist in the cluster
+          EXISTING=$(aws ecs list-services --cluster "$CLUSTER" \
+            --query 'serviceArns[*]' --output text | tr '\t' '\n' | \
+            grep -E "backend|ml-serving|aether-ui|kyber-ui" | tr '\n' ' ')
+          if [ -n "$EXISTING" ]; then
+            aws ecs wait services-stable \
+              --cluster "$CLUSTER" \
+              --services $EXISTING \
+              --region "${{ env.AWS_REGION }}"
+          fi
 
       - name: Health check
         # ALB_DNS_NAME is a GitHub Actions variable set per environment

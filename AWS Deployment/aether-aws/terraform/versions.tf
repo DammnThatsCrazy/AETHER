@@ -10,5 +10,9 @@ terraform {
       source  = "hashicorp/random"
       version = "~> 3.5"
     }
+    auth0 = {
+      source  = "auth0/auth0"
+      version = "~> 1.0"
+    }
   }
 }

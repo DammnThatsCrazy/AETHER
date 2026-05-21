@@ -209,3 +209,25 @@ module "monitoring" {
   alert_email        = var.alert_email
   log_retention_days = var.log_retention_days
 }
+
+# ---------------------------------------------------------------------------
+# 8. Auth0 (SPA clients + API resource server)
+# ---------------------------------------------------------------------------
+
+module "auth0" {
+  source = "./modules/auth0"
+
+  environment                    = var.environment
+  auth0_domain                   = var.auth0_domain
+  auth0_management_client_id     = var.auth0_management_client_id
+  auth0_management_client_secret = var.auth0_management_client_secret
+  api_audience                   = var.auth0_api_audience
+
+  aether_callback_urls = ["${var.aether_app_url}/callback"]
+  aether_logout_urls   = [var.aether_app_url]
+  aether_web_origins   = [var.aether_app_url]
+
+  kyber_callback_urls  = ["${var.kyber_app_url}/callback"]
+  kyber_logout_urls    = [var.kyber_app_url]
+  kyber_web_origins    = [var.kyber_app_url]
+}
