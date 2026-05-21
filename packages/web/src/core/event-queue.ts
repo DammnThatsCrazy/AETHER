@@ -8,6 +8,7 @@ import { storage } from '../utils';
 
 const QUEUE_STORAGE_KEY = 'event_queue';
 const MAX_STORED_EVENTS = 1000;
+const SDK_VERSION = '7.0.0';
 
 interface QueueConfig {
   endpoint: string;
@@ -143,7 +144,7 @@ export class EventQueue {
     const payload = JSON.stringify({
       batch: events,
       sentAt: new Date().toISOString(),
-      context: { library: { name: '@aether/sdk', version: '8.7.1' } },
+      context: { library: { name: '@aether/sdk', version: SDK_VERSION } },
     });
 
     const response = await fetch(`${this.config.endpoint}/v1/batch`, {
@@ -186,7 +187,7 @@ export class EventQueue {
     const payload = JSON.stringify({
       batch: this.filterByConsent(events),
       sentAt: new Date().toISOString(),
-      context: { library: { name: '@aether/sdk', version: '8.7.1' } },
+      context: { library: { name: '@aether/sdk', version: SDK_VERSION } },
     });
     const blob = new Blob([payload], { type: 'application/json' });
     // API key sent via query param (sendBeacon does not support custom headers)
@@ -206,11 +207,16 @@ export class EventQueue {
     if (typeof window === 'undefined') return;
     window.addEventListener('visibilitychange', () => {
       if (document.visibilityState === 'hidden' && this.queue.length > 0) {
-        this.sendBeacon(this.queue); this.queue = [];
+        const sent = this.sendBeacon(this.queue);
+        if (sent) this.queue = [];
+        // If beacon rejected, leave queue intact — periodic flush will retry
       }
     });
     window.addEventListener('pagehide', () => {
-      if (this.queue.length > 0) { this.sendBeacon(this.queue); this.queue = []; }
+      if (this.queue.length > 0) {
+        const sent = this.sendBeacon(this.queue);
+        if (sent) this.queue = [];
+      }
     });
     window.addEventListener('online', () => {
       if (this.queue.length > 0) this.flush();

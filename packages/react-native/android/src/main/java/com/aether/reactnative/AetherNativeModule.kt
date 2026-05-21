@@ -110,23 +110,26 @@ class AetherNativeModule(private val reactContext: ReactApplicationContext) :
 
     @ReactMethod
     fun walletConnect(address: String, options: ReadableMap) {
-        Aether.hydrateIdentity(IdentityData(
-            walletAddress = address,
-            walletType = options.getString("type"),
-            chainId = if (options.hasKey("chainId")) options.getInt("chainId") else null
-        ))
+        val walletType = options.getString("type") ?: "unknown"
+        val chainId = if (options.hasKey("chainId")) options.getInt("chainId").toString() else "unknown"
+        Aether.walletConnected(address, walletType, chainId)
     }
 
     @ReactMethod
-    fun walletDisconnect() {
-        Aether.track("wallet_disconnected")
+    fun walletDisconnect(address: String) {
+        Aether.walletDisconnected(address)
     }
 
     @ReactMethod
     fun walletTransaction(txHash: String, options: ReadableMap) {
-        Aether.track("wallet_transaction", mapOf(
-            "txHash" to txHash
-        ) + options.toHashMap().mapValues { it.value })
+        val chainId = options.getString("chainId") ?: "unknown"
+        val value = options.getString("value")
+        Aether.walletTransaction(txHash, chainId, value, options.toHashMap().mapValues { it.value as? Any })
+    }
+
+    @ReactMethod
+    fun getFingerprint(promise: Promise) {
+        promise.resolve(Aether.getFingerprintId())
     }
 
     @ReactMethod
@@ -145,26 +148,27 @@ class AetherNativeModule(private val reactContext: ReactApplicationContext) :
 
     @ReactMethod
     fun getConsentState(promise: Promise) {
+        val granted = Aether.getConsentState().toSet()
         val state = Arguments.createMap().apply {
-            putBoolean("analytics", true)
-            putBoolean("marketing", false)
-            putBoolean("web3", false)
+            putBoolean("analytics", "analytics" in granted)
+            putBoolean("marketing", "marketing" in granted)
+            putBoolean("web3", "web3" in granted)
+            putBoolean("agent", "agent" in granted)
+            putBoolean("commerce", "commerce" in granted)
         }
         promise.resolve(state)
     }
 
     @ReactMethod
     fun grantConsent(purposes: ReadableArray) {
-        Aether.track("consent_granted", mapOf(
-            "purposes" to (0 until purposes.size()).map { purposes.getString(it) }
-        ))
+        val list = (0 until purposes.size()).map { purposes.getString(it) ?: "" }
+        Aether.grantConsent(list)
     }
 
     @ReactMethod
     fun revokeConsent(purposes: ReadableArray) {
-        Aether.track("consent_revoked", mapOf(
-            "purposes" to (0 until purposes.size()).map { purposes.getString(it) }
-        ))
+        val list = (0 until purposes.size()).map { purposes.getString(it) ?: "" }
+        Aether.revokeConsent(list)
     }
 
     @ReactMethod

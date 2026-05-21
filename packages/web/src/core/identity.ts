@@ -61,7 +61,6 @@ export class IdentityManager {
     if (data.oauthSubject) this.identity.traits.oauthSubject = data.oauthSubject;
 
     this.identity.lastSeen = now();
-    this.identity.sessionCount++;
     this.persist();
     return this.getIdentity();
   }

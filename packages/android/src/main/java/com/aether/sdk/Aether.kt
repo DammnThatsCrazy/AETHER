@@ -5,10 +5,14 @@
 
 package com.aether.sdk
 
+import android.app.ActivityManager
 import android.app.Application
 import android.content.Context
 import android.content.SharedPreferences
+import android.net.ConnectivityManager
+import android.net.NetworkCapabilities
 import android.os.Build
+import android.os.SystemClock
 import android.provider.Settings
 import android.util.Log
 import androidx.lifecycle.*
@@ -84,6 +88,9 @@ object Aether : DefaultLifecycleObserver {
     private var flushJob: Job? = null
     private val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
 
+    private const val MAX_QUEUE_SIZE = 500
+    private const val SESSION_TIMEOUT_MS = 30 * 60 * 1000L // 30 min
+
     private var sessionId: String = UUID.randomUUID().toString()
     private var anonymousId: String = ""
     private var userId: String? = null
@@ -96,6 +103,9 @@ object Aether : DefaultLifecycleObserver {
     private var consentState: MutableList<String> = mutableListOf()
     private var fingerprintId: String = ""
     private var campaignContext: JSONObject? = null
+    private var appStartTimeMs: Long = SystemClock.elapsedRealtime()
+    private var foregroundStartMs: Long = 0L
+    private var lastActivityMs: Long = 0L
     private val CLICK_ID_PARAMS = setOf(
         "gclid", "msclkid", "fbclid", "ttclid", "twclid",
         "li_fat_id", "rdt_cid", "scid", "dclid", "epik",
@@ -121,6 +131,7 @@ object Aether : DefaultLifecycleObserver {
         this.anonymousId = loadOrCreateAnonymousId()
         this.userId = prefs?.getString("userId", null)
         this.walletAddress = prefs?.getString("walletAddress", null)
+        this.consentState = (prefs?.getStringSet("consentState", emptySet()) ?: emptySet()).toMutableList()
         this.sessionId = UUID.randomUUID().toString()
 
         // Lifecycle tracking
@@ -145,6 +156,7 @@ object Aether : DefaultLifecycleObserver {
         log("Aether Android SDK initialized (v$VERSION)")
 
         fetchConfig()
+        emitSessionStart(application.applicationContext)
 
         if (config.autoResumeJourney) {
             walletAddress?.let { addr -> scope.launch { checkWalletIdentityResolution(addr) } }
@@ -191,16 +203,21 @@ object Aether : DefaultLifecycleObserver {
 
     fun getAnonymousId(): String = anonymousId
     fun getUserId(): String? = userId
+    fun getFingerprintId(): String = fingerprintId
 
     fun reset() {
         flush()
         flushJob?.cancel()
         userId = null
+        walletAddress = null
         traits.clear()
+        consentState.clear()
         anonymousId = UUID.randomUUID().toString()
         sessionId = UUID.randomUUID().toString()
         prefs?.edit()
             ?.remove("userId")
+            ?.remove("walletAddress")
+            ?.remove("consentState")
             ?.putString("anonymousId", anonymousId)
             ?.apply()
         log("SDK reset")
@@ -296,11 +313,14 @@ object Aether : DefaultLifecycleObserver {
 
     fun grantConsent(categories: List<String>) {
         consentState.addAll(categories)
+        consentState = consentState.distinct().toMutableList()
+        prefs?.edit()?.putStringSet("consentState", consentState.toSet())?.apply()
         enqueueEvent("consent", mapOf("action" to "grant", "categories" to categories))
     }
 
     fun revokeConsent(categories: List<String>) {
-        consentState.removeAll(categories)
+        consentState.removeAll(categories.toSet())
+        prefs?.edit()?.putStringSet("consentState", consentState.toSet())?.apply()
         enqueueEvent("consent", mapOf("action" to "revoke", "categories" to categories))
     }
 
@@ -348,12 +368,20 @@ object Aether : DefaultLifecycleObserver {
     // =========================================================================
 
     override fun onStart(owner: LifecycleOwner) {
-        sessionId = UUID.randomUUID().toString()
-        track("app_foreground")
+        val now = SystemClock.elapsedRealtime()
+        if (lastActivityMs == 0L || (now - lastActivityMs) > SESSION_TIMEOUT_MS) {
+            sessionId = UUID.randomUUID().toString()
+        }
+        foregroundStartMs = now
+        lastActivityMs = now
+        track("app_foreground", mapOf("networkType" to getNetworkType()))
     }
 
     override fun onStop(owner: LifecycleOwner) {
-        track("app_background")
+        val now = SystemClock.elapsedRealtime()
+        lastActivityMs = now
+        val sessionDurationMs = if (foregroundStartMs > 0) now - foregroundStartMs else 0L
+        track("app_background", mapOf("sessionDurationMs" to sessionDurationMs))
         flush()
     }
 
@@ -375,6 +403,8 @@ object Aether : DefaultLifecycleObserver {
             put("context", buildContext())
         }
 
+        // Enforce max queue size to prevent OOM under prolonged offline
+        while (eventQueue.size >= MAX_QUEUE_SIZE) { eventQueue.poll() }
         eventQueue.add(event)
         eventCount++
 
@@ -443,9 +473,17 @@ object Aether : DefaultLifecycleObserver {
         put("os", JSONObject().apply {
             put("name", "Android")
             put("version", Build.VERSION.RELEASE)
+            put("sdkInt", Build.VERSION.SDK_INT)
+        })
+        put("device", JSONObject().apply {
+            put("manufacturer", Build.MANUFACTURER)
+            put("model", Build.MODEL)
         })
         put("locale", Locale.getDefault().toLanguageTag())
         put("timezone", TimeZone.getDefault().id)
+        put("network", JSONObject().apply {
+            put("type", getNetworkType())
+        })
         put("library", JSONObject().apply {
             put("name", "aether-android")
             put("version", VERSION)
@@ -454,6 +492,14 @@ object Aether : DefaultLifecycleObserver {
             put("id", fingerprintId)
         })
         campaignContext?.let { put("campaign", it) }
+        put("consent", JSONObject().apply {
+            val granted = consentState.toSet()
+            put("analytics", "analytics" in granted)
+            put("marketing", "marketing" in granted)
+            put("web3", "web3" in granted)
+            put("agent", "agent" in granted)
+            put("commerce", "commerce" in granted)
+        })
     }
 
     private fun loadOrCreateAnonymousId(): String {
@@ -483,9 +529,37 @@ object Aether : DefaultLifecycleObserver {
                     "stack" to (throwable.stackTraceToString().take(2000)),
                     "thread" to thread.name
                 ))
-                runBlocking { sendBatch() }
+                scope.launch { sendBatch() }
             } catch (_: Exception) {}
             defaultHandler?.uncaughtException(thread, throwable)
+        }
+    }
+
+    private fun emitSessionStart(ctx: Context) {
+        val memInfo = ActivityManager.MemoryInfo()
+        (ctx.getSystemService(Context.ACTIVITY_SERVICE) as? ActivityManager)?.getMemoryInfo(memInfo)
+        val startupMs = SystemClock.elapsedRealtime() - appStartTimeMs
+
+        enqueueEvent("session_start", mapOf(
+            "startupTimeMs"       to startupMs,
+            "totalMemoryMB"       to (memInfo.totalMem / 1048576L),
+            "availableMemoryMB"   to (memInfo.availMem / 1048576L),
+            "lowMemory"           to memInfo.lowMemory,
+            "networkType"         to getNetworkType(),
+            "osVersion"           to Build.VERSION.RELEASE,
+            "sdkInt"              to Build.VERSION.SDK_INT,
+            "device"              to "${Build.MANUFACTURER} ${Build.MODEL}",
+        ))
+    }
+
+    private fun getNetworkType(): String {
+        val cm = context?.getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager ?: return "unknown"
+        val nc = cm.getNetworkCapabilities(cm.activeNetwork) ?: return "none"
+        return when {
+            nc.hasTransport(NetworkCapabilities.TRANSPORT_WIFI)     -> "wifi"
+            nc.hasTransport(NetworkCapabilities.TRANSPORT_CELLULAR) -> "cellular"
+            nc.hasTransport(NetworkCapabilities.TRANSPORT_ETHERNET) -> "ethernet"
+            else -> "other"
         }
     }
 

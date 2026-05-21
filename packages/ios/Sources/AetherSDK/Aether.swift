@@ -6,6 +6,8 @@
 import Foundation
 import UIKit
 import CryptoKit
+import MetricKit
+import Network
 
 // MARK: - Configuration
 
@@ -72,6 +74,9 @@ public struct EventContext: Codable {
     public var device: DeviceInfo?
     public var campaign: CampaignInfo?
     public var fingerprint: FingerprintInfo?
+    public var network: String?
+    public var thermalState: String?
+    public var consent: [String: Bool]?
 
     public struct LibraryInfo: Codable {
         public let name: String
@@ -144,7 +149,7 @@ struct DeviceFingerprint {
 
 // MARK: - Main SDK Class
 
-public final class Aether {
+public final class Aether: NSObject {
     public static let shared = Aether()
 
     private var config: AetherConfig?
@@ -156,6 +161,7 @@ public final class Aether {
     private var traits: [String: AnyCodable] = [:]
     private var flushTimer: Timer?
     private var sessionStart: Date = Date()
+    private var appStartDate: Date = Date()
     private var screenCount: Int = 0
     private var eventCount: Int = 0
     private var isInitialized = false
@@ -163,6 +169,8 @@ public final class Aether {
     private var consentState: [String] = []
     private var fingerprintId: String = ""
     private var campaignInfo: EventContext.CampaignInfo?
+    private let networkMonitor = NWPathMonitor()
+    private var currentNetworkType: String = "unknown"
 
     private static let clickIdParams: Set<String> = [
         "gclid", "msclkid", "fbclid", "ttclid", "twclid",
@@ -172,8 +180,14 @@ public final class Aether {
 
     private let serialQueue = DispatchQueue(label: "com.aether.sdk.serial")
     private let defaults = UserDefaults(suiteName: "com.aether.sdk")!
+    private static let maxQueueSize = 500
+    private static let sessionTimeoutSeconds: TimeInterval = 30 * 60
+    private var lastActivityDate: Date?
 
-    private init() {}
+    private override init() {
+        super.init()
+        startNetworkMonitor()
+    }
 
     // MARK: - Public API
 
@@ -186,6 +200,8 @@ public final class Aether {
         self.config = config
         self.anonymousId = loadOrCreateAnonymousId()
         self.walletAddress = defaults.string(forKey: "walletAddress")
+        self.consentState = defaults.stringArray(forKey: "consentState") ?? []
+        self.userId = defaults.string(forKey: "userId")
         self.sessionId = UUID().uuidString
         self.sessionStart = Date()
 
@@ -208,6 +224,10 @@ public final class Aether {
         log("Aether iOS SDK initialized (v7.0.0)")
 
         fetchConfig()
+        emitSessionStart()
+
+        // MetricKit: subscribe for diagnostic/performance payloads (iOS 13+)
+        MXMetricManager.shared.add(self)
 
         if config.autoResumeJourney, let addr = walletAddress {
             checkWalletIdentityResolution(address: addr)
@@ -250,14 +270,19 @@ public final class Aether {
 
     public func getAnonymousId() -> String { anonymousId }
     public func getUserId() -> String? { userId }
+    public func getFingerprintId() -> String { fingerprintId }
 
     public func reset() {
         flush()
         userId = nil
+        walletAddress = nil
         traits = [:]
+        consentState = []
         anonymousId = UUID().uuidString
         sessionId = UUID().uuidString
         defaults.removeObject(forKey: "userId")
+        defaults.removeObject(forKey: "walletAddress")
+        defaults.removeObject(forKey: "consentState")
         defaults.set(anonymousId, forKey: "anonymousId")
         log("SDK reset")
     }
@@ -354,6 +379,7 @@ public final class Aether {
 
     public func grantConsent(categories: [String]) {
         consentState = Array(Set(consentState + categories))
+        defaults.set(consentState, forKey: "consentState")
         enqueueEvent(type: .consent, properties: [
             "action": AnyCodable("grant"),
             "categories": AnyCodable(categories)
@@ -362,6 +388,7 @@ public final class Aether {
 
     public func revokeConsent(categories: [String]) {
         consentState = consentState.filter { !categories.contains($0) }
+        defaults.set(consentState, forKey: "consentState")
         enqueueEvent(type: .consent, properties: [
             "action": AnyCodable("revoke"),
             "categories": AnyCodable(categories)
@@ -427,13 +454,15 @@ public final class Aether {
         )
 
         serialQueue.async { [weak self] in
-            self?.eventQueue.append(event)
-            if let batchSize = self?.config?.batchSize, (self?.eventQueue.count ?? 0) >= batchSize {
-                self?.sendBatch()
+            guard let self = self else { return }
+            // Enforce max queue size
+            while self.eventQueue.count >= Aether.maxQueueSize { self.eventQueue.removeFirst() }
+            self.eventQueue.append(event)
+            self.eventCount += 1
+            if let batchSize = self.config?.batchSize, self.eventQueue.count >= batchSize {
+                self.sendBatch()
             }
         }
-
-        eventCount += 1
     }
 
     private func sendBatch() {
@@ -482,6 +511,7 @@ public final class Aether {
     }
 
     private func buildContext() -> EventContext {
+        let granted = Set(consentState)
         return EventContext(
             library: .init(name: "aether-ios", version: "7.0.0"),
             device: .init(
@@ -491,8 +521,64 @@ public final class Aether {
                 timezone: TimeZone.current.identifier
             ),
             campaign: self.campaignInfo,
-            fingerprint: .init(id: self.fingerprintId)
+            fingerprint: .init(id: self.fingerprintId),
+            network: currentNetworkType,
+            thermalState: thermalStateString(),
+            consent: [
+                "analytics": granted.contains("analytics"),
+                "marketing": granted.contains("marketing"),
+                "web3": granted.contains("web3"),
+                "agent": granted.contains("agent"),
+                "commerce": granted.contains("commerce"),
+            ]
         )
+    }
+
+    private func emitSessionStart() {
+        let startupMs = Int(Date().timeIntervalSince(appStartDate) * 1000)
+        let memoryUsedMB = memoryUsageMB()
+        enqueueEvent(type: .track, properties: [
+            "event":          AnyCodable("session_start"),
+            "startupTimeMs":  AnyCodable(startupMs),
+            "memoryUsedMB":   AnyCodable(memoryUsedMB),
+            "thermalState":   AnyCodable(thermalStateString()),
+            "networkType":    AnyCodable(currentNetworkType),
+            "osVersion":      AnyCodable(UIDevice.current.systemVersion),
+            "device":         AnyCodable(UIDevice.current.model),
+        ])
+    }
+
+    private func memoryUsageMB() -> Int {
+        var info = mach_task_basic_info()
+        var count = mach_msg_type_number_t(MemoryLayout<mach_task_basic_info>.size) / 4
+        let result = withUnsafeMutablePointer(to: &info) {
+            $0.withMemoryRebound(to: integer_t.self, capacity: Int(count)) {
+                task_info(mach_task_self_, task_flavor_t(MACH_TASK_BASIC_INFO), $0, &count)
+            }
+        }
+        guard result == KERN_SUCCESS else { return 0 }
+        return Int(info.resident_size / 1048576)
+    }
+
+    private func thermalStateString() -> String {
+        switch ProcessInfo.processInfo.thermalState {
+        case .nominal:  return "nominal"
+        case .fair:     return "fair"
+        case .serious:  return "serious"
+        case .critical: return "critical"
+        @unknown default: return "unknown"
+        }
+    }
+
+    private func startNetworkMonitor() {
+        networkMonitor.pathUpdateHandler = { [weak self] path in
+            if path.usesInterfaceType(.wifi) { self?.currentNetworkType = "wifi" }
+            else if path.usesInterfaceType(.cellular) { self?.currentNetworkType = "cellular" }
+            else if path.usesInterfaceType(.wiredEthernet) { self?.currentNetworkType = "ethernet" }
+            else if path.status == .satisfied { self?.currentNetworkType = "other" }
+            else { self?.currentNetworkType = "none" }
+        }
+        networkMonitor.start(queue: DispatchQueue(label: "com.aether.sdk.network"))
     }
 
     private func loadOrCreateAnonymousId() -> String {
@@ -512,9 +598,18 @@ public final class Aether {
             self?.flush()
         }
         NotificationCenter.default.addObserver(forName: UIApplication.willEnterForegroundNotification, object: nil, queue: .main) { [weak self] _ in
-            self?.sessionId = UUID().uuidString
-            self?.sessionStart = Date()
-            self?.track("app_foreground")
+            guard let self = self else { return }
+            let now = Date()
+            let elapsed = self.lastActivityDate.map { now.timeIntervalSince($0) } ?? (Aether.sessionTimeoutSeconds + 1)
+            if elapsed > Aether.sessionTimeoutSeconds {
+                self.sessionId = UUID().uuidString
+                self.sessionStart = now
+            }
+            self.lastActivityDate = now
+            self.track("app_foreground")
+        }
+        NotificationCenter.default.addObserver(forName: UIApplication.didEnterBackgroundNotification, object: nil, queue: .main) { [weak self] _ in
+            self?.lastActivityDate = Date()
         }
     }
 
@@ -568,6 +663,64 @@ public final class Aether {
     private func log(_ message: String) {
         guard config?.debug == true else { return }
         print("[Aether SDK] \(message)")
+    }
+}
+
+// MARK: - MetricKit Delegate
+
+extension Aether: MXMetricManagerSubscriber {
+    public func didReceive(_ payloads: [MXMetricPayload]) {
+        for payload in payloads {
+            var props: [String: AnyCodable] = [
+                "event":        AnyCodable("metrickit_payload"),
+                "appVersion":   AnyCodable(payload.metaData?.applicationBuildNumber ?? ""),
+                "periodStart":  AnyCodable(ISO8601DateFormatter().string(from: payload.timeStampBegin)),
+                "periodEnd":    AnyCodable(ISO8601DateFormatter().string(from: payload.timeStampEnd)),
+            ]
+
+            if let launch = payload.applicationLaunchMetrics {
+                props["resumeTimeP50Ms"]   = AnyCodable(launch.applicationResumeTime.histogram.buckets.first?.averageValue.converted(to: .milliseconds).value ?? 0)
+                props["coldLaunchTimeP50Ms"] = AnyCodable(launch.timeToFirstDrawKey.histogram.buckets.first?.averageValue.converted(to: .milliseconds).value ?? 0)
+            }
+            if let hang = payload.applicationResponsivenessMetrics {
+                props["hangRatePerHour"] = AnyCodable(hang.hangRate.averageValue.value)
+            }
+            if let cpu = payload.cpuMetrics {
+                props["cpuTimePerSecond"] = AnyCodable(cpu.cumulativeCPUTime.converted(to: .seconds).value)
+            }
+            if let mem = payload.memoryMetrics {
+                props["peakMemoryMB"] = AnyCodable(mem.peakMemoryUsage.converted(to: .megabytes).value)
+            }
+            if let network = payload.networkTransferMetrics {
+                props["wifiUploadMB"]   = AnyCodable(network.cumulativeWifiUpload.converted(to: .megabytes).value)
+                props["wifiDownloadMB"] = AnyCodable(network.cumulativeWifiDownload.converted(to: .megabytes).value)
+                props["cellUploadMB"]   = AnyCodable(network.cumulativeCellularUpload.converted(to: .megabytes).value)
+                props["cellDownloadMB"] = AnyCodable(network.cumulativeCellularDownload.converted(to: .megabytes).value)
+            }
+            if let disk = payload.diskIOMetrics {
+                props["diskWritesMB"] = AnyCodable(disk.cumulativeLogicalWrites.converted(to: .megabytes).value)
+            }
+
+            enqueueEvent(type: .track, properties: props)
+        }
+    }
+
+    public func didReceive(_ payloads: [MXDiagnosticPayload]) {
+        for payload in payloads {
+            var props: [String: AnyCodable] = [
+                "event":      AnyCodable("metrickit_diagnostic"),
+                "appVersion": AnyCodable(payload.metaData?.applicationBuildNumber ?? ""),
+            ]
+            if let crashes = payload.crashDiagnostics, !crashes.isEmpty {
+                props["crashCount"] = AnyCodable(crashes.count)
+                props["crashType"]  = AnyCodable(crashes.first?.exceptionType ?? "unknown")
+            }
+            if let hangs = payload.hangDiagnostics, !hangs.isEmpty {
+                props["hangCount"]          = AnyCodable(hangs.count)
+                props["hangDurationMs"]     = AnyCodable(hangs.first?.hangDuration.converted(to: .milliseconds).value ?? 0)
+            }
+            enqueueEvent(type: .track, properties: props)
+        }
     }
 }
 

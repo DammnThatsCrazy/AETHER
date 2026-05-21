@@ -31,6 +31,7 @@ import { FeatureFlagModule } from './modules/feature-flags';
 import { HeatmapModule } from './modules/heatmaps';
 import { FunnelModule } from './modules/funnels';
 import type { FunnelDefinition } from './modules/funnels';
+import { PerformanceModule } from './modules/performance';
 import { DeviceFingerprintCollector } from './core/fingerprint';
 import { generateId, now, getPageContext, getDeviceContext, getCampaignContext } from './utils';
 import { createModuleProxy } from './utils/module-proxy';
@@ -54,6 +55,7 @@ class AetherSDK implements AetherSDKInterface {
   private featureFlags: FeatureFlagModule | null = null;
   private heatmapModule: HeatmapModule | null = null;
   private funnelModule: FunnelModule | null = null;
+  private performanceModule: PerformanceModule | null = null;
   private fingerprintCollector: DeviceFingerprintCollector | null = null;
   private plugins: AetherPlugin[] = [];
   private initialized = false;
@@ -178,6 +180,7 @@ class AetherSDK implements AetherSDKInterface {
     this.web3Module?.destroy();
     this.sessionManager?.destroy();
     this.eventQueue?.destroy();
+    this.performanceModule?.destroy();
     this.plugins.forEach((p) => { try { p.destroy(); } catch { /* */ } });
 
     this.semanticContext?.destroy();
@@ -199,6 +202,7 @@ class AetherSDK implements AetherSDKInterface {
     this.featureFlags = null;
     this.heatmapModule = null;
     this.funnelModule = null;
+    this.performanceModule = null;
     this.sessionManager = null;
     this.identityManager = null;
     this.eventQueue = null;
@@ -505,6 +509,16 @@ class AetherSDK implements AetherSDKInterface {
     if (modules.funnels) {
       this.funnelModule = new FunnelModule({ onTrack: trackFn });
     }
+
+    // Performance — Web Vitals, Navigation Timing, Long Tasks, Memory
+    if (modules.performance !== false) {
+      const perfCfg = typeof modules.performance === 'object' ? modules.performance : {};
+      this.performanceModule = new PerformanceModule({
+        onTrack: trackFn,
+        sampleRate: perfCfg.sampleRate ?? 1.0,
+      });
+      this.performanceModule.start();
+    }
   }
 
   private initAnalytics(config: AetherConfig, modules: NonNullable<AetherConfig['modules']>): void {
@@ -550,6 +564,12 @@ class AetherSDK implements AetherSDKInterface {
         consent,
         semantic,
         trafficSource: this.trafficTracker?.toEventPayload(),
+        network: typeof navigator !== 'undefined' && (navigator as any).connection ? {
+          effectiveType: (navigator as any).connection.effectiveType,
+          downlink: (navigator as any).connection.downlink,
+          rtt: (navigator as any).connection.rtt,
+          saveData: (navigator as any).connection.saveData,
+        } : undefined,
       },
     };
 

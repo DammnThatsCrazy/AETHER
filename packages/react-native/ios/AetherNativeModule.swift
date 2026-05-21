@@ -111,24 +111,27 @@ class AetherNativeModule: RCTEventEmitter {
 
     @objc
     func walletConnect(_ address: String, options: NSDictionary) {
-        let identityData = IdentityData(
-            walletAddress: address,
-            traits: nil
-        )
-        Aether.shared.hydrateIdentity(identityData)
+        let walletType = options["type"] as? String
+        let chainId = options["chainId"].map { "\($0)" }
+        Aether.shared.walletConnected(address: address, walletType: walletType, chainId: chainId)
     }
 
     @objc
-    func walletDisconnect() {
-        Aether.shared.track("wallet_disconnected")
+    func walletDisconnect(_ address: String) {
+        Aether.shared.walletDisconnected(address: address)
     }
 
     @objc
     func walletTransaction(_ txHash: String, options: NSDictionary) {
-        let props = (options as? [String: Any])?.mapValues { AnyCodable($0) } ?? [:]
-        var allProps = props
-        allProps["txHash"] = AnyCodable(txHash)
-        Aether.shared.track("wallet_transaction", properties: allProps)
+        let chainId = options["chainId"] as? String ?? "unknown"
+        let value = options["value"] as? String
+        let extra = (options as? [String: Any])?.mapValues { AnyCodable($0) }
+        Aether.shared.walletTransaction(txHash: txHash, chainId: chainId, value: value, properties: extra)
+    }
+
+    @objc
+    func getFingerprint(_ resolve: @escaping RCTPromiseResolveBlock, rejecter reject: RCTPromiseRejectBlock) {
+        resolve(Aether.shared.getFingerprintId())
     }
 
     @objc
@@ -146,22 +149,25 @@ class AetherNativeModule: RCTEventEmitter {
 
     @objc
     func getConsentState(_ resolve: @escaping RCTPromiseResolveBlock, rejecter reject: RCTPromiseRejectBlock) {
+        let granted = Set(Aether.shared.getConsentState())
         resolve([
-            "analytics": true,
-            "marketing": false,
-            "web3": false
+            "analytics": granted.contains("analytics"),
+            "marketing": granted.contains("marketing"),
+            "web3":      granted.contains("web3"),
+            "agent":     granted.contains("agent"),
+            "commerce":  granted.contains("commerce"),
         ])
     }
 
     @objc
     func grantConsent(_ purposes: NSArray) {
         let purposeList = purposes.compactMap { $0 as? String }
-        Aether.shared.track("consent_granted", properties: ["purposes": AnyCodable(purposeList)])
+        Aether.shared.grantConsent(categories: purposeList)
     }
 
     @objc
     func revokeConsent(_ purposes: NSArray) {
         let purposeList = purposes.compactMap { $0 as? String }
-        Aether.shared.track("consent_revoked", properties: ["purposes": AnyCodable(purposeList)])
+        Aether.shared.revokeConsent(categories: purposeList)
     }
 }
