@@ -63,12 +63,20 @@ data class PrivacyConfig(
 // IDENTITY
 // =============================================================================
 
+data class WalletEntry(
+    val address: String,
+    val vm: String = "evm",       // evm | svm | bitcoin | movevm | near | tvm | cosmos
+    val walletType: String = "unknown",
+    val chainId: String = "unknown",
+)
+
 data class IdentityData(
     val userId: String? = null,
     val walletAddress: String? = null,
     val walletType: String? = null,
     val chainId: Int? = null,
-    val traits: Map<String, Any?> = emptyMap()
+    val traits: Map<String, Any?> = emptyMap(),
+    val wallets: List<WalletEntry> = emptyList(),
 )
 
 // =============================================================================
@@ -190,14 +198,27 @@ object Aether : DefaultLifecycleObserver {
             walletAddress = it
             prefs?.edit()?.putString("walletAddress", it)?.apply()
         }
+        // Multi-wallet: connect each wallet as a proper wallet event
+        for (w in data.wallets) {
+            walletConnected(w.address, w.walletType, w.chainId)
+        }
 
+        val walletsJson = JSONArray().apply {
+            for (w in data.wallets) {
+                put(JSONObject().apply {
+                    put("address", w.address); put("vm", w.vm)
+                    put("walletType", w.walletType); put("chainId", w.chainId)
+                })
+            }
+        }
         val props = mutableMapOf<String, Any?>(
             "userId" to (userId ?: ""),
             "traits" to traits,
-            "walletAddress" to (data.walletAddress ?: "")
+            "walletAddress" to (data.walletAddress ?: ""),
+            "walletsCount" to data.wallets.size,
+            "wallets" to walletsJson.toString(),
         )
         enqueueEvent("identify", props)
-
         prefs?.edit()?.putString("userId", userId)?.apply()
     }
 
@@ -423,6 +444,15 @@ object Aether : DefaultLifecycleObserver {
         }
         if (batch.isEmpty()) return@withContext
 
+        sendBatchWithRetry(batch, cfg, retryCount = 0)
+    }
+
+    private suspend fun sendBatchWithRetry(
+        batch: List<JSONObject>,
+        cfg: AetherConfig,
+        retryCount: Int,
+    ) = withContext(Dispatchers.IO) {
+        val maxRetries = 3
         try {
             val url = URL("${cfg.endpoint}/v1/batch")
             val connection = url.openConnection() as HttpURLConnection
@@ -440,16 +470,40 @@ object Aether : DefaultLifecycleObserver {
             }
 
             connection.outputStream.use { it.write(payload.toString().toByteArray()) }
-
             val responseCode = connection.responseCode
-            if (responseCode >= 400) {
-                log("Batch send HTTP error: $responseCode")
-                batch.forEach { eventQueue.add(it) } // Re-enqueue
-            }
             connection.disconnect()
+
+            when {
+                responseCode == 429 -> {
+                    val retryAfterSec = connection.getHeaderField("Retry-After")?.toLongOrNull() ?: 5L
+                    if (retryCount < maxRetries) {
+                        delay(retryAfterSec * 1000)
+                        sendBatchWithRetry(batch, cfg, retryCount + 1)
+                    } else {
+                        log("Batch dropped after $maxRetries retries (rate limited)")
+                    }
+                }
+                responseCode >= 500 -> {
+                    if (retryCount < maxRetries) {
+                        val backoff = minOf(1000L * (1L shl retryCount), 30000L)
+                        delay(backoff)
+                        sendBatchWithRetry(batch, cfg, retryCount + 1)
+                    } else {
+                        log("Batch dropped after $maxRetries retries (server error $responseCode)")
+                    }
+                }
+                responseCode >= 400 -> log("Batch rejected (client error $responseCode) — not retrying")
+            }
         } catch (e: Exception) {
             log("Batch send failed: ${e.message}")
-            batch.forEach { eventQueue.add(it) }
+            if (retryCount < maxRetries) {
+                val backoff = minOf(1000L * (1L shl retryCount), 30000L)
+                delay(backoff)
+                sendBatchWithRetry(batch, cfg, retryCount + 1)
+            } else {
+                // Permanent failure — re-enqueue for next flush cycle
+                batch.forEach { eventQueue.add(it) }
+            }
         }
     }
 

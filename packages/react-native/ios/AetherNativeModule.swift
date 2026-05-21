@@ -9,7 +9,7 @@ class AetherNativeModule: RCTEventEmitter {
     }
 
     override func supportedEvents() -> [String]! {
-        return ["AetherIdentityChanged"]
+        return ["AetherIdentityChanged", "AetherConsentChanged"]
     }
 
     @objc
@@ -163,11 +163,24 @@ class AetherNativeModule: RCTEventEmitter {
     func grantConsent(_ purposes: NSArray) {
         let purposeList = purposes.compactMap { $0 as? String }
         Aether.shared.grantConsent(categories: purposeList)
+        emitConsentChanged()
     }
 
     @objc
     func revokeConsent(_ purposes: NSArray) {
         let purposeList = purposes.compactMap { $0 as? String }
         Aether.shared.revokeConsent(categories: purposeList)
+        emitConsentChanged()
+    }
+
+    private func emitConsentChanged() {
+        let granted = Set(Aether.shared.getConsentState())
+        sendEvent(withName: "AetherConsentChanged", body: [
+            "analytics": granted.contains("analytics"),
+            "marketing": granted.contains("marketing"),
+            "web3":      granted.contains("web3"),
+            "agent":     granted.contains("agent"),
+            "commerce":  granted.contains("commerce"),
+        ])
     }
 }

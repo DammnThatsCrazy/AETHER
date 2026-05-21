@@ -6,6 +6,7 @@ import type { ConsentState, ConsentConfig, ConsentBannerConfig, ConsentCallback 
 import { storage, now } from '../utils';
 
 const CONSENT_KEY = 'consent';
+const CONSENT_RECORDED_KEY = 'consent_recorded';
 
 export class ConsentModule {
   private state: ConsentState;
@@ -33,9 +34,9 @@ export class ConsentModule {
     return (this.state as unknown as Record<string, unknown>)[purpose] === true;
   }
 
-  /** Check if any consent has been given/recorded */
+  /** Check if user has explicitly accepted or rejected (banner was acted on) */
   hasRecordedConsent(): boolean {
-    return !!storage.get(CONSENT_KEY);
+    return !!storage.get(CONSENT_RECORDED_KEY);
   }
 
   /** Grant consent for specified purposes */
@@ -62,11 +63,13 @@ export class ConsentModule {
   /** Grant all purposes */
   grantAll(): void {
     this.grant(this.config.purposes);
+    storage.set(CONSENT_RECORDED_KEY, true);
   }
 
   /** Revoke all purposes */
   revokeAll(): void {
     this.revoke(this.config.purposes);
+    storage.set(CONSENT_RECORDED_KEY, true);
   }
 
   /** Register a listener for consent changes */
