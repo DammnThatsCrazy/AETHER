@@ -17,6 +17,7 @@ Routes:
     PUT  /v1/identity/profiles/{id}     Upsert profile
     POST /v1/identity/merge             Merge identities
     GET  /v1/identity/profiles/{id}/graph  Profile graph
+    POST /sdk/identity/resolve          Cross-device wallet identity resolution
     POST /v1/analytics/events/query     Query events
     GET  /v1/analytics/events/{id}      Get event
     GET  /v1/analytics/dashboard/summary  Dashboard
@@ -168,6 +169,7 @@ from services.profile360_workers import attach_profile360_workers
 from services.investigation.routes import router as investigation_router
 from services.governance.routes import router as governance_router
 from services.events.routes import router as events_router
+from services.sdk.routes import router as sdk_router
 
 
 # ═══════════════════════════════════════════════════════════════════════
@@ -311,6 +313,7 @@ def create_app() -> FastAPI:
     app.include_router(governance_router)
     app.include_router(events_router)
     app.include_router(user_agents_router)  # Profile 360: user/org-owned agents (always-on)
+    app.include_router(sdk_router)          # SDK utilities: cross-device identity resolution
 
     # ── Intelligence Graph services (feature-flagged) ───────────
     ig = settings.intelligence_graph
