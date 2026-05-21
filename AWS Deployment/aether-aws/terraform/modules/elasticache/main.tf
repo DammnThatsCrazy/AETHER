@@ -1,10 +1,10 @@
 # ============================================================================
 # AETHER — ElastiCache Redis Module
 #
-# Provisions a Redis 7.x cluster with:
+# Provisions a Redis 7.x replication group with:
 #   - Encryption in-transit (TLS) and at-rest (KMS)
-#   - Subnet group in isolated subnets
 #   - Auth token stored in Secrets Manager
+#   - Subnet group in isolated subnets
 # ============================================================================
 
 resource "random_password" "redis_auth" {
@@ -49,8 +49,8 @@ resource "aws_elasticache_subnet_group" "this" {
 # --------------------------------------------------------------------------
 
 resource "aws_elasticache_parameter_group" "this" {
-  name_prefix = "${lower(var.project)}-${var.environment}-redis7-"
-  family      = "redis7"
+  name   = "${lower(var.project)}-${var.environment}-redis7"
+  family = "redis7"
   description = "${var.project} ${var.environment} Redis 7 parameters"
 
   parameter {
@@ -68,29 +68,32 @@ resource "aws_elasticache_parameter_group" "this" {
 }
 
 # --------------------------------------------------------------------------
-# ElastiCache Cluster
+# ElastiCache Replication Group (Redis)
+# Using replication_group for TLS + auth_token support.
 # --------------------------------------------------------------------------
 
-resource "aws_elasticache_cluster" "this" {
-  cluster_id           = "${lower(var.project)}-${var.environment}-redis"
+resource "aws_elasticache_replication_group" "this" {
+  replication_group_id = "${lower(var.project)}-${var.environment}-redis"
+  description          = "${var.project} Redis (${var.environment})"
+
   engine               = "redis"
   engine_version       = "7.1"
   node_type            = var.node_type
-  num_cache_nodes      = var.num_cache_nodes
+  num_cache_clusters   = var.num_cache_nodes
   parameter_group_name = aws_elasticache_parameter_group.this.name
   port                 = 6379
 
   subnet_group_name  = aws_elasticache_subnet_group.this.name
   security_group_ids = [var.redis_sg_id]
 
-  # Encryption — in-transit TLS and at-rest KMS
-  at_rest_encryption_enabled  = true
-  transit_encryption_enabled  = true
-  auth_token                  = random_password.redis_auth.result
+  at_rest_encryption_enabled = true
+  kms_key_id                 = aws_kms_key.redis.arn
+  transit_encryption_enabled = true
+  auth_token                 = random_password.redis_auth.result
 
   snapshot_retention_limit = 1
   snapshot_window          = "05:00-06:00"
-  maintenance_window       = "Mon:06:00-Mon:07:00"
+  maintenance_window       = "mon:06:00-mon:07:00"
 
   tags = {
     Name = "${var.project}-${var.environment}-redis"
@@ -102,7 +105,7 @@ resource "aws_elasticache_cluster" "this" {
 # --------------------------------------------------------------------------
 
 resource "aws_secretsmanager_secret" "redis_auth" {
-  name                    = "aether/redis-auth-token"
+  name                    = "aether/${var.environment}/redis-auth-token"
   description             = "${var.project} Redis AUTH token (${var.environment})"
   kms_key_id              = aws_kms_key.redis.arn
   recovery_window_in_days = 30

@@ -101,3 +101,31 @@ variable "log_retention_days" {
   description = "CloudWatch log group retention in days"
   default     = 30
 }
+
+variable "redis_host" {
+  type        = string
+  description = "ElastiCache Redis primary endpoint hostname"
+}
+
+variable "redis_port" {
+  type        = number
+  description = "ElastiCache Redis port"
+  default     = 6379
+}
+
+variable "kafka_bootstrap_servers" {
+  type        = string
+  description = "MSK Kafka TLS bootstrap broker string"
+}
+
+variable "neptune_endpoint" {
+  type        = string
+  description = "Neptune cluster writer endpoint (empty string = in-memory fallback)"
+  default     = ""
+}
+
+variable "ml_serving_url" {
+  type        = string
+  description = "Internal URL for the ML serving service (empty string = unreachable fallback)"
+  default     = ""
+}

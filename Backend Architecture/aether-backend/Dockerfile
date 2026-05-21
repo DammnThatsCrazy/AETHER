@@ -48,6 +48,12 @@ EXPOSE 8000
 HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 \
   CMD curl -sf http://localhost:8000/v1/health || exit 1
 
+# Entrypoint: parses DATABASE_URL_SECRET JSON (RDS manage_master_user_password)
+# into DATABASE_URL before uvicorn starts. No-op when DATABASE_URL is already set.
+COPY ["Backend Architecture/aether-backend/entrypoint.sh", "/entrypoint.sh"]
+RUN chmod +x /entrypoint.sh
+
 USER appuser
 
+ENTRYPOINT ["/entrypoint.sh"]
 CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
