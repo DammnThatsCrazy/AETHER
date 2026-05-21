@@ -49,6 +49,11 @@ extracted/
 # Generated docs
 docs/api/
 
+# Terraform local state / plugin cache (lock file IS committed)
+.terraform/
+*.tfplan
+tfplan
+
 # ML artifacts
 *.onnx
 *.tflite
