@@ -30,11 +30,13 @@ export interface AetherRNConfig {
     pushTracking?: boolean;
     walletTracking?: boolean;
     experiments?: boolean;
+    performance?: boolean;
   };
   privacy?: {
     gdprMode?: boolean;
     anonymizeIP?: boolean;
   };
+  autoResumeJourney?: boolean;
 }
 
 export interface Identity {
@@ -114,8 +116,8 @@ const Aether = {
     connect(address: string, options?: { type?: string; chainId?: number }): void {
       AetherNative?.walletConnect(address, options ?? {});
     },
-    disconnect(): void {
-      AetherNative?.walletDisconnect();
+    disconnect(address: string): void {
+      AetherNative?.walletDisconnect(address);
     },
     transaction(txHash: string, options?: Record<string, unknown>): void {
       AetherNative?.walletTransaction(txHash, options ?? {});

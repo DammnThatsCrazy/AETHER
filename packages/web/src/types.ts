@@ -67,6 +67,8 @@ export interface ModuleConfig {
   featureFlags?: boolean;
   heatmaps?: boolean;
   funnels?: boolean;
+  // Performance
+  performance?: boolean | { sampleRate?: number };
   // Wallet / multi-VM capture
   walletTracking?: boolean;   // evm
   svmTracking?: boolean;
@@ -420,6 +422,16 @@ export interface EventContext {
   timezone?: string;
   userAgent?: string;
   consent?: ConsentState;
+  semantic?: Record<string, unknown>;
+  trafficSource?: Record<string, unknown>;
+  network?: NetworkContext;
+}
+
+export interface NetworkContext {
+  effectiveType?: string;
+  downlink?: number;
+  rtt?: number;
+  saveData?: boolean;
 }
 
 export interface PageContext {

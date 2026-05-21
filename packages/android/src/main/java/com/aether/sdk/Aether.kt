@@ -5,10 +5,14 @@
 
 package com.aether.sdk
 
+import android.app.ActivityManager
 import android.app.Application
 import android.content.Context
 import android.content.SharedPreferences
+import android.net.ConnectivityManager
+import android.net.NetworkCapabilities
 import android.os.Build
+import android.os.SystemClock
 import android.provider.Settings
 import android.util.Log
 import androidx.lifecycle.*
@@ -96,6 +100,8 @@ object Aether : DefaultLifecycleObserver {
     private var consentState: MutableList<String> = mutableListOf()
     private var fingerprintId: String = ""
     private var campaignContext: JSONObject? = null
+    private var appStartTimeMs: Long = SystemClock.elapsedRealtime()
+    private var foregroundStartMs: Long = 0L
     private val CLICK_ID_PARAMS = setOf(
         "gclid", "msclkid", "fbclid", "ttclid", "twclid",
         "li_fat_id", "rdt_cid", "scid", "dclid", "epik",
@@ -145,6 +151,7 @@ object Aether : DefaultLifecycleObserver {
         log("Aether Android SDK initialized (v$VERSION)")
 
         fetchConfig()
+        emitSessionStart(application.applicationContext)
 
         if (config.autoResumeJourney) {
             walletAddress?.let { addr -> scope.launch { checkWalletIdentityResolution(addr) } }
@@ -191,6 +198,7 @@ object Aether : DefaultLifecycleObserver {
 
     fun getAnonymousId(): String = anonymousId
     fun getUserId(): String? = userId
+    fun getFingerprintId(): String = fingerprintId
 
     fun reset() {
         flush()
@@ -349,11 +357,13 @@ object Aether : DefaultLifecycleObserver {
 
     override fun onStart(owner: LifecycleOwner) {
         sessionId = UUID.randomUUID().toString()
-        track("app_foreground")
+        foregroundStartMs = SystemClock.elapsedRealtime()
+        track("app_foreground", mapOf("networkType" to getNetworkType()))
     }
 
     override fun onStop(owner: LifecycleOwner) {
-        track("app_background")
+        val sessionDurationMs = if (foregroundStartMs > 0) SystemClock.elapsedRealtime() - foregroundStartMs else 0L
+        track("app_background", mapOf("sessionDurationMs" to sessionDurationMs))
         flush()
     }
 
@@ -443,9 +453,17 @@ object Aether : DefaultLifecycleObserver {
         put("os", JSONObject().apply {
             put("name", "Android")
             put("version", Build.VERSION.RELEASE)
+            put("sdkInt", Build.VERSION.SDK_INT)
+        })
+        put("device", JSONObject().apply {
+            put("manufacturer", Build.MANUFACTURER)
+            put("model", Build.MODEL)
         })
         put("locale", Locale.getDefault().toLanguageTag())
         put("timezone", TimeZone.getDefault().id)
+        put("network", JSONObject().apply {
+            put("type", getNetworkType())
+        })
         put("library", JSONObject().apply {
             put("name", "aether-android")
             put("version", VERSION)
@@ -486,6 +504,34 @@ object Aether : DefaultLifecycleObserver {
                 runBlocking { sendBatch() }
             } catch (_: Exception) {}
             defaultHandler?.uncaughtException(thread, throwable)
+        }
+    }
+
+    private fun emitSessionStart(ctx: Context) {
+        val memInfo = ActivityManager.MemoryInfo()
+        (ctx.getSystemService(Context.ACTIVITY_SERVICE) as? ActivityManager)?.getMemoryInfo(memInfo)
+        val startupMs = SystemClock.elapsedRealtime() - appStartTimeMs
+
+        enqueueEvent("session_start", mapOf(
+            "startupTimeMs"       to startupMs,
+            "totalMemoryMB"       to (memInfo.totalMem / 1048576L),
+            "availableMemoryMB"   to (memInfo.availMem / 1048576L),
+            "lowMemory"           to memInfo.lowMemory,
+            "networkType"         to getNetworkType(),
+            "osVersion"           to Build.VERSION.RELEASE,
+            "sdkInt"              to Build.VERSION.SDK_INT,
+            "device"              to "${Build.MANUFACTURER} ${Build.MODEL}",
+        ))
+    }
+
+    private fun getNetworkType(): String {
+        val cm = context?.getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager ?: return "unknown"
+        val nc = cm.getNetworkCapabilities(cm.activeNetwork) ?: return "none"
+        return when {
+            nc.hasTransport(NetworkCapabilities.TRANSPORT_WIFI)     -> "wifi"
+            nc.hasTransport(NetworkCapabilities.TRANSPORT_CELLULAR) -> "cellular"
+            nc.hasTransport(NetworkCapabilities.TRANSPORT_ETHERNET) -> "ethernet"
+            else -> "other"
         }
     }
 
