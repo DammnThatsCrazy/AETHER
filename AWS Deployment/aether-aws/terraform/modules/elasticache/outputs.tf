@@ -1,16 +1,16 @@
 output "primary_endpoint" {
   description = "Redis primary endpoint (host:port)"
-  value       = "${aws_elasticache_cluster.this.cache_nodes[0].address}:${aws_elasticache_cluster.this.port}"
+  value       = "${aws_elasticache_replication_group.this.primary_endpoint_address}:${aws_elasticache_replication_group.this.port}"
 }
 
 output "cluster_id" {
-  description = "ElastiCache cluster ID"
-  value       = aws_elasticache_cluster.this.cluster_id
+  description = "ElastiCache replication group ID"
+  value       = aws_elasticache_replication_group.this.id
 }
 
 output "port" {
   description = "Redis port"
-  value       = aws_elasticache_cluster.this.port
+  value       = aws_elasticache_replication_group.this.port
 }
 
 output "auth_token_secret_arn" {
