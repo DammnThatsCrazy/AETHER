@@ -88,29 +88,6 @@ resource "aws_db_parameter_group" "this" {
 }
 
 # --------------------------------------------------------------------------
-# Random password (stored in Secrets Manager by the secrets module)
-# We generate it here so it can be seeded into the DB and the secret value.
-# --------------------------------------------------------------------------
-
-resource "random_password" "db" {
-  length           = 32
-  special          = true
-  override_special = "!#$%&*()-_=+[]{}:?"
-}
-
-resource "aws_secretsmanager_secret_version" "db_password" {
-  secret_id = var.db_password_secret_arn
-  secret_string = jsonencode({
-    username = "aether_admin"
-    password = random_password.db.result
-    engine   = "postgres"
-    host     = aws_db_instance.this.address
-    port     = aws_db_instance.this.port
-    dbname   = var.db_name
-  })
-}
-
-# --------------------------------------------------------------------------
 # RDS Instance
 # --------------------------------------------------------------------------
 
@@ -122,8 +99,13 @@ resource "aws_db_instance" "this" {
   instance_class       = var.db_instance_class
   db_name              = var.db_name
   username             = "aether_admin"
-  password             = random_password.db.result
   port                 = 5432
+
+  # AWS manages the master password — it is never stored in Terraform state.
+  # The credential JSON is placed in Secrets Manager automatically and rotated
+  # on demand via the console or aws rds rotate-secret CLI.
+  manage_master_user_password   = true
+  master_user_secret_kms_key_id = aws_kms_key.rds.arn
 
   # Storage
   storage_type          = "gp3"

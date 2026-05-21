@@ -1,185 +1,87 @@
-# ═══════════════════════════════════════════════════════════════════════════
-# Aether — Secrets Manager Module (NEW)
-# Centralised secret management with automatic rotation.
-# ═══════════════════════════════════════════════════════════════════════════
+# ============================================================================
+# AETHER — Secrets Manager Module
+#
+# Creates Secrets Manager secret stubs with KMS encryption.
+# No secret VALUES are stored here — values must be injected manually
+# post-deploy (see the root README.md for instructions).
+#
+# Secrets:
+#   aether/jwt-secret                — JWT signing key
+#   aether/byok-encryption-key       — BYOK AES-256 encryption key
+#   aether/stripe-secret-key         — Stripe secret key
+#   aether/stripe-webhook-secret     — Stripe webhook signing secret
+#   aether/oracle-signer-private-key — Oracle signer private key
+#   aether/watermark-secret-key      — Watermark HMAC key
+#   aether/canary-secret-seed        — Canary token seed
+#
+# DB credentials: managed by the RDS module via manage_master_user_password.
+# Redis AUTH token: managed by the ElastiCache module. Both ARNs are passed
+# into the ECS module at the root level — neither value touches TF state.
+#
+# ECS task definitions reference these ARNs via the `secrets:` block,
+# so the values are injected at container start (never in env vars).
+# ============================================================================
 
-variable "environment" { type = string }
-
-# ── KMS Key for Secrets ────────────────────────────────────────────────
+# --------------------------------------------------------------------------
+# KMS Key shared by all secrets
+# --------------------------------------------------------------------------
 
 resource "aws_kms_key" "secrets" {
-  description             = "Aether secrets encryption key - ${var.environment}"
+  description             = "${var.project} Secrets Manager encryption key (${var.environment})"
   deletion_window_in_days = 30
   enable_key_rotation     = true
 
-  tags = { Name = "aether-secrets-${var.environment}" }
+  tags = {
+    Name = "${var.project}-${var.environment}-secrets-kms"
+  }
 }
 
 resource "aws_kms_alias" "secrets" {
-  name          = "alias/aether-secrets-${var.environment}"
+  name          = "alias/${lower(var.project)}-${var.environment}-secrets"
   target_key_id = aws_kms_key.secrets.key_id
 }
 
-# ── Secrets ────────────────────────────────────────────────────────────
+# --------------------------------------------------------------------------
+# Secret definitions
+# --------------------------------------------------------------------------
 
-resource "aws_secretsmanager_secret" "rds_master" {
-  name        = "aether/${var.environment}/rds/master"
-  description = "Aurora PostgreSQL master credentials"
-  kms_key_id  = aws_kms_key.secrets.arn
-
-  replica {
-    region = var.environment == "production" ? "us-west-2" : null
-  }
-
-  tags = { Service = "RDS" }
-}
-
-resource "aws_secretsmanager_secret" "neptune_auth" {
-  name        = "aether/${var.environment}/neptune/master"
-  description = "Neptune IAM auth configuration"
-  kms_key_id  = aws_kms_key.secrets.arn
-
-  tags = { Service = "Neptune" }
-}
-
-resource "aws_secretsmanager_secret" "redis_auth" {
-  name        = "aether/${var.environment}/redis/auth"
-  description = "Redis AUTH token"
-  kms_key_id  = aws_kms_key.secrets.arn
-
-  tags = { Service = "ElastiCache" }
-}
-
-resource "aws_secretsmanager_secret" "opensearch_master" {
-  name        = "aether/${var.environment}/opensearch/master"
-  description = "OpenSearch admin credentials"
-  kms_key_id  = aws_kms_key.secrets.arn
-
-  tags = { Service = "OpenSearch" }
-}
-
-resource "aws_secretsmanager_secret" "jwt_secret" {
-  name        = "aether/${var.environment}/api/jwt-secret"
-  description = "JWT signing secret for auth service"
-  kms_key_id  = aws_kms_key.secrets.arn
-
-  tags = { Service = "API" }
-}
-
-resource "aws_secretsmanager_secret" "encryption_key" {
-  name        = "aether/${var.environment}/api/encryption-key"
-  description = "AES-256 encryption key for PII"
-  kms_key_id  = aws_kms_key.secrets.arn
-
-  tags = { Service = "API" }
-}
-
-resource "aws_secretsmanager_secret" "pagerduty_key" {
-  name        = "aether/${var.environment}/pagerduty/api-key"
-  description = "PagerDuty integration key"
-  kms_key_id  = aws_kms_key.secrets.arn
-
-  tags = { Service = "Monitoring" }
-}
-
-resource "aws_secretsmanager_secret" "slack_webhook" {
-  name        = "aether/${var.environment}/slack/webhook-url"
-  description = "Slack webhook for alerts"
-  kms_key_id  = aws_kms_key.secrets.arn
-
-  tags = { Service = "Monitoring" }
-}
-
-# ── Rotation Configuration ────────────────────────────────────────────
-
-resource "aws_secretsmanager_secret_rotation" "rds_rotation" {
-  count               = var.environment == "production" ? 1 : 0
-  secret_id           = aws_secretsmanager_secret.rds_master.id
-  rotation_lambda_arn = aws_lambda_function.secret_rotator[0].arn
-
-  rotation_rules {
-    automatically_after_days = 30
-  }
-}
-
-# Lambda for secret rotation (production only)
-resource "aws_lambda_function" "secret_rotator" {
-  count         = var.environment == "production" ? 1 : 0
-  function_name = "aether-secret-rotator-${var.environment}"
-  runtime       = "python3.12"
-  handler       = "index.handler"
-  role          = aws_iam_role.rotation_lambda[0].arn
-  timeout       = 30
-  filename      = "${path.module}/rotation_lambda.zip"
-
-  environment {
-    variables = {
-      ENVIRONMENT = var.environment
+locals {
+  secrets = {
+    "jwt-secret" = {
+      description = "JWT signing key for AETHER authentication service"
+    }
+    "byok-encryption-key" = {
+      description = "BYOK AES-256 encryption key for user-controlled encryption"
+    }
+    "stripe-secret-key" = {
+      description = "Stripe secret API key for payment processing"
+    }
+    "stripe-webhook-secret" = {
+      description = "Stripe webhook endpoint signing secret"
+    }
+    "oracle-signer-private-key" = {
+      description = "Private key for the AETHER oracle signing service"
+    }
+    "watermark-secret-key" = {
+      description = "HMAC key for invisible watermarking"
+    }
+    "canary-secret-seed" = {
+      description = "Seed for canary token generation"
     }
   }
-
-  tags = { Name = "aether-secret-rotator-${var.environment}" }
 }
 
-resource "aws_iam_role" "rotation_lambda" {
-  count = var.environment == "production" ? 1 : 0
-  name  = "aether-secret-rotator-role-${var.environment}"
+resource "aws_secretsmanager_secret" "this" {
+  for_each = local.secrets
 
-  assume_role_policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [{
-      Action = "sts:AssumeRole"
-      Effect = "Allow"
-      Principal = { Service = "lambda.amazonaws.com" }
-    }]
-  })
-}
+  name        = "aether/${each.key}"
+  description = each.value.description
+  kms_key_id  = aws_kms_key.secrets.arn
 
-resource "aws_iam_role_policy" "rotation_lambda" {
-  count = var.environment == "production" ? 1 : 0
-  name  = "aether-secret-rotator-policy"
-  role  = aws_iam_role.rotation_lambda[0].id
+  recovery_window_in_days = 30
 
-  policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [
-      {
-        Effect = "Allow"
-        Action = [
-          "secretsmanager:GetSecretValue",
-          "secretsmanager:PutSecretValue",
-          "secretsmanager:UpdateSecretVersionStage",
-          "secretsmanager:DescribeSecret",
-        ]
-        Resource = "arn:aws:secretsmanager:*:*:secret:aether/${var.environment}/*"
-      },
-      {
-        Effect   = "Allow"
-        Action   = ["kms:Decrypt", "kms:GenerateDataKey"]
-        Resource = aws_kms_key.secrets.arn
-      },
-      {
-        Effect   = "Allow"
-        Action   = ["logs:CreateLogGroup", "logs:CreateLogStream", "logs:PutLogEvents"]
-        Resource = "arn:aws:logs:*:*:*"
-      },
-    ]
-  })
-}
-
-# ── Outputs ────────────────────────────────────────────────────────────
-
-output "kms_key_arn" {
-  value = aws_kms_key.secrets.arn
-}
-
-output "secret_arns" {
-  value = {
-    rds       = aws_secretsmanager_secret.rds_master.arn
-    neptune   = aws_secretsmanager_secret.neptune_auth.arn
-    redis     = aws_secretsmanager_secret.redis_auth.arn
-    opensearch = aws_secretsmanager_secret.opensearch_master.arn
-    jwt       = aws_secretsmanager_secret.jwt_secret.arn
-    encryption = aws_secretsmanager_secret.encryption_key.arn
+  tags = {
+    Name        = "aether/${each.key}"
+    Environment = var.environment
   }
 }

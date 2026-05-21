@@ -56,3 +56,4 @@ docs/api/
 *.pt
 *.pkl
 mlruns/
+.claude/worktrees/

@@ -20,7 +20,9 @@ Internet
 ```
 
 All secrets are fetched at container start-up from Secrets Manager. No secret
-values appear in Terraform state or task definitions.
+values appear in task definitions. DB credentials use AWS-managed master
+password rotation; Redis uses a Terraform-generated token stored only in
+Secrets Manager (never in ECS task env vars).
 
 ## Module Summary
 
@@ -28,9 +30,9 @@ values appear in Terraform state or task definitions.
 |--------|-----------|
 | `vpc` | VPC, 3-tier subnets (public/private/isolated), NAT GW, security groups, flow logs |
 | `ecr` | 4 private ECR repositories with lifecycle policies |
-| `secrets` | 8 Secrets Manager stubs (KMS-encrypted, values injected post-deploy) |
-| `rds` | RDS Postgres 16, Multi-AZ, KMS, enhanced monitoring |
-| `elasticache` | Redis 7.x cluster, TLS, KMS |
+| `secrets` | 7 Secrets Manager stubs (KMS-encrypted, values injected post-deploy) |
+| `rds` | RDS Postgres 16, Multi-AZ, KMS, enhanced monitoring; AWS-managed master password |
+| `elasticache` | Redis 7.x cluster, TLS in-transit, AUTH token, KMS at-rest |
 | `msk` | 3-broker MSK Kafka, TLS, KMS, CloudWatch metrics |
 | `neptune` | Neptune cluster + instances, IAM auth, KMS — VPC only |
 | `alb` | Internet-facing ALB, HTTP→HTTPS redirect, path routing |
@@ -92,23 +94,31 @@ The Secrets Manager stubs are created empty. Populate them:
 # JWT signing key (generate a secure random value)
 aws secretsmanager put-secret-value \
   --secret-id aether/jwt-secret \
-  --secret-string '{"value":"REPLACE_WITH_SECURE_RANDOM_256BIT_KEY"}'
+  --secret-string 'REPLACE_WITH_SECURE_RANDOM_256BIT_KEY'
 
 # Stripe keys
 aws secretsmanager put-secret-value \
   --secret-id aether/stripe-secret-key \
-  --secret-string '{"value":"sk_live_..."}'
+  --secret-string 'sk_live_...'
 
 aws secretsmanager put-secret-value \
   --secret-id aether/stripe-webhook-secret \
-  --secret-string '{"value":"whsec_..."}'
+  --secret-string 'whsec_...'
 
 # BYOK encryption key, oracle signer, watermark key, canary seed
 # (follow the same pattern for each secret listed in modules/secrets/main.tf)
 ```
 
+> **Note:** Store raw secret strings, not JSON objects. ECS `valueFrom` ARNs
+> inject the entire secret string into the container — a JSON wrapper would
+> require a JSON-key suffix on the ARN and is error-prone.
+
 The `aether/db-password` secret is populated automatically by the RDS module
-and contains JSON with `host`, `port`, `username`, `password`, `dbname`.
+via AWS-managed master password rotation and contains JSON with
+`host`, `port`, `username`, `password`, `dbname`.
+
+The `aether/redis-auth-token` secret is populated automatically by the
+ElastiCache module and contains the raw AUTH token string.
 
 ### 3. Build and push Docker images
 

@@ -85,7 +85,6 @@ module "rds" {
   multi_az                 = var.db_multi_az
   allocated_storage        = var.db_allocated_storage
   max_allocated_storage    = var.db_max_allocated_storage
-  db_password_secret_arn   = module.secrets.secret_arns["db-password"]
 }
 
 # ---------------------------------------------------------------------------
@@ -169,7 +168,10 @@ module "ecs" {
   ecr_ml_url               = module.ecr.repository_urls["aether-ml-serving"]
   alb_backend_tg_arn       = module.alb.backend_target_group_arn
   alb_ml_tg_arn            = module.alb.ml_target_group_arn
-  secret_arns              = module.secrets.secret_arns
+  secret_arns              = merge(module.secrets.secret_arns, {
+    "db-password"      = module.rds.db_password_secret_arn
+    "redis-auth-token" = module.elasticache.auth_token_secret_arn
+  })
 
   backend_cpu              = var.ecs_backend_cpu
   backend_memory           = var.ecs_backend_memory
