@@ -44,7 +44,7 @@ def _remove_crypto_stubs():
     for mod in _STUBBED:
         sys.modules.pop(mod, None)
     for name in list(sys.modules):
-        if name == "shared.auth" or name.startswith("shared.auth."):
+        if name == "shared" or name.startswith("shared."):
             sys.modules.pop(name, None)
 
 

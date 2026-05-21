@@ -59,19 +59,17 @@ from services.attribution.models import (  # noqa: E402
 
 @pytest.fixture(scope="module", autouse=True)
 def _remove_crypto_stubs():
-    """Remove jwt/crypto stubs and auth modules after this module's tests.
+    """Remove jwt/crypto stubs and all shared.* modules after this module's tests.
 
-    Clears only jwt + shared.auth.* so that test_auth_middleware (which comes
-    alphabetically after us) re-imports shared.auth.auth fresh and picks up
-    the real jwt library.  Other cached shared.* modules (billing, rate_limit,
-    etc.) are intentionally left in sys.modules so later test files that do
-    lazy imports of those modules continue to work.
+    Clears jwt/crypto stubs AND the entire shared.* namespace so that later
+    test files (test_auth_middleware, test_stripe_billing, etc.) always get a
+    fresh import with the real jwt library rather than stale MagicMock types.
     """
     yield
     for mod in _STUBBED:
         sys.modules.pop(mod, None)
     for name in list(sys.modules):
-        if name == "shared.auth" or name.startswith("shared.auth."):
+        if name == "shared" or name.startswith("shared."):
             sys.modules.pop(name, None)
 
 

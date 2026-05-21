@@ -2,8 +2,10 @@
 """Aether Platform — AWS Secrets Manager Bootstrap
 
 Pushes all generated secrets into AWS Secrets Manager under the
-`aether/<environment>/` prefix, creating each secret if it doesn't
-exist or updating it if it does.
+`aether/` prefix, matching the path format used by the Terraform
+secrets module (modules/secrets/main.tf: name = "aether/${each.key}").
+ECS task definitions reference secrets by this exact ARN, so the paths
+must match — the environment is captured in resource tags, not the path.
 
 Usage:
     # Push to staging
@@ -29,16 +31,16 @@ Prerequisites:
       - secretsmanager:PutSecretValue
       - secretsmanager:DescribeSecret
 
-Secret paths (stored as individual SecretString):
-    aether/<env>/jwt-secret
-    aether/<env>/byok-encryption-key
-    aether/<env>/watermark-secret-key
-    aether/<env>/canary-secret-seed
-    aether/<env>/extraction-canary-seed
-    aether/<env>/oracle-signer-private-key
-    aether/<env>/grafana-admin-password
-    aether/<env>/stripe-secret-key          (manual — from Stripe Dashboard)
-    aether/<env>/stripe-webhook-secret      (manual — from Stripe Dashboard)
+Secret paths (stored as individual SecretString, matching Terraform):
+    aether/jwt-secret
+    aether/byok-encryption-key
+    aether/watermark-secret-key
+    aether/canary-secret-seed
+    aether/extraction-canary-seed
+    aether/oracle-signer-private-key
+    aether/grafana-admin-password
+    aether/stripe-secret-key          (manual — from Stripe Dashboard)
+    aether/stripe-webhook-secret      (manual — from Stripe Dashboard)
 """
 
 from __future__ import annotations
@@ -195,11 +197,12 @@ def run(
         {"Key": "ManagedBy", "Value": "bootstrap-script"},
     ]
 
-    prefix = f"aether/{env}/"
+    prefix = "aether/"
 
     print(f"{'DRY-RUN: ' if dry_run else ''}Pushing secrets to AWS Secrets Manager")
     print(f"  Region : {region}")
-    print(f"  Prefix : {prefix}")
+    print(f"  Env tag: {env}")
+    print(f"  Prefix : {prefix}  (matches Terraform: aether/<name>)")
     print(f"  Source : {'generated' if not from_env else from_env}")
     print()
 

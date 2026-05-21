@@ -234,7 +234,7 @@ resource "aws_cloudwatch_metric_alarm" "alb_5xx" {
 
   metric_query {
     id          = "error_rate"
-    expression  = "100 * errors / MAX([errors, 1])"
+    expression  = "100 * errors / MAX([requests, 1])"
     label       = "5xx Error Rate (%)"
     return_data = true
   }
@@ -243,6 +243,19 @@ resource "aws_cloudwatch_metric_alarm" "alb_5xx" {
     id = "errors"
     metric {
       metric_name = "HTTPCode_ELB_5XX_Count"
+      namespace   = "AWS/ApplicationELB"
+      period      = 60
+      stat        = "Sum"
+      dimensions = {
+        LoadBalancer = var.alb_arn_suffix
+      }
+    }
+  }
+
+  metric_query {
+    id = "requests"
+    metric {
+      metric_name = "RequestCount"
       namespace   = "AWS/ApplicationELB"
       period      = 60
       stat        = "Sum"
