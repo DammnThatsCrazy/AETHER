@@ -215,3 +215,40 @@ variable "log_retention_days" {
   description = "CloudWatch log retention period in days"
   default     = 30
 }
+
+# --------------------------------------------------------------------------
+# Auth0
+# --------------------------------------------------------------------------
+
+variable "auth0_domain" {
+  type        = string
+  description = "Auth0 tenant domain (e.g. your-tenant.auth0.com)"
+}
+
+variable "auth0_management_client_id" {
+  type        = string
+  description = "Client ID of the Terraform M2M application in Auth0"
+  sensitive   = true
+}
+
+variable "auth0_management_client_secret" {
+  type        = string
+  description = "Client secret of the Terraform M2M application in Auth0"
+  sensitive   = true
+}
+
+variable "auth0_api_audience" {
+  type        = string
+  description = "Audience identifier for the AETHER API resource server"
+  default     = "https://api.aether.io"
+}
+
+variable "aether_app_url" {
+  type        = string
+  description = "Public URL of the Aether customer app (e.g. https://app.aether.io)"
+}
+
+variable "kyber_app_url" {
+  type        = string
+  description = "Public URL of the Kyber operator console (e.g. https://kyber.aether.io)"
+}
