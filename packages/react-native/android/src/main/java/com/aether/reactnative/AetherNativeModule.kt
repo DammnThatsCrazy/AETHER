@@ -163,12 +163,25 @@ class AetherNativeModule(private val reactContext: ReactApplicationContext) :
     fun grantConsent(purposes: ReadableArray) {
         val list = (0 until purposes.size()).map { purposes.getString(it) ?: "" }
         Aether.grantConsent(list)
+        emitConsentChanged()
     }
 
     @ReactMethod
     fun revokeConsent(purposes: ReadableArray) {
         val list = (0 until purposes.size()).map { purposes.getString(it) ?: "" }
         Aether.revokeConsent(list)
+        emitConsentChanged()
+    }
+
+    private fun emitConsentChanged() {
+        val granted = Aether.getConsentState().toSet()
+        sendEvent("AetherConsentChanged", Arguments.createMap().apply {
+            putBoolean("analytics", "analytics" in granted)
+            putBoolean("marketing", "marketing" in granted)
+            putBoolean("web3", "web3" in granted)
+            putBoolean("agent", "agent" in granted)
+            putBoolean("commerce", "commerce" in granted)
+        })
     }
 
     @ReactMethod

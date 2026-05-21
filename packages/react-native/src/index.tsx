@@ -148,6 +148,10 @@ const Aether = {
     revoke(purposes: ConsentPurpose[]): void {
       AetherNative?.revokeConsent(purposes);
     },
+    onUpdate(callback: (state: ConsentState) => void): () => void {
+      const sub = emitter?.addListener('AetherConsentChanged', callback);
+      return () => sub?.remove();
+    },
   },
 
   // E-commerce
@@ -199,6 +203,21 @@ export function useScreenTracking(screenName: string) {
   useEffect(() => {
     Aether.screenView(screenName);
   }, [screenName]);
+}
+
+export function useConsentState() {
+  const [consent, setConsent] = useState<ConsentState | null>(null);
+
+  useEffect(() => {
+    Aether.consent.getState().then(setConsent);
+    return Aether.consent.onUpdate(setConsent);
+  }, []);
+
+  return {
+    consent,
+    grant: Aether.consent.grant,
+    revoke: Aether.consent.revoke,
+  };
 }
 
 // =============================================================================

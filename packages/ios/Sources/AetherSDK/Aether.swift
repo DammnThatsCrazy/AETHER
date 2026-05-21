@@ -8,6 +8,8 @@ import UIKit
 import CryptoKit
 import MetricKit
 import Network
+import AppTrackingTransparency
+import AdSupport
 
 // MARK: - Configuration
 
@@ -107,17 +109,30 @@ public struct EventContext: Codable {
 
 // MARK: - Identity
 
+public struct WalletEntry {
+    public var address: String
+    public var vm: String       // evm | svm | bitcoin | movevm | near | tvm | cosmos
+    public var walletType: String
+    public var chainId: String
+
+    public init(address: String, vm: String = "evm", walletType: String = "unknown", chainId: String = "unknown") {
+        self.address = address; self.vm = vm
+        self.walletType = walletType; self.chainId = chainId
+    }
+}
+
 public struct IdentityData {
     public var userId: String?
     public var walletAddress: String?
     public var walletType: String?
     public var chainId: Int?
     public var traits: [String: AnyCodable]?
+    public var wallets: [WalletEntry]
 
-    public init(userId: String? = nil, walletAddress: String? = nil, traits: [String: AnyCodable]? = nil) {
-        self.userId = userId
-        self.walletAddress = walletAddress
-        self.traits = traits
+    public init(userId: String? = nil, walletAddress: String? = nil,
+                traits: [String: AnyCodable]? = nil, wallets: [WalletEntry] = []) {
+        self.userId = userId; self.walletAddress = walletAddress
+        self.traits = traits; self.wallets = wallets
     }
 }
 
@@ -220,6 +235,11 @@ public final class Aether: NSObject {
 
         self.fingerprintId = DeviceFingerprint.generate()
 
+        // Request App Tracking Transparency authorization if required (iOS 14.5+)
+        if config.privacy.respectATT {
+            requestTrackingAuthorization()
+        }
+
         isInitialized = true
         log("Aether iOS SDK initialized (v7.0.0)")
 
@@ -257,14 +277,19 @@ public final class Aether: NSObject {
             walletAddress = addr
             defaults.set(addr, forKey: "walletAddress")
         }
+        // Multi-wallet: connect each as a proper wallet event
+        for w in data.wallets {
+            walletConnected(address: w.address, walletType: w.walletType, chainId: w.chainId)
+        }
 
         enqueueEvent(type: .identify, properties: [
-            "userId": AnyCodable(userId ?? ""),
-            "traits": AnyCodable(traits),
-            "walletAddress": AnyCodable(data.walletAddress ?? "")
+            "userId":       AnyCodable(userId ?? ""),
+            "traits":       AnyCodable(traits),
+            "walletAddress": AnyCodable(data.walletAddress ?? ""),
+            "walletsCount": AnyCodable(data.wallets.count),
+            "wallets": AnyCodable(data.wallets.map { ["address": $0.address, "vm": $0.vm, "walletType": $0.walletType] }),
         ])
 
-        // Persist
         defaults.set(userId, forKey: "userId")
     }
 
@@ -471,29 +496,59 @@ public final class Aether: NSObject {
         let batch = Array(eventQueue.prefix(config.batchSize))
         eventQueue.removeFirst(min(batch.count, eventQueue.count))
 
+        sendBatchWithRetry(batch: batch, config: config, retryCount: 0)
+    }
+
+    private func sendBatchWithRetry(batch: [AetherEvent], config: AetherConfig, retryCount: Int) {
+        let maxRetries = 3
         guard let url = URL(string: "\(config.endpoint)/v1/batch") else { return }
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.setValue("Bearer \(config.apiKey)", forHTTPHeaderField: "Authorization")
         request.setValue("ios", forHTTPHeaderField: "X-Aether-SDK")
+        request.timeoutInterval = 10.0
 
-        let payload: [String: Any] = [
-            "batch": batch.map { try? JSONEncoder().encode($0) }.compactMap { $0 }.map { try? JSONSerialization.jsonObject(with: $0) }.compactMap { $0 },
-            "sentAt": ISO8601DateFormatter().string(from: Date())
-        ]
-
+        let encodedBatch = batch.map { try? JSONEncoder().encode($0) }
+            .compactMap { $0 }
+            .map { try? JSONSerialization.jsonObject(with: $0) }
+            .compactMap { $0 }
+        let payload: [String: Any] = ["batch": encodedBatch, "sentAt": ISO8601DateFormatter().string(from: Date())]
         request.httpBody = try? JSONSerialization.data(withJSONObject: payload)
 
         URLSession.shared.dataTask(with: request) { [weak self] _, response, error in
+            guard let self = self else { return }
+            let statusCode = (response as? HTTPURLResponse)?.statusCode ?? 0
+
             if let error = error {
-                self?.log("Batch send failed: \(error.localizedDescription)")
-                // Re-enqueue failed events
-                self?.serialQueue.async {
-                    self?.eventQueue.insert(contentsOf: batch, at: 0)
+                self.log("Batch send failed: \(error.localizedDescription)")
+                if retryCount < maxRetries {
+                    let delay = min(pow(2.0, Double(retryCount)), 30.0)
+                    DispatchQueue.global().asyncAfter(deadline: .now() + delay) {
+                        self.sendBatchWithRetry(batch: batch, config: config, retryCount: retryCount + 1)
+                    }
+                } else {
+                    self.serialQueue.async { self.eventQueue.insert(contentsOf: batch, at: 0) }
                 }
-            } else if let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode >= 400 {
-                self?.log("Batch send HTTP error: \(httpResponse.statusCode)")
+            } else if statusCode == 429 {
+                let retryAfter = (response as? HTTPURLResponse)?.value(forHTTPHeaderField: "Retry-After")
+                    .flatMap { Double($0) } ?? 5.0
+                if retryCount < maxRetries {
+                    DispatchQueue.global().asyncAfter(deadline: .now() + retryAfter) {
+                        self.sendBatchWithRetry(batch: batch, config: config, retryCount: retryCount + 1)
+                    }
+                }
+            } else if statusCode >= 500 {
+                if retryCount < maxRetries {
+                    let delay = min(pow(2.0, Double(retryCount)), 30.0)
+                    DispatchQueue.global().asyncAfter(deadline: .now() + delay) {
+                        self.sendBatchWithRetry(batch: batch, config: config, retryCount: retryCount + 1)
+                    }
+                } else {
+                    self.log("Batch dropped after \(maxRetries) retries (server error \(statusCode))")
+                }
+            } else if statusCode >= 400 {
+                self.log("Batch rejected (client error \(statusCode)) — not retrying")
             }
         }.resume()
     }
@@ -567,6 +622,29 @@ public final class Aether: NSObject {
         case .serious:  return "serious"
         case .critical: return "critical"
         @unknown default: return "unknown"
+        }
+    }
+
+    private func requestTrackingAuthorization() {
+        if #available(iOS 14.5, *) {
+            // Must be called after the first UIApplicationDidBecomeActive
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                ATTrackingManager.requestTrackingAuthorization { [weak self] status in
+                    let statusStr: String
+                    switch status {
+                    case .authorized:          statusStr = "authorized"
+                    case .denied:              statusStr = "denied"
+                    case .restricted:          statusStr = "restricted"
+                    case .notDetermined:       statusStr = "not_determined"
+                    @unknown default:          statusStr = "unknown"
+                    }
+                    self?.enqueueEvent(type: .track, properties: [
+                        "event": AnyCodable("att_authorization"),
+                        "status": AnyCodable(statusStr),
+                        "idfa": AnyCodable(status == .authorized ? ASIdentifierManager.shared().advertisingIdentifier.uuidString : ""),
+                    ])
+                }
+            }
         }
     }
 
