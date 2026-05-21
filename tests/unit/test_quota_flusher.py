@@ -31,22 +31,37 @@ if str(BACKEND_ROOT) not in sys.path:
     sys.path.insert(0, str(BACKEND_ROOT))
 
 
+import types as _types
+
+
 @pytest.fixture(scope="module", autouse=True)
 def _remove_crypto_stubs():
+    # flush_once does a dynamic `from repositories.repos import get_pool` —
+    # install the stub now (execution time) so collection of this module
+    # does NOT pollute sys.modules for earlier-running test files.
+    _repos_mod = _types.ModuleType("repositories.repos")
+    _repos_mod.get_pool = AsyncMock()  # type: ignore[attr-defined]
+    _orig_repos = sys.modules.get("repositories")
+    _orig_repos_repos = sys.modules.get("repositories.repos")
+    sys.modules.setdefault("repositories", _types.ModuleType("repositories"))
+    sys.modules["repositories.repos"] = _repos_mod
+
     yield
+
     for mod in _STUBBED:
         sys.modules.pop(mod, None)
     for name in list(sys.modules):
         if name == "shared" or name.startswith("shared."):
             sys.modules.pop(name, None)
-
-# flush_once does a dynamic `from repositories.repos import get_pool` —
-# provide a module stub so we can swap get_pool per test via sys.modules.
-import types as _types
-_repos_mod = _types.ModuleType("repositories.repos")
-_repos_mod.get_pool = AsyncMock()  # type: ignore[attr-defined]
-sys.modules.setdefault("repositories", _types.ModuleType("repositories"))
-sys.modules["repositories.repos"] = _repos_mod
+    # Restore repositories stubs to pre-test state
+    if _orig_repos is None:
+        sys.modules.pop("repositories", None)
+    else:
+        sys.modules["repositories"] = _orig_repos
+    if _orig_repos_repos is None:
+        sys.modules.pop("repositories.repos", None)
+    else:
+        sys.modules["repositories.repos"] = _orig_repos_repos
 
 
 # ---------------------------------------------------------------------------
