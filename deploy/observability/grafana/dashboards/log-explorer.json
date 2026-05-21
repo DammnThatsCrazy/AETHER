@@ -1,0 +1,169 @@
+{
+  "uid": "aether-log-explorer",
+  "title": "Log Explorer",
+  "tags": ["aether", "logs", "loki"],
+  "schemaVersion": 36,
+  "version": 1,
+  "timezone": "utc",
+  "time": {"from": "now-1h", "to": "now"},
+  "refresh": "30s",
+  "templating": {
+    "list": [
+      {
+        "name": "datasource",
+        "type": "datasource",
+        "pluginId": "loki",
+        "label": "Loki Datasource"
+      },
+      {
+        "name": "service",
+        "type": "query",
+        "label": "Service",
+        "datasource": {"type": "loki", "uid": "${datasource}"},
+        "definition": "label_values(service)",
+        "query": "label_values(service)",
+        "multi": true,
+        "includeAll": true,
+        "current": {"text": "All", "value": "$__all"}
+      },
+      {
+        "name": "level",
+        "type": "custom",
+        "label": "Log Level",
+        "options": [
+          {"text": "All", "value": ""},
+          {"text": "error", "value": "error"},
+          {"text": "warn", "value": "warn"},
+          {"text": "info", "value": "info"},
+          {"text": "debug", "value": "debug"}
+        ],
+        "current": {"text": "All", "value": ""},
+        "multi": false,
+        "includeAll": false
+      },
+      {
+        "name": "search",
+        "type": "textbox",
+        "label": "Search",
+        "current": {"text": "", "value": ""}
+      }
+    ]
+  },
+  "panels": [
+    {
+      "id": 1,
+      "title": "Log Volume by Service",
+      "type": "timeseries",
+      "gridPos": {"h": 8, "w": 24, "x": 0, "y": 0},
+      "datasource": {"type": "loki", "uid": "${datasource}"},
+      "targets": [
+        {
+          "expr": "sum by (service) (count_over_time({service=~\"$service\"}[1m]))",
+          "legendFormat": "{{service}}",
+          "queryType": "range"
+        }
+      ],
+      "fieldConfig": {"defaults": {"unit": "short"}},
+      "options": {"tooltip": {"mode": "multi"}}
+    },
+    {
+      "id": 2,
+      "title": "Log Level Distribution",
+      "type": "timeseries",
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 8},
+      "datasource": {"type": "loki", "uid": "${datasource}"},
+      "targets": [
+        {
+          "expr": "sum by (level) (count_over_time({service=~\"$service\", level=\"error\"}[1m]))",
+          "legendFormat": "error"
+        },
+        {
+          "expr": "sum by (level) (count_over_time({service=~\"$service\", level=\"warn\"}[1m]))",
+          "legendFormat": "warn"
+        },
+        {
+          "expr": "sum by (level) (count_over_time({service=~\"$service\", level=\"info\"}[1m]))",
+          "legendFormat": "info"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {"unit": "short"},
+        "overrides": [
+          {"matcher": {"id": "byName", "options": "error"}, "properties": [{"id": "color", "value": {"fixedColor": "red", "mode": "fixed"}}]},
+          {"matcher": {"id": "byName", "options": "warn"}, "properties": [{"id": "color", "value": {"fixedColor": "yellow", "mode": "fixed"}}]},
+          {"matcher": {"id": "byName", "options": "info"}, "properties": [{"id": "color", "value": {"fixedColor": "blue", "mode": "fixed"}}]}
+        ]
+      }
+    },
+    {
+      "id": 3,
+      "title": "Recent Errors",
+      "type": "logs",
+      "gridPos": {"h": 10, "w": 12, "x": 12, "y": 8},
+      "datasource": {"type": "loki", "uid": "${datasource}"},
+      "targets": [
+        {
+          "expr": "{service=~\"$service\", level=\"error\"} |= \"$search\"",
+          "queryType": "range",
+          "maxLines": 100
+        }
+      ],
+      "options": {
+        "showTime": true,
+        "showLabels": true,
+        "showCommonLabels": false,
+        "wrapLogMessage": true,
+        "sortOrder": "Descending",
+        "dedupStrategy": "none"
+      }
+    },
+    {
+      "id": 4,
+      "title": "Error Rate by Service (from logs)",
+      "type": "timeseries",
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 18},
+      "datasource": {"type": "loki", "uid": "${datasource}"},
+      "targets": [
+        {
+          "expr": "sum by (service) (rate({service=~\"$service\", level=\"error\"}[5m]))",
+          "legendFormat": "{{service}} errors/s"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "reqps",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"color": "green", "value": null},
+              {"color": "yellow", "value": 0.1},
+              {"color": "red", "value": 1}
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": 5,
+      "title": "Log Stream Explorer",
+      "type": "logs",
+      "gridPos": {"h": 12, "w": 12, "x": 12, "y": 18},
+      "datasource": {"type": "loki", "uid": "${datasource}"},
+      "targets": [
+        {
+          "expr": "{service=~\"$service\"} |= \"$search\"",
+          "queryType": "range",
+          "maxLines": 200
+        }
+      ],
+      "options": {
+        "showTime": true,
+        "showLabels": true,
+        "showCommonLabels": false,
+        "wrapLogMessage": false,
+        "sortOrder": "Descending",
+        "dedupStrategy": "none"
+      }
+    }
+  ]
+}

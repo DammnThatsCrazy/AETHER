@@ -1,0 +1,136 @@
+{
+  "uid": "aether-fraud-attribution",
+  "title": "Fraud & Attribution",
+  "tags": ["aether", "fraud", "attribution"],
+  "schemaVersion": 36,
+  "version": 1,
+  "timezone": "utc",
+  "time": {"from": "now-1h", "to": "now"},
+  "refresh": "30s",
+  "templating": {
+    "list": [
+      {
+        "name": "datasource",
+        "type": "datasource",
+        "pluginId": "prometheus",
+        "label": "Datasource"
+      }
+    ]
+  },
+  "panels": [
+    {
+      "id": 1,
+      "title": "Fraud Evaluations per Second",
+      "type": "timeseries",
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 0},
+      "datasource": {"type": "prometheus", "uid": "${datasource}"},
+      "targets": [
+        {
+          "expr": "sum by (model) (rate(fraud_evaluations_total[5m]))",
+          "legendFormat": "{{model}}"
+        }
+      ],
+      "fieldConfig": {"defaults": {"unit": "reqps"}}
+    },
+    {
+      "id": 2,
+      "title": "Fraud Detection Rate %",
+      "type": "timeseries",
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 0},
+      "datasource": {"type": "prometheus", "uid": "${datasource}"},
+      "targets": [
+        {
+          "expr": "sum(rate(fraud_detected_total[5m])) / sum(rate(fraud_evaluations_total[5m])) * 100",
+          "legendFormat": "Detection Rate %"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"color": "green", "value": null},
+              {"color": "yellow", "value": 5},
+              {"color": "red", "value": 15}
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": 3,
+      "title": "Attribution Model Usage",
+      "type": "stat",
+      "gridPos": {"h": 6, "w": 12, "x": 0, "y": 8},
+      "datasource": {"type": "prometheus", "uid": "${datasource}"},
+      "targets": [
+        {
+          "expr": "sum by (model) (rate(attribution_resolved_total[5m]))",
+          "legendFormat": "{{model}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "reqps",
+          "color": {"mode": "palette-classic"}
+        }
+      },
+      "options": {"colorMode": "background", "graphMode": "area", "orientation": "horizontal"}
+    },
+    {
+      "id": 4,
+      "title": "Touchpoint Recording Rate",
+      "type": "timeseries",
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 8},
+      "datasource": {"type": "prometheus", "uid": "${datasource}"},
+      "targets": [
+        {
+          "expr": "sum by (channel) (rate(attribution_touchpoint_recorded_total[5m]))",
+          "legendFormat": "{{channel}}"
+        }
+      ],
+      "fieldConfig": {"defaults": {"unit": "reqps"}}
+    },
+    {
+      "id": 5,
+      "title": "High-Risk Events (last hour)",
+      "type": "stat",
+      "gridPos": {"h": 6, "w": 6, "x": 0, "y": 16},
+      "datasource": {"type": "prometheus", "uid": "${datasource}"},
+      "targets": [
+        {
+          "expr": "sum(increase(fraud_detected_total{risk_level=\"high\"}[1h]))",
+          "legendFormat": "High Risk"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"color": "green", "value": null},
+              {"color": "yellow", "value": 10},
+              {"color": "red", "value": 50}
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": 6,
+      "title": "Attribution Resolution Time p95 (ms)",
+      "type": "timeseries",
+      "gridPos": {"h": 6, "w": 18, "x": 6, "y": 16},
+      "datasource": {"type": "prometheus", "uid": "${datasource}"},
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.95, sum by (model, le) (rate(attribution_resolution_duration_seconds_bucket[5m]))) * 1000",
+          "legendFormat": "{{model}} p95"
+        }
+      ],
+      "fieldConfig": {"defaults": {"unit": "ms"}}
+    }
+  ]
+}
