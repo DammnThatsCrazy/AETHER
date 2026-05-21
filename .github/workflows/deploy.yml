@@ -1,0 +1,140 @@
+name: Deploy
+
+# Triggers: automatic on push to main, or manual for staging/production
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: Target environment
+        type: choice
+        options: [staging, production]
+        default: production
+        required: true
+
+concurrency:
+  group: deploy-${{ github.event.inputs.environment || 'production' }}
+  cancel-in-progress: false  # never cancel an active deployment
+
+permissions:
+  id-token: write   # required for OIDC auth with AWS
+  contents: read
+
+env:
+  AWS_REGION: us-east-1
+
+jobs:
+  # ─────────────────────────────────────────────────────────────────────────
+  # 1. Build Docker images and push to ECR
+  # ─────────────────────────────────────────────────────────────────────────
+  build-and-push:
+    name: Build & Push images
+    runs-on: ubuntu-latest
+    outputs:
+      image_tag: ${{ steps.tag.outputs.tag }}
+      ecr_registry: ${{ steps.ecr-login.outputs.registry }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Login to ECR
+        id: ecr-login
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Set image tag
+        id: tag
+        run: echo "tag=${{ github.sha }}" >> "$GITHUB_OUTPUT"
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      # Backend — build context is repo root (Dockerfile COPYs from repo-relative paths)
+      - name: Build & push aether-backend
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: Backend Architecture/aether-backend/Dockerfile
+          push: true
+          tags: |
+            ${{ steps.ecr-login.outputs.registry }}/aether-backend:${{ steps.tag.outputs.tag }}
+            ${{ steps.ecr-login.outputs.registry }}/aether-backend:latest
+          cache-from: type=gha,scope=backend
+          cache-to:   type=gha,scope=backend,mode=max
+
+      # ML serving — context is the ML directory; uses the "serving" build stage
+      - name: Build & push aether-ml-serving
+        uses: docker/build-push-action@v5
+        with:
+          context: ML Models/aether-ml
+          file: ML Models/aether-ml/docker/Dockerfile
+          target: serving
+          push: true
+          tags: |
+            ${{ steps.ecr-login.outputs.registry }}/aether-ml-serving:${{ steps.tag.outputs.tag }}
+            ${{ steps.ecr-login.outputs.registry }}/aether-ml-serving:latest
+          cache-from: type=gha,scope=ml-serving
+          cache-to:   type=gha,scope=ml-serving,mode=max
+
+  # ─────────────────────────────────────────────────────────────────────────
+  # 2. Force new ECS deployments and wait for stability
+  # ─────────────────────────────────────────────────────────────────────────
+  deploy:
+    name: Deploy to ECS (${{ github.event.inputs.environment || 'production' }})
+    runs-on: ubuntu-latest
+    needs: build-and-push
+    environment: ${{ github.event.inputs.environment || 'production' }}
+
+    env:
+      ENV: ${{ github.event.inputs.environment || 'production' }}
+
+    steps:
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Force new deployments
+        run: |
+          CLUSTER="AETHER-${ENV}"
+          for svc in "AETHER-${ENV}-backend" "AETHER-${ENV}-ml-serving"; do
+            echo "Deploying ${svc} to cluster ${CLUSTER}..."
+            aws ecs update-service \
+              --cluster "$CLUSTER" \
+              --service "$svc" \
+              --force-new-deployment \
+              --region "${{ env.AWS_REGION }}"
+          done
+
+      - name: Wait for services to stabilise
+        # Timeout: 10 minutes (600 seconds via aws-cli default)
+        run: |
+          CLUSTER="AETHER-${ENV}"
+          aws ecs wait services-stable \
+            --cluster "$CLUSTER" \
+            --services "AETHER-${ENV}-backend" "AETHER-${ENV}-ml-serving" \
+            --region "${{ env.AWS_REGION }}"
+
+      - name: Health check
+        # ALB_DNS_NAME is a GitHub Actions variable set per environment
+        # (set it to the Terraform output: terraform output -raw alb_dns_name)
+        run: |
+          for i in 1 2 3; do
+            STATUS=$(curl -sf -o /dev/null -w "%{http_code}" \
+              "https://${{ vars.ALB_DNS_NAME }}/v1/health" 2>/dev/null || echo "000")
+            if [ "$STATUS" = "200" ]; then
+              echo "Health check passed (attempt $i)"
+              exit 0
+            fi
+            echo "Health check returned HTTP $STATUS (attempt $i), retrying in 10s..."
+            sleep 10
+          done
+          echo "::error::Health check failed after 3 attempts"
+          exit 1

@@ -207,6 +207,8 @@ locals {
     ORACLE_SIGNER_PRIVATE_KEY = var.secret_arns["oracle-signer-private-key"]
     WATERMARK_SECRET_KEY      = var.secret_arns["watermark-secret-key"]
     CANARY_SECRET_SEED        = var.secret_arns["canary-secret-seed"]
+    # Redis AUTH token — read by shared/cache/cache.py as REDIS_PASSWORD
+    REDIS_PASSWORD            = var.secret_arns["redis-auth-token"]
   }
 
   backend_secrets_block = [for env_var, arn in local.backend_secrets : {
@@ -249,9 +251,15 @@ resource "aws_ecs_task_definition" "backend" {
       ]
 
       environment = [
-        { name = "APP_ENV", value = var.environment },
-        { name = "PORT", value = "8000" },
-        { name = "LOG_LEVEL", value = var.environment == "production" ? "INFO" : "DEBUG" },
+        { name = "APP_ENV",                 value = var.environment },
+        { name = "AETHER_ENV",              value = var.environment },
+        { name = "PORT",                    value = "8000" },
+        { name = "LOG_LEVEL",               value = var.environment == "production" ? "INFO" : "DEBUG" },
+        { name = "REDIS_HOST",              value = var.redis_host },
+        { name = "REDIS_PORT",              value = tostring(var.redis_port) },
+        { name = "KAFKA_BOOTSTRAP_SERVERS", value = var.kafka_bootstrap_servers },
+        { name = "NEPTUNE_ENDPOINT",        value = var.neptune_endpoint },
+        { name = "ML_SERVING_URL",          value = var.ml_serving_url },
       ]
 
       secrets = local.backend_secrets_block

@@ -173,6 +173,13 @@ module "ecs" {
     "redis-auth-token" = module.elasticache.auth_token_secret_arn
   })
 
+  redis_host              = split(":", module.elasticache.primary_endpoint)[0]
+  redis_port              = module.elasticache.port
+  kafka_bootstrap_servers = module.msk.bootstrap_brokers_tls
+  neptune_endpoint        = module.neptune.cluster_endpoint
+  # ML_SERVING_URL: set to ALB DNS once DNS/cert is in place; empty = backend uses "not_trained" fallback
+  ml_serving_url          = ""
+
   backend_cpu              = var.ecs_backend_cpu
   backend_memory           = var.ecs_backend_memory
   ml_cpu                   = var.ecs_ml_cpu
