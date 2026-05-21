@@ -5,18 +5,18 @@
 # No secret VALUES are stored here — values must be injected manually
 # post-deploy (see the root README.md for instructions).
 #
-# The one exception is the db-password secret, whose value is written
-# by the RDS module after the DB instance is created.
-#
 # Secrets:
 #   aether/jwt-secret                — JWT signing key
 #   aether/byok-encryption-key       — BYOK AES-256 encryption key
-#   aether/db-password               — Postgres credentials (set by RDS module)
 #   aether/stripe-secret-key         — Stripe secret key
 #   aether/stripe-webhook-secret     — Stripe webhook signing secret
 #   aether/oracle-signer-private-key — Oracle signer private key
 #   aether/watermark-secret-key      — Watermark HMAC key
 #   aether/canary-secret-seed        — Canary token seed
+#
+# DB credentials: managed by the RDS module via manage_master_user_password.
+# Redis AUTH token: managed by the ElastiCache module. Both ARNs are passed
+# into the ECS module at the root level — neither value touches TF state.
 #
 # ECS task definitions reference these ARNs via the `secrets:` block,
 # so the values are injected at container start (never in env vars).
@@ -52,9 +52,6 @@ locals {
     }
     "byok-encryption-key" = {
       description = "BYOK AES-256 encryption key for user-controlled encryption"
-    }
-    "db-password" = {
-      description = "Postgres credentials (host, port, username, password, dbname)"
     }
     "stripe-secret-key" = {
       description = "Stripe secret API key for payment processing"

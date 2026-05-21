@@ -83,8 +83,10 @@ resource "aws_elasticache_cluster" "this" {
   subnet_group_name  = aws_elasticache_subnet_group.this.name
   security_group_ids = [var.redis_sg_id]
 
-  # Encryption
-  at_rest_encryption_enabled = true
+  # Encryption — in-transit TLS and at-rest KMS
+  at_rest_encryption_enabled  = true
+  transit_encryption_enabled  = true
+  auth_token                  = random_password.redis_auth.result
 
   snapshot_retention_limit = 1
   snapshot_window          = "05:00-06:00"
@@ -93,4 +95,24 @@ resource "aws_elasticache_cluster" "this" {
   tags = {
     Name = "${var.project}-${var.environment}-redis"
   }
+}
+
+# --------------------------------------------------------------------------
+# Redis AUTH token — stored in Secrets Manager for application retrieval
+# --------------------------------------------------------------------------
+
+resource "aws_secretsmanager_secret" "redis_auth" {
+  name                    = "aether/redis-auth-token"
+  description             = "${var.project} Redis AUTH token (${var.environment})"
+  kms_key_id              = aws_kms_key.redis.arn
+  recovery_window_in_days = 30
+
+  tags = {
+    Name = "${var.project}-${var.environment}-redis-auth"
+  }
+}
+
+resource "aws_secretsmanager_secret_version" "redis_auth" {
+  secret_id     = aws_secretsmanager_secret.redis_auth.id
+  secret_string = random_password.redis_auth.result
 }

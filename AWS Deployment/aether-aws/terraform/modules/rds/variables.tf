@@ -53,7 +53,3 @@ variable "max_allocated_storage" {
   default     = 500
 }
 
-variable "db_password_secret_arn" {
-  type        = string
-  description = "ARN of the Secrets Manager secret where the DB password will be stored"
-}
