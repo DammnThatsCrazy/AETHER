@@ -76,6 +76,7 @@ public struct EventContext: Codable {
     public var fingerprint: FingerprintInfo?
     public var network: String?
     public var thermalState: String?
+    public var consent: [String: Bool]?
 
     public struct LibraryInfo: Codable {
         public let name: String
@@ -179,6 +180,9 @@ public final class Aether: NSObject {
 
     private let serialQueue = DispatchQueue(label: "com.aether.sdk.serial")
     private let defaults = UserDefaults(suiteName: "com.aether.sdk")!
+    private static let maxQueueSize = 500
+    private static let sessionTimeoutSeconds: TimeInterval = 30 * 60
+    private var lastActivityDate: Date?
 
     private override init() {
         super.init()
@@ -196,6 +200,8 @@ public final class Aether: NSObject {
         self.config = config
         self.anonymousId = loadOrCreateAnonymousId()
         self.walletAddress = defaults.string(forKey: "walletAddress")
+        self.consentState = defaults.stringArray(forKey: "consentState") ?? []
+        self.userId = defaults.string(forKey: "userId")
         self.sessionId = UUID().uuidString
         self.sessionStart = Date()
 
@@ -269,10 +275,14 @@ public final class Aether: NSObject {
     public func reset() {
         flush()
         userId = nil
+        walletAddress = nil
         traits = [:]
+        consentState = []
         anonymousId = UUID().uuidString
         sessionId = UUID().uuidString
         defaults.removeObject(forKey: "userId")
+        defaults.removeObject(forKey: "walletAddress")
+        defaults.removeObject(forKey: "consentState")
         defaults.set(anonymousId, forKey: "anonymousId")
         log("SDK reset")
     }
@@ -369,6 +379,7 @@ public final class Aether: NSObject {
 
     public func grantConsent(categories: [String]) {
         consentState = Array(Set(consentState + categories))
+        defaults.set(consentState, forKey: "consentState")
         enqueueEvent(type: .consent, properties: [
             "action": AnyCodable("grant"),
             "categories": AnyCodable(categories)
@@ -377,6 +388,7 @@ public final class Aether: NSObject {
 
     public func revokeConsent(categories: [String]) {
         consentState = consentState.filter { !categories.contains($0) }
+        defaults.set(consentState, forKey: "consentState")
         enqueueEvent(type: .consent, properties: [
             "action": AnyCodable("revoke"),
             "categories": AnyCodable(categories)
@@ -442,13 +454,15 @@ public final class Aether: NSObject {
         )
 
         serialQueue.async { [weak self] in
-            self?.eventQueue.append(event)
-            if let batchSize = self?.config?.batchSize, (self?.eventQueue.count ?? 0) >= batchSize {
-                self?.sendBatch()
+            guard let self = self else { return }
+            // Enforce max queue size
+            while self.eventQueue.count >= Aether.maxQueueSize { self.eventQueue.removeFirst() }
+            self.eventQueue.append(event)
+            self.eventCount += 1
+            if let batchSize = self.config?.batchSize, self.eventQueue.count >= batchSize {
+                self.sendBatch()
             }
         }
-
-        eventCount += 1
     }
 
     private func sendBatch() {
@@ -497,6 +511,7 @@ public final class Aether: NSObject {
     }
 
     private func buildContext() -> EventContext {
+        let granted = Set(consentState)
         return EventContext(
             library: .init(name: "aether-ios", version: "7.0.0"),
             device: .init(
@@ -508,7 +523,14 @@ public final class Aether: NSObject {
             campaign: self.campaignInfo,
             fingerprint: .init(id: self.fingerprintId),
             network: currentNetworkType,
-            thermalState: thermalStateString()
+            thermalState: thermalStateString(),
+            consent: [
+                "analytics": granted.contains("analytics"),
+                "marketing": granted.contains("marketing"),
+                "web3": granted.contains("web3"),
+                "agent": granted.contains("agent"),
+                "commerce": granted.contains("commerce"),
+            ]
         )
     }
 
@@ -576,9 +598,18 @@ public final class Aether: NSObject {
             self?.flush()
         }
         NotificationCenter.default.addObserver(forName: UIApplication.willEnterForegroundNotification, object: nil, queue: .main) { [weak self] _ in
-            self?.sessionId = UUID().uuidString
-            self?.sessionStart = Date()
-            self?.track("app_foreground")
+            guard let self = self else { return }
+            let now = Date()
+            let elapsed = self.lastActivityDate.map { now.timeIntervalSince($0) } ?? (Aether.sessionTimeoutSeconds + 1)
+            if elapsed > Aether.sessionTimeoutSeconds {
+                self.sessionId = UUID().uuidString
+                self.sessionStart = now
+            }
+            self.lastActivityDate = now
+            self.track("app_foreground")
+        }
+        NotificationCenter.default.addObserver(forName: UIApplication.didEnterBackgroundNotification, object: nil, queue: .main) { [weak self] _ in
+            self?.lastActivityDate = Date()
         }
     }
 
