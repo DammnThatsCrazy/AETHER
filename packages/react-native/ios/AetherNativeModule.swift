@@ -4,17 +4,20 @@ import React
 @objc(AetherNative)
 class AetherNativeModule: RCTEventEmitter {
 
+    private var resolveEndpoint: String = ""
+
     override static func requiresMainQueueSetup() -> Bool {
         return false
     }
 
     override func supportedEvents() -> [String]! {
-        return ["AetherIdentityChanged", "AetherConsentChanged"]
+        return ["AetherIdentityChanged", "AetherConsentChanged", "AetherJourneyResumed"]
     }
 
     @objc
     func initialize(_ config: NSDictionary) {
         let apiKey = config["apiKey"] as? String ?? ""
+        resolveEndpoint = config["endpoint"] as? String ?? "https://api.aether.network"
         var aetherConfig = AetherConfig(apiKey: apiKey)
 
         if let env = config["environment"] as? String {
@@ -26,7 +29,7 @@ class AetherNativeModule: RCTEventEmitter {
         }
 
         aetherConfig.debug = config["debug"] as? Bool ?? false
-        aetherConfig.endpoint = config["endpoint"] as? String ?? "https://api.aether.network"
+        aetherConfig.endpoint = resolveEndpoint
 
         if let modules = config["modules"] as? NSDictionary {
             aetherConfig.modules.screenTracking = modules["screenTracking"] as? Bool ?? true
@@ -114,6 +117,33 @@ class AetherNativeModule: RCTEventEmitter {
         let walletType = options["type"] as? String
         let chainId = options["chainId"].map { "\($0)" }
         Aether.shared.walletConnected(address: address, walletType: walletType, chainId: chainId)
+        resolveWalletIdentity(address: address, walletType: walletType ?? "unknown", chainId: chainId ?? "unknown")
+    }
+
+    private func resolveWalletIdentity(address: String, walletType: String, chainId: String) {
+        guard !resolveEndpoint.isEmpty,
+              let url = URL(string: "\(resolveEndpoint)/sdk/identity/resolve") else { return }
+
+        let body: [String: Any] = [
+            "wallets": [["address": address, "type": walletType, "chainId": chainId]],
+            "anonymousId": Aether.shared.getAnonymousId(),
+            "deviceFingerprint": Aether.shared.getFingerprintId()
+        ]
+        guard let bodyData = try? JSONSerialization.data(withJSONObject: body) else { return }
+
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.httpBody = bodyData
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+
+        URLSession.shared.dataTask(with: request) { [weak self] data, _, _ in
+            guard let self = self,
+                  let data = data,
+                  let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+                  let resolved = json["resolved"] as? Bool, resolved,
+                  let identity = json["identity"] as? [String: Any] else { return }
+            self.sendEvent(withName: "AetherJourneyResumed", body: identity)
+        }.resume()
     }
 
     @objc

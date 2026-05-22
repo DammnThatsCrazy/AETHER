@@ -13,6 +13,8 @@ class AetherNativeModule(private val reactContext: ReactApplicationContext) :
 
     override fun getName(): String = "AetherNative"
 
+    private var resolveEndpoint: String = ""
+
     @ReactMethod
     fun initialize(config: ReadableMap) {
         val application = reactContext.applicationContext as? android.app.Application ?: return
@@ -28,7 +30,7 @@ class AetherNativeModule(private val reactContext: ReactApplicationContext) :
                 else -> AetherConfig.Environment.PRODUCTION
             },
             debug = if (config.hasKey("debug")) config.getBoolean("debug") else false,
-            endpoint = config.getString("endpoint") ?: "https://api.aether.network",
+            endpoint = (config.getString("endpoint") ?: "https://api.aether.network").also { resolveEndpoint = it },
             modules = ModuleConfig(
                 activityTracking = modules?.getBoolean("screenTracking") ?: true,
                 deepLinkAttribution = modules?.getBoolean("deepLinkAttribution") ?: true,
@@ -113,6 +115,47 @@ class AetherNativeModule(private val reactContext: ReactApplicationContext) :
         val walletType = options.getString("type") ?: "unknown"
         val chainId = if (options.hasKey("chainId")) options.getInt("chainId").toString() else "unknown"
         Aether.walletConnected(address, walletType, chainId)
+        resolveWalletIdentity(address, walletType, chainId)
+    }
+
+    private fun resolveWalletIdentity(address: String, walletType: String, chainId: String) {
+        if (resolveEndpoint.isEmpty()) return
+        Thread {
+            try {
+                val url = java.net.URL("$resolveEndpoint/sdk/identity/resolve")
+                val bodyJson = org.json.JSONObject().apply {
+                    put("wallets", org.json.JSONArray().apply {
+                        put(org.json.JSONObject().apply {
+                            put("address", address)
+                            put("type", walletType)
+                            put("chainId", chainId)
+                        })
+                    })
+                    put("anonymousId", Aether.getAnonymousId())
+                    put("deviceFingerprint", Aether.getFingerprintId())
+                }.toString().toByteArray(Charsets.UTF_8)
+
+                val conn = url.openConnection() as java.net.HttpURLConnection
+                conn.requestMethod = "POST"
+                conn.setRequestProperty("Content-Type", "application/json")
+                conn.doOutput = true
+                conn.outputStream.use { it.write(bodyJson) }
+
+                if (conn.responseCode == 200) {
+                    val response = conn.inputStream.bufferedReader().readText()
+                    val json = org.json.JSONObject(response)
+                    if (json.optBoolean("resolved", false)) {
+                        val identity = json.getJSONObject("identity")
+                        val params = Arguments.createMap().apply {
+                            if (identity.has("userId")) putString("userId", identity.getString("userId"))
+                            if (identity.has("anonymousId")) putString("anonymousId", identity.getString("anonymousId"))
+                        }
+                        sendEvent("AetherJourneyResumed", params)
+                    }
+                }
+                conn.disconnect()
+            } catch (_: Exception) { }
+        }.start()
     }
 
     @ReactMethod
