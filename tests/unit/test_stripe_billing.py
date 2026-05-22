@@ -255,7 +255,7 @@ class TestWebhookHandling:
             from shared.billing import stripe_repository
 
             stripe_repository._reset_in_memory_for_tests()
-            routes = importlib.import_module("services.admin.routes")
+            wh = importlib.import_module("services.admin.webhook_routes")
 
             sub_obj = {
                 "id": "sub_1",
@@ -265,7 +265,9 @@ class TestWebhookHandling:
                 "metadata": {"tenant_id": "t-1"},
                 "items": {"data": [{"price": {"id": "price_p3"}}]},
             }
-            asyncio.run(routes._handle_subscription_event(sub_obj, deleted=False))
+            asyncio.run(wh._apply_subscription_state(
+                sub_obj, event_name="customer.subscription.updated",
+            ))
 
             acct = asyncio.run(stripe_repository.get_billing_account("t-1"))
             assert acct["plan_tier"] == "P3"
@@ -281,13 +283,14 @@ class TestWebhookHandling:
             stripe_repository._reset_in_memory_for_tests()
             asyncio.run(stripe_repository.update_plan_tier("t-2", "P3"))
 
-            routes = importlib.import_module("services.admin.routes")
-            sub_obj = {
+            wh = importlib.import_module("services.admin.webhook_routes")
+            event_data = {"object": {
                 "id": "sub_2", "customer": "cus_2", "status": "canceled",
+                "ended_at": None,
                 "metadata": {"tenant_id": "t-2"},
                 "items": {"data": [{"price": {"id": "price_p3"}}]},
-            }
-            asyncio.run(routes._handle_subscription_event(sub_obj, deleted=True))
+            }}
+            asyncio.run(wh._handle_subscription_deleted(event_data))
             acct = asyncio.run(stripe_repository.get_billing_account("t-2"))
             assert acct["plan_tier"] == "P1"
             assert acct["subscription_status"] == "canceled"
@@ -300,15 +303,15 @@ class TestWebhookHandling:
             stripe_repository._reset_in_memory_for_tests()
             asyncio.run(stripe_repository.update_plan_tier("t-3", "P1"))
 
-            routes = importlib.import_module("services.admin.routes")
-            session_obj = {
+            wh = importlib.import_module("services.admin.webhook_routes")
+            event_data = {"object": {
                 "id": "cs_1", "customer": "cus_3", "subscription": "sub_3",
                 "client_reference_id": "t-3",
                 "metadata": {"tenant_id": "t-3", "requested_plan_tier": "P3"},
-            }
-            asyncio.run(routes._handle_checkout_session_completed(session_obj))
+            }}
+            asyncio.run(wh._handle_checkout_session_completed(event_data))
             acct = asyncio.run(stripe_repository.get_billing_account("t-3"))
-            # plan_tier must remain unchanged at this stage
+            # plan_tier must remain unchanged — subscription events own the tier
             assert acct["plan_tier"] == "P1"
             assert acct["stripe_customer_id"] == "cus_3"
             assert acct["stripe_subscription_id"] == "sub_3"
@@ -319,17 +322,18 @@ class TestWebhookHandling:
             _reload_settings()
             from shared.billing import stripe_repository
             stripe_repository._reset_in_memory_for_tests()
-            routes = importlib.import_module("services.admin.routes")
-            inv = {
+            wh = importlib.import_module("services.admin.webhook_routes")
+            event_data = {"object": {
                 "id": "in_1", "customer": "cus_4", "subscription": "sub_4",
                 "status": "paid", "currency": "usd",
                 "amount_due": 9900, "amount_paid": 9900, "amount_remaining": 0,
                 "hosted_invoice_url": "https://stripe/h", "invoice_pdf": "https://stripe/p",
                 "created": 1_700_000_000, "period_start": 1_700_000_000,
                 "period_end": 1_702_000_000,
+                "billing_reason": "subscription_cycle",
                 "metadata": {"tenant_id": "t-4"},
-            }
-            asyncio.run(routes._handle_invoice_event("invoice.paid", inv))
+            }}
+            asyncio.run(wh._handle_invoice_paid(event_data))
             invoices = asyncio.run(stripe_repository.list_invoices("t-4"))
             assert len(invoices) == 1
             assert invoices[0]["stripe_invoice_id"] == "in_1"
@@ -342,16 +346,18 @@ class TestWebhookHandling:
             from shared.billing import stripe_repository
             stripe_repository._reset_in_memory_for_tests()
             asyncio.run(stripe_repository.update_plan_tier("t-5", "P3"))
-            routes = importlib.import_module("services.admin.routes")
-            inv = {
+            wh = importlib.import_module("services.admin.webhook_routes")
+            event_data = {"object": {
                 "id": "in_5", "customer": "cus_5", "subscription": "sub_5",
                 "status": "open", "currency": "usd",
                 "amount_due": 9900, "amount_paid": 0, "amount_remaining": 9900,
+                "attempt_count": 1,
                 "metadata": {"tenant_id": "t-5"},
-            }
-            asyncio.run(routes._handle_invoice_event("invoice.payment_failed", inv))
+            }}
+            asyncio.run(wh._handle_invoice_payment_failed(event_data))
             acct = asyncio.run(stripe_repository.get_billing_account("t-5"))
-            assert acct["plan_tier"] == "P3"  # not downgraded by invoice event alone
+            assert acct["plan_tier"] == "P3"  # not downgraded — only subscription.deleted does that
+            assert acct["subscription_status"] == "past_due"
             invs = asyncio.run(stripe_repository.list_invoices("t-5"))
             assert invs[0]["status"] == "open"
 
