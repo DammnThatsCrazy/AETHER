@@ -15,10 +15,18 @@ export type VMType =
   | 'cosmos'
   | 'aptos'
   | 'ton'
-  | 'starknet';
+  | 'starknet'
+  | 'cardano'
+  | 'substrate'
+  | 'algorand'
+  | 'hedera'
+  | 'stellar'
+  | 'icp';
 
 export const VM_TYPES: readonly VMType[] = [
-  'evm', 'svm', 'bitcoin', 'movevm', 'near', 'tvm', 'cosmos', 'aptos', 'ton', 'starknet',
+  'evm', 'svm', 'bitcoin', 'movevm', 'near', 'tvm', 'cosmos',
+  'aptos', 'ton', 'starknet',
+  'cardano', 'substrate', 'algorand', 'hedera', 'stellar', 'icp',
 ] as const;
 
 /** Wallet security classification (computed server-side; SDK may leave undefined). */

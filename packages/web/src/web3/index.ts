@@ -20,6 +20,12 @@ import { CosmosProvider } from './providers/cosmos-provider';
 import { AptosProvider } from './providers/aptos-provider';
 import { TonProvider } from './providers/ton-provider';
 import { StarknetProvider } from './providers/starknet-provider';
+import { CardanoProvider } from './providers/cardano-provider';
+import { SubstrateProvider } from './providers/substrate-provider';
+import { AlgorandProvider } from './providers/algorand-provider';
+import { HederaProvider } from './providers/hedera-provider';
+import { StellarProvider } from './providers/stellar-provider';
+import { ICPProvider } from './providers/icp-provider';
 
 // Trackers (slim — raw data only)
 import { EVMTracker } from './tracking/evm-tracker';
@@ -32,6 +38,12 @@ import { CosmosTracker } from './tracking/cosmos-tracker';
 import { AptosTracker } from './tracking/aptos-tracker';
 import { TonTracker } from './tracking/ton-tracker';
 import { StarknetTracker } from './tracking/starknet-tracker';
+import { CardanoTracker } from './tracking/cardano-tracker';
+import { SubstrateTracker } from './tracking/substrate-tracker';
+import { AlgorandTracker } from './tracking/algorand-tracker';
+import { HederaTracker } from './tracking/hedera-tracker';
+import { StellarTracker } from './tracking/stellar-tracker';
+import { ICPTracker } from './tracking/icp-tracker';
 
 // =============================================================================
 // Callbacks interface
@@ -53,6 +65,12 @@ export interface Web3ModuleConfig {
   aptosTracking?: boolean;
   tonTracking?: boolean;
   starknetTracking?: boolean;
+  cardanoTracking?: boolean;
+  substrateTracking?: boolean;
+  algorandTracking?: boolean;
+  hederaTracking?: boolean;
+  stellarTracking?: boolean;
+  icpTracking?: boolean;
   cosmosChains?: string[];
   approvalScan?: boolean;
   domainResolution?: boolean;
@@ -78,6 +96,12 @@ export class Web3Module {
   private aptosProvider: AptosProvider | null = null;
   private tonProvider: TonProvider | null = null;
   private starknetProvider: StarknetProvider | null = null;
+  private cardanoProvider: CardanoProvider | null = null;
+  private substrateProvider: SubstrateProvider | null = null;
+  private algorandProvider: AlgorandProvider | null = null;
+  private hederaProvider: HederaProvider | null = null;
+  private stellarProvider: StellarProvider | null = null;
+  private icpProvider: ICPProvider | null = null;
 
   // Trackers (slim)
   private evmTracker: EVMTracker | null = null;
@@ -90,6 +114,12 @@ export class Web3Module {
   private aptosTracker: AptosTracker | null = null;
   private tonTracker: TonTracker | null = null;
   private starknetTracker: StarknetTracker | null = null;
+  private cardanoTracker: CardanoTracker | null = null;
+  private substrateTracker: SubstrateTracker | null = null;
+  private algorandTracker: AlgorandTracker | null = null;
+  private hederaTracker: HederaTracker | null = null;
+  private stellarTracker: StellarTracker | null = null;
+  private icpTracker: ICPTracker | null = null;
 
   // Wallet change listeners
   private walletChangeListeners: ((wallets: ConnectedWallet[]) => void)[] = [];
@@ -214,6 +244,66 @@ export class Web3Module {
       this.starknetProvider.init();
       this.starknetTracker = new StarknetTracker(trackerCallbacks);
     }
+
+    // Cardano
+    if (cfg.cardanoTracking) {
+      this.cardanoProvider = new CardanoProvider({
+        onWalletEvent: (action, data) => this.handleWalletEvent('cardano', action, data),
+        onTransaction: (hash, data) => this.handleTransaction('cardano', hash, data),
+      });
+      this.cardanoProvider.init();
+      this.cardanoTracker = new CardanoTracker(trackerCallbacks);
+    }
+
+    // Polkadot / Substrate
+    if (cfg.substrateTracking) {
+      this.substrateProvider = new SubstrateProvider({
+        onWalletEvent: (action, data) => this.handleWalletEvent('substrate', action, data),
+        onTransaction: (hash, data) => this.handleTransaction('substrate', hash, data),
+      });
+      this.substrateProvider.init();
+      this.substrateTracker = new SubstrateTracker(trackerCallbacks);
+    }
+
+    // Algorand
+    if (cfg.algorandTracking) {
+      this.algorandProvider = new AlgorandProvider({
+        onWalletEvent: (action, data) => this.handleWalletEvent('algorand', action, data),
+        onTransaction: (txId, data) => this.handleTransaction('algorand', txId, data),
+      });
+      this.algorandProvider.init();
+      this.algorandTracker = new AlgorandTracker(trackerCallbacks);
+    }
+
+    // Hedera
+    if (cfg.hederaTracking) {
+      this.hederaProvider = new HederaProvider({
+        onWalletEvent: (action, data) => this.handleWalletEvent('hedera', action, data),
+        onTransaction: (txId, data) => this.handleTransaction('hedera', txId, data),
+      });
+      this.hederaProvider.init();
+      this.hederaTracker = new HederaTracker(trackerCallbacks);
+    }
+
+    // Stellar
+    if (cfg.stellarTracking) {
+      this.stellarProvider = new StellarProvider({
+        onWalletEvent: (action, data) => this.handleWalletEvent('stellar', action, data),
+        onTransaction: (hash, data) => this.handleTransaction('stellar', hash, data),
+      });
+      this.stellarProvider.init();
+      this.stellarTracker = new StellarTracker(trackerCallbacks);
+    }
+
+    // ICP
+    if (cfg.icpTracking) {
+      this.icpProvider = new ICPProvider({
+        onWalletEvent: (action, data) => this.handleWalletEvent('icp', action, data),
+        onTransaction: (blockIndex, data) => this.handleTransaction('icp', blockIndex, data),
+      });
+      this.icpProvider.init();
+      this.icpTracker = new ICPTracker(trackerCallbacks);
+    }
   }
 
   // =========================================================================
@@ -260,6 +350,30 @@ export class Web3Module {
     this.starknetProvider?.connect(address, options);
   }
 
+  connectCardano(address: string, options?: Partial<WalletInfo>): void {
+    this.cardanoProvider?.connect(address, options);
+  }
+
+  connectSubstrate(address: string, options?: Partial<WalletInfo>): void {
+    this.substrateProvider?.connect(address, options);
+  }
+
+  connectAlgorand(address: string, options?: Partial<WalletInfo>): void {
+    this.algorandProvider?.connect(address, options);
+  }
+
+  connectHedera(address: string, options?: Partial<WalletInfo>): void {
+    this.hederaProvider?.connect(address, options);
+  }
+
+  connectStellar(address: string, options?: Partial<WalletInfo>): void {
+    this.stellarProvider?.connect(address, options);
+  }
+
+  connectICP(principal: string, options?: Partial<WalletInfo>): void {
+    this.icpProvider?.connect(principal, options);
+  }
+
   disconnect(address?: string): void {
     if (address) {
       this.evmProvider?.disconnect(address);
@@ -272,6 +386,12 @@ export class Web3Module {
       this.aptosProvider?.disconnect();
       this.tonProvider?.disconnect();
       this.starknetProvider?.disconnect();
+      this.cardanoProvider?.disconnect();
+      this.substrateProvider?.disconnect();
+      this.algorandProvider?.disconnect();
+      this.hederaProvider?.disconnect();
+      this.stellarProvider?.disconnect();
+      this.icpProvider?.disconnect();
     } else {
       this.evmProvider?.disconnect();
       this.svmProvider?.disconnect();
@@ -283,6 +403,12 @@ export class Web3Module {
       this.aptosProvider?.disconnect();
       this.tonProvider?.disconnect();
       this.starknetProvider?.disconnect();
+      this.cardanoProvider?.disconnect();
+      this.substrateProvider?.disconnect();
+      this.algorandProvider?.disconnect();
+      this.hederaProvider?.disconnect();
+      this.stellarProvider?.disconnect();
+      this.icpProvider?.disconnect();
     }
   }
 
@@ -297,6 +423,12 @@ export class Web3Module {
       ?? this.aptosProvider?.getWallet()
       ?? this.tonProvider?.getWallet()
       ?? this.starknetProvider?.getWallet()
+      ?? this.cardanoProvider?.getWallet()
+      ?? this.substrateProvider?.getWallet()
+      ?? this.algorandProvider?.getWallet()
+      ?? this.hederaProvider?.getWallet()
+      ?? this.stellarProvider?.getWallet()
+      ?? this.icpProvider?.getWallet()
       ?? null;
   }
 
@@ -313,6 +445,12 @@ export class Web3Module {
       case 'aptos': this.aptosProvider?.transaction(txHash, options as Record<string, unknown> ?? {}); break;
       case 'ton': this.tonProvider?.transaction(txHash, options as Record<string, unknown> ?? {}); break;
       case 'starknet': this.starknetProvider?.transaction(txHash, options as Record<string, unknown> ?? {}); break;
+      case 'cardano': this.cardanoProvider?.transaction(txHash, options as Record<string, unknown> ?? {}); break;
+      case 'substrate': this.substrateProvider?.transaction(txHash, options as Record<string, unknown> ?? {}); break;
+      case 'algorand': this.algorandProvider?.transaction(txHash, options as Record<string, unknown> ?? {}); break;
+      case 'hedera': this.hederaProvider?.transaction(txHash, options as Record<string, unknown> ?? {}); break;
+      case 'stellar': this.stellarProvider?.transaction(txHash, options as Record<string, unknown> ?? {}); break;
+      case 'icp': this.icpProvider?.transaction(txHash, options as Record<string, unknown> ?? {}); break;
     }
   }
 
@@ -334,6 +472,12 @@ export class Web3Module {
     this.aptosProvider?.destroy();
     this.tonProvider?.destroy();
     this.starknetProvider?.destroy();
+    this.cardanoProvider?.destroy();
+    this.substrateProvider?.destroy();
+    this.algorandProvider?.destroy();
+    this.hederaProvider?.destroy();
+    this.stellarProvider?.destroy();
+    this.icpProvider?.destroy();
 
     this.evmTracker?.destroy();
     this.svmTracker?.destroy();
@@ -345,6 +489,12 @@ export class Web3Module {
     this.aptosTracker?.destroy();
     this.tonTracker?.destroy();
     this.starknetTracker?.destroy();
+    this.cardanoTracker?.destroy();
+    this.substrateTracker?.destroy();
+    this.algorandTracker?.destroy();
+    this.hederaTracker?.destroy();
+    this.stellarTracker?.destroy();
+    this.icpTracker?.destroy();
 
     this.walletChangeListeners = [];
 
@@ -358,6 +508,12 @@ export class Web3Module {
     this.aptosProvider = null;
     this.tonProvider = null;
     this.starknetProvider = null;
+    this.cardanoProvider = null;
+    this.substrateProvider = null;
+    this.algorandProvider = null;
+    this.hederaProvider = null;
+    this.stellarProvider = null;
+    this.icpProvider = null;
     this.evmTracker = null;
     this.svmTracker = null;
     this.btcTracker = null;
@@ -368,6 +524,12 @@ export class Web3Module {
     this.aptosTracker = null;
     this.tonTracker = null;
     this.starknetTracker = null;
+    this.cardanoTracker = null;
+    this.substrateTracker = null;
+    this.algorandTracker = null;
+    this.hederaTracker = null;
+    this.stellarTracker = null;
+    this.icpTracker = null;
   }
 
   // =========================================================================

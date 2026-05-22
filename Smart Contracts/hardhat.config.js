@@ -250,6 +250,123 @@ module.exports = {
       chainId: 1868,
     },
 
+    // ── Tier 4 — Additional EVM chains ──────────────────────────────
+    zetachain: {
+      url: process.env.ZETACHAIN_RPC || "https://zetachain-evm.publicnode.com",
+      accounts: process.env.DEPLOYER_KEY ? [process.env.DEPLOYER_KEY] : [],
+      chainId: 7000,
+    },
+    flare: {
+      url: process.env.FLARE_RPC || "https://flare-api.flare.network/ext/C/rpc",
+      accounts: process.env.DEPLOYER_KEY ? [process.env.DEPLOYER_KEY] : [],
+      chainId: 14,
+    },
+    wemix: {
+      url: process.env.WEMIX_RPC || "https://api.wemix.com",
+      accounts: process.env.DEPLOYER_KEY ? [process.env.DEPLOYER_KEY] : [],
+      chainId: 1111,
+    },
+    oktChain: {
+      url: process.env.OKT_RPC || "https://exchainrpc.okex.org",
+      accounts: process.env.DEPLOYER_KEY ? [process.env.DEPLOYER_KEY] : [],
+      chainId: 66,
+    },
+    merlin: {
+      url: process.env.MERLIN_RPC || "https://rpc.merlinchain.io",
+      accounts: process.env.DEPLOYER_KEY ? [process.env.DEPLOYER_KEY] : [],
+      chainId: 4200,
+    },
+    core: {
+      url: process.env.CORE_RPC || "https://rpc.coredao.org",
+      accounts: process.env.DEPLOYER_KEY ? [process.env.DEPLOYER_KEY] : [],
+      chainId: 1116,
+    },
+    fuse: {
+      url: process.env.FUSE_RPC || "https://rpc.fuse.io",
+      accounts: process.env.DEPLOYER_KEY ? [process.env.DEPLOYER_KEY] : [],
+      chainId: 122,
+    },
+    iotex: {
+      url: process.env.IOTEX_RPC || "https://babel-api.mainnet.iotex.io",
+      accounts: process.env.DEPLOYER_KEY ? [process.env.DEPLOYER_KEY] : [],
+      chainId: 4689,
+    },
+    bob: {
+      url: process.env.BOB_RPC || "https://rpc.gobob.xyz",
+      accounts: process.env.DEPLOYER_KEY ? [process.env.DEPLOYER_KEY] : [],
+      chainId: 60808,
+    },
+    unichain: {
+      url: process.env.UNICHAIN_RPC || "https://mainnet.unichain.org",
+      accounts: process.env.DEPLOYER_KEY ? [process.env.DEPLOYER_KEY] : [],
+      chainId: 130,
+    },
+    abstract: {
+      url: process.env.ABSTRACT_RPC || "https://api.mainnet.abs.xyz",
+      accounts: process.env.DEPLOYER_KEY ? [process.env.DEPLOYER_KEY] : [],
+      chainId: 2741,
+    },
+    ink: {
+      url: process.env.INK_RPC || "https://rpc-gel.inkonchain.com",
+      accounts: process.env.DEPLOYER_KEY ? [process.env.DEPLOYER_KEY] : [],
+      chainId: 57073,
+    },
+    gravity: {
+      url: process.env.GRAVITY_RPC || "https://rpc.gravity.xyz",
+      accounts: process.env.DEPLOYER_KEY ? [process.env.DEPLOYER_KEY] : [],
+      chainId: 1625,
+    },
+    apechain: {
+      url: process.env.APECHAIN_RPC || "https://rpc.apechain.com",
+      accounts: process.env.DEPLOYER_KEY ? [process.env.DEPLOYER_KEY] : [],
+      chainId: 33139,
+    },
+    conflux: {
+      url: process.env.CONFLUX_RPC || "https://evm.confluxrpc.com",
+      accounts: process.env.DEPLOYER_KEY ? [process.env.DEPLOYER_KEY] : [],
+      chainId: 1030,
+    },
+    oasisSapphire: {
+      url: process.env.OASIS_SAPPHIRE_RPC || "https://sapphire.oasis.io",
+      accounts: process.env.DEPLOYER_KEY ? [process.env.DEPLOYER_KEY] : [],
+      chainId: 23294,
+    },
+    neonEvm: {
+      url: process.env.NEON_RPC || "https://neon-proxy-mainnet.solana.p2p.org",
+      accounts: process.env.DEPLOYER_KEY ? [process.env.DEPLOYER_KEY] : [],
+      chainId: 245022934,
+    },
+    thundercore: {
+      url: process.env.THUNDERCORE_RPC || "https://mainnet-rpc.thundercore.com",
+      accounts: process.env.DEPLOYER_KEY ? [process.env.DEPLOYER_KEY] : [],
+      chainId: 108,
+    },
+    kcc: {
+      url: process.env.KCC_RPC || "https://rpc-mainnet.kcc.network",
+      accounts: process.env.DEPLOYER_KEY ? [process.env.DEPLOYER_KEY] : [],
+      chainId: 321,
+    },
+    xdc: {
+      url: process.env.XDC_RPC || "https://erpc.xinfin.network",
+      accounts: process.env.DEPLOYER_KEY ? [process.env.DEPLOYER_KEY] : [],
+      chainId: 50,
+    },
+    telos: {
+      url: process.env.TELOS_RPC || "https://mainnet.telos.net/evm",
+      accounts: process.env.DEPLOYER_KEY ? [process.env.DEPLOYER_KEY] : [],
+      chainId: 40,
+    },
+    filecoin: {
+      url: process.env.FILECOIN_RPC || "https://api.node.glif.io/rpc/v1",
+      accounts: process.env.DEPLOYER_KEY ? [process.env.DEPLOYER_KEY] : [],
+      chainId: 314,
+    },
+    seiEvm: {
+      url: process.env.SEI_EVM_RPC || "https://evm-rpc.sei-apis.com",
+      accounts: process.env.DEPLOYER_KEY ? [process.env.DEPLOYER_KEY] : [],
+      chainId: 1329,
+    },
+
     // ── Testnet chains ──────────────────────────────────────────────
     sepolia: {
       url: process.env.ETHEREUM_TESTNET_RPC || "https://rpc.sepolia.org",
@@ -325,6 +442,30 @@ module.exports = {
       lisk: process.env.LISK_EXPLORER_KEY || "",
       cyber: process.env.CYBER_EXPLORER_KEY || "",
       soneium: process.env.SONEIUM_EXPLORER_KEY || "",
+      // Tier 4
+      zetachain: process.env.ZETACHAIN_EXPLORER_KEY || "",
+      flare: process.env.FLARE_EXPLORER_KEY || "",
+      wemix: process.env.WEMIX_EXPLORER_KEY || "",
+      oktChain: process.env.OKT_EXPLORER_KEY || "",
+      merlin: process.env.MERLIN_EXPLORER_KEY || "",
+      core: process.env.CORE_EXPLORER_KEY || "",
+      fuse: process.env.FUSE_EXPLORER_KEY || "",
+      iotex: process.env.IOTEX_EXPLORER_KEY || "",
+      bob: process.env.BOB_EXPLORER_KEY || "",
+      unichain: process.env.UNICHAIN_EXPLORER_KEY || "",
+      abstract: process.env.ABSTRACT_EXPLORER_KEY || "",
+      ink: process.env.INK_EXPLORER_KEY || "",
+      gravity: process.env.GRAVITY_EXPLORER_KEY || "",
+      apechain: process.env.APECHAIN_EXPLORER_KEY || "",
+      conflux: process.env.CONFLUX_EXPLORER_KEY || "",
+      oasisSapphire: process.env.OASIS_SAPPHIRE_EXPLORER_KEY || "",
+      neonEvm: process.env.NEON_EXPLORER_KEY || "",
+      thundercore: process.env.THUNDERCORE_EXPLORER_KEY || "",
+      kcc: process.env.KCC_EXPLORER_KEY || "",
+      xdc: process.env.XDC_EXPLORER_KEY || "",
+      telos: process.env.TELOS_EXPLORER_KEY || "",
+      filecoin: process.env.FILECOIN_EXPLORER_KEY || "",
+      seiEvm: process.env.SEI_EVM_EXPLORER_KEY || "",
       // Testnets (use same keys — Etherscan API keys work across testnet/mainnet)
       sepolia: process.env.ETHERSCAN_KEY || "",
       polygonAmoy: process.env.POLYGONSCAN_KEY || "",

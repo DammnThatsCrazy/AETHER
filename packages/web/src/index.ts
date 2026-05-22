@@ -151,6 +151,15 @@ class AetherSDK implements AetherSDKInterface {
           case 'near': this.web3Module?.connectNEAR(w.address, { type: w.walletType }); break;
           case 'tvm': this.web3Module?.connectTRON(w.address, { type: w.walletType }); break;
           case 'cosmos': this.web3Module?.connectCosmos(w.address, { type: w.walletType }); break;
+          case 'aptos': this.web3Module?.connectAptos(w.address, { type: w.walletType }); break;
+          case 'ton': this.web3Module?.connectTON(w.address, { type: w.walletType }); break;
+          case 'starknet': this.web3Module?.connectStarknet(w.address, { type: w.walletType }); break;
+          case 'cardano': this.web3Module?.connectCardano(w.address, { type: w.walletType }); break;
+          case 'substrate': this.web3Module?.connectSubstrate(w.address, { type: w.walletType }); break;
+          case 'algorand': this.web3Module?.connectAlgorand(w.address, { type: w.walletType }); break;
+          case 'hedera': this.web3Module?.connectHedera(w.address, { type: w.walletType }); break;
+          case 'stellar': this.web3Module?.connectStellar(w.address, { type: w.walletType }); break;
+          case 'icp': this.web3Module?.connectICP(w.address, { type: w.walletType }); break;
         }
       }
     }
@@ -246,6 +255,24 @@ class AetherSDK implements AetherSDKInterface {
     },
     connectStarknet: (address: string, options?: Partial<WalletInfo>) => {
       this.web3Module?.connectStarknet(address, options);
+    },
+    connectCardano: (address: string, options?: Partial<WalletInfo>) => {
+      this.web3Module?.connectCardano(address, options);
+    },
+    connectSubstrate: (address: string, options?: Partial<WalletInfo>) => {
+      this.web3Module?.connectSubstrate(address, options);
+    },
+    connectAlgorand: (address: string, options?: Partial<WalletInfo>) => {
+      this.web3Module?.connectAlgorand(address, options);
+    },
+    connectHedera: (address: string, options?: Partial<WalletInfo>) => {
+      this.web3Module?.connectHedera(address, options);
+    },
+    connectStellar: (address: string, options?: Partial<WalletInfo>) => {
+      this.web3Module?.connectStellar(address, options);
+    },
+    connectICP: (principal: string, options?: Partial<WalletInfo>) => {
+      this.web3Module?.connectICP(principal, options);
     },
     disconnect: (address?: string) => {
       this.web3Module?.disconnect(address);
@@ -457,7 +484,10 @@ class AetherSDK implements AetherSDKInterface {
 
   private initWeb3(config: AetherConfig, modules: NonNullable<AetherConfig['modules']>): void {
     if (modules.walletTracking || modules.svmTracking || modules.bitcoinTracking ||
-        modules.moveTracking || modules.nearTracking || modules.tronTracking || modules.cosmosTracking) {
+        modules.moveTracking || modules.nearTracking || modules.tronTracking || modules.cosmosTracking ||
+        modules.aptosTracking || modules.tonTracking || modules.starknetTracking ||
+        modules.cardanoTracking || modules.substrateTracking || modules.algorandTracking ||
+        modules.hederaTracking || modules.stellarTracking || modules.icpTracking) {
       this.web3Module = new Web3Module(
         {
           onWalletEvent: (action, data) => {
@@ -480,6 +510,19 @@ class AetherSDK implements AetherSDKInterface {
           nearTracking: modules.nearTracking,
           tronTracking: modules.tronTracking,
           cosmosTracking: modules.cosmosTracking,
+          aptosTracking: modules.aptosTracking,
+          tonTracking: modules.tonTracking,
+          starknetTracking: modules.starknetTracking,
+          cardanoTracking: modules.cardanoTracking,
+          substrateTracking: modules.substrateTracking,
+          algorandTracking: modules.algorandTracking,
+          hederaTracking: modules.hederaTracking,
+          stellarTracking: modules.stellarTracking,
+          icpTracking: modules.icpTracking,
+          cosmosChains: modules.cosmosChains,
+          approvalScan: modules.approvalScan,
+          domainResolution: modules.domainResolution,
+          networkContext: modules.networkContext,
         }
       );
       this.web3Module.init();
