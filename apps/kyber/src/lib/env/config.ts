@@ -3,6 +3,8 @@ import { z } from 'zod';
 const envSchema = z.object({
   VITE_KYBER_ENV: z.enum(['local-mocked', 'local-live', 'staging', 'production']).default('local-mocked'),
   VITE_API_BASE_URL: z.string().url().default('http://localhost:8000'),
+  VITE_AETHER_API_KEY: z.string().default(''),
+  VITE_AETHER_ENDPOINT: z.string().url().default('http://localhost:8000'),
   VITE_WS_BASE_URL: z.string().default('ws://localhost:8000'),
   VITE_GRAPHQL_URL: z.string().url().default('http://localhost:8000/v1/analytics/graphql'),
   VITE_OIDC_AUTHORITY: z.string().url().optional(),

@@ -3,6 +3,7 @@ import { BrowserRouter } from 'react-router-dom';
 import { ThemeProvider } from '@aether/ui';
 import { AuthProvider } from '@aether-app/features/auth';
 import { AetherAuth0Provider } from '@aether-app/lib/auth/auth0-provider';
+import { JourneyProvider } from '@aether-app/features/journey';
 import { ErrorBoundary } from './error-boundary';
 
 interface ProvidersProps {
@@ -16,7 +17,9 @@ export function Providers({ children }: ProvidersProps) {
         <BrowserRouter>
           <ThemeProvider storageKey="aether-theme">
             <AuthProvider>
-              {children}
+              <JourneyProvider>
+                {children}
+              </JourneyProvider>
             </AuthProvider>
           </ThemeProvider>
         </BrowserRouter>

@@ -3,6 +3,8 @@ import { z } from 'zod';
 const envSchema = z.object({
   VITE_AETHER_ENV: z.enum(['local-mocked', 'local-live', 'staging', 'production']).default('local-mocked'),
   VITE_API_BASE_URL: z.string().url().default('http://localhost:8000'),
+  VITE_AETHER_API_KEY: z.string().default(''),
+  VITE_AETHER_ENDPOINT: z.string().url().default('http://localhost:8000'),
   VITE_OIDC_AUTHORITY: z.string().url().optional(),
   VITE_OIDC_CLIENT_ID: z.string().optional(),
   VITE_OIDC_REDIRECT_URI: z.string().url().optional(),
