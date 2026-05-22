@@ -12,7 +12,7 @@ android {
         minSdk = 21
         targetSdk = 34
 
-        buildConfigField("String", "AETHER_SDK_VERSION", "\"8.8.0\"")
+        buildConfigField("String", "AETHER_SDK_VERSION", "\"${project.properties["sdkVersion"]}\"")
 
         consumerProguardFiles("consumer-rules.pro")
     }
@@ -52,10 +52,39 @@ publishing {
         create<MavenPublication>("release") {
             groupId = "com.aether"
             artifactId = "sdk-android"
-            version = "8.8.0"
+            version = project.properties["sdkVersion"] as String
 
             afterEvaluate {
                 from(components["release"])
+            }
+
+            pom {
+                name.set("Aether Android SDK")
+                description.set("Aether analytics, feature flags, and identity SDK for Android")
+                url.set("https://github.com/DammnThatsCrazy/AETHER")
+                licenses {
+                    license {
+                        name.set("UNLICENSED")
+                    }
+                }
+                developers {
+                    developer {
+                        id.set("aether")
+                        name.set("Aether")
+                        email.set("sdk@aether.io")
+                    }
+                }
+            }
+        }
+    }
+
+    repositories {
+        maven {
+            name = "GitHubPackages"
+            url = uri("https://maven.pkg.github.com/DammnThatsCrazy/AETHER")
+            credentials {
+                username = System.getenv("GITHUB_ACTOR") ?: ""
+                password = System.getenv("GITHUB_TOKEN") ?: ""
             }
         }
     }

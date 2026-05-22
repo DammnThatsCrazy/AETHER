@@ -1,0 +1,269 @@
+name: Publish SDK
+
+# Triggered manually with an explicit version string.
+# Publishes:
+#   - @aether/shared          → npm
+#   - @aether/react-native    → npm
+#   - AetherSDK               → CocoaPods trunk
+#   - aether-react-native     → CocoaPods trunk
+#   - com.aether:sdk-android  → GitHub Packages (Maven)
+# Then creates a GitHub Release and pushes a sdk/v{version} tag.
+#
+# Required secrets:
+#   NPM_TOKEN              — npm automation token (Settings → Developer tokens)
+#   COCOAPODS_TRUNK_TOKEN  — from: pod trunk register sdk@aether.io 'Aether'
+#                            then: cat ~/.netrc | grep trunk
+#   GITHUB_TOKEN           — automatic (used for GitHub Packages + release)
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version to publish (e.g. 8.9.0)"
+        required: true
+        type: string
+      dry_run:
+        description: "Dry run — build and validate without publishing"
+        required: false
+        type: boolean
+        default: false
+
+concurrency:
+  group: publish-sdk
+  cancel-in-progress: false
+
+permissions:
+  contents: write       # push tag + create release
+  packages: write       # GitHub Packages (Maven)
+
+jobs:
+  validate:
+    name: Validate & bump version
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.ver.outputs.version }}
+      tag:     ${{ steps.ver.outputs.tag }}
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Validate semver
+        id: ver
+        run: |
+          VERSION="${{ github.event.inputs.version }}"
+          if ! [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[a-zA-Z0-9.]+)?$ ]]; then
+            echo "::error::Invalid version: $VERSION"
+            exit 1
+          fi
+          TAG="sdk/v${VERSION}"
+          if git rev-parse "$TAG" >/dev/null 2>&1; then
+            echo "::error::Tag $TAG already exists"
+            exit 1
+          fi
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "tag=$TAG"        >> "$GITHUB_OUTPUT"
+
+      - name: Bump version across all packages
+        run: bash scripts/bump-sdk-version.sh "${{ steps.ver.outputs.version }}"
+
+      - name: Upload bumped files
+        uses: actions/upload-artifact@v4
+        with:
+          name: version-bumped
+          path: |
+            packages/shared/package.json
+            packages/react-native/package.json
+            packages/react-native/aether-react-native.podspec
+            packages/android/gradle.properties
+            packages/ios/AetherSDK.podspec
+
+  # ── npm ──────────────────────────────────────────────────────────────────
+  publish-npm:
+    name: Publish to npm
+    runs-on: ubuntu-latest
+    needs: validate
+    env:
+      VERSION: ${{ needs.validate.outputs.version }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          cache: npm
+          registry-url: 'https://registry.npmjs.org'
+
+      - name: Download bumped files
+        uses: actions/download-artifact@v4
+        with:
+          name: version-bumped
+
+      - name: Install dependencies
+        run: npm ci --ignore-scripts
+
+      - name: Build @aether/shared
+        run: npm run build --workspace=packages/shared
+
+      - name: Build @aether/react-native
+        run: npm run build --workspace=packages/react-native
+
+      - name: Publish @aether/shared
+        if: ${{ !github.event.inputs.dry_run }}
+        run: npm publish --workspace=packages/shared --access public
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      - name: Publish @aether/react-native
+        if: ${{ !github.event.inputs.dry_run }}
+        run: npm publish --workspace=packages/react-native --access public
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      - name: Dry run summary (npm)
+        if: ${{ github.event.inputs.dry_run }}
+        run: |
+          echo "DRY RUN — would publish:"
+          npm pack --workspace=packages/shared --dry-run
+          npm pack --workspace=packages/react-native --dry-run
+
+  # ── CocoaPods ────────────────────────────────────────────────────────────
+  publish-cocoapods:
+    name: Publish to CocoaPods
+    runs-on: macos-latest
+    needs: validate
+    env:
+      VERSION: ${{ needs.validate.outputs.version }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download bumped files
+        uses: actions/download-artifact@v4
+        with:
+          name: version-bumped
+
+      - name: Install CocoaPods
+        run: gem install cocoapods --no-document
+
+      - name: Validate AetherSDK podspec
+        run: pod spec lint packages/ios/AetherSDK.podspec --allow-warnings
+
+      - name: Validate aether-react-native podspec
+        run: pod spec lint packages/react-native/aether-react-native.podspec --allow-warnings
+
+      - name: Push AetherSDK to trunk
+        if: ${{ !github.event.inputs.dry_run }}
+        run: pod trunk push packages/ios/AetherSDK.podspec --allow-warnings
+        env:
+          COCOAPODS_TRUNK_TOKEN: ${{ secrets.COCOAPODS_TRUNK_TOKEN }}
+
+      - name: Push aether-react-native to trunk
+        if: ${{ !github.event.inputs.dry_run }}
+        run: pod trunk push packages/react-native/aether-react-native.podspec --allow-warnings
+        env:
+          COCOAPODS_TRUNK_TOKEN: ${{ secrets.COCOAPODS_TRUNK_TOKEN }}
+
+  # ── Android / Maven ───────────────────────────────────────────────────────
+  publish-android:
+    name: Publish to GitHub Packages (Maven)
+    runs-on: ubuntu-latest
+    needs: validate
+    env:
+      VERSION: ${{ needs.validate.outputs.version }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download bumped files
+        uses: actions/download-artifact@v4
+        with:
+          name: version-bumped
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v3
+
+      - name: Assemble release AAR
+        working-directory: packages/android
+        run: ./gradlew assembleRelease
+
+      - name: Publish to GitHub Packages
+        if: ${{ !github.event.inputs.dry_run }}
+        working-directory: packages/android
+        run: ./gradlew publishReleasePublicationToGitHubPackagesRepository
+        env:
+          GITHUB_ACTOR: ${{ github.actor }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  # ── Tag + Release ─────────────────────────────────────────────────────────
+  release:
+    name: Tag & GitHub Release
+    runs-on: ubuntu-latest
+    needs: [validate, publish-npm, publish-cocoapods, publish-android]
+    env:
+      VERSION: ${{ needs.validate.outputs.version }}
+      TAG:     ${{ needs.validate.outputs.tag }}
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Download bumped files
+        uses: actions/download-artifact@v4
+        with:
+          name: version-bumped
+
+      - name: Configure git
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+      - name: Commit version bump
+        run: |
+          git add packages/shared/package.json \
+                  packages/react-native/package.json \
+                  packages/react-native/aether-react-native.podspec \
+                  packages/android/gradle.properties \
+                  packages/ios/AetherSDK.podspec
+          git commit -m "chore(sdk): bump version to $VERSION"
+
+      - name: Create and push tag
+        if: ${{ !github.event.inputs.dry_run }}
+        run: |
+          git tag "$TAG" -m "SDK release $VERSION"
+          git push origin HEAD:main "$TAG"
+
+      - name: Extract changelog entry
+        id: changelog
+        run: |
+          # Pull the first unreleased section from CHANGELOG.md
+          NOTES=$(awk '/^## \[Unreleased\]/{found=1; next} found && /^## \[/{exit} found{print}' CHANGELOG.md | head -40)
+          echo "notes<<EOF" >> "$GITHUB_OUTPUT"
+          echo "$NOTES"    >> "$GITHUB_OUTPUT"
+          echo "EOF"       >> "$GITHUB_OUTPUT"
+
+      - name: Create GitHub Release
+        if: ${{ !github.event.inputs.dry_run }}
+        uses: actions/github-script@v7
+        with:
+          script: |
+            await github.rest.repos.createRelease({
+              owner: context.repo.owner,
+              repo:  context.repo.repo,
+              tag_name: process.env.TAG,
+              name: `SDK v${process.env.VERSION}`,
+              body: `${{ steps.changelog.outputs.notes }}\n\n**Install**\n\`\`\`\nnpm install @aether/react-native@${process.env.VERSION}\n\`\`\`\n\n**CocoaPods**\n\`\`\`\npod 'AetherSDK', '~> ${process.env.VERSION.split('.')[0]}.0'\n\`\`\`\n\n**Maven (GitHub Packages)**\n\`\`\`kotlin\nimplementation("com.aether:sdk-android:${process.env.VERSION}")\n\`\`\``,
+              draft: false,
+              prerelease: process.env.VERSION.includes('-'),
+            });
+        env:
+          TAG:     ${{ env.TAG }}
+          VERSION: ${{ env.VERSION }}
