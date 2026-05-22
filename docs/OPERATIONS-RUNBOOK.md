@@ -265,3 +265,110 @@ All data access goes through `BaseRepository` (asyncpg PostgreSQL) which provide
 | ML Serving Proxy | `httpx.AsyncClient` | Connection pooling with `_client_lock` |
 
 All stores support horizontal scaling natively through their backend implementations.
+
+---
+
+## Kafka Consumer Lag Spike
+
+### Detection
+
+- Prometheus alert: `aether_kafka_consumer_lag > 10000` sustained for 5 minutes
+- Grafana "Event Bus" dashboard → Consumer Group Lag panel
+- `GET /v1/diagnostics/report` → `event_bus` field shows `"degraded"` or `"error"`
+
+### Triage
+
+1. Check overall lag: `GET /v1/diagnostics/health` → inspect `event_bus` status
+2. Identify the lagging consumer group:
+   ```
+   kafka-consumer-groups.sh --bootstrap-server $KAFKA_BOOTSTRAP \
+     --describe --group aether-backend
+   ```
+3. Check ECS task count for the backend service — unexpected scale-in causes consumer group rebalancing, which temporarily stalls progress
+
+### Remediation
+
+| Lag Pattern | Cause | Action |
+|-------------|-------|--------|
+| Steady lag growth | Consumer is slower than producer | Scale ECS tasks; check for expensive downstream calls |
+| Lag spikes then recovers | Rebalancing after scale event | Wait 60s for group to stabilise |
+| Lag frozen on one partition | Poison-pill message | Use console consumer to inspect the offset, skip with `--to-offset` |
+| Lag spike after deploy | Schema change in event envelope | Restart consumers after confirming schema compatibility |
+| Lag > 50K, not recovering after 10 min | Broker-side issue | Check CloudWatch MSK metrics for broker CPU and disk; page on-call |
+
+### Recovery Verification
+
+Lag should return to < 1000 within 5 minutes of remediation. Monitor via Grafana dashboard.
+
+---
+
+## Neptune / Graph DB Unavailable
+
+### Detection
+
+- `GET /v1/diagnostics/health` → `"graph": "error"` or `"graph": "degraded"`
+- `GET /v1/diagnostics/circuit-breakers` → graph breaker in `"open"` state
+- CloudWatch Neptune metric `ServerlessDatabaseCapacity` drops to 0
+
+### Impact Scope
+
+Services affected (degraded responses, not errors):
+- `GET /v1/identity/profiles/{id}/graph` — profile graph traversal
+- `POST /v1/identity/merge` — identity merge edge writes
+- `GET /v1/agent/*` routes that query A2H relationships
+
+Services **unaffected** (Neptune is not in the hot path):
+- All ingestion, analytics, ML serving, billing, fraud, attribution, rewards, oracle endpoints continue normally
+
+### Triage
+
+1. Confirm graph client state: `GET /v1/diagnostics/circuit-breakers` — if breaker is `"open"`, the graph client has already tripped and is preventing cascading load
+2. Check Neptune cluster status in AWS Console → Amazon Neptune → Clusters
+3. Review CloudWatch metrics: `GremlinRequestsPerSec`, `CPUUtilization`, `DatabaseConnections`
+
+### Remediation
+
+| State | Action |
+|-------|--------|
+| Circuit breaker `"open"` | Self-heals after `PROVIDER_CB_TIMEOUT_S` (default 30s) recovery check — no action required |
+| Neptune cluster stopped | Start cluster via AWS Console; graph client reconnects automatically on next request |
+| Neptune cluster unreachable (VPC issue) | Check security group rules — port 8182 must be open from ECS task SG to Neptune SG |
+| Half-open, single request fails | Breaker re-opens; wait another 30s cycle |
+
+### Post-Recovery Verification
+
+Circuit breaker transitions to `"closed"` automatically after the first successful Gremlin request. Confirm via `GET /v1/diagnostics/circuit-breakers`.
+
+---
+
+## Stripe Webhook Retry / Stuck Event
+
+### Detection
+
+- Stripe Dashboard → Developers → Webhooks → select endpoint → Failed deliveries tab
+- Prometheus counter `stripe_webhook_sig_failures` spiking (signature failures, not handler errors)
+- Application logs: `ERROR Stripe webhook handler failed` on `POST /v1/admin/billing/stripe/webhook`
+
+### How Retries Work
+
+The handler uses an idempotency claim: it inserts `event_id` into `stripe_webhook_events` before processing. On handler failure (5xx), the claim is released (`DELETE` from the table) so Stripe's next retry attempt is treated as new. This means **Stripe retries heal automatically** for transient failures.
+
+### Triage
+
+| Symptom | Likely Cause | Next Step |
+|---------|-------------|-----------|
+| 400 responses | Invalid `Stripe-Signature` — webhook secret mismatch | Verify `STRIPE_WEBHOOK_SECRET` matches the endpoint secret in Stripe Dashboard |
+| 500 responses, then 200 on retry | Transient DB error or downstream unavailability | Monitor — retries self-heal; check DB health |
+| 500 responses, not recovering | Tenant not found in `tenant_billing_accounts` | Tenant was not provisioned before subscription creation; manually upsert the billing account row |
+| Event appears stuck in DB | Idempotency claim not released (process killed mid-handler) | Run: `DELETE FROM stripe_webhook_events WHERE event_id = '<id>';` |
+
+### Manual Re-Trigger
+
+Use Stripe Dashboard: select the failed event → "Resend" button. Alternatively, use the Stripe CLI:
+```
+stripe events resend <evt_xxxxxxxx> --webhook-endpoint=<we_xxxxxxxx>
+```
+
+### Escalation
+
+If an event type is consistently failing after 3 Stripe retry cycles (Stripe retries over 72 hours with exponential backoff), investigate the specific handler (`_handle_<event_type>` in `services/admin/webhook_routes.py`) and consider adding the event to a dead-letter queue for manual reprocessing.

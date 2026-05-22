@@ -147,6 +147,7 @@ class APIConfig:
 @dataclass(frozen=True)
 class AuthConfig:
     jwt_secret: str = _env("JWT_SECRET", "change-me-in-production")
+    jwt_secret_previous: str = _env("JWT_SECRET_PREVIOUS", "")
     jwt_algorithm: str = "HS256"
     jwt_expiry_minutes: int = _env_int("JWT_EXPIRY_MINUTES", 60)
     api_key_header: str = "X-API-Key"

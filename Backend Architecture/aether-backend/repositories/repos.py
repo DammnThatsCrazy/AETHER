@@ -53,6 +53,13 @@ _pool_lock = asyncio.Lock()
 _TABLE_NAME_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]{0,62}$")
 
 
+async def _init_connection(conn: Any) -> None:
+    """Per-connection init: set PostgreSQL-side timeouts and application name."""
+    await conn.execute("SET statement_timeout = '30s'")
+    await conn.execute("SET idle_in_transaction_session_timeout = '60s'")
+    await conn.execute("SET application_name = 'aether-backend'")
+
+
 async def get_pool() -> Any:
     """Get or create the shared asyncpg connection pool (thread-safe)."""
     global _pool
@@ -78,11 +85,20 @@ async def get_pool() -> Any:
                 return None
             raise RuntimeError("asyncpg required for production: pip install asyncpg>=0.29")
 
+        from config.settings import settings as _settings
+        db_cfg = _settings.timescaledb
         _pool = await asyncpg.create_pool(
-            url, min_size=2, max_size=20,
-            command_timeout=30, statement_cache_size=100,
+            url,
+            min_size=db_cfg.pool_min,
+            max_size=db_cfg.pool_max,
+            command_timeout=30,
+            statement_cache_size=100,
+            init=_init_connection,
         )
-        logger.info(f"Database pool created (asyncpg, {url.split('@')[-1] if '@' in url else url})")
+        logger.info(
+            f"Database pool created (asyncpg, {url.split('@')[-1] if '@' in url else url}, "
+            f"min={db_cfg.pool_min} max={db_cfg.pool_max})"
+        )
         return _pool
 
 
