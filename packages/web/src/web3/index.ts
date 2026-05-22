@@ -17,6 +17,9 @@ import { MoveProvider } from './providers/move-provider';
 import { NEARProvider } from './providers/near-provider';
 import { TronProvider } from './providers/tron-provider';
 import { CosmosProvider } from './providers/cosmos-provider';
+import { AptosProvider } from './providers/aptos-provider';
+import { TonProvider } from './providers/ton-provider';
+import { StarknetProvider } from './providers/starknet-provider';
 
 // Trackers (slim — raw data only)
 import { EVMTracker } from './tracking/evm-tracker';
@@ -26,6 +29,9 @@ import { MoveTracker } from './tracking/move-tracker';
 import { NEARTracker } from './tracking/near-tracker';
 import { TronTracker } from './tracking/tron-tracker';
 import { CosmosTracker } from './tracking/cosmos-tracker';
+import { AptosTracker } from './tracking/aptos-tracker';
+import { TonTracker } from './tracking/ton-tracker';
+import { StarknetTracker } from './tracking/starknet-tracker';
 
 // =============================================================================
 // Callbacks interface
@@ -44,6 +50,13 @@ export interface Web3ModuleConfig {
   nearTracking?: boolean;
   tronTracking?: boolean;
   cosmosTracking?: boolean;
+  aptosTracking?: boolean;
+  tonTracking?: boolean;
+  starknetTracking?: boolean;
+  cosmosChains?: string[];
+  approvalScan?: boolean;
+  domainResolution?: boolean;
+  networkContext?: boolean;
 }
 
 // =============================================================================
@@ -62,6 +75,9 @@ export class Web3Module {
   private nearProvider: NEARProvider | null = null;
   private tronProvider: TronProvider | null = null;
   private cosmosProvider: CosmosProvider | null = null;
+  private aptosProvider: AptosProvider | null = null;
+  private tonProvider: TonProvider | null = null;
+  private starknetProvider: StarknetProvider | null = null;
 
   // Trackers (slim)
   private evmTracker: EVMTracker | null = null;
@@ -71,6 +87,9 @@ export class Web3Module {
   private nearTracker: NEARTracker | null = null;
   private tronTracker: TronTracker | null = null;
   private cosmosTracker: CosmosTracker | null = null;
+  private aptosTracker: AptosTracker | null = null;
+  private tonTracker: TonTracker | null = null;
+  private starknetTracker: StarknetTracker | null = null;
 
   // Wallet change listeners
   private walletChangeListeners: ((wallets: ConnectedWallet[]) => void)[] = [];
@@ -97,6 +116,10 @@ export class Web3Module {
       this.evmProvider = new EVMProvider({
         onWalletEvent: (action, data) => this.handleWalletEvent('evm', action, data),
         onTransaction: (hash, data) => this.handleTransaction('evm', hash, data),
+      }, {
+        approvalScan: cfg.approvalScan,
+        domainResolution: cfg.domainResolution,
+        networkContext: cfg.networkContext,
       });
       this.evmProvider.init();
       this.evmTracker = new EVMTracker(trackerCallbacks);
@@ -152,14 +175,44 @@ export class Web3Module {
       this.tronTracker = new TronTracker(trackerCallbacks);
     }
 
-    // Cosmos / SEI
+    // Cosmos / multi-chain
     if (cfg.cosmosTracking) {
       this.cosmosProvider = new CosmosProvider({
         onWalletEvent: (action, data) => this.handleWalletEvent('cosmos', action, data),
         onTransaction: (hash, data) => this.handleTransaction('cosmos', hash, data),
-      });
+      }, { supportedChains: cfg.cosmosChains });
       this.cosmosProvider.init();
       this.cosmosTracker = new CosmosTracker(trackerCallbacks);
+    }
+
+    // Aptos
+    if (cfg.aptosTracking) {
+      this.aptosProvider = new AptosProvider({
+        onWalletEvent: (action, data) => this.handleWalletEvent('aptos', action, data),
+        onTransaction: (hash, data) => this.handleTransaction('aptos', hash, data),
+      });
+      this.aptosProvider.init();
+      this.aptosTracker = new AptosTracker(trackerCallbacks);
+    }
+
+    // TON
+    if (cfg.tonTracking) {
+      this.tonProvider = new TonProvider({
+        onWalletEvent: (action, data) => this.handleWalletEvent('ton', action, data),
+        onTransaction: (hash, data) => this.handleTransaction('ton', hash, data),
+      });
+      this.tonProvider.init();
+      this.tonTracker = new TonTracker(trackerCallbacks);
+    }
+
+    // Starknet
+    if (cfg.starknetTracking) {
+      this.starknetProvider = new StarknetProvider({
+        onWalletEvent: (action, data) => this.handleWalletEvent('starknet', action, data),
+        onTransaction: (hash, data) => this.handleTransaction('starknet', hash, data),
+      });
+      this.starknetProvider.init();
+      this.starknetTracker = new StarknetTracker(trackerCallbacks);
     }
   }
 
@@ -195,6 +248,18 @@ export class Web3Module {
     this.cosmosProvider?.connect(address, options);
   }
 
+  connectAptos(address: string, options?: Partial<WalletInfo>): void {
+    this.aptosProvider?.connect(address, options);
+  }
+
+  connectTON(address: string, options?: Partial<WalletInfo>): void {
+    this.tonProvider?.connect(address, options);
+  }
+
+  connectStarknet(address: string, options?: Partial<WalletInfo>): void {
+    this.starknetProvider?.connect(address, options);
+  }
+
   disconnect(address?: string): void {
     if (address) {
       this.evmProvider?.disconnect(address);
@@ -204,6 +269,9 @@ export class Web3Module {
       this.nearProvider?.disconnect();
       this.tronProvider?.disconnect();
       this.cosmosProvider?.disconnect();
+      this.aptosProvider?.disconnect();
+      this.tonProvider?.disconnect();
+      this.starknetProvider?.disconnect();
     } else {
       this.evmProvider?.disconnect();
       this.svmProvider?.disconnect();
@@ -212,6 +280,9 @@ export class Web3Module {
       this.nearProvider?.disconnect();
       this.tronProvider?.disconnect();
       this.cosmosProvider?.disconnect();
+      this.aptosProvider?.disconnect();
+      this.tonProvider?.disconnect();
+      this.starknetProvider?.disconnect();
     }
   }
 
@@ -223,6 +294,9 @@ export class Web3Module {
       ?? this.nearProvider?.getWallet()
       ?? this.tronProvider?.getWallet()
       ?? this.cosmosProvider?.getWallet()
+      ?? this.aptosProvider?.getWallet()
+      ?? this.tonProvider?.getWallet()
+      ?? this.starknetProvider?.getWallet()
       ?? null;
   }
 
@@ -236,6 +310,9 @@ export class Web3Module {
       case 'near': this.nearProvider?.transaction(txHash, options as Record<string, unknown> ?? {}); break;
       case 'tvm': this.tronProvider?.transaction(txHash, options as Record<string, unknown> ?? {}); break;
       case 'cosmos': this.cosmosProvider?.transaction(txHash, options as Record<string, unknown> ?? {}); break;
+      case 'aptos': this.aptosProvider?.transaction(txHash, options as Record<string, unknown> ?? {}); break;
+      case 'ton': this.tonProvider?.transaction(txHash, options as Record<string, unknown> ?? {}); break;
+      case 'starknet': this.starknetProvider?.transaction(txHash, options as Record<string, unknown> ?? {}); break;
     }
   }
 
@@ -254,6 +331,9 @@ export class Web3Module {
     this.nearProvider?.destroy();
     this.tronProvider?.destroy();
     this.cosmosProvider?.destroy();
+    this.aptosProvider?.destroy();
+    this.tonProvider?.destroy();
+    this.starknetProvider?.destroy();
 
     this.evmTracker?.destroy();
     this.svmTracker?.destroy();
@@ -262,6 +342,9 @@ export class Web3Module {
     this.nearTracker?.destroy();
     this.tronTracker?.destroy();
     this.cosmosTracker?.destroy();
+    this.aptosTracker?.destroy();
+    this.tonTracker?.destroy();
+    this.starknetTracker?.destroy();
 
     this.walletChangeListeners = [];
 
@@ -272,6 +355,9 @@ export class Web3Module {
     this.nearProvider = null;
     this.tronProvider = null;
     this.cosmosProvider = null;
+    this.aptosProvider = null;
+    this.tonProvider = null;
+    this.starknetProvider = null;
     this.evmTracker = null;
     this.svmTracker = null;
     this.btcTracker = null;
@@ -279,6 +365,9 @@ export class Web3Module {
     this.nearTracker = null;
     this.tronTracker = null;
     this.cosmosTracker = null;
+    this.aptosTracker = null;
+    this.tonTracker = null;
+    this.starknetTracker = null;
   }
 
   // =========================================================================

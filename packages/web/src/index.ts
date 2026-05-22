@@ -238,6 +238,15 @@ class AetherSDK implements AetherSDKInterface {
     connectCosmos: (address: string, options?: Partial<WalletInfo>) => {
       this.web3Module?.connectCosmos(address, options);
     },
+    connectAptos: (address: string, options?: Partial<WalletInfo>) => {
+      this.web3Module?.connectAptos(address, options);
+    },
+    connectTON: (address: string, options?: Partial<WalletInfo>) => {
+      this.web3Module?.connectTON(address, options);
+    },
+    connectStarknet: (address: string, options?: Partial<WalletInfo>) => {
+      this.web3Module?.connectStarknet(address, options);
+    },
     disconnect: (address?: string) => {
       this.web3Module?.disconnect(address);
     },

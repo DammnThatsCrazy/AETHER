@@ -10,6 +10,10 @@ interface SolanaProvider {
   isSolflare?: boolean;
   isBackpack?: boolean;
   isGlow?: boolean;
+  isNightly?: boolean;
+  isBraveWallet?: boolean;
+  isCoin98?: boolean;
+  isExodus?: boolean;
   publicKey?: { toString(): string; toBase58(): string };
   isConnected?: boolean;
   connect(opts?: { onlyIfTrusted?: boolean }): Promise<{ publicKey: { toString(): string } }>;
@@ -29,6 +33,10 @@ declare global {
     solflare?: SolanaProvider;
     backpack?: { solana?: SolanaProvider };
     glow?: SolanaProvider;
+    nightly?: { aptos?: unknown; solana?: unknown; sui?: unknown };
+    braveSolana?: SolanaProvider;
+    coin98?: { sol?: SolanaProvider };
+    exodus?: { solana?: SolanaProvider };
   }
 }
 
@@ -47,12 +55,16 @@ export class SVMProvider extends BaseVMProvider {
   init(): void {
     if (typeof window === 'undefined') return;
 
-    // Priority order: Phantom > Solflare > Backpack > Glow > generic
-    const provider =
+    // Priority order: Phantom > Solflare > Backpack > Glow > Nightly > Brave > Coin98 > Exodus > generic
+    const provider: SolanaProvider | undefined =
       window.phantom?.solana ??
       window.solflare ??
       window.backpack?.solana ??
       window.glow ??
+      (window.nightly?.solana as SolanaProvider | undefined) ??
+      window.braveSolana ??
+      window.coin98?.sol ??
+      window.exodus?.solana ??
       window.solana;
 
     if (provider) {
@@ -85,6 +97,13 @@ export class SVMProvider extends BaseVMProvider {
     if (this.provider.isSolflare) return 'solflare';
     if (this.provider.isBackpack) return 'backpack';
     if (this.provider.isGlow) return 'glow';
+    if (this.provider.isNightly) return 'nightly';
+    if (this.provider.isBraveWallet) return 'brave';
+    if (this.provider.isCoin98) return 'coin98';
+    if (this.provider.isExodus) return 'exodus';
+    if (this.provider === window.braveSolana) return 'brave';
+    if (this.provider === window.coin98?.sol) return 'coin98';
+    if (this.provider === window.exodus?.solana) return 'exodus';
     return 'solana';
   }
 
@@ -131,7 +150,9 @@ export class SVMProvider extends BaseVMProvider {
 
     // Auto-detect existing connection
     if (provider.isConnected && provider.publicKey) {
-      this.connect(provider.publicKey.toString(), { type: this.walletType });
+      const address = provider.publicKey.toString();
+      this.connect(address, { type: this.walletType });
+      this.resolveSNS(address);
     }
 
     // Account changes
@@ -161,6 +182,22 @@ export class SVMProvider extends BaseVMProvider {
       ['disconnect', disconnectHandler],
       ['accountChanged', accountChangeHandler]
     );
+  }
+
+  private async resolveSNS(address: string): Promise<void> {
+    try {
+      const response = await fetch(
+        `https://sns-sdk-proxy.bonfida.workers.dev/reverse-lookup/${address}`,
+      );
+      if (response.ok) {
+        const data = await response.json() as { result?: string };
+        if (data?.result) {
+          this.callbacks.onWalletEvent('domain_names', {
+            address, vm: 'svm', domainNames: { sns: `${data.result}.sol` },
+          });
+        }
+      }
+    } catch { /* SNS resolution failed — non-fatal */ }
   }
 
   private getRpcUrl(): string {

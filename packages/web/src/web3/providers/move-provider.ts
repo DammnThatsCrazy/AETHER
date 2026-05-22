@@ -21,8 +21,10 @@ declare global {
   interface Window {
     suiWallet?: SuiWalletProvider;
     ethosWallet?: SuiWalletProvider;
-    martian?: { sui?: SuiWalletProvider };
+    martian?: { aptos?: unknown; sui?: unknown };
     surfWallet?: SuiWalletProvider;
+    suiet?: SuiWalletProvider;
+    nightly?: { aptos?: unknown; solana?: unknown; sui?: unknown };
   }
 }
 
@@ -39,7 +41,13 @@ export class MoveProvider extends BaseVMProvider {
 
   init(): void {
     if (typeof window === 'undefined') return;
-    const provider = window.suiWallet ?? window.ethosWallet ?? window.martian?.sui ?? window.surfWallet;
+    const provider: SuiWalletProvider | undefined =
+      window.suiWallet ??
+      window.ethosWallet ??
+      (window.martian?.sui as SuiWalletProvider | undefined) ??
+      window.surfWallet ??
+      window.suiet ??
+      (window.nightly?.sui as SuiWalletProvider | undefined);
     if (provider) this.setupProvider(provider);
   }
 
@@ -53,7 +61,13 @@ export class MoveProvider extends BaseVMProvider {
   // ---------------------------------------------------------------------------
 
   protected detectWalletType(): string {
-    return this.provider?.name ?? 'sui_wallet';
+    if (typeof window === 'undefined' || !this.provider) return 'sui_wallet';
+    if (this.provider === window.suiet) return 'suiet';
+    if (this.provider === (window.nightly?.sui as SuiWalletProvider | undefined)) return 'nightly_sui';
+    if (this.provider === window.surfWallet) return 'surf';
+    if (this.provider === window.ethosWallet) return 'ethos';
+    if (this.provider === (window.martian?.sui as SuiWalletProvider | undefined)) return 'martian';
+    return this.provider.name ?? 'sui_wallet';
   }
 
   protected async monitorTransaction(digest: string): Promise<void> {

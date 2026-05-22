@@ -5,7 +5,7 @@
 
 import type { WalletInfo } from '../../types';
 
-export type VMType = 'evm' | 'svm' | 'bitcoin' | 'movevm' | 'near' | 'tvm' | 'cosmos';
+export type VMType = 'evm' | 'svm' | 'bitcoin' | 'movevm' | 'near' | 'tvm' | 'cosmos' | 'aptos' | 'ton' | 'starknet';
 
 export interface ProviderCallbacks {
   onWalletEvent: (action: string, data: Record<string, unknown>) => void;
