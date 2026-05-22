@@ -114,6 +114,142 @@ module.exports = {
       chainId: 1101,
     },
 
+    // ── Tier 1 — High TVL / major ecosystems ────────────────────────
+    gnosis: {
+      url: process.env.GNOSIS_RPC || "https://rpc.gnosischain.com",
+      accounts: process.env.DEPLOYER_KEY ? [process.env.DEPLOYER_KEY] : [],
+      chainId: 100,
+    },
+    arbitrumNova: {
+      url: process.env.ARBITRUM_NOVA_RPC || "https://nova.arbitrum.io/rpc",
+      accounts: process.env.DEPLOYER_KEY ? [process.env.DEPLOYER_KEY] : [],
+      chainId: 42170,
+    },
+    opBnb: {
+      url: process.env.OPBNB_RPC || "https://opbnb-mainnet-rpc.bnbchain.org",
+      accounts: process.env.DEPLOYER_KEY ? [process.env.DEPLOYER_KEY] : [],
+      chainId: 204,
+    },
+    mode: {
+      url: process.env.MODE_RPC || "https://mainnet.mode.network",
+      accounts: process.env.DEPLOYER_KEY ? [process.env.DEPLOYER_KEY] : [],
+      chainId: 34443,
+    },
+    taiko: {
+      url: process.env.TAIKO_RPC || "https://rpc.mainnet.taiko.xyz",
+      accounts: process.env.DEPLOYER_KEY ? [process.env.DEPLOYER_KEY] : [],
+      chainId: 167000,
+    },
+    berachain: {
+      url: process.env.BERACHAIN_RPC || "https://rpc.berachain.com",
+      accounts: process.env.DEPLOYER_KEY ? [process.env.DEPLOYER_KEY] : [],
+      chainId: 80094,
+    },
+    zora: {
+      url: process.env.ZORA_RPC || "https://rpc.zora.energy",
+      accounts: process.env.DEPLOYER_KEY ? [process.env.DEPLOYER_KEY] : [],
+      chainId: 7777777,
+    },
+    kava: {
+      url: process.env.KAVA_RPC || "https://evm.kava.io",
+      accounts: process.env.DEPLOYER_KEY ? [process.env.DEPLOYER_KEY] : [],
+      chainId: 2222,
+    },
+    moonbeam: {
+      url: process.env.MOONBEAM_RPC || "https://rpc.api.moonbeam.network",
+      accounts: process.env.DEPLOYER_KEY ? [process.env.DEPLOYER_KEY] : [],
+      chainId: 1284,
+    },
+    celo: {
+      url: process.env.CELO_RPC || "https://forno.celo.org",
+      accounts: process.env.DEPLOYER_KEY ? [process.env.DEPLOYER_KEY] : [],
+      chainId: 42220,
+    },
+
+    // ── Tier 2 — Established chains ─────────────────────────────────
+    metis: {
+      url: process.env.METIS_RPC || "https://andromeda.metis.io/?owner=1088",
+      accounts: process.env.DEPLOYER_KEY ? [process.env.DEPLOYER_KEY] : [],
+      chainId: 1088,
+    },
+    aurora: {
+      url: process.env.AURORA_RPC || "https://mainnet.aurora.dev",
+      accounts: process.env.DEPLOYER_KEY ? [process.env.DEPLOYER_KEY] : [],
+      chainId: 1313161554,
+    },
+    fraxtal: {
+      url: process.env.FRAXTAL_RPC || "https://rpc.frax.com",
+      accounts: process.env.DEPLOYER_KEY ? [process.env.DEPLOYER_KEY] : [],
+      chainId: 252,
+    },
+    mantaPacific: {
+      url: process.env.MANTA_RPC || "https://pacific-rpc.manta.network/http",
+      accounts: process.env.DEPLOYER_KEY ? [process.env.DEPLOYER_KEY] : [],
+      chainId: 169,
+    },
+    xlayer: {
+      url: process.env.XLAYER_RPC || "https://rpc.xlayer.tech",
+      accounts: process.env.DEPLOYER_KEY ? [process.env.DEPLOYER_KEY] : [],
+      chainId: 196,
+    },
+    moonriver: {
+      url: process.env.MOONRIVER_RPC || "https://rpc.api.moonriver.moonbeam.network",
+      accounts: process.env.DEPLOYER_KEY ? [process.env.DEPLOYER_KEY] : [],
+      chainId: 1285,
+    },
+    klaytn: {
+      url: process.env.KLAYTN_RPC || "https://public-node-api.klaytnapi.com/v1/cypress",
+      accounts: process.env.DEPLOYER_KEY ? [process.env.DEPLOYER_KEY] : [],
+      chainId: 8217,
+    },
+    boba: {
+      url: process.env.BOBA_RPC || "https://mainnet.boba.network",
+      accounts: process.env.DEPLOYER_KEY ? [process.env.DEPLOYER_KEY] : [],
+      chainId: 288,
+    },
+    canto: {
+      url: process.env.CANTO_RPC || "https://canto.gravitychain.io",
+      accounts: process.env.DEPLOYER_KEY ? [process.env.DEPLOYER_KEY] : [],
+      chainId: 7700,
+    },
+    astar: {
+      url: process.env.ASTAR_RPC || "https://evm.astar.network",
+      accounts: process.env.DEPLOYER_KEY ? [process.env.DEPLOYER_KEY] : [],
+      chainId: 592,
+    },
+
+    // ── Tier 3 — Emerging / niche ────────────────────────────────────
+    evmos: {
+      url: process.env.EVMOS_RPC || "https://evmos-evm.publicnode.com",
+      accounts: process.env.DEPLOYER_KEY ? [process.env.DEPLOYER_KEY] : [],
+      chainId: 9001,
+    },
+    rootstock: {
+      url: process.env.ROOTSTOCK_RPC || "https://public-node.rsk.co",
+      accounts: process.env.DEPLOYER_KEY ? [process.env.DEPLOYER_KEY] : [],
+      chainId: 30,
+    },
+    worldchain: {
+      url: process.env.WORLDCHAIN_RPC || "https://worldchain-mainnet.g.alchemy.com/public",
+      accounts: process.env.DEPLOYER_KEY ? [process.env.DEPLOYER_KEY] : [],
+      chainId: 480,
+    },
+    lisk: {
+      url: process.env.LISK_RPC || "https://rpc.api.lisk.com",
+      accounts: process.env.DEPLOYER_KEY ? [process.env.DEPLOYER_KEY] : [],
+      chainId: 1135,
+    },
+    cyber: {
+      url: process.env.CYBER_RPC || "https://cyber.alt.technology",
+      accounts: process.env.DEPLOYER_KEY ? [process.env.DEPLOYER_KEY] : [],
+      chainId: 7560,
+    },
+    soneium: {
+      url: process.env.SONEIUM_RPC || "https://rpc.soneium.org",
+      accounts: process.env.DEPLOYER_KEY ? [process.env.DEPLOYER_KEY] : [],
+      chainId: 1868,
+    },
+
     // ── Testnet chains ──────────────────────────────────────────────
     sepolia: {
       url: process.env.ETHEREUM_TESTNET_RPC || "https://rpc.sepolia.org",
@@ -160,6 +296,35 @@ module.exports = {
       opera: process.env.FTMSCAN_KEY || "",
       cronos: process.env.CRONOSCAN_KEY || "",
       polygonZkEvm: process.env.POLYGON_ZKEVM_EXPLORER_KEY || "",
+      // Tier 1
+      gnosis: process.env.GNOSISSCAN_KEY || "",
+      arbitrumNova: process.env.ARBISCAN_KEY || "",
+      opBnb: process.env.OPBNB_EXPLORER_KEY || "",
+      mode: process.env.MODE_EXPLORER_KEY || "",
+      taiko: process.env.TAIKO_EXPLORER_KEY || "",
+      berachain: process.env.BERACHAIN_EXPLORER_KEY || "",
+      zora: process.env.ZORA_EXPLORER_KEY || "",
+      kava: process.env.KAVA_EXPLORER_KEY || "",
+      moonbeam: process.env.MOONBEAM_EXPLORER_KEY || "",
+      celo: process.env.CELOSCAN_KEY || "",
+      // Tier 2
+      metis: process.env.METIS_EXPLORER_KEY || "",
+      aurora: process.env.AURORA_EXPLORER_KEY || "",
+      fraxtal: process.env.FRAXTAL_EXPLORER_KEY || "",
+      mantaPacific: process.env.MANTA_EXPLORER_KEY || "",
+      xlayer: process.env.XLAYER_EXPLORER_KEY || "",
+      moonriver: process.env.MOONRIVER_EXPLORER_KEY || "",
+      klaytn: process.env.KLAYTN_EXPLORER_KEY || "",
+      boba: process.env.BOBA_EXPLORER_KEY || "",
+      canto: process.env.CANTO_EXPLORER_KEY || "",
+      astar: process.env.ASTAR_EXPLORER_KEY || "",
+      // Tier 3
+      evmos: process.env.EVMOS_EXPLORER_KEY || "",
+      rootstock: process.env.ROOTSTOCK_EXPLORER_KEY || "",
+      worldchain: process.env.WORLDCHAIN_EXPLORER_KEY || "",
+      lisk: process.env.LISK_EXPLORER_KEY || "",
+      cyber: process.env.CYBER_EXPLORER_KEY || "",
+      soneium: process.env.SONEIUM_EXPLORER_KEY || "",
       // Testnets (use same keys — Etherscan API keys work across testnet/mainnet)
       sepolia: process.env.ETHERSCAN_KEY || "",
       polygonAmoy: process.env.POLYGONSCAN_KEY || "",
