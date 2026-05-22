@@ -136,8 +136,10 @@ class JWTHandler:
         issuer: str = "",
         audience: str = "",
         allow_hs256_fallback: bool = True,
+        secret_previous: str = "",
     ):
         self.secret = secret or settings.auth.jwt_secret
+        self.secret_previous = secret_previous or settings.auth.jwt_secret_previous
         self.algorithm = algorithm or os.getenv("JWT_ALGORITHM", "HS256")
         self.private_key = private_key or os.getenv("JWT_PRIVATE_KEY", "")
         self.public_key = public_key or os.getenv("JWT_PUBLIC_KEY", "")
@@ -239,6 +241,21 @@ class JWTHandler:
                 raise UnauthorizedError("Invalid token algorithm")
             except pyjwt.ExpiredSignatureError:
                 raise UnauthorizedError("Token expired")
+            except pyjwt.InvalidSignatureError:
+                # During JWT_SECRET rotation: accept tokens signed by the previous key.
+                # Deploy with JWT_SECRET=<new> + JWT_SECRET_PREVIOUS=<old>, then wait
+                # for all old tokens to expire before clearing JWT_SECRET_PREVIOUS.
+                if self.secret_previous:
+                    try:
+                        return pyjwt.decode(
+                            token, self.secret_previous,
+                            algorithms=["HS256"], options=options, **kwargs,
+                        )
+                    except pyjwt.ExpiredSignatureError:
+                        raise UnauthorizedError("Token expired")
+                    except pyjwt.InvalidTokenError:
+                        pass
+                raise UnauthorizedError("Invalid token: Signature verification failed")
             except pyjwt.InvalidTokenError as e:
                 raise UnauthorizedError(f"Invalid token: {e}")
 
@@ -259,6 +276,12 @@ class JWTHandler:
                 hmac.new(self.secret.encode(), signing_input, hashlib.sha256).digest()
             ).rstrip(b"=").decode()
             if not hmac.compare_digest(expected_sig, parts[2]):
+                if self.secret_previous:
+                    prev_sig = base64.urlsafe_b64encode(
+                        hmac.new(self.secret_previous.encode(), signing_input, hashlib.sha256).digest()
+                    ).rstrip(b"=").decode()
+                    if hmac.compare_digest(prev_sig, parts[2]):
+                        return payload
                 raise UnauthorizedError("Invalid signature")
             return payload
         except UnauthorizedError:
