@@ -35,9 +35,9 @@ export function JourneyProvider({ children }: { readonly children: ReactNode }) 
   const [resumedFrom, setResumedFrom] = useState<ResolvedIdentity | null>(null);
   const initialized = useRef(false);
 
-  // Initialize SDK exactly once per app lifetime.
+  // Initialize SDK exactly once per app lifetime. Skip if no API key (dev without credentials).
   useEffect(() => {
-    if (initialized.current) return;
+    if (initialized.current || !env.VITE_AETHER_API_KEY) return;
     initialized.current = true;
 
     Aether.init({
