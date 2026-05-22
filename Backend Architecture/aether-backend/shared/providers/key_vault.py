@@ -63,9 +63,10 @@ class BYOKKeyVault:
     - Local dev: Falls back to base64 if cryptography not installed or key not set.
     """
 
-    def __init__(self, encryption_key: str = "") -> None:
+    def __init__(self, encryption_key: str = "", encryption_key_previous: str = "") -> None:
         self._encryption_key = encryption_key or os.getenv("BYOK_ENCRYPTION_KEY", "")
         self._fernet: Optional[Any] = None
+        self._fernet_previous: Optional[Any] = None
 
         if self._encryption_key and FERNET_AVAILABLE:
             try:
@@ -91,6 +92,14 @@ class BYOKKeyVault:
         else:
             logger.warning("BYOK vault using base64 encoding (LOCAL mode only)")
 
+        prev_key = encryption_key_previous or os.getenv("BYOK_ENCRYPTION_KEY_PREVIOUS", "")
+        if prev_key and FERNET_AVAILABLE:
+            try:
+                self._fernet_previous = Fernet(prev_key.encode())
+                logger.info("BYOK vault: previous encryption key loaded for rotation window")
+            except Exception as e:
+                logger.warning(f"Invalid BYOK_ENCRYPTION_KEY_PREVIOUS, ignoring: {e}")
+
         # In-memory store — production should swap to DynamoDB/Redis
         self._store: dict[str, StoredKey] = {}
 
@@ -106,12 +115,20 @@ class BYOKKeyVault:
         return base64.urlsafe_b64encode(plaintext.encode()).decode()
 
     def _decrypt(self, ciphertext: str) -> str:
-        """Decrypt an encrypted API key."""
+        """Decrypt an encrypted API key, falling back to previous key during rotation."""
         if self._fernet:
             try:
                 return self._fernet.decrypt(ciphertext.encode()).decode()
             except InvalidToken:
-                raise ValueError("Failed to decrypt BYOK key — encryption key may have been rotated")
+                if self._fernet_previous:
+                    try:
+                        return self._fernet_previous.decrypt(ciphertext.encode()).decode()
+                    except InvalidToken:
+                        pass
+                raise ValueError(
+                    "Failed to decrypt BYOK key — run scripts/byok_reencrypt.py "
+                    "or set BYOK_ENCRYPTION_KEY_PREVIOUS to the previous key"
+                )
         # Local-only fallback
         return base64.urlsafe_b64decode(ciphertext.encode()).decode()
 

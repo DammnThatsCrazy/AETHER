@@ -14,6 +14,7 @@
         lint format typecheck \
         serve-backend serve-ml \
         docker-up docker-down docker-logs \
+        smoke byok-reencrypt \
         clean validate-docs validate-frontmatter extract-docs docs-drift docs-stamp docs bump-version help
 
 # Centralized subsystem paths — single place to rename if directories move.
@@ -90,6 +91,26 @@ docker-down: ## Stop all docker services
 
 docker-logs: ## Tail logs from all docker services
 	docker compose logs -f
+
+# ---------------------------------------------------------------------------
+# Post-deploy verification
+# ---------------------------------------------------------------------------
+
+smoke: ## Run golden-path smoke test against a live deployment (set BASE_URL and API_KEY)
+	@if [ -z "$(BASE_URL)" ]; then \
+	  echo "Usage: make smoke BASE_URL=https://api.example.com API_KEY=<key>"; exit 1; fi
+	python scripts/smoke_test.py \
+	  --base-url "$(BASE_URL)" \
+	  --api-key  "$(API_KEY)" \
+	  --verbose
+
+byok-reencrypt: ## Re-encrypt BYOK keys after rotating BYOK_ENCRYPTION_KEY (see script for full usage)
+	@if [ -z "$(OLD_KEY)" ] || [ -z "$(NEW_KEY)" ]; then \
+	  echo "Usage: make byok-reencrypt OLD_KEY=<old-fernet-key> NEW_KEY=<new-fernet-key>"; exit 1; fi
+	python scripts/byok_reencrypt.py \
+	  --old-key "$(OLD_KEY)" \
+	  --new-key "$(NEW_KEY)" \
+	  --verbose
 
 # ---------------------------------------------------------------------------
 # Version & Documentation Management
