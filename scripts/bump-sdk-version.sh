@@ -40,6 +40,11 @@ IOS_PODSPEC="$ROOT/packages/ios/AetherSDK.podspec"
 sed -i "s/s\.version\s*=\s*\"[^\"]*\"/s.version         = \"${VERSION}\"/" "$IOS_PODSPEC"
 echo "  ✓ packages/ios/AetherSDK.podspec"
 
+# ── React Native podspec ─────────────────────────────────────────────────────
+RN_PODSPEC="$ROOT/packages/react-native/aether-react-native.podspec"
+sed -i "s/s\.version\s*=\s*\"[^\"]*\"/s.version          = \"${VERSION}\"/" "$RN_PODSPEC"
+echo "  ✓ packages/react-native/aether-react-native.podspec"
+
 echo ""
 echo "Done. All packages set to $VERSION."
 echo "Review changes with: git diff packages/"
