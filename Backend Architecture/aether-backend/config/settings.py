@@ -192,6 +192,9 @@ class ProviderGatewayConfig:
     enabled: bool = _env_bool("PROVIDER_GATEWAY_ENABLED", False)
     # BYOK_ENCRYPTION_KEY is the canonical name; PROVIDER_GATEWAY_ENCRYPTION_KEY is a legacy alias.
     encryption_key: str = _env("BYOK_ENCRYPTION_KEY", "") or _env("PROVIDER_GATEWAY_ENCRYPTION_KEY", "")
+    # Set during key rotation: old key so in-flight tokens remain decryptable.
+    # Clear once all rows are re-encrypted (see scripts/byok_reencrypt.py).
+    encryption_key_previous: str = _env("BYOK_ENCRYPTION_KEY_PREVIOUS", "")
     # Additional provider API keys (system defaults)
     alchemy_api_key: str = _env("ALCHEMY_API_KEY", "")
     alchemy_endpoint: str = _env("ALCHEMY_ENDPOINT", "")
