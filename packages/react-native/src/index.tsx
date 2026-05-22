@@ -19,6 +19,12 @@ const emitter = AetherNative ? new NativeEventEmitter(AetherNative) : null;
 // TYPES
 // =============================================================================
 
+export interface ResolvedIdentity {
+  userId?: string;
+  anonymousId?: string;
+  traits?: Record<string, unknown>;
+}
+
 export interface AetherRNConfig {
   apiKey: string;
   environment?: 'production' | 'staging' | 'development';
@@ -37,6 +43,7 @@ export interface AetherRNConfig {
     anonymizeIP?: boolean;
   };
   autoResumeJourney?: boolean;
+  onJourneyResumed?: (identity: ResolvedIdentity) => void;
 }
 
 export interface Identity {
@@ -220,6 +227,19 @@ export function useConsentState() {
   };
 }
 
+export function useJourneyResumed(): ResolvedIdentity | null {
+  const [resumedIdentity, setResumedIdentity] = useState<ResolvedIdentity | null>(null);
+
+  useEffect(() => {
+    const sub = emitter?.addListener('AetherJourneyResumed', (identity: ResolvedIdentity) => {
+      setResumedIdentity(identity);
+    });
+    return () => sub?.remove();
+  }, []);
+
+  return resumedIdentity;
+}
+
 // =============================================================================
 // CONTEXT PROVIDER
 // =============================================================================
@@ -265,7 +285,14 @@ export function AetherProvider({
     // Cache fingerprint ID
     Aether.getFingerprint().catch(() => {});
 
+    // Wire onJourneyResumed callback if provided
+    let journeySub: ReturnType<NonNullable<typeof emitter>['addListener']> | undefined;
+    if (config.onJourneyResumed && emitter) {
+      journeySub = emitter.addListener('AetherJourneyResumed', config.onJourneyResumed);
+    }
+
     return () => {
+      journeySub?.remove();
       semanticContext.destroy();
       RNEcommerce.destroy();
       RNFeatureFlags.destroy();

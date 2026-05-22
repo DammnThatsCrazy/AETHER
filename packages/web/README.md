@@ -311,14 +311,6 @@ const wallets = aether.wallet.getWallets();
 const evmWallets = aether.wallet.getWalletsByVM('evm');
 const svmWallets = aether.wallet.getWalletsByVM('svm');
 
-// Cross-chain portfolio aggregation
-const portfolio = aether.wallet.getPortfolio();
-// => { totalValue, walletCount, chainCount, tokens, defiPositions, ... }
-
-// Wallet classification
-const classification = aether.wallet.classifyWallet('0xabc...def');
-// => { type: 'hot', confidence: 0.95, labels: ['active-trader', 'defi-user'] }
-
 // Listen for wallet changes (connect/disconnect/chain-switch across all VMs)
 const unsub = aether.wallet.onWalletChange((event) => {
   // event.type: 'connect' | 'disconnect' | 'chainChanged' | 'accountChanged'
