@@ -155,6 +155,7 @@ from services.diagnostics.observability_routes import router as diagnostics_obse
 from services.diagnostics.guardrails_routes import router as guardrails_router
 from services.consent.audit_routes import router as audit_router
 from services.admin.billing_subscription_routes import router as admin_billing_subscription_router
+from services.admin.webhook_routes import router as stripe_webhook_router
 
 # Profile 360 (additive — multi-entity identity, delegation, flows, behavior, realtime)
 from services.entities.routes import router as entities_router
@@ -300,6 +301,7 @@ def create_app() -> FastAPI:
     app.include_router(guardrails_router)
     app.include_router(audit_router)
     app.include_router(admin_billing_subscription_router)
+    app.include_router(stripe_webhook_router)
 
     # ── Profile 360 (additive) ─────────────────────────────────────────
     app.include_router(entities_router)
