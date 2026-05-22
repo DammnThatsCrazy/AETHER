@@ -77,6 +77,15 @@ export interface ModuleConfig {
   nearTracking?: boolean;
   tronTracking?: boolean;
   cosmosTracking?: boolean;
+  aptosTracking?: boolean;
+  tonTracking?: boolean;
+  starknetTracking?: boolean;
+  // Cosmos multi-chain — list of chain IDs to enable (defaults to sei-pacific-1 only)
+  cosmosChains?: string[];
+  // Connect-time data enrichment (optional, adds latency)
+  approvalScan?: boolean;
+  domainResolution?: boolean;
+  networkContext?: boolean;
 }
 
 export interface PrivacyConfig {
@@ -147,7 +156,7 @@ export interface FingerprintComponents {
 // =============================================================================
 
 /** Virtual machine family */
-export type VMType = 'evm' | 'svm' | 'bitcoin' | 'movevm' | 'near' | 'tvm' | 'cosmos';
+export type VMType = 'evm' | 'svm' | 'bitcoin' | 'movevm' | 'near' | 'tvm' | 'cosmos' | 'aptos' | 'ton' | 'starknet';
 
 /** Wallet classification by security model */
 export type WalletClassification = 'hot' | 'cold' | 'smart' | 'exchange' | 'protocol' | 'multisig';
@@ -825,6 +834,46 @@ export interface Session {
 // WEB3 TYPES
 // =============================================================================
 
+/** Multi-protocol domain names resolved at connect time. */
+export interface DomainNames {
+  ens?: string;
+  uns?: string;
+  lens?: string;
+  sns?: string;
+  avvy?: string;
+  fns?: string;
+}
+
+/** Bitcoin-specific metadata captured at connect time. */
+export interface BitcoinExtended {
+  addressType: 'taproot' | 'native_segwit' | 'segwit' | 'legacy' | 'unknown';
+  hasOrdinals?: boolean;
+  hasInscriptions?: boolean;
+  utxoCount?: number;
+}
+
+/** EVM blockchain network state captured at wallet connect time. */
+export interface BlockchainNetworkContext {
+  blockNumber: number;
+  gasPrice?: string;
+  baseFee?: string;
+  priorityFee?: string;
+  congestionLevel: 'low' | 'medium' | 'high';
+  timestamp: string;
+}
+
+/** EVM token approval risk summary captured at connect time. */
+export interface TokenApproval {
+  tokenAddress: string;
+  tokenSymbol?: string;
+  spender: string;
+  spenderLabel?: string;
+  allowance: string;
+  isUnlimited: boolean;
+  riskLevel: 'low' | 'medium' | 'high';
+  chainId: number;
+}
+
 export interface WalletInfo {
   address: string;
   chainId: number | string;
@@ -835,6 +884,10 @@ export interface WalletInfo {
   sns?: string;
   isConnected: boolean;
   connectedAt?: string;
+  domainNames?: DomainNames;
+  networkSnapshot?: BlockchainNetworkContext;
+  approvalRisk?: { hasUnlimitedApprovals: boolean; highRiskCount: number };
+  bitcoinExtended?: BitcoinExtended;
 }
 
 export interface TransactionOptions {
@@ -994,6 +1047,12 @@ export interface WalletInterface {
   connectTRON(address: string, options?: Partial<WalletInfo>): void;
   /** Connect a Cosmos/SEI wallet */
   connectCosmos(address: string, options?: Partial<WalletInfo>): void;
+  /** Connect an Aptos wallet */
+  connectAptos(address: string, options?: Partial<WalletInfo>): void;
+  /** Connect a TON wallet */
+  connectTON(address: string, options?: Partial<WalletInfo>): void;
+  /** Connect a Starknet wallet */
+  connectStarknet(address: string, options?: Partial<WalletInfo>): void;
   /** Disconnect a specific wallet or all wallets */
   disconnect(address?: string): void;
   /** Get primary wallet info (backwards compatible) */

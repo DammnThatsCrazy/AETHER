@@ -12,10 +12,13 @@ export type VMType =
   | 'movevm'
   | 'near'
   | 'tvm'
-  | 'cosmos';
+  | 'cosmos'
+  | 'aptos'
+  | 'ton'
+  | 'starknet';
 
 export const VM_TYPES: readonly VMType[] = [
-  'evm', 'svm', 'bitcoin', 'movevm', 'near', 'tvm', 'cosmos',
+  'evm', 'svm', 'bitcoin', 'movevm', 'near', 'tvm', 'cosmos', 'aptos', 'ton', 'starknet',
 ] as const;
 
 /** Wallet security classification (computed server-side; SDK may leave undefined). */
@@ -30,6 +33,40 @@ export type WalletClassification =
 /** Transaction lifecycle status. */
 export type TxStatus = 'pending' | 'confirmed' | 'failed';
 
+/** Multi-protocol domain names resolved at connect time. */
+export interface DomainNames {
+  ens?: string;
+  uns?: string;
+  lens?: string;
+  sns?: string;
+  avvy?: string;
+  fns?: string;
+}
+
+/** Bitcoin-specific connect-time metadata. */
+export interface BitcoinExtended {
+  addressType: 'taproot' | 'native_segwit' | 'segwit' | 'legacy' | 'unknown';
+  hasOrdinals?: boolean;
+  hasInscriptions?: boolean;
+  utxoCount?: number;
+}
+
+/** Blockchain network state captured at connect time. */
+export interface BlockchainNetworkContext {
+  blockNumber: number;
+  gasPrice?: string;
+  baseFee?: string;
+  priorityFee?: string;
+  congestionLevel: 'low' | 'medium' | 'high';
+  timestamp: string;
+}
+
+/** Token approval risk flags for EVM wallets. */
+export interface ApprovalRiskFlags {
+  hasUnlimitedApprovals: boolean;
+  highRiskCount: number;
+}
+
 /** Canonical wallet identity emitted by SDK wallet.connect calls. */
 export interface WalletInfo {
   address: string;
@@ -40,6 +77,10 @@ export interface WalletInfo {
   connectedAt?: string;
   isPrimary?: boolean;
   classification?: WalletClassification;
+  domainNames?: DomainNames;
+  networkSnapshot?: BlockchainNetworkContext;
+  approvalRisk?: ApprovalRiskFlags;
+  bitcoinExtended?: BitcoinExtended;
 }
 
 /** Options accepted by SDK transaction() helpers. */

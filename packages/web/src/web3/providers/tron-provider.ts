@@ -24,6 +24,7 @@ declare global {
   interface Window {
     tronWeb?: TronWebProvider;
     tronLink?: { ready?: boolean; tronWeb?: TronWebProvider };
+    bitkeep?: { bitcoin?: unknown; tronLink?: unknown };
   }
 }
 
@@ -41,12 +42,14 @@ export class TronProvider extends BaseVMProvider {
   init(): void {
     if (typeof window === 'undefined') return;
 
-    const tw = window.tronLink?.tronWeb ?? window.tronWeb;
+    const bitkeepTronLink = window.bitkeep?.tronLink as { tronWeb?: TronWebProvider } | undefined;
+    const tw = window.tronLink?.tronWeb ?? bitkeepTronLink?.tronWeb ?? window.tronWeb;
     if (tw) this.setupProvider(tw);
 
     // TronLink injects async
     window.addEventListener('tronLink#initialized', () => {
-      const tw2 = window.tronLink?.tronWeb ?? window.tronWeb;
+      const bitkeepTronLink2 = window.bitkeep?.tronLink as { tronWeb?: TronWebProvider } | undefined;
+      const tw2 = window.tronLink?.tronWeb ?? bitkeepTronLink2?.tronWeb ?? window.tronWeb;
       if (tw2 && !this.tronWeb) this.setupProvider(tw2);
     });
   }
@@ -61,6 +64,9 @@ export class TronProvider extends BaseVMProvider {
   // ---------------------------------------------------------------------------
 
   protected detectWalletType(): string {
+    if (typeof window === 'undefined') return 'tronlink';
+    const bitkeepTronLink = window.bitkeep?.tronLink as { tronWeb?: TronWebProvider } | undefined;
+    if (bitkeepTronLink?.tronWeb === this.tronWeb && this.tronWeb !== undefined) return 'bitget_tron';
     return 'tronlink';
   }
 

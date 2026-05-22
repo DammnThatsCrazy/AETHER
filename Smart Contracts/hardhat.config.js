@@ -63,6 +63,56 @@ module.exports = {
       accounts: process.env.DEPLOYER_KEY ? [process.env.DEPLOYER_KEY] : [],
       chainId: 10,
     },
+    bsc: {
+      url: process.env.BSC_RPC || "https://bsc-dataseed.binance.org",
+      accounts: process.env.DEPLOYER_KEY ? [process.env.DEPLOYER_KEY] : [],
+      chainId: 56,
+    },
+    avalanche: {
+      url: process.env.AVALANCHE_RPC || "https://api.avax.network/ext/bc/C/rpc",
+      accounts: process.env.DEPLOYER_KEY ? [process.env.DEPLOYER_KEY] : [],
+      chainId: 43114,
+    },
+    zksync: {
+      url: process.env.ZKSYNC_RPC || "https://mainnet.era.zksync.io",
+      accounts: process.env.DEPLOYER_KEY ? [process.env.DEPLOYER_KEY] : [],
+      chainId: 324,
+    },
+    linea: {
+      url: process.env.LINEA_RPC || "https://rpc.linea.build",
+      accounts: process.env.DEPLOYER_KEY ? [process.env.DEPLOYER_KEY] : [],
+      chainId: 59144,
+    },
+    scroll: {
+      url: process.env.SCROLL_RPC || "https://rpc.scroll.io",
+      accounts: process.env.DEPLOYER_KEY ? [process.env.DEPLOYER_KEY] : [],
+      chainId: 534352,
+    },
+    mantle: {
+      url: process.env.MANTLE_RPC || "https://rpc.mantle.xyz",
+      accounts: process.env.DEPLOYER_KEY ? [process.env.DEPLOYER_KEY] : [],
+      chainId: 5000,
+    },
+    blast: {
+      url: process.env.BLAST_RPC || "https://rpc.blast.io",
+      accounts: process.env.DEPLOYER_KEY ? [process.env.DEPLOYER_KEY] : [],
+      chainId: 81457,
+    },
+    fantom: {
+      url: process.env.FANTOM_RPC || "https://rpc.ftm.tools",
+      accounts: process.env.DEPLOYER_KEY ? [process.env.DEPLOYER_KEY] : [],
+      chainId: 250,
+    },
+    cronos: {
+      url: process.env.CRONOS_RPC || "https://evm.cronos.org",
+      accounts: process.env.DEPLOYER_KEY ? [process.env.DEPLOYER_KEY] : [],
+      chainId: 25,
+    },
+    polygonZkEvm: {
+      url: process.env.POLYGON_ZKEVM_RPC || "https://zkevm-rpc.com",
+      accounts: process.env.DEPLOYER_KEY ? [process.env.DEPLOYER_KEY] : [],
+      chainId: 1101,
+    },
 
     // ── Testnet chains ──────────────────────────────────────────────
     sepolia: {
@@ -100,6 +150,16 @@ module.exports = {
       arbitrumOne: process.env.ARBISCAN_KEY || "",
       base: process.env.BASESCAN_KEY || "",
       optimisticEthereum: process.env.OPTIMISM_ETHERSCAN_KEY || "",
+      bsc: process.env.BSCSCAN_KEY || "",
+      avalanche: process.env.SNOWTRACE_KEY || "",
+      zksync: process.env.ZKSYNC_EXPLORER_KEY || "",
+      linea: process.env.LINEASCAN_KEY || "",
+      scroll: process.env.SCROLLSCAN_KEY || "",
+      mantle: process.env.MANTLE_EXPLORER_KEY || "",
+      blast: process.env.BLASTSCAN_KEY || "",
+      opera: process.env.FTMSCAN_KEY || "",
+      cronos: process.env.CRONOSCAN_KEY || "",
+      polygonZkEvm: process.env.POLYGON_ZKEVM_EXPLORER_KEY || "",
       // Testnets (use same keys — Etherscan API keys work across testnet/mainnet)
       sepolia: process.env.ETHERSCAN_KEY || "",
       polygonAmoy: process.env.POLYGONSCAN_KEY || "",

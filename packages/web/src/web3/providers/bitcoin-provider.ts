@@ -23,6 +23,7 @@ declare global {
     xverse?: { bitcoin?: BTCProvider };
     LeatherProvider?: BTCProvider;
     okxwallet?: { bitcoin?: BTCProvider };
+    bitkeep?: { bitcoin?: unknown; tronLink?: unknown };
   }
 }
 
@@ -41,11 +42,12 @@ export class BitcoinProvider extends BaseVMProvider {
   init(): void {
     if (typeof window === 'undefined') return;
 
-    const provider =
+    const provider: BTCProvider | undefined =
       window.unisat ??
       window.xverse?.bitcoin ??
       window.LeatherProvider ??
-      window.okxwallet?.bitcoin;
+      window.okxwallet?.bitcoin ??
+      (window.bitkeep?.bitcoin as BTCProvider | undefined);
 
     if (provider) {
       this.setupProvider(provider);
@@ -55,6 +57,7 @@ export class BitcoinProvider extends BaseVMProvider {
   /** Override connect to include addressType and preserve BTC address casing */
   connect(address: string, options?: Partial<WalletInfo>): void {
     super.connect(address, options);
+    const addressType = this.detectAddressType(address);
     // Emit extra addressType data
     this.callbacks.onWalletEvent('connect', {
       address,
@@ -62,8 +65,11 @@ export class BitcoinProvider extends BaseVMProvider {
       walletType: options?.type ?? this.walletType,
       vm: this.vm,
       classification: 'hot',
-      addressType: this.detectAddressType(address),
+      addressType,
+      bitcoinExtended: { addressType },
     });
+    // Async enrichment: check for ordinals/inscriptions and UTXO count
+    this.checkOrdinalsAndUTXOs(address);
   }
 
   destroy(): void {
@@ -87,6 +93,7 @@ export class BitcoinProvider extends BaseVMProvider {
     if (window.xverse?.bitcoin) return 'xverse';
     if (window.LeatherProvider) return 'leather';
     if (window.okxwallet?.bitcoin) return 'okx';
+    if (window.bitkeep?.bitcoin !== undefined) return 'bitget';
     return 'bitcoin';
   }
 
@@ -151,11 +158,49 @@ export class BitcoinProvider extends BaseVMProvider {
     }
   }
 
-  private detectAddressType(address: string): string {
+  private detectAddressType(address: string): 'taproot' | 'native_segwit' | 'segwit' | 'legacy' | 'unknown' {
     if (address.startsWith('bc1p') || address.startsWith('tb1p')) return 'taproot';
     if (address.startsWith('bc1') || address.startsWith('tb1')) return 'native_segwit';
     if (address.startsWith('3')) return 'segwit';
     if (address.startsWith('1')) return 'legacy';
     return 'unknown';
+  }
+
+  private async checkOrdinalsAndUTXOs(address: string): Promise<void> {
+    let hasInscriptions = false;
+    let utxoCount: number | undefined;
+
+    // Check inscriptions via Ordinals API
+    try {
+      const response = await fetch(
+        `https://ordinals.com/inscriptions?address=${address}`,
+        { headers: { Accept: 'application/json' } },
+      );
+      if (response.ok) {
+        const data = await response.json() as { total?: number; results?: unknown[] };
+        const count = data?.total ?? data?.results?.length ?? 0;
+        hasInscriptions = count > 0;
+      }
+    } catch { /* ordinals API unavailable */ }
+
+    // Get UTXO count from mempool.space
+    try {
+      const utxoResponse = await fetch(`https://mempool.space/api/address/${address}/utxo`);
+      if (utxoResponse.ok) {
+        const utxos = await utxoResponse.json() as unknown[];
+        utxoCount = Array.isArray(utxos) ? utxos.length : undefined;
+      }
+    } catch { /* mempool API unavailable */ }
+
+    if (hasInscriptions || utxoCount !== undefined) {
+      this.callbacks.onWalletEvent('bitcoin_extended', {
+        address, vm: 'bitcoin',
+        bitcoinExtended: {
+          addressType: this.detectAddressType(address),
+          hasInscriptions,
+          utxoCount,
+        },
+      });
+    }
   }
 }
