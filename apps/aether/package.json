@@ -17,6 +17,7 @@
   "dependencies": {
     "@aether/shared": "*",
     "@aether/ui": "*",
+    "@aether/web": "*",
     "cytoscape": "^3.30.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",

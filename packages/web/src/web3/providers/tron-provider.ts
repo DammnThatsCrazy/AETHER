@@ -77,7 +77,7 @@ export class TronProvider extends BaseVMProvider {
       try {
         const tx = await this.tronWeb!.trx!.getTransaction(txid);
         if (tx?.ret && tx.ret.length > 0) {
-          const status = tx.ret[0].contractRet === 'SUCCESS' ? 'confirmed' : 'failed';
+          const status = tx.ret[0]!.contractRet === 'SUCCESS' ? 'confirmed' : 'failed';
           this.callbacks.onTransaction(txid, {
             txHash: txid, chainId: this.network, vm: 'tvm', status,
           });

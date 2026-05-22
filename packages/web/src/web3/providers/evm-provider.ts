@@ -242,9 +242,9 @@ export class EVMProvider {
       if (accts.length === 0) {
         this.disconnect();
       } else {
-        const addr = accts[0].toLowerCase();
+        const addr = accts[0]!.toLowerCase();
         if (!this.wallets.has(addr) || !this.wallets.get(addr)!.isConnected) {
-          this.connect(accts[0], { chainId: this.wallets.values().next().value?.chainId, type: this.detectWalletType(provider) });
+          this.connect(accts[0]!, { chainId: this.wallets.values().next().value?.chainId, type: this.detectWalletType(provider) });
         }
       }
     };

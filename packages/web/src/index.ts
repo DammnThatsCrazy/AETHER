@@ -667,4 +667,4 @@ const aether = new AetherSDK();
 
 export default aether;
 export { AetherSDK };
-export type { AetherConfig, AetherSDKInterface } from './types';
+export type { AetherConfig, AetherSDKInterface, ResolvedIdentity } from './types';

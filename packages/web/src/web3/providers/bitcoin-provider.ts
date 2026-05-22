@@ -139,7 +139,7 @@ export class BitcoinProvider extends BaseVMProvider {
     try {
       const accounts = await provider.getAccounts();
       if (accounts.length > 0) {
-        this.connect(accounts[0], { type: this.walletType });
+        this.connect(accounts[0]!, { type: this.walletType });
       }
     } catch { /* not connected */ }
 
@@ -150,7 +150,7 @@ export class BitcoinProvider extends BaseVMProvider {
         if (accts.length === 0) {
           this.disconnect();
         } else {
-          this.connect(accts[0], { type: this.walletType });
+          this.connect(accts[0]!, { type: this.walletType });
         }
       };
       provider.on('accountsChanged', accountHandler);

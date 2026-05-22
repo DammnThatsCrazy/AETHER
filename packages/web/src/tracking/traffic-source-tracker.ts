@@ -13,11 +13,11 @@ const CLICK_ID_PARAMS = [
 export interface TrafficSourceData {
   referrer: string;
   referrerDomain: string;
-  utmSource?: string;
-  utmMedium?: string;
-  utmCampaign?: string;
-  utmTerm?: string;
-  utmContent?: string;
+  utmSource?: string | null;
+  utmMedium?: string | null;
+  utmCampaign?: string | null;
+  utmTerm?: string | null;
+  utmContent?: string | null;
   clickIds: Record<string, string>;
   landingPage: string;
 }
@@ -66,11 +66,11 @@ export class TrafficSourceTracker {
     this.data = {
       referrer: document.referrer || '',
       referrerDomain,
-      utmSource: params.get('utm_source') ?? undefined,
-      utmMedium: params.get('utm_medium') ?? undefined,
-      utmCampaign: params.get('utm_campaign') ?? undefined,
-      utmTerm: params.get('utm_term') ?? undefined,
-      utmContent: params.get('utm_content') ?? undefined,
+      utmSource: params.get('utm_source'),
+      utmMedium: params.get('utm_medium'),
+      utmCampaign: params.get('utm_campaign'),
+      utmTerm: params.get('utm_term'),
+      utmContent: params.get('utm_content'),
       clickIds,
       landingPage: window.location.href,
     };
