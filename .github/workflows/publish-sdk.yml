@@ -7,7 +7,7 @@ name: Publish SDK
 #   - AetherSDK               → CocoaPods trunk
 #   - aether-react-native     → CocoaPods trunk
 #   - com.aether:sdk-android  → GitHub Packages (Maven)
-# Then creates a GitHub Release and pushes a sdk/v{version} tag.
+# Then creates a GitHub Release (tag already pushed by the `tag` job).
 #
 # Required secrets:
 #   NPM_TOKEN              — npm automation token (Settings → Developer tokens)
@@ -79,6 +79,45 @@ jobs:
             packages/android/gradle.properties
             packages/ios/AetherSDK.podspec
 
+  # ── Tag (must precede CocoaPods — podspec source URL requires the tag) ────
+  tag:
+    name: Commit version bump & push tag
+    runs-on: ubuntu-latest
+    needs: validate
+    if: ${{ !inputs.dry_run }}
+    env:
+      VERSION: ${{ needs.validate.outputs.version }}
+      TAG:     ${{ needs.validate.outputs.tag }}
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Download bumped files
+        uses: actions/download-artifact@v4
+        with:
+          name: version-bumped
+
+      - name: Configure git
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+      - name: Commit version bump
+        run: |
+          git add packages/shared/package.json \
+                  packages/react-native/package.json \
+                  packages/react-native/aether-react-native.podspec \
+                  packages/android/gradle.properties \
+                  packages/ios/AetherSDK.podspec
+          git commit -m "chore(sdk): bump version to $VERSION"
+
+      - name: Create and push tag
+        run: |
+          git tag "$TAG" -m "SDK release $VERSION"
+          git push origin HEAD:main "$TAG"
+
   # ── npm ──────────────────────────────────────────────────────────────────
   publish-npm:
     name: Publish to npm
@@ -111,29 +150,31 @@ jobs:
         run: npm run build --workspace=packages/react-native
 
       - name: Publish @aether/shared
-        if: ${{ !github.event.inputs.dry_run }}
+        if: ${{ !inputs.dry_run }}
         run: npm publish --workspace=packages/shared --access public
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
       - name: Publish @aether/react-native
-        if: ${{ !github.event.inputs.dry_run }}
+        if: ${{ !inputs.dry_run }}
         run: npm publish --workspace=packages/react-native --access public
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
       - name: Dry run summary (npm)
-        if: ${{ github.event.inputs.dry_run }}
+        if: ${{ inputs.dry_run }}
         run: |
           echo "DRY RUN — would publish:"
           npm pack --workspace=packages/shared --dry-run
           npm pack --workspace=packages/react-native --dry-run
 
   # ── CocoaPods ────────────────────────────────────────────────────────────
+  # Depends on `tag` so the sdk/v{version} tag exists when pod trunk push
+  # fetches and validates the podspec source URL.
   publish-cocoapods:
     name: Publish to CocoaPods
     runs-on: macos-latest
-    needs: validate
+    needs: [validate, tag]
     env:
       VERSION: ${{ needs.validate.outputs.version }}
 
@@ -148,20 +189,21 @@ jobs:
       - name: Install CocoaPods
         run: gem install cocoapods --no-document
 
-      - name: Validate AetherSDK podspec
-        run: pod spec lint packages/ios/AetherSDK.podspec --allow-warnings
+      # --quick validates podspec format only; source URL/tag checked by trunk push below.
+      - name: Validate AetherSDK podspec (format)
+        run: pod spec lint packages/ios/AetherSDK.podspec --allow-warnings --quick
 
-      - name: Validate aether-react-native podspec
-        run: pod spec lint packages/react-native/aether-react-native.podspec --allow-warnings
+      - name: Validate aether-react-native podspec (format)
+        run: pod spec lint packages/react-native/aether-react-native.podspec --allow-warnings --quick
 
       - name: Push AetherSDK to trunk
-        if: ${{ !github.event.inputs.dry_run }}
+        if: ${{ !inputs.dry_run }}
         run: pod trunk push packages/ios/AetherSDK.podspec --allow-warnings
         env:
           COCOAPODS_TRUNK_TOKEN: ${{ secrets.COCOAPODS_TRUNK_TOKEN }}
 
       - name: Push aether-react-native to trunk
-        if: ${{ !github.event.inputs.dry_run }}
+        if: ${{ !inputs.dry_run }}
         run: pod trunk push packages/react-native/aether-react-native.podspec --allow-warnings
         env:
           COCOAPODS_TRUNK_TOKEN: ${{ secrets.COCOAPODS_TRUNK_TOKEN }}
@@ -189,57 +231,34 @@ jobs:
 
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v3
+        with:
+          gradle-version: '8.6'
 
       - name: Assemble release AAR
         working-directory: packages/android
-        run: ./gradlew assembleRelease
+        run: gradle assembleRelease
 
       - name: Publish to GitHub Packages
-        if: ${{ !github.event.inputs.dry_run }}
+        if: ${{ !inputs.dry_run }}
         working-directory: packages/android
-        run: ./gradlew publishReleasePublicationToGitHubPackagesRepository
+        run: gradle publishReleasePublicationToGitHubPackagesRepository
         env:
           GITHUB_ACTOR: ${{ github.actor }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-  # ── Tag + Release ─────────────────────────────────────────────────────────
+  # ── GitHub Release ────────────────────────────────────────────────────────
+  # Tag is already pushed by the `tag` job; this only creates the release page.
   release:
-    name: Tag & GitHub Release
+    name: GitHub Release
     runs-on: ubuntu-latest
-    needs: [validate, publish-npm, publish-cocoapods, publish-android]
+    needs: [validate, tag, publish-npm, publish-cocoapods, publish-android]
+    if: ${{ !inputs.dry_run }}
     env:
       VERSION: ${{ needs.validate.outputs.version }}
       TAG:     ${{ needs.validate.outputs.tag }}
 
     steps:
       - uses: actions/checkout@v4
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Download bumped files
-        uses: actions/download-artifact@v4
-        with:
-          name: version-bumped
-
-      - name: Configure git
-        run: |
-          git config user.name  "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-
-      - name: Commit version bump
-        run: |
-          git add packages/shared/package.json \
-                  packages/react-native/package.json \
-                  packages/react-native/aether-react-native.podspec \
-                  packages/android/gradle.properties \
-                  packages/ios/AetherSDK.podspec
-          git commit -m "chore(sdk): bump version to $VERSION"
-
-      - name: Create and push tag
-        if: ${{ !github.event.inputs.dry_run }}
-        run: |
-          git tag "$TAG" -m "SDK release $VERSION"
-          git push origin HEAD:main "$TAG"
 
       - name: Extract changelog entry
         id: changelog
@@ -251,7 +270,6 @@ jobs:
           echo "EOF"       >> "$GITHUB_OUTPUT"
 
       - name: Create GitHub Release
-        if: ${{ !github.event.inputs.dry_run }}
         uses: actions/github-script@v7
         with:
           script: |
