@@ -34,6 +34,7 @@ export function JourneyProvider({ children }: { readonly children: ReactNode }) 
   const { user } = useAuth();
   const [resumedFrom, setResumedFrom] = useState<ResolvedIdentity | null>(null);
   const initialized = useRef(false);
+  const wasAuthenticated = useRef(false);
 
   // Initialize SDK exactly once per app lifetime. Skip if no API key (dev without credentials).
   useEffect(() => {
@@ -63,8 +64,18 @@ export function JourneyProvider({ children }: { readonly children: ReactNode }) 
   }, []);
 
   // Bridge authenticated user into SDK identity so userId flows into all events.
+  // On logout (user → null after being non-null) reset to a fresh anonymous
+  // identity so post-logout events are not attributed to the previous account.
+  // Guard against mount with null user so anonymous session IDs are preserved.
   useEffect(() => {
-    if (!user) return;
+    if (!user) {
+      if (wasAuthenticated.current) {
+        Aether.reset();
+        wasAuthenticated.current = false;
+      }
+      return;
+    }
+    wasAuthenticated.current = true;
     Aether.hydrateIdentity({
       userId: user.id,
       traits: {
