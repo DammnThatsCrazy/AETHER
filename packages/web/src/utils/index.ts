@@ -152,20 +152,21 @@ export function getCampaignContext(): CampaignContext {
     }
   };
 
-  const referrerDomain = document.referrer
-    ? (() => { try { return new URL(document.referrer).hostname; } catch { return undefined; } })()
-    : undefined;
+  const ctx: CampaignContext = { referrerType: getReferrerType() };
 
-  return {
-    source: params.get('utm_source') ?? undefined,
-    medium: params.get('utm_medium') ?? undefined,
-    campaign: params.get('utm_campaign') ?? undefined,
-    content: params.get('utm_content') ?? undefined,
-    term: params.get('utm_term') ?? undefined,
-    clickId: params.get('gclid') ?? params.get('fbclid') ?? params.get('msclkid') ?? undefined,
-    referrerDomain,
-    referrerType: getReferrerType(),
-  };
+  if (document.referrer) {
+    try { ctx.referrerDomain = new URL(document.referrer).hostname; } catch { /* malformed */ }
+  }
+
+  const s = params.get('utm_source'); if (s) ctx.source = s;
+  const m = params.get('utm_medium'); if (m) ctx.medium = m;
+  const c = params.get('utm_campaign'); if (c) ctx.campaign = c;
+  const ct = params.get('utm_content'); if (ct) ctx.content = ct;
+  const t = params.get('utm_term'); if (t) ctx.term = t;
+  const cid = params.get('gclid') ?? params.get('fbclid') ?? params.get('msclkid');
+  if (cid) ctx.clickId = cid;
+
+  return ctx;
 }
 
 // =============================================================================

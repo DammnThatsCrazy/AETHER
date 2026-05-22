@@ -4,10 +4,10 @@
   "description": "Aether SDK for Web \u2014 Behavioral analytics with thin-client architecture",
   "main": "./src/index.ts",
   "module": "./src/index.ts",
-  "types": "./src/index.ts",
+  "types": "./dist/index.d.ts",
   "exports": {
     ".": {
-      "types": "./src/index.ts",
+      "types": "./dist/index.d.ts",
       "import": "./dist/aether.esm.js",
       "require": "./dist/aether.cjs.js",
       "default": "./src/index.ts"

@@ -6,6 +6,8 @@ node_modules/
 # Build output
 dist/
 build/
+# Exception: committed type declarations for workspace consumers
+!packages/web/dist/
 .gradle/
 Smart Contracts/artifacts/
 Smart Contracts/cache/

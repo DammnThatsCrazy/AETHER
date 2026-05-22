@@ -151,7 +151,7 @@ export class PerformanceModule {
   // ---------------------------------------------------------------------------
   private observeFID(): void {
     this.observe('first-input', (list) => {
-      const entry = list.getEntries()[0] as PerformanceEntry & { processingStart: number; startTime: number };
+      const entry = list.getEntries()[0] as (PerformanceEntry & { processingStart: number; startTime: number }) | undefined;
       if (!entry) return;
       const value = entry.processingStart - entry.startTime;
       this.emit({ name: 'FID', value, rating: rate('FID', value) });
@@ -196,7 +196,7 @@ export class PerformanceModule {
       if (this.navSent) return;
       const entries = performance.getEntriesByType('navigation') as PerformanceNavigationTiming[];
       if (!entries.length) return;
-      const nav = entries[0];
+      const nav = entries[0]!;
       this.navSent = true;
 
       const ttfb = nav.responseStart - nav.requestStart;

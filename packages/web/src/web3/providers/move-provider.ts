@@ -92,7 +92,7 @@ export class MoveProvider extends BaseVMProvider {
     try {
       const accounts = await provider.getAccounts?.();
       if (accounts && accounts.length > 0) {
-        this.connect(accounts[0].address, { type: this.walletType });
+        this.connect(accounts[0]!.address, { type: this.walletType });
       }
     } catch { /* not connected */ }
   }
