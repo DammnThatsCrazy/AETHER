@@ -80,6 +80,12 @@ export interface ModuleConfig {
   aptosTracking?: boolean;
   tonTracking?: boolean;
   starknetTracking?: boolean;
+  cardanoTracking?: boolean;
+  substrateTracking?: boolean;
+  algorandTracking?: boolean;
+  hederaTracking?: boolean;
+  stellarTracking?: boolean;
+  icpTracking?: boolean;
   // Cosmos multi-chain — list of chain IDs to enable (defaults to sei-pacific-1 only)
   cosmosChains?: string[];
   // Connect-time data enrichment (optional, adds latency)
@@ -156,7 +162,7 @@ export interface FingerprintComponents {
 // =============================================================================
 
 /** Virtual machine family */
-export type VMType = 'evm' | 'svm' | 'bitcoin' | 'movevm' | 'near' | 'tvm' | 'cosmos' | 'aptos' | 'ton' | 'starknet';
+export type VMType = 'evm' | 'svm' | 'bitcoin' | 'movevm' | 'near' | 'tvm' | 'cosmos' | 'aptos' | 'ton' | 'starknet' | 'cardano' | 'substrate' | 'algorand' | 'hedera' | 'stellar' | 'icp';
 
 /** Wallet classification by security model */
 export type WalletClassification = 'hot' | 'cold' | 'smart' | 'exchange' | 'protocol' | 'multisig';
@@ -1053,6 +1059,18 @@ export interface WalletInterface {
   connectTON(address: string, options?: Partial<WalletInfo>): void;
   /** Connect a Starknet wallet */
   connectStarknet(address: string, options?: Partial<WalletInfo>): void;
+  /** Connect a Cardano wallet */
+  connectCardano(address: string, options?: Partial<WalletInfo>): void;
+  /** Connect a Polkadot/Substrate wallet */
+  connectSubstrate(address: string, options?: Partial<WalletInfo>): void;
+  /** Connect an Algorand wallet */
+  connectAlgorand(address: string, options?: Partial<WalletInfo>): void;
+  /** Connect a Hedera wallet */
+  connectHedera(address: string, options?: Partial<WalletInfo>): void;
+  /** Connect a Stellar wallet */
+  connectStellar(address: string, options?: Partial<WalletInfo>): void;
+  /** Connect an ICP wallet */
+  connectICP(address: string, options?: Partial<WalletInfo>): void;
   /** Disconnect a specific wallet or all wallets */
   disconnect(address?: string): void;
   /** Get primary wallet info (backwards compatible) */
