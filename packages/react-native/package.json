@@ -1,19 +1,21 @@
 {
   "name": "@aether/react-native",
   "version": "8.8.0",
-  "description": "Aether SDK for React Native \u2014 Unified bridge to native iOS/Android analytics",
-  "main": "src/index.tsx",
-  "types": "src/index.tsx",
+  "description": "Aether SDK for React Native — Unified bridge to native iOS/Android analytics",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
   "react-native": "src/index.tsx",
+  "source": "src/index.tsx",
   "scripts": {
     "typecheck": "tsc --noEmit",
-    "build": "tsc --noEmit",
+    "build": "tsc -p tsconfig.json",
+    "prepublishOnly": "npm run build",
     "test": "vitest run",
     "test:watch": "vitest",
     "lint": "eslint 'src/**/*.{ts,tsx}' --fix"
   },
   "dependencies": {
-    "@aether/shared": "*"
+    "@aether/shared": "^8.8.0"
   },
   "peerDependencies": {
     "react": ">=18.0.0",
@@ -27,9 +29,14 @@
   },
   "files": [
     "src",
+    "dist",
     "android",
     "ios",
     "aether-react-native.podspec"
   ],
+  "publishConfig": {
+    "access": "public",
+    "registry": "https://registry.npmjs.org"
+  },
   "license": "UNLICENSED"
 }
