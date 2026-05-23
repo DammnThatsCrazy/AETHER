@@ -209,9 +209,10 @@ resource "auth0_connection" "microsoft" {
   strategy = "windowslive"
 
   options {
-    client_id     = var.microsoft_client_id
-    client_secret = var.microsoft_client_secret
-    scopes        = ["wl.emails", "wl.basic"]
+    client_id        = var.microsoft_client_id
+    client_secret    = var.microsoft_client_secret
+    strategy_version = 2
+    scopes           = ["signin", "graph_user"]
   }
 }
 
@@ -220,13 +221,39 @@ resource "auth0_connection_clients" "microsoft_aether" {
   enabled_clients = [auth0_client.aether.id]
 }
 
+# --------------------------------------------------------------------------
+# Slack SSO — configured via the generic OAuth2 connection strategy.
+# "slack" is not a standalone strategy in the Auth0 Terraform provider;
+# use strategy = "oauth2" and supply the Slack OAuth2 endpoints instead.
+# --------------------------------------------------------------------------
+
 resource "auth0_connection" "slack" {
   name     = "aether-${var.environment}-slack"
-  strategy = "slack"
+  strategy = "oauth2"
 
   options {
-    client_id     = var.slack_client_id
-    client_secret = var.slack_client_secret
+    client_id              = var.slack_client_id
+    client_secret          = var.slack_client_secret
+    strategy_version       = 2
+    authorization_endpoint = "https://slack.com/oauth/v2/authorize"
+    token_endpoint         = "https://slack.com/api/oauth.v2.access"
+    scopes                 = ["openid", "email", "profile"]
+    pkce_enabled           = true
+
+    scripts = {
+      fetchUserProfile = <<-JS
+        function(accessToken, ctx, cb) {
+          request.get(
+            { url: 'https://slack.com/api/users.identity', headers: { 'Authorization': 'Bearer ' + accessToken } },
+            function(e, r, b) {
+              if (e) return cb(e);
+              var body = JSON.parse(b);
+              cb(null, { user_id: body.user.id, email: body.user.email, name: body.user.name });
+            }
+          );
+        }
+      JS
+    }
   }
 }
 
