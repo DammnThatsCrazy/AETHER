@@ -289,6 +289,34 @@ class EmailConfig:
 
 
 # ---------------------------------------------------------------------------
+# Auth0 / SSO
+# ---------------------------------------------------------------------------
+
+@dataclass(frozen=True)
+class Auth0Config:
+    """Auth0 tenant configuration for SSO (Google, Apple, Microsoft, Twitter/X, Slack).
+
+    Set AUTH0_DOMAIN and AUTH0_API_AUDIENCE from the Auth0 Dashboard.
+    Leave blank in AETHER_ENV=local to bypass RS256 validation and run without Auth0.
+    """
+    domain: str = _env("AUTH0_DOMAIN", "")
+    api_audience: str = _env("AUTH0_API_AUDIENCE", "")
+    client_id: str = _env("AUTH0_CLIENT_ID", "")
+
+
+# ---------------------------------------------------------------------------
+# Password / Email Auth
+# ---------------------------------------------------------------------------
+
+@dataclass(frozen=True)
+class PasswordAuthConfig:
+    """Configuration for the native email+password sign-up flow."""
+    otp_ttl_seconds: int = _env_int("OTP_TTL_SECONDS", 600)      # 10 minutes
+    min_password_length: int = _env_int("MIN_PASSWORD_LENGTH", 8)
+    max_login_attempts: int = _env_int("MAX_LOGIN_ATTEMPTS", 10)  # per IP per minute
+
+
+# ---------------------------------------------------------------------------
 # Stripe Billing
 # ---------------------------------------------------------------------------
 
@@ -375,6 +403,12 @@ class Settings:
 
     # Email
     email: EmailConfig = field(default_factory=EmailConfig)
+
+    # Auth0 / SSO
+    auth0: Auth0Config = field(default_factory=Auth0Config)
+
+    # Password / Email auth
+    password_auth: PasswordAuthConfig = field(default_factory=PasswordAuthConfig)
 
     # Stripe Billing
     stripe_billing: StripeBillingConfig = field(default_factory=StripeBillingConfig)
