@@ -249,8 +249,8 @@ public final class Aether: NSObject {
         // MetricKit: subscribe for diagnostic/performance payloads (iOS 13+)
         MXMetricManager.shared.add(self)
 
-        if config.autoResumeJourney, let addr = walletAddress {
-            checkWalletIdentityResolution(address: addr)
+        if config.autoResumeJourney {
+            resolveIdentity(walletAddress: walletAddress, userId: nil)
         }
     }
 
@@ -271,6 +271,7 @@ public final class Aether: NSObject {
     }
 
     public func hydrateIdentity(_ data: IdentityData) {
+        let priorUserId = self.userId
         if let userId = data.userId { self.userId = userId }
         if let traits = data.traits { self.traits.merge(traits) { _, new in new } }
         if let addr = data.walletAddress {
@@ -291,6 +292,11 @@ public final class Aether: NSObject {
         ])
 
         defaults.set(userId, forKey: "userId")
+
+        // Cross-device: fire resolve when userId just became known
+        if config?.autoResumeJourney == true, let uid = self.userId, uid != priorUserId {
+            resolveIdentity(walletAddress: walletAddress, userId: uid)
+        }
     }
 
     public func getAnonymousId() -> String { anonymousId }
@@ -371,7 +377,7 @@ public final class Aether: NSObject {
             "chainId": AnyCodable(chainId ?? "unknown")
         ])
         if config?.autoResumeJourney == true {
-            checkWalletIdentityResolution(address: address)
+            resolveIdentity(walletAddress: address, userId: userId)
         }
     }
 
@@ -691,7 +697,7 @@ public final class Aether: NSObject {
         }
     }
 
-    private func checkWalletIdentityResolution(address: String) {
+    private func resolveIdentity(walletAddress addr: String?, userId uid: String?) {
         guard let cfg = config,
               let url = URL(string: "\(cfg.endpoint)/sdk/identity/resolve") else { return }
 
@@ -701,11 +707,17 @@ public final class Aether: NSObject {
         request.setValue(cfg.apiKey, forHTTPHeaderField: "x-api-key")
         request.timeoutInterval = 5.0
 
-        let body: [String: Any] = [
-            "wallets": [["address": address, "vm": "evm"]],
-            "anonymousId": anonymousId,
-            "fingerprint": fingerprintId
+        var wallets: [[String: String]] = []
+        if let address = addr, !address.isEmpty {
+            wallets = [["address": address, "vm": "evm"]]
+        }
+        var body: [String: Any] = [
+            "wallets": wallets,
+            "anonymous_id": anonymousId,
+            "device_fingerprint": fingerprintId,
+            "platform": "ios",
         ]
+        if let uid = uid { body["user_id"] = uid }
         request.httpBody = try? JSONSerialization.data(withJSONObject: body)
 
         URLSession.shared.dataTask(with: request) { [weak self] data, response, _ in
@@ -717,8 +729,8 @@ public final class Aether: NSObject {
                   let resolved = json["resolved"] as? Bool, resolved,
                   let identity = json["identity"] as? [String: Any] else { return }
 
-            let resolvedAnonymousId = identity["anonymousId"] as? String ?? ""
-            let resolvedUserId = identity["userId"] as? String
+            let resolvedAnonymousId = identity["anonymous_id"] as? String ?? ""
+            let resolvedUserId = identity["user_id"] as? String
 
             guard !resolvedAnonymousId.isEmpty, resolvedAnonymousId != self.anonymousId else { return }
 
@@ -732,7 +744,7 @@ public final class Aether: NSObject {
                     "resolvedAnonymousId": AnyCodable(resolvedAnonymousId),
                     "resolvedUserId": AnyCodable(resolvedUserId ?? "")
                 ])
-                self.log("Journey resumed from prior device via wallet resolution")
+                self.log("Journey resumed from prior device")
                 cfg.onJourneyResumed?(resolvedAnonymousId, resolvedUserId)
             }
         }.resume()
