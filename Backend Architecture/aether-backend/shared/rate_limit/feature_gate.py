@@ -30,6 +30,8 @@ PUBLIC_PATHS: frozenset[str] = frozenset({
     # Aether API keys. The route handler verifies the signature before
     # processing the payload.
     "/v1/admin/billing/stripe/webhook",
+    # Public registration: unauthenticated tenant sign-up endpoint.
+    "/v1/tenants",
 })
 
 

@@ -268,6 +268,27 @@ class ExtractionMeshConfig:
 
 
 # ---------------------------------------------------------------------------
+# Email
+# ---------------------------------------------------------------------------
+
+@dataclass(frozen=True)
+class EmailConfig:
+    """Transactional email configuration.
+
+    provider=ses   → uses boto3 (AWS SDK). Requires AWS credentials in env.
+    provider=sendgrid → uses requests + SENDGRID_API_KEY.
+    EMAIL_ENABLED=false disables all sending (default) — safe for local dev.
+    """
+    enabled: bool = _env_bool("EMAIL_ENABLED", False)
+    provider: str = _env("EMAIL_PROVIDER", "ses")       # "ses" | "sendgrid"
+    from_address: str = _env("EMAIL_FROM_ADDRESS", "noreply@aether.io")
+    from_name: str = _env("EMAIL_FROM_NAME", "AETHER")
+    aws_region: str = _env("EMAIL_AWS_REGION", "us-east-1")
+    sendgrid_api_key: str = _env("SENDGRID_API_KEY", "")
+    app_url: str = _env("APP_URL", "http://localhost:3000")
+
+
+# ---------------------------------------------------------------------------
 # Stripe Billing
 # ---------------------------------------------------------------------------
 
@@ -351,6 +372,9 @@ class Settings:
     extraction_mesh: ExtractionMeshConfig = field(
         default_factory=ExtractionMeshConfig,
     )
+
+    # Email
+    email: EmailConfig = field(default_factory=EmailConfig)
 
     # Stripe Billing
     stripe_billing: StripeBillingConfig = field(default_factory=StripeBillingConfig)

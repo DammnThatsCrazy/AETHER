@@ -203,6 +203,22 @@ async def _handle_checkout_session_completed(event_data: dict[str, Any]) -> None
         labels={"plan_tier": plan_tier.value if plan_tier else "unknown"},
     )
 
+    # Send payment-success / subscription-activated email (best-effort)
+    if contact_email:
+        try:
+            from shared.email import email_service
+            from shared.email.templates import _base
+            tier_label = plan_tier.value if plan_tier else "your plan"
+            subject = f"AETHER subscription activated — {tier_label}"
+            body_html = _base(f"Subscription activated: {tier_label}", f"""
+<p>Your AETHER subscription is active.</p>
+<p>Plan: <strong>{tier_label}</strong></p>
+<p>Log in to your dashboard to view usage and manage your account.</p>
+""")
+            await email_service.send_email(to=contact_email, subject=subject, body_html=body_html)
+        except Exception as _e:
+            logger.debug(f"checkout email skipped: {_e}")
+
     logger.info(
         f"checkout.session.completed: tenant={tenant_id} "
         f"customer={customer_id} subscription={subscription_id} "
@@ -395,6 +411,24 @@ async def _handle_invoice_payment_failed(event_data: dict[str, Any]) -> None:
         )
 
     await stripe_repository.upsert_invoice(_invoice_record(inv, tenant_id))
+
+    # Send payment-failed email (best-effort)
+    try:
+        account = await stripe_repository.get_billing_account(tenant_id)
+        contact_email = (account or {}).get("contact_email", "")
+        if contact_email:
+            from shared.email import email_service, templates
+            amount_cents = inv.get("amount_due", 0) or 0
+            amount_str = f"${amount_cents / 100:.2f} {(inv.get('currency') or 'usd').upper()}"
+            invoice_url = inv.get("hosted_invoice_url", "")
+            subject, body_html = templates.payment_failed(
+                tenant_name=tenant_id,
+                amount=amount_str,
+                invoice_url=invoice_url,
+            )
+            await email_service.send_email(to=contact_email, subject=subject, body_html=body_html)
+    except Exception as _e:
+        logger.debug(f"payment_failed email skipped: {_e}")
 
     metrics.increment("stripe_webhook_invoice_payment_failed")
     logger.warning(

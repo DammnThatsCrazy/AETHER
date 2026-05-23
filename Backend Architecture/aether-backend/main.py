@@ -156,6 +156,9 @@ from services.diagnostics.guardrails_routes import router as guardrails_router
 from services.consent.audit_routes import router as audit_router
 from services.admin.billing_subscription_routes import router as admin_billing_subscription_router
 from services.admin.webhook_routes import router as stripe_webhook_router
+from services.registration.routes import router as registration_router
+from services.me.routes import router as me_router
+from services.billing.routes import router as billing_router, admin_overage_router
 
 # Profile 360 (additive — multi-entity identity, delegation, flows, behavior, realtime)
 from services.entities.routes import router as entities_router
@@ -190,6 +193,10 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     from services.events.worker import start_replay_worker
     replay_worker_task = asyncio.create_task(start_replay_worker())
 
+    # Monthly overage invoice cron (end-of-month billing cycle)
+    from services.billing.cron import run_monthly_overage_cron
+    overage_cron_task = asyncio.create_task(run_monthly_overage_cron())
+
     # Profile 360 — attach derived workers to the shared consumer.
     # Strictly additive: workers consume new topics + a few existing ones,
     # write to new tables only, and never mutate existing service state.
@@ -217,8 +224,13 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     # Graceful shutdown: drain connections and close backends
     logger.info("Initiating graceful shutdown...")
     replay_worker_task.cancel()
+    overage_cron_task.cancel()
     try:
         await replay_worker_task
+    except asyncio.CancelledError:
+        pass
+    try:
+        await overage_cron_task
     except asyncio.CancelledError:
         pass
     if provider_gateway:
@@ -302,6 +314,10 @@ def create_app() -> FastAPI:
     app.include_router(audit_router)
     app.include_router(admin_billing_subscription_router)
     app.include_router(stripe_webhook_router)
+    app.include_router(registration_router)
+    app.include_router(me_router)
+    app.include_router(billing_router)
+    app.include_router(admin_overage_router)
 
     # ── Profile 360 (additive) ─────────────────────────────────────────
     app.include_router(entities_router)
