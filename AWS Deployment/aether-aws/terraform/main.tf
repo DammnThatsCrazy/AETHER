@@ -172,6 +172,7 @@ module "ecs" {
     "db-password"      = module.rds.db_password_secret_arn
     "redis-auth-token" = module.elasticache.auth_token_secret_arn
   })
+  companion_secret_arns    = module.secrets.companion_secret_arns
 
   redis_host              = split(":", module.elasticache.primary_endpoint)[0]
   redis_port              = module.elasticache.port

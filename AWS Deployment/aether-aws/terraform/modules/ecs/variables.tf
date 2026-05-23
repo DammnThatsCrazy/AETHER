@@ -48,6 +48,12 @@ variable "secret_arns" {
   description = "Map of secret name to Secrets Manager ARN"
 }
 
+variable "companion_secret_arns" {
+  type        = map(string)
+  description = "ARNs of companion *-previous secrets populated by the rotation Lambda (jwt-secret-previous, byok-encryption-key-previous)"
+  default     = {}
+}
+
 variable "backend_cpu" {
   type        = number
   description = "CPU units for the backend task"
