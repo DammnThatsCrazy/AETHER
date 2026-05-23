@@ -12,7 +12,7 @@ source_files:
 canonical_owner: backend@aether
 estimated_read_minutes: 5
 toc_depth: 3
-last_synced_commit: bbbb603
+last_synced_commit: 9ef8563
 ---
 
 # PostgreSQL / Repository Subsystem
@@ -56,6 +56,7 @@ Tables are created automatically on first access. No migration tool is required 
 | `webhooks` | `WebhookRepository` | Notification service |
 | `alerts` | `AlertRepository` | Notification service |
 | `tenants` | `AdminRepository` | Admin service |
+| `users` | `UserRepository` | Auth (email+password signup, OTP, SSO via Auth0) |
 | `api_keys` | `APIKeyRepository` | Admin service |
 | `provider_usage` | `UsageMeter` | Provider gateway |
 | `investigations` | `InvestigationRepository` | Investigation service |
