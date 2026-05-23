@@ -12,7 +12,7 @@ source_files:
 canonical_owner: platform@aether
 estimated_read_minutes: 12
 toc_depth: 3
-last_synced_commit: bbbb603
+last_synced_commit: be04e56
 ---
 # Operations Runbook v8.8.0
 
@@ -249,6 +249,34 @@ All 114 Kafka topics are provisioned by `deploy/staging/kafka_topics.sh`, called
 | Error messages | Internal details never leaked to clients |
 | WebSocket auth | First message must authenticate; errors are generic |
 | IP data | Raw IPs never logged; only hashed values persisted |
+
+### No-auth endpoints (registration & recovery)
+
+These endpoints intentionally bypass API-key auth — operators should monitor them
+for abuse and ensure IP rate-limiting is active:
+
+| Endpoint | Purpose |
+|---|---|
+| `POST /v1/tenants` | Public tenant sign-up |
+| `POST /v1/auth/register` | Email sign-up step 1 (send OTP) |
+| `POST /v1/auth/verify-email` | Email sign-up step 2 (verify OTP, create tenant) |
+| `POST /v1/auth/resend-verification` | Resend OTP |
+| `POST /v1/auth/login` | Email + password → API key |
+| `POST /v1/auth/sso/callback` | SSO via Auth0 JWT → API key |
+| `GET  /v1/auth/sso/providers` | List configured SSO providers |
+| `POST /v1/auth/recover` | Recover lost API key via email |
+
+The Stripe webhook (`POST /v1/admin/billing/stripe/webhook`) is also unauthenticated
+at the HTTP layer but verifies a Stripe-signed payload — failures should alert.
+
+### Background tasks running in the app lifespan
+
+| Task | Module | Cadence |
+|---|---|---|
+| Monthly overage invoice cron | `services/billing/cron.run_monthly_overage_cron` | end-of-month billing cycle |
+
+These start during app `lifespan` startup and are cancelled on shutdown. Restart loops
+during deploys are normal; persistent failures should page billing oncall.
 
 ---
 
