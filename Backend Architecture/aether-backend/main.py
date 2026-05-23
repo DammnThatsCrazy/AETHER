@@ -48,6 +48,18 @@ Routes:
     DELETE /v1/notifications/webhooks/{id}  Delete webhook
     POST /v1/notifications/alerts       Create alert
     GET  /v1/notifications/alerts       List alerts
+    POST /v1/tenants                    Public sign-up (no auth)
+    POST /v1/auth/recover               Recover lost API key via email (no auth)
+    GET  /v1/me                         Caller profile + plan summary
+    GET  /v1/me/api-keys                List caller's API keys (paginated)
+    POST /v1/me/api-keys                Create API key (self-service)
+    PATCH /v1/me/api-keys/{id}          Rename API key
+    DELETE /v1/me/api-keys/{id}         Revoke API key
+    POST /v1/billing/checkout           Create Stripe Checkout session
+    POST /v1/billing/portal             Create Stripe Billing Portal session
+    GET  /v1/billing/invoices           List invoices
+    GET  /v1/billing/invoices/{id}      Get invoice
+    POST /v1/admin/billing/overage-cycle  Trigger overage invoice cycle (admin)
     POST /v1/admin/tenants              Create tenant
     GET  /v1/admin/tenants/{id}         Get tenant
     PATCH /v1/admin/tenants/{id}        Update tenant

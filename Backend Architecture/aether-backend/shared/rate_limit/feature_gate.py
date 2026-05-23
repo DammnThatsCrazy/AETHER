@@ -32,6 +32,8 @@ PUBLIC_PATHS: frozenset[str] = frozenset({
     "/v1/admin/billing/stripe/webhook",
     # Public registration: unauthenticated tenant sign-up endpoint.
     "/v1/tenants",
+    # Public recovery: unauthenticated key recovery (never returns a key in body).
+    "/v1/auth/recover",
 })
 
 
