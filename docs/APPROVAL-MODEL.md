@@ -11,7 +11,7 @@ source_files:
 canonical_owner: commerce@aether
 estimated_read_minutes: 4
 toc_depth: 3
-last_synced_commit: b41baa4
+last_synced_commit: 9ef8563
 ---
 # Agentic Commerce — Approval Model
 
@@ -61,6 +61,23 @@ Configurable per tenant via `ApprovalService` SLA_SECONDS dict.
 `apply_decision(action="approve", is_override=True)` bypasses a policy-denied request.
 Requires `commerce:admin`. Always audited with `COMMERCE_APPROVAL_OVERRIDE` action.
 Event emitted with `is_override=true` flag.
+
+## Budget policies
+
+Per-subject spend caps that feed the policy engine. Operators (or admins) can
+create budget policies via three endpoints on the commerce router:
+
+| Endpoint | Permission | Purpose |
+|---|---|---|
+| `POST /v1/x402/policies/budget` | `x402:write` | Create / replace a budget policy for an agent or user |
+| `GET  /v1/x402/policies/budget` | `x402:read`  | List active budget policies for the tenant |
+| `GET  /v1/x402/policies/budget/{subject_id}` | `x402:read` | Get one subject's active policy |
+
+Each policy carries `daily_cap_usd`, `monthly_cap_usd`, and
+`per_transaction_cap_usd` (defaults: 100 / 1000 / 50). The policy engine
+consults these caps when evaluating a payment authorization; an over-cap
+spend is denied at policy time, *before* the approval queue, so operators
+don't see requests they couldn't ever approve.
 
 ## Self-service opt-down
 
