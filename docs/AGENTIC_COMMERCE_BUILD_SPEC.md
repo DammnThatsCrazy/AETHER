@@ -12,7 +12,7 @@ source_files:
 canonical_owner: commerce@aether
 estimated_read_minutes: 45
 toc_depth: 3
-last_synced_commit: bbbb603
+last_synced_commit: ad7c2d1
 ---
 # Aether Agentic Commerce — Day-1 Build Specification
 
@@ -85,6 +85,7 @@ Aether already has a capture-side x402 subsystem (L3b) and a commerce layer (L3a
 | Settlement Tracker | `services/x402/settlement.py` | Multi-state settlement FSM (pending/verifying/settled/failed/disputed) |
 | Entitlement Service | `services/x402/entitlements.py` | Access grant issuance, reuse, expiry, revocation, SIWX binding |
 | Policy Engine | `services/x402/policies.py` | Price/budget/treasury/asset/network policy evaluation |
+| Budget Policy CRUD | `services/x402/commerce_routes.py` (`POST/GET /v1/x402/policies/budget`, `GET /v1/x402/policies/budget/{subject_id}`) | Per-subject daily/monthly/per-tx cap management. Caps are enforced by the Policy Engine before requests reach the approval queue. |
 | Approval Service | `services/x402/approvals.py` | Mandatory approval workflow (request/queue/assign/decide/expire/revoke) |
 | Facilitator Registry | `services/x402/facilitators.py` | Approved facilitator list, routing, health tracking |
 | Pricing Engine | `services/x402/pricing.py` | Resource→price resolution with tenant overrides |
