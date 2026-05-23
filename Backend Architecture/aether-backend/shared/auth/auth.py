@@ -407,12 +407,31 @@ class APIKeyValidator:
 
         ctx = self._build_context(key_data)
         ctx = await _maybe_apply_billing_plan_tier(ctx)
+
+        # Fire-and-forget last_used_at update (does not block the request)
+        import asyncio
+        asyncio.ensure_future(_update_last_used_at(key_hash))
+
         return ctx
 
     @staticmethod
     def _build_context(key_data: dict) -> TenantContext:  # noqa: D401
         """See module-level helper below for billing-account override."""
         return _build_context_from_key_data(key_data)
+
+
+async def _update_last_used_at(key_hash: str) -> None:
+    """Background task: persist last_used_at on the api_keys record."""
+    try:
+        from repositories.repos import APIKeyRepository
+        repo = APIKeyRepository()
+        # The record's primary key is the first 12 chars of the hash
+        key_id = key_hash[:12]
+        record = await repo.find_by_id(key_id)
+        if record:
+            await repo.update(key_id, {"last_used_at": utc_now().isoformat()})
+    except Exception:
+        pass  # best-effort; never block auth path
 
 
 def _build_context_from_key_data(key_data: dict) -> TenantContext:

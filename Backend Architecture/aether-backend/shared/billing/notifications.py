@@ -84,15 +84,37 @@ class QuotaNotifier:
         self._memory_dedup.add(f"{key}:{event_type}")
 
     async def _send(self, event_type: str, payload: dict) -> None:
-        if self._notifier is None:
-            logger.info(
-                f"[quota-notification] {event_type} payload={payload}"
-            )
-            return
-        try:
-            await self._notifier.dispatch(event_type, payload)
-        except Exception as e:  # pragma: no cover — defensive
-            logger.warning(f"Notification dispatch failed: {e}")
+        if self._notifier is not None:
+            try:
+                await self._notifier.dispatch(event_type, payload)
+            except Exception as e:  # pragma: no cover — defensive
+                logger.warning(f"Notification dispatch failed: {e}")
+        # Best-effort email for threshold events
+        tenant_id = payload.get("tenant_id", "")
+        contact_email = payload.get("contact_email", "")
+        if not contact_email and tenant_id:
+            try:
+                from shared.billing import stripe_repository
+                account = await stripe_repository.get_billing_account(tenant_id)
+                contact_email = (account or {}).get("contact_email", "")
+            except Exception:
+                pass
+        if contact_email and event_type.startswith("quota.threshold"):
+            try:
+                from shared.email import email_service, templates
+                ratio = payload.get("utilization_ratio", 0)
+                percent = int(ratio * 100)
+                subject, body = templates.quota_threshold(
+                    tenant_name=payload.get("tenant_id", ""),
+                    percent=percent,
+                    used=payload.get("used", 0),
+                    limit=payload.get("limit", 0),
+                )
+                await email_service.send_email(to=contact_email, subject=subject, body_html=body)
+            except Exception as e:
+                logger.debug(f"Quota email skipped: {e}")
+        elif not self._notifier:
+            logger.info(f"[quota-notification] {event_type} payload={payload}")
 
     async def check_and_notify(
         self,
