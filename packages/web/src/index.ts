@@ -637,10 +637,23 @@ class AetherSDK implements AetherSDKInterface {
 
       // Map snake_case backend fields to camelCase TypeScript type
       const raw = data.identity;
+      const rawWalletRefs = (raw.wallet_refs ?? []) as Array<{ address: string; vm: string }>;
+      const resolvedAt = ((raw.resolved_at ?? raw.resolvedAt) as string) ?? '';
       const mapped: ResolvedIdentity = {
         anonymousId: ((raw.anonymous_id ?? raw.anonymousId) as string) ?? '',
         userId: (raw.user_id ?? raw.userId) as string | undefined,
-        resolvedAt: ((raw.resolved_at ?? raw.resolvedAt) as string) ?? '',
+        resolvedAt,
+        wallets: rawWalletRefs.map((w) => ({
+          address: w.address,
+          vm: w.vm as import('./types').VMType,
+          chainId: '',
+          walletType: 'unknown',
+          displayName: w.address,
+          classification: 'hot' as import('./types').WalletClassification,
+          connectedAt: resolvedAt,
+          isConnected: false,
+          isPrimary: false,
+        })),
       };
       if (mapped.anonymousId && mapped.anonymousId !== currentAnonymousId) {
         resolved = mapped;
