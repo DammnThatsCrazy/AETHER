@@ -180,6 +180,14 @@ class DeletionPlan:
         self.add_step("postgresql", "identity_links", DeletionBehavior.EDGE_SEVER,
                        DataClassification.REGULATED, "Sever cross-domain identity links")
 
+        # Identity clusters (wallet, userId, email, fingerprint links) — sever
+        self.add_step("postgresql", "identity_clusters", DeletionBehavior.EDGE_SEVER,
+                       DataClassification.REGULATED, "Sever identity cluster links for entity")
+
+        # Device sessions (fingerprint hashes, canvas, webGL, IP subnet) — hard delete
+        self.add_step("postgresql", "device_sessions", DeletionBehavior.HARD_DELETE,
+                       DataClassification.CONFIDENTIAL, "Delete device fingerprint sessions for entity")
+
     async def execute(self, store_adapters: Optional[dict] = None) -> dict:
         """
         Execute the deletion plan against real data stores.

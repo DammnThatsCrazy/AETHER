@@ -123,15 +123,17 @@ public struct WalletEntry {
 
 public struct IdentityData {
     public var userId: String?
+    public var email: String?
     public var walletAddress: String?
     public var walletType: String?
     public var chainId: Int?
     public var traits: [String: AnyCodable]?
     public var wallets: [WalletEntry]
 
-    public init(userId: String? = nil, walletAddress: String? = nil,
+    public init(userId: String? = nil, email: String? = nil, walletAddress: String? = nil,
                 traits: [String: AnyCodable]? = nil, wallets: [WalletEntry] = []) {
-        self.userId = userId; self.walletAddress = walletAddress
+        self.userId = userId; self.email = email
+        self.walletAddress = walletAddress
         self.traits = traits; self.wallets = wallets
     }
 }
@@ -173,6 +175,7 @@ public final class Aether: NSObject {
     private var anonymousId: String = ""
     private var userId: String?
     private var walletAddress: String?
+    private var email: String?
     private var traits: [String: AnyCodable] = [:]
     private var flushTimer: Timer?
     private var sessionStart: Date = Date()
@@ -250,7 +253,7 @@ public final class Aether: NSObject {
         MXMetricManager.shared.add(self)
 
         if config.autoResumeJourney {
-            resolveIdentity(walletAddress: walletAddress, userId: nil)
+            resolveIdentity(walletAddress: walletAddress, userId: nil, email: nil)
         }
     }
 
@@ -272,7 +275,9 @@ public final class Aether: NSObject {
 
     public func hydrateIdentity(_ data: IdentityData) {
         let priorUserId = self.userId
+        let priorEmail = self.email
         if let userId = data.userId { self.userId = userId }
+        if let em = data.email { self.email = em }
         if let traits = data.traits { self.traits.merge(traits) { _, new in new } }
         if let addr = data.walletAddress {
             walletAddress = addr
@@ -293,9 +298,13 @@ public final class Aether: NSObject {
 
         defaults.set(userId, forKey: "userId")
 
-        // Cross-device: fire resolve when userId just became known
-        if config?.autoResumeJourney == true, let uid = self.userId, uid != priorUserId {
-            resolveIdentity(walletAddress: walletAddress, userId: uid)
+        // Cross-device: fire resolve when userId or email just became known
+        if config?.autoResumeJourney == true {
+            let uidChanged = self.userId != nil && self.userId != priorUserId
+            let emailChanged = self.email != nil && self.email != priorEmail
+            if uidChanged || emailChanged {
+                resolveIdentity(walletAddress: walletAddress, userId: self.userId, email: self.email)
+            }
         }
     }
 
@@ -377,7 +386,7 @@ public final class Aether: NSObject {
             "chainId": AnyCodable(chainId ?? "unknown")
         ])
         if config?.autoResumeJourney == true {
-            resolveIdentity(walletAddress: address, userId: userId)
+            resolveIdentity(walletAddress: address, userId: userId, email: email)
         }
     }
 
@@ -697,7 +706,13 @@ public final class Aether: NSObject {
         }
     }
 
-    private func resolveIdentity(walletAddress addr: String?, userId uid: String?) {
+    private func sha256(_ string: String) -> String {
+        let data = Data(string.lowercased().utf8)
+        let hash = SHA256.hash(data: data)
+        return hash.compactMap { String(format: "%02x", $0) }.joined()
+    }
+
+    private func resolveIdentity(walletAddress addr: String?, userId uid: String?, email: String?) {
         guard let cfg = config,
               let url = URL(string: "\(cfg.endpoint)/sdk/identity/resolve") else { return }
 
@@ -718,6 +733,7 @@ public final class Aether: NSObject {
             "platform": "ios",
         ]
         if let uid = uid { body["user_id"] = uid }
+        if let em = email, !em.isEmpty { body["email_hash"] = sha256(em.trimmingCharacters(in: .whitespaces)) }
         request.httpBody = try? JSONSerialization.data(withJSONObject: body)
 
         URLSession.shared.dataTask(with: request) { [weak self] data, response, _ in
