@@ -127,6 +127,7 @@ class AetherSDK implements AetherSDKInterface {
 
   hydrateIdentity(data: IdentityData): void {
     if (!this.identityManager) return;
+    const priorUserId = this.identityManager.getUserId();
     const identity = this.identityManager.hydrateIdentity(data);
     this.enqueueEvent('identify', {
       userId: identity.userId, traits: identity.traits,
@@ -161,6 +162,16 @@ class AetherSDK implements AetherSDKInterface {
           case 'stellar': this.web3Module?.connectStellar(w.address, { type: w.walletType }); break;
           case 'icp': this.web3Module?.connectICP(w.address, { type: w.walletType }); break;
         }
+      }
+    }
+
+    // Cross-device: fire resolve when userId or email just became known
+    if (this.config?.autoResumeJourney !== false) {
+      const newUserId = identity.userId !== priorUserId ? identity.userId : undefined;
+      if (newUserId || data.email) {
+        this._hashEmail(data.email).then((emailHash) => {
+          this.resolveIdentity({ wallets: identity.wallets, userId: newUserId, emailHash }).catch(() => {});
+        });
       }
     }
   }
@@ -467,12 +478,11 @@ class AetherSDK implements AetherSDKInterface {
 
     this.sessionManager.start();
 
-    // Cross-device: resolve identity for wallets carried over from a prior session
+    // Cross-device: resolve identity on init (fingerprint path for all users,
+    // plus wallet path if prior wallets are cached)
     if (config.autoResumeJourney !== false) {
       const priorWallets = this.identityManager.getWallets();
-      if (priorWallets.length > 0) {
-        this.checkWalletIdentityResolution(priorWallets).catch(() => {});
-      }
+      this.resolveIdentity({ wallets: priorWallets }).catch(() => {});
     }
 
     // Reward client — thin claim-only stub
@@ -496,7 +506,7 @@ class AetherSDK implements AetherSDKInterface {
               const address = data['address'] as string | undefined;
               const vm = data['vm'] as VMType | undefined;
               if (address && vm) {
-                this.checkWalletIdentityResolution([{ address, vm }]).catch(() => {});
+                this.resolveIdentity({ wallets: [{ address, vm }] }).catch(() => {});
               }
             }
           },
@@ -629,16 +639,31 @@ class AetherSDK implements AetherSDKInterface {
     this.log('debug', `Event: ${type}`, properties);
   }
 
-  private async checkWalletIdentityResolution(wallets: { address: string; vm: VMType }[]): Promise<void> {
+  private async resolveIdentity(opts: {
+    wallets?: { address: string; vm: VMType }[];
+    userId?: string;
+    emailHash?: string;
+  }): Promise<void> {
     if (!this.config || !this.identityManager) return;
 
     const endpoint = this.config.endpoint ?? DEFAULT_ENDPOINT;
-    const currentAnonymousId = this.identityManager.getIdentity().anonymousId;
+    const currentAnonymousId = this.identityManager.getAnonymousId();
+    const fp = this.fingerprintCollector;
+    const fpComponents = fp?.getComponents();
 
     const body = {
-      wallets: wallets.map((w) => ({ address: w.address, vm: w.vm })),
-      anonymousId: currentAnonymousId,
-      fingerprint: this.fingerprintCollector?.getFingerprintId() ?? null,
+      wallets: (opts.wallets ?? []).map((w) => ({ address: w.address, vm: w.vm })),
+      anonymous_id: currentAnonymousId,
+      device_fingerprint: fp?.getFingerprintId() ?? null,
+      fingerprint_signals: fpComponents ? {
+        canvas_hash: fpComponents.canvasHash,
+        webgl_renderer: fpComponents.webglRenderer,
+        timezone: fpComponents.timezone,
+        language: fpComponents.language,
+      } : undefined,
+      user_id: opts.userId ?? null,
+      email_hash: opts.emailHash ?? null,
+      platform: 'web',
     };
 
     let resolved: ResolvedIdentity | null = null;
@@ -653,12 +678,18 @@ class AetherSDK implements AetherSDKInterface {
       });
 
       if (!res.ok) return;
-      const data = await res.json() as { resolved: boolean; identity?: ResolvedIdentity };
+      const data = await res.json() as { resolved: boolean; identity?: Record<string, unknown> };
       if (!data.resolved || !data.identity) return;
 
-      // Resolved identity is from a different anonymous session — merge it
-      if (data.identity.anonymousId !== currentAnonymousId) {
-        resolved = data.identity;
+      // Map snake_case backend fields to camelCase TypeScript type
+      const raw = data.identity;
+      const mapped: ResolvedIdentity = {
+        anonymousId: ((raw.anonymous_id ?? raw.anonymousId) as string) ?? '',
+        userId: (raw.user_id ?? raw.userId) as string | undefined,
+        resolvedAt: ((raw.resolved_at ?? raw.resolvedAt) as string) ?? '',
+      };
+      if (mapped.anonymousId && mapped.anonymousId !== currentAnonymousId) {
+        resolved = mapped;
       }
     } catch {
       return;
@@ -677,8 +708,20 @@ class AetherSDK implements AetherSDKInterface {
       resolvedUserId: resolved.userId ?? null,
     });
 
-    this.log('info', 'Journey resumed from prior device via wallet resolution');
+    this.log('info', 'Journey resumed from prior device');
     this.config.onJourneyResumed?.(resolved);
+  }
+
+  private async _hashEmail(email?: string): Promise<string | undefined> {
+    if (!email || typeof crypto === 'undefined' || !crypto.subtle) return undefined;
+    try {
+      const normalized = email.toLowerCase().trim();
+      const data = new TextEncoder().encode(normalized);
+      const hashBuffer = await crypto.subtle.digest('SHA-256', data);
+      return Array.from(new Uint8Array(hashBuffer)).map((b) => b.toString(16).padStart(2, '0')).join('');
+    } catch {
+      return undefined;
+    }
   }
 
   private setupSPATracking(): void {

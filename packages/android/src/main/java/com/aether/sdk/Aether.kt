@@ -167,7 +167,7 @@ object Aether : DefaultLifecycleObserver {
         emitSessionStart(application.applicationContext)
 
         if (config.autoResumeJourney) {
-            walletAddress?.let { addr -> scope.launch { checkWalletIdentityResolution(addr) } }
+            scope.launch { resolveIdentity(walletAddress = walletAddress, userId = null) }
         }
     }
 
@@ -192,6 +192,7 @@ object Aether : DefaultLifecycleObserver {
     }
 
     fun hydrateIdentity(data: IdentityData) {
+        val priorUserId = userId
         data.userId?.let { userId = it }
         traits.putAll(data.traits)
         data.walletAddress?.let {
@@ -220,6 +221,12 @@ object Aether : DefaultLifecycleObserver {
         )
         enqueueEvent("identify", props)
         prefs?.edit()?.putString("userId", userId)?.apply()
+
+        // Cross-device: fire resolve when userId just became known
+        val newUid = userId
+        if (config?.autoResumeJourney == true && newUid != null && newUid != priorUserId) {
+            scope.launch { resolveIdentity(walletAddress = walletAddress, userId = newUid) }
+        }
     }
 
     fun getAnonymousId(): String = anonymousId
@@ -304,7 +311,7 @@ object Aether : DefaultLifecycleObserver {
             "walletType" to walletType, "chainId" to chainId
         ))
         if (config?.autoResumeJourney == true) {
-            scope.launch { checkWalletIdentityResolution(address) }
+            scope.launch { resolveIdentity(walletAddress = address, userId = userId) }
         }
     }
 
@@ -617,7 +624,7 @@ object Aether : DefaultLifecycleObserver {
         }
     }
 
-    private suspend fun checkWalletIdentityResolution(address: String) = withContext(Dispatchers.IO) {
+    private suspend fun resolveIdentity(walletAddress: String?, userId: String?) = withContext(Dispatchers.IO) {
         val cfg = config ?: return@withContext
         try {
             val url = URL("${cfg.endpoint}/sdk/identity/resolve")
@@ -629,10 +636,16 @@ object Aether : DefaultLifecycleObserver {
             connection.connectTimeout = 5000
             connection.readTimeout = 5000
 
+            val wallets = JSONArray()
+            if (!walletAddress.isNullOrEmpty()) {
+                wallets.put(JSONObject().apply { put("address", walletAddress); put("vm", "evm") })
+            }
             val body = JSONObject().apply {
-                put("wallets", JSONArray().apply { put(JSONObject().apply { put("address", address); put("vm", "evm") }) })
-                put("anonymousId", anonymousId)
-                put("fingerprint", fingerprintId)
+                put("wallets", wallets)
+                put("anonymous_id", anonymousId)
+                put("device_fingerprint", fingerprintId)
+                put("platform", "android")
+                if (userId != null) put("user_id", userId)
             }
 
             connection.outputStream.use { it.write(body.toString().toByteArray()) }
@@ -645,17 +658,17 @@ object Aether : DefaultLifecycleObserver {
             if (!response.optBoolean("resolved")) return@withContext
 
             val identity = response.optJSONObject("identity") ?: return@withContext
-            val resolvedAnonymousId = identity.optString("anonymousId")
-            val resolvedUserId = identity.optString("userId").takeIf { it.isNotEmpty() }
+            val resolvedAnonymousId = identity.optString("anonymous_id")
+            val resolvedUserId = identity.optString("user_id").takeIf { it.isNotEmpty() }
 
             if (resolvedAnonymousId.isEmpty() || resolvedAnonymousId == anonymousId) return@withContext
 
-            resolvedUserId?.let { uid -> userId = uid; prefs?.edit()?.putString("userId", uid)?.apply() }
+            resolvedUserId?.let { uid -> this@Aether.userId = uid; prefs?.edit()?.putString("userId", uid)?.apply() }
             enqueueEvent("journey_resumed", mapOf(
                 "resolvedAnonymousId" to resolvedAnonymousId,
                 "resolvedUserId" to (resolvedUserId ?: "")
             ))
-            log("Journey resumed from prior device via wallet resolution")
+            log("Journey resumed from prior device")
             cfg.onJourneyResumed?.invoke(resolvedAnonymousId, resolvedUserId)
         } catch (_: Exception) { }
     }
