@@ -11,7 +11,7 @@ source_files:
 canonical_owner: commerce@aether
 estimated_read_minutes: 3
 toc_depth: 3
-last_synced_commit: bbbb603
+last_synced_commit: ad7c2d1
 ---
 # Commerce Operator Runbook
 
@@ -81,3 +81,29 @@ curl /v1/x402/explain/{challenge_id} → full lifecycle trace
 ```
 
 Both responses include all context needed for SOC2/GDPR evidence.
+
+## 8. Managing budget policies
+
+Budget policies short-circuit the approval queue: an over-cap spend is denied
+at policy time before an approval request is ever issued. Manage them via
+three endpoints on the commerce router (require `x402:write` for mutation,
+`x402:read` for query):
+
+```bash
+# Create or replace a per-subject policy
+curl -X POST /v1/x402/policies/budget \
+  -d '{"subject_id":"agent-42","subject_type":"agent",
+       "daily_cap_usd":100,"monthly_cap_usd":1000,"per_transaction_cap_usd":50}'
+
+# List tenant-wide policies
+curl /v1/x402/policies/budget
+
+# Get one subject's active policy
+curl /v1/x402/policies/budget/agent-42
+```
+
+**When to use it:** a runaway agent or compromised key is racking up
+charges. Set a tight `per_transaction_cap_usd` first (immediate
+limitation), then a tighter `daily_cap_usd` for cumulative protection.
+Re-issue the same `POST` with new caps to replace; there's no separate
+PATCH/DELETE — an absent policy means no caps.

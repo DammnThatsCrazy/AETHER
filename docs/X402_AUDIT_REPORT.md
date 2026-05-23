@@ -11,7 +11,7 @@ source_files:
 canonical_owner: security@aether
 estimated_read_minutes: 12
 toc_depth: 3
-last_synced_commit: bbbb603
+last_synced_commit: ad7c2d1
 ---
 # x402 Protocol Support Audit — Aether Repository
 
@@ -279,6 +279,13 @@ Aether has a **production-grade x402 capture and analytics subsystem** that:
 - `FacilitatorRegistry` + `VerificationEngine` implement facilitator-aware verification with x402 wire format
 - `SettlementEngine` implements the full pending → clearing → settled / failed state machine
 - Idempotency store is now Redis-backed in staging/production for multi-instance safety
+- **Budget policy CRUD** has been added — operators can now cap per-subject spend
+  via `POST/GET /v1/x402/policies/budget` and `GET /v1/x402/policies/budget/{subject_id}`.
+  The policy engine consults these caps before reaching the approval queue,
+  giving operators an immediate-effect control surface against runaway agents
+  or compromised credentials. Each `BudgetPolicy` carries
+  `daily_cap_usd`, `monthly_cap_usd`, `per_transaction_cap_usd`. See
+  `COMMERCE-CONTROL-PLANE.md §9` and `COMMERCE-OPERATOR-RUNBOOK.md §8`.
 
 The **one remaining gap** is:
 
