@@ -316,6 +316,7 @@ public final class Aether: NSObject {
         flush()
         userId = nil
         walletAddress = nil
+        email = nil
         traits = [:]
         consentState = []
         anonymousId = UUID().uuidString
