@@ -72,6 +72,7 @@ data class WalletEntry(
 
 data class IdentityData(
     val userId: String? = null,
+    val email: String? = null,
     val walletAddress: String? = null,
     val walletType: String? = null,
     val chainId: Int? = null,
@@ -102,6 +103,7 @@ object Aether : DefaultLifecycleObserver {
     private var sessionId: String = UUID.randomUUID().toString()
     private var anonymousId: String = ""
     private var userId: String? = null
+    private var email: String? = null
     private var walletAddress: String? = null
     private var traits: MutableMap<String, Any?> = mutableMapOf()
     private var screenCount = 0
@@ -167,7 +169,7 @@ object Aether : DefaultLifecycleObserver {
         emitSessionStart(application.applicationContext)
 
         if (config.autoResumeJourney) {
-            scope.launch { resolveIdentity(walletAddress = walletAddress, userId = null) }
+            scope.launch { resolveIdentity(walletAddress = walletAddress, userId = null, email = null) }
         }
     }
 
@@ -193,7 +195,9 @@ object Aether : DefaultLifecycleObserver {
 
     fun hydrateIdentity(data: IdentityData) {
         val priorUserId = userId
+        val priorEmail = email
         data.userId?.let { userId = it }
+        data.email?.let { email = it }
         traits.putAll(data.traits)
         data.walletAddress?.let {
             walletAddress = it
@@ -222,10 +226,13 @@ object Aether : DefaultLifecycleObserver {
         enqueueEvent("identify", props)
         prefs?.edit()?.putString("userId", userId)?.apply()
 
-        // Cross-device: fire resolve when userId just became known
-        val newUid = userId
-        if (config?.autoResumeJourney == true && newUid != null && newUid != priorUserId) {
-            scope.launch { resolveIdentity(walletAddress = walletAddress, userId = newUid) }
+        // Cross-device: fire resolve when userId or email just became known
+        if (config?.autoResumeJourney == true) {
+            val uidChanged = userId != null && userId != priorUserId
+            val emailChanged = email != null && email != priorEmail
+            if (uidChanged || emailChanged) {
+                scope.launch { resolveIdentity(walletAddress = walletAddress, userId = userId, email = email) }
+            }
         }
     }
 
@@ -311,7 +318,7 @@ object Aether : DefaultLifecycleObserver {
             "walletType" to walletType, "chainId" to chainId
         ))
         if (config?.autoResumeJourney == true) {
-            scope.launch { resolveIdentity(walletAddress = address, userId = userId) }
+            scope.launch { resolveIdentity(walletAddress = address, userId = userId, email = email) }
         }
     }
 
@@ -624,7 +631,13 @@ object Aether : DefaultLifecycleObserver {
         }
     }
 
-    private suspend fun resolveIdentity(walletAddress: String?, userId: String?) = withContext(Dispatchers.IO) {
+    private fun sha256(input: String): String {
+        val bytes = java.security.MessageDigest.getInstance("SHA-256")
+            .digest(input.lowercase().trim().toByteArray())
+        return bytes.joinToString("") { "%02x".format(it) }
+    }
+
+    private suspend fun resolveIdentity(walletAddress: String?, userId: String?, email: String?) = withContext(Dispatchers.IO) {
         val cfg = config ?: return@withContext
         try {
             val url = URL("${cfg.endpoint}/sdk/identity/resolve")
@@ -646,6 +659,7 @@ object Aether : DefaultLifecycleObserver {
                 put("device_fingerprint", fingerprintId)
                 put("platform", "android")
                 if (userId != null) put("user_id", userId)
+                if (!email.isNullOrBlank()) put("email_hash", sha256(email))
             }
 
             connection.outputStream.use { it.write(body.toString().toByteArray()) }

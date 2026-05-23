@@ -60,6 +60,7 @@ class AetherSDK implements AetherSDKInterface {
   private plugins: AetherPlugin[] = [];
   private initialized = false;
   private debug = false;
+  private _lastEmailHash: string | undefined = undefined;
 
   // Wallet change listeners
   private walletChangeListeners: ((wallets: ConnectedWallet[]) => void)[] = [];
@@ -165,11 +166,15 @@ class AetherSDK implements AetherSDKInterface {
       }
     }
 
-    // Cross-device: fire resolve when userId or email just became known
+    // Cross-device: fire resolve when userId or email first becomes known (or changes).
+    // Guard email with _lastEmailHash so repeated hydrateIdentity({ email }) calls
+    // don't generate redundant network requests.
     if (this.config?.autoResumeJourney !== false) {
       const newUserId = identity.userId !== priorUserId ? identity.userId : undefined;
       if (newUserId || data.email) {
         this._hashEmail(data.email).then((emailHash) => {
+          if (emailHash === this._lastEmailHash && !newUserId) return;
+          if (emailHash !== undefined) this._lastEmailHash = emailHash;
           this.resolveIdentity({ wallets: identity.wallets, userId: newUserId, emailHash }).catch(() => {});
         });
       }
@@ -185,6 +190,7 @@ class AetherSDK implements AetherSDKInterface {
     this.identityManager?.reset();
     this.sessionManager?.reset();
     this.web3Module?.disconnect();
+    this._lastEmailHash = undefined;
     this.log('info', 'SDK reset — new anonymous identity created');
   }
 

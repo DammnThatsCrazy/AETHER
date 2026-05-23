@@ -326,9 +326,10 @@ async def resolve_identity(
                 if c["anonymous_id"] != caller_anon_id and c.get("last_seen", "") >= cutoff
             ]
 
+            sigs = body.fingerprint_signals
+
             if candidates:
                 best = max(candidates, key=lambda r: r.get("last_seen", ""))
-                sigs = body.fingerprint_signals
                 confidence = 0.90
 
                 if sigs and sigs.timezone and best.get("timezone") and sigs.timezone != best["timezone"]:
@@ -355,6 +356,50 @@ async def resolve_identity(
                             resolved_at=utc_now().isoformat(),
                         ),
                     )
+
+            # Partial match: hash changed (e.g. browser update) but canvas hash still matches.
+            # Lower base confidence because we can't verify the full fingerprint hasn't drifted.
+            if not candidates and sigs and sigs.canvas_hash:
+                partial = [
+                    c for c in await session_repo.find_many(
+                        filters={"canvas_hash": sigs.canvas_hash, "tenant_id": tenant_id},
+                        limit=10,
+                    )
+                    if c["anonymous_id"] != caller_anon_id
+                    and c.get("fingerprint_hash") != fp_hash  # skip exact-hash records
+                    and c.get("last_seen", "") >= cutoff
+                ]
+                if partial:
+                    best = max(partial, key=lambda r: r.get("last_seen", ""))
+                    confidence = 0.75  # canvas matches but combined hash changed
+
+                    if sigs.timezone and best.get("timezone") and sigs.timezone != best["timezone"]:
+                        confidence = 0.0  # cross-timezone → reject
+                    else:
+                        if sigs.webgl_renderer and sigs.webgl_renderer == best.get("webgl_renderer"):
+                            confidence += 0.08  # same GPU: strong signal
+                        if sigs.language and sigs.language == best.get("language"):
+                            confidence += 0.05
+                        if ip_subnet and ip_subnet == best.get("ip_subnet"):
+                            confidence += 0.03
+
+                    if confidence >= 0.85:
+                        prior_anon_id = best["anonymous_id"]
+                        wallets = await _get_all_wallets_for_entity(cluster_repo, prior_anon_id)
+                        await _emit_resolved(producer, tenant_id, caller_anon_id, prior_anon_id, "fingerprint")
+                        logger.info(
+                            f"[sdk/resolve] fingerprint (partial/browser-update) matched "
+                            f"prior anon={prior_anon_id[:8]}… caller={caller_anon_id[:8]}… "
+                            f"confidence={confidence:.2f}"
+                        )
+                        return IdentityResolveResponse(
+                            resolved=True,
+                            identity=ResolvedIdentity(
+                                anonymous_id=prior_anon_id,
+                                wallet_addresses=wallets,
+                                resolved_at=utc_now().isoformat(),
+                            ),
+                        )
 
     return IdentityResolveResponse(resolved=False)
 
