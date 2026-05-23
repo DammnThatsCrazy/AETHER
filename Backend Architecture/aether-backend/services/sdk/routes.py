@@ -191,7 +191,7 @@ async def resolve_identity(
         if cached and cached.get("entity_id") and cached["entity_id"] != caller_anon_id:
             prior_anon_id = cached["entity_id"]
             all_wallets = await _get_all_wallets_for_entity(cluster_repo, prior_anon_id)
-            await _link_wallet_alias(cluster_repo, tenant_id, caller_anon_id, normalized, wallet_ref.vm)
+            await _link_alias(cluster_repo, tenant_id, caller_anon_id, normalized, wallet_ref.vm)
             await _emit_resolved(producer, tenant_id, caller_anon_id, prior_anon_id, "wallet", normalized)
             logger.info(
                 f"[sdk/resolve] wallet={normalized[:10]}… matched prior anon={prior_anon_id[:8]}… "
@@ -222,7 +222,7 @@ async def resolve_identity(
             user_id = prior_record.get("user_id")
             await cache.set_json(cache_key, {"entity_id": prior_anon_id, "user_id": user_id}, TTL.DAY)
             all_wallets = await _get_all_wallets_for_entity(cluster_repo, prior_anon_id)
-            await _link_wallet_alias(cluster_repo, tenant_id, caller_anon_id, normalized, wallet_ref.vm)
+            await _link_alias(cluster_repo, tenant_id, caller_anon_id, normalized, wallet_ref.vm)
             await _emit_resolved(producer, tenant_id, caller_anon_id, prior_anon_id, "wallet", normalized)
             logger.info(
                 f"[sdk/resolve] wallet={normalized[:10]}… matched prior anon={prior_anon_id[:8]}… "
@@ -386,7 +386,7 @@ async def _get_all_wallets_for_entity(
     ]
 
 
-async def _link_wallet_alias(
+async def _link_alias(
     repo: IdentityClusterRepository,
     tenant_id: str,
     caller_anon_id: str,
