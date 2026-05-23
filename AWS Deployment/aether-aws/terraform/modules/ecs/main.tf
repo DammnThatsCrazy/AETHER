@@ -108,7 +108,10 @@ resource "aws_iam_role_policy" "execution_secrets" {
           "secretsmanager:GetSecretValue",
           "secretsmanager:DescribeSecret",
         ]
-        Resource = [for arn in values(var.secret_arns) : arn]
+        Resource = concat(
+          [for arn in values(var.secret_arns) : arn],
+          [for arn in values(var.companion_secret_arns) : arn],
+        )
       },
       {
         Sid    = "KMSDecrypt"
@@ -178,7 +181,10 @@ resource "aws_iam_role_policy" "task" {
         Action = [
           "secretsmanager:GetSecretValue",
         ]
-        Resource = [for arn in values(var.secret_arns) : arn]
+        Resource = concat(
+          [for arn in values(var.secret_arns) : arn],
+          [for arn in values(var.companion_secret_arns) : arn],
+        )
       },
       {
         Sid    = "NeptuneIAMAuth"
@@ -198,18 +204,28 @@ resource "aws_iam_role_policy" "task" {
 
 locals {
   # Secret name → container env var name mapping for backend
-  backend_secrets = {
-    JWT_SECRET                = var.secret_arns["jwt-secret"]
-    BYOK_ENCRYPTION_KEY       = var.secret_arns["byok-encryption-key"]
-    DATABASE_URL_SECRET       = var.secret_arns["db-password"]
-    STRIPE_SECRET_KEY         = var.secret_arns["stripe-secret-key"]
-    STRIPE_WEBHOOK_SECRET     = var.secret_arns["stripe-webhook-secret"]
-    ORACLE_SIGNER_PRIVATE_KEY = var.secret_arns["oracle-signer-private-key"]
-    WATERMARK_SECRET_KEY      = var.secret_arns["watermark-secret-key"]
-    CANARY_SECRET_SEED        = var.secret_arns["canary-secret-seed"]
-    # Redis AUTH token — read by shared/cache/cache.py as REDIS_PASSWORD
-    REDIS_PASSWORD            = var.secret_arns["redis-auth-token"]
-  }
+  backend_secrets = merge(
+    {
+      JWT_SECRET                = var.secret_arns["jwt-secret"]
+      BYOK_ENCRYPTION_KEY       = var.secret_arns["byok-encryption-key"]
+      DATABASE_URL_SECRET       = var.secret_arns["db-password"]
+      STRIPE_SECRET_KEY         = var.secret_arns["stripe-secret-key"]
+      STRIPE_WEBHOOK_SECRET     = var.secret_arns["stripe-webhook-secret"]
+      ORACLE_SIGNER_PRIVATE_KEY = var.secret_arns["oracle-signer-private-key"]
+      WATERMARK_SECRET_KEY      = var.secret_arns["watermark-secret-key"]
+      CANARY_SECRET_SEED        = var.secret_arns["canary-secret-seed"]
+      # Redis AUTH token — read by shared/cache/cache.py as REDIS_PASSWORD
+      REDIS_PASSWORD            = var.secret_arns["redis-auth-token"]
+    },
+    # Companion secrets for zero-downtime rotation window.
+    # Populated by the rotation Lambda in setSecret phase; empty until first rotation.
+    lookup(var.companion_secret_arns, "jwt-secret-previous", null) != null ? {
+      JWT_SECRET_PREVIOUS = var.companion_secret_arns["jwt-secret-previous"]
+    } : {},
+    lookup(var.companion_secret_arns, "byok-encryption-key-previous", null) != null ? {
+      BYOK_ENCRYPTION_KEY_PREVIOUS = var.companion_secret_arns["byok-encryption-key-previous"]
+    } : {},
+  )
 
   backend_secrets_block = [for env_var, arn in local.backend_secrets : {
     name      = env_var
