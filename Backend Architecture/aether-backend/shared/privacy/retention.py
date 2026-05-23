@@ -116,6 +116,7 @@ class DeletionPlan:
         behavior: DeletionBehavior,
         classification: DataClassification,
         description: str = "",
+        entity_field: str = "",
     ) -> None:
         """Add a deletion step to the plan."""
         self.steps.append({
@@ -125,6 +126,7 @@ class DeletionPlan:
             "behavior": behavior.value,
             "classification": classification.value,
             "description": description,
+            "entity_field": entity_field,
             "status": "pending",
         })
 
@@ -182,11 +184,13 @@ class DeletionPlan:
 
         # Identity clusters (wallet, userId, email, fingerprint links) — sever
         self.add_step("postgresql", "identity_clusters", DeletionBehavior.EDGE_SEVER,
-                       DataClassification.REGULATED, "Sever identity cluster links for entity")
+                       DataClassification.REGULATED, "Sever identity cluster links for entity",
+                       entity_field="entity_id")
 
         # Device sessions (fingerprint hashes, canvas, webGL, IP subnet) — hard delete
         self.add_step("postgresql", "device_sessions", DeletionBehavior.HARD_DELETE,
-                       DataClassification.CONFIDENTIAL, "Delete device fingerprint sessions for entity")
+                       DataClassification.CONFIDENTIAL, "Delete device fingerprint sessions for entity",
+                       entity_field="anonymous_id")
 
     async def execute(self, store_adapters: Optional[dict] = None) -> dict:
         """
@@ -221,12 +225,12 @@ class DeletionPlan:
                 adapter = adapters.get(store_key)
 
                 if behavior == DeletionBehavior.HARD_DELETE:
+                    entity_field = step.get("entity_field") or "user_id"
                     if adapter and hasattr(adapter, "delete_by_entity"):
-                        count = await adapter.delete_by_entity("user_id", self.entity_id)
+                        count = await adapter.delete_by_entity(entity_field, self.entity_id)
                         step["records_affected"] = count
                     elif adapter and hasattr(adapter, "delete"):
-                        # Try entity-level deletion by finding matching records first
-                        records = await adapter.find_many(filters={"user_id": self.entity_id}, limit=10000)
+                        records = await adapter.find_many(filters={entity_field: self.entity_id}, limit=10000)
                         count = 0
                         for rec in records:
                             rid = rec.get("id", "")
@@ -253,10 +257,15 @@ class DeletionPlan:
                         step["note"] = "no adapter configured — pseudonymization logged only"
 
                 elif behavior == DeletionBehavior.EDGE_SEVER:
-                    # Graph edge severing and cross-domain link deletion
+                    entity_field = step.get("entity_field")
                     if adapter and hasattr(adapter, "delete_by_entity"):
-                        count = await adapter.delete_by_entity("source_entity_id", self.entity_id)
-                        count += await adapter.delete_by_entity("target_entity_id", self.entity_id)
+                        if entity_field:
+                            # Single-field keyed table (e.g. identity_clusters keyed by entity_id)
+                            count = await adapter.delete_by_entity(entity_field, self.entity_id)
+                        else:
+                            # Default: Neptune-style graph edges with source/target fields
+                            count = await adapter.delete_by_entity("source_entity_id", self.entity_id)
+                            count += await adapter.delete_by_entity("target_entity_id", self.entity_id)
                         step["records_affected"] = count
                     else:
                         step["records_affected"] = 0

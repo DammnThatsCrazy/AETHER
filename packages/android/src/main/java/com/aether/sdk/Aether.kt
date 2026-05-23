@@ -245,6 +245,7 @@ object Aether : DefaultLifecycleObserver {
         flushJob?.cancel()
         userId = null
         walletAddress = null
+        email = null
         traits.clear()
         consentState.clear()
         anonymousId = UUID.randomUUID().toString()
