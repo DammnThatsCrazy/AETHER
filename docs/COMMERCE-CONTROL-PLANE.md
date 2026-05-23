@@ -13,7 +13,7 @@ source_files:
 canonical_owner: commerce@aether
 estimated_read_minutes: 8
 toc_depth: 3
-last_synced_commit: bbbb603
+last_synced_commit: be04e56
 ---
 # Aether Agentic Commerce — Control Plane
 
@@ -139,6 +139,9 @@ All commerce events published under `aether.commerce.*` topic namespace on the e
 | `/v1/x402/verify` | POST | Verify tx + settle + mint entitlement |
 | `/v1/x402/access/grant` | POST | Grant access + record fulfillment |
 | `/v1/x402/explain/{id}` | GET | Full lifecycle trace |
+| `/v1/x402/policies/budget` | POST | Create or replace a per-subject budget policy (daily/monthly/per-tx caps) |
+| `/v1/x402/policies/budget` | GET | List active budget policies for the tenant |
+| `/v1/x402/policies/budget/{subject_id}` | GET | Get one subject's active policy |
 | `/v1/approvals` | GET | Approval queue |
 | `/v1/approvals/{id}/decide` | POST | Operator approve/reject/escalate |
 | `/v1/approvals/{id}/revoke` | POST | Revoke prior approval |

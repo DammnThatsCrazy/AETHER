@@ -13,7 +13,7 @@ source_files:
 canonical_owner: sdk@aether
 estimated_read_minutes: 9
 toc_depth: 3
-last_synced_commit: bbbb603
+last_synced_commit: be04e56
 ---
 
 # Aether React Native SDK v8.8.0 — Integration Guide
@@ -148,6 +148,43 @@ function SettingsScreen() {
   return <View>...</View>;
 }
 ```
+
+### useConsentState
+
+Subscribes to the SDK's consent state and re-renders when it changes — useful for
+rendering consent UI without manually wiring `onUpdate` callbacks.
+
+```tsx
+import { useConsentState } from '@aether/react-native-sdk';
+
+function PrivacyBanner() {
+  const consent = useConsentState();
+  if (consent?.analytics) return null;
+  return <ConsentPrompt />;
+}
+```
+
+### useJourneyResumed
+
+Fires when the backend resumes a cross-device journey (returns the
+`ResolvedIdentity` once, then `null`). Use it to greet a returning user or
+restore session state without polling.
+
+```tsx
+import { useJourneyResumed, type ResolvedIdentity } from '@aether/react-native-sdk';
+
+function HomeScreen() {
+  const resumed: ResolvedIdentity | null = useJourneyResumed();
+  if (resumed) {
+    // wallet identity matched a prior session — restore state
+    restoreSession(resumed.userId);
+  }
+  return <View>...</View>;
+}
+```
+
+`ResolvedIdentity` carries `{ anonymousId, userId, wallets, matchSignals, ... }` —
+the same shape the backend returns from `POST /sdk/identity/resolve`.
 
 ## Wallet Tracking
 
