@@ -1,11 +1,12 @@
 """
-Aether Service — Customer Self-Service API Keys
+Aether Service — Customer Self-Service
 
-Allows authenticated tenants to manage their own API keys without needing
-admin privileges. All operations are scoped to request.state.tenant.tenant_id.
+Profile, API key management, and account endpoints for authenticated tenants.
+All operations are scoped to request.state.tenant.tenant_id.
 
 Endpoints:
-    GET    /v1/me/api-keys          List caller's API keys (keys masked)
+    GET    /v1/me                   Tenant profile + plan + billing summary
+    GET    /v1/me/api-keys          List caller's API keys (paginated, keys masked)
     POST   /v1/me/api-keys          Create a new API key
     PATCH  /v1/me/api-keys/{id}     Rename a key
     DELETE /v1/me/api-keys/{id}     Revoke a key
@@ -17,7 +18,7 @@ import hashlib
 import uuid
 from typing import Optional
 
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, Query, Request
 from pydantic import BaseModel, Field
 
 from shared.common.common import APIResponse, ForbiddenError, NotFoundError
@@ -25,7 +26,7 @@ from shared.logger.logger import get_logger, metrics
 from repositories.repos import APIKeyRepository
 
 logger = get_logger("aether.service.me")
-router = APIRouter(prefix="/v1/me", tags=["Me — API Keys"])
+router = APIRouter(prefix="/v1/me", tags=["Me"])
 
 _key_repo = APIKeyRepository()
 
@@ -59,15 +60,77 @@ def _assert_owns_key(key: dict, tenant_id: str) -> None:
         raise ForbiddenError("Key does not belong to this tenant")
 
 
-@router.get("/api-keys")
-async def list_my_api_keys(request: Request):
-    """List all API keys for the calling tenant."""
+@router.get("")
+async def get_my_profile(request: Request):
+    """Return the calling tenant's profile: plan, billing, key count."""
     tenant = _require_tenant(request)
-    keys = await _key_repo.find_many(filters={"tenant_id": tenant.tenant_id})
+    from shared.plans.catalog import PLAN_CATALOG
+    from shared.billing import stripe_repository
+    from shared.auth.auth import PlanTier
+    from repositories.repos import AdminRepository
+
+    plan_tier = getattr(tenant, "plan_tier", None)
+    plan = PLAN_CATALOG.get(plan_tier) if plan_tier else None
+
+    # Tenant record (name, contact_email)
+    tenant_record = {}
+    try:
+        repo = AdminRepository()
+        tenant_record = await repo.find_by_id(tenant.tenant_id) or {}
+    except Exception:
+        pass
+
+    # Billing account (subscription status, period)
+    billing = {}
+    try:
+        acct = await stripe_repository.get_billing_account(tenant.tenant_id)
+        if acct:
+            billing = {
+                "subscription_status": acct.get("subscription_status"),
+                "current_period_end": acct.get("current_period_end"),
+                "stripe_customer_id": acct.get("stripe_customer_id"),
+            }
+    except Exception:
+        pass
+
+    key_count = await _key_repo.count(filters={"tenant_id": tenant.tenant_id})
+
+    return APIResponse(data={
+        "tenant_id": tenant.tenant_id,
+        "name": tenant_record.get("name", ""),
+        "contact_email": tenant_record.get("contact_email", ""),
+        "plan": {
+            "plan_id": plan.plan_id if plan else (plan_tier.value if plan_tier else "P1"),
+            "display_name": plan.display_name if plan else "",
+            "monthly_quota": plan.monthly_quota if plan else 0,
+            "burst_rpm": plan.burst_rpm if plan else 0,
+        },
+        "billing": billing,
+        "api_key_count": key_count,
+    }).to_dict()
+
+
+@router.get("/api-keys")
+async def list_my_api_keys(
+    request: Request,
+    limit: int = Query(default=20, ge=1, le=100),
+    offset: int = Query(default=0, ge=0),
+):
+    """List API keys for the calling tenant (paginated)."""
+    tenant = _require_tenant(request)
+    keys = await _key_repo.find_many(
+        filters={"tenant_id": tenant.tenant_id},
+        limit=limit,
+        offset=offset,
+    )
+    total = await _key_repo.count(filters={"tenant_id": tenant.tenant_id})
     return APIResponse(data={
         "tenant_id": tenant.tenant_id,
         "api_keys": [_safe_key(k) for k in keys],
         "count": len(keys),
+        "total": total,
+        "limit": limit,
+        "offset": offset,
     }).to_dict()
 
 
