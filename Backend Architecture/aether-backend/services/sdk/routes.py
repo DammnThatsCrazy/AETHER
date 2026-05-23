@@ -7,6 +7,7 @@ Not exposed publicly — requires a valid SDK API key.
 from __future__ import annotations
 
 import hashlib
+import re
 import uuid
 from datetime import datetime, timezone, timedelta
 from typing import Any, Optional
@@ -53,6 +54,7 @@ class ResolvedIdentity(BaseModel):
     anonymous_id: str
     user_id: Optional[str] = None
     wallet_addresses: list[str] = Field(default_factory=list)
+    wallet_refs: list[dict] = Field(default_factory=list)
     resolved_at: str
 
 
@@ -173,7 +175,8 @@ async def resolve_identity(
                     identity=ResolvedIdentity(
                         anonymous_id=prior_anon_id,
                         user_id=uid,
-                        wallet_addresses=wallets,
+                        wallet_addresses=[w["address"] for w in wallets],
+                        wallet_refs=wallets,
                         resolved_at=utc_now().isoformat(),
                     ),
                 )
@@ -202,7 +205,8 @@ async def resolve_identity(
                 identity=ResolvedIdentity(
                     anonymous_id=prior_anon_id,
                     user_id=cached.get("user_id"),
-                    wallet_addresses=all_wallets,
+                    wallet_addresses=[w["address"] for w in all_wallets],
+                    wallet_refs=all_wallets,
                     resolved_at=utc_now().isoformat(),
                 ),
             )
@@ -233,7 +237,8 @@ async def resolve_identity(
                 identity=ResolvedIdentity(
                     anonymous_id=prior_anon_id,
                     user_id=user_id,
-                    wallet_addresses=all_wallets,
+                    wallet_addresses=[w["address"] for w in all_wallets],
+                    wallet_refs=all_wallets,
                     resolved_at=utc_now().isoformat(),
                 ),
             )
@@ -255,7 +260,7 @@ async def resolve_identity(
     # ── Priority 3: email hash ─────────────────────────────────────────
     if body.email_hash:
         eh = body.email_hash.strip().lower()
-        if eh:
+        if eh and re.fullmatch(r'[0-9a-f]{64}', eh):
             prior = [
                 r for r in await cluster_repo.find_many(
                     filters={"tenant_id": tenant_id, "identifier_type": "email", "identifier_value": eh},
@@ -294,7 +299,8 @@ async def resolve_identity(
                     resolved=True,
                     identity=ResolvedIdentity(
                         anonymous_id=prior_anon_id,
-                        wallet_addresses=wallets,
+                        wallet_addresses=[w["address"] for w in wallets],
+                        wallet_refs=wallets,
                         resolved_at=utc_now().isoformat(),
                     ),
                 )
@@ -303,7 +309,7 @@ async def resolve_identity(
     if body.device_fingerprint:
         fp_hash = body.device_fingerprint.strip()
         if fp_hash:
-            ip_subnet = _hash_ip_subnet(request.client.host or "")
+            ip_subnet = _hash_ip_subnet((request.client.host if request.client else "") or "")
             await session_repo.insert(f"ds:{tenant_id}:{caller_anon_id}", {
                 "anonymous_id": caller_anon_id,
                 "tenant_id": tenant_id,
@@ -352,7 +358,8 @@ async def resolve_identity(
                         resolved=True,
                         identity=ResolvedIdentity(
                             anonymous_id=prior_anon_id,
-                            wallet_addresses=wallets,
+                            wallet_addresses=[w["address"] for w in wallets],
+                            wallet_refs=wallets,
                             resolved_at=utc_now().isoformat(),
                         ),
                     )
@@ -396,7 +403,8 @@ async def resolve_identity(
                             resolved=True,
                             identity=ResolvedIdentity(
                                 anonymous_id=prior_anon_id,
-                                wallet_addresses=wallets,
+                                wallet_addresses=[w["address"] for w in wallets],
+                                wallet_refs=wallets,
                                 resolved_at=utc_now().isoformat(),
                             ),
                         )
@@ -421,11 +429,14 @@ def _normalize_address(address: str, vm: str) -> Optional[str]:
 
 async def _get_all_wallets_for_entity(
     repo: IdentityClusterRepository, entity_id: str
-) -> list[str]:
-    """Return all active wallet addresses linked to an entity."""
+) -> list[dict]:
+    """Return all active wallets linked to an entity as {address, vm} dicts."""
     records = await repo.list_for_entity(entity_id)
     return [
-        r["identifier_value"]
+        {
+            "address": r["identifier_value"],
+            "vm": (r.get("provenance") or {}).get("vm", "evm"),
+        }
         for r in records
         if r.get("identifier_type") == "wallet"
     ]

@@ -127,8 +127,8 @@ async def test_get_all_wallets_returns_only_wallet_type(repo):
     await repo.link(str(uuid.uuid4()), "anon_a", "t1", "wallet", "0xabc", 1.0)
     await repo.link(str(uuid.uuid4()), "anon_a", "t1", "email", "a@b.com", 1.0)
     wallets = await _get_all_wallets_for_entity(repo, "anon_a")
-    assert wallets == ["0xabc"]
-    assert "a@b.com" not in wallets
+    assert [w["address"] for w in wallets] == ["0xabc"]
+    assert not any(w["address"] == "a@b.com" for w in wallets)
 
 
 # ---------------------------------------------------------------------------
@@ -216,7 +216,7 @@ async def test_get_all_wallets_for_entity_after_link(repo):
     await repo.link(str(uuid.uuid4()), anon_id, "t1", "wallet", "0xwallet2", 1.0)
 
     wallets = await _get_all_wallets_for_entity(repo, anon_id)
-    assert set(wallets) == {"0xwallet1", "0xwallet2"}
+    assert {w["address"] for w in wallets} == {"0xwallet1", "0xwallet2"}
 
 
 async def test_unlinked_wallet_not_returned(repo):
@@ -226,7 +226,7 @@ async def test_unlinked_wallet_not_returned(repo):
     await repo.unlink(cluster_id)
 
     wallets = await _get_all_wallets_for_entity(repo, anon_id)
-    assert "0xold" not in wallets
+    assert not any(w["address"] == "0xold" for w in wallets)
 
 
 async def test_second_device_alias_is_linked(repo):
