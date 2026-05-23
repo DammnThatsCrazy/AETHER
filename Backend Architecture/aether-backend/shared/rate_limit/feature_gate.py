@@ -34,6 +34,15 @@ PUBLIC_PATHS: frozenset[str] = frozenset({
     "/v1/tenants",
     # Public recovery: unauthenticated key recovery (never returns a key in body).
     "/v1/auth/recover",
+    # Email+password sign-up flow (public — tenant created only after OTP verification).
+    "/v1/auth/register",
+    "/v1/auth/verify-email",
+    "/v1/auth/resend-verification",
+    # Email+password login (returns session API key).
+    "/v1/auth/login",
+    # SSO via Auth0 (Google, Apple, Microsoft, Twitter/X, Slack).
+    "/v1/auth/sso/callback",
+    "/v1/auth/sso/providers",
 })
 
 

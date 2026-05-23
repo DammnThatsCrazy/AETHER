@@ -149,3 +149,88 @@ resource "auth0_connection_clients" "kyber_db" {
   connection_id   = auth0_connection.database.id
   enabled_clients = [auth0_client.kyber.id]
 }
+
+# --------------------------------------------------------------------------
+# Social Connections (SSO)
+# Each provider requires an app/client registered with that OAuth vendor.
+# Pass client_id / client_secret via var.social_* variables (see variables.tf).
+# --------------------------------------------------------------------------
+
+resource "auth0_connection" "google" {
+  name     = "aether-${var.environment}-google"
+  strategy = "google-oauth2"
+
+  options {
+    client_id     = var.google_client_id
+    client_secret = var.google_client_secret
+    scopes        = ["email", "profile"]
+  }
+}
+
+resource "auth0_connection_clients" "google_aether" {
+  connection_id   = auth0_connection.google.id
+  enabled_clients = [auth0_client.aether.id, auth0_client.kyber.id]
+}
+
+resource "auth0_connection" "apple" {
+  name     = "aether-${var.environment}-apple"
+  strategy = "apple"
+
+  options {
+    client_id     = var.apple_client_id
+    client_secret = var.apple_client_secret
+    team_id       = var.apple_team_id
+    key_id        = var.apple_key_id
+  }
+}
+
+resource "auth0_connection_clients" "apple_aether" {
+  connection_id   = auth0_connection.apple.id
+  enabled_clients = [auth0_client.aether.id]
+}
+
+resource "auth0_connection" "twitter" {
+  name     = "aether-${var.environment}-twitter"
+  strategy = "twitter"
+
+  options {
+    consumer_key    = var.twitter_consumer_key
+    consumer_secret = var.twitter_consumer_secret
+  }
+}
+
+resource "auth0_connection_clients" "twitter_aether" {
+  connection_id   = auth0_connection.twitter.id
+  enabled_clients = [auth0_client.aether.id]
+}
+
+resource "auth0_connection" "microsoft" {
+  name     = "aether-${var.environment}-microsoft"
+  strategy = "windowslive"
+
+  options {
+    client_id     = var.microsoft_client_id
+    client_secret = var.microsoft_client_secret
+    scopes        = ["wl.emails", "wl.basic"]
+  }
+}
+
+resource "auth0_connection_clients" "microsoft_aether" {
+  connection_id   = auth0_connection.microsoft.id
+  enabled_clients = [auth0_client.aether.id]
+}
+
+resource "auth0_connection" "slack" {
+  name     = "aether-${var.environment}-slack"
+  strategy = "slack"
+
+  options {
+    client_id     = var.slack_client_id
+    client_secret = var.slack_client_secret
+  }
+}
+
+resource "auth0_connection_clients" "slack_aether" {
+  connection_id   = auth0_connection.slack.id
+  enabled_clients = [auth0_client.aether.id]
+}

@@ -604,6 +604,30 @@ class APIKeyRepository(BaseRepository):
         super().__init__("api_keys")
 
 
+class UserRepository(BaseRepository):
+    """User records for email+password and SSO sign-ups.
+
+    Each row represents a verified user. Pending (unverified) registrations
+    are also stored here under the id `pending:{email}` until OTP verification
+    completes, at which point the pending row is deleted and a permanent user
+    row is written with a UUID id.
+    """
+    def __init__(self) -> None:
+        super().__init__("users")
+
+    async def find_by_email(self, email: str) -> Optional[dict]:
+        results = await self.find_many(
+            filters={"email": email.lower(), "status": "active"}, limit=1
+        )
+        return results[0] if results else None
+
+    async def find_by_auth0_sub(self, sub: str) -> Optional[dict]:
+        results = await self.find_many(
+            filters={"auth0_sub": sub, "status": "active"}, limit=1
+        )
+        return results[0] if results else None
+
+
 # ═══════════════════════════════════════════════════════════════════════════
 # PRIVATE CONCRETE STORES (used by composite repos above)
 # ═══════════════════════════════════════════════════════════════════════════

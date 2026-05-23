@@ -50,6 +50,15 @@ Routes:
     GET  /v1/notifications/alerts       List alerts
     POST /v1/tenants                    Public sign-up (no auth)
     POST /v1/auth/recover               Recover lost API key via email (no auth)
+    POST /v1/auth/register              Step 1 email sign-up: send OTP (no auth)
+    POST /v1/auth/verify-email          Step 2: verify OTP, create tenant (no auth)
+    POST /v1/auth/resend-verification   Resend OTP (no auth)
+    POST /v1/auth/login                 Email+password login → API key (no auth)
+    POST /v1/auth/sso/callback          SSO via Auth0 JWT → API key (no auth)
+    GET  /v1/auth/sso/providers         List SSO providers (no auth)
+    DELETE /v1/me/account               Self-service account deletion
+    POST /v1/admin/tenants/{id}/deactivate  Deactivate tenant (admin)
+    DELETE /v1/admin/tenants/{id}           GDPR delete tenant (admin)
     GET  /v1/me                         Caller profile + plan summary
     GET  /v1/me/api-keys                List caller's API keys (paginated)
     POST /v1/me/api-keys                Create API key (self-service)
@@ -171,6 +180,7 @@ from services.admin.webhook_routes import router as stripe_webhook_router
 from services.registration.routes import router as registration_router
 from services.me.routes import router as me_router
 from services.billing.routes import router as billing_router, admin_overage_router
+from services.auth.routes import router as auth_router, admin_auth_router
 
 # Profile 360 (additive — multi-entity identity, delegation, flows, behavior, realtime)
 from services.entities.routes import router as entities_router
@@ -330,6 +340,8 @@ def create_app() -> FastAPI:
     app.include_router(me_router)
     app.include_router(billing_router)
     app.include_router(admin_overage_router)
+    app.include_router(auth_router)
+    app.include_router(admin_auth_router)
 
     # ── Profile 360 (additive) ─────────────────────────────────────────
     app.include_router(entities_router)
