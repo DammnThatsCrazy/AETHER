@@ -105,7 +105,7 @@ services:
         condition: service_healthy
     env_file: .env
     environment:
-      AETHER_ENV: staging
+      AETHER_ENV: ${AETHER_ENV:-local}
       DATABASE_URL: postgresql://aether:aether_dev_password@postgres:5432/aether
       REDIS_HOST: redis
       REDIS_PORT: "6379"
@@ -130,13 +130,16 @@ services:
         condition: service_healthy
     env_file: .env
     environment:
-      AETHER_ENV: staging
+      AETHER_ENV: ${AETHER_ENV:-local}
     command: uvicorn serving.src.api:app --host 0.0.0.0 --port 8080
 
   journey-service:
     build:
       context: "Backend Architecture/services/journey-service"
       dockerfile: Dockerfile
+    # Streaming consumer: needs Kafka + ClickHouse, both profile-gated.
+    # Keep this service in the streaming profile so the default stack stays minimal.
+    profiles: ["streaming", "full"]
     ports:
       - "8090:8080"
     depends_on:
@@ -150,7 +153,7 @@ services:
         condition: service_started
     env_file: .env
     environment:
-      AETHER_ENV: staging
+      AETHER_ENV: ${AETHER_ENV:-staging}
       DATABASE_URL: postgresql://aether:aether_dev_password@postgres:5432/aether
       REDIS_HOST: redis
       REDIS_PORT: "6379"
@@ -194,6 +197,9 @@ services:
 
   grafana:
     image: grafana/grafana:10.3.0
+    # Depends on prometheus, which is in the observability/full profile.
+    # Pin grafana to the same profiles so the default stack does not pull it in.
+    profiles: ["observability", "full"]
     ports:
       - "3000:3000"
     environment:
