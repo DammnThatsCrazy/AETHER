@@ -56,7 +56,9 @@ services:
   # -------------------------------------------------------------------------
   mlflow:
     image: ghcr.io/mlflow/mlflow:v2.11.0
-    profiles: ["experiment", "full"]
+    # Included in `notebooks` so `jupyter` (which depends_on mlflow) can
+    # start under `--profile notebooks` without also requiring experiment.
+    profiles: ["experiment", "notebooks", "full"]
     ports:
       - "5000:5000"
     command: >

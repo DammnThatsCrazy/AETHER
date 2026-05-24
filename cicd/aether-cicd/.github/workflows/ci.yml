@@ -298,18 +298,16 @@ jobs:
           fi
 
   # ──────────────────────────────────────────────────────────────────────
-  # STAGE 7: E2E TEST — parallel with perf, only on develop/release
-  # Skipped on docs-only PRs (run_all=false and no affected service).
+  # STAGE 7: E2E TEST — runs on develop/release pushes. Parallel with perf.
   # ──────────────────────────────────────────────────────────────────────
   e2e-test:
     name: "7. E2E Test"
     runs-on: ubuntu-latest
-    needs: [build, detect-changes]
+    needs: [build]
     timeout-minutes: 30
     if: >
       github.event_name == 'push' &&
-      (github.ref == 'refs/heads/develop' || startsWith(github.ref, 'refs/heads/release/')) &&
-      needs.detect-changes.outputs.run_all == 'true'
+      (github.ref == 'refs/heads/develop' || startsWith(github.ref, 'refs/heads/release/'))
     steps:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/setup-node-python
@@ -333,12 +331,9 @@ jobs:
   performance-test:
     name: "8. Performance Test"
     runs-on: ubuntu-latest
-    needs: [build, detect-changes]
+    needs: [build]
     timeout-minutes: 30
-    if: >
-      github.event_name == 'push' &&
-      startsWith(github.ref, 'refs/heads/release/') &&
-      needs.detect-changes.outputs.run_all == 'true'
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/heads/release/')
     steps:
       - uses: actions/checkout@v4
       - name: Install k6

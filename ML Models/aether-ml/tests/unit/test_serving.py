@@ -312,7 +312,9 @@ class TestModelServer:
 
         with pytest.raises(HTTPException) as exc_info:
             server.get_model("nonexistent_model")
-        assert exc_info.value.status_code == 503
+        # Unknown model name -> 404 (distinct from 503 which means
+        # "known model, no artifact loaded").
+        assert exc_info.value.status_code == 404
 
     def test_model_names_list(self) -> None:
         from serving.src.api import MODEL_NAMES
