@@ -131,6 +131,28 @@ class Notifier:
             metadata={"finding_type": finding_type, "resource": resource},
         ))
 
+    def ml_serving_alert(
+        self,
+        model_name: str,
+        metric: str,
+        value: float,
+        threshold: float,
+        details: str = "",
+    ) -> None:
+        """Fire when an ML serving metric (latency, error rate, PSI drift) breaches threshold."""
+        self.send(Notification(
+            title=f"ML Serving Alert — {model_name}",
+            message=f"{metric} = {value:.4f} (threshold: {threshold}). {details}".strip(),
+            severity=Severity.CRITICAL,
+            channel="ml-alerts",
+            metadata={
+                "model": model_name,
+                "metric": metric,
+                "value": value,
+                "threshold": threshold,
+            },
+        ))
+
 
 # Module-level singleton
 notifier = Notifier()

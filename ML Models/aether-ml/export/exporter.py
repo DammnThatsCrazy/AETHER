@@ -1,4 +1,4 @@
-"""Export edge models to TF.js, ONNX, TF Lite, and CoreML formats."""
+"""Export edge and server models to TF.js, ONNX, TF Lite, and CoreML formats."""
 
 from __future__ import annotations
 
@@ -18,6 +18,18 @@ _DEFAULT_EDGE_MODELS: dict[str, list[str]] = {
     "bot_detection": ["onnx", "tflite"],
     "session_scorer": ["tfjs", "coreml"],
 }
+
+# Server-side in-process models (M6, M7, M9) that run as ONNX on Fargate.
+# After E1, these no longer use SageMaker real-time endpoints — they are
+# loaded lazily from S3 by the aether-ml serving process on first call.
+_SERVER_ONNX_MODELS: dict[str, str] = {
+    "churn_prediction": "xgboost",      # M6 — XGBClassifier tabular
+    "ltv_prediction": "xgboost",        # M7 — XGBRegressor tabular
+    "campaign_attribution": "sklearn",  # M9 — sklearn predictor (Shapley at runtime)
+}
+
+# These models use the onnxmltools XGBoost bridge rather than plain skl2onnx.
+_XGBOOST_MODEL_NAMES: frozenset[str] = frozenset({"churn_prediction", "ltv_prediction"})
 
 
 # =============================================================================
@@ -402,10 +414,15 @@ class ModelExporter:
             model_path_str = str(model_file)
 
             if fmt == "onnx":
-                # Infer feature count from model
                 feature_names = self._infer_feature_names(model_file)
                 output_file = str(output_base / f"{model_name}.onnx")
-                result = self.export_to_onnx(model_path_str, output_file, feature_names)
+                if model_name in _XGBOOST_MODEL_NAMES:
+                    task = "regression" if model_name == "ltv_prediction" else "classification"
+                    result = self.export_xgboost_to_onnx(
+                        model_path_str, output_file, feature_names, task=task
+                    )
+                else:
+                    result = self.export_to_onnx(model_path_str, output_file, feature_names)
             elif fmt == "tfjs":
                 result = self.export_to_tfjs(model_path_str, str(output_base))
             elif fmt == "tflite":
@@ -427,6 +444,131 @@ class ModelExporter:
             results.append(result)
 
         return results
+
+    # --------------------------------------------------------------------- #
+    # XGBOOST ONNX (server models M6, M7)
+    # --------------------------------------------------------------------- #
+
+    def export_xgboost_to_onnx(
+        self,
+        model_path: str,
+        output_path: str,
+        feature_names: list[str],
+        task: str = "classification",
+    ) -> ExportResult:
+        """Export an XGBoost sklearn wrapper to ONNX via onnxmltools.
+
+        Args:
+            model_path: Path to a joblib/pickle serialised XGBClassifier or
+                XGBRegressor.
+            output_path: Destination ``.onnx`` file path.
+            feature_names: Ordered list of input feature names.
+            task: ``"classification"`` or ``"regression"``. Controls the ONNX
+                output type used for the conversion (affects probabilities vs
+                raw predictions).
+
+        Returns:
+            An ``ExportResult`` describing the outcome.
+        """
+        try:
+            import joblib
+            import onnx
+            from onnxmltools import convert_xgboost
+            from onnxmltools.convert.common.data_types import FloatTensorType as OnnxFloat
+
+            model = joblib.load(model_path)
+            n_features = len(feature_names)
+            initial_types = [("features", OnnxFloat([None, n_features]))]
+            onnx_model = convert_xgboost(model, initial_types=initial_types)
+
+            out = Path(output_path)
+            out.parent.mkdir(parents=True, exist_ok=True)
+            with open(out, "wb") as f:
+                f.write(onnx_model.SerializeToString())
+
+            size = out.stat().st_size
+            logger.info(f"Exported XGBoost ONNX model to {out} ({size / 1024:.1f} KB)")
+            self._validate_onnx(str(out), n_features)
+
+            return ExportResult(
+                model_name=Path(model_path).stem,
+                format="onnx",
+                output_path=str(out),
+                size_bytes=size,
+                success=True,
+            )
+        except Exception as exc:
+            logger.error(f"XGBoost ONNX export failed for {model_path}: {exc}")
+            return ExportResult(
+                model_name=Path(model_path).stem,
+                format="onnx",
+                output_path=output_path,
+                size_bytes=0,
+                success=False,
+                error=str(exc),
+            )
+
+    # --------------------------------------------------------------------- #
+    # EXPORT ALL SERVER MODELS (M6, M7, M9)
+    # --------------------------------------------------------------------- #
+
+    def export_all_server_models(self) -> list[ExportResult]:
+        """Export M6/M7/M9 in-process server models to ONNX for Fargate serving.
+
+        These models replaced their SageMaker real-time endpoints in E1 and
+        are now loaded lazily from S3 by the aether-ml service on first request
+        to each ``/v1/predict/<model>`` route.
+
+        Returns:
+            Flat list of ``ExportResult`` across all three models.
+        """
+        all_results: list[ExportResult] = []
+
+        for model_name, framework in _SERVER_ONNX_MODELS.items():
+            logger.info(f"Exporting server model '{model_name}' ({framework}) to ONNX")
+            model_dir = self.models_dir / model_name
+            output_path = str(self.output_dir / model_name / "onnx" / f"{model_name}.onnx")
+
+            model_file: Path | None = None
+            for ext in (".pkl", ".joblib", ".json", ".ubj"):
+                candidate = model_dir / f"{model_name}{ext}"
+                if candidate.exists():
+                    model_file = candidate
+                    break
+            if model_file is None and model_dir.exists():
+                for f in model_dir.iterdir():
+                    if f.is_file() and f.suffix in (".pkl", ".joblib", ".json", ".ubj"):
+                        model_file = f
+                        break
+
+            if model_file is None:
+                logger.warning(f"No model artifact found in {model_dir}")
+                all_results.append(ExportResult(
+                    model_name=model_name,
+                    format="onnx",
+                    output_path=output_path,
+                    size_bytes=0,
+                    success=False,
+                    error=f"Model artifact not found in {model_dir}",
+                ))
+                continue
+
+            feature_names = self._infer_feature_names(model_file)
+
+            if model_name in _XGBOOST_MODEL_NAMES:
+                task = "regression" if model_name == "ltv_prediction" else "classification"
+                result = self.export_xgboost_to_onnx(
+                    str(model_file), output_path, feature_names, task=task
+                )
+            else:
+                result = self.export_to_onnx(str(model_file), output_path, feature_names)
+
+            all_results.append(result)
+
+        successes = sum(1 for r in all_results if r.success)
+        failures = len(all_results) - successes
+        logger.info(f"Server model export complete: {successes} succeeded, {failures} failed")
+        return all_results
 
     # --------------------------------------------------------------------- #
     # EXPORT ALL EDGE MODELS
@@ -506,14 +648,20 @@ class ModelExporter:
 
 
 def export_all_edge_models() -> list[dict[str, Any]]:
-    """Convenience function for CLI/Makefile usage.
-
-    Creates a ``ModelExporter`` with default paths and exports all edge models.
-
-    Returns:
-        List of dictionaries, one per export, containing model name, format,
-        output path, file size, and success status.
-    """
+    """Convenience function for CLI/Makefile usage — exports M1/M2/M3 edge models."""
     exporter = ModelExporter()
     results = exporter.export_all_edge_models()
+    return [r.to_dict() for r in results]
+
+
+def export_all_server_models() -> list[dict[str, Any]]:
+    """Convenience function for CLI/Makefile usage — exports M6/M7/M9 server ONNX models.
+
+    M6 (churn_prediction) and M7 (ltv_prediction) are XGBoost tabular models
+    exported via onnxmltools. M9 (campaign_attribution) is a sklearn model
+    exported via skl2onnx. All three are loaded lazily from S3 by the
+    aether-ml Fargate service.
+    """
+    exporter = ModelExporter()
+    results = exporter.export_all_server_models()
     return [r.to_dict() for r in results]
