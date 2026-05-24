@@ -1,0 +1,69 @@
+---
+title: What is Aether?
+slug: overview
+section: home
+visibility: P
+audience: [exec, buyer, dev-junior, dev-senior]
+status: stable
+since_version: "8.8.0"
+estimated_read_minutes: 3
+toc_depth: 2
+---
+
+# What is Aether?
+
+Aether is a **unified behavioral analytics and Web3 data platform** that
+bridges traditional product analytics with on-chain economic observability.
+One SDK installation gives you real-time event capture, an identity graph,
+ML-powered user intelligence, and crypto-native reward flows — all from the
+same pipeline.
+
+## Key capabilities
+
+### Unified observation
+A single event schema covers Web, iOS, Android, and React Native. Every
+`track()` call flows through the same consent, enrichment, and storage
+pipeline regardless of platform.
+
+### Hybrid identity graph
+Aether links anonymous sessions, authenticated users, and wallet addresses
+into a single profile without a full-stack re-identification. The graph
+survives cross-device and cross-chain traversals.
+
+### Consent-first by design
+All events carry a `consent_purpose` tag validated at ingest.
+GDPR Subject Access Requests and erasure flows are built into the platform —
+not bolted on afterwards.
+
+### Economic observability
+Track token transfers, NFT mints, and stablecoin payments alongside your
+product events. The x402 Payment Protocol integration enables per-request
+micropayment metering.
+
+### Agent-native
+The agent layer supports approval-first commerce flows: an autonomous agent
+can propose a purchase, the platform routes it to the operator console for
+review, and the on-chain settlement happens only after human sign-off.
+
+## How it works
+
+```
+Your App
+  │  track("event", { …properties })
+  ▼
+Aether SDK  →  FastAPI Ingest  →  Kafka  →  Neptune Graph
+                                            PostgreSQL
+                                            Redis
+                                            S3 Data Lake
+```
+
+Events are validated against the canonical schema, fanned out to the
+storage targets, and made available for ML feature extraction and
+real-time dashboards in the Kyber operator console.
+
+## Next steps
+
+- [Quickstart — track your first event](/quickstart)
+- [Web SDK integration guide](/sdks/web)
+- [Event schema reference](/reference/events)
+- [Consent & GDPR guide](/concepts/consent)
