@@ -59,11 +59,16 @@ jobs:
         # schema and docs/_templates/page.template.mdx for new pages.
         run: python scripts/validate_frontmatter.py
 
-      - name: Detect doc source drift
-        # Hard-fails if a doc's `source_files:` frontmatter references a
-        # path that doesn't exist (renamed or deleted module). Staleness
-        # is advisory until `last_synced_commit` rollout completes.
-        run: python scripts/docs_drift.py
+      - name: Detect doc source drift (strict)
+        # Hard-fails on:
+        #   - source_files paths that don't exist (always fatal — typically
+        #     means a referenced module was renamed or deleted)
+        #   - staleness: any commit touched a doc's source_files after the
+        #     doc's last_synced_commit. Strict mode is enabled now that the
+        #     corpus is caught up (PRs #159–#164, #170 cleared all 17
+        #     originally-stale docs). The standard remediation is to run
+        #     `make docs-stamp` after a re-review pass.
+        run: python scripts/docs_drift.py --strict
 
       - name: Regenerate docs/_generated artifacts
         # Re-derives env.json, events.json, etc. from canonical sources.

@@ -20,7 +20,7 @@ source_files:
 canonical_owner: platform@aether
 estimated_read_minutes: 8
 toc_depth: 3
-last_synced_commit: 9ef8563
+last_synced_commit: 63e575d
 ---
 
 # Documentation Pipeline
@@ -120,9 +120,26 @@ CI rejects the PR if steps 2 or 4 were skipped.
 
 ## Known follow-ups
 
-- `docs_drift` staleness is **advisory**; promoting `--strict` to a CI
-  failure is pending a short authoring-discipline period.
 - `extract_openapi` and `extract_abis` generators are not yet built —
   they need a running FastAPI app and compiled Solidity respectively.
 - The `apps/docs/` frontend shell (Phase 6) renders these artifacts;
   not yet scaffolded.
+
+## Strict mode (enabled)
+
+CI runs `python scripts/docs_drift.py --strict`. Any commit that
+touches a path listed in a doc's `source_files:` without also bumping
+that doc's `last_synced_commit:` will fail the build.
+
+Two ways to remediate:
+
+1. **The change updates the doc's content.** Edit the doc, then run
+   `make docs-stamp` (or call `python scripts/docs_drift.py --update`
+   yourself) and commit the new `last_synced_commit:` value.
+
+2. **The change is incidental — the doc is still accurate.** Run
+   `make docs-stamp` to re-stamp without content edits. This is fine
+   as long as you actually verified the doc still reflects reality.
+
+Don't blanket-stamp without checking. The whole point of the gate is
+to force a human eye on every change a doc claims to describe.

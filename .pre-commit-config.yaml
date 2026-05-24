@@ -28,15 +28,14 @@ repos:
         files: '^(docs/.*\.(md|mdx)|scripts/docs_schema\.json|scripts/validate_frontmatter\.py)$'
         stages: [commit]
 
-      # Source-path drift - fails when a doc's source_files: points to a
-      # missing path (typically: a renamed or deleted module). Runs
-      # unconditionally: a commit that only renames/deletes a referenced
-      # module touches no doc, so a files filter would skip exactly the
-      # scenario this check exists to catch. Staleness stays advisory
-      # until the --strict rollout.
+      # Source-path drift + staleness (strict). Runs unconditionally: a
+      # commit that only renames/deletes a referenced module touches no
+      # doc, so a files filter would skip exactly the scenario this check
+      # exists to catch. --strict promotes staleness from advisory to
+      # fatal — matches the CI gate.
       - id: docs-drift
-        name: Check doc source paths exist
-        entry: python scripts/docs_drift.py
+        name: Check doc source paths + staleness (strict)
+        entry: python scripts/docs_drift.py --strict
         language: python
         pass_filenames: false
         always_run: true
