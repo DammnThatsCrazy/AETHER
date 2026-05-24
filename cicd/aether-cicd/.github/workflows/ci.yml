@@ -80,7 +80,7 @@ jobs:
       - uses: ./.github/actions/setup-node-python
         with:
           install-python: "true"
-          python-packages: "black ruff"
+          python-packages: "ruff"
       - name: ESLint (TypeScript)
         run: npx turbo run lint --filter='./packages/*' --filter='./services/*'
       - name: Ruff (Python)
