@@ -364,17 +364,7 @@ class ModelServer:
         self._versions: dict[str, str] = {}
         self._statuses: dict[str, str] = {name: "not_loaded" for name in MODEL_NAMES}
         self.start_time: float = time.time()
-
-    # --------------------------------------------------------------------- #
-    # Model loading
-    # --------------------------------------------------------------------- #
-
-    def load_all_models(self) -> list[str]:
-        """Attempt to load every known model from disk.
-
-        Returns a list of model names that loaded successfully.
-        """
-        loaders: dict[str, Any] = {
+        self._loaders: dict[str, Any] = {
             "intent_prediction": self._load_intent,
             "bot_detection": self._load_bot,
             "session_scorer": self._load_session,
@@ -385,76 +375,99 @@ class ModelServer:
             "anomaly_detection": self._load_anomaly,
             "identity_resolution": self._load_identity,
         }
+        self._stub_factories: dict[str, Any] = {
+            "intent_prediction": _StubIntentModel,
+            "bot_detection": _StubBotModel,
+            "session_scorer": _StubSessionModel,
+            "churn_prediction": _StubChurnModel,
+            "ltv_prediction": _StubLTVModel,
+            "journey_prediction": _StubJourneyModel,
+            "campaign_attribution": _StubAttributionModel,
+            "anomaly_detection": _StubAnomalyModel,
+            "identity_resolution": _StubIdentityModel,
+        }
 
-        loaded: list[str] = []
-        for name, loader in loaders.items():
-            model_path = self.models_dir / name
-            if not model_path.exists():
-                logger.debug("Model artifact not found: %s", model_path)
-                continue
+    # --------------------------------------------------------------------- #
+    # Model loading
+    # --------------------------------------------------------------------- #
+
+    @staticmethod
+    def _allow_stubs() -> bool:
+        return os.getenv("AETHER_ENV", "local").lower() not in ("production", "staging")
+
+    def discover_artifacts(self) -> list[str]:
+        """Return model names whose artifact directory exists on disk."""
+        if not self.models_dir.exists():
+            return []
+        return [name for name in MODEL_NAMES if (self.models_dir / name).exists()]
+
+    def _record(self, name: str, model: Any, version: str | None = None) -> Any:
+        self._models[name] = model
+        self._versions[name] = version or getattr(model, "version", "0.0.0")
+        self._statuses[name] = "loaded"
+        return model
+
+    def _load_one(self, name: str) -> Any:
+        """Load a single model from disk; fall back to a stub in dev environments."""
+        loader = self._loaders.get(name)
+        if loader is None:
+            raise HTTPException(
+                status_code=404,
+                detail=f"Unknown model '{name}'. Known: {list(self._loaders)}",
+            )
+
+        model_path = self.models_dir / name
+        if model_path.exists():
             try:
                 model = loader(model_path)
-                self._models[name] = model
-                self._versions[name] = getattr(model, "version", "0.0.0")
-                self._statuses[name] = "loaded"
-                loaded.append(name)
-                logger.info("Loaded model: %s (v%s)", name, self._versions[name])
+                logger.info("Loaded model on demand: %s", name)
+                return self._record(name, model)
             except Exception as exc:
                 self._statuses[name] = "error"
                 logger.warning("Failed to load %s: %s", name, exc)
+                raise HTTPException(
+                    status_code=503,
+                    detail=f"Model '{name}' failed to load: {exc}",
+                ) from exc
 
-        if not loaded:
-            import os
-            env = os.getenv("AETHER_ENV", "local").lower()
-            if env in ("production", "staging"):
-                logger.error(
-                    "CRITICAL: No trained ML model artifacts found in %s environment. "
-                    "ML serving will return errors until models are trained and deployed. "
-                    "Run: python -m training.pipelines.train --model all",
-                    env,
-                )
-                # Do NOT load stubs in production/staging — return empty so
-                # prediction endpoints return clear errors instead of fake data
-                return []
+        if self._allow_stubs():
+            factory = self._stub_factories[name]
+            logger.info("No artifact for %s; using stub (local/dev mode only)", name)
+            return self._record(name, factory(), version="test-stub")
 
-            stub_models = {
-                "intent_prediction": _StubIntentModel(),
-                "bot_detection": _StubBotModel(),
-                "session_scorer": _StubSessionModel(),
-                "churn_prediction": _StubChurnModel(),
-                "ltv_prediction": _StubLTVModel(),
-                "journey_prediction": _StubJourneyModel(),
-                "campaign_attribution": _StubAttributionModel(),
-                "anomaly_detection": _StubAnomalyModel(),
-                "identity_resolution": _StubIdentityModel(),
-            }
-            for name, model in stub_models.items():
-                self._models[name] = model
-                self._versions[name] = getattr(model, "version", "test-stub")
-                self._statuses[name] = "loaded"
-            loaded = list(stub_models.keys())
-            logger.info("No serialized models found; loaded stub models (local/dev mode only)")
+        self._statuses[name] = "not_loaded"
+        raise HTTPException(
+            status_code=503,
+            detail=(
+                f"Model '{name}' has no artifact at {model_path}. "
+                "Train and deploy the model before serving requests."
+            ),
+        )
 
-        return loaded
+    def load_all_models(self) -> list[str]:
+        """Eagerly load every model with an artifact on disk.
+
+        Retained for tests and admin tooling. Production startup uses lazy
+        per-route loading via :meth:`get_model` and does NOT call this.
+        """
+        for name in MODEL_NAMES:
+            if name in self._models:
+                continue
+            try:
+                self._load_one(name)
+            except HTTPException:
+                continue
+        return self.loaded_models()
 
     # --------------------------------------------------------------------- #
     # Model access
     # --------------------------------------------------------------------- #
 
     def get_model(self, name: str) -> Any:
-        """Return a loaded model by canonical name.
-
-        Raises:
-            HTTPException: If the model is not loaded.
-        """
-        if not self._models:
-            self.load_all_models()
-        if name not in self._models:
-            raise HTTPException(
-                status_code=503,
-                detail=f"Model '{name}' is not loaded. Available: {self.loaded_models()}",
-            )
-        return self._models[name]
+        """Return a loaded model by canonical name, loading it on first use."""
+        if name in self._models:
+            return self._models[name]
+        return self._load_one(name)
 
     def loaded_models(self) -> list[str]:
         """Return the names of all successfully loaded models."""
@@ -568,24 +581,30 @@ class ModelServer:
 server = ModelServer()
 
 
-def _ensure_models_loaded() -> None:
-    if not server.loaded_models():
-        server.load_all_models()
-
-
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """Application lifespan: load models on startup, clean up on shutdown."""
-    _ensure_models_loaded()
-    loaded = server.loaded_models()
+    """Application lifespan: announce model artifacts, clean up on shutdown.
+
+    Models load lazily on first request to keep startup fast and resilient.
+    If no artifacts exist in a production environment, the service still comes
+    up; the first prediction request will surface a clear 503 and trigger
+    existing alarming, rather than CrashLoopBackOff hiding the root cause.
+    """
+    available = server.discover_artifacts()
     env = os.getenv("AETHER_ENV", "local").lower()
-    if not loaded and env in ("production", "staging"):
-        raise RuntimeError(
-            f"FATAL: No ML models loaded in {env}. "
-            "Deploy model artifacts to /opt/ml/models before starting serving. "
-            "Run: python -m training.pipelines.train --model all"
+    if not available and env in ("production", "staging"):
+        logger.error(
+            "No ML model artifacts found in %s at %s. Prediction routes will return 503 "
+            "until artifacts are deployed.",
+            env,
+            server.models_dir,
         )
-    logger.info("Serving %d models: %s", len(loaded), loaded)
+    else:
+        logger.info(
+            "Lazy-loading enabled. %d artifact(s) discovered: %s",
+            len(available),
+            available,
+        )
 
     # Start extraction defense cleanup task if defense is enabled
     _cleanup_task = None
@@ -750,8 +769,11 @@ def _apply_output_defense(request: Request, value: float, features: dict) -> flo
 
 @app.get("/health", response_model=HealthResponse)
 async def health() -> HealthResponse:
-    """Return service health status, loaded models, and uptime."""
-    _ensure_models_loaded()
+    """Return service health status, loaded models, and uptime.
+
+    Does NOT trigger model loading — this endpoint must stay sub-millisecond
+    so load balancer health checks pass immediately after container start.
+    """
     return HealthResponse(
         status="healthy",
         version="4.0.0",
@@ -763,7 +785,6 @@ async def health() -> HealthResponse:
 @app.get("/models")
 async def list_models() -> dict[str, list[dict[str, Any]]]:
     """Return metadata for every known model including load status."""
-    _ensure_models_loaded()
     return {"models": [model.model_dump() for model in server.model_info()]}
 
 

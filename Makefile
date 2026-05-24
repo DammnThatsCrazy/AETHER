@@ -13,6 +13,7 @@
         test test-security test-ml test-coverage \
         lint format typecheck \
         serve-backend serve-ml \
+        dev dev-streaming dev-analytics dev-full dev-down \
         docker-up docker-down docker-logs \
         smoke byok-reencrypt \
         clean validate-docs validate-frontmatter extract-docs docs-drift docs-stamp docs bump-version help
@@ -80,7 +81,34 @@ serve-ml: ## Start the ML serving API (port 8080)
 	python -m uvicorn serving.src.api:app --host 0.0.0.0 --port 8080 --reload
 
 # ---------------------------------------------------------------------------
-# Docker
+# Dev shortcuts (minimal boot — default stack only)
+# ---------------------------------------------------------------------------
+
+dev: ## Start minimal dev stack: postgres + redis + backend + ml-serving (~2 GB RAM)
+	docker compose up -d
+	@echo ""
+	@echo "  Backend API:  http://localhost:8000"
+	@echo "  ML Serving:   http://localhost:8080"
+	@echo ""
+	@echo "  Profiles available:"
+	@echo "    make dev-streaming   add Kafka + Zookeeper"
+	@echo "    make dev-analytics   add ClickHouse"
+	@echo "    make dev-full        everything"
+
+dev-streaming: ## Add Kafka + Zookeeper to the running stack
+	docker compose --profile streaming up -d
+
+dev-analytics: ## Add ClickHouse to the running stack
+	docker compose --profile analytics up -d
+
+dev-full: ## Start full stack with all optional services (~8 GB RAM)
+	docker compose --profile full up -d
+
+dev-down: ## Stop all dev services
+	docker compose --profile full down
+
+# ---------------------------------------------------------------------------
+# Docker (legacy aliases — prefer dev/dev-down for daily use)
 # ---------------------------------------------------------------------------
 
 docker-up: ## Start full stack via docker compose

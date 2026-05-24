@@ -87,7 +87,7 @@ cmd_lint() {
 
 cmd_format() {
     echo -e "${BLUE}[aether] Formatting...${NC}"
-    black .
+    ruff format .
     ruff check --fix .
     echo -e "${GREEN}[aether] Format complete.${NC}"
 }

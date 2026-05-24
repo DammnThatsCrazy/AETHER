@@ -7,41 +7,55 @@ name = "aether-ml"
 version = "4.0.0"
 description = "Aether ML — Hybrid prediction engine for behavioral analytics"
 requires-python = ">=3.10"
+# Base deps are the minimum required to import the package and run the
+# serving API in stub mode. Heavy ML libraries live in optional extras so
+# that the serving container can be slimmed independently of training.
 dependencies = [
-    "torch>=2.2.0",
-    "tensorflow>=2.15.0",
-    "scikit-learn>=1.4.0",
-    "xgboost>=2.0.0",
     "numpy>=1.26.0",
     "pandas>=2.2.0",
-    "pyarrow>=15.0.0",
-    "mlflow>=2.11.0",
-    "boto3>=1.34.0",
     "pydantic>=2.6.0",
     "fastapi>=0.110.0",
     "uvicorn>=0.27.0",
-    "onnx>=1.15.0",
-    "onnxruntime>=1.17.0",
-    "tensorflowjs>=4.17.0",
-    "networkx>=3.2.0",
-    "lifetimes>=0.11.0",
-    "redis>=5.0.0",
+    "boto3>=1.34.0",
 ]
 
 [project.optional-dependencies]
+# Serving runtime: ONNX inference + S3 artifact fetch. Sized to fit in a
+# <1 GB container with no torch/tensorflow/xgboost.
+serving = [
+    "onnxruntime>=1.17.0",
+    "onnx>=1.15.0",
+    "pyarrow>=15.0.0",
+]
+
+# Training & native-format inference: full ML stack. Required by any code
+# path that imports the native model classes (server.models, edge.models,
+# server.journey_prediction, server.campaign_attribution).
+training = [
+    "torch>=2.2.0",
+    "tensorflow>=2.15.0",
+    "tensorflowjs>=4.17.0",
+    "scikit-learn>=1.4.0",
+    "xgboost>=2.0.0",
+    "mlflow>=2.11.0",
+    "networkx>=3.2.0",
+    "lifetimes>=0.11.0",
+    "onnx>=1.15.0",
+    "onnxruntime>=1.17.0",
+]
+
+# Backwards-compat alias. Existing CI and Dockerfile stages reference no
+# extras (bare `pip install -e .`), and that still works — the serving
+# image will swap to `.[serving]` once server-side ONNX exports land.
+all = [
+    "aether-ml[serving,training,dev]",
+]
+
 dev = [
     "pytest>=8.0.0",
     "pytest-asyncio>=0.23.0",
+    "pytest-xdist>=3.5.0",
     "mypy>=1.8.0",
-    "ruff>=0.3.0",
-    "black>=24.2.0",
+    "ruff>=0.4.0",
     "jupyter>=1.0.0",
 ]
-
-[tool.ruff]
-line-length = 120
-target-version = "py310"
-
-[tool.mypy]
-python_version = "3.10"
-strict = true
