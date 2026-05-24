@@ -28,6 +28,14 @@ except ImportError:
     aioredis = None  # type: ignore[assignment]
     REDIS_AVAILABLE = False
 
+# Optional boto3 import (used for DynamoDB cache backend)
+try:
+    import boto3 as _boto3_cache
+    BOTO3_CACHE_AVAILABLE = True
+except ImportError:
+    _boto3_cache = None  # type: ignore[assignment]
+    BOTO3_CACHE_AVAILABLE = False
+
 
 # ═══════════════════════════════════════════════════════════════════════════
 # TTL PRESETS (seconds)
@@ -249,6 +257,127 @@ class _RedisBackend:
 
 
 # ═══════════════════════════════════════════════════════════════════════════
+# DYNAMODB BACKEND (alternative production backend)
+# ═══════════════════════════════════════════════════════════════════════════
+
+class _DynamoDBBackend:
+    """DynamoDB-backed cache using sync boto3 wrapped in asyncio executor.
+
+    Table schema:
+      PK  cache_key  (String)
+      val            (String)  — stored value
+      cnt            (Number)  — used by incr
+      ttl            (Number)  — DynamoDB TTL attribute (epoch seconds)
+    """
+
+    def __init__(self, table_name: str) -> None:
+        if not BOTO3_CACHE_AVAILABLE:
+            raise RuntimeError(
+                "boto3 not installed. Install with: pip install boto3>=1.34.0"
+            )
+        self._table_name = table_name
+        self._table: Optional[Any] = None
+
+    def _get_table(self) -> Any:
+        if self._table is None:
+            resource = _boto3_cache.resource("dynamodb")  # type: ignore[union-attr]
+            self._table = resource.Table(self._table_name)
+        return self._table
+
+    async def _run(self, fn: Any) -> Any:
+        loop = asyncio.get_event_loop()
+        return await loop.run_in_executor(None, fn)
+
+    async def get(self, key: str) -> Optional[str]:
+        now = int(time.time())
+        response = await self._run(
+            lambda: self._get_table().get_item(Key={"cache_key": key})
+        )
+        item = response.get("Item")
+        if item is None:
+            return None
+        ttl_val = item.get("ttl")
+        if ttl_val is not None and int(ttl_val) < now:
+            return None
+        return item.get("val")
+
+    async def set(self, key: str, value: str, ttl: int = TTL.MEDIUM) -> None:
+        expires_at = int(time.time()) + ttl if ttl > 0 else None
+        item: dict[str, Any] = {"cache_key": key, "val": value}
+        if expires_at is not None:
+            item["ttl"] = expires_at
+        await self._run(lambda: self._get_table().put_item(Item=item))
+
+    async def delete(self, key: str) -> None:
+        await self._run(
+            lambda: self._get_table().delete_item(Key={"cache_key": key})
+        )
+
+    async def delete_pattern(self, pattern: str) -> int:
+        # DynamoDB has no native pattern scan; perform a full scan with filter
+        prefix = pattern.rstrip("*")
+        loop = asyncio.get_event_loop()
+
+        def _scan_and_delete() -> int:
+            table = self._get_table()
+            count = 0
+            last_key = None
+            while True:
+                kwargs: dict[str, Any] = {
+                    "ProjectionExpression": "cache_key",
+                    "FilterExpression": "begins_with(cache_key, :pfx)",
+                    "ExpressionAttributeValues": {":pfx": prefix},
+                }
+                if last_key:
+                    kwargs["ExclusiveStartKey"] = last_key
+                resp = table.scan(**kwargs)
+                for item in resp.get("Items", []):
+                    table.delete_item(Key={"cache_key": item["cache_key"]})
+                    count += 1
+                last_key = resp.get("LastEvaluatedKey")
+                if not last_key:
+                    break
+            return count
+
+        return await loop.run_in_executor(None, _scan_and_delete)
+
+    async def exists(self, key: str) -> bool:
+        return await self.get(key) is not None
+
+    async def incr(self, key: str, ttl: int = 60) -> int:
+        expires_at = int(time.time()) + ttl if ttl > 0 else None
+        update_expr = "ADD cnt :one"
+        expr_values: dict[str, Any] = {":one": 1}
+        if expires_at is not None:
+            update_expr += " SET #t = if_not_exists(#t, :ttl)"
+            expr_values[":ttl"] = expires_at
+
+        def _update() -> int:
+            kwargs: dict[str, Any] = {
+                "Key": {"cache_key": key},
+                "UpdateExpression": update_expr,
+                "ExpressionAttributeValues": expr_values,
+                "ReturnValues": "ALL_NEW",
+            }
+            if expires_at is not None:
+                kwargs["ExpressionAttributeNames"] = {"#t": "ttl"}
+            resp = self._get_table().update_item(**kwargs)
+            return int(resp["Attributes"].get("cnt", 1))
+
+        return await asyncio.get_event_loop().run_in_executor(None, _update)
+
+    async def ping(self) -> bool:
+        try:
+            await self._run(lambda: self._get_table().table_status)
+            return True
+        except Exception:
+            return False
+
+    async def close(self) -> None:
+        self._table = None
+
+
+# ═══════════════════════════════════════════════════════════════════════════
 # CACHE CLIENT (public API — auto-selects backend)
 # ═══════════════════════════════════════════════════════════════════════════
 
@@ -262,13 +391,18 @@ class CacheClient:
     """
 
     def __init__(self) -> None:
-        self._backend: Optional[_InMemoryBackend | _RedisBackend] = None
+        self._backend: Optional[_InMemoryBackend | _RedisBackend | _DynamoDBBackend] = None
         self._connected = False
         self._mode = "uninitialized"
 
     async def connect(self) -> None:
         """Initialize the cache backend based on environment."""
-        if _is_local_env() or not REDIS_AVAILABLE:
+        dynamo_table = os.getenv("DYNAMODB_CACHE_TABLE", "")
+        if dynamo_table and BOTO3_CACHE_AVAILABLE:
+            self._backend = _DynamoDBBackend(dynamo_table)
+            self._mode = "dynamodb"
+            logger.info(f"Cache client connected (DynamoDB table: {dynamo_table})")
+        elif _is_local_env() or not REDIS_AVAILABLE:
             if not _is_local_env() and not REDIS_AVAILABLE:
                 logger.warning(
                     "Redis package not installed — using in-memory cache. "

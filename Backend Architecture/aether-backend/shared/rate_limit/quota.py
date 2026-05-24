@@ -14,6 +14,7 @@ Storage:
 
 from __future__ import annotations
 
+import asyncio
 import os
 import time
 from dataclasses import dataclass
@@ -40,8 +41,21 @@ except ImportError:
     aioredis = None  # type: ignore[assignment]
     REDIS_AVAILABLE = False
 
+# Optional boto3 import (used for DynamoDB quota backend)
+try:
+    import boto3 as _boto3_quota
+    BOTO3_QUOTA_AVAILABLE = True
+except ImportError:
+    _boto3_quota = None  # type: ignore[assignment]
+    BOTO3_QUOTA_AVAILABLE = False
 
-REDIS_TTL_SECONDS = 35 * 86400  # 35 days
+
+REDIS_TTL_SECONDS = 35 * 86400   # 35 days
+DYNAMO_TTL_SECONDS = 35 * 86400  # 35 days
+
+
+def _dynamo_quota_table() -> str:
+    return os.getenv("DYNAMODB_QUOTA_TABLE", "")
 
 
 @dataclass
