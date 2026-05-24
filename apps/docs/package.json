@@ -1,0 +1,30 @@
+{
+  "name": "@aether/docs",
+  "version": "8.8.0",
+  "private": true,
+  "license": "UNLICENSED",
+  "type": "module",
+  "description": "Documentation site — renders authored MDX + generated artifacts to three tiers (public, customer portal, internal).",
+  "scripts": {
+    "dev": "vite --port 5176",
+    "build": "tsc --noEmit && vite build",
+    "preview": "vite preview --port 5176",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint 'src/**/*.{ts,tsx}' --fix",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "react-router-dom": "^7.0.0"
+  },
+  "devDependencies": {
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "@vitejs/plugin-react": "^4.3.0",
+    "eslint": "^9.0.0",
+    "typescript": "^5.4.0",
+    "vite": "^6.0.0",
+    "vitest": "^1.6.0"
+  }
+}

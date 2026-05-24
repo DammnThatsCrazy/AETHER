@@ -9,7 +9,8 @@
     "packages/web",
     "packages/react-native",
     "apps/kyber",
-    "apps/aether"
+    "apps/aether",
+    "apps/docs"
   ],
   "scripts": {
     "build": "npm run build --workspaces --if-present",
