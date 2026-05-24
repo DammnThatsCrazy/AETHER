@@ -41,11 +41,14 @@ SKIP_DIRS = {"_generated", "_templates", "archive"}
 
 FRONTMATTER_RE = re.compile(r"^---\s*\n(.*?)\n---", re.DOTALL)
 
-KEPT_KEYS = {
+# Ordered tuple — sets have non-deterministic iteration order which
+# would break the byte-identical-output guarantee that the drift gate
+# depends on. Don't change to a set.
+KEPT_KEYS = (
     "title", "slug", "section", "visibility", "audience", "status",
     "since_version", "estimated_read_minutes", "toc_depth",
     "canonical_owner", "flags",
-}
+)
 
 
 def _read_frontmatter(path: Path) -> dict | None:
