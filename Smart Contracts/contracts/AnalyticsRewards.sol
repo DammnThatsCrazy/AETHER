@@ -142,6 +142,33 @@ contract AnalyticsRewards is
         _grantRole(CAMPAIGN_MANAGER_ROLE, _admin);
     }
 
+
+    /**
+     * @dev Prevent direct ORACLE_ROLE mutations through AccessControl entrypoints.
+     *      Use rotateOracle() to keep oracleSigner synchronized with role membership.
+     */
+    function grantRole(bytes32 role, address account)
+        public
+        override(AccessControl)
+        onlyRole(getRoleAdmin(role))
+    {
+        if (role == ORACLE_ROLE) revert OracleRoleManagedViaRotateOracle();
+        super.grantRole(role, account);
+    }
+
+    /**
+     * @dev Prevent direct ORACLE_ROLE mutations through AccessControl entrypoints.
+     *      Use rotateOracle() to keep oracleSigner synchronized with role membership.
+     */
+    function revokeRole(bytes32 role, address account)
+        public
+        override(AccessControl)
+        onlyRole(getRoleAdmin(role))
+    {
+        if (role == ORACLE_ROLE) revert OracleRoleManagedViaRotateOracle();
+        super.revokeRole(role, account);
+    }
+
     // ──────────────────────────────────────────────
     //  Core — Claim Reward
     // ──────────────────────────────────────────────
