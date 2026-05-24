@@ -212,8 +212,8 @@ variable "alert_email" {
 
 variable "log_retention_days" {
   type        = number
-  description = "CloudWatch log retention period in days"
-  default     = 30
+  description = "CloudWatch log retention period in days (INFO/DEBUG ship to S3 via Vector; keep only WARN+ in CW)"
+  default     = 3
 }
 
 # --------------------------------------------------------------------------

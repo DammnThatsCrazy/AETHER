@@ -388,6 +388,9 @@ resource "aws_cloudwatch_dashboard" "main" {
           }
         },
         # ── Row 3: DynamoDB ───────────────────────────────────────────
+        # SEARCH expressions aggregate across all tables so no TableName
+        # dimension is required. Without a dimension the bare metrics arrays
+        # produce empty graphs because DynamoDB throttle events are per-table.
         {
           type   = "metric"
           x      = 0
@@ -395,12 +398,14 @@ resource "aws_cloudwatch_dashboard" "main" {
           width  = 8
           height = 6
           properties = {
-            title  = "DynamoDB Read Throttles"
+            title  = "DynamoDB Read Throttles (all tables)"
             view   = "timeSeries"
             region = data.aws_region.current.name
             metrics = [[
-              "AWS/DynamoDB", "ReadThrottleEvents",
-              { stat = "Sum", color = "#d62728" }
+              { expression = "SUM(SEARCH('{AWS/DynamoDB,TableName} MetricName=\"ReadThrottleEvents\"', 'Sum', 300))"
+                id    = "read_throttles"
+                label = "Read Throttles"
+                color = "#d62728" }
             ]]
           }
         },
@@ -411,12 +416,14 @@ resource "aws_cloudwatch_dashboard" "main" {
           width  = 8
           height = 6
           properties = {
-            title  = "DynamoDB Write Throttles"
+            title  = "DynamoDB Write Throttles (all tables)"
             view   = "timeSeries"
             region = data.aws_region.current.name
             metrics = [[
-              "AWS/DynamoDB", "WriteThrottleEvents",
-              { stat = "Sum", color = "#d62728" }
+              { expression = "SUM(SEARCH('{AWS/DynamoDB,TableName} MetricName=\"WriteThrottleEvents\"', 'Sum', 300))"
+                id    = "write_throttles"
+                label = "Write Throttles"
+                color = "#d62728" }
             ]]
           }
         },

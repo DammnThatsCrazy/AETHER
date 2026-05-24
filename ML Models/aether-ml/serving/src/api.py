@@ -511,65 +511,75 @@ class ModelServer:
     # --------------------------------------------------------------------- #
 
     def _load_intent(self, path: Path) -> Any:
-        from edge.models import IntentPredictionModel
+        from edge.models import IntentPrediction
 
-        m = IntentPredictionModel()
+        m = IntentPrediction()
         m.load(path)
         return m
 
     def _load_bot(self, path: Path) -> Any:
-        from edge.models import BotDetectionModel
+        from edge.models import BotDetection
 
-        m = BotDetectionModel()
+        m = BotDetection()
         m.load(path)
         return m
 
     def _load_session(self, path: Path) -> Any:
-        from edge.models import SessionScorerModel
+        from edge.models import SessionScorer
 
-        m = SessionScorerModel()
+        m = SessionScorer()
         m.load(path)
         return m
 
     def _load_churn(self, path: Path) -> Any:
-        from server.models import ChurnPredictionModel
-
-        m = ChurnPredictionModel()
+        # Prefer ONNX artifact (slim serving image, no XGBoost required).
+        from serving.src.onnx_models import OnnxChurnModel
+        onnx = OnnxChurnModel.load(path, "churn_prediction")
+        if onnx is not None:
+            return onnx
+        # Fall back to native XGBoost loader (training image only).
+        from server.models import ChurnPrediction
+        m = ChurnPrediction()
         m.load(path)
         return m
 
     def _load_ltv(self, path: Path) -> Any:
-        from server.models import LTVPredictionModel
-
-        m = LTVPredictionModel()
+        # Prefer ONNX artifact (slim serving image, no XGBoost required).
+        from serving.src.onnx_models import OnnxLTVModel
+        onnx = OnnxLTVModel.load(path, "ltv_prediction")
+        if onnx is not None:
+            return onnx
+        # Fall back to native XGBoost loader (training image only).
+        from server.models import LTVPrediction
+        m = LTVPrediction()
         m.load(path)
         return m
 
     def _load_journey(self, path: Path) -> Any:
-        from server.journey_prediction import JourneyPredictionModel
+        from server.journey_prediction import JourneyPrediction
 
-        m = JourneyPredictionModel()
+        m = JourneyPrediction()
         m.load(path)
         return m
 
     def _load_attribution(self, path: Path) -> Any:
-        from server.campaign_attribution import CampaignAttributionModel
+        from server.campaign_attribution import CampaignAttribution
 
-        m = CampaignAttributionModel()
+        m = CampaignAttribution()
         m.load(path)
         return m
 
     def _load_anomaly(self, path: Path) -> Any:
-        from server.models import AnomalyDetectionModel
+        from server.models import AnomalyDetection
 
-        m = AnomalyDetectionModel()
+        m = AnomalyDetection()
         m.load(path)
         return m
 
     def _load_identity(self, path: Path) -> Any:
-        from server.models import IdentityResolutionModel
+        from server.models import IdentityResolution
 
-        m = IdentityResolutionModel()
+        m = IdentityResolution()
         m.load(path)
         return m
 
