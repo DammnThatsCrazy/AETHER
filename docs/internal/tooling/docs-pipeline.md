@@ -20,7 +20,7 @@ source_files:
 canonical_owner: platform@aether
 estimated_read_minutes: 8
 toc_depth: 3
-last_synced_commit: c37edbb
+last_synced_commit: 699506b
 ---
 
 # Documentation Pipeline
@@ -123,11 +123,14 @@ CI rejects the PR if steps 2 or 4 were skipped.
 
 - `extract_openapi` and `extract_abis` generators are not yet built —
   they need a running FastAPI app and compiled Solidity respectively.
-- `apps/docs/` (Phase 6) is scaffolded as of slice 1 — Vite + React 19
-  hello-world that builds against the workspace. Subsequent slices add
-  MDX rendering, frontmatter-based visibility partitioning into the
-  three deployable bundles (`out-public/`, `out-portal/`,
-  `out-internal/`), and pages that render `docs/_generated/*.json`.
+- `apps/docs/` (Phase 6) — current state:
+  - Slice 1: Vite + React 19 workspace scaffold
+  - Slice 2: MDX rendering via `@mdx-js/rollup` + `remark-frontmatter`
+  - Slice 3: `extract_doc_manifest` generator + `DocIndex` + `DocViewer` + routing
+  - Slice 4: Three build outputs (`out-public/`, `out-portal/`,
+    `out-internal/`) — `VITE_TIER=P/C/I` baked at build time via
+    `npm run build:public`, `build:portal`, `build:internal`
+  - Upcoming: `docs/nav.config.ts` sidebar, generator-artifact pages
 
 ## Strict mode (enabled)
 
