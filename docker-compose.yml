@@ -1,20 +1,23 @@
 # =============================================================================
-# Aether Platform — Full Stack Docker Compose
+# Aether Platform — Docker Compose
 #
-# Default (no flags): postgres, redis, backend, ml-serving — the minimum
-# stack a developer needs to run the app. ~2 GB RAM, ~30 s to boot.
+# Default (no flags): postgres + redis + backend + ml-serving.
+# Redis stays in default until the DynamoDB caching layer (E1) lands and the
+# backend's cache client is switched over.
 #
 # Profiles (opt-in):
-#   --profile streaming      kafka + zookeeper (event-driven work)
+#   --profile streaming      LocalStack SQS+SNS (replaces Kafka in prod)
 #   --profile analytics      clickhouse (analytics queries)
-#   --profile observability  prometheus
+#   --profile observability  prometheus + grafana
 #   --profile demo           kyber demo frontend
+#   --profile notebooks      jupyter lab (ML training image)
 #   --profile full           everything
 #
 # Usage:
-#   docker compose up -d                          Default minimal stack
-#   docker compose --profile streaming up -d      Add Kafka/Zookeeper
-#   docker compose --profile full up -d           Everything
+#   make dev                                      Default minimal stack
+#   make dev-streaming                            Add LocalStack SQS+SNS
+#   make dev-notebooks                            Add Jupyter (ML)
+#   make dev-full                                 Everything
 #   docker compose logs -f
 #   docker compose down
 # =============================================================================
@@ -51,32 +54,25 @@ services:
       timeout: 3s
       retries: 3
 
-  zookeeper:
-    image: confluentinc/cp-zookeeper:7.6.0
+  # LocalStack — local SQS+SNS for streaming development (replaces Kafka in prod).
+  # Exposes the AWS SDK-compatible endpoint at http://localhost:4566.
+  # Set AWS_ENDPOINT_URL=http://localstack:4566 in service env to route
+  # aiosqs / boto3 calls here instead of real AWS.
+  localstack:
+    image: localstack/localstack:3
     profiles: ["streaming", "full"]
     ports:
-      - "2181:2181"
+      - "4566:4566"
     environment:
-      ZOOKEEPER_CLIENT_PORT: 2181
-      ZOOKEEPER_TICK_TIME: 2000
-
-  kafka:
-    image: confluentinc/cp-kafka:7.6.0
-    profiles: ["streaming", "full"]
-    ports:
-      - "9092:9092"
-    depends_on:
-      - zookeeper
-    environment:
-      KAFKA_BROKER_ID: 1
-      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
-      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092
-      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
-      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
+      SERVICES: sqs,sns
+      DEFAULT_REGION: us-east-1
+      LOCALSTACK_AUTH_TOKEN: ${LOCALSTACK_AUTH_TOKEN:-}
+    volumes:
+      - localstack_data:/var/lib/localstack
     healthcheck:
-      test: ["CMD-SHELL", "kafka-topics --bootstrap-server localhost:9092 --list"]
-      interval: 15s
-      timeout: 10s
+      test: ["CMD-SHELL", "curl -sf http://localhost:4566/_localstack/health | grep -q '\"sqs\"'"]
+      interval: 10s
+      timeout: 5s
       retries: 5
 
   clickhouse:
@@ -109,8 +105,11 @@ services:
       DATABASE_URL: postgresql://aether:aether_dev_password@postgres:5432/aether
       REDIS_HOST: redis
       REDIS_PORT: "6379"
-      KAFKA_BOOTSTRAP_SERVERS: ${KAFKA_BOOTSTRAP_SERVERS:-kafka:9092}
-      KAFKA_BROKERS: ${KAFKA_BROKERS:-kafka:9092}
+      # SQS: point to LocalStack when running --profile streaming, else real AWS.
+      AWS_ENDPOINT_URL: ${AWS_ENDPOINT_URL:-http://localstack:4566}
+      AWS_DEFAULT_REGION: ${AWS_DEFAULT_REGION:-us-east-1}
+      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID:-test}
+      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY:-test}
       ML_SERVING_URL: http://ml-serving:8080
       JWT_SECRET: ${JWT_SECRET:?JWT_SECRET is required — run deploy/staging/bootstrap.sh or set manually}
       BYOK_ENCRYPTION_KEY: ${BYOK_ENCRYPTION_KEY:-}
@@ -163,6 +162,21 @@ services:
       JOURNEY_CONSUMER_AUTOSTART: "1"
       ICEBERG_CATALOG_URI: ${ICEBERG_CATALOG_URI:-}
       ICEBERG_S3_BUCKET:   ${ICEBERG_S3_BUCKET:-aether-snapshots-dev}
+
+  # Jupyter Lab — interactive ML exploration using the training image.
+  # Access at http://localhost:8888 (token printed in container logs).
+  jupyter:
+    build:
+      context: "ML Models/aether-ml"
+      dockerfile: docker/Dockerfile
+      target: training
+    profiles: ["notebooks", "full"]
+    ports:
+      - "8888:8888"
+    command: jupyter lab --ip=0.0.0.0 --port=8888 --allow-root --no-browser --NotebookApp.token=''
+    volumes:
+      - ./ML Models/aether-ml:/app
+      - jupyter_data:/root/.jupyter
 
   kyber:
     build:
@@ -219,3 +233,5 @@ volumes:
   clickhouse_data:
   prometheus_data:
   grafana_data:
+  localstack_data:
+  jupyter_data:

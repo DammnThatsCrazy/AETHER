@@ -13,7 +13,7 @@
         test test-security test-ml test-coverage \
         lint format typecheck \
         serve-backend serve-ml \
-        dev dev-streaming dev-analytics dev-full dev-down \
+        dev dev-streaming dev-analytics dev-notebooks dev-full dev-down \
         docker-up docker-down docker-logs \
         smoke byok-reencrypt \
         clean validate-docs validate-frontmatter extract-docs docs-drift docs-stamp docs bump-version help
@@ -90,21 +90,30 @@ dev: ## Start minimal dev stack: postgres + redis + backend + ml-serving (~2 GB 
 	@echo "  Backend API:  http://localhost:8000"
 	@echo "  ML Serving:   http://localhost:8080"
 	@echo ""
-	@echo "  Profiles available:"
-	@echo "    make dev-streaming   add Kafka + Zookeeper"
-	@echo "    make dev-analytics   add ClickHouse"
+	@echo "  Add-on profiles:"
+	@echo "    make dev-streaming   LocalStack SQS+SNS (prod streaming equivalent)"
+	@echo "    make dev-analytics   ClickHouse (analytics queries)"
+	@echo "    make dev-notebooks   Jupyter Lab (ML training)"
 	@echo "    make dev-full        everything"
 
-dev-streaming: ## Add Kafka + Zookeeper to the running stack
+dev-streaming: ## Add LocalStack SQS+SNS to the running stack (prod streaming equivalent)
 	docker compose --profile streaming up -d
+	@echo ""
+	@echo "  LocalStack SQS+SNS:  http://localhost:4566"
+	@echo "  Set AWS_ENDPOINT_URL=http://localhost:4566 for local boto3 calls."
 
 dev-analytics: ## Add ClickHouse to the running stack
 	docker compose --profile analytics up -d
 
+dev-notebooks: ## Start Jupyter Lab for ML exploration (http://localhost:8888)
+	docker compose --profile notebooks up -d
+	@echo ""
+	@echo "  Jupyter Lab: http://localhost:8888 (no token required)"
+
 dev-full: ## Start full stack with all optional services (~8 GB RAM)
 	docker compose --profile full up -d
 
-dev-down: ## Stop all dev services
+dev-down: ## Stop all dev services and remove containers
 	docker compose --profile full down
 
 # ---------------------------------------------------------------------------
