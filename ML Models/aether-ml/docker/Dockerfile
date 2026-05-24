@@ -45,17 +45,17 @@ RUN mkdir -p /opt/ml/model /opt/ml/input /opt/ml/output
 ENTRYPOINT ["python", "-m", "training.pipelines.train"]
 
 # ---------------------------------------------------------------------------
-# Stage 3 — Serving image (slim target: ONNX runtime only).
+# Stage 3 — Serving image (slim: ONNX runtime only, ~600 MB).
 #
-# Today this still installs the [training] extras because the native model
-# loaders in server/*.py import torch / xgboost / tensorflow. Once
-# server-side ONNX exports land (M6, M7, M9 are tabular and trivial; M4,
-# M5, M8-AE follow), flip the extras to just `.[serving]` and the image
-# drops from ~4.5 GB to ~600 MB with no API contract change.
+# M6/M7 churn and LTV are served via OnnxChurnModel / OnnxLTVModel when an
+# *.onnx artifact is present (see serving/src/onnx_models.py); the native
+# XGBoost loaders are only reached as a fallback in the training image.
+# M4/M5/M8 (identity, journey, anomaly-AE) are on SageMaker Serverless.
+# M9 (attribution) is algorithmic — only needs numpy/pandas (base deps).
 # ---------------------------------------------------------------------------
 FROM base AS serving
 
-RUN pip install -e ".[serving,training]"
+RUN pip install -e ".[serving]"
 
 COPY common/ common/
 COPY edge/ edge/

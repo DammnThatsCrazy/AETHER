@@ -630,19 +630,30 @@ class ModelExporter:
 
     @staticmethod
     def _infer_feature_names(model_path: Path) -> list[str]:
-        """Attempt to infer feature names from a fitted sklearn model.
+        """Attempt to infer feature names from a fitted model.
 
         Falls back to generic ``feature_0 .. feature_N`` names when the
         model does not store ``feature_names_in_``.
         """
         try:
-            import joblib
-
-            model = joblib.load(model_path)
-            if hasattr(model, "feature_names_in_"):
-                return list(model.feature_names_in_)
-            if hasattr(model, "n_features_in_"):
-                return [f"feature_{i}" for i in range(model.n_features_in_)]
+            suffix = Path(model_path).suffix.lower()
+            if suffix in (".json", ".ubj"):
+                import xgboost as xgb
+                # XGBoost native format: load and read feature names
+                model = xgb.Booster()
+                model.load_model(str(model_path))
+                names = model.feature_names
+                if names:
+                    return list(names)
+                n = model.num_features()
+                return [f"feature_{i}" for i in range(n)]
+            else:
+                import joblib
+                model = joblib.load(model_path)
+                if hasattr(model, "feature_names_in_"):
+                    return list(model.feature_names_in_)
+                if hasattr(model, "n_features_in_"):
+                    return [f"feature_{i}" for i in range(model.n_features_in_)]
         except Exception:
             pass
 
