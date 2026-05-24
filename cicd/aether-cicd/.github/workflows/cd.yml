@@ -90,12 +90,12 @@ jobs:
           terraform apply -auto-approve staging.tfplan
       - name: Update ECS services
         run: |
-          SERVICES=(ingestion identity analytics ml-serving agent campaign consent notification admin)
+          SERVICES=(aether-app aether-ml)
           for svc in "${SERVICES[@]}"; do
-            echo "Deploying aether-${svc}..."
+            echo "Deploying ${svc}..."
             aws ecs update-service \
               --cluster aether-staging \
-              --service "aether-${svc}" \
+              --service "${svc}" \
               --force-new-deployment \
               --region ${{ env.AWS_REGION }}
           done
@@ -103,7 +103,7 @@ jobs:
         run: |
           aws ecs wait services-stable \
             --cluster aether-staging \
-            --services aether-ingestion aether-identity aether-analytics \
+            --services aether-app aether-ml \
             --region ${{ env.AWS_REGION }}
 
   # ──────────────────────────────────────────────────────────────────────
@@ -159,13 +159,13 @@ jobs:
       - name: Deploy canary task definitions
         run: |
           VERSION=${{ needs.prepare.outputs.version }}
-          SERVICES=(ingestion identity analytics ml-serving agent campaign consent notification admin)
+          SERVICES=(aether-app aether-ml)
           for svc in "${SERVICES[@]}"; do
-            IMAGE="${{ env.ECR_REGISTRY }}/aether-${svc}:${VERSION}"
-            echo "Deploying canary for aether-${svc} -> ${IMAGE}"
+            IMAGE="${{ env.ECR_REGISTRY }}/${svc}:${VERSION}"
+            echo "Deploying canary for ${svc} -> ${IMAGE}"
             aws ecs update-service \
               --cluster aether-production \
-              --service "aether-${svc}-canary" \
+              --service "${svc}-canary" \
               --force-new-deployment \
               --region ${{ env.AWS_REGION }} || true
           done
@@ -318,12 +318,12 @@ jobs:
           terraform apply -auto-approve demo.tfplan
       - name: Update ECS services (demo cluster)
         run: |
-          SERVICES=(ingestion identity analytics ml-serving agent campaign consent notification admin)
+          SERVICES=(aether-app aether-ml)
           for svc in "${SERVICES[@]}"; do
-            echo "Deploying aether-${svc} to demo..."
+            echo "Deploying ${svc} to demo..."
             aws ecs update-service \
               --cluster aether-demo \
-              --service "aether-${svc}" \
+              --service "${svc}" \
               --force-new-deployment \
               --region ${{ env.AWS_REGION }} || true
           done
@@ -331,7 +331,7 @@ jobs:
         run: |
           aws ecs wait services-stable \
             --cluster aether-demo \
-            --services aether-ingestion aether-identity aether-analytics \
+            --services aether-app aether-ml \
             --region ${{ env.AWS_REGION }} || true
       - name: Upload playground to S3
         run: |
