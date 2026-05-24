@@ -1,22 +1,20 @@
 # ============================================================================
-# AETHER — Monitoring Module
+# AETHER — Monitoring Module (E6 cost reduction)
 #
-# Provisions:
-#   - CloudWatch log groups (30-day retention)
+# Provisions (budget-optimised):
+#   - CloudWatch log groups (3-day retention; longer retention → S3 archive)
+#   - S3 log archive bucket (IT storage class; Glacier IR after 90 days)
 #   - SNS topic for alarm notifications
-#   - CloudWatch alarms:
-#       ECS backend CPU > 80%
-#       ECS backend Memory > 80%
-#       ECS ml-serving CPU > 80%
-#       ECS ml-serving Memory > 80%
-#       RDS CPU > 80%
-#       RDS FreeStorageSpace < 10 GB
-#       ALB 5xx error rate > 1%
-#       ALB p99 latency > 5 seconds
-#   - CloudWatch Dashboard "AETHER-Production"
+#   - CloudWatch alarms (3 critical alarms only):
+#       1. ALB 5xx error rate > 1%
+#       2. Aurora at max ACU for > 10 min (capacity ceiling alert)
+#       3. ML accuracy drift PSI breach (custom metric from nightly drift Lambda)
+#   - CloudWatch Dashboard "AETHER-<env>" with ECS, Aurora, SageMaker,
+#     DynamoDB, and ALB widgets
 # ============================================================================
 
 data "aws_region" "current" {}
+data "aws_caller_identity" "current" {}
 
 # --------------------------------------------------------------------------
 # SNS Topic for Alarms
@@ -37,8 +35,7 @@ resource "aws_sns_topic_subscription" "email" {
 }
 
 # --------------------------------------------------------------------------
-# CloudWatch Log Group — application (ECS logs created by ECS module;
-# this log group is for the platform / infra layer)
+# CloudWatch Log Groups (3-day retention; INFO/DEBUG ship to S3 via Vector)
 # --------------------------------------------------------------------------
 
 resource "aws_cloudwatch_log_group" "platform" {
@@ -50,175 +47,93 @@ resource "aws_cloudwatch_log_group" "platform" {
   }
 }
 
-# --------------------------------------------------------------------------
-# Alarms — ECS Backend
-# --------------------------------------------------------------------------
-
-resource "aws_cloudwatch_metric_alarm" "ecs_backend_cpu" {
-  alarm_name          = "${var.project}-${var.environment}-backend-cpu-high"
-  comparison_operator = "GreaterThanThreshold"
-  evaluation_periods  = 3
-  metric_name         = "CPUUtilization"
-  namespace           = "AWS/ECS"
-  period              = 60
-  statistic           = "Average"
-  threshold           = 80
-
-  dimensions = {
-    ClusterName = var.ecs_cluster_name
-    ServiceName = var.backend_service_name
-  }
-
-  alarm_description = "ECS backend CPU utilization exceeded 80%"
-  alarm_actions     = [aws_sns_topic.alerts.arn]
-  ok_actions        = [aws_sns_topic.alerts.arn]
-
-  treat_missing_data = "notBreaching"
+resource "aws_cloudwatch_log_group" "app" {
+  name              = "/aether/${var.project}-${var.environment}/app"
+  retention_in_days = var.log_retention_days
 
   tags = {
-    Name = "${var.project}-${var.environment}-backend-cpu-alarm"
+    Name = "${var.project}-${var.environment}-app-logs"
   }
 }
 
-resource "aws_cloudwatch_metric_alarm" "ecs_backend_memory" {
-  alarm_name          = "${var.project}-${var.environment}-backend-memory-high"
-  comparison_operator = "GreaterThanThreshold"
-  evaluation_periods  = 3
-  metric_name         = "MemoryUtilization"
-  namespace           = "AWS/ECS"
-  period              = 60
-  statistic           = "Average"
-  threshold           = 80
-
-  dimensions = {
-    ClusterName = var.ecs_cluster_name
-    ServiceName = var.backend_service_name
-  }
-
-  alarm_description = "ECS backend Memory utilization exceeded 80%"
-  alarm_actions     = [aws_sns_topic.alerts.arn]
-  ok_actions        = [aws_sns_topic.alerts.arn]
-
-  treat_missing_data = "notBreaching"
+resource "aws_cloudwatch_log_group" "ml" {
+  name              = "/aether/${var.project}-${var.environment}/ml"
+  retention_in_days = var.log_retention_days
 
   tags = {
-    Name = "${var.project}-${var.environment}-backend-memory-alarm"
+    Name = "${var.project}-${var.environment}-ml-logs"
   }
 }
 
 # --------------------------------------------------------------------------
-# Alarms — ECS ML Serving
+# S3 Log Archive Bucket
+# Creates the bucket only when var.log_archive_bucket is empty string.
+# Otherwise callers provide their own bucket and we just reference it.
 # --------------------------------------------------------------------------
 
-resource "aws_cloudwatch_metric_alarm" "ecs_ml_cpu" {
-  alarm_name          = "${var.project}-${var.environment}-ml-cpu-high"
-  comparison_operator = "GreaterThanThreshold"
-  evaluation_periods  = 3
-  metric_name         = "CPUUtilization"
-  namespace           = "AWS/ECS"
-  period              = 60
-  statistic           = "Average"
-  threshold           = 80
-
-  dimensions = {
-    ClusterName = var.ecs_cluster_name
-    ServiceName = var.ml_service_name
-  }
-
-  alarm_description = "ECS ml-serving CPU utilization exceeded 80%"
-  alarm_actions     = [aws_sns_topic.alerts.arn]
-  ok_actions        = [aws_sns_topic.alerts.arn]
-
-  treat_missing_data = "notBreaching"
+resource "aws_s3_bucket" "log_archive" {
+  count  = var.log_archive_bucket == "" ? 1 : 0
+  bucket = "${lower(var.project)}-${var.environment}-log-archive-${data.aws_caller_identity.current.account_id}"
 
   tags = {
-    Name = "${var.project}-${var.environment}-ml-cpu-alarm"
+    Name = "${var.project}-${var.environment}-log-archive"
   }
 }
 
-resource "aws_cloudwatch_metric_alarm" "ecs_ml_memory" {
-  alarm_name          = "${var.project}-${var.environment}-ml-memory-high"
-  comparison_operator = "GreaterThanThreshold"
-  evaluation_periods  = 3
-  metric_name         = "MemoryUtilization"
-  namespace           = "AWS/ECS"
-  period              = 60
-  statistic           = "Average"
-  threshold           = 80
+resource "aws_s3_bucket_lifecycle_configuration" "log_archive" {
+  count  = var.log_archive_bucket == "" ? 1 : 0
+  bucket = aws_s3_bucket.log_archive[0].id
 
-  dimensions = {
-    ClusterName = var.ecs_cluster_name
-    ServiceName = var.ml_service_name
-  }
+  rule {
+    id     = "archive-logs"
+    status = "Enabled"
 
-  alarm_description = "ECS ml-serving Memory utilization exceeded 80%"
-  alarm_actions     = [aws_sns_topic.alerts.arn]
-  ok_actions        = [aws_sns_topic.alerts.arn]
+    # Apply to all objects in the bucket. The empty filter prefix is required
+    # by the AWS provider; without it a deprecation warning fires.
+    filter {}
 
-  treat_missing_data = "notBreaching"
+    # Move to Intelligent-Tiering immediately (handles automatic cold-tier move)
+    transition {
+      days          = 0
+      storage_class = "INTELLIGENT_TIERING"
+    }
 
-  tags = {
-    Name = "${var.project}-${var.environment}-ml-memory-alarm"
-  }
-}
+    # Deep archive after 90 days
+    transition {
+      days          = 90
+      storage_class = "GLACIER_IR"
+    }
 
-# --------------------------------------------------------------------------
-# Alarms — RDS
-# --------------------------------------------------------------------------
-
-resource "aws_cloudwatch_metric_alarm" "rds_cpu" {
-  alarm_name          = "${var.project}-${var.environment}-rds-cpu-high"
-  comparison_operator = "GreaterThanThreshold"
-  evaluation_periods  = 3
-  metric_name         = "CPUUtilization"
-  namespace           = "AWS/RDS"
-  period              = 60
-  statistic           = "Average"
-  threshold           = 80
-
-  dimensions = {
-    DBInstanceIdentifier = var.rds_identifier
-  }
-
-  alarm_description = "RDS CPU utilization exceeded 80%"
-  alarm_actions     = [aws_sns_topic.alerts.arn]
-  ok_actions        = [aws_sns_topic.alerts.arn]
-
-  treat_missing_data = "notBreaching"
-
-  tags = {
-    Name = "${var.project}-${var.environment}-rds-cpu-alarm"
+    # Expire after 365 days
+    expiration {
+      days = 365
+    }
   }
 }
 
-resource "aws_cloudwatch_metric_alarm" "rds_storage" {
-  alarm_name          = "${var.project}-${var.environment}-rds-storage-low"
-  comparison_operator = "LessThanThreshold"
-  evaluation_periods  = 3
-  metric_name         = "FreeStorageSpace"
-  namespace           = "AWS/RDS"
-  period              = 300
-  statistic           = "Average"
-  # 10 GB in bytes
-  threshold = 10737418240
+resource "aws_s3_bucket_server_side_encryption_configuration" "log_archive" {
+  count  = var.log_archive_bucket == "" ? 1 : 0
+  bucket = aws_s3_bucket.log_archive[0].id
 
-  dimensions = {
-    DBInstanceIdentifier = var.rds_identifier
-  }
-
-  alarm_description = "RDS free storage space below 10 GB"
-  alarm_actions     = [aws_sns_topic.alerts.arn]
-  ok_actions        = [aws_sns_topic.alerts.arn]
-
-  treat_missing_data = "notBreaching"
-
-  tags = {
-    Name = "${var.project}-${var.environment}-rds-storage-alarm"
+  rule {
+    apply_server_side_encryption_by_default {
+      sse_algorithm = "AES256"
+    }
   }
 }
 
+resource "aws_s3_bucket_public_access_block" "log_archive" {
+  count  = var.log_archive_bucket == "" ? 1 : 0
+  bucket = aws_s3_bucket.log_archive[0].id
+
+  block_public_acls       = true
+  block_public_policy     = true
+  ignore_public_acls      = true
+  restrict_public_buckets = true
+}
+
 # --------------------------------------------------------------------------
-# Alarms — ALB
+# Alarm 1: ALB 5xx Error Rate > 1%
 # --------------------------------------------------------------------------
 
 resource "aws_cloudwatch_metric_alarm" "alb_5xx" {
@@ -228,7 +143,7 @@ resource "aws_cloudwatch_metric_alarm" "alb_5xx" {
   threshold           = 1
   treat_missing_data  = "notBreaching"
 
-  alarm_description = "ALB 5xx error rate exceeded 1%"
+  alarm_description = "ALB 5xx error rate exceeded 1% — likely application error or deployment issue"
   alarm_actions     = [aws_sns_topic.alerts.arn]
   ok_actions        = [aws_sns_topic.alerts.arn]
 
@@ -257,203 +172,280 @@ resource "aws_cloudwatch_metric_alarm" "alb_5xx" {
   }
 }
 
-resource "aws_cloudwatch_metric_alarm" "alb_latency_p99" {
-  alarm_name          = "${var.project}-${var.environment}-alb-latency-p99"
-  comparison_operator = "GreaterThanThreshold"
-  evaluation_periods  = 3
-  metric_name         = "TargetResponseTime"
-  namespace           = "AWS/ApplicationELB"
-  period              = 60
-  extended_statistic  = "p99"
-  threshold           = 5
+# --------------------------------------------------------------------------
+# Alarm 2: Aurora at max ACU for > 10 minutes
+# Fires when the cluster has been pegged at max capacity for two consecutive
+# 5-minute periods — indicating we may need to raise the max ACU floor.
+# --------------------------------------------------------------------------
+
+resource "aws_cloudwatch_metric_alarm" "aurora_max_acu" {
+  count               = var.aurora_cluster_id == "" ? 0 : 1
+  alarm_name          = "${var.project}-${var.environment}-aurora-max-acu"
+  comparison_operator = "GreaterThanOrEqualToThreshold"
+  evaluation_periods  = 2   # 2 × 5-min periods = 10 min sustained
+  metric_name         = "ServerlessDatabaseCapacity"
+  namespace           = "AWS/RDS"
+  period              = 300
+  statistic           = "Maximum"
+  threshold           = var.aurora_max_acu
 
   dimensions = {
-    LoadBalancer = var.alb_arn_suffix
+    DBClusterIdentifier = var.aurora_cluster_id
   }
 
-  alarm_description = "ALB p99 response time exceeded 5 seconds"
+  alarm_description = "Aurora Serverless v2 has been at max capacity (${var.aurora_max_acu} ACU) for >10 min — consider raising max_acu"
   alarm_actions     = [aws_sns_topic.alerts.arn]
   ok_actions        = [aws_sns_topic.alerts.arn]
 
   treat_missing_data = "notBreaching"
 
   tags = {
-    Name = "${var.project}-${var.environment}-alb-latency-alarm"
+    Name = "${var.project}-${var.environment}-aurora-max-acu-alarm"
+  }
+}
+
+# --------------------------------------------------------------------------
+# Alarm 3: ML Accuracy Drift PSI Breach
+# The nightly drift Lambda publishes PSI scores to custom namespace
+# "Aether/MLDrift" with metric "PSI" and dimension "Model=<name>".
+# Alarm fires if any model's PSI exceeds 0.2 (significant drift threshold).
+# --------------------------------------------------------------------------
+
+resource "aws_cloudwatch_metric_alarm" "ml_drift" {
+  alarm_name          = "${var.project}-${var.environment}-ml-drift-psi"
+  comparison_operator = "GreaterThanThreshold"
+  evaluation_periods  = 1
+  metric_name         = "PSI"
+  namespace           = "Aether/MLDrift"
+  period              = 86400  # nightly Lambda publishes once per 24 h
+  statistic           = "Maximum"
+  threshold           = 0.2
+
+  alarm_description = "ML model PSI drift score exceeded 0.2 — potential distribution shift requiring retraining"
+  alarm_actions     = [aws_sns_topic.alerts.arn]
+  ok_actions        = [aws_sns_topic.alerts.arn]
+
+  treat_missing_data = "notBreaching"
+
+  tags = {
+    Name = "${var.project}-${var.environment}-ml-drift-alarm"
   }
 }
 
 # --------------------------------------------------------------------------
 # CloudWatch Dashboard
+# Rows:
+#   1. ECS (aether-app + aether-ml CPU/memory, ALB req/5xx)
+#   2. Aurora (capacity ACU, connections, latency)
+#   3. SageMaker Serverless (invocations per endpoint, model latency)
+#   4. DynamoDB (throttles, consumed RCU/WCU)
 # --------------------------------------------------------------------------
+
+locals {
+  # Aurora widgets are gated by `for ... if` so the result is a homogeneous
+  # list type whether populated or empty. A naive `cond ? [] : [...]` fails
+  # tuple-type unification in Terraform 1.7+.
+  _aurora_widget_specs = [
+    {
+      x           = 0
+      title       = "Aurora Serverless Capacity (ACU)"
+      metric_name = "ServerlessDatabaseCapacity"
+      stat        = "Maximum"
+    },
+    {
+      x           = 8
+      title       = "Aurora DB Connections"
+      metric_name = "DatabaseConnections"
+      stat        = "Average"
+    },
+  ]
+
+  aurora_widgets = [
+    for spec in local._aurora_widget_specs : {
+      type   = "metric"
+      x      = spec.x
+      y      = 6
+      width  = 8
+      height = 6
+      properties = {
+        title  = spec.title
+        view   = "timeSeries"
+        region = data.aws_region.current.name
+        metrics = [[
+          "AWS/RDS", spec.metric_name,
+          "DBClusterIdentifier", var.aurora_cluster_id,
+          { stat = spec.stat }
+        ]]
+      }
+    } if var.aurora_cluster_id != ""
+  ]
+
+  sm_endpoint_widgets = [
+    for idx, ep_name in var.sagemaker_endpoint_names : {
+      type   = "metric"
+      x      = (idx % 3) * 8
+      y      = 18 + floor(idx / 3) * 6
+      width  = 8
+      height = 6
+      properties = {
+        title  = "SageMaker Invocations — ${ep_name}"
+        view   = "timeSeries"
+        region = data.aws_region.current.name
+        metrics = [
+          [
+            "AWS/SageMaker", "Invocations",
+            "EndpointName", ep_name,
+            { stat = "Sum", label = "Invocations" }
+          ],
+          [
+            "AWS/SageMaker", "ModelLatency",
+            "EndpointName", ep_name,
+            { stat = "p99", label = "Model Latency p99 (us)", yAxis = "right" }
+          ],
+        ]
+      }
+    }
+  ]
+}
 
 resource "aws_cloudwatch_dashboard" "main" {
   dashboard_name = "${var.project}-${var.environment}"
 
   dashboard_body = jsonencode({
-    widgets = [
-      # Row 1: ECS Backend
-      {
-        type   = "metric"
-        x      = 0
-        y      = 0
-        width  = 8
-        height = 6
-        properties = {
-          title  = "ECS Backend CPU"
-          view   = "timeSeries"
-          region = data.aws_region.current.name
-          metrics = [[
-            "AWS/ECS", "CPUUtilization",
-            "ClusterName", var.ecs_cluster_name,
-            "ServiceName", var.backend_service_name,
-            { stat = "Average", label = "CPU %" }
-          ]]
-          yAxis = { left = { min = 0, max = 100 } }
-        }
-      },
-      {
-        type   = "metric"
-        x      = 8
-        y      = 0
-        width  = 8
-        height = 6
-        properties = {
-          title  = "ECS Backend Memory"
-          view   = "timeSeries"
-          region = data.aws_region.current.name
-          metrics = [[
-            "AWS/ECS", "MemoryUtilization",
-            "ClusterName", var.ecs_cluster_name,
-            "ServiceName", var.backend_service_name,
-            { stat = "Average", label = "Memory %" }
-          ]]
-          yAxis = { left = { min = 0, max = 100 } }
-        }
-      },
-      {
-        type   = "metric"
-        x      = 16
-        y      = 0
-        width  = 8
-        height = 6
-        properties = {
-          title  = "ECS ML Serving CPU"
-          view   = "timeSeries"
-          region = data.aws_region.current.name
-          metrics = [[
-            "AWS/ECS", "CPUUtilization",
-            "ClusterName", var.ecs_cluster_name,
-            "ServiceName", var.ml_service_name,
-            { stat = "Average", label = "CPU %" }
-          ]]
-          yAxis = { left = { min = 0, max = 100 } }
-        }
-      },
-      # Row 2: RDS
-      {
-        type   = "metric"
-        x      = 0
-        y      = 6
-        width  = 8
-        height = 6
-        properties = {
-          title  = "RDS CPU"
-          view   = "timeSeries"
-          region = data.aws_region.current.name
-          metrics = [[
-            "AWS/RDS", "CPUUtilization",
-            "DBInstanceIdentifier", var.rds_identifier,
-            { stat = "Average", label = "CPU %" }
-          ]]
-          yAxis = { left = { min = 0, max = 100 } }
-        }
-      },
-      {
-        type   = "metric"
-        x      = 8
-        y      = 6
-        width  = 8
-        height = 6
-        properties = {
-          title  = "RDS Free Storage (GB)"
-          view   = "timeSeries"
-          region = data.aws_region.current.name
-          metrics = [[
-            "AWS/RDS", "FreeStorageSpace",
-            "DBInstanceIdentifier", var.rds_identifier,
-            { stat = "Average", label = "Free Storage Bytes" }
-          ]]
-        }
-      },
-      {
-        type   = "metric"
-        x      = 16
-        y      = 6
-        width  = 8
-        height = 6
-        properties = {
-          title  = "RDS Connections"
-          view   = "timeSeries"
-          region = data.aws_region.current.name
-          metrics = [[
-            "AWS/RDS", "DatabaseConnections",
-            "DBInstanceIdentifier", var.rds_identifier,
-            { stat = "Average", label = "Connections" }
-          ]]
-        }
-      },
-      # Row 3: ALB
-      {
-        type   = "metric"
-        x      = 0
-        y      = 12
-        width  = 8
-        height = 6
-        properties = {
-          title  = "ALB Request Count"
-          view   = "timeSeries"
-          region = data.aws_region.current.name
-          metrics = [[
-            "AWS/ApplicationELB", "RequestCount",
-            "LoadBalancer", var.alb_arn_suffix,
-            { stat = "Sum", label = "Requests" }
-          ]]
-        }
-      },
-      {
-        type   = "metric"
-        x      = 8
-        y      = 12
-        width  = 8
-        height = 6
-        properties = {
-          title  = "ALB 5xx Errors"
-          view   = "timeSeries"
-          region = data.aws_region.current.name
-          metrics = [[
-            "AWS/ApplicationELB", "HTTPCode_ELB_5XX_Count",
-            "LoadBalancer", var.alb_arn_suffix,
-            { stat = "Sum", label = "5xx Count" }
-          ]]
-        }
-      },
-      {
-        type   = "metric"
-        x      = 16
-        y      = 12
-        width  = 8
-        height = 6
-        properties = {
-          title  = "ALB Target Response Time p99"
-          view   = "timeSeries"
-          region = data.aws_region.current.name
-          metrics = [[
-            "AWS/ApplicationELB", "TargetResponseTime",
-            "LoadBalancer", var.alb_arn_suffix,
-            { stat = "p99", label = "p99 Latency (s)" }
-          ]]
-        }
-      },
-    ]
+    widgets = concat(
+      [
+        # ── Row 1: ECS + ALB ──────────────────────────────────────────
+        {
+          type   = "metric"
+          x      = 0
+          y      = 0
+          width  = 6
+          height = 6
+          properties = {
+            title  = "aether-app CPU %"
+            view   = "timeSeries"
+            region = data.aws_region.current.name
+            metrics = [[
+              "AWS/ECS", "CPUUtilization",
+              "ClusterName", var.ecs_cluster_name,
+              "ServiceName", var.backend_service_name,
+              { stat = "Average" }
+            ]]
+            yAxis = { left = { min = 0, max = 100 } }
+          }
+        },
+        {
+          type   = "metric"
+          x      = 6
+          y      = 0
+          width  = 6
+          height = 6
+          properties = {
+            title  = "aether-ml CPU %"
+            view   = "timeSeries"
+            region = data.aws_region.current.name
+            metrics = [[
+              "AWS/ECS", "CPUUtilization",
+              "ClusterName", var.ecs_cluster_name,
+              "ServiceName", var.ml_service_name,
+              { stat = "Average" }
+            ]]
+            yAxis = { left = { min = 0, max = 100 } }
+          }
+        },
+        {
+          type   = "metric"
+          x      = 12
+          y      = 0
+          width  = 6
+          height = 6
+          properties = {
+            title  = "ALB Request Count"
+            view   = "timeSeries"
+            region = data.aws_region.current.name
+            metrics = [[
+              "AWS/ApplicationELB", "RequestCount",
+              "LoadBalancer", var.alb_arn_suffix,
+              { stat = "Sum" }
+            ]]
+          }
+        },
+        {
+          type   = "metric"
+          x      = 18
+          y      = 0
+          width  = 6
+          height = 6
+          properties = {
+            title  = "ALB 5xx Errors"
+            view   = "timeSeries"
+            region = data.aws_region.current.name
+            metrics = [[
+              "AWS/ApplicationELB", "HTTPCode_ELB_5XX_Count",
+              "LoadBalancer", var.alb_arn_suffix,
+              { stat = "Sum", color = "#d62728" }
+            ]]
+          }
+        },
+        # ── Row 3: DynamoDB ───────────────────────────────────────────
+        {
+          type   = "metric"
+          x      = 0
+          y      = 12
+          width  = 8
+          height = 6
+          properties = {
+            title  = "DynamoDB Read Throttles"
+            view   = "timeSeries"
+            region = data.aws_region.current.name
+            metrics = [[
+              "AWS/DynamoDB", "ReadThrottleEvents",
+              { stat = "Sum", color = "#d62728" }
+            ]]
+          }
+        },
+        {
+          type   = "metric"
+          x      = 8
+          y      = 12
+          width  = 8
+          height = 6
+          properties = {
+            title  = "DynamoDB Write Throttles"
+            view   = "timeSeries"
+            region = data.aws_region.current.name
+            metrics = [[
+              "AWS/DynamoDB", "WriteThrottleEvents",
+              { stat = "Sum", color = "#d62728" }
+            ]]
+          }
+        },
+        {
+          type   = "metric"
+          x      = 16
+          y      = 12
+          width  = 8
+          height = 6
+          properties = {
+            title  = "ML Drift PSI Score"
+            view   = "timeSeries"
+            region = data.aws_region.current.name
+            metrics = [[
+              "Aether/MLDrift", "PSI",
+              { stat = "Maximum", label = "Max PSI (all models)" }
+            ]]
+            annotations = {
+              horizontal = [{
+                label = "Drift threshold"
+                value = 0.2
+                color = "#ff7f0e"
+              }]
+            }
+          }
+        },
+      ],
+      local.aurora_widgets,
+      local.sm_endpoint_widgets
+    )
   })
 }
