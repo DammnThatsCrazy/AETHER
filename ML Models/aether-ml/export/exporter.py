@@ -471,12 +471,20 @@ class ModelExporter:
             An ``ExportResult`` describing the outcome.
         """
         try:
-            import joblib
             import onnx
             from onnxmltools import convert_xgboost
             from onnxmltools.convert.common.data_types import FloatTensorType as OnnxFloat
 
-            model = joblib.load(model_path)
+            # Native XGBoost formats (.json/.ubj) must be loaded with the XGBoost
+            # API; joblib cannot deserialise them.
+            suffix = Path(model_path).suffix.lower()
+            if suffix in (".json", ".ubj"):
+                import xgboost as xgb
+                model = xgb.XGBRegressor() if task == "regression" else xgb.XGBClassifier()
+                model.load_model(model_path)
+            else:
+                import joblib
+                model = joblib.load(model_path)
             n_features = len(feature_names)
             initial_types = [("features", OnnxFloat([None, n_features]))]
             onnx_model = convert_xgboost(model, initial_types=initial_types)

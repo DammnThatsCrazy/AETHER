@@ -31,6 +31,7 @@ GENERATORS = [
     "extract_plans",
     "extract_providers",
     "extract_topics",
+    "extract_doc_manifest",
 ]
 
 

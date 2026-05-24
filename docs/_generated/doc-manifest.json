@@ -1,0 +1,621 @@
+{
+  "generated_by": "scripts/docs_extract/extract_doc_manifest.py",
+  "doc_count": 38,
+  "docs": [
+    {
+      "audience": [
+        "architect",
+        "ai"
+      ],
+      "estimated_read_minutes": 12,
+      "section": "ai",
+      "since_version": "8.8.0",
+      "slug": "ai/agent-controller",
+      "status": "stable",
+      "title": "Agent Controller — Multi-Controller Architecture",
+      "toc_depth": 3,
+      "visibility": "P",
+      "renderable": true,
+      "_source": "docs/AGENT-CONTROLLER.md"
+    },
+    {
+      "audience": [
+        "architect",
+        "dev-senior"
+      ],
+      "estimated_read_minutes": 4,
+      "section": "ai",
+      "since_version": "8.8.0",
+      "slug": "ai/approval-model",
+      "status": "stable",
+      "title": "Agentic Commerce — Approval Model",
+      "toc_depth": 3,
+      "visibility": "P",
+      "renderable": true,
+      "_source": "docs/APPROVAL-MODEL.md"
+    },
+    {
+      "audience": [
+        "security",
+        "ai",
+        "architect"
+      ],
+      "estimated_read_minutes": 8,
+      "section": "ai",
+      "since_version": "8.8.0",
+      "slug": "ai/extraction-defense",
+      "status": "stable",
+      "title": "Model Extraction Defense",
+      "toc_depth": 3,
+      "visibility": "P",
+      "renderable": true,
+      "_source": "docs/MODEL-EXTRACTION-DEFENSE.md"
+    },
+    {
+      "audience": [
+        "ai",
+        "dev-senior"
+      ],
+      "estimated_read_minutes": 4,
+      "section": "ai",
+      "since_version": "8.8.0",
+      "slug": "ai/ml-training",
+      "status": "stable",
+      "title": "ML Model Training Guide",
+      "toc_depth": 3,
+      "visibility": "P",
+      "renderable": true,
+      "_source": "docs/ML-TRAINING-GUIDE.md"
+    },
+    {
+      "audience": [
+        "architect",
+        "ai",
+        "dev-senior"
+      ],
+      "estimated_read_minutes": 15,
+      "section": "ai",
+      "since_version": "8.8.0",
+      "slug": "ai/semantic-context",
+      "status": "stable",
+      "title": "Semantic Context Intelligence Layer",
+      "toc_depth": 3,
+      "visibility": "P",
+      "renderable": true,
+      "_source": "docs/SEMANTIC-CONTEXT-INTELLIGENCE.md"
+    },
+    {
+      "audience": [
+        "dev-junior",
+        "dev-senior",
+        "architect"
+      ],
+      "estimated_read_minutes": 60,
+      "section": "api",
+      "since_version": "8.8.0",
+      "slug": "api/backend-reference",
+      "status": "stable",
+      "title": "Aether Backend API — Endpoint Specification",
+      "toc_depth": 3,
+      "visibility": "P",
+      "renderable": true,
+      "_source": "docs/BACKEND-API.md"
+    },
+    {
+      "audience": [
+        "architect",
+        "dev-senior"
+      ],
+      "estimated_read_minutes": 8,
+      "section": "api",
+      "since_version": "8.8.0",
+      "slug": "api/commerce-control-plane",
+      "status": "stable",
+      "title": "Agentic Commerce — Control Plane",
+      "toc_depth": 3,
+      "visibility": "P",
+      "renderable": true,
+      "_source": "docs/COMMERCE-CONTROL-PLANE.md"
+    },
+    {
+      "audience": [
+        "dev-senior",
+        "architect"
+      ],
+      "estimated_read_minutes": 8,
+      "section": "api",
+      "since_version": "8.8.0",
+      "slug": "api/profile-360-aggregation",
+      "status": "stable",
+      "title": "Profile 360 Aggregation Layer",
+      "toc_depth": 3,
+      "visibility": "P",
+      "renderable": true,
+      "_source": "docs/PROFILE-360-AGGREGATION.md"
+    },
+    {
+      "audience": [
+        "architect",
+        "dev-senior"
+      ],
+      "estimated_read_minutes": 30,
+      "section": "architecture",
+      "slug": "architecture/backend-intelligence",
+      "status": "experimental",
+      "title": "Aether Backend Intelligence Architecture Blueprint",
+      "toc_depth": 4,
+      "visibility": "I",
+      "renderable": false,
+      "_source": "docs/architecture/BACKEND_INTELLIGENCE_ARCHITECTURE.md"
+    },
+    {
+      "audience": [
+        "dev-senior",
+        "architect"
+      ],
+      "estimated_read_minutes": 10,
+      "section": "architecture",
+      "since_version": "8.8.0",
+      "slug": "architecture/profile360-frontend",
+      "status": "stable",
+      "title": "Profile360 Frontend Architecture",
+      "toc_depth": 3,
+      "visibility": "I",
+      "renderable": false,
+      "_source": "docs/frontend/PROFILE360_ARCHITECTURE.md"
+    },
+    {
+      "audience": [
+        "architect",
+        "dev-senior",
+        "security"
+      ],
+      "estimated_read_minutes": 20,
+      "section": "architecture",
+      "since_version": "8.8.0",
+      "slug": "architecture/system-map",
+      "status": "stable",
+      "title": "Aether Architecture Guide",
+      "toc_depth": 3,
+      "visibility": "P",
+      "renderable": true,
+      "_source": "docs/ARCHITECTURE.md"
+    },
+    {
+      "audience": [
+        "dev-junior",
+        "dev-senior",
+        "ops"
+      ],
+      "estimated_read_minutes": 10,
+      "section": "changelog",
+      "since_version": "8.8.0",
+      "slug": "changelog",
+      "status": "stable",
+      "title": "Changelog",
+      "toc_depth": 3,
+      "visibility": "P",
+      "renderable": true,
+      "_source": "docs/CHANGELOG.md"
+    },
+    {
+      "audience": [
+        "architect",
+        "dev-senior",
+        "ai"
+      ],
+      "estimated_read_minutes": 45,
+      "section": "concepts",
+      "since_version": "8.8.0",
+      "slug": "concepts/agentic-commerce-spec",
+      "status": "stable",
+      "title": "Agentic Commerce — Day-1 Build Specification",
+      "toc_depth": 3,
+      "visibility": "I",
+      "renderable": false,
+      "_source": "docs/AGENTIC_COMMERCE_BUILD_SPEC.md"
+    },
+    {
+      "audience": [
+        "dev-senior",
+        "architect",
+        "ai"
+      ],
+      "estimated_read_minutes": 10,
+      "section": "concepts",
+      "since_version": "8.8.0",
+      "slug": "concepts/economic-observability",
+      "status": "stable",
+      "title": "Economic Observability",
+      "toc_depth": 3,
+      "visibility": "P",
+      "renderable": true,
+      "_source": "docs/ECONOMIC-OBSERVABILITY.md"
+    },
+    {
+      "audience": [
+        "dev-senior",
+        "architect"
+      ],
+      "estimated_read_minutes": 12,
+      "section": "concepts",
+      "since_version": "8.8.0",
+      "slug": "concepts/identity-resolution",
+      "status": "stable",
+      "title": "Identity Resolution",
+      "toc_depth": 3,
+      "visibility": "P",
+      "renderable": true,
+      "_source": "docs/IDENTITY-RESOLUTION.md"
+    },
+    {
+      "audience": [
+        "architect",
+        "dev-senior",
+        "ai"
+      ],
+      "estimated_read_minutes": 15,
+      "section": "concepts",
+      "since_version": "8.8.0",
+      "slug": "concepts/intelligence-graph",
+      "status": "stable",
+      "title": "Unified Intelligence Graph",
+      "toc_depth": 3,
+      "visibility": "P",
+      "renderable": true,
+      "_source": "docs/INTELLIGENCE-GRAPH.md"
+    },
+    {
+      "audience": [
+        "dev-senior",
+        "architect"
+      ],
+      "estimated_read_minutes": 2,
+      "section": "concepts",
+      "since_version": "8.8.0",
+      "slug": "concepts/stablecoin-rails",
+      "status": "stable",
+      "title": "Stablecoin Rails",
+      "toc_depth": 3,
+      "visibility": "P",
+      "renderable": true,
+      "_source": "docs/STABLECOIN-RAILS.md"
+    },
+    {
+      "audience": [
+        "dev-senior",
+        "ops",
+        "buyer"
+      ],
+      "estimated_read_minutes": 6,
+      "section": "concepts",
+      "since_version": "8.8.0",
+      "slug": "concepts/stripe-billing",
+      "status": "stable",
+      "title": "Stripe Billing — P1–P4 Integration",
+      "toc_depth": 3,
+      "visibility": "P",
+      "renderable": true,
+      "_source": "docs/STRIPE-BILLING.md"
+    },
+    {
+      "audience": [
+        "dev-senior",
+        "architect",
+        "ops"
+      ],
+      "estimated_read_minutes": 4,
+      "section": "data",
+      "since_version": "8.8.0",
+      "slug": "data/cache",
+      "status": "stable",
+      "title": "Cache / Redis Subsystem",
+      "toc_depth": 3,
+      "visibility": "P",
+      "renderable": true,
+      "_source": "docs/SUBSYSTEM-CACHE.md"
+    },
+    {
+      "audience": [
+        "dev-senior",
+        "architect",
+        "ops"
+      ],
+      "estimated_read_minutes": 4,
+      "section": "data",
+      "since_version": "8.8.0",
+      "slug": "data/kafka",
+      "status": "stable",
+      "title": "Events / Kafka Subsystem",
+      "toc_depth": 3,
+      "visibility": "P",
+      "renderable": true,
+      "_source": "docs/SUBSYSTEM-EVENTS.md"
+    },
+    {
+      "audience": [
+        "dev-senior",
+        "architect",
+        "ops"
+      ],
+      "estimated_read_minutes": 5,
+      "section": "data",
+      "since_version": "8.8.0",
+      "slug": "data/postgres",
+      "status": "stable",
+      "title": "PostgreSQL / Repository Subsystem",
+      "toc_depth": 3,
+      "visibility": "P",
+      "renderable": true,
+      "_source": "docs/SUBSYSTEM-DATABASE.md"
+    },
+    {
+      "audience": [
+        "ops"
+      ],
+      "estimated_read_minutes": 3,
+      "section": "operations",
+      "since_version": "8.8.0",
+      "slug": "operations/commerce-runbook",
+      "status": "stable",
+      "title": "Commerce Operator Runbook",
+      "toc_depth": 3,
+      "visibility": "I",
+      "renderable": false,
+      "_source": "docs/COMMERCE-OPERATOR-RUNBOOK.md"
+    },
+    {
+      "audience": [
+        "ops",
+        "dev-senior"
+      ],
+      "estimated_read_minutes": 2,
+      "section": "operations",
+      "since_version": "8.8.0",
+      "slug": "operations/doc-automation",
+      "status": "stable",
+      "title": "Documentation Automation",
+      "toc_depth": 3,
+      "visibility": "I",
+      "renderable": false,
+      "_source": "docs/AUTOMATION.md"
+    },
+    {
+      "audience": [
+        "ops"
+      ],
+      "estimated_read_minutes": 8,
+      "section": "operations",
+      "since_version": "8.8.0",
+      "slug": "operations/migration",
+      "status": "stable",
+      "title": "Migration Runbook",
+      "toc_depth": 3,
+      "visibility": "I",
+      "renderable": false,
+      "_source": "docs/MIGRATION-RUNBOOK.md"
+    },
+    {
+      "audience": [
+        "dev-senior",
+        "architect",
+        "ops"
+      ],
+      "section": "operations",
+      "slug": "operations/operational-intelligence-audit",
+      "status": "stable",
+      "title": "Operational Intelligence — Stub vs. Production Audit",
+      "visibility": "I",
+      "renderable": false,
+      "_source": "docs/OPERATIONAL-INTELLIGENCE-AUDIT.md"
+    },
+    {
+      "audience": [
+        "ops",
+        "architect"
+      ],
+      "estimated_read_minutes": 6,
+      "section": "operations",
+      "since_version": "8.8.0",
+      "slug": "operations/production-readiness",
+      "status": "stable",
+      "title": "Production Readiness Review",
+      "toc_depth": 3,
+      "visibility": "I",
+      "renderable": false,
+      "_source": "docs/PRODUCTION-READINESS.md"
+    },
+    {
+      "audience": [
+        "ops"
+      ],
+      "estimated_read_minutes": 10,
+      "section": "operations",
+      "since_version": "8.8.0",
+      "slug": "operations/rollback",
+      "status": "stable",
+      "title": "Rollback Runbook",
+      "toc_depth": 3,
+      "visibility": "I",
+      "renderable": false,
+      "_source": "docs/ROLLBACK-RUNBOOK.md"
+    },
+    {
+      "audience": [
+        "ops"
+      ],
+      "estimated_read_minutes": 12,
+      "section": "operations",
+      "since_version": "8.8.0",
+      "slug": "operations/runbook",
+      "status": "stable",
+      "title": "Operations Runbook",
+      "toc_depth": 3,
+      "visibility": "I",
+      "renderable": false,
+      "_source": "docs/OPERATIONS-RUNBOOK.md"
+    },
+    {
+      "audience": [
+        "ops"
+      ],
+      "estimated_read_minutes": 10,
+      "section": "operations",
+      "since_version": "8.8.0",
+      "slug": "operations/smoke-tests",
+      "status": "stable",
+      "title": "Smoke Test & Post-Deploy Verification Checklist",
+      "toc_depth": 3,
+      "visibility": "I",
+      "renderable": false,
+      "_source": "docs/SMOKE-TEST-CHECKLIST.md"
+    },
+    {
+      "audience": [
+        "dev-senior",
+        "ops",
+        "architect"
+      ],
+      "estimated_read_minutes": 2,
+      "section": "reference",
+      "since_version": "8.8.0",
+      "slug": "reference/repo-index",
+      "status": "stable",
+      "title": "Repository Index",
+      "toc_depth": 3,
+      "visibility": "I",
+      "renderable": false,
+      "_source": "docs/REPO-INDEX.md"
+    },
+    {
+      "audience": [
+        "dev-junior",
+        "dev-senior"
+      ],
+      "estimated_read_minutes": 10,
+      "section": "sdks",
+      "since_version": "8.8.0",
+      "slug": "sdks/android",
+      "status": "stable",
+      "title": "Aether Android SDK — Integration Guide",
+      "toc_depth": 3,
+      "visibility": "P",
+      "renderable": true,
+      "_source": "docs/SDK-ANDROID.md"
+    },
+    {
+      "audience": [
+        "dev-junior",
+        "dev-senior"
+      ],
+      "estimated_read_minutes": 10,
+      "section": "sdks",
+      "since_version": "8.8.0",
+      "slug": "sdks/ios",
+      "status": "stable",
+      "title": "Aether iOS SDK — Integration Guide",
+      "toc_depth": 3,
+      "visibility": "P",
+      "renderable": true,
+      "_source": "docs/SDK-IOS.md"
+    },
+    {
+      "audience": [
+        "dev-junior",
+        "dev-senior"
+      ],
+      "estimated_read_minutes": 8,
+      "section": "sdks",
+      "since_version": "8.8.0",
+      "slug": "sdks/migration-v7",
+      "status": "deprecated",
+      "title": "SDK Migration Guide — v6.x to v7.0",
+      "toc_depth": 3,
+      "visibility": "P",
+      "renderable": true,
+      "_source": "docs/MIGRATION-v7.md"
+    },
+    {
+      "audience": [
+        "dev-junior",
+        "dev-senior"
+      ],
+      "estimated_read_minutes": 9,
+      "section": "sdks",
+      "since_version": "8.8.0",
+      "slug": "sdks/react-native",
+      "status": "stable",
+      "title": "Aether React Native SDK — Integration Guide",
+      "toc_depth": 3,
+      "visibility": "P",
+      "renderable": true,
+      "_source": "docs/SDK-REACT-NATIVE.md"
+    },
+    {
+      "audience": [
+        "dev-junior",
+        "dev-senior"
+      ],
+      "estimated_read_minutes": 12,
+      "section": "sdks",
+      "since_version": "8.8.0",
+      "slug": "sdks/web",
+      "status": "stable",
+      "title": "Aether Web SDK — Integration Guide",
+      "toc_depth": 3,
+      "visibility": "P",
+      "renderable": true,
+      "_source": "docs/SDK-WEB.md"
+    },
+    {
+      "audience": [
+        "security",
+        "ops"
+      ],
+      "estimated_read_minutes": 2,
+      "section": "security",
+      "since_version": "8.8.0",
+      "slug": "security/secret-rotation",
+      "status": "stable",
+      "title": "Secret Rotation Runbook",
+      "toc_depth": 3,
+      "visibility": "I",
+      "renderable": false,
+      "_source": "docs/SECRET-ROTATION.md"
+    },
+    {
+      "audience": [
+        "security",
+        "architect",
+        "compliance"
+      ],
+      "estimated_read_minutes": 12,
+      "section": "security",
+      "since_version": "8.8.0",
+      "slug": "security/x402-audit",
+      "status": "stable",
+      "title": "x402 Protocol Support Audit",
+      "toc_depth": 3,
+      "visibility": "P",
+      "renderable": true,
+      "_source": "docs/X402_AUDIT_REPORT.md"
+    },
+    {
+      "audience": [
+        "ops",
+        "dev-senior",
+        "architect"
+      ],
+      "estimated_read_minutes": 8,
+      "section": "operations",
+      "since_version": "8.8.0",
+      "slug": "tooling/docs-pipeline",
+      "status": "stable",
+      "title": "Documentation Pipeline",
+      "toc_depth": 3,
+      "visibility": "I",
+      "renderable": false,
+      "_source": "docs/internal/tooling/docs-pipeline.md"
+    }
+  ]
+}
