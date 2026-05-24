@@ -114,7 +114,6 @@ contract AnalyticsRewards is
     error ZeroAmount();
     error InvalidOracleRotation(address oldOracle, address newOracle);
     error InvalidRewardAmount(bytes32 campaignId, uint256 provided, uint256 expected);
-    error OracleRoleManagedViaRotateOracle();
 
     // ──────────────────────────────────────────────
     //  Constructor
