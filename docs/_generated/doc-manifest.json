@@ -1,0 +1,620 @@
+{
+  "version": "8.8.0",
+  "generated_from": "docs/**/*.{md,mdx}",
+  "docs": [
+    {
+      "path": "docs/AGENT-CONTROLLER.md",
+      "title": "Agent Controller — Multi-Controller Architecture",
+      "slug": "ai/agent-controller",
+      "section": "ai",
+      "visibility": "P",
+      "audience": [
+        "architect",
+        "ai"
+      ],
+      "status": "stable",
+      "since_version": "8.8.0",
+      "estimated_read_minutes": 12,
+      "toc_depth": 3,
+      "canonical_owner": "agent@aether"
+    },
+    {
+      "path": "docs/AGENTIC_COMMERCE_BUILD_SPEC.md",
+      "title": "Agentic Commerce — Day-1 Build Specification",
+      "slug": "concepts/agentic-commerce-spec",
+      "section": "concepts",
+      "visibility": "I",
+      "audience": [
+        "architect",
+        "dev-senior",
+        "ai"
+      ],
+      "status": "stable",
+      "since_version": "8.8.0",
+      "estimated_read_minutes": 45,
+      "toc_depth": 3,
+      "canonical_owner": "commerce@aether"
+    },
+    {
+      "path": "docs/APPROVAL-MODEL.md",
+      "title": "Agentic Commerce — Approval Model",
+      "slug": "ai/approval-model",
+      "section": "ai",
+      "visibility": "P",
+      "audience": [
+        "architect",
+        "dev-senior"
+      ],
+      "status": "stable",
+      "since_version": "8.8.0",
+      "estimated_read_minutes": 4,
+      "toc_depth": 3,
+      "canonical_owner": "commerce@aether"
+    },
+    {
+      "path": "docs/ARCHITECTURE.md",
+      "title": "Aether Architecture Guide",
+      "slug": "architecture/system-map",
+      "section": "architecture",
+      "visibility": "P",
+      "audience": [
+        "architect",
+        "dev-senior",
+        "security"
+      ],
+      "status": "stable",
+      "since_version": "8.8.0",
+      "estimated_read_minutes": 20,
+      "toc_depth": 3,
+      "canonical_owner": "platform@aether"
+    },
+    {
+      "path": "docs/AUTOMATION.md",
+      "title": "Documentation Automation",
+      "slug": "operations/doc-automation",
+      "section": "operations",
+      "visibility": "I",
+      "audience": [
+        "ops",
+        "dev-senior"
+      ],
+      "status": "stable",
+      "since_version": "8.8.0",
+      "estimated_read_minutes": 2,
+      "toc_depth": 3,
+      "canonical_owner": "platform@aether"
+    },
+    {
+      "path": "docs/BACKEND-API.md",
+      "title": "Aether Backend API — Endpoint Specification",
+      "slug": "api/backend-reference",
+      "section": "api",
+      "visibility": "P",
+      "audience": [
+        "dev-junior",
+        "dev-senior",
+        "architect"
+      ],
+      "status": "stable",
+      "since_version": "8.8.0",
+      "estimated_read_minutes": 60,
+      "toc_depth": 3,
+      "canonical_owner": "backend@aether"
+    },
+    {
+      "path": "docs/CHANGELOG.md",
+      "title": "Changelog",
+      "slug": "changelog",
+      "section": "changelog",
+      "visibility": "P",
+      "audience": [
+        "dev-junior",
+        "dev-senior",
+        "ops"
+      ],
+      "status": "stable",
+      "since_version": "8.8.0",
+      "estimated_read_minutes": 10,
+      "toc_depth": 3,
+      "canonical_owner": "release@aether"
+    },
+    {
+      "path": "docs/COMMERCE-CONTROL-PLANE.md",
+      "title": "Agentic Commerce — Control Plane",
+      "slug": "api/commerce-control-plane",
+      "section": "api",
+      "visibility": "P",
+      "audience": [
+        "architect",
+        "dev-senior"
+      ],
+      "status": "stable",
+      "since_version": "8.8.0",
+      "estimated_read_minutes": 8,
+      "toc_depth": 3,
+      "canonical_owner": "commerce@aether"
+    },
+    {
+      "path": "docs/COMMERCE-OPERATOR-RUNBOOK.md",
+      "title": "Commerce Operator Runbook",
+      "slug": "operations/commerce-runbook",
+      "section": "operations",
+      "visibility": "I",
+      "audience": [
+        "ops"
+      ],
+      "status": "stable",
+      "since_version": "8.8.0",
+      "estimated_read_minutes": 3,
+      "toc_depth": 3,
+      "canonical_owner": "commerce@aether"
+    },
+    {
+      "path": "docs/ECONOMIC-OBSERVABILITY.md",
+      "title": "Economic Observability",
+      "slug": "concepts/economic-observability",
+      "section": "concepts",
+      "visibility": "P",
+      "audience": [
+        "dev-senior",
+        "architect",
+        "ai"
+      ],
+      "status": "stable",
+      "since_version": "8.8.0",
+      "estimated_read_minutes": 10,
+      "toc_depth": 3,
+      "canonical_owner": "platform@aether"
+    },
+    {
+      "path": "docs/IDENTITY-RESOLUTION.md",
+      "title": "Identity Resolution",
+      "slug": "concepts/identity-resolution",
+      "section": "concepts",
+      "visibility": "P",
+      "audience": [
+        "dev-senior",
+        "architect"
+      ],
+      "status": "stable",
+      "since_version": "8.8.0",
+      "estimated_read_minutes": 12,
+      "toc_depth": 3,
+      "canonical_owner": "identity@aether"
+    },
+    {
+      "path": "docs/INTELLIGENCE-GRAPH.md",
+      "title": "Unified Intelligence Graph",
+      "slug": "concepts/intelligence-graph",
+      "section": "concepts",
+      "visibility": "P",
+      "audience": [
+        "architect",
+        "dev-senior",
+        "ai"
+      ],
+      "status": "stable",
+      "since_version": "8.8.0",
+      "estimated_read_minutes": 15,
+      "toc_depth": 3,
+      "canonical_owner": "graph@aether"
+    },
+    {
+      "path": "docs/MIGRATION-RUNBOOK.md",
+      "title": "Migration Runbook",
+      "slug": "operations/migration",
+      "section": "operations",
+      "visibility": "I",
+      "audience": [
+        "ops"
+      ],
+      "status": "stable",
+      "since_version": "8.8.0",
+      "estimated_read_minutes": 8,
+      "toc_depth": 3,
+      "canonical_owner": "platform@aether"
+    },
+    {
+      "path": "docs/MIGRATION-v7.md",
+      "title": "SDK Migration Guide — v6.x to v7.0",
+      "slug": "sdks/migration-v7",
+      "section": "sdks",
+      "visibility": "P",
+      "audience": [
+        "dev-junior",
+        "dev-senior"
+      ],
+      "status": "deprecated",
+      "since_version": "8.8.0",
+      "estimated_read_minutes": 8,
+      "toc_depth": 3,
+      "canonical_owner": "sdk@aether"
+    },
+    {
+      "path": "docs/ML-TRAINING-GUIDE.md",
+      "title": "ML Model Training Guide",
+      "slug": "ai/ml-training",
+      "section": "ai",
+      "visibility": "P",
+      "audience": [
+        "ai",
+        "dev-senior"
+      ],
+      "status": "stable",
+      "since_version": "8.8.0",
+      "estimated_read_minutes": 4,
+      "toc_depth": 3,
+      "canonical_owner": "ml@aether"
+    },
+    {
+      "path": "docs/MODEL-EXTRACTION-DEFENSE.md",
+      "title": "Model Extraction Defense",
+      "slug": "ai/extraction-defense",
+      "section": "ai",
+      "visibility": "P",
+      "audience": [
+        "security",
+        "ai",
+        "architect"
+      ],
+      "status": "stable",
+      "since_version": "8.8.0",
+      "estimated_read_minutes": 8,
+      "toc_depth": 3,
+      "canonical_owner": "security@aether"
+    },
+    {
+      "path": "docs/OPERATIONAL-INTELLIGENCE-AUDIT.md",
+      "title": "Operational Intelligence — Stub vs. Production Audit",
+      "slug": "operations/operational-intelligence-audit",
+      "section": "operations",
+      "visibility": "I",
+      "audience": [
+        "dev-senior",
+        "architect",
+        "ops"
+      ],
+      "status": "stable"
+    },
+    {
+      "path": "docs/OPERATIONS-RUNBOOK.md",
+      "title": "Operations Runbook",
+      "slug": "operations/runbook",
+      "section": "operations",
+      "visibility": "I",
+      "audience": [
+        "ops"
+      ],
+      "status": "stable",
+      "since_version": "8.8.0",
+      "estimated_read_minutes": 12,
+      "toc_depth": 3,
+      "canonical_owner": "platform@aether"
+    },
+    {
+      "path": "docs/PRODUCTION-READINESS.md",
+      "title": "Production Readiness Review",
+      "slug": "operations/production-readiness",
+      "section": "operations",
+      "visibility": "I",
+      "audience": [
+        "ops",
+        "architect"
+      ],
+      "status": "stable",
+      "since_version": "8.8.0",
+      "estimated_read_minutes": 6,
+      "toc_depth": 3,
+      "canonical_owner": "platform@aether"
+    },
+    {
+      "path": "docs/PROFILE-360-AGGREGATION.md",
+      "title": "Profile 360 Aggregation Layer",
+      "slug": "api/profile-360-aggregation",
+      "section": "api",
+      "visibility": "P",
+      "audience": [
+        "dev-senior",
+        "architect"
+      ],
+      "status": "stable",
+      "since_version": "8.8.0",
+      "estimated_read_minutes": 8,
+      "toc_depth": 3,
+      "canonical_owner": "backend@aether"
+    },
+    {
+      "path": "docs/REPO-INDEX.md",
+      "title": "Repository Index",
+      "slug": "reference/repo-index",
+      "section": "reference",
+      "visibility": "I",
+      "audience": [
+        "dev-senior",
+        "ops",
+        "architect"
+      ],
+      "status": "stable",
+      "since_version": "8.8.0",
+      "estimated_read_minutes": 2,
+      "toc_depth": 3,
+      "canonical_owner": "platform@aether"
+    },
+    {
+      "path": "docs/ROLLBACK-RUNBOOK.md",
+      "title": "Rollback Runbook",
+      "slug": "operations/rollback",
+      "section": "operations",
+      "visibility": "I",
+      "audience": [
+        "ops"
+      ],
+      "status": "stable",
+      "since_version": "8.8.0",
+      "estimated_read_minutes": 10,
+      "toc_depth": 3,
+      "canonical_owner": "platform@aether"
+    },
+    {
+      "path": "docs/SDK-ANDROID.md",
+      "title": "Aether Android SDK — Integration Guide",
+      "slug": "sdks/android",
+      "section": "sdks",
+      "visibility": "P",
+      "audience": [
+        "dev-junior",
+        "dev-senior"
+      ],
+      "status": "stable",
+      "since_version": "8.8.0",
+      "estimated_read_minutes": 10,
+      "toc_depth": 3,
+      "canonical_owner": "sdk@aether"
+    },
+    {
+      "path": "docs/SDK-IOS.md",
+      "title": "Aether iOS SDK — Integration Guide",
+      "slug": "sdks/ios",
+      "section": "sdks",
+      "visibility": "P",
+      "audience": [
+        "dev-junior",
+        "dev-senior"
+      ],
+      "status": "stable",
+      "since_version": "8.8.0",
+      "estimated_read_minutes": 10,
+      "toc_depth": 3,
+      "canonical_owner": "sdk@aether"
+    },
+    {
+      "path": "docs/SDK-REACT-NATIVE.md",
+      "title": "Aether React Native SDK — Integration Guide",
+      "slug": "sdks/react-native",
+      "section": "sdks",
+      "visibility": "P",
+      "audience": [
+        "dev-junior",
+        "dev-senior"
+      ],
+      "status": "stable",
+      "since_version": "8.8.0",
+      "estimated_read_minutes": 9,
+      "toc_depth": 3,
+      "canonical_owner": "sdk@aether"
+    },
+    {
+      "path": "docs/SDK-WEB.md",
+      "title": "Aether Web SDK — Integration Guide",
+      "slug": "sdks/web",
+      "section": "sdks",
+      "visibility": "P",
+      "audience": [
+        "dev-junior",
+        "dev-senior"
+      ],
+      "status": "stable",
+      "since_version": "8.8.0",
+      "estimated_read_minutes": 12,
+      "toc_depth": 3,
+      "canonical_owner": "sdk@aether"
+    },
+    {
+      "path": "docs/SECRET-ROTATION.md",
+      "title": "Secret Rotation Runbook",
+      "slug": "security/secret-rotation",
+      "section": "security",
+      "visibility": "I",
+      "audience": [
+        "security",
+        "ops"
+      ],
+      "status": "stable",
+      "since_version": "8.8.0",
+      "estimated_read_minutes": 2,
+      "toc_depth": 3,
+      "canonical_owner": "security@aether"
+    },
+    {
+      "path": "docs/SEMANTIC-CONTEXT-INTELLIGENCE.md",
+      "title": "Semantic Context Intelligence Layer",
+      "slug": "ai/semantic-context",
+      "section": "ai",
+      "visibility": "P",
+      "audience": [
+        "architect",
+        "ai",
+        "dev-senior"
+      ],
+      "status": "stable",
+      "since_version": "8.8.0",
+      "estimated_read_minutes": 15,
+      "toc_depth": 3,
+      "canonical_owner": "ai@aether"
+    },
+    {
+      "path": "docs/SMOKE-TEST-CHECKLIST.md",
+      "title": "Smoke Test & Post-Deploy Verification Checklist",
+      "slug": "operations/smoke-tests",
+      "section": "operations",
+      "visibility": "I",
+      "audience": [
+        "ops"
+      ],
+      "status": "stable",
+      "since_version": "8.8.0",
+      "estimated_read_minutes": 10,
+      "toc_depth": 3,
+      "canonical_owner": "platform@aether"
+    },
+    {
+      "path": "docs/STABLECOIN-RAILS.md",
+      "title": "Stablecoin Rails",
+      "slug": "concepts/stablecoin-rails",
+      "section": "concepts",
+      "visibility": "P",
+      "audience": [
+        "dev-senior",
+        "architect"
+      ],
+      "status": "stable",
+      "since_version": "8.8.0",
+      "estimated_read_minutes": 2,
+      "toc_depth": 3,
+      "canonical_owner": "commerce@aether"
+    },
+    {
+      "path": "docs/STRIPE-BILLING.md",
+      "title": "Stripe Billing — P1–P4 Integration",
+      "slug": "concepts/stripe-billing",
+      "section": "concepts",
+      "visibility": "P",
+      "audience": [
+        "dev-senior",
+        "ops",
+        "buyer"
+      ],
+      "status": "stable",
+      "since_version": "8.8.0",
+      "estimated_read_minutes": 6,
+      "toc_depth": 3,
+      "canonical_owner": "billing@aether"
+    },
+    {
+      "path": "docs/SUBSYSTEM-CACHE.md",
+      "title": "Cache / Redis Subsystem",
+      "slug": "data/cache",
+      "section": "data",
+      "visibility": "P",
+      "audience": [
+        "dev-senior",
+        "architect",
+        "ops"
+      ],
+      "status": "stable",
+      "since_version": "8.8.0",
+      "estimated_read_minutes": 4,
+      "toc_depth": 3,
+      "canonical_owner": "backend@aether"
+    },
+    {
+      "path": "docs/SUBSYSTEM-DATABASE.md",
+      "title": "PostgreSQL / Repository Subsystem",
+      "slug": "data/postgres",
+      "section": "data",
+      "visibility": "P",
+      "audience": [
+        "dev-senior",
+        "architect",
+        "ops"
+      ],
+      "status": "stable",
+      "since_version": "8.8.0",
+      "estimated_read_minutes": 5,
+      "toc_depth": 3,
+      "canonical_owner": "backend@aether"
+    },
+    {
+      "path": "docs/SUBSYSTEM-EVENTS.md",
+      "title": "Events / Kafka Subsystem",
+      "slug": "data/kafka",
+      "section": "data",
+      "visibility": "P",
+      "audience": [
+        "dev-senior",
+        "architect",
+        "ops"
+      ],
+      "status": "stable",
+      "since_version": "8.8.0",
+      "estimated_read_minutes": 4,
+      "toc_depth": 3,
+      "canonical_owner": "backend@aether"
+    },
+    {
+      "path": "docs/X402_AUDIT_REPORT.md",
+      "title": "x402 Protocol Support Audit",
+      "slug": "security/x402-audit",
+      "section": "security",
+      "visibility": "P",
+      "audience": [
+        "security",
+        "architect",
+        "compliance"
+      ],
+      "status": "stable",
+      "since_version": "8.8.0",
+      "estimated_read_minutes": 12,
+      "toc_depth": 3,
+      "canonical_owner": "security@aether"
+    },
+    {
+      "path": "docs/architecture/BACKEND_INTELLIGENCE_ARCHITECTURE.md",
+      "title": "Aether Backend Intelligence Architecture Blueprint",
+      "slug": "architecture/backend-intelligence",
+      "section": "architecture",
+      "visibility": "I",
+      "audience": [
+        "architect",
+        "dev-senior"
+      ],
+      "status": "experimental",
+      "estimated_read_minutes": 30,
+      "toc_depth": 4,
+      "canonical_owner": "platform@aether"
+    },
+    {
+      "path": "docs/frontend/PROFILE360_ARCHITECTURE.md",
+      "title": "Profile360 Frontend Architecture",
+      "slug": "architecture/profile360-frontend",
+      "section": "architecture",
+      "visibility": "I",
+      "audience": [
+        "dev-senior",
+        "architect"
+      ],
+      "status": "stable",
+      "since_version": "8.8.0",
+      "estimated_read_minutes": 10,
+      "toc_depth": 3,
+      "canonical_owner": "frontend@aether"
+    },
+    {
+      "path": "docs/internal/tooling/docs-pipeline.md",
+      "title": "Documentation Pipeline",
+      "slug": "tooling/docs-pipeline",
+      "section": "operations",
+      "visibility": "I",
+      "audience": [
+        "ops",
+        "dev-senior",
+        "architect"
+      ],
+      "status": "stable",
+      "since_version": "8.8.0",
+      "estimated_read_minutes": 8,
+      "toc_depth": 3,
+      "canonical_owner": "platform@aether"
+    }
+  ]
+}
