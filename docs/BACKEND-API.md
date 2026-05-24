@@ -11,7 +11,7 @@ source_files:
 canonical_owner: backend@aether
 estimated_read_minutes: 60
 toc_depth: 3
-last_synced_commit: bbbb603
+last_synced_commit: 05eb147
 ---
 # Aether Backend API v8.8.0 — Endpoint Specification
 
@@ -99,6 +99,66 @@ Example 403:
   "endpoint": "/v1/agent/tasks"
 }
 ```
+
+## Customer-Facing Sign-Up, Auth, and Self-Service (no API key required)
+
+These endpoints intentionally bypass API-key auth so prospective customers can
+register without one. The Stripe webhook is also HTTP-unauthenticated but verifies
+a Stripe-signed payload. Operators should ensure IP-rate-limiting is active on
+these paths and alert on signature-verification failures.
+
+| Endpoint | Method | Purpose |
+|---|---|---|
+| `/v1/tenants` | POST | Public tenant sign-up (programmatic / legacy path) |
+| `/v1/auth/register` | POST | Email sign-up step 1 — send OTP to the supplied email |
+| `/v1/auth/verify-email` | POST | Email sign-up step 2 — verify OTP, create tenant + first API key |
+| `/v1/auth/resend-verification` | POST | Resend the OTP if the first email was lost |
+| `/v1/auth/login` | POST | Email + password → API key (creates a new key per login) |
+| `/v1/auth/sso/callback` | POST | Auth0 JWT → API key (SSO finish) |
+| `/v1/auth/sso/providers` | GET | List configured SSO providers (no auth) |
+| `/v1/auth/recover` | POST | Recover lost API key via signed email |
+| `/v1/admin/billing/stripe/webhook` | POST | Stripe-signed webhook (subscription + invoice events) |
+
+### Self-service caller endpoints (`/v1/me/*`, API key required)
+
+The "me" surface lets a customer manage their own API keys without admin
+intervention. Every endpoint scopes to the caller's API key tenant; no
+permission gate beyond authentication.
+
+| Endpoint | Method | Purpose |
+|---|---|---|
+| `/v1/me` | GET | Caller profile + plan summary |
+| `/v1/me/api-keys` | GET | List caller's API keys (paginated; honours `limit` + `cursor`) |
+| `/v1/me/api-keys` | POST | Create a new API key (self-service) |
+| `/v1/me/api-keys/{key_id}` | PATCH | Rename an existing API key |
+| `/v1/me/api-keys/{key_id}` | DELETE | Revoke an API key |
+| `/v1/me/account` | DELETE | Self-service account deletion (GDPR Article 17) |
+
+### Self-service billing (`/v1/billing/*`, API key required)
+
+Stripe-mediated billing for paying customers. Requires the tenant to have a
+Stripe customer object provisioned by the registration flow.
+
+| Endpoint | Method | Purpose |
+|---|---|---|
+| `/v1/billing/checkout` | POST | Create a Stripe Checkout session URL for plan upgrade |
+| `/v1/billing/portal` | POST | Create a Stripe Billing Portal session URL |
+| `/v1/billing/invoices` | GET | List invoices for the caller's tenant |
+| `/v1/billing/invoices/{invoice_id}` | GET | Get one invoice's full payload |
+| `/v1/admin/billing/overage-cycle` | POST | Trigger the monthly overage invoice cycle (admin; also auto-runs as a lifespan cron) |
+
+### Admin tenant lifecycle (admin permission required)
+
+| Endpoint | Method | Purpose |
+|---|---|---|
+| `/v1/admin/tenants/{tenant_id}/deactivate` | POST | Soft-deactivate tenant (suspends new requests; preserves data) |
+| `/v1/admin/tenants/{tenant_id}` | DELETE | Hard-delete tenant (GDPR; cascading) |
+
+### SDK utilities (`/sdk/*`, API key required)
+
+| Endpoint | Method | Purpose |
+|---|---|---|
+| `/sdk/identity/resolve` | POST | Cross-device wallet identity resolution. SDKs call this on init when `autoResumeJourney: true` and fire `onJourneyResumed` with the returned `ResolvedIdentity` if the backend matches a prior session. |
 
 ## Billing Endpoints
 
