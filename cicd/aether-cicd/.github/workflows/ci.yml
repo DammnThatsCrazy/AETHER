@@ -54,11 +54,13 @@ jobs:
           else
             # Build comma-separated list of affected services
             AFFECTED=""
-            for svc in ingestion identity analytics ml-serving agent campaign consent notification admin; do
-              if echo "$CHANGED" | grep -q "^services/${svc}/"; then
-                AFFECTED="${AFFECTED},${svc}"
-              fi
-            done
+            # Map changed paths to the two deployed service names
+            if echo "$CHANGED" | grep -qE "^(Backend Architecture/|Agent Layer/|security/|packages/)"; then
+              AFFECTED="${AFFECTED},aether-app"
+            fi
+            if echo "$CHANGED" | grep -q "^ML Models/"; then
+              AFFECTED="${AFFECTED},aether-ml"
+            fi
             AFFECTED="${AFFECTED#,}"
             echo "run_all=false" >> $GITHUB_OUTPUT
             echo "affected=${AFFECTED:-all}" >> $GITHUB_OUTPUT
@@ -78,7 +80,7 @@ jobs:
       - uses: ./.github/actions/setup-node-python
         with:
           install-python: "true"
-          python-packages: "black ruff"
+          python-packages: "ruff"
       - name: ESLint (TypeScript)
         run: npx turbo run lint --filter='./packages/*' --filter='./services/*'
       - name: Ruff (Python)
@@ -225,15 +227,8 @@ jobs:
       fail-fast: false
       matrix:
         service:
-          - ingestion
-          - identity
-          - analytics
-          - ml-serving
-          - agent
-          - campaign
-          - consent
-          - notification
-          - admin
+          - aether-app
+          - aether-ml
     steps:
       - uses: actions/checkout@v4
 
@@ -262,12 +257,24 @@ jobs:
         if: steps.check.outputs.skip == 'false'
         uses: docker/setup-buildx-action@v3
 
+      - name: Resolve build context
+        if: steps.check.outputs.skip == 'false'
+        id: ctx
+        run: |
+          if [ "${{ matrix.service }}" = "aether-app" ]; then
+            echo "context=." >> $GITHUB_OUTPUT
+            echo "dockerfile=Backend Architecture/aether-backend/Dockerfile" >> $GITHUB_OUTPUT
+          else
+            echo "context=ML Models/aether-ml" >> $GITHUB_OUTPUT
+            echo "dockerfile=ML Models/aether-ml/docker/Dockerfile" >> $GITHUB_OUTPUT
+          fi
+
       - name: Build & push ${{ matrix.service }}
         if: steps.check.outputs.skip == 'false'
         uses: docker/build-push-action@v5
         with:
-          context: services/${{ matrix.service }}
-          file: services/${{ matrix.service }}/Dockerfile
+          context: ${{ steps.ctx.outputs.context }}
+          file: ${{ steps.ctx.outputs.dockerfile }}
           push: true
           tags: |
             ${{ env.ECR_REGISTRY }}/aether-${{ matrix.service }}:${{ github.sha }}
@@ -288,10 +295,10 @@ jobs:
           SIZE=$(docker image inspect ${{ env.ECR_REGISTRY }}/aether-${{ matrix.service }}:${{ github.sha }} --format='{{.Size}}' 2>/dev/null || echo 0)
           SIZE_MB=$((SIZE / 1048576))
           echo "Image size: ${SIZE_MB}MB"
-          # ml-serving currently installs training deps alongside serving deps until
+          # aether-ml currently installs training deps alongside serving deps until
           # ONNX server-model exports land. Budget 2000MB; drops to 600MB on cutover.
           LIMIT=500
-          if [ "${{ matrix.service }}" = "ml-serving" ]; then LIMIT=2000; fi
+          if [ "${{ matrix.service }}" = "aether-ml" ]; then LIMIT=2000; fi
           if [ $SIZE_MB -gt $LIMIT ]; then
             echo "::error::Image ${SIZE_MB}MB exceeds ${LIMIT}MB budget for ${{ matrix.service }}"
             exit 1

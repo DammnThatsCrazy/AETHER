@@ -119,17 +119,14 @@ class ServiceSpec:
 
 
 # ── Production specs ───────────────────────────────────────────────────
+# Consolidated to two Fargate Spot services (E2 cost reduction):
+#   aether-app    — all FastAPI routers (backend + admin + agent)
+#   aether-ml     — ML serving API (lazy ONNX per route)
+# Previously 9 notional services; Terraform always provisioned only these 2.
 
 _PRODUCTION_SPECS = {
-    "ingestion":    ServiceSpec(512,  1024, min_count=2,  max_count=20, target_cpu_pct=60, port=8001),
-    "identity":     ServiceSpec(512,  1024, min_count=2,  max_count=10, target_cpu_pct=60, port=8002),
-    "analytics":    ServiceSpec(1024, 2048, min_count=2,  max_count=15, target_cpu_pct=70, port=8003),
-    "ml-serving":   ServiceSpec(1024, 4096, min_count=2,  max_count=20, target_cpu_pct=50, port=8004),
-    "agent":        ServiceSpec(512,  2048, min_count=1,  max_count=10, target_cpu_pct=70, port=8005, spot=True),
-    "campaign":     ServiceSpec(256,  512,  min_count=1,  max_count=5,  target_cpu_pct=60, port=8006),
-    "consent":      ServiceSpec(256,  512,  min_count=1,  max_count=3,  target_cpu_pct=60, port=8007),
-    "notification": ServiceSpec(256,  512,  min_count=1,  max_count=5,  target_cpu_pct=60, port=8008),
-    "admin":        ServiceSpec(256,  512,  min_count=1,  max_count=3,  target_cpu_pct=60, port=8009),
+    "aether-app": ServiceSpec(512, 1024, min_count=1, max_count=6,  target_cpu_pct=60, port=8000, spot=True),
+    "aether-ml":  ServiceSpec(512, 1024, min_count=1, max_count=6,  target_cpu_pct=60, port=8080, spot=True),
 }
 
 

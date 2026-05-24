@@ -35,6 +35,14 @@ except ImportError:
     AIOKafkaConsumer = None  # type: ignore[misc, assignment]
     KAFKA_AVAILABLE = False
 
+# Optional boto3 import (used for SQS backend)
+try:
+    import boto3 as _boto3_events
+    BOTO3_EVENTS_AVAILABLE = True
+except ImportError:
+    _boto3_events = None  # type: ignore[assignment]
+    BOTO3_EVENTS_AVAILABLE = False
+
 
 def _is_local_env() -> bool:
     return os.getenv("AETHER_ENV", "local").lower() == "local"
@@ -42,6 +50,14 @@ def _is_local_env() -> bool:
 
 def _kafka_bootstrap() -> str:
     return os.getenv("KAFKA_BOOTSTRAP_SERVERS", "")
+
+
+def _event_broker() -> str:
+    return os.getenv("EVENT_BROKER", "kafka").lower()
+
+
+def _sqs_queue_url() -> str:
+    return os.getenv("SQS_QUEUE_URL", "")
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -337,11 +353,21 @@ class EventProducer:
         self._published: list[Event] = []
         self._connected = False
         self._kafka_producer: Optional[Any] = None
+        self._sqs_client: Optional[Any] = None
+        self._sqs_queue_url: str = ""
         self._mode = "uninitialized"
 
     async def connect(self) -> None:
         bootstrap = _kafka_bootstrap()
-        if bootstrap and KAFKA_AVAILABLE:
+        if _event_broker() == "sns_sqs" and BOTO3_EVENTS_AVAILABLE and _sqs_queue_url():
+            loop = asyncio.get_event_loop()
+            self._sqs_client = await loop.run_in_executor(
+                None, lambda: _boto3_events.client("sqs")  # type: ignore[union-attr]
+            )
+            self._sqs_queue_url = _sqs_queue_url()
+            self._mode = "sqs"
+            logger.info(f"EventProducer connected (SQS: {self._sqs_queue_url})")
+        elif bootstrap and KAFKA_AVAILABLE:
             try:
                 self._kafka_producer = AIOKafkaProducer(
                     bootstrap_servers=bootstrap,
@@ -380,6 +406,7 @@ class EventProducer:
         if self._kafka_producer:
             await self._kafka_producer.stop()
             self._kafka_producer = None
+        self._sqs_client = None
         self._connected = False
         logger.info("EventProducer closed")
 
@@ -390,7 +417,29 @@ class EventProducer:
 
         for attempt in range(self.MAX_RETRIES):
             try:
-                if self._kafka_producer:
+                if self._sqs_client:
+                    body = event.serialize()
+                    loop = asyncio.get_event_loop()
+                    is_fifo = self._sqs_queue_url.endswith(".fifo")
+                    if is_fifo:
+                        await loop.run_in_executor(
+                            None,
+                            lambda: self._sqs_client.send_message(  # type: ignore[union-attr]
+                                QueueUrl=self._sqs_queue_url,
+                                MessageBody=body,
+                                MessageGroupId=event.tenant_id or "default",
+                                MessageDeduplicationId=event.event_id,
+                            ),
+                        )
+                    else:
+                        await loop.run_in_executor(
+                            None,
+                            lambda: self._sqs_client.send_message(  # type: ignore[union-attr]
+                                QueueUrl=self._sqs_queue_url,
+                                MessageBody=body,
+                            ),
+                        )
+                elif self._kafka_producer:
                     await self._kafka_producer.send_and_wait(
                         event.topic.value, event.serialize()
                     )
@@ -466,6 +515,8 @@ class EventConsumer:
         self._semaphore = asyncio.Semaphore(self.MAX_CONCURRENT)
         self._dlq: list[Event] = []
         self._kafka_consumer: Optional[Any] = None
+        self._sqs_client: Optional[Any] = None
+        self._sqs_queue_url: str = ""
         self._group_id = group_id
         self._running = False
         self._mode = "uninitialized"
@@ -475,7 +526,7 @@ class EventConsumer:
         logger.info(f"Subscribed handler to {topic.value}")
 
     async def start(self) -> None:
-        """Start consuming from Kafka or stay in in-memory mode."""
+        """Start consuming from Kafka, SQS, or stay in in-memory mode."""
         bootstrap = _kafka_bootstrap()
         topics = [t.value for t in self._handlers.keys()]
         if not topics:
@@ -483,7 +534,16 @@ class EventConsumer:
             logger.info("EventConsumer: no subscriptions, in-memory mode")
             return
 
-        if bootstrap and KAFKA_AVAILABLE:
+        if _event_broker() == "sns_sqs" and BOTO3_EVENTS_AVAILABLE and _sqs_queue_url():
+            loop = asyncio.get_event_loop()
+            self._sqs_client = await loop.run_in_executor(
+                None, lambda: _boto3_events.client("sqs")  # type: ignore[union-attr]
+            )
+            self._sqs_queue_url = _sqs_queue_url()
+            self._mode = "sqs"
+            self._running = True
+            logger.info(f"EventConsumer started (SQS: {self._sqs_queue_url})")
+        elif bootstrap and KAFKA_AVAILABLE:
             try:
                 self._kafka_consumer = AIOKafkaConsumer(
                     *topics,
@@ -520,6 +580,42 @@ class EventConsumer:
                     logger.error(f"Error processing Kafka message: {e}")
         except Exception as e:
             logger.error(f"Kafka consume loop error: {e}")
+        finally:
+            self._running = False
+
+    async def _sqs_receive_loop(self) -> None:
+        """Long-poll SQS receive loop. Run as asyncio task."""
+        if not self._sqs_client:
+            return
+        loop = asyncio.get_event_loop()
+        try:
+            while self._running:
+                try:
+                    response = await loop.run_in_executor(
+                        None,
+                        lambda: self._sqs_client.receive_message(  # type: ignore[union-attr]
+                            QueueUrl=self._sqs_queue_url,
+                            MaxNumberOfMessages=10,
+                            WaitTimeSeconds=20,
+                        ),
+                    )
+                    messages = response.get("Messages", [])
+                    for msg in messages:
+                        receipt_handle = msg["ReceiptHandle"]
+                        try:
+                            event = Event.deserialize(msg["Body"])
+                            await self.process(event)
+                            await loop.run_in_executor(
+                                None,
+                                lambda rh=receipt_handle: self._sqs_client.delete_message(  # type: ignore[union-attr]
+                                    QueueUrl=self._sqs_queue_url,
+                                    ReceiptHandle=rh,
+                                ),
+                            )
+                        except Exception as e:
+                            logger.error(f"Error processing SQS message: {e}")
+                except Exception as e:
+                    logger.error(f"SQS receive loop error: {e}")
         finally:
             self._running = False
 
@@ -569,6 +665,7 @@ class EventConsumer:
         if self._kafka_consumer:
             await self._kafka_consumer.stop()
             self._kafka_consumer = None
+        self._sqs_client = None
         logger.info("EventConsumer stopped")
 
     @property

@@ -41,7 +41,10 @@ class SageMakerTrainingConfig(BaseModel):
 
 
 class SageMakerEndpointConfig(BaseModel):
-    """Configuration for an AWS SageMaker real-time inference endpoint."""
+    """Configuration for an AWS SageMaker real-time inference endpoint.
+
+    Retained for legacy tooling. New server models use SageMakerServerlessConfig.
+    """
 
     instance_type: str
     instance_count: int = 1
@@ -50,6 +53,19 @@ class SageMakerEndpointConfig(BaseModel):
     auto_scaling_min: int = 1
     auto_scaling_max: int = 4
     target_invocations_per_instance: int = 100
+
+
+class SageMakerServerlessConfig(BaseModel):
+    """Configuration for a SageMaker Serverless Inference endpoint.
+
+    Pay-per-request: no always-on instances. Cold start ~1-10 s after ≥15 min
+    idle. Memory sizes must be one of: 1024, 2048, 3072, 4096, 5120, 6144 MB.
+    """
+
+    model_name: str
+    endpoint_name: str
+    memory_size_mb: int = 2048
+    max_concurrency: int = 5
 
 
 # ---------------------------------------------------------------------------
@@ -224,65 +240,49 @@ SAGEMAKER_TRAINING_CONFIGS: dict[str, SageMakerTrainingConfig] = {
 
 
 # ---------------------------------------------------------------------------
-# Per-model endpoint configs
+# Per-model inference configs (E1 cost reduction)
+#
+# Hosting tiers after E1:
+#   Serverless Inference (pay-per-request, ~$80/mo):
+#     M4 identity_resolution (GAT)   — GPU warm-up < 10 s
+#     M5 journey_prediction (LSTM)   — GPU warm-up < 10 s
+#     M8 anomaly_detection (AE)      — CPU serverless
+#
+#   In-process ONNX on Fargate (no SageMaker cost):
+#     M6 churn_prediction  (XGBoost tabular)
+#     M7 ltv_prediction    (XGBoost tabular)
+#     M9 campaign_attribution (Shapley, CPU-only)
+#
+#   Edge (browser, unchanged):
+#     M1 intent_prediction / M2 bot_detection / M3 session_scorer
 # ---------------------------------------------------------------------------
 
-SAGEMAKER_ENDPOINT_CONFIGS: dict[str, SageMakerEndpointConfig] = {
-    "identity_resolution": SageMakerEndpointConfig(
-        instance_type="ml.m5.xlarge",
-        instance_count=1,
+SAGEMAKER_SERVERLESS_CONFIGS: dict[str, SageMakerServerlessConfig] = {
+    "identity_resolution": SageMakerServerlessConfig(
         model_name="aether-identity-resolution",
-        endpoint_name="aether-identity-resolution-prod",
-        auto_scaling_min=1,
-        auto_scaling_max=4,
-        target_invocations_per_instance=200,
+        endpoint_name="aether-identity-resolution-serverless",
+        memory_size_mb=2048,
+        max_concurrency=5,
     ),
-    "journey_prediction": SageMakerEndpointConfig(
-        instance_type="ml.g4dn.xlarge",
-        instance_count=1,
+    "journey_prediction": SageMakerServerlessConfig(
         model_name="aether-journey-prediction",
-        endpoint_name="aether-journey-prediction-prod",
-        auto_scaling_min=1,
-        auto_scaling_max=3,
-        target_invocations_per_instance=100,
+        endpoint_name="aether-journey-prediction-serverless",
+        memory_size_mb=2048,
+        max_concurrency=5,
     ),
-    "churn_prediction": SageMakerEndpointConfig(
-        instance_type="ml.m5.large",
-        instance_count=1,
-        model_name="aether-churn-prediction",
-        endpoint_name="aether-churn-prediction-prod",
-        auto_scaling_min=1,
-        auto_scaling_max=4,
-        target_invocations_per_instance=300,
-    ),
-    "ltv_prediction": SageMakerEndpointConfig(
-        instance_type="ml.m5.large",
-        instance_count=1,
-        model_name="aether-ltv-prediction",
-        endpoint_name="aether-ltv-prediction-prod",
-        auto_scaling_min=1,
-        auto_scaling_max=4,
-        target_invocations_per_instance=300,
-    ),
-    "anomaly_detection": SageMakerEndpointConfig(
-        instance_type="ml.m5.large",
-        instance_count=1,
+    "anomaly_detection": SageMakerServerlessConfig(
         model_name="aether-anomaly-detection",
-        endpoint_name="aether-anomaly-detection-prod",
-        auto_scaling_min=1,
-        auto_scaling_max=2,
-        target_invocations_per_instance=150,
-    ),
-    "campaign_attribution": SageMakerEndpointConfig(
-        instance_type="ml.m5.large",
-        instance_count=1,
-        model_name="aether-campaign-attribution",
-        endpoint_name="aether-campaign-attribution-prod",
-        auto_scaling_min=1,
-        auto_scaling_max=2,
-        target_invocations_per_instance=100,
+        endpoint_name="aether-anomaly-detection-serverless",
+        memory_size_mb=1024,
+        max_concurrency=5,
     ),
 }
+
+# Models served in-process on Fargate via ONNX (no SageMaker endpoint).
+IN_PROCESS_MODELS = frozenset({"churn_prediction", "ltv_prediction", "campaign_attribution"})
+
+# Legacy alias kept for ops scripts that haven't migrated.
+SAGEMAKER_ENDPOINT_CONFIGS: dict[str, SageMakerEndpointConfig] = {}
 
 
 # ---------------------------------------------------------------------------
@@ -294,7 +294,7 @@ def get_training_config(model_name: str) -> SageMakerTrainingConfig:
     """Get the SageMaker training job config for a model.
 
     Args:
-        model_name: One of the 9 Aether model identifiers.
+        model_name: One of the Aether model identifiers.
 
     Returns:
         The ``SageMakerTrainingConfig`` for the requested model.
@@ -310,21 +310,39 @@ def get_training_config(model_name: str) -> SageMakerTrainingConfig:
     return SAGEMAKER_TRAINING_CONFIGS[model_name]
 
 
-def get_endpoint_config(model_name: str) -> SageMakerEndpointConfig:
-    """Get the SageMaker endpoint config for a model.
+def get_serverless_config(model_name: str) -> SageMakerServerlessConfig:
+    """Get the SageMaker Serverless Inference config for a model.
 
-    Args:
-        model_name: One of the server-side Aether model identifiers.
-
-    Returns:
-        The ``SageMakerEndpointConfig`` for the requested model.
+    Only M4, M5, M8 have serverless endpoints. M6, M7, M9 are in-process
+    ONNX on Fargate — call ``is_in_process_model()`` to check before calling
+    this function.
 
     Raises:
-        KeyError: If the model name is not found.
+        KeyError: If the model has no serverless endpoint (wrong tier).
     """
+    if model_name not in SAGEMAKER_SERVERLESS_CONFIGS:
+        if model_name in IN_PROCESS_MODELS:
+            raise KeyError(
+                f"'{model_name}' runs in-process on Fargate (ONNX), "
+                "not on a SageMaker endpoint."
+            )
+        raise KeyError(
+            f"No serverless endpoint config for '{model_name}'. "
+            f"Serverless models: {sorted(SAGEMAKER_SERVERLESS_CONFIGS.keys())}"
+        )
+    return SAGEMAKER_SERVERLESS_CONFIGS[model_name]
+
+
+def is_in_process_model(model_name: str) -> bool:
+    """Return True if the model is served in-process on Fargate (not SageMaker)."""
+    return model_name in IN_PROCESS_MODELS
+
+
+def get_endpoint_config(model_name: str) -> SageMakerEndpointConfig:
+    """Deprecated. Use get_serverless_config() for new server models."""
     if model_name not in SAGEMAKER_ENDPOINT_CONFIGS:
         raise KeyError(
-            f"No SageMaker endpoint config for '{model_name}'. "
-            f"Available: {sorted(SAGEMAKER_ENDPOINT_CONFIGS.keys())}"
+            f"No real-time endpoint config for '{model_name}'. "
+            "Server models now use SageMaker Serverless — see get_serverless_config()."
         )
     return SAGEMAKER_ENDPOINT_CONFIGS[model_name]
