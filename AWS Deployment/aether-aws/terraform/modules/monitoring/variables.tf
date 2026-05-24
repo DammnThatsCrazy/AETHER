@@ -15,17 +15,24 @@ variable "ecs_cluster_name" {
 
 variable "backend_service_name" {
   type        = string
-  description = "ECS backend service name"
+  description = "ECS aether-app service name"
 }
 
 variable "ml_service_name" {
   type        = string
-  description = "ECS ml-serving service name"
+  description = "ECS aether-ml service name"
 }
 
-variable "rds_identifier" {
+# Replaces rds_identifier — Aurora Serverless v2 uses cluster-level metrics.
+variable "aurora_cluster_id" {
   type        = string
-  description = "RDS instance identifier"
+  description = "Aurora Serverless v2 cluster identifier (used in CloudWatch alarm dimensions)"
+}
+
+variable "aurora_max_acu" {
+  type        = number
+  description = "Aurora max ACU configured on the cluster (used to compute the max-ACU alarm threshold)"
+  default     = 4
 }
 
 variable "alb_arn_suffix" {
@@ -38,8 +45,25 @@ variable "alert_email" {
   description = "Email address for alarm notifications"
 }
 
+# Serverless endpoint names for dashboard widgets (M4, M5, M8).
+variable "sagemaker_endpoint_names" {
+  type        = list(string)
+  description = "SageMaker Serverless endpoint names to show per-model invocations on the dashboard"
+  default = [
+    "aether-identity-resolution-serverless",
+    "aether-journey-prediction-serverless",
+    "aether-anomaly-detection-serverless",
+  ]
+}
+
 variable "log_retention_days" {
   type        = number
   description = "CloudWatch log retention in days"
-  default     = 30
+  default     = 3
+}
+
+variable "log_archive_bucket" {
+  type        = string
+  description = "S3 bucket name for long-term log archive (Vector → S3 Parquet). Created by this module if empty string."
+  default     = ""
 }
