@@ -8,7 +8,9 @@
 # =============================================================================
 
 # ---------------------------------------------------------------------------
-# Stage 1 — Base image with system deps and Python packages
+# Stage 1 — Base image: system deps and an installable package skeleton.
+# Optional extras are installed per stage below so each image only carries
+# what it actually needs.
 # ---------------------------------------------------------------------------
 FROM python:3.10-slim AS base
 
@@ -25,27 +27,35 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 WORKDIR /app
 
 COPY pyproject.toml ./
-RUN pip install --upgrade pip && \
-    pip install -e "."
+RUN pip install --upgrade pip && pip install -e "."
 
 # ---------------------------------------------------------------------------
-# Stage 2 — Training image (heavy: full source tree + GPU support)
+# Stage 2 — Training image (heavy: full source tree + GPU-capable ML stack)
 # ---------------------------------------------------------------------------
 FROM base AS training
+
+RUN pip install -e ".[training]"
 
 COPY . .
 
 ENV AETHER_ENV=training
 
-# SageMaker-compatible directory structure
 RUN mkdir -p /opt/ml/model /opt/ml/input /opt/ml/output
 
 ENTRYPOINT ["python", "-m", "training.pipelines.train"]
 
 # ---------------------------------------------------------------------------
-# Stage 3 — Serving image (lighter: only inference code + models)
+# Stage 3 — Serving image (slim target: ONNX runtime only).
+#
+# Today this still installs the [training] extras because the native model
+# loaders in server/*.py import torch / xgboost / tensorflow. Once
+# server-side ONNX exports land (M6, M7, M9 are tabular and trivial; M4,
+# M5, M8-AE follow), flip the extras to just `.[serving]` and the image
+# drops from ~4.5 GB to ~600 MB with no API contract change.
 # ---------------------------------------------------------------------------
 FROM base AS serving
+
+RUN pip install -e ".[serving,training]"
 
 COPY common/ common/
 COPY edge/ edge/
@@ -55,7 +65,6 @@ COPY export/ export/
 
 ENV AETHER_ENV=serving
 
-# Model artifacts mounted or copied at deploy time
 RUN mkdir -p /opt/ml/models
 
 EXPOSE 8000
@@ -70,6 +79,8 @@ ENTRYPOINT ["python", "-m", "serving.src.api"]
 # ---------------------------------------------------------------------------
 FROM base AS features
 
+RUN pip install -e ".[training]"
+
 COPY common/ common/
 COPY features/ features/
 
@@ -81,6 +92,8 @@ ENTRYPOINT ["python", "-m", "features.pipeline"]
 # Stage 5 — Monitoring image
 # ---------------------------------------------------------------------------
 FROM base AS monitoring
+
+RUN pip install -e ".[serving]"
 
 COPY common/ common/
 COPY monitoring/ monitoring/
