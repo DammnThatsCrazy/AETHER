@@ -88,6 +88,10 @@ resource "aws_s3_bucket_lifecycle_configuration" "log_archive" {
     id     = "archive-logs"
     status = "Enabled"
 
+    # Apply to all objects in the bucket. The empty filter prefix is required
+    # by the AWS provider; without it a deprecation warning fires.
+    filter {}
+
     # Move to Intelligent-Tiering immediately (handles automatic cold-tier move)
     transition {
       days          = 0
@@ -238,72 +242,42 @@ resource "aws_cloudwatch_metric_alarm" "ml_drift" {
 # --------------------------------------------------------------------------
 
 locals {
-  aurora_widgets = var.aurora_cluster_id == "" ? [] : [
+  # Aurora widgets are gated by `for ... if` so the result is a homogeneous
+  # list type whether populated or empty. A naive `cond ? [] : [...]` fails
+  # tuple-type unification in Terraform 1.7+.
+  _aurora_widget_specs = [
     {
+      x           = 0
+      title       = "Aurora Serverless Capacity (ACU)"
+      metric_name = "ServerlessDatabaseCapacity"
+      stat        = "Maximum"
+    },
+    {
+      x           = 8
+      title       = "Aurora DB Connections"
+      metric_name = "DatabaseConnections"
+      stat        = "Average"
+    },
+  ]
+
+  aurora_widgets = [
+    for spec in local._aurora_widget_specs : {
       type   = "metric"
-      x      = 0
+      x      = spec.x
       y      = 6
       width  = 8
       height = 6
       properties = {
-        title  = "Aurora Serverless Capacity (ACU)"
+        title  = spec.title
         view   = "timeSeries"
         region = data.aws_region.current.name
         metrics = [[
-          "AWS/RDS", "ServerlessDatabaseCapacity",
+          "AWS/RDS", spec.metric_name,
           "DBClusterIdentifier", var.aurora_cluster_id,
-          { stat = "Maximum", label = "ACU (max)" }
-        ]]
-        annotations = {
-          horizontal = [{
-            label = "Max ACU"
-            value = var.aurora_max_acu
-            color = "#ff7f0e"
-          }]
-        }
-      }
-    },
-    {
-      type   = "metric"
-      x      = 8
-      y      = 6
-      width  = 8
-      height = 6
-      properties = {
-        title  = "Aurora DB Connections"
-        view   = "timeSeries"
-        region = data.aws_region.current.name
-        metrics = [[
-          "AWS/RDS", "DatabaseConnections",
-          "DBClusterIdentifier", var.aurora_cluster_id,
-          { stat = "Average" }
+          { stat = spec.stat }
         ]]
       }
-    },
-    {
-      type   = "metric"
-      x      = 16
-      y      = 6
-      width  = 8
-      height = 6
-      properties = {
-        title  = "Aurora Commit + Select Latency (ms)"
-        view   = "timeSeries"
-        region = data.aws_region.current.name
-        metrics = [
-          [
-            "AWS/RDS", "CommitLatency",
-            "DBClusterIdentifier", var.aurora_cluster_id,
-            { stat = "p99", label = "Commit p99" }
-          ],
-          [
-            "AWS/RDS", "SelectLatency",
-            "DBClusterIdentifier", var.aurora_cluster_id,
-            { stat = "p99", label = "Select p99" }
-          ],
-        ]
-      }
-    },
+    } if var.aurora_cluster_id != ""
   ]
 
   sm_endpoint_widgets = [
