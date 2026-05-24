@@ -13,7 +13,7 @@ source_files:
 canonical_owner: sdk@aether
 estimated_read_minutes: 10
 toc_depth: 3
-last_synced_commit: bbbb603
+last_synced_commit: c52ae66
 ---
 
 # Aether Android SDK v8.8.0 — Integration Guide
@@ -217,7 +217,10 @@ data class AetherConfig(
     val batchSize: Int = 10,
     val flushIntervalMs: Long = 5000L,
     val modules: ModuleConfig = ModuleConfig(),
-    val privacy: PrivacyConfig = PrivacyConfig()
+    val privacy: PrivacyConfig = PrivacyConfig(),
+    val autoResumeJourney: Boolean = true,   // Call /sdk/identity/resolve on init
+    val onJourneyResumed:                    // Fires once when a prior session is matched
+        ((resolvedAnonymousId: String, resolvedUserId: String?) -> Unit)? = null
 ) {
     enum class Environment { PRODUCTION, STAGING, DEVELOPMENT }
 }

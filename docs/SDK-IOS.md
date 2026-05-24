@@ -13,7 +13,7 @@ source_files:
 canonical_owner: sdk@aether
 estimated_read_minutes: 10
 toc_depth: 3
-last_synced_commit: bbbb603
+last_synced_commit: c52ae66
 ---
 
 # Aether iOS SDK v8.8.0 — Integration Guide
@@ -216,6 +216,10 @@ struct AetherConfig {
     var privacy: PrivacyConfig = PrivacyConfig()
     var batchSize: Int = 10                      // Events per batch
     var flushInterval: TimeInterval = 5.0        // Seconds between flushes
+    var autoResumeJourney: Bool = true           // Call /sdk/identity/resolve on init
+    var onJourneyResumed:                        // Fires once when a prior session is matched
+        ((_ resolvedAnonymousId: String,
+          _ resolvedUserId: String?) -> Void)? = nil
 }
 
 struct ModuleConfig {

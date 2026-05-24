@@ -13,7 +13,7 @@ source_files:
 canonical_owner: sdk@aether
 estimated_read_minutes: 12
 toc_depth: 3
-last_synced_commit: bbbb603
+last_synced_commit: c52ae66
 ---
 
 # Aether Web SDK v8.8.0 — Integration Guide
@@ -93,6 +93,31 @@ const identity = aether.getIdentity();
 aether.reset();
 ```
 
+### Cross-device journey resumption
+
+When a user returns on a new device but presents a wallet the backend has
+seen before, the SDK can resume their prior session. On `init()` the SDK
+posts the current fingerprint + any connected wallets to
+`POST /sdk/identity/resolve`; if the backend matches, it returns a
+`ResolvedIdentity` and the SDK silently merges the anonymous IDs.
+
+```typescript
+import type { ResolvedIdentity } from '@aether/web';
+
+aether.init({
+  apiKey: '...',
+  autoResumeJourney: true,    // default true
+  onJourneyResumed: (resolved: ResolvedIdentity) => {
+    // resolved = { anonymousId, userId, wallets, matchSignals, ... }
+    // Restore session state, greet returning user, etc.
+    restoreSession(resolved.userId);
+  },
+});
+```
+
+The same `ResolvedIdentity` shape is re-exported from the Aether SDK so
+React Native and the Web SDK can share types.
+
 ### Device Fingerprint
 
 The SDK automatically generates a SHA-256 device fingerprint on initialization from 17 browser signals (canvas rendering, WebGL, audio context, fonts, screen, timezone, language, platform, hardware). The fingerprint is included in every event's `context.fingerprint.id`.
@@ -125,7 +150,7 @@ const unsub = aether.consent.onUpdate((state) => {
 
 ## Web3 Wallet Tracking
 
-The SDK detects wallets across 7 VM families:
+The SDK detects wallets across 16 VM families:
 
 | VM | Wallets Detected |
 |---|---|
@@ -133,9 +158,23 @@ The SDK detects wallets across 7 VM families:
 | **Solana (SVM)** | Phantom, Solflare, Backpack, Glow |
 | **Bitcoin** | Unisat, Xverse, Leather |
 | **Move (SUI)** | Sui Wallet, Ethos, Martian, Surf |
+| **Aptos** (also Move) | Petra, Martian, Pontem |
 | **NEAR** | NEAR Wallet, MyNearWallet, Meteor |
 | **TRON (TVM)** | TronLink |
 | **Cosmos** | Keplr, Leap |
+| **TON** | Tonkeeper, OpenMask |
+| **Starknet** | Argent X, Braavos |
+| **Cardano** | Nami, Eternl, Flint |
+| **Algorand** | Pera, MyAlgo |
+| **Hedera** | HashPack, Blade |
+| **Stellar** | Freighter, Albedo |
+| **Substrate** (Polkadot/Kusama) | Polkadot{.js}, Talisman |
+| **ICP** (Internet Computer) | Plug, Stoic |
+
+`aether.wallet.connect<VM>(...)` exists for every family
+(`connectAptos`, `connectTON`, `connectStarknet`, `connectCardano`,
+`connectAlgorand`, `connectHedera`, `connectStellar`,
+`connectSubstrate`, `connectICP` joined the original seven).
 
 ### Wallet Events
 
