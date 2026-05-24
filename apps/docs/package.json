@@ -8,6 +8,10 @@
   "scripts": {
     "dev": "vite --port 5176",
     "build": "tsc --noEmit && vite build",
+    "build:public": "tsc --noEmit && VITE_TIER=P vite build",
+    "build:portal": "tsc --noEmit && VITE_TIER=C vite build",
+    "build:internal": "tsc --noEmit && VITE_TIER=I vite build",
+    "build:all": "npm run build:public && npm run build:portal && npm run build:internal",
     "preview": "vite preview --port 5176",
     "typecheck": "tsc --noEmit",
     "lint": "eslint 'src/**/*.{ts,tsx}' --fix",

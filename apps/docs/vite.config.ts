@@ -5,9 +5,18 @@ import remarkFrontmatter from 'remark-frontmatter';
 import remarkMdxFrontmatter from 'remark-mdx-frontmatter';
 import path from 'path';
 
+// Tier-to-output-dir mapping.
+// VITE_TIER is set by the build:public/portal/internal npm scripts.
+// The default tier is 'P' (public) so `npm run build` (CI) always
+// produces the most-conservative bundle.
+const tier = (process.env['VITE_TIER'] ?? 'P') as 'P' | 'C' | 'I';
+const outDirMap: Record<typeof tier, string> = {
+  P: 'out-public',
+  C: 'out-portal',
+  I: 'out-internal',
+};
+
 // MDX is processed before React so enforce: 'pre' is required.
-// Three build outputs land in slice 4 (out-public / out-portal / out-internal),
-// routed by frontmatter `visibility:` field.
 export default defineConfig({
   plugins: [
     {
@@ -18,14 +27,16 @@ export default defineConfig({
     },
     react(),
   ],
+  define: {
+    // Expose tier to the client bundle so App.tsx can filter by visibility.
+    'import.meta.env.VITE_TIER': JSON.stringify(tier),
+  },
   resolve: {
     alias: {
       '@docs': path.resolve(__dirname, 'src'),
-      // Allow importing from the repo-level docs tree
       '@content': path.resolve(__dirname, '../../docs'),
     },
   },
-  // Allow Vite to serve files from the repo-level docs tree
   server: {
     port: 5176,
     fs: {
@@ -34,6 +45,8 @@ export default defineConfig({
   },
   build: {
     sourcemap: true,
-    outDir: 'dist',
+    // `npm run build` (CI / dev) → dist  so existing CI step still passes.
+    // `npm run build:public/portal/internal` → tier-specific dirs.
+    outDir: process.env['VITE_TIER'] ? outDirMap[tier] : 'dist',
   },
 });
