@@ -101,13 +101,59 @@ class QuotaEngine:
 
     def __init__(self, redis_client: Optional[Any] = None) -> None:
         self._redis: Optional[Any] = redis_client
+        self._dynamo_table: Optional[Any] = None
         self._memory_quota: dict[str, int] = {}
         self._memory_overage: dict[str, dict[str, int]] = {}
         self._mode = "in-memory"
 
+    def _get_dynamo_table(self) -> Any:
+        """Lazy-init and return the DynamoDB Table resource."""
+        if self._dynamo_table is None:
+            resource = _boto3_quota.resource("dynamodb")  # type: ignore[union-attr]
+            self._dynamo_table = resource.Table(_dynamo_quota_table())
+        return self._dynamo_table
+
+    async def _dynamo_incr(self, pk: str, sk: str, ttl_seconds: int) -> int:
+        """Atomically increment count in DynamoDB and return new value."""
+        expires_at = int(time.time()) + ttl_seconds
+
+        def _update() -> int:
+            resp = self._get_dynamo_table().update_item(
+                Key={"pk": pk, "sk": sk},
+                UpdateExpression="ADD #cnt :one SET #t = if_not_exists(#t, :ttl)",
+                ExpressionAttributeNames={"#cnt": "count", "#t": "ttl"},
+                ExpressionAttributeValues={":one": 1, ":ttl": expires_at},
+                ReturnValues="ALL_NEW",
+            )
+            return int(resp["Attributes"].get("count", 1))
+
+        return await asyncio.get_event_loop().run_in_executor(None, _update)
+
+    async def _dynamo_get_count(self, pk: str, sk: str) -> int:
+        """Fetch count from DynamoDB; returns 0 if not found or expired."""
+        now = int(time.time())
+
+        def _get() -> int:
+            resp = self._get_dynamo_table().get_item(Key={"pk": pk, "sk": sk})
+            item = resp.get("Item")
+            if item is None:
+                return 0
+            ttl_val = item.get("ttl")
+            if ttl_val is not None and int(ttl_val) < now:
+                return 0
+            return int(item.get("count", 0))
+
+        return await asyncio.get_event_loop().run_in_executor(None, _get)
+
     async def connect(self) -> None:
         if self._redis:
             self._mode = "redis"
+            return
+        dynamo_table = _dynamo_quota_table()
+        if dynamo_table and BOTO3_QUOTA_AVAILABLE:
+            # Lazy-init: just record mode; table connection happens on first use
+            self._mode = "dynamodb"
+            logger.info(f"QuotaEngine connected (DynamoDB table: {dynamo_table})")
             return
         redis_host = os.getenv("REDIS_HOST", "")
         if redis_host and REDIS_AVAILABLE:
@@ -156,7 +202,13 @@ class QuotaEngine:
         qkey = self.quota_key(tenant_id, period)
 
         # Increment counter
-        if self._redis is not None:
+        if self._mode == "dynamodb":
+            try:
+                current = await self._dynamo_incr(qkey, "_total", DYNAMO_TTL_SECONDS)
+            except Exception as e:
+                logger.warning(f"DynamoDB quota INCR failed: {e} — fallback in-memory")
+                current = self._memory_increment(qkey)
+        elif self._redis is not None:
             try:
                 current = await self._redis.incr(qkey)
                 if current == 1:
@@ -176,7 +228,13 @@ class QuotaEngine:
             if service is not None:
                 overage_service = service.name
                 okey = self.overage_key(tenant_id, period)
-                if self._redis is not None:
+                if self._mode == "dynamodb":
+                    try:
+                        await self._dynamo_incr(okey, service.name, DYNAMO_TTL_SECONDS)
+                    except Exception as e:
+                        logger.warning(f"DynamoDB overage INCR failed: {e}")
+                        self._memory_overage_increment(okey, service.name)
+                elif self._redis is not None:
                     try:
                         await self._redis.hincrby(okey, service.name, 1)
                         ttl = await self._redis.ttl(okey)
@@ -235,6 +293,30 @@ class QuotaEngine:
         """Return per-service overage counts for the given period."""
         period = period or _current_period()
         okey = self.overage_key(tenant_id, period)
+        if self._mode == "dynamodb":
+            try:
+                # Query all SK items for this PK (overage key)
+                now = int(time.time())
+
+                def _query() -> dict[str, int]:
+                    from boto3.dynamodb.conditions import Key as DKey  # type: ignore[import]
+                    resp = self._get_dynamo_table().query(
+                        KeyConditionExpression=DKey("pk").eq(okey),
+                    )
+                    result: dict[str, int] = {}
+                    for item in resp.get("Items", []):
+                        ttl_val = item.get("ttl")
+                        if ttl_val is not None and int(ttl_val) < now:
+                            continue
+                        sk = item.get("sk", "")
+                        if sk != "_total":
+                            result[sk] = int(item.get("count", 0))
+                    return result
+
+                return await asyncio.get_event_loop().run_in_executor(None, _query)
+            except Exception as e:
+                logger.warning(f"DynamoDB overage query failed: {e}")
+                return dict(self._memory_overage.get(okey, {}))
         if self._redis is not None:
             try:
                 raw = await self._redis.hgetall(okey)
@@ -249,6 +331,12 @@ class QuotaEngine:
         """Return the current period's total request count."""
         period = period or _current_period()
         qkey = self.quota_key(tenant_id, period)
+        if self._mode == "dynamodb":
+            try:
+                return await self._dynamo_get_count(qkey, "_total")
+            except Exception as e:
+                logger.warning(f"DynamoDB quota GET failed: {e}")
+                return self._memory_quota.get(qkey, 0)
         if self._redis is not None:
             try:
                 raw = await self._redis.get(qkey)
