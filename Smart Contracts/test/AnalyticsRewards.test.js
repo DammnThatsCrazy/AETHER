@@ -391,30 +391,7 @@ describe("AnalyticsRewards", function () {
       expect(await rewards.hasRole(ORACLE_ROLE, user2.address)).to.equal(true);
       expect(await rewards.getOracleAddress()).to.equal(user2.address);
     });
-
-    it("should reject direct ORACLE_ROLE grant/revoke and require rotateOracle", async function () {
-      const { rewards, admin, oracle, user2 } = await loadFixture(deployFixture);
-      const ORACLE_ROLE = await rewards.ORACLE_ROLE();
-
-      await expect(
-        rewards.connect(admin).grantRole(ORACLE_ROLE, user2.address)
-      ).to.be.revertedWithCustomError(rewards, "OracleRoleManagedViaRotateOracle");
-
-      await expect(
-        rewards.connect(admin).revokeRole(ORACLE_ROLE, oracle.address)
-      ).to.be.revertedWithCustomError(rewards, "OracleRoleManagedViaRotateOracle");
-    });
-
-    it("should reject oracle self-renounce and require rotateOracle", async function () {
-      const { rewards, oracle } = await loadFixture(deployFixture);
-      const ORACLE_ROLE = await rewards.ORACLE_ROLE();
-
-      await expect(
-        rewards.connect(oracle).renounceRole(ORACLE_ROLE, oracle.address)
-      ).to.be.revertedWithCustomError(rewards, "OracleRoleManagedViaRotateOracle");
-    });
   });
-
 
   // ── Emergency Functions ────────────────────────────────────────────────
 

@@ -114,7 +114,6 @@ contract AnalyticsRewards is
     error ZeroAmount();
     error InvalidOracleRotation(address oldOracle, address newOracle);
     error InvalidRewardAmount(bytes32 campaignId, uint256 provided, uint256 expected);
-    error OracleRoleManagedViaRotateOracle();
 
     // ──────────────────────────────────────────────
     //  Constructor
@@ -168,19 +167,6 @@ contract AnalyticsRewards is
     {
         if (role == ORACLE_ROLE) revert OracleRoleManagedViaRotateOracle();
         super.revokeRole(role, account);
-    }
-
-
-    /**
-     * @dev Prevent ORACLE_ROLE self-renounce to avoid leaving contract without
-     *      a recoverable oracle path. Use rotateOracle() instead.
-     */
-    function renounceRole(bytes32 role, address callerConfirmation)
-        public
-        override(AccessControl)
-    {
-        if (role == ORACLE_ROLE) revert OracleRoleManagedViaRotateOracle();
-        super.renounceRole(role, callerConfirmation);
     }
 
     // ──────────────────────────────────────────────
@@ -392,21 +378,9 @@ contract AnalyticsRewards is
         override
         onlyRole(DEFAULT_ADMIN_ROLE)
     {
-        if (newOracle == address(0)) revert InvalidOracleRotation(oldOracle, newOracle);
-
-        // Recovery path: if no active oracle role exists, admin can reseed by
-        // passing oldOracle == address(0).
-        if (oldOracle == address(0)) {
-            if (oracleSigner != address(0) && hasRole(ORACLE_ROLE, oracleSigner)) {
-                revert InvalidOracleRotation(oldOracle, newOracle);
-            }
-            _grantRole(ORACLE_ROLE, newOracle);
-            oracleSigner = newOracle;
-            emit OracleUpdated(address(0), newOracle);
-            return;
+        if (oldOracle == address(0) || newOracle == address(0) || oldOracle == newOracle) {
+            revert InvalidOracleRotation(oldOracle, newOracle);
         }
-
-        if (oldOracle == newOracle) revert InvalidOracleRotation(oldOracle, newOracle);
         if (!hasRole(ORACLE_ROLE, oldOracle)) revert SignerNotOracle(oldOracle);
 
         _grantRole(ORACLE_ROLE, newOracle);
