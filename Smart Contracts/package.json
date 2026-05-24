@@ -1,13 +1,14 @@
 {
   "name": "@aether/smart-contracts",
   "version": "8.7.1",
-  "description": "Aether Analytics Rewards — Multi-chain smart contracts",
+  "description": "Aether Analytics Rewards \u2014 Multi-chain smart contracts",
   "private": true,
   "scripts": {
     "compile": "hardhat compile",
     "test": "hardhat test",
     "test:coverage": "hardhat coverage",
-    "clean": "hardhat clean"
+    "clean": "hardhat clean",
+    "verify:postdeploy": "hardhat run scripts/post_deploy_verify.js --network ${NETWORK:-localhost}"
   },
   "dependencies": {
     "@openzeppelin/contracts": "^5.0.0"
