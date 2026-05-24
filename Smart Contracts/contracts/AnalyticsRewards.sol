@@ -81,6 +81,9 @@ contract AnalyticsRewards is
     /// @notice The ERC-20 token used for reward payouts.
     IERC20 public immutable rewardToken;
 
+    /// @notice Canonical oracle signer address used for integrations and monitoring.
+    address public oracleSigner;
+
     /// @notice Campaign storage keyed by campaign ID.
     mapping(bytes32 => Campaign) public campaigns;
 
@@ -109,6 +112,9 @@ contract AnalyticsRewards is
     error MaxClaimsExceeded(address user, bytes32 campaignId, uint256 maxClaims);
     error ZeroAddress();
     error ZeroAmount();
+    error InvalidOracleRotation(address oldOracle, address newOracle);
+    error InvalidRewardAmount(bytes32 campaignId, uint256 provided, uint256 expected);
+    error OracleRoleManagedViaRotateOracle();
 
     // ──────────────────────────────────────────────
     //  Constructor
@@ -133,7 +139,35 @@ contract AnalyticsRewards is
 
         _grantRole(DEFAULT_ADMIN_ROLE, _admin);
         _grantRole(ORACLE_ROLE, _oracle);
+        oracleSigner = _oracle;
         _grantRole(CAMPAIGN_MANAGER_ROLE, _admin);
+    }
+
+
+    /**
+     * @dev Prevent direct ORACLE_ROLE mutations through AccessControl entrypoints.
+     *      Use rotateOracle() to keep oracleSigner synchronized with role membership.
+     */
+    function grantRole(bytes32 role, address account)
+        public
+        override(AccessControl)
+        onlyRole(getRoleAdmin(role))
+    {
+        if (role == ORACLE_ROLE) revert OracleRoleManagedViaRotateOracle();
+        super.grantRole(role, account);
+    }
+
+    /**
+     * @dev Prevent direct ORACLE_ROLE mutations through AccessControl entrypoints.
+     *      Use rotateOracle() to keep oracleSigner synchronized with role membership.
+     */
+    function revokeRole(bytes32 role, address account)
+        public
+        override(AccessControl)
+        onlyRole(getRoleAdmin(role))
+    {
+        if (role == ORACLE_ROLE) revert OracleRoleManagedViaRotateOracle();
+        super.revokeRole(role, account);
     }
 
     // ──────────────────────────────────────────────
@@ -183,6 +217,11 @@ contract AnalyticsRewards is
         // Campaign must exist and be active
         if (campaign.id == bytes32(0)) revert CampaignDoesNotExist(campaignId);
         if (!campaign.active) revert CampaignNotActive(campaignId);
+
+        // Enforce per-campaign reward policy
+        if (amount != campaign.rewardAmount) {
+            revert InvalidRewardAmount(campaignId, amount, campaign.rewardAmount);
+        }
 
         // Budget check
         uint256 remaining = campaign.totalBudget - campaign.spent;
@@ -328,9 +367,28 @@ contract AnalyticsRewards is
 
     /// @inheritdoc IAnalyticsRewards
     function getOracleAddress() external view override returns (address) {
-        // Return the first member of ORACLE_ROLE (convenience helper).
-        // For full enumeration use AccessControl.getRoleMemberCount / getRoleMember.
-        return address(0); // Overridden by off-chain indexing; role check is authoritative.
+        return oracleSigner;
+    }
+
+    /**
+     * @notice Rotate oracle signer in a single transaction.
+     * @dev Revokes role from old oracle and grants role to new oracle.
+     */
+    function rotateOracle(address oldOracle, address newOracle)
+        external
+        override
+        onlyRole(DEFAULT_ADMIN_ROLE)
+    {
+        if (oldOracle == address(0) || newOracle == address(0) || oldOracle == newOracle) {
+            revert InvalidOracleRotation(oldOracle, newOracle);
+        }
+        if (!hasRole(ORACLE_ROLE, oldOracle)) revert SignerNotOracle(oldOracle);
+
+        _grantRole(ORACLE_ROLE, newOracle);
+        _revokeRole(ORACLE_ROLE, oldOracle);
+        oracleSigner = newOracle;
+
+        emit OracleUpdated(oldOracle, newOracle);
     }
 
     /**

@@ -122,4 +122,10 @@ interface IAnalyticsRewards {
 
     /// @notice Returns the current oracle signer address.
     function getOracleAddress() external view returns (address);
+
+    /**
+     * @notice Rotate oracle signer role from `oldOracle` to `newOracle`.
+     * @dev Callable by admin in implementations.
+     */
+    function rotateOracle(address oldOracle, address newOracle) external;
 }
