@@ -20,7 +20,7 @@ source_files:
 canonical_owner: platform@aether
 estimated_read_minutes: 8
 toc_depth: 3
-last_synced_commit: 984e60a
+last_synced_commit: 699506b
 ---
 
 # Documentation Pipeline
@@ -80,6 +80,7 @@ drift gate reliable.
 | `extract_plans.py` | `shared/plans/catalog.py` | `plans.json` |
 | `extract_providers.py` | `shared/providers/categories.py` | `providers.json` |
 | `extract_topics.py` | `shared/events/events.py` | `topics.json` |
+| `extract_doc_manifest.py` | `docs/**/*.{md,mdx}` | `doc-manifest.json` |
 
 Adding a generator is one line in `run_all.py`'s `GENERATORS` list;
 tests and the CI drift gate follow automatically.
@@ -122,8 +123,14 @@ CI rejects the PR if steps 2 or 4 were skipped.
 
 - `extract_openapi` and `extract_abis` generators are not yet built —
   they need a running FastAPI app and compiled Solidity respectively.
-- The `apps/docs/` frontend shell (Phase 6) renders these artifacts;
-  not yet scaffolded.
+- `apps/docs/` (Phase 6) — current state:
+  - Slice 1: Vite + React 19 workspace scaffold
+  - Slice 2: MDX rendering via `@mdx-js/rollup` + `remark-frontmatter`
+  - Slice 3: `extract_doc_manifest` generator + `DocIndex` + `DocViewer` + routing
+  - Slice 4: Three build outputs (`out-public/`, `out-portal/`,
+    `out-internal/`) — `VITE_TIER=P/C/I` baked at build time via
+    `npm run build:public`, `build:portal`, `build:internal`
+  - Upcoming: `docs/nav.config.ts` sidebar, generator-artifact pages
 
 ## Strict mode (enabled)
 

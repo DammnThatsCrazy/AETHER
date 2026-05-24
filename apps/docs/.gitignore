@@ -1,0 +1,7 @@
+node_modules/
+dist/
+out-public/
+out-portal/
+out-internal/
+.vite/
+*.tsbuildinfo
