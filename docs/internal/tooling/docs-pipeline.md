@@ -20,7 +20,7 @@ source_files:
 canonical_owner: platform@aether
 estimated_read_minutes: 8
 toc_depth: 3
-last_synced_commit: 984e60a
+last_synced_commit: a9d6227
 ---
 
 # Documentation Pipeline
@@ -80,6 +80,7 @@ drift gate reliable.
 | `extract_plans.py` | `shared/plans/catalog.py` | `plans.json` |
 | `extract_providers.py` | `shared/providers/categories.py` | `providers.json` |
 | `extract_topics.py` | `shared/events/events.py` | `topics.json` |
+| `extract_doc_manifest.py` | `docs/**/*.{md,mdx}` | `doc-manifest.json` |
 
 Adding a generator is one line in `run_all.py`'s `GENERATORS` list;
 tests and the CI drift gate follow automatically.
