@@ -200,15 +200,16 @@ module "ecs" {
 module "monitoring" {
   source = "./modules/monitoring"
 
-  environment        = var.environment
-  project            = var.project
-  ecs_cluster_name   = module.ecs.cluster_name
+  environment          = var.environment
+  project              = var.project
+  ecs_cluster_name     = module.ecs.cluster_name
   backend_service_name = module.ecs.backend_service_name
-  ml_service_name    = module.ecs.ml_service_name
-  rds_identifier     = module.rds.db_instance_identifier
-  alb_arn_suffix     = module.alb.alb_arn_suffix
-  alert_email        = var.alert_email
-  log_retention_days = var.log_retention_days
+  ml_service_name      = module.ecs.ml_service_name
+  # aurora_cluster_id intentionally omitted — defaults to "" during the
+  # RDS→Aurora migration, which disables the Aurora-specific alarm and widgets.
+  alb_arn_suffix       = module.alb.alb_arn_suffix
+  alert_email          = var.alert_email
+  log_retention_days   = var.log_retention_days
 }
 
 # ---------------------------------------------------------------------------

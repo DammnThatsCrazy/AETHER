@@ -24,9 +24,12 @@ variable "ml_service_name" {
 }
 
 # Replaces rds_identifier — Aurora Serverless v2 uses cluster-level metrics.
+# Optional: leave empty during the RDS→Aurora migration; alarm/widgets skip
+# when unset so the module continues to plan cleanly against an RDS-only root.
 variable "aurora_cluster_id" {
   type        = string
-  description = "Aurora Serverless v2 cluster identifier (used in CloudWatch alarm dimensions)"
+  description = "Aurora Serverless v2 cluster identifier (used in CloudWatch alarm dimensions). Empty string disables Aurora alarms/widgets."
+  default     = ""
 }
 
 variable "aurora_max_acu" {

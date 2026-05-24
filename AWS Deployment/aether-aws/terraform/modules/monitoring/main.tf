@@ -175,6 +175,7 @@ resource "aws_cloudwatch_metric_alarm" "alb_5xx" {
 # --------------------------------------------------------------------------
 
 resource "aws_cloudwatch_metric_alarm" "aurora_max_acu" {
+  count               = var.aurora_cluster_id == "" ? 0 : 1
   alarm_name          = "${var.project}-${var.environment}-aurora-max-acu"
   comparison_operator = "GreaterThanOrEqualToThreshold"
   evaluation_periods  = 2   # 2 × 5-min periods = 10 min sustained
@@ -237,11 +238,79 @@ resource "aws_cloudwatch_metric_alarm" "ml_drift" {
 # --------------------------------------------------------------------------
 
 locals {
+  aurora_widgets = var.aurora_cluster_id == "" ? [] : [
+    {
+      type   = "metric"
+      x      = 0
+      y      = 6
+      width  = 8
+      height = 6
+      properties = {
+        title  = "Aurora Serverless Capacity (ACU)"
+        view   = "timeSeries"
+        region = data.aws_region.current.name
+        metrics = [[
+          "AWS/RDS", "ServerlessDatabaseCapacity",
+          "DBClusterIdentifier", var.aurora_cluster_id,
+          { stat = "Maximum", label = "ACU (max)" }
+        ]]
+        annotations = {
+          horizontal = [{
+            label = "Max ACU"
+            value = var.aurora_max_acu
+            color = "#ff7f0e"
+          }]
+        }
+      }
+    },
+    {
+      type   = "metric"
+      x      = 8
+      y      = 6
+      width  = 8
+      height = 6
+      properties = {
+        title  = "Aurora DB Connections"
+        view   = "timeSeries"
+        region = data.aws_region.current.name
+        metrics = [[
+          "AWS/RDS", "DatabaseConnections",
+          "DBClusterIdentifier", var.aurora_cluster_id,
+          { stat = "Average" }
+        ]]
+      }
+    },
+    {
+      type   = "metric"
+      x      = 16
+      y      = 6
+      width  = 8
+      height = 6
+      properties = {
+        title  = "Aurora Commit + Select Latency (ms)"
+        view   = "timeSeries"
+        region = data.aws_region.current.name
+        metrics = [
+          [
+            "AWS/RDS", "CommitLatency",
+            "DBClusterIdentifier", var.aurora_cluster_id,
+            { stat = "p99", label = "Commit p99" }
+          ],
+          [
+            "AWS/RDS", "SelectLatency",
+            "DBClusterIdentifier", var.aurora_cluster_id,
+            { stat = "p99", label = "Select p99" }
+          ],
+        ]
+      }
+    },
+  ]
+
   sm_endpoint_widgets = [
     for idx, ep_name in var.sagemaker_endpoint_names : {
       type   = "metric"
       x      = (idx % 3) * 8
-      y      = 18 + (floor(idx / 3)) * 6
+      y      = 18 + floor(idx / 3) * 6
       width  = 8
       height = 6
       properties = {
@@ -344,72 +413,6 @@ resource "aws_cloudwatch_dashboard" "main" {
             ]]
           }
         },
-        # ── Row 2: Aurora ─────────────────────────────────────────────
-        {
-          type   = "metric"
-          x      = 0
-          y      = 6
-          width  = 8
-          height = 6
-          properties = {
-            title  = "Aurora Serverless Capacity (ACU)"
-            view   = "timeSeries"
-            region = data.aws_region.current.name
-            metrics = [[
-              "AWS/RDS", "ServerlessDatabaseCapacity",
-              "DBClusterIdentifier", var.aurora_cluster_id,
-              { stat = "Maximum", label = "ACU (max)" }
-            ]]
-            annotations = {
-              horizontal = [{
-                label = "Max ACU"
-                value = var.aurora_max_acu
-                color = "#ff7f0e"
-              }]
-            }
-          }
-        },
-        {
-          type   = "metric"
-          x      = 8
-          y      = 6
-          width  = 8
-          height = 6
-          properties = {
-            title  = "Aurora DB Connections"
-            view   = "timeSeries"
-            region = data.aws_region.current.name
-            metrics = [[
-              "AWS/RDS", "DatabaseConnections",
-              "DBClusterIdentifier", var.aurora_cluster_id,
-              { stat = "Average" }
-            ]]
-          }
-        },
-        {
-          type   = "metric"
-          x      = 16
-          y      = 6
-          width  = 8
-          height = 6
-          properties = {
-            title  = "Aurora Commit + Select Latency (ms)"
-            view   = "timeSeries"
-            region = data.aws_region.current.name
-            metrics = [
-              [
-                "AWS/RDS", "CommitLatency",
-                "DBClusterIdentifier", var.aurora_cluster_id,
-                { stat = "p99", label = "Commit p99" }
-              ],
-              [
-                "AWS/RDS", "SelectLatency",
-                "DBClusterIdentifier", var.aurora_cluster_id,
-                { stat = "p99", label = "Select p99" }
-              ],
-            ]
-          }
-        },
         # ── Row 3: DynamoDB ───────────────────────────────────────────
         {
           type   = "metric"
@@ -467,6 +470,7 @@ resource "aws_cloudwatch_dashboard" "main" {
           }
         },
       ],
+      local.aurora_widgets,
       local.sm_endpoint_widgets
     )
   })
