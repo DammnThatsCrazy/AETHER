@@ -11,21 +11,47 @@ source_files:
 canonical_owner: security@aether
 estimated_read_minutes: 2
 toc_depth: 3
-last_synced_commit: b41baa4
+last_synced_commit: 2b59946
 ---
 # Secret Rotation Runbook
 
 Procedures for rotating production secrets without downtime.
+
+## Generator
+
+`scripts/generate_secrets.py` is the canonical entry point — use it instead of
+hand-rolled `python -c` one-liners so secret strength + format stay consistent
+across rotations.
+
+```bash
+# Generate every required secret in .env format (pipe to your secret manager)
+python scripts/generate_secrets.py > .env.secrets
+
+# Dry-run: see what would be generated without printing values
+python scripts/generate_secrets.py --dry-run
+
+# Validate an existing .env for default / weak (<32 byte) secrets
+python scripts/generate_secrets.py --validate .env
+```
+
+Secrets the generator covers: `JWT_SECRET`, `PROVIDER_GATEWAY_ENCRYPTION_KEY`
+(used as `BYOK_ENCRYPTION_KEY` alias), `WATERMARK_SECRET_KEY`,
+`CANARY_SECRET_SEED`, `EXTRACTION_CANARY_SEED`, `ORACLE_SIGNER_PRIVATE_KEY`,
+`GRAFANA_ADMIN_PASSWORD`. `STRIPE_WEBHOOK_SECRET` is emitted as a placeholder —
+the real value comes from the Stripe Dashboard.
 
 ## Secrets Inventory
 
 | Secret | Env Var | Used By | Rotation Impact |
 |--------|---------|---------|-----------------|
 | JWT signing key | `JWT_SECRET` | All authenticated requests | Active sessions invalidated |
-| BYOK vault key | `BYOK_ENCRYPTION_KEY` | Tenant API key encryption | Stored keys become undecryptable |
+| BYOK vault key | `PROVIDER_GATEWAY_ENCRYPTION_KEY` (alias: `BYOK_ENCRYPTION_KEY`) | Tenant API key encryption | Stored keys must be re-encrypted (see `make byok-reencrypt`) |
 | Watermark key | `WATERMARK_SECRET_KEY` | ML extraction defense | Watermark verification continuity lost |
 | Canary seed | `CANARY_SECRET_SEED` | ML extraction defense | Canary patterns change |
+| Extraction-mesh canary | `EXTRACTION_CANARY_SEED` | Extraction mesh layer | Mesh canary patterns change |
 | Oracle signer key | `ORACLE_SIGNER_PRIVATE_KEY` | Reward proof generation | Signer address changes |
+| Grafana admin | `GRAFANA_ADMIN_PASSWORD` | Grafana dashboard | Grafana logins invalidated |
+| Stripe webhook | `STRIPE_WEBHOOK_SECRET` | Stripe webhook verification | Pending webhooks fail signature |
 
 ## JWT_SECRET Rotation
 
