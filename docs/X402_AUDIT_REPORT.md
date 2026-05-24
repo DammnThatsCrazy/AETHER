@@ -11,7 +11,7 @@ source_files:
 canonical_owner: security@aether
 estimated_read_minutes: 12
 toc_depth: 3
-last_synced_commit: ad7c2d1
+last_synced_commit: e6440ec
 ---
 # x402 Protocol Support Audit — Aether Repository
 
