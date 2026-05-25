@@ -22,6 +22,6 @@
       "@content/*": ["../../docs/*"]
     }
   },
-  "include": ["src/**/*.ts", "src/**/*.tsx", "src/**/*.d.ts"],
+  "include": ["src/**/*.ts", "src/**/*.tsx", "src/**/*.d.ts", "../../docs/nav.config.ts"],
   "exclude": ["node_modules", "dist"]
 }
