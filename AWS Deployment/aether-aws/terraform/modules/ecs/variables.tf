@@ -161,3 +161,9 @@ variable "ml_serving_url" {
   description = "Internal URL for the ML serving service (empty string = unreachable fallback)"
   default     = ""
 }
+
+variable "use_fargate_spot" {
+  type        = bool
+  description = "Use Fargate Spot capacity for the backend service (E2). 4:1 Spot:on-demand ratio; base on-demand task ensures one guaranteed task survives Spot reclamation."
+  default     = false
+}

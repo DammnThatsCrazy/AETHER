@@ -438,10 +438,33 @@ resource "aws_ecs_service" "backend" {
   task_definition = aws_ecs_task_definition.backend.arn
   desired_count   = var.backend_min_capacity
 
-  capacity_provider_strategy {
-    capacity_provider = "FARGATE"
-    base              = 1
-    weight            = 100
+  # Use Fargate Spot when var.use_fargate_spot = true (E2 cost reduction).
+  # Base = 1 on-demand keeps one guaranteed task; the rest scale on Spot.
+  dynamic "capacity_provider_strategy" {
+    for_each = var.use_fargate_spot ? [] : [1]
+    content {
+      capacity_provider = "FARGATE"
+      base              = 1
+      weight            = 100
+    }
+  }
+
+  dynamic "capacity_provider_strategy" {
+    for_each = var.use_fargate_spot ? [1] : []
+    content {
+      capacity_provider = "FARGATE"
+      base              = 1
+      weight            = 1
+    }
+  }
+
+  dynamic "capacity_provider_strategy" {
+    for_each = var.use_fargate_spot ? [1] : []
+    content {
+      capacity_provider = "FARGATE_SPOT"
+      base              = 0
+      weight            = 4
+    }
   }
 
   network_configuration {

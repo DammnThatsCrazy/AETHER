@@ -19,7 +19,7 @@ from typing import Any, Optional
 
 import numpy as np
 import pandas as pd
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import APIRouter, FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
@@ -590,6 +590,13 @@ class ModelServer:
 
 server = ModelServer()
 
+# ---------------------------------------------------------------------------
+# Shared router — importable by the consolidated aether-app backend (E2).
+# All predict/defense routes are registered here so they can be mounted at
+# any prefix. The standalone app below includes this router after setup.
+# ---------------------------------------------------------------------------
+router = APIRouter()
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -772,12 +779,27 @@ def _apply_output_defense(request: Request, value: float, features: dict) -> flo
     return result.output
 
 
+# Mount the shared router on the standalone app so `uvicorn serving.src.api:app`
+# continues to work unchanged. When the backend imports `router` directly it
+# mounts the same handlers at its own prefix without touching this `app`.
+app.include_router(router)
+
+
+def startup_ml() -> None:
+    """Announce ML model artifacts — call from the parent app's lifespan.
+
+    The consolidated aether-app backend calls this during its own startup so
+    lazy-load discovery runs once rather than on the first prediction request.
+    """
+    server.discover_artifacts()
+
+
 # =============================================================================
 # HEALTH & METADATA
 # =============================================================================
 
 
-@app.get("/health", response_model=HealthResponse)
+@router.get("/health", response_model=HealthResponse)
 async def health() -> HealthResponse:
     """Return service health status, loaded models, and uptime.
 
@@ -792,7 +814,7 @@ async def health() -> HealthResponse:
     )
 
 
-@app.get("/models")
+@router.get("/models")
 async def list_models() -> dict[str, list[dict[str, Any]]]:
     """Return metadata for every known model including load status."""
     return {"models": [model.model_dump() for model in server.model_info()]}
@@ -803,7 +825,7 @@ async def list_models() -> dict[str, list[dict[str, Any]]]:
 # =============================================================================
 
 
-@app.post("/v1/predict/intent", response_model=IntentPredictionResponse)
+@router.post("/v1/predict/intent", response_model=IntentPredictionResponse)
 async def predict_intent(req: IntentPredictionRequest, request: Request) -> IntentPredictionResponse:
     """Real-time intent prediction for a browsing session.
 
@@ -850,7 +872,7 @@ async def predict_intent(req: IntentPredictionRequest, request: Request) -> Inte
     )
 
 
-@app.post("/v1/predict/bot", response_model=BotDetectionResponse)
+@router.post("/v1/predict/bot", response_model=BotDetectionResponse)
 async def predict_bot(req: BotDetectionRequest, request: Request) -> BotDetectionResponse:
     """Classify a session as bot or human.
 
@@ -876,7 +898,7 @@ async def predict_bot(req: BotDetectionRequest, request: Request) -> BotDetectio
     )
 
 
-@app.post("/v1/predict/session-score", response_model=SessionScoreResponse)
+@router.post("/v1/predict/session-score", response_model=SessionScoreResponse)
 async def predict_session_score(req: SessionScoreRequest, request: Request) -> SessionScoreResponse:
     """Score session engagement level.
 
@@ -914,7 +936,7 @@ async def predict_session_score(req: SessionScoreRequest, request: Request) -> S
     )
 
 
-@app.post("/v1/predict/churn", response_model=ChurnPredictionResponse)
+@router.post("/v1/predict/churn", response_model=ChurnPredictionResponse)
 async def predict_churn(req: ChurnPredictionRequest, request: Request) -> ChurnPredictionResponse:
     """Predict churn risk for a known identity.
 
@@ -960,7 +982,7 @@ async def predict_churn(req: ChurnPredictionRequest, request: Request) -> ChurnP
     )
 
 
-@app.post("/v1/predict/ltv", response_model=LTVPredictionResponse)
+@router.post("/v1/predict/ltv", response_model=LTVPredictionResponse)
 async def predict_ltv(req: LTVPredictionRequest, request: Request) -> LTVPredictionResponse:
     """Predict lifetime value for a known identity.
 
@@ -989,7 +1011,7 @@ async def predict_ltv(req: LTVPredictionRequest, request: Request) -> LTVPredict
     )
 
 
-@app.post("/v1/predict/journey", response_model=JourneyPredictionResponse)
+@router.post("/v1/predict/journey", response_model=JourneyPredictionResponse)
 async def predict_journey(req: JourneyPredictionRequest, request: Request) -> JourneyPredictionResponse:
     """Predict the next N steps in a user journey.
 
@@ -1041,7 +1063,7 @@ async def predict_journey(req: JourneyPredictionRequest, request: Request) -> Jo
     )
 
 
-@app.post("/v1/predict/attribution", response_model=AttributionResponse)
+@router.post("/v1/predict/attribution", response_model=AttributionResponse)
 async def predict_attribution(req: AttributionRequest, request: Request) -> AttributionResponse:
     """Compute multi-touch attribution for a conversion.
 
@@ -1083,7 +1105,7 @@ async def predict_attribution(req: AttributionRequest, request: Request) -> Attr
 # =============================================================================
 
 
-@app.post("/v1/predict/batch", response_model=BatchPredictionResponse)
+@router.post("/v1/predict/batch", response_model=BatchPredictionResponse)
 async def batch_predict(req: BatchPredictionRequest, request: Request) -> BatchPredictionResponse:
     """Run batch prediction for any loaded model.
 
@@ -1187,7 +1209,7 @@ async def batch_predict(req: BatchPredictionRequest, request: Request) -> BatchP
 # =============================================================================
 
 
-@app.get("/v1/defense/status")
+@router.get("/v1/defense/status")
 async def defense_status():
     """Return extraction defense layer status and configuration flags."""
     defense = _get_defense_layer()
@@ -1203,7 +1225,7 @@ async def defense_status():
     }
 
 
-@app.get("/v1/defense/metrics")
+@router.get("/v1/defense/metrics")
 async def defense_metrics():
     """Return extraction defense metrics snapshot for monitoring dashboards."""
     defense = _get_defense_layer()
@@ -1212,7 +1234,7 @@ async def defense_metrics():
     return defense.get_metrics_snapshot()
 
 
-@app.get("/v1/defense/risk-scores")
+@router.get("/v1/defense/risk-scores")
 async def defense_risk_scores():
     """Return current risk scores for all tracked clients."""
     defense = _get_defense_layer()
@@ -1225,7 +1247,7 @@ async def defense_risk_scores():
     }
 
 
-@app.get("/v1/defense/canary-triggers")
+@router.get("/v1/defense/canary-triggers")
 async def defense_canary_triggers():
     """Return canary trigger event history."""
     defense = _get_defense_layer()
