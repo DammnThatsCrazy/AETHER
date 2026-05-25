@@ -198,10 +198,14 @@ resource "aws_iam_role_policy" "task" {
   name = "${var.project}-${var.environment}-ecs-task-policy"
   role = aws_iam_role.task.id
 
+  # The base statements have mixed Resource types (string vs list of strings),
+  # and the sqs/dynamo statements only have string Resources. Wrapping each
+  # operand in jsondecode(jsonencode(...)) coerces them to `any` so concat()
+  # doesn't trip Terraform 1.7+ tuple element type unification.
   policy = jsonencode({
     Version = "2012-10-17"
     Statement = concat(
-      [
+      jsondecode(jsonencode([
         {
           Sid    = "CloudWatchMetrics"
           Effect = "Allow"
@@ -231,9 +235,9 @@ resource "aws_iam_role_policy" "task" {
           ]
           Resource = "arn:aws:neptune-db:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}:*/*"
         },
-      ],
-      local.sqs_statements,
-      local.dynamodb_statements,
+      ])),
+      jsondecode(jsonencode(local.sqs_statements)),
+      jsondecode(jsonencode(local.dynamodb_statements)),
     )
   })
 }

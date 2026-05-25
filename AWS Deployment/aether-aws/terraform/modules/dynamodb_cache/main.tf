@@ -12,6 +12,12 @@ resource "aws_dynamodb_table" "cache" {
   name         = "${var.project}-${var.environment}-cache"
   billing_mode = var.use_provisioned_capacity ? "PROVISIONED" : "PAY_PER_REQUEST"
 
+  # When PAY_PER_REQUEST, read/write capacity must be unset (null). When
+  # PROVISIONED, both must be > 0. aws_dynamodb_table uses these as
+  # top-level args (not a provisioned_throughput nested block).
+  read_capacity  = var.use_provisioned_capacity ? var.read_capacity : null
+  write_capacity = var.use_provisioned_capacity ? var.write_capacity : null
+
   hash_key = "cache_key"
 
   attribute {
@@ -27,14 +33,6 @@ resource "aws_dynamodb_table" "cache" {
   # Point-in-time recovery is cheap insurance; ~$0.20/GB/month
   point_in_time_recovery {
     enabled = true
-  }
-
-  dynamic "provisioned_throughput" {
-    for_each = var.use_provisioned_capacity ? [1] : []
-    content {
-      read_capacity  = var.read_capacity
-      write_capacity = var.write_capacity
-    }
   }
 
   tags = {
