@@ -70,3 +70,15 @@ variable "log_archive_bucket" {
   description = "S3 bucket name for long-term log archive (Vector → S3 Parquet). Created by this module if empty string."
   default     = ""
 }
+
+# When populated, the dashboard renders one read-throttle and one write-throttle
+# widget per table with an explicit TableName dimension. When empty, the
+# dashboard falls back to a SEARCH-based metric math expression that aggregates
+# throttle events across all DynamoDB tables in the account. Both paths surface
+# real data — the explicit per-table path is preferred when the set of tables
+# is known so individual hot tables stand out in the graph.
+variable "dynamodb_table_names" {
+  type        = list(string)
+  description = "Optional list of DynamoDB table names to chart per-table throttle widgets for. Empty list = aggregate via SEARCH."
+  default     = []
+}

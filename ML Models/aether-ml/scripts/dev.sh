@@ -12,7 +12,7 @@
 #   serve         Start FastAPI serving API locally
 #   export        Export edge models to TF.js / ONNX / TFLite
 #   lint          Run ruff linter + mypy type checker
-#   format        Auto-format with black + ruff --fix
+#   format        Auto-format with ruff format + ruff --fix
 #   docker-up     Start the Docker Compose dev stack
 #   docker-down   Tear down the Docker Compose dev stack
 #   clean         Remove build artifacts, caches, and temp files
@@ -130,7 +130,7 @@ cmd_help() {
     echo "  serve         Start FastAPI serving API locally"
     echo "  export        Export edge models to TF.js / ONNX"
     echo "  lint          Run ruff linter + mypy type checker"
-    echo "  format        Auto-format with black + ruff --fix"
+    echo "  format        Auto-format with ruff format + ruff --fix"
     echo "  docker-up     Start the Docker Compose dev stack"
     echo "  docker-down   Tear down the Docker Compose dev stack"
     echo "  clean         Remove build artifacts, caches, and temp files"
