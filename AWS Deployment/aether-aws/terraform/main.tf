@@ -213,7 +213,20 @@ module "monitoring" {
 }
 
 # ---------------------------------------------------------------------------
-# 8. Auth0 (SPA clients + API resource server)
+# 8. ML Drift Lambda (nightly PSI check → Aether/MLDrift CloudWatch namespace)
+# Depends on monitoring so the log_archive_bucket name is available.
+# ---------------------------------------------------------------------------
+
+module "ml_drift_lambda" {
+  source = "./modules/ml_drift_lambda"
+
+  environment = var.environment
+  project     = var.project
+  log_bucket  = module.monitoring.log_archive_bucket
+}
+
+# ---------------------------------------------------------------------------
+# 9. Auth0 (SPA clients + API resource server)
 # ---------------------------------------------------------------------------
 
 module "auth0" {

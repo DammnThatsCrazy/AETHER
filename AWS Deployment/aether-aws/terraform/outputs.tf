@@ -124,3 +124,22 @@ output "sns_alert_topic_arn" {
   description = "ARN of the SNS topic used for CloudWatch alarms"
   value       = module.monitoring.sns_topic_arn
 }
+
+output "log_archive_bucket" {
+  description = "S3 bucket used for long-term log archive and drift reference data"
+  value       = module.monitoring.log_archive_bucket
+}
+
+# --------------------------------------------------------------------------
+# ML Drift Lambda
+# --------------------------------------------------------------------------
+
+output "drift_lambda_arn" {
+  description = "ARN of the nightly ML drift Lambda"
+  value       = module.ml_drift_lambda.lambda_arn
+}
+
+output "drift_lambda_function_name" {
+  description = "Function name of the nightly ML drift Lambda"
+  value       = module.ml_drift_lambda.lambda_function_name
+}
