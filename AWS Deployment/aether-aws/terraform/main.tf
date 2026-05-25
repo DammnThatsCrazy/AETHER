@@ -89,6 +89,8 @@ module "rds" {
 
 # ---------------------------------------------------------------------------
 # 4b. ElastiCache Redis
+# Kept for rollback safety. ECS uses DynamoDB cache when dynamodb_cache_table
+# is wired in (E1). Decommission after 72 h of clean prod metrics.
 # ---------------------------------------------------------------------------
 
 module "elasticache" {
@@ -104,7 +106,20 @@ module "elasticache" {
 }
 
 # ---------------------------------------------------------------------------
+# 4b-E1. DynamoDB cache table (replaces ElastiCache as active backend)
+# ---------------------------------------------------------------------------
+
+module "dynamodb_cache" {
+  source = "./modules/dynamodb_cache"
+
+  environment = var.environment
+  project     = var.project
+}
+
+# ---------------------------------------------------------------------------
 # 4c. MSK Kafka
+# Kept for rollback safety. ECS uses SQS when sqs_queue_url is wired in (E1).
+# Decommission after 72 h of clean prod metrics.
 # ---------------------------------------------------------------------------
 
 module "msk" {
@@ -119,6 +134,17 @@ module "msk" {
   kafka_version        = var.msk_kafka_version
   broker_count         = var.msk_broker_count
   broker_volume_size   = var.msk_broker_volume_size
+}
+
+# ---------------------------------------------------------------------------
+# 4c-E1. SQS + SNS fanout (replaces MSK as active event broker)
+# ---------------------------------------------------------------------------
+
+module "sqs" {
+  source = "./modules/sqs"
+
+  environment = var.environment
+  project     = var.project
 }
 
 # ---------------------------------------------------------------------------
@@ -174,10 +200,17 @@ module "ecs" {
   })
   companion_secret_arns    = module.secrets.companion_secret_arns
 
-  redis_host              = split(":", module.elasticache.primary_endpoint)[0]
-  redis_port              = module.elasticache.port
-  kafka_bootstrap_servers = module.msk.bootstrap_brokers_tls
-  neptune_endpoint        = module.neptune.cluster_endpoint
+  # E1: SQS replaces Kafka; DynamoDB replaces Redis as the active backend.
+  # Old MSK/ElastiCache vars left wired so rollback is a single variable swap.
+  sqs_queue_url            = module.sqs.queue_url
+  sqs_queue_arn            = module.sqs.queue_arn
+  dynamodb_cache_table     = module.dynamodb_cache.table_name
+  dynamodb_cache_table_arn = module.dynamodb_cache.table_arn
+  # kafka/redis kept but no longer used by the task definition when sqs/dynamo are set
+  kafka_bootstrap_servers  = module.msk.bootstrap_brokers_tls
+  redis_host               = split(":", module.elasticache.primary_endpoint)[0]
+  redis_port               = module.elasticache.port
+  neptune_endpoint         = module.neptune.cluster_endpoint
   # ML_SERVING_URL: set to ALB DNS once DNS/cert is in place; empty = backend uses "not_trained" fallback
   ml_serving_url          = ""
 
