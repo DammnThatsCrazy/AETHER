@@ -82,7 +82,11 @@ export default function DocIndex({ tier }: Props) {
           <ul style={{ listStyle: 'none', padding: 0, margin: 0, display: 'grid', gap: '0.5rem' }}>
             {docs.map((doc) => {
               const slug = doc.slug ?? '';
-              const isRenderable = availableSlugs.has(slug.split('/').pop() ?? '');
+              // Use the full slug — getAvailableSlugs() returns the content-
+              // relative path (e.g. "concepts/identity-resolution"), so
+              // stripping to the last segment would falsely mark every nested
+              // page as non-renderable.
+              const isRenderable = availableSlugs.has(slug);
               return (
                 <li key={doc.path} style={{ display: 'flex', alignItems: 'baseline', gap: '0.75rem' }}>
                   {isRenderable ? (
