@@ -110,7 +110,8 @@ variable "log_retention_days" {
 
 variable "redis_host" {
   type        = string
-  description = "ElastiCache Redis primary endpoint hostname"
+  description = "ElastiCache Redis primary endpoint hostname (empty string = DynamoDB cache backend)"
+  default     = ""
 }
 
 variable "redis_port" {
@@ -121,7 +122,32 @@ variable "redis_port" {
 
 variable "kafka_bootstrap_servers" {
   type        = string
-  description = "MSK Kafka TLS bootstrap broker string"
+  description = "MSK Kafka TLS bootstrap broker string (empty string = SQS event broker)"
+  default     = ""
+}
+
+variable "sqs_queue_url" {
+  type        = string
+  description = "SQS events queue URL (used when EVENT_BROKER=sns_sqs; empty string falls back to Kafka)"
+  default     = ""
+}
+
+variable "dynamodb_cache_table" {
+  type        = string
+  description = "DynamoDB table name for the shared cache (used when non-empty; falls back to Redis)"
+  default     = ""
+}
+
+variable "sqs_queue_arn" {
+  type        = string
+  description = "SQS events queue ARN (used for IAM policy scoping; empty string = no SQS permissions)"
+  default     = ""
+}
+
+variable "dynamodb_cache_table_arn" {
+  type        = string
+  description = "DynamoDB cache table ARN (used for IAM policy scoping; empty string = no DynamoDB permissions)"
+  default     = ""
 }
 
 variable "neptune_endpoint" {

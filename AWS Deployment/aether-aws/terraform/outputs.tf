@@ -54,6 +54,21 @@ output "kafka_brokers" {
   value       = module.msk.bootstrap_brokers_tls
 }
 
+output "sqs_events_queue_url" {
+  description = "SQS events queue URL (E1 replacement for MSK Kafka)"
+  value       = module.sqs.queue_url
+}
+
+output "sqs_fanout_topic_arn" {
+  description = "SNS fanout topic ARN (E1)"
+  value       = module.sqs.fanout_topic_arn
+}
+
+output "dynamodb_cache_table_name" {
+  description = "DynamoDB cache table name (E1 replacement for ElastiCache)"
+  value       = module.dynamodb_cache.table_name
+}
+
 output "neptune_endpoint" {
   description = "Neptune cluster writer endpoint"
   value       = module.neptune.cluster_endpoint
@@ -123,4 +138,23 @@ output "cloudwatch_dashboard_url" {
 output "sns_alert_topic_arn" {
   description = "ARN of the SNS topic used for CloudWatch alarms"
   value       = module.monitoring.sns_topic_arn
+}
+
+output "log_archive_bucket" {
+  description = "S3 bucket used for long-term log archive and drift reference data"
+  value       = module.monitoring.log_archive_bucket
+}
+
+# --------------------------------------------------------------------------
+# ML Drift Lambda
+# --------------------------------------------------------------------------
+
+output "drift_lambda_arn" {
+  description = "ARN of the nightly ML drift Lambda"
+  value       = module.ml_drift_lambda.lambda_arn
+}
+
+output "drift_lambda_function_name" {
+  description = "Function name of the nightly ML drift Lambda"
+  value       = module.ml_drift_lambda.lambda_function_name
 }

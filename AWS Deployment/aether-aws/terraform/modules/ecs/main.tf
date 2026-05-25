@@ -158,43 +158,87 @@ resource "aws_iam_role" "task" {
   }
 }
 
+locals {
+  sqs_statements = var.sqs_queue_arn != "" ? [
+    {
+      Sid    = "SQSEventsAccess"
+      Effect = "Allow"
+      Action = [
+        "sqs:SendMessage",
+        "sqs:ReceiveMessage",
+        "sqs:DeleteMessage",
+        "sqs:GetQueueAttributes",
+        "sqs:GetQueueUrl",
+        "sqs:ChangeMessageVisibility",
+      ]
+      Resource = var.sqs_queue_arn
+    }
+  ] : []
+
+  dynamodb_statements = var.dynamodb_cache_table_arn != "" ? [
+    {
+      Sid    = "DynamoDBCacheAccess"
+      Effect = "Allow"
+      Action = [
+        "dynamodb:GetItem",
+        "dynamodb:PutItem",
+        "dynamodb:UpdateItem",
+        "dynamodb:DeleteItem",
+        "dynamodb:Query",
+        "dynamodb:Scan",
+        "dynamodb:BatchGetItem",
+        "dynamodb:BatchWriteItem",
+      ]
+      Resource = var.dynamodb_cache_table_arn
+    }
+  ] : []
+}
+
 resource "aws_iam_role_policy" "task" {
   name = "${var.project}-${var.environment}-ecs-task-policy"
   role = aws_iam_role.task.id
 
+  # The base statements have mixed Resource types (string vs list of strings),
+  # and the sqs/dynamo statements only have string Resources. Wrapping each
+  # operand in jsondecode(jsonencode(...)) coerces them to `any` so concat()
+  # doesn't trip Terraform 1.7+ tuple element type unification.
   policy = jsonencode({
     Version = "2012-10-17"
-    Statement = [
-      {
-        Sid    = "CloudWatchMetrics"
-        Effect = "Allow"
-        Action = [
-          "cloudwatch:PutMetricData",
-          "cloudwatch:GetMetricStatistics",
-          "cloudwatch:ListMetrics",
-        ]
-        Resource = "*"
-      },
-      {
-        Sid    = "SecretsManagerRead"
-        Effect = "Allow"
-        Action = [
-          "secretsmanager:GetSecretValue",
-        ]
-        Resource = concat(
-          [for arn in values(var.secret_arns) : arn],
-          [for arn in values(var.companion_secret_arns) : arn],
-        )
-      },
-      {
-        Sid    = "NeptuneIAMAuth"
-        Effect = "Allow"
-        Action = [
-          "neptune-db:*",
-        ]
-        Resource = "arn:aws:neptune-db:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}:*/*"
-      },
-    ]
+    Statement = concat(
+      jsondecode(jsonencode([
+        {
+          Sid    = "CloudWatchMetrics"
+          Effect = "Allow"
+          Action = [
+            "cloudwatch:PutMetricData",
+            "cloudwatch:GetMetricStatistics",
+            "cloudwatch:ListMetrics",
+          ]
+          Resource = "*"
+        },
+        {
+          Sid    = "SecretsManagerRead"
+          Effect = "Allow"
+          Action = [
+            "secretsmanager:GetSecretValue",
+          ]
+          Resource = concat(
+            [for arn in values(var.secret_arns) : arn],
+            [for arn in values(var.companion_secret_arns) : arn],
+          )
+        },
+        {
+          Sid    = "NeptuneIAMAuth"
+          Effect = "Allow"
+          Action = [
+            "neptune-db:*",
+          ]
+          Resource = "arn:aws:neptune-db:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}:*/*"
+        },
+      ])),
+      jsondecode(jsonencode(local.sqs_statements)),
+      jsondecode(jsonencode(local.dynamodb_statements)),
+    )
   })
 }
 
@@ -266,17 +310,31 @@ resource "aws_ecs_task_definition" "backend" {
         }
       ]
 
-      environment = [
-        { name = "APP_ENV",                 value = var.environment },
-        { name = "AETHER_ENV",              value = var.environment },
-        { name = "PORT",                    value = "8000" },
-        { name = "LOG_LEVEL",               value = var.environment == "production" ? "INFO" : "DEBUG" },
-        { name = "REDIS_HOST",              value = var.redis_host },
-        { name = "REDIS_PORT",              value = tostring(var.redis_port) },
-        { name = "KAFKA_BOOTSTRAP_SERVERS", value = var.kafka_bootstrap_servers },
-        { name = "NEPTUNE_ENDPOINT",        value = var.neptune_endpoint },
-        { name = "ML_SERVING_URL",          value = var.ml_serving_url },
-      ]
+      environment = concat(
+        [
+          { name = "APP_ENV",      value = var.environment },
+          { name = "AETHER_ENV",   value = var.environment },
+          { name = "PORT",         value = "8000" },
+          { name = "LOG_LEVEL",    value = var.environment == "production" ? "INFO" : "DEBUG" },
+          { name = "NEPTUNE_ENDPOINT", value = var.neptune_endpoint },
+          { name = "ML_SERVING_URL",   value = var.ml_serving_url },
+        ],
+        # SQS event broker — set when sqs_queue_url is provided; otherwise Kafka
+        var.sqs_queue_url != "" ? [
+          { name = "EVENT_BROKER", value = "sns_sqs" },
+          { name = "SQS_QUEUE_URL", value = var.sqs_queue_url },
+        ] : [
+          { name = "EVENT_BROKER",            value = "kafka" },
+          { name = "KAFKA_BOOTSTRAP_SERVERS", value = var.kafka_bootstrap_servers },
+        ],
+        # DynamoDB cache — set when dynamodb_cache_table is provided; otherwise Redis
+        var.dynamodb_cache_table != "" ? [
+          { name = "DYNAMODB_CACHE_TABLE", value = var.dynamodb_cache_table },
+        ] : [
+          { name = "REDIS_HOST", value = var.redis_host },
+          { name = "REDIS_PORT", value = tostring(var.redis_port) },
+        ],
+      )
 
       secrets = local.backend_secrets_block
 
