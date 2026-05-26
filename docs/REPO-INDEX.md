@@ -11,7 +11,6 @@ source_files:
 canonical_owner: platform@aether
 estimated_read_minutes: 2
 toc_depth: 3
-last_synced_commit: f0f023a
 ---
 
 # Repository Index
