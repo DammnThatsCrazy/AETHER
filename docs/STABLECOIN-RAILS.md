@@ -11,7 +11,7 @@ source_files:
 canonical_owner: commerce@aether
 estimated_read_minutes: 2
 toc_depth: 3
-last_synced_commit: a266987
+last_synced_commit: 6106c13
 ---
 # Stablecoin Rails — Day-1 GA
 
