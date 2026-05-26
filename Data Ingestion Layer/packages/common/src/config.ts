@@ -23,10 +23,29 @@ function envBool(key: string, fallback: boolean): boolean {
 export function loadIngestionConfig(): IngestionConfig {
   const environment = env('NODE_ENV', 'development') as IngestionConfig['environment'];
 
+  // E1: SQS replaces Kafka as the default streaming sink. Kafka is kept for
+  // rollback — set KAFKA_ENABLED=true to re-enable while migrating.
+  // E1: Redis real-time sink is disabled; DynamoDB handles the cache layer.
+  const sqsQueueUrl = env('SQS_QUEUE_URL', '');
+
   const sinks: SinkConfig[] = [
     {
+      type: 'sqs',
+      enabled: envBool('SQS_ENABLED', sqsQueueUrl !== ''),
+      config: {
+        queueUrl: sqsQueueUrl,
+        region: env('AWS_DEFAULT_REGION', env('AWS_REGION', 'us-east-1')),
+        // Override endpoint for LocalStack or other SQS-compatible services.
+        // Defaults to the host extracted from queueUrl (works for both AWS and LocalStack).
+        ...(env('AWS_ENDPOINT_URL') ? { endpoint: env('AWS_ENDPOINT_URL') } : {}),
+      },
+      batchSize: envInt('SQS_FLUSH_BATCH', 10),
+      flushIntervalMs: envInt('SQS_FLUSH_INTERVAL_MS', 1000),
+      retryAttempts: 3,
+    },
+    {
       type: 'kafka',
-      enabled: envBool('KAFKA_ENABLED', true),
+      enabled: envBool('KAFKA_ENABLED', false),
       config: {
         brokers: env('KAFKA_BROKERS', 'localhost:9092').split(','),
         topic: env('KAFKA_EVENTS_TOPIC', 'aether.events.raw'),
@@ -75,8 +94,10 @@ export function loadIngestionConfig(): IngestionConfig {
       retryAttempts: 3,
     },
     {
+      // Redis real-time sink kept for rollback; disabled by default after E1.
+      // Set REDIS_ENABLED=true to re-enable alongside the legacy profile.
       type: 'redis',
-      enabled: envBool('REDIS_ENABLED', true),
+      enabled: envBool('REDIS_ENABLED', false),
       config: {
         url: env('REDIS_URL', 'redis://localhost:6379'),
         prefix: 'aether:rt:',

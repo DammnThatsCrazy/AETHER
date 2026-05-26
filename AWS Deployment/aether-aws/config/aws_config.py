@@ -119,14 +119,15 @@ class ServiceSpec:
 
 
 # ── Production specs ───────────────────────────────────────────────────
-# Consolidated to two Fargate Spot services (E2 cost reduction):
-#   aether-app    — all FastAPI routers (backend + admin + agent)
-#   aether-ml     — ML serving API (lazy ONNX per route)
-# Previously 9 notional services; Terraform always provisioned only these 2.
+# E2: Single Fargate Spot service — all FastAPI routers in-process.
+#   aether-app  — backend + ML predict routes (ML_SERVING_INLINE=true)
+# aether-ml is kept in Terraform at desired_count=0 for rollback;
+# flip ml_serving_inline=false in the ECS module to restore it instantly.
 
 _PRODUCTION_SPECS = {
-    "aether-app": ServiceSpec(512, 1024, min_count=1, max_count=6,  target_cpu_pct=60, port=8000, spot=True),
-    "aether-ml":  ServiceSpec(512, 1024, min_count=1, max_count=6,  target_cpu_pct=60, port=8080, spot=True),
+    "aether-app": ServiceSpec(512, 1024, min_count=1, max_count=6, target_cpu_pct=60, port=8000, spot=True),
+    # desired_count=0 in Terraform when ml_serving_inline=true (E2). Kept here for rollback reference.
+    "aether-ml":  ServiceSpec(512, 1024, min_count=0, max_count=6, target_cpu_pct=60, port=8080, spot=True),
 }
 
 
@@ -186,16 +187,24 @@ class DataStoreSpec:
     backup_retention_days: int = 35
 
 
+# E1/E3: Active stack after cost-reduction epics.
+# Decommission markers show what was replaced and when it is safe to remove.
 DATA_STORES = {
     "production": [
-        DataStoreSpec("Neptune (Graph DB)",       "db.r6g.xlarge",       "Multi-AZ, read replicas, PITR 35-day"),
-        DataStoreSpec("RDS PostgreSQL+Timescale",  "db.r6g.xlarge",     "Multi-AZ, automated backups, performance insights"),
-        DataStoreSpec("ElastiCache Redis",         "cache.r6g.large",   "Cluster mode, 3 shards x 2 replicas, daily snapshots"),
-        DataStoreSpec("S3 + Athena (Event Store)", "Intelligent Tiering","Parquet, partitioned by tenant/date, versioned"),
-        DataStoreSpec("OpenSearch (Vector Store)", "r6g.large.search",  "3 nodes, k-NN plugin, encrypted, TLS 1.2"),
-        DataStoreSpec("DynamoDB (Config Store)",   "On-demand",         "Global tables for multi-region, PITR"),
-        DataStoreSpec("SageMaker Feature Store",   "Online + Offline",  "Online + Offline stores, 9 ML models"),
-        DataStoreSpec("MSK (Kafka)",               "kafka.m5.large",    "3 brokers, 3 AZs, TLS, 168h retention"),
+        # ── Active (E3) ──────────────────────────────────────────────────
+        DataStoreSpec("Aurora Serverless v2",      "0.5–4 ACU",         "Active primary DB (E3); min 0.5 ACU warm, max 4 ACU, PITR 7-day",
+                      multi_az=False, backup_retention_days=7),
+        DataStoreSpec("Neptune (Graph DB)",        "db.r6g.large",      "Identity graph; Multi-AZ, PITR 35-day"),
+        DataStoreSpec("DynamoDB On-Demand",        "On-demand",         "Cache + quota counters + idempotency keys (E1); PITR enabled"),
+        DataStoreSpec("SQS Standard + SNS",        "Managed",           "Event streaming (E1, replaces MSK); per-message fanout via SNS",
+                      multi_az=False, backup_retention_days=0),
+        DataStoreSpec("S3 + Athena (Event Store)", "Intelligent Tiering","Parquet, partitioned by tenant/date, versioned; logs via Vector"),
+        DataStoreSpec("SageMaker Serverless",      "1 GB / 5 concurrent","Inference for M4 (identity), M5 (journey), M8-AE (anomaly)",
+                      multi_az=False, backup_retention_days=0),
+        # ── Decommission after 72 h clean prod metrics ───────────────────
+        DataStoreSpec("RDS PostgreSQL (rollback)", "db.t3.medium",      "Kept for rollback; decommission after Aurora v2 validation"),
+        DataStoreSpec("ElastiCache Redis (rollback)", "cache.t3.micro", "Kept for rollback; decommission after DynamoDB cache validation"),
+        DataStoreSpec("MSK Kafka (rollback)",      "kafka.m5.large",    "Kept for rollback; decommission after SQS migration validation"),
     ],
 }
 
@@ -212,15 +221,17 @@ class SecretSpec:
     description: str = ""
 
 SECRETS = [
-    SecretSpec("aether/rds/master",         "RDS",         30,  "Aurora PostgreSQL master credentials"),
+    # Active after E1/E3
+    SecretSpec("aether/aurora/master",       "Aurora",      30,  "Aurora Serverless v2 master credentials (managed by Secrets Manager)"),
     SecretSpec("aether/neptune/master",      "Neptune",     30,  "Neptune IAM auth token"),
-    SecretSpec("aether/redis/auth",          "ElastiCache", 90,  "Redis AUTH token"),
-    SecretSpec("aether/opensearch/master",   "OpenSearch",  30,  "OpenSearch admin credentials"),
     SecretSpec("aether/api/jwt-secret",      "API",         90,  "JWT signing secret for auth service"),
     SecretSpec("aether/api/encryption-key",  "API",         180, "AES-256 encryption key for PII"),
     SecretSpec("aether/pagerduty/api-key",   "Monitoring",  365, "PagerDuty integration key"),
     SecretSpec("aether/slack/webhook-url",   "Monitoring",  365, "Slack webhook for alerts"),
-    SecretSpec("aether/sagemaker/api-key",   "ML",          90,  "SageMaker endpoint auth"),
+    SecretSpec("aether/sagemaker/api-key",   "ML",          90,  "SageMaker Serverless endpoint auth"),
+    # Rollback — decommission after 72 h clean prod metrics
+    SecretSpec("aether/rds/master",          "RDS",         30,  "RDS rollback credentials (decommission after Aurora validation)"),
+    SecretSpec("aether/redis/auth",          "ElastiCache", 90,  "Redis AUTH token (decommission after DynamoDB cache validation)"),
 ]
 
 
@@ -236,13 +247,15 @@ class MonitoringSpec:
 
 
 MONITORING_STACK = [
-    MonitoringSpec("Metrics",         "CloudWatch + Prometheus (on ECS)", "Custom metrics: event throughput, latency percentiles, error rates per service"),
-    MonitoringSpec("Logging",         "CloudWatch Logs + OpenSearch",     "Structured JSON logs, 30-day retention, indexed for search"),
+    # E6: consolidated to CloudWatch-native stack; OpenSearch and Grafana removed.
+    MonitoringSpec("Metrics",         "CloudWatch",                       "Custom metrics: event throughput, latency percentiles, error rates, Aurora ACU, ML PSI drift"),
+    MonitoringSpec("Logging",         "CloudWatch Logs (WARN+) + S3/Athena", "WARN+ in CW (3-day retention); INFO/DEBUG via Vector → S3 Parquet → Athena ad-hoc"),
     MonitoringSpec("Tracing",         "AWS X-Ray",                        "Distributed tracing, 5% sampling (100% on errors)"),
-    MonitoringSpec("Alerting",        "CloudWatch Alarms + PagerDuty",   "Error rate >1%, P99 >500ms, queue depth >10K, disk >80%"),
-    MonitoringSpec("Dashboards",      "Grafana (on ECS)",                "Service health, business metrics, SLO tracking, cost dashboards"),
-    MonitoringSpec("Cost Monitoring", "Cost Explorer + Budgets",          "Per-service cost allocation tags, monthly budget alerts"),
+    MonitoringSpec("Alerting",        "CloudWatch Alarms + SNS",         "3 alarms: 5xx spike, Aurora max-ACU sustained, ML PSI drift >0.2"),
+    MonitoringSpec("Dashboards",      "CloudWatch Dashboard (aether-prod)", "Single dashboard: request rate, p99 latency, model prediction latency, Aurora ACU, SQS lag"),
+    MonitoringSpec("Cost Monitoring", "Cost Explorer + Budgets",          "Per-service cost allocation tags, $750/mo budget alert at 80%/100%"),
     MonitoringSpec("Security",        "GuardDuty + Security Hub",        "Threat detection, compliance scoring, vulnerability management"),
+    MonitoringSpec("ML Drift",        "EventBridge nightly Lambda",       "PSI scores for all 11 models published to Aether/MLDrift namespace"),
 ]
 
 
@@ -288,15 +301,18 @@ class DRConfig:
 
 
 DR_STRATEGIES = {
-    "Neptune":        "Automated continuous backups, point-in-time recovery within 35-day window",
-    "RDS":            "Automated daily snapshots, cross-region replication for DR",
-    "S3":             "Cross-region replication to DR region, versioning enabled",
-    "ElastiCache":    "Daily snapshots, multi-AZ automatic failover",
-    "MSK (Kafka)":    "Multi-AZ replication, topic-level retention policies",
-    "DynamoDB":       "Global tables auto-replicate to DR region",
-    "OpenSearch":     "Automated snapshots, cross-cluster replication available",
-    "SageMaker":      "Model artifacts in S3 (replicated), endpoint rebuild from config",
-    "Infrastructure": "Terraform state enables full environment rebuild in DR region within 2 hours",
+    # E3: Aurora Serverless v2 is the active DB; weekly snapshot to S3 for DR.
+    "Aurora Serverless v2": "Continuous storage replication within region; weekly snapshot to S3 for cross-region DR",
+    "Neptune":              "Automated continuous backups, point-in-time recovery within 35-day window",
+    "DynamoDB":             "On-Demand tables with PITR; data replication is handled by Aurora for relational data",
+    "SQS":                  "Managed service; DR is queue recreation from Terraform (seconds); messages retained 4 days",
+    "S3":                   "Versioning enabled on all buckets; event archive and model artifacts cross-region replicated",
+    "SageMaker Serverless": "Model artifacts in S3 (replicated); endpoint rebuild from Terraform in ~5 min",
+    "Infrastructure":       "Terraform split into aether-data + aether-compute stacks; compute plane rebuilds in ~3.5 min",
+    # Rollback entries — remove after decommission
+    "RDS (rollback)":       "Automated daily snapshots; cross-region replication for DR",
+    "ElastiCache (rollback)": "Daily snapshots; remove after DynamoDB cache validation",
+    "MSK (rollback)":       "Multi-AZ replication; remove after SQS migration validation",
 }
 
 DR = DRConfig()
@@ -313,12 +329,14 @@ class BudgetConfig:
     alert_thresholds: list[int] = field(default_factory=lambda: [50, 80, 100])
 
 
+# E1–E7 target: total opex ≤ $750/mo across all environments.
+# Prod ≈$450, staging ≈$150, dev ≈$30, data ≈$80, security ≈$40.
 BUDGET_CONFIGS = [
-    BudgetConfig("aether-dev",        2000,  [80, 100]),
-    BudgetConfig("aether-staging",    3000,  [80, 100]),
-    BudgetConfig("aether-production", 15000, [50, 80, 100]),
-    BudgetConfig("aether-data",       5000,  [80, 100]),
-    BudgetConfig("aether-security",   500,   [80, 100]),
+    BudgetConfig("aether-dev",        100,   [80, 100]),
+    BudgetConfig("aether-staging",    200,   [80, 100]),
+    BudgetConfig("aether-production", 500,   [50, 80, 100]),
+    BudgetConfig("aether-data",       100,   [80, 100]),
+    BudgetConfig("aether-security",   50,    [80, 100]),
 ]
 
 
