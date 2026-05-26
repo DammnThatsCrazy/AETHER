@@ -42,7 +42,29 @@ variable "enable_nat_gateway_ha" {
 }
 
 # --------------------------------------------------------------------------
-# RDS Postgres
+# Aurora Serverless v2 (E3 — replaces RDS as the active database)
+# --------------------------------------------------------------------------
+
+variable "aurora_min_acu" {
+  type        = number
+  description = "Aurora Serverless v2 minimum capacity units. 0 = auto-pause (staging); 0.5 = always warm (prod)."
+  default     = 0.5
+}
+
+variable "aurora_max_acu" {
+  type        = number
+  description = "Aurora Serverless v2 maximum capacity units."
+  default     = 4
+}
+
+variable "aurora_backup_retention_days" {
+  type        = number
+  description = "Automated backup retention in days."
+  default     = 7
+}
+
+# --------------------------------------------------------------------------
+# RDS Postgres (kept for rollback safety — decommission after E3 validation)
 # --------------------------------------------------------------------------
 
 variable "db_instance_class" {
