@@ -197,6 +197,18 @@ from services.governance.routes import router as governance_router
 from services.events.routes import router as events_router
 from services.sdk.routes import router as sdk_router
 
+# ML predict routes — imported from the ML serving package when available.
+# When ML_SERVING_INLINE=true (E2 consolidated image) the predict routes are
+# served in-process. When unset/false the httpx proxy (ml_router above) handles
+# them and the try-block below is a no-op.
+_ml_predict_router = None
+_ml_startup_fn = None
+try:
+    if os.getenv("ML_SERVING_INLINE", "false").lower() == "true":
+        from serving.src.api import router as _ml_predict_router, startup_ml as _ml_startup_fn
+except ImportError:
+    pass
+
 
 # ═══════════════════════════════════════════════════════════════════════
 # LIFESPAN — startup / shutdown hooks
@@ -211,6 +223,10 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     """
     registry = get_registry()
     await registry.startup()
+
+    # Announce ML model artifacts when running inline (E2 consolidated image).
+    if _ml_startup_fn is not None:
+        _ml_startup_fn()
 
     from services.events.worker import start_replay_worker
     replay_worker_task = asyncio.create_task(start_replay_worker())
@@ -356,6 +372,13 @@ def create_app() -> FastAPI:
     app.include_router(events_router)
     app.include_router(user_agents_router)  # Profile 360: user/org-owned agents (always-on)
     app.include_router(sdk_router)          # SDK utilities: cross-device identity resolution
+
+    # ── ML serving inline (E2 consolidated image) ───────────────────────
+    # When ML_SERVING_INLINE=true the predict routes are handled in-process
+    # rather than proxied by the ml_router httpx client above.
+    if _ml_predict_router is not None:
+        app.include_router(_ml_predict_router)
+        logger.info("ML serving routes mounted inline (E2)")
 
     # ── Intelligence Graph services (feature-flagged) ───────────
     ig = settings.intelligence_graph

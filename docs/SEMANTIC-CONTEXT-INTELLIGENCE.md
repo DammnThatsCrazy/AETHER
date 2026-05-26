@@ -12,7 +12,7 @@ source_files:
 canonical_owner: ai@aether
 estimated_read_minutes: 15
 toc_depth: 3
-last_synced_commit: 87d913f
+last_synced_commit: db8fb3c
 ---
 # Semantic Context Intelligence Layer
 

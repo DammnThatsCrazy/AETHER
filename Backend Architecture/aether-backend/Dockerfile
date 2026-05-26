@@ -11,6 +11,15 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 COPY pyproject.toml .
 RUN pip install --no-cache-dir ".[backend]"
 
+# ---------------------------------------------------------------------------
+# Optional: install onnxruntime for ML_SERVING_INLINE=true.
+# This stage is shared by both the standard backend image and the
+# consolidated aether-app image (E2).  onnxruntime adds ~180 MB but
+# the same image can run with or without ML_SERVING_INLINE; the runtime
+# cost is zero when the env var is false.
+# ---------------------------------------------------------------------------
+RUN pip install --no-cache-dir "onnxruntime>=1.17.0" "onnx>=1.15.0"
+
 # --- Production stage ---
 FROM python:3.11-slim
 
@@ -42,6 +51,12 @@ COPY ["Backend Architecture/aether-backend/services/", "./services/"]
 COPY ["Backend Architecture/aether-backend/shared/", "./shared/"]
 COPY ["Backend Architecture/aether-backend/main.py", "./main.py"]
 COPY security/ ./security/
+
+# ML serving source tree (required when ML_SERVING_INLINE=true, E2).
+# Routes are lazy-loaded per request; the image boots without them.
+COPY ["ML Models/aether-ml/serving/", "./serving/"]
+
+ENV ML_SERVING_INLINE=false
 
 EXPOSE 8000
 

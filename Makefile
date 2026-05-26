@@ -84,22 +84,29 @@ serve-ml: ## Start the ML serving API (port 8080)
 # Dev shortcuts (minimal boot — default stack only)
 # ---------------------------------------------------------------------------
 
-dev: ## Start minimal dev stack: postgres + redis + backend + ml-serving (~2 GB RAM)
+dev: ## Start minimal dev stack: postgres + backend only (~1.5 GB RAM, ML inline)
 	docker compose up -d
+	@echo ""
+	@echo "  Backend API (+ ML predict routes inline): http://localhost:8000"
+	@echo ""
+	@echo "  Add-on profiles:"
+	@echo "    make dev-streaming   LocalStack SQS+SNS+DynamoDB (prod equivalent)"
+	@echo "    make dev-analytics   ClickHouse (analytics queries)"
+	@echo "    make dev-notebooks   Jupyter Lab (ML training)"
+	@echo "    make dev-legacy      Redis + standalone ml-serving (pre-E1/E2 rollback)"
+	@echo "    make dev-full        everything"
+
+dev-legacy: ## Start pre-E1/E2 stack with Redis + standalone ml-serving (rollback)
+	docker compose --profile legacy up -d
 	@echo ""
 	@echo "  Backend API:  http://localhost:8000"
 	@echo "  ML Serving:   http://localhost:8080"
-	@echo ""
-	@echo "  Add-on profiles:"
-	@echo "    make dev-streaming   LocalStack SQS+SNS (prod streaming equivalent)"
-	@echo "    make dev-analytics   ClickHouse (analytics queries)"
-	@echo "    make dev-notebooks   Jupyter Lab (ML training)"
-	@echo "    make dev-full        everything"
+	@echo "  Redis:        localhost:6379"
 
-dev-streaming: ## Add LocalStack SQS+SNS to the running stack (prod streaming equivalent)
+dev-streaming: ## Add LocalStack SQS+SNS+DynamoDB to the running stack (prod streaming equivalent)
 	docker compose --profile streaming up -d
 	@echo ""
-	@echo "  LocalStack SQS+SNS:  http://localhost:4566"
+	@echo "  LocalStack SQS+SNS+DynamoDB:  http://localhost:4566"
 	@echo "  Set AWS_ENDPOINT_URL=http://localhost:4566 for local boto3 calls."
 
 dev-analytics: ## Add ClickHouse to the running stack

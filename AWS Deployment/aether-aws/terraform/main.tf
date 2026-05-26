@@ -70,6 +70,8 @@ module "secrets" {
 
 # ---------------------------------------------------------------------------
 # 4a. RDS Postgres
+# Kept for rollback safety. Active database is Aurora Serverless v2 (E3).
+# Decommission after 72 h of clean prod metrics.
 # ---------------------------------------------------------------------------
 
 module "rds" {
@@ -85,6 +87,27 @@ module "rds" {
   multi_az                 = var.db_multi_az
   allocated_storage        = var.db_allocated_storage
   max_allocated_storage    = var.db_max_allocated_storage
+}
+
+# ---------------------------------------------------------------------------
+# 4a-E3. Aurora Serverless v2 (replaces RDS as the active database)
+# Reuses the rds_sg_id (same port 5432, same network rules).
+# ---------------------------------------------------------------------------
+
+module "aurora" {
+  source = "./modules/aurora"
+
+  environment  = var.environment
+  project      = var.project
+  vpc_id       = module.vpc.vpc_id
+  subnet_ids   = module.vpc.isolated_subnet_ids
+  aurora_sg_id = module.vpc.rds_sg_id
+  db_name      = var.db_name
+  min_acu      = var.aurora_min_acu
+  max_acu      = var.aurora_max_acu
+
+  backup_retention_days = var.aurora_backup_retention_days
+  deletion_protection   = var.environment == "production"
 }
 
 # ---------------------------------------------------------------------------
@@ -195,7 +218,9 @@ module "ecs" {
   alb_backend_tg_arn       = module.alb.backend_target_group_arn
   alb_ml_tg_arn            = module.alb.ml_target_group_arn
   secret_arns              = merge(module.secrets.secret_arns, {
-    "db-password"      = module.rds.db_password_secret_arn
+    # E3: Aurora Serverless v2 replaces RDS as the active database.
+    # entrypoint.sh reads this ARN via DATABASE_URL_SECRET and builds DATABASE_URL.
+    "db-password"      = module.aurora.db_password_secret_arn
     "redis-auth-token" = module.elasticache.auth_token_secret_arn
   })
   companion_secret_arns    = module.secrets.companion_secret_arns
@@ -214,6 +239,12 @@ module "ecs" {
   # ML_SERVING_URL: set to ALB DNS once DNS/cert is in place; empty = backend uses "not_trained" fallback
   ml_serving_url          = ""
 
+  # E2: ML predict routes run in-process inside aether-app. The dedicated
+  # aether-ml-serving ECS service is kept at desired_count=0 for rollback;
+  # flip ml_serving_inline=false to restore it instantly.
+  ml_serving_inline        = true
+
+  use_fargate_spot         = true
   backend_cpu              = var.ecs_backend_cpu
   backend_memory           = var.ecs_backend_memory
   ml_cpu                   = var.ecs_ml_cpu
@@ -238,8 +269,9 @@ module "monitoring" {
   ecs_cluster_name     = module.ecs.cluster_name
   backend_service_name = module.ecs.backend_service_name
   ml_service_name      = module.ecs.ml_service_name
-  # aurora_cluster_id intentionally omitted — defaults to "" during the
-  # RDS→Aurora migration, which disables the Aurora-specific alarm and widgets.
+  # E3: Aurora is now the active database — pass cluster_identifier so
+  # the monitoring module enables the Aurora ACU alarm and dashboard widget.
+  aurora_cluster_id    = module.aurora.cluster_identifier
   alb_arn_suffix       = module.alb.alb_arn_suffix
   alert_email          = var.alert_email
   log_retention_days   = var.log_retention_days
