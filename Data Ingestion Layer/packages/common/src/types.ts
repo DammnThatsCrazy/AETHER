@@ -324,7 +324,7 @@ export interface IngestionMetrics {
 // SINK DESTINATIONS
 // =============================================================================
 
-export type SinkType = 'kafka' | 'kinesis' | 's3' | 'clickhouse' | 'redis' | 'opensearch' | 'neptune';
+export type SinkType = 'kafka' | 'kinesis' | 's3' | 'clickhouse' | 'redis' | 'opensearch' | 'neptune' | 'sqs';
 
 export interface SinkConfig {
   type: SinkType;
