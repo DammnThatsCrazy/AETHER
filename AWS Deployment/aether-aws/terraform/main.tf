@@ -214,6 +214,11 @@ module "ecs" {
   # ML_SERVING_URL: set to ALB DNS once DNS/cert is in place; empty = backend uses "not_trained" fallback
   ml_serving_url          = ""
 
+  # E2: ML predict routes run in-process inside aether-app. The dedicated
+  # aether-ml-serving ECS service is kept at desired_count=0 for rollback;
+  # flip ml_serving_inline=false to restore it instantly.
+  ml_serving_inline        = true
+
   use_fargate_spot         = true
   backend_cpu              = var.ecs_backend_cpu
   backend_memory           = var.ecs_backend_memory

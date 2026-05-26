@@ -167,3 +167,9 @@ variable "use_fargate_spot" {
   description = "Use Fargate Spot capacity for the backend service (E2). 4:1 Spot:on-demand ratio; base on-demand task ensures one guaranteed task survives Spot reclamation."
   default     = false
 }
+
+variable "ml_serving_inline" {
+  type        = bool
+  description = "When true, ML serving is handled in-process by the backend (ML_SERVING_INLINE=true). Sets the aether-ml-serving ECS service desired_count to 0 and disables its autoscaling. Flip to false to roll back to the dedicated ML service."
+  default     = false
+}

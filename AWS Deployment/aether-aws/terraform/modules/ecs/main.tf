@@ -312,12 +312,13 @@ resource "aws_ecs_task_definition" "backend" {
 
       environment = concat(
         [
-          { name = "APP_ENV",      value = var.environment },
-          { name = "AETHER_ENV",   value = var.environment },
-          { name = "PORT",         value = "8000" },
-          { name = "LOG_LEVEL",    value = var.environment == "production" ? "INFO" : "DEBUG" },
-          { name = "NEPTUNE_ENDPOINT", value = var.neptune_endpoint },
-          { name = "ML_SERVING_URL",   value = var.ml_serving_url },
+          { name = "APP_ENV",           value = var.environment },
+          { name = "AETHER_ENV",        value = var.environment },
+          { name = "PORT",              value = "8000" },
+          { name = "LOG_LEVEL",         value = var.environment == "production" ? "INFO" : "DEBUG" },
+          { name = "NEPTUNE_ENDPOINT",  value = var.neptune_endpoint },
+          { name = "ML_SERVING_URL",    value = var.ml_serving_url },
+          { name = "ML_SERVING_INLINE", value = var.ml_serving_inline ? "true" : "false" },
         ],
         # SQS event broker — set when sqs_queue_url is provided; otherwise Kafka
         var.sqs_queue_url != "" ? [
@@ -510,7 +511,9 @@ resource "aws_ecs_service" "ml" {
   name            = "${var.project}-${var.environment}-ml-serving"
   cluster         = aws_ecs_cluster.this.id
   task_definition = aws_ecs_task_definition.ml.arn
-  desired_count   = var.ml_min_capacity
+  # Zero tasks when ML serving is inlined into the backend (E2).
+  # Set ml_serving_inline = false to restore the dedicated ML service.
+  desired_count   = var.ml_serving_inline ? 0 : var.ml_min_capacity
 
   capacity_provider_strategy {
     capacity_provider = "FARGATE"
@@ -601,9 +604,11 @@ resource "aws_appautoscaling_policy" "backend_memory" {
 
 # --------------------------------------------------------------------------
 # Application Auto Scaling — ML Serving
+# Disabled when ML serving is inlined into the backend (ml_serving_inline=true).
 # --------------------------------------------------------------------------
 
 resource "aws_appautoscaling_target" "ml" {
+  count              = var.ml_serving_inline ? 0 : 1
   max_capacity       = var.ml_max_capacity
   min_capacity       = var.ml_min_capacity
   resource_id        = "service/${aws_ecs_cluster.this.name}/${aws_ecs_service.ml.name}"
@@ -612,11 +617,12 @@ resource "aws_appautoscaling_target" "ml" {
 }
 
 resource "aws_appautoscaling_policy" "ml_cpu" {
+  count              = var.ml_serving_inline ? 0 : 1
   name               = "${var.project}-${var.environment}-ml-cpu-scaling"
   policy_type        = "TargetTrackingScaling"
-  resource_id        = aws_appautoscaling_target.ml.resource_id
-  scalable_dimension = aws_appautoscaling_target.ml.scalable_dimension
-  service_namespace  = aws_appautoscaling_target.ml.service_namespace
+  resource_id        = aws_appautoscaling_target.ml[0].resource_id
+  scalable_dimension = aws_appautoscaling_target.ml[0].scalable_dimension
+  service_namespace  = aws_appautoscaling_target.ml[0].service_namespace
 
   target_tracking_scaling_policy_configuration {
     predefined_metric_specification {
