@@ -779,12 +779,6 @@ def _apply_output_defense(request: Request, value: float, features: dict) -> flo
     return result.output
 
 
-# Mount the shared router on the standalone app so `uvicorn serving.src.api:app`
-# continues to work unchanged. When the backend imports `router` directly it
-# mounts the same handlers at its own prefix without touching this `app`.
-app.include_router(router)
-
-
 def startup_ml() -> None:
     """Announce ML model artifacts — call from the parent app's lifespan.
 
@@ -1266,6 +1260,12 @@ async def defense_canary_triggers():
             for t in triggers[-50:]  # last 50
         ],
     }
+
+
+# Mount the shared router on the standalone app so `uvicorn serving.src.api:app`
+# continues to work unchanged. When the backend imports `router` directly it
+# mounts the same handlers at its own prefix without touching this `app`.
+app.include_router(router)
 
 
 # =============================================================================
