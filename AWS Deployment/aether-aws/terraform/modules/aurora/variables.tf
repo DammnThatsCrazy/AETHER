@@ -31,8 +31,8 @@ variable "db_name" {
 
 variable "min_acu" {
   type        = number
-  description = "Aurora Serverless v2 minimum capacity units (0 = auto-pause on staging)"
-  default     = 0.5
+  description = "Aurora Serverless v2 minimum capacity units (0 = auto-pause; prod callers should pass 0.5)"
+  default     = 0
 }
 
 variable "max_acu" {

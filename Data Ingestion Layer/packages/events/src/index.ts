@@ -3,6 +3,7 @@
 // Fan-out enriched events to multiple downstream sinks concurrently
 // =============================================================================
 
+import * as crypto from 'node:crypto';
 import * as http from 'node:http';
 import * as https from 'node:https';
 import * as net from 'node:net';
@@ -701,6 +702,204 @@ export class RedisSink extends BufferedSink {
 }
 
 // =============================================================================
+// SQS SINK (E1: replaces Kafka for event streaming)
+// Sends events to an AWS SQS standard queue using SendMessageBatch.
+// Auth: reads AWS credentials from env vars (local dev) or the ECS container
+// credentials endpoint (Fargate task role). No external dependencies needed.
+// Config: queueUrl (required), region, endpoint (optional LocalStack override)
+// =============================================================================
+
+// ---- inline AWS SigV4 signing (Node.js built-ins only) ----
+
+interface AwsCredentials {
+  accessKeyId: string;
+  secretAccessKey: string;
+  sessionToken?: string;
+}
+
+// Cached ECS credentials to avoid hitting the metadata endpoint on every call.
+let _cachedCreds: AwsCredentials & { expiry: number } | null = null;
+
+async function resolveAwsCredentials(): Promise<AwsCredentials> {
+  // ECS container credentials provider
+  const relUri = process.env.AWS_CONTAINER_CREDENTIALS_RELATIVE_URI;
+  const fullUri = process.env.AWS_CONTAINER_CREDENTIALS_FULL_URI;
+  const metaUri = relUri ? `http://169.254.170.2${relUri}` : fullUri;
+
+  if (metaUri) {
+    const now = Date.now();
+    if (_cachedCreds && _cachedCreds.expiry - now > 60_000) {
+      return _cachedCreds;
+    }
+    const res = await httpRequest({ url: metaUri, method: 'GET', timeoutMs: 3_000 });
+    const d = JSON.parse(res.body) as {
+      AccessKeyId: string; SecretAccessKey: string; Token: string; Expiration: string;
+    };
+    _cachedCreds = {
+      accessKeyId: d.AccessKeyId,
+      secretAccessKey: d.SecretAccessKey,
+      sessionToken: d.Token,
+      expiry: new Date(d.Expiration).getTime(),
+    };
+    return _cachedCreds;
+  }
+
+  // Static env vars (local dev / LocalStack)
+  const accessKeyId = process.env.AWS_ACCESS_KEY_ID ?? 'test';
+  const secretAccessKey = process.env.AWS_SECRET_ACCESS_KEY ?? 'test';
+  return { accessKeyId, secretAccessKey, sessionToken: process.env.AWS_SESSION_TOKEN };
+}
+
+function _sha256hex(data: string): string {
+  return crypto.createHash('sha256').update(data, 'utf8').digest('hex');
+}
+function _hmac(key: Buffer | string, data: string): Buffer {
+  return crypto.createHmac('sha256', key).update(data, 'utf8').digest();
+}
+
+function buildSigV4Headers(opts: {
+  method: string;
+  url: string;
+  service: string;
+  region: string;
+  body: string;
+  extraHeaders: Record<string, string>;
+  creds: AwsCredentials;
+}): Record<string, string> {
+  const now = new Date();
+  const amzDate = now.toISOString().replace(/[:-]/g, '').slice(0, 15) + 'Z';
+  const dateStamp = amzDate.slice(0, 8);
+  const parsedUrl = new URL(opts.url);
+  const payloadHash = _sha256hex(opts.body);
+  const hdrs: Record<string, string> = {
+    ...opts.extraHeaders,
+    host: parsedUrl.host,
+    'x-amz-date': amzDate,
+    'x-amz-content-sha256': payloadHash,
+  };
+  if (opts.creds.sessionToken) hdrs['x-amz-security-token'] = opts.creds.sessionToken;
+
+  const sortedKeys = Object.keys(hdrs).sort();
+  const canonicalHeaders = sortedKeys.map(k => `${k}:${hdrs[k]}\n`).join('');
+  const signedHeaders = sortedKeys.join(';');
+  const canonicalRequest = [
+    opts.method,
+    parsedUrl.pathname || '/',
+    '',
+    canonicalHeaders,
+    signedHeaders,
+    payloadHash,
+  ].join('\n');
+
+  const credScope = `${dateStamp}/${opts.region}/${opts.service}/aws4_request`;
+  const stringToSign = ['AWS4-HMAC-SHA256', amzDate, credScope, _sha256hex(canonicalRequest)].join('\n');
+  const kSign = _hmac(
+    _hmac(_hmac(_hmac(`AWS4${opts.creds.secretAccessKey}`, dateStamp), opts.region), opts.service),
+    'aws4_request',
+  );
+  const signature = crypto.createHmac('sha256', kSign).update(stringToSign, 'utf8').digest('hex');
+  return {
+    ...hdrs,
+    Authorization: `AWS4-HMAC-SHA256 Credential=${opts.creds.accessKeyId}/${credScope}, SignedHeaders=${signedHeaders}, Signature=${signature}`,
+  };
+}
+
+// ---- SqsSink ----
+
+export class SqsSink extends BufferedSink {
+  readonly name = 'sqs';
+  readonly type = 'sqs';
+  private queueUrl: string;
+  private region: string;
+  private endpoint: string;
+
+  constructor(config: SinkConfig) {
+    // SQS SendMessageBatch cap: 10 messages per call
+    super(Math.min(config.batchSize ?? 10, 10), config.flushIntervalMs ?? 1000, config.retryAttempts ?? 3);
+    const c = config.config as Record<string, any>;
+    this.queueUrl = c.queueUrl as string;
+    if (!this.queueUrl) throw new Error('SqsSink: config.queueUrl is required');
+    this.region = (c.region as string | undefined) ?? process.env.AWS_DEFAULT_REGION ?? process.env.AWS_REGION ?? 'us-east-1';
+    const parsed = new URL(this.queueUrl);
+    this.endpoint = (c.endpoint as string | undefined) ?? `${parsed.protocol}//${parsed.host}`;
+  }
+
+  async initialize(): Promise<void> {
+    await super.initialize();
+    try {
+      await this._sqsAction('GetQueueAttributes', { QueueUrl: this.queueUrl, AttributeNames: ['QueueArn'] });
+      logger.info('SQS sink ready', { queueUrl: this.queueUrl });
+    } catch (err) {
+      logger.warn('SQS probe failed on init, will retry on writes', { error: (err as Error).message });
+    }
+  }
+
+  protected async writeBatch(events: EnrichedEvent[]): Promise<void> {
+    for (let i = 0; i < events.length; i += 10) {
+      const chunk = events.slice(i, i + 10);
+      const entries = chunk.map((e, idx) => ({
+        Id: String(idx),
+        MessageBody: JSON.stringify(e),
+        MessageAttributes: {
+          'event-type': { DataType: 'String', StringValue: e.type },
+          'project-id': { DataType: 'String', StringValue: e.projectId },
+          'partition-key': { DataType: 'String', StringValue: e.partitionKey },
+        },
+      }));
+      const result = await this._sqsAction('SendMessageBatch', { QueueUrl: this.queueUrl, Entries: entries }) as {
+        Failed?: Array<{ Id: string; Code: string; Message: string }>;
+      };
+      if (result.Failed?.length) {
+        throw new Error(
+          `SQS SendMessageBatch partial failure: ${result.Failed.map(f => `[${f.Id}] ${f.Code}: ${f.Message}`).join('; ')}`,
+        );
+      }
+    }
+    logger.debug(`SQS: enqueued ${events.length} events`, { queueUrl: this.queueUrl });
+  }
+
+  async healthCheck(): Promise<{ healthy: boolean; latencyMs: number }> {
+    const start = Date.now();
+    try {
+      await this._sqsAction('GetQueueAttributes', {
+        QueueUrl: this.queueUrl,
+        AttributeNames: ['ApproximateNumberOfMessages'],
+      });
+      return { healthy: true, latencyMs: Date.now() - start };
+    } catch {
+      return { healthy: false, latencyMs: Date.now() - start };
+    }
+  }
+
+  private async _sqsAction(action: string, payload: unknown): Promise<unknown> {
+    const body = JSON.stringify(payload);
+    const creds = await resolveAwsCredentials();
+    const headers = buildSigV4Headers({
+      method: 'POST',
+      url: this.endpoint,
+      service: 'sqs',
+      region: this.region,
+      body,
+      extraHeaders: {
+        'content-type': 'application/x-amz-json-1.0',
+        'x-amz-target': `AmazonSQS.${action}`,
+      },
+      creds,
+    });
+    const res = await httpRequest({ url: this.endpoint, method: 'POST', headers, body, timeoutMs: 15_000 });
+    if (res.statusCode >= 400) {
+      throw new Error(`SQS ${action} HTTP ${res.statusCode}: ${res.body.slice(0, 500)}`);
+    }
+    return JSON.parse(res.body || '{}');
+  }
+
+  async close(): Promise<void> {
+    await super.close();
+    logger.info('SQS sink closed');
+  }
+}
+
+// =============================================================================
 // EVENT ROUTER — fans out events to all configured sinks
 // =============================================================================
 
@@ -761,6 +960,7 @@ export class EventRouter {
 export function createSink(config: SinkConfig): EventSink {
   switch (config.type) {
     case 'kafka': return new KafkaSink(config);
+    case 'sqs': return new SqsSink(config);
     case 's3': return new S3Sink(config);
     case 'clickhouse': return new ClickHouseSink(config);
     case 'redis': return new RedisSink(config);

@@ -70,6 +70,8 @@ module "secrets" {
 
 # ---------------------------------------------------------------------------
 # 4a. RDS Postgres
+# Kept for rollback safety. Active database is Aurora Serverless v2 (E3).
+# Decommission after 72 h of clean prod metrics.
 # ---------------------------------------------------------------------------
 
 module "rds" {
@@ -88,7 +90,30 @@ module "rds" {
 }
 
 # ---------------------------------------------------------------------------
+# 4a-E3. Aurora Serverless v2 (replaces RDS as the active database)
+# Reuses the rds_sg_id (same port 5432, same network rules).
+# ---------------------------------------------------------------------------
+
+module "aurora" {
+  source = "./modules/aurora"
+
+  environment  = var.environment
+  project      = var.project
+  vpc_id       = module.vpc.vpc_id
+  subnet_ids   = module.vpc.isolated_subnet_ids
+  aurora_sg_id = module.vpc.rds_sg_id
+  db_name      = var.db_name
+  min_acu      = var.aurora_min_acu
+  max_acu      = var.aurora_max_acu
+
+  backup_retention_days = var.aurora_backup_retention_days
+  deletion_protection   = var.environment == "production"
+}
+
+# ---------------------------------------------------------------------------
 # 4b. ElastiCache Redis
+# Kept for rollback safety. ECS uses DynamoDB cache when dynamodb_cache_table
+# is wired in (E1). Decommission after 72 h of clean prod metrics.
 # ---------------------------------------------------------------------------
 
 module "elasticache" {
@@ -104,7 +129,20 @@ module "elasticache" {
 }
 
 # ---------------------------------------------------------------------------
+# 4b-E1. DynamoDB cache table (replaces ElastiCache as active backend)
+# ---------------------------------------------------------------------------
+
+module "dynamodb_cache" {
+  source = "./modules/dynamodb_cache"
+
+  environment = var.environment
+  project     = var.project
+}
+
+# ---------------------------------------------------------------------------
 # 4c. MSK Kafka
+# Kept for rollback safety. ECS uses SQS when sqs_queue_url is wired in (E1).
+# Decommission after 72 h of clean prod metrics.
 # ---------------------------------------------------------------------------
 
 module "msk" {
@@ -119,6 +157,17 @@ module "msk" {
   kafka_version        = var.msk_kafka_version
   broker_count         = var.msk_broker_count
   broker_volume_size   = var.msk_broker_volume_size
+}
+
+# ---------------------------------------------------------------------------
+# 4c-E1. SQS + SNS fanout (replaces MSK as active event broker)
+# ---------------------------------------------------------------------------
+
+module "sqs" {
+  source = "./modules/sqs"
+
+  environment = var.environment
+  project     = var.project
 }
 
 # ---------------------------------------------------------------------------
@@ -169,18 +218,33 @@ module "ecs" {
   alb_backend_tg_arn       = module.alb.backend_target_group_arn
   alb_ml_tg_arn            = module.alb.ml_target_group_arn
   secret_arns              = merge(module.secrets.secret_arns, {
-    "db-password"      = module.rds.db_password_secret_arn
+    # E3: Aurora Serverless v2 replaces RDS as the active database.
+    # entrypoint.sh reads this ARN via DATABASE_URL_SECRET and builds DATABASE_URL.
+    "db-password"      = module.aurora.db_password_secret_arn
     "redis-auth-token" = module.elasticache.auth_token_secret_arn
   })
   companion_secret_arns    = module.secrets.companion_secret_arns
 
-  redis_host              = split(":", module.elasticache.primary_endpoint)[0]
-  redis_port              = module.elasticache.port
-  kafka_bootstrap_servers = module.msk.bootstrap_brokers_tls
-  neptune_endpoint        = module.neptune.cluster_endpoint
+  # E1: SQS replaces Kafka; DynamoDB replaces Redis as the active backend.
+  # Old MSK/ElastiCache vars left wired so rollback is a single variable swap.
+  sqs_queue_url            = module.sqs.queue_url
+  sqs_queue_arn            = module.sqs.queue_arn
+  dynamodb_cache_table     = module.dynamodb_cache.table_name
+  dynamodb_cache_table_arn = module.dynamodb_cache.table_arn
+  # kafka/redis kept but no longer used by the task definition when sqs/dynamo are set
+  kafka_bootstrap_servers  = module.msk.bootstrap_brokers_tls
+  redis_host               = split(":", module.elasticache.primary_endpoint)[0]
+  redis_port               = module.elasticache.port
+  neptune_endpoint         = module.neptune.cluster_endpoint
   # ML_SERVING_URL: set to ALB DNS once DNS/cert is in place; empty = backend uses "not_trained" fallback
   ml_serving_url          = ""
 
+  # E2: ML predict routes run in-process inside aether-app. The dedicated
+  # aether-ml-serving ECS service is kept at desired_count=0 for rollback;
+  # flip ml_serving_inline=false to restore it instantly.
+  ml_serving_inline        = true
+
+  use_fargate_spot         = true
   backend_cpu              = var.ecs_backend_cpu
   backend_memory           = var.ecs_backend_memory
   ml_cpu                   = var.ecs_ml_cpu
@@ -205,15 +269,29 @@ module "monitoring" {
   ecs_cluster_name     = module.ecs.cluster_name
   backend_service_name = module.ecs.backend_service_name
   ml_service_name      = module.ecs.ml_service_name
-  # aurora_cluster_id intentionally omitted — defaults to "" during the
-  # RDS→Aurora migration, which disables the Aurora-specific alarm and widgets.
+  # E3: Aurora is now the active database — pass cluster_identifier so
+  # the monitoring module enables the Aurora ACU alarm and dashboard widget.
+  aurora_cluster_id    = module.aurora.cluster_identifier
   alb_arn_suffix       = module.alb.alb_arn_suffix
   alert_email          = var.alert_email
   log_retention_days   = var.log_retention_days
 }
 
 # ---------------------------------------------------------------------------
-# 8. Auth0 (SPA clients + API resource server)
+# 8. ML Drift Lambda (nightly PSI check → Aether/MLDrift CloudWatch namespace)
+# Depends on monitoring so the log_archive_bucket name is available.
+# ---------------------------------------------------------------------------
+
+module "ml_drift_lambda" {
+  source = "./modules/ml_drift_lambda"
+
+  environment = var.environment
+  project     = var.project
+  log_bucket  = module.monitoring.log_archive_bucket
+}
+
+# ---------------------------------------------------------------------------
+# 9. Auth0 (SPA clients + API resource server)
 # ---------------------------------------------------------------------------
 
 module "auth0" {

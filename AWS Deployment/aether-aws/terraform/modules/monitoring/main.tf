@@ -306,6 +306,98 @@ locals {
       }
     }
   ]
+
+  # DynamoDB throttle widgets. Throttle events are emitted per-table with a
+  # TableName dimension, so a bare `["AWS/DynamoDB", "ReadThrottleEvents"]`
+  # array renders an empty graph. We support two modes:
+  #
+  #   1. When dynamodb_table_names is populated, render one widget per table
+  #      with the explicit TableName dimension so individual hot tables stand
+  #      out in the dashboard.
+  #   2. When dynamodb_table_names is empty, fall back to a single aggregate
+  #      widget per metric using a SEARCH metric-math expression that scans
+  #      across every table with the TableName dimension.
+  #
+  # `for ... if` filters keep both branches as a homogeneous list type so
+  # concat() in the dashboard body type-checks cleanly under Terraform 1.7+.
+  _dynamo_per_table_widgets = concat(
+    [
+      for idx, tn in var.dynamodb_table_names : {
+        type   = "metric"
+        x      = (idx % 2) * 12
+        y      = 12 + floor(idx / 2) * 6
+        width  = 12
+        height = 6
+        properties = {
+          title  = "DynamoDB Throttles — ${tn}"
+          view   = "timeSeries"
+          region = data.aws_region.current.name
+          metrics = [
+            [
+              "AWS/DynamoDB", "ReadThrottleEvents",
+              "TableName", tn,
+              { stat = "Sum", label = "Read", color = "#d62728" }
+            ],
+            [
+              "AWS/DynamoDB", "WriteThrottleEvents",
+              "TableName", tn,
+              { stat = "Sum", label = "Write", color = "#ff7f0e" }
+            ],
+          ]
+        }
+      }
+    ],
+  )
+
+  _dynamo_aggregate_widgets = [
+    {
+      type   = "metric"
+      x      = 0
+      y      = 12
+      width  = 8
+      height = 6
+      properties = {
+        title  = "DynamoDB Read Throttles (all tables)"
+        view   = "timeSeries"
+        region = data.aws_region.current.name
+        metrics = [[
+          { expression = "SUM(SEARCH('{AWS/DynamoDB,TableName} MetricName=\"ReadThrottleEvents\"', 'Sum', 300))"
+            id    = "read_throttles"
+            label = "Read Throttles"
+            color = "#d62728" }
+        ]]
+      }
+    },
+    {
+      type   = "metric"
+      x      = 8
+      y      = 12
+      width  = 8
+      height = 6
+      properties = {
+        title  = "DynamoDB Write Throttles (all tables)"
+        view   = "timeSeries"
+        region = data.aws_region.current.name
+        metrics = [[
+          { expression = "SUM(SEARCH('{AWS/DynamoDB,TableName} MetricName=\"WriteThrottleEvents\"', 'Sum', 300))"
+            id    = "write_throttles"
+            label = "Write Throttles"
+            color = "#d62728" }
+        ]]
+      }
+    },
+  ]
+
+  # Each branch is jsondecode(jsonencode(...))-wrapped BEFORE the conditional
+  # so both sides resolve to `any` and the ?: operator sees a single type.
+  # The two branches' metrics arrays have different inner shapes (4-element
+  # legacy arrays vs. single-element metric-math objects), which otherwise
+  # trips tuple-element type unification under Terraform 1.7+.
+  dynamo_widgets = (
+    length(var.dynamodb_table_names) > 0
+      ? jsondecode(jsonencode(local._dynamo_per_table_widgets))
+      : jsondecode(jsonencode(local._dynamo_aggregate_widgets))
+  )
 }
 
 resource "aws_cloudwatch_dashboard" "main" {
@@ -387,39 +479,7 @@ resource "aws_cloudwatch_dashboard" "main" {
             ]]
           }
         },
-        # ── Row 3: DynamoDB ───────────────────────────────────────────
-        {
-          type   = "metric"
-          x      = 0
-          y      = 12
-          width  = 8
-          height = 6
-          properties = {
-            title  = "DynamoDB Read Throttles"
-            view   = "timeSeries"
-            region = data.aws_region.current.name
-            metrics = [[
-              "AWS/DynamoDB", "ReadThrottleEvents",
-              { stat = "Sum", color = "#d62728" }
-            ]]
-          }
-        },
-        {
-          type   = "metric"
-          x      = 8
-          y      = 12
-          width  = 8
-          height = 6
-          properties = {
-            title  = "DynamoDB Write Throttles"
-            view   = "timeSeries"
-            region = data.aws_region.current.name
-            metrics = [[
-              "AWS/DynamoDB", "WriteThrottleEvents",
-              { stat = "Sum", color = "#d62728" }
-            ]]
-          }
-        },
+        # ── Row 3: ML Drift (DynamoDB widgets come from local.dynamo_widgets) ─
         {
           type   = "metric"
           x      = 16
@@ -444,6 +504,7 @@ resource "aws_cloudwatch_dashboard" "main" {
           }
         },
       ],
+      local.dynamo_widgets,
       local.aurora_widgets,
       local.sm_endpoint_widgets
     )

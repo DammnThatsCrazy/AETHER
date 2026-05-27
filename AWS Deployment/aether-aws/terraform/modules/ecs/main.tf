@@ -158,43 +158,87 @@ resource "aws_iam_role" "task" {
   }
 }
 
+locals {
+  sqs_statements = var.sqs_queue_arn != "" ? [
+    {
+      Sid    = "SQSEventsAccess"
+      Effect = "Allow"
+      Action = [
+        "sqs:SendMessage",
+        "sqs:ReceiveMessage",
+        "sqs:DeleteMessage",
+        "sqs:GetQueueAttributes",
+        "sqs:GetQueueUrl",
+        "sqs:ChangeMessageVisibility",
+      ]
+      Resource = var.sqs_queue_arn
+    }
+  ] : []
+
+  dynamodb_statements = var.dynamodb_cache_table_arn != "" ? [
+    {
+      Sid    = "DynamoDBCacheAccess"
+      Effect = "Allow"
+      Action = [
+        "dynamodb:GetItem",
+        "dynamodb:PutItem",
+        "dynamodb:UpdateItem",
+        "dynamodb:DeleteItem",
+        "dynamodb:Query",
+        "dynamodb:Scan",
+        "dynamodb:BatchGetItem",
+        "dynamodb:BatchWriteItem",
+      ]
+      Resource = var.dynamodb_cache_table_arn
+    }
+  ] : []
+}
+
 resource "aws_iam_role_policy" "task" {
   name = "${var.project}-${var.environment}-ecs-task-policy"
   role = aws_iam_role.task.id
 
+  # The base statements have mixed Resource types (string vs list of strings),
+  # and the sqs/dynamo statements only have string Resources. Wrapping each
+  # operand in jsondecode(jsonencode(...)) coerces them to `any` so concat()
+  # doesn't trip Terraform 1.7+ tuple element type unification.
   policy = jsonencode({
     Version = "2012-10-17"
-    Statement = [
-      {
-        Sid    = "CloudWatchMetrics"
-        Effect = "Allow"
-        Action = [
-          "cloudwatch:PutMetricData",
-          "cloudwatch:GetMetricStatistics",
-          "cloudwatch:ListMetrics",
-        ]
-        Resource = "*"
-      },
-      {
-        Sid    = "SecretsManagerRead"
-        Effect = "Allow"
-        Action = [
-          "secretsmanager:GetSecretValue",
-        ]
-        Resource = concat(
-          [for arn in values(var.secret_arns) : arn],
-          [for arn in values(var.companion_secret_arns) : arn],
-        )
-      },
-      {
-        Sid    = "NeptuneIAMAuth"
-        Effect = "Allow"
-        Action = [
-          "neptune-db:*",
-        ]
-        Resource = "arn:aws:neptune-db:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}:*/*"
-      },
-    ]
+    Statement = concat(
+      jsondecode(jsonencode([
+        {
+          Sid    = "CloudWatchMetrics"
+          Effect = "Allow"
+          Action = [
+            "cloudwatch:PutMetricData",
+            "cloudwatch:GetMetricStatistics",
+            "cloudwatch:ListMetrics",
+          ]
+          Resource = "*"
+        },
+        {
+          Sid    = "SecretsManagerRead"
+          Effect = "Allow"
+          Action = [
+            "secretsmanager:GetSecretValue",
+          ]
+          Resource = concat(
+            [for arn in values(var.secret_arns) : arn],
+            [for arn in values(var.companion_secret_arns) : arn],
+          )
+        },
+        {
+          Sid    = "NeptuneIAMAuth"
+          Effect = "Allow"
+          Action = [
+            "neptune-db:*",
+          ]
+          Resource = "arn:aws:neptune-db:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}:*/*"
+        },
+      ])),
+      jsondecode(jsonencode(local.sqs_statements)),
+      jsondecode(jsonencode(local.dynamodb_statements)),
+    )
   })
 }
 
@@ -266,17 +310,32 @@ resource "aws_ecs_task_definition" "backend" {
         }
       ]
 
-      environment = [
-        { name = "APP_ENV",                 value = var.environment },
-        { name = "AETHER_ENV",              value = var.environment },
-        { name = "PORT",                    value = "8000" },
-        { name = "LOG_LEVEL",               value = var.environment == "production" ? "INFO" : "DEBUG" },
-        { name = "REDIS_HOST",              value = var.redis_host },
-        { name = "REDIS_PORT",              value = tostring(var.redis_port) },
-        { name = "KAFKA_BOOTSTRAP_SERVERS", value = var.kafka_bootstrap_servers },
-        { name = "NEPTUNE_ENDPOINT",        value = var.neptune_endpoint },
-        { name = "ML_SERVING_URL",          value = var.ml_serving_url },
-      ]
+      environment = concat(
+        [
+          { name = "APP_ENV",           value = var.environment },
+          { name = "AETHER_ENV",        value = var.environment },
+          { name = "PORT",              value = "8000" },
+          { name = "LOG_LEVEL",         value = var.environment == "production" ? "INFO" : "DEBUG" },
+          { name = "NEPTUNE_ENDPOINT",  value = var.neptune_endpoint },
+          { name = "ML_SERVING_URL",    value = var.ml_serving_url },
+          { name = "ML_SERVING_INLINE", value = var.ml_serving_inline ? "true" : "false" },
+        ],
+        # SQS event broker — set when sqs_queue_url is provided; otherwise Kafka
+        var.sqs_queue_url != "" ? [
+          { name = "EVENT_BROKER", value = "sns_sqs" },
+          { name = "SQS_QUEUE_URL", value = var.sqs_queue_url },
+        ] : [
+          { name = "EVENT_BROKER",            value = "kafka" },
+          { name = "KAFKA_BOOTSTRAP_SERVERS", value = var.kafka_bootstrap_servers },
+        ],
+        # DynamoDB cache — set when dynamodb_cache_table is provided; otherwise Redis
+        var.dynamodb_cache_table != "" ? [
+          { name = "DYNAMODB_CACHE_TABLE", value = var.dynamodb_cache_table },
+        ] : [
+          { name = "REDIS_HOST", value = var.redis_host },
+          { name = "REDIS_PORT", value = tostring(var.redis_port) },
+        ],
+      )
 
       secrets = local.backend_secrets_block
 
@@ -380,10 +439,33 @@ resource "aws_ecs_service" "backend" {
   task_definition = aws_ecs_task_definition.backend.arn
   desired_count   = var.backend_min_capacity
 
-  capacity_provider_strategy {
-    capacity_provider = "FARGATE"
-    base              = 1
-    weight            = 100
+  # Use Fargate Spot when var.use_fargate_spot = true (E2 cost reduction).
+  # Base = 1 on-demand keeps one guaranteed task; the rest scale on Spot.
+  dynamic "capacity_provider_strategy" {
+    for_each = var.use_fargate_spot ? [] : [1]
+    content {
+      capacity_provider = "FARGATE"
+      base              = 1
+      weight            = 100
+    }
+  }
+
+  dynamic "capacity_provider_strategy" {
+    for_each = var.use_fargate_spot ? [1] : []
+    content {
+      capacity_provider = "FARGATE"
+      base              = 1
+      weight            = 1
+    }
+  }
+
+  dynamic "capacity_provider_strategy" {
+    for_each = var.use_fargate_spot ? [1] : []
+    content {
+      capacity_provider = "FARGATE_SPOT"
+      base              = 0
+      weight            = 4
+    }
   }
 
   network_configuration {
@@ -429,7 +511,9 @@ resource "aws_ecs_service" "ml" {
   name            = "${var.project}-${var.environment}-ml-serving"
   cluster         = aws_ecs_cluster.this.id
   task_definition = aws_ecs_task_definition.ml.arn
-  desired_count   = var.ml_min_capacity
+  # Zero tasks when ML serving is inlined into the backend (E2).
+  # Set ml_serving_inline = false to restore the dedicated ML service.
+  desired_count   = var.ml_serving_inline ? 0 : var.ml_min_capacity
 
   capacity_provider_strategy {
     capacity_provider = "FARGATE"
@@ -520,9 +604,11 @@ resource "aws_appautoscaling_policy" "backend_memory" {
 
 # --------------------------------------------------------------------------
 # Application Auto Scaling — ML Serving
+# Disabled when ML serving is inlined into the backend (ml_serving_inline=true).
 # --------------------------------------------------------------------------
 
 resource "aws_appautoscaling_target" "ml" {
+  count              = var.ml_serving_inline ? 0 : 1
   max_capacity       = var.ml_max_capacity
   min_capacity       = var.ml_min_capacity
   resource_id        = "service/${aws_ecs_cluster.this.name}/${aws_ecs_service.ml.name}"
@@ -531,11 +617,12 @@ resource "aws_appautoscaling_target" "ml" {
 }
 
 resource "aws_appautoscaling_policy" "ml_cpu" {
+  count              = var.ml_serving_inline ? 0 : 1
   name               = "${var.project}-${var.environment}-ml-cpu-scaling"
   policy_type        = "TargetTrackingScaling"
-  resource_id        = aws_appautoscaling_target.ml.resource_id
-  scalable_dimension = aws_appautoscaling_target.ml.scalable_dimension
-  service_namespace  = aws_appautoscaling_target.ml.service_namespace
+  resource_id        = aws_appautoscaling_target.ml[0].resource_id
+  scalable_dimension = aws_appautoscaling_target.ml[0].scalable_dimension
+  service_namespace  = aws_appautoscaling_target.ml[0].service_namespace
 
   target_tracking_scaling_policy_configuration {
     predefined_metric_specification {

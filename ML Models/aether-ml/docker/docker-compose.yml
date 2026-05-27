@@ -2,16 +2,23 @@
 # Aether ML — Docker Compose for local development
 #
 # Default (no flags): serving API only. ~600 MB RAM, ~10 s to boot.
+# Models load lazily from /opt/ml/models on first request.
+#
+# In production the serving image points at S3 for artifacts and uses
+# MLflow in library mode (no MLflow server required). Locally you can
+# either mount pre-exported ONNX files into model-data, or spin up the
+# optional experiment profile to run a local MLflow server.
 #
 # Profiles (opt-in):
-#   --profile experiment   redis + mlflow (experiment tracking)
-#   --profile observability prometheus
-#   --profile notebooks    jupyter lab (training image)
+#   --profile experiment   local MLflow server (experiment tracking)
+#   --profile observability prometheus (metrics scraping)
+#   --profile notebooks    jupyter lab + mlflow (interactive training)
 #   --profile full         everything
 #
 # Usage:
 #   cd docker && docker compose up -d
 #   docker compose --profile experiment up -d
+#   docker compose --profile notebooks up -d
 #   docker compose --profile full up -d
 #   docker compose down
 # =============================================================================

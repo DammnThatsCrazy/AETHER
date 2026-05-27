@@ -1,20 +1,24 @@
 # =============================================================================
-# Aether Platform — Full Stack Docker Compose
+# Aether Platform — Docker Compose
 #
-# Default (no flags): postgres, redis, backend, ml-serving — the minimum
-# stack a developer needs to run the app. ~2 GB RAM, ~30 s to boot.
+# Default (no flags): postgres + backend only (~1.5 GB RAM, <2 min cold start).
+# ML predict routes are served in-process (ML_SERVING_INLINE=true, E2).
+# Cache falls back to in-memory when AETHER_ENV=local (E1).
 #
 # Profiles (opt-in):
-#   --profile streaming      kafka + zookeeper (event-driven work)
+#   --profile streaming      LocalStack SQS+SNS+DynamoDB (prod streaming equivalent)
 #   --profile analytics      clickhouse (analytics queries)
-#   --profile observability  prometheus
+#   --profile observability  prometheus + grafana
 #   --profile demo           kyber demo frontend
+#   --profile notebooks      jupyter lab (ML training image)
+#   --profile legacy         redis + standalone ml-serving (pre-E1/E2 rollback)
 #   --profile full           everything
 #
 # Usage:
-#   docker compose up -d                          Default minimal stack
-#   docker compose --profile streaming up -d      Add Kafka/Zookeeper
-#   docker compose --profile full up -d           Everything
+#   make dev                                      Default minimal stack
+#   make dev-streaming                            Add LocalStack SQS+SNS+DynamoDB
+#   make dev-notebooks                            Add Jupyter (ML)
+#   make dev-full                                 Everything
 #   docker compose logs -f
 #   docker compose down
 # =============================================================================
@@ -40,6 +44,10 @@ services:
 
   redis:
     image: redis:7-alpine
+    # E1: DynamoDB On-Demand is the production cache backend. Redis is kept in
+    # the legacy profile for rollback and for devs who want a local Redis.
+    # Default dev stack uses in-memory cache (AETHER_ENV=local fallback).
+    profiles: ["legacy", "full"]
     ports:
       - "6379:6379"
     volumes:
@@ -51,32 +59,26 @@ services:
       timeout: 3s
       retries: 3
 
-  zookeeper:
-    image: confluentinc/cp-zookeeper:7.6.0
+  # LocalStack — local SQS+SNS for streaming development (replaces Kafka in prod).
+  # Exposes the AWS SDK-compatible endpoint at http://localhost:4566.
+  # Set AWS_ENDPOINT_URL=http://localstack:4566 in service env to route
+  # aiosqs / boto3 calls here instead of real AWS.
+  localstack:
+    image: localstack/localstack:3
     profiles: ["streaming", "full"]
     ports:
-      - "2181:2181"
+      - "4566:4566"
     environment:
-      ZOOKEEPER_CLIENT_PORT: 2181
-      ZOOKEEPER_TICK_TIME: 2000
-
-  kafka:
-    image: confluentinc/cp-kafka:7.6.0
-    profiles: ["streaming", "full"]
-    ports:
-      - "9092:9092"
-    depends_on:
-      - zookeeper
-    environment:
-      KAFKA_BROKER_ID: 1
-      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
-      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092
-      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
-      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
+      # Include dynamodb so DYNAMODB_CACHE_TABLE works locally with --profile streaming
+      SERVICES: sqs,sns,dynamodb
+      DEFAULT_REGION: us-east-1
+      LOCALSTACK_AUTH_TOKEN: ${LOCALSTACK_AUTH_TOKEN:-}
+    volumes:
+      - localstack_data:/var/lib/localstack
     healthcheck:
-      test: ["CMD-SHELL", "kafka-topics --bootstrap-server localhost:9092 --list"]
-      interval: 15s
-      timeout: 10s
+      test: ["CMD-SHELL", "curl -sf http://localhost:4566/_localstack/health | grep -q '\"sqs\"'"]
+      interval: 10s
+      timeout: 5s
       retries: 5
 
   clickhouse:
@@ -101,17 +103,19 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
-      redis:
-        condition: service_healthy
     env_file: .env
     environment:
       AETHER_ENV: ${AETHER_ENV:-local}
       DATABASE_URL: postgresql://aether:aether_dev_password@postgres:5432/aether
-      REDIS_HOST: redis
-      REDIS_PORT: "6379"
-      KAFKA_BOOTSTRAP_SERVERS: ${KAFKA_BOOTSTRAP_SERVERS:-kafka:9092}
-      KAFKA_BROKERS: ${KAFKA_BROKERS:-kafka:9092}
-      ML_SERVING_URL: http://ml-serving:8080
+      # E1: no REDIS_HOST → cache falls back to in-memory when AETHER_ENV=local.
+      # Add --profile legacy to run with Redis, or --profile streaming for LocalStack DynamoDB.
+      # E2: ML predict routes served in-process — no separate ml-serving container needed.
+      ML_SERVING_INLINE: "true"
+      # SQS/DynamoDB: point to LocalStack when running --profile streaming.
+      AWS_ENDPOINT_URL: ${AWS_ENDPOINT_URL:-http://localstack:4566}
+      AWS_DEFAULT_REGION: ${AWS_DEFAULT_REGION:-us-east-1}
+      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID:-test}
+      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY:-test}
       JWT_SECRET: ${JWT_SECRET:?JWT_SECRET is required — run deploy/staging/bootstrap.sh or set manually}
       BYOK_ENCRYPTION_KEY: ${BYOK_ENCRYPTION_KEY:-}
       WATERMARK_SECRET_KEY: ${WATERMARK_SECRET_KEY:-}
@@ -119,6 +123,10 @@ services:
     command: uvicorn main:app --host 0.0.0.0 --port 8000
 
   ml-serving:
+    # E2: ML predict routes are now served in-process by the backend container
+    # (ML_SERVING_INLINE=true). This standalone service is in the legacy profile
+    # for rollback; flip ML_SERVING_INLINE=false on the backend to use it again.
+    profiles: ["legacy", "full"]
     build:
       context: "ML Models/aether-ml"
       dockerfile: docker/Dockerfile
@@ -163,6 +171,21 @@ services:
       JOURNEY_CONSUMER_AUTOSTART: "1"
       ICEBERG_CATALOG_URI: ${ICEBERG_CATALOG_URI:-}
       ICEBERG_S3_BUCKET:   ${ICEBERG_S3_BUCKET:-aether-snapshots-dev}
+
+  # Jupyter Lab — interactive ML exploration using the training image.
+  # Access at http://localhost:8888 (token printed in container logs).
+  jupyter:
+    build:
+      context: "ML Models/aether-ml"
+      dockerfile: docker/Dockerfile
+      target: training
+    profiles: ["notebooks", "full"]
+    ports:
+      - "8888:8888"
+    command: jupyter lab --ip=0.0.0.0 --port=8888 --allow-root --no-browser --NotebookApp.token=''
+    volumes:
+      - ./ML Models/aether-ml:/app
+      - jupyter_data:/root/.jupyter
 
   kyber:
     build:
@@ -219,3 +242,5 @@ volumes:
   clickhouse_data:
   prometheus_data:
   grafana_data:
+  localstack_data:
+  jupyter_data:
