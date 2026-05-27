@@ -25,6 +25,21 @@ import type {
   EntityCluster, RelationshipSummary, GraphNodeKind,
 } from './graph-relationships';
 import type { Provenance } from './provenance';
+import type { TierProfile } from './tier';
+import type { AssetComposition } from './asset-composition';
+import type { PNLSummary } from './pnl';
+import type { TradingProfile } from './trading-profile';
+import type { LocationHistory } from './location-history';
+import type { CalendarHeatmap } from './temporal-intelligence';
+import type { SocialProfile } from './social-intelligence';
+import type {
+  JourneyEconomics, DevicePerformance, ConversionFunnel, TimeToConversion,
+} from './journey-economics';
+import type { RetargetRecommendation } from './recommendations';
+import type { Web2Profile } from './web2-profile';
+import type {
+  ProtocolMetrics, GovernanceActivity, AuditRecord, CorporateStructure,
+} from './entity-extensions';
 
 // ── Surface & visibility ──────────────────────────────────────────────────────
 
@@ -46,6 +61,10 @@ export type Profile360Visibility = 'internal_full' | 'redacted';
 export type Profile360EntityType =
   // People & orgs
   | 'human' | 'user' | 'agent' | 'bot' | 'organization' | 'tenant'
+  // Business / legal entity
+  | 'business'
+  // Onchain entity specializations
+  | 'dao' | 'dex' | 'exchange' | 'staking_platform'
   // Infrastructure
   | 'wallet' | 'device' | 'session' | 'contract' | 'protocol'
   // Activities
@@ -148,6 +167,54 @@ export interface Profile360SubResources {
 
   // Provenance and audit
   readonly provenance?: Provenance;
+
+  // ── Tier & financial intelligence (Human, window-aware) ──────────────────
+  /** Entity tier (Whale / Shark / Dolphin / Fish / Shrimp) + percentile rank */
+  readonly tier?: TierProfile;
+  /** On-chain portfolio composition by asset category */
+  readonly asset_composition?: AssetComposition;
+  /** Realized + unrealized PNL and TVL delta */
+  readonly pnl?: PNLSummary;
+  /** Trading behavior: pairs, gas strategy, slippage, protocol loyalty */
+  readonly trading_profile?: TradingProfile;
+
+  // ── Geo & temporal intelligence ──────────────────────────────────────────
+  /** City-level location history with 30/60/90/lifetime window */
+  readonly location_history?: LocationHistory[];
+  /** 24×7 activity heatmap + streak data */
+  readonly temporal_heatmap?: CalendarHeatmap;
+
+  // ── Social & Web2 ────────────────────────────────────────────────────────
+  /** Cross-platform social profile aggregation */
+  readonly social_intelligence?: SocialProfile;
+  /** TradFi portfolio, bank accounts, credit signal, income estimate */
+  readonly web2?: Web2Profile;
+
+  // ── Journey economics & funnel ───────────────────────────────────────────
+  /** Per-journey ROAS, CPA, LTV, and retarget score */
+  readonly journey_economics?: JourneyEconomics[];
+  /** Conversion rate and average value per device type */
+  readonly device_performance?: DevicePerformance;
+  /** Stage-by-stage conversion funnel (Impression → Liquidity) */
+  readonly funnel?: ConversionFunnel;
+  /** Median time between each funnel stage */
+  readonly time_to_convert?: TimeToConversion;
+
+  // ── Retargeting ──────────────────────────────────────────────────────────
+  /** Analyst-review recommendations for re-engaging abandoned journeys */
+  readonly retarget_recommendations?: RetargetRecommendation[];
+
+  // ── Onchain entity extensions (DAO / Protocol / DEX) ─────────────────────
+  /** TVL history, volume, fee revenue per time window */
+  readonly protocol_metrics?: ProtocolMetrics;
+  /** Governance proposals, votes, participation rate */
+  readonly governance_activity?: GovernanceActivity;
+  /** Security audit history */
+  readonly audit_records?: AuditRecord[];
+
+  // ── Business entity extensions ───────────────────────────────────────────
+  /** Parent/subsidiary tree, UBO, jurisdiction, sector */
+  readonly corporate_structure?: CorporateStructure;
 }
 
 // ── Canonical response ────────────────────────────────────────────────────────

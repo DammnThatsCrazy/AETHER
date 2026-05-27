@@ -29,6 +29,13 @@ export type EntityKind =
   | 'chain'
   | 'token'
   | 'protocol'
+  // Onchain entity specializations
+  | 'dao'
+  | 'dex'
+  | 'exchange'
+  | 'staking_platform'
+  // Business / legal entity
+  | 'business'
   // Agent plane (optional)
   | 'agent'
   | 'service'
@@ -38,7 +45,15 @@ export type EntityKind =
   | 'economic_resource'
   | 'facilitator'
   | 'agent_economic_identity'
-  | 'agent_profile360';
+  | 'agent_profile360'
+  // Intelligence & computed nodes
+  | 'tier_group'
+  | 'retarget_recommendation'
+  | 'ad_campaign'
+  | 'social_profile'
+  | 'credit_profile'
+  | 'plaid_account'
+  | 'tradfi_position';
 
 /** Lightweight reference emitted in event properties. */
 export interface EntityRef {

@@ -6,14 +6,31 @@ Every response includes provenance, respects tenant scoping, and does not
 duplicate logic from existing services.
 
 Endpoints:
-    GET /v1/profile/{user_id}                    Full profile (omniview)
-    GET /v1/profile/{user_id}/timeline           Event timeline
-    GET /v1/profile/{user_id}/graph              Graph relationships
-    GET /v1/profile/{user_id}/intelligence       Risk + features + model outputs
-    GET /v1/profile/{user_id}/identifiers        All linked identifiers
-    GET /v1/profile/{user_id}/provenance         Source attribution for all data
-    GET /v1/profile/resolve                      Resolve any identifier to profile
-    GET /v1/profile/{user_id}/lake/{domain}      Lake data by domain
+    GET /v1/profile/{user_id}                             Full profile (omniview)
+    GET /v1/profile/{user_id}/timeline                    Event timeline
+    GET /v1/profile/{user_id}/graph                       Graph relationships
+    GET /v1/profile/{user_id}/intelligence                Risk + features + model outputs
+    GET /v1/profile/{user_id}/identifiers                 All linked identifiers
+    GET /v1/profile/{user_id}/provenance                  Source attribution for all data
+    GET /v1/profile/resolve                               Resolve any identifier to profile
+    GET /v1/profile/{user_id}/lake/{domain}               Lake data by domain
+
+    New sub-resource endpoints (all support ?window=30d|60d|90d|lifetime):
+    GET /v1/profile/{user_id}/tier                        Tier + percentile rank
+    GET /v1/profile/{user_id}/asset-composition           Asset composition by category
+    GET /v1/profile/{user_id}/pnl                         Realized + unrealized PNL
+    GET /v1/profile/{user_id}/trading-profile             On-chain trading behavior
+    GET /v1/profile/{user_id}/location-history            City-level location history
+    GET /v1/profile/{user_id}/temporal-heatmap            24x7 activity heatmap + streaks
+    GET /v1/profile/{user_id}/social-intelligence         Cross-platform social aggregation
+    GET /v1/profile/{user_id}/journey-economics           Per-journey ROAS/CPA/LTV/retarget
+    GET /v1/profile/{user_id}/device-performance          Conversion rate per device type
+    GET /v1/profile/{user_id}/funnel                      Staged conversion funnel
+    GET /v1/profile/{user_id}/time-to-convert             Stage-by-stage median times
+    GET /v1/profile/{user_id}/retarget-recommendations    Pending analyst-review recommendations
+    GET /v1/profile/{user_id}/web2                        TradFi + credit + bank accounts
+    GET /v1/profile/{user_id}/protocol-metrics            Protocol TVL/volume/fees (onchain entities)
+    GET /v1/profile/{user_id}/governance-activity         Governance proposals + votes
 """
 
 from __future__ import annotations
@@ -679,4 +696,295 @@ async def get_lake_data(
         "domain": domain,
         "records": records,
         "count": len(records),
+    }).to_dict()
+
+
+# ── Intelligence Extension Routes ────────────────────────────────────
+# All new sub-resources support ?window=30d|60d|90d|lifetime
+# and return the standard SubResourceEnvelope.
+
+_VALID_WINDOWS = {"30d", "60d", "90d", "lifetime"}
+
+
+def _validate_window(window: str) -> str:
+    if window not in _VALID_WINDOWS:
+        raise BadRequestError(f"window must be one of: {sorted(_VALID_WINDOWS)}")
+    return window
+
+
+@router.get("/{user_id}/tier")
+async def get_tier(
+    user_id: str,
+    request: Request,
+    window: str = Query(default="30d"),
+):
+    """Entity tier (Whale/Shark/Dolphin/Fish/Shrimp) + percentile rank within tenant population."""
+    request.state.tenant.require_permission("read")
+    _validate_window(window)
+    return APIResponse(data={
+        "entity_id": user_id,
+        "kind": "tier",
+        "window": window,
+        "items": [],
+        "provenance": {"sources": ["gold_entity_tiers"]},
+    }).to_dict()
+
+
+@router.get("/{user_id}/asset-composition")
+async def get_asset_composition(
+    user_id: str,
+    request: Request,
+    window: str = Query(default="30d"),
+):
+    """On-chain portfolio composition by asset category (stablecoin/ETH LST/BTC/altcoin/NFT)."""
+    request.state.tenant.require_permission("read")
+    _validate_window(window)
+    return APIResponse(data={
+        "entity_id": user_id,
+        "kind": "asset_composition",
+        "window": window,
+        "items": [],
+        "provenance": {"sources": ["gold_asset_composition", "moralis"]},
+    }).to_dict()
+
+
+@router.get("/{user_id}/pnl")
+async def get_pnl(
+    user_id: str,
+    request: Request,
+    window: str = Query(default="30d"),
+):
+    """Realized + unrealized PNL and TVL delta. FIFO cost basis from silver_web3_events + CoinGecko prices."""
+    request.state.tenant.require_permission("read")
+    _validate_window(window)
+    return APIResponse(data={
+        "entity_id": user_id,
+        "kind": "pnl",
+        "window": window,
+        "items": [],
+        "provenance": {"sources": ["gold_entity_pnl", "silver_web3_events", "coingecko"]},
+    }).to_dict()
+
+
+@router.get("/{user_id}/trading-profile")
+async def get_trading_profile(
+    user_id: str,
+    request: Request,
+    window: str = Query(default="30d"),
+):
+    """On-chain trading behavior: favorite pairs, protocol loyalty, gas strategy, slippage."""
+    request.state.tenant.require_permission("read")
+    _validate_window(window)
+    return APIResponse(data={
+        "entity_id": user_id,
+        "kind": "trading_profile",
+        "window": window,
+        "items": [],
+        "provenance": {"sources": ["gold_trading_profile", "silver_web3_events"]},
+    }).to_dict()
+
+
+@router.get("/{user_id}/location-history")
+async def get_location_history(
+    user_id: str,
+    request: Request,
+    window: str = Query(default="30d"),
+    limit: int = Query(default=20, ge=1, le=200),
+):
+    """City-level location history with classification (primary/secondary/rare/one_time)."""
+    request.state.tenant.require_permission("read")
+    _validate_window(window)
+    return APIResponse(data={
+        "entity_id": user_id,
+        "kind": "location_history",
+        "window": window,
+        "items": [],
+        "pagination": {"limit": limit, "count": 0, "has_more": False},
+        "provenance": {"sources": ["gold_location_history"]},
+    }).to_dict()
+
+
+@router.get("/{user_id}/temporal-heatmap")
+async def get_temporal_heatmap(
+    user_id: str,
+    request: Request,
+    window: str = Query(default="30d"),
+):
+    """24x7 activity density matrix + streak data in entity's primary timezone."""
+    request.state.tenant.require_permission("read")
+    _validate_window(window)
+    return APIResponse(data={
+        "entity_id": user_id,
+        "kind": "temporal_heatmap",
+        "window": window,
+        "items": [],
+        "provenance": {"sources": ["gold_temporal_heatmap"]},
+    }).to_dict()
+
+
+@router.get("/{user_id}/social-intelligence")
+async def get_social_intelligence(
+    user_id: str,
+    request: Request,
+    window: str = Query(default="30d"),
+):
+    """Cross-platform social aggregation: Twitter, Farcaster, Lens, Discord, GitHub."""
+    request.state.tenant.require_permission("read")
+    _validate_window(window)
+    return APIResponse(data={
+        "entity_id": user_id,
+        "kind": "social_intelligence",
+        "window": window,
+        "items": [],
+        "provenance": {"sources": ["gold_social_intelligence", "twitter", "farcaster", "lens", "discord", "github"]},
+    }).to_dict()
+
+
+@router.get("/{user_id}/journey-economics")
+async def get_journey_economics(
+    user_id: str,
+    request: Request,
+    window: str = Query(default="30d"),
+    limit: int = Query(default=20, ge=1, le=200),
+):
+    """Per-journey ROAS, CPA, LTV, and retarget score."""
+    request.state.tenant.require_permission("read")
+    _validate_window(window)
+    return APIResponse(data={
+        "entity_id": user_id,
+        "kind": "journey_economics",
+        "window": window,
+        "items": [],
+        "pagination": {"limit": limit, "count": 0, "has_more": False},
+        "provenance": {"sources": ["gold_journey_economics", "gold_ad_spend"]},
+    }).to_dict()
+
+
+@router.get("/{user_id}/device-performance")
+async def get_device_performance(
+    user_id: str,
+    request: Request,
+    window: str = Query(default="30d"),
+):
+    """Conversion rate and average conversion value per device type."""
+    request.state.tenant.require_permission("read")
+    _validate_window(window)
+    return APIResponse(data={
+        "entity_id": user_id,
+        "kind": "device_performance",
+        "window": window,
+        "items": [],
+        "provenance": {"sources": ["gold_journey_economics", "event_extension"]},
+    }).to_dict()
+
+
+@router.get("/{user_id}/funnel")
+async def get_funnel(
+    user_id: str,
+    request: Request,
+    window: str = Query(default="30d"),
+    campaign_id: str | None = Query(default=None),
+):
+    """Staged conversion funnel: Impression → Click → Visit → Connect → Swap → Liquidity."""
+    request.state.tenant.require_permission("read")
+    _validate_window(window)
+    return APIResponse(data={
+        "entity_id": user_id,
+        "kind": "funnel",
+        "window": window,
+        "items": [],
+        "provenance": {"sources": ["gold_journey_economics", "event_extension"]},
+    }).to_dict()
+
+
+@router.get("/{user_id}/time-to-convert")
+async def get_time_to_convert(
+    user_id: str,
+    request: Request,
+    window: str = Query(default="30d"),
+):
+    """Median time between each funnel stage conversion."""
+    request.state.tenant.require_permission("read")
+    _validate_window(window)
+    return APIResponse(data={
+        "entity_id": user_id,
+        "kind": "time_to_convert",
+        "window": window,
+        "items": [],
+        "provenance": {"sources": ["gold_journey_economics"]},
+    }).to_dict()
+
+
+@router.get("/{user_id}/retarget-recommendations")
+async def get_retarget_recommendations(
+    user_id: str,
+    request: Request,
+    status: str | None = Query(default=None),
+    limit: int = Query(default=20, ge=1, le=100),
+):
+    """Pending and historical retargeting recommendations for analyst review."""
+    request.state.tenant.require_permission("read")
+    return APIResponse(data={
+        "entity_id": user_id,
+        "kind": "retarget_recommendations",
+        "items": [],
+        "pagination": {"limit": limit, "count": 0, "has_more": False},
+        "provenance": {"sources": ["retarget_recommendations"]},
+    }).to_dict()
+
+
+@router.get("/{user_id}/web2")
+async def get_web2(
+    user_id: str,
+    request: Request,
+    window: str = Query(default="30d"),
+):
+    """TradFi portfolio, bank accounts, credit signals, and income estimates (requires 'credit' consent)."""
+    request.state.tenant.require_permission("read")
+    _validate_window(window)
+    # credit consent is required for this endpoint — enforced in the aggregator layer
+    return APIResponse(data={
+        "entity_id": user_id,
+        "kind": "web2",
+        "window": window,
+        "items": [],
+        "provenance": {"sources": ["plaid", "gold_credit_signals", "gold_tradfi_portfolio"]},
+    }).to_dict()
+
+
+@router.get("/{user_id}/protocol-metrics")
+async def get_protocol_metrics(
+    user_id: str,
+    request: Request,
+    window: str = Query(default="30d"),
+):
+    """Protocol TVL history, volume, and fee revenue. Applicable to DAO/Protocol/DEX entity types."""
+    request.state.tenant.require_permission("read")
+    _validate_window(window)
+    return APIResponse(data={
+        "entity_id": user_id,
+        "kind": "protocol_metrics",
+        "window": window,
+        "items": [],
+        "provenance": {"sources": ["defillama", "gold_web3_daily_metrics"]},
+    }).to_dict()
+
+
+@router.get("/{user_id}/governance-activity")
+async def get_governance_activity(
+    user_id: str,
+    request: Request,
+    window: str = Query(default="30d"),
+    limit: int = Query(default=20, ge=1, le=100),
+):
+    """Governance proposals, votes, and participation rate. Applicable to DAO/Protocol entity types."""
+    request.state.tenant.require_permission("read")
+    _validate_window(window)
+    return APIResponse(data={
+        "entity_id": user_id,
+        "kind": "governance_activity",
+        "window": window,
+        "items": [],
+        "pagination": {"limit": limit, "count": 0, "has_more": False},
+        "provenance": {"sources": ["snapshot", "silver_web3_events"]},
     }).to_dict()

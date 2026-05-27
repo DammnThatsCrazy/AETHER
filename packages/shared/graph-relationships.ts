@@ -18,15 +18,22 @@ export type ActorClass = 'H' | 'A' | 'S'; // Human | Agent | System
 
 /** Granular entity kinds within the graph. */
 export type GraphNodeKind =
-  | 'human'        // H — natural person
-  | 'agent'        // A — AI / autonomous agent
-  | 'organization' // legal entity / company
-  | 'device'       // physical or virtual device
-  | 'wallet'       // blockchain wallet address
-  | 'session'      // browser/app session node
-  | 'contract'     // smart contract
-  | 'protocol'     // DeFi / Web3 protocol
-  | 'bot'          // scripted, non-AI bot
+  | 'human'             // H — natural person
+  | 'agent'             // A — AI / autonomous agent
+  | 'organization'      // legal entity / company
+  | 'device'            // physical or virtual device
+  | 'wallet'            // blockchain wallet address
+  | 'session'           // browser/app session node
+  | 'contract'          // smart contract
+  | 'protocol'          // DeFi / Web3 protocol
+  | 'bot'               // scripted, non-AI bot
+  // Onchain entity specializations
+  | 'dao'               // on-chain governance organization
+  | 'dex'               // decentralized exchange
+  | 'exchange'          // centralized or hybrid exchange
+  | 'staking_platform'  // staking / restaking protocol
+  // Business / legal
+  | 'business'          // registered company / LLC / fund
   | 'unknown';
 
 /**
@@ -67,7 +74,29 @@ export type RelationType =
   | 'shares_device'          // probabilistic — same device fingerprint
   | 'shares_wallet'          // same wallet address across contexts
   | 'same_person'            // resolved identity merge
-  | 'co_located';            // same IP / network segment
+  | 'co_located'             // same IP / network segment
+  // Human → Onchain Entity
+  | 'trades_on'              // swap events on DEX / protocol
+  | 'governs'                // DAO governance vote cast
+  | 'stakes_in'              // staking / restaking deposit
+  | 'deploys_contract'       // wallet is tx_from on contract creation
+  | 'uses_bridge'            // bridge cross-chain event
+  // Human → Business
+  | 'employee_of'            // HR / LinkedIn / manual
+  | 'founder_of'             // incorporation filing or self-reported
+  | 'customer_of'            // Stripe payment or subscription record
+  | 'investor_in'            // token purchase from project wallet / Crunchbase
+  | 'contractor_for'         // delegation record with time-bounded scope
+  // Human/Business → Agent
+  | 'owns_agent'             // entity directly owns/controls an agent
+  | 'deploys_agent'          // first deployment transaction
+  | 'authorizes_agent'       // delegation record with agent scope
+  | 'agent_acts_on_behalf_of' // inverse: agent → human/business
+  // Human → Human
+  | 'co_invests_with'        // shared LP position in same pool
+  | 'shared_wallet_cluster'  // identity cluster match
+  | 'social_follows'         // Twitter / Farcaster / Lens follow
+  | 'same_bundle';           // wallet bundle via identity resolution
 
 // ── Relationship edge ─────────────────────────────────────────────────────────
 

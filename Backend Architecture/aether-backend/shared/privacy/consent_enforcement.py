@@ -4,7 +4,7 @@ Aether Privacy — Consent Enforcement at Processing Time
 Enforces consent state at actual processing points, not just storage.
 Called by middleware, async jobs, enrichment pipelines, and export paths.
 
-Consent purposes: analytics, marketing, web3, agent, commerce
+Consent purposes: analytics, marketing, web3, agent, commerce, personalization, credit, location
 Enforcement behavior: fail-closed — disallowed processing is blocked.
 """
 
@@ -17,7 +17,16 @@ logger = get_logger("aether.privacy.consent")
 
 
 # Valid consent purposes that can be checked
-CONSENT_PURPOSES = {"analytics", "marketing", "web3", "agent", "commerce", "personalization"}
+CONSENT_PURPOSES = {
+    "analytics",
+    "marketing",
+    "web3",
+    "agent",
+    "commerce",
+    "personalization",
+    "credit",    # gates credit bureau + income + brokerage data
+    "location",  # gates GPS/precise location (IP-level GeoIP does not require this)
+}
 
 
 class ConsentDeniedError(Exception):
@@ -118,6 +127,13 @@ async def filter_by_consent(
 
 def is_consent_required_purpose(purpose: str) -> bool:
     """Check if a purpose requires explicit consent (vs. legitimate interest)."""
-    # These purposes require explicit opt-in consent
-    consent_required = {"marketing", "personalization", "web3", "agent", "commerce"}
+    consent_required = {
+        "marketing",
+        "personalization",
+        "web3",
+        "agent",
+        "commerce",
+        "credit",    # requires explicit opt-in: credit bureau + income + brokerage
+        "location",  # requires explicit opt-in: GPS/precise location data
+    }
     return purpose in consent_required
