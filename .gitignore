@@ -8,6 +8,9 @@ dist/
 build/
 # Exception: committed type declarations for workspace consumers
 !packages/web/dist/
+# But keep build JS artifacts ignored (only .d.ts is committed)
+packages/web/dist/**/*.js
+packages/web/dist/**/*.js.map
 .gradle/
 Smart Contracts/artifacts/
 Smart Contracts/cache/
