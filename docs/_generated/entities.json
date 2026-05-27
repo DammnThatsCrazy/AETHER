@@ -41,6 +41,21 @@
       ]
     },
     {
+      "name": "Onchain entity specializations",
+      "kinds": [
+        "dao",
+        "dex",
+        "exchange",
+        "staking_platform"
+      ]
+    },
+    {
+      "name": "Business / legal entity",
+      "kinds": [
+        "business"
+      ]
+    },
+    {
       "name": "Agent plane (optional)",
       "kinds": [
         "agent",
@@ -56,6 +71,18 @@
         "facilitator",
         "agent_economic_identity",
         "agent_profile360"
+      ]
+    },
+    {
+      "name": "Intelligence & computed nodes",
+      "kinds": [
+        "tier_group",
+        "retarget_recommendation",
+        "ad_campaign",
+        "social_profile",
+        "credit_profile",
+        "plaid_account",
+        "tradfi_position"
       ]
     }
   ],
@@ -78,6 +105,11 @@
     "chain",
     "token",
     "protocol",
+    "dao",
+    "dex",
+    "exchange",
+    "staking_platform",
+    "business",
     "agent",
     "service",
     "payment_intent",
@@ -85,6 +117,13 @@
     "economic_resource",
     "facilitator",
     "agent_economic_identity",
-    "agent_profile360"
+    "agent_profile360",
+    "tier_group",
+    "retarget_recommendation",
+    "ad_campaign",
+    "social_profile",
+    "credit_profile",
+    "plaid_account",
+    "tradfi_position"
   ]
 }
