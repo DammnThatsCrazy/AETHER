@@ -93,10 +93,10 @@ jobs:
         run: python scripts/sync_docs.py
 
       - name: Run core tests (security + integration)
-        run: python -m pytest tests/ -v --tb=short
+        run: python -m pytest tests/ -n auto --tb=short
 
       - name: Run ML model tests
-        run: python -m pytest "$ML_DIR/tests/" -v --tb=short
+        run: python -m pytest "$ML_DIR/tests/" -n auto --tb=short
 
       - name: Verify Python syntax (all modules)
         run: |
