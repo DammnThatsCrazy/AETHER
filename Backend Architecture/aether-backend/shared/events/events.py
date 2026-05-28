@@ -217,6 +217,35 @@ class Topic(str, Enum):
     EVENT_REPLAY_COMPLETED = "aether.event.replay.completed"
     EVENT_REPLAY_CANCELLED = "aether.event.replay.cancelled"
 
+    # ── Cognitive Integrity System ───────────────────────────────────────
+    # Graph mutation lifecycle
+    CIS_GRAPH_MUTATION_CREATED           = "aether.cis.graph.mutation.created"
+    CIS_GRAPH_MUTATION_ACCEPTED          = "aether.cis.graph.mutation.accepted"
+    CIS_GRAPH_MUTATION_REJECTED          = "aether.cis.graph.mutation.rejected"
+    CIS_GRAPH_MUTATION_QUARANTINED       = "aether.cis.graph.mutation.quarantined"
+    # Retrieval observability
+    CIS_RETRIEVAL_EXECUTED               = "aether.cis.retrieval.executed"
+    CIS_RETRIEVAL_CONTEXT_SELECTED       = "aether.cis.retrieval.context.selected"
+    CIS_RETRIEVAL_INSTABILITY_DETECTED   = "aether.cis.retrieval.instability.detected"
+    CIS_RETRIEVAL_CONTAMINATION_DETECTED = "aether.cis.retrieval.contamination.detected"
+    # Generation telemetry
+    CIS_GENERATION_STARTED               = "aether.cis.generation.started"
+    CIS_GENERATION_COMPLETED             = "aether.cis.generation.completed"
+    CIS_GENERATION_CLAIM_EXTRACTED       = "aether.cis.generation.claim.extracted"
+    CIS_GENERATION_UNGROUNDED_DETECTED   = "aether.cis.generation.ungrounded.detected"
+    # Semantic drift
+    CIS_SEMANTIC_DRIFT_DETECTED          = "aether.cis.semantic.drift.detected"
+    CIS_SEMANTIC_CLUSTER_INSTABILITY     = "aether.cis.semantic.cluster.instability.detected"
+    CIS_SEMANTIC_EMBEDDING_DEFORMATION   = "aether.cis.semantic.embedding.deformation.detected"
+    # Reasoning chain auditing
+    CIS_REASONING_CHAIN_CREATED          = "aether.cis.reasoning.chain.created"
+    CIS_REASONING_CONTRADICTION_DETECTED = "aether.cis.reasoning.contradiction.detected"
+    CIS_REASONING_RECURSION_DETECTED     = "aether.cis.reasoning.recursion.detected"
+    # Quarantine workflows
+    CIS_QUARANTINE_INITIATED             = "aether.cis.quarantine.initiated"
+    CIS_QUARANTINE_RELEASED              = "aether.cis.quarantine.released"
+    CIS_QUARANTINE_ESCALATED             = "aether.cis.quarantine.escalated"
+
     # Dead letter
     DEAD_LETTER = "aether.dlq"
 

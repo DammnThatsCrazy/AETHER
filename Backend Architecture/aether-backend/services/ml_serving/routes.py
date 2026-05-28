@@ -222,6 +222,33 @@ async def predict(
                 payload=prediction,
             ))
 
+            # 4b. CIS retrieval trace (additive, guarded by CIS_ENABLED)
+            try:
+                import os as _os, hashlib as _hl, json as _json
+                if _os.getenv("CIS_ENABLED", "false").lower() in ("true", "1"):
+                    await producer.publish(Event(
+                        topic=Topic.CIS_RETRIEVAL_EXECUTED,
+                        tenant_id=tenant.tenant_id,
+                        source_service="ml_serving",
+                        payload={
+                            "query_hash": CacheKey.hash_query(str(body.features)),
+                            "model_name": body.model_name,
+                            "latency_ms": round(latency_ms, 2),
+                            "confidence_score": float(
+                                ml_result.get("confidence", 0.0)
+                                if isinstance(ml_result, dict)
+                                else 0.0
+                            ),
+                            "generation_hash": _hl.sha256(
+                                _json.dumps(ml_result, sort_keys=True, default=str).encode()
+                            ).hexdigest()[:16],
+                            "grounded": 1,
+                            "synthetic_ratio": 0.0,
+                        },
+                    ))
+            except Exception:
+                pass
+
             metrics.increment("ml_predictions", labels={"model": body.model_name})
             return APIResponse(data={**prediction, "cached": False}).to_dict()
 
