@@ -135,7 +135,8 @@
       "Bash(echo \"EXIT: $?\")",
       "Bash(python scripts/docs_drift.py --help)",
       "Bash(python scripts/docs_drift.py --update)",
-      "Bash(pip install *)"
+      "Bash(pip install *)",
+      "mcp__ebba02ce-3bf2-4a39-b2ae-55c716d54dd1__use_figma"
     ]
   }
 }
