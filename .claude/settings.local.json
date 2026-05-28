@@ -134,7 +134,8 @@
       "Bash(python scripts/sync_docs.py)",
       "Bash(echo \"EXIT: $?\")",
       "Bash(python scripts/docs_drift.py --help)",
-      "Bash(python scripts/docs_drift.py --update)"
+      "Bash(python scripts/docs_drift.py --update)",
+      "Bash(pip install *)"
     ]
   }
 }
