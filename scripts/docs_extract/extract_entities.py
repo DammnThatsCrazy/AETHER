@@ -36,12 +36,8 @@ ROOT = Path(__file__).resolve().parent.parent.parent
 ENTITIES_TS = ROOT / "packages" / "shared" / "entities.ts"
 OUTPUT = ROOT / "docs" / "_generated" / "entities.json"
 
-UNION_RE = re.compile(
-    r"export\s+type\s+EntityKind\s*=\s*((?:\s*(?://[^\n]*\n)?\s*\|\s*'[^']+'(?:\s*\n)?)+)\s*;",
-    re.MULTILINE,
-)
 MEMBER_RE = re.compile(r"\|\s*'([^']+)'")
-COMMENT_RE = re.compile(r"//\s*(.+)")
+SECTION_RE = re.compile(r"^\s*//\s*(.+)")
 
 
 def read_version() -> str:
@@ -51,24 +47,47 @@ def read_version() -> str:
 
 
 def parse_planes(text: str) -> list[dict]:
-    m = UNION_RE.search(text)
-    if not m:
+    # Locate the EntityKind type alias with a simple non-backtracking search.
+    start = text.find("export type EntityKind =")
+    if start == -1:
         raise ValueError("could not locate EntityKind union in entities.ts")
+    # Find the closing semicolon that ends the union.
+    end = text.find(";", start)
+    if end == -1:
+        raise ValueError("could not find closing ';' for EntityKind union")
+    union_block = text[start:end + 1]
 
     planes: list[dict] = []
-    current = {"name": "Uncategorized", "kinds": []}
-    for line in m.group(1).splitlines():
-        comment = COMMENT_RE.search(line)
-        if comment and "|" not in line:
-            if current["kinds"]:
-                planes.append(current)
-            current = {"name": comment.group(1).strip(), "kinds": []}
+    current: dict = {"name": "Uncategorized", "kinds": []}
+    in_union = False
+
+    for line in union_block.splitlines():
+        stripped = line.strip()
+        if not in_union:
+            in_union = True
+            continue  # skip the "export type EntityKind =" line itself
+
+        # Comment-only line (no pipe) → start a new section plane.
+        if stripped.startswith("//") and "|" not in stripped:
+            # Strip decorative chars: ─, ─, spaces, dashes, leading slashes
+            name = re.sub(r"^[/\s─\-─]+|[─\-─\s]+$", "", stripped).strip()
+            if name:
+                if current["kinds"]:
+                    planes.append(current)
+                current = {"name": name, "kinds": []}
             continue
-        member = MEMBER_RE.search(line)
+
+        # Kind line: | 'foo'  // optional inline comment
+        member = MEMBER_RE.search(stripped)
         if member:
             current["kinds"].append(member.group(1))
+
     if current["kinds"]:
         planes.append(current)
+
+    if not planes:
+        raise ValueError("EntityKind union parsed but found no kinds")
+
     return planes
 
 

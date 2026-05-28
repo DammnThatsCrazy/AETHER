@@ -31,7 +31,18 @@
       ]
     },
     {
-      "name": "Web3 plane (optional)",
+      "name": "Unified entity categories (Web2 + Web3, domain-agnostic)",
+      "kinds": [
+        "governance_org",
+        "exchange",
+        "yield_platform",
+        "brand",
+        "marketplace",
+        "media_entity"
+      ]
+    },
+    {
+      "name": "Blockchain-specific (additive)",
       "kinds": [
         "wallet",
         "contract",
@@ -41,29 +52,14 @@
       ]
     },
     {
-      "name": "Onchain entity specializations",
-      "kinds": [
-        "dao",
-        "dex",
-        "exchange",
-        "staking_platform"
-      ]
-    },
-    {
-      "name": "Business / legal entity",
-      "kinds": [
-        "business"
-      ]
-    },
-    {
-      "name": "Agent plane (optional)",
+      "name": "Agent plane",
       "kinds": [
         "agent",
         "service"
       ]
     },
     {
-      "name": "Economic graph layer (optional/additive)",
+      "name": "Economic graph layer",
       "kinds": [
         "payment_intent",
         "settlement_event",
@@ -84,6 +80,15 @@
         "plaid_account",
         "tradfi_position"
       ]
+    },
+    {
+      "name": "Legacy aliases (kept for backward compatibility)",
+      "kinds": [
+        "dao",
+        "dex",
+        "staking_platform",
+        "business"
+      ]
     }
   ],
   "all_kinds": [
@@ -100,16 +105,17 @@
     "invoice",
     "subscription",
     "plan",
+    "governance_org",
+    "exchange",
+    "yield_platform",
+    "brand",
+    "marketplace",
+    "media_entity",
     "wallet",
     "contract",
     "chain",
     "token",
     "protocol",
-    "dao",
-    "dex",
-    "exchange",
-    "staking_platform",
-    "business",
     "agent",
     "service",
     "payment_intent",
@@ -124,6 +130,10 @@
     "social_profile",
     "credit_profile",
     "plaid_account",
-    "tradfi_position"
+    "tradfi_position",
+    "dao",
+    "dex",
+    "staking_platform",
+    "business"
   ]
 }
