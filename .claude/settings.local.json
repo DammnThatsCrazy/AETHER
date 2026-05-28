@@ -124,7 +124,10 @@
       "Bash(git add \"AWS Deployment/\")",
       "Bash(git add \"GDPR & SOC2/\")",
       "Bash(git status -u)",
-      "Bash(git add .claude/)"
+      "Bash(git add .claude/)",
+      "Bash(mkdir -p \"/home/user/AETHER/Backend Architecture/aether-backend/shared/cis\")",
+      "Bash(git add *)",
+      "Bash(git push *)"
     ]
   }
 }
