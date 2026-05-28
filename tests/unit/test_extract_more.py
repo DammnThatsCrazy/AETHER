@@ -86,8 +86,8 @@ def test_entities_planes_match_source_groups(ee):
     expected_subset = {
         "Core (always present)",
         "Commerce plane",
-        "Web3 plane (optional)",
-        "Agent plane (optional)",
+        "Blockchain-specific (additive)",
+        "Agent plane",
     }
     assert expected_subset.issubset(set(names))
 
