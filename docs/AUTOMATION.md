@@ -12,7 +12,7 @@ source_files:
 canonical_owner: platform@aether
 estimated_read_minutes: 2
 toc_depth: 3
-last_synced_commit: b8ebf7a
+last_synced_commit: 04c7fdf
 ---
 
 # Documentation Automation
