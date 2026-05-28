@@ -45,6 +45,22 @@
     {
       "name": "GOVERNANCE",
       "value": "governance"
+    },
+    {
+      "name": "AD_PLATFORM",
+      "value": "ad_platform"
+    },
+    {
+      "name": "OPEN_BANKING",
+      "value": "open_banking"
+    },
+    {
+      "name": "CREDIT_BUREAU",
+      "value": "credit_bureau"
+    },
+    {
+      "name": "BROKERAGE",
+      "value": "brokerage"
     }
   ],
   "categories": [
@@ -95,6 +111,10 @@
         {
           "name": "reddit",
           "class": "RedditProvider"
+        },
+        {
+          "name": "discord",
+          "class": "DiscordProvider"
         }
       ]
     },
@@ -209,6 +229,82 @@
           "class": "DatabentoProvider"
         }
       ]
+    },
+    {
+      "enum_name": "AD_PLATFORM",
+      "value": "ad_platform",
+      "providers": [
+        {
+          "name": "twitter_ads",
+          "class": "TwitterAdsProvider"
+        },
+        {
+          "name": "google_ads",
+          "class": "GoogleAdsProvider"
+        },
+        {
+          "name": "meta_ads",
+          "class": "MetaAdsProvider"
+        },
+        {
+          "name": "linkedin_ads",
+          "class": "LinkedInAdsProvider"
+        },
+        {
+          "name": "tiktok_ads",
+          "class": "TikTokAdsProvider"
+        }
+      ]
+    },
+    {
+      "enum_name": "OPEN_BANKING",
+      "value": "open_banking",
+      "providers": [
+        {
+          "name": "plaid",
+          "class": "PlaidProvider"
+        }
+      ]
+    },
+    {
+      "enum_name": "CREDIT_BUREAU",
+      "value": "credit_bureau",
+      "providers": [
+        {
+          "name": "experian",
+          "class": "CreditBureauProvider"
+        },
+        {
+          "name": "equifax",
+          "class": "CreditBureauProvider"
+        },
+        {
+          "name": "transunion",
+          "class": "CreditBureauProvider"
+        }
+      ]
+    },
+    {
+      "enum_name": "BROKERAGE",
+      "value": "brokerage",
+      "providers": [
+        {
+          "name": "alpaca",
+          "class": "AlpacaProvider"
+        },
+        {
+          "name": "ibkr",
+          "class": "IBKRProvider"
+        },
+        {
+          "name": "schwab",
+          "class": "SchwabProvider"
+        },
+        {
+          "name": "fidelity",
+          "class": "FidelityProvider"
+        }
+      ]
     }
   ],
   "all_providers": [
@@ -307,6 +403,62 @@
     {
       "name": "databento",
       "class": "DatabentoProvider"
+    },
+    {
+      "name": "discord",
+      "class": "DiscordProvider"
+    },
+    {
+      "name": "twitter_ads",
+      "class": "TwitterAdsProvider"
+    },
+    {
+      "name": "google_ads",
+      "class": "GoogleAdsProvider"
+    },
+    {
+      "name": "meta_ads",
+      "class": "MetaAdsProvider"
+    },
+    {
+      "name": "linkedin_ads",
+      "class": "LinkedInAdsProvider"
+    },
+    {
+      "name": "tiktok_ads",
+      "class": "TikTokAdsProvider"
+    },
+    {
+      "name": "plaid",
+      "class": "PlaidProvider"
+    },
+    {
+      "name": "experian",
+      "class": "CreditBureauProvider"
+    },
+    {
+      "name": "equifax",
+      "class": "CreditBureauProvider"
+    },
+    {
+      "name": "transunion",
+      "class": "CreditBureauProvider"
+    },
+    {
+      "name": "alpaca",
+      "class": "AlpacaProvider"
+    },
+    {
+      "name": "ibkr",
+      "class": "IBKRProvider"
+    },
+    {
+      "name": "schwab",
+      "class": "SchwabProvider"
+    },
+    {
+      "name": "fidelity",
+      "class": "FidelityProvider"
     }
   ]
 }

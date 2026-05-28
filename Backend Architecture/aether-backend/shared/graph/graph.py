@@ -123,6 +123,27 @@ class VertexType:
     AGENT_ECONOMIC_IDENTITY = "AgentEconomicIdentity"
     AGENT_PROFILE360 = "AgentProfile360"
 
+    # ── Intelligence & Computed ────────────────────────────────────────
+    TIER_GROUP = "TierGroup"                           # one per tier per tenant
+    BEHAVIORAL_SIGNAL_NODE = "BehavioralSignalNode"   # per-signal instance
+    SOCIAL_PROFILE_NODE = "SocialProfileNode"         # aggregated cross-platform identity
+    LOCATION_SUMMARY = "LocationSummary"              # city-level aggregated access
+
+    # ── Onchain Entity Specializations ───────────────────────────────
+    DAO = "DAO"
+    DEX = "DEX"
+    EXCHANGE = "Exchange"
+    STAKING_PLATFORM = "StakingPlatform"
+
+    # ── External Integration ──────────────────────────────────────────
+    PLAID_ACCOUNT = "PlaidAccount"
+    CREDIT_PROFILE = "CreditProfile"
+    TRADFI_POSITION = "TradFiPosition"
+
+    # ── Campaign Intelligence ─────────────────────────────────────────
+    RETARGET_RECOMMENDATION = "RetargetRecommendation"
+    AD_CAMPAIGN = "AdCampaign"
+
     # ── Agentic Commerce — Control Plane vertices ──────────────────────
     PAYMENT_REQUIREMENT = "PaymentRequirement"
     PAYMENT_AUTHORIZATION = "PaymentAuthorization"
@@ -327,6 +348,49 @@ class EdgeType:
     REQUESTS_APPROVAL_FROM = "REQUESTS_APPROVAL_FROM"  # ApprovalRequest → User
     GOVERNED_BY_POLICY = "GOVERNED_BY_POLICY"     # Tenant/Agent → PolicyDecision
     FUNDED_FROM_TREASURY = "FUNDED_FROM_TREASURY"  # PaymentAuthorization → Treasury
+
+    # ── Tier ──────────────────────────────────────────────────────────
+    IN_TIER_GROUP = "IN_TIER_GROUP"                  # Entity → TierGroup
+
+    # ── Behavioral ────────────────────────────────────────────────────
+    HAS_BEHAVIORAL_SIGNAL = "HAS_BEHAVIORAL_SIGNAL"  # Entity → BehavioralSignalNode
+
+    # ── Social ────────────────────────────────────────────────────────
+    HAS_SOCIAL_PROFILE = "HAS_SOCIAL_PROFILE"        # Entity → SocialProfileNode
+    FOLLOWS_SOCIAL = "FOLLOWS_SOCIAL"                # Entity → Entity (cross-platform follow)
+
+    # ── Location ──────────────────────────────────────────────────────
+    PRIMARY_LOCATION = "PRIMARY_LOCATION"            # Entity → LocationSummary (>50% sessions)
+    SECONDARY_LOCATION = "SECONDARY_LOCATION"        # Entity → LocationSummary (5-50%)
+    ACCESSED_FROM = "ACCESSED_FROM"                  # Entity → LocationSummary (generic)
+
+    # ── Entity specialization ─────────────────────────────────────────
+    IS_DAO = "IS_DAO"                                # Organization → DAO
+    IS_DEX = "IS_DEX"                               # Protocol → DEX
+
+    # ── External account linkage ──────────────────────────────────────
+    HAS_PLAID_ACCOUNT = "HAS_PLAID_ACCOUNT"          # Entity → PlaidAccount
+    HAS_CREDIT_PROFILE = "HAS_CREDIT_PROFILE"        # Entity → CreditProfile
+    HAS_TRADFI_POSITION = "HAS_TRADFI_POSITION"      # Entity → TradFiPosition
+
+    # ── Campaign ──────────────────────────────────────────────────────
+    TARGETED_BY_CAMPAIGN = "TARGETED_BY_CAMPAIGN"   # Entity → AdCampaign
+    HAS_RETARGET_RECOMMENDATION = "HAS_RETARGET_RECOMMENDATION"  # Entity → RetargetRecommendation
+
+    # ── Human → Onchain Entity ────────────────────────────────────────
+    TRADES_ON_PROTOCOL = "TRADES_ON_PROTOCOL"       # Wallet → Protocol (swap events)
+    STAKES_IN = "STAKES_IN"                         # Wallet → Protocol (staking/restaking)
+    DEPLOYS_CONTRACT_FROM = "DEPLOYS_CONTRACT_FROM"  # Wallet → Contract (contract creation)
+
+    # ── Human → Human (extended) ──────────────────────────────────────
+    CO_INVESTS_WITH = "CO_INVESTS_WITH"             # Entity → Entity (shared LP position)
+
+    # ── Human → Business ──────────────────────────────────────────────
+    EMPLOYEE_OF = "EMPLOYEE_OF"                     # Entity → Organization
+    FOUNDER_OF = "FOUNDER_OF"                       # Entity → Organization
+    CUSTOMER_OF = "CUSTOMER_OF"                     # Entity → Organization
+    INVESTOR_IN = "INVESTOR_IN"                     # Entity → Organization
+    CONTRACTOR_FOR = "CONTRACTOR_FOR"               # Entity → Organization (time-bounded)
 
 
 # ═══════════════════════════════════════════════════════════════════════════

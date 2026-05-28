@@ -44,6 +44,11 @@ class ProviderCategory(str, Enum):
     ONCHAIN_INTELLIGENCE = "onchain_intelligence"
     TRADFI_DATA = "tradfi_data"
     GOVERNANCE = "governance"
+    # New categories
+    AD_PLATFORM = "ad_platform"          # Twitter Ads, Google Ads, Meta, LinkedIn, TikTok
+    OPEN_BANKING = "open_banking"        # Plaid / open banking
+    CREDIT_BUREAU = "credit_bureau"      # Experian, Equifax, TransUnion
+    BROKERAGE = "brokerage"              # Alpaca, IBKR, Schwab, Fidelity
 
 
 def _require_httpx() -> None:
@@ -932,6 +937,264 @@ class DatabentoProvider(Provider):
 
 
 # ======================================================================
+# Category 12: Discord Social Provider
+# ======================================================================
+
+
+class DiscordProvider(Provider):
+    """Discord — guild memberships and user metadata via Bot token."""
+
+    def _base_url(self) -> str:
+        return self.config.endpoint or "https://discord.com/api/v10"
+
+    async def execute(self, method: str, params: dict[str, Any]) -> ProviderResult:
+        start = time.perf_counter()
+        if not self.config.api_key:
+            return ProviderResult(success=False, error="Discord Bot token not configured", provider_name=self.name, latency_ms=0.0)
+        headers = {"Authorization": f"Bot {self.config.api_key}", "Content-Type": "application/json"}
+        self._request_count += 1
+        try:
+            if method == "user_guilds":
+                url = f"{self._base_url()}/users/{params['user_id']}/guilds"
+                result = await _http_get_json(url, headers=headers)
+            elif method == "user":
+                url = f"{self._base_url()}/users/{params['user_id']}"
+                result = await _http_get_json(url, headers=headers)
+            else:
+                url = f"{self._base_url()}/{method}"
+                result = await _http_get_json(url, params=params.get("query", {}), headers=headers)
+            elapsed = (time.perf_counter() - start) * 1000
+            metrics.increment("provider_request", labels={"provider": self.name, "method": method, "status": "success"})
+            return ProviderResult(success=True, data=result, provider_name=self.name, latency_ms=elapsed)
+        except Exception as e:
+            elapsed = (time.perf_counter() - start) * 1000
+            return ProviderResult(success=False, error=str(e), provider_name=self.name, latency_ms=elapsed)
+
+    async def health_check(self) -> ProviderStatus:
+        return ProviderStatus.HEALTHY if self.config.api_key else ProviderStatus.UNAVAILABLE
+
+
+# ======================================================================
+# Category 13: Ad Platform Providers
+# ======================================================================
+
+
+class _BaseAdPlatformProvider(Provider):
+    """Shared base for ad platform providers."""
+
+    def _base_url(self) -> str:
+        return self.config.endpoint or ""
+
+    def _auth_headers(self) -> dict:
+        if self.config.api_key:
+            return {"Authorization": f"Bearer {self.config.api_key}"}
+        return {}
+
+    async def execute(self, method: str, params: dict[str, Any]) -> ProviderResult:
+        start = time.perf_counter()
+        if not self.config.api_key:
+            return ProviderResult(success=False, error=f"{self.name}: API credentials not configured", provider_name=self.name, latency_ms=0.0)
+        self._request_count += 1
+        try:
+            url = f"{self._base_url()}/{params.get('path', method)}"
+            if params.get("body"):
+                result = await _http_post_json(url, params["body"], headers=self._auth_headers())
+            else:
+                result = await _http_get_json(url, params=params.get("query", {}), headers=self._auth_headers())
+            elapsed = (time.perf_counter() - start) * 1000
+            metrics.increment("provider_request", labels={"provider": self.name, "method": method, "status": "success"})
+            return ProviderResult(success=True, data=result, provider_name=self.name, latency_ms=elapsed)
+        except Exception as e:
+            elapsed = (time.perf_counter() - start) * 1000
+            return ProviderResult(success=False, error=str(e), provider_name=self.name, latency_ms=elapsed)
+
+    async def health_check(self) -> ProviderStatus:
+        return ProviderStatus.HEALTHY if self.config.api_key else ProviderStatus.UNAVAILABLE
+
+
+class TwitterAdsProvider(_BaseAdPlatformProvider):
+    """Twitter Ads API v2 — campaign spend + impressions + custom audiences."""
+
+    def _base_url(self) -> str:
+        return self.config.endpoint or "https://ads-api.twitter.com/12"
+
+
+class GoogleAdsProvider(_BaseAdPlatformProvider):
+    """Google Ads API v15 — CustomerService + CampaignService + UserLists."""
+
+    def _base_url(self) -> str:
+        return self.config.endpoint or "https://googleads.googleapis.com/v15"
+
+
+class MetaAdsProvider(_BaseAdPlatformProvider):
+    """Meta Marketing API v19.0 — Insights + Custom Audiences."""
+
+    def _base_url(self) -> str:
+        return self.config.endpoint or "https://graph.facebook.com/v19.0"
+
+
+class LinkedInAdsProvider(_BaseAdPlatformProvider):
+    """LinkedIn Campaign Manager API v3 — spend data + audience segments."""
+
+    def _base_url(self) -> str:
+        return self.config.endpoint or "https://api.linkedin.com/v2"
+
+
+class TikTokAdsProvider(_BaseAdPlatformProvider):
+    """TikTok for Business API v1.3 — campaign analytics + custom audiences."""
+
+    def _base_url(self) -> str:
+        return self.config.endpoint or "https://business-api.tiktok.com/open_api/v1.3"
+
+
+# ======================================================================
+# Category 14: Open Banking — Plaid
+# ======================================================================
+
+
+class PlaidProvider(Provider):
+    """Plaid — bank accounts, transactions, investments, liabilities."""
+
+    def _base_url(self) -> str:
+        if self.config.extra.get("sandbox"):
+            return "https://sandbox.plaid.com"
+        return self.config.endpoint or "https://production.plaid.com"
+
+    async def execute(self, method: str, params: dict[str, Any]) -> ProviderResult:
+        start = time.perf_counter()
+        client_id = self.config.extra.get("client_id") or self.config.api_key
+        client_secret = self.config.extra.get("client_secret", "")
+        if not client_id:
+            return ProviderResult(success=False, error="Plaid client_id not configured", provider_name=self.name, latency_ms=0.0)
+        self._request_count += 1
+
+        # Inject Plaid credentials into every request body
+        body = {**params.get("body", {}), "client_id": client_id, "secret": client_secret}
+        endpoint_map = {
+            "accounts_balance_get": "/accounts/balance/get",
+            "transactions_get": "/transactions/get",
+            "investments_holdings_get": "/investments/holdings/get",
+            "liabilities_get": "/liabilities/get",
+            "link_token_create": "/link/token/create",
+            "item_public_token_exchange": "/item/public_token/exchange",
+        }
+        path = endpoint_map.get(method, f"/{method.replace('_', '/')}")
+        url = f"{self._base_url()}{path}"
+
+        try:
+            result = await _http_post_json(url, body)
+            elapsed = (time.perf_counter() - start) * 1000
+            metrics.increment("provider_request", labels={"provider": self.name, "method": method, "status": "success"})
+            return ProviderResult(success=True, data=result, provider_name=self.name, latency_ms=elapsed)
+        except Exception as e:
+            elapsed = (time.perf_counter() - start) * 1000
+            return ProviderResult(success=False, error=str(e), provider_name=self.name, latency_ms=elapsed)
+
+    async def health_check(self) -> ProviderStatus:
+        return ProviderStatus.HEALTHY if (self.config.api_key or self.config.extra.get("client_id")) else ProviderStatus.UNAVAILABLE
+
+
+# ======================================================================
+# Category 15: Credit Bureau Provider
+# ======================================================================
+
+
+class CreditBureauProvider(Provider):
+    """
+    Tri-bureau credit bureau adapter (Experian / Equifax / TransUnion).
+    The bureau is selected via config.extra['bureau']: 'experian' | 'equifax' | 'transunion'.
+    Requires 'credit' consent purpose before any query is issued.
+    SSN is NEVER stored — it is passed at query time only as a hashed value.
+    """
+
+    _ENDPOINTS = {
+        "experian": "https://us-api.experian.com/consumerservices/credit-profile/v2",
+        "equifax": "https://api.equifax.com/business/instant-decision",
+        "transunion": "https://api.transunion.com/v1",
+    }
+
+    def _base_url(self) -> str:
+        bureau = self.config.extra.get("bureau", "experian")
+        return self.config.endpoint or self._ENDPOINTS.get(bureau, self._ENDPOINTS["experian"])
+
+    async def execute(self, method: str, params: dict[str, Any]) -> ProviderResult:
+        start = time.perf_counter()
+        if not self.config.api_key:
+            return ProviderResult(success=False, error=f"Credit bureau API key not configured (consent + contract required)", provider_name=self.name, latency_ms=0.0)
+        self._request_count += 1
+        headers = {"Authorization": f"Bearer {self.config.api_key}", "Content-Type": "application/json"}
+        try:
+            url = f"{self._base_url()}/{method}"
+            result = await _http_post_json(url, params.get("body", {}), headers=headers)
+            elapsed = (time.perf_counter() - start) * 1000
+            metrics.increment("provider_request", labels={"provider": self.name, "method": method, "status": "success"})
+            return ProviderResult(success=True, data=result, provider_name=self.name, latency_ms=elapsed)
+        except Exception as e:
+            elapsed = (time.perf_counter() - start) * 1000
+            return ProviderResult(success=False, error=str(e), provider_name=self.name, latency_ms=elapsed)
+
+    async def health_check(self) -> ProviderStatus:
+        return ProviderStatus.HEALTHY if self.config.api_key else ProviderStatus.UNAVAILABLE
+
+
+# ======================================================================
+# Category 16: Brokerage Providers
+# ======================================================================
+
+
+class _BaseBrokerageProvider(Provider):
+    """Shared base for brokerage/TradFi portfolio providers."""
+
+    def _auth_headers(self) -> dict:
+        if self.config.api_key:
+            return {"Authorization": f"Bearer {self.config.api_key}"}
+        return {}
+
+    async def execute(self, method: str, params: dict[str, Any]) -> ProviderResult:
+        start = time.perf_counter()
+        if not self.config.api_key:
+            return ProviderResult(success=False, error=f"{self.name}: credentials not configured", provider_name=self.name, latency_ms=0.0)
+        self._request_count += 1
+        try:
+            base = self.config.endpoint or ""
+            url = f"{base}/{params.get('path', method)}"
+            if params.get("body"):
+                result = await _http_post_json(url, params["body"], headers=self._auth_headers())
+            else:
+                result = await _http_get_json(url, params=params.get("query", {}), headers=self._auth_headers())
+            elapsed = (time.perf_counter() - start) * 1000
+            metrics.increment("provider_request", labels={"provider": self.name, "method": method, "status": "success"})
+            return ProviderResult(success=True, data=result, provider_name=self.name, latency_ms=elapsed)
+        except Exception as e:
+            elapsed = (time.perf_counter() - start) * 1000
+            return ProviderResult(success=False, error=str(e), provider_name=self.name, latency_ms=elapsed)
+
+    async def health_check(self) -> ProviderStatus:
+        return ProviderStatus.HEALTHY if self.config.api_key else ProviderStatus.UNAVAILABLE
+
+
+class AlpacaProvider(_BaseBrokerageProvider):
+    """Alpaca Markets API — equities, ETFs, crypto positions + orders."""
+
+    def _auth_headers(self) -> dict:
+        key_id = self.config.extra.get("key_id", self.config.api_key or "")
+        secret = self.config.extra.get("secret_key", "")
+        return {"APCA-API-KEY-ID": key_id, "APCA-API-SECRET-KEY": secret}
+
+
+class IBKRProvider(_BaseBrokerageProvider):
+    """Interactive Brokers Client Portal API — portfolio + account management."""
+
+
+class SchwabProvider(_BaseBrokerageProvider):
+    """Charles Schwab Developer API (TD Ameritrade successor) — portfolio data."""
+
+
+class FidelityProvider(_BaseBrokerageProvider):
+    """Fidelity FidelityConnect API — portfolio positions + transaction history."""
+
+
+# ======================================================================
 # FACTORY: name -> Provider class mapping
 # ======================================================================
 
@@ -971,12 +1234,31 @@ PROVIDER_FACTORY: dict[str, type[Provider]] = {
     # TradFi Data (contract-gated)
     "massive": MassiveProvider,
     "databento": DatabentoProvider,
+    # Social (new)
+    "discord": DiscordProvider,
+    # Ad Platforms
+    "twitter_ads": TwitterAdsProvider,
+    "google_ads": GoogleAdsProvider,
+    "meta_ads": MetaAdsProvider,
+    "linkedin_ads": LinkedInAdsProvider,
+    "tiktok_ads": TikTokAdsProvider,
+    # Open Banking
+    "plaid": PlaidProvider,
+    # Credit Bureau
+    "experian": CreditBureauProvider,
+    "equifax": CreditBureauProvider,
+    "transunion": CreditBureauProvider,
+    # Brokerage
+    "alpaca": AlpacaProvider,
+    "ibkr": IBKRProvider,
+    "schwab": SchwabProvider,
+    "fidelity": FidelityProvider,
 }
 
 CATEGORY_PROVIDERS: dict[ProviderCategory, list[str]] = {
     ProviderCategory.BLOCKCHAIN_RPC: ["quicknode", "alchemy", "infura", "custom_rpc"],
     ProviderCategory.BLOCK_EXPLORER: ["etherscan", "moralis"],
-    ProviderCategory.SOCIAL_API: ["twitter", "reddit"],
+    ProviderCategory.SOCIAL_API: ["twitter", "reddit", "discord"],
     ProviderCategory.ANALYTICS_DATA: ["dune"],
     ProviderCategory.MARKET_DATA: ["defillama", "coingecko", "binance", "coinbase"],
     ProviderCategory.PREDICTION_MARKET: ["polymarket", "kalshi"],
@@ -985,4 +1267,8 @@ CATEGORY_PROVIDERS: dict[ProviderCategory, list[str]] = {
     ProviderCategory.GOVERNANCE: ["snapshot"],
     ProviderCategory.ONCHAIN_INTELLIGENCE: ["chainalysis", "nansen"],
     ProviderCategory.TRADFI_DATA: ["massive", "databento"],
+    ProviderCategory.AD_PLATFORM: ["twitter_ads", "google_ads", "meta_ads", "linkedin_ads", "tiktok_ads"],
+    ProviderCategory.OPEN_BANKING: ["plaid"],
+    ProviderCategory.CREDIT_BUREAU: ["experian", "equifax", "transunion"],
+    ProviderCategory.BROKERAGE: ["alpaca", "ibkr", "schwab", "fidelity"],
 }

@@ -233,6 +233,14 @@ export interface BehavioralSignal {
   readonly status?: string;
   readonly created_at?: string;
   readonly updated_at?: string;
+  // Intelligence extension — signal sentiment, evidence, and staleness
+  readonly sentiment?: 'positive' | 'caution' | 'negative' | 'informational';
+  /** Event IDs or metric names that triggered this signal */
+  readonly evidence_refs?: string[];
+  /** ISO8601 — when this signal was last detected by the engine */
+  readonly last_detected?: string;
+  /** true when last_detected > 30 days ago; signal may no longer be relevant */
+  readonly is_stale?: boolean;
 }
 
 export interface WhyExplanation {

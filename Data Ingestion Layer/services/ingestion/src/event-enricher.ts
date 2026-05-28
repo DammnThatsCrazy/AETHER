@@ -17,6 +17,8 @@ export interface EnrichmentConfig {
   enrichGeo: boolean;
   enrichUA: boolean;
   anonymizeIp: boolean;
+  /** When true, performs ASN lookup to classify connection type (broadband/mobile/datacenter). */
+  enrichASN?: boolean;
   /** When provided, every event is stamped with actor_id + actor_kind. */
   resolveActor?: boolean;
   /** When provided + an event carries delegationId, scope is verified. */
@@ -117,6 +119,102 @@ function normalizeEconomicTelemetry(properties?: Record<string, unknown>): Econo
     abandonedReason: typeof economic.abandoned_reason === 'string' ? economic.abandoned_reason : typeof economic.abandonedReason === 'string' ? economic.abandonedReason : undefined,
   };
   return Object.values(telemetry).some(value => value !== undefined) ? telemetry : undefined;
+}
+
+// =============================================================================
+// ASN RESOLVER — connection type classification via ASN database
+// Loaded from GEOIP_ASN_DB_PATH env var (same format as GeoIP database).
+// Classifies IPs as: broadband | mobile | datacenter | unknown.
+// =============================================================================
+
+type ConnectionType = 'broadband' | 'mobile' | 'datacenter' | 'unknown';
+
+interface AsnRangeEntry {
+  startIp: string;
+  endIp: string;
+  asn: string;
+  org: string;
+  connectionType: ConnectionType;
+}
+
+export interface AsnData {
+  readonly asn: string;
+  readonly org: string;
+  readonly connectionType: ConnectionType;
+}
+
+class AsnResolver {
+  private ranges: Array<AsnRangeEntry & { startNum: number; endNum: number }> = [];
+  private cache: Map<string, AsnData | undefined> = new Map();
+  private readonly maxCacheSize: number;
+  private loaded = false;
+
+  constructor(maxCacheSize = 50_000) {
+    this.maxCacheSize = maxCacheSize;
+  }
+
+  load(filePath: string): void {
+    try {
+      const raw = readFileSync(filePath, 'utf-8');
+      const entries: AsnRangeEntry[] = JSON.parse(raw);
+      this.ranges = entries.map(e => ({
+        ...e,
+        startNum: ipToNumber(e.startIp),
+        endNum: ipToNumber(e.endIp),
+      }));
+      this.ranges.sort((a, b) => a.startNum - b.startNum);
+      this.loaded = true;
+      logger.info('ASN database loaded', { path: filePath, rangeCount: this.ranges.length });
+    } catch (err) {
+      logger.error('Failed to load ASN database', { path: filePath, error: (err as Error).message });
+      this.loaded = false;
+    }
+  }
+
+  resolve(ip: string): AsnData | undefined {
+    if (!ip || ip === '0.0.0.0' || ip === '127.0.0.1' || ip.startsWith('10.') || ip.startsWith('192.168.')) {
+      return undefined;
+    }
+    if (!this.loaded || this.ranges.length === 0) return undefined;
+    if (this.cache.has(ip)) return this.cache.get(ip);
+
+    const ipNum = ipToNumber(ip);
+    let low = 0;
+    let high = this.ranges.length - 1;
+    let result: AsnData | undefined;
+
+    while (low <= high) {
+      const mid = (low + high) >>> 1;
+      const range = this.ranges[mid];
+      if (ipNum < range.startNum) {
+        high = mid - 1;
+      } else if (ipNum > range.endNum) {
+        low = mid + 1;
+      } else {
+        result = { asn: range.asn, org: range.org, connectionType: range.connectionType };
+        break;
+      }
+    }
+
+    if (this.cache.size >= this.maxCacheSize) {
+      const firstKey = this.cache.keys().next().value;
+      if (firstKey !== undefined) this.cache.delete(firstKey);
+    }
+    this.cache.set(ip, result);
+    return result;
+  }
+}
+
+const asnResolver = new AsnResolver();
+const asnDatabasePath = process.env.GEOIP_ASN_DB_PATH;
+if (asnDatabasePath) {
+  asnResolver.load(asnDatabasePath);
+} else {
+  logger.info('ASN enrichment disabled: GEOIP_ASN_DB_PATH not set');
+}
+
+function resolveAsn(ip: string): AsnData | undefined {
+  return asnResolver.resolve(ip);
 }
 
 // =============================================================================
@@ -378,6 +476,16 @@ export class EventEnricher {
       // GeoIP enrichment
       if (this.config.enrichGeo) {
         enrichment.geo = resolveGeoIp(clientIp);
+      }
+
+      // ASN enrichment — classifies connection type as broadband/mobile/datacenter
+      if (this.config.enrichASN) {
+        const asnData = resolveAsn(clientIp);
+        if (asnData) {
+          (enrichment as Record<string, unknown>).connectionType = asnData.connectionType;
+          (enrichment as Record<string, unknown>).asn = asnData.asn;
+          (enrichment as Record<string, unknown>).asnOrg = asnData.org;
+        }
       }
 
       // IP anonymization
