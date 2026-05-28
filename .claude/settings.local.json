@@ -127,7 +127,14 @@
       "Bash(git add .claude/)",
       "Bash(mkdir -p \"/home/user/AETHER/Backend Architecture/aether-backend/shared/cis\")",
       "Bash(git add *)",
-      "Bash(git push *)"
+      "Bash(git push *)",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\" \"http://127.0.0.1:36633/github/repos/DammnThatsCrazy/AETHER/actions/jobs/78238190743/logs\")",
+      "Bash(python scripts/docs_extract/run_all.py)",
+      "Bash(python scripts/docs_drift.py --strict)",
+      "Bash(python scripts/sync_docs.py)",
+      "Bash(echo \"EXIT: $?\")",
+      "Bash(python scripts/docs_drift.py --help)",
+      "Bash(python scripts/docs_drift.py --update)"
     ]
   }
 }
