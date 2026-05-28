@@ -107,6 +107,64 @@ export default function Sidebar() {
           docs={docsBySection.get(section.id) ?? []}
         />
       ))}
+
+      <ArtifactsBlock />
     </nav>
+  );
+}
+
+const ARTIFACT_LINKS: { slug: string; title: string }[] = [
+  { slug: 'events',    title: 'Event Registry' },
+  { slug: 'env',       title: 'Environment Variables' },
+  { slug: 'plans',     title: 'Plans & Pricing' },
+  { slug: 'providers', title: 'Provider Matrix' },
+];
+
+function ArtifactsBlock() {
+  const { pathname } = useLocation();
+  return (
+    <div style={{ marginBottom: '1.25rem' }}>
+      <div
+        style={{
+          fontSize: '0.7rem',
+          fontWeight: 700,
+          textTransform: 'uppercase',
+          letterSpacing: '0.07em',
+          color: '#9ca3af',
+          padding: '0 0.75rem',
+          marginBottom: '0.25rem',
+        }}
+      >
+        Generated Reference
+      </div>
+      <ul style={{ listStyle: 'none', padding: 0, margin: 0 }}>
+        {ARTIFACT_LINKS.map((a) => {
+          const href = `/artifacts/${a.slug}`;
+          const active = pathname === href;
+          return (
+            <li key={a.slug}>
+              <NavLink
+                to={href}
+                style={{
+                  display: 'block',
+                  padding: '0.28rem 0.75rem',
+                  fontSize: '0.875rem',
+                  color: active ? '#1d4ed8' : '#374151',
+                  background: active ? '#eff6ff' : 'transparent',
+                  borderRadius: 4,
+                  textDecoration: 'none',
+                  fontWeight: active ? 600 : 400,
+                  whiteSpace: 'nowrap',
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
+                }}
+              >
+                {a.title}
+              </NavLink>
+            </li>
+          );
+        })}
+      </ul>
+    </div>
   );
 }

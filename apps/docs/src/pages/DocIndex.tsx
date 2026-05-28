@@ -67,7 +67,7 @@ export default function DocIndex({ tier }: Props) {
             <ul style={{ listStyle: 'none', padding: 0, margin: 0, display: 'grid', gap: '0.5rem' }}>
               {docs.map((doc: ManifestEntry) => {
                 const slug = doc.slug ?? '';
-                const isRenderable = availableSlugs.has(slug.split('/').pop() ?? '');
+                const isRenderable = availableSlugs.has(slug);
                 return (
                   <li key={doc.path} style={{ display: 'flex', alignItems: 'baseline', gap: '0.75rem' }}>
                     {isRenderable ? (
