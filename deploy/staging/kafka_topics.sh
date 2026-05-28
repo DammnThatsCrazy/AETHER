@@ -2,7 +2,7 @@
 # =============================================================================
 # Aether Platform — Kafka Topic Provisioning
 #
-# Creates all 110 topics with explicit partition counts and retention settings.
+# Creates all 131 topics with explicit partition counts and retention settings.
 # Safe to re-run: uses --if-not-exists on creation.
 #
 # Usage (against local Docker Compose):
@@ -180,6 +180,38 @@ _create aether.extraction.policy.applied        3 ${NINETY_DAY_MS}
 _create aether.extraction.canary.hit            3 ${NINETY_DAY_MS}
 _create aether.extraction.alert.opened          3 ${NINETY_DAY_MS}
 _create aether.extraction.cluster.escalated     3 ${NINETY_DAY_MS}
+
+# ── Cognitive Integrity System (epistemic middleware, 14/90-day) ─
+# Mutation lifecycle — high-volume operational, 14-day
+_create aether.cis.graph.mutation.created              6 ${TWO_WEEKS_MS}
+_create aether.cis.graph.mutation.accepted             6 ${TWO_WEEKS_MS}
+_create aether.cis.graph.mutation.rejected             6 ${TWO_WEEKS_MS}
+# Mutation quarantine — governance/audit, 90-day
+_create aether.cis.graph.mutation.quarantined          3 ${NINETY_DAY_MS}
+# Retrieval observability — high-volume operational, 14-day
+_create aether.cis.retrieval.executed                  6 ${TWO_WEEKS_MS}
+_create aether.cis.retrieval.context.selected          6 ${TWO_WEEKS_MS}
+# Retrieval anomalies — governance/audit, 90-day
+_create aether.cis.retrieval.instability.detected      3 ${NINETY_DAY_MS}
+_create aether.cis.retrieval.contamination.detected    3 ${NINETY_DAY_MS}
+# Generation telemetry — high-volume operational, 14-day
+_create aether.cis.generation.started                  6 ${TWO_WEEKS_MS}
+_create aether.cis.generation.completed                6 ${TWO_WEEKS_MS}
+_create aether.cis.generation.claim.extracted          6 ${TWO_WEEKS_MS}
+# Generation anomalies — governance/audit, 90-day
+_create aether.cis.generation.ungrounded.detected      3 ${NINETY_DAY_MS}
+# Semantic drift — low-volume anomaly detection, 90-day
+_create aether.cis.semantic.drift.detected                        3 ${NINETY_DAY_MS}
+_create aether.cis.semantic.cluster.instability.detected          3 ${NINETY_DAY_MS}
+_create aether.cis.semantic.embedding.deformation.detected        3 ${NINETY_DAY_MS}
+# Reasoning chains — operational, 14-day; anomalies 90-day
+_create aether.cis.reasoning.chain.created             6 ${TWO_WEEKS_MS}
+_create aether.cis.reasoning.contradiction.detected    3 ${NINETY_DAY_MS}
+_create aether.cis.reasoning.recursion.detected        3 ${NINETY_DAY_MS}
+# Quarantine workflow — governance/audit, 90-day
+_create aether.cis.quarantine.initiated                3 ${NINETY_DAY_MS}
+_create aether.cis.quarantine.released                 3 ${NINETY_DAY_MS}
+_create aether.cis.quarantine.escalated                3 ${NINETY_DAY_MS}
 
 # ── Dead Letter Queue (operational, 14-day) ───────────────────────
 _create aether.dlq                              3 ${TWO_WEEKS_MS}

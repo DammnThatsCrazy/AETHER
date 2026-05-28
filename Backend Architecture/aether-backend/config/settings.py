@@ -363,6 +363,42 @@ class StripeBillingConfig:
 
 
 # ---------------------------------------------------------------------------
+# ClickHouse (CIS cognitive telemetry warehouse)
+# ---------------------------------------------------------------------------
+
+@dataclass(frozen=True)
+class ClickHouseConfig:
+    host: str = _env("CLICKHOUSE_HOST", "localhost")
+    port: int = _env_int("CLICKHOUSE_PORT", 9000)
+    http_port: int = _env_int("CLICKHOUSE_HTTP_PORT", 8123)
+    database: str = _env("CLICKHOUSE_DB", "aether_cis")
+    user: str = _env("CLICKHOUSE_USER", "default")
+    password: str = _env("CLICKHOUSE_PASSWORD", "")
+    pool_size: int = _env_int("CLICKHOUSE_POOL_SIZE", 5)
+
+
+# ---------------------------------------------------------------------------
+# Cognitive Integrity System
+# ---------------------------------------------------------------------------
+
+@dataclass(frozen=True)
+class CISConfig:
+    enabled: bool = _env_bool("CIS_ENABLED", False)
+    mutation_gateway_enabled: bool = _env_bool("CIS_MUTATION_GATEWAY", True)
+    drift_threshold: float = float(_env("CIS_DRIFT_THRESHOLD", "0.25"))
+    contamination_threshold: float = float(_env("CIS_CONTAMINATION_THRESHOLD", "0.60"))
+    quarantine_on_high_risk: bool = _env_bool("CIS_QUARANTINE_HIGH_RISK", True)
+    health_compute_interval_s: int = _env_int("CIS_HEALTH_INTERVAL_S", 300)
+    # Scoring weights (must sum to 1.0; validated at runtime)
+    health_weight_structural: float = float(_env("CIS_WEIGHT_STRUCTURAL", "0.20"))
+    health_weight_semantic: float = float(_env("CIS_WEIGHT_SEMANTIC", "0.20"))
+    health_weight_retrieval: float = float(_env("CIS_WEIGHT_RETRIEVAL", "0.15"))
+    health_weight_provenance: float = float(_env("CIS_WEIGHT_PROVENANCE", "0.20"))
+    health_weight_contamination: float = float(_env("CIS_WEIGHT_CONTAMINATION", "0.15"))
+    health_weight_volatility: float = float(_env("CIS_WEIGHT_VOLATILITY", "0.10"))
+
+
+# ---------------------------------------------------------------------------
 # Master settings
 # ---------------------------------------------------------------------------
 
@@ -412,6 +448,12 @@ class Settings:
 
     # Stripe Billing
     stripe_billing: StripeBillingConfig = field(default_factory=StripeBillingConfig)
+
+    # ClickHouse (CIS telemetry warehouse)
+    clickhouse: ClickHouseConfig = field(default_factory=ClickHouseConfig)
+
+    # Cognitive Integrity System
+    cis: CISConfig = field(default_factory=CISConfig)
 
     def __post_init__(self):
         _is_non_local = self.env != Environment.LOCAL

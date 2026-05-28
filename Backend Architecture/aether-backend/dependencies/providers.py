@@ -10,6 +10,7 @@ from typing import Any, Optional
 
 from config.settings import settings
 from shared.cache.cache import CacheClient
+from shared.cis.clickhouse import ClickHouseClient
 from shared.events.events import EventProducer, EventConsumer
 from shared.graph.graph import GraphClient
 from shared.rate_limit.limiter import BurstRateLimiter
@@ -44,6 +45,8 @@ class ResourceRegistry:
         self.quota_notifier = None  # Set during startup once notifier available
         self.jwt_handler = JWTHandler()
         self.api_key_validator = APIKeyValidator()
+        self.clickhouse = ClickHouseClient()  # CIS telemetry warehouse
+        self.cis_hub: Optional[Any] = None   # CIS WebSocket stream hub
         self._started = False
 
     async def startup(self) -> None:
@@ -83,6 +86,18 @@ class ResourceRegistry:
             )
         except Exception as e:  # pragma: no cover — defensive
             logger.debug(f"QuotaFlusher start skipped: {e}")
+        # Cognitive Integrity System (feature-flagged)
+        if settings.cis.enabled:
+            try:
+                await self.clickhouse.connect()
+                from services.cis.hub import CISStreamHub
+                self.cis_hub = CISStreamHub()
+                from services.cis.workers.telemetry_consumer import attach_cis_telemetry_workers
+                attach_cis_telemetry_workers(self.consumer, self.clickhouse, self.cis_hub)
+                logger.info("CIS telemetry workers wired to consumer")
+            except Exception as e:
+                logger.warning(f"CIS initialization failed: {e}")
+
         self._started = True
         logger.info("All shared resources initialized")
 
@@ -96,6 +111,10 @@ class ResourceRegistry:
         await self.producer.close()
         await self.graph.close()
         await self.cache.close()
+        try:
+            await self.clickhouse.close()
+        except Exception:
+            pass
         try:
             from repositories.repos import close_pool
             await close_pool()
@@ -181,6 +200,14 @@ def get_jwt_handler() -> JWTHandler:
 
 def get_api_key_validator() -> APIKeyValidator:
     return get_registry().api_key_validator
+
+
+def get_clickhouse() -> ClickHouseClient:
+    return get_registry().clickhouse
+
+
+def get_cis_hub() -> Optional[Any]:
+    return get_registry().cis_hub
 
 
 # ── Provider Gateway ──────────────────────────────────────────────────

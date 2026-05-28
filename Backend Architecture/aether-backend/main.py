@@ -405,6 +405,12 @@ def create_app() -> FastAPI:
         app.include_router(onchain_router)
         logger.info("Intelligence Graph: On-Chain Action service (L0) mounted")
 
+    # ── Cognitive Integrity System (feature-flagged) ────────────────────
+    if settings.cis.enabled:
+        from services.cis.routes import router as cis_router
+        app.include_router(cis_router)
+        logger.info("Cognitive Integrity System (CIS) routes mounted")
+
     if ig.enable_x402_layer:
         from services.x402.routes import router as x402_router
         app.include_router(x402_router)

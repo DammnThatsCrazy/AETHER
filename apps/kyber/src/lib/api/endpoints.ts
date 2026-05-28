@@ -1288,6 +1288,47 @@ export const api = {
       restClient.get(`/v1/governance/audit${buildQS({ tenantId, ...params })}`, unknownSchema),
   },
 
+  // ── Cognitive Integrity System (CIS) ──────────────────────────────────────
+  cis: {
+    getHealth: (tenantId?: string) =>
+      restClient.get(`/v1/cis/health${tenantId ? buildQS({ tenant_id: tenantId }) : ''}`, wrap(unknownSchema)).then(r => r.data),
+
+    getGlobalHealth: () =>
+      restClient.get('/v1/cis/health/global', wrap(unknownSchema)).then(r => r.data),
+
+    getMutations: (params?: { status?: string; agent_id?: string; risk_band?: string; limit?: number; offset?: number }) =>
+      restClient.get(`/v1/cis/mutations${buildQS({ ...params })}`, wrap(unknownSchema)).then(r => r.data),
+
+    getMutation: (mutationId: string) =>
+      restClient.get(`/v1/cis/mutations/${mutationId}`, wrap(unknownSchema)).then(r => r.data),
+
+    quarantineMutation: (mutationId: string, reason?: string) =>
+      restClient.post(`/v1/cis/mutations/${mutationId}/quarantine`, wrap(unknownSchema), { reason }),
+
+    approveMutation: (mutationId: string, reason?: string) =>
+      restClient.post(`/v1/cis/mutations/${mutationId}/approve`, wrap(unknownSchema), { reason }),
+
+    getContamination: () =>
+      restClient.get('/v1/cis/contamination', wrap(unknownSchema)).then(r => r.data),
+
+    getForensics: (nodeId: string) =>
+      restClient.get(`/v1/cis/forensics/${nodeId}`, wrap(unknownSchema)).then(r => r.data),
+
+    getDrift: (params?: { window?: string; cluster_id?: string; limit?: number }) =>
+      restClient.get(`/v1/cis/drift${buildQS({ ...params })}`, wrap(unknownSchema)).then(r => r.data),
+
+    getRetrieval: (params?: { window?: string; model_name?: string; limit?: number }) =>
+      restClient.get(`/v1/cis/retrieval${buildQS({ ...params })}`, wrap(unknownSchema)).then(r => r.data),
+
+    getReasoning: (params?: { chain_id?: string; limit?: number }) =>
+      restClient.get(`/v1/cis/reasoning${buildQS({ ...params })}`, wrap(unknownSchema)).then(r => r.data),
+
+    getTenantGovernance: (tenantId: string) =>
+      restClient.get(`/v1/cis/tenants/${tenantId}/governance`, wrap(unknownSchema)).then(r => r.data),
+
+    wsUrl: () => '/v1/cis/ws/stream' as string,
+  },
+
   // ── Commerce ───────────────────────────────────────────────────────────────
   commerce: {
     recordPayment: (payment: Record<string, unknown>) =>

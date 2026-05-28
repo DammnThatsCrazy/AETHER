@@ -535,6 +535,120 @@
       ]
     },
     {
+      "name": "\u2500\u2500 Cognitive Integrity System \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500",
+      "topics": [
+        {
+          "member": "CIS_GRAPH_MUTATION_CREATED",
+          "value": "aether.cis.graph.mutation.created"
+        },
+        {
+          "member": "CIS_GRAPH_MUTATION_ACCEPTED",
+          "value": "aether.cis.graph.mutation.accepted"
+        },
+        {
+          "member": "CIS_GRAPH_MUTATION_REJECTED",
+          "value": "aether.cis.graph.mutation.rejected"
+        },
+        {
+          "member": "CIS_GRAPH_MUTATION_QUARANTINED",
+          "value": "aether.cis.graph.mutation.quarantined"
+        }
+      ]
+    },
+    {
+      "name": "Retrieval observability",
+      "topics": [
+        {
+          "member": "CIS_RETRIEVAL_EXECUTED",
+          "value": "aether.cis.retrieval.executed"
+        },
+        {
+          "member": "CIS_RETRIEVAL_CONTEXT_SELECTED",
+          "value": "aether.cis.retrieval.context.selected"
+        },
+        {
+          "member": "CIS_RETRIEVAL_INSTABILITY_DETECTED",
+          "value": "aether.cis.retrieval.instability.detected"
+        },
+        {
+          "member": "CIS_RETRIEVAL_CONTAMINATION_DETECTED",
+          "value": "aether.cis.retrieval.contamination.detected"
+        }
+      ]
+    },
+    {
+      "name": "Generation telemetry",
+      "topics": [
+        {
+          "member": "CIS_GENERATION_STARTED",
+          "value": "aether.cis.generation.started"
+        },
+        {
+          "member": "CIS_GENERATION_COMPLETED",
+          "value": "aether.cis.generation.completed"
+        },
+        {
+          "member": "CIS_GENERATION_CLAIM_EXTRACTED",
+          "value": "aether.cis.generation.claim.extracted"
+        },
+        {
+          "member": "CIS_GENERATION_UNGROUNDED_DETECTED",
+          "value": "aether.cis.generation.ungrounded.detected"
+        }
+      ]
+    },
+    {
+      "name": "Semantic drift",
+      "topics": [
+        {
+          "member": "CIS_SEMANTIC_DRIFT_DETECTED",
+          "value": "aether.cis.semantic.drift.detected"
+        },
+        {
+          "member": "CIS_SEMANTIC_CLUSTER_INSTABILITY",
+          "value": "aether.cis.semantic.cluster.instability.detected"
+        },
+        {
+          "member": "CIS_SEMANTIC_EMBEDDING_DEFORMATION",
+          "value": "aether.cis.semantic.embedding.deformation.detected"
+        }
+      ]
+    },
+    {
+      "name": "Reasoning chain auditing",
+      "topics": [
+        {
+          "member": "CIS_REASONING_CHAIN_CREATED",
+          "value": "aether.cis.reasoning.chain.created"
+        },
+        {
+          "member": "CIS_REASONING_CONTRADICTION_DETECTED",
+          "value": "aether.cis.reasoning.contradiction.detected"
+        },
+        {
+          "member": "CIS_REASONING_RECURSION_DETECTED",
+          "value": "aether.cis.reasoning.recursion.detected"
+        }
+      ]
+    },
+    {
+      "name": "Quarantine workflows",
+      "topics": [
+        {
+          "member": "CIS_QUARANTINE_INITIATED",
+          "value": "aether.cis.quarantine.initiated"
+        },
+        {
+          "member": "CIS_QUARANTINE_RELEASED",
+          "value": "aether.cis.quarantine.released"
+        },
+        {
+          "member": "CIS_QUARANTINE_ESCALATED",
+          "value": "aether.cis.quarantine.escalated"
+        }
+      ]
+    },
+    {
       "name": "Dead letter",
       "topics": [
         {
@@ -996,6 +1110,90 @@
     {
       "member": "EVENT_REPLAY_CANCELLED",
       "value": "aether.event.replay.cancelled"
+    },
+    {
+      "member": "CIS_GRAPH_MUTATION_CREATED",
+      "value": "aether.cis.graph.mutation.created"
+    },
+    {
+      "member": "CIS_GRAPH_MUTATION_ACCEPTED",
+      "value": "aether.cis.graph.mutation.accepted"
+    },
+    {
+      "member": "CIS_GRAPH_MUTATION_REJECTED",
+      "value": "aether.cis.graph.mutation.rejected"
+    },
+    {
+      "member": "CIS_GRAPH_MUTATION_QUARANTINED",
+      "value": "aether.cis.graph.mutation.quarantined"
+    },
+    {
+      "member": "CIS_RETRIEVAL_EXECUTED",
+      "value": "aether.cis.retrieval.executed"
+    },
+    {
+      "member": "CIS_RETRIEVAL_CONTEXT_SELECTED",
+      "value": "aether.cis.retrieval.context.selected"
+    },
+    {
+      "member": "CIS_RETRIEVAL_INSTABILITY_DETECTED",
+      "value": "aether.cis.retrieval.instability.detected"
+    },
+    {
+      "member": "CIS_RETRIEVAL_CONTAMINATION_DETECTED",
+      "value": "aether.cis.retrieval.contamination.detected"
+    },
+    {
+      "member": "CIS_GENERATION_STARTED",
+      "value": "aether.cis.generation.started"
+    },
+    {
+      "member": "CIS_GENERATION_COMPLETED",
+      "value": "aether.cis.generation.completed"
+    },
+    {
+      "member": "CIS_GENERATION_CLAIM_EXTRACTED",
+      "value": "aether.cis.generation.claim.extracted"
+    },
+    {
+      "member": "CIS_GENERATION_UNGROUNDED_DETECTED",
+      "value": "aether.cis.generation.ungrounded.detected"
+    },
+    {
+      "member": "CIS_SEMANTIC_DRIFT_DETECTED",
+      "value": "aether.cis.semantic.drift.detected"
+    },
+    {
+      "member": "CIS_SEMANTIC_CLUSTER_INSTABILITY",
+      "value": "aether.cis.semantic.cluster.instability.detected"
+    },
+    {
+      "member": "CIS_SEMANTIC_EMBEDDING_DEFORMATION",
+      "value": "aether.cis.semantic.embedding.deformation.detected"
+    },
+    {
+      "member": "CIS_REASONING_CHAIN_CREATED",
+      "value": "aether.cis.reasoning.chain.created"
+    },
+    {
+      "member": "CIS_REASONING_CONTRADICTION_DETECTED",
+      "value": "aether.cis.reasoning.contradiction.detected"
+    },
+    {
+      "member": "CIS_REASONING_RECURSION_DETECTED",
+      "value": "aether.cis.reasoning.recursion.detected"
+    },
+    {
+      "member": "CIS_QUARANTINE_INITIATED",
+      "value": "aether.cis.quarantine.initiated"
+    },
+    {
+      "member": "CIS_QUARANTINE_RELEASED",
+      "value": "aether.cis.quarantine.released"
+    },
+    {
+      "member": "CIS_QUARANTINE_ESCALATED",
+      "value": "aether.cis.quarantine.escalated"
     },
     {
       "member": "DEAD_LETTER",
