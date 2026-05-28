@@ -2,6 +2,10 @@
 Aether — Social Intelligence API Routes
 
 GET /v1/profile/{entity_id}/social-intelligence?window=30d|60d|90d|lifetime
+
+Entity-agnostic: works for any human, brand, organization, or AI agent.
+Supported platforms: twitter, youtube, instagram, tiktok, reddit, linkedin,
+spotify, telegram, discord, github, farcaster, lens.
 """
 
 from __future__ import annotations
@@ -25,7 +29,9 @@ async def get_social_intelligence(
 ):
     """
     Return aggregated cross-platform social data for an entity.
-    Phase 1: Twitter, Farcaster, Lens, Discord, GitHub.
+    Works for any entity type: human, brand, organization, AI agent.
+    Platform coverage: twitter, youtube, instagram, tiktok, reddit, linkedin,
+    spotify, telegram, discord, github, farcaster, lens.
     """
     if window not in _WINDOW_MAP:
         raise HTTPException(status_code=400, detail=f"window must be one of: {list(_WINDOW_MAP.keys())}")
@@ -39,9 +45,14 @@ async def get_social_intelligence(
             "total_followers_deduped": 0,
             "influence_level": "low",
             "engagement_rate": 0.0,
-            "platforms_connected": 0,
+            "platforms_connected": [],
         },
         "pagination": {"limit": limit, "count": 0, "has_more": False},
         "computed_at": None,
-        "provenance": {"sources": ["twitter", "farcaster", "lens", "discord", "github"]},
+        "provenance": {
+            "sources": [
+                "twitter", "youtube", "instagram", "tiktok", "reddit", "linkedin",
+                "spotify", "telegram", "discord", "github", "farcaster", "lens",
+            ]
+        },
     }

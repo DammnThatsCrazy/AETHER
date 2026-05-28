@@ -129,11 +129,19 @@ class VertexType:
     SOCIAL_PROFILE_NODE = "SocialProfileNode"         # aggregated cross-platform identity
     LOCATION_SUMMARY = "LocationSummary"              # city-level aggregated access
 
-    # ── Onchain Entity Specializations ───────────────────────────────
-    DAO = "DAO"
-    DEX = "DEX"
-    EXCHANGE = "Exchange"
-    STAKING_PLATFORM = "StakingPlatform"
+    # ── Unified Entity Categories (Web2 + Web3, domain-agnostic) ─────
+    # These replace domain-specific names. Aliases below preserve backward compat.
+    GOVERNANCE_ORG = "GovernanceOrg"      # DAO, NGO, cooperative, government body
+    BRAND = "Brand"                       # company, product brand, SaaS, startup
+    MARKETPLACE = "Marketplace"           # e-commerce platform, app store, gig platform
+    MEDIA_ENTITY = "MediaEntity"          # publisher, content creator, influencer
+    YIELD_PLATFORM = "YieldPlatform"      # staking protocol, savings account, robo-advisor
+
+    # ── Backward Compat Aliases (deprecated — prefer unified kinds above) ──
+    DAO = "DAO"                           # → GOVERNANCE_ORG
+    DEX = "DEX"                           # → EXCHANGE
+    STAKING_PLATFORM = "StakingPlatform"  # → YIELD_PLATFORM
+    EXCHANGE = "Exchange"                 # unified (covers DEX + CEX + stock exchange)
 
     # ── External Integration ──────────────────────────────────────────
     PLAID_ACCOUNT = "PlaidAccount"
@@ -364,9 +372,15 @@ class EdgeType:
     SECONDARY_LOCATION = "SECONDARY_LOCATION"        # Entity → LocationSummary (5-50%)
     ACCESSED_FROM = "ACCESSED_FROM"                  # Entity → LocationSummary (generic)
 
-    # ── Entity specialization ─────────────────────────────────────────
-    IS_DAO = "IS_DAO"                                # Organization → DAO
-    IS_DEX = "IS_DEX"                               # Protocol → DEX
+    # ── Unified entity specialization (domain-agnostic) ─────────────────
+    IS_GOVERNANCE_ORG = "IS_GOVERNANCE_ORG"         # Entity → GovernanceOrg
+    IS_BRAND = "IS_BRAND"                           # Entity → Brand
+    IS_MARKETPLACE = "IS_MARKETPLACE"               # Entity → Marketplace
+    IS_MEDIA_ENTITY = "IS_MEDIA_ENTITY"             # Entity → MediaEntity
+    IS_YIELD_PLATFORM = "IS_YIELD_PLATFORM"         # Entity → YieldPlatform
+    # Backward compat aliases
+    IS_DAO = "IS_DAO"                               # → IS_GOVERNANCE_ORG
+    IS_DEX = "IS_DEX"                               # → (use EXCHANGE vertex directly)
 
     # ── External account linkage ──────────────────────────────────────
     HAS_PLAID_ACCOUNT = "HAS_PLAID_ACCOUNT"          # Entity → PlaidAccount
@@ -377,19 +391,26 @@ class EdgeType:
     TARGETED_BY_CAMPAIGN = "TARGETED_BY_CAMPAIGN"   # Entity → AdCampaign
     HAS_RETARGET_RECOMMENDATION = "HAS_RETARGET_RECOMMENDATION"  # Entity → RetargetRecommendation
 
-    # ── Human → Onchain Entity ────────────────────────────────────────
+    # ── Entity → Protocol / Onchain ───────────────────────────────────
     TRADES_ON_PROTOCOL = "TRADES_ON_PROTOCOL"       # Wallet → Protocol (swap events)
     STAKES_IN = "STAKES_IN"                         # Wallet → Protocol (staking/restaking)
     DEPLOYS_CONTRACT_FROM = "DEPLOYS_CONTRACT_FROM"  # Wallet → Contract (contract creation)
 
-    # ── Human → Human (extended) ──────────────────────────────────────
-    CO_INVESTS_WITH = "CO_INVESTS_WITH"             # Entity → Entity (shared LP position)
+    # ── Entity → Entity (universal relationship graph) ────────────────
+    CO_INVESTS_WITH = "CO_INVESTS_WITH"             # Entity → Entity (shared investment position)
+    LISTED_ON = "LISTED_ON"                         # Brand/Product → Marketplace or Exchange
+    DISTRIBUTES_VIA = "DISTRIBUTES_VIA"             # Entity → Channel/Platform (distribution)
+    CONTENT_ON = "CONTENT_ON"                       # Entity → MediaEntity/Platform (presence)
+    COMPETES_WITH = "COMPETES_WITH"                 # Entity → Entity (competitive relationship)
+    REVIEWS = "REVIEWS"                             # Entity → Entity (review/rating)
+    SELLS_ON = "SELLS_ON"                           # Brand → Marketplace (seller relationship)
+    OPERATES_CHANNEL = "OPERATES_CHANNEL"           # Entity → MediaEntity (owns/runs channel)
 
-    # ── Human → Business ──────────────────────────────────────────────
-    EMPLOYEE_OF = "EMPLOYEE_OF"                     # Entity → Organization
-    FOUNDER_OF = "FOUNDER_OF"                       # Entity → Organization
-    CUSTOMER_OF = "CUSTOMER_OF"                     # Entity → Organization
-    INVESTOR_IN = "INVESTOR_IN"                     # Entity → Organization
+    # ── Human → Business / Org ────────────────────────────────────────
+    EMPLOYEE_OF = "EMPLOYEE_OF"                     # Entity → Organization/Brand
+    FOUNDER_OF = "FOUNDER_OF"                       # Entity → Organization/Brand
+    CUSTOMER_OF = "CUSTOMER_OF"                     # Entity → Organization/Brand
+    INVESTOR_IN = "INVESTOR_IN"                     # Entity → Organization/Brand
     CONTRACTOR_FOR = "CONTRACTOR_FOR"               # Entity → Organization (time-bounded)
 
 

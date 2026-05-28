@@ -39,6 +39,8 @@ import type { RetargetRecommendation } from './recommendations';
 import type { Web2Profile } from './web2-profile';
 import type {
   ProtocolMetrics, GovernanceActivity, AuditRecord, CorporateStructure,
+  BrandProfile, MarketplaceProfile, MediaEntityProfile,
+  ExchangeProfile, YieldPlatformProfile,
 } from './entity-extensions';
 
 // ── Surface & visibility ──────────────────────────────────────────────────────
@@ -57,17 +59,28 @@ export type Profile360Visibility = 'internal_full' | 'redacted';
 /**
  * Every entity type that supports Profile360 lookup.
  * Pass as the {entity_type} path segment in the API route.
+ *
+ * Entity types are domain-agnostic — the same type covers Web2 and Web3
+ * equivalents. Use unified kinds where possible; legacy onchain kinds
+ * are preserved for backward compatibility.
  */
 export type Profile360EntityType =
-  // People & orgs
+  // ── People & agents ──────────────────────────────────────────────────
   | 'human' | 'user' | 'agent' | 'bot' | 'organization' | 'tenant'
-  // Business / legal entity
+  // ── Unified entity categories (Web2 + Web3) ──────────────────────────
+  | 'governance_org'    // DAO, NGO, cooperative, government body
+  | 'brand'             // company, product brand, SaaS, startup
+  | 'marketplace'       // e-commerce platform, app store, gig platform
+  | 'media_entity'      // publisher, creator, influencer, media outlet
+  | 'exchange'          // DEX, CEX, stock exchange, forex platform
+  | 'yield_platform'    // staking protocol, savings account, robo-advisor
+  // ── Legacy onchain aliases (backward compat) ─────────────────────────
+  | 'dao' | 'dex' | 'staking_platform'
+  // ── Business / legal (legacy alias → brand) ───────────────────────────
   | 'business'
-  // Onchain entity specializations
-  | 'dao' | 'dex' | 'exchange' | 'staking_platform'
-  // Infrastructure
+  // ── Infrastructure ───────────────────────────────────────────────────
   | 'wallet' | 'device' | 'session' | 'contract' | 'protocol'
-  // Activities
+  // ── Activities ───────────────────────────────────────────────────────
   | 'journey' | 'delegation' | 'transaction' | 'payment'
   | 'reward' | 'campaign' | 'execution_trace';
 
@@ -204,17 +217,27 @@ export interface Profile360SubResources {
   /** Analyst-review recommendations for re-engaging abandoned journeys */
   readonly retarget_recommendations?: RetargetRecommendation[];
 
-  // ── Onchain entity extensions (DAO / Protocol / DEX) ─────────────────────
+  // ── Protocol / Onchain entity extensions ─────────────────────────────────
   /** TVL history, volume, fee revenue per time window */
   readonly protocol_metrics?: ProtocolMetrics;
-  /** Governance proposals, votes, participation rate */
+  /** Governance proposals, votes, participation rate (DAO, NGO, gov body) */
   readonly governance_activity?: GovernanceActivity;
   /** Security audit history */
   readonly audit_records?: AuditRecord[];
 
-  // ── Business entity extensions ───────────────────────────────────────────
-  /** Parent/subsidiary tree, UBO, jurisdiction, sector */
+  // ── Unified entity class extensions (Web2 + Web3) ─────────────────────────
+  /** Brand/company intelligence — covers any registered business entity */
+  readonly brand_profile?: BrandProfile;
+  /** Corporate structure: parent/subsidiary tree, UBO, jurisdiction, sector */
   readonly corporate_structure?: CorporateStructure;
+  /** Marketplace: GMV, sellers, buyers, take rate */
+  readonly marketplace_profile?: MarketplaceProfile;
+  /** Media entity / creator / influencer profile */
+  readonly media_entity_profile?: MediaEntityProfile;
+  /** Exchange profile: trading volume, pairs, regulation (DEX or CEX or stock exchange) */
+  readonly exchange_profile?: ExchangeProfile;
+  /** Yield platform: TVL, APY, depositors (staking or savings or robo-advisor) */
+  readonly yield_platform_profile?: YieldPlatformProfile;
 }
 
 // ── Canonical response ────────────────────────────────────────────────────────

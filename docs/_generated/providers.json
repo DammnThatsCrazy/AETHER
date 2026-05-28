@@ -11,10 +11,6 @@
       "value": "block_explorer"
     },
     {
-      "name": "SOCIAL_API",
-      "value": "social_api"
-    },
-    {
       "name": "ANALYTICS_DATA",
       "value": "analytics_data"
     },
@@ -25,10 +21,6 @@
     {
       "name": "PREDICTION_MARKET",
       "value": "prediction_market"
-    },
-    {
-      "name": "WEB3_SOCIAL",
-      "value": "web3_social"
     },
     {
       "name": "IDENTITY_ENRICHMENT",
@@ -45,6 +37,22 @@
     {
       "name": "GOVERNANCE",
       "value": "governance"
+    },
+    {
+      "name": "SOCIAL_API",
+      "value": "social_api"
+    },
+    {
+      "name": "WEB3_SOCIAL",
+      "value": "web3_social"
+    },
+    {
+      "name": "STREAMING_MEDIA",
+      "value": "streaming_media"
+    },
+    {
+      "name": "CONTENT_PLATFORM",
+      "value": "content_platform"
     },
     {
       "name": "AD_PLATFORM",
@@ -109,12 +117,52 @@
           "class": "TwitterProvider"
         },
         {
+          "name": "instagram",
+          "class": "InstagramProvider"
+        },
+        {
+          "name": "linkedin",
+          "class": "LinkedInProvider"
+        },
+        {
           "name": "reddit",
           "class": "RedditProvider"
         },
         {
           "name": "discord",
           "class": "DiscordProvider"
+        },
+        {
+          "name": "github",
+          "class": "GitHubProvider"
+        }
+      ]
+    },
+    {
+      "enum_name": "STREAMING_MEDIA",
+      "value": "streaming_media",
+      "providers": [
+        {
+          "name": "youtube",
+          "class": "YouTubeProvider"
+        },
+        {
+          "name": "spotify",
+          "class": "SpotifyProvider"
+        },
+        {
+          "name": "tiktok",
+          "class": "TikTokProvider"
+        }
+      ]
+    },
+    {
+      "enum_name": "CONTENT_PLATFORM",
+      "value": "content_platform",
+      "providers": [
+        {
+          "name": "telegram",
+          "class": "TelegramProvider"
         }
       ]
     },
@@ -303,6 +351,34 @@
         {
           "name": "fidelity",
           "class": "FidelityProvider"
+        },
+        {
+          "name": "robinhood",
+          "class": "RobinhoodProvider"
+        },
+        {
+          "name": "sofi",
+          "class": "SoFiProvider"
+        },
+        {
+          "name": "betterment",
+          "class": "BettermentProvider"
+        },
+        {
+          "name": "vanguard",
+          "class": "VanguardProvider"
+        },
+        {
+          "name": "etrade",
+          "class": "ETradeProvider"
+        },
+        {
+          "name": "tdameritrade",
+          "class": "TDAmeritradeProvider"
+        },
+        {
+          "name": "webull",
+          "class": "WebullProvider"
         }
       ]
     }
@@ -337,8 +413,36 @@
       "class": "TwitterProvider"
     },
     {
+      "name": "instagram",
+      "class": "InstagramProvider"
+    },
+    {
+      "name": "linkedin",
+      "class": "LinkedInProvider"
+    },
+    {
       "name": "reddit",
       "class": "RedditProvider"
+    },
+    {
+      "name": "discord",
+      "class": "DiscordProvider"
+    },
+    {
+      "name": "youtube",
+      "class": "YouTubeProvider"
+    },
+    {
+      "name": "spotify",
+      "class": "SpotifyProvider"
+    },
+    {
+      "name": "tiktok",
+      "class": "TikTokProvider"
+    },
+    {
+      "name": "telegram",
+      "class": "TelegramProvider"
     },
     {
       "name": "dune",
@@ -405,10 +509,6 @@
       "class": "DatabentoProvider"
     },
     {
-      "name": "discord",
-      "class": "DiscordProvider"
-    },
-    {
       "name": "twitter_ads",
       "class": "TwitterAdsProvider"
     },
@@ -459,6 +559,34 @@
     {
       "name": "fidelity",
       "class": "FidelityProvider"
+    },
+    {
+      "name": "robinhood",
+      "class": "RobinhoodProvider"
+    },
+    {
+      "name": "sofi",
+      "class": "SoFiProvider"
+    },
+    {
+      "name": "betterment",
+      "class": "BettermentProvider"
+    },
+    {
+      "name": "vanguard",
+      "class": "VanguardProvider"
+    },
+    {
+      "name": "etrade",
+      "class": "ETradeProvider"
+    },
+    {
+      "name": "tdameritrade",
+      "class": "TDAmeritradeProvider"
+    },
+    {
+      "name": "webull",
+      "class": "WebullProvider"
     }
   ]
 }

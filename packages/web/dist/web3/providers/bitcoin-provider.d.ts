@@ -24,6 +24,10 @@ declare global {
         okxwallet?: {
             bitcoin?: BTCProvider;
         };
+        bitkeep?: {
+            bitcoin?: unknown;
+            tronLink?: unknown;
+        };
     }
 }
 export declare class BitcoinProvider extends BaseVMProvider {
@@ -41,5 +45,6 @@ export declare class BitcoinProvider extends BaseVMProvider {
     protected monitorTransaction(txid: string): Promise<void>;
     private setupProvider;
     private detectAddressType;
+    private checkOrdinalsAndUTXOs;
 }
 export {};

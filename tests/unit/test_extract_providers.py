@@ -36,13 +36,13 @@ def ep():
 def test_real_source_has_24_providers(ep):
     text = CATEGORIES_PY.read_text(encoding="utf-8")
     payload = ep.build_payload(text)
-    assert len(payload["all_providers"]) == 38
+    assert len(payload["all_providers"]) == 51
 
 
 def test_real_source_has_11_categories(ep):
     text = CATEGORIES_PY.read_text(encoding="utf-8")
     payload = ep.build_payload(text)
-    assert len(payload["categories"]) == 15
+    assert len(payload["categories"]) == 17
 
 
 def test_real_source_includes_canonical_providers(ep):

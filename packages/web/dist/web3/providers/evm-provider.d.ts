@@ -1,4 +1,9 @@
 import type { WalletInfo } from '../../types';
+export interface EVMProviderEnrichmentConfig {
+    approvalScan?: boolean;
+    domainResolution?: boolean;
+    networkContext?: boolean;
+}
 export interface EVMProviderCallbacks {
     onWalletEvent: (action: string, data: Record<string, unknown>) => void;
     onTransaction: (txHash: string, data: Record<string, unknown>) => void;
@@ -23,6 +28,16 @@ interface EthereumProvider {
     isZerion?: boolean;
     isOKExWallet?: boolean;
     isLedgerConnect?: boolean;
+    isTaho?: boolean;
+    isUniswapWallet?: boolean;
+    isRoninWallet?: boolean;
+    isBitgetWallet?: boolean;
+    isBybitWallet?: boolean;
+    isSafe?: boolean;
+    isExodus?: boolean;
+    isCoin98?: boolean;
+    isTokenPocket?: boolean;
+    providers?: EthereumProvider[];
     request: (args: {
         method: string;
         params?: unknown[];
@@ -38,15 +53,17 @@ declare global {
     }
     interface Window {
         ethereum?: EthereumProvider;
+        coinbaseWalletExtension?: EthereumProvider;
     }
 }
 export declare class EVMProvider {
     private callbacks;
+    private enrichmentConfig;
     private providers;
     private wallets;
     private handlers;
     private eip6963Handler;
-    constructor(callbacks: EVMProviderCallbacks);
+    constructor(callbacks: EVMProviderCallbacks, enrichmentConfig?: EVMProviderEnrichmentConfig);
     init(): void;
     connect(address: string, options?: Partial<WalletInfo>): void;
     disconnect(address?: string): void;
@@ -59,5 +76,9 @@ export declare class EVMProvider {
     private classifyProvider;
     private getActiveProvider;
     private monitorTransaction;
+    private captureNetworkContext;
+    private scanTokenApprovals;
+    private resolveAllDomainNames;
+    private computeEnsReverseNode;
 }
 export {};

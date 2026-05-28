@@ -11,6 +11,19 @@ export interface Web3ModuleConfig {
     nearTracking?: boolean;
     tronTracking?: boolean;
     cosmosTracking?: boolean;
+    aptosTracking?: boolean;
+    tonTracking?: boolean;
+    starknetTracking?: boolean;
+    cardanoTracking?: boolean;
+    substrateTracking?: boolean;
+    algorandTracking?: boolean;
+    hederaTracking?: boolean;
+    stellarTracking?: boolean;
+    icpTracking?: boolean;
+    cosmosChains?: string[];
+    approvalScan?: boolean;
+    domainResolution?: boolean;
+    networkContext?: boolean;
 }
 export declare class Web3Module {
     private callbacks;
@@ -22,6 +35,15 @@ export declare class Web3Module {
     private nearProvider;
     private tronProvider;
     private cosmosProvider;
+    private aptosProvider;
+    private tonProvider;
+    private starknetProvider;
+    private cardanoProvider;
+    private substrateProvider;
+    private algorandProvider;
+    private hederaProvider;
+    private stellarProvider;
+    private icpProvider;
     private evmTracker;
     private svmTracker;
     private btcTracker;
@@ -29,6 +51,15 @@ export declare class Web3Module {
     private nearTracker;
     private tronTracker;
     private cosmosTracker;
+    private aptosTracker;
+    private tonTracker;
+    private starknetTracker;
+    private cardanoTracker;
+    private substrateTracker;
+    private algorandTracker;
+    private hederaTracker;
+    private stellarTracker;
+    private icpTracker;
     private walletChangeListeners;
     constructor(callbacks: Web3Callbacks, config?: Web3ModuleConfig);
     init(): void;
@@ -39,6 +70,15 @@ export declare class Web3Module {
     connectNEAR(accountId: string, options?: Partial<WalletInfo>): void;
     connectTRON(address: string, options?: Partial<WalletInfo>): void;
     connectCosmos(address: string, options?: Partial<WalletInfo>): void;
+    connectAptos(address: string, options?: Partial<WalletInfo>): void;
+    connectTON(address: string, options?: Partial<WalletInfo>): void;
+    connectStarknet(address: string, options?: Partial<WalletInfo>): void;
+    connectCardano(address: string, options?: Partial<WalletInfo>): void;
+    connectSubstrate(address: string, options?: Partial<WalletInfo>): void;
+    connectAlgorand(address: string, options?: Partial<WalletInfo>): void;
+    connectHedera(address: string, options?: Partial<WalletInfo>): void;
+    connectStellar(address: string, options?: Partial<WalletInfo>): void;
+    connectICP(principal: string, options?: Partial<WalletInfo>): void;
     disconnect(address?: string): void;
     getInfo(): WalletInfo | null;
     transaction(txHash: string, options?: TransactionOptions): void;

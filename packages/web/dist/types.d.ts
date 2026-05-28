@@ -63,6 +63,19 @@ export interface ModuleConfig {
     nearTracking?: boolean;
     tronTracking?: boolean;
     cosmosTracking?: boolean;
+    aptosTracking?: boolean;
+    tonTracking?: boolean;
+    starknetTracking?: boolean;
+    cardanoTracking?: boolean;
+    substrateTracking?: boolean;
+    algorandTracking?: boolean;
+    hederaTracking?: boolean;
+    stellarTracking?: boolean;
+    icpTracking?: boolean;
+    cosmosChains?: string[];
+    approvalScan?: boolean;
+    domainResolution?: boolean;
+    networkContext?: boolean;
 }
 export interface PrivacyConfig {
     /** Anonymize IP addresses before transmission */
@@ -120,7 +133,7 @@ export interface FingerprintComponents {
     pixelRatio: number;
 }
 /** Virtual machine family */
-export type VMType = 'evm' | 'svm' | 'bitcoin' | 'movevm' | 'near' | 'tvm' | 'cosmos';
+export type VMType = 'evm' | 'svm' | 'bitcoin' | 'movevm' | 'near' | 'tvm' | 'cosmos' | 'aptos' | 'ton' | 'starknet' | 'cardano' | 'substrate' | 'algorand' | 'hedera' | 'stellar' | 'icp';
 /** Wallet classification by security model */
 export type WalletClassification = 'hot' | 'cold' | 'smart' | 'exchange' | 'protocol' | 'multisig';
 /** DeFi protocol categories */
@@ -720,6 +733,42 @@ export interface Session {
     device: DeviceContext;
     isActive: boolean;
 }
+/** Multi-protocol domain names resolved at connect time. */
+export interface DomainNames {
+    ens?: string;
+    uns?: string;
+    lens?: string;
+    sns?: string;
+    avvy?: string;
+    fns?: string;
+}
+/** Bitcoin-specific metadata captured at connect time. */
+export interface BitcoinExtended {
+    addressType: 'taproot' | 'native_segwit' | 'segwit' | 'legacy' | 'unknown';
+    hasOrdinals?: boolean;
+    hasInscriptions?: boolean;
+    utxoCount?: number;
+}
+/** EVM blockchain network state captured at wallet connect time. */
+export interface BlockchainNetworkContext {
+    blockNumber: number;
+    gasPrice?: string;
+    baseFee?: string;
+    priorityFee?: string;
+    congestionLevel: 'low' | 'medium' | 'high';
+    timestamp: string;
+}
+/** EVM token approval risk summary captured at connect time. */
+export interface TokenApproval {
+    tokenAddress: string;
+    tokenSymbol?: string;
+    spender: string;
+    spenderLabel?: string;
+    allowance: string;
+    isUnlimited: boolean;
+    riskLevel: 'low' | 'medium' | 'high';
+    chainId: number;
+}
 export interface WalletInfo {
     address: string;
     chainId: number | string;
@@ -730,6 +779,13 @@ export interface WalletInfo {
     sns?: string;
     isConnected: boolean;
     connectedAt?: string;
+    domainNames?: DomainNames;
+    networkSnapshot?: BlockchainNetworkContext;
+    approvalRisk?: {
+        hasUnlimitedApprovals: boolean;
+        highRiskCount: number;
+    };
+    bitcoinExtended?: BitcoinExtended;
 }
 export interface TransactionOptions {
     chainId?: number | string;
@@ -864,6 +920,24 @@ export interface WalletInterface {
     connectTRON(address: string, options?: Partial<WalletInfo>): void;
     /** Connect a Cosmos/SEI wallet */
     connectCosmos(address: string, options?: Partial<WalletInfo>): void;
+    /** Connect an Aptos wallet */
+    connectAptos(address: string, options?: Partial<WalletInfo>): void;
+    /** Connect a TON wallet */
+    connectTON(address: string, options?: Partial<WalletInfo>): void;
+    /** Connect a Starknet wallet */
+    connectStarknet(address: string, options?: Partial<WalletInfo>): void;
+    /** Connect a Cardano wallet */
+    connectCardano(address: string, options?: Partial<WalletInfo>): void;
+    /** Connect a Polkadot/Substrate wallet */
+    connectSubstrate(address: string, options?: Partial<WalletInfo>): void;
+    /** Connect an Algorand wallet */
+    connectAlgorand(address: string, options?: Partial<WalletInfo>): void;
+    /** Connect a Hedera wallet */
+    connectHedera(address: string, options?: Partial<WalletInfo>): void;
+    /** Connect a Stellar wallet */
+    connectStellar(address: string, options?: Partial<WalletInfo>): void;
+    /** Connect an ICP wallet */
+    connectICP(address: string, options?: Partial<WalletInfo>): void;
     /** Disconnect a specific wallet or all wallets */
     disconnect(address?: string): void;
     /** Get primary wallet info (backwards compatible) */
