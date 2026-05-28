@@ -11,9 +11,9 @@ source_files:
 canonical_owner: platform@aether
 estimated_read_minutes: 10
 toc_depth: 3
-last_synced_commit: 7f8c4da
+last_synced_commit: 3086b33
 ---
-# Rollback Runbook — Aether Platform v8.9.0
+# Rollback Runbook — Aether Platform v8.8.0
 
 Step-by-step procedures for rolling back the Aether platform after a failed deployment or production incident.
 
