@@ -23,9 +23,16 @@ declare global {
         suiWallet?: SuiWalletProvider;
         ethosWallet?: SuiWalletProvider;
         martian?: {
-            sui?: SuiWalletProvider;
+            aptos?: unknown;
+            sui?: unknown;
         };
         surfWallet?: SuiWalletProvider;
+        suiet?: SuiWalletProvider;
+        nightly?: {
+            aptos?: unknown;
+            solana?: unknown;
+            sui?: unknown;
+        };
     }
 }
 export declare class MoveProvider extends BaseVMProvider {

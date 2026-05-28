@@ -1,6 +1,6 @@
 import { BaseVMProvider, type VMType, type ProviderCallbacks } from './base-provider';
 interface KeplrProvider {
-    enable(chainId: string): Promise<void>;
+    enable(chainId: string | string[]): Promise<void>;
     getKey(chainId: string): Promise<{
         bech32Address: string;
         name: string;
@@ -11,10 +11,19 @@ interface KeplrProvider {
     signDirect?(chainId: string, signer: string, signDoc: unknown): Promise<unknown>;
     experimentalSuggestChain?(chainInfo: unknown): Promise<void>;
 }
+export interface CosmosProviderConfig {
+    supportedChains?: string[];
+}
 declare global {
     interface Window {
         keplr?: KeplrProvider;
         leap?: KeplrProvider;
+        cosmostation?: {
+            providers?: {
+                keplr?: KeplrProvider;
+            };
+        };
+        station?: KeplrProvider;
     }
 }
 export declare class CosmosProvider extends BaseVMProvider {
@@ -22,7 +31,8 @@ export declare class CosmosProvider extends BaseVMProvider {
     readonly defaultChainId: string;
     private provider;
     private chainId;
-    constructor(callbacks: ProviderCallbacks);
+    private supportedChains;
+    constructor(callbacks: ProviderCallbacks, config?: CosmosProviderConfig);
     init(): void;
     destroy(): void;
     protected detectWalletType(): string;

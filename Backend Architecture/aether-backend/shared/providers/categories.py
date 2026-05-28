@@ -31,24 +31,35 @@ except ImportError:
 
 
 class ProviderCategory(str, Enum):
-    """Categories of external providers requiring abstraction."""
+    """
+    Categories of external providers requiring abstraction.
 
+    Entity-agnostic: categories cover Web2 and Web3 data sources equally.
+    A social_api provider might be Twitter (Web2) or Farcaster (Web3).
+    """
+
+    # ── Data source categories ─────────────────────────────────────────────
     BLOCKCHAIN_RPC = "blockchain_rpc"
     BLOCK_EXPLORER = "block_explorer"
-    SOCIAL_API = "social_api"
     ANALYTICS_DATA = "analytics_data"
     MARKET_DATA = "market_data"
     PREDICTION_MARKET = "prediction_market"
-    WEB3_SOCIAL = "web3_social"
     IDENTITY_ENRICHMENT = "identity_enrichment"
     ONCHAIN_INTELLIGENCE = "onchain_intelligence"
     TRADFI_DATA = "tradfi_data"
     GOVERNANCE = "governance"
-    # New categories
-    AD_PLATFORM = "ad_platform"          # Twitter Ads, Google Ads, Meta, LinkedIn, TikTok
-    OPEN_BANKING = "open_banking"        # Plaid / open banking
+
+    # ── Social / content platforms (Web2 + Web3) ──────────────────────────
+    SOCIAL_API = "social_api"            # Twitter/X, Instagram, LinkedIn, Reddit, Discord, GitHub
+    WEB3_SOCIAL = "web3_social"          # Farcaster, Lens Protocol
+    STREAMING_MEDIA = "streaming_media"  # YouTube, Spotify, TikTok, Twitch
+    CONTENT_PLATFORM = "content_platform"  # Telegram channels, newsletters, podcasts
+
+    # ── Financial data sources ────────────────────────────────────────────
+    AD_PLATFORM = "ad_platform"          # Twitter Ads, Google Ads, Meta, LinkedIn, TikTok Ads
+    OPEN_BANKING = "open_banking"        # Plaid, open banking connectors
     CREDIT_BUREAU = "credit_bureau"      # Experian, Equifax, TransUnion
-    BROKERAGE = "brokerage"              # Alpaca, IBKR, Schwab, Fidelity
+    BROKERAGE = "brokerage"              # Fidelity, Schwab, Robinhood, Alpaca, IBKR, SoFi, etc.
 
 
 def _require_httpx() -> None:
@@ -1194,6 +1205,223 @@ class FidelityProvider(_BaseBrokerageProvider):
     """Fidelity FidelityConnect API — portfolio positions + transaction history."""
 
 
+class RobinhoodProvider(_BaseBrokerageProvider):
+    """Robinhood API — retail brokerage portfolio + options positions."""
+
+
+class SoFiProvider(_BaseBrokerageProvider):
+    """SoFi Invest API — managed + active investment accounts."""
+
+
+class BettermentProvider(_BaseBrokerageProvider):
+    """Betterment API — robo-advisor portfolio + savings goals."""
+
+
+class VanguardProvider(_BaseBrokerageProvider):
+    """Vanguard API — index fund + retirement account positions."""
+
+
+class ETradeProvider(_BaseBrokerageProvider):
+    """E*TRADE / Morgan Stanley API — brokerage + options + retirement."""
+
+
+class TDAmeritradeProvider(_BaseBrokerageProvider):
+    """TD Ameritrade / Schwab API — brokerage + thinkorswim data."""
+
+
+class WebullProvider(_BaseBrokerageProvider):
+    """Webull API — commission-free brokerage account positions."""
+
+
+# ======================================================================
+# STREAMING MEDIA PROVIDERS (YouTube, Spotify, TikTok)
+# ======================================================================
+
+class _BaseStreamingProvider(Provider):
+    """
+    Shared base for streaming/content platform providers.
+    BYOK pattern: tenants supply their own API credentials.
+    Normalises creator and consumer signals into ProviderResult.
+    """
+
+    async def health_check(self) -> ProviderStatus:
+        _require_httpx()
+        if not self.api_key:
+            return ProviderStatus.UNAVAILABLE
+        return ProviderStatus.AVAILABLE
+
+    async def execute(self, method: str, params: dict[str, Any]) -> dict[str, Any]:
+        raise NotImplementedError(f"{self.__class__.__name__}.execute({method}) not implemented")
+
+
+class YouTubeProvider(_BaseStreamingProvider):
+    """YouTube Data API v3 — channel stats, video counts, subscriber count."""
+
+    async def execute(self, method: str, params: dict[str, Any]) -> dict[str, Any]:
+        _require_httpx()
+        if method == "channel_stats":
+            channel_id = params.get("channel_id", "")
+            url = "https://www.googleapis.com/youtube/v3/channels"
+            query = {
+                "part": "statistics,snippet,brandingSettings",
+                "id": channel_id,
+                "key": self.api_key,
+            }
+            async with httpx.AsyncClient(timeout=10.0) as client:
+                resp = await client.get(url, params=query)
+                resp.raise_for_status()
+                items = resp.json().get("items", [])
+                return {"data": items[0] if items else {}}
+        return {"data": {}}
+
+
+class SpotifyProvider(_BaseStreamingProvider):
+    """Spotify Web API — artist profile, monthly listeners, user library."""
+
+    async def execute(self, method: str, params: dict[str, Any]) -> dict[str, Any]:
+        _require_httpx()
+        headers = {"Authorization": f"Bearer {self.api_key}"}
+        if method == "artist_profile":
+            artist_id = params.get("artist_id", "")
+            async with httpx.AsyncClient(timeout=10.0) as client:
+                resp = await client.get(
+                    f"https://api.spotify.com/v1/artists/{artist_id}",
+                    headers=headers,
+                )
+                resp.raise_for_status()
+                return {"data": resp.json()}
+        if method == "user_profile":
+            user_id = params.get("user_id", "")
+            async with httpx.AsyncClient(timeout=10.0) as client:
+                resp = await client.get(
+                    f"https://api.spotify.com/v1/users/{user_id}",
+                    headers=headers,
+                )
+                resp.raise_for_status()
+                return {"data": resp.json()}
+        return {"data": {}}
+
+
+class TikTokProvider(_BaseStreamingProvider):
+    """TikTok Display API — creator profile, follower count, video stats."""
+
+    async def execute(self, method: str, params: dict[str, Any]) -> dict[str, Any]:
+        _require_httpx()
+        if method == "user_info":
+            username = params.get("username", "")
+            async with httpx.AsyncClient(timeout=10.0) as client:
+                resp = await client.get(
+                    "https://open.tiktokapis.com/v2/user/info/",
+                    params={"fields": "open_id,union_id,display_name,username,avatar_url,follower_count,following_count,likes_count,video_count"},
+                    headers={"Authorization": f"Bearer {self.api_key}"},
+                )
+                resp.raise_for_status()
+                return {"data": resp.json().get("data", {})}
+        return {"data": {}}
+
+
+# ======================================================================
+# CONTENT PLATFORM PROVIDERS (Telegram, newsletters)
+# ======================================================================
+
+class _BaseContentPlatformProvider(Provider):
+    """Base for content distribution platform providers (Telegram, etc.)."""
+
+    async def health_check(self) -> ProviderStatus:
+        _require_httpx()
+        if not self.api_key:
+            return ProviderStatus.UNAVAILABLE
+        return ProviderStatus.AVAILABLE
+
+    async def execute(self, method: str, params: dict[str, Any]) -> dict[str, Any]:
+        raise NotImplementedError(f"{self.__class__.__name__}.execute({method}) not implemented")
+
+
+class TelegramProvider(_BaseContentPlatformProvider):
+    """Telegram Bot API — public channel stats (subscriber count, post reach)."""
+
+    async def execute(self, method: str, params: dict[str, Any]) -> dict[str, Any]:
+        _require_httpx()
+        if method == "channel_stats":
+            channel_id = params.get("channel_id", "")
+            async with httpx.AsyncClient(timeout=10.0) as client:
+                resp = await client.get(
+                    f"https://api.telegram.org/bot{self.api_key}/getChat",
+                    params={"chat_id": channel_id},
+                )
+                resp.raise_for_status()
+                result = resp.json().get("result", {})
+                # Get member count separately
+                count_resp = await client.get(
+                    f"https://api.telegram.org/bot{self.api_key}/getChatMemberCount",
+                    params={"chat_id": channel_id},
+                )
+                member_count = count_resp.json().get("result", 0) if count_resp.is_success else 0
+                result["members_count"] = member_count
+                return {"data": result}
+        return {"data": {}}
+
+
+# ======================================================================
+# EXTENDED SOCIAL API PROVIDERS
+# ======================================================================
+
+class InstagramProvider(Provider):
+    """
+    Instagram Graph API — business/creator profile stats.
+    Requires Facebook Business API access.
+    Returns followers, following, media count, engagement rate.
+    """
+
+    async def health_check(self) -> ProviderStatus:
+        _require_httpx()
+        if not self.api_key:
+            return ProviderStatus.UNAVAILABLE
+        return ProviderStatus.AVAILABLE
+
+    async def execute(self, method: str, params: dict[str, Any]) -> dict[str, Any]:
+        _require_httpx()
+        if method == "user_profile":
+            ig_user_id = params.get("ig_user_id") or params.get("username", "")
+            fields = "id,name,followers_count,follows_count,media_count,is_verified"
+            async with httpx.AsyncClient(timeout=10.0) as client:
+                resp = await client.get(
+                    f"https://graph.facebook.com/v19.0/{ig_user_id}",
+                    params={"fields": fields, "access_token": self.api_key},
+                )
+                resp.raise_for_status()
+                return {"data": resp.json()}
+        return {"data": {}}
+
+
+class LinkedInProvider(Provider):
+    """
+    LinkedIn API — profile stats, connection count, company page followers.
+    Uses OAuth 2.0 member / company token.
+    """
+
+    async def health_check(self) -> ProviderStatus:
+        _require_httpx()
+        if not self.api_key:
+            return ProviderStatus.UNAVAILABLE
+        return ProviderStatus.AVAILABLE
+
+    async def execute(self, method: str, params: dict[str, Any]) -> dict[str, Any]:
+        _require_httpx()
+        headers = {"Authorization": f"Bearer {self.api_key}"}
+        if method == "profile_stats":
+            linkedin_id = params.get("linkedin_id", "")
+            async with httpx.AsyncClient(timeout=10.0) as client:
+                resp = await client.get(
+                    f"https://api.linkedin.com/v2/people/{linkedin_id}",
+                    headers=headers,
+                    params={"projection": "(id,localizedFirstName,localizedLastName,vanityName,followersCount)"},
+                )
+                resp.raise_for_status()
+                return {"data": resp.json()}
+        return {"data": {}}
+
+
 # ======================================================================
 # FACTORY: name -> Provider class mapping
 # ======================================================================
@@ -1207,9 +1435,17 @@ PROVIDER_FACTORY: dict[str, type[Provider]] = {
     # Block Explorer
     "etherscan": EtherscanProvider,
     "moralis": MoralisProvider,
-    # Social
+    # Social (Web2 primary)
     "twitter": TwitterProvider,
+    "instagram": InstagramProvider,
+    "linkedin": LinkedInProvider,
     "reddit": RedditProvider,
+    "discord": DiscordProvider,
+    # Streaming / content platforms
+    "youtube": YouTubeProvider,
+    "spotify": SpotifyProvider,
+    "tiktok": TikTokProvider,
+    "telegram": TelegramProvider,
     # Analytics
     "dune": DuneAnalyticsProvider,
     # Market Data
@@ -1234,8 +1470,6 @@ PROVIDER_FACTORY: dict[str, type[Provider]] = {
     # TradFi Data (contract-gated)
     "massive": MassiveProvider,
     "databento": DatabentoProvider,
-    # Social (new)
-    "discord": DiscordProvider,
     # Ad Platforms
     "twitter_ads": TwitterAdsProvider,
     "google_ads": GoogleAdsProvider,
@@ -1248,17 +1482,27 @@ PROVIDER_FACTORY: dict[str, type[Provider]] = {
     "experian": CreditBureauProvider,
     "equifax": CreditBureauProvider,
     "transunion": CreditBureauProvider,
-    # Brokerage
+    # Brokerage (traditional + retail)
     "alpaca": AlpacaProvider,
     "ibkr": IBKRProvider,
     "schwab": SchwabProvider,
     "fidelity": FidelityProvider,
+    "robinhood": RobinhoodProvider,
+    "sofi": SoFiProvider,
+    "betterment": BettermentProvider,
+    "vanguard": VanguardProvider,
+    "etrade": ETradeProvider,
+    "tdameritrade": TDAmeritradeProvider,
+    "webull": WebullProvider,
 }
 
 CATEGORY_PROVIDERS: dict[ProviderCategory, list[str]] = {
     ProviderCategory.BLOCKCHAIN_RPC: ["quicknode", "alchemy", "infura", "custom_rpc"],
     ProviderCategory.BLOCK_EXPLORER: ["etherscan", "moralis"],
-    ProviderCategory.SOCIAL_API: ["twitter", "reddit", "discord"],
+    # Social API — Web2 primary + secondary
+    ProviderCategory.SOCIAL_API: ["twitter", "instagram", "linkedin", "reddit", "discord", "github"],
+    ProviderCategory.STREAMING_MEDIA: ["youtube", "spotify", "tiktok"],
+    ProviderCategory.CONTENT_PLATFORM: ["telegram"],
     ProviderCategory.ANALYTICS_DATA: ["dune"],
     ProviderCategory.MARKET_DATA: ["defillama", "coingecko", "binance", "coinbase"],
     ProviderCategory.PREDICTION_MARKET: ["polymarket", "kalshi"],
@@ -1270,5 +1514,8 @@ CATEGORY_PROVIDERS: dict[ProviderCategory, list[str]] = {
     ProviderCategory.AD_PLATFORM: ["twitter_ads", "google_ads", "meta_ads", "linkedin_ads", "tiktok_ads"],
     ProviderCategory.OPEN_BANKING: ["plaid"],
     ProviderCategory.CREDIT_BUREAU: ["experian", "equifax", "transunion"],
-    ProviderCategory.BROKERAGE: ["alpaca", "ibkr", "schwab", "fidelity"],
+    ProviderCategory.BROKERAGE: [
+        "alpaca", "ibkr", "schwab", "fidelity",
+        "robinhood", "sofi", "betterment", "vanguard", "etrade", "tdameritrade", "webull",
+    ],
 }

@@ -25,6 +25,7 @@ declare class AetherSDK implements AetherSDKInterface {
     private plugins;
     private initialized;
     private debug;
+    private _lastEmailHash;
     private walletChangeListeners;
     init(config: AetherConfig): void;
     track(event: string, properties?: Record<string, unknown>): void;
@@ -58,7 +59,8 @@ declare class AetherSDK implements AetherSDKInterface {
     private initWeb2;
     private initAnalytics;
     private enqueueEvent;
-    private checkWalletIdentityResolution;
+    private resolveIdentity;
+    private _hashEmail;
     private setupSPATracking;
     private log;
 }

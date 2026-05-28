@@ -4,6 +4,10 @@ interface SolanaProvider {
     isSolflare?: boolean;
     isBackpack?: boolean;
     isGlow?: boolean;
+    isNightly?: boolean;
+    isBraveWallet?: boolean;
+    isCoin98?: boolean;
+    isExodus?: boolean;
     publicKey?: {
         toString(): string;
         toBase58(): string;
@@ -37,6 +41,18 @@ declare global {
             solana?: SolanaProvider;
         };
         glow?: SolanaProvider;
+        nightly?: {
+            aptos?: unknown;
+            solana?: unknown;
+            sui?: unknown;
+        };
+        braveSolana?: SolanaProvider;
+        coin98?: {
+            sol?: SolanaProvider;
+        };
+        exodus?: {
+            solana?: SolanaProvider;
+        };
     }
 }
 export declare class SVMProvider extends BaseVMProvider {
@@ -51,6 +67,7 @@ export declare class SVMProvider extends BaseVMProvider {
     protected detectWalletType(): string;
     protected monitorTransaction(signature: string): Promise<void>;
     private setupProvider;
+    private resolveSNS;
     private getRpcUrl;
 }
 export {};

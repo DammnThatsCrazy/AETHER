@@ -16,24 +16,40 @@ import type {
 /** High-level actor class — drives interaction-class labels. */
 export type ActorClass = 'H' | 'A' | 'S'; // Human | Agent | System
 
-/** Granular entity kinds within the graph. */
+/**
+ * Granular entity kinds within the graph.
+ *
+ * Unified across Web2 and Web3 — the graph does not distinguish
+ * by domain. Functional categories cover both:
+ *   governance_org = DAO or NGO or government body
+ *   exchange       = DEX or CEX or stock exchange
+ *   yield_platform = staking protocol or savings account
+ *   brand          = startup or enterprise or product
+ *   marketplace    = DeFi app or Shopify or Amazon Seller
+ *   media_entity   = influencer or publisher or media outlet
+ */
 export type GraphNodeKind =
-  | 'human'             // H — natural person
-  | 'agent'             // A — AI / autonomous agent
-  | 'organization'      // legal entity / company
+  | 'human'             // natural person
+  | 'agent'             // AI / autonomous agent
+  | 'organization'      // generic legal entity / company (use specific kinds below when known)
   | 'device'            // physical or virtual device
   | 'wallet'            // blockchain wallet address
   | 'session'           // browser/app session node
   | 'contract'          // smart contract
   | 'protocol'          // DeFi / Web3 protocol
   | 'bot'               // scripted, non-AI bot
-  // Onchain entity specializations
-  | 'dao'               // on-chain governance organization
-  | 'dex'               // decentralized exchange
-  | 'exchange'          // centralized or hybrid exchange
-  | 'staking_platform'  // staking / restaking protocol
-  // Business / legal
-  | 'business'          // registered company / LLC / fund
+  // ── Unified entity categories (Web2 + Web3) ──────────────────────────
+  | 'governance_org'    // DAO, NGO, cooperative, government body, trade association
+  | 'exchange'          // DEX, CEX, stock exchange, forex platform
+  | 'yield_platform'    // staking protocol, savings account, yield aggregator, robo-advisor
+  | 'brand'             // company, product brand, SaaS, startup
+  | 'marketplace'       // e-commerce platform, app store, gig platform
+  | 'media_entity'      // publisher, content creator, influencer, media outlet
+  // ── Legacy aliases (kept for backward compatibility) ──────────────────
+  | 'dao'               // → governance_org
+  | 'dex'               // → exchange
+  | 'staking_platform'  // → yield_platform
+  | 'business'          // → brand
   | 'unknown';
 
 /**
@@ -93,10 +109,21 @@ export type RelationType =
   | 'authorizes_agent'       // delegation record with agent scope
   | 'agent_acts_on_behalf_of' // inverse: agent → human/business
   // Human → Human
-  | 'co_invests_with'        // shared LP position in same pool
+  | 'co_invests_with'        // shared LP or co-investment in same vehicle
   | 'shared_wallet_cluster'  // identity cluster match
-  | 'social_follows'         // Twitter / Farcaster / Lens follow
-  | 'same_bundle';           // wallet bundle via identity resolution
+  | 'social_follows'         // any social platform follow
+  | 'same_bundle'            // wallet bundle via identity resolution
+  // Entity → Channel / Platform (Web2-native)
+  | 'listed_on'              // product or brand listed on marketplace/exchange
+  | 'distributes_via'        // content/product distributed through a channel
+  | 'content_on'             // entity has channel/page on platform
+  | 'competes_with'          // competitive relationship between brands/entities
+  | 'reviews'                // entity reviews / rates another entity
+  | 'sells_on'               // brand sells through marketplace
+  | 'operates_channel'       // brand operates media channel or social page
+  // Org → People (Web2 employment / org chart)
+  | 'employs'                // org → human (employment relationship)
+  | 'advises';               // advisor relationship
 
 // ── Relationship edge ─────────────────────────────────────────────────────────
 

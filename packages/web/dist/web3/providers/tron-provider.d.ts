@@ -34,6 +34,10 @@ declare global {
             ready?: boolean;
             tronWeb?: TronWebProvider;
         };
+        bitkeep?: {
+            bitcoin?: unknown;
+            tronLink?: unknown;
+        };
     }
 }
 export declare class TronProvider extends BaseVMProvider {
