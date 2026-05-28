@@ -3,7 +3,7 @@ title: Aether Frontend Architecture & Designer Handoff
 slug: architecture/frontend
 section: architecture
 visibility: I
-audience: [dev-senior, designer, architect, product]
+audience: [dev-senior, architect]
 status: stable
 since_version: "8.8.0"
 source_files:
@@ -12,7 +12,7 @@ source_files:
 canonical_owner: frontend@aether
 estimated_read_minutes: 35
 toc_depth: 4
-last_synced_commit: df45786
+last_synced_commit: b8ebf7a
 ---
 
 # Aether Frontend Architecture & Designer Handoff
