@@ -167,6 +167,22 @@
       "canonical_owner": "platform@aether"
     },
     {
+      "path": "docs/FRONTEND-ARCHITECTURE.md",
+      "title": "Aether Frontend Architecture & Designer Handoff",
+      "slug": "architecture/frontend",
+      "section": "architecture",
+      "visibility": "I",
+      "audience": [
+        "dev-senior",
+        "architect"
+      ],
+      "status": "stable",
+      "since_version": "8.8.0",
+      "estimated_read_minutes": 35,
+      "toc_depth": 4,
+      "canonical_owner": "frontend@aether"
+    },
+    {
       "path": "docs/IDENTITY-RESOLUTION.md",
       "title": "Identity Resolution",
       "slug": "concepts/identity-resolution",
@@ -306,6 +322,22 @@
       "estimated_read_minutes": 6,
       "toc_depth": 3,
       "canonical_owner": "platform@aether"
+    },
+    {
+      "path": "docs/PRODUCTIZATION.md",
+      "title": "Productization Gap Analysis — First Paying Customer",
+      "slug": "productization",
+      "section": "architecture",
+      "visibility": "I",
+      "audience": [
+        "exec",
+        "architect"
+      ],
+      "status": "stable",
+      "since_version": "8.8.0",
+      "estimated_read_minutes": 15,
+      "toc_depth": 3,
+      "canonical_owner": "product@aether"
     },
     {
       "path": "docs/PROFILE-360-AGGREGATION.md",
