@@ -11,7 +11,7 @@ source_files:
 canonical_owner: platform@aether
 estimated_read_minutes: 10
 toc_depth: 3
-last_synced_commit: e693c83
+last_synced_commit: 0e70bad
 ---
 # Economic Observability
 

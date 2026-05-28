@@ -48,8 +48,8 @@ jobs:
 
       - name: Install Python dependencies (dev only)
         run: |
-          python -m pip install --upgrade pip
-          pip install -e ".[dev]"
+          pip install uv
+          uv pip install --system -e ".[dev]"
 
       - name: Validate documentation versions
         run: python scripts/validate_docs.py
@@ -124,8 +124,8 @@ jobs:
 
       - name: Install Python dependencies
         run: |
-          python -m pip install --upgrade pip
-          pip install -e ".[dev,security,backend,agent]"
+          pip install uv
+          uv pip install --system -e ".[dev,security,backend,agent]"
 
       - name: Run core tests (security + integration)
         run: python -m pytest tests/ -n auto --tb=short
@@ -152,8 +152,8 @@ jobs:
 
       - name: Install Python dependencies (with ML extras)
         run: |
-          python -m pip install --upgrade pip
-          pip install -e ".[dev,security,backend,agent,ml]"
+          pip install uv
+          uv pip install --system -e ".[dev,security,backend,agent,ml]"
 
       - name: Run ML model tests
         run: python -m pytest "$ML_DIR/tests/" --tb=short
