@@ -16,7 +16,7 @@ source_files:
   - apps/kyber/src/features/investigation/use-investigations.ts
   - apps/kyber/src/features/governance/use-governance.ts
   - apps/kyber/src/features/graph/use-graph-intelligence.ts
-last_synced_commit: 987ba94
+last_synced_commit: 484ba01
 ---
 
 # Operational Intelligence — Stub vs. Production Audit

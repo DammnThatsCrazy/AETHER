@@ -694,6 +694,27 @@
       ]
     },
     {
+      "name": "SDK Observability",
+      "topics": [
+        {
+          "member": "SDK_HEALTH_HEARTBEAT",
+          "value": "aether.sdk.health.heartbeat"
+        },
+        {
+          "member": "SDK_HEALTH_STATE_CHANGED",
+          "value": "aether.sdk.health.state_changed"
+        },
+        {
+          "member": "SDK_DRIFT_DETECTED",
+          "value": "aether.sdk.drift.detected"
+        },
+        {
+          "member": "SDK_CONFIG_UPDATED",
+          "value": "aether.sdk.config.updated"
+        }
+      ]
+    },
+    {
       "name": "Dead letter",
       "topics": [
         {
@@ -1279,6 +1300,22 @@
     {
       "member": "NOTIFICATION_CHANNEL_DISCONNECTED",
       "value": "aether.notifications.channel.disconnected"
+    },
+    {
+      "member": "SDK_HEALTH_HEARTBEAT",
+      "value": "aether.sdk.health.heartbeat"
+    },
+    {
+      "member": "SDK_HEALTH_STATE_CHANGED",
+      "value": "aether.sdk.health.state_changed"
+    },
+    {
+      "member": "SDK_DRIFT_DETECTED",
+      "value": "aether.sdk.drift.detected"
+    },
+    {
+      "member": "SDK_CONFIG_UPDATED",
+      "value": "aether.sdk.config.updated"
     },
     {
       "member": "DEAD_LETTER",

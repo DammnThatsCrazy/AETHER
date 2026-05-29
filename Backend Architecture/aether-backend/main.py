@@ -216,6 +216,9 @@ from services.investigation.routes import router as investigation_router
 from services.governance.routes import router as governance_router
 from services.events.routes import router as events_router
 from services.sdk.routes import router as sdk_router
+from services.sdk_health.routes import router as sdk_health_router
+from services.sdk_drift.routes import router as sdk_drift_router
+from services.sdk_config.routes import router as sdk_config_router
 
 # ML predict routes — imported from the ML serving package when available.
 # When ML_SERVING_INLINE=true (E2 consolidated image) the predict routes are
@@ -419,6 +422,9 @@ def create_app() -> FastAPI:
     app.include_router(events_router)
     app.include_router(user_agents_router)  # Profile 360: user/org-owned agents (always-on)
     app.include_router(sdk_router)          # SDK utilities: cross-device identity resolution
+    app.include_router(sdk_health_router)   # SDK health monitoring: heartbeats + fleet status
+    app.include_router(sdk_drift_router)    # SDK drift detection: schema, stale, replay storm
+    app.include_router(sdk_config_router)   # SDK remote config: signed manifests + rollouts
 
     # ── ML serving inline (E2 consolidated image) ───────────────────────
     # When ML_SERVING_INLINE=true the predict routes are handled in-process

@@ -258,6 +258,12 @@ class Topic(str, Enum):
     NOTIFICATION_CHANNEL_CONNECTED    = "aether.notifications.channel.connected"
     NOTIFICATION_CHANNEL_DISCONNECTED = "aether.notifications.channel.disconnected"
 
+    # SDK Observability
+    SDK_HEALTH_HEARTBEAT     = "aether.sdk.health.heartbeat"
+    SDK_HEALTH_STATE_CHANGED = "aether.sdk.health.state_changed"
+    SDK_DRIFT_DETECTED       = "aether.sdk.drift.detected"
+    SDK_CONFIG_UPDATED       = "aether.sdk.config.updated"
+
     # Dead letter
     DEAD_LETTER = "aether.dlq"
 
