@@ -82,7 +82,7 @@ export function useIntelligenceNotifications(tenantId: string): UseIntelligenceN
             what: n.what,
             why: n.why,
             impact: n.impact,
-            recommendedAction: n.recommended_action,
+            ...(n.recommended_action !== undefined ? { recommendedAction: n.recommended_action } : {}),
             deepLink: n.deep_link,
           }));
         }

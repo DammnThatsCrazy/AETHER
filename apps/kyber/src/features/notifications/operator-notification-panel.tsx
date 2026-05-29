@@ -28,16 +28,19 @@ function SlaCountdown({ expiresAt }: { readonly expiresAt?: string }) {
   );
 }
 
+const SEVERITY_BADGE_COLORS: Record<string, string> = {
+  P0:   'bg-red-500/20 text-red-300 border-red-500/30',
+  P1:   'bg-orange-500/20 text-orange-300 border-orange-500/30',
+  P2:   'bg-yellow-500/20 text-yellow-300 border-yellow-500/30',
+  P3:   'bg-blue-500/20 text-blue-300 border-blue-500/30',
+  info: 'bg-zinc-500/20 text-zinc-300 border-zinc-500/30',
+};
+const SEVERITY_BADGE_DEFAULT = 'bg-zinc-500/20 text-zinc-300 border-zinc-500/30';
+
 function SeverityBadge({ severity }: { readonly severity: string }) {
-  const colors: Record<string, string> = {
-    P0: 'bg-red-500/20 text-red-300 border-red-500/30',
-    P1: 'bg-orange-500/20 text-orange-300 border-orange-500/30',
-    P2: 'bg-yellow-500/20 text-yellow-300 border-yellow-500/30',
-    P3: 'bg-blue-500/20 text-blue-300 border-blue-500/30',
-    info: 'bg-zinc-500/20 text-zinc-300 border-zinc-500/30',
-  };
+  const colorClass = SEVERITY_BADGE_COLORS[severity] ?? SEVERITY_BADGE_DEFAULT;
   return (
-    <span className={`inline-flex px-2 py-0.5 rounded-full text-xs font-bold border ${colors[severity] ?? colors.info}`}>
+    <span className={`inline-flex px-2 py-0.5 rounded-full text-xs font-bold border ${colorClass}`}>
       {severity}
     </span>
   );
@@ -93,15 +96,17 @@ const NotificationCard: FC<NotificationCardProps> = ({
 
         {expanded && (
           <dl className="mt-3 grid grid-cols-1 gap-y-2 text-xs">
-            {[
-              ['What', n.what],
-              ['Why', n.why],
-              ['Impact', n.impact],
-              n.recommended_action ? ['Action', n.recommended_action] : null,
-            ].filter(Boolean).map(([label, value]) => (
-              <div key={label as string} className="flex gap-2">
+            {([
+              { label: 'What',   value: n.what },
+              { label: 'Why',    value: n.why },
+              { label: 'Impact', value: n.impact },
+              ...(n.recommended_action !== undefined
+                ? [{ label: 'Action', value: n.recommended_action }]
+                : []),
+            ] as { label: string; value: string }[]).map(({ label, value }) => (
+              <div key={label} className="flex gap-2">
                 <dt className="text-zinc-500 w-14 shrink-0">{label}:</dt>
-                <dd className="text-zinc-300">{value as string}</dd>
+                <dd className="text-zinc-300">{value}</dd>
               </div>
             ))}
           </dl>
