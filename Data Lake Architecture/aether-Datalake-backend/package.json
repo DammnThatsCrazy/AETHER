@@ -1,6 +1,6 @@
 {
   "name": "aether-datalake-backend",
-  "version": "8.8.0",
+  "version": "8.9.0",
   "private": true,
   "description": "Aether Backend \u2014 Microservices for behavioral analytics, identity resolution, and ML serving",
   "workspaces": [

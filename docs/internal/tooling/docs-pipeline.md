@@ -20,7 +20,7 @@ source_files:
 canonical_owner: platform@aether
 estimated_read_minutes: 8
 toc_depth: 3
-last_synced_commit: e4c17b2
+last_synced_commit: c2775a8
 ---
 
 # Documentation Pipeline
@@ -123,14 +123,24 @@ CI rejects the PR if steps 2 or 4 were skipped.
 
 - `extract_openapi` and `extract_abis` generators are not yet built —
   they need a running FastAPI app and compiled Solidity respectively.
-- `apps/docs/` (Phase 6) — current state:
+- `apps/docs/` (Phase 6) — **all six slices shipped**:
   - Slice 1: Vite + React 19 workspace scaffold
   - Slice 2: MDX rendering via `@mdx-js/rollup` + `remark-frontmatter`
   - Slice 3: `extract_doc_manifest` generator + `DocIndex` + `DocViewer` + routing
   - Slice 4: Three build outputs (`out-public/`, `out-portal/`,
     `out-internal/`) — `VITE_TIER=P/C/I` baked at build time via
     `npm run build:public`, `build:portal`, `build:internal`
-  - Upcoming: `docs/nav.config.ts` sidebar, generator-artifact pages
+  - Slice 5: `docs/nav.config.ts` + sticky sidebar with tier-filtered section nav
+  - Slice 6: Generator-artifact pages (`/artifacts/{events,env,plans,providers}`)
+    + Generated Reference sidebar block + DocIndex nested-slug fix
+- **Phase 2 (restructure)** not yet started — `docs/{public,portal,internal}/`
+  directory layout, MDX frontmatter back-fill on existing `.md` files, and
+  subsystem README stubs are deferred pending Phase 0 sign-offs.
+- **Phase 5 (authoring)** not yet started — only `apps/docs/src/content/overview.mdx`
+  exists; remaining docs are navigable via manifest but not yet MDX-rendered.
+- **Phase 0 sign-offs** pending human decisions (mobile SDK deprecation, ingestion
+  routing, SLA numbers, SOC 2 status, data residency, AI training-data statement,
+  smart-contract audit, LLM provider roadmap).
 
 ## Strict mode (enabled)
 

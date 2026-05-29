@@ -1,10 +1,11 @@
 # Aether
 
-**Unified observation layer for hybrid companies** — Web2, Web3, or any mix.
+**Entity-agnostic intelligence graph infrastructure** — Web2, Web3, AI-native, or any mix.
 Cross-platform SDKs capture canonical events (analytics, identity, consent,
 commerce, wallet, agent, x402) and deliver them to a Python/FastAPI backend
 that owns all enrichment, identity resolution, graph mutation, and
-orchestration.
+orchestration. Profile360 surfaces unified intelligence for any entity type —
+humans, organizations, AI agents, and onchain protocols.
 
 > **Source of truth** for SDK behavior lives in [`docs/source-of-truth/`](docs/source-of-truth/).
 > Canonical SDK contracts live in [`packages/shared/`](packages/shared/).
@@ -39,7 +40,7 @@ Aether is a **hybrid Python/FastAPI + Node/TypeScript** monorepo with four opera
                                     │   /v1/agent/*        Agent orchestration │
 ┌─────────────────────────────┐     │   /v1/rewards/*      On-chain rewards    │
 │   External Data Providers   │     │   /v1/analytics/*    Dashboards/export   │
-│   (24 connectors)           │ ──> │   /v1/profile/*      Profile 360         │
+│   (51 providers, 17 cats)   │ ──> │   /v1/profile/*      Profile 360         │
 │                             │     │   /v1/population/*   Group intelligence  │
 │                             │     │   /v1/expectations/* Negative-space      │
 │                             │     │   /v1/behavioral/*   Friction signals    │
@@ -76,7 +77,7 @@ Aether is a **hybrid Python/FastAPI + Node/TypeScript** monorepo with four opera
 ### Data Flow: Extraction to Intelligence
 
 ```
-Provider connectors (24) → POST /v1/lake/ingest → Bronze (raw, immutable)
+Provider connectors (51 across 17 categories) → POST /v1/lake/ingest → Bronze (raw, immutable)
                                                        ↓
                                                   Silver (validated, normalized)
                                                        ↓
@@ -120,23 +121,30 @@ are documented in
 | **React Native** | `@aether/react-native` | `packages/react-native/src/index.tsx` |
 | **Shared contracts** | `packages/shared/` | canonical event / consent / identity / commerce / agent / wallet types |
 
-## Provider Connectors (24)
+## Provider Connectors (51 across 17 categories)
 
-| Category | Providers | Auth |
-|----------|-----------|------|
-| Blockchain RPC | QuickNode, Alchemy, Infura, Generic | API key |
-| Block Explorer | Etherscan, Moralis | API key |
-| Social | Twitter, Reddit | OAuth/Bearer |
-| Analytics | Dune Analytics | API key |
-| Market Data | DeFiLlama (free), CoinGecko, Binance, Coinbase | API key |
-| Prediction Markets | Polymarket, Kalshi | Bearer |
-| Web3 Social | Farcaster, Lens Protocol | API key |
-| Identity Enrichment | ENS (free), GitHub | PAT |
-| Governance | Snapshot (free) | None |
-| On-Chain Intel | Chainalysis, Nansen | Contract required |
-| TradFi | Massive, Databento | Contract required |
+| Category | Providers |
+|---|---|
+| Blockchain RPC | QuickNode, Alchemy, Infura, Generic |
+| Block Explorer | Etherscan, Moralis |
+| Social API | Twitter/X, Instagram, TikTok, Reddit, YouTube, LinkedIn, Discord, GitHub, Snapchat, Pinterest, Telegram, Mastodon |
+| Web3 Social | Farcaster, Lens Protocol |
+| Market Data | DeFiLlama, CoinGecko, Binance, Coinbase |
+| Analytics | Dune Analytics |
+| Prediction Markets | Polymarket, Kalshi |
+| Identity Enrichment | ENS, GitHub |
+| Governance | Snapshot |
+| On-Chain Intel | Chainalysis, Nansen |
+| TradFi | Massive, Databento |
+| Open Banking | Plaid |
+| Credit Bureau | Experian, Equifax, TransUnion |
+| Brokerage | Alpaca, IBKR, Schwab, Fidelity |
+| Consumer Fintech | Robinhood, SoFi, CashApp, Chime |
+| Payment Processor | PayPal, Venmo, Square, Stripe Connect, Zelle |
+| E-commerce Platform | Shopify, WooCommerce, Amazon Seller |
+| Ad Platforms | Twitter Ads, Google Ads, LinkedIn Ads, Meta Ads, TikTok Ads |
 
-All connectors use real httpx HTTP calls. Unconfigured providers report `not_configured`. See `PROVIDER_MATRIX.md` for details.
+All connectors use real httpx HTTP calls with BYOK key vault. Unconfigured providers report `not_configured`.
 
 ## Intelligence Graph
 
@@ -150,6 +158,27 @@ All connectors use real httpx HTTP calls. Unconfigured providers report `not_con
 | **A2A** | Agent-to-Agent — orchestration, payments, protocol composition |
 
 **V1 activation:** Intelligence Graph services are available and can be enabled per-environment via `IG_AGENT_LAYER=true`, `IG_COMMERCE_LAYER=true`, `IG_ONCHAIN_LAYER=true`, `IG_X402_LAYER=true`. Graph mutations are fueled by the lake Silver/Gold tiers, not ad-hoc scripts.
+
+## Profile360
+
+Multi-dimensional entity intelligence surface for any entity type — human, organization, AI agent, or onchain protocol.
+All sub-resources support `?window=30d|60d|90d|lifetime` and include `data_freshness` (live / recent / stale) + `computed_at`.
+
+| Sub-Resource | Entity Types | Covers |
+|---|---|---|
+| `social_intelligence` | All | 20+ platforms: followers, engagement, cross-platform influence tier |
+| `web2` | Human | Bank accounts (Plaid), brokerage positions, credit signal, P2P payments |
+| `ecommerce_profile` | Organization | GMV, AOV, conversion rate, cart abandonment, repeat purchase rate |
+| `saas_profile` | Organization | MRR, ARR, churn rate, NRR, NPS |
+| `customer_intelligence` | Organization | LTV distribution, retention rate, segment breakdown |
+| `customer_relationships` | Human | Organizations an individual subscribes to / shops at / works for |
+| `temporal_heatmap` | All | 24×7 activity heatmap, streaks, behavioral velocity score, dormancy |
+| `location_history` | All | Primary / secondary / rare cities with ASN connection type |
+| `economic_flow` | All | Cross-rail inflow/outflow (web2_ach, web2_card, web2_p2p, web3_onchain, web3_l2) |
+| `agent_activity` | AI Agent | Execution history, spending, delegation chain, authorized capabilities |
+| `graph_traversal` | All | N-hop configurable BFS + PageRank-style influence scoring (max 500 nodes) |
+
+See [`docs/PROFILE-360-AGGREGATION.md`](docs/PROFILE-360-AGGREGATION.md) for the full aggregator spec.
 
 ## Economic Observability
 
@@ -305,7 +334,7 @@ Backend Architecture/aether-backend/   Python/FastAPI backend (35 routers, 246+ 
     graph/           Neptune graph client + 4 relationship layers (H2H/H2A/A2H/A2A)
     events/          Kafka event bus + topic registry
     cache/           Redis cache
-    providers/       24 provider adapters (11 categories)
+    providers/       51 provider adapters (17 categories)
     auth/            API key validation + JWT + tenant context
     scoring/         Trust score + bytecode risk + extraction score
     rate_limit/      Burst RPM (P1-P4), monthly quota engine, feature gate, metrics

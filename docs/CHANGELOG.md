@@ -5,13 +5,13 @@ section: changelog
 visibility: P
 audience: [dev-junior, dev-senior, ops]
 status: stable
-since_version: "8.8.0"
+since_version: "8.9.0"
 source_files:
   - CHANGELOG.md
 canonical_owner: release@aether
 estimated_read_minutes: 10
 toc_depth: 3
-last_synced_commit: e4c17b2
+last_synced_commit: c2775a8
 ---
 # Changelog
 
@@ -59,6 +59,34 @@ last_synced_commit: e4c17b2
   see `docs/BACKEND-API.md`.
 - Set `PRICING_OPTION` explicitly in production. The startup validator
   fails fast on invalid values.
+
+---
+
+## v8.9.0 — Entity-Agnostic Profile360: Social, Financial, Business, Graph, Agentic Intelligence (2026-05-28)
+
+### Added
+
+- **Profile360 intelligence expansion** — 13 new TypeScript type packages, 12 new ClickHouse gold schemas, 4 new backend services (pnl, signals, social, recommendations), 15+ new profile API routes. Covers any entity type: human, organization, AI agent, onchain protocol.
+- **Social intelligence — 20+ platforms**: Reddit, YouTube, Snapchat, Pinterest, Telegram, Threads, Facebook, Twitch, Spotify, SoundCloud, Bluesky, Mastodon. Cross-platform follower deduplication and influence scoring via `gold_social_intelligence`.
+- **Financial provider expansion**: `CONSUMER_FINTECH`, `PAYMENT_RAILS`, `MERCHANT_PAYMENTS` categories. `PlaidProvider`, tri-bureau `CreditBureauProvider`, `BrokerageProvider`. **51 providers across 17 categories** (up from 24 across 11).
+- **Business entity intelligence**: `packages/shared/business-intelligence.ts` — `EcommerceProfile`, `SaaSProfile`, `BusinessCustomerIntelligence`, `CustomerRelationship`. Gold schemas: `gold_ecommerce_profile`, `gold_saas_profile`, `gold_customer_relationships`, `gold_payment_intelligence`.
+- **Multi-hop graph traversal**: `GraphTraversalEngine` — BFS up to N hops, domain filter, PageRank-style scoring, 500-node cap. Endpoint: `GET /v1/entities/{id}/graph/traverse`.
+- **Temporal + economic flow + agentic intelligence**: `gold_temporal_heatmap` (entity-agnostic), `packages/shared/economic-flow.ts`, `packages/shared/agentic-intelligence.ts`, `gold_economic_flow`, `gold_agentic_activity`.
+- **PII masking**: 3 analyst role tiers (`analyst_readonly`, `analyst_standard`, `analyst_compliance`).
+- **Consent**: extended to 8 purposes (added `credit`, `location`, `commerce`).
+- **Graph extensions**: 13 new `VertexType`, 23 new `EdgeType`, 6 new `RelationType`.
+- **Ad platform connectors**: Twitter Ads, Google Ads, LinkedIn Ads, Meta Ads, TikTok Ads. `gold_ad_spend` schema.
+- **New entity kinds**: `ecommerce_company`, `saas_company`, `marketplace`, `content_creator`, `payment_network_entity`.
+
+### Changed
+
+- Entity-agnostic framing across all routes, SDK types, and docs. Replaced "DeFi/Web3 company" language throughout.
+- CI: uv installs (20+ min → 1–2 min cold), parallel jobs, ML path filter.
+
+### Fixed
+
+- `extract_entities.py` catastrophic backtracking regex — replaced with line-by-line parser; `lint-docs` CI no longer hangs.
+- Entity plane name test assertions updated for Phase 3 domain-agnostic renames.
 
 ---
 

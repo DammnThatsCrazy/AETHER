@@ -1,5 +1,5 @@
 {
-  "version": "8.8.0",
+  "version": "8.9.0",
   "generated_from": "docs/**/*.{md,mdx}",
   "docs": [
     {
@@ -85,6 +85,23 @@
       "canonical_owner": "platform@aether"
     },
     {
+      "path": "docs/AWS-DEPLOYMENT.md",
+      "title": "AWS Deployment — Infrastructure Reference",
+      "slug": "operations/aws-deployment",
+      "section": "operations",
+      "visibility": "I",
+      "audience": [
+        "ops",
+        "security",
+        "architect"
+      ],
+      "status": "stable",
+      "since_version": "8.8.0",
+      "estimated_read_minutes": 14,
+      "toc_depth": 3,
+      "canonical_owner": "platform@aether"
+    },
+    {
       "path": "docs/BACKEND-API.md",
       "title": "Aether Backend API — Endpoint Specification",
       "slug": "api/backend-reference",
@@ -113,10 +130,27 @@
         "ops"
       ],
       "status": "stable",
-      "since_version": "8.8.0",
+      "since_version": "8.9.0",
       "estimated_read_minutes": 10,
       "toc_depth": 3,
       "canonical_owner": "release@aether"
+    },
+    {
+      "path": "docs/CICD.md",
+      "title": "CI/CD Pipeline — Stages, Gates & SDK Release",
+      "slug": "operations/cicd",
+      "section": "operations",
+      "visibility": "I",
+      "audience": [
+        "ops",
+        "dev-senior",
+        "architect"
+      ],
+      "status": "stable",
+      "since_version": "8.8.0",
+      "estimated_read_minutes": 12,
+      "toc_depth": 3,
+      "canonical_owner": "platform@aether"
     },
     {
       "path": "docs/COMMERCE-CONTROL-PLANE.md",
@@ -148,6 +182,42 @@
       "estimated_read_minutes": 3,
       "toc_depth": 3,
       "canonical_owner": "commerce@aether"
+    },
+    {
+      "path": "docs/COMPLIANCE.md",
+      "title": "Compliance Framework — GDPR & SOC 2",
+      "slug": "compliance/overview",
+      "section": "compliance",
+      "visibility": "C",
+      "audience": [
+        "compliance",
+        "security",
+        "buyer",
+        "exec"
+      ],
+      "status": "stable",
+      "since_version": "8.8.0",
+      "estimated_read_minutes": 12,
+      "toc_depth": 3,
+      "canonical_owner": "compliance@aether"
+    },
+    {
+      "path": "docs/DATA-INGESTION.md",
+      "title": "Data Ingestion — Architecture & API Reference",
+      "slug": "data/ingestion",
+      "section": "data",
+      "visibility": "P",
+      "audience": [
+        "dev-junior",
+        "dev-senior",
+        "architect",
+        "ops"
+      ],
+      "status": "stable",
+      "since_version": "8.8.0",
+      "estimated_read_minutes": 10,
+      "toc_depth": 3,
+      "canonical_owner": "ingest@aether"
     },
     {
       "path": "docs/ECONOMIC-OBSERVABILITY.md",
