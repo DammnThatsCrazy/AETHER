@@ -40,7 +40,7 @@ export function useSdkHealth(sdkId?: string) {
       let selectedScore: SDKHealthScore | null = null;
       if (sdkId) {
         try {
-          selectedScore = await api.sdkHealth.sdkScore(sdkId);
+          selectedScore = await api.sdkHealth.sdkScore(sdkId) as SDKHealthScore;
         } catch {
           // Non-fatal — SDK may not have checked in yet
         }

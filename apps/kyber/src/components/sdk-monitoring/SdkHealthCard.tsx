@@ -37,7 +37,7 @@ export function SdkHealthCard({ score, className }: SdkHealthCardProps) {
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
             <AsciiStatusGlyph
-              status={{ status: score.status as 'healthy' | 'degraded' | 'unhealthy', lastChecked: score.computed_at }}
+              status={score.status as 'healthy' | 'degraded' | 'unhealthy' | 'unknown'}
               className="text-base"
             />
             <span className="text-xs font-mono text-text-secondary truncate max-w-[120px]">
