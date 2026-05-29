@@ -1,13 +1,19 @@
 ---
-title: "ADR-003: Cache Backend Migration — Redis → DynamoDB On-Demand (E1)"
-status: Accepted
-date: "2026-05-26"
+title: "ADR-003: Cache Backend Migration — Redis to DynamoDB On-Demand"
+slug: decisions/adr-003-redis-to-dynamodb
+section: reference
+visibility: I
+audience: [architect, dev-senior, ops]
+status: stable
+since_version: "8.9.0"
+canonical_owner: platform@aether
+estimated_read_minutes: 3
+toc_depth: 2
 ---
 
 # ADR-003: Cache Backend Migration — Redis → DynamoDB On-Demand (E1)
 
-**Status:** Accepted  
-**Date:** 2026-05-26
+**Status:** Accepted | **Date:** 2026-05-26
 
 ## Context
 

@@ -1,13 +1,19 @@
 ---
 title: "ADR-001: Documentation Sync Stamp System"
-status: Accepted
-date: "2026-05-29"
+slug: decisions/adr-001-docs-stamp-system
+section: reference
+visibility: I
+audience: [architect, dev-senior, ops]
+status: stable
+since_version: "8.9.0"
+canonical_owner: platform@aether
+estimated_read_minutes: 3
+toc_depth: 2
 ---
 
 # ADR-001: Documentation Sync Stamp System
 
-**Status:** Accepted  
-**Date:** 2026-05-29
+**Status:** Accepted | **Date:** 2026-05-29
 
 ## Context
 

@@ -1,24 +1,26 @@
 ---
 title: "ADR-004: Backend Architecture — Single FastAPI Monolith with Router Registry"
-status: Accepted — Decomposition Planned
-date: "2026-05-29"
+slug: decisions/adr-004-backend-monolith
+section: reference
+visibility: I
+audience: [architect, dev-senior]
+status: stable
+since_version: "8.9.0"
+canonical_owner: platform@aether
+estimated_read_minutes: 4
+toc_depth: 2
 ---
 
 # ADR-004: Backend Architecture — Single FastAPI Monolith with Router Registry
 
-**Status:** Accepted — Decomposition Planned  
-**Date:** 2026-05-29
+**Status:** Accepted — Decomposition Planned | **Date:** 2026-05-29
 
 ## Context
 
 The Aether backend currently mounts **65 service routers** from a single
 `main.py` entry point (`Backend Architecture/aether-backend/main.py`). All
-routers share:
-- One Python process (one Uvicorn/Gunicorn instance)
-- One dependency set (`pyproject.toml [backend]`)
-- One PostgreSQL connection pool
-- One Redis/DynamoDB cache client
-- One Neptune gremlin client
+routers share one Python process, one dependency set, one PostgreSQL connection
+pool, one Redis/DynamoDB cache client, and one Neptune gremlin client.
 
 This is a monolith — not a microservice architecture — despite the internal
 service boundary organisation under `services/`.
@@ -48,8 +50,7 @@ and admin.
 Decompose when any of the following are true:
 - Two concurrent PRs conflict on `main.py` more than once per sprint.
 - A single domain requires a dependency incompatible with the shared set.
-- Deployment of one domain requires redeploying all 65 — and that causes
-  measurable downtime.
+- Deployment of one domain requires redeploying all 65 and causes measurable downtime.
 - Team grows beyond 4 active backend contributors.
 
 ## Consequences

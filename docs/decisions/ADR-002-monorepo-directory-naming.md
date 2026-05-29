@@ -1,13 +1,19 @@
 ---
 title: "ADR-002: Monorepo Directory Naming Convention"
-status: Accepted — Migration Pending
-date: "2026-05-29"
+slug: decisions/adr-002-monorepo-directory-naming
+section: reference
+visibility: I
+audience: [architect, dev-senior]
+status: stable
+since_version: "8.9.0"
+canonical_owner: platform@aether
+estimated_read_minutes: 3
+toc_depth: 2
 ---
 
 # ADR-002: Monorepo Directory Naming Convention
 
-**Status:** Accepted — Migration Pending  
-**Date:** 2026-05-29
+**Status:** Accepted — Migration Pending | **Date:** 2026-05-29
 
 ## Context
 
