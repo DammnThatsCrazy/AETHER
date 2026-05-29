@@ -320,7 +320,7 @@ export class SDKHealthAgent {
       return await crypto.subtle.verify(
         'HMAC',
         key,
-        sigBytes,
+        sigBytes as unknown as ArrayBuffer,
         new TextEncoder().encode(canonical),
       );
     } catch {
