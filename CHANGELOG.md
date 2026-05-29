@@ -164,6 +164,43 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ---
 
+## [8.9.0] — 2026-05-28
+
+### Added — Entity-Agnostic Profile360: Social, Financial, Business, Graph, Intelligence
+
+- **Profile360 intelligence expansion** — additive multi-dimensional intelligence surface for any entity type (human, organization, AI agent, onchain protocol). 13 new TypeScript type packages in `packages/shared/`, 12 new ClickHouse gold schemas, 4 new backend services (pnl, signals, social, recommendations), 15+ new profile API routes under `/v1/profile/{entity_id}/`.
+- **Social intelligence — 20+ platforms**: new providers for Reddit, YouTube, Snapchat, Pinterest, Telegram, Threads, Facebook, Twitch, Spotify, SoundCloud, Bluesky, Mastodon. All feed `gold_social_intelligence` with cross-platform follower deduplication and PageRank-style influence scoring.
+- **Financial provider expansion**: 3 new `ProviderCategory` values — `CONSUMER_FINTECH` (Robinhood, SoFi, CashApp, Chime), `PAYMENT_RAILS` (PayPal, Venmo, Square, Zelle, Wise), `MERCHANT_PAYMENTS` (Stripe Connect, Square, Shopify Payments, Braintree). Total: **51 providers across 17 categories** (up from 24 across 11).
+- **Open banking + credit + brokerage**: `PlaidProvider`, `CreditBureauProvider` (Experian/Equifax/TransUnion), `BrokerageProvider` (Alpaca/IBKR/Schwab/Fidelity). New gold schemas: `gold_plaid_accounts`, `gold_plaid_transactions`, `gold_credit_signals`, `gold_tradfi_portfolio`.
+- **Business entity intelligence**: `EcommerceProfile`, `SaaSProfile`, `BusinessCustomerIntelligence`, `CustomerRelationship` in `packages/shared/business-intelligence.ts`. Gold schemas: `gold_ecommerce_profile`, `gold_saas_profile`, `gold_customer_relationships`, `gold_payment_intelligence`.
+- **Multi-hop graph traversal**: `GraphTraversalEngine` (`services/graph/traversal.py`) — BFS up to N hops with domain filter (web2/web3/agent), PageRank-style influence scoring on the traversal subgraph, 500-node cap. New endpoint: `GET /v1/entities/{id}/graph/traverse?depth=1..5&domains=web2,web3,agent`.
+- **Temporal intelligence**: entity-agnostic `gold_temporal_heatmap`, `behavioral_velocity_score` (7d vs 30d acceleration), dormancy detection (`last_active_at`, `dormancy_days`, `is_dormant`).
+- **Economic flow layer**: `packages/shared/economic-flow.ts` — `MoneyMovement`, `EconomicFlow`, `EconomicEdge` across rails (web2_ach, web2_card, web2_p2p, web3_onchain, web3_l2). New `gold_economic_flow` schema. New `EdgeType` values: `PAID_TO`, `RECEIVED_FROM`, `TRANSFERRED_TO`. New endpoint: `GET /v1/profile/{id}/economic-flow`.
+- **Agentic intelligence layer**: `packages/shared/agentic-intelligence.ts` — `AgentCapabilityProfile`, `ToolUsageRecord`, `DelegationChain`, `AgentEconomics`. `gold_agentic_activity` schema. New endpoint: `GET /v1/profile/{id}/agent-activity`.
+- **PII masking**: 3 analyst role tiers (`analyst_readonly`, `analyst_standard`, `analyst_compliance`) in `shared/privacy/pii_masking.py`. All unmask/export/approve actions written to `consent_audit_log`.
+- **Consent**: extended from 5 to 8 purposes — added `credit` (gates credit bureau + income data), `location` (gates GPS-precision location), `commerce` (gates merchant/payment data).
+- **Graph extensions**: 13 new `VertexType`, 23 new `EdgeType`, 6 new `RelationType` in `shared/graph/graph.py` and `packages/shared/graph-relationships.ts`. New relationship types: `subscribes_to`, `shops_at`, `sells_on`, `creates_content_for`, `has_customer`, `processes_payments_for`.
+- **Ad platform connectors**: `TwitterAdsProvider`, `GoogleAdsProvider`, `LinkedInAdsProvider`, `MetaAdsProvider`, `TikTokAdsProvider`. New `gold_ad_spend` schema and `ad_spend` lake domain.
+- **New entity kinds**: `ecommerce_company`, `saas_company`, `marketplace`, `content_creator`, `payment_network_entity` in `packages/shared/entities.ts`.
+- **`Profile360SubResources`** (`packages/shared/profile360-contract.ts`) extended with: `ecommerce_profile`, `saas_profile`, `customer_intelligence`, `customer_relationships`, `content_creator_profile`, `payment_intelligence`, `merchant_profile`, `economic_flow`, `agent_activity`, `graph_traversal`.
+
+### Changed — Entity-Agnostic Framing
+
+- Replaced all "DeFi/Web3 company" framing with "any entity type — human, organization, AI agent, or onchain protocol" across `services/profile/routes.py`, `packages/shared/entity-extensions.ts`, `packages/shared/profile360-contract.ts`, `Data Ingestion Layer/services/ingestion/src/event-enricher.ts`.
+
+### Changed — CI & Developer Experience
+
+- **uv installs**: replaced `pip install -e ".[extras]"` with `pip install uv && uv pip install --system` in all three Python CI jobs. Cold install reduced from 20+ min to 1–2 min.
+- **Parallel CI jobs**: `lint-docs`, `python-tests`, `typescript` now run concurrently with `cancel-in-progress: true`.
+- **ML path filter**: `ml-tests` job only triggers when `ML Models/**` changes (via `dorny/paths-filter`).
+
+### Fixed
+
+- **`extract_entities.py` catastrophic backtracking**: replaced `UNION_RE` regex (which hung indefinitely on `EntityKind` values with inline trailing comments) with a line-by-line parser. Unblocked `lint-docs` CI job from hanging in `run_all.py`.
+- **Entity plane name test assertions**: updated `test_entities_planes_match_source_groups` for Phase 3 domain-agnostic renames (`Web3 plane (optional)` → `Blockchain-specific (additive)`, `Agent plane (optional)` → `Agent plane`).
+
+---
+
 ## [v8.8.0] — 2026-04-05
 
 ### Added — Production audit remediation (monorepo-wide)
