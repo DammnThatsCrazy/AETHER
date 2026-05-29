@@ -514,3 +514,7 @@ class Permissions:
     ENTITLEMENTS_READ = "entitlements:read"
     ENTITLEMENTS_WRITE = "entitlements:write"
     RESOURCES_ADMIN = "resources:admin"
+    # Notification Intelligence scopes
+    NOTIFICATIONS_APPROVE        = "notifications:approve"
+    NOTIFICATIONS_MANAGE         = "notifications:manage"
+    NOTIFICATIONS_CHANNELS_WRITE = "notifications:channels:write"

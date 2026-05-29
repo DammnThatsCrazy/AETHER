@@ -649,6 +649,51 @@
       ]
     },
     {
+      "name": "\u2500\u2500 Notification Intelligence \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500",
+      "topics": [
+        {
+          "member": "INTEL_NOTIFICATION_DETECTED",
+          "value": "aether.notifications.intelligence.detected"
+        },
+        {
+          "member": "INTEL_NOTIFICATION_VALIDATED",
+          "value": "aether.notifications.intelligence.validated"
+        },
+        {
+          "member": "INTEL_NOTIFICATION_QUEUED",
+          "value": "aether.notifications.intelligence.queued"
+        },
+        {
+          "member": "INTEL_NOTIFICATION_DELIVERED",
+          "value": "aether.notifications.intelligence.delivered"
+        },
+        {
+          "member": "INTEL_NOTIFICATION_FAILED",
+          "value": "aether.notifications.intelligence.failed"
+        },
+        {
+          "member": "OPERATOR_ACTION",
+          "value": "aether.notifications.operator.action"
+        },
+        {
+          "member": "INTEL_NOTIFICATION_PROPAGATED",
+          "value": "aether.notifications.intelligence.propagated"
+        },
+        {
+          "member": "INTEL_NOTIFICATION_EXPIRED",
+          "value": "aether.notifications.intelligence.expired"
+        },
+        {
+          "member": "NOTIFICATION_CHANNEL_CONNECTED",
+          "value": "aether.notifications.channel.connected"
+        },
+        {
+          "member": "NOTIFICATION_CHANNEL_DISCONNECTED",
+          "value": "aether.notifications.channel.disconnected"
+        }
+      ]
+    },
+    {
       "name": "SDK Observability",
       "topics": [
         {
@@ -1215,6 +1260,46 @@
     {
       "member": "CIS_QUARANTINE_ESCALATED",
       "value": "aether.cis.quarantine.escalated"
+    },
+    {
+      "member": "INTEL_NOTIFICATION_DETECTED",
+      "value": "aether.notifications.intelligence.detected"
+    },
+    {
+      "member": "INTEL_NOTIFICATION_VALIDATED",
+      "value": "aether.notifications.intelligence.validated"
+    },
+    {
+      "member": "INTEL_NOTIFICATION_QUEUED",
+      "value": "aether.notifications.intelligence.queued"
+    },
+    {
+      "member": "INTEL_NOTIFICATION_DELIVERED",
+      "value": "aether.notifications.intelligence.delivered"
+    },
+    {
+      "member": "INTEL_NOTIFICATION_FAILED",
+      "value": "aether.notifications.intelligence.failed"
+    },
+    {
+      "member": "OPERATOR_ACTION",
+      "value": "aether.notifications.operator.action"
+    },
+    {
+      "member": "INTEL_NOTIFICATION_PROPAGATED",
+      "value": "aether.notifications.intelligence.propagated"
+    },
+    {
+      "member": "INTEL_NOTIFICATION_EXPIRED",
+      "value": "aether.notifications.intelligence.expired"
+    },
+    {
+      "member": "NOTIFICATION_CHANNEL_CONNECTED",
+      "value": "aether.notifications.channel.connected"
+    },
+    {
+      "member": "NOTIFICATION_CHANNEL_DISCONNECTED",
+      "value": "aether.notifications.channel.disconnected"
     },
     {
       "member": "SDK_HEALTH_HEARTBEAT",

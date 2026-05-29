@@ -43,11 +43,31 @@ Routes:
     GET  /v1/consent/records/{user_id}  Get consent
     POST /v1/consent/dsr                Submit DSR
     GET  /v1/consent/dsr                List DSRs
-    POST /v1/notifications/webhooks     Create webhook
-    GET  /v1/notifications/webhooks     List webhooks
-    DELETE /v1/notifications/webhooks/{id}  Delete webhook
-    POST /v1/notifications/alerts       Create alert
-    GET  /v1/notifications/alerts       List alerts
+    POST   /v1/notifications/intelligence             Emit intelligence notification
+    GET    /v1/notifications/intelligence             List intelligence notifications
+    GET    /v1/notifications/intelligence/{id}        Get single notification
+    PATCH  /v1/notifications/intelligence/{id}/approve    Operator approve
+    PATCH  /v1/notifications/intelligence/{id}/suppress   Operator suppress
+    PATCH  /v1/notifications/intelligence/{id}/escalate   Operator escalate
+    PATCH  /v1/notifications/intelligence/{id}/annotate   Operator annotate
+    POST   /v1/notifications/intelligence/{id}/replay     Re-deliver to channels
+    GET    /v1/notifications/intelligence/{id}/audit       Full audit trail
+    GET    /v1/notifications/config               Get tenant notification config
+    PUT    /v1/notifications/config               Update tenant notification config
+    GET    /v1/notifications/channels             List user notification channels
+    POST   /v1/notifications/channels             Register channel
+    PATCH  /v1/notifications/channels/{id}        Update channel
+    DELETE /v1/notifications/channels/{id}        Remove channel
+    POST   /v1/notifications/channels/{id}/test   Test channel delivery
+    GET    /v1/notifications/channels/slack/connect  Initiate Slack OAuth
+    GET    /v1/notifications/channels/slack/callback Slack OAuth callback
+    POST   /v1/notifications/slack/callback       Slack interactive handler
+    POST   /v1/notifications/telegram/callback    Telegram inline keyboard handler
+    POST   /v1/notifications/webhooks             Create webhook (legacy)
+    GET    /v1/notifications/webhooks             List webhooks (legacy)
+    DELETE /v1/notifications/webhooks/{id}        Delete webhook (legacy)
+    POST   /v1/notifications/alerts               Create alert (legacy)
+    GET    /v1/notifications/alerts               List alerts (legacy)
     POST /v1/tenants                    Public sign-up (no auth)
     POST /v1/auth/recover               Recover lost API key via email (no auth)
     POST /v1/auth/register              Step 1 email sign-up: send OTP (no auth)
@@ -148,7 +168,7 @@ from services.analytics.routes import router as analytics_router
 from services.ml_serving.routes import router as ml_router
 from services.campaign.routes import router as campaign_router
 from services.consent.routes import router as consent_router
-from services.notification.routes import router as notification_router
+from services.notification_intelligence.routes import router as notification_router
 from services.admin.routes import router as admin_router
 from services.traffic.routes import router as traffic_router
 from services.fraud.routes import router as fraud_router
@@ -243,9 +263,31 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     # write to new tables only, and never mutate existing service state.
     try:
         attach_profile360_workers(registry.consumer, registry.graph)
-        await registry.consumer.start()
     except Exception as e:  # pragma: no cover — defensive
         logger.warning(f"Profile 360 worker wiring skipped: {e}")
+
+    # Notification Intelligence — attach Kafka consumers and SLA expiry worker.
+    _sla_worker_fn = None
+    try:
+        from services.notification_intelligence.consumer import attach_notification_consumers
+        from services.notification_intelligence.lifecycle import start_sla_worker as _sla_worker_fn
+        attach_notification_consumers(
+            registry.consumer,
+            producer=registry.producer,
+            cache=registry.cache,
+        )
+    except Exception as e:  # pragma: no cover — defensive
+        logger.warning(f"Notification intelligence consumer wiring skipped: {e}")
+
+    try:
+        await registry.consumer.start()
+    except Exception as e:  # pragma: no cover — defensive
+        logger.warning(f"Kafka consumer start skipped: {e}")
+
+    if _sla_worker_fn is not None:
+        sla_worker_task = asyncio.create_task(_sla_worker_fn(producer=registry.producer))
+    else:
+        sla_worker_task = asyncio.create_task(asyncio.sleep(0))
 
     # Provider Gateway (feature-flagged)
     from dependencies.providers import _init_provider_gateway
@@ -266,12 +308,17 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     logger.info("Initiating graceful shutdown...")
     replay_worker_task.cancel()
     overage_cron_task.cancel()
+    sla_worker_task.cancel()
     try:
         await replay_worker_task
     except asyncio.CancelledError:
         pass
     try:
         await overage_cron_task
+    except asyncio.CancelledError:
+        pass
+    try:
+        await sla_worker_task
     except asyncio.CancelledError:
         pass
     if provider_gateway:
