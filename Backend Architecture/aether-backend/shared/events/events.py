@@ -246,6 +246,18 @@ class Topic(str, Enum):
     CIS_QUARANTINE_RELEASED              = "aether.cis.quarantine.released"
     CIS_QUARANTINE_ESCALATED             = "aether.cis.quarantine.escalated"
 
+    # ── Notification Intelligence ────────────────────────────────────────────
+    INTEL_NOTIFICATION_DETECTED    = "aether.notifications.intelligence.detected"
+    INTEL_NOTIFICATION_VALIDATED   = "aether.notifications.intelligence.validated"
+    INTEL_NOTIFICATION_QUEUED      = "aether.notifications.intelligence.queued"
+    INTEL_NOTIFICATION_DELIVERED   = "aether.notifications.intelligence.delivered"
+    INTEL_NOTIFICATION_FAILED      = "aether.notifications.intelligence.failed"
+    OPERATOR_ACTION                = "aether.notifications.operator.action"
+    INTEL_NOTIFICATION_PROPAGATED  = "aether.notifications.intelligence.propagated"
+    INTEL_NOTIFICATION_EXPIRED     = "aether.notifications.intelligence.expired"
+    NOTIFICATION_CHANNEL_CONNECTED    = "aether.notifications.channel.connected"
+    NOTIFICATION_CHANNEL_DISCONNECTED = "aether.notifications.channel.disconnected"
+
     # Dead letter
     DEAD_LETTER = "aether.dlq"
 
