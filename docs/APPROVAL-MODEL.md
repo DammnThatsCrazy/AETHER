@@ -11,7 +11,7 @@ source_files:
 canonical_owner: commerce@aether
 estimated_read_minutes: 4
 toc_depth: 3
-last_synced_commit: 7f8c4da
+last_synced_commit: c2775a8
 ---
 # Agentic Commerce — Approval Model
 
