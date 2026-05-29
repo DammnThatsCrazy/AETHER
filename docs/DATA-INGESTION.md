@@ -57,25 +57,25 @@ shared across the service and any consumers:
 
 ## Event types
 
-Twelve first-class event types are recognised:
+Twelve first-class event types are recognised (source:
+`Data Ingestion Layer/services/ingestion/src/validator.ts`):
 
 | Event | Description |
 |-------|-------------|
-| `page_view` | Browser or mobile page/screen impression |
-| `user_identify` | User identity resolution (anonymous → identified) |
-| `user_signup` | New account creation |
 | `track` | Generic custom event with arbitrary properties |
-| `wallet_connect` | Web3 wallet connection |
+| `page` | Browser page-view impression |
+| `screen` | Mobile screen impression |
+| `identify` | User identity resolution (anonymous → identified) |
+| `conversion` | Goal or funnel conversion |
+| `wallet` | Web3 wallet connection or interaction |
 | `transaction` | On-chain or off-chain commerce transaction |
-| `consent_update` | GDPR/CCPA consent change |
-| `session_start` | SDK session initialisation |
-| `session_end` | SDK session teardown |
 | `error` | Client-side error capture |
 | `performance` | Core Web Vitals and custom performance marks |
-| `ai_interaction` | LLM prompt/completion telemetry |
+| `experiment` | A/B or feature-flag experiment exposure |
+| `consent` | GDPR/CCPA consent change |
+| `heartbeat` | SDK keep-alive / session heartbeat |
 
-Events that do not match a known type are accepted as `track` events with the
-original event name preserved as a property.
+Events sent with an unrecognised type are rejected with 400.
 
 ## Enrichment
 
@@ -104,26 +104,28 @@ request.
 
 ```json
 {
-  "events": [
+  "batch": [
     {
-      "type": "page_view",
+      "type": "page",
       "timestamp": "2025-01-15T12:00:00Z",
       "anonymous_id": "anon-uuid",
       "user_id": "usr_abc123",
       "properties": {}
     }
-  ]
+  ],
+  "sentAt": "2025-01-15T12:00:00Z"
 }
 ```
 
 | Field | Type | Required | Notes |
 |-------|------|----------|-------|
-| `events` | array | yes | 1 – 500 events per request |
-| `events[].type` | string | yes | One of the 12 recognised types or any custom name |
-| `events[].timestamp` | ISO-8601 string | yes | UTC; ±24 h window enforced |
-| `events[].anonymous_id` | string | no | Required when `user_id` is absent |
-| `events[].user_id` | string | no | Required when `anonymous_id` is absent |
-| `events[].properties` | object | no | Arbitrary key/value pairs |
+| `batch` | array | yes | 1 – 500 events per request |
+| `sentAt` | ISO-8601 string | yes | Client-side send time; used to detect clock skew |
+| `batch[].type` | string | yes | One of the 12 recognised types (see Event types above) |
+| `batch[].timestamp` | ISO-8601 string | yes | UTC; ±24 h window enforced |
+| `batch[].anonymous_id` | string | no | Required when `user_id` is absent |
+| `batch[].user_id` | string | no | Required when `anonymous_id` is absent |
+| `batch[].properties` | object | no | Arbitrary key/value pairs |
 
 **Response codes**
 

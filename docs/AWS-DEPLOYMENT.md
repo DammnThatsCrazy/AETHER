@@ -94,28 +94,27 @@ customer-managed KMS keys in production). TLS 1.2+ enforced in transit.
 
 ## Terraform modules
 
-The Terraform codebase is split into 17 reusable modules under
+The Terraform codebase is split into 16 reusable modules under
 `AWS Deployment/aether-aws/terraform/modules/`:
 
 | Module | Manages |
 |--------|---------|
 | `vpc` | VPC, subnets, route tables, NACLs |
-| `ecs_cluster` | ECS cluster, capacity providers, CloudWatch log groups |
-| `ecs_service` | Fargate service, task definition, ALB target group |
+| `vpc_endpoints` | VPC Interface and Gateway endpoints |
+| `alb` | Application Load Balancer, listeners, target groups |
+| `ecs` | ECS cluster, Fargate service, task definition |
+| `ecr` | ECR repositories, lifecycle policies |
+| `aurora` | Aurora PostgreSQL cluster, subnet group, parameter group |
 | `rds` | RDS instance, subnet group, parameter group |
 | `elasticache` | Redis cluster, subnet group |
 | `msk` | MSK cluster, broker configuration |
 | `neptune` | Neptune cluster, subnet group |
-| `opensearch` | OpenSearch domain, access policy |
-| `dynamodb` | DynamoDB table with TTL and auto-scaling |
-| `s3` | S3 bucket, lifecycle rules, replication |
-| `sagemaker` | SageMaker domain, execution role |
-| `iam` | IAM roles, policies, instance profiles |
-| `kms` | KMS key, alias, key policy |
-| `waf` | WAF v2 web ACL, rate-limit rules |
-| `route53` | Hosted zone, DNS records, health checks |
-| `acm` | ACM certificate with DNS validation |
-| `cloudwatch` | Alarms, dashboards, metric filters |
+| `dynamodb_cache` | DynamoDB table used for caching (TTL-backed) |
+| `sqs` | SQS queues, dead-letter queues |
+| `auth0` | Auth0 API resource server and application config |
+| `secrets` | Secrets Manager secrets, rotation schedule |
+| `monitoring` | CloudWatch alarms, dashboards, metric filters |
+| `ml_drift_lambda` | Lambda function for ML model drift detection |
 
 ## Environment cost estimates
 
