@@ -1,4 +1,4 @@
-# Aether AWS Deployment v8.8.0
+# Aether AWS Deployment v8.9.0
 
 Multi-account AWS infrastructure for the Aether platform, provisioned with Terraform and operated via Python automation scripts. Spans six AWS accounts, five VPCs, nine ECS Fargate services, eight managed data stores, and a full security/compliance posture -- all orchestrated from a single configuration source.
 

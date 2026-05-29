@@ -16,7 +16,7 @@
 
 [project]
 name = "aether"
-version = "8.8.0"
+version = "8.9.0"
 description = "Aether Platform — Cross-platform Unified Intelligence Graph"
 requires-python = ">=3.10"
 license = {text = "Proprietary"}
