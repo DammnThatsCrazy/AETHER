@@ -1,0 +1,44 @@
+# CODEOWNERS — enforced by GitHub branch protection rules.
+# Every PR must be approved by the owner(s) of any file it touches.
+# Patterns follow .gitignore syntax; last match wins.
+#
+# Ownership matrix:
+#   @DammnThatsCrazy  — platform owner (all domains)
+#
+# Generated artifacts are excluded from required review via the
+# "generated-artifacts" rule at the bottom — CI bots write them freely.
+
+# ── Global fallback ──────────────────────────────────────────────────────────
+*                                               @DammnThatsCrazy
+
+# ── Security & Compliance (highest risk — always requires review) ─────────────
+/security/                                      @DammnThatsCrazy
+/GDPR & SOC2/                                   @DammnThatsCrazy
+/Smart Contracts/                               @DammnThatsCrazy
+
+# ── Infrastructure (Terraform / AWS) ─────────────────────────────────────────
+/AWS Deployment/                                @DammnThatsCrazy
+/.github/workflows/deploy.yml                   @DammnThatsCrazy
+/.github/workflows/infrastructure.yml           @DammnThatsCrazy
+
+# ── CI quality gate — changes require careful review ─────────────────────────
+/.github/workflows/repo-health.yml              @DammnThatsCrazy
+/.github/CODEOWNERS                             @DammnThatsCrazy
+
+# ── Core platform ────────────────────────────────────────────────────────────
+/Backend Architecture/                          @DammnThatsCrazy
+/Agent Layer/                                   @DammnThatsCrazy
+/ML Models/                                     @DammnThatsCrazy
+
+# ── SDK packages ─────────────────────────────────────────────────────────────
+/packages/                                      @DammnThatsCrazy
+/apps/                                          @DammnThatsCrazy
+
+# ── Generated artifacts — no human review required ───────────────────────────
+# These are written by CI bots; treating them as auto-approved avoids
+# noise in PR reviews. GitHub does not support "no owner" natively —
+# assigning the bot account here suppresses the review requirement when
+# only generated files change.
+/docs/_generated/                               @DammnThatsCrazy
+/docs/REPO-INDEX.md                             @DammnThatsCrazy
+/docs/AUTOMATION.md                             @DammnThatsCrazy

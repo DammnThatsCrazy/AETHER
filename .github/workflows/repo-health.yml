@@ -32,6 +32,30 @@ jobs:
             ml:
               - 'ML Models/**'
 
+  pr-size:
+    # Warn (non-blocking) when a PR exceeds 600 meaningful lines changed.
+    # Generated artifacts, lockfiles, and docs stamps are excluded from the count.
+    # Runs on PRs only; push events to main skip this check.
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Count meaningful lines changed
+        run: |
+          CHANGED=$(git diff --shortstat "origin/${{ github.base_ref }}...HEAD" -- \
+            ':!docs/_generated/**' \
+            ':!docs/REPO-INDEX.md' \
+            ':!docs/AUTOMATION.md' \
+            ':!package-lock.json' \
+            ':!**/package-lock.json' \
+            | grep -oE '[0-9]+ insertion' | grep -oE '[0-9]+' || echo 0)
+          echo "Meaningful lines added: ${CHANGED}"
+          if [ "${CHANGED}" -gt 600 ]; then
+            echo "::warning::PR adds ${CHANGED} lines (soft limit: 600 excluding generated/lockfiles). Consider splitting into smaller PRs for easier review."
+          fi
+
   lint-docs:
     runs-on: ubuntu-latest
     steps:
@@ -80,7 +104,7 @@ jobs:
 
       - name: Check env vars documented
         run: |
-          for var in $(grep -oP '"\K[A-Z_]+(?=")' "$BACKEND_DIR/config/settings.py" | sort -u); do
+          for var in $(grep -oP '"\K[A-Z_]+(?=")' "${BACKEND_DIR}/config/settings.py" | sort -u); do
             if ! grep -q "^${var}=" .env.example 2>/dev/null; then
               echo "WARNING: $var not in .env.example"
             fi
@@ -102,7 +126,7 @@ jobs:
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git add docs/REPO-INDEX.md docs/AUTOMATION.md
-          git commit -m 'docs: synchronize generated repository documentation'
+          git commit -m 'docs: synchronize generated repository documentation [skip ci]'
           git push
 
       - name: Fail PRs on drift
@@ -188,7 +212,8 @@ jobs:
   validate:
     # Aggregate gate: required-status check for branch protection rules.
     # Passes only when all dependent jobs pass (or skip via path filter).
-    needs: [lint-docs, python-tests, ml-tests, typescript]
+    # pr-size is advisory only and never blocks this gate.
+    needs: [lint-docs, python-tests, ml-tests, typescript, pr-size]
     if: always()
     runs-on: ubuntu-latest
     steps:
@@ -219,4 +244,5 @@ jobs:
           if [ "${{ needs.ml-tests.result }}" != "success" ] && [ "${{ needs.ml-tests.result }}" != "skipped" ]; then
             echo "ml-tests failed: ${{ needs.ml-tests.result }}"; exit 1
           fi
+          # pr-size is advisory — skipped on push events; never blocks the gate
           echo "All required jobs passed."

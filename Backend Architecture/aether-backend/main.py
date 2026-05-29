@@ -1,6 +1,6 @@
 """
 Aether Backend — Main Application
-Mounts 17 core services + up to 3 Intelligence Graph services (feature-flagged).
+Mounts 65 service routers across all backend domains.
 Applies middleware and serves the unified API.
 
 Run:
