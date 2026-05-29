@@ -194,6 +194,18 @@ jobs:
     steps:
       - name: Check job results
         run: |
+          # If any job was cancelled the whole workflow was superseded by a
+          # newer concurrency-group run. Exit 0 so the stale check doesn't
+          # block the PR; the newer run will provide the authoritative result.
+          for result in \
+            "${{ needs.lint-docs.result }}" \
+            "${{ needs.python-tests.result }}" \
+            "${{ needs.typescript.result }}" \
+            "${{ needs.ml-tests.result }}"; do
+            if [ "$result" = "cancelled" ]; then
+              echo "Jobs cancelled — superseded by a newer run. Skipping."; exit 0
+            fi
+          done
           if [ "${{ needs.lint-docs.result }}" != "success" ]; then
             echo "lint-docs failed: ${{ needs.lint-docs.result }}"; exit 1
           fi
