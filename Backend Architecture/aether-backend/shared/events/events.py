@@ -246,6 +246,12 @@ class Topic(str, Enum):
     CIS_QUARANTINE_RELEASED              = "aether.cis.quarantine.released"
     CIS_QUARANTINE_ESCALATED             = "aether.cis.quarantine.escalated"
 
+    # SDK Observability
+    SDK_HEALTH_HEARTBEAT     = "aether.sdk.health.heartbeat"
+    SDK_HEALTH_STATE_CHANGED = "aether.sdk.health.state_changed"
+    SDK_DRIFT_DETECTED       = "aether.sdk.drift.detected"
+    SDK_CONFIG_UPDATED       = "aether.sdk.config.updated"
+
     # Dead letter
     DEAD_LETTER = "aether.dlq"
 

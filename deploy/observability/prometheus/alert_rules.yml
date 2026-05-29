@@ -166,3 +166,71 @@ groups:
         annotations:
           summary: "Rate limiting middleware p99 latency >50ms on {{ $labels.layer }}"
           description: "Middleware overhead is too high. Check Redis connectivity and load."
+
+  # ============================================================
+  # SDK Health & Drift Detection Alerts
+  # ============================================================
+  - name: aether_sdk_health
+    rules:
+      - alert: SDKFleetSilence
+        expr: rate(aether_sdk_heartbeats_total[10m]) == 0
+        for: 10m
+        labels:
+          severity: critical
+        annotations:
+          summary: "No SDK heartbeats received for tenant {{ $labels.tenant_id }}"
+          description: "No SDK instance has checked in for 10+ minutes. Possible fleet-wide outage or SDK crash."
+
+      - alert: SDKReplayStorm
+        expr: rate(aether_sdk_drift_incidents_total{drift_type="replay_storm"}[5m]) > 0
+        for: 3m
+        labels:
+          severity: critical
+        annotations:
+          summary: "SDK replay storm detected for tenant {{ $labels.tenant_id }}"
+          description: "Event replay rate has exceeded the safety threshold. Check for stuck retry loops."
+
+      - alert: SDKStaleVersionSpike
+        expr: sum by (tenant_id) (aether_sdk_stale_count) > 10
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "{{ $value }} stale SDK instances for tenant {{ $labels.tenant_id }}"
+          description: "More than 10 SDK instances are running a deprecated version. Prompt upgrade required."
+
+      - alert: SDKDroppedEventSpike
+        expr: rate(aether_sdk_dropped_events_total[5m]) > 100
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "SDK dropped-event rate >100/min for tenant {{ $labels.tenant_id }}"
+          description: "High event drop rate may indicate consent misconfiguration, schema mismatch, or backend rejection."
+
+      - alert: SDKHealthScoreDegraded
+        expr: aether_sdk_health_score < 50
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "SDK {{ $labels.sdk_id }} health score below 50 for tenant {{ $labels.tenant_id }}"
+          description: "SDK composite health score has been below 50 for 5+ minutes. Investigate connectivity, auth, and ingestion."
+
+      - alert: SDKSchemaDriftDetected
+        expr: rate(aether_sdk_drift_incidents_total{drift_type="schema_drift"}[5m]) > 0
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "SDK schema drift detected for tenant {{ $labels.tenant_id }}"
+          description: "An SDK instance is reporting an unexpected schema hash. Possible unauthorized modification or version mismatch."
+
+      - alert: SDKPayloadAnomalySpike
+        expr: rate(aether_sdk_drift_incidents_total{drift_type="payload_anomaly"}[10m]) > 5
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "SDK payload anomaly rate elevated for tenant {{ $labels.tenant_id }}"
+          description: "Multiple SDK instances reporting high event drop rates — possible systematic ingestion failure."
