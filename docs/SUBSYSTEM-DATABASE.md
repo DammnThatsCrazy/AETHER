@@ -12,7 +12,7 @@ source_files:
 canonical_owner: backend@aether
 estimated_read_minutes: 5
 toc_depth: 3
-last_synced_commit: e4c17b2
+last_synced_commit: 987ba94
 ---
 
 # PostgreSQL / Repository Subsystem
@@ -53,8 +53,8 @@ Tables are created automatically on first access. No migration tool is required 
 | `sessions` | `AnalyticsRepository` | Analytics service |
 | `campaigns` | `CampaignRepository` | Campaign service |
 | `consent_records` | `ConsentRepository` | Consent service |
-| `webhooks` | `WebhookRepository` | Notification service |
-| `alerts` | `AlertRepository` | Notification service |
+| `webhooks` | `WebhookRepository` | Notification service (legacy) |
+| `alerts` | `AlertRepository` | Notification service (legacy) |
 | `tenants` | `AdminRepository` | Admin service |
 | `users` | `UserRepository` | Auth (email+password signup, OTP, SSO via Auth0) |
 | `api_keys` | `APIKeyRepository` | Admin service |
@@ -63,6 +63,12 @@ Tables are created automatically on first access. No migration tool is required 
 | `governance_decisions` | `GovernanceRepository` | Governance service |
 | `event_replay_jobs` | `EventReplayRepository` | Events replay worker |
 | `event_envelopes` | `EventEnvelopeRepository` | Events service |
+| `providers` | `ProvidersRepository` | BYOK vault — encrypted channel credentials |
+| `notification_intelligence_events` | `NotificationIntelligenceRepository` | Notification intelligence pipeline |
+| `tenant_notification_configs` | `TenantNotificationConfigRepository` | Per-tenant notification routing config |
+| `operator_actions` | `OperatorActionRepository` | Operator approve/suppress/escalate/annotate audit |
+| `user_notification_channels` | `UserNotificationChannelRepository` | End-user Slack/Discord/Telegram/Webhook registrations |
+| `slack_oauth_states` | `SlackOAuthStateRepository` | Slack OAuth 2.0 CSRF state nonces (10-min TTL) |
 
 ## Environment Variables
 

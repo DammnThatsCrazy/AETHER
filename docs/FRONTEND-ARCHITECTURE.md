@@ -12,7 +12,7 @@ source_files:
 canonical_owner: frontend@aether
 estimated_read_minutes: 35
 toc_depth: 4
-last_synced_commit: e4c17b2
+last_synced_commit: 987ba94
 ---
 
 # Aether Frontend Architecture & Designer Handoff
@@ -464,6 +464,23 @@ Type contracts for all new sub-resources are in `packages/shared/`. The frontend
 | `TimeWindowSelector` | 30d / 60d / 90d / Lifetime chip group | High (shared) |
 | `EvidenceDrawer` | Expandable signal evidence panel | Medium |
 | `DelegationChainDiagram` | Linear chain visualization for agent operator flow | Low |
+
+## Notification Intelligence Components (Kyber, v8.8.0)
+
+Operator-facing and end-user notification components in `apps/kyber/src/features/notifications/`:
+
+| Component / Hook | Purpose |
+|---|---|
+| `OperatorNotificationPanel` | Operator review queue — SLA countdown, severity badge, expandable detail, action bar |
+| `OperatorActionBar` | Approve / Suppress / Escalate / Annotate with inline annotation textarea; RBAC-gated |
+| `NotificationLifecycleBadge` | Color-coded lifecycle state: detected→validated→queued→operator_review→approved→propagated→suppressed→expired |
+| `AuditTrailTimeline` | Vertical timeline rendered from `audit_trail[]`; shows actor, state, timestamp, annotation |
+| `ChannelSettingsPage` | Self-serve channel management — list, toggle active, test, remove |
+| `ChannelConnectModal` | Tabbed wizard: Slack OAuth / Discord webhook / Telegram bot / HTTPS webhook |
+| `ChannelTypeIcon` | SVG icons for Slack, Discord, Telegram, Webhook channel types |
+| `ChannelSeverityFilter` | P0/P1/P2/P3/info multi-select checkbox group |
+| `useIntelligenceNotifications` | Polls `/v1/notifications/intelligence?state=operator_review` (10 s); bridges to `NotificationContext` |
+| `useNotificationChannels` | CRUD for channel management; includes `getSlackConnectUrl()` for OAuth initiation |
 
 ---
 

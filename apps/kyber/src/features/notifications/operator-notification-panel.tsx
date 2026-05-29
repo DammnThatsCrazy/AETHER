@@ -11,7 +11,7 @@ interface Props {
   readonly canEscalate: boolean;
 }
 
-function SlaCountdown({ expiresAt }: { readonly expiresAt?: string }) {
+function SlaCountdown({ expiresAt }: { readonly expiresAt: string | undefined }) {
   if (!expiresAt) return null;
   const remaining = new Date(expiresAt).getTime() - Date.now();
   if (remaining <= 0) return <span className="text-xs text-red-400 font-medium">SLA exceeded</span>;
@@ -130,7 +130,7 @@ const NotificationCard: FC<NotificationCardProps> = ({
       {expanded && n.audit_trail.length > 0 && (
         <div className="border-t border-zinc-700 px-4 py-3">
           <p className="text-xs font-semibold text-zinc-400 mb-3">Audit Trail</p>
-          <AuditTrailTimeline trail={n.audit_trail as AuditEntry[]} />
+          <AuditTrailTimeline trail={n.audit_trail as unknown as readonly AuditEntry[]} />
         </div>
       )}
     </article>
