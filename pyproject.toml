@@ -109,6 +109,7 @@ markers = [
     "asyncio: async test functions",
     "integration: integration tests requiring backend deps",
 ]
+asyncio_mode = "auto"
 addopts = "-n auto"
 filterwarnings = [
     "ignore::DeprecationWarning",
