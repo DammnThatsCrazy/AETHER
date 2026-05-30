@@ -1,6 +1,7 @@
 import { useEffect, useState, type ReactNode } from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
 import { cn, Badge, Button, GlyphIcon, useTheme } from '@aether/ui';
+import { AetherLogo } from '@aether-app/components/aether-logo';
 import { useAuth } from '@aether-app/features/auth';
 import { SESSION_KEY } from '@aether-app/features/auth/auth-context';
 
@@ -84,9 +85,7 @@ export function AppShell({ children }: AppShellProps) {
       )}>
         {/* Brand */}
         <div className="px-4 py-4 border-b border-border-default">
-          <div className="flex items-center gap-2">
-            <span className="text-lg font-semibold font-mono text-text-primary">[ AETHER ]</span>
-          </div>
+          <AetherLogo size={28} />
           {user && (
             <p className="text-xs text-text-muted mt-0.5 truncate font-mono">{user.email}</p>
           )}
