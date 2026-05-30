@@ -167,12 +167,10 @@ export function SignupPage() {
       <div className="w-full max-w-md">
         <div className="text-center mb-6">
           <AetherLogo size={36} className="justify-center mb-2" />
-          <div className="flex items-center justify-center gap-2 text-xs font-mono text-text-muted">
-            <span className={step >= 1 ? 'text-accent' : ''}>01</span>
+          <div className="flex items-center justify-center gap-1 text-xs font-mono text-text-muted">
+            <span className="text-accent">0{step}</span>
             <span>/</span>
-            <span className={step >= 2 ? 'text-accent' : ''}>02</span>
-            <span>/</span>
-            <span className={step >= 3 ? 'text-accent' : ''}>03</span>
+            <span>03</span>
           </div>
         </div>
 
