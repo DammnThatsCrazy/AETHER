@@ -24,7 +24,7 @@ EXTENSIONS = (".ts", ".tsx")
 INDEX_FILES = tuple(f"index{ext}" for ext in EXTENSIONS)
 
 ALIAS_ROOTS = {
-    "@kyber/": Path("apps/kyber/src"),
+    "@kyber/": Path("frontend/kyber/src"),
     "@aether/shared/": Path("packages/shared/src"),
     "@aether/web/": Path("packages/web/src"),
     "@aether/react-native/": Path("packages/react-native/src"),

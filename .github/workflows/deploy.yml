@@ -94,7 +94,7 @@ jobs:
         uses: docker/build-push-action@v5
         with:
           context: .
-          file: apps/aether/Dockerfile
+          file: frontend/aether/Dockerfile
           push: true
           tags: |
             ${{ steps.ecr-login.outputs.registry }}/aether-aether:${{ steps.tag.outputs.tag }}
@@ -114,7 +114,7 @@ jobs:
         uses: docker/build-push-action@v5
         with:
           context: .
-          file: apps/kyber/Dockerfile
+          file: frontend/kyber/Dockerfile
           push: true
           tags: |
             ${{ steps.ecr-login.outputs.registry }}/aether-kyber:${{ steps.tag.outputs.tag }}
