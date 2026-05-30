@@ -12,7 +12,7 @@ source_files:
 canonical_owner: backend@aether
 estimated_read_minutes: 5
 toc_depth: 3
-last_synced_commit: 987ba94
+last_synced_commit: 3bc69b5
 ---
 
 # PostgreSQL / Repository Subsystem
