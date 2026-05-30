@@ -13,7 +13,7 @@ export const SESSION_KEY = 'aether_session_key';
 interface AuthContextValue extends AuthState {
   login: () => Promise<void>;
   logout: () => Promise<void>;
-  apiKeyLogin: (apiKey: string) => void;
+  apiKeyLogin: (apiKey: string, email?: string, displayName?: string) => void;
 }
 
 type AuthAction =
@@ -232,10 +232,13 @@ export function AuthProvider({ children }: { readonly children: ReactNode }) {
     window.location.href = authUrl.toString();
   }, []);
 
-  const apiKeyLogin = useCallback((apiKey: string) => {
+  const apiKeyLogin = useCallback((apiKey: string, email = '', displayName = '') => {
     sessionStorage.setItem(SESSION_KEY, apiKey);
     currentTokens = { accessToken: apiKey, idToken: '', refreshToken: undefined, expiresAt: Date.now() / 1000 + 86400 };
-    dispatch({ type: 'AUTH_SUCCESS', user: MOCK_USER, tokens: currentTokens });
+    const user: AetherUser = email
+      ? { id: apiKey, email, displayName: displayName || email }
+      : MOCK_USER;
+    dispatch({ type: 'AUTH_SUCCESS', user, tokens: currentTokens });
   }, []);
 
   const logout = useCallback(async () => {

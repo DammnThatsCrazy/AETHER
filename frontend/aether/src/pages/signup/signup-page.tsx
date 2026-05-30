@@ -46,23 +46,35 @@ function CodeBlock({ code, onCopy }: { code: string; onCopy: () => void }) {
   );
 }
 
+const PLAN_OPTIONS = [
+  { value: 'P1', label: 'Hobbyist — $99/mo' },
+  { value: 'P2', label: 'Professional — $499/mo' },
+  { value: 'P3', label: 'Growth Intelligence — $1,499/mo' },
+  { value: 'P4', label: 'Protocol Master — $3,999/mo' },
+];
+
 export function SignupPage() {
   const navigate = useNavigate();
   const { apiKeyLogin } = useAuth();
   const { toast } = useToast();
 
   const [step, setStep] = useState<Step>(1);
+  // Step 1 form fields
+  const [name, setName] = useState('');
   const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [planTier, setPlanTier] = useState('P1');
+  const [registerError, setRegisterError] = useState<string | null>(null);
+  // Step 2 OTP
   const [otp, setOtp] = useState('');
   const [otpError, setOtpError] = useState<string | null>(null);
   const [resendHighlighted, setResendHighlighted] = useState(false);
   const [resendCooldown, setResendCooldown] = useState(0);
-  const [emailLoading, setEmailLoading] = useState(false);
+  const [registerLoading, setRegisterLoading] = useState(false);
   const [otpLoading, setOtpLoading] = useState(false);
   const [ssoLoading, setSsoLoading] = useState(false);
   const [revealedKey, setRevealedKey] = useState<string | null>(null);
   const [keySaved, setKeySaved] = useState(false);
-  const [showOtp, setShowOtp] = useState(false);
 
   useEffect(() => {
     if (resendCooldown <= 0) return;
@@ -70,18 +82,22 @@ export function SignupPage() {
     return () => clearTimeout(id);
   }, [resendCooldown]);
 
-  async function handleEmailSubmit(e: React.FormEvent) {
+  async function handleRegisterSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (!email.trim()) return;
-    setEmailLoading(true);
+    if (name.trim().length < 2) { setRegisterError('Name must be at least 2 characters'); return; }
+    if (password.length < 8) { setRegisterError('Password must be at least 8 characters'); return; }
+    setRegisterLoading(true);
+    setRegisterError(null);
     try {
-      await api.auth.requestOtp(email.trim());
-    } catch {
-      // silent — don't reveal if email exists
-    } finally {
-      setEmailLoading(false);
-      setShowOtp(true);
+      await api.auth.register({ name: name.trim(), email: email.trim(), password, plan_tier: planTier });
+      setStep(2);
       setResendCooldown(RESEND_COOLDOWN);
+    } catch {
+      // Anti-enumeration: always advance to OTP step even if email already registered
+      setStep(2);
+      setResendCooldown(RESEND_COOLDOWN);
+    } finally {
+      setRegisterLoading(false);
     }
   }
 
@@ -91,10 +107,11 @@ export function SignupPage() {
     setOtpLoading(true);
     setOtpError(null);
     try {
-      const { api_key } = await api.auth.verifyOtp(email.trim(), otp);
-      apiKeyLogin(api_key);
+      const { api_key, name: verifiedName } = await api.auth.verifyEmail(email.trim(), otp);
+      apiKeyLogin(api_key, email.trim(), verifiedName || name.trim());
       setRevealedKey(api_key);
-      setStep(2);
+      setStep(2 as Step);
+      // Keep on step 2 to show key reveal; advance to 3 after user saves key
     } catch {
       setOtpError('Invalid or expired code — try again or request a new one');
       setResendHighlighted(true);
@@ -109,7 +126,9 @@ export function SignupPage() {
     setResendHighlighted(false);
     setOtpError(null);
     setResendCooldown(RESEND_COOLDOWN);
-    try { await api.auth.requestOtp(email.trim()); } catch { /* silent */ }
+    try {
+      await api.auth.register({ name: name.trim() || 'User', email: email.trim(), password: password || 'resend', plan_tier: planTier });
+    } catch { /* silent — anti-enumeration */ }
   }
 
   function handleSso(provider: SocialProvider) {
@@ -159,18 +178,30 @@ export function SignupPage() {
 
         <div className="bg-surface-raised border border-border-default rounded-lg p-6">
 
-          {/* ── Step 1: Email + OTP ──────────────────────────────── */}
-          {step === 1 && !showOtp && (
+          {/* ── Step 1: Registration form ─────────────────────────── */}
+          {step === 1 && (
             <div className="space-y-5">
               <div>
                 <h1 className="text-sm font-medium text-text-primary">Create your account</h1>
-                <p className="text-xs text-text-muted mt-0.5">Enter your email to get started</p>
+                <p className="text-xs text-text-muted mt-0.5">Start with a plan you can upgrade anytime</p>
               </div>
-              <form onSubmit={(e) => { void handleEmailSubmit(e); }} className="space-y-3">
+              <form onSubmit={(e) => { void handleRegisterSubmit(e); }} className="space-y-3">
                 <div className="flex flex-col gap-1">
-                  <label htmlFor="signup-email" className="text-xs text-text-secondary">
-                    Work email
-                  </label>
+                  <label htmlFor="signup-name" className="text-xs text-text-secondary">Full name</label>
+                  <input
+                    id="signup-name"
+                    type="text"
+                    autoComplete="name"
+                    required
+                    minLength={2}
+                    value={name}
+                    onChange={e => setName(e.target.value)}
+                    placeholder="Alex Reeves"
+                    className="bg-surface-base text-text-primary border border-border-default rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-border-focus placeholder:text-text-muted"
+                  />
+                </div>
+                <div className="flex flex-col gap-1">
+                  <label htmlFor="signup-email" className="text-xs text-text-secondary">Work email</label>
                   <input
                     id="signup-email"
                     type="email"
@@ -182,8 +213,37 @@ export function SignupPage() {
                     className="bg-surface-base text-text-primary border border-border-default rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-border-focus placeholder:text-text-muted"
                   />
                 </div>
-                <Button type="submit" variant="primary" size="sm" className="w-full" disabled={!email.trim() || emailLoading}>
-                  {emailLoading ? '[···]' : 'Continue'}
+                <div className="flex flex-col gap-1">
+                  <label htmlFor="signup-password" className="text-xs text-text-secondary">Password</label>
+                  <input
+                    id="signup-password"
+                    type="password"
+                    autoComplete="new-password"
+                    required
+                    minLength={8}
+                    value={password}
+                    onChange={e => setPassword(e.target.value)}
+                    placeholder="Min. 8 characters"
+                    className="bg-surface-base text-text-primary border border-border-default rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-border-focus placeholder:text-text-muted"
+                  />
+                </div>
+                <div className="flex flex-col gap-1">
+                  <label htmlFor="signup-plan" className="text-xs text-text-secondary">Plan</label>
+                  <select
+                    id="signup-plan"
+                    value={planTier}
+                    onChange={e => setPlanTier(e.target.value)}
+                    className="bg-surface-base text-text-primary border border-border-default rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-border-focus"
+                  >
+                    {PLAN_OPTIONS.map(o => (
+                      <option key={o.value} value={o.value}>{o.label}</option>
+                    ))}
+                  </select>
+                </div>
+                {registerError && <p className="text-danger text-xs font-mono">{registerError}</p>}
+                <Button type="submit" variant="primary" size="sm" className="w-full"
+                  disabled={!name.trim() || !email.trim() || !password || registerLoading}>
+                  {registerLoading ? '[···]' : 'Continue →'}
                 </Button>
               </form>
               <div className="flex items-center gap-3">
@@ -220,20 +280,21 @@ export function SignupPage() {
             </div>
           )}
 
-          {step === 1 && showOtp && (
+          {/* ── Step 2: OTP verification (before key is revealed) ── */}
+          {step === 2 && !revealedKey && (
             <form onSubmit={(e) => { void handleOtpSubmit(e); }} className="space-y-4">
               <div>
                 <h1 className="text-sm font-medium text-text-primary">Check your email</h1>
                 <p className="text-xs text-text-muted mt-0.5">
-                  We sent a code to{' '}
+                  We sent a verification code to{' '}
                   <span className="font-mono text-accent">{email}</span>
                 </p>
                 <button
                   type="button"
-                  onClick={() => { setShowOtp(false); setOtp(''); setOtpError(null); }}
+                  onClick={() => { setStep(1); setOtp(''); setOtpError(null); }}
                   className="text-xs text-text-muted underline mt-0.5"
                 >
-                  Change email
+                  Change details
                 </button>
               </div>
               <div className="flex flex-col gap-2">
@@ -260,7 +321,7 @@ export function SignupPage() {
           )}
 
           {/* ── Step 2: API Key Reveal + SDK Install ─────────────── */}
-          {step === 2 && (
+          {step === 2 && revealedKey && (
             <div className="space-y-5">
               <div>
                 <h1 className="text-sm font-medium text-text-primary">Your API key</h1>

@@ -118,16 +118,16 @@ export const handlers = [
   http.post(`${API}/v1/contact/enterprise`, () =>
     HttpResponse.json({ data: { received: true, message: "Thank you — we'll be in touch within 2 business days." }, status: 'ok', timestamp: new Date().toISOString() }),
   ),
-  http.post(`${API}/v1/auth/otp/request`, () =>
-    HttpResponse.json({ data: { message: 'Code sent' }, status: 'ok', timestamp: new Date().toISOString() }),
+  http.post(`${API}/v1/auth/register`, async ({ request }) => {
+    const body = await request.json() as { email?: string };
+    return HttpResponse.json({ data: { message: 'Check your email for a verification code.', email: body.email ?? 'user@example.com' }, status: 'ok', timestamp: new Date().toISOString() });
+  }),
+  http.post(`${API}/v1/auth/verify-email`, () =>
+    HttpResponse.json({ data: { api_key: 'ak_mock_dev_key_from_otp_verify', tenant_id: 'tenant_demo_001', name: 'Alex Reeves', message: 'Verified' }, status: 'ok', timestamp: new Date().toISOString() }),
   ),
-  http.post(`${API}/v1/auth/otp/verify`, () =>
-    HttpResponse.json({ data: { api_key: 'ak_mock_dev_key_from_otp_verify', tenant_id: 'tenant_demo_001', message: 'Verified' }, status: 'ok', timestamp: new Date().toISOString() }),
-  ),
-  http.post(`${API}/v1/auth/register`, () =>
-    HttpResponse.json({ data: { message: 'Check your email', email: 'user@example.com' }, status: 'ok', timestamp: new Date().toISOString() }),
-  ),
-  http.post(`${API}/v1/auth/login`, () =>
-    HttpResponse.json({ data: { api_key: 'ak_mock_login_key', tenant_id: 'tenant_demo_001' }, status: 'ok', timestamp: new Date().toISOString() }),
-  ),
+  http.post(`${API}/v1/auth/login`, async ({ request }) => {
+    const body = await request.json() as { email?: string };
+    return HttpResponse.json({ data: { api_key: 'ak_mock_login_key', tenant_id: 'tenant_demo_001', email: body.email }, status: 'ok', timestamp: new Date().toISOString() });
+  }),
+  http.get(`${API}/v1/billing/plans`, () => HttpResponse.json(mockPlans)),
 ];

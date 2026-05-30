@@ -261,15 +261,16 @@ export const api = {
   // ── Consent & Privacy ──────────────────────────────────────────────────────
   consent: {
     getProfile: (userId: string) =>
-      restClient.get(`/v1/consent/${userId}`, wrap(z.object({
+      restClient.get(`/v1/consent/records/${userId}`, wrap(z.object({
         user_id: z.string(),
-        purposes: z.record(z.boolean()),
+        purposes: z.array(z.string()),
+        granted: z.boolean(),
         updated_at: z.string().optional(),
         version: z.string().optional(),
       }).passthrough())).then(r => r.data),
 
-    update: (userId: string, purposes: Record<string, boolean>) =>
-      restClient.post(`/v1/consent/${userId}`, wrap(unknownSchema), { purposes }),
+    update: (userId: string, purposes: string[], granted: boolean, source = 'ui') =>
+      restClient.post('/v1/consent/records', wrap(unknownSchema), { user_id: userId, purposes, granted, source }),
 
     submitDsr: (userId: string, requestType: 'access' | 'deletion' | 'portability', details?: Record<string, unknown>) =>
       restClient.post('/v1/consent/dsr', wrap(unknownSchema), { user_id: userId, request_type: requestType, ...details }),
@@ -822,16 +823,21 @@ export const api = {
       restClient.get(`/v1/commerce/agent/${agentId}/spend`, wrap(unknownSchema)).then(r => r.data),
   },
 
-  // ── Customer auth (email OTP + SSO callback) ──────────────────────────────
+  // ── Customer auth (email registration + OTP + SSO callback) ─────────────
   auth: {
-    /** Request a one-time password sent to email. */
-    requestOtp: (email: string) =>
-      restClient.post('/v1/auth/otp/request', wrap(unknownSchema), { email }).then(r => r.data),
+    /** Step 1: register email+password → sends 6-digit OTP. */
+    register: (body: { name: string; email: string; password: string; plan_tier: string }) =>
+      restClient.post('/v1/auth/register', wrap(unknownSchema), body).then(r => r.data),
 
-    /** Verify OTP — returns the tenant API key on success. */
-    verifyOtp: (email: string, otp: string) =>
-      restClient.post('/v1/auth/otp/verify', wrap(unknownSchema), { email, otp })
-        .then(r => r.data as { api_key: string }),
+    /** Step 2: verify OTP code — creates tenant + returns API key. */
+    verifyEmail: (email: string, code: string) =>
+      restClient.post('/v1/auth/verify-email', wrap(unknownSchema), { email, code })
+        .then(r => r.data as { api_key: string; tenant_id: string; name: string }),
+
+    /** Email + password login for returning users. */
+    login: (email: string, password: string) =>
+      restClient.post('/v1/auth/login', wrap(unknownSchema), { email, password })
+        .then(r => r.data as { api_key: string; tenant_id: string }),
 
     /** Exchange Auth0 JWT for a tenant API key (SSO callback). */
     ssoCallback: (jwt: string) =>
