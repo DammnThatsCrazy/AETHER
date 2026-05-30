@@ -5,12 +5,12 @@
   "description": "Aether SDK \u2014 Multi-platform behavioral analytics and Web3 data collection",
   "workspaces": [
     "packages/shared",
-    "packages/ui",
     "packages/web",
     "packages/react-native",
-    "apps/kyber",
-    "apps/aether",
-    "apps/docs"
+    "frontend/aether",
+    "frontend/kyber",
+    "frontend/shared",
+    "frontend/docs"
   ],
   "scripts": {
     "build": "npm run build --workspaces --if-present",
