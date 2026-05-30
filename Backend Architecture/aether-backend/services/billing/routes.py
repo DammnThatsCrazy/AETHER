@@ -6,6 +6,7 @@ Checkout and Billing Portal sessions, exposes invoice history, and
 provides an admin endpoint to trigger the overage invoice cycle.
 
 Endpoints:
+    GET   /v1/billing/plans                     List all available plan tiers
     POST  /v1/billing/checkout                  Create Stripe Checkout session
     POST  /v1/billing/portal                    Create Stripe Billing Portal session
     GET   /v1/billing/invoices                  List invoices for calling tenant
@@ -59,6 +60,25 @@ def _require_tenant(request: Request):
 # ---------------------------------------------------------------------------
 # Customer endpoints
 # ---------------------------------------------------------------------------
+
+@router.get("/plans")
+async def list_plans():
+    """Return all available plan tiers. Public — no auth required."""
+    from shared.plans.catalog import PLAN_CATALOG
+    plans = [
+        {
+            "plan_id": plan.plan_id,
+            "display_name": plan.display_name,
+            "price_monthly": int(plan.pricing.option_a),
+            "monthly_quota": plan.monthly_quota,
+            "burst_rpm": plan.burst_rpm,
+            "service_count": plan.service_count,
+            "target_user": plan.target_user,
+        }
+        for plan in PLAN_CATALOG.values()
+    ]
+    return APIResponse(data={"plans": plans}).to_dict()
+
 
 @router.post("/checkout")
 async def create_checkout_session(body: CheckoutRequest, request: Request):

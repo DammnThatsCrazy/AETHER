@@ -21,10 +21,16 @@ export default defineConfig({
   build: {
     sourcemap: true,
     rollupOptions: {
+      // Exclude MSW from production bundles — it's only used in local-mocked mode
+      external: (id) => id.includes('msw') && process.env.VITE_AETHER_ENV !== 'local-mocked',
       output: {
-        manualChunks: {
-          react: ['react', 'react-dom'],
-          router: ['react-router-dom'],
+        manualChunks(id) {
+          if (id.includes('node_modules/react-dom')) return 'react-dom';
+          if (id.includes('node_modules/react')) return 'react';
+          if (id.includes('node_modules/react-router')) return 'router';
+          if (id.includes('node_modules/@auth0')) return 'auth0';
+          if (id.includes('node_modules/zod')) return 'zod';
+          if (id.includes('frontend/shared/src')) return 'ui';
         },
       },
     },
