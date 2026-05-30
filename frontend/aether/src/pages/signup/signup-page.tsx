@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { AetherLogo } from '@aether-app/components/aether-logo';
 import {
   Button,
   GlyphIcon,
@@ -146,7 +147,7 @@ export function SignupPage() {
     <div className="min-h-screen bg-surface-base flex items-center justify-center px-4 py-8">
       <div className="w-full max-w-md">
         <div className="text-center mb-6">
-          <div className="font-mono text-2xl text-accent mb-1">[ AETHER ]</div>
+          <AetherLogo size={36} className="justify-center mb-2" />
           <div className="flex items-center justify-center gap-2 text-xs font-mono text-text-muted">
             <span className={step >= 1 ? 'text-accent' : ''}>01</span>
             <span>/</span>

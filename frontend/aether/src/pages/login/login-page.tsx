@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { Button, GlyphIcon, SocialProviderIcon } from '@aether/ui';
+import { AetherLogo } from '@aether-app/components/aether-logo';
 import type { SocialProvider } from '@aether/ui';
 import { useAuth } from '@aether-app/features/auth';
 import { api } from '@aether-app/lib/api/endpoints';
@@ -98,8 +99,8 @@ export function LoginPage() {
     <div className="min-h-screen bg-surface-base flex items-center justify-center px-4">
       <div className="w-full max-w-sm">
         <div className="text-center mb-8">
-          <div className="font-mono text-2xl text-accent mb-1">[ AETHER ]</div>
-          <p className="text-text-muted text-xs font-mono">Sign in to your account</p>
+          <AetherLogo size={36} className="justify-center mb-2" />
+          <p className="text-text-muted text-sm">Sign in to your account</p>
         </div>
 
         <div className="bg-surface-raised border border-border-default rounded-lg p-6 space-y-5">

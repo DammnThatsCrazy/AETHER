@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth0 } from '@auth0/auth0-react';
 import { Button, ErrorState } from '@aether/ui';
+import { AetherLogo } from '@aether-app/components/aether-logo';
 import { isLocalMocked } from '@aether-app/lib/env';
 import { useAuth } from '@aether-app/features/auth';
 import { api } from '@aether-app/lib/api/endpoints';
@@ -40,7 +41,7 @@ export function CallbackPage() {
     return (
       <div className="flex h-screen items-center justify-center bg-surface-base px-4">
         <div className="max-w-sm w-full text-center space-y-4">
-          <div className="font-mono text-2xl text-accent">[ AETHER ]</div>
+          <AetherLogo size={32} className="justify-center" />
           <div className="bg-danger/10 border border-danger/30 rounded p-4 text-xs font-mono text-danger">
             <span className="font-medium">Sign-in failed:</span> {msg}
           </div>
@@ -56,7 +57,7 @@ export function CallbackPage() {
     return (
       <div className="flex h-screen items-center justify-center bg-surface-base px-4">
         <div className="max-w-sm w-full text-center space-y-4">
-          <div className="font-mono text-2xl text-accent">[ AETHER ]</div>
+          <AetherLogo size={32} className="justify-center" />
           <ErrorState message={exchangeError ?? 'Sign-in failed'} />
           <Button variant="primary" size="sm" onClick={() => void navigate('/login')}>
             Back to login
@@ -69,7 +70,7 @@ export function CallbackPage() {
   return (
     <div className="flex h-screen items-center justify-center bg-surface-base">
       <div className="text-center space-y-2">
-        <div className="font-mono text-2xl text-accent">[ AETHER ]</div>
+        <AetherLogo size={32} className="justify-center" />
         <div className="text-text-secondary text-sm font-mono">Completing sign-in...</div>
       </div>
     </div>

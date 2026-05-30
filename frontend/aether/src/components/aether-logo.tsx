@@ -1,0 +1,44 @@
+interface AetherLogoProps {
+  /** Size of the logo icon (height in px). Default: 32 */
+  size?: number;
+  /** Whether to show the "Aether" wordmark next to the icon. Default: true */
+  showWordmark?: boolean;
+  className?: string;
+}
+
+/** The five stacked diamond layers that form the Aether brand mark. */
+function AetherLayers({ size = 32 }: { size: number }) {
+  const aspectRatio = 200 / 232;
+  const width = Math.round(size * aspectRatio);
+  return (
+    <svg
+      width={width}
+      height={size}
+      viewBox="0 0 200 232"
+      fill="none"
+      aria-hidden="true"
+    >
+      <path d="M20.8 177.2L89.2 146.8Q100 142 110.8 146.8L179.2 177.2Q190 182 179.2 186.8L110.8 217.2Q100 222 89.2 217.2L20.8 186.8Q10 182 20.8 177.2Z" fill="#6b9a7c" />
+      <path d="M20.8 145.2L89.2 114.8Q100 110 110.8 114.8L179.2 145.2Q190 150 179.2 154.8L110.8 185.2Q100 190 89.2 185.2L20.8 154.8Q10 150 20.8 145.2Z" fill="#a87575" />
+      <path d="M20.8 113.2L89.2 82.8Q100 78 110.8 82.8L179.2 113.2Q190 118 179.2 122.8L110.8 153.2Q100 158 89.2 153.2L20.8 122.8Q10 118 20.8 113.2Z" fill="#c9975a" />
+      <path d="M20.8 81.2L89.2 50.8Q100 46 110.8 50.8L179.2 81.2Q190 86 179.2 90.8L110.8 121.2Q100 126 89.2 121.2L20.8 90.8Q10 86 20.8 81.2Z" fill="#5a85a8" />
+      <path d="M20.8 49.2L89.2 18.8Q100 14 110.8 18.8L179.2 49.2Q190 54 179.2 58.8L110.8 89.2Q100 94 89.2 89.2L20.8 58.8Q10 54 20.8 49.2Z" fill="#3a6896" />
+    </svg>
+  );
+}
+
+export function AetherLogo({ size = 32, showWordmark = true, className }: AetherLogoProps) {
+  return (
+    <div className={`flex items-center gap-2.5 ${className ?? ''}`}>
+      <AetherLayers size={size} />
+      {showWordmark && (
+        <span
+          style={{ fontFamily: 'Geist, system-ui, sans-serif', letterSpacing: '-0.03em' }}
+          className="font-medium text-text-primary"
+        >
+          Aether
+        </span>
+      )}
+    </div>
+  );
+}
