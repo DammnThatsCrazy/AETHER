@@ -872,15 +872,15 @@ export const api = {
   // ── API key management ─────────────────────────────────────────────────────
   settings: {
     listKeys: () =>
-      restClient.get('/v1/settings/api-keys', wrap(unknownSchema))
-        .then(r => r.data as { keys: Array<{ id: string; name: string; tier: string; permissions: string[]; last_used_at: string | null; created_at: string }> }),
+      restClient.get('/v1/me/api-keys', wrap(unknownSchema))
+        .then(r => r.data as { keys: Array<{ id: string; name: string; tier: string; permissions: string[]; last_used_at: string | null }> }),
 
     createKey: (payload: { name: string; tier?: string; permissions?: string[] }) =>
-      restClient.post('/v1/settings/api-keys', wrap(unknownSchema), payload)
-        .then(r => r.data as { id: string; name: string; key: string; tier: string; permissions: string[] }),
+      restClient.post('/v1/me/api-keys', wrap(unknownSchema), payload)
+        .then(r => r.data as { id: string; name: string; key: string; api_key: string; tier: string; permissions: string[] }),
 
     revokeKey: (id: string) =>
-      restClient.delete(`/v1/settings/api-keys/${id}`, wrap(unknownSchema)),
+      restClient.delete(`/v1/me/api-keys/${id}`, wrap(unknownSchema)),
   },
 
   // ── Billing & plans ────────────────────────────────────────────────────────

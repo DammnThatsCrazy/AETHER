@@ -90,7 +90,7 @@ function NewKeyModal({ open, onClose, onCreated }: NewKeyModalProps) {
     if (!name.trim()) return;
     const result = await mutate({ name: name.trim() });
     if (result) {
-      onCreated(result.key);
+      onCreated((result as { api_key?: string; key?: string }).api_key ?? (result as { key: string }).key);
       setName('');
     }
   }
