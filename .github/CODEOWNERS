@@ -5,8 +5,11 @@
 # Ownership matrix:
 #   @DammnThatsCrazy  — platform owner (all domains)
 #
-# Generated artifacts are excluded from required review via the
-# "generated-artifacts" rule at the bottom — CI bots write them freely.
+# Note: GitHub does not support "no owner" natively. Generated artifacts
+# (docs/_generated/, docs/REPO-INDEX.md, docs/AUTOMATION.md) fall through
+# to the global * rule and require the same review as all other files.
+# To suppress review for CI-generated files, configure a bypass actor
+# (e.g. the github-actions[bot] app) in branch protection settings.
 
 # ── Global fallback ──────────────────────────────────────────────────────────
 *                                               @DammnThatsCrazy
@@ -34,11 +37,8 @@
 /packages/                                      @DammnThatsCrazy
 /apps/                                          @DammnThatsCrazy
 
-# ── Generated artifacts — no human review required ───────────────────────────
-# These are written by CI bots; treating them as auto-approved avoids
-# noise in PR reviews. GitHub does not support "no owner" natively —
-# assigning the bot account here suppresses the review requirement when
-# only generated files change.
-/docs/_generated/                               @DammnThatsCrazy
-/docs/REPO-INDEX.md                             @DammnThatsCrazy
-/docs/AUTOMATION.md                             @DammnThatsCrazy
+# ── Generated artifacts ───────────────────────────────────────────────────────
+# docs/_generated/, docs/REPO-INDEX.md, and docs/AUTOMATION.md are written
+# by CI. They are covered by the global * rule above. To exempt them from
+# required review, add github-actions[bot] (or a dedicated CI service account)
+# as a bypass actor in the branch protection settings — not via CODEOWNERS.
