@@ -11,7 +11,7 @@ source_files:
 canonical_owner: backend@aether
 estimated_read_minutes: 60
 toc_depth: 3
-last_synced_commit: 6cc58f9
+last_synced_commit: 7c30262
 ---
 # Aether Backend API v8.8.0 — Endpoint Specification
 
@@ -1745,3 +1745,53 @@ Returns the last 50 canary detection events with API key (masked), IP, canary ID
 | `ENABLE_QUERY_ANALYSIS` | `true` | Enable pattern detection and risk scoring |
 | `WATERMARK_SECRET_KEY` | (default) | Secret for watermark generation (change in production) |
 | `CANARY_SECRET_SEED` | (default) | Seed for canary input generation (change in production) |
+
+## Notification Intelligence Service (v8.8.0)
+
+Event-driven multi-channel operator notification pipeline. Ingests intelligence signals from Kafka (anomaly detection, CIS quarantine, agent escalation, ML extraction, governance, commerce approvals), routes them to Slack/Discord/Telegram/Webhook, and surfaces an operator review queue with RBAC-gated approve/suppress/escalate/annotate actions.
+
+### Intelligence Notifications
+
+| Method | Path | Description |
+|--------|------|-------------|
+| POST | `/v1/notifications/intelligence` | Emit a new intelligence notification |
+| GET | `/v1/notifications/intelligence` | List notifications (filter: `state`, `severity`, `source_topic`) |
+| GET | `/v1/notifications/intelligence/{id}` | Get single notification with audit trail |
+| GET | `/v1/notifications/intelligence/{id}/audit` | Full append-only audit log |
+| PATCH | `/v1/notifications/intelligence/{id}/approve` | Operator approve (propagates to graph) |
+| PATCH | `/v1/notifications/intelligence/{id}/suppress` | Operator suppress |
+| PATCH | `/v1/notifications/intelligence/{id}/escalate` | Operator escalate |
+| PATCH | `/v1/notifications/intelligence/{id}/annotate` | Add annotation |
+| POST | `/v1/notifications/intelligence/{id}/replay` | Re-deliver to all active channels |
+
+### Tenant Configuration
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/v1/notifications/config` | Get tenant notification config |
+| PUT | `/v1/notifications/config` | Update config (Slack token stored via vault) |
+
+### Channel Management (End-User Self-Service)
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/v1/notifications/channels` | List connected channels |
+| POST | `/v1/notifications/channels` | Register Discord/Telegram/Webhook channel |
+| PATCH | `/v1/notifications/channels/{id}` | Update severity filter or name |
+| DELETE | `/v1/notifications/channels/{id}` | Remove channel |
+| POST | `/v1/notifications/channels/{id}/test` | Send test message; sets `verified_at` on success |
+| GET | `/v1/notifications/channels/slack/connect` | Initiate Slack OAuth (returns redirect URL) |
+| GET | `/v1/notifications/channels/slack/callback` | Slack OAuth callback |
+
+### Interactive Callbacks
+
+| Method | Path | Description |
+|--------|------|-------------|
+| POST | `/v1/notifications/slack/callback` | Slack Block Kit action handler (HMAC-verified) |
+| POST | `/v1/notifications/telegram/callback` | Telegram inline keyboard handler |
+
+### Required Permissions
+
+- `notifications:approve` — operator approve/suppress/escalate
+- `notifications:manage` — config management
+- `notifications:channels:write` — channel registration/removal

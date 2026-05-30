@@ -11,7 +11,7 @@ source_files:
 canonical_owner: backend@aether
 estimated_read_minutes: 4
 toc_depth: 3
-last_synced_commit: 6cc58f9
+last_synced_commit: 7c30262
 ---
 
 # Events / Kafka Subsystem
@@ -56,6 +56,7 @@ Topics are organized by domain:
 - **Agent:** `aether.agent.task.started`, `aether.agent.task.completed`
 - **Commerce:** `aether.commerce.payment.sent`, `aether.commerce.agent.hired`
 - **A2H:** `aether.agent.notification.sent`, `aether.agent.recommendation.made`
+- **Notification Intelligence:** `aether.notifications.intelligence.detected`, `.validated`, `.queued`, `.delivered`, `.failed`, `.propagated`, `.expired`; `aether.notifications.operator.action`; `aether.notifications.channel.connected`, `.disconnected`
 
 ## Failure Modes
 

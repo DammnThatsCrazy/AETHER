@@ -1343,6 +1343,36 @@ export const api = {
     agentSpend: (agentId: string) =>
       restClient.get(`/v1/commerce/agent/${agentId}/spend`, wrap(unknownSchema)).then(r => r.data),
   },
+
+  // ── SDK Health Monitoring ──────────────────────────────────────────────────
+  sdkHealth: {
+    fleet: () =>
+      restClient.get('/v1/diagnostics/sdk/health', wrap(unknownSchema)).then(r => r.data),
+
+    sdkScore: (sdkId: string) =>
+      restClient
+        .get(`/v1/diagnostics/sdk/health/${encodeURIComponent(sdkId)}`, wrap(unknownSchema))
+        .then(r => r.data),
+
+    silent: () =>
+      restClient.get('/v1/diagnostics/sdk/silent', wrap(unknownSchema)).then(r => r.data),
+
+    driftIncidents: (params?: { drift_type?: string; severity?: string; limit?: number }) =>
+      restClient
+        .get(`/v1/diagnostics/sdk/drift/incidents${buildQS({ ...params })}`, wrap(unknownSchema))
+        .then(r => r.data),
+
+    driftReport: () =>
+      restClient.get('/v1/diagnostics/sdk/drift/report', wrap(unknownSchema)).then(r => r.data),
+
+    manifest: (params?: { sdk_id?: string; sdk_version?: string; cohort?: string }) =>
+      restClient
+        .get(`/v1/config/sdk/manifest${buildQS({ ...params })}`, wrap(unknownSchema))
+        .then(r => r.data),
+
+    rolloutStatus: () =>
+      restClient.get('/v1/config/sdk/rollout', wrap(unknownSchema)).then(r => r.data),
+  },
 };
 
 // ─── Utility: call API with a typed fallback ─────────────────────────────────

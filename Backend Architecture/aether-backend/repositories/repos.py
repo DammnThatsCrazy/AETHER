@@ -1416,3 +1416,179 @@ class EventEnvelopeRepository(BaseRepository):
         if to_time:
             results = [r for r in results if r.get("occurredAt", "") <= to_time]
         return results
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# PROVIDERS REPOSITORY (BYOK vault — encrypted credentials)
+# ═══════════════════════════════════════════════════════════════════════════
+
+class ProvidersRepository(BaseRepository):
+    """Encrypted provider credentials (BYOK vault).
+
+    Stores references to external service credentials (Slack tokens, Discord
+    webhook URLs, Telegram bot tokens, etc.). Raw credential values are never
+    returned directly; callers retrieve by `credentials_ref` key.
+    """
+
+    def __init__(self) -> None:
+        super().__init__("providers")
+
+    async def upsert(self, provider_id: str, data: dict) -> dict:
+        existing = await self.find_by_id(provider_id)
+        if existing:
+            return await self.update(provider_id, data)
+        return await self.insert(provider_id, data)
+
+    async def list_for_tenant(self, tenant_id: str, limit: int = 100) -> list[dict]:
+        return await self.find_many(filters={"tenant_id": tenant_id}, limit=limit)
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# NOTIFICATION INTELLIGENCE REPOSITORIES
+# ═══════════════════════════════════════════════════════════════════════════
+
+
+class NotificationIntelligenceRepository(BaseRepository):
+    """Persists IntelligenceNotificationEvent records.
+
+    Table: notification_intelligence_events
+    Indexed by tenant_id + lifecycle_state for operator panel queries,
+    and by deduplication_key for dedupe checks.
+    """
+
+    def __init__(self) -> None:
+        super().__init__("notification_intelligence_events")
+
+    async def create(self, record: dict) -> dict:
+        return await self.insert(record["id"], record)
+
+    async def list_for_tenant(
+        self,
+        tenant_id: str,
+        lifecycle_state: Optional[str] = None,
+        severity: Optional[str] = None,
+        source_topic: Optional[str] = None,
+        limit: int = 50,
+        offset: int = 0,
+    ) -> list[dict]:
+        filters: dict[str, Any] = {"tenant_id": tenant_id}
+        if lifecycle_state:
+            filters["lifecycle_state"] = lifecycle_state
+        if severity:
+            filters["severity"] = severity
+        if source_topic:
+            filters["source_topic"] = source_topic
+        return await self.find_many(filters=filters, limit=limit, offset=offset)
+
+    async def find_by_dedup_key(self, dedup_key: str) -> Optional[dict]:
+        results = await self.find_many(
+            filters={"deduplication_key": dedup_key}, limit=1
+        )
+        return results[0] if results else None
+
+
+class OperatorActionRepository(BaseRepository):
+    """Persists operator actions (approve/suppress/escalate/annotate).
+
+    Table: operator_actions
+    """
+
+    def __init__(self) -> None:
+        super().__init__("operator_actions")
+
+    async def create(self, record: dict) -> dict:
+        return await self.insert(record["id"], record)
+
+    async def list_for_notification(
+        self, notification_id: str, limit: int = 100
+    ) -> list[dict]:
+        return await self.find_many(
+            filters={"notification_id": notification_id}, limit=limit
+        )
+
+    async def list_for_tenant(
+        self, tenant_id: str, limit: int = 50
+    ) -> list[dict]:
+        return await self.find_many(filters={"tenant_id": tenant_id}, limit=limit)
+
+
+class TenantNotificationConfigRepository(BaseRepository):
+    """Tenant-level notification configuration.
+
+    Table: tenant_notification_configs
+    Keyed by tenant_id (one config per tenant).
+    """
+
+    def __init__(self) -> None:
+        super().__init__("tenant_notification_configs")
+
+    async def upsert(self, tenant_id: str, data: dict) -> dict:
+        existing = await self.find_by_id(tenant_id)
+        data["tenant_id"] = tenant_id
+        if existing:
+            return await self.update(tenant_id, data)
+        return await self.insert(tenant_id, data)
+
+
+class UserNotificationChannelRepository(BaseRepository):
+    """End-user notification channel registrations.
+
+    Table: user_notification_channels
+    Stores channel configs for Slack, Discord, Telegram, and generic webhooks.
+    `credentials_ref` holds only the vault key ID — never the raw credential.
+    """
+
+    def __init__(self) -> None:
+        super().__init__("user_notification_channels")
+
+    async def create(self, record: dict) -> dict:
+        return await self.insert(record["id"], record)
+
+    async def list_for_tenant(
+        self,
+        tenant_id: str,
+        user_id: Optional[str] = None,
+        active_only: bool = True,
+        limit: int = 100,
+    ) -> list[dict]:
+        filters: dict[str, Any] = {"tenant_id": tenant_id}
+        if user_id:
+            filters["user_id"] = user_id
+        if active_only:
+            filters["active"] = True
+        return await self.find_many(filters=filters, limit=limit)
+
+
+class SlackOAuthStateRepository(BaseRepository):
+    """Short-lived Slack OAuth state nonces for CSRF prevention.
+
+    Table: slack_oauth_states
+    Each state nonce has a 10-minute TTL. Rows are written on OAuth initiation
+    and deleted (or expired) after the callback completes.
+    """
+
+    def __init__(self) -> None:
+        super().__init__("slack_oauth_states")
+
+    async def create(self, record: dict) -> dict:
+        return await self.insert(record["state"], record)
+
+    async def consume(self, state: str) -> Optional[dict]:
+        """Retrieve and delete a state nonce (single-use)."""
+        record = await self.find_by_id(state)
+        if record is None:
+            return None
+        await self.delete(state)
+        return record
+
+    async def purge_expired(self) -> int:
+        """Remove expired state records. Returns count deleted."""
+        now_iso = utc_now().isoformat()
+        all_states = await self.find_many(limit=500)
+        expired_ids = [
+            r["state"] for r in all_states
+            if r.get("expires_at", "") < now_iso
+        ]
+        for state_id in expired_ids:
+            await self.delete(state_id)
+        return len(expired_ids)
