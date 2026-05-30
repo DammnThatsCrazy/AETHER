@@ -135,7 +135,7 @@ class JWTHandler:
         public_key: str = "",
         issuer: str = "",
         audience: str = "",
-        allow_hs256_fallback: bool = True,
+        allow_hs256_fallback: bool = False,
         secret_previous: str = "",
     ):
         self.secret = secret or settings.auth.jwt_secret

@@ -140,8 +140,8 @@ async def list_mutations(
         where = " AND ".join(conditions)
         rows = await pool.fetch(
             f"SELECT * FROM cis_quarantine_records WHERE {where} "
-            f"ORDER BY initiated_at DESC LIMIT {limit} OFFSET {offset}",
-            *params,
+            f"ORDER BY initiated_at DESC LIMIT ${idx} OFFSET ${idx + 1}",
+            *params, limit, offset,
         )
         total_row = await pool.fetchrow(
             f"SELECT COUNT(*) AS cnt FROM cis_quarantine_records WHERE {where}",

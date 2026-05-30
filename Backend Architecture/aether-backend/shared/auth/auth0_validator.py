@@ -114,11 +114,18 @@ async def validate_auth0_token(token: str) -> dict:
     except ImportError:
         pass  # Fall through to manual check
 
-    # Fallback: decode claims and verify exp/iss/aud without signature
-    # (acceptable when cryptography library unavailable; warn loudly)
+    # PyJWT/cryptography is unavailable — refuse to accept tokens without
+    # signature verification in non-local environments.
+    import os as _os
+    if _os.getenv("AETHER_ENV", "local").lower() != "local":
+        raise RuntimeError(
+            "Auth0 token signature verification is unavailable: PyJWT or "
+            "cryptography package is not installed. Install production "
+            "dependencies before starting in non-local environments."
+        )
     logger.warning(
         "Auth0 token signature NOT cryptographically verified — "
-        "PyJWT/cryptography unavailable. Deploy with correct dependencies."
+        "PyJWT/cryptography unavailable. Acceptable in local mode only."
     )
     claims = _decode_claims(token)
     now = time.time()

@@ -264,6 +264,8 @@ class BaseRepository(ABC):
                 if key == "tenant_id":
                     conditions.append(f"tenant_id = ${idx}")
                 else:
+                    if not re.fullmatch(r"[a-zA-Z_][a-zA-Z0-9_]*", key):
+                        raise ValueError(f"Invalid filter key: {key!r}")
                     conditions.append(f"data->>'{key}' = ${idx}")
                 params.append(str(value))
                 idx += 1
@@ -401,6 +403,8 @@ class BaseRepository(ABC):
             return len(to_delete)
 
         await self._ensure_table()
+        if not re.fullmatch(r"[a-zA-Z_][a-zA-Z0-9_]*", entity_field):
+            raise ValueError(f"Invalid entity_field: {entity_field!r}")
         result = await pool.execute(
             f"DELETE FROM {self.table_name} WHERE data->>'{entity_field}' = $1",
             entity_id,

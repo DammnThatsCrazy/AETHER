@@ -164,6 +164,20 @@ class ExtractionDefenseConfig:
     @classmethod
     def from_env(cls) -> ExtractionDefenseConfig:
         """Load configuration from environment variables with sensible defaults."""
+        wm_key = os.getenv("WATERMARK_SECRET_KEY", "aether-wm-default-change-me")
+        canary_seed = os.getenv("CANARY_SECRET_SEED", "aether-canary-seed-change-me")
+        is_local = os.getenv("AETHER_ENV", "local").lower() == "local"
+        if not is_local:
+            if wm_key == "aether-wm-default-change-me":
+                raise RuntimeError(
+                    "WATERMARK_SECRET_KEY must be set to a non-default value in "
+                    "non-local environments."
+                )
+            if canary_seed == "aether-canary-seed-change-me":
+                raise RuntimeError(
+                    "CANARY_SECRET_SEED must be set to a non-default value in "
+                    "non-local environments."
+                )
         return cls(
             enable_extraction_defense=os.getenv(
                 "ENABLE_EXTRACTION_DEFENSE", "true"
@@ -177,14 +191,6 @@ class ExtractionDefenseConfig:
             enable_query_analysis=os.getenv(
                 "ENABLE_QUERY_ANALYSIS", "true"
             ).lower() == "true",
-            watermark=WatermarkConfig(
-                secret_key=os.getenv(
-                    "WATERMARK_SECRET_KEY", "aether-wm-default-change-me"
-                ),
-            ),
-            canary=CanaryConfig(
-                secret_seed=os.getenv(
-                    "CANARY_SECRET_SEED", "aether-canary-seed-change-me"
-                ),
-            ),
+            watermark=WatermarkConfig(secret_key=wm_key),
+            canary=CanaryConfig(secret_seed=canary_seed),
         )

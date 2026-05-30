@@ -14,9 +14,7 @@ concurrency:
   cancel-in-progress: false  # never cancel an active apply
 
 permissions:
-  id-token: write       # required for OIDC auth with AWS
   contents: read
-  pull-requests: write  # required to post plan output as PR comment
 
 env:
   AWS_REGION: us-east-1
@@ -26,6 +24,10 @@ jobs:
   terraform:
     name: Terraform ${{ github.event_name == 'pull_request' && 'Plan' || 'Apply' }}
     runs-on: ubuntu-latest
+    permissions:
+      id-token: write       # OIDC auth with AWS
+      contents: read
+      pull-requests: write  # post plan output as PR comment
 
     defaults:
       run:
@@ -74,12 +76,15 @@ jobs:
 
       - name: Terraform Init (with remote backend)
         if: steps.creds.outputs.available == 'true'
+        env:
+          TF_STATE_BUCKET: ${{ secrets.TF_STATE_BUCKET }}
+          TF_LOCK_TABLE:   ${{ secrets.TF_LOCK_TABLE }}
         run: |
           terraform init \
-            -backend-config="bucket=${{ secrets.TF_STATE_BUCKET }}" \
-            -backend-config="dynamodb_table=${{ secrets.TF_LOCK_TABLE }}" \
+            -backend-config="bucket=${TF_STATE_BUCKET}" \
+            -backend-config="dynamodb_table=${TF_LOCK_TABLE}" \
             -backend-config="key=production/terraform.tfstate" \
-            -backend-config="region=${{ env.AWS_REGION }}"
+            -backend-config="region=${AWS_REGION}"
 
       - name: Terraform Plan
         if: steps.creds.outputs.available == 'true'
