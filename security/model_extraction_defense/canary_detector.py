@@ -18,6 +18,7 @@ ensuring consistency across restarts.
 
 from __future__ import annotations
 
+import collections
 import hashlib
 import logging
 import time
@@ -64,7 +65,7 @@ class CanaryInputDetector:
     def __init__(self, config: Optional[CanaryConfig] = None):
         self.config = config or CanaryConfig()
         self._canaries: list[np.ndarray] = []
-        self._triggers: list[CanaryTrigger] = []
+        self._triggers: collections.deque[CanaryTrigger] = collections.deque(maxlen=10_000)
         self._cooldown_map: dict[str, float] = {}  # api_key → cooldown_until
 
     def generate_canaries(self, n_features: int) -> None:

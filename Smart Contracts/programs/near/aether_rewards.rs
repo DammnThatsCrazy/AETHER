@@ -272,9 +272,11 @@ impl AetherRewards {
         );
 
         // 5. Build the message that the oracle signed.
+        // Fields are separated by ':' to prevent concatenation collisions where
+        // different (user, action_type, nonce) tuples produce the same string.
         let user = env::predecessor_account_id();
         let message = format!(
-            "{}{}{}{}{}",
+            "{}:{}:{}:{}:{}",
             user, action_type, amount_val, nonce, expiry_val
         );
         let message_bytes = message.as_bytes();

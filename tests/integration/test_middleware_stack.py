@@ -121,6 +121,8 @@ class TestAuthMiddlewareIntegration:
         monkeypatch.setenv("AETHER_ENV", "staging")
         monkeypatch.setenv("JWT_SECRET", "staging-secret-that-is-long-32ch!!")
         monkeypatch.setenv("DATABASE_URL", "postgresql://fake:fake@localhost/fake")
+        monkeypatch.setenv("WATERMARK_SECRET_KEY", "test-watermark-secret-key-for-tests")
+        monkeypatch.setenv("CANARY_SECRET_SEED", "test-canary-secret-seed-for-tests")
 
         with backend_module_path():
             auth_mod = importlib.import_module("shared.auth.auth")

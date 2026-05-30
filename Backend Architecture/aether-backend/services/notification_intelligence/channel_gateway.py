@@ -12,8 +12,11 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import hmac
+import ipaddress
 import json
+import socket
 import time
+import urllib.parse
 from abc import ABC, abstractmethod
 from datetime import datetime, timezone
 from typing import Any, Optional
@@ -21,6 +24,42 @@ from typing import Any, Optional
 from shared.logger.logger import get_logger, metrics
 
 logger = get_logger("aether.notification.channel_gateway")
+
+# Private/reserved IP ranges that outbound webhook calls must not reach.
+_BLOCKED_NETWORKS = [
+    ipaddress.ip_network("10.0.0.0/8"),
+    ipaddress.ip_network("172.16.0.0/12"),
+    ipaddress.ip_network("192.168.0.0/16"),
+    ipaddress.ip_network("127.0.0.0/8"),
+    ipaddress.ip_network("169.254.0.0/16"),   # link-local (AWS metadata)
+    ipaddress.ip_network("::1/128"),
+    ipaddress.ip_network("fc00::/7"),
+]
+
+
+def _validate_webhook_url(url: str, *, require_hostname: str | None = None) -> None:
+    """Raise ValueError if url is not a safe, externally-reachable HTTPS endpoint."""
+    parsed = urllib.parse.urlparse(url)
+    if parsed.scheme != "https":
+        raise ValueError(f"Webhook URL must use HTTPS (got scheme {parsed.scheme!r})")
+    hostname = parsed.hostname or ""
+    if not hostname:
+        raise ValueError("Webhook URL is missing a hostname")
+    if require_hostname and hostname != require_hostname:
+        raise ValueError(
+            f"Webhook hostname must be {require_hostname!r} (got {hostname!r})"
+        )
+    try:
+        addr = socket.getaddrinfo(hostname, None, proto=socket.IPPROTO_TCP)
+    except socket.gaierror as exc:
+        raise ValueError(f"Webhook hostname DNS resolution failed: {exc}") from exc
+    for _, _, _, _, sockaddr in addr:
+        ip = ipaddress.ip_address(sockaddr[0])
+        for net in _BLOCKED_NETWORKS:
+            if ip in net:
+                raise ValueError(
+                    f"Webhook URL resolves to a private/reserved address ({ip})"
+                )
 
 try:
     import httpx
@@ -336,6 +375,10 @@ class DiscordChannelGateway(ChannelGateway):
 
     async def deliver(self, notification: Any, config: dict[str, Any], credentials: str) -> DeliveryResult:
         webhook_url = credentials  # credentials IS the webhook URL for Discord
+        try:
+            _validate_webhook_url(webhook_url, require_hostname="discord.com")
+        except ValueError as exc:
+            return DeliveryResult(success=False, channel_type="discord", error=str(exc))
         embed = self._build_embed(notification)
         t0 = time.monotonic()
         try:
@@ -353,7 +396,11 @@ class DiscordChannelGateway(ChannelGateway):
 
     async def test(self, config: dict[str, Any], credentials: str) -> DeliveryResult:
         webhook_url = credentials
-        payload = {"embeds": [{"title": "✅ Aether Test", "description": "Notification channel verified.", "color": 0x00AA00}]}
+        try:
+            _validate_webhook_url(webhook_url, require_hostname="discord.com")
+        except ValueError as exc:
+            return DeliveryResult(success=False, channel_type="discord", error=str(exc))
+        payload = {"embeds": [{"title": "Aether Test", "description": "Notification channel verified.", "color": 0x00AA00}]}
         try:
             status, _ = await self._post_with_retry(webhook_url, payload)
             success = status in (200, 204)
@@ -489,6 +536,10 @@ class WebhookChannelGateway(ChannelGateway):
         except Exception:
             creds = {"url": credentials}
         url = creds.get("url", "")
+        try:
+            _validate_webhook_url(url)
+        except ValueError as exc:
+            return DeliveryResult(success=False, channel_type="webhook", error=str(exc))
         secret = creds.get("secret", "")
         payload = self._build_payload(notification)
         body_str = json.dumps(payload)

@@ -31,6 +31,8 @@ def test_oracle_routes_require_explicit_secrets_outside_local(monkeypatch):
     monkeypatch.setenv("JWT_SECRET", "test-secret")
     monkeypatch.setenv("DATABASE_URL", "postgresql://aether:test@localhost:5432/aether")
     monkeypatch.setenv("BYOK_ENCRYPTION_KEY", "test-byok-key-for-testing")
+    monkeypatch.setenv("WATERMARK_SECRET_KEY", "test-watermark-secret-key-for-tests")
+    monkeypatch.setenv("CANARY_SECRET_SEED", "test-canary-secret-seed-for-tests")
     monkeypatch.delenv("ORACLE_SIGNER_KEY", raising=False)
     monkeypatch.delenv("ORACLE_INTERNAL_KEY", raising=False)
     monkeypatch.delenv("REWARD_CONTRACT_ADDRESS", raising=False)

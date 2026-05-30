@@ -337,9 +337,10 @@ fn execute_claim_reward(
     }
 
     // 5. Build the signed message.
-    //    message = sender || action_type || amount || nonce || expiry
+    //    Fields separated by ':' to prevent concatenation collisions where
+    //    different (sender, action_type, nonce) tuples produce the same string.
     let message = format!(
-        "{}{}{}{}{}",
+        "{}:{}:{}:{}:{}",
         info.sender, action_type, amount, nonce, expiry
     );
     let message_bytes = message.as_bytes();

@@ -374,11 +374,10 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         required=True,
         help="Initial oracle signer address.",
     )
-    parser.add_argument(
-        "--private-key",
-        default=os.getenv("DEPLOYER_KEY", ""),
-        help="Deployer private key (or set DEPLOYER_KEY env var).",
-    )
+    # Private key is read exclusively from the DEPLOYER_KEY environment variable.
+    # Passing it as a CLI argument is intentionally not supported: command-line
+    # arguments are visible in process listings (ps aux), shell history, and CI
+    # logs, which would expose the private key to any user on the same host.
     parser.add_argument(
         "--rewards-only",
         action="store_true",
@@ -401,11 +400,12 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
 async def _main(argv: list[str] | None = None) -> None:
     args = _parse_args(argv)
 
-    if not args.private_key:
-        logger.error("No deployer key provided. Use --private-key or DEPLOYER_KEY env var.")
+    private_key = os.getenv("DEPLOYER_KEY", "")
+    if not private_key:
+        logger.error("No deployer key provided. Set the DEPLOYER_KEY environment variable.")
         sys.exit(1)
 
-    deployer = ContractDeployer(chain=args.chain, private_key=args.private_key)
+    deployer = ContractDeployer(chain=args.chain, private_key=private_key)
 
     results: dict[str, DeploymentResult] = {}
 

@@ -33,8 +33,7 @@ concurrency:
   cancel-in-progress: false
 
 permissions:
-  contents: write       # push tag + create release
-  packages: write       # GitHub Packages (Maven)
+  contents: read
 
 jobs:
   validate:
@@ -51,8 +50,10 @@ jobs:
 
       - name: Validate semver
         id: ver
+        env:
+          INPUT_VERSION: ${{ github.event.inputs.version }}
         run: |
-          VERSION="${{ github.event.inputs.version }}"
+          VERSION="$INPUT_VERSION"
           if ! [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[a-zA-Z0-9.]+)?$ ]]; then
             echo "::error::Invalid version: $VERSION"
             exit 1
@@ -66,7 +67,9 @@ jobs:
           echo "tag=$TAG"        >> "$GITHUB_OUTPUT"
 
       - name: Bump version across all packages
-        run: bash scripts/bump-sdk-version.sh "${{ steps.ver.outputs.version }}"
+        env:
+          SDK_VERSION: ${{ steps.ver.outputs.version }}
+        run: bash scripts/bump-sdk-version.sh "$SDK_VERSION"
 
       - name: Upload bumped files
         uses: actions/upload-artifact@v4
@@ -85,6 +88,8 @@ jobs:
     runs-on: ubuntu-latest
     needs: validate
     if: ${{ !inputs.dry_run }}
+    permissions:
+      contents: write
     env:
       VERSION: ${{ needs.validate.outputs.version }}
       TAG:     ${{ needs.validate.outputs.tag }}
@@ -213,6 +218,9 @@ jobs:
     name: Publish to GitHub Packages (Maven)
     runs-on: ubuntu-latest
     needs: validate
+    permissions:
+      packages: write
+      contents: read
     env:
       VERSION: ${{ needs.validate.outputs.version }}
 
@@ -253,6 +261,8 @@ jobs:
     runs-on: ubuntu-latest
     needs: [validate, tag, publish-npm, publish-cocoapods, publish-android]
     if: ${{ !inputs.dry_run }}
+    permissions:
+      contents: write
     env:
       VERSION: ${{ needs.validate.outputs.version }}
       TAG:     ${{ needs.validate.outputs.tag }}
@@ -271,17 +281,39 @@ jobs:
 
       - name: Create GitHub Release
         uses: actions/github-script@v7
+        env:
+          TAG:            ${{ env.TAG }}
+          VERSION:        ${{ env.VERSION }}
+          RELEASE_NOTES:  ${{ steps.changelog.outputs.notes }}
         with:
           script: |
+            const notes   = process.env.RELEASE_NOTES || '';
+            const version = process.env.VERSION;
+            const major   = version.split('.')[0];
+            const body = [
+              notes,
+              '',
+              '**Install**',
+              '```',
+              `npm install @aether/react-native@${version}`,
+              '```',
+              '',
+              '**CocoaPods**',
+              '```',
+              `pod 'AetherSDK', '~> ${major}.0'`,
+              '```',
+              '',
+              '**Maven (GitHub Packages)**',
+              '```kotlin',
+              `implementation("com.aether:sdk-android:${version}")`,
+              '```',
+            ].join('\n');
             await github.rest.repos.createRelease({
-              owner: context.repo.owner,
-              repo:  context.repo.repo,
-              tag_name: process.env.TAG,
-              name: `SDK v${process.env.VERSION}`,
-              body: `${{ steps.changelog.outputs.notes }}\n\n**Install**\n\`\`\`\nnpm install @aether/react-native@${process.env.VERSION}\n\`\`\`\n\n**CocoaPods**\n\`\`\`\npod 'AetherSDK', '~> ${process.env.VERSION.split('.')[0]}.0'\n\`\`\`\n\n**Maven (GitHub Packages)**\n\`\`\`kotlin\nimplementation("com.aether:sdk-android:${process.env.VERSION}")\n\`\`\``,
-              draft: false,
-              prerelease: process.env.VERSION.includes('-'),
+              owner:      context.repo.owner,
+              repo:       context.repo.repo,
+              tag_name:   process.env.TAG,
+              name:       `SDK v${version}`,
+              body,
+              draft:      false,
+              prerelease: version.includes('-'),
             });
-        env:
-          TAG:     ${{ env.TAG }}
-          VERSION: ${{ env.VERSION }}

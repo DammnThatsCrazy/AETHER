@@ -405,7 +405,7 @@ class CISConfig:
 @dataclass
 class Settings:
     env: Environment = Environment(_env("AETHER_ENV", "local"))
-    debug: bool = _env_bool("DEBUG", True)
+    debug: bool = _env_bool("DEBUG", False)
 
     # Databases
     timescaledb: TimescaleDBConfig = field(default_factory=TimescaleDBConfig)
@@ -501,25 +501,27 @@ class Settings:
             )
 
         # ── Extraction defense secrets ────────────────────────────────────────
+        # Guard unconditionally in non-local environments: a misconfigured
+        # deployment with extraction defense disabled still has the secrets in
+        # the codebase, and enabling it later without rotating secrets is silently
+        # broken. Fail at startup so the mistake is caught before it matters.
         if (
-            self.extraction_defense.enabled
-            and _is_non_local
+            _is_non_local
             and self.extraction_defense.watermark_secret_key
             == "aether-wm-default-change-me"
         ):
             raise RuntimeError(
-                "WATERMARK_SECRET_KEY must be changed from default when "
-                "extraction defense is enabled in non-local environments"
+                "WATERMARK_SECRET_KEY must be set to a non-default value in "
+                "non-local environments"
             )
         if (
-            self.extraction_defense.enabled
-            and _is_non_local
+            _is_non_local
             and self.extraction_defense.canary_secret_seed
             == "aether-canary-seed-change-me"
         ):
             raise RuntimeError(
-                "CANARY_SECRET_SEED must be changed from default when "
-                "extraction defense is enabled in non-local environments"
+                "CANARY_SECRET_SEED must be set to a non-default value in "
+                "non-local environments"
             )
 
         # ── Neptune ──────────────────────────────────────────────────────────
