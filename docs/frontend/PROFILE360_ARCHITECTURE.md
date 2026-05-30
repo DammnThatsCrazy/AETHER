@@ -7,8 +7,8 @@ audience: [dev-senior, architect]
 status: stable
 since_version: "8.8.0"
 source_files:
-  - apps/kyber/src/components/profile360/
-  - apps/kyber/src/features/profile360/
+  - frontend/kyber/src/components/profile360/
+  - frontend/kyber/src/features/profile360/
 canonical_owner: frontend@aether
 estimated_read_minutes: 10
 toc_depth: 3

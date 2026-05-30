@@ -7,7 +7,7 @@ audience: [dev-senior, architect]
 status: stable
 since_version: "8.8.0"
 source_files:
-  - apps/kyber/src/
+  - frontend/kyber/src/
   - packages/shared/
 canonical_owner: frontend@aether
 estimated_read_minutes: 35
