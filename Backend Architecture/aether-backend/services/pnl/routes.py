@@ -6,7 +6,7 @@ GET /v1/profile/{entity_id}/pnl?window=30d|60d|90d|lifetime
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 
 from shared.logger.logger import get_logger
 
@@ -20,8 +20,10 @@ _WINDOW_MAP = {"30d": 30, "60d": 60, "90d": 90, "lifetime": None}
 @router.get("/v1/profile/{entity_id}/pnl")
 async def get_pnl(
     entity_id: str,
+    request: Request,
     window: str = Query(default="30d", description="30d | 60d | 90d | lifetime"),
 ):
+    request.state.tenant.require_permission("read")
     """
     Return realized + unrealized PNL and TVL delta for an entity.
     Source: silver_web3_events (FIFO cost basis) + CoinGecko historical prices.

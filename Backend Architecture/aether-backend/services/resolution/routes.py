@@ -215,9 +215,9 @@ async def update_resolution_config(
     body: ResolutionConfigUpdate,
     request: Request,
 ):
-    """Update resolution engine configuration thresholds."""
+    """Update resolution engine configuration thresholds. Requires admin — config is global."""
     tenant = request.state.tenant
-    tenant.require_permission("write")
+    tenant.require_permission("admin")
 
     global _config, _engine
 
