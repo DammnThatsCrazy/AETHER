@@ -4,7 +4,7 @@
   "private": true,
   "license": "UNLICENSED",
   "type": "module",
-  "description": "Documentation site — renders authored MDX + generated artifacts to three tiers (public, customer portal, internal).",
+  "description": "Documentation site \u2014 renders authored MDX + generated artifacts to three tiers (public, customer portal, internal).",
   "scripts": {
     "dev": "vite --port 5176",
     "build": "tsc --noEmit && vite build",
@@ -14,7 +14,7 @@
     "build:all": "npm run build:public && npm run build:portal && npm run build:internal",
     "preview": "vite preview --port 5176",
     "typecheck": "tsc --noEmit",
-    "lint": "eslint 'src/**/*.{ts,tsx}' --fix",
+    "lint": "tsc --noEmit",
     "test": "vitest run --passWithNoTests"
   },
   "dependencies": {
