@@ -123,6 +123,8 @@ class TestAuthMiddlewareIntegration:
         monkeypatch.setenv("DATABASE_URL", "postgresql://fake:fake@localhost/fake")
         monkeypatch.setenv("WATERMARK_SECRET_KEY", "test-watermark-secret-key-for-tests")
         monkeypatch.setenv("CANARY_SECRET_SEED", "test-canary-secret-seed-for-tests")
+        monkeypatch.setenv("EXTRACTION_CANARY_SEED", "test-extraction-canary-seed-for-tests")
+        monkeypatch.setenv("SDK_CONFIG_SECRET", "test-sdk-config-secret-for-tests")
 
         with backend_module_path():
             auth_mod = importlib.import_module("shared.auth.auth")
