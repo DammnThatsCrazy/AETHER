@@ -272,11 +272,12 @@ class ResolutionRepository:
 
     # ── Audit ────────────────────────────────────────────────────────
 
-    async def record_audit(self, decision: Any) -> None:
+    async def record_audit(self, tenant_id: str, decision: Any) -> None:
         """Write an immutable audit record for a resolution decision."""
         audit_id = str(uuid.uuid4())
         record = {
             "audit_id": audit_id,
+            "tenant_id": tenant_id,
             "decision_id": decision.decision_id,
             "profile_a_id": decision.profile_a_id,
             "profile_b_id": decision.profile_b_id,
@@ -288,10 +289,10 @@ class ResolutionRepository:
         }
         await self._audit.insert(audit_id, record)
 
-    async def get_audit(self, decision_id: str) -> list[dict]:
-        """Retrieve all audit entries for a given decision."""
+    async def get_audit(self, tenant_id: str, decision_id: str) -> list[dict]:
+        """Retrieve all audit entries for a given decision, scoped to a tenant."""
         return await self._audit.find_many(
-            filters={"decision_id": decision_id}, limit=100,
+            filters={"decision_id": decision_id, "tenant_id": tenant_id}, limit=100,
         )
 
     # ── Cluster queries ──────────────────────────────────────────────

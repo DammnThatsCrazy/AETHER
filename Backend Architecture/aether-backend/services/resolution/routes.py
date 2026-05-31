@@ -190,7 +190,8 @@ async def get_audit_trail(
     repo: ResolutionRepository = Depends(_get_resolution_repo),
 ):
     """Get the audit trail for a resolution decision."""
-    records = await repo.get_audit(decision_id)
+    tenant = request.state.tenant
+    records = await repo.get_audit(tenant.tenant_id, decision_id)
     if not records:
         raise NotFoundError("Audit trail")
     return APIResponse(data=records).to_dict()
