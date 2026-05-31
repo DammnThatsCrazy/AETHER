@@ -204,6 +204,7 @@ from services.me.routes import router as me_router
 from services.billing.routes import router as billing_router, admin_overage_router
 from services.auth.routes import router as auth_router, admin_auth_router
 from services.contact.routes import router as contact_router
+from services.recommendations.routes import router as recommendations_router
 
 # Profile 360 (additive — multi-entity identity, delegation, flows, behavior, realtime)
 from services.entities.routes import router as entities_router
@@ -414,6 +415,7 @@ def create_app() -> FastAPI:
     app.include_router(auth_router)
     app.include_router(admin_auth_router)
     app.include_router(contact_router)
+    app.include_router(recommendations_router)
 
     # ── Profile 360 (additive) ─────────────────────────────────────────
     app.include_router(entities_router)
