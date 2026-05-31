@@ -271,7 +271,7 @@ class IdentityResolutionEngine:
                 decision,
             )
         elif decision.action == "flag_for_review":
-            await self.repository.create_pending_resolution(decision)
+            await self.repository.create_pending_resolution(tenant_id, decision)
             await self.producer.publish(Event(
                 topic=Topic.RESOLUTION_FLAGGED,
                 tenant_id=tenant_id,

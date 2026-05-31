@@ -11,7 +11,7 @@ from typing import Optional
 from fastapi import APIRouter, Request
 from pydantic import BaseModel, Field
 
-from shared.common.common import APIResponse
+from shared.common.common import APIResponse, ForbiddenError, NotFoundError
 from shared.logger.logger import get_logger
 from repositories.repos import WebhookRepository, AlertRepository
 
@@ -56,6 +56,12 @@ async def list_webhooks(request: Request):
 
 @router.delete("/webhooks/{webhook_id}")
 async def delete_webhook(webhook_id: str, request: Request):
+    request.state.tenant.require_permission("write")
+    webhook = await _webhook_repo.find_by_id(webhook_id)
+    if not webhook:
+        raise NotFoundError("Webhook")
+    if webhook.get("tenant_id") != request.state.tenant.tenant_id:
+        raise ForbiddenError("Webhook belongs to a different tenant")
     await _webhook_repo.delete(webhook_id)
     return APIResponse(data={"deleted": True}).to_dict()
 

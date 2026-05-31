@@ -218,10 +218,11 @@ class ResolutionRepository:
 
     # ── Pending decisions ────────────────────────────────────────────
 
-    async def create_pending_resolution(self, decision: Any) -> str:
+    async def create_pending_resolution(self, tenant_id: str, decision: Any) -> str:
         """Store a resolution decision that requires admin review."""
         record = {
             "decision_id": decision.decision_id,
+            "tenant_id": tenant_id,
             "profile_a_id": decision.profile_a_id,
             "profile_b_id": decision.profile_b_id,
             "action": decision.action,
@@ -245,7 +246,7 @@ class ResolutionRepository:
     ) -> list[dict]:
         """Retrieve pending resolution decisions for a tenant."""
         return await self._pending.find_many(
-            filters={"status": "pending"},
+            filters={"status": "pending", "tenant_id": tenant_id},
             limit=limit,
             sort_by="created_at",
             sort_order="desc",

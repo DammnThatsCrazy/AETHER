@@ -10,7 +10,7 @@ from typing import Optional
 
 from fastapi import APIRouter, Depends, Request
 
-from shared.common.common import APIResponse, NotFoundError
+from shared.common.common import APIResponse, ForbiddenError, NotFoundError
 from shared.cache.cache import CacheClient
 from shared.graph.graph import GraphClient
 from shared.events.events import Event, EventProducer, Topic
@@ -119,6 +119,12 @@ async def approve_resolution(
     tenant = request.state.tenant
     tenant.require_permission("write")
 
+    existing = await repo._pending.find_by_id(decision_id)
+    if not existing:
+        raise NotFoundError("Resolution decision")
+    if existing.get("tenant_id") != tenant.tenant_id:
+        raise ForbiddenError("Resolution decision belongs to a different tenant")
+
     record = await repo.approve_resolution(decision_id)
 
     # Execute the actual merge
@@ -155,6 +161,12 @@ async def reject_resolution(
     """Admin rejects a pending identity merge."""
     tenant = request.state.tenant
     tenant.require_permission("write")
+
+    existing = await repo._pending.find_by_id(decision_id)
+    if not existing:
+        raise NotFoundError("Resolution decision")
+    if existing.get("tenant_id") != tenant.tenant_id:
+        raise ForbiddenError("Resolution decision belongs to a different tenant")
 
     record = await repo.reject_resolution(decision_id)
 
