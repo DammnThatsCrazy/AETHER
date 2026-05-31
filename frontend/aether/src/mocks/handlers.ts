@@ -130,4 +130,219 @@ export const handlers = [
     return HttpResponse.json({ data: { api_key: 'ak_mock_login_key', tenant_id: 'tenant_demo_001', email: body.email }, status: 'ok', timestamp: new Date().toISOString() });
   }),
   http.get(`${API}/v1/billing/plans`, () => HttpResponse.json(mockPlans)),
+
+  // ── Users / entities ─────────────────────────────────────────────────────────
+  http.get(`${API}/v1/entities`, () =>
+    HttpResponse.json({
+      data: {
+        entities: Array.from({ length: 10 }, (_, i) => ({
+          id: `user_${String(i + 1).padStart(4, '0')}`,
+          kind: 'user',
+          label: `User ${i + 1}`,
+          email: `user${i + 1}@example.com`,
+          trust_score: Math.round(65 + Math.random() * 30),
+          created_at: new Date(Date.now() - (i + 1) * 7 * 86400_000).toISOString(),
+        })),
+        total: 10,
+      },
+      status: 'ok',
+      timestamp: new Date().toISOString(),
+    }),
+  ),
+  http.get(`${API}/v1/entities/search`, () =>
+    HttpResponse.json({ data: { results: [], total: 0 }, status: 'ok', timestamp: new Date().toISOString() }),
+  ),
+  http.get(`${API}/v1/entities/:entityId`, ({ params }) =>
+    HttpResponse.json({ data: { id: params.entityId, kind: 'user', label: `User ${params.entityId}`, trust_score: 78 }, status: 'ok', timestamp: new Date().toISOString() }),
+  ),
+
+  // ── Profile ───────────────────────────────────────────────────────────────────
+  http.get(`${API}/v1/profile/:userId/summary`, ({ params }) =>
+    HttpResponse.json({
+      data: {
+        user_id: params.userId,
+        name: `User ${String(params.userId).slice(-4)}`,
+        email: `user@example.com`,
+        trust_score: 78,
+        risk_level: 'low',
+        profile_completeness: 0.82,
+        last_seen: new Date(Date.now() - 3600_000).toISOString(),
+        computed_at: new Date().toISOString(),
+      },
+      status: 'ok',
+      timestamp: new Date().toISOString(),
+    }),
+  ),
+  http.get(`${API}/v1/profile/:userId`, ({ params }) =>
+    HttpResponse.json({
+      data: {
+        user_id: params.userId,
+        name: `User ${String(params.userId).slice(-4)}`,
+        email: `user@example.com`,
+        trust_score: 78,
+        risk_level: 'low',
+        devices: [],
+        sessions: [],
+        timeline: [],
+        intelligence: {},
+      },
+      status: 'ok',
+      timestamp: new Date().toISOString(),
+    }),
+  ),
+  http.get(`${API}/v1/profile/:userId/timeline`, ({ params }) =>
+    HttpResponse.json({ user_id: params.userId, events: [], count: 0 }),
+  ),
+  http.get(`${API}/v1/profile/:userId/sessions`, ({ params }) =>
+    HttpResponse.json({ data: { user_id: params.userId, sessions: [], count: 0 }, status: 'ok', timestamp: new Date().toISOString() }),
+  ),
+  http.get(`${API}/v1/profile/:userId/devices`, ({ params }) =>
+    HttpResponse.json({ data: { user_id: params.userId, devices: [], count: 0 }, status: 'ok', timestamp: new Date().toISOString() }),
+  ),
+  http.get(`${API}/v1/profile/:userId/platforms`, ({ params }) =>
+    HttpResponse.json({ data: { user_id: params.userId, platforms: [], count: 0 }, status: 'ok', timestamp: new Date().toISOString() }),
+  ),
+  http.get(`${API}/v1/profile/:userId/journeys`, ({ params }) =>
+    HttpResponse.json({ data: { user_id: params.userId, journeys: [], count: 0 }, status: 'ok', timestamp: new Date().toISOString() }),
+  ),
+  http.get(`${API}/v1/profile/:userId/wallets`, ({ params }) =>
+    HttpResponse.json({ data: { user_id: params.userId, wallets: [], count: 0 }, status: 'ok', timestamp: new Date().toISOString() }),
+  ),
+  http.get(`${API}/v1/profile/:userId/financials`, ({ params }) =>
+    HttpResponse.json({ data: { user_id: params.userId, accounts: [], total_balance_usd: 0, computed_at: new Date().toISOString() }, status: 'ok', timestamp: new Date().toISOString() }),
+  ),
+  http.get(`${API}/v1/profile/:userId/rewards`, ({ params }) =>
+    HttpResponse.json({ data: { user_id: params.userId, campaigns: [], total_earned_usd: 0 }, status: 'ok', timestamp: new Date().toISOString() }),
+  ),
+  http.get(`${API}/v1/profile/:userId/identifiers`, ({ params }) =>
+    HttpResponse.json({ data: { user_id: params.userId, identifiers: [], count: 0 }, status: 'ok', timestamp: new Date().toISOString() }),
+  ),
+  http.get(`${API}/v1/profile/:userId/intelligence`, ({ params }) =>
+    HttpResponse.json({ data: { user_id: params.userId, signals: [], risk_level: 'low', trust_score: 78 }, status: 'ok', timestamp: new Date().toISOString() }),
+  ),
+  http.get(`${API}/v1/profile/:userId/relationships`, ({ params }) =>
+    HttpResponse.json({ data: { user_id: params.userId, relationships: [], count: 0 }, status: 'ok', timestamp: new Date().toISOString() }),
+  ),
+  http.get(`${API}/v1/profile/:userId/provenance`, ({ params }) =>
+    HttpResponse.json({ data: { user_id: params.userId, sources: [], count: 0 }, status: 'ok', timestamp: new Date().toISOString() }),
+  ),
+  http.get(`${API}/v1/profile/:userId/protocols`, ({ params }) =>
+    HttpResponse.json({ data: { user_id: params.userId, protocols: [], count: 0 }, status: 'ok', timestamp: new Date().toISOString() }),
+  ),
+  http.get(`${API}/v1/profile/:userId/lake/:domain`, ({ params }) =>
+    HttpResponse.json({ data: { user_id: params.userId, domain: params.domain, records: [], count: 0 }, status: 'ok', timestamp: new Date().toISOString() }),
+  ),
+  http.get(`${API}/v1/profile/:userId/social-intelligence`, ({ params }) =>
+    HttpResponse.json({
+      data: {
+        entity_id: params.userId,
+        kind: 'social_intelligence',
+        window: '30d',
+        items: [],
+        summary: {
+          total_followers_deduped: 0,
+          influence_level: 'none',
+          engagement_rate: 0,
+          platforms_connected: 0,
+        },
+        provenance: { sources: [] },
+        computed_at: new Date().toISOString(),
+      },
+      status: 'ok',
+      timestamp: new Date().toISOString(),
+    }),
+  ),
+  http.get(`${API}/v1/profile/:userId/retarget-recommendations`, ({ params }) =>
+    HttpResponse.json({
+      data: {
+        entity_id: params.userId,
+        kind: 'retarget_recommendations',
+        items: [],
+        pagination: { limit: 20, count: 0, has_more: false },
+        provenance: { sources: ['retarget_recommendations'] },
+      },
+      status: 'ok',
+      timestamp: new Date().toISOString(),
+    }),
+  ),
+  http.get(`${API}/v1/profile/resolve`, () =>
+    HttpResponse.json({ data: { resolved_user_id: 'user_0001' }, status: 'ok', timestamp: new Date().toISOString() }),
+  ),
+
+  // ── Recommendations ───────────────────────────────────────────────────────────
+  http.post(`${API}/v1/recommendations/:recommendationId/approve`, ({ params }) =>
+    HttpResponse.json({ data: { recommendation_id: params.recommendationId, status: 'approved' }, status: 'ok', timestamp: new Date().toISOString() }),
+  ),
+  http.post(`${API}/v1/recommendations/:recommendationId/reject`, ({ params }) =>
+    HttpResponse.json({ data: { recommendation_id: params.recommendationId, status: 'rejected' }, status: 'ok', timestamp: new Date().toISOString() }),
+  ),
+
+  // ── Geo ───────────────────────────────────────────────────────────────────────
+  http.get(`${API}/v1/geo/summary`, () =>
+    HttpResponse.json({ data: null, status: 'ok', timestamp: new Date().toISOString() }),
+  ),
+  http.get(`${API}/v1/geo/entities`, () =>
+    HttpResponse.json({ data: null, status: 'ok', timestamp: new Date().toISOString() }),
+  ),
+
+  // ── Campaigns ─────────────────────────────────────────────────────────────────
+  http.get(`${API}/v1/campaigns`, () =>
+    HttpResponse.json({ data: { campaigns: [], total: 0 }, status: 'ok', timestamp: new Date().toISOString() }),
+  ),
+  http.get(`${API}/v1/campaigns/:campaignId`, ({ params }) =>
+    HttpResponse.json({ data: { campaign_id: params.campaignId, name: 'Mock Campaign', status: 'draft' }, status: 'ok', timestamp: new Date().toISOString() }),
+  ),
+  http.post(`${API}/v1/campaigns`, async ({ request }) => {
+    const body = await request.json() as { name: string };
+    return HttpResponse.json({ data: { campaign_id: `camp_${Date.now()}`, name: body.name, status: 'draft' }, status: 'ok', timestamp: new Date().toISOString() });
+  }),
+
+  // ── Behavioral / Expectations / Attribution ───────────────────────────────────
+  http.get(`${API}/v1/behavioral/entity/:entityId`, ({ params }) =>
+    HttpResponse.json({ data: { entity_id: params.entityId, signals: [] }, status: 'ok', timestamp: new Date().toISOString() }),
+  ),
+  http.get(`${API}/v1/expectations/entity/:entityId/explain`, ({ params }) =>
+    HttpResponse.json({
+      data: {
+        entity_id: params.entityId,
+        explanation: 'No anomalies detected.',
+        signals: [],
+        confidence: 0.9,
+        computed_at: new Date().toISOString(),
+      },
+      status: 'ok',
+      timestamp: new Date().toISOString(),
+    }),
+  ),
+  http.get(`${API}/v1/attribution/journey/:userId`, ({ params }) =>
+    HttpResponse.json({ data: { user_id: params.userId, touchpoints: [], journeys: [], count: 0 }, status: 'ok', timestamp: new Date().toISOString() }),
+  ),
+
+  // ── Graph ─────────────────────────────────────────────────────────────────────
+  http.get(`${API}/v1/entities/:entityId/graph`, ({ params }) =>
+    HttpResponse.json({ data: { entity_id: params.entityId, nodes: [], edges: [], node_count: 0, edge_count: 0 }, status: 'ok', timestamp: new Date().toISOString() }),
+  ),
+  http.get(`${API}/v1/resolution/cluster/:entityId`, ({ params }) =>
+    HttpResponse.json({ data: { entity_id: params.entityId, cluster_id: `cluster_${params.entityId}`, members: [], size: 0 }, status: 'ok', timestamp: new Date().toISOString() }),
+  ),
+  http.post(`${API}/v1/graph/traverse`, () =>
+    HttpResponse.json({ data: { nodes: [], edges: [], node_count: 0 }, status: 'ok', timestamp: new Date().toISOString() }),
+  ),
+
+  // ── Settings ──────────────────────────────────────────────────────────────────
+  http.get(`${API}/v1/me/settings`, () =>
+    HttpResponse.json({ data: { notifications: true, theme: 'dark', timezone: 'UTC' }, status: 'ok', timestamp: new Date().toISOString() }),
+  ),
+  http.patch(`${API}/v1/me/settings`, async ({ request }) => {
+    const body = await request.json() as Record<string, unknown>;
+    return HttpResponse.json({ data: body, status: 'ok', timestamp: new Date().toISOString() });
+  }),
+
+  // ── Auth refresh ──────────────────────────────────────────────────────────────
+  http.post(`${API}/v1/auth/refresh`, () =>
+    HttpResponse.json({ data: { access_token: 'mock_refreshed_token', expires_in: 3600 }, status: 'ok', timestamp: new Date().toISOString() }),
+  ),
+  http.post(`${API}/v1/auth/token`, () =>
+    HttpResponse.json({ data: { access_token: 'mock_access_token', refresh_token: 'mock_refresh', expires_in: 3600 }, status: 'ok', timestamp: new Date().toISOString() }),
+  ),
 ];

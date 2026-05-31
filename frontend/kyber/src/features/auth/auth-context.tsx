@@ -115,7 +115,7 @@ export function AuthProvider({ children }: { readonly children: ReactNode }) {
       return;
     }
     try {
-      const response = await fetch('/api/v1/auth/refresh', {
+      const response = await fetch('/v1/auth/refresh', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ refresh_token: currentTokens.refreshToken }),
@@ -162,7 +162,7 @@ export function AuthProvider({ children }: { readonly children: ReactNode }) {
       const verifier = sessionStorage.getItem('kyber_pkce_verifier');
       if (!verifier) throw new Error('Missing PKCE verifier');
 
-      const response = await fetch('/api/v1/auth/token', {
+      const response = await fetch('/v1/auth/token', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ code, code_verifier: verifier }),
