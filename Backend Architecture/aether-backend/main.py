@@ -399,6 +399,11 @@ def create_app() -> FastAPI:
     app.include_router(lake_router)
     app.include_router(intelligence_router)
     app.include_router(extraction_intel_router)
+    # pnl_router and social_router define /v1/profile/{id}/pnl and
+    # /v1/profile/{id}/social-intelligence with richer responses than
+    # profile_router's handlers; mount them first so FastAPI matches them.
+    app.include_router(pnl_router)
+    app.include_router(social_router)
     app.include_router(profile_router)
     app.include_router(profile360_router)
     app.include_router(population_router)
@@ -423,10 +428,8 @@ def create_app() -> FastAPI:
     app.include_router(contact_router)
     app.include_router(recommendations_router)
     app.include_router(notification_alerts_router)
-    app.include_router(pnl_router)
     app.include_router(resolution_router)
     app.include_router(signals_router)
-    app.include_router(social_router)
     app.include_router(geo_router)
 
     # ── Profile 360 (additive) ─────────────────────────────────────────
