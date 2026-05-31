@@ -18,7 +18,6 @@ from typing import Optional
 from fastapi import APIRouter, Request
 from pydantic import BaseModel, Field
 
-from config.settings import settings
 from shared.auth.auth import PlanTier
 from shared.billing import stripe_client, stripe_repository
 from shared.common.common import APIResponse, BadRequestError, RateLimitedError

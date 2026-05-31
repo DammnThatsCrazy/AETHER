@@ -224,7 +224,9 @@ async def predict(
 
             # 4b. CIS retrieval trace (additive, guarded by CIS_ENABLED)
             try:
-                import os as _os, hashlib as _hl, json as _json
+                import hashlib as _hl
+                import json as _json
+                import os as _os
                 if _os.getenv("CIS_ENABLED", "false").lower() in ("true", "1"):
                     await producer.publish(Event(
                         topic=Topic.CIS_RETRIEVAL_EXECUTED,
