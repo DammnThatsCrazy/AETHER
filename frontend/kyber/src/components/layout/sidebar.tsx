@@ -8,14 +8,17 @@ interface NavItem {
 }
 
 const NAV_ITEMS: NavItem[] = [
-  { path: '/mission',     label: 'Mission',     glyph: '◈' },
-  { path: '/live',        label: 'Live',        glyph: '◉' },
-  { path: '/command',     label: 'Command',     glyph: '⌘' },
-  { path: '/review',      label: 'Review',      glyph: '✓' },
-  { path: '/entities',    label: 'Entities',    glyph: '⬡' },
-  { path: '/noesis',      label: 'Noesis',      glyph: '⬢' },
-  { path: '/diagnostics', label: 'Diagnostics', glyph: '⚙' },
-  { path: '/lab',         label: 'Lab',         glyph: '⚗' },
+  { path: '/mission',         label: 'Mission',         glyph: '◈' },
+  { path: '/live',            label: 'Live',            glyph: '◉' },
+  { path: '/command',         label: 'Command',         glyph: '⌘' },
+  { path: '/review',          label: 'Review',          glyph: '✓' },
+  { path: '/entities',        label: 'Entities',        glyph: '⬡' },
+  { path: '/noesis',          label: 'Noesis',          glyph: '⬢' },
+  { path: '/tenants',         label: 'Tenants',         glyph: '⊞' },
+  { path: '/investigations',  label: 'Investigations',  glyph: '⚒' },
+  { path: '/cis',             label: 'CIS',             glyph: '◎' },
+  { path: '/diagnostics',     label: 'Diagnostics',     glyph: '⚙' },
+  { path: '/lab',             label: 'Lab',             glyph: '⚗' },
 ];
 
 export function Sidebar() {

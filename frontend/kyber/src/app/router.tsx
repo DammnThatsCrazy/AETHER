@@ -15,6 +15,9 @@ const DiagnosticsPage = lazy(() => import('@kyber/pages/diagnostics').then(m => 
 const ReviewPage = lazy(() => import('@kyber/pages/review').then(m => ({ default: m.ReviewPage })));
 const LabPage = lazy(() => import('@kyber/pages/lab').then(m => ({ default: m.LabPage })));
 const Profile360Page = lazy(() => import('@kyber/pages/profile360').then(m => ({ default: m.Profile360Page })));
+const TenantsPage = lazy(() => import('@kyber/pages/tenants').then(m => ({ default: m.TenantsPage })));
+const CisPage = lazy(() => import('@kyber/pages/cis').then(m => ({ default: m.CisPage })));
+const InvestigationsPage = lazy(() => import('@kyber/pages/investigations').then(m => ({ default: m.InvestigationsPage })));
 
 function PageSuspense({ children }: { readonly children: React.ReactNode }) {
   return (
@@ -51,6 +54,12 @@ export function AppRouter() {
                 <Route path="/review" element={<PageSuspense><ReviewPage /></PageSuspense>} />
                 <Route path="/review/:batchId" element={<PageSuspense><ReviewPage /></PageSuspense>} />
                 <Route path="/lab" element={<PageSuspense><LabPage /></PageSuspense>} />
+                <Route path="/tenants" element={<PageSuspense><TenantsPage /></PageSuspense>} />
+                <Route path="/tenants/:tenantId" element={<PageSuspense><TenantsPage /></PageSuspense>} />
+                <Route path="/cis" element={<PageSuspense><CisPage /></PageSuspense>} />
+                <Route path="/cis/forensics/:nodeId" element={<PageSuspense><CisPage /></PageSuspense>} />
+                <Route path="/investigations" element={<PageSuspense><InvestigationsPage /></PageSuspense>} />
+                <Route path="/investigations/:caseId" element={<PageSuspense><InvestigationsPage /></PageSuspense>} />
                 <Route path="*" element={<Navigate to="/mission" replace />} />
               </Routes>
             </AppShell>
