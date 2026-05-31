@@ -114,7 +114,6 @@ export function useChannelSubscription(params: {
       if (reconnectTimer.current) clearTimeout(reconnectTimer.current);
       wsRef.current?.close();
     };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tenantId, JSON.stringify(channels), enabled]);
 
   const disconnect = useCallback(() => {
