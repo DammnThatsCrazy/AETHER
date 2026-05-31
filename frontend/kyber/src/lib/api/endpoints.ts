@@ -314,6 +314,11 @@ export const api = {
     lake: (userId: string, domain: 'identity' | 'market' | 'onchain' | 'social') =>
       restClient.get(`/v1/profile/${userId}/lake/${domain}`, wrap(unknownSchema)).then(r => r.data),
 
+    /** Aggregated social intelligence — 12 platforms with summary (total_followers_deduped, influence_level, etc.).
+     *  Backend: GET /v1/profile/{id}/social-intelligence?window={window} */
+    socialIntelligence: (userId: string, window = '30d') =>
+      restClient.get(`/v1/profile/${userId}/social-intelligence${buildQS({ window })}`, wrap(unknownSchema)).then(r => r.data),
+
     resolve: (params: { wallet?: string; email?: string; device?: string; session?: string; social?: string; customer?: string }) =>
       restClient.get(`/v1/profile/resolve${buildQS(params)}`, wrap(z.object({ resolved_user_id: z.string() }))).then(r => r.data),
   },

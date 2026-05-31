@@ -4,19 +4,50 @@ import { api } from '@kyber/lib/api/endpoints';
 import type { TimeWindow } from '@aether/ui';
 
 interface SocialPlatformData {
-  handle?: string;
-  followers?: number;
-  verified?: boolean;
-  engagement_rate?: number;
+  handle: string | null;
+  followers: number | null;
+  verified: boolean | null;
+  engagement_rate: number | null;
   [key: string]: unknown;
 }
 
 interface SocialIntelligenceData {
-  computed_at?: string;
-  total_followers?: number;
-  influence_level?: 'high' | 'medium' | 'low';
-  platforms?: Record<string, SocialPlatformData | null>;
-  [key: string]: unknown;
+  computed_at: string | null;
+  total_followers: number | null;
+  influence_level: 'high' | 'medium' | 'low';
+  platforms: Record<string, SocialPlatformData | null>;
+}
+
+// Normalise the backend envelope:
+// GET /v1/profile/{id}/social-intelligence returns
+// { data: { entity_id, kind, window, items: [...], summary?: {...}, provenance } }
+// items[] entries carry platform, handle, followers, verified, engagement_rate
+function normalise(raw: unknown): SocialIntelligenceData {
+  const fallback: SocialIntelligenceData = { computed_at: null, total_followers: null, influence_level: 'low', platforms: {} };
+  if (!raw || typeof raw !== 'object') return fallback;
+  const inner = raw as Record<string, unknown>;
+  const items = Array.isArray(inner.items) ? (inner.items as Array<Record<string, unknown>>) : [];
+  const summary = inner.summary as Record<string, unknown> | undefined;
+
+  const platforms: Record<string, SocialPlatformData | null> = {};
+  for (const item of items) {
+    const pid = String(item.platform ?? item.platform_id ?? '');
+    if (pid) {
+      platforms[pid] = {
+        handle: (item.handle as string) ?? null,
+        followers: (item.followers as number) ?? null,
+        verified: (item.verified as boolean) ?? null,
+        engagement_rate: (item.engagement_rate as number) ?? null,
+      };
+    }
+  }
+
+  return {
+    computed_at: (inner.computed_at as string) ?? null,
+    total_followers: ((summary?.total_followers_deduped ?? inner.total_followers) as number) ?? null,
+    influence_level: ((summary?.influence_level ?? 'low') as 'high' | 'medium' | 'low'),
+    platforms,
+  };
 }
 
 const PLATFORMS = [
@@ -52,17 +83,18 @@ interface Props {
 }
 
 export function KyberSocialIntelligencePanel({ entityId, window = '30d' }: Props) {
-  const { data, isLoading, error } = useQuery<SocialIntelligenceData>({
+  const { data: raw, isLoading, error } = useQuery({
     key: `entity:social:${entityId}:${window}`,
-    fetcher: () => api.profile.lake(entityId, 'social') as Promise<SocialIntelligenceData>,
+    fetcher: () => api.profile.socialIntelligence(entityId, window),
     enabled: !!entityId,
   });
 
   if (isLoading) return <LoadingState lines={6} className="pt-2" />;
-  if (error || !data) {
+  if (error) {
     return <EmptyState title="Social data unavailable" description="Social intelligence data could not be loaded for this entity." />;
   }
 
+  const data: SocialIntelligenceData = normalise(raw);
   const platforms = data.platforms ?? {};
   const influenceLevel = data.influence_level ?? 'low';
 
@@ -74,14 +106,14 @@ export function KyberSocialIntelligencePanel({ entityId, window = '30d' }: Props
           <div>
             <span className="text-[10px] uppercase text-text-muted font-mono">Cross-platform reach</span>
             <div className="text-xl font-semibold font-mono text-accent">
-              {fmtFollowers(data.total_followers)}
+              {fmtFollowers(data.total_followers ?? undefined)}
             </div>
           </div>
           <Badge variant={influenceBadgeVariant(influenceLevel)}>
             {influenceLevel} influence
           </Badge>
         </div>
-        {data.computed_at && (
+        {Boolean(data.computed_at) && (
           <FreshnessIndicator computedAt={String(data.computed_at)} />
         )}
       </div>

@@ -167,6 +167,15 @@ export function GeoPage() {
 
       {summaryError && <ErrorState message="Failed to load geographic data" />}
 
+      {!summaryLoading && !summary && !summaryError && (
+        <div className="rounded border border-border-subtle bg-surface-raised px-4 py-6 text-center mb-6">
+          <p className="text-sm font-mono text-text-muted">
+            Geographic intelligence is being provisioned for your account.
+            Data will appear here once your geo pipeline is active.
+          </p>
+        </div>
+      )}
+
       {!summaryLoading && summary && (
         <>
           {/* Summary cards */}
