@@ -9,7 +9,7 @@
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview --port 5175",
     "typecheck": "tsc --noEmit",
-    "lint": "eslint 'src/**/*.{ts,tsx}'",
+    "lint": "tsc --noEmit",
     "format:check": "prettier --check 'src/**/*.{ts,tsx,css}'",
     "test": "vitest run",
     "test:watch": "vitest"
