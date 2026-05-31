@@ -17,6 +17,18 @@ ecosystem coverage. New entries are added through provider-backed discovery
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from .registries import (
+        AppRegistry,
+        ChainRegistry,
+        GovernanceSpaceRegistry,
+        MarketVenueRegistry,
+        ProtocolRegistry,
+        TokenRegistry,
+    )
+
 
 # ═══════════════════════════════════════════════════════════════════════════
 # CHAIN SEED

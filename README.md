@@ -254,18 +254,22 @@ Model artifacts require training run before serving. See `docs/ML-TRAINING-GUIDE
 
 ```bash
 # Local development (no infrastructure required)
-pip install -e ".[dev,backend,agent,ml]"
-npm ci                                 # install TypeScript workspaces
+pip install -e ".[dev,security,backend,agent,ml]"
+npm ci --ignore-scripts                # install TypeScript workspaces from package-lock.json
 export AETHER_ENV=local
-make test                              # Python tests (163 unit + integration + security)
-npm test                               # JS tests (web + react-native + kyber, 89 tests total)
+python -m ruff check .                 # Python static checks
+make test                              # Python tests (root + ML testpaths)
+npm run lint                           # TypeScript workspace static checks
+npm run typecheck                      # TypeScript type checks
+npm test                               # TypeScript/Vitest tests
+npm run build                          # TypeScript package and frontend builds
 
 # Full-stack Docker compose
 docker compose up -d                   # postgres, redis, kafka, clickhouse, backend, ml-serving, kyber, prometheus
 curl http://localhost:8000/v1/health   # backend
 curl http://localhost:8080/health      # ml-serving
 curl http://localhost:8081/health      # kyber operator console
-# apps/aether runs separately (dev-only): cd apps/aether && npm run dev  # → http://localhost:5175
+# frontend/aether runs separately (dev-only): cd frontend/aether && npm run dev  # → http://localhost:5175
 
 # Staging
 cd deploy/staging
@@ -421,7 +425,7 @@ tests/                                 Python test suite (163+ tests)
 
 .github/workflows/                     CI/CD workflows
   repo-health.yml  Validate: lint, typecheck, build, test, madge, docs drift
-  kyber-e2e.yml    Path-scoped Playwright E2E for apps/kyber + packages/shared
+  kyber-e2e.yml    Path-scoped Playwright E2E for frontend/kyber + packages/shared
 ```
 
 ## Documentation
