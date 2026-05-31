@@ -812,16 +812,19 @@ function RecommendationCards({ userId }: { userId: string }) {
   const { toast } = useToast();
   const { data, isLoading } = useUserRecommendations(userId);
   const [confirmId, setConfirmId] = useState<string | null>(null);
+  const [rejectId, setRejectId] = useState<string | null>(null);
+  const [rejectReason, setRejectReason] = useState('');
   const [actionLoading, setActionLoading] = useState(false);
 
-  const recs = (data?.recommendations ?? []).filter(r => r.status === 'pending_review');
+  // Backend envelope: { items: [...] } — filter to only pending_review items
+  const recs = (data?.items ?? []).filter(r => r.status === 'pending_review');
   if (isLoading) return <LoadingState lines={3} />;
   if (recs.length === 0) return null;
 
   async function handleApprove(id: string) {
     setActionLoading(true);
     try {
-      await api.recommendations.approve(id);
+      await api.recommendations.approve(id, userId);
       toast.success('Recommendation approved');
       setConfirmId(null);
     } catch {
@@ -831,11 +834,14 @@ function RecommendationCards({ userId }: { userId: string }) {
     }
   }
 
-  async function handleReject(id: string) {
+  async function handleReject(id: string, reason: string) {
+    if (!reason.trim()) { toast.error('Please enter a reason for rejection'); return; }
     setActionLoading(true);
     try {
-      await api.recommendations.reject(id);
+      await api.recommendations.reject(id, userId, reason.trim());
       toast.success('Recommendation rejected');
+      setRejectId(null);
+      setRejectReason('');
     } catch {
       toast.error('Rejection failed — please try again');
     } finally {
@@ -872,7 +878,7 @@ function RecommendationCards({ userId }: { userId: string }) {
             </ul>
           )}
           <div className="flex gap-2 pt-1">
-            <Button variant="danger" size="sm" onClick={() => void handleReject(rec.id)} disabled={actionLoading}>
+            <Button variant="danger" size="sm" onClick={() => setRejectId(rec.id)} disabled={actionLoading}>
               Reject
             </Button>
             <Button variant="primary" size="sm" onClick={() => setConfirmId(rec.id)} disabled={actionLoading}>
@@ -897,6 +903,33 @@ function RecommendationCards({ userId }: { userId: string }) {
             <Button variant="ghost" size="sm" onClick={() => setConfirmId(null)} disabled={actionLoading}>Cancel</Button>
             <Button variant="primary" size="sm" onClick={() => void handleApprove(confirmId)} disabled={actionLoading}>
               {actionLoading ? '[···]' : 'Confirm approve'}
+            </Button>
+          </ModalFooter>
+        </Modal>
+      )}
+
+      {/* Reject modal with required reason field */}
+      {rejectId && (
+        <Modal open onClose={() => { setRejectId(null); setRejectReason(''); }}>
+          <ModalHeader>
+            <h2 className="text-sm font-medium font-mono">Reject recommendation</h2>
+          </ModalHeader>
+          <ModalBody>
+            <p className="text-sm text-text-secondary mb-3">
+              Provide a reason for rejection. This will be recorded with the decision.
+            </p>
+            <input
+              className="w-full rounded border border-border-default bg-surface-raised px-3 py-2 text-sm text-text-primary placeholder:text-text-muted focus:outline-none focus:border-accent"
+              placeholder="Reason for rejection…"
+              value={rejectReason}
+              onChange={e => setRejectReason(e.target.value)}
+              autoFocus
+            />
+          </ModalBody>
+          <ModalFooter>
+            <Button variant="ghost" size="sm" onClick={() => { setRejectId(null); setRejectReason(''); }} disabled={actionLoading}>Cancel</Button>
+            <Button variant="danger" size="sm" onClick={() => void handleReject(rejectId, rejectReason)} disabled={actionLoading || !rejectReason.trim()}>
+              {actionLoading ? '[···]' : 'Confirm rejection'}
             </Button>
           </ModalFooter>
         </Modal>

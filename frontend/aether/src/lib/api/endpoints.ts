@@ -977,11 +977,14 @@ export const api = {
 
   // ── Recommendations (pending retarget / campaign actions) ──────────────────
   recommendations: {
-    /** Pending recommendation cards for a user requiring analyst approval. */
+    /** Pending recommendation cards for a user requiring analyst approval.
+     *  Backend returns: { data: { entity_id, kind, items: [...], pagination, provenance } }
+     *  We normalise to { items: [...] } so callers can filter on status directly. */
     forUser: (userId: string) =>
       restClient.get(`/v1/profile/${userId}/retarget-recommendations`, wrap(unknownSchema))
-        .then(r => r.data as {
-          recommendations: Array<{
+        .then(r => {
+          const envelope = r.data as { items?: unknown[] } | null;
+          const items = (envelope?.items ?? []) as Array<{
             id: string;
             platform: string;
             action: string;
@@ -991,15 +994,24 @@ export const api = {
             reasoning: string[];
             status: 'pending_review' | 'approved' | 'rejected' | 'executing' | 'executed' | 'failed';
           }>;
+          return { items };
         }),
 
-    /** Approve a recommendation — requires human confirmation before calling. */
-    approve: (recommendationId: string) =>
-      restClient.post(`/v1/agent/tasks/${recommendationId}/approve`, wrap(unknownSchema), {}).then(r => r.data),
+    /** Approve a recommendation — requires human confirmation before calling.
+     *  Backend: POST /v1/recommendations/{id}/approve  body: { reviewed_by, review_notes? } */
+    approve: (recommendationId: string, reviewedBy: string, reviewNotes?: string) =>
+      restClient.post(`/v1/recommendations/${recommendationId}/approve`, wrap(unknownSchema), {
+        reviewed_by: reviewedBy,
+        review_notes: reviewNotes ?? null,
+      }).then(r => r.data),
 
-    /** Reject a recommendation. */
-    reject: (recommendationId: string) =>
-      restClient.post(`/v1/agent/tasks/${recommendationId}/reject`, wrap(unknownSchema), {}).then(r => r.data),
+    /** Reject a recommendation.
+     *  Backend: POST /v1/recommendations/{id}/reject  body: { reviewed_by, reason } */
+    reject: (recommendationId: string, reviewedBy: string, reason: string) =>
+      restClient.post(`/v1/recommendations/${recommendationId}/reject`, wrap(unknownSchema), {
+        reviewed_by: reviewedBy,
+        reason,
+      }).then(r => r.data),
   },
 };
 
