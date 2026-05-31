@@ -124,6 +124,14 @@ SERVICE_CATALOG: list[ServiceDefinition] = [
         pricing=_pricing("0.25", "0.63", "1.00", "1.50"),
         plan_access={_P1: None, _P2: "Core Feature", _P3: "Advanced", _P4: "Cross-Domain"},
     ),
+    # 11b. Identity Resolution (admin review/approve/reject for merge decisions)
+    ServiceDefinition(
+        name="Identity Resolution",
+        pillar="Identity",
+        endpoint_pattern="/v1/resolution/*",
+        pricing=_pricing("0.25", "0.63", "1.00", "1.50"),
+        plan_access={_P1: None, _P2: "Core Feature", _P3: "Advanced", _P4: "Cross-Domain"},
+    ),
     # 12. Ledger-Sync (On-Chain)
     ServiceDefinition(
         name="Ledger-Sync",

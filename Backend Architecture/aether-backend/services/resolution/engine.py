@@ -261,7 +261,7 @@ class IdentityResolutionEngine:
     ) -> None:
         """Route a decision to merge, review, or reject."""
         # Always record in audit
-        await self.repository.record_audit(decision)
+        await self.repository.record_audit(tenant_id, decision)
 
         if decision.action == "auto_merge":
             await self.execute_merge(
@@ -271,7 +271,7 @@ class IdentityResolutionEngine:
                 decision,
             )
         elif decision.action == "flag_for_review":
-            await self.repository.create_pending_resolution(decision)
+            await self.repository.create_pending_resolution(tenant_id, decision)
             await self.producer.publish(Event(
                 topic=Topic.RESOLUTION_FLAGGED,
                 tenant_id=tenant_id,

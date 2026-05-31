@@ -10,7 +10,7 @@ from typing import Optional
 
 from fastapi import APIRouter, Depends, Request
 
-from shared.common.common import APIResponse, NotFoundError
+from shared.common.common import APIResponse, ConflictError, ForbiddenError, NotFoundError
 from shared.cache.cache import CacheClient
 from shared.graph.graph import GraphClient
 from shared.events.events import Event, EventProducer, Topic
@@ -86,10 +86,11 @@ async def get_cluster(
     identity_repo: IdentityRepository = Depends(_get_identity_repo),
 ):
     """Get the identity cluster for a user (linked profiles, devices, IPs, wallets, emails)."""
-    # Verify the user belongs to the requesting tenant before returning cluster data
     tenant = request.state.tenant
     profile = await identity_repo.get_profile(tenant.tenant_id, user_id)
-    if not profile:
+    # get_profile does not filter by tenant_id in the DB query — verify ownership explicitly.
+    # Return NotFoundError (not Forbidden) to avoid leaking cross-tenant user existence.
+    if not profile or profile.get("tenant_id") != tenant.tenant_id:
         raise NotFoundError("Profile")
     cluster = await repo.get_cluster(user_id)
     return APIResponse(data=cluster).to_dict()
@@ -118,6 +119,14 @@ async def approve_resolution(
     """Admin approves a pending identity merge."""
     tenant = request.state.tenant
     tenant.require_permission("write")
+
+    existing = await repo._pending.find_by_id(decision_id)
+    if not existing:
+        raise NotFoundError("Resolution decision")
+    if existing.get("tenant_id") != tenant.tenant_id:
+        raise ForbiddenError("Resolution decision belongs to a different tenant")
+    if existing.get("status") != "pending":
+        raise ConflictError(f"Resolution decision is already {existing.get('status')}")
 
     record = await repo.approve_resolution(decision_id)
 
@@ -156,6 +165,14 @@ async def reject_resolution(
     tenant = request.state.tenant
     tenant.require_permission("write")
 
+    existing = await repo._pending.find_by_id(decision_id)
+    if not existing:
+        raise NotFoundError("Resolution decision")
+    if existing.get("tenant_id") != tenant.tenant_id:
+        raise ForbiddenError("Resolution decision belongs to a different tenant")
+    if existing.get("status") != "pending":
+        raise ConflictError(f"Resolution decision is already {existing.get('status')}")
+
     record = await repo.reject_resolution(decision_id)
 
     await producer.publish(Event(
@@ -178,7 +195,8 @@ async def get_audit_trail(
     repo: ResolutionRepository = Depends(_get_resolution_repo),
 ):
     """Get the audit trail for a resolution decision."""
-    records = await repo.get_audit(decision_id)
+    tenant = request.state.tenant
+    records = await repo.get_audit(tenant.tenant_id, decision_id)
     if not records:
         raise NotFoundError("Audit trail")
     return APIResponse(data=records).to_dict()
@@ -202,9 +220,9 @@ async def update_resolution_config(
     body: ResolutionConfigUpdate,
     request: Request,
 ):
-    """Update resolution engine configuration thresholds."""
+    """Update resolution engine configuration thresholds. Requires admin — config is global."""
     tenant = request.state.tenant
-    tenant.require_permission("write")
+    tenant.require_permission("admin")
 
     global _config, _engine
 

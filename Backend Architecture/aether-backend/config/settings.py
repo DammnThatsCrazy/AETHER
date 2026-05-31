@@ -524,6 +524,26 @@ class Settings:
                 "non-local environments"
             )
 
+        # ── Extraction Mesh canary seed ──────────────────────────────────────
+        if (
+            _is_non_local
+            and self.extraction_mesh.canary_secret_seed
+            == "aether-mesh-canary-seed"
+        ):
+            raise RuntimeError(
+                "EXTRACTION_CANARY_SEED must be set to a non-default value in "
+                "non-local environments"
+            )
+
+        # ── SDK Config signing secret ─────────────────────────────────────────
+        import os as _os
+        _sdk_secret = _os.getenv("SDK_CONFIG_SECRET", "default-dev-secret-change-in-production")
+        if _is_non_local and _sdk_secret == "default-dev-secret-change-in-production":
+            raise RuntimeError(
+                "SDK_CONFIG_SECRET must be set to a non-default value in "
+                "non-local environments"
+            )
+
         # ── Neptune ──────────────────────────────────────────────────────────
         # Neptune requires AWS infrastructure. In non-local envs where the
         # endpoint is still the placeholder "localhost", emit a clear warning so

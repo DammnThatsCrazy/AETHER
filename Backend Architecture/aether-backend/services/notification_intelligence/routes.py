@@ -832,7 +832,14 @@ async def list_webhooks(request: Request):
 @router.delete("/webhooks/{webhook_id}")
 async def delete_webhook(webhook_id: str, request: Request):
     from repositories.repos import WebhookRepository
+    from shared.common.common import ForbiddenError, NotFoundError
+    request.state.tenant.require_permission("write")
     wh_repo = WebhookRepository()
+    webhook = await wh_repo.find_by_id(webhook_id)
+    if not webhook:
+        raise NotFoundError("Webhook")
+    if webhook.get("tenant_id") != request.state.tenant.tenant_id:
+        raise ForbiddenError("Webhook belongs to a different tenant")
     await wh_repo.delete(webhook_id)
     return APIResponse(data={"deleted": True}).to_dict()
 

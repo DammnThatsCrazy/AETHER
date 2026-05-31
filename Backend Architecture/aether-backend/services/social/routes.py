@@ -10,7 +10,7 @@ spotify, telegram, discord, github, farcaster, lens.
 
 from __future__ import annotations
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, HTTPException, Query, Request
 
 from shared.logger.logger import get_logger
 
@@ -24,9 +24,11 @@ _WINDOW_MAP = {"30d": 30, "60d": 60, "90d": 90, "lifetime": None}
 @router.get("/v1/profile/{entity_id}/social-intelligence")
 async def get_social_intelligence(
     entity_id: str,
+    request: Request,
     window: str = Query(default="30d", description="30d | 60d | 90d | lifetime"),
     limit: int = Query(default=10, ge=1, le=50),
 ):
+    request.state.tenant.require_permission("read")
     """
     Return aggregated cross-platform social data for an entity.
     Works for any entity type: human, brand, organization, AI agent.
