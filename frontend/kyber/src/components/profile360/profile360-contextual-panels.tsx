@@ -1,4 +1,6 @@
-import { Badge, Card, CardContent, CardHeader, CardTitle, EmptyState, ScrollArea } from '@aether/ui';
+import { useState } from 'react';
+import { Badge, Card, CardContent, CardHeader, CardTitle, EmptyState, EvidenceDrawer, GlyphIcon, ScrollArea } from '@aether/ui';
+import type { EvidenceRef } from '@aether/ui';
 import { cn } from '@kyber/lib/utils';
 import type { Profile360Section } from '@kyber/types';
 
@@ -355,7 +357,54 @@ export function Profile360WalletsPanel({ sections }: { readonly sections: readon
 
 // ── Behavioral ────────────────────────────────────────────────────────────────
 
-export function Profile360BehavioralPanel({ sections }: { readonly sections: readonly Profile360Section[] }) {
+function BehavioralSignalRow({ sig, index }: { sig: unknown; index: number }) {
+  const [evidenceOpen, setEvidenceOpen] = useState(false);
+  const sr = asRec(sig);
+  const family = String(sr.family ?? sr.signal_family ?? 'other');
+  const severity = String(sr.severity ?? sr.level ?? 'info');
+  const explanation = String(sr.explanation ?? sr.reason ?? sr.description ?? '');
+  const score = typeof sr.score === 'number' ? sr.score : null;
+  const signalName = String(sr.name ?? sr.signal_type ?? sr.type ?? '');
+  const evidenceRefs = Array.isArray(sr.evidence_refs) ? sr.evidence_refs as EvidenceRef[] : [];
+
+  return (
+    <div key={String(sr.id ?? index)} className="border border-border-subtle rounded bg-surface-raised">
+      <div className="p-3 space-y-1.5">
+        <div className="flex items-center gap-2 flex-wrap">
+          <Badge size="sm">{family}</Badge>
+          <Badge
+            variant={severity === 'critical' || severity === 'high' ? 'danger' : severity === 'medium' ? 'warning' : 'default'}
+            size="sm"
+          >{severity}</Badge>
+          <span className="text-xs text-text-primary font-medium">{signalName}</span>
+          {score !== null && (
+            <span className="text-xs font-mono text-text-secondary">{score.toFixed(3)}</span>
+          )}
+          {evidenceRefs.length > 0 && (
+            <button
+              onClick={() => setEvidenceOpen(o => !o)}
+              className="ml-auto flex items-center gap-1 text-[10px] font-mono text-text-muted hover:text-accent transition-colors"
+            >
+              <GlyphIcon glyph={evidenceOpen ? '[-]' : '[>]'} className="text-[10px]" />
+              {evidenceOpen ? 'hide' : 'evidence'}
+            </button>
+          )}
+        </div>
+        {explanation && <p className="text-xs text-text-secondary">{explanation}</p>}
+      </div>
+      {evidenceRefs.length > 0 && (
+        <EvidenceDrawer
+          signalName={signalName}
+          evidence={evidenceRefs}
+          open={evidenceOpen}
+          onClose={() => setEvidenceOpen(false)}
+        />
+      )}
+    </div>
+  );
+}
+
+export function Profile360BehavioralPanel({ sections, window: _window }: { readonly sections: readonly Profile360Section[]; readonly window?: string }) {
   const section = sections.find(s => s.id === 'behavioral-signals');
   const data = asRec(section?.data);
   const signals = Array.isArray(data.signals) ? data.signals : [];
@@ -400,29 +449,9 @@ export function Profile360BehavioralPanel({ sections }: { readonly sections: rea
           <CardContent>
             <ScrollArea maxHeight="440px">
               <div className="space-y-2">
-                {signals.map((sig, i) => {
-                  const sr = asRec(sig);
-                  const family = String(sr.family ?? sr.signal_family ?? 'other');
-                  const severity = String(sr.severity ?? sr.level ?? 'info');
-                  const explanation = String(sr.explanation ?? sr.reason ?? sr.description ?? '');
-                  const score = typeof sr.score === 'number' ? sr.score : null;
-                  return (
-                    <div key={String(sr.id ?? i)} className="p-3 border border-border-subtle rounded bg-surface-raised space-y-1.5">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <Badge size="sm">{family}</Badge>
-                        <Badge
-                          variant={severity === 'critical' || severity === 'high' ? 'danger' : severity === 'medium' ? 'warning' : 'default'}
-                          size="sm"
-                        >{severity}</Badge>
-                        <span className="text-xs text-text-primary font-medium">{String(sr.name ?? sr.signal_type ?? sr.type ?? '')}</span>
-                        {score !== null && (
-                          <span className="ml-auto text-xs font-mono text-text-secondary">{score.toFixed(3)}</span>
-                        )}
-                      </div>
-                      {explanation && <p className="text-xs text-text-secondary">{explanation}</p>}
-                    </div>
-                  );
-                })}
+                {signals.map((sig, i) => (
+                  <BehavioralSignalRow key={String(asRec(sig).id ?? i)} sig={sig} index={i} />
+                ))}
               </div>
             </ScrollArea>
           </CardContent>

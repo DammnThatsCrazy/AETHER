@@ -1,6 +1,7 @@
 import { useCallback, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Badge, Button, Card, CardContent, CardHeader, CardTitle, EmptyState, LoadingState, StatusIndicator, Tabs, TabsContent, TabsList, TabsTrigger, TerminalSeparator } from '@aether/ui';
+import { Badge, Button, Card, CardContent, CardHeader, CardTitle, EmptyState, FreshnessIndicator, LoadingState, StatusIndicator, Tabs, TabsContent, TabsList, TabsTrigger, TerminalSeparator, TimeWindowSelector } from '@aether/ui';
+import type { TimeWindow } from '@aether/ui';
 import { useProfile360 } from '@kyber/features/profile360';
 import type { Profile360EntityType, Profile360Reference, Profile360ViewId } from '@kyber/types';
 import { entityDetailPath, profile360Path } from '@kyber/routes';
@@ -15,6 +16,7 @@ import {
   Profile360BehavioralPanel,
   Profile360AttributionPanel,
 } from './profile360-contextual-panels';
+import { KyberSocialIntelligencePanel } from './social-intelligence-panel';
 
 interface Profile360ViewProps {
   readonly type: Profile360EntityType;
@@ -22,12 +24,13 @@ interface Profile360ViewProps {
   readonly onBack?: () => void;
 }
 
-const views: { id: Profile360ViewId; label: string }[] = [
+const views: { id: Profile360ViewId | 'social'; label: string }[] = [
   { id: 'identity', label: 'Identity' },
   { id: 'system', label: 'System' },
   { id: 'financial', label: 'Financial' },
   { id: 'sessions', label: 'Sessions' },
   { id: 'journeys', label: 'Journeys' },
+  { id: 'social', label: 'Social' },
   { id: 'wallets', label: 'Web3' },
   { id: 'behavioral', label: 'Behavioral' },
   { id: 'attribution', label: 'Attribution' },
@@ -46,7 +49,8 @@ function wsVariant(status: string) {
 
 export function Profile360View({ type, id, onBack }: Profile360ViewProps) {
   const navigate = useNavigate();
-  const [activeView, setActiveView] = useState<Profile360ViewId>('identity');
+  const [activeView, setActiveView] = useState<Profile360ViewId | 'social'>('identity');
+  const [timeWindow, setTimeWindow] = useState<TimeWindow>('30d');
   const { entity, sections, timeline, graph, highlightedNodeIds, isLoading, error, websocketStatus, actions } = useProfile360(type, id);
 
   const onDrill = useCallback((reference: Profile360Reference) => {
@@ -85,13 +89,19 @@ export function Profile360View({ type, id, onBack }: Profile360ViewProps) {
             <StatusIndicator status={entity.health.status} label={entity.health.status} />
           </div>
         </div>
-        <div className="grid grid-cols-4 gap-2 min-w-[360px]">
-          {headlineMetrics.map((metric) => (
-            <div key={metric.label} className="rounded border border-border-subtle bg-surface-raised p-2 text-center">
-              <div className="text-[10px] uppercase text-text-muted">{metric.label}</div>
-              <div className="text-lg font-semibold font-mono text-text-primary">{metric.value}</div>
-            </div>
-          ))}
+        <div className="flex flex-col items-end gap-3">
+          <TimeWindowSelector value={timeWindow} onChange={setTimeWindow} />
+          {Boolean(entity.metadata?.computed_at) && (
+            <FreshnessIndicator computedAt={String(entity.metadata.computed_at)} />
+          )}
+          <div className="grid grid-cols-4 gap-2 min-w-[360px]">
+            {headlineMetrics.map((metric) => (
+              <div key={metric.label} className="rounded border border-border-subtle bg-surface-raised p-2 text-center">
+                <div className="text-[10px] uppercase text-text-muted">{metric.label}</div>
+                <div className="text-lg font-semibold font-mono text-text-primary">{metric.value}</div>
+              </div>
+            ))}
+          </div>
         </div>
       </div>
 
@@ -112,7 +122,7 @@ export function Profile360View({ type, id, onBack }: Profile360ViewProps) {
         </CardContent>
       </Card>
 
-      <Tabs value={activeView} onValueChange={(value) => setActiveView(value as Profile360ViewId)}>
+      <Tabs value={activeView} onValueChange={(value) => setActiveView(value as Profile360ViewId | 'social')}>
         <TabsList className="overflow-x-auto">
           {views.map((view) => <TabsTrigger key={view.id} value={view.id}>{view.label}</TabsTrigger>)}
         </TabsList>
@@ -122,8 +132,9 @@ export function Profile360View({ type, id, onBack }: Profile360ViewProps) {
         <TabsContent value="financial"><Profile360SectionGrid sections={sections.financial ?? []} onDrill={onDrill} /></TabsContent>
         <TabsContent value="sessions"><Profile360SessionsPanel sections={sections.sessions ?? []} /></TabsContent>
         <TabsContent value="journeys"><Profile360JourneysPanel sections={sections.journeys ?? []} /></TabsContent>
+        <TabsContent value="social"><KyberSocialIntelligencePanel entityId={id} window={timeWindow} /></TabsContent>
         <TabsContent value="wallets"><Profile360WalletsPanel sections={sections.wallets ?? []} /></TabsContent>
-        <TabsContent value="behavioral"><Profile360BehavioralPanel sections={sections.behavioral ?? []} /></TabsContent>
+        <TabsContent value="behavioral"><Profile360BehavioralPanel sections={sections.behavioral ?? []} window={timeWindow} /></TabsContent>
         <TabsContent value="attribution"><Profile360AttributionPanel sections={sections.attribution ?? []} /></TabsContent>
         <TabsContent value="graph"><Profile360GraphPanel graph={graph} highlightedNodeIds={highlightedNodeIds} onHighlight={actions.highlightNodes} onDrill={onDrill} /></TabsContent>
         <TabsContent value="timeline"><Profile360TimelinePanel events={timeline} onHighlight={actions.highlightNodes} onDrill={onDrill} /></TabsContent>
