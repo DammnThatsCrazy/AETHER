@@ -10,7 +10,7 @@ from typing import Optional
 
 from fastapi import APIRouter, Depends, Request
 
-from shared.common.common import APIResponse, ForbiddenError, NotFoundError
+from shared.common.common import APIResponse, ConflictError, ForbiddenError, NotFoundError
 from shared.cache.cache import CacheClient
 from shared.graph.graph import GraphClient
 from shared.events.events import Event, EventProducer, Topic
@@ -86,10 +86,11 @@ async def get_cluster(
     identity_repo: IdentityRepository = Depends(_get_identity_repo),
 ):
     """Get the identity cluster for a user (linked profiles, devices, IPs, wallets, emails)."""
-    # Verify the user belongs to the requesting tenant before returning cluster data
     tenant = request.state.tenant
     profile = await identity_repo.get_profile(tenant.tenant_id, user_id)
-    if not profile:
+    # get_profile does not filter by tenant_id in the DB query — verify ownership explicitly.
+    # Return NotFoundError (not Forbidden) to avoid leaking cross-tenant user existence.
+    if not profile or profile.get("tenant_id") != tenant.tenant_id:
         raise NotFoundError("Profile")
     cluster = await repo.get_cluster(user_id)
     return APIResponse(data=cluster).to_dict()
@@ -124,6 +125,8 @@ async def approve_resolution(
         raise NotFoundError("Resolution decision")
     if existing.get("tenant_id") != tenant.tenant_id:
         raise ForbiddenError("Resolution decision belongs to a different tenant")
+    if existing.get("status") != "pending":
+        raise ConflictError(f"Resolution decision is already {existing.get('status')}")
 
     record = await repo.approve_resolution(decision_id)
 
@@ -167,6 +170,8 @@ async def reject_resolution(
         raise NotFoundError("Resolution decision")
     if existing.get("tenant_id") != tenant.tenant_id:
         raise ForbiddenError("Resolution decision belongs to a different tenant")
+    if existing.get("status") != "pending":
+        raise ConflictError(f"Resolution decision is already {existing.get('status')}")
 
     record = await repo.reject_resolution(decision_id)
 
