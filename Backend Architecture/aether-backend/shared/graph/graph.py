@@ -75,6 +75,10 @@ class VertexType:
     # Intelligence Graph — Record nodes
     PAYMENT = "Payment"
     ACTION_RECORD = "ActionRecord"
+    RECOMMENDATION = "Recommendation"
+    DECISION_RECORD = "DecisionRecord"
+    OUTCOME_OBSERVATION = "OutcomeObservation"
+    PLAYBOOK_RUN = "PlaybookRun"
 
     # Web3 Coverage — Registry-native graph objects
     CHAIN = "Chain"
@@ -230,6 +234,14 @@ class EdgeType:
 
     # Intelligence Graph — Action tracking
     PERFORMED_ACTION = "PERFORMED_ACTION"  # Agent → ActionRecord
+
+    # Decision & Outcome Intelligence OODA loop
+    HAS_RECOMMENDATION = "HAS_RECOMMENDATION"
+    SUPPORTED_BY = "SUPPORTED_BY"
+    SELECTED_BY = "SELECTED_BY"
+    EXECUTED_AS = "EXECUTED_AS"
+    PRODUCED = "PRODUCED"
+    UPDATES_CONFIDENCE_FOR = "UPDATES_CONFIDENCE_FOR"
 
     # ── Web3 Coverage — Wallet ↔ Entity edges ──────────────────────────
     USES_PROTOCOL = "USES_PROTOCOL"           # Wallet → Protocol

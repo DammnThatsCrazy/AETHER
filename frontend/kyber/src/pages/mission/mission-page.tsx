@@ -25,6 +25,7 @@ import { cn, formatRelativeTime, formatCompactNumber, formatPercentage } from '@
 import { getEnvironment, getRuntimeMode } from '@kyber/lib/env';
 import { useMissionData } from '@kyber/features/mission';
 import { useDiagnosticsData } from '@kyber/features/diagnostics';
+import { RecommendationObservabilityPanel } from '@kyber/components/recommendation-observability-panel';
 import type { KeyChange, Severity } from '@kyber/types';
 
 const SEVERITY_COLORS: Record<string, string> = {
@@ -119,6 +120,8 @@ export function MissionPage() {
         </div>
       }
     >
+      <RecommendationObservabilityPanel />
+
       {/* ---- Row 1: Health Summary Cards ---- */}
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-3">
         {/* Global Health */}

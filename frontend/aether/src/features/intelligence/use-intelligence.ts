@@ -98,3 +98,37 @@ export function useEntityBehavioralSignals(
     enabled: !!entityId,
   });
 }
+
+export function useRecommendations() {
+  return useQuery({
+    key: 'intelligence:recommendations',
+    fetcher: () => api.intelligence.recommendations(),
+    staleTime: STALE,
+  });
+}
+
+export function useProfileRecommendations(entityId: string) {
+  return useQuery({
+    key: key('profile-recommendations', entityId),
+    fetcher: () => api.profile.recommendations(entityId),
+    staleTime: STALE,
+    enabled: !!entityId,
+  });
+}
+
+export function useProfileOutcomes(entityId: string) {
+  return useQuery({
+    key: key('profile-outcomes', entityId),
+    fetcher: () => api.profile.outcomes(entityId),
+    staleTime: STALE,
+    enabled: !!entityId,
+  });
+}
+
+export function usePlaybooks() {
+  return useQuery({
+    key: 'intelligence:playbooks',
+    fetcher: () => api.intelligence.playbooks(),
+    staleTime: STALE,
+  });
+}

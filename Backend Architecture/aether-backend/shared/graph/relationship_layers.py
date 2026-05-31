@@ -73,6 +73,12 @@ _EDGE_LAYER_MAP: dict[str, RelationshipLayer] = {
     EdgeType.GOVERNED_BY: RelationshipLayer.A2A,
     EdgeType.DEPENDS_ON: RelationshipLayer.A2A,
     EdgeType.PERFORMED_ACTION: RelationshipLayer.A2A,
+    EdgeType.HAS_RECOMMENDATION: RelationshipLayer.A2H,
+    EdgeType.SUPPORTED_BY: RelationshipLayer.A2H,
+    EdgeType.SELECTED_BY: RelationshipLayer.A2H,
+    EdgeType.EXECUTED_AS: RelationshipLayer.A2A,
+    EdgeType.PRODUCED: RelationshipLayer.A2A,
+    EdgeType.UPDATES_CONFIDENCE_FOR: RelationshipLayer.A2A,
 }
 
 

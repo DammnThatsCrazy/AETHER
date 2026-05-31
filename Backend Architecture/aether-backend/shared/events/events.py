@@ -264,6 +264,14 @@ class Topic(str, Enum):
     SDK_DRIFT_DETECTED       = "aether.sdk.drift.detected"
     SDK_CONFIG_UPDATED       = "aether.sdk.config.updated"
 
+    # Decision & Outcome Intelligence (OODA loop)
+    RECOMMENDATION_GENERATED = "aether.recommendation.generated"
+    RECOMMENDATION_VIEWED = "aether.recommendation.viewed"
+    DECISION_RECORDED = "aether.decision.recorded"
+    ACTION_EXECUTED = "aether.action.executed"
+    OUTCOME_OBSERVED = "aether.outcome.observed"
+    RECOMMENDATION_CONFIDENCE_UPDATED = "aether.recommendation.confidence_updated"
+
     # Dead letter
     DEAD_LETTER = "aether.dlq"
 
