@@ -98,21 +98,26 @@ function EnterpriseContactModal({ open, onClose, prefill }: EnterpriseModalProps
     message: '',
   });
   const [success, setSuccess] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
 
   function setField(field: string, value: string) {
     setForm(prev => ({ ...prev, [field]: value }));
+    if (submitError) setSubmitError(null);
   }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
+    setSubmitError(null);
     const result = await mutate(form);
     if (result !== null) {
       if ((result as { mailto_fallback?: boolean }).mailto_fallback) {
         toast.info('Opening your mail client…');
       } else {
         setSuccess(true);
+        toast.success("Message sent — we'll be in touch within 2 business days");
       }
     } else {
+      setSubmitError('Could not send message — please try again');
       toast.error('Could not send message — please try again');
     }
   }
@@ -179,6 +184,9 @@ function EnterpriseContactModal({ open, onClose, prefill }: EnterpriseModalProps
                 className="bg-surface-raised text-text-primary border border-border-default rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-border-focus placeholder:text-text-muted resize-none"
               />
             </div>
+          {submitError && (
+            <p className="text-danger text-xs font-mono px-4 pb-2">{submitError}</p>
+          )}
           </ModalBody>
           <ModalFooter>
             <Button variant="ghost" size="sm" type="button" onClick={onClose} disabled={isLoading}>Cancel</Button>

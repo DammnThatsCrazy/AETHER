@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react';
 import { Navigate, useLocation } from 'react-router-dom';
 import { useAuth } from './auth-context';
+import { AetherLogo } from '@aether-app/components/aether-logo';
 
 interface RequireAuthProps {
   readonly children: ReactNode;
@@ -15,8 +16,8 @@ export function RequireAuth({ children, fallback }: RequireAuthProps) {
     return (
       <div className="flex h-screen items-center justify-center bg-surface-base">
         <div className="text-center">
-          <div className="font-mono text-2xl text-accent mb-2">[ AETHER ]</div>
-          <div className="text-text-secondary text-sm font-mono">Loading...</div>
+          <AetherLogo size={32} className="justify-center mb-2" />
+          <div className="text-text-secondary text-sm">Loading...</div>
         </div>
       </div>
     );

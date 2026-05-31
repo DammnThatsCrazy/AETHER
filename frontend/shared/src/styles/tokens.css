@@ -1,82 +1,110 @@
 /* === Aether Design Tokens — canonical CSS custom properties === */
-/* Both apps import this file. Each app can override values in its own tokens.css. */
+/* Palette extracted from the Olympus · Aether Design System brand assets. */
+/* Layer colors (brand identity, bottom → top): */
+/*   L1 Deep Steel   #3a6896  — primary accent    */
+/*   L2 Sky Blue     #5a85a8  — secondary / hover */
+/*   L3 Amber        #c9975a  — warning            */
+/*   L4 Rose         #a87575  — danger             */
+/*   L5 Sage         #6b9a7c  — success            */
 
 :root {
-  /* Surface colors */
-  --color-surface-base: #0a0a0f;
-  --color-surface-raised: #12121a;
-  --color-surface-overlay: #1a1a26;
-  --color-surface-sunken: #06060a;
+  /* Surface */
+  --color-surface-base:    #111114;
+  --color-surface-raised:  #1a1a1e;
+  --color-surface-overlay: #232328;
+  --color-surface-sunken:  #0d0d10;
 
-  /* Border colors */
-  --color-border-default: #2a2a3a;
-  --color-border-subtle: #1e1e2e;
-  --color-border-focus: #4a6cf7;
+  /* Border */
+  --color-border-default:  #2a2a2f;
+  --color-border-subtle:   #1e1e24;
+  --color-border-focus:    #5a85a8;
 
-  /* Text colors */
-  --color-text-primary: #e8e8f0;
-  --color-text-secondary: #8888a0;
-  --color-text-muted: #555570;
-  --color-text-inverse: #0a0a0f;
+  /* Text */
+  --color-text-primary:    #e8e6e1;
+  --color-text-secondary:  #9e9b94;
+  --color-text-muted:      #5c5a56;
+  --color-text-inverse:    #111114;
 
-  /* Accent and semantic colors */
-  --color-accent: #4a6cf7;
-  --color-accent-hover: #5b7df8;
-  --color-success: #22c55e;
-  --color-warning: #f59e0b;
-  --color-danger: #ef4444;
-  --color-info: #3b82f6;
+  /* Brand — layer palette */
+  --color-accent:          #3a6896;
+  --color-accent-hover:    #5a85a8;
+  --color-success:         #6b9a7c;
+  --color-warning:         #c9975a;
+  --color-danger:          #a87575;
+  --color-info:            #5a85a8;
 
   /* Typography */
-  --font-family-mono: 'JetBrains Mono', 'Fira Code', 'SF Mono', 'Consolas', ui-monospace, monospace;
-  --font-family-sans: 'Inter', system-ui, -apple-system, sans-serif;
-}
-
-/* System light theme */
-@media (prefers-color-scheme: light) {
-  :root {
-    --color-surface-base: #fafafa;
-    --color-surface-raised: #ffffff;
-    --color-surface-overlay: #f5f5f5;
-    --color-surface-sunken: #eeeeee;
-
-    --color-border-default: #d4d4d8;
-    --color-border-subtle: #e4e4e7;
-    --color-border-focus: #4a6cf7;
-
-    --color-text-primary: #18181b;
-    --color-text-secondary: #52525b;
-    --color-text-muted: #a1a1aa;
-    --color-text-inverse: #fafafa;
-  }
+  --font-family-sans: 'Geist', system-ui, -apple-system, sans-serif;
+  --font-family-mono: 'Geist Mono', 'JetBrains Mono', 'Fira Code', ui-monospace, monospace;
 }
 
 .dark {
-  --color-surface-base: #0a0a0f;
-  --color-surface-raised: #12121a;
-  --color-surface-overlay: #1a1a26;
-  --color-surface-sunken: #06060a;
+  --color-surface-base:    #111114;
+  --color-surface-raised:  #1a1a1e;
+  --color-surface-overlay: #232328;
+  --color-surface-sunken:  #0d0d10;
 
-  --color-border-default: #2a2a3a;
-  --color-border-subtle: #1e1e2e;
+  --color-border-default:  #2a2a2f;
+  --color-border-subtle:   #1e1e24;
+  --color-border-focus:    #5a85a8;
 
-  --color-text-primary: #e8e8f0;
-  --color-text-secondary: #8888a0;
-  --color-text-muted: #555570;
-  --color-text-inverse: #0a0a0f;
+  --color-text-primary:    #e8e6e1;
+  --color-text-secondary:  #9e9b94;
+  --color-text-muted:      #5c5a56;
+  --color-text-inverse:    #111114;
+
+  --color-accent:          #3a6896;
+  --color-accent-hover:    #5a85a8;
+  --color-success:         #6b9a7c;
+  --color-warning:         #c9975a;
+  --color-danger:          #a87575;
+  --color-info:            #5a85a8;
 }
 
 .light {
-  --color-surface-base: #fafafa;
-  --color-surface-raised: #ffffff;
-  --color-surface-overlay: #f5f5f5;
-  --color-surface-sunken: #eeeeee;
+  --color-surface-base:    #f5f4f0;
+  --color-surface-raised:  #faf9f6;
+  --color-surface-overlay: #eceae5;
+  --color-surface-sunken:  #e4e2dd;
 
-  --color-border-default: #d4d4d8;
-  --color-border-subtle: #e4e4e7;
+  --color-border-default:  #d0cdc7;
+  --color-border-subtle:   #e0ddd8;
+  --color-border-focus:    #3a6896;
 
-  --color-text-primary: #18181b;
-  --color-text-secondary: #52525b;
-  --color-text-muted: #a1a1aa;
-  --color-text-inverse: #fafafa;
+  --color-text-primary:    #1a1a1e;
+  --color-text-secondary:  #52504a;
+  --color-text-muted:      #908d87;
+  --color-text-inverse:    #e8e6e1;
+
+  --color-accent:          #3a6896;
+  --color-accent-hover:    #2d5478;
+  --color-success:         #4d7a5d;
+  --color-warning:         #a67846;
+  --color-danger:          #8a5a5a;
+  --color-info:            #3a6896;
+}
+
+@media (prefers-color-scheme: light) {
+  :root {
+    --color-surface-base:    #f5f4f0;
+    --color-surface-raised:  #faf9f6;
+    --color-surface-overlay: #eceae5;
+    --color-surface-sunken:  #e4e2dd;
+
+    --color-border-default:  #d0cdc7;
+    --color-border-subtle:   #e0ddd8;
+    --color-border-focus:    #3a6896;
+
+    --color-text-primary:    #1a1a1e;
+    --color-text-secondary:  #52504a;
+    --color-text-muted:      #908d87;
+    --color-text-inverse:    #e8e6e1;
+
+    --color-accent:          #3a6896;
+    --color-accent-hover:    #2d5478;
+    --color-success:         #4d7a5d;
+    --color-warning:         #a67846;
+    --color-danger:          #8a5a5a;
+    --color-info:            #3a6896;
+  }
 }

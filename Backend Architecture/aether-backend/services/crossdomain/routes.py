@@ -27,7 +27,7 @@ from fastapi import APIRouter, Request, Query
 
 from shared.common.common import utc_now
 from shared.logger.logger import get_logger
-from middleware.middleware import require_permission
+from shared.decorators import require_permission
 
 from services.crossdomain.registries import (
     InstitutionRegistry,

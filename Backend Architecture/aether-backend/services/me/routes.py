@@ -6,16 +6,19 @@ All operations are scoped to request.state.tenant.tenant_id.
 
 Endpoints:
     GET    /v1/me                   Tenant profile + plan + billing summary
+    GET    /v1/me/usage             Current-period usage stats (quota, RPM, days remaining)
     GET    /v1/me/api-keys          List caller's API keys (paginated, keys masked)
     POST   /v1/me/api-keys          Create a new API key
     PATCH  /v1/me/api-keys/{id}     Rename a key
     DELETE /v1/me/api-keys/{id}     Revoke a key
+    DELETE /v1/me/account           Self-service account deletion
 """
 
 from __future__ import annotations
 
 import hashlib
 import uuid
+from datetime import date, timedelta
 from typing import Optional
 
 from fastapi import APIRouter, Query, Request
@@ -107,6 +110,67 @@ async def get_my_profile(request: Request):
         },
         "billing": billing,
         "api_key_count": key_count,
+    }).to_dict()
+
+
+@router.get("/usage")
+async def get_my_usage(request: Request):
+    """Return current-period usage stats: quota consumption, peak RPM, and days remaining.
+
+    Events-used and RPM-peak are derived from the ingestion metrics store when available;
+    on any failure the response falls back to zeros so the frontend can still render quota
+    limits without crashing.
+    """
+    tenant = _require_tenant(request)
+    from shared.plans.catalog import PLAN_CATALOG
+    from shared.auth.auth import PlanTier
+
+    plan_tier = getattr(tenant, "plan_tier", None)
+    plan = PLAN_CATALOG.get(plan_tier) if plan_tier else None
+
+    monthly_quota = plan.monthly_quota if plan else 0
+    burst_rpm = plan.burst_rpm if plan else 0
+
+    # Billing period: calendar month (1st → last day).
+    today = date.today()
+    period_start = today.replace(day=1)
+    # First day of next month minus one day = last day of this month.
+    if today.month == 12:
+        period_end = date(today.year + 1, 1, 1) - timedelta(days=1)
+    else:
+        period_end = date(today.year, today.month + 1, 1) - timedelta(days=1)
+    days_remaining = (period_end - today).days
+
+    # Try to pull real event counts from the ingestion metrics layer.
+    events_used = 0
+    rpm_peak = 0
+    try:
+        from repositories.repos import AdminRepository
+        repo = AdminRepository()
+        usage_record = await repo.get_tenant_usage(
+            tenant_id=tenant.tenant_id,
+            period_start=period_start.isoformat(),
+            period_end=period_end.isoformat(),
+        )
+        if usage_record:
+            events_used = usage_record.get("events_used", 0)
+            rpm_peak = usage_record.get("rpm_peak", 0)
+    except Exception:
+        # Graceful fallback — quota limits are still returned so UsageBar can render at 0%.
+        pass
+
+    overage_events = max(0, events_used - monthly_quota)
+
+    metrics.increment("me_usage_fetched")
+    return APIResponse(data={
+        "period_start": period_start.isoformat(),
+        "period_end": period_end.isoformat(),
+        "events_used": events_used,
+        "events_quota": monthly_quota,
+        "rpm_peak": rpm_peak,
+        "rpm_limit": burst_rpm,
+        "overage_events": overage_events,
+        "days_remaining": days_remaining,
     }).to_dict()
 
 

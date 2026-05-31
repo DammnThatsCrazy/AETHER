@@ -1,10 +1,11 @@
 import { GlyphIcon, TerminalSeparator } from '@aether/ui';
+import { AetherLogo } from '@aether-app/components/aether-logo';
 
 export function DataRetentionPage() {
   return (
     <div className="min-h-screen bg-surface-base px-4 py-12">
       <div className="max-w-2xl mx-auto">
-        <div className="font-mono text-2xl text-accent mb-1">[ AETHER ]</div>
+        <AetherLogo size={32} className="mb-4" />
         <h1 className="text-lg font-medium text-text-primary mb-1">Data Retention Policy</h1>
         <p className="text-xs text-text-muted font-mono mb-8">Effective as of launch</p>
 

@@ -81,17 +81,28 @@ interface NewKeyModalProps {
   onCreated: (key: string) => void;
 }
 
+const ALL_PERMISSIONS = ['read', 'write', 'ingest', 'analytics'] as const;
+type Permission = typeof ALL_PERMISSIONS[number];
+
 function NewKeyModal({ open, onClose, onCreated }: NewKeyModalProps) {
   const [name, setName] = useState('');
+  const [permissions, setPermissions] = useState<Permission[]>(['read']);
   const { mutate, isLoading } = useCreateApiKey();
+
+  function togglePermission(perm: Permission) {
+    setPermissions(prev =>
+      prev.includes(perm) ? prev.filter(p => p !== perm) : [...prev, perm]
+    );
+  }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!name.trim()) return;
-    const result = await mutate({ name: name.trim() });
+    const result = await mutate({ name: name.trim(), permissions });
     if (result) {
-      onCreated(result.key);
+      onCreated((result as { api_key?: string; key?: string }).api_key ?? (result as { key: string }).key);
       setName('');
+      setPermissions(['read']);
     }
   }
 
@@ -114,10 +125,31 @@ function NewKeyModal({ open, onClose, onCreated }: NewKeyModalProps) {
               className="bg-surface-raised text-text-primary border border-border-default rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-border-focus placeholder:text-text-muted"
             />
           </div>
+          <div className="flex flex-col gap-1.5">
+            <span className="text-xs text-text-secondary">Permissions</span>
+            <div className="flex flex-wrap gap-2">
+              {ALL_PERMISSIONS.map(perm => (
+                <button
+                  key={perm}
+                  type="button"
+                  role="switch"
+                  aria-checked={permissions.includes(perm)}
+                  onClick={() => togglePermission(perm)}
+                  className={`px-2 py-1 rounded text-xs font-mono border transition-colors ${
+                    permissions.includes(perm)
+                      ? 'bg-accent/20 border-accent text-accent'
+                      : 'bg-surface-base border-border-default text-text-muted'
+                  }`}
+                >
+                  {perm}
+                </button>
+              ))}
+            </div>
+          </div>
         </ModalBody>
         <ModalFooter>
           <Button variant="ghost" size="sm" type="button" onClick={onClose}>Cancel</Button>
-          <Button variant="primary" size="sm" type="submit" disabled={!name.trim() || isLoading}>
+          <Button variant="primary" size="sm" type="submit" disabled={!name.trim() || permissions.length === 0 || isLoading}>
             {isLoading ? '[···]' : 'Create key'}
           </Button>
         </ModalFooter>
@@ -277,6 +309,12 @@ export function SettingsPage() {
           data={keys}
           keyExtractor={(row: ApiKey) => row.id}
         />
+      )}
+
+      {!isLoading && !error && keys && keys.length > 0 && (
+        <p className="text-xs font-mono text-text-muted mt-3 text-right">
+          1–{keys.length} of {keys.length} key{keys.length !== 1 ? 's' : ''}
+        </p>
       )}
 
       <NewKeyModal

@@ -31,8 +31,8 @@ export function useDsrRequest(requestId: string) {
 
 export function useUpdateConsent() {
   return useMutation({
-    mutationFn: ({ userId, purposes }: { userId: string; purposes: Record<string, boolean> }) =>
-      api.consent.update(userId, purposes),
+    mutationFn: ({ userId, purposes, granted, source }: { userId: string; purposes: string[]; granted: boolean; source?: string }) =>
+      api.consent.update(userId, purposes, granted, source),
   });
 }
 
