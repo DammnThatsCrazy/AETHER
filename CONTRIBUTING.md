@@ -2,44 +2,37 @@
 
 ## Development Setup
 
+See [DEVELOPMENT.md](DEVELOPMENT.md) for the full local setup guide. Quick start:
+
 ```bash
 # Clone and install
-git clone https://github.com/DammnThatsCrazy/Aether.git
-cd Aether
-pip install -e ".[dev,backend,ml]"
+git clone https://github.com/DammnThatsCrazy/AETHER.git
+cd AETHER
 
-# Install Node workspace deps (shared, ui, web, react-native, kyber, aether)
+# Install Python backend deps
+pip install -e ".[backend]" --ignore-installed PyJWT
+
+# Install Node workspace deps
 npm ci
 
-# Run tests
-make test
-npm test
+# Configure environment (see DEVELOPMENT.md for required secret values)
+cp .env.example .env
+cp frontend/aether/.env.example frontend/aether/.env.local
 
-# Start local infrastructure only (no application services)
-docker compose up -d postgres redis kafka zookeeper clickhouse
+# Start infrastructure
+docker compose up -d postgres
 
-# Start backend in dev mode
-export AETHER_ENV=local
-make serve-backend          # backend → http://localhost:8000
-make serve-ml               # ML serving → http://localhost:8080
+# Start backend
+make serve-backend          # → http://localhost:8000
 
-# Optional: start the Kyber operator control surface
-cd apps/kyber && npm run dev   # → http://localhost:5174
-
-# Optional: start the Aether customer app
-cd apps/aether && npm run dev  # → http://localhost:5175
-
-# Full stack via docker compose (backend + ml + kyber + infra)
-docker compose up -d
-# → backend    http://localhost:8000
-# → ml-serving http://localhost:8080
-# → kyber      http://localhost:8081  (host port 8081 → container 8080)
-# apps/aether is dev-only; run separately: cd apps/aether && npm run dev
+# Start frontend apps (separate terminals)
+cd frontend/aether && npm run dev   # customer app  → http://localhost:5175
+cd frontend/kyber  && npm run dev   # operator UI   → http://localhost:5174
 ```
 
 ## Environment
 
-Set `AETHER_ENV=local` for development. This enables in-memory fallbacks for all infrastructure (Redis, PostgreSQL, Neptune, Kafka). No external services are required for local development.
+Set `AETHER_ENV=local` in `.env` for development. This enables in-memory fallbacks for Kafka and Neptune — only PostgreSQL is required locally. Set `VITE_AETHER_ENV=local-mocked` in `frontend/aether/.env.local` to develop the UI without a running backend.
 
 ## Code Standards
 
@@ -99,8 +92,8 @@ packages/web/                          Web SDK (@aether/web)
 packages/react-native/                 React Native SDK (@aether/react-native)
 packages/ios/                          Native iOS SDK
 packages/android/                      Native Android SDK
-apps/kyber/                            Operator control surface (React SPA, port 5174)
-apps/aether/                           Customer web app (React SPA, port 5175)
+frontend/kyber/                        Operator control surface (React SPA, port 5174)
+frontend/aether/                       Customer web app (React SPA, port 5175)
 ```
 
 ## Subsystem Documentation
