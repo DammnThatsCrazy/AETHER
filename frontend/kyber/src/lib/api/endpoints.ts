@@ -1024,12 +1024,18 @@ export const api = {
   // ── Admin (tenant / billing) ───────────────────────────────────────────────
   admin: {
     tenants: {
+      list: (params?: { limit?: number; offset?: number; plan?: string; status?: string }) =>
+        restClient.get(`/v1/admin/tenants${buildQS({ ...params })}`, wrap(unknownSchema)).then(r => r.data as { tenants: unknown[]; total: number }),
       create: (tenant: { name: string; plan: string; contact_email: string; settings?: Record<string, unknown> }) =>
         restClient.post('/v1/admin/tenants', wrap(unknownSchema), tenant).then(r => r.data),
       get: (tenantId: string) =>
         restClient.get(`/v1/admin/tenants/${tenantId}`, wrap(unknownSchema)).then(r => r.data),
       update: (tenantId: string, updates: Record<string, unknown>) =>
         restClient.patch(`/v1/admin/tenants/${tenantId}`, wrap(unknownSchema), updates).then(r => r.data),
+      deactivate: (tenantId: string) =>
+        restClient.post(`/v1/admin/tenants/${tenantId}/deactivate`, wrap(unknownSchema), {}).then(r => r.data),
+      delete: (tenantId: string) =>
+        restClient.delete(`/v1/admin/tenants/${tenantId}`, wrap(unknownSchema)).then(r => r.data),
     },
     apiKeys: {
       create: (tenantId: string, key: { name: string; scopes?: string[] }) =>
