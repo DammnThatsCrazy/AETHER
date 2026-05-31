@@ -913,6 +913,94 @@ export const api = {
     enterprise: (payload: { name: string; email: string; company_name: string; company_type: string; message: string }) =>
       restClient.post('/v1/contact/enterprise', wrap(unknownSchema), payload).then(r => r.data),
   },
+
+  // ── Social Intelligence (12-platform unified grid) ─────────────────────────
+  social: {
+    /** Unified social intelligence for a user — all 12 platforms in one response. */
+    intelligence: (userId: string, window = '30d') =>
+      restClient.get(`/v1/profile/${userId}/social-intelligence${buildQS({ window })}`, wrap(unknownSchema))
+        .then(r => r.data as {
+          influence_level: 'high' | 'medium' | 'low' | null;
+          total_followers_deduped: number | null;
+          platforms: Array<{
+            platform: string;
+            handle: string | null;
+            followers: number | null;
+            verified: boolean;
+            engagement_rate: number | null;
+            content_count: number | null;
+            extra: Record<string, unknown>;
+          }>;
+          computed_at: string | null;
+        }),
+  },
+
+  // ── Geographic Intelligence ─────────────────────────────────────────────────
+  geo: {
+    /** Aggregate geographic summary for the tenant's entity pool at a given level. */
+    summary: (params?: { level?: string; geo_id?: string; window?: string }) =>
+      restClient.get(`/v1/geo/summary${buildQS({ ...params })}`, wrap(unknownSchema))
+        .then(r => r.data as {
+          level: string;
+          geo_id: string | null;
+          geo_name: string | null;
+          entity_count: number;
+          tier_distribution: Record<string, number>;
+          avg_edges_per_entity: number | null;
+          conversion_rate: number | null;
+          anomaly_flags: number;
+          children: Array<{
+            geo_id: string;
+            geo_name: string;
+            entity_count: number;
+            conversion_rate: number | null;
+            anomaly_flags: number;
+          }>;
+          computed_at: string | null;
+        }),
+
+    /** Entities at a specific geographic location, paginated. */
+    entities: (params: { level: string; geo_id: string; window?: string; limit?: number; offset?: number }) =>
+      restClient.get(`/v1/geo/entities${buildQS({ ...params })}`, wrap(unknownSchema))
+        .then(r => r.data as {
+          entities: Array<{
+            entity_id: string;
+            display_name: string | null;
+            tier: string | null;
+            ltv: number | null;
+            risk_score: number | null;
+            last_active_at: string | null;
+          }>;
+          total: number;
+        }),
+  },
+
+  // ── Recommendations (pending retarget / campaign actions) ──────────────────
+  recommendations: {
+    /** Pending recommendation cards for a user requiring analyst approval. */
+    forUser: (userId: string) =>
+      restClient.get(`/v1/profile/${userId}/retarget-recommendations`, wrap(unknownSchema))
+        .then(r => r.data as {
+          recommendations: Array<{
+            id: string;
+            platform: string;
+            action: string;
+            creative_theme: string | null;
+            estimated_bid: number | null;
+            confidence: number;
+            reasoning: string[];
+            status: 'pending_review' | 'approved' | 'rejected' | 'executing' | 'executed' | 'failed';
+          }>;
+        }),
+
+    /** Approve a recommendation — requires human confirmation before calling. */
+    approve: (recommendationId: string) =>
+      restClient.post(`/v1/agent/tasks/${recommendationId}/approve`, wrap(unknownSchema), {}).then(r => r.data),
+
+    /** Reject a recommendation. */
+    reject: (recommendationId: string) =>
+      restClient.post(`/v1/agent/tasks/${recommendationId}/reject`, wrap(unknownSchema), {}).then(r => r.data),
+  },
 };
 
 // ─── Utility: call API with typed fallback ────────────────────────────────────

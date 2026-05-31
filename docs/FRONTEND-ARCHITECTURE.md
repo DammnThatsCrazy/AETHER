@@ -7,8 +7,9 @@ audience: [dev-senior, architect]
 status: stable
 since_version: "8.8.0"
 source_files:
+  - frontend/aether/src/
   - frontend/kyber/src/
-  - packages/shared/
+  - frontend/shared/src/
 canonical_owner: frontend@aether
 estimated_read_minutes: 35
 toc_depth: 4
@@ -16,6 +17,45 @@ last_synced_commit: 91d4d49
 ---
 
 # Aether Frontend Architecture & Designer Handoff
+
+---
+
+## ⚠️ Two Frontends — Critical Distinction
+
+There are two separate frontend applications. **Do not mix them up.**
+
+| App | Directory | Audience | Purpose |
+|-----|-----------|----------|---------|
+| **Aether** | `frontend/aether/` | External paying tenants / customers / clients | Self-service: sign up, install SDK, manage API keys, view their own intelligence graph, entity profiles, campaigns, geographic intelligence |
+| **Kyber** | `frontend/kyber/` | Internal Aether team / operators only | Operator mission control: monitor all tenants, diagnose system health, approve agent actions, review entity clusters, run lab fixtures |
+
+### What belongs where
+
+**Aether (customer-facing) contains:**
+- Auth flows (signup, login, SSO, billing)
+- The intelligence **graph canvas** showing the tenant's users, organizations, and AI agents
+- **Entity Profile360** panels — what tenants drill into when they click a graph node
+- **Geographic Intelligence** view — their users by location
+- **Social Intelligence** panels — their users' social platform presence
+- **Recommendation cards** — pending retargeting / campaign actions for the tenant to approve
+- Campaign management, attribution dashboards
+- API key management, plan management, usage metering
+
+**Kyber (internal operator console) contains:**
+- Mission dashboard — real-time system health across all tenants
+- Noesis — operator graph view of cross-tenant entity relationships
+- Live event stream — raw event firehose for debugging
+- Entity admin — manage any entity across any tenant
+- Command center — controller management
+- Diagnostics — circuit breakers, error tracking, dependency health
+- Review / approval workflows — human-in-the-loop agent approvals
+- Lab — test fixtures and replay
+
+**Shared (`frontend/shared/` — npm package `@aether/ui`):**
+- Design system components used by both Aether and Kyber
+- `TimeWindowSelector`, `FreshnessIndicator`, `EvidenceDrawer`, `UsageBar`, `Toast`, etc.
+
+---
 
 ## What Aether Is (Canonical Framing)
 

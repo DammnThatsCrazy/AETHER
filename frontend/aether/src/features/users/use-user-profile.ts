@@ -195,3 +195,23 @@ export function useUserLake(
     enabled: !!userId,
   });
 }
+
+/** Unified social intelligence — all 12 platforms. */
+export function useUserSocialIntelligence(userId: string, window = '30d') {
+  return useQuery({
+    key: key(userId, `social-intelligence:${window}`),
+    fetcher: () => api.social.intelligence(userId, window),
+    staleTime: STALE,
+    enabled: !!userId,
+  });
+}
+
+/** Pending recommendation cards requiring analyst approval. */
+export function useUserRecommendations(userId: string) {
+  return useQuery({
+    key: key(userId, 'recommendations'),
+    fetcher: () => api.recommendations.forUser(userId),
+    staleTime: STALE,
+    enabled: !!userId,
+  });
+}

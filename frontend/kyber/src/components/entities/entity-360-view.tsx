@@ -30,15 +30,155 @@ import {
   ModalFooter,
   Input,
   TerminalSeparator,
+  useToast,
 } from '@aether/ui';
 import { cn, formatRelativeTime, formatTimestamp } from '@kyber/lib/utils';
 import { PermissionGate } from '@kyber/features/permissions';
+import { api } from '@kyber/lib/api/endpoints';
 import { EntityScoreCard } from './entity-score-card';
 import { NeedsHelpPanel } from './needs-help-panel';
 import { Profile360SummaryCard } from './profile360-summary-card';
 import { Profile360DrillStack } from './profile360-drill-stack';
 import { Profile360Views, RealtimeEventIntelligenceFeed } from './profile360-surfaces';
 import { getAnalytics, getProfile360Summary, getRelationships } from './profile360-utils';
+
+// ── Recommendations panel ─────────────────────────────────────────────────────
+
+function RecommendationsPanel({ recommendations }: { recommendations: readonly EntityRecommendation[] }) {
+  const { toast } = useToast();
+  const [approvingId, setApprovingId] = useState<string | null>(null);
+  const [rejectingId, setRejectingId] = useState<string | null>(null);
+  const [loadingId, setLoadingId] = useState<string | null>(null);
+
+  async function handleApprove(id: string) {
+    setLoadingId(id);
+    try {
+      await api.resolution.approve(id);
+      toast.success('Recommendation approved');
+    } catch {
+      toast.error('Failed to approve recommendation');
+    } finally {
+      setLoadingId(null);
+      setApprovingId(null);
+    }
+  }
+
+  async function handleReject(id: string) {
+    setLoadingId(id);
+    try {
+      await api.resolution.reject(id);
+      toast.info('Recommendation rejected');
+    } catch {
+      toast.error('Failed to reject recommendation');
+    } finally {
+      setLoadingId(null);
+      setRejectingId(null);
+    }
+  }
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Recommendations</CardTitle>
+      </CardHeader>
+      <CardContent>
+        {recommendations.length === 0 ? (
+          <div className="text-text-muted text-sm py-6 text-center font-mono">No active recommendations.</div>
+        ) : (
+          <div className="space-y-3">
+            {recommendations.map((rec) => (
+              <div key={rec.id} className="border border-accent/30 rounded p-3 space-y-2 bg-surface-raised">
+                <div className="flex items-center justify-between flex-wrap gap-2">
+                  <span className="text-sm font-medium text-text-primary">{rec.title}</span>
+                  <div className="flex items-center gap-2">
+                    <Badge variant="default" size="sm">Class {rec.actionClass}</Badge>
+                    <Badge variant={rec.reversible ? 'default' : 'danger'} size="sm">
+                      {rec.reversible ? 'Reversible' : 'Irreversible'}
+                    </Badge>
+                  </div>
+                </div>
+                <p className="text-xs text-text-secondary">{rec.description}</p>
+                <div className="flex items-center gap-4 text-xs text-text-muted font-mono">
+                  <span>Confidence: <span className="text-text-secondary">{(rec.confidence * 100).toFixed(0)}%</span></span>
+                </div>
+                <div>
+                  <div className="text-[10px] uppercase text-text-muted font-mono">Rationale</div>
+                  <p className="text-xs text-text-secondary mt-0.5">{rec.rationale}</p>
+                </div>
+                <PermissionGate requires="canApprove" actionClass={rec.actionClass as import('@kyber/types').ActionClass}>
+                  <div className="flex items-center gap-2 pt-1 border-t border-border-subtle">
+                    <Button
+                      variant="danger"
+                      size="sm"
+                      disabled={loadingId === rec.id}
+                      onClick={() => setRejectingId(rec.id)}
+                    >
+                      Reject
+                    </Button>
+                    <Button
+                      variant="primary"
+                      size="sm"
+                      disabled={loadingId === rec.id}
+                      onClick={() => setApprovingId(rec.id)}
+                    >
+                      Approve
+                    </Button>
+                  </div>
+                </PermissionGate>
+              </div>
+            ))}
+          </div>
+        )}
+      </CardContent>
+
+      {/* Approve confirm modal */}
+      {approvingId && (
+        <Modal open onClose={() => setApprovingId(null)}>
+          <ModalHeader>Confirm approval</ModalHeader>
+          <ModalBody>
+            <p className="text-sm text-text-secondary">
+              This action cannot be undone. The recommendation will be submitted for execution.
+            </p>
+          </ModalBody>
+          <ModalFooter>
+            <Button variant="ghost" size="sm" onClick={() => setApprovingId(null)}>Cancel</Button>
+            <Button
+              variant="primary"
+              size="sm"
+              disabled={loadingId === approvingId}
+              onClick={() => void handleApprove(approvingId)}
+            >
+              Confirm approval
+            </Button>
+          </ModalFooter>
+        </Modal>
+      )}
+
+      {/* Reject confirm modal */}
+      {rejectingId && (
+        <Modal open onClose={() => setRejectingId(null)}>
+          <ModalHeader>Confirm rejection</ModalHeader>
+          <ModalBody>
+            <p className="text-sm text-text-secondary">
+              Reject this recommendation? It will be dismissed and removed from the queue.
+            </p>
+          </ModalBody>
+          <ModalFooter>
+            <Button variant="ghost" size="sm" onClick={() => setRejectingId(null)}>Cancel</Button>
+            <Button
+              variant="danger"
+              size="sm"
+              disabled={loadingId === rejectingId}
+              onClick={() => void handleReject(rejectingId)}
+            >
+              Confirm rejection
+            </Button>
+          </ModalFooter>
+        </Modal>
+      )}
+    </Card>
+  );
+}
 
 interface Entity360ViewProps {
   readonly entity: Entity;
@@ -627,52 +767,7 @@ export function Entity360View({
             </Card>
 
             {/* Recommendations */}
-            <Card>
-              <CardHeader>
-                <CardTitle>Recommendations</CardTitle>
-              </CardHeader>
-              <CardContent>
-                {recommendations.length === 0 ? (
-                  <div className="text-neutral-500 text-sm py-6 text-center">
-                    No active recommendations.
-                  </div>
-                ) : (
-                  <div className="space-y-3">
-                    {recommendations.map((rec) => (
-                      <div
-                        key={rec.id}
-                        className="border border-neutral-800 rounded p-3 space-y-2"
-                      >
-                        <div className="flex items-center justify-between">
-                          <span className="text-sm font-medium text-neutral-200">{rec.title}</span>
-                          <div className="flex items-center gap-2">
-                            <Badge variant="default" className="text-xs">
-                              Class {rec.actionClass}
-                            </Badge>
-                            <Badge variant={rec.reversible ? 'default' : 'danger'} className="text-xs">
-                              {rec.reversible ? 'Reversible' : 'Irreversible'}
-                            </Badge>
-                          </div>
-                        </div>
-                        <p className="text-sm text-neutral-400">{rec.description}</p>
-                        <div className="flex items-center gap-4 text-xs text-neutral-500">
-                          <span>
-                            Confidence:{' '}
-                            <span className="font-mono text-neutral-300">
-                              {(rec.confidence * 100).toFixed(0)}%
-                            </span>
-                          </span>
-                        </div>
-                        <div>
-                          <div className="text-xs text-neutral-500 mt-1">Rationale:</div>
-                          <p className="text-xs text-neutral-400">{rec.rationale}</p>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </CardContent>
-            </Card>
+            <RecommendationsPanel recommendations={recommendations} />
           </div>
         </TabsContent>
       </Tabs>

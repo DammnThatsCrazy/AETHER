@@ -1,5 +1,11 @@
 export { cn } from './utils/cn';
 
+export { TimeWindowSelector } from './components/time-window-selector';
+export type { TimeWindow } from './components/time-window-selector';
+export { FreshnessIndicator } from './components/freshness-indicator';
+export { EvidenceDrawer } from './components/evidence-drawer';
+export type { EvidenceRef } from './components/evidence-drawer';
+
 export { UsageBar } from './components/usage-bar';
 export { ToastProvider, Toaster, useToast } from './components/toast';
 export { Popover } from './components/popover';

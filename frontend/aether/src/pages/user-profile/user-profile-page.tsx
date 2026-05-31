@@ -1,15 +1,21 @@
+import { useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import {
   Badge, Button, Card, CardContent, CardHeader,
-  DataTable, EmptyState, ErrorState, LoadingState,
+  DataTable, EmptyState, ErrorState, EvidenceDrawer, FreshnessIndicator,
+  GlyphIcon, LoadingState, Modal, ModalBody, ModalFooter, ModalHeader,
   Skeleton, StatusIndicator, Tabs, TabsContent, TabsList, TabsTrigger,
+  TerminalSeparator, TimeWindowSelector, useToast,
 } from '@aether/ui';
+import type { TimeWindow } from '@aether/ui';
 import {
   useUserProfile, useUserSessions, useUserDevices, useUserPlatforms,
   useUserJourneys, useUserWallets, useUserFinancials, useUserRewards,
   useUserIdentifiers, useUserIntelligence, useUserBehavioral,
   useUserWhyExplain, useUserAttributionJourney, useUserGraph, useUserCluster,
+  useUserSocialIntelligence, useUserRecommendations,
 } from '@aether-app/features/users/use-user-profile';
+import { api } from '@aether-app/lib/api/endpoints';
 
 // ── helpers ────────────────────────────────────────────────────────────────────
 
@@ -510,23 +516,9 @@ function BehavioralTab({ userId }: { userId: string }) {
         )}
         {topSignals.length === 0
           ? <p className="text-xs text-text-muted">No anomalies detected.</p>
-          : topSignals.map((sig, i) => {
-              const s = asRecord(sig);
-              return (
-                <div key={i} className="border border-border-default rounded-md p-3 space-y-1">
-                  <div className="flex items-center gap-2">
-                    <Badge variant={severityVariant(fmt(s.severity))} size="sm">{fmt(s.severity)}</Badge>
-                    <Badge variant="default" size="sm">{fmt(s.signal_type)}</Badge>
-                    {!!s.family && <Badge variant="default" size="sm">{fmt(s.family)}</Badge>}
-                    <span className="text-xs text-text-muted ml-auto">Confidence: {Math.round(Number(s.confidence ?? 0) * 100)}%</span>
-                  </div>
-                  <p className="text-sm text-text-primary">{fmt(s.explanation)}</p>
-                  {s.expected !== undefined && (
-                    <p className="text-xs text-text-muted">Expected: {fmt(s.expected)} → Observed: {fmt(s.observed)}</p>
-                  )}
-                </div>
-              );
-            })
+          : topSignals.map((sig, i) => (
+              <SignalRowWithEvidence key={i} sig={asRecord(sig)} severityVariant={severityVariant} />
+            ))
         }
         {!!why.expectation_gaps && asList(why.expectation_gaps).length > 0 && (
           <div className="mt-3">
@@ -554,6 +546,48 @@ function BehavioralTab({ userId }: { userId: string }) {
           ]}
         />
       </Section>
+    </div>
+  );
+}
+
+// ── Evidence drawer wrapper for a signal row ─────────────────────────────────
+
+function SignalRowWithEvidence({ sig, severityVariant }: {
+  sig: Record<string, unknown>;
+  severityVariant: (sev: string) => 'danger' | 'warning' | 'success' | 'default';
+}) {
+  const [open, setOpen] = useState(false);
+  const evidenceRefs = (sig.evidence_refs as Array<{ event_id: string; description?: string; timestamp?: string }> | undefined) ?? [];
+
+  return (
+    <div>
+      <div className="border border-border-default rounded-md p-3 space-y-1">
+        <div className="flex items-center gap-2">
+          <Badge variant={severityVariant(fmt(sig.severity))} size="sm">{fmt(sig.severity)}</Badge>
+          <Badge variant="default" size="sm">{fmt(sig.signal_type)}</Badge>
+          {!!sig.family && <Badge variant="default" size="sm">{fmt(sig.family)}</Badge>}
+          <span className="text-xs text-text-muted ml-auto">Confidence: {Math.round(Number(sig.confidence ?? 0) * 100)}%</span>
+          {evidenceRefs.length > 0 && (
+            <button
+              onClick={() => setOpen(v => !v)}
+              className="text-xs font-mono text-accent hover:underline ml-2"
+              aria-label="Show evidence"
+            >
+              {open ? '[−] hide' : '[>] evidence'}
+            </button>
+          )}
+        </div>
+        <p className="text-sm text-text-primary">{fmt(sig.explanation)}</p>
+        {sig.expected !== undefined && (
+          <p className="text-xs text-text-muted">Expected: {fmt(sig.expected)} → Observed: {fmt(sig.observed)}</p>
+        )}
+      </div>
+      <EvidenceDrawer
+        signalName={fmt(sig.signal_type)}
+        evidence={evidenceRefs}
+        open={open}
+        onClose={() => setOpen(false)}
+      />
     </div>
   );
 }
@@ -687,9 +721,194 @@ function RelationshipsTab({ userId }: { userId: string }) {
 
 // ── Profile page ──────────────────────────────────────────────────────────────
 
+// ── Social Intelligence tab ────────────────────────────────────────────────────
+
+const SOCIAL_PLATFORMS = [
+  'twitter', 'youtube', 'instagram', 'tiktok', 'reddit',
+  'linkedin', 'spotify', 'telegram', 'discord', 'github', 'farcaster', 'lens',
+] as const;
+
+const PLATFORM_LABELS: Record<string, string> = {
+  twitter: 'Twitter / X', youtube: 'YouTube', instagram: 'Instagram',
+  tiktok: 'TikTok', reddit: 'Reddit', linkedin: 'LinkedIn',
+  spotify: 'Spotify', telegram: 'Telegram', discord: 'Discord',
+  github: 'GitHub', farcaster: 'Farcaster', lens: 'Lens',
+};
+
+function SocialTab({ userId, window }: { userId: string; window: TimeWindow }) {
+  const { data, isLoading, error } = useUserSocialIntelligence(userId, window);
+
+  if (isLoading) return <LoadingState lines={6} />;
+  if (error) return <ErrorState message="Failed to load social intelligence" />;
+
+  const influenceVariant = data?.influence_level === 'high' ? 'accent' : 'default';
+
+  const platformMap = new Map(
+    (data?.platforms ?? []).map(p => [p.platform, p])
+  );
+
+  return (
+    <div className="space-y-4">
+      {/* Influence summary */}
+      <div className="flex items-center gap-4 flex-wrap">
+        {data?.influence_level && (
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-text-muted font-mono">Influence</span>
+            <Badge variant={influenceVariant} size="sm">{data.influence_level.toUpperCase()}</Badge>
+          </div>
+        )}
+        {data?.total_followers_deduped != null && (
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-text-muted font-mono">Total reach (deduped)</span>
+            <span className="text-xl font-mono text-accent">{data.total_followers_deduped.toLocaleString()}</span>
+          </div>
+        )}
+        {data?.computed_at && (
+          <FreshnessIndicator computedAt={data.computed_at} className="ml-auto" />
+        )}
+      </div>
+
+      {/* 12-platform grid */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+        {SOCIAL_PLATFORMS.map(platform => {
+          const p = platformMap.get(platform);
+          const linked = !!p?.handle;
+          return (
+            <div
+              key={platform}
+              className={`border rounded-md p-3 ${linked ? 'border-border-default bg-surface-raised' : 'border-border-subtle bg-surface-base opacity-50'}`}
+            >
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-xs font-medium text-text-primary">{PLATFORM_LABELS[platform]}</span>
+                {p?.verified && <Badge variant="success" size="sm">✓</Badge>}
+              </div>
+              {linked ? (
+                <div className="space-y-1">
+                  <p className="text-xs font-mono text-accent">@{p.handle}</p>
+                  {p.followers != null && (
+                    <p className="text-xs text-text-secondary">
+                      {p.followers.toLocaleString()} followers
+                      {p.engagement_rate != null && ` · ${(p.engagement_rate * 100).toFixed(1)}% eng.`}
+                    </p>
+                  )}
+                  {p.content_count != null && (
+                    <p className="text-xs text-text-muted">{p.content_count.toLocaleString()} posts</p>
+                  )}
+                </div>
+              ) : (
+                <p className="text-xs text-text-muted font-mono">Not linked</p>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+// ── Recommendation cards ───────────────────────────────────────────────────────
+
+function RecommendationCards({ userId }: { userId: string }) {
+  const { toast } = useToast();
+  const { data, isLoading } = useUserRecommendations(userId);
+  const [confirmId, setConfirmId] = useState<string | null>(null);
+  const [actionLoading, setActionLoading] = useState(false);
+
+  const recs = (data?.recommendations ?? []).filter(r => r.status === 'pending_review');
+  if (isLoading) return <LoadingState lines={3} />;
+  if (recs.length === 0) return null;
+
+  async function handleApprove(id: string) {
+    setActionLoading(true);
+    try {
+      await api.recommendations.approve(id);
+      toast.success('Recommendation approved');
+      setConfirmId(null);
+    } catch {
+      toast.error('Approval failed — please try again');
+    } finally {
+      setActionLoading(false);
+    }
+  }
+
+  async function handleReject(id: string) {
+    setActionLoading(true);
+    try {
+      await api.recommendations.reject(id);
+      toast.success('Recommendation rejected');
+    } catch {
+      toast.error('Rejection failed — please try again');
+    } finally {
+      setActionLoading(false);
+    }
+  }
+
+  return (
+    <div className="space-y-3 mb-6">
+      <TerminalSeparator label="pending recommendations" />
+      {recs.map(rec => (
+        <div key={rec.id} className="border border-accent/30 bg-surface-raised rounded-md p-4 space-y-3">
+          <div className="flex items-center justify-between flex-wrap gap-2">
+            <div className="flex items-center gap-2">
+              <GlyphIcon glyph="[>]" className="text-accent" />
+              <span className="text-sm font-medium text-text-primary">{rec.action} on {rec.platform}</span>
+            </div>
+            <Badge variant="accent" size="sm">{Math.round(rec.confidence * 100)}% confidence</Badge>
+          </div>
+          {rec.creative_theme && (
+            <p className="text-xs text-text-secondary">Theme: {rec.creative_theme}</p>
+          )}
+          {rec.estimated_bid != null && (
+            <p className="text-xs text-text-muted font-mono">Est. bid: ${rec.estimated_bid.toFixed(2)} CPA</p>
+          )}
+          {rec.reasoning.length > 0 && (
+            <ul className="space-y-0.5">
+              {rec.reasoning.map((r, i) => (
+                <li key={i} className="text-xs text-text-secondary flex items-start gap-1.5">
+                  <GlyphIcon glyph="[·]" className="text-text-muted mt-0.5 flex-shrink-0" />
+                  {r}
+                </li>
+              ))}
+            </ul>
+          )}
+          <div className="flex gap-2 pt-1">
+            <Button variant="danger" size="sm" onClick={() => void handleReject(rec.id)} disabled={actionLoading}>
+              Reject
+            </Button>
+            <Button variant="primary" size="sm" onClick={() => setConfirmId(rec.id)} disabled={actionLoading}>
+              Approve
+            </Button>
+          </div>
+        </div>
+      ))}
+
+      {/* Confirm approve modal */}
+      {confirmId && (
+        <Modal open onClose={() => setConfirmId(null)}>
+          <ModalHeader>
+            <h2 className="text-sm font-medium font-mono">Confirm approval</h2>
+          </ModalHeader>
+          <ModalBody>
+            <p className="text-sm text-text-secondary">
+              This recommendation will be submitted for execution. This action cannot be undone.
+            </p>
+          </ModalBody>
+          <ModalFooter>
+            <Button variant="ghost" size="sm" onClick={() => setConfirmId(null)} disabled={actionLoading}>Cancel</Button>
+            <Button variant="primary" size="sm" onClick={() => void handleApprove(confirmId)} disabled={actionLoading}>
+              {actionLoading ? '[···]' : 'Confirm approve'}
+            </Button>
+          </ModalFooter>
+        </Modal>
+      )}
+    </div>
+  );
+}
+
 export function UserProfilePage() {
   const { id: userId = '' } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const [window, setWindow] = useState<TimeWindow>('30d');
   const { data: summary, isLoading: headerLoading } = useUserProfile(userId);
   const s = asRecord(summary);
 
@@ -708,6 +927,7 @@ export function UserProfilePage() {
           ) : (
             <div className="flex items-center gap-3 flex-wrap">
               <h1 className="text-xl font-semibold text-text-primary font-mono">{userId}</h1>
+              <TimeWindowSelector value={window} onChange={setWindow} className="ml-auto" />
               {!!s.loyalty_tier && s.loyalty_tier !== 'none' && (
                 <Badge variant="warning">{fmt(s.loyalty_tier)}</Badge>
               )}
@@ -740,6 +960,7 @@ export function UserProfilePage() {
           <TabsTrigger value="overview">Overview</TabsTrigger>
           <TabsTrigger value="sessions">Sessions & Devices</TabsTrigger>
           <TabsTrigger value="journeys">Journeys</TabsTrigger>
+          <TabsTrigger value="social">Social</TabsTrigger>
           <TabsTrigger value="wallets">Web3 Wallets</TabsTrigger>
           <TabsTrigger value="financials">Financials</TabsTrigger>
           <TabsTrigger value="behavioral">Behavior</TabsTrigger>
@@ -749,7 +970,11 @@ export function UserProfilePage() {
 
         <TabsContent value="overview"><OverviewTab userId={userId} /></TabsContent>
         <TabsContent value="sessions"><SessionsTab userId={userId} /></TabsContent>
-        <TabsContent value="journeys"><JourneysTab userId={userId} /></TabsContent>
+        <TabsContent value="journeys">
+          <RecommendationCards userId={userId} />
+          <JourneysTab userId={userId} />
+        </TabsContent>
+        <TabsContent value="social"><SocialTab userId={userId} window={window} /></TabsContent>
         <TabsContent value="wallets"><WalletsTab userId={userId} /></TabsContent>
         <TabsContent value="financials"><FinancialsTab userId={userId} /></TabsContent>
         <TabsContent value="behavioral"><BehavioralTab userId={userId} /></TabsContent>
