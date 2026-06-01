@@ -1015,3 +1015,33 @@ async def get_profile_outcomes(user_id: str, request: Request, limit: int = Quer
     repo = OutcomeRepository()
     items = await repo.list_for_tenant(tenant.tenant_id, limit=limit, entity_id=user_id)
     return APIResponse(data={"entity_id": user_id, "items": items, "count": len(items)}).to_dict()
+
+
+@router.get("/{user_id}/outcome-ledger")
+async def get_profile_outcome_ledger(user_id: str, request: Request, limit: int = 100):
+    """Entity-level Decision & Outcome Intelligence value ledger."""
+    tenant = request.state.tenant
+    tenant.require_permission("read")
+    from services.intelligence import routes as intelligence_routes
+
+    recommendations = await intelligence_routes._recommendations.list_for_tenant(tenant.tenant_id, limit=limit, entity_id=user_id)
+    recommendation_ids = {rec.get("recommendation_id") or rec.get("id") for rec in recommendations}
+    decisions = [
+        decision
+        for decision in await intelligence_routes._decisions.find_many({"tenant_id": tenant.tenant_id}, limit=limit)
+        if decision.get("recommendation_id") in recommendation_ids
+    ]
+    decision_ids = {decision.get("decision_id") for decision in decisions}
+    actions = [
+        action
+        for action in await intelligence_routes._actions.find_many({"tenant_id": tenant.tenant_id}, limit=limit)
+        if action.get("decision_id") in decision_ids
+    ]
+    outcomes = await intelligence_routes._outcomes.list_for_tenant(tenant.tenant_id, limit=limit, entity_id=user_id)
+    feedback = [
+        item
+        for item in await intelligence_routes._feedback.find_many({"tenant_id": tenant.tenant_id}, limit=limit)
+        if item.get("recommendation_id") in recommendation_ids
+    ]
+    ledger = intelligence_routes._ledger.build(recommendations, decisions, actions, outcomes, feedback)
+    return APIResponse(data={"entity_id": user_id, **ledger}).to_dict()

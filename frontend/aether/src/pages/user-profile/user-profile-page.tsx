@@ -16,6 +16,7 @@ import {
   useUserSocialIntelligence, useUserRecommendations,
 } from '@aether-app/features/users/use-user-profile';
 import { api } from '@aether-app/lib/api/endpoints';
+import { OutcomeLedgerPanel } from '@aether-app/components/outcome-ledger-panel';
 
 // ── helpers ────────────────────────────────────────────────────────────────────
 
@@ -30,6 +31,10 @@ function asList(v: unknown): unknown[] {
 function fmt(v: unknown, fallback = '—'): string {
   if (v === null || v === undefined || v === '') return fallback;
   return String(v);
+}
+
+function humanizeFamily(v: unknown): string {
+  return fmt(v, 'recommendation').replace(/_/g, ' ');
 }
 
 function fmtScore(v: unknown): string {
@@ -858,6 +863,7 @@ function RecommendationCards({ userId }: { userId: string }) {
             <div className="flex items-center gap-2">
               <GlyphIcon glyph="[>]" className="text-accent" />
               <span className="text-sm font-medium text-text-primary">{rec.action} on {rec.platform}</span>
+              <Badge variant="default" size="sm">{humanizeFamily(asRecord(rec).recommendation_type ?? asRecord(rec).family)}</Badge>
             </div>
             <Badge variant="accent" size="sm">{Math.round(rec.confidence * 100)}% confidence</Badge>
           </div>
@@ -999,6 +1005,7 @@ export function UserProfilePage() {
           <TabsTrigger value="behavioral">Behavior</TabsTrigger>
           <TabsTrigger value="attribution">Attribution</TabsTrigger>
           <TabsTrigger value="relationships">Graph</TabsTrigger>
+          <TabsTrigger value="outcomes">Outcomes</TabsTrigger>
         </TabsList>
 
         <TabsContent value="overview"><OverviewTab userId={userId} /></TabsContent>
@@ -1013,6 +1020,7 @@ export function UserProfilePage() {
         <TabsContent value="behavioral"><BehavioralTab userId={userId} /></TabsContent>
         <TabsContent value="attribution"><AttributionTab userId={userId} /></TabsContent>
         <TabsContent value="relationships"><RelationshipsTab userId={userId} /></TabsContent>
+        <TabsContent value="outcomes"><OutcomeLedgerPanel entityId={userId} /></TabsContent>
       </Tabs>
     </div>
   );

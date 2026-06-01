@@ -45,7 +45,18 @@ from services.intelligence.graph_mutations import (
     upsert_outcome_graph,
     upsert_recommendation_graph,
 )
+from services.intelligence.investigations import build_recommendation_investigation
 from services.intelligence.ooda_engine import GraphNativeRecommendationEngine, now_iso
+from services.intelligence.outcome_ledger import OutcomeLedgerAggregator
+from services.intelligence.playbooks import (
+    PLAYBOOK_TEMPLATES,
+    PlaybookEvaluationResult,
+    build_playbook_performance,
+    evaluate_trigger,
+    generate_for_playbook,
+    playbook_from_template,
+    template_by_id,
+)
 from services.intelligence.repositories import (
     ActionFeedbackRepository,
     DecisionRepository,
@@ -218,7 +229,8 @@ _outcomes = OutcomeRepository()
 _playbooks = PlaybookRepository()
 _playbook_runs = PlaybookRunRepository()
 _feedback = RecommendationFeedbackRepository()
-_ooda = GraphNativeRecommendationEngine()
+_ooda = GraphNativeRecommendationEngine(confidence_threshold=settings.decision_outcome.confidence_threshold)
+_ledger = OutcomeLedgerAggregator()
 
 
 class GenerateRecommendationRequest(BaseModel):
@@ -257,6 +269,20 @@ class OutcomeRequest(BaseModel):
     observed_window: dict[str, str]
 
 
+class CreatePlaybookFromTemplateRequest(BaseModel):
+    template_id: str
+    name: str | None = None
+    description: str | None = None
+    enabled: bool = True
+
+
+class PlaybookEvaluationRequest(BaseModel):
+    entity_id: str | None = None
+    population_id: str | None = None
+    signals: dict[str, Any] = Field(default_factory=dict)
+    context: dict[str, Any] = Field(default_factory=dict)
+
+
 class PlaybookRequest(BaseModel):
     name: str
     description: str | None = None
@@ -277,29 +303,65 @@ async def _publish(topic: Topic, tenant_id: str, payload: dict) -> None:
         logger.warning(f"decision intelligence event publish skipped: {exc}")
 
 
-@router.post("/recommendations/generate")
-async def generate_entity_recommendation(body: GenerateRecommendationRequest, request: Request):
+def _suppress_if_needed(rec: dict) -> dict:
+    if rec["confidence"]["overall"] < settings.decision_outcome.confidence_threshold:
+        rec["status"] = "suppressed"
+        flags = set(rec.get("policy_governance_flags", []))
+        flags.add("below_confidence_threshold")
+        rec["policy_governance_flags"] = sorted(flags)
+    return rec
+
+
+def _build_recommendation_previews(tenant_id: str, body: GenerateRecommendationRequest) -> list[dict]:
+    generated = _ooda.generate_all_for_entity(tenant_id, body.entity_id, body.signals)
+    return [_suppress_if_needed(rec.model_dump()) for rec in generated]
+
+
+def _primary_with_items(items: list[dict], **extra: Any) -> dict:
+    primary = {**items[0], **extra}
+    if len(items) > 1:
+        primary["items"] = items
+        primary["count"] = len(items)
+    return primary
+
+
+@router.post("/recommendations/preview")
+async def preview_entity_recommendation(body: GenerateRecommendationRequest, request: Request):
     tenant = request.state.tenant
     tenant.require_permission("read")
     if not settings.decision_outcome.recommendations_enabled:
         return APIResponse(data={"enabled": False, "items": []}).to_dict()
-    rec = _ooda.generate_for_entity(tenant.tenant_id, body.entity_id, body.signals).model_dump()
-    if rec["confidence"]["overall"] < settings.decision_outcome.confidence_threshold:
-        rec["status"] = "suppressed"
-    saved = await _recommendations.insert(rec["recommendation_id"], rec)
-    try:
-        await upsert_recommendation_graph(get_registry().graph, saved)
-    except Exception as exc:  # pragma: no cover
-        logger.warning(f"recommendation graph mutation skipped: {exc}")
-    await _publish(Topic.RECOMMENDATION_GENERATED, tenant.tenant_id, saved)
-    return APIResponse(data=saved).to_dict()
+    items = _build_recommendation_previews(tenant.tenant_id, body)
+    return APIResponse(data=_primary_with_items(items, preview=True)).to_dict()
+
+
+@router.post("/recommendations/generate")
+async def generate_entity_recommendation(body: GenerateRecommendationRequest, request: Request):
+    tenant = request.state.tenant
+    tenant.require_permission("write")
+    if not settings.decision_outcome.recommendations_enabled:
+        return APIResponse(data={"enabled": False, "items": []}).to_dict()
+    recs = _build_recommendation_previews(tenant.tenant_id, body)
+    saved_items = []
+    for rec in recs:
+        saved = await _recommendations.insert(rec["recommendation_id"], rec)
+        saved_items.append(saved)
+        try:
+            await upsert_recommendation_graph(get_registry().graph, saved)
+        except Exception as exc:  # pragma: no cover
+            logger.warning(f"recommendation graph mutation skipped: {exc}")
+        await _publish(Topic.RECOMMENDATION_GENERATED, tenant.tenant_id, saved)
+    return APIResponse(data=_primary_with_items(saved_items)).to_dict()
 
 
 @router.get("/recommendations")
-async def list_intelligence_recommendations(request: Request, limit: int = 50):
+async def list_intelligence_recommendations(request: Request, limit: int = 50, recommendation_type: str | None = None):
     tenant = request.state.tenant
     tenant.require_permission("read")
-    items = await _recommendations.list_for_tenant(tenant.tenant_id, limit=limit)
+    if recommendation_type:
+        items = await _recommendations.find_many({"tenant_id": tenant.tenant_id, "recommendation_type": recommendation_type}, limit=limit, sort_by="created_at", sort_order="desc")
+    else:
+        items = await _recommendations.list_for_tenant(tenant.tenant_id, limit=limit)
     return APIResponse(data={"items": items, "count": len(items)}).to_dict()
 
 
@@ -315,6 +377,30 @@ async def get_intelligence_recommendation(recommendation_id: str, request: Reque
         rec = await _recommendations.update(recommendation_id, {"status": "viewed"})
         await _publish(Topic.RECOMMENDATION_VIEWED, tenant.tenant_id, rec)
     return APIResponse(data=rec).to_dict()
+
+
+@router.get("/recommendations/{recommendation_id}/investigation")
+async def get_recommendation_investigation(recommendation_id: str, request: Request):
+    tenant = request.state.tenant
+    tenant.require_permission("read")
+    rec = await _recommendations.find_by_id_or_fail(recommendation_id)
+    if rec.get("tenant_id") != tenant.tenant_id:
+        from shared.common.common import NotFoundError
+        raise NotFoundError("recommendation")
+    graph = None
+    try:
+        graph = get_registry().graph
+    except Exception as exc:  # pragma: no cover
+        logger.warning(f"recommendation investigation graph unavailable: {exc}")
+    investigation = await build_recommendation_investigation(
+        tenant_id=tenant.tenant_id,
+        recommendation=rec,
+        decisions_repo=_decisions,
+        actions_repo=_actions,
+        outcomes_repo=_outcomes,
+        graph=graph,
+    )
+    return APIResponse(data=investigation).to_dict()
 
 
 @router.post("/recommendations/{recommendation_id}/decision")
@@ -433,6 +519,48 @@ async def list_outcomes(request: Request, limit: int = 50):
     return APIResponse(data={"items": items, "count": len(items)}).to_dict()
 
 
+async def _tenant_outcome_ledger(tenant_id: str, limit: int = 500) -> dict:
+    recommendations = await _recommendations.list_for_tenant(tenant_id, limit=limit)
+    decisions = await _decisions.find_many({"tenant_id": tenant_id}, limit=limit)
+    actions = await _actions.find_many({"tenant_id": tenant_id}, limit=limit)
+    outcomes = await _outcomes.list_for_tenant(tenant_id, limit=limit)
+    feedback = await _feedback.find_many({"tenant_id": tenant_id}, limit=limit)
+    playbooks = await _playbooks.find_many({"tenant_id": tenant_id}, limit=limit)
+    runs = await _playbook_runs.find_many({"tenant_id": tenant_id}, limit=limit)
+    return _ledger.build(recommendations, decisions, actions, outcomes, feedback, playbooks, runs)
+
+
+@router.get("/outcome-ledger")
+async def get_outcome_ledger(request: Request, limit: int = 500):
+    tenant = request.state.tenant
+    tenant.require_permission("read")
+    return APIResponse(data=await _tenant_outcome_ledger(tenant.tenant_id, limit=limit)).to_dict()
+
+
+@router.get("/outcome-ledger/summary")
+async def get_outcome_ledger_summary(request: Request):
+    tenant = request.state.tenant
+    tenant.require_permission("read")
+    ledger = await _tenant_outcome_ledger(tenant.tenant_id)
+    return APIResponse(data=ledger["summary"]).to_dict()
+
+
+@router.get("/outcome-ledger/by-recommendation-type")
+async def get_outcome_ledger_by_recommendation_type(request: Request):
+    tenant = request.state.tenant
+    tenant.require_permission("read")
+    ledger = await _tenant_outcome_ledger(tenant.tenant_id)
+    return APIResponse(data={"items": ledger["by_recommendation_type"]}).to_dict()
+
+
+@router.get("/outcome-ledger/by-playbook")
+async def get_outcome_ledger_by_playbook(request: Request):
+    tenant = request.state.tenant
+    tenant.require_permission("read")
+    ledger = await _tenant_outcome_ledger(tenant.tenant_id)
+    return APIResponse(data={"items": ledger["by_playbook"]}).to_dict()
+
+
 @router.get("/playbooks")
 async def list_playbooks(request: Request, limit: int = 50):
     tenant = request.state.tenant
@@ -454,6 +582,171 @@ async def create_playbook(body: PlaybookRequest, request: Request):
         approval_level=body.approval_level, enabled=body.enabled, created_at=utc_now().isoformat(),
     ).model_dump()
     return APIResponse(data=await _playbooks.insert(playbook["playbook_id"], playbook)).to_dict()
+
+
+@router.get("/playbooks/templates")
+async def list_playbook_templates(request: Request):
+    tenant = request.state.tenant
+    tenant.require_permission("read")
+    return APIResponse(data={"items": [template.model_dump() for template in PLAYBOOK_TEMPLATES], "count": len(PLAYBOOK_TEMPLATES)}).to_dict()
+
+
+@router.post("/playbooks/from-template")
+async def create_playbook_from_template(body: CreatePlaybookFromTemplateRequest, request: Request):
+    tenant = request.state.tenant
+    tenant.require_permission("write")
+    if not settings.decision_outcome.playbooks_enabled:
+        return APIResponse(data={"enabled": False}).to_dict()
+    template = template_by_id(body.template_id)
+    if template is None:
+        raise BadRequestError("Unknown playbook template")
+    playbook = playbook_from_template(
+        template,
+        tenant.tenant_id,
+        {"name": body.name, "description": body.description, "enabled": body.enabled},
+    ).model_dump()
+    playbook["template_id"] = template.template_id
+    playbook["category"] = template.category
+    playbook["expected_outcome_types"] = template.expected_outcome_types
+    playbook["recommended_integrations"] = template.recommended_integrations
+    return APIResponse(data=await _playbooks.insert(playbook["playbook_id"], playbook)).to_dict()
+
+
+async def _playbook_performance(playbook: dict, limit: int = 500) -> dict:
+    tenant_id = str(playbook.get("tenant_id"))
+    playbook_id = str(playbook.get("playbook_id"))
+    runs = await _playbook_runs.find_many({"tenant_id": tenant_id, "playbook_id": playbook_id}, limit=limit)
+    recommendations = await _recommendations.find_many({"tenant_id": tenant_id}, limit=limit)
+    decisions = await _decisions.find_many({"tenant_id": tenant_id}, limit=limit)
+    actions = await _actions.find_many({"tenant_id": tenant_id}, limit=limit)
+    outcomes = await _outcomes.find_many({"tenant_id": tenant_id}, limit=limit)
+    feedback = await _feedback.find_many({"tenant_id": tenant_id}, limit=limit)
+    return build_playbook_performance(playbook, runs, recommendations, decisions, actions, outcomes, feedback).model_dump()
+
+
+@router.get("/playbooks/performance/summary")
+async def get_playbook_performance_summary(request: Request, limit: int = 500):
+    tenant = request.state.tenant
+    tenant.require_permission("read")
+    playbooks = await _playbooks.find_many({"tenant_id": tenant.tenant_id}, limit=limit)
+    items = [await _playbook_performance(playbook, limit=limit) for playbook in playbooks]
+    totals = {
+        "playbooks_total": len(items),
+        "runs_total": sum(item["runs_total"] for item in items),
+        "runs_completed": sum(item["runs_completed"] for item in items),
+        "recommendations_generated": sum(item["recommendations_generated"] for item in items),
+        "observed_value_total": round(sum(item["observed_value_total"] for item in items), 2),
+        "expected_value_total": round(sum(item["expected_value_total"] for item in items), 2),
+        "pending_value_total": round(sum(item["pending_value_total"] for item in items), 2),
+        "stale_run_count": sum(item["stale_run_count"] for item in items),
+        "incomplete_run_count": sum(item["incomplete_run_count"] for item in items),
+    }
+    return APIResponse(data={"items": items, "summary": totals}).to_dict()
+
+
+@router.get("/playbooks/{playbook_id}")
+async def get_playbook(playbook_id: str, request: Request):
+    tenant = request.state.tenant
+    tenant.require_permission("read")
+    playbook = await _playbooks.find_by_id_or_fail(playbook_id)
+    if playbook.get("tenant_id") != tenant.tenant_id:
+        from shared.common.common import NotFoundError
+        raise NotFoundError("playbook")
+    return APIResponse(data=playbook).to_dict()
+
+
+@router.get("/playbooks/{playbook_id}/runs")
+async def list_playbook_runs(playbook_id: str, request: Request, limit: int = 50):
+    tenant = request.state.tenant
+    tenant.require_permission("read")
+    playbook = await _playbooks.find_by_id_or_fail(playbook_id)
+    if playbook.get("tenant_id") != tenant.tenant_id:
+        from shared.common.common import NotFoundError
+        raise NotFoundError("playbook")
+    runs = await _playbook_runs.find_many({"tenant_id": tenant.tenant_id, "playbook_id": playbook_id}, limit=limit)
+    return APIResponse(data={"items": runs, "count": len(runs)}).to_dict()
+
+
+@router.get("/playbooks/{playbook_id}/performance")
+async def get_playbook_performance(playbook_id: str, request: Request, limit: int = 500):
+    tenant = request.state.tenant
+    tenant.require_permission("read")
+    playbook = await _playbooks.find_by_id_or_fail(playbook_id)
+    if playbook.get("tenant_id") != tenant.tenant_id:
+        from shared.common.common import NotFoundError
+        raise NotFoundError("playbook")
+    return APIResponse(data=await _playbook_performance(playbook, limit=limit)).to_dict()
+
+
+@router.post("/playbooks/{playbook_id}/evaluate")
+async def evaluate_playbook(playbook_id: str, body: PlaybookEvaluationRequest, request: Request):
+    tenant = request.state.tenant
+    tenant.require_permission("write")
+    if not settings.decision_outcome.playbooks_enabled:
+        return APIResponse(data={"enabled": False}).to_dict()
+    playbook = await _playbooks.find_by_id_or_fail(playbook_id)
+    if playbook.get("tenant_id") != tenant.tenant_id:
+        from shared.common.common import NotFoundError
+        raise NotFoundError("playbook")
+    if not playbook.get("enabled", True):
+        result = PlaybookEvaluationResult(
+            playbook_id=playbook_id,
+            tenant_id=tenant.tenant_id,
+            matched=False,
+            skipped_reason="playbook_disabled",
+            evaluated_at=utc_now().isoformat(),
+        )
+        return APIResponse(data=result.model_dump()).to_dict()
+    signals = {**body.context, **body.signals}
+    matched, trigger_matches, skipped = evaluate_trigger(playbook, signals)
+    if not matched:
+        result = PlaybookEvaluationResult(
+            playbook_id=playbook_id,
+            tenant_id=tenant.tenant_id,
+            matched=False,
+            trigger_matches=trigger_matches,
+            skipped_reason=skipped,
+            evaluated_at=utc_now().isoformat(),
+        )
+        return APIResponse(data=result.model_dump()).to_dict()
+    recommendations = generate_for_playbook(_ooda, tenant.tenant_id, playbook, signals, body.entity_id, body.population_id)
+    run = PlaybookRun(
+        run_id=str(uuid.uuid4()),
+        playbook_id=playbook_id,
+        tenant_id=tenant.tenant_id,
+        status="completed",
+        recommendation_ids=[],
+        trigger_snapshot={"signals": body.signals, "context": body.context, "matches": trigger_matches},
+        generated_recommendation_ids=[],
+        started_at=utc_now().isoformat(),
+        completed_at=utc_now().isoformat(),
+        summary={"matched": True, "recommendations_generated": 0},
+    ).model_dump()
+    generated_ids: list[str] = []
+    for recommendation in recommendations:
+        rec = _suppress_if_needed(recommendation.model_dump())
+        rec["playbook_id"] = playbook_id
+        rec["playbook_run_id"] = run["run_id"]
+        saved = await _recommendations.insert(rec["recommendation_id"], rec)
+        generated_ids.append(saved["recommendation_id"])
+        try:
+            await upsert_recommendation_graph(get_registry().graph, saved)
+        except Exception as exc:  # pragma: no cover
+            logger.warning(f"playbook recommendation graph mutation skipped: {exc}")
+        await _publish(Topic.RECOMMENDATION_GENERATED, tenant.tenant_id, saved)
+    run["recommendation_ids"] = generated_ids
+    run["generated_recommendation_ids"] = generated_ids
+    run["summary"] = {"matched": True, "recommendations_generated": len(generated_ids)}
+    await _playbook_runs.insert(run["run_id"], run)
+    result = PlaybookEvaluationResult(
+        playbook_id=playbook_id,
+        tenant_id=tenant.tenant_id,
+        matched=True,
+        trigger_matches=trigger_matches,
+        generated_recommendation_ids=generated_ids,
+        evaluated_at=utc_now().isoformat(),
+    )
+    return APIResponse(data=result.model_dump()).to_dict()
 
 
 @router.post("/playbooks/{playbook_id}/run")
