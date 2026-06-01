@@ -1045,6 +1045,22 @@ export const api = {
       revoke: (keyId: string) =>
         restClient.delete(`/v1/admin/api-keys/${keyId}`, wrap(z.object({ revoked: z.boolean() }))),
     },
+    kyber: {
+      recommendationHealth: () =>
+        restClient.get('/v1/admin/kyber/recommendation-health', wrap(unknownSchema)).then(r => r.data),
+      tenantValueHealth: () =>
+        restClient.get('/v1/admin/kyber/tenant-value-health', wrap(unknownSchema)).then(r => r.data),
+      outcomeCaptureHealth: () =>
+        restClient.get('/v1/admin/kyber/outcome-capture-health', wrap(unknownSchema)).then(r => r.data),
+      playbookPerformance: () =>
+        restClient.get('/v1/admin/kyber/playbook-performance', wrap(unknownSchema)).then(r => r.data),
+      modelConfidenceDrift: () =>
+        restClient.get('/v1/admin/kyber/model-confidence-drift', wrap(unknownSchema)).then(r => r.data),
+      verticalSolutionSignals: () =>
+        restClient.get('/v1/admin/kyber/vertical-solution-signals', wrap(unknownSchema)).then(r => r.data),
+      expansionOpportunities: () =>
+        restClient.get('/v1/admin/kyber/expansion-opportunities', wrap(unknownSchema)).then(r => r.data),
+    },
     billing: {
       info: (tenantId: string) =>
         restClient.get(`/v1/admin/tenants/${tenantId}/billing`, wrap(unknownSchema)).then(r => r.data),

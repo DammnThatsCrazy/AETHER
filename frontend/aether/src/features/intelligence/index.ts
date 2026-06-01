@@ -10,7 +10,6 @@ export {
   useProfileOutcomes,
   useOutcomeLedger,
   useProfileOutcomeLedger,
-  useRecommendationInvestigation,
   usePlaybooks,
   usePlaybookTemplates,
   usePlaybookRuns,

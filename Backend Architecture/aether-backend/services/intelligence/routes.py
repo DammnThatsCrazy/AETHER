@@ -48,15 +48,6 @@ from services.intelligence.graph_mutations import (
 from services.intelligence.investigations import build_recommendation_investigation
 from services.intelligence.ooda_engine import GraphNativeRecommendationEngine, now_iso
 from services.intelligence.outcome_ledger import OutcomeLedgerAggregator
-from services.intelligence.playbooks import (
-    PLAYBOOK_TEMPLATES,
-    PlaybookEvaluationResult,
-    build_playbook_performance,
-    evaluate_trigger,
-    generate_for_playbook,
-    playbook_from_template,
-    template_by_id,
-)
 from services.intelligence.repositories import (
     ActionFeedbackRepository,
     DecisionRepository,
@@ -70,6 +61,7 @@ from services.lake.features import materialize_wallet_features
 
 logger = get_logger("aether.service.intelligence")
 router = APIRouter(prefix="/v1/intelligence", tags=["Intelligence"])
+kyber_admin_router = APIRouter(prefix="/v1/admin/kyber", tags=["Admin — Kyber Strategic Observability"])
 
 
 @router.get("/wallet/{address}/risk")
@@ -229,7 +221,7 @@ _outcomes = OutcomeRepository()
 _playbooks = PlaybookRepository()
 _playbook_runs = PlaybookRunRepository()
 _feedback = RecommendationFeedbackRepository()
-_ooda = GraphNativeRecommendationEngine(confidence_threshold=settings.decision_outcome.confidence_threshold)
+_ooda = GraphNativeRecommendationEngine()
 _ledger = OutcomeLedgerAggregator()
 
 
@@ -303,7 +295,8 @@ async def _publish(topic: Topic, tenant_id: str, payload: dict) -> None:
         logger.warning(f"decision intelligence event publish skipped: {exc}")
 
 
-def _suppress_if_needed(rec: dict) -> dict:
+def _build_recommendation_preview(tenant_id: str, body: GenerateRecommendationRequest) -> dict:
+    rec = _ooda.generate_for_entity(tenant_id, body.entity_id, body.signals).model_dump()
     if rec["confidence"]["overall"] < settings.decision_outcome.confidence_threshold:
         rec["status"] = "suppressed"
         flags = set(rec.get("policy_governance_flags", []))
@@ -312,27 +305,15 @@ def _suppress_if_needed(rec: dict) -> dict:
     return rec
 
 
-def _build_recommendation_previews(tenant_id: str, body: GenerateRecommendationRequest) -> list[dict]:
-    generated = _ooda.generate_all_for_entity(tenant_id, body.entity_id, body.signals)
-    return [_suppress_if_needed(rec.model_dump()) for rec in generated]
-
-
-def _primary_with_items(items: list[dict], **extra: Any) -> dict:
-    primary = {**items[0], **extra}
-    if len(items) > 1:
-        primary["items"] = items
-        primary["count"] = len(items)
-    return primary
-
-
 @router.post("/recommendations/preview")
 async def preview_entity_recommendation(body: GenerateRecommendationRequest, request: Request):
     tenant = request.state.tenant
     tenant.require_permission("read")
     if not settings.decision_outcome.recommendations_enabled:
         return APIResponse(data={"enabled": False, "items": []}).to_dict()
-    items = _build_recommendation_previews(tenant.tenant_id, body)
-    return APIResponse(data=_primary_with_items(items, preview=True)).to_dict()
+    rec = _build_recommendation_preview(tenant.tenant_id, body)
+    rec["preview"] = True
+    return APIResponse(data=rec).to_dict()
 
 
 @router.post("/recommendations/generate")
@@ -341,17 +322,14 @@ async def generate_entity_recommendation(body: GenerateRecommendationRequest, re
     tenant.require_permission("write")
     if not settings.decision_outcome.recommendations_enabled:
         return APIResponse(data={"enabled": False, "items": []}).to_dict()
-    recs = _build_recommendation_previews(tenant.tenant_id, body)
-    saved_items = []
-    for rec in recs:
-        saved = await _recommendations.insert(rec["recommendation_id"], rec)
-        saved_items.append(saved)
-        try:
-            await upsert_recommendation_graph(get_registry().graph, saved)
-        except Exception as exc:  # pragma: no cover
-            logger.warning(f"recommendation graph mutation skipped: {exc}")
-        await _publish(Topic.RECOMMENDATION_GENERATED, tenant.tenant_id, saved)
-    return APIResponse(data=_primary_with_items(saved_items)).to_dict()
+    rec = _build_recommendation_preview(tenant.tenant_id, body)
+    saved = await _recommendations.insert(rec["recommendation_id"], rec)
+    try:
+        await upsert_recommendation_graph(get_registry().graph, saved)
+    except Exception as exc:  # pragma: no cover
+        logger.warning(f"recommendation graph mutation skipped: {exc}")
+    await _publish(Topic.RECOMMENDATION_GENERATED, tenant.tenant_id, saved)
+    return APIResponse(data=saved).to_dict()
 
 
 @router.get("/recommendations")
@@ -387,20 +365,37 @@ async def get_recommendation_investigation(recommendation_id: str, request: Requ
     if rec.get("tenant_id") != tenant.tenant_id:
         from shared.common.common import NotFoundError
         raise NotFoundError("recommendation")
-    graph = None
+    decisions = await _decisions.find_many({"tenant_id": tenant.tenant_id, "recommendation_id": recommendation_id}, limit=100)
+    actions = []
+    for decision in decisions:
+        actions.extend(await _actions.find_many({"tenant_id": tenant.tenant_id, "decision_id": decision.get("decision_id")}, limit=100))
+    outcomes = await _outcomes.find_many({"tenant_id": tenant.tenant_id, "recommendation_id": recommendation_id}, limit=100)
+    prior_outcomes = await _outcomes.find_many({"tenant_id": tenant.tenant_id}, limit=100)
+    prior_similar = [o for o in prior_outcomes if o.get("recommendation_id") != recommendation_id][:20]
+    graph_edges = []
     try:
-        graph = get_registry().graph
+        neighbors = await get_registry().graph.get_neighbors(recommendation_id, direction="both")
+        graph_edges = [{"id": v.vertex_id, "type": v.vertex_type, "properties": v.properties} for v in neighbors[:50]]
     except Exception as exc:  # pragma: no cover
-        logger.warning(f"recommendation investigation graph unavailable: {exc}")
-    investigation = await build_recommendation_investigation(
-        tenant_id=tenant.tenant_id,
-        recommendation=rec,
-        decisions_repo=_decisions,
-        actions_repo=_actions,
-        outcomes_repo=_outcomes,
-        graph=graph,
-    )
-    return APIResponse(data=investigation).to_dict()
+        logger.warning(f"recommendation investigation graph lookup skipped: {exc}")
+    data = {
+        "recommendation": rec,
+        "confidence_breakdown": rec.get("confidence", {}),
+        "evidence": rec.get("evidence", []),
+        "related_entity": {"entity_id": rec.get("entity_id"), "population_id": rec.get("population_id")},
+        "related_events": [e for e in rec.get("evidence", []) if e.get("source_type") == "event"],
+        "related_graph_edges": graph_edges,
+        "attribution_path": next((e for e in rec.get("evidence", []) if e.get("source_type") == "attribution_path"), None),
+        "prior_similar_outcomes": prior_similar,
+        "candidate_actions": rec.get("candidate_actions", []),
+        "decision_history": decisions,
+        "action_history": actions,
+        "outcome_history": outcomes,
+        "governance_flags": rec.get("policy_governance_flags", []),
+        "data_freshness": rec.get("data_freshness", {}),
+        "suppression_explanation": rec.get("policy_governance_flags", []) if rec.get("status") == "suppressed" else [],
+    }
+    return APIResponse(data=data).to_dict()
 
 
 @router.post("/recommendations/{recommendation_id}/decision")
@@ -519,7 +514,7 @@ async def list_outcomes(request: Request, limit: int = 50):
     return APIResponse(data={"items": items, "count": len(items)}).to_dict()
 
 
-async def _tenant_outcome_ledger(tenant_id: str, limit: int = 500) -> dict:
+async def _tenant_ledger(tenant_id: str, limit: int = 500) -> dict:
     recommendations = await _recommendations.list_for_tenant(tenant_id, limit=limit)
     decisions = await _decisions.find_many({"tenant_id": tenant_id}, limit=limit)
     actions = await _actions.find_many({"tenant_id": tenant_id}, limit=limit)
@@ -534,14 +529,15 @@ async def _tenant_outcome_ledger(tenant_id: str, limit: int = 500) -> dict:
 async def get_outcome_ledger(request: Request, limit: int = 500):
     tenant = request.state.tenant
     tenant.require_permission("read")
-    return APIResponse(data=await _tenant_outcome_ledger(tenant.tenant_id, limit=limit)).to_dict()
+    ledger = await _tenant_ledger(tenant.tenant_id, limit=limit)
+    return APIResponse(data=ledger).to_dict()
 
 
 @router.get("/outcome-ledger/summary")
 async def get_outcome_ledger_summary(request: Request):
     tenant = request.state.tenant
     tenant.require_permission("read")
-    ledger = await _tenant_outcome_ledger(tenant.tenant_id)
+    ledger = await _tenant_ledger(tenant.tenant_id)
     return APIResponse(data=ledger["summary"]).to_dict()
 
 
@@ -549,7 +545,7 @@ async def get_outcome_ledger_summary(request: Request):
 async def get_outcome_ledger_by_recommendation_type(request: Request):
     tenant = request.state.tenant
     tenant.require_permission("read")
-    ledger = await _tenant_outcome_ledger(tenant.tenant_id)
+    ledger = await _tenant_ledger(tenant.tenant_id)
     return APIResponse(data={"items": ledger["by_recommendation_type"]}).to_dict()
 
 
@@ -557,7 +553,7 @@ async def get_outcome_ledger_by_recommendation_type(request: Request):
 async def get_outcome_ledger_by_playbook(request: Request):
     tenant = request.state.tenant
     tenant.require_permission("read")
-    ledger = await _tenant_outcome_ledger(tenant.tenant_id)
+    ledger = await _tenant_ledger(tenant.tenant_id)
     return APIResponse(data={"items": ledger["by_playbook"]}).to_dict()
 
 
@@ -759,3 +755,175 @@ async def run_playbook(playbook_id: str, request: Request):
         raise NotFoundError("playbook")
     run = PlaybookRun(run_id=str(uuid.uuid4()), playbook_id=playbook_id, tenant_id=tenant.tenant_id, status="queued", started_at=utc_now().isoformat()).model_dump()
     return APIResponse(data=await _playbook_runs.insert(run["run_id"], run)).to_dict()
+
+_PLAYBOOK_TEMPLATES: list[dict[str, Any]] = [
+    {"template_id": "high-ltv-churn-save", "name": "High-LTV churn save", "trigger": "churn_probability >= 0.65 and ltv_predicted_usd >= 500", "recommendation_families": ["retention"], "candidate_actions": ["human_review_retention_offer"], "approval_level": "elevated", "outcome_mapping": {"success": "retained_value"}, "expected_value_model": "ltv_predicted_usd * 0.18"},
+    {"template_id": "fraud-cluster-review", "name": "Fraud cluster review", "trigger": "fraud_probability >= 0.70", "recommendation_families": ["fraud_review"], "candidate_actions": ["open_fraud_cluster_review"], "approval_level": "elevated", "outcome_mapping": {"success": "loss_avoided"}, "expected_value_model": "exposure_usd"},
+    {"template_id": "campaign-waste-reduction", "name": "Campaign waste reduction", "trigger": "attribution_waste_probability >= 0.60", "recommendation_families": ["attribution_optimization"], "candidate_actions": ["review_attribution_path"], "approval_level": "standard", "outcome_mapping": {"success": "waste_reduced"}, "expected_value_model": "wasted_spend_usd"},
+    {"template_id": "agent-failure-review", "name": "Agent failure review", "trigger": "agent_risk_probability >= 0.50", "recommendation_families": ["agent_governance"], "candidate_actions": ["review_agent_policy"], "approval_level": "critical", "outcome_mapping": {"success": "risk_reduced"}, "expected_value_model": "risk_exposure_usd"},
+    {"template_id": "expansion-signal-routing", "name": "Expansion signal routing", "trigger": "expansion_probability >= 0.60", "recommendation_families": ["expansion"], "candidate_actions": ["route_expansion_signal"], "approval_level": "standard", "outcome_mapping": {"success": "pipeline_created"}, "expected_value_model": "pipeline_value_usd"},
+    {"template_id": "reward-trigger-review", "name": "Reward trigger review", "trigger": "reward_optimization_probability >= 0.60", "recommendation_families": ["rewards_optimization"], "candidate_actions": ["review_reward_trigger"], "approval_level": "standard", "outcome_mapping": {"success": "reward_efficiency"}, "expected_value_model": "reward_savings_usd"},
+    {"template_id": "operational-failure-review", "name": "Operational failure review", "trigger": "operational_failure_probability >= 0.55", "recommendation_families": ["operational_failure"], "candidate_actions": ["open_operational_failure_review"], "approval_level": "elevated", "outcome_mapping": {"success": "incident_reduction"}, "expected_value_model": "incident_cost_avoided_usd"},
+]
+
+
+class PlaybookFromTemplateRequest(BaseModel):
+    template_id: str
+    name: str | None = None
+    enabled: bool = True
+
+
+@router.get("/playbooks/templates")
+async def list_playbook_templates(request: Request):
+    request.state.tenant.require_permission("read")
+    return APIResponse(data={"items": _PLAYBOOK_TEMPLATES, "count": len(_PLAYBOOK_TEMPLATES)}).to_dict()
+
+
+@router.post("/playbooks/from-template")
+async def create_playbook_from_template(body: PlaybookFromTemplateRequest, request: Request):
+    tenant = request.state.tenant
+    tenant.require_permission("write")
+    template = next((item for item in _PLAYBOOK_TEMPLATES if item["template_id"] == body.template_id), None)
+    if template is None:
+        raise BadRequestError("Unknown playbook template_id")
+    playbook = PlaybookDefinition(
+        playbook_id=str(uuid.uuid4()),
+        tenant_id=tenant.tenant_id,
+        name=body.name or template["name"],
+        description=f"Template-derived playbook: {template['name']}",
+        trigger=template["trigger"],
+        recommendation_types=template["recommendation_families"],
+        candidate_actions=[],
+        approval_level=template["approval_level"],
+        enabled=body.enabled,
+        created_at=utc_now().isoformat(),
+    ).model_dump()
+    playbook["template_id"] = template["template_id"]
+    playbook["outcome_mapping"] = template["outcome_mapping"]
+    playbook["expected_value_model"] = template["expected_value_model"]
+    return APIResponse(data=await _playbooks.insert(playbook["playbook_id"], playbook)).to_dict()
+
+
+async def _playbook_performance(tenant_id: str, playbook_id: str) -> dict:
+    playbook = await _playbooks.find_by_id_or_fail(playbook_id)
+    if playbook.get("tenant_id") != tenant_id:
+        from shared.common.common import NotFoundError
+        raise NotFoundError("playbook")
+    runs = await _playbook_runs.find_many({"tenant_id": tenant_id, "playbook_id": playbook_id}, limit=500)
+    rec_ids = {rid for run in runs for rid in run.get("recommendation_ids", [])}
+    recs = [r for r in await _recommendations.list_for_tenant(tenant_id, limit=500) if (r.get("recommendation_id") or r.get("id")) in rec_ids]
+    outcomes = [o for o in await _outcomes.list_for_tenant(tenant_id, limit=500) if o.get("recommendation_id") in rec_ids]
+    ledger = _ledger.build(recs, [], [], outcomes, [], [playbook], runs)
+    return {"playbook": playbook, "runs": runs, "performance": ledger["summary"], "by_run": ledger["by_playbook"]}
+
+
+@router.get("/playbooks/{playbook_id}/performance")
+async def get_playbook_performance(playbook_id: str, request: Request):
+    tenant = request.state.tenant
+    tenant.require_permission("read")
+    return APIResponse(data=await _playbook_performance(tenant.tenant_id, playbook_id)).to_dict()
+
+
+@router.get("/playbooks/{playbook_id}/runs")
+async def get_playbook_runs(playbook_id: str, request: Request, limit: int = 100):
+    tenant = request.state.tenant
+    tenant.require_permission("read")
+    return APIResponse(data={"items": await _playbook_runs.find_many({"tenant_id": tenant.tenant_id, "playbook_id": playbook_id}, limit=limit)}).to_dict()
+
+
+@router.post("/playbooks/{playbook_id}/evaluate")
+async def evaluate_playbook(playbook_id: str, request: Request):
+    tenant = request.state.tenant
+    tenant.require_permission("write")
+    data = await _playbook_performance(tenant.tenant_id, playbook_id)
+    tuning_needed = data["performance"].get("outcome_capture_rate", 0) < 0.5 or data["performance"].get("failure_rate", 0) > 0.25
+    return APIResponse(data={**data, "needs_tuning": tuning_needed}).to_dict()
+
+
+class IntegrationActionRequest(BaseModel):
+    decision_id: str
+    target: Literal["slack", "webhook", "crm_task", "marketing_automation", "ticketing"]
+    payload: dict[str, Any] = Field(default_factory=dict)
+    status: Literal["planned", "queued", "executed", "failed", "cancelled"] = "planned"
+    authorization_metadata: dict[str, Any] | None = None
+
+
+@router.post("/actions/integration-ready")
+async def log_integration_ready_action(body: IntegrationActionRequest, request: Request):
+    return await log_action(ActionLogRequest(
+        decision_id=body.decision_id,
+        action_type=f"integration:{body.target}",
+        system=body.target,
+        integration=body.target,
+        status=body.status,
+        actor_type="human",
+        economic_payload=body.payload,
+        authorization_metadata=body.authorization_metadata,
+    ), request)
+
+
+async def _all_tenant_ledgers(limit: int = 1000) -> dict[str, dict]:
+    recs = await _recommendations.find_many({}, limit=limit)
+    tenants = sorted({r.get("tenant_id") for r in recs if r.get("tenant_id")})
+    return {tenant_id: await _tenant_ledger(tenant_id, limit=limit) for tenant_id in tenants}
+
+
+@kyber_admin_router.get("/recommendation-health")
+async def kyber_recommendation_health(request: Request):
+    request.state.tenant.require_permission("admin")
+    ledgers = await _all_tenant_ledgers()
+    return APIResponse(data={"tenants": {k: v["summary"] for k, v in ledgers.items()}, "aggregate": _combine_summaries([v["summary"] for v in ledgers.values()])}).to_dict()
+
+
+@kyber_admin_router.get("/tenant-value-health")
+async def kyber_tenant_value_health(request: Request):
+    request.state.tenant.require_permission("admin")
+    ledgers = await _all_tenant_ledgers()
+    items = [{"tenant_id": tenant_id, "value_created": ledger["summary"]["observed_value"], "value_pending": max(ledger["summary"]["expected_value"] - ledger["summary"]["observed_value"], 0), "at_risk": ledger["summary"]["outcome_capture_rate"] < 0.25, "expansion_ready": ledger["summary"]["observed_value"] > 0 and ledger["summary"]["success_rate"] >= 0.5} for tenant_id, ledger in ledgers.items()]
+    return APIResponse(data={"items": items}).to_dict()
+
+
+@kyber_admin_router.get("/outcome-capture-health")
+async def kyber_outcome_capture_health(request: Request):
+    request.state.tenant.require_permission("admin")
+    ledgers = await _all_tenant_ledgers()
+    return APIResponse(data={"items": [{"tenant_id": t, "outcome_capture_rate": l["summary"]["outcome_capture_rate"], "stale_loops": l["summary"]["stale_loops"], "incomplete_loops": l["summary"]["incomplete_loops"]} for t, l in ledgers.items()]}).to_dict()
+
+
+@kyber_admin_router.get("/playbook-performance")
+async def kyber_playbook_performance(request: Request):
+    request.state.tenant.require_permission("admin")
+    ledgers = await _all_tenant_ledgers()
+    return APIResponse(data={"items": [item for ledger in ledgers.values() for item in ledger["by_playbook"]]}).to_dict()
+
+
+@kyber_admin_router.get("/model-confidence-drift")
+async def kyber_model_confidence_drift(request: Request):
+    request.state.tenant.require_permission("admin")
+    feedback = await _feedback.find_many({}, limit=1000)
+    return APIResponse(data={"confidence_deltas_over_time": feedback, "total_delta": round(sum(float(f.get("confidence_delta", 0)) for f in feedback), 4)}).to_dict()
+
+
+@kyber_admin_router.get("/vertical-solution-signals")
+async def kyber_vertical_solution_signals(request: Request):
+    request.state.tenant.require_permission("admin")
+    ledgers = await _all_tenant_ledgers()
+    clusters: dict[str, int] = {}
+    for ledger in ledgers.values():
+        for item in ledger["by_recommendation_type"]:
+            clusters[item["key"]] = clusters.get(item["key"], 0) + item["recommendations"]
+    return APIResponse(data={"clusters": clusters}).to_dict()
+
+
+@kyber_admin_router.get("/expansion-opportunities")
+async def kyber_expansion_opportunities(request: Request):
+    request.state.tenant.require_permission("admin")
+    ledgers = await _all_tenant_ledgers()
+    return APIResponse(data={"items": [{"tenant_id": t, "reason": "high_success_and_value", "observed_value": l["summary"]["observed_value"]} for t, l in ledgers.items() if l["summary"]["success_rate"] >= 0.5 and l["summary"]["observed_value"] > 0]}).to_dict()
+
+
+def _combine_summaries(summaries: list[dict[str, Any]]) -> dict[str, Any]:
+    keys = ["recommendations_generated", "recommendations_viewed", "decisions_recorded", "actions_logged", "outcomes_observed", "expected_value", "observed_value", "stale_loops", "incomplete_loops", "failed_loops"]
+    combined = {key: round(sum(float(s.get(key, 0)) for s in summaries), 2) for key in keys}
+    combined["outcome_capture_rate"] = round(combined["outcomes_observed"] / combined["recommendations_generated"], 4) if combined["recommendations_generated"] else 0.0
+    return combined

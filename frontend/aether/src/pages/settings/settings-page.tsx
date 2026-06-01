@@ -24,7 +24,6 @@ import { useApiKeys, useCreateApiKey, useRevokeApiKey } from '@aether-app/featur
 import type { ApiKey } from '@aether-app/features/account';
 import { queryCache } from '@aether/ui';
 import { OutcomeLedgerPanel } from '@aether-app/components/outcome-ledger-panel';
-import { PlaybookSystemPanel } from '@aether-app/components/playbook-system-panel';
 
 function formatRelative(iso: string | null): string {
   if (!iso) return 'never';
@@ -239,7 +238,6 @@ export function SettingsPage() {
   return (
     <div className="p-8 max-w-5xl space-y-6">
       <OutcomeLedgerPanel />
-      <PlaybookSystemPanel />
 
       <div className="max-w-3xl">
       <div className="flex items-center justify-between mb-6">
