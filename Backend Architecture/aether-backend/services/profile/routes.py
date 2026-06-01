@@ -1015,3 +1015,27 @@ async def get_profile_outcomes(user_id: str, request: Request, limit: int = Quer
     repo = OutcomeRepository()
     items = await repo.list_for_tenant(tenant.tenant_id, limit=limit, entity_id=user_id)
     return APIResponse(data={"entity_id": user_id, "items": items, "count": len(items)}).to_dict()
+
+
+@router.get("/{user_id}/outcome-ledger")
+async def get_profile_outcome_ledger(user_id: str, request: Request, limit: int = Query(default=100, ge=1, le=500)):
+    """Entity-level outcome ledger linked to this Profile360 entity."""
+    tenant = request.state.tenant
+    tenant.require_permission("read")
+    from services.intelligence.outcome_ledger import OutcomeLedgerAggregator
+    from services.intelligence.repositories import (
+        ActionFeedbackRepository,
+        DecisionRepository,
+        OutcomeRepository,
+        RecommendationFeedbackRepository,
+        RecommendationRepository,
+    )
+    recs = await RecommendationRepository().list_for_tenant(tenant.tenant_id, limit=limit, entity_id=user_id)
+    rec_ids = {r.get("recommendation_id") or r.get("id") for r in recs}
+    decisions = [d for d in await DecisionRepository().find_many({"tenant_id": tenant.tenant_id}, limit=limit) if d.get("recommendation_id") in rec_ids]
+    decision_ids = {d.get("decision_id") for d in decisions}
+    actions = [a for a in await ActionFeedbackRepository().find_many({"tenant_id": tenant.tenant_id}, limit=limit) if a.get("decision_id") in decision_ids]
+    outcomes = await OutcomeRepository().list_for_tenant(tenant.tenant_id, limit=limit, entity_id=user_id)
+    feedback = [f for f in await RecommendationFeedbackRepository().find_many({"tenant_id": tenant.tenant_id}, limit=limit) if f.get("recommendation_id") in rec_ids]
+    ledger = OutcomeLedgerAggregator().build(recs, decisions, actions, outcomes, feedback)
+    return APIResponse(data={"entity_id": user_id, **ledger}).to_dict()
