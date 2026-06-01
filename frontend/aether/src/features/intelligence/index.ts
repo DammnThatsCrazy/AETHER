@@ -11,4 +11,8 @@ export {
   useOutcomeLedger,
   useProfileOutcomeLedger,
   usePlaybooks,
+  usePlaybookTemplates,
+  usePlaybookRuns,
+  usePlaybookPerformance,
+  usePlaybookPerformanceSummary,
 } from './use-intelligence';

@@ -154,6 +154,11 @@ class PlaybookRun(BaseModel):
     tenant_id: str
     status: Literal["queued", "running", "completed", "failed", "cancelled"] = "queued"
     recommendation_ids: list[str] = Field(default_factory=list)
+    trigger_snapshot: dict[str, Any] | None = None
+    generated_recommendation_ids: list[str] = Field(default_factory=list)
+    decision_ids: list[str] = Field(default_factory=list)
+    action_ids: list[str] = Field(default_factory=list)
+    outcome_ids: list[str] = Field(default_factory=list)
     started_at: str
     completed_at: str | None = None
     summary: dict[str, Any] | None = None

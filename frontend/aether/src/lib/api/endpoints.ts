@@ -496,6 +496,21 @@ export const api = {
 
     playbooks: () =>
       restClient.get(`/v1/intelligence/playbooks`, wrap(unknownSchema)).then(r => r.data),
+
+    playbookTemplates: () =>
+      restClient.get(`/v1/intelligence/playbooks/templates`, wrap(unknownSchema)).then(r => r.data),
+
+    createPlaybookFromTemplate: (templateId: string) =>
+      restClient.post(`/v1/intelligence/playbooks/from-template`, wrap(unknownSchema), { template_id: templateId }).then(r => r.data),
+
+    playbookRuns: (playbookId: string) =>
+      restClient.get(`/v1/intelligence/playbooks/${playbookId}/runs`, wrap(unknownSchema)).then(r => r.data),
+
+    playbookPerformance: (playbookId: string) =>
+      restClient.get(`/v1/intelligence/playbooks/${playbookId}/performance`, wrap(unknownSchema)).then(r => r.data),
+
+    playbookPerformanceSummary: () =>
+      restClient.get(`/v1/intelligence/playbooks/performance/summary`, wrap(unknownSchema)).then(r => r.data),
   },
 
   // ── Analytics ─────────────────────────────────────────────────────────────

@@ -158,3 +158,37 @@ export function usePlaybooks() {
     staleTime: STALE,
   });
 }
+
+export function usePlaybookTemplates() {
+  return useQuery({
+    key: 'intelligence:playbook-templates',
+    fetcher: () => api.intelligence.playbookTemplates(),
+    staleTime: STALE,
+  });
+}
+
+export function usePlaybookRuns(playbookId: string) {
+  return useQuery({
+    key: key('playbook-runs', playbookId),
+    fetcher: () => api.intelligence.playbookRuns(playbookId),
+    staleTime: STALE,
+    enabled: !!playbookId,
+  });
+}
+
+export function usePlaybookPerformance(playbookId: string) {
+  return useQuery({
+    key: key('playbook-performance', playbookId),
+    fetcher: () => api.intelligence.playbookPerformance(playbookId),
+    staleTime: STALE,
+    enabled: !!playbookId,
+  });
+}
+
+export function usePlaybookPerformanceSummary() {
+  return useQuery({
+    key: 'intelligence:playbook-performance-summary',
+    fetcher: () => api.intelligence.playbookPerformanceSummary(),
+    staleTime: STALE,
+  });
+}

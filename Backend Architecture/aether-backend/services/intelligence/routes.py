@@ -261,6 +261,20 @@ class OutcomeRequest(BaseModel):
     observed_window: dict[str, str]
 
 
+class CreatePlaybookFromTemplateRequest(BaseModel):
+    template_id: str
+    name: str | None = None
+    description: str | None = None
+    enabled: bool = True
+
+
+class PlaybookEvaluationRequest(BaseModel):
+    entity_id: str | None = None
+    population_id: str | None = None
+    signals: dict[str, Any] = Field(default_factory=dict)
+    context: dict[str, Any] = Field(default_factory=dict)
+
+
 class PlaybookRequest(BaseModel):
     name: str
     description: str | None = None
@@ -564,6 +578,171 @@ async def create_playbook(body: PlaybookRequest, request: Request):
         approval_level=body.approval_level, enabled=body.enabled, created_at=utc_now().isoformat(),
     ).model_dump()
     return APIResponse(data=await _playbooks.insert(playbook["playbook_id"], playbook)).to_dict()
+
+
+@router.get("/playbooks/templates")
+async def list_playbook_templates(request: Request):
+    tenant = request.state.tenant
+    tenant.require_permission("read")
+    return APIResponse(data={"items": [template.model_dump() for template in PLAYBOOK_TEMPLATES], "count": len(PLAYBOOK_TEMPLATES)}).to_dict()
+
+
+@router.post("/playbooks/from-template")
+async def create_playbook_from_template(body: CreatePlaybookFromTemplateRequest, request: Request):
+    tenant = request.state.tenant
+    tenant.require_permission("write")
+    if not settings.decision_outcome.playbooks_enabled:
+        return APIResponse(data={"enabled": False}).to_dict()
+    template = template_by_id(body.template_id)
+    if template is None:
+        raise BadRequestError("Unknown playbook template")
+    playbook = playbook_from_template(
+        template,
+        tenant.tenant_id,
+        {"name": body.name, "description": body.description, "enabled": body.enabled},
+    ).model_dump()
+    playbook["template_id"] = template.template_id
+    playbook["category"] = template.category
+    playbook["expected_outcome_types"] = template.expected_outcome_types
+    playbook["recommended_integrations"] = template.recommended_integrations
+    return APIResponse(data=await _playbooks.insert(playbook["playbook_id"], playbook)).to_dict()
+
+
+async def _playbook_performance(playbook: dict, limit: int = 500) -> dict:
+    tenant_id = str(playbook.get("tenant_id"))
+    playbook_id = str(playbook.get("playbook_id"))
+    runs = await _playbook_runs.find_many({"tenant_id": tenant_id, "playbook_id": playbook_id}, limit=limit)
+    recommendations = await _recommendations.find_many({"tenant_id": tenant_id}, limit=limit)
+    decisions = await _decisions.find_many({"tenant_id": tenant_id}, limit=limit)
+    actions = await _actions.find_many({"tenant_id": tenant_id}, limit=limit)
+    outcomes = await _outcomes.find_many({"tenant_id": tenant_id}, limit=limit)
+    feedback = await _feedback.find_many({"tenant_id": tenant_id}, limit=limit)
+    return build_playbook_performance(playbook, runs, recommendations, decisions, actions, outcomes, feedback).model_dump()
+
+
+@router.get("/playbooks/performance/summary")
+async def get_playbook_performance_summary(request: Request, limit: int = 500):
+    tenant = request.state.tenant
+    tenant.require_permission("read")
+    playbooks = await _playbooks.find_many({"tenant_id": tenant.tenant_id}, limit=limit)
+    items = [await _playbook_performance(playbook, limit=limit) for playbook in playbooks]
+    totals = {
+        "playbooks_total": len(items),
+        "runs_total": sum(item["runs_total"] for item in items),
+        "runs_completed": sum(item["runs_completed"] for item in items),
+        "recommendations_generated": sum(item["recommendations_generated"] for item in items),
+        "observed_value_total": round(sum(item["observed_value_total"] for item in items), 2),
+        "expected_value_total": round(sum(item["expected_value_total"] for item in items), 2),
+        "pending_value_total": round(sum(item["pending_value_total"] for item in items), 2),
+        "stale_run_count": sum(item["stale_run_count"] for item in items),
+        "incomplete_run_count": sum(item["incomplete_run_count"] for item in items),
+    }
+    return APIResponse(data={"items": items, "summary": totals}).to_dict()
+
+
+@router.get("/playbooks/{playbook_id}")
+async def get_playbook(playbook_id: str, request: Request):
+    tenant = request.state.tenant
+    tenant.require_permission("read")
+    playbook = await _playbooks.find_by_id_or_fail(playbook_id)
+    if playbook.get("tenant_id") != tenant.tenant_id:
+        from shared.common.common import NotFoundError
+        raise NotFoundError("playbook")
+    return APIResponse(data=playbook).to_dict()
+
+
+@router.get("/playbooks/{playbook_id}/runs")
+async def list_playbook_runs(playbook_id: str, request: Request, limit: int = 50):
+    tenant = request.state.tenant
+    tenant.require_permission("read")
+    playbook = await _playbooks.find_by_id_or_fail(playbook_id)
+    if playbook.get("tenant_id") != tenant.tenant_id:
+        from shared.common.common import NotFoundError
+        raise NotFoundError("playbook")
+    runs = await _playbook_runs.find_many({"tenant_id": tenant.tenant_id, "playbook_id": playbook_id}, limit=limit)
+    return APIResponse(data={"items": runs, "count": len(runs)}).to_dict()
+
+
+@router.get("/playbooks/{playbook_id}/performance")
+async def get_playbook_performance(playbook_id: str, request: Request, limit: int = 500):
+    tenant = request.state.tenant
+    tenant.require_permission("read")
+    playbook = await _playbooks.find_by_id_or_fail(playbook_id)
+    if playbook.get("tenant_id") != tenant.tenant_id:
+        from shared.common.common import NotFoundError
+        raise NotFoundError("playbook")
+    return APIResponse(data=await _playbook_performance(playbook, limit=limit)).to_dict()
+
+
+@router.post("/playbooks/{playbook_id}/evaluate")
+async def evaluate_playbook(playbook_id: str, body: PlaybookEvaluationRequest, request: Request):
+    tenant = request.state.tenant
+    tenant.require_permission("write")
+    if not settings.decision_outcome.playbooks_enabled:
+        return APIResponse(data={"enabled": False}).to_dict()
+    playbook = await _playbooks.find_by_id_or_fail(playbook_id)
+    if playbook.get("tenant_id") != tenant.tenant_id:
+        from shared.common.common import NotFoundError
+        raise NotFoundError("playbook")
+    if not playbook.get("enabled", True):
+        result = PlaybookEvaluationResult(
+            playbook_id=playbook_id,
+            tenant_id=tenant.tenant_id,
+            matched=False,
+            skipped_reason="playbook_disabled",
+            evaluated_at=utc_now().isoformat(),
+        )
+        return APIResponse(data=result.model_dump()).to_dict()
+    signals = {**body.context, **body.signals}
+    matched, trigger_matches, skipped = evaluate_trigger(playbook, signals)
+    if not matched:
+        result = PlaybookEvaluationResult(
+            playbook_id=playbook_id,
+            tenant_id=tenant.tenant_id,
+            matched=False,
+            trigger_matches=trigger_matches,
+            skipped_reason=skipped,
+            evaluated_at=utc_now().isoformat(),
+        )
+        return APIResponse(data=result.model_dump()).to_dict()
+    recommendations = generate_for_playbook(_ooda, tenant.tenant_id, playbook, signals, body.entity_id, body.population_id)
+    run = PlaybookRun(
+        run_id=str(uuid.uuid4()),
+        playbook_id=playbook_id,
+        tenant_id=tenant.tenant_id,
+        status="completed",
+        recommendation_ids=[],
+        trigger_snapshot={"signals": body.signals, "context": body.context, "matches": trigger_matches},
+        generated_recommendation_ids=[],
+        started_at=utc_now().isoformat(),
+        completed_at=utc_now().isoformat(),
+        summary={"matched": True, "recommendations_generated": 0},
+    ).model_dump()
+    generated_ids: list[str] = []
+    for recommendation in recommendations:
+        rec = _suppress_if_needed(recommendation.model_dump())
+        rec["playbook_id"] = playbook_id
+        rec["playbook_run_id"] = run["run_id"]
+        saved = await _recommendations.insert(rec["recommendation_id"], rec)
+        generated_ids.append(saved["recommendation_id"])
+        try:
+            await upsert_recommendation_graph(get_registry().graph, saved)
+        except Exception as exc:  # pragma: no cover
+            logger.warning(f"playbook recommendation graph mutation skipped: {exc}")
+        await _publish(Topic.RECOMMENDATION_GENERATED, tenant.tenant_id, saved)
+    run["recommendation_ids"] = generated_ids
+    run["generated_recommendation_ids"] = generated_ids
+    run["summary"] = {"matched": True, "recommendations_generated": len(generated_ids)}
+    await _playbook_runs.insert(run["run_id"], run)
+    result = PlaybookEvaluationResult(
+        playbook_id=playbook_id,
+        tenant_id=tenant.tenant_id,
+        matched=True,
+        trigger_matches=trigger_matches,
+        generated_recommendation_ids=generated_ids,
+        evaluated_at=utc_now().isoformat(),
+    )
+    return APIResponse(data=result.model_dump()).to_dict()
 
 
 @router.post("/playbooks/{playbook_id}/run")
