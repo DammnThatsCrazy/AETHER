@@ -99,11 +99,20 @@ export function useEntityBehavioralSignals(
   });
 }
 
-export function useRecommendations() {
+export function useRecommendations(params?: { family?: string }) {
   return useQuery({
-    key: 'intelligence:recommendations',
-    fetcher: () => api.intelligence.recommendations(),
+    key: key('intelligence:recommendations', params?.family ?? 'all'),
+    fetcher: () => api.intelligence.recommendations(params),
     staleTime: STALE,
+  });
+}
+
+export function useRecommendationInvestigation(recommendationId: string) {
+  return useQuery({
+    key: key('intelligence:recommendation-investigation', recommendationId),
+    fetcher: () => api.intelligence.recommendationInvestigation(recommendationId),
+    staleTime: STALE,
+    enabled: !!recommendationId,
   });
 }
 
@@ -120,6 +129,23 @@ export function useProfileOutcomes(entityId: string) {
   return useQuery({
     key: key('profile-outcomes', entityId),
     fetcher: () => api.profile.outcomes(entityId),
+    staleTime: STALE,
+    enabled: !!entityId,
+  });
+}
+
+export function useOutcomeLedger() {
+  return useQuery({
+    key: 'intelligence:outcome-ledger',
+    fetcher: () => api.intelligence.outcomeLedger(),
+    staleTime: STALE,
+  });
+}
+
+export function useProfileOutcomeLedger(entityId: string) {
+  return useQuery({
+    key: key('profile-outcome-ledger', entityId),
+    fetcher: () => api.profile.outcomeLedger(entityId),
     staleTime: STALE,
     enabled: !!entityId,
   });

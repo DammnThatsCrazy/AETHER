@@ -8,5 +8,8 @@ export {
   useRecommendations,
   useProfileRecommendations,
   useProfileOutcomes,
+  useOutcomeLedger,
+  useProfileOutcomeLedger,
+  useRecommendationInvestigation,
   usePlaybooks,
 } from './use-intelligence';

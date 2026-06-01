@@ -135,6 +135,9 @@ export const api = {
     outcomes: (userId: string) =>
       restClient.get(`/v1/profile/${userId}/outcomes`, wrap(unknownSchema)).then(r => r.data),
 
+    outcomeLedger: (userId: string) =>
+      restClient.get(`/v1/profile/${userId}/outcome-ledger`, wrap(unknownSchema)).then(r => r.data),
+
     /** Data provenance — source attribution for every data point in the profile. */
     provenance: (userId: string) =>
       restClient.get(`/v1/profile/${userId}/provenance`, wrap(unknownSchema)).then(r => r.data),
@@ -470,8 +473,17 @@ export const api = {
     entityCluster: (entityId: string) =>
       restClient.get(`/v1/intelligence/entity/${entityId}/cluster`, wrap(unknownSchema)).then(r => r.data as EntityCluster),
 
-    recommendations: () =>
-      restClient.get(`/v1/intelligence/recommendations`, wrap(unknownSchema)).then(r => r.data),
+    recommendations: (params?: { family?: string }) =>
+      restClient.get(`/v1/intelligence/recommendations${buildQS({ recommendation_type: params?.family })}`, wrap(unknownSchema)).then(r => r.data),
+
+    recommendationInvestigation: (recommendationId: string) =>
+      restClient.get(`/v1/intelligence/recommendations/${recommendationId}/investigation`, wrap(unknownSchema)).then(r => r.data),
+
+    outcomeLedger: () =>
+      restClient.get(`/v1/intelligence/outcome-ledger`, wrap(unknownSchema)).then(r => r.data),
+
+    outcomeLedgerSummary: () =>
+      restClient.get(`/v1/intelligence/outcome-ledger/summary`, wrap(unknownSchema)).then(r => r.data),
 
     outcomes: () =>
       restClient.get(`/v1/intelligence/outcomes`, wrap(unknownSchema)).then(r => r.data),

@@ -45,7 +45,9 @@ from services.intelligence.graph_mutations import (
     upsert_outcome_graph,
     upsert_recommendation_graph,
 )
+from services.intelligence.investigations import build_recommendation_investigation
 from services.intelligence.ooda_engine import GraphNativeRecommendationEngine, now_iso
+from services.intelligence.outcome_ledger import OutcomeLedgerAggregator
 from services.intelligence.repositories import (
     ActionFeedbackRepository,
     DecisionRepository,
@@ -218,7 +220,8 @@ _outcomes = OutcomeRepository()
 _playbooks = PlaybookRepository()
 _playbook_runs = PlaybookRunRepository()
 _feedback = RecommendationFeedbackRepository()
-_ooda = GraphNativeRecommendationEngine()
+_ooda = GraphNativeRecommendationEngine(confidence_threshold=settings.decision_outcome.confidence_threshold)
+_ledger = OutcomeLedgerAggregator()
 
 
 class GenerateRecommendationRequest(BaseModel):
@@ -277,29 +280,65 @@ async def _publish(topic: Topic, tenant_id: str, payload: dict) -> None:
         logger.warning(f"decision intelligence event publish skipped: {exc}")
 
 
-@router.post("/recommendations/generate")
-async def generate_entity_recommendation(body: GenerateRecommendationRequest, request: Request):
+def _suppress_if_needed(rec: dict) -> dict:
+    if rec["confidence"]["overall"] < settings.decision_outcome.confidence_threshold:
+        rec["status"] = "suppressed"
+        flags = set(rec.get("policy_governance_flags", []))
+        flags.add("below_confidence_threshold")
+        rec["policy_governance_flags"] = sorted(flags)
+    return rec
+
+
+def _build_recommendation_previews(tenant_id: str, body: GenerateRecommendationRequest) -> list[dict]:
+    generated = _ooda.generate_all_for_entity(tenant_id, body.entity_id, body.signals)
+    return [_suppress_if_needed(rec.model_dump()) for rec in generated]
+
+
+def _primary_with_items(items: list[dict], **extra: Any) -> dict:
+    primary = {**items[0], **extra}
+    if len(items) > 1:
+        primary["items"] = items
+        primary["count"] = len(items)
+    return primary
+
+
+@router.post("/recommendations/preview")
+async def preview_entity_recommendation(body: GenerateRecommendationRequest, request: Request):
     tenant = request.state.tenant
     tenant.require_permission("read")
     if not settings.decision_outcome.recommendations_enabled:
         return APIResponse(data={"enabled": False, "items": []}).to_dict()
-    rec = _ooda.generate_for_entity(tenant.tenant_id, body.entity_id, body.signals).model_dump()
-    if rec["confidence"]["overall"] < settings.decision_outcome.confidence_threshold:
-        rec["status"] = "suppressed"
-    saved = await _recommendations.insert(rec["recommendation_id"], rec)
-    try:
-        await upsert_recommendation_graph(get_registry().graph, saved)
-    except Exception as exc:  # pragma: no cover
-        logger.warning(f"recommendation graph mutation skipped: {exc}")
-    await _publish(Topic.RECOMMENDATION_GENERATED, tenant.tenant_id, saved)
-    return APIResponse(data=saved).to_dict()
+    items = _build_recommendation_previews(tenant.tenant_id, body)
+    return APIResponse(data=_primary_with_items(items, preview=True)).to_dict()
+
+
+@router.post("/recommendations/generate")
+async def generate_entity_recommendation(body: GenerateRecommendationRequest, request: Request):
+    tenant = request.state.tenant
+    tenant.require_permission("write")
+    if not settings.decision_outcome.recommendations_enabled:
+        return APIResponse(data={"enabled": False, "items": []}).to_dict()
+    recs = _build_recommendation_previews(tenant.tenant_id, body)
+    saved_items = []
+    for rec in recs:
+        saved = await _recommendations.insert(rec["recommendation_id"], rec)
+        saved_items.append(saved)
+        try:
+            await upsert_recommendation_graph(get_registry().graph, saved)
+        except Exception as exc:  # pragma: no cover
+            logger.warning(f"recommendation graph mutation skipped: {exc}")
+        await _publish(Topic.RECOMMENDATION_GENERATED, tenant.tenant_id, saved)
+    return APIResponse(data=_primary_with_items(saved_items)).to_dict()
 
 
 @router.get("/recommendations")
-async def list_intelligence_recommendations(request: Request, limit: int = 50):
+async def list_intelligence_recommendations(request: Request, limit: int = 50, recommendation_type: str | None = None):
     tenant = request.state.tenant
     tenant.require_permission("read")
-    items = await _recommendations.list_for_tenant(tenant.tenant_id, limit=limit)
+    if recommendation_type:
+        items = await _recommendations.find_many({"tenant_id": tenant.tenant_id, "recommendation_type": recommendation_type}, limit=limit, sort_by="created_at", sort_order="desc")
+    else:
+        items = await _recommendations.list_for_tenant(tenant.tenant_id, limit=limit)
     return APIResponse(data={"items": items, "count": len(items)}).to_dict()
 
 
@@ -315,6 +354,30 @@ async def get_intelligence_recommendation(recommendation_id: str, request: Reque
         rec = await _recommendations.update(recommendation_id, {"status": "viewed"})
         await _publish(Topic.RECOMMENDATION_VIEWED, tenant.tenant_id, rec)
     return APIResponse(data=rec).to_dict()
+
+
+@router.get("/recommendations/{recommendation_id}/investigation")
+async def get_recommendation_investigation(recommendation_id: str, request: Request):
+    tenant = request.state.tenant
+    tenant.require_permission("read")
+    rec = await _recommendations.find_by_id_or_fail(recommendation_id)
+    if rec.get("tenant_id") != tenant.tenant_id:
+        from shared.common.common import NotFoundError
+        raise NotFoundError("recommendation")
+    graph = None
+    try:
+        graph = get_registry().graph
+    except Exception as exc:  # pragma: no cover
+        logger.warning(f"recommendation investigation graph unavailable: {exc}")
+    investigation = await build_recommendation_investigation(
+        tenant_id=tenant.tenant_id,
+        recommendation=rec,
+        decisions_repo=_decisions,
+        actions_repo=_actions,
+        outcomes_repo=_outcomes,
+        graph=graph,
+    )
+    return APIResponse(data=investigation).to_dict()
 
 
 @router.post("/recommendations/{recommendation_id}/decision")
@@ -431,6 +494,48 @@ async def list_outcomes(request: Request, limit: int = 50):
     tenant.require_permission("read")
     items = await _outcomes.list_for_tenant(tenant.tenant_id, limit=limit)
     return APIResponse(data={"items": items, "count": len(items)}).to_dict()
+
+
+async def _tenant_outcome_ledger(tenant_id: str, limit: int = 500) -> dict:
+    recommendations = await _recommendations.list_for_tenant(tenant_id, limit=limit)
+    decisions = await _decisions.find_many({"tenant_id": tenant_id}, limit=limit)
+    actions = await _actions.find_many({"tenant_id": tenant_id}, limit=limit)
+    outcomes = await _outcomes.list_for_tenant(tenant_id, limit=limit)
+    feedback = await _feedback.find_many({"tenant_id": tenant_id}, limit=limit)
+    playbooks = await _playbooks.find_many({"tenant_id": tenant_id}, limit=limit)
+    runs = await _playbook_runs.find_many({"tenant_id": tenant_id}, limit=limit)
+    return _ledger.build(recommendations, decisions, actions, outcomes, feedback, playbooks, runs)
+
+
+@router.get("/outcome-ledger")
+async def get_outcome_ledger(request: Request, limit: int = 500):
+    tenant = request.state.tenant
+    tenant.require_permission("read")
+    return APIResponse(data=await _tenant_outcome_ledger(tenant.tenant_id, limit=limit)).to_dict()
+
+
+@router.get("/outcome-ledger/summary")
+async def get_outcome_ledger_summary(request: Request):
+    tenant = request.state.tenant
+    tenant.require_permission("read")
+    ledger = await _tenant_outcome_ledger(tenant.tenant_id)
+    return APIResponse(data=ledger["summary"]).to_dict()
+
+
+@router.get("/outcome-ledger/by-recommendation-type")
+async def get_outcome_ledger_by_recommendation_type(request: Request):
+    tenant = request.state.tenant
+    tenant.require_permission("read")
+    ledger = await _tenant_outcome_ledger(tenant.tenant_id)
+    return APIResponse(data={"items": ledger["by_recommendation_type"]}).to_dict()
+
+
+@router.get("/outcome-ledger/by-playbook")
+async def get_outcome_ledger_by_playbook(request: Request):
+    tenant = request.state.tenant
+    tenant.require_permission("read")
+    ledger = await _tenant_outcome_ledger(tenant.tenant_id)
+    return APIResponse(data={"items": ledger["by_playbook"]}).to_dict()
 
 
 @router.get("/playbooks")

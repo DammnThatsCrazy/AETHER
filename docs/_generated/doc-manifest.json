@@ -312,6 +312,29 @@
       "canonical_owner": "graph@aether"
     },
     {
+      "path": "docs/INVESTIGATION-WORKSPACE.md",
+      "title": "Investigation Workspace",
+      "slug": "ai/investigation-workspace",
+      "section": "ai",
+      "visibility": "I",
+      "audience": [
+        "ai",
+        "architect",
+        "dev-senior",
+        "ops"
+      ],
+      "status": "beta",
+      "since_version": "8.9.0",
+      "estimated_read_minutes": 5,
+      "toc_depth": 3,
+      "canonical_owner": "platform@aether",
+      "flags": [
+        "AETHER_RECOMMENDATIONS_ENABLED",
+        "AETHER_DECISION_RECORDS_ENABLED",
+        "AETHER_OUTCOME_FEEDBACK_ENABLED"
+      ]
+    },
+    {
       "path": "docs/MIGRATION-RUNBOOK.md",
       "title": "Migration Runbook",
       "slug": "operations/migration",
@@ -404,6 +427,30 @@
       "canonical_owner": "platform@aether"
     },
     {
+      "path": "docs/OUTCOME-LEDGER.md",
+      "title": "Outcome Ledger",
+      "slug": "ai/outcome-ledger",
+      "section": "ai",
+      "visibility": "I",
+      "audience": [
+        "ai",
+        "architect",
+        "dev-senior",
+        "ops",
+        "exec"
+      ],
+      "status": "beta",
+      "since_version": "8.9.0",
+      "estimated_read_minutes": 5,
+      "toc_depth": 3,
+      "canonical_owner": "platform@aether",
+      "flags": [
+        "AETHER_RECOMMENDATIONS_ENABLED",
+        "AETHER_DECISION_RECORDS_ENABLED",
+        "AETHER_OUTCOME_FEEDBACK_ENABLED"
+      ]
+    },
+    {
       "path": "docs/PRODUCTION-READINESS.md",
       "title": "Production Readiness Review",
       "slug": "operations/production-readiness",
@@ -450,6 +497,27 @@
       "estimated_read_minutes": 8,
       "toc_depth": 3,
       "canonical_owner": "backend@aether"
+    },
+    {
+      "path": "docs/RECOMMENDATION-FAMILIES.md",
+      "title": "Recommendation Families",
+      "slug": "ai/recommendation-families",
+      "section": "ai",
+      "visibility": "I",
+      "audience": [
+        "ai",
+        "architect",
+        "dev-senior"
+      ],
+      "status": "beta",
+      "since_version": "8.9.0",
+      "estimated_read_minutes": 7,
+      "toc_depth": 3,
+      "canonical_owner": "platform@aether",
+      "flags": [
+        "AETHER_RECOMMENDATIONS_ENABLED",
+        "AETHER_RECOMMENDATION_CONFIDENCE_THRESHOLD"
+      ]
     },
     {
       "path": "docs/REPO-INDEX.md",
