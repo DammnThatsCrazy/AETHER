@@ -404,6 +404,30 @@
       "canonical_owner": "platform@aether"
     },
     {
+      "path": "docs/OUTCOME-LEDGER.md",
+      "title": "Outcome Ledger",
+      "slug": "ai/outcome-ledger",
+      "section": "ai",
+      "visibility": "I",
+      "audience": [
+        "ai",
+        "architect",
+        "dev-senior",
+        "ops",
+        "exec"
+      ],
+      "status": "beta",
+      "since_version": "8.9.0",
+      "estimated_read_minutes": 5,
+      "toc_depth": 3,
+      "canonical_owner": "platform@aether",
+      "flags": [
+        "AETHER_RECOMMENDATIONS_ENABLED",
+        "AETHER_DECISION_RECORDS_ENABLED",
+        "AETHER_OUTCOME_FEEDBACK_ENABLED"
+      ]
+    },
+    {
       "path": "docs/PRODUCTION-READINESS.md",
       "title": "Production Readiness Review",
       "slug": "operations/production-readiness",

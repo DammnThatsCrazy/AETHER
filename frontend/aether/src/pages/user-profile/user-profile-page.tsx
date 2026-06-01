@@ -16,6 +16,7 @@ import {
   useUserSocialIntelligence, useUserRecommendations,
 } from '@aether-app/features/users/use-user-profile';
 import { api } from '@aether-app/lib/api/endpoints';
+import { OutcomeLedgerPanel } from '@aether-app/components/outcome-ledger-panel';
 
 // ── helpers ────────────────────────────────────────────────────────────────────
 
@@ -999,6 +1000,7 @@ export function UserProfilePage() {
           <TabsTrigger value="behavioral">Behavior</TabsTrigger>
           <TabsTrigger value="attribution">Attribution</TabsTrigger>
           <TabsTrigger value="relationships">Graph</TabsTrigger>
+          <TabsTrigger value="outcomes">Outcomes</TabsTrigger>
         </TabsList>
 
         <TabsContent value="overview"><OverviewTab userId={userId} /></TabsContent>
@@ -1013,6 +1015,7 @@ export function UserProfilePage() {
         <TabsContent value="behavioral"><BehavioralTab userId={userId} /></TabsContent>
         <TabsContent value="attribution"><AttributionTab userId={userId} /></TabsContent>
         <TabsContent value="relationships"><RelationshipsTab userId={userId} /></TabsContent>
+        <TabsContent value="outcomes"><OutcomeLedgerPanel entityId={userId} /></TabsContent>
       </Tabs>
     </div>
   );

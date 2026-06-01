@@ -46,6 +46,7 @@ from services.intelligence.graph_mutations import (
     upsert_recommendation_graph,
 )
 from services.intelligence.ooda_engine import GraphNativeRecommendationEngine, now_iso
+from services.intelligence.outcome_ledger import OutcomeLedgerAggregator
 from services.intelligence.repositories import (
     ActionFeedbackRepository,
     DecisionRepository,
@@ -219,6 +220,7 @@ _playbooks = PlaybookRepository()
 _playbook_runs = PlaybookRunRepository()
 _feedback = RecommendationFeedbackRepository()
 _ooda = GraphNativeRecommendationEngine()
+_ledger = OutcomeLedgerAggregator()
 
 
 class GenerateRecommendationRequest(BaseModel):
@@ -277,15 +279,33 @@ async def _publish(topic: Topic, tenant_id: str, payload: dict) -> None:
         logger.warning(f"decision intelligence event publish skipped: {exc}")
 
 
-@router.post("/recommendations/generate")
-async def generate_entity_recommendation(body: GenerateRecommendationRequest, request: Request):
+def _build_recommendation_preview(tenant_id: str, body: GenerateRecommendationRequest) -> dict:
+    rec = _ooda.generate_for_entity(tenant_id, body.entity_id, body.signals).model_dump()
+    if rec["confidence"]["overall"] < settings.decision_outcome.confidence_threshold:
+        rec["status"] = "suppressed"
+        flags = set(rec.get("policy_governance_flags", []))
+        flags.add("below_confidence_threshold")
+        rec["policy_governance_flags"] = sorted(flags)
+    return rec
+
+
+@router.post("/recommendations/preview")
+async def preview_entity_recommendation(body: GenerateRecommendationRequest, request: Request):
     tenant = request.state.tenant
     tenant.require_permission("read")
     if not settings.decision_outcome.recommendations_enabled:
         return APIResponse(data={"enabled": False, "items": []}).to_dict()
-    rec = _ooda.generate_for_entity(tenant.tenant_id, body.entity_id, body.signals).model_dump()
-    if rec["confidence"]["overall"] < settings.decision_outcome.confidence_threshold:
-        rec["status"] = "suppressed"
+    rec = _build_recommendation_preview(tenant.tenant_id, body)
+    return APIResponse(data={**rec, "preview": True}).to_dict()
+
+
+@router.post("/recommendations/generate")
+async def generate_entity_recommendation(body: GenerateRecommendationRequest, request: Request):
+    tenant = request.state.tenant
+    tenant.require_permission("write")
+    if not settings.decision_outcome.recommendations_enabled:
+        return APIResponse(data={"enabled": False, "items": []}).to_dict()
+    rec = _build_recommendation_preview(tenant.tenant_id, body)
     saved = await _recommendations.insert(rec["recommendation_id"], rec)
     try:
         await upsert_recommendation_graph(get_registry().graph, saved)
@@ -431,6 +451,48 @@ async def list_outcomes(request: Request, limit: int = 50):
     tenant.require_permission("read")
     items = await _outcomes.list_for_tenant(tenant.tenant_id, limit=limit)
     return APIResponse(data={"items": items, "count": len(items)}).to_dict()
+
+
+async def _tenant_outcome_ledger(tenant_id: str, limit: int = 500) -> dict:
+    recommendations = await _recommendations.list_for_tenant(tenant_id, limit=limit)
+    decisions = await _decisions.find_many({"tenant_id": tenant_id}, limit=limit)
+    actions = await _actions.find_many({"tenant_id": tenant_id}, limit=limit)
+    outcomes = await _outcomes.list_for_tenant(tenant_id, limit=limit)
+    feedback = await _feedback.find_many({"tenant_id": tenant_id}, limit=limit)
+    playbooks = await _playbooks.find_many({"tenant_id": tenant_id}, limit=limit)
+    runs = await _playbook_runs.find_many({"tenant_id": tenant_id}, limit=limit)
+    return _ledger.build(recommendations, decisions, actions, outcomes, feedback, playbooks, runs)
+
+
+@router.get("/outcome-ledger")
+async def get_outcome_ledger(request: Request, limit: int = 500):
+    tenant = request.state.tenant
+    tenant.require_permission("read")
+    return APIResponse(data=await _tenant_outcome_ledger(tenant.tenant_id, limit=limit)).to_dict()
+
+
+@router.get("/outcome-ledger/summary")
+async def get_outcome_ledger_summary(request: Request):
+    tenant = request.state.tenant
+    tenant.require_permission("read")
+    ledger = await _tenant_outcome_ledger(tenant.tenant_id)
+    return APIResponse(data=ledger["summary"]).to_dict()
+
+
+@router.get("/outcome-ledger/by-recommendation-type")
+async def get_outcome_ledger_by_recommendation_type(request: Request):
+    tenant = request.state.tenant
+    tenant.require_permission("read")
+    ledger = await _tenant_outcome_ledger(tenant.tenant_id)
+    return APIResponse(data={"items": ledger["by_recommendation_type"]}).to_dict()
+
+
+@router.get("/outcome-ledger/by-playbook")
+async def get_outcome_ledger_by_playbook(request: Request):
+    tenant = request.state.tenant
+    tenant.require_permission("read")
+    ledger = await _tenant_outcome_ledger(tenant.tenant_id)
+    return APIResponse(data={"items": ledger["by_playbook"]}).to_dict()
 
 
 @router.get("/playbooks")

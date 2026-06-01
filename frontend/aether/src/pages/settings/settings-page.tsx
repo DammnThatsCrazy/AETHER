@@ -23,6 +23,7 @@ import {
 import { useApiKeys, useCreateApiKey, useRevokeApiKey } from '@aether-app/features/account';
 import type { ApiKey } from '@aether-app/features/account';
 import { queryCache } from '@aether/ui';
+import { OutcomeLedgerPanel } from '@aether-app/components/outcome-ledger-panel';
 
 function formatRelative(iso: string | null): string {
   if (!iso) return 'never';
@@ -235,7 +236,10 @@ export function SettingsPage() {
   }
 
   return (
-    <div className="p-8 max-w-3xl">
+    <div className="p-8 max-w-5xl space-y-6">
+      <OutcomeLedgerPanel />
+
+      <div className="max-w-3xl">
       <div className="flex items-center justify-between mb-6">
         <span className="text-sm font-mono text-text-muted">API Keys</span>
         <Button variant="primary" size="sm" onClick={() => setNewKeyOpen(true)}>
@@ -335,6 +339,7 @@ export function SettingsPage() {
           onClose={() => setRevealKey(null)}
         />
       )}
+      </div>
     </div>
   );
 }

@@ -9,6 +9,7 @@ since_version: "8.9.0"
 source_files:
   - Backend Architecture/aether-backend/services/intelligence/decision_models.py
   - Backend Architecture/aether-backend/services/intelligence/ooda_engine.py
+  - Backend Architecture/aether-backend/services/intelligence/outcome_ledger.py
   - Backend Architecture/aether-backend/services/intelligence/routes.py
   - Backend Architecture/aether-backend/services/intelligence/repositories.py
   - Backend Architecture/aether-backend/config/settings.py
@@ -69,18 +70,28 @@ Additive OODA edges:
 
 ## API examples
 
-- `POST /v1/intelligence/recommendations/generate`
+- `POST /v1/intelligence/recommendations/preview` — read-scoped preview; does not persist rows, mutate graph edges, or emit lifecycle events.
+- `POST /v1/intelligence/recommendations/generate` — write-scoped generation; persists the recommendation, mutates graph edges, and emits `recommendation.generated`.
 - `GET /v1/intelligence/recommendations`
 - `GET /v1/intelligence/recommendations/{id}`
 - `POST /v1/intelligence/recommendations/{id}/decision`
 - `POST /v1/intelligence/actions`
 - `POST /v1/intelligence/actions/{id}/outcome`
 - `GET /v1/intelligence/outcomes`
+- `GET /v1/intelligence/outcome-ledger`
+- `GET /v1/intelligence/outcome-ledger/summary`
+- `GET /v1/intelligence/outcome-ledger/by-recommendation-type`
+- `GET /v1/intelligence/outcome-ledger/by-playbook`
 - `GET /v1/profile/{entity_id}/recommendations`
 - `GET /v1/profile/{entity_id}/outcomes`
+- `GET /v1/profile/{entity_id}/outcome-ledger`
 - `GET /v1/intelligence/playbooks`
 - `POST /v1/intelligence/playbooks`
 - `POST /v1/intelligence/playbooks/{id}/run`
+
+## Outcome Ledger
+
+The Outcome Ledger makes the loop commercially legible for tenants. It answers what was recommended, what was decided, what action was taken, what outcome happened, what value was created, whether confidence improved, and which loops are stale, incomplete, or failed. Ledger APIs are read-only and are derived from existing OODA repositories; they do not create a separate product layer.
 
 ## Feature flags
 
