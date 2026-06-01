@@ -33,6 +33,10 @@ function fmt(v: unknown, fallback = '—'): string {
   return String(v);
 }
 
+function humanizeFamily(v: unknown): string {
+  return fmt(v, 'recommendation').replace(/_/g, ' ');
+}
+
 function fmtScore(v: unknown): string {
   if (v === null || v === undefined) return '—';
   return `${Math.round(Number(v) * 100)}`;
@@ -859,6 +863,7 @@ function RecommendationCards({ userId }: { userId: string }) {
             <div className="flex items-center gap-2">
               <GlyphIcon glyph="[>]" className="text-accent" />
               <span className="text-sm font-medium text-text-primary">{rec.action} on {rec.platform}</span>
+              <Badge variant="default" size="sm">{humanizeFamily(asRecord(rec).recommendation_type ?? asRecord(rec).family)}</Badge>
             </div>
             <Badge variant="accent" size="sm">{Math.round(rec.confidence * 100)}% confidence</Badge>
           </div>

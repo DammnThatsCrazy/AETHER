@@ -99,11 +99,20 @@ export function useEntityBehavioralSignals(
   });
 }
 
-export function useRecommendations() {
+export function useRecommendations(params?: { family?: string }) {
   return useQuery({
-    key: 'intelligence:recommendations',
-    fetcher: () => api.intelligence.recommendations(),
+    key: key('intelligence:recommendations', params?.family ?? 'all'),
+    fetcher: () => api.intelligence.recommendations(params),
     staleTime: STALE,
+  });
+}
+
+export function useRecommendationInvestigation(recommendationId: string) {
+  return useQuery({
+    key: key('intelligence:recommendation-investigation', recommendationId),
+    fetcher: () => api.intelligence.recommendationInvestigation(recommendationId),
+    staleTime: STALE,
+    enabled: !!recommendationId,
   });
 }
 

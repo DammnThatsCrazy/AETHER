@@ -45,6 +45,7 @@ from services.intelligence.graph_mutations import (
     upsert_outcome_graph,
     upsert_recommendation_graph,
 )
+from services.intelligence.investigations import build_recommendation_investigation
 from services.intelligence.ooda_engine import GraphNativeRecommendationEngine, now_iso
 from services.intelligence.outcome_ledger import OutcomeLedgerAggregator
 from services.intelligence.repositories import (
@@ -318,10 +319,13 @@ async def generate_entity_recommendation(body: GenerateRecommendationRequest, re
 
 
 @router.get("/recommendations")
-async def list_intelligence_recommendations(request: Request, limit: int = 50):
+async def list_intelligence_recommendations(request: Request, limit: int = 50, recommendation_type: str | None = None):
     tenant = request.state.tenant
     tenant.require_permission("read")
-    items = await _recommendations.list_for_tenant(tenant.tenant_id, limit=limit)
+    if recommendation_type:
+        items = await _recommendations.find_many({"tenant_id": tenant.tenant_id, "recommendation_type": recommendation_type}, limit=limit, sort_by="created_at", sort_order="desc")
+    else:
+        items = await _recommendations.list_for_tenant(tenant.tenant_id, limit=limit)
     return APIResponse(data={"items": items, "count": len(items)}).to_dict()
 
 

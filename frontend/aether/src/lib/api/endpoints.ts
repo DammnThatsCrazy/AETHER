@@ -473,8 +473,17 @@ export const api = {
     entityCluster: (entityId: string) =>
       restClient.get(`/v1/intelligence/entity/${entityId}/cluster`, wrap(unknownSchema)).then(r => r.data as EntityCluster),
 
-    recommendations: () =>
-      restClient.get(`/v1/intelligence/recommendations`, wrap(unknownSchema)).then(r => r.data),
+    recommendations: (params?: { family?: string }) =>
+      restClient.get(`/v1/intelligence/recommendations${buildQS({ recommendation_type: params?.family })}`, wrap(unknownSchema)).then(r => r.data),
+
+    recommendationInvestigation: (recommendationId: string) =>
+      restClient.get(`/v1/intelligence/recommendations/${recommendationId}/investigation`, wrap(unknownSchema)).then(r => r.data),
+
+    outcomeLedger: () =>
+      restClient.get(`/v1/intelligence/outcome-ledger`, wrap(unknownSchema)).then(r => r.data),
+
+    outcomeLedgerSummary: () =>
+      restClient.get(`/v1/intelligence/outcome-ledger/summary`, wrap(unknownSchema)).then(r => r.data),
 
     outcomeLedger: () =>
       restClient.get(`/v1/intelligence/outcome-ledger`, wrap(unknownSchema)).then(r => r.data),

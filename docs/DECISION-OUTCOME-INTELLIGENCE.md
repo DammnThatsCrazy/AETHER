@@ -23,6 +23,8 @@ flags:
   - AETHER_RECOMMENDATION_CONFIDENCE_THRESHOLD
 related:
   - architecture/intelligence-graph
+  - ai/recommendation-families
+  - ai/investigation-workspace
   - operations/cicd
 canonical_owner: platform@aether
 estimated_read_minutes: 6
@@ -75,6 +77,7 @@ Additive OODA edges:
 - `POST /v1/intelligence/recommendations/generate` — write-scoped persisted generation; persists the recommendation, mutates graph edges, and emits lifecycle events.
 - `GET /v1/intelligence/recommendations`
 - `GET /v1/intelligence/recommendations/{id}`
+- `GET /v1/intelligence/recommendations/{id}/investigation`
 - `POST /v1/intelligence/recommendations/{id}/decision`
 - `POST /v1/intelligence/actions`
 - `POST /v1/intelligence/actions/{id}/outcome`
