@@ -220,6 +220,32 @@
       "canonical_owner": "ingest@aether"
     },
     {
+      "path": "docs/DECISION-OUTCOME-INTELLIGENCE.md",
+      "title": "Decision & Outcome Intelligence",
+      "slug": "ai/decision-outcome-intelligence",
+      "section": "ai",
+      "visibility": "I",
+      "audience": [
+        "ai",
+        "architect",
+        "dev-senior",
+        "ops"
+      ],
+      "status": "beta",
+      "since_version": "8.9.0",
+      "estimated_read_minutes": 6,
+      "toc_depth": 3,
+      "canonical_owner": "platform@aether",
+      "flags": [
+        "AETHER_RECOMMENDATIONS_ENABLED",
+        "AETHER_DECISION_RECORDS_ENABLED",
+        "AETHER_OUTCOME_FEEDBACK_ENABLED",
+        "AETHER_PLAYBOOKS_ENABLED",
+        "KYBER_RECOMMENDATION_OBSERVABILITY_ENABLED",
+        "AETHER_RECOMMENDATION_CONFIDENCE_THRESHOLD"
+      ]
+    },
+    {
       "path": "docs/ECONOMIC-OBSERVABILITY.md",
       "title": "Economic Observability",
       "slug": "concepts/economic-observability",
