@@ -91,6 +91,10 @@ Additive OODA edges:
 - `POST /v1/intelligence/playbooks`
 - `POST /v1/intelligence/playbooks/{id}/run`
 
+## Outcome Ledger
+
+The Outcome Ledger makes the loop commercially legible for tenants. It answers what was recommended, what was decided, what action was taken, what outcome happened, what value was created, whether confidence improved, and which loops are stale, incomplete, or failed. Ledger APIs are read-only and are derived from existing OODA repositories; they do not create a separate product layer.
+
 ## Feature flags
 
 Decision and outcome intelligence flags default to disabled so tenants and operators can roll the loop out gradually:
