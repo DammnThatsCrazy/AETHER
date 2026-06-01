@@ -181,7 +181,7 @@ from services.analytics_automation.routes import router as automation_router
 from services.diagnostics.routes import router as diagnostics_router
 from services.providers.routes import router as providers_router
 from services.lake.routes import router as lake_router
-from services.intelligence.routes import router as intelligence_router
+from services.intelligence.routes import kyber_admin_router, router as intelligence_router
 from services.intelligence.extraction_intel import router as extraction_intel_router
 from services.profile.routes import router as profile_router, profile360_router
 from services.population.routes import router as population_router
@@ -398,6 +398,7 @@ def create_app() -> FastAPI:
     app.include_router(providers_router)
     app.include_router(lake_router)
     app.include_router(intelligence_router)
+    app.include_router(kyber_admin_router)
     app.include_router(extraction_intel_router)
     # pnl_router and social_router define /v1/profile/{id}/pnl and
     # /v1/profile/{id}/social-intelligence with richer responses than

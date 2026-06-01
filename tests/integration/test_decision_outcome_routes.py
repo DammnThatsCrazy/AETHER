@@ -97,3 +97,138 @@ async def test_recommend_decide_act_learn_flow_is_tenant_scoped():
         assert after > before
     finally:
         _restore_decision_flags(routes, previous_flags)
+
+class PermissionedTenant(FakeTenant):
+    def __init__(self, tenant_id="tenant-route-1", permissions=None):
+        super().__init__(tenant_id)
+        self.permissions = set(permissions or {"read"})
+
+    def require_permission(self, perm: str) -> None:
+        from shared.common.common import ForbiddenError
+        if perm not in self.permissions and "admin" not in self.permissions:
+            raise ForbiddenError(f"Missing permission: {perm}")
+
+
+class PermissionedRequest(FakeRequest):
+    def __init__(self, tenant_id="tenant-route-1", permissions=None):
+        self.state = MagicMock()
+        self.state.tenant = PermissionedTenant(tenant_id, permissions)
+
+
+class FakeGraph:
+    def __init__(self):
+        self.vertices = []
+        self.edges = []
+
+    async def upsert_vertex(self, vertex):
+        self.vertices.append(vertex)
+
+    async def add_edge(self, edge):
+        self.edges.append(edge)
+
+    async def get_neighbors(self, *args, **kwargs):
+        return []
+
+
+class FakeProducer:
+    def __init__(self):
+        self.events = []
+
+    async def publish(self, event):
+        self.events.append(event)
+
+
+class FakeRegistry:
+    def __init__(self):
+        self.graph = FakeGraph()
+        self.producer = FakeProducer()
+
+
+@pytest.mark.asyncio
+async def test_recommendation_preview_is_read_only_and_non_persistent(monkeypatch):
+    from repositories.repos import reset_in_memory_stores
+    from services.intelligence import routes
+    from shared.common.common import ForbiddenError
+
+    reset_in_memory_stores()
+    registry = FakeRegistry()
+    monkeypatch.setattr(routes, "get_registry", lambda: registry)
+    previous_flags = _set_decision_flags(routes, True)
+    try:
+        read_request = PermissionedRequest(permissions={"read"})
+        body = routes.GenerateRecommendationRequest(entity_id="entity-preview", signals={"churn_probability": 0.8})
+
+        preview_resp = await routes.preview_entity_recommendation(body, read_request)
+        assert preview_resp["data"]["preview"] is True
+        assert preview_resp["data"]["tenant_id"] == "tenant-route-1"
+        assert (await routes.list_intelligence_recommendations(read_request))["data"]["count"] == 0
+        assert registry.graph.vertices == []
+        assert registry.graph.edges == []
+        assert registry.producer.events == []
+
+        with pytest.raises(ForbiddenError):
+            await routes.generate_entity_recommendation(body, read_request)
+        assert (await routes.list_intelligence_recommendations(read_request))["data"]["count"] == 0
+    finally:
+        _restore_decision_flags(routes, previous_flags)
+
+
+@pytest.mark.asyncio
+async def test_recommendation_generate_requires_write_and_persists(monkeypatch):
+    from repositories.repos import reset_in_memory_stores
+    from services.intelligence import routes
+
+    reset_in_memory_stores()
+    registry = FakeRegistry()
+    monkeypatch.setattr(routes, "get_registry", lambda: registry)
+    previous_flags = _set_decision_flags(routes, True)
+    try:
+        write_request = PermissionedRequest(permissions={"read", "write"})
+        body = routes.GenerateRecommendationRequest(entity_id="entity-generate", signals={"churn_probability": 0.8})
+
+        generate_resp = await routes.generate_entity_recommendation(body, write_request)
+        rec = generate_resp["data"]
+        assert rec["recommendation_id"]
+        assert (await routes.list_intelligence_recommendations(write_request))["data"]["count"] == 1
+        assert registry.graph.vertices
+        assert registry.graph.edges
+        assert len(registry.producer.events) == 1
+    finally:
+        _restore_decision_flags(routes, previous_flags)
+
+
+@pytest.mark.asyncio
+async def test_outcome_ledger_aggregates_tenant_value(monkeypatch):
+    from repositories.repos import reset_in_memory_stores
+    from services.intelligence import routes
+
+    reset_in_memory_stores()
+    monkeypatch.setattr(routes, "get_registry", lambda: FakeRegistry())
+    previous_flags = _set_decision_flags(routes, True)
+    try:
+        request = PermissionedRequest(permissions={"read", "write"})
+        rec = (await routes.generate_entity_recommendation(
+            routes.GenerateRecommendationRequest(entity_id="entity-ledger", signals={"churn_probability": 0.9, "ltv_predicted_usd": 1000}), request
+        ))["data"]
+        decision = (await routes.record_decision(
+            rec["recommendation_id"],
+            routes.DecisionRequest(actor_id="analyst", selected_action_key=rec["recommended_action"]["action_key"], decision_status="approved"),
+            request,
+        ))["data"]
+        action = (await routes.log_action(routes.ActionLogRequest(decision_id=decision["decision_id"], action_type="manual", status="planned"), request))["data"]
+        await routes.observe_outcome(
+            action["action_id"],
+            routes.OutcomeRequest(recommendation_id=rec["recommendation_id"], entity_id="entity-ledger", outcome_type="retention", value=125.0, label="success", observed_window={"start": "2026-05-01T00:00:00Z", "end": "2026-05-31T00:00:00Z"}),
+            request,
+        )
+
+        summary = (await routes.get_outcome_ledger_summary(request))["data"]
+        assert summary["recommendations_generated"] == 1
+        assert summary["decisions_recorded"] == 1
+        assert summary["actions_logged"] == 1
+        assert summary["outcomes_observed"] == 1
+        assert summary["observed_value"] == 125.0
+        by_type = (await routes.get_outcome_ledger_by_recommendation_type(request))["data"]["items"]
+        assert by_type[0]["key"] == "retention"
+    finally:
+        _restore_decision_flags(routes, previous_flags)
