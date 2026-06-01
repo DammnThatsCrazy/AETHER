@@ -28,8 +28,13 @@ from shared.events import Event, Topic
 from shared.logger.logger import get_logger, metrics
 from shared.scoring.trust_score import TrustScoreComposite
 
+from services.intelligence.action_targets import ActionTargetRegistry
 from services.intelligence.decision_models import (
+    ActionDeliveryReceipt,
+    ActionDispatch,
     ActionFeedback,
+    ActionIntegrationConfig,
+    RevenueMeteringEvent,
     ApprovalLevel,
     CandidateAction,
     DecisionRecord,
@@ -48,14 +53,27 @@ from services.intelligence.graph_mutations import (
 from services.intelligence.investigations import build_recommendation_investigation
 from services.intelligence.ooda_engine import GraphNativeRecommendationEngine, now_iso
 from services.intelligence.outcome_ledger import OutcomeLedgerAggregator
+from services.intelligence.playbooks import (
+    PLAYBOOK_TEMPLATES,
+    PlaybookEvaluationResult,
+    playbook_from_template,
+    template_by_id,
+    build_playbook_performance,
+    evaluate_trigger,
+    generate_for_playbook,
+)
 from services.intelligence.repositories import (
+    ActionDeliveryReceiptRepository,
+    ActionDispatchRepository,
     ActionFeedbackRepository,
+    ActionIntegrationConfigRepository,
     DecisionRepository,
     OutcomeRepository,
     PlaybookRepository,
     PlaybookRunRepository,
     RecommendationFeedbackRepository,
     RecommendationRepository,
+    RevenueMeteringEventRepository,
 )
 from services.lake.features import materialize_wallet_features
 
@@ -217,6 +235,11 @@ async def wallet_profile(address: str, request: Request):
 _recommendations = RecommendationRepository()
 _decisions = DecisionRepository()
 _actions = ActionFeedbackRepository()
+_integrations = ActionIntegrationConfigRepository()
+_dispatches = ActionDispatchRepository()
+_delivery_receipts = ActionDeliveryReceiptRepository()
+_metering = RevenueMeteringEventRepository()
+_action_targets = ActionTargetRegistry()
 _outcomes = OutcomeRepository()
 _playbooks = PlaybookRepository()
 _playbook_runs = PlaybookRunRepository()
@@ -248,6 +271,29 @@ class ActionLogRequest(BaseModel):
     actor_type: Literal["human", "system", "agent"] = "human"
     economic_payload: dict[str, Any] | None = None
     authorization_metadata: dict[str, Any] | None = None
+
+
+class IntegrationConfigRequest(BaseModel):
+    target_type: str
+    name: str
+    default_destination: str | None = None
+    config: dict[str, Any] = Field(default_factory=dict)
+    enabled: bool = True
+
+
+class DispatchActionRequest(BaseModel):
+    target_type: str
+    config_id: str | None = None
+    payload_overrides: dict[str, Any] = Field(default_factory=dict)
+    approval_metadata: dict[str, Any] = Field(default_factory=dict)
+    idempotency_key: str | None = None
+
+
+class DeliveryReceiptRequest(BaseModel):
+    external_id: str | None = None
+    external_url: str | None = None
+    status: Literal["delivered", "failed", "cancelled"] = "delivered"
+    raw: dict[str, Any] = Field(default_factory=dict)
 
 
 class OutcomeRequest(BaseModel):
@@ -293,6 +339,63 @@ async def _publish(topic: Topic, tenant_id: str, payload: dict) -> None:
             await producer.publish(Event(topic=topic, tenant_id=tenant_id, payload=payload, source_service="intelligence"))
     except Exception as exc:  # pragma: no cover - event bus must not block request path
         logger.warning(f"decision intelligence event publish skipped: {exc}")
+
+
+def _safe_integration_config(config: dict[str, Any]) -> dict[str, Any]:
+    safe = dict(config)
+    nested = dict(safe.get("config") or {})
+    secret_keys = {"auth_secret", "secret", "api_key", "webhook_secret", "secret_ref"}
+    has_secret = bool(safe.get("secret_ref") or nested.get("secret_ref"))
+    for key in secret_keys:
+        if key in safe:
+            has_secret = has_secret or key != "secret_ref"
+            safe.pop(key, None)
+        if key in nested:
+            has_secret = has_secret or key != "secret_ref"
+            nested.pop(key, None)
+    safe["config"] = nested
+    if has_secret:
+        safe["has_secret"] = True
+    return safe
+
+
+def _config_with_secret_ref(config: dict[str, Any]) -> dict[str, Any]:
+    import hashlib
+
+    prepared = dict(config)
+    nested = dict(prepared.get("config") or {})
+    for key in ("auth_secret", "secret", "api_key", "webhook_secret"):
+        secret = prepared.pop(key, None) or nested.pop(key, None)
+        if secret:
+            nested["secret_ref"] = hashlib.sha256(str(secret).encode("utf-8")).hexdigest()[:16]
+            break
+    prepared["config"] = nested
+    return prepared
+
+
+async def _load_dispatch_context(tenant_id: str, action_id: str) -> tuple[dict[str, Any], dict[str, Any], dict[str, Any]]:
+    action = await _actions.find_by_id_or_fail(action_id)
+    if action.get("tenant_id") != tenant_id:
+        from shared.common.common import NotFoundError
+        raise NotFoundError("action")
+    decision = await _decisions.find_by_id_or_fail(action["decision_id"])
+    if decision.get("tenant_id") != tenant_id:
+        from shared.common.common import NotFoundError
+        raise NotFoundError("decision")
+    recommendation = await _recommendations.find_by_id_or_fail(decision["recommendation_id"])
+    if recommendation.get("tenant_id") != tenant_id:
+        from shared.common.common import NotFoundError
+        raise NotFoundError("recommendation")
+    return action, decision, recommendation
+
+
+def _suppress_if_needed(rec: dict[str, Any]) -> dict[str, Any]:
+    if rec.get("confidence", {}).get("overall", 0.0) < settings.decision_outcome.confidence_threshold:
+        rec["status"] = "suppressed"
+        flags = set(rec.get("policy_governance_flags", []))
+        flags.add("below_confidence_threshold")
+        rec["policy_governance_flags"] = sorted(flags)
+    return rec
 
 
 def _build_recommendation_preview(tenant_id: str, body: GenerateRecommendationRequest) -> dict:
@@ -463,6 +566,200 @@ async def log_action(body: ActionLogRequest, request: Request):
     return APIResponse(data=saved).to_dict()
 
 
+@router.get("/action-targets")
+async def list_action_targets(request: Request):
+    tenant = request.state.tenant
+    tenant.require_permission("read")
+    items = [target.descriptor().model_dump() for target in _action_targets.list_targets()]
+    return APIResponse(data={"items": items, "count": len(items)}).to_dict()
+
+
+@router.get("/action-integrations")
+async def list_action_integrations(request: Request, limit: int = 100):
+    tenant = request.state.tenant
+    tenant.require_permission("read")
+    items = await _integrations.find_many({"tenant_id": tenant.tenant_id}, limit=limit)
+    return APIResponse(data={"items": [_safe_integration_config(item) for item in items], "count": len(items)}).to_dict()
+
+
+@router.post("/action-integrations")
+async def create_action_integration(body: IntegrationConfigRequest, request: Request):
+    tenant = request.state.tenant
+    tenant.require_permission("write")
+    try:
+        _action_targets.get(body.target_type)
+    except ValueError as exc:
+        raise BadRequestError(str(exc)) from exc
+    prepared = _config_with_secret_ref(body.model_dump())
+    config = ActionIntegrationConfig(
+        config_id=str(uuid.uuid4()),
+        tenant_id=tenant.tenant_id,
+        target_type=body.target_type,
+        name=body.name,
+        default_destination=body.default_destination,
+        config=prepared.get("config", {}),
+        enabled=body.enabled,
+        created_at=utc_now().isoformat(),
+    ).model_dump()
+    saved = await _integrations.insert(config["config_id"], config)
+    return APIResponse(data=_safe_integration_config(saved)).to_dict()
+
+
+@router.put("/action-integrations/{config_id}")
+async def update_action_integration(config_id: str, body: IntegrationConfigRequest, request: Request):
+    tenant = request.state.tenant
+    tenant.require_permission("write")
+    existing = await _integrations.find_by_id_or_fail(config_id)
+    if existing.get("tenant_id") != tenant.tenant_id:
+        from shared.common.common import NotFoundError
+        raise NotFoundError("action integration")
+    if existing.get("target_type") != body.target_type:
+        raise BadRequestError("target_type cannot be changed for an integration config")
+    prepared = _config_with_secret_ref(body.model_dump())
+    saved = await _integrations.update(config_id, {
+        "name": body.name,
+        "default_destination": body.default_destination,
+        "config": prepared.get("config", {}),
+        "enabled": body.enabled,
+        "updated_at": utc_now().isoformat(),
+    })
+    return APIResponse(data=_safe_integration_config(saved)).to_dict()
+
+
+async def _dispatch_action(action_id: str, body: DispatchActionRequest, request: Request):
+    tenant = request.state.tenant
+    tenant.require_permission("write")
+    action, decision, recommendation = await _load_dispatch_context(tenant.tenant_id, action_id)
+    if decision.get("decision_status") != "approved":
+        raise BadRequestError("Actions can only be dispatched for approved decisions")
+    config = None
+    if body.config_id:
+        raw_config = await _integrations.find_by_id_or_fail(body.config_id)
+        if raw_config.get("tenant_id") != tenant.tenant_id:
+            from shared.common.common import NotFoundError
+            raise NotFoundError("action integration")
+        config = ActionIntegrationConfig(**raw_config)
+    target = _action_targets.get(body.target_type)
+    try:
+        target.validate_config(config)
+    except ValueError as exc:
+        raise BadRequestError(str(exc)) from exc
+    payload = target.build_payload(
+        action=action,
+        decision=decision,
+        recommendation=recommendation,
+        config=config,
+        overrides=body.payload_overrides,
+    )
+    dispatch = ActionDispatch(
+        dispatch_id=str(uuid.uuid4()),
+        tenant_id=tenant.tenant_id,
+        action_id=action_id,
+        decision_id=decision["decision_id"],
+        recommendation_id=recommendation["recommendation_id"],
+        target_type=body.target_type,
+        config_id=body.config_id,
+        status="queued",
+        payload=payload,
+        approval_metadata=body.approval_metadata,
+        idempotency_key=body.idempotency_key,
+        created_at=utc_now().isoformat(),
+    )
+    receipt = await target.dispatch(dispatch, config)
+    dispatch.status = receipt.status if receipt.status != "delivered" else "delivered"
+    dispatch.dispatched_at = utc_now().isoformat()
+    dispatch.updated_at = dispatch.dispatched_at
+    saved_dispatch = await _dispatches.insert(dispatch.dispatch_id, dispatch.model_dump())
+    saved_receipt = await _delivery_receipts.insert(receipt.receipt_id, receipt.model_dump())
+    metering = RevenueMeteringEvent(
+        event_id=str(uuid.uuid4()),
+        tenant_id=tenant.tenant_id,
+        dispatch_id=dispatch.dispatch_id,
+        recommendation_id=recommendation["recommendation_id"],
+        event_type="action_dispatch",
+        units=1.0,
+        amount=0.0 if not target.premium_connector else 1.0,
+        created_at=utc_now().isoformat(),
+        metadata={"target_type": body.target_type},
+    ).model_dump()
+    await _metering.insert(metering["event_id"], metering)
+    await _actions.update(action_id, {"status": "executed" if dispatch.status == "delivered" else "queued", "integration": body.target_type})
+    return APIResponse(data={"dispatch": saved_dispatch, "receipt": saved_receipt, "metering_event": metering}).to_dict()
+
+
+@router.post("/actions/{action_id}/dispatch")
+async def dispatch_action(action_id: str, body: DispatchActionRequest, request: Request):
+    return await _dispatch_action(action_id, body, request)
+
+
+@router.post("/action-dispatches/{dispatch_id}/retry")
+async def retry_action_dispatch(dispatch_id: str, request: Request):
+    tenant = request.state.tenant
+    tenant.require_permission("write")
+    raw_dispatch = await _dispatches.find_by_id_or_fail(dispatch_id)
+    if raw_dispatch.get("tenant_id") != tenant.tenant_id:
+        from shared.common.common import NotFoundError
+        raise NotFoundError("action dispatch")
+    config = ActionIntegrationConfig(**await _integrations.find_by_id_or_fail(raw_dispatch["config_id"])) if raw_dispatch.get("config_id") else None
+    target = _action_targets.get(raw_dispatch["target_type"])
+    dispatch = ActionDispatch(**raw_dispatch)
+    receipt = await target.retry(dispatch, config, int(raw_dispatch.get("retry_count", 0)) + 1)
+    saved_dispatch = await _dispatches.update(dispatch_id, {"status": receipt.status, "retry_count": receipt.retry_count, "updated_at": utc_now().isoformat(), "error": None})
+    saved_receipt = await _delivery_receipts.insert(receipt.receipt_id, receipt.model_dump())
+    return APIResponse(data={"dispatch": saved_dispatch, "receipt": saved_receipt}).to_dict()
+
+
+@router.post("/action-dispatches/{dispatch_id}/cancel")
+async def cancel_action_dispatch(dispatch_id: str, request: Request):
+    tenant = request.state.tenant
+    tenant.require_permission("write")
+    raw_dispatch = await _dispatches.find_by_id_or_fail(dispatch_id)
+    if raw_dispatch.get("tenant_id") != tenant.tenant_id:
+        from shared.common.common import NotFoundError
+        raise NotFoundError("action dispatch")
+    config = ActionIntegrationConfig(**await _integrations.find_by_id_or_fail(raw_dispatch["config_id"])) if raw_dispatch.get("config_id") else None
+    target = _action_targets.get(raw_dispatch["target_type"])
+    try:
+        receipt = await target.cancel(ActionDispatch(**raw_dispatch), config)
+    except ValueError as exc:
+        raise BadRequestError(str(exc)) from exc
+    saved_dispatch = await _dispatches.update(dispatch_id, {"status": "cancelled", "updated_at": utc_now().isoformat()})
+    saved_receipt = await _delivery_receipts.insert(receipt.receipt_id, receipt.model_dump())
+    return APIResponse(data={"dispatch": saved_dispatch, "receipt": saved_receipt}).to_dict()
+
+
+@router.post("/action-dispatches/{dispatch_id}/receipts")
+async def record_delivery_receipt(dispatch_id: str, body: DeliveryReceiptRequest, request: Request):
+    tenant = request.state.tenant
+    tenant.require_permission("write")
+    raw_dispatch = await _dispatches.find_by_id_or_fail(dispatch_id)
+    if raw_dispatch.get("tenant_id") != tenant.tenant_id:
+        from shared.common.common import NotFoundError
+        raise NotFoundError("action dispatch")
+    receipt = ActionDeliveryReceipt(
+        receipt_id=str(uuid.uuid4()),
+        dispatch_id=dispatch_id,
+        target_type=raw_dispatch["target_type"],
+        external_id=body.external_id,
+        external_url=body.external_url,
+        status=body.status,
+        delivered_at=utc_now().isoformat(),
+        retry_count=int(raw_dispatch.get("retry_count", 0)),
+        raw=body.raw,
+    ).model_dump()
+    saved_receipt = await _delivery_receipts.insert(receipt["receipt_id"], receipt)
+    saved_dispatch = await _dispatches.update(dispatch_id, {"status": body.status, "updated_at": utc_now().isoformat()})
+    return APIResponse(data={"dispatch": saved_dispatch, "receipt": saved_receipt}).to_dict()
+
+
+@router.get("/action-dispatches")
+async def list_action_dispatches(request: Request, limit: int = 100):
+    tenant = request.state.tenant
+    tenant.require_permission("read")
+    items = await _dispatches.find_many({"tenant_id": tenant.tenant_id}, limit=limit)
+    return APIResponse(data={"items": items, "count": len(items)}).to_dict()
+
+
 @router.post("/actions/{action_id}/outcome")
 async def observe_outcome(action_id: str, body: OutcomeRequest, request: Request):
     tenant = request.state.tenant
@@ -571,6 +868,8 @@ async def create_playbook(body: PlaybookRequest, request: Request):
     tenant.require_permission("write")
     if not settings.decision_outcome.playbooks_enabled:
         return APIResponse(data={"enabled": False}).to_dict()
+    if not settings.decision_outcome.recommendations_enabled:
+        return APIResponse(data={"enabled": False, "reason": "recommendations_disabled"}).to_dict()
     playbook = PlaybookDefinition(
         playbook_id=str(uuid.uuid4()), tenant_id=tenant.tenant_id,
         name=body.name, description=body.description, trigger=body.trigger,
@@ -680,6 +979,8 @@ async def evaluate_playbook(playbook_id: str, body: PlaybookEvaluationRequest, r
     tenant.require_permission("write")
     if not settings.decision_outcome.playbooks_enabled:
         return APIResponse(data={"enabled": False}).to_dict()
+    if not settings.decision_outcome.recommendations_enabled:
+        return APIResponse(data={"enabled": False, "reason": "recommendations_disabled"}).to_dict()
     playbook = await _playbooks.find_by_id_or_fail(playbook_id)
     if playbook.get("tenant_id") != tenant.tenant_id:
         from shared.common.common import NotFoundError
@@ -693,6 +994,8 @@ async def evaluate_playbook(playbook_id: str, body: PlaybookEvaluationRequest, r
             evaluated_at=utc_now().isoformat(),
         )
         return APIResponse(data=result.model_dump()).to_dict()
+    if not body.entity_id and not body.population_id:
+        raise BadRequestError("Playbook evaluation requires entity_id or population_id")
     signals = {**body.context, **body.signals}
     matched, trigger_matches, skipped = evaluate_trigger(playbook, signals)
     if not matched:
@@ -755,111 +1058,6 @@ async def run_playbook(playbook_id: str, request: Request):
         raise NotFoundError("playbook")
     run = PlaybookRun(run_id=str(uuid.uuid4()), playbook_id=playbook_id, tenant_id=tenant.tenant_id, status="queued", started_at=utc_now().isoformat()).model_dump()
     return APIResponse(data=await _playbook_runs.insert(run["run_id"], run)).to_dict()
-
-_PLAYBOOK_TEMPLATES: list[dict[str, Any]] = [
-    {"template_id": "high-ltv-churn-save", "name": "High-LTV churn save", "trigger": "churn_probability >= 0.65 and ltv_predicted_usd >= 500", "recommendation_families": ["retention"], "candidate_actions": ["human_review_retention_offer"], "approval_level": "elevated", "outcome_mapping": {"success": "retained_value"}, "expected_value_model": "ltv_predicted_usd * 0.18"},
-    {"template_id": "fraud-cluster-review", "name": "Fraud cluster review", "trigger": "fraud_probability >= 0.70", "recommendation_families": ["fraud_review"], "candidate_actions": ["open_fraud_cluster_review"], "approval_level": "elevated", "outcome_mapping": {"success": "loss_avoided"}, "expected_value_model": "exposure_usd"},
-    {"template_id": "campaign-waste-reduction", "name": "Campaign waste reduction", "trigger": "attribution_waste_probability >= 0.60", "recommendation_families": ["attribution_optimization"], "candidate_actions": ["review_attribution_path"], "approval_level": "standard", "outcome_mapping": {"success": "waste_reduced"}, "expected_value_model": "wasted_spend_usd"},
-    {"template_id": "agent-failure-review", "name": "Agent failure review", "trigger": "agent_risk_probability >= 0.50", "recommendation_families": ["agent_governance"], "candidate_actions": ["review_agent_policy"], "approval_level": "critical", "outcome_mapping": {"success": "risk_reduced"}, "expected_value_model": "risk_exposure_usd"},
-    {"template_id": "expansion-signal-routing", "name": "Expansion signal routing", "trigger": "expansion_probability >= 0.60", "recommendation_families": ["expansion"], "candidate_actions": ["route_expansion_signal"], "approval_level": "standard", "outcome_mapping": {"success": "pipeline_created"}, "expected_value_model": "pipeline_value_usd"},
-    {"template_id": "reward-trigger-review", "name": "Reward trigger review", "trigger": "reward_optimization_probability >= 0.60", "recommendation_families": ["rewards_optimization"], "candidate_actions": ["review_reward_trigger"], "approval_level": "standard", "outcome_mapping": {"success": "reward_efficiency"}, "expected_value_model": "reward_savings_usd"},
-    {"template_id": "operational-failure-review", "name": "Operational failure review", "trigger": "operational_failure_probability >= 0.55", "recommendation_families": ["operational_failure"], "candidate_actions": ["open_operational_failure_review"], "approval_level": "elevated", "outcome_mapping": {"success": "incident_reduction"}, "expected_value_model": "incident_cost_avoided_usd"},
-]
-
-
-class PlaybookFromTemplateRequest(BaseModel):
-    template_id: str
-    name: str | None = None
-    enabled: bool = True
-
-
-@router.get("/playbooks/templates")
-async def list_playbook_templates(request: Request):
-    request.state.tenant.require_permission("read")
-    return APIResponse(data={"items": _PLAYBOOK_TEMPLATES, "count": len(_PLAYBOOK_TEMPLATES)}).to_dict()
-
-
-@router.post("/playbooks/from-template")
-async def create_playbook_from_template(body: PlaybookFromTemplateRequest, request: Request):
-    tenant = request.state.tenant
-    tenant.require_permission("write")
-    template = next((item for item in _PLAYBOOK_TEMPLATES if item["template_id"] == body.template_id), None)
-    if template is None:
-        raise BadRequestError("Unknown playbook template_id")
-    playbook = PlaybookDefinition(
-        playbook_id=str(uuid.uuid4()),
-        tenant_id=tenant.tenant_id,
-        name=body.name or template["name"],
-        description=f"Template-derived playbook: {template['name']}",
-        trigger=template["trigger"],
-        recommendation_types=template["recommendation_families"],
-        candidate_actions=[],
-        approval_level=template["approval_level"],
-        enabled=body.enabled,
-        created_at=utc_now().isoformat(),
-    ).model_dump()
-    playbook["template_id"] = template["template_id"]
-    playbook["outcome_mapping"] = template["outcome_mapping"]
-    playbook["expected_value_model"] = template["expected_value_model"]
-    return APIResponse(data=await _playbooks.insert(playbook["playbook_id"], playbook)).to_dict()
-
-
-async def _playbook_performance(tenant_id: str, playbook_id: str) -> dict:
-    playbook = await _playbooks.find_by_id_or_fail(playbook_id)
-    if playbook.get("tenant_id") != tenant_id:
-        from shared.common.common import NotFoundError
-        raise NotFoundError("playbook")
-    runs = await _playbook_runs.find_many({"tenant_id": tenant_id, "playbook_id": playbook_id}, limit=500)
-    rec_ids = {rid for run in runs for rid in run.get("recommendation_ids", [])}
-    recs = [r for r in await _recommendations.list_for_tenant(tenant_id, limit=500) if (r.get("recommendation_id") or r.get("id")) in rec_ids]
-    outcomes = [o for o in await _outcomes.list_for_tenant(tenant_id, limit=500) if o.get("recommendation_id") in rec_ids]
-    ledger = _ledger.build(recs, [], [], outcomes, [], [playbook], runs)
-    return {"playbook": playbook, "runs": runs, "performance": ledger["summary"], "by_run": ledger["by_playbook"]}
-
-
-@router.get("/playbooks/{playbook_id}/performance")
-async def get_playbook_performance(playbook_id: str, request: Request):
-    tenant = request.state.tenant
-    tenant.require_permission("read")
-    return APIResponse(data=await _playbook_performance(tenant.tenant_id, playbook_id)).to_dict()
-
-
-@router.get("/playbooks/{playbook_id}/runs")
-async def get_playbook_runs(playbook_id: str, request: Request, limit: int = 100):
-    tenant = request.state.tenant
-    tenant.require_permission("read")
-    return APIResponse(data={"items": await _playbook_runs.find_many({"tenant_id": tenant.tenant_id, "playbook_id": playbook_id}, limit=limit)}).to_dict()
-
-
-@router.post("/playbooks/{playbook_id}/evaluate")
-async def evaluate_playbook(playbook_id: str, request: Request):
-    tenant = request.state.tenant
-    tenant.require_permission("write")
-    data = await _playbook_performance(tenant.tenant_id, playbook_id)
-    tuning_needed = data["performance"].get("outcome_capture_rate", 0) < 0.5 or data["performance"].get("failure_rate", 0) > 0.25
-    return APIResponse(data={**data, "needs_tuning": tuning_needed}).to_dict()
-
-
-class IntegrationActionRequest(BaseModel):
-    decision_id: str
-    target: Literal["slack", "webhook", "crm_task", "marketing_automation", "ticketing"]
-    payload: dict[str, Any] = Field(default_factory=dict)
-    status: Literal["planned", "queued", "executed", "failed", "cancelled"] = "planned"
-    authorization_metadata: dict[str, Any] | None = None
-
-
-@router.post("/actions/integration-ready")
-async def log_integration_ready_action(body: IntegrationActionRequest, request: Request):
-    return await log_action(ActionLogRequest(
-        decision_id=body.decision_id,
-        action_type=f"integration:{body.target}",
-        system=body.target,
-        integration=body.target,
-        status=body.status,
-        actor_type="human",
-        economic_payload=body.payload,
-        authorization_metadata=body.authorization_metadata,
-    ), request)
 
 
 async def _all_tenant_ledgers(limit: int = 1000) -> dict[str, dict]:

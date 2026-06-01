@@ -113,6 +113,75 @@ class ActionFeedback(BaseModel):
     tenant_id: str
 
 
+class ActionTarget(BaseModel):
+    target_type: str
+    label: str
+    description: str
+    supported_action_types: list[str] = Field(default_factory=list)
+    requires_configuration: bool = True
+    supports_delivery_receipts: bool = True
+    supports_retries: bool = True
+    supports_cancellation: bool = False
+    approval_policy_notes: str | None = None
+    premium_connector: bool = False
+
+
+class ActionIntegrationConfig(BaseModel):
+    config_id: str
+    tenant_id: str
+    target_type: str
+    name: str
+    default_destination: str | None = None
+    config: dict[str, Any] = Field(default_factory=dict)
+    enabled: bool = True
+    created_at: str
+    updated_at: str | None = None
+
+
+class ActionDispatch(BaseModel):
+    dispatch_id: str
+    tenant_id: str
+    action_id: str
+    decision_id: str
+    recommendation_id: str
+    target_type: str
+    config_id: str | None = None
+    status: Literal["queued", "dispatched", "delivered", "failed", "cancelled"] = "queued"
+    payload: dict[str, Any] = Field(default_factory=dict)
+    approval_metadata: dict[str, Any] = Field(default_factory=dict)
+    idempotency_key: str | None = None
+    created_at: str
+    dispatched_at: str | None = None
+    updated_at: str | None = None
+    error: str | None = None
+    retry_count: int = 0
+
+
+class ActionDeliveryReceipt(BaseModel):
+    receipt_id: str
+    dispatch_id: str
+    target_type: str
+    external_id: str | None = None
+    external_url: str | None = None
+    delivered_at: str
+    status: Literal["delivered", "failed", "cancelled"] = "delivered"
+    retry_count: int = 0
+    raw: dict[str, Any] = Field(default_factory=dict)
+
+
+class RevenueMeteringEvent(BaseModel):
+    event_id: str
+    tenant_id: str
+    dispatch_id: str | None = None
+    recommendation_id: str | None = None
+    event_type: str
+    units: float = 1.0
+    amount: float | None = None
+    currency: str = "USD"
+    created_at: str
+    metadata: dict[str, Any] = Field(default_factory=dict)
+
+
 class ObservedWindow(BaseModel):
     start: str
     end: str
