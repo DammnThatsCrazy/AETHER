@@ -295,6 +295,27 @@
       "canonical_owner": "identity@aether"
     },
     {
+      "path": "docs/INTEGRATION-ACTIONS.md",
+      "title": "Integration Actions",
+      "slug": "ai/integration-actions",
+      "section": "ai",
+      "visibility": "I",
+      "audience": [
+        "architect",
+        "dev-senior",
+        "ops"
+      ],
+      "status": "beta",
+      "since_version": "8.9.0",
+      "estimated_read_minutes": 4,
+      "toc_depth": 3,
+      "canonical_owner": "platform@aether",
+      "flags": [
+        "AETHER_DECISION_RECORDS_ENABLED",
+        "AETHER_OUTCOME_FEEDBACK_ENABLED"
+      ]
+    },
+    {
       "path": "docs/INTELLIGENCE-GRAPH.md",
       "title": "Unified Intelligence Graph",
       "slug": "concepts/intelligence-graph",
@@ -312,16 +333,15 @@
       "canonical_owner": "graph@aether"
     },
     {
-      "path": "docs/INVESTIGATION-WORKSPACE.md",
-      "title": "Investigation Workspace",
-      "slug": "ai/investigation-workspace",
-      "section": "ai",
+      "path": "docs/KYBER-STRATEGIC-OBSERVABILITY.md",
+      "title": "Kyber Strategic Observability",
+      "slug": "kyber/strategic-observability",
+      "section": "kyber",
       "visibility": "I",
       "audience": [
-        "ai",
-        "architect",
-        "dev-senior",
-        "ops"
+        "exec",
+        "ops",
+        "architect"
       ],
       "status": "beta",
       "since_version": "8.9.0",
@@ -329,9 +349,7 @@
       "toc_depth": 3,
       "canonical_owner": "platform@aether",
       "flags": [
-        "AETHER_RECOMMENDATIONS_ENABLED",
-        "AETHER_DECISION_RECORDS_ENABLED",
-        "AETHER_OUTCOME_FEEDBACK_ENABLED"
+        "KYBER_RECOMMENDATION_OBSERVABILITY_ENABLED"
       ]
     },
     {
@@ -451,6 +469,28 @@
       ]
     },
     {
+      "path": "docs/PLAYBOOKS.md",
+      "title": "Playbooks",
+      "slug": "ai/playbooks",
+      "section": "ai",
+      "visibility": "I",
+      "audience": [
+        "ai",
+        "architect",
+        "dev-senior",
+        "ops"
+      ],
+      "status": "beta",
+      "since_version": "8.9.0",
+      "estimated_read_minutes": 5,
+      "toc_depth": 3,
+      "canonical_owner": "platform@aether",
+      "flags": [
+        "AETHER_PLAYBOOKS_ENABLED",
+        "AETHER_RECOMMENDATIONS_ENABLED"
+      ]
+    },
+    {
       "path": "docs/PRODUCTION-READINESS.md",
       "title": "Production Readiness Review",
       "slug": "operations/production-readiness",
@@ -511,7 +551,7 @@
       ],
       "status": "beta",
       "since_version": "8.9.0",
-      "estimated_read_minutes": 7,
+      "estimated_read_minutes": 6,
       "toc_depth": 3,
       "canonical_owner": "platform@aether",
       "flags": [

@@ -485,6 +485,12 @@ export const api = {
     outcomeLedgerSummary: () =>
       restClient.get(`/v1/intelligence/outcome-ledger/summary`, wrap(unknownSchema)).then(r => r.data),
 
+    outcomeLedger: () =>
+      restClient.get(`/v1/intelligence/outcome-ledger`, wrap(unknownSchema)).then(r => r.data),
+
+    outcomeLedgerSummary: () =>
+      restClient.get(`/v1/intelligence/outcome-ledger/summary`, wrap(unknownSchema)).then(r => r.data),
+
     outcomes: () =>
       restClient.get(`/v1/intelligence/outcomes`, wrap(unknownSchema)).then(r => r.data),
 

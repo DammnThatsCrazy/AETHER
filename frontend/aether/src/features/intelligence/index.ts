@@ -10,6 +10,5 @@ export {
   useProfileOutcomes,
   useOutcomeLedger,
   useProfileOutcomeLedger,
-  useRecommendationInvestigation,
   usePlaybooks,
 } from './use-intelligence';
