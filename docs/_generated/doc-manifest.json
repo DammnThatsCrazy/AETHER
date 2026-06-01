@@ -3,6 +3,24 @@
   "generated_from": "docs/**/*.{md,mdx}",
   "docs": [
     {
+      "path": "docs/ACTION-DISPATCH.md",
+      "title": "Action Dispatch",
+      "slug": "ai/action-dispatch",
+      "section": "ai",
+      "visibility": "I",
+      "audience": [
+        "ai",
+        "architect",
+        "dev-senior",
+        "ops"
+      ],
+      "status": "beta",
+      "since_version": "8.9.0",
+      "flags": [
+        "AETHER_DECISION_RECORDS_ENABLED"
+      ]
+    },
+    {
       "path": "docs/AGENT-CONTROLLER.md",
       "title": "Agent Controller — Multi-Controller Architecture",
       "slug": "ai/agent-controller",
@@ -295,6 +313,25 @@
       "canonical_owner": "identity@aether"
     },
     {
+      "path": "docs/INTEGRATION-ACTIONS.md",
+      "title": "Integration Actions",
+      "slug": "ai/integration-actions",
+      "section": "ai",
+      "visibility": "I",
+      "audience": [
+        "ai",
+        "architect",
+        "dev-senior",
+        "ops"
+      ],
+      "status": "beta",
+      "since_version": "8.9.0",
+      "flags": [
+        "AETHER_DECISION_RECORDS_ENABLED",
+        "AETHER_OUTCOME_FEEDBACK_ENABLED"
+      ]
+    },
+    {
       "path": "docs/INTELLIGENCE-GRAPH.md",
       "title": "Unified Intelligence Graph",
       "slug": "concepts/intelligence-graph",
@@ -310,6 +347,67 @@
       "estimated_read_minutes": 15,
       "toc_depth": 3,
       "canonical_owner": "graph@aether"
+    },
+    {
+      "path": "docs/INVESTIGATION-WORKSPACE.md",
+      "title": "Investigation Workspace",
+      "slug": "ai/investigation-workspace",
+      "section": "ai",
+      "visibility": "I",
+      "audience": [
+        "ai",
+        "architect",
+        "dev-senior",
+        "ops"
+      ],
+      "status": "beta",
+      "since_version": "8.9.0",
+      "estimated_read_minutes": 5,
+      "toc_depth": 3,
+      "canonical_owner": "platform@aether",
+      "flags": [
+        "AETHER_RECOMMENDATIONS_ENABLED",
+        "AETHER_DECISION_RECORDS_ENABLED",
+        "AETHER_OUTCOME_FEEDBACK_ENABLED"
+      ]
+    },
+    {
+      "path": "docs/KYBER-REVENUE-INTELLIGENCE.md",
+      "title": "Kyber Revenue Intelligence",
+      "slug": "ai/kyber-revenue-intelligence",
+      "section": "ai",
+      "visibility": "I",
+      "audience": [
+        "ai",
+        "architect",
+        "dev-senior",
+        "ops",
+        "exec"
+      ],
+      "status": "beta",
+      "since_version": "8.9.0",
+      "flags": [
+        "KYBER_RECOMMENDATION_OBSERVABILITY_ENABLED"
+      ]
+    },
+    {
+      "path": "docs/KYBER-STRATEGIC-OBSERVABILITY.md",
+      "title": "Kyber Strategic Observability",
+      "slug": "ai/kyber-strategic-observability",
+      "section": "ai",
+      "visibility": "I",
+      "audience": [
+        "ai",
+        "architect",
+        "dev-senior",
+        "ops",
+        "exec"
+      ],
+      "status": "beta",
+      "since_version": "8.9.0",
+      "flags": [
+        "KYBER_RECOMMENDATION_OBSERVABILITY_ENABLED"
+      ]
     },
     {
       "path": "docs/MIGRATION-RUNBOOK.md",
@@ -404,6 +502,50 @@
       "canonical_owner": "platform@aether"
     },
     {
+      "path": "docs/OUTCOME-LEDGER.md",
+      "title": "Outcome Ledger",
+      "slug": "ai/outcome-ledger",
+      "section": "ai",
+      "visibility": "I",
+      "audience": [
+        "ai",
+        "architect",
+        "dev-senior",
+        "ops",
+        "exec"
+      ],
+      "status": "beta",
+      "since_version": "8.9.0",
+      "estimated_read_minutes": 5,
+      "toc_depth": 3,
+      "canonical_owner": "platform@aether",
+      "flags": [
+        "AETHER_RECOMMENDATIONS_ENABLED",
+        "AETHER_DECISION_RECORDS_ENABLED",
+        "AETHER_OUTCOME_FEEDBACK_ENABLED"
+      ]
+    },
+    {
+      "path": "docs/PLAYBOOKS.md",
+      "title": "Playbooks",
+      "slug": "ai/playbooks",
+      "section": "ai",
+      "visibility": "I",
+      "audience": [
+        "ai",
+        "architect",
+        "dev-senior",
+        "ops",
+        "exec"
+      ],
+      "status": "beta",
+      "since_version": "8.9.0",
+      "flags": [
+        "AETHER_PLAYBOOKS_ENABLED",
+        "AETHER_RECOMMENDATIONS_ENABLED"
+      ]
+    },
+    {
       "path": "docs/PRODUCTION-READINESS.md",
       "title": "Production Readiness Review",
       "slug": "operations/production-readiness",
@@ -452,6 +594,27 @@
       "canonical_owner": "backend@aether"
     },
     {
+      "path": "docs/RECOMMENDATION-FAMILIES.md",
+      "title": "Recommendation Families",
+      "slug": "ai/recommendation-families",
+      "section": "ai",
+      "visibility": "I",
+      "audience": [
+        "ai",
+        "architect",
+        "dev-senior"
+      ],
+      "status": "beta",
+      "since_version": "8.9.0",
+      "estimated_read_minutes": 7,
+      "toc_depth": 3,
+      "canonical_owner": "platform@aether",
+      "flags": [
+        "AETHER_RECOMMENDATIONS_ENABLED",
+        "AETHER_RECOMMENDATION_CONFIDENCE_THRESHOLD"
+      ]
+    },
+    {
       "path": "docs/REPO-INDEX.md",
       "title": "Repository Index",
       "slug": "reference/repo-index",
@@ -467,6 +630,25 @@
       "estimated_read_minutes": 2,
       "toc_depth": 3,
       "canonical_owner": "platform@aether"
+    },
+    {
+      "path": "docs/REVENUE-METERING-EVENTS.md",
+      "title": "Revenue Metering Events",
+      "slug": "ai/revenue-metering-events",
+      "section": "ai",
+      "visibility": "I",
+      "audience": [
+        "ai",
+        "architect",
+        "dev-senior",
+        "ops",
+        "exec"
+      ],
+      "status": "beta",
+      "since_version": "8.9.0",
+      "flags": [
+        "KYBER_RECOMMENDATION_OBSERVABILITY_ENABLED"
+      ]
     },
     {
       "path": "docs/ROLLBACK-RUNBOOK.md",

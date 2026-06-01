@@ -135,6 +135,9 @@ export const api = {
     outcomes: (userId: string) =>
       restClient.get(`/v1/profile/${userId}/outcomes`, wrap(unknownSchema)).then(r => r.data),
 
+    outcomeLedger: (userId: string) =>
+      restClient.get(`/v1/profile/${userId}/outcome-ledger`, wrap(unknownSchema)).then(r => r.data),
+
     /** Data provenance — source attribution for every data point in the profile. */
     provenance: (userId: string) =>
       restClient.get(`/v1/profile/${userId}/provenance`, wrap(unknownSchema)).then(r => r.data),
@@ -470,14 +473,75 @@ export const api = {
     entityCluster: (entityId: string) =>
       restClient.get(`/v1/intelligence/entity/${entityId}/cluster`, wrap(unknownSchema)).then(r => r.data as EntityCluster),
 
-    recommendations: () =>
-      restClient.get(`/v1/intelligence/recommendations`, wrap(unknownSchema)).then(r => r.data),
+    recommendations: (params?: { family?: string }) =>
+      restClient.get(`/v1/intelligence/recommendations${buildQS({ recommendation_type: params?.family })}`, wrap(unknownSchema)).then(r => r.data),
+
+    recommendationInvestigation: (recommendationId: string) =>
+      restClient.get(`/v1/intelligence/recommendations/${recommendationId}/investigation`, wrap(unknownSchema)).then(r => r.data),
+
+    outcomeLedger: () =>
+      restClient.get(`/v1/intelligence/outcome-ledger`, wrap(unknownSchema)).then(r => r.data),
+
+    outcomeLedgerSummary: () =>
+      restClient.get(`/v1/intelligence/outcome-ledger/summary`, wrap(unknownSchema)).then(r => r.data),
 
     outcomes: () =>
       restClient.get(`/v1/intelligence/outcomes`, wrap(unknownSchema)).then(r => r.data),
 
     playbooks: () =>
       restClient.get(`/v1/intelligence/playbooks`, wrap(unknownSchema)).then(r => r.data),
+
+    playbookTemplates: () =>
+      restClient.get(`/v1/intelligence/playbooks/templates`, wrap(unknownSchema)).then(r => r.data),
+
+    createPlaybookFromTemplate: (templateId: string) =>
+      restClient.post(`/v1/intelligence/playbooks/from-template`, wrap(unknownSchema), { template_id: templateId }).then(r => r.data),
+
+    playbookRuns: (playbookId: string) =>
+      restClient.get(`/v1/intelligence/playbooks/${playbookId}/runs`, wrap(unknownSchema)).then(r => r.data),
+
+    playbookPerformance: (playbookId: string) =>
+      restClient.get(`/v1/intelligence/playbooks/${playbookId}/performance`, wrap(unknownSchema)).then(r => r.data),
+
+    playbookPerformanceSummary: () =>
+      restClient.get(`/v1/intelligence/playbooks/performance/summary`, wrap(unknownSchema)).then(r => r.data),
+
+
+    actions: (params?: { status?: string }) =>
+      restClient.get(`/v1/intelligence/actions${buildQS({ status: params?.status })}`, wrap(unknownSchema)).then(r => r.data),
+
+    actionTargets: () =>
+      restClient.get(`/v1/intelligence/action-targets`, wrap(unknownSchema)).then(r => r.data),
+
+    actionIntegrations: () =>
+      restClient.get(`/v1/intelligence/action-integrations`, wrap(unknownSchema)).then(r => r.data),
+
+    createActionIntegration: (body: Record<string, unknown>) =>
+      restClient.post(`/v1/intelligence/action-integrations`, wrap(unknownSchema), body).then(r => r.data),
+
+    updateActionIntegration: (integrationConfigId: string, body: Record<string, unknown>) =>
+      restClient.patch(`/v1/intelligence/action-integrations/${integrationConfigId}`, wrap(unknownSchema), body).then(r => r.data),
+
+    dispatchAction: (actionId: string, body: Record<string, unknown>) =>
+      restClient.post(`/v1/intelligence/actions/${actionId}/dispatch`, wrap(unknownSchema), body).then(r => r.data),
+
+    actionDispatches: (actionId: string) =>
+      restClient.get(`/v1/intelligence/actions/${actionId}/dispatches`, wrap(unknownSchema)).then(r => r.data),
+
+    getActionDispatch: (dispatchId: string) =>
+      restClient.get(`/v1/intelligence/action-dispatches/${dispatchId}`, wrap(unknownSchema)).then(r => r.data),
+
+    retryActionDispatch: (dispatchId: string) =>
+      restClient.post(`/v1/intelligence/action-dispatches/${dispatchId}/retry`, wrap(unknownSchema), {}).then(r => r.data),
+
+    cancelActionDispatch: (dispatchId: string) =>
+      restClient.post(`/v1/intelligence/action-dispatches/${dispatchId}/cancel`, wrap(unknownSchema), {}).then(r => r.data),
+
+    testWebhook: (body: Record<string, unknown>) =>
+      restClient.post(`/v1/intelligence/webhooks/test`, wrap(unknownSchema), body).then(r => r.data),
+
+    rotateWebhookSecret: (integrationConfigId: string) =>
+      restClient.post(`/v1/intelligence/webhooks/${integrationConfigId}/rotate-secret`, wrap(unknownSchema), {}).then(r => r.data),
   },
 
   // ── Analytics ─────────────────────────────────────────────────────────────

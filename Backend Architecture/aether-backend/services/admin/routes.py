@@ -902,3 +902,155 @@ async def stripe_webhook(request: Request):
         "event_id": event_id,
         "event_type": event_type,
     }).to_dict()
+
+# ── Kyber strategic observability and revenue intelligence ────────────────
+
+from services.admin.kyber_strategic import KyberStrategicObservability, Window
+from services.intelligence.repositories import (
+    ActionDeliveryReceiptRepository,
+    ActionDispatchRepository,
+    ActionFeedbackRepository,
+    ActionIntegrationConfigRepository,
+    DecisionRepository,
+    OutcomeRepository,
+    PlaybookRepository,
+    PlaybookRunRepository,
+    RecommendationFeedbackRepository,
+    RecommendationRepository,
+    RevenueMeteringEventRepository,
+)
+
+_kyber_recommendations = RecommendationRepository()
+_kyber_decisions = DecisionRepository()
+_kyber_actions = ActionFeedbackRepository()
+_kyber_outcomes = OutcomeRepository()
+_kyber_playbooks = PlaybookRepository()
+_kyber_playbook_runs = PlaybookRunRepository()
+_kyber_feedback = RecommendationFeedbackRepository()
+_kyber_integrations = ActionIntegrationConfigRepository()
+_kyber_dispatches = ActionDispatchRepository()
+_kyber_receipts = ActionDeliveryReceiptRepository()
+_kyber_metering = RevenueMeteringEventRepository()
+
+
+def _require_kyber_operator(request: Request) -> None:
+    """Require Olympus Labs operator/admin access for internal Kyber views."""
+    request.state.tenant.require_permission("admin")
+
+
+async def _kyber_observability(window: Window = "30d") -> KyberStrategicObservability:
+    limit = 10000
+    tenants = await _repo.find_many(limit=limit)
+    recommendations = await _kyber_recommendations.find_many(limit=limit)
+    decisions = await _kyber_decisions.find_many(limit=limit)
+    actions = await _kyber_actions.find_many(limit=limit)
+    outcomes = await _kyber_outcomes.find_many(limit=limit)
+    feedback = await _kyber_feedback.find_many(limit=limit)
+    playbooks = await _kyber_playbooks.find_many(limit=limit)
+    runs = await _kyber_playbook_runs.find_many(limit=limit)
+    integrations = await _kyber_integrations.find_many(limit=limit)
+    dispatches = await _kyber_dispatches.find_many(limit=limit)
+    receipts = await _kyber_receipts.find_many(limit=limit)
+    metering = await _kyber_metering.find_many(limit=limit)
+    return KyberStrategicObservability(tenants, recommendations, decisions, actions, outcomes, feedback, playbooks, runs, window, integrations, dispatches, receipts, metering)
+
+
+@router.get("/kyber/strategic-overview")
+async def kyber_strategic_overview(request: Request, window: Window = "30d"):
+    _require_kyber_operator(request)
+    observability = await _kyber_observability(window)
+    return APIResponse(data=observability.response({"overview": observability.strategic_overview().model_dump()})).to_dict()
+
+
+@router.get("/kyber/tenant-value-health")
+async def kyber_tenant_value_health(request: Request, window: Window = "30d"):
+    _require_kyber_operator(request)
+    observability = await _kyber_observability(window)
+    items = [item.model_dump() for item in observability.tenant_health()]
+    return APIResponse(data=observability.response({"items": items, "count": len(items)})).to_dict()
+
+
+@router.get("/kyber/tenant-expansion-opportunities")
+async def kyber_tenant_expansion_opportunities(request: Request, window: Window = "30d"):
+    _require_kyber_operator(request)
+    observability = await _kyber_observability(window)
+    items = [item.model_dump() for item in observability.tenant_health() if item.expansion_score >= 0.5]
+    items.sort(key=lambda item: item["expansion_score"], reverse=True)
+    return APIResponse(data=observability.response({"items": items, "count": len(items)})).to_dict()
+
+
+@router.get("/kyber/tenant-churn-risk")
+async def kyber_tenant_churn_risk(request: Request, window: Window = "30d"):
+    _require_kyber_operator(request)
+    observability = await _kyber_observability(window)
+    items = [item.model_dump() for item in observability.tenant_health() if item.churn_risk_score >= 0.4]
+    items.sort(key=lambda item: item["churn_risk_score"], reverse=True)
+    return APIResponse(data=observability.response({"items": items, "count": len(items)})).to_dict()
+
+
+@router.get("/kyber/recommendation-family-performance")
+async def kyber_recommendation_family_performance(request: Request, window: Window = "30d"):
+    _require_kyber_operator(request)
+    observability = await _kyber_observability(window)
+    items = [item.model_dump() for item in observability.family_performance()]
+    return APIResponse(data=observability.response({"items": items, "count": len(items)})).to_dict()
+
+
+@router.get("/kyber/playbook-performance")
+async def kyber_playbook_performance(request: Request, window: Window = "30d"):
+    _require_kyber_operator(request)
+    observability = await _kyber_observability(window)
+    items = [item.model_dump() for item in observability.playbook_performance()]
+    return APIResponse(data=observability.response({"items": items, "count": len(items)})).to_dict()
+
+
+@router.get("/kyber/outcome-capture-health")
+async def kyber_outcome_capture_health(request: Request, window: Window = "30d"):
+    _require_kyber_operator(request)
+    observability = await _kyber_observability(window)
+    tenants = observability.tenant_health()
+    weak = [item.model_dump() for item in tenants if item.outcome_capture_rate < 0.4 and item.recommendations_generated > 0]
+    summary = {
+        "average_outcome_capture_rate": round(sum(item.outcome_capture_rate for item in tenants) / len(tenants), 4) if tenants else 0.0,
+        "tenants_below_threshold": len(weak),
+        "threshold": 0.4,
+    }
+    return APIResponse(data=observability.response({"summary": summary, "items": weak, "count": len(weak)})).to_dict()
+
+
+@router.get("/kyber/model-confidence-drift")
+async def kyber_model_confidence_drift(request: Request, window: Window = "30d"):
+    _require_kyber_operator(request)
+    observability = await _kyber_observability(window)
+    return APIResponse(data=observability.response({"report": observability.model_confidence_drift().model_dump()})).to_dict()
+
+
+@router.get("/kyber/vertical-solution-signals")
+async def kyber_vertical_solution_signals(request: Request, window: Window = "30d"):
+    _require_kyber_operator(request)
+    observability = await _kyber_observability(window)
+    items = [item.model_dump() for item in observability.vertical_solution_signals()]
+    return APIResponse(data=observability.response({"items": items, "count": len(items)})).to_dict()
+
+
+
+
+@router.get("/kyber/integration-health")
+async def kyber_integration_health(request: Request, window: Window = "30d"):
+    _require_kyber_operator(request)
+    observability = await _kyber_observability(window)
+    items = [item.model_dump() for item in observability.integration_health()]
+    summary = {
+        "dispatch_volume": sum(item["dispatch_volume"] for item in items),
+        "revenue_metering_events": sum(item["revenue_metering_events"] for item in items),
+        "estimated_billable_value": round(sum(item["estimated_billable_value"] for item in items), 2),
+    }
+    return APIResponse(data=observability.response({"summary": summary, "items": items, "count": len(items)})).to_dict()
+
+
+@router.get("/kyber/revenue-opportunities")
+async def kyber_revenue_opportunities(request: Request, window: Window = "30d"):
+    _require_kyber_operator(request)
+    observability = await _kyber_observability(window)
+    items = [item.model_dump() for item in observability.revenue_opportunities()]
+    return APIResponse(data=observability.response({"items": items, "count": len(items)})).to_dict()

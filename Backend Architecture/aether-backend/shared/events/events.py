@@ -271,6 +271,15 @@ class Topic(str, Enum):
     ACTION_EXECUTED = "aether.action.executed"
     OUTCOME_OBSERVED = "aether.outcome.observed"
     RECOMMENDATION_CONFIDENCE_UPDATED = "aether.recommendation.confidence_updated"
+    ACTION_DISPATCH_QUEUED = "aether.action.dispatch_queued"
+    ACTION_DISPATCH_SENT = "aether.action.dispatch_sent"
+    ACTION_DISPATCH_DELIVERED = "aether.action.dispatch_delivered"
+    ACTION_DISPATCH_FAILED = "aether.action.dispatch_failed"
+    ACTION_DISPATCH_RETRIED = "aether.action.dispatch_retried"
+    ACTION_DISPATCH_CANCELLED = "aether.action.dispatch_cancelled"
+    INTEGRATION_CONFIGURED = "aether.integration.configured"
+    INTEGRATION_DISABLED = "aether.integration.disabled"
+    REVENUE_METERING_EVENT_CREATED = "aether.revenue.metering_event_created"
 
     # Dead letter
     DEAD_LETTER = "aether.dlq"

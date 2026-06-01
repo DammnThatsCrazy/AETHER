@@ -97,3 +97,532 @@ async def test_recommend_decide_act_learn_flow_is_tenant_scoped():
         assert after > before
     finally:
         _restore_decision_flags(routes, previous_flags)
+
+class PermissionedTenant(FakeTenant):
+    def __init__(self, tenant_id="tenant-route-1", permissions=None):
+        super().__init__(tenant_id)
+        self.permissions = set(permissions or {"read"})
+
+    def require_permission(self, perm: str) -> None:
+        from shared.common.common import ForbiddenError
+        if perm not in self.permissions and "admin" not in self.permissions:
+            raise ForbiddenError(f"Missing permission: {perm}")
+
+
+class PermissionedRequest(FakeRequest):
+    def __init__(self, tenant_id="tenant-route-1", permissions=None):
+        self.state = MagicMock()
+        self.state.tenant = PermissionedTenant(tenant_id, permissions)
+
+
+class FakeGraph:
+    def __init__(self):
+        self.vertices = []
+        self.edges = []
+
+    async def upsert_vertex(self, vertex):
+        self.vertices.append(vertex)
+
+    async def add_edge(self, edge):
+        self.edges.append(edge)
+
+
+class FakeProducer:
+    def __init__(self):
+        self.events = []
+
+    async def publish(self, event):
+        self.events.append(event)
+
+
+class FakeRegistry:
+    def __init__(self):
+        self.graph = FakeGraph()
+        self.producer = FakeProducer()
+
+
+@pytest.mark.asyncio
+async def test_recommendation_preview_is_read_only_and_non_persistent(monkeypatch):
+    from repositories.repos import reset_in_memory_stores
+    from services.intelligence import routes
+    from shared.common.common import ForbiddenError
+
+    reset_in_memory_stores()
+    registry = FakeRegistry()
+    monkeypatch.setattr(routes, "get_registry", lambda: registry)
+    previous_flags = _set_decision_flags(routes, True)
+    try:
+        request = PermissionedRequest(permissions={"read"})
+        body = routes.GenerateRecommendationRequest(entity_id="entity-preview", signals={"churn_probability": 0.8})
+
+        preview = (await routes.preview_entity_recommendation(body, request))["data"]
+        assert preview["preview"] is True
+        assert preview["tenant_id"] == "tenant-route-1"
+        assert (await routes.list_intelligence_recommendations(request))["data"]["count"] == 0
+        assert registry.graph.vertices == []
+        assert registry.graph.edges == []
+        assert registry.producer.events == []
+
+        with pytest.raises(ForbiddenError):
+            await routes.generate_entity_recommendation(body, request)
+        assert (await routes.list_intelligence_recommendations(request))["data"]["count"] == 0
+        assert registry.graph.edges == []
+        assert registry.producer.events == []
+    finally:
+        _restore_decision_flags(routes, previous_flags)
+
+
+@pytest.mark.asyncio
+async def test_write_user_can_generate_persisted_recommendation(monkeypatch):
+    from repositories.repos import reset_in_memory_stores
+    from services.intelligence import routes
+
+    reset_in_memory_stores()
+    registry = FakeRegistry()
+    monkeypatch.setattr(routes, "get_registry", lambda: registry)
+    previous_flags = _set_decision_flags(routes, True)
+    try:
+        request = PermissionedRequest(permissions={"read", "write"})
+        body = routes.GenerateRecommendationRequest(entity_id="entity-generate", signals={"churn_probability": 0.8})
+
+        rec = (await routes.generate_entity_recommendation(body, request))["data"]
+        assert rec["recommendation_id"]
+        assert (await routes.list_intelligence_recommendations(request))["data"]["count"] == 1
+        assert registry.graph.vertices
+        assert registry.graph.edges
+        assert len(registry.producer.events) == 1
+    finally:
+        _restore_decision_flags(routes, previous_flags)
+
+
+@pytest.mark.asyncio
+async def test_outcome_ledger_endpoints_are_tenant_isolated(monkeypatch):
+    from repositories.repos import reset_in_memory_stores
+    from services.intelligence import routes
+
+    reset_in_memory_stores()
+    monkeypatch.setattr(routes, "get_registry", lambda: FakeRegistry())
+    previous_flags = _set_decision_flags(routes, True)
+    try:
+        request = PermissionedRequest(permissions={"read", "write"})
+        other_request = PermissionedRequest(tenant_id="other-tenant", permissions={"read"})
+        rec = (await routes.generate_entity_recommendation(
+            routes.GenerateRecommendationRequest(entity_id="entity-ledger", signals={"churn_probability": 0.9, "ltv_predicted_usd": 1000}),
+            request,
+        ))["data"]
+        decision = (await routes.record_decision(
+            rec["recommendation_id"],
+            routes.DecisionRequest(actor_id="analyst", selected_action_key=rec["recommended_action"]["action_key"], decision_status="approved"),
+            request,
+        ))["data"]
+        action = (await routes.log_action(
+            routes.ActionLogRequest(decision_id=decision["decision_id"], action_type="manual", status="planned"),
+            request,
+        ))["data"]
+        await routes.observe_outcome(
+            action["action_id"],
+            routes.OutcomeRequest(
+                recommendation_id=rec["recommendation_id"],
+                entity_id="entity-ledger",
+                outcome_type="retention",
+                value=125.0,
+                label="success",
+                observed_window={"start": "2026-05-01T00:00:00Z", "end": "2026-05-31T00:00:00Z"},
+            ),
+            request,
+        )
+
+        summary = (await routes.get_outcome_ledger_summary(request))["data"]
+        assert summary["recommendations_generated"] == 1
+        assert summary["decisions_recorded"] == 1
+        assert summary["actions_logged"] == 1
+        assert summary["outcomes_observed"] == 1
+        assert summary["success_count"] == 1
+        assert summary["observed_value"] == 125.0
+        assert summary["pending_value"] >= 0
+        assert summary["confidence_delta_total"] == 0.05
+
+        by_type = (await routes.get_outcome_ledger_by_recommendation_type(request))["data"]["items"]
+        assert by_type[0]["key"] == "retention"
+        assert by_type[0]["observed_value"] == 125.0
+        by_playbook = (await routes.get_outcome_ledger_by_playbook(request))["data"]["items"]
+        assert by_playbook == []
+        other_summary = (await routes.get_outcome_ledger_summary(other_request))["data"]
+        assert other_summary["recommendations_generated"] == 0
+        assert other_summary["observed_value"] == 0
+    finally:
+        _restore_decision_flags(routes, previous_flags)
+
+
+@pytest.mark.asyncio
+async def test_profile_outcome_ledger_filters_to_entity(monkeypatch):
+    from repositories.repos import reset_in_memory_stores
+    from services.intelligence import routes
+    from services.profile import routes as profile_routes
+
+    reset_in_memory_stores()
+    monkeypatch.setattr(routes, "get_registry", lambda: FakeRegistry())
+    previous_flags = _set_decision_flags(routes, True)
+    try:
+        request = PermissionedRequest(permissions={"read", "write"})
+        rec = (await routes.generate_entity_recommendation(
+            routes.GenerateRecommendationRequest(entity_id="entity-profile", signals={"churn_probability": 0.9, "ltv_predicted_usd": 500}),
+            request,
+        ))["data"]
+        decision = (await routes.record_decision(
+            rec["recommendation_id"],
+            routes.DecisionRequest(actor_id="analyst", selected_action_key=rec["recommended_action"]["action_key"], decision_status="approved"),
+            request,
+        ))["data"]
+        action = (await routes.log_action(routes.ActionLogRequest(decision_id=decision["decision_id"], action_type="manual"), request))["data"]
+        await routes.observe_outcome(
+            action["action_id"],
+            routes.OutcomeRequest(
+                recommendation_id=rec["recommendation_id"],
+                entity_id="entity-profile",
+                outcome_type="retention",
+                value=50.0,
+                label="neutral",
+                observed_window={"start": "2026-05-01T00:00:00Z", "end": "2026-05-31T00:00:00Z"},
+            ),
+            request,
+        )
+
+        ledger = (await profile_routes.get_profile_outcome_ledger("entity-profile", request))["data"]
+        assert ledger["entity_id"] == "entity-profile"
+        assert ledger["summary"]["recommendations_generated"] == 1
+        assert ledger["summary"]["actions_logged"] == 1
+        assert ledger["summary"]["neutral_count"] == 1
+        assert ledger["summary"]["observed_value"] == 50.0
+        empty = (await profile_routes.get_profile_outcome_ledger("other-entity", request))["data"]
+        assert empty["summary"]["recommendations_generated"] == 0
+    finally:
+        _restore_decision_flags(routes, previous_flags)
+
+
+@pytest.mark.asyncio
+async def test_generate_persists_multiple_matching_recommendation_families(monkeypatch):
+    from repositories.repos import reset_in_memory_stores
+    from services.intelligence import routes
+
+    reset_in_memory_stores()
+    monkeypatch.setattr(routes, "get_registry", lambda: FakeRegistry())
+    previous_flags = _set_decision_flags(routes, True)
+    try:
+        request = PermissionedRequest(permissions={"read", "write"})
+        response = await routes.generate_entity_recommendation(
+            routes.GenerateRecommendationRequest(
+                entity_id="entity-multi",
+                signals={"churn_probability": 0.8, "usage_growth": 0.9, "ltv_predicted_usd": 1000},
+            ),
+            request,
+        )
+        data = response["data"]
+        assert data["count"] >= 2
+        families = {item["recommendation_type"] for item in data["items"]}
+        assert {"retention", "expansion"}.issubset(families)
+        listed = (await routes.list_intelligence_recommendations(request))["data"]
+        assert listed["count"] >= 2
+        filtered = (await routes.list_intelligence_recommendations(request, recommendation_type="expansion"))["data"]
+        assert filtered["count"] == 1
+        assert filtered["items"][0]["recommendation_type"] == "expansion"
+    finally:
+        _restore_decision_flags(routes, previous_flags)
+
+
+@pytest.mark.asyncio
+async def test_recommendation_investigation_is_tenant_isolated_and_graceful(monkeypatch):
+    from repositories.repos import reset_in_memory_stores
+    from services.intelligence import routes
+    from shared.common.common import NotFoundError
+
+    reset_in_memory_stores()
+    monkeypatch.setattr(routes, "get_registry", lambda: FakeRegistry())
+    previous_flags = _set_decision_flags(routes, True)
+    try:
+        request = PermissionedRequest(permissions={"read", "write"})
+        rec = (await routes.generate_entity_recommendation(
+            routes.GenerateRecommendationRequest(entity_id="entity-investigate", signals={"churn_probability": 0.8, "ltv_predicted_usd": 1000}),
+            request,
+        ))["data"]
+        decision = (await routes.record_decision(
+            rec["recommendation_id"],
+            routes.DecisionRequest(actor_id="analyst", selected_action_key=rec["recommended_action"]["action_key"], decision_status="approved"),
+            request,
+        ))["data"]
+        action = (await routes.log_action(routes.ActionLogRequest(decision_id=decision["decision_id"], action_type="manual"), request))["data"]
+        await routes.observe_outcome(
+            action["action_id"],
+            routes.OutcomeRequest(
+                recommendation_id=rec["recommendation_id"],
+                entity_id="entity-investigate",
+                outcome_type="retention",
+                value=25.0,
+                label="success",
+                observed_window={"start": "2026-05-01T00:00:00Z", "end": "2026-05-31T00:00:00Z"},
+            ),
+            request,
+        )
+
+        investigation = (await routes.get_recommendation_investigation(rec["recommendation_id"], request))["data"]
+        assert investigation["recommendation"]["recommendation_id"] == rec["recommendation_id"]
+        assert investigation["confidence_breakdown"]
+        assert investigation["evidence"]
+        assert investigation["candidate_actions"]
+        assert investigation["decision_history"]
+        assert investigation["action_history"]
+        assert investigation["outcome_history"]
+        assert investigation["governance_flags"]
+        assert "data_freshness" in investigation
+        assert investigation["related_graph_edges"] == []
+
+        with pytest.raises(NotFoundError):
+            await routes.get_recommendation_investigation(rec["recommendation_id"], PermissionedRequest(tenant_id="other-tenant", permissions={"read"}))
+    finally:
+        _restore_decision_flags(routes, previous_flags)
+
+
+@pytest.mark.asyncio
+async def test_playbook_template_create_evaluate_runs_and_performance(monkeypatch):
+    from repositories.repos import reset_in_memory_stores
+    from services.intelligence import routes
+
+    reset_in_memory_stores()
+    registry = FakeRegistry()
+    monkeypatch.setattr(routes, "get_registry", lambda: registry)
+    previous_flags = _set_decision_flags(routes, True)
+    try:
+        request = PermissionedRequest(permissions={"read", "write"})
+        templates = (await routes.list_playbook_templates(request))["data"]["items"]
+        assert len(templates) == 8
+
+        playbook = (await routes.create_playbook_from_template(
+            routes.CreatePlaybookFromTemplateRequest(template_id="high_ltv_churn_save"),
+            request,
+        ))["data"]
+        assert playbook["tenant_id"] == "tenant-route-1"
+        assert playbook["category"] == "retention"
+
+        no_match = (await routes.evaluate_playbook(
+            playbook["playbook_id"],
+            routes.PlaybookEvaluationRequest(entity_id="entity-pb", signals={"churn_probability": 0.1}),
+            request,
+        ))["data"]
+        assert no_match["matched"] is False
+        assert no_match["skipped_reason"] == "trigger_conditions_not_met"
+
+        matched = (await routes.evaluate_playbook(
+            playbook["playbook_id"],
+            routes.PlaybookEvaluationRequest(
+                entity_id="entity-pb",
+                signals={"churn_probability": 0.82, "ltv_predicted_usd": 1000, "trust_score": 0.9, "engagement_decline": 0.4},
+            ),
+            request,
+        ))["data"]
+        assert matched["matched"] is True
+        assert matched["generated_recommendation_ids"]
+        rec_id = matched["generated_recommendation_ids"][0]
+        rec = (await routes.get_intelligence_recommendation(rec_id, request))["data"]
+        assert rec["playbook_id"] == playbook["playbook_id"]
+
+        runs = (await routes.list_playbook_runs(playbook["playbook_id"], request))["data"]["items"]
+        assert len(runs) == 1
+        assert runs[0]["generated_recommendation_ids"] == matched["generated_recommendation_ids"]
+
+        decision = (await routes.record_decision(
+            rec_id,
+            routes.DecisionRequest(actor_id="analyst", selected_action_key=rec["recommended_action"]["action_key"], decision_status="approved"),
+            request,
+        ))["data"]
+        action = (await routes.log_action(routes.ActionLogRequest(decision_id=decision["decision_id"], action_type="manual", status="executed"), request))["data"]
+        await routes.observe_outcome(
+            action["action_id"],
+            routes.OutcomeRequest(
+                recommendation_id=rec_id,
+                entity_id="entity-pb",
+                outcome_type="retention_saved",
+                value=150,
+                label="success",
+                observed_window={"start": "2026-05-01T00:00:00Z", "end": "2026-05-31T00:00:00Z"},
+            ),
+            request,
+        )
+
+        performance = (await routes.get_playbook_performance(playbook["playbook_id"], request))["data"]
+        assert performance["runs_total"] == 1
+        assert performance["recommendations_generated"] >= 1
+        assert performance["decisions_recorded"] == 1
+        assert performance["actions_logged"] == 1
+        assert performance["outcomes_observed"] == 1
+        assert performance["observed_value_total"] == 150
+        assert performance["success_count"] == 1
+
+        summary = (await routes.get_playbook_performance_summary(request))["data"]
+        assert summary["summary"]["playbooks_total"] == 1
+        assert summary["summary"]["observed_value_total"] == 150
+    finally:
+        _restore_decision_flags(routes, previous_flags)
+
+
+@pytest.mark.asyncio
+async def test_playbook_cross_tenant_access_denied(monkeypatch):
+    from repositories.repos import reset_in_memory_stores
+    from services.intelligence import routes
+    from shared.common.common import NotFoundError
+
+    reset_in_memory_stores()
+    monkeypatch.setattr(routes, "get_registry", lambda: FakeRegistry())
+    previous_flags = _set_decision_flags(routes, True)
+    try:
+        request = PermissionedRequest(permissions={"read", "write"})
+        other = PermissionedRequest(tenant_id="other-tenant", permissions={"read", "write"})
+        playbook = (await routes.create_playbook_from_template(
+            routes.CreatePlaybookFromTemplateRequest(template_id="operational_loop_repair"),
+            request,
+        ))["data"]
+
+        with pytest.raises(NotFoundError):
+            await routes.get_playbook(playbook["playbook_id"], other)
+        with pytest.raises(NotFoundError):
+            await routes.evaluate_playbook(
+                playbook["playbook_id"],
+                routes.PlaybookEvaluationRequest(entity_id="entity-x", signals={"stale_loop_count": 2}),
+                other,
+            )
+        with pytest.raises(NotFoundError):
+            await routes.get_playbook_performance(playbook["playbook_id"], other)
+    finally:
+        _restore_decision_flags(routes, previous_flags)
+
+
+@pytest.mark.asyncio
+async def test_kyber_admin_endpoints_require_admin_and_return_aggregate_health(monkeypatch):
+    from repositories.repos import reset_in_memory_stores
+    from services.admin import routes as admin_routes
+    from services.intelligence import routes
+    from shared.common.common import ForbiddenError
+
+    reset_in_memory_stores()
+    monkeypatch.setattr(routes, "get_registry", lambda: FakeRegistry())
+    previous_flags = _set_decision_flags(routes, True)
+    try:
+        tenant_request = PermissionedRequest(tenant_id="tenant-kyber-a", permissions={"read", "write"})
+        admin_request = PermissionedRequest(tenant_id="olympus", permissions={"admin", "read", "write"})
+        await admin_routes._repo.insert("tenant-kyber-a", {"id": "tenant-kyber-a", "name": "Tenant Kyber A", "plan": "enterprise"})
+
+        rec = (await routes.generate_entity_recommendation(
+            routes.GenerateRecommendationRequest(entity_id="entity-kyber", signals={"recommendation_family": "fraud_review", "anomaly_score": 0.9, "suspicious_cluster_score": 0.9, "economic_expected_value": 2000}),
+            tenant_request,
+        ))["data"]
+        decision = (await routes.record_decision(
+            rec["recommendation_id"],
+            routes.DecisionRequest(actor_id="analyst", selected_action_key=rec["recommended_action"]["action_key"], decision_status="approved"),
+            tenant_request,
+        ))["data"]
+        action = (await routes.log_action(routes.ActionLogRequest(decision_id=decision["decision_id"], action_type="manual", status="executed", authorization_metadata={"approval_id": "appr-kyber"}), tenant_request))["data"]
+        await routes.observe_outcome(
+            action["action_id"],
+            routes.OutcomeRequest(
+                recommendation_id=rec["recommendation_id"],
+                entity_id="entity-kyber",
+                outcome_type="fraud_prevented",
+                value=600,
+                label="success",
+                observed_window={"start": "2026-05-01T00:00:00Z", "end": "2026-05-31T00:00:00Z"},
+            ),
+            tenant_request,
+        )
+
+        with pytest.raises(ForbiddenError):
+            await admin_routes.kyber_strategic_overview(PermissionedRequest(permissions={"read"}))
+
+        overview = (await admin_routes.kyber_strategic_overview(admin_request, window="lifetime"))["data"]
+        assert overview["overview"]["total_tenants"] >= 1
+        assert overview["overview"]["recommendations_generated"] >= 1
+        assert overview["overview"]["observed_value_total"] >= 600
+        assert "data_freshness" in overview
+
+        families = (await admin_routes.kyber_recommendation_family_performance(admin_request, window="lifetime"))["data"]["items"]
+        assert any(item["recommendation_family"] == "fraud_review" for item in families)
+        health = (await admin_routes.kyber_tenant_value_health(admin_request, window="lifetime"))["data"]["items"]
+        assert any(item["tenant_id"] == "tenant-kyber-a" for item in health)
+        opportunities = (await admin_routes.kyber_revenue_opportunities(admin_request, window="lifetime"))["data"]["items"]
+        assert isinstance(opportunities, list)
+    finally:
+        _restore_decision_flags(routes, previous_flags)
+
+
+@pytest.mark.asyncio
+async def test_action_dispatch_lifecycle_is_governed_and_tenant_scoped(monkeypatch):
+    from repositories.repos import reset_in_memory_stores
+    from services.intelligence import routes
+    from shared.common.common import BadRequestError, NotFoundError
+
+    reset_in_memory_stores()
+    monkeypatch.setattr(routes, "get_registry", lambda: FakeRegistry())
+    previous_flags = _set_decision_flags(routes, True)
+    try:
+        request = PermissionedRequest(tenant_id="tenant-dispatch", permissions={"read", "write"})
+        other = PermissionedRequest(tenant_id="other-tenant", permissions={"read", "write"})
+        targets = (await routes.list_action_targets(request))["data"]["items"]
+        assert {item["target_type"] for item in targets} >= {"slack", "webhook", "crm_task"}
+
+        config = (await routes.create_action_integration(
+            routes.ActionIntegrationConfigRequest(
+                target_type="webhook",
+                display_name="Tenant webhook",
+                auth_type="webhook_secret",
+                default_destination="https://example.test/aether",
+                auth_secret="super-secret",
+            ),
+            request,
+        ))["data"]
+        assert "auth_secret" not in config
+        assert "secret" not in config
+        assert config["has_secret"] is True
+
+        rec = (await routes.generate_entity_recommendation(
+            routes.GenerateRecommendationRequest(entity_id="entity-dispatch", signals={"recommendation_family": "retention", "churn_probability": 0.8, "ltv_predicted_usd": 1000}),
+            request,
+        ))["data"]
+        deferred = (await routes.record_decision(
+            rec["recommendation_id"],
+            routes.DecisionRequest(actor_id="analyst", selected_action_key=rec["recommended_action"]["action_key"], decision_status="deferred"),
+            request,
+        ))["data"]
+        planned = (await routes.log_action(routes.ActionLogRequest(decision_id=deferred["decision_id"], action_type="manual", status="planned"), request))["data"]
+        with pytest.raises(BadRequestError):
+            await routes.dispatch_action(planned["action_id"], routes.ActionDispatchRequest(target_type="webhook", integration_config_id=config["integration_config_id"]), request)
+
+        approved_rec = (await routes.generate_entity_recommendation(
+            routes.GenerateRecommendationRequest(entity_id="entity-dispatch-2", signals={"recommendation_family": "retention", "churn_probability": 0.9, "ltv_predicted_usd": 1500}),
+            request,
+        ))["data"]
+        decision = (await routes.record_decision(
+            approved_rec["recommendation_id"],
+            routes.DecisionRequest(actor_id="analyst", selected_action_key=approved_rec["recommended_action"]["action_key"], decision_status="approved"),
+            request,
+        ))["data"]
+        action = (await routes.log_action(routes.ActionLogRequest(decision_id=decision["decision_id"], action_type="manual", status="planned"), request))["data"]
+        dispatched = (await routes.dispatch_action(
+            action["action_id"],
+            routes.ActionDispatchRequest(target_type="webhook", integration_config_id=config["integration_config_id"]),
+            request,
+        ))["data"]
+        assert dispatched["dispatch"]["status"] == "delivered"
+        assert dispatched["receipt"]["delivered_at"]
+        repeated = (await routes.dispatch_action(
+            action["action_id"],
+            routes.ActionDispatchRequest(target_type="webhook", integration_config_id=config["integration_config_id"]),
+            request,
+        ))["data"]
+        assert repeated["dispatch"]["dispatch_id"] == dispatched["dispatch"]["dispatch_id"]
+
+        retry = (await routes.retry_action_dispatch(dispatched["dispatch"]["dispatch_id"], request))["data"]
+        assert retry["receipt"]["retry_count"] >= 1
+        metering = await routes._revenue_metering.find_many({"tenant_id": "tenant-dispatch"}, limit=20)
+        assert {item["event_type"] for item in metering} >= {"action_dispatched", "integration_delivery", "integration_retry"}
+        with pytest.raises(NotFoundError):
+            await routes.get_action_dispatch(dispatched["dispatch"]["dispatch_id"], other)
+    finally:
+        _restore_decision_flags(routes, previous_flags)

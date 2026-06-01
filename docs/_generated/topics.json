@@ -740,6 +740,42 @@
         {
           "member": "RECOMMENDATION_CONFIDENCE_UPDATED",
           "value": "aether.recommendation.confidence_updated"
+        },
+        {
+          "member": "ACTION_DISPATCH_QUEUED",
+          "value": "aether.action.dispatch_queued"
+        },
+        {
+          "member": "ACTION_DISPATCH_SENT",
+          "value": "aether.action.dispatch_sent"
+        },
+        {
+          "member": "ACTION_DISPATCH_DELIVERED",
+          "value": "aether.action.dispatch_delivered"
+        },
+        {
+          "member": "ACTION_DISPATCH_FAILED",
+          "value": "aether.action.dispatch_failed"
+        },
+        {
+          "member": "ACTION_DISPATCH_RETRIED",
+          "value": "aether.action.dispatch_retried"
+        },
+        {
+          "member": "ACTION_DISPATCH_CANCELLED",
+          "value": "aether.action.dispatch_cancelled"
+        },
+        {
+          "member": "INTEGRATION_CONFIGURED",
+          "value": "aether.integration.configured"
+        },
+        {
+          "member": "INTEGRATION_DISABLED",
+          "value": "aether.integration.disabled"
+        },
+        {
+          "member": "REVENUE_METERING_EVENT_CREATED",
+          "value": "aether.revenue.metering_event_created"
         }
       ]
     },
@@ -1369,6 +1405,42 @@
     {
       "member": "RECOMMENDATION_CONFIDENCE_UPDATED",
       "value": "aether.recommendation.confidence_updated"
+    },
+    {
+      "member": "ACTION_DISPATCH_QUEUED",
+      "value": "aether.action.dispatch_queued"
+    },
+    {
+      "member": "ACTION_DISPATCH_SENT",
+      "value": "aether.action.dispatch_sent"
+    },
+    {
+      "member": "ACTION_DISPATCH_DELIVERED",
+      "value": "aether.action.dispatch_delivered"
+    },
+    {
+      "member": "ACTION_DISPATCH_FAILED",
+      "value": "aether.action.dispatch_failed"
+    },
+    {
+      "member": "ACTION_DISPATCH_RETRIED",
+      "value": "aether.action.dispatch_retried"
+    },
+    {
+      "member": "ACTION_DISPATCH_CANCELLED",
+      "value": "aether.action.dispatch_cancelled"
+    },
+    {
+      "member": "INTEGRATION_CONFIGURED",
+      "value": "aether.integration.configured"
+    },
+    {
+      "member": "INTEGRATION_DISABLED",
+      "value": "aether.integration.disabled"
+    },
+    {
+      "member": "REVENUE_METERING_EVENT_CREATED",
+      "value": "aether.revenue.metering_event_created"
     },
     {
       "member": "DEAD_LETTER",

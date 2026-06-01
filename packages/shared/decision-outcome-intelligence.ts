@@ -5,7 +5,12 @@
 export type RecommendationType =
   | 'retention'
   | 'growth'
+  | 'expansion'
   | 'risk_mitigation'
+  | 'attribution_optimization'
+  | 'agent_governance'
+  | 'rewards_optimization'
+  | 'operational_failure'
   | 'journey_optimization'
   | 'fraud_review'
   | 'commerce'
@@ -140,7 +145,125 @@ export interface PlaybookRun {
   readonly tenant_id: string;
   readonly status: 'queued' | 'running' | 'completed' | 'failed' | 'cancelled';
   readonly recommendation_ids: string[];
+  readonly trigger_snapshot?: Record<string, unknown>;
+  readonly generated_recommendation_ids: string[];
+  readonly decision_ids: string[];
+  readonly action_ids: string[];
+  readonly outcome_ids: string[];
   readonly started_at: string;
   readonly completed_at?: string;
   readonly summary?: Record<string, unknown>;
 }
+
+export interface PlaybookTemplate {
+  readonly template_id: string;
+  readonly name: string;
+  readonly description: string;
+  readonly category: RecommendationType | string;
+  readonly trigger_schema: Record<string, unknown>;
+  readonly default_candidate_actions: CandidateAction[];
+  readonly default_approval_level: ApprovalLevel;
+  readonly expected_outcome_types: string[];
+  readonly recommended_integrations: string[];
+  readonly created_at: string;
+}
+
+export interface PlaybookPerformance {
+  readonly playbook_id: string;
+  readonly tenant_id: string;
+  readonly runs_total: number;
+  readonly runs_completed: number;
+  readonly recommendations_generated: number;
+  readonly decisions_recorded: number;
+  readonly actions_logged: number;
+  readonly outcomes_observed: number;
+  readonly success_count: number;
+  readonly failure_count: number;
+  readonly neutral_count: number;
+  readonly expected_value_total: number;
+  readonly observed_value_total: number;
+  readonly pending_value_total: number;
+  readonly outcome_capture_rate: number;
+  readonly success_rate: number;
+  readonly average_confidence_delta: number;
+  readonly stale_run_count: number;
+  readonly incomplete_run_count: number;
+}
+
+export interface PlaybookEvaluationResult {
+  readonly playbook_id: string;
+  readonly tenant_id: string;
+  readonly matched: boolean;
+  readonly trigger_matches: Record<string, boolean>;
+  readonly generated_recommendation_ids: string[];
+  readonly skipped_reason?: string;
+  readonly evaluated_at: string;
+}
+
+export interface ActionTarget {
+  readonly target_type: string;
+  readonly label: string;
+  readonly description?: string;
+  readonly supported_action_types: string[];
+  readonly requires_configuration: boolean;
+  readonly supports_delivery_receipts: boolean;
+  readonly supports_retries: boolean;
+  readonly supports_cancellation: boolean;
+  readonly approval_policy_notes?: string;
+}
+
+export interface ActionIntegrationConfig {
+  readonly integration_config_id: string;
+  readonly tenant_id: string;
+  readonly target_type: string;
+  readonly display_name: string;
+  readonly enabled: boolean;
+  readonly auth_type: 'oauth' | 'api_key' | 'webhook_secret' | 'none';
+  readonly scopes: string[];
+  readonly default_destination?: string;
+  readonly policy_flags: string[];
+  readonly created_at: string;
+  readonly updated_at?: string;
+}
+
+export interface ActionDispatch {
+  readonly dispatch_id: string;
+  readonly tenant_id: string;
+  readonly action_id: string;
+  readonly decision_id: string;
+  readonly recommendation_id: string;
+  readonly target_type: string;
+  readonly integration_config_id?: string;
+  readonly status: 'queued' | 'sent' | 'delivered' | 'failed' | 'cancelled';
+  readonly payload: Record<string, unknown>;
+  readonly idempotency_key: string;
+  readonly created_at: string;
+  readonly updated_at?: string;
+}
+
+export interface ActionDeliveryReceipt {
+  readonly receipt_id: string;
+  readonly dispatch_id: string;
+  readonly target_type: string;
+  readonly external_id?: string;
+  readonly external_url?: string;
+  readonly delivered_at?: string;
+  readonly failed_at?: string;
+  readonly error_code?: string;
+  readonly error_message?: string;
+  readonly retry_count: number;
+}
+
+export interface RevenueMeteringEvent {
+  readonly metering_event_id: string;
+  readonly tenant_id: string;
+  readonly event_type: 'action_dispatched' | 'integration_delivery' | 'integration_retry' | 'premium_connector_used' | 'managed_workflow_triggered';
+  readonly action_id?: string;
+  readonly dispatch_id?: string;
+  readonly playbook_id?: string;
+  readonly recommendation_id?: string;
+  readonly quantity: number;
+  readonly estimated_billable_value?: number;
+  readonly created_at: string;
+}
+

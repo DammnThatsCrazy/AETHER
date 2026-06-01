@@ -113,6 +113,81 @@ class ActionFeedback(BaseModel):
     tenant_id: str
 
 
+
+
+class ActionTarget(BaseModel):
+    target_type: str
+    label: str
+    description: str | None = None
+    supported_action_types: list[str] = Field(default_factory=list)
+    requires_configuration: bool = True
+    supports_delivery_receipts: bool = True
+    supports_retries: bool = True
+    supports_cancellation: bool = False
+    approval_policy_notes: str | None = None
+
+
+class ActionIntegrationConfig(BaseModel):
+    integration_config_id: str
+    tenant_id: str
+    target_type: str
+    display_name: str
+    enabled: bool = True
+    auth_type: Literal["oauth", "api_key", "webhook_secret", "none"] = "none"
+    scopes: list[str] = Field(default_factory=list)
+    default_destination: str | None = None
+    policy_flags: list[str] = Field(default_factory=list)
+    created_at: str
+    updated_at: str | None = None
+
+
+class ActionDispatch(BaseModel):
+    dispatch_id: str
+    tenant_id: str
+    action_id: str
+    decision_id: str
+    recommendation_id: str
+    target_type: str
+    integration_config_id: str | None = None
+    status: Literal["queued", "sent", "delivered", "failed", "cancelled"] = "queued"
+    payload: dict[str, Any] = Field(default_factory=dict)
+    idempotency_key: str
+    created_at: str
+    updated_at: str | None = None
+
+
+class ActionDeliveryReceipt(BaseModel):
+    receipt_id: str
+    dispatch_id: str
+    target_type: str
+    external_id: str | None = None
+    external_url: str | None = None
+    delivered_at: str | None = None
+    failed_at: str | None = None
+    error_code: str | None = None
+    error_message: str | None = None
+    retry_count: int = 0
+
+
+class RevenueMeteringEvent(BaseModel):
+    metering_event_id: str
+    tenant_id: str
+    event_type: Literal[
+        "action_dispatched",
+        "integration_delivery",
+        "integration_retry",
+        "premium_connector_used",
+        "managed_workflow_triggered",
+    ]
+    action_id: str | None = None
+    dispatch_id: str | None = None
+    playbook_id: str | None = None
+    recommendation_id: str | None = None
+    quantity: int = 1
+    estimated_billable_value: float | None = None
+    created_at: str
+
+
 class ObservedWindow(BaseModel):
     start: str
     end: str
@@ -154,6 +229,11 @@ class PlaybookRun(BaseModel):
     tenant_id: str
     status: Literal["queued", "running", "completed", "failed", "cancelled"] = "queued"
     recommendation_ids: list[str] = Field(default_factory=list)
+    trigger_snapshot: dict[str, Any] | None = None
+    generated_recommendation_ids: list[str] = Field(default_factory=list)
+    decision_ids: list[str] = Field(default_factory=list)
+    action_ids: list[str] = Field(default_factory=list)
+    outcome_ids: list[str] = Field(default_factory=list)
     started_at: str
     completed_at: str | None = None
     summary: dict[str, Any] | None = None
