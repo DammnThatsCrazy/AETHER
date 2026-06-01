@@ -217,7 +217,10 @@ def evaluate_trigger(playbook: dict[str, Any], signals: dict[str, Any]) -> tuple
         return True, {}, None
     matches: dict[str, bool] = {}
     for key, rule in rules.items():
-        value = _num(signals.get(key))
+        if key not in signals and "default" not in rule:
+            matches[key] = False
+            continue
+        value = _num(signals.get(key, rule.get("default")))
         ok = True
         if "gte" in rule:
             ok = ok and value >= _num(rule.get("gte"))

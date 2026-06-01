@@ -49,3 +49,23 @@ class PlaybookRunRepository(BaseRepository):
 class RecommendationFeedbackRepository(BaseRepository):
     def __init__(self) -> None:
         super().__init__("recommendation_feedback")
+
+
+class ActionIntegrationConfigRepository(BaseRepository):
+    def __init__(self) -> None:
+        super().__init__("action_integration_configs")
+
+
+class ActionDispatchRepository(BaseRepository):
+    def __init__(self) -> None:
+        super().__init__("action_dispatches")
+
+
+class ActionDeliveryReceiptRepository(BaseRepository):
+    def __init__(self) -> None:
+        super().__init__("action_delivery_receipts")
+
+
+class RevenueMeteringEventRepository(BaseRepository):
+    def __init__(self) -> None:
+        super().__init__("revenue_metering_events")

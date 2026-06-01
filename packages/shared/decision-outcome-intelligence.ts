@@ -109,6 +109,77 @@ export interface ActionFeedback {
   readonly tenant_id: string;
 }
 
+
+export interface ActionTarget {
+  readonly target_type: string;
+  readonly label: string;
+  readonly description: string;
+  readonly supported_action_types: string[];
+  readonly requires_configuration: boolean;
+  readonly supports_delivery_receipts: boolean;
+  readonly supports_retries: boolean;
+  readonly supports_cancellation: boolean;
+  readonly approval_policy_notes?: string;
+  readonly premium_connector?: boolean;
+}
+
+export interface ActionIntegrationConfig {
+  readonly config_id: string;
+  readonly tenant_id: string;
+  readonly target_type: string;
+  readonly name: string;
+  readonly default_destination?: string;
+  readonly config: Record<string, unknown>;
+  readonly enabled: boolean;
+  readonly has_secret?: boolean;
+  readonly created_at: string;
+  readonly updated_at?: string;
+}
+
+export interface ActionDispatch {
+  readonly dispatch_id: string;
+  readonly tenant_id: string;
+  readonly action_id: string;
+  readonly decision_id: string;
+  readonly recommendation_id: string;
+  readonly target_type: string;
+  readonly config_id?: string;
+  readonly status: 'queued' | 'dispatched' | 'delivered' | 'failed' | 'cancelled';
+  readonly payload: Record<string, unknown>;
+  readonly approval_metadata: Record<string, unknown>;
+  readonly idempotency_key?: string;
+  readonly created_at: string;
+  readonly dispatched_at?: string;
+  readonly updated_at?: string;
+  readonly error?: string;
+  readonly retry_count: number;
+}
+
+export interface ActionDeliveryReceipt {
+  readonly receipt_id: string;
+  readonly dispatch_id: string;
+  readonly target_type: string;
+  readonly external_id?: string;
+  readonly external_url?: string;
+  readonly delivered_at: string;
+  readonly status: 'delivered' | 'failed' | 'cancelled';
+  readonly retry_count: number;
+  readonly raw: Record<string, unknown>;
+}
+
+export interface RevenueMeteringEvent {
+  readonly event_id: string;
+  readonly tenant_id: string;
+  readonly dispatch_id?: string;
+  readonly recommendation_id?: string;
+  readonly event_type: string;
+  readonly units: number;
+  readonly amount?: number;
+  readonly currency: string;
+  readonly created_at: string;
+  readonly metadata: Record<string, unknown>;
+}
+
 export interface OutcomeObservation {
   readonly outcome_id: string;
   readonly action_id: string;
