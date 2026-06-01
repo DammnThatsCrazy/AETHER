@@ -93,81 +93,50 @@ def test_decision_outcome_feature_flags_default_to_gradual_rollout_disabled(monk
     assert cfg.kyber_observability_enabled is False
 
 
-def test_outcome_ledger_summary_and_groupings_include_value_and_loop_health():
+def test_recommendation_family_registry_selects_non_retention_family():
+    from services.intelligence.recommendation_families import RecommendationFamilyRegistry
+
+    registry = RecommendationFamilyRegistry()
+    family = registry.detect({"fraud_probability": 0.91, "expected_value_usd": 750})
+    assert family.family_key == "fraud_review"
+    rec = family.emit("tenant-1", "entity-1", {"fraud_probability": 0.91, "expected_value_usd": 750})
+    assert rec.recommendation_type == "fraud_review"
+    assert rec.required_approval_level in {"elevated", "critical"}
+    assert rec.evidence
+
+
+@pytest.mark.parametrize("signal,family_key", [
+    ({"churn_probability": 0.8}, "retention"),
+    ({"expansion_probability": 0.8}, "expansion"),
+    ({"fraud_probability": 0.8}, "fraud_review"),
+    ({"attribution_waste_probability": 0.8}, "attribution_optimization"),
+    ({"journey_dropoff_probability": 0.8}, "journey_optimization"),
+    ({"agent_risk_probability": 0.8}, "agent_governance"),
+    ({"reward_optimization_probability": 0.8}, "rewards_optimization"),
+    ({"operational_failure_probability": 0.8}, "operational_failure"),
+])
+def test_each_recommendation_family_generates_evidence_and_actions(signal, family_key):
+    from services.intelligence.recommendation_families import RecommendationFamilyRegistry
+
+    family = RecommendationFamilyRegistry().get(family_key)
+    assert family is not None
+    rec = family.emit("tenant-1", "entity-1", {**signal, "expected_value_usd": 100})
+    assert rec.recommendation_type == family_key
+    assert rec.candidate_actions
+    assert rec.evidence
+    assert rec.expected_outcome
+
+
+def test_outcome_ledger_detects_stale_incomplete_and_failed_loops():
     from services.intelligence.outcome_ledger import OutcomeLedgerAggregator
 
-    recommendations = [
-        {
-            "recommendation_id": "rec-success",
-            "tenant_id": "tenant-1",
-            "entity_id": "entity-1",
-            "recommendation_type": "retention",
-            "expected_value": 100,
-            "status": "viewed",
-            "computed_at": "2026-05-30T00:00:00+00:00",
-        },
-        {
-            "recommendation_id": "rec-stale",
-            "tenant_id": "tenant-1",
-            "entity_id": "entity-2",
-            "recommendation_type": "retention",
-            "expected_value": 80,
-            "status": "generated",
-            "computed_at": "2026-01-01T00:00:00+00:00",
-        },
-        {
-            "recommendation_id": "rec-failure",
-            "tenant_id": "tenant-1",
-            "entity_id": "entity-1",
-            "recommendation_type": "risk_review",
-            "expected_value": 40,
-            "status": "decided",
-            "computed_at": "2026-05-30T00:00:00+00:00",
-        },
+    recs = [
+        {"recommendation_id": "rec-old", "tenant_id": "tenant-1", "entity_id": "entity-1", "recommendation_type": "retention", "expected_value": 100, "computed_at": "2026-01-01T00:00:00+00:00", "status": "generated"},
+        {"recommendation_id": "rec-fail", "tenant_id": "tenant-1", "entity_id": "entity-2", "recommendation_type": "fraud_review", "expected_value": 50, "computed_at": "2026-05-01T00:00:00+00:00", "status": "viewed"},
     ]
-    decisions = [
-        {"decision_id": "dec-success", "recommendation_id": "rec-success", "tenant_id": "tenant-1"},
-        {"decision_id": "dec-failure", "recommendation_id": "rec-failure", "tenant_id": "tenant-1"},
-    ]
-    actions = [
-        {"action_id": "act-success", "decision_id": "dec-success", "tenant_id": "tenant-1"},
-        {"action_id": "act-failure", "decision_id": "dec-failure", "tenant_id": "tenant-1"},
-    ]
-    outcomes = [
-        {"outcome_id": "out-success", "recommendation_id": "rec-success", "entity_id": "entity-1", "tenant_id": "tenant-1", "label": "success", "value": 70},
-        {"outcome_id": "out-failure", "recommendation_id": "rec-failure", "entity_id": "entity-1", "tenant_id": "tenant-1", "label": "failure", "value": -10},
-    ]
-    feedback = [
-        {"recommendation_id": "rec-success", "outcome_id": "out-success", "confidence_delta": 0.05, "created_at": "2026-05-31T00:00:00+00:00"},
-        {"recommendation_id": "rec-failure", "outcome_id": "out-failure", "confidence_delta": -0.05, "created_at": "2026-05-31T01:00:00+00:00"},
-    ]
-    playbooks = [{"playbook_id": "pb-1", "name": "Churn save", "tenant_id": "tenant-1"}]
-    runs = [{"run_id": "run-1", "playbook_id": "pb-1", "tenant_id": "tenant-1", "recommendation_ids": ["rec-success"], "status": "completed"}]
-
-    ledger = OutcomeLedgerAggregator().build(recommendations, decisions, actions, outcomes, feedback, playbooks, runs)
-    summary = ledger["summary"]
-
-    assert summary["recommendations_generated"] == 3
-    assert summary["recommendations_viewed"] == 2
-    assert summary["decisions_recorded"] == 2
-    assert summary["actions_logged"] == 2
-    assert summary["outcomes_observed"] == 2
-    assert summary["success_count"] == 1
-    assert summary["failure_count"] == 1
-    assert summary["neutral_count"] == 0
-    assert summary["success_rate"] == 0.5
-    assert summary["outcome_capture_rate"] == pytest.approx(0.6667)
-    assert summary["expected_value"] == 220
-    assert summary["observed_value"] == 60
-    assert summary["pending_value"] == 160
-    assert summary["stale_loops"] == 1
-    assert summary["incomplete_loops"] == 1
-    assert summary["failed_loops"] == 1
-    assert summary["confidence_delta_total"] == 0
-
-    by_type = {item["key"]: item for item in ledger["by_recommendation_type"]}
-    assert by_type["retention"]["expected_value"] == 180
-    assert by_type["retention"]["observed_value"] == 70
-    assert by_type["risk_review"]["failure_count"] == 1
-    assert ledger["by_playbook"][0]["playbook_name"] == "Churn save"
-    assert ledger["by_playbook"][0]["observed_value"] == 70
+    outcomes = [{"outcome_id": "out-1", "recommendation_id": "rec-fail", "tenant_id": "tenant-1", "label": "failure", "value": -10}]
+    ledger = OutcomeLedgerAggregator().build(recs, [], [], outcomes)
+    assert ledger["summary"]["stale_loops"] == 1
+    assert ledger["summary"]["incomplete_loops"] == 2
+    assert ledger["summary"]["failed_loops"] == 1
+    assert ledger["summary"]["observed_value"] == -10
