@@ -17,7 +17,6 @@ from typing import Any
 
 from fastapi import APIRouter, Request
 from pydantic import BaseModel
-
 from shared.common.common import APIResponse, utc_now
 from shared.logger.logger import get_logger, metrics
 

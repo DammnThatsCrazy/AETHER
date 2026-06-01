@@ -129,6 +129,12 @@ export const api = {
     intelligence: (userId: string) =>
       restClient.get(`/v1/profile/${userId}/intelligence`, wrap(unknownSchema)).then(r => r.data as IntelligenceProfile),
 
+    recommendations: (userId: string) =>
+      restClient.get(`/v1/profile/${userId}/recommendations`, wrap(unknownSchema)).then(r => r.data),
+
+    outcomes: (userId: string) =>
+      restClient.get(`/v1/profile/${userId}/outcomes`, wrap(unknownSchema)).then(r => r.data),
+
     /** Data provenance — source attribution for every data point in the profile. */
     provenance: (userId: string) =>
       restClient.get(`/v1/profile/${userId}/provenance`, wrap(unknownSchema)).then(r => r.data),
@@ -463,6 +469,15 @@ export const api = {
 
     entityCluster: (entityId: string) =>
       restClient.get(`/v1/intelligence/entity/${entityId}/cluster`, wrap(unknownSchema)).then(r => r.data as EntityCluster),
+
+    recommendations: () =>
+      restClient.get(`/v1/intelligence/recommendations`, wrap(unknownSchema)).then(r => r.data),
+
+    outcomes: () =>
+      restClient.get(`/v1/intelligence/outcomes`, wrap(unknownSchema)).then(r => r.data),
+
+    playbooks: () =>
+      restClient.get(`/v1/intelligence/playbooks`, wrap(unknownSchema)).then(r => r.data),
   },
 
   // ── Analytics ─────────────────────────────────────────────────────────────

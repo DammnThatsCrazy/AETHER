@@ -37,13 +37,9 @@ from __future__ import annotations
 
 from typing import Optional
 
-from fastapi import APIRouter, Depends, Request, Query
-
-from shared.common.common import APIResponse, BadRequestError, NotFoundError
-from shared.cache.cache import CacheClient
-from shared.graph.graph import GraphClient
-from shared.logger.logger import get_logger, metrics
 from dependencies.providers import get_cache, get_graph
+from fastapi import APIRouter, Depends, Query, Request
+from repositories.lake import gold_identity, gold_market, gold_onchain, gold_social
 from repositories.repos import (
     AgentConfigRepository,
     AgentExecutionRepository,
@@ -54,10 +50,14 @@ from repositories.repos import (
     IdentityRepository,
     TransferRepository,
 )
-from repositories.lake import gold_identity, gold_market, gold_onchain, gold_social
-from services.profile.resolver import ProfileResolver
-from services.profile.composer import ProfileComposer
+from shared.cache.cache import CacheClient
+from shared.common.common import APIResponse, BadRequestError, NotFoundError
+from shared.graph.graph import GraphClient
+from shared.logger.logger import get_logger, metrics
+
 from services.profile.aggregator import Profile360Aggregator
+from services.profile.composer import ProfileComposer
+from services.profile.resolver import ProfileResolver
 
 logger = get_logger("aether.service.profile")
 router = APIRouter(prefix="/v1/profile", tags=["Profile 360"])
@@ -491,8 +491,12 @@ def _get_aggregator(
     global _aggregator
     if _aggregator is None:
         from repositories.repos import (
-            DelegationRepository as _DR,
             AnalyticsRepository as _AR,
+        )
+        from repositories.repos import (
+            DelegationRepository as _DR,
+        )
+        from repositories.repos import (
             IdentityRepository as _IR,
         )
         _aggregator = Profile360Aggregator(
@@ -988,3 +992,26 @@ async def get_governance_activity(
         "pagination": {"limit": limit, "count": 0, "has_more": False},
         "provenance": {"sources": ["snapshot", "silver_web3_events"]},
     }).to_dict()
+
+# ── Decision & Outcome Intelligence subresources (additive) ─────────────
+
+@router.get("/{user_id}/recommendations")
+async def get_profile_recommendations(user_id: str, request: Request, limit: int = Query(default=20, ge=1, le=100)):
+    """Entity-level recommendations linked to this Profile360 entity."""
+    tenant = request.state.tenant
+    tenant.require_permission("read")
+    from services.intelligence.repositories import RecommendationRepository
+    repo = RecommendationRepository()
+    items = await repo.list_for_tenant(tenant.tenant_id, limit=limit, entity_id=user_id)
+    return APIResponse(data={"entity_id": user_id, "items": items, "count": len(items)}).to_dict()
+
+
+@router.get("/{user_id}/outcomes")
+async def get_profile_outcomes(user_id: str, request: Request, limit: int = Query(default=20, ge=1, le=100)):
+    """Outcome history linked to this Profile360 entity."""
+    tenant = request.state.tenant
+    tenant.require_permission("read")
+    from services.intelligence.repositories import OutcomeRepository
+    repo = OutcomeRepository()
+    items = await repo.list_for_tenant(tenant.tenant_id, limit=limit, entity_id=user_id)
+    return APIResponse(data={"entity_id": user_id, "items": items, "count": len(items)}).to_dict()

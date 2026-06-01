@@ -5,4 +5,8 @@ export {
   useEntityIntelligence,
   useEntityWhyExplain,
   useEntityBehavioralSignals,
+  useRecommendations,
+  useProfileRecommendations,
+  useProfileOutcomes,
+  usePlaybooks,
 } from './use-intelligence';

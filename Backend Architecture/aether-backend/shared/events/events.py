@@ -28,7 +28,7 @@ EventHandler = Callable[["Event"], Awaitable[None]]
 
 # Optional aiokafka import
 try:
-    from aiokafka import AIOKafkaProducer, AIOKafkaConsumer
+    from aiokafka import AIOKafkaConsumer, AIOKafkaProducer
     KAFKA_AVAILABLE = True
 except ImportError:
     AIOKafkaProducer = None  # type: ignore[misc, assignment]
@@ -263,6 +263,14 @@ class Topic(str, Enum):
     SDK_HEALTH_STATE_CHANGED = "aether.sdk.health.state_changed"
     SDK_DRIFT_DETECTED       = "aether.sdk.drift.detected"
     SDK_CONFIG_UPDATED       = "aether.sdk.config.updated"
+
+    # Decision & Outcome Intelligence (OODA loop)
+    RECOMMENDATION_GENERATED = "aether.recommendation.generated"
+    RECOMMENDATION_VIEWED = "aether.recommendation.viewed"
+    DECISION_RECORDED = "aether.decision.recorded"
+    ACTION_EXECUTED = "aether.action.executed"
+    OUTCOME_OBSERVED = "aether.outcome.observed"
+    RECOMMENDATION_CONFIDENCE_UPDATED = "aether.recommendation.confidence_updated"
 
     # Dead letter
     DEAD_LETTER = "aether.dlq"
@@ -530,7 +538,7 @@ class EventProducer:
             return False
         if self._kafka_producer:
             try:
-                partitions = await self._kafka_producer.partitions_for("__health")
+                await self._kafka_producer.partitions_for("__health")
                 return True
             except Exception:
                 return False

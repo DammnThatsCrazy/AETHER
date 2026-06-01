@@ -20,6 +20,7 @@ export * from './intelligence';
 export * from './financials';
 export * from './profile360-contract';
 export * from './operational-intelligence';
+export * from './decision-outcome-intelligence';
 
 // Existing partial contracts (already referenced by RN SDK).
 export * from './ecommerce-types';

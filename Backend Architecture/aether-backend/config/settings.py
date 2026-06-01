@@ -399,6 +399,20 @@ class CISConfig:
 
 
 # ---------------------------------------------------------------------------
+# Decision & Outcome Intelligence feature flags
+# ---------------------------------------------------------------------------
+
+@dataclass(frozen=True)
+class DecisionOutcomeIntelligenceConfig:
+    recommendations_enabled: bool = _env_bool("AETHER_RECOMMENDATIONS_ENABLED", False)
+    decision_records_enabled: bool = _env_bool("AETHER_DECISION_RECORDS_ENABLED", False)
+    outcome_feedback_enabled: bool = _env_bool("AETHER_OUTCOME_FEEDBACK_ENABLED", False)
+    playbooks_enabled: bool = _env_bool("AETHER_PLAYBOOKS_ENABLED", False)
+    kyber_observability_enabled: bool = _env_bool("KYBER_RECOMMENDATION_OBSERVABILITY_ENABLED", False)
+    confidence_threshold: float = float(_env("AETHER_RECOMMENDATION_CONFIDENCE_THRESHOLD", "0.35"))
+
+
+# ---------------------------------------------------------------------------
 # Master settings
 # ---------------------------------------------------------------------------
 
@@ -422,6 +436,7 @@ class Settings:
 
     # Intelligence Graph
     intelligence_graph: IntelligenceGraphConfig = field(default_factory=IntelligenceGraphConfig)
+    decision_outcome: DecisionOutcomeIntelligenceConfig = field(default_factory=DecisionOutcomeIntelligenceConfig)
     quicknode: QuickNodeConfig = field(default_factory=QuickNodeConfig)
 
     # Provider Gateway
