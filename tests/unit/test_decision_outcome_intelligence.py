@@ -11,7 +11,7 @@ sys.path.insert(0, str(BACKEND_ROOT))
 
 
 def test_recommendation_scorer_penalizes_risk_and_governance():
-    from services.intelligence.scoring import RecommendationScorer, RecommendationScoreInput
+    from services.intelligence.scoring import RecommendationScoreInput, RecommendationScorer
 
     scorer = RecommendationScorer()
     strong = scorer.score(RecommendationScoreInput(
@@ -36,7 +36,11 @@ def test_recommendation_scorer_penalizes_risk_and_governance():
 
 
 def test_recommendation_schema_requires_entity_or_population():
-    from services.intelligence.decision_models import CandidateAction, Recommendation, RecommendationConfidence
+    from services.intelligence.decision_models import (
+        CandidateAction,
+        Recommendation,
+        RecommendationConfidence,
+    )
 
     confidence = RecommendationConfidence(overall=0.5, deterministic_rule_score=0.5)
     action = CandidateAction(action_key="review", action_type="manual", label="Review", confidence=confidence)
@@ -67,3 +71,23 @@ def test_ooda_engine_generates_governed_recommendation():
     assert rec.evidence
     assert rec.required_approval_level in {"standard", "elevated", "critical"}
     assert "consent_required" in rec.policy_governance_flags
+
+
+def test_decision_outcome_feature_flags_default_to_gradual_rollout_disabled(monkeypatch):
+    for key in (
+        "AETHER_RECOMMENDATIONS_ENABLED",
+        "AETHER_DECISION_RECORDS_ENABLED",
+        "AETHER_OUTCOME_FEEDBACK_ENABLED",
+        "AETHER_PLAYBOOKS_ENABLED",
+        "KYBER_RECOMMENDATION_OBSERVABILITY_ENABLED",
+    ):
+        monkeypatch.delenv(key, raising=False)
+
+    from config.settings import DecisionOutcomeIntelligenceConfig
+
+    cfg = DecisionOutcomeIntelligenceConfig()
+    assert cfg.recommendations_enabled is False
+    assert cfg.decision_records_enabled is False
+    assert cfg.outcome_feedback_enabled is False
+    assert cfg.playbooks_enabled is False
+    assert cfg.kyber_observability_enabled is False

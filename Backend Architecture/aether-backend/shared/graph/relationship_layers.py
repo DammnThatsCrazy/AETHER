@@ -13,7 +13,7 @@ from __future__ import annotations
 
 from enum import Enum
 
-from shared.graph.graph import EdgeType, Vertex, Edge, VertexType, GraphClient
+from shared.graph.graph import Edge, EdgeType, GraphClient, Vertex, VertexType
 from shared.logger.logger import get_logger
 
 logger = get_logger("aether.graph.layers")

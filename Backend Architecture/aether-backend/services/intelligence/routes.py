@@ -15,15 +15,47 @@ Endpoints:
 
 from __future__ import annotations
 
+import uuid
+from typing import Any, Literal
 
-from fastapi import APIRouter, Request
-
-from shared.common.common import APIResponse, utc_now
-from shared.scoring.trust_score import TrustScoreComposite
-from shared.logger.logger import get_logger, metrics
-from repositories.lake import gold_identity, gold_market
-from services.lake.features import materialize_wallet_features
+from config.settings import settings
 from dependencies.providers import get_registry
+from fastapi import APIRouter, Request
+from pydantic import BaseModel, Field
+from repositories.lake import gold_identity, gold_market
+from shared.common.common import APIResponse, BadRequestError, utc_now
+from shared.events import Event, Topic
+from shared.logger.logger import get_logger, metrics
+from shared.scoring.trust_score import TrustScoreComposite
+
+from services.intelligence.decision_models import (
+    ActionFeedback,
+    ApprovalLevel,
+    CandidateAction,
+    DecisionRecord,
+    DecisionStatus,
+    OutcomeLabel,
+    OutcomeObservation,
+    PlaybookDefinition,
+    PlaybookRun,
+)
+from services.intelligence.graph_mutations import (
+    upsert_action_graph,
+    upsert_decision_graph,
+    upsert_outcome_graph,
+    upsert_recommendation_graph,
+)
+from services.intelligence.ooda_engine import GraphNativeRecommendationEngine, now_iso
+from services.intelligence.repositories import (
+    ActionFeedbackRepository,
+    DecisionRepository,
+    OutcomeRepository,
+    PlaybookRepository,
+    PlaybookRunRepository,
+    RecommendationFeedbackRepository,
+    RecommendationRepository,
+)
+from services.lake.features import materialize_wallet_features
 
 logger = get_logger("aether.service.intelligence")
 router = APIRouter(prefix="/v1/intelligence", tags=["Intelligence"])
@@ -179,25 +211,6 @@ async def wallet_profile(address: str, request: Request):
 
 # ── Graph-native Decision & Outcome Intelligence (OODA loop) ─────────────
 
-import uuid
-from pydantic import BaseModel, Field
-from config.settings import settings
-from shared.events import Event, Topic
-from services.intelligence.decision_models import (
-    ActionFeedback, CandidateAction, DecisionRecord, OutcomeObservation,
-    PlaybookDefinition, PlaybookRun,
-)
-from services.intelligence.graph_mutations import (
-    upsert_action_graph, upsert_decision_graph, upsert_outcome_graph,
-    upsert_recommendation_graph,
-)
-from services.intelligence.ooda_engine import GraphNativeRecommendationEngine, now_iso
-from services.intelligence.repositories import (
-    ActionFeedbackRepository, DecisionRepository, OutcomeRepository,
-    PlaybookRepository, PlaybookRunRepository, RecommendationFeedbackRepository,
-    RecommendationRepository,
-)
-
 _recommendations = RecommendationRepository()
 _decisions = DecisionRepository()
 _actions = ActionFeedbackRepository()
@@ -210,14 +223,14 @@ _ooda = GraphNativeRecommendationEngine()
 
 class GenerateRecommendationRequest(BaseModel):
     entity_id: str
-    signals: dict = Field(default_factory=dict)
+    signals: dict[str, Any] = Field(default_factory=dict)
 
 
 class DecisionRequest(BaseModel):
     actor_id: str
     selected_action_key: str | None = None
     rejected_action_keys: list[str] = Field(default_factory=list)
-    decision_status: str
+    decision_status: DecisionStatus
     reason: str | None = None
     comment: str | None = None
 
@@ -227,10 +240,10 @@ class ActionLogRequest(BaseModel):
     action_type: str
     system: str | None = None
     integration: str | None = None
-    status: str = "planned"
-    actor_type: str = "human"
-    economic_payload: dict | None = None
-    authorization_metadata: dict | None = None
+    status: Literal["planned", "queued", "executed", "failed", "cancelled"] = "planned"
+    actor_type: Literal["human", "system", "agent"] = "human"
+    economic_payload: dict[str, Any] | None = None
+    authorization_metadata: dict[str, Any] | None = None
 
 
 class OutcomeRequest(BaseModel):
@@ -240,8 +253,8 @@ class OutcomeRequest(BaseModel):
     outcome_type: str
     value: float | None = None
     currency: str | None = None
-    label: str
-    observed_window: dict
+    label: OutcomeLabel
+    observed_window: dict[str, str]
 
 
 class PlaybookRequest(BaseModel):
@@ -250,7 +263,7 @@ class PlaybookRequest(BaseModel):
     trigger: str
     recommendation_types: list[str] = Field(default_factory=list)
     candidate_actions: list[CandidateAction] = Field(default_factory=list)
-    approval_level: str = "standard"
+    approval_level: ApprovalLevel = "standard"
     enabled: bool = True
 
 
@@ -316,6 +329,8 @@ async def record_decision(recommendation_id: str, body: DecisionRequest, request
         raise NotFoundError("recommendation")
     candidates = [CandidateAction(**c) for c in rec.get("candidate_actions", [])]
     selected = next((c for c in candidates if c.action_key == body.selected_action_key), None)
+    if body.decision_status == "approved" and selected is None:
+        raise BadRequestError("Approved decisions require a valid selected_action_key")
     rejected = [c for c in candidates if c.action_key in set(body.rejected_action_keys)]
     decision = DecisionRecord(
         decision_id=str(uuid.uuid4()), recommendation_id=recommendation_id,
@@ -341,6 +356,16 @@ async def log_action(body: ActionLogRequest, request: Request):
     if decision.get("tenant_id") != tenant.tenant_id:
         from shared.common.common import NotFoundError
         raise NotFoundError("decision")
+    if body.status in {"queued", "executed"} and decision.get("decision_status") != "approved":
+        raise BadRequestError("Actions cannot be queued or executed without an approved decision")
+    selected_action = decision.get("selected_action") or {}
+    approval_level = selected_action.get("requires_approval_level", "none")
+    if (
+        body.status == "executed"
+        and approval_level in {"elevated", "critical"}
+        and not (body.authorization_metadata or {}).get("approval_id")
+    ):
+        raise BadRequestError("Elevated or critical actions require authorization metadata with approval_id")
     action = ActionFeedback(
         action_id=str(uuid.uuid4()), decision_id=body.decision_id,
         action_type=body.action_type, system=body.system, integration=body.integration,
@@ -367,23 +392,31 @@ async def observe_outcome(action_id: str, body: OutcomeRequest, request: Request
     if action.get("tenant_id") != tenant.tenant_id:
         from shared.common.common import NotFoundError
         raise NotFoundError("action")
-    delta = {"success": 0.05, "neutral": 0.0, "failure": -0.05}.get(body.label, 0.0)
+    decision = await _decisions.find_by_id_or_fail(action["decision_id"])
+    if decision.get("tenant_id") != tenant.tenant_id:
+        from shared.common.common import NotFoundError
+        raise NotFoundError("decision")
+    if decision.get("recommendation_id") != body.recommendation_id:
+        raise BadRequestError("Outcome recommendation_id must match the action decision recommendation")
+    rec = await _recommendations.find_by_id_or_fail(body.recommendation_id)
+    if rec.get("tenant_id") != tenant.tenant_id:
+        from shared.common.common import NotFoundError
+        raise NotFoundError("recommendation")
+    delta = {"success": 0.05, "neutral": 0.0, "failure": -0.05}[body.label]
     outcome = OutcomeObservation(
         outcome_id=str(uuid.uuid4()), action_id=action_id,
-        recommendation_id=body.recommendation_id, entity_id=body.entity_id,
-        population_id=body.population_id, outcome_type=body.outcome_type,
+        recommendation_id=body.recommendation_id, entity_id=body.entity_id or rec.get("entity_id"),
+        population_id=body.population_id or rec.get("population_id"), outcome_type=body.outcome_type,
         value=body.value, currency=body.currency, label=body.label,
         observed_window=body.observed_window, computed_at=utc_now().isoformat(),
         confidence_delta=delta, tenant_id=tenant.tenant_id,
     ).model_dump()
     saved = await _outcomes.insert(outcome["outcome_id"], outcome)
     await _feedback.insert(str(uuid.uuid4()), {"tenant_id": tenant.tenant_id, "recommendation_id": body.recommendation_id, "outcome_id": saved["outcome_id"], "confidence_delta": delta, "created_at": now_iso()})
-    rec = await _recommendations.find_by_id(body.recommendation_id)
-    if rec and rec.get("tenant_id") == tenant.tenant_id:
-        conf = rec.get("confidence", {})
-        conf["overall"] = max(0.0, min(1.0, float(conf.get("overall", 0.0)) + delta))
-        await _recommendations.update(body.recommendation_id, {"confidence": conf})
-        await _publish(Topic.RECOMMENDATION_CONFIDENCE_UPDATED, tenant.tenant_id, {"recommendation_id": body.recommendation_id, "confidence": conf})
+    conf = rec.get("confidence", {})
+    conf["overall"] = max(0.0, min(1.0, float(conf.get("overall", 0.0)) + delta))
+    await _recommendations.update(body.recommendation_id, {"confidence": conf})
+    await _publish(Topic.RECOMMENDATION_CONFIDENCE_UPDATED, tenant.tenant_id, {"recommendation_id": body.recommendation_id, "confidence": conf})
     try:
         await upsert_outcome_graph(get_registry().graph, saved)
     except Exception as exc:  # pragma: no cover

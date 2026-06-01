@@ -28,7 +28,7 @@ EventHandler = Callable[["Event"], Awaitable[None]]
 
 # Optional aiokafka import
 try:
-    from aiokafka import AIOKafkaProducer, AIOKafkaConsumer
+    from aiokafka import AIOKafkaConsumer, AIOKafkaProducer
     KAFKA_AVAILABLE = True
 except ImportError:
     AIOKafkaProducer = None  # type: ignore[misc, assignment]
@@ -538,7 +538,7 @@ class EventProducer:
             return False
         if self._kafka_producer:
             try:
-                partitions = await self._kafka_producer.partitions_for("__health")
+                await self._kafka_producer.partitions_for("__health")
                 return True
             except Exception:
                 return False

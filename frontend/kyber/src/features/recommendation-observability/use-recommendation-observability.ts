@@ -8,7 +8,7 @@ export interface RecommendationObservabilityMetric {
 
 export function useRecommendationObservability() {
   return useMemo(() => ({
-    enabled: import.meta.env.VITE_KYBER_RECOMMENDATION_OBSERVABILITY_ENABLED !== 'false',
+    enabled: import.meta.env.VITE_KYBER_RECOMMENDATION_OBSERVABILITY_ENABLED === 'true',
     metrics: [
       { label: 'Recommendation volume', value: 'Aggregate by tenant', status: 'healthy' },
       { label: 'Approval / rejection rate', value: 'Decision records', status: 'healthy' },

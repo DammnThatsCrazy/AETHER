@@ -26,8 +26,8 @@ logger = get_logger("aether.graph")
 try:
     from gremlin_python.driver.driver_remote_connection import DriverRemoteConnection
     from gremlin_python.process.anonymous_traversal import traversal
-    from gremlin_python.process.graph_traversal import GraphTraversalSource, __
-    from gremlin_python.process.traversal import T, Cardinality
+    from gremlin_python.process.graph_traversal import __
+    from gremlin_python.process.traversal import Cardinality, T
     GREMLIN_AVAILABLE = True
 except ImportError:
     GREMLIN_AVAILABLE = False
@@ -743,7 +743,7 @@ class _NeptuneGraphBackend:
         return results
 
     async def query(self, gremlin: str) -> list[dict]:
-        g = await self._ensure_connected()
+        await self._ensure_connected()
         try:
             # Submit raw Gremlin string via the connection's client
             if self._connection and hasattr(self._connection, '_client'):

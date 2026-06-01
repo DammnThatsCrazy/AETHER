@@ -56,6 +56,8 @@ Additive OODA edges:
 
 ## Feature flags
 
+Decision and outcome intelligence flags default to disabled so tenants and operators can roll the loop out gradually:
+
 - `AETHER_RECOMMENDATIONS_ENABLED`
 - `AETHER_DECISION_RECORDS_ENABLED`
 - `AETHER_OUTCOME_FEEDBACK_ENABLED`

@@ -56,24 +56,23 @@ The pipeline operates across six isolated AWS accounts:
 Each pull request runs eight sequential stages. A failure at any stage stops the
 pipeline and blocks the merge.
 
-### 1. Lint
+### 1. Lint / static checks
 
-- ESLint (TypeScript packages) with the `@aether/eslint-config` ruleset
-- Ruff (Python services) — `E`, `F`, `W`, `I` rule groups
-- Prettier formatting check (TypeScript, JSON, YAML)
-- Gate: **0 errors, 0 warnings**
+- `python -m ruff check .` for Python correctness-oriented linting.
+- `npm run lint` for TypeScript workspace static checks. The workspace lint scripts intentionally run TypeScript compiler validation so CI does not depend on an unpinned ESLint parser/config package.
+- Gate: **0 errors**.
 
 ### 2. Type check
 
-- `tsc --noEmit` across all TypeScript workspace packages
-- `mypy --strict` on all Python services
-- Gate: **0 type errors**
+- `npm run typecheck` across the TypeScript SDK/operator workspaces.
+- Python runtime syntax is validated with `compileall` for the backend, agent layer, and security package.
+- Gate: **0 type/syntax errors**.
 
 ### 3. Unit tests
 
-- Jest (TypeScript) with `--coverage`
-- Pytest (Python) with `--cov`
-- Gate: **≥ 90% line coverage** across all packages
+- Vitest via `npm test` for TypeScript SDKs and frontends.
+- Pytest via `python -m pytest tests/ -n auto --tb=short` for core Python tests; ML tests run when `ML Models/**` changes.
+- Gate: **all tests pass**.
 
 ### 4. Integration tests
 

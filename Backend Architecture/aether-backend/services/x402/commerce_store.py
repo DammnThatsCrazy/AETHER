@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import asyncio
 from collections import defaultdict
-from typing import Any, Optional, TypeVar
+from typing import TYPE_CHECKING, Any, Optional, TypeVar
 
 from pydantic import BaseModel
 
@@ -33,6 +33,10 @@ from .commerce_models import (
     StablecoinAsset,
     Treasury,
 )
+
+if TYPE_CHECKING:
+    from .commerce_models import BudgetPolicy
+
 
 T = TypeVar("T", bound=BaseModel)
 

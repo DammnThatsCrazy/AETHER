@@ -7,9 +7,12 @@ from datetime import datetime, timezone
 from typing import Any
 
 from services.intelligence.decision_models import (
-    CandidateAction, DataFreshness, Recommendation, RecommendationEvidence,
+    CandidateAction,
+    DataFreshness,
+    Recommendation,
+    RecommendationEvidence,
 )
-from services.intelligence.scoring import RecommendationScorer, RecommendationScoreInput
+from services.intelligence.scoring import RecommendationScoreInput, RecommendationScorer
 
 
 def now_iso() -> str:
