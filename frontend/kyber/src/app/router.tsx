@@ -18,6 +18,8 @@ const Profile360Page = lazy(() => import('@kyber/pages/profile360').then(m => ({
 const TenantsPage = lazy(() => import('@kyber/pages/tenants').then(m => ({ default: m.TenantsPage })));
 const CisPage = lazy(() => import('@kyber/pages/cis').then(m => ({ default: m.CisPage })));
 const InvestigationsPage = lazy(() => import('@kyber/pages/investigations').then(m => ({ default: m.InvestigationsPage })));
+const SolutionPackagesPage = lazy(() => import('@kyber/pages/packages').then(m => ({ default: m.SolutionPackagesPage })));
+const DeploymentReadinessPage = lazy(() => import('@kyber/pages/deployment-readiness').then(m => ({ default: m.DeploymentReadinessPage })));
 
 function PageSuspense({ children }: { readonly children: React.ReactNode }) {
   return (
@@ -60,6 +62,9 @@ export function AppRouter() {
                 <Route path="/cis/forensics/:nodeId" element={<PageSuspense><CisPage /></PageSuspense>} />
                 <Route path="/investigations" element={<PageSuspense><InvestigationsPage /></PageSuspense>} />
                 <Route path="/investigations/:caseId" element={<PageSuspense><InvestigationsPage /></PageSuspense>} />
+                <Route path="/packages" element={<PageSuspense><SolutionPackagesPage /></PageSuspense>} />
+                <Route path="/packages/:packageId" element={<PageSuspense><SolutionPackagesPage /></PageSuspense>} />
+                <Route path="/deployment-readiness" element={<PageSuspense><DeploymentReadinessPage /></PageSuspense>} />
                 <Route path="*" element={<Navigate to="/mission" replace />} />
               </Routes>
             </AppShell>

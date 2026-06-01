@@ -505,6 +505,18 @@ export const api = {
 
     playbookPerformanceSummary: () =>
       restClient.get(`/v1/intelligence/playbooks/performance/summary`, wrap(unknownSchema)).then(r => r.data),
+
+    auditExportTypes: () =>
+      restClient.get('/v1/intelligence/audit-exports/types', wrap(unknownSchema)).then(r => r.data),
+
+    createAuditExport: (payload: Record<string, unknown>) =>
+      restClient.post('/v1/intelligence/audit-exports', wrap(unknownSchema), payload).then(r => r.data),
+
+    auditExport: (exportId: string) =>
+      restClient.get(`/v1/intelligence/audit-exports/${exportId}`, wrap(unknownSchema)).then(r => r.data),
+
+    downloadAuditExport: (exportId: string) =>
+      restClient.get(`/v1/intelligence/audit-exports/${exportId}/download`, wrap(unknownSchema)).then(r => r.data),
   },
 
   // ── Analytics ─────────────────────────────────────────────────────────────

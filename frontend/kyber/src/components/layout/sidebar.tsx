@@ -17,6 +17,8 @@ const NAV_ITEMS: NavItem[] = [
   { path: '/tenants',         label: 'Tenants',         glyph: '⊞' },
   { path: '/investigations',  label: 'Investigations',  glyph: '⚒' },
   { path: '/cis',             label: 'CIS',             glyph: '◎' },
+  { path: '/packages',        label: 'Packages',        glyph: '▣' },
+  { path: '/deployment-readiness', label: 'Deploy Ready', glyph: '▤' },
   { path: '/diagnostics',     label: 'Diagnostics',     glyph: '⚙' },
   { path: '/lab',             label: 'Lab',             glyph: '⚗' },
 ];
