@@ -1,3 +1,31 @@
+---
+title: Decision & Outcome Intelligence
+slug: ai/decision-outcome-intelligence
+section: ai
+visibility: I
+audience: [ai, architect, dev-senior, ops]
+status: beta
+since_version: "8.9.0"
+source_files:
+  - Backend Architecture/aether-backend/services/intelligence/decision_models.py
+  - Backend Architecture/aether-backend/services/intelligence/ooda_engine.py
+  - Backend Architecture/aether-backend/services/intelligence/routes.py
+  - Backend Architecture/aether-backend/services/intelligence/repositories.py
+  - Backend Architecture/aether-backend/config/settings.py
+flags:
+  - AETHER_RECOMMENDATIONS_ENABLED
+  - AETHER_DECISION_RECORDS_ENABLED
+  - AETHER_OUTCOME_FEEDBACK_ENABLED
+  - AETHER_PLAYBOOKS_ENABLED
+  - KYBER_RECOMMENDATION_OBSERVABILITY_ENABLED
+  - AETHER_RECOMMENDATION_CONFIDENCE_THRESHOLD
+related:
+  - architecture/intelligence-graph
+  - operations/cicd
+canonical_owner: platform@aether
+estimated_read_minutes: 6
+toc_depth: 3
+---
 # Decision & Outcome Intelligence
 
 Aether extends the existing intelligence graph into a graph-native OODA loop: **Observe → Orient → Recommend → Decide → Act → Learn**. This is not a separate decision-engine product or parallel application layer; it is an additive extension of the existing SDK ingestion, profile, intelligence, graph, event, approval, action, and observability patterns.

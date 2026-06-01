@@ -715,6 +715,35 @@
       ]
     },
     {
+      "name": "Decision & Outcome Intelligence (OODA loop)",
+      "topics": [
+        {
+          "member": "RECOMMENDATION_GENERATED",
+          "value": "aether.recommendation.generated"
+        },
+        {
+          "member": "RECOMMENDATION_VIEWED",
+          "value": "aether.recommendation.viewed"
+        },
+        {
+          "member": "DECISION_RECORDED",
+          "value": "aether.decision.recorded"
+        },
+        {
+          "member": "ACTION_EXECUTED",
+          "value": "aether.action.executed"
+        },
+        {
+          "member": "OUTCOME_OBSERVED",
+          "value": "aether.outcome.observed"
+        },
+        {
+          "member": "RECOMMENDATION_CONFIDENCE_UPDATED",
+          "value": "aether.recommendation.confidence_updated"
+        }
+      ]
+    },
+    {
       "name": "Dead letter",
       "topics": [
         {
@@ -1316,6 +1345,30 @@
     {
       "member": "SDK_CONFIG_UPDATED",
       "value": "aether.sdk.config.updated"
+    },
+    {
+      "member": "RECOMMENDATION_GENERATED",
+      "value": "aether.recommendation.generated"
+    },
+    {
+      "member": "RECOMMENDATION_VIEWED",
+      "value": "aether.recommendation.viewed"
+    },
+    {
+      "member": "DECISION_RECORDED",
+      "value": "aether.decision.recorded"
+    },
+    {
+      "member": "ACTION_EXECUTED",
+      "value": "aether.action.executed"
+    },
+    {
+      "member": "OUTCOME_OBSERVED",
+      "value": "aether.outcome.observed"
+    },
+    {
+      "member": "RECOMMENDATION_CONFIDENCE_UPDATED",
+      "value": "aether.recommendation.confidence_updated"
     },
     {
       "member": "DEAD_LETTER",
