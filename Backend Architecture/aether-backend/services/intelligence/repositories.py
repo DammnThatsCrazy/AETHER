@@ -69,3 +69,8 @@ class ActionDeliveryReceiptRepository(BaseRepository):
 class RevenueMeteringEventRepository(BaseRepository):
     def __init__(self) -> None:
         super().__init__("revenue_metering_events")
+
+
+class AuditExportRepository(BaseRepository):
+    def __init__(self) -> None:
+        super().__init__("audit_exports_intelligence")

@@ -1082,6 +1082,18 @@ export const api = {
         restClient.get(`/v1/admin/kyber/vertical-solution-signals${buildQS({ window })}`, wrap(unknownSchema)).then(r => r.data),
       revenueOpportunities: (window = '30d') =>
         restClient.get(`/v1/admin/kyber/revenue-opportunities${buildQS({ window })}`, wrap(unknownSchema)).then(r => r.data),
+      solutionPackages: () =>
+        restClient.get('/v1/admin/kyber/solution-packages', wrap(unknownSchema)).then(r => r.data),
+      solutionPackage: (packageId: string) =>
+        restClient.get(`/v1/admin/kyber/solution-packages/${packageId}`, wrap(unknownSchema)).then(r => r.data),
+      packageReadiness: () =>
+        restClient.get('/v1/admin/kyber/package-readiness', wrap(unknownSchema)).then(r => r.data),
+      deploymentModes: () =>
+        restClient.get('/v1/admin/kyber/deployment-modes', wrap(unknownSchema)).then(r => r.data),
+      deploymentReadiness: () =>
+        restClient.get('/v1/admin/kyber/deployment-readiness', wrap(unknownSchema)).then(r => r.data),
+      auditExportHealth: () =>
+        restClient.get('/v1/admin/kyber/audit-export-health', wrap(unknownSchema)).then(r => r.data),
     },
   },
 

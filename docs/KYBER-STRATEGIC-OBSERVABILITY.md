@@ -34,3 +34,7 @@ Kyber strategic observability uses backend aggregate endpoints to show Olympus L
 ## Data boundaries
 
 Kyber may show tenant-level account health to Olympus Labs operators with `admin` permission. Cross-tenant views must remain aggregate, anonymized, or internal operational diagnostics. Raw tenant-private evidence, graph intelligence, and tenant-specific investigation content are not exposed across tenants.
+
+## Packaging command extensions
+
+Kyber now includes enterprise/government packaging and deployment readiness command views: solution packages, package detail, package readiness, deployment modes, deployment readiness, audit export health, and tenant-package fit. Government entries are planning tracks only and do not claim certification.

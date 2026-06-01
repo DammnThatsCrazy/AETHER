@@ -38,3 +38,7 @@ Initial templates include High-LTV churn save, Fraud cluster review, Campaign wa
 ## Lifecycle
 
 A playbook defines trigger conditions, recommendation families, candidate actions, approval threshold, outcome mapping, expected value model, run history, ROI aggregation, and stale run detection. Execution remains approval-aware and auditable.
+
+## Package ROI and audit exports
+
+Playbook definitions, run history, generated recommendations, linked decisions/actions/outcomes, and ROI metrics are included in `playbook_run_audit` exports and in Kyber package readiness views.
