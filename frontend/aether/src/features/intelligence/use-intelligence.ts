@@ -125,6 +125,23 @@ export function useProfileOutcomes(entityId: string) {
   });
 }
 
+export function useOutcomeLedger() {
+  return useQuery({
+    key: 'intelligence:outcome-ledger',
+    fetcher: () => api.intelligence.outcomeLedger(),
+    staleTime: STALE,
+  });
+}
+
+export function useProfileOutcomeLedger(entityId: string) {
+  return useQuery({
+    key: key('profile-outcome-ledger', entityId),
+    fetcher: () => api.profile.outcomeLedger(entityId),
+    staleTime: STALE,
+    enabled: !!entityId,
+  });
+}
+
 export function usePlaybooks() {
   return useQuery({
     key: 'intelligence:playbooks',
