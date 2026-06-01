@@ -19,20 +19,7 @@ class GraphNativeRecommendationEngine:
         self.registry = registry or RecommendationFamilyRegistry(confidence_threshold=confidence_threshold)
 
     def _context(self, tenant_id: str, entity_id: str | None, signals: dict[str, Any] | None = None) -> RecommendationGenerationContext:
-        signals = signals or {}
-        return RecommendationGenerationContext(
-            tenant_id=tenant_id,
-            entity_id=entity_id,
-            population_id=signals.get("population_id"),
-            signals=signals,
-            profile_context=dict(signals.get("profile_context", {})),
-            graph_context=dict(signals.get("graph_context", {})),
-            attribution_context=dict(signals.get("attribution_context", {})),
-            economic_context=dict(signals.get("economic_context", {})),
-            ml_context=dict(signals.get("ml_context", {})),
-            governance_context=dict(signals.get("governance_context", {})),
-            computed_at=now_iso(),
-        )
+        return RecommendationGenerationContext.from_signals(tenant_id, entity_id, signals)
 
     def generate_for_entity(self, tenant_id: str, entity_id: str, signals: dict[str, Any] | None = None) -> Recommendation:
         """Return the highest-ranked recommendation for legacy callers."""

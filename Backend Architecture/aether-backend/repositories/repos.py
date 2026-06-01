@@ -126,16 +126,23 @@ _IN_MEMORY_STORES: dict[str, dict[str, dict]] = {}
 
 
 def reset_in_memory_stores() -> None:
-    """Test helper: drop every in-memory backing store.
+    """Test helper: empty every in-memory backing store.
 
     Production code uses Postgres; the in-memory backend is local/dev-only.
-    Tests that need isolated state can call this from their fixtures. Existing
-    repository singletons hold references to their table dicts, so clear each
-    dict before dropping the registry mapping.
+    Tests that need isolated state can call this from their fixtures.
+
+    Each table dict is cleared *in place* and the registry mapping is kept.
+    Module-level repository singletons (e.g. ``_recommendations`` in
+    services/intelligence/routes.py) cache a reference to their table dict at
+    import time. Dropping the registry mapping would orphan those references:
+    the singleton would keep writing into a detached dict that a subsequent
+    reset can no longer see, leaking state across tests. Clearing in place and
+    retaining the (now-empty) mapping keeps every singleton's store reachable
+    and resettable, while preserving the one-dict-per-table sharing the
+    in-memory backend relies on (see ``_IN_MEMORY_STORES`` docstring).
     """
     for store in _IN_MEMORY_STORES.values():
         store.clear()
-    _IN_MEMORY_STORES.clear()
 
 
 def _matches_filters(row: dict, filters: dict) -> bool:

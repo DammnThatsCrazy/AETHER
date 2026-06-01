@@ -32,7 +32,7 @@ BACKEND_ROOT = Path(__file__).parent.parent.parent / "Backend Architecture" / "a
 def backend_module_path():
     """Isolate backend module imports and stub broken system crypto."""
     original = list(sys.path)
-    original_mods = set(sys.modules.keys())
+    original_modules = dict(sys.modules)
 
     # Clean stale backend module cache so each test gets fresh imports
     for prefix in ("config", "services", "shared", "middleware", "dependencies", "repositories"):
@@ -84,9 +84,19 @@ def backend_module_path():
         yield
     finally:
         sys.path[:] = original
+        # Restore sys.modules to its exact pre-context state. This context
+        # evicts the real `jwt`/`cryptography` and installs stubs (to exercise
+        # the PyJWT-unavailable fallback). Without restoring the originals, the
+        # stub `jwt` — which has no encode/decode — leaks into later tests on
+        # the same xdist worker whenever the real `jwt` was already imported
+        # before this context (so it was in the snapshot and never dropped),
+        # causing AttributeError: module 'jwt' has no attribute 'encode'.
         for name in list(sys.modules):
-            if name not in original_mods:
+            if name not in original_modules:
                 sys.modules.pop(name, None)
+        for name, module in original_modules.items():
+            if sys.modules.get(name) is not module:
+                sys.modules[name] = module
 
 
 def _import_auth(monkeypatch):

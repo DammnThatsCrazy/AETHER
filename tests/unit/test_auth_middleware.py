@@ -35,9 +35,16 @@ def backend_module_path():
         yield
     finally:
         sys.path[:] = original_path
-        # Remove any modules loaded during the context
+        # Remove only the *backend* modules imported during the context so the
+        # next import re-reads env/config. Third-party packages (notably PyJWT's
+        # `jwt`) must stay cached: evicting then re-importing them can leave a
+        # half-initialised module without `encode`/`decode`, which fails
+        # flakily under pytest-xdist depending on whether another test imported
+        # the package first. _BACKEND_PREFIXES scopes the cleanup to our code.
         for name in list(sys.modules):
-            if name not in original_mods:
+            if name in original_mods:
+                continue
+            if name.split(".", 1)[0] in _BACKEND_PREFIXES:
                 sys.modules.pop(name, None)
 
 

@@ -6,6 +6,7 @@ export {
   useEntityWhyExplain,
   useEntityBehavioralSignals,
   useRecommendations,
+  useRecommendationInvestigation,
   useProfileRecommendations,
   useProfileOutcomes,
   useOutcomeLedger,

@@ -6,7 +6,7 @@ from services.intelligence.recommendation_families.base import BaseRecommendatio
 class FraudReviewRecommendationFamily(BaseRecommendationFamily):
     family_key = "fraud_review"
     family_label = "Fraud review"
-    detection_signal_keys = ("anomaly_score", "suspicious_cluster_score", "velocity_score", "fraud_risk_score")
+    detection_signal_keys = ("fraud_probability", "anomaly_score", "suspicious_cluster_score", "velocity_score", "fraud_risk_score")
     primary_signal = "suspicious_cluster_score"
     detect_threshold = 0.5
     default_expected_outcome = "Reduce fraud loss while preserving analyst review."

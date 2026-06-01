@@ -55,6 +55,35 @@ class RecommendationGenerationContext:
                 return source[key]
         return default
 
+    @classmethod
+    def from_signals(
+        cls,
+        tenant_id: str,
+        entity_id: str | None = None,
+        signals: dict[str, Any] | None = None,
+        population_id: str | None = None,
+    ) -> "RecommendationGenerationContext":
+        """Build a context from a flat signal dict.
+
+        Shared by the OODA engine façade and ``BaseRecommendationFamily.emit``
+        so ad-hoc callers and the registry assemble an identical context shape,
+        including any nested ``*_context`` sub-dictionaries passed inside
+        ``signals``. Keeping one builder avoids the two paths drifting apart.
+        """
+        signals = dict(signals or {})
+        return cls(
+            tenant_id=tenant_id,
+            entity_id=entity_id,
+            population_id=population_id or signals.get("population_id"),
+            signals=signals,
+            profile_context=dict(signals.get("profile_context", {})),
+            graph_context=dict(signals.get("graph_context", {})),
+            attribution_context=dict(signals.get("attribution_context", {})),
+            economic_context=dict(signals.get("economic_context", {})),
+            ml_context=dict(signals.get("ml_context", {})),
+            governance_context=dict(signals.get("governance_context", {})),
+        )
+
 
 class GovernancePolicyGate:
     """Tenant policy gate preserving human approval for critical/high-impact actions."""
@@ -194,6 +223,24 @@ class BaseRecommendationFamily:
     def graph_snapshot_id(self, context: RecommendationGenerationContext) -> str:
         digest = hashlib.sha256(f"{context.tenant_id}:{context.entity_id}:{context.population_id}:{self.family_key}:{context.signals}".encode()).hexdigest()[:16]
         return f"graph-snapshot-{digest}"
+
+    def emit(
+        self,
+        tenant_id: str,
+        entity_id: str | None = None,
+        signals: dict[str, Any] | None = None,
+        population_id: str | None = None,
+    ) -> Recommendation:
+        """Build a context from raw signals and generate a recommendation.
+
+        Convenience entry point so callers can produce a recommendation without
+        assembling a :class:`RecommendationGenerationContext` by hand. Equivalent
+        to ``self.generate(RecommendationGenerationContext.from_signals(...))``.
+        """
+        context = RecommendationGenerationContext.from_signals(
+            tenant_id, entity_id, signals, population_id
+        )
+        return self.generate(context)
 
     def generate(self, context: RecommendationGenerationContext) -> Recommendation:
         confidence = self.score(context)

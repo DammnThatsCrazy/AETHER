@@ -1,6 +1,8 @@
 """Registry for graph-native recommendation families."""
 from __future__ import annotations
 
+from typing import Any
+
 from services.intelligence.decision_models import Recommendation
 from services.intelligence.recommendation_families.agent_governance import AgentGovernanceRecommendationFamily
 from services.intelligence.recommendation_families.attribution_optimization import AttributionOptimizationRecommendationFamily
@@ -33,6 +35,22 @@ class RecommendationFamilyRegistry:
 
     def get(self, family_key: str) -> BaseRecommendationFamily | None:
         return next((family for family in self._families if family.family_key == family_key), None)
+
+    def detect(self, signals: dict[str, Any]) -> BaseRecommendationFamily:
+        """Return the most specific family whose detection fires for ``signals``.
+
+        Builds a generation context from the flat signal dict and reuses
+        :meth:`matching_families`. ``retention`` is the permissive catch-all, so
+        a specific (non-retention) match is preferred when one exists — that way
+        a single discriminating signal (e.g. ``fraud_probability``) resolves to
+        its dedicated family rather than the retention default.
+        """
+        context = RecommendationGenerationContext.from_signals(
+            str(signals.get("tenant_id", "")), signals.get("entity_id"), signals
+        )
+        matches = self.matching_families(context)
+        non_retention = [family for family in matches if family.family_key != "retention"]
+        return (non_retention or matches)[0]
 
     def matching_families(self, context: RecommendationGenerationContext) -> list[BaseRecommendationFamily]:
         requested = context.value("recommendation_family") or context.value("recommendation_type")

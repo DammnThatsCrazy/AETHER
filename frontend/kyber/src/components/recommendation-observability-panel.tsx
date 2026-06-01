@@ -26,21 +26,39 @@ function pct(value: unknown) {
 }
 
 export function RecommendationObservabilityPanel() {
-  const { enabled, metrics, isLoading, error } = useRecommendationObservability();
-  if (!enabled) return null;
+  const [window, setWindow] = useState<KyberWindow>('30d');
+  const data = useRecommendationObservability(window);
+  if (!data.enabled) return null;
+
+  const overview = record(record(data.strategicOverview.data).overview);
+  const drift = record(record(data.modelConfidenceDrift.data).report);
+  const tenants = items(data.tenantValueHealth.data).slice(0, 6);
+  const families = items(data.familyPerformance.data).slice(0, 6);
+  const playbooks = items(data.playbookPerformance.data).slice(0, 5);
+  const solutions = items(data.verticalSolutionSignals.data).slice(0, 4);
+  const opportunities = items(data.revenueOpportunities.data).slice(0, 6);
+
   return (
     <Card>
       <CardHeader>
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
-            <h2 className="text-text-primary font-medium">Recommendation OODA observability</h2>
-            <p className="text-xs text-text-secondary mt-1">Backend aggregate health only; tenant-private intelligence stays isolated.</p>
+            <h2 className="text-text-primary font-medium">Kyber Strategic Observability</h2>
+            <p className="text-xs text-text-secondary mt-1">Admin-only aggregate OODA health, tenant value, solution signals, and revenue intelligence.</p>
+          </div>
+          <div className="flex items-center gap-2">
+            {windows.map((item) => (
+              <button key={item} type="button" onClick={() => setWindow(item)} className={`rounded-full border px-2 py-1 text-[11px] ${window === item ? 'border-accent text-accent' : 'border-border-subtle text-text-secondary'}`}>
+                {item}
+              </button>
+            ))}
+            <Badge variant={drift.drift_status === 'drifting' ? 'danger' : drift.drift_status === 'watch' ? 'warning' : 'success'}>{text(drift.drift_status, 'loading')}</Badge>
           </div>
         </div>
       </CardHeader>
       <CardContent>
-        {isLoading ? <p className="text-sm text-text-secondary">Loading backend observability…</p> : null}
-        {error ? <p className="text-sm text-danger">Backend observability unavailable.</p> : null}
+        {data.isLoading ? <p className="text-sm text-text-secondary">Loading strategic observability…</p> : null}
+        {data.error ? <p className="text-sm text-danger">Strategic observability unavailable.</p> : null}
         <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
           <Metric label="Observed value" value={`$${numberText(overview.observed_value_total)}`} />
           <Metric label="Outcome capture" value={pct(overview.outcome_capture_rate)} />
