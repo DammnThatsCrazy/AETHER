@@ -9,10 +9,8 @@ since_version: "8.9.0"
 source_files:
   - Backend Architecture/aether-backend/services/intelligence/decision_models.py
   - Backend Architecture/aether-backend/services/intelligence/ooda_engine.py
+  - Backend Architecture/aether-backend/services/intelligence/recommendation_families.py
   - Backend Architecture/aether-backend/services/intelligence/outcome_ledger.py
-  - Backend Architecture/aether-backend/services/intelligence/recommendation_families/base.py
-  - Backend Architecture/aether-backend/services/intelligence/recommendation_families/registry.py
-  - Backend Architecture/aether-backend/services/intelligence/investigations.py
   - Backend Architecture/aether-backend/services/intelligence/routes.py
   - Backend Architecture/aether-backend/services/intelligence/repositories.py
   - Backend Architecture/aether-backend/config/settings.py
@@ -75,8 +73,8 @@ Additive OODA edges:
 
 ## API examples
 
-- `POST /v1/intelligence/recommendations/preview` — read-scoped preview; does not persist rows, mutate graph edges, or emit lifecycle events.
-- `POST /v1/intelligence/recommendations/generate` — write-scoped generation; persists the recommendation, mutates graph edges, and emits `recommendation.generated`.
+- `POST /v1/intelligence/recommendations/preview` — read-only recommendation preview; does not persist rows, mutate graph edges, or emit lifecycle events.
+- `POST /v1/intelligence/recommendations/generate` — write-scoped persisted generation; persists the recommendation, mutates graph edges, and emits lifecycle events.
 - `GET /v1/intelligence/recommendations`
 - `GET /v1/intelligence/recommendations/{id}`
 - `GET /v1/intelligence/recommendations/{id}/investigation`
@@ -88,20 +86,13 @@ Additive OODA edges:
 - `GET /v1/intelligence/outcome-ledger/summary`
 - `GET /v1/intelligence/outcome-ledger/by-recommendation-type`
 - `GET /v1/intelligence/outcome-ledger/by-playbook`
+- `GET /v1/intelligence/recommendations/{id}/investigation`
 - `GET /v1/profile/{entity_id}/recommendations`
 - `GET /v1/profile/{entity_id}/outcomes`
 - `GET /v1/profile/{entity_id}/outcome-ledger`
 - `GET /v1/intelligence/playbooks`
 - `POST /v1/intelligence/playbooks`
 - `POST /v1/intelligence/playbooks/{id}/run`
-
-## Recommendation families
-
-The OODA engine delegates recommendation generation to `RecommendationFamilyRegistry`. Families cover retention, expansion, fraud review, attribution optimization, journey optimization, agent governance, rewards optimization, and operational failure while preserving the same recommendation contract and governance gates.
-
-## Investigation workspace
-
-Every recommendation can be inspected through `GET /v1/intelligence/recommendations/{id}/investigation`, which returns confidence, evidence, graph/profile context when available, candidate actions, decision/action/outcome history, prior similar outcomes for the same tenant, governance flags, data freshness, and suppression reason.
 
 ## Outcome Ledger
 
@@ -122,6 +113,15 @@ Decision and outcome intelligence flags default to disabled so tenants and opera
 
 The implementation is additive: JSONB-backed repositories auto-create tables in production and share in-memory stores in local/test mode. Existing APIs are not removed. SDK contracts are extended through shared optional types rather than changing canonical event ingestion contracts.
 
-## Playbook operational assets
+## Expansion surfaces
 
-Playbooks now provide template-driven operational workflows for recurring recommendation families. Tenants can create playbooks from built-in templates, evaluate triggers against graph/signals, generate governed recommendations linked to playbook runs, and measure ROI through playbook performance endpoints. See [Playbooks](./PLAYBOOKS.md).
+- **Recommendation families**: `RecommendationFamilyRegistry` routes generation to retention, expansion, fraud review, attribution optimization, journey optimization, agent governance, rewards optimization, and operational failure strategies. Families own detection, scoring, candidate actions, evidence, governance, suppression reasons, and emitted recommendation shape.
+- **Outcome ledger**: tenant-scoped aggregations expose value created, value pending, outcome capture rate, confidence deltas, stale loops, incomplete loops, failed loops, and value by recommendation type/playbook/entity.
+- **Investigation workspace**: recommendation investigation responses include recommendation details, confidence breakdown, evidence, graph context, related events, attribution path, candidate actions, decision/action/outcome history, governance flags, data freshness, and suppression explanation.
+- **Playbooks**: templates convert repeated recommendation loops into governed operational assets with trigger conditions, family mappings, candidate actions, approval thresholds, outcome mappings, ROI aggregation, and stale run detection.
+- **Kyber strategic observability**: `/v1/admin/kyber/*` endpoints expose aggregate health, outcome capture, playbook performance, confidence drift, vertical solution signals, and expansion opportunities for internal operators without exposing raw cross-tenant intelligence.
+- **Integration actions**: Slack, webhook, CRM task, marketing automation, and ticketing placeholders can be logged as auditable `ActionFeedback` records after required approval checks.
+
+## Rollout and migration notes
+
+Feature flags continue to default disabled. Existing recommendation APIs remain present, but persistence is now behind `write` permission: tenants should call preview for read-only analyst exploration and generate only when they intend to create an auditable graph-native recommendation record. Existing outcome/recommendation mismatch protection, approved-decision action constraints, and elevated/critical approval metadata requirements remain enforced.

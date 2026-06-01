@@ -1,12 +1,12 @@
 """Graph-native OODA recommendation generation inside the intelligence service."""
 from __future__ import annotations
 
+import hashlib
 from datetime import datetime, timezone
 from typing import Any
 
-from services.intelligence.decision_models import Recommendation
-from services.intelligence.recommendation_families import RecommendationFamilyRegistry, RecommendationGenerationContext
-from services.intelligence.recommendation_families.base import GovernancePolicyGate
+from services.intelligence.decision_models import CandidateAction
+from services.intelligence.recommendation_families import RecommendationFamilyRegistry
 
 
 def now_iso() -> str:
@@ -14,26 +14,24 @@ def now_iso() -> str:
 
 
 class GraphNativeRecommendationEngine:
-    """Backward-compatible facade over the recommendation family registry."""
+    def __init__(self, registry: RecommendationFamilyRegistry | None = None) -> None:
+        self.registry = registry or RecommendationFamilyRegistry()
 
     def __init__(self, registry: RecommendationFamilyRegistry | None = None, confidence_threshold: float = 0.0) -> None:
         self.registry = registry or RecommendationFamilyRegistry(confidence_threshold=confidence_threshold)
         self.policy_gate = GovernancePolicyGate()
 
-    def _context(self, tenant_id: str, entity_id: str | None, signals: dict[str, Any] | None = None, population_id: str | None = None) -> RecommendationGenerationContext:
+    def generate_for_entity(self, tenant_id: str, entity_id: str, signals: dict[str, Any] | None = None):
+        """Generate one governed recommendation using the configured family registry."""
         signals = signals or {}
-        return RecommendationGenerationContext(
-            tenant_id=tenant_id,
-            entity_id=entity_id,
-            population_id=population_id,
-            signals=signals,
-            profile_context=dict(signals.get("profile_context", {})),
-            graph_context=dict(signals.get("graph_context", {})),
-            attribution_context=dict(signals.get("attribution_context", {})),
-            economic_context=dict(signals.get("economic_context", {})),
-            ml_context=dict(signals.get("ml_context", {})),
-            governance_context=dict(signals.get("governance_context", {})),
-            computed_at=now_iso(),
+        family = self.registry.detect(signals, graph_context=signals.get("graph_context"), profile_context=signals.get("profile_context"))
+        enriched_signals = {**signals, "graph_snapshot_id": self._snapshot_id(tenant_id, entity_id, signals)}
+        return family.emit(
+            tenant_id,
+            entity_id,
+            enriched_signals,
+            graph_context=signals.get("graph_context"),
+            profile_context=signals.get("profile_context"),
         )
 
     def generate_for_entity(self, tenant_id: str, entity_id: str, signals: dict[str, Any] | None = None) -> Recommendation:
