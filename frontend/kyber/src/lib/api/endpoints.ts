@@ -1077,6 +1077,28 @@ export const api = {
       createOverageInvoice: (tenantId: string, params: Record<string, unknown>) =>
         restClient.post(`/v1/admin/tenants/${tenantId}/billing/overage-invoice`, wrap(unknownSchema), params).then(r => r.data),
     },
+    kyber: {
+      strategicOverview: (window = '30d') =>
+        restClient.get(`/v1/admin/kyber/strategic-overview${buildQS({ window })}`, wrap(unknownSchema)).then(r => r.data),
+      tenantValueHealth: (window = '30d') =>
+        restClient.get(`/v1/admin/kyber/tenant-value-health${buildQS({ window })}`, wrap(unknownSchema)).then(r => r.data),
+      tenantExpansionOpportunities: (window = '30d') =>
+        restClient.get(`/v1/admin/kyber/tenant-expansion-opportunities${buildQS({ window })}`, wrap(unknownSchema)).then(r => r.data),
+      tenantChurnRisk: (window = '30d') =>
+        restClient.get(`/v1/admin/kyber/tenant-churn-risk${buildQS({ window })}`, wrap(unknownSchema)).then(r => r.data),
+      recommendationFamilyPerformance: (window = '30d') =>
+        restClient.get(`/v1/admin/kyber/recommendation-family-performance${buildQS({ window })}`, wrap(unknownSchema)).then(r => r.data),
+      playbookPerformance: (window = '30d') =>
+        restClient.get(`/v1/admin/kyber/playbook-performance${buildQS({ window })}`, wrap(unknownSchema)).then(r => r.data),
+      outcomeCaptureHealth: (window = '30d') =>
+        restClient.get(`/v1/admin/kyber/outcome-capture-health${buildQS({ window })}`, wrap(unknownSchema)).then(r => r.data),
+      modelConfidenceDrift: (window = '30d') =>
+        restClient.get(`/v1/admin/kyber/model-confidence-drift${buildQS({ window })}`, wrap(unknownSchema)).then(r => r.data),
+      verticalSolutionSignals: (window = '30d') =>
+        restClient.get(`/v1/admin/kyber/vertical-solution-signals${buildQS({ window })}`, wrap(unknownSchema)).then(r => r.data),
+      revenueOpportunities: (window = '30d') =>
+        restClient.get(`/v1/admin/kyber/revenue-opportunities${buildQS({ window })}`, wrap(unknownSchema)).then(r => r.data),
+    },
   },
 
   // ── Graph — Kyber sees the COMBINED graph of ALL tenants ──────────────────
