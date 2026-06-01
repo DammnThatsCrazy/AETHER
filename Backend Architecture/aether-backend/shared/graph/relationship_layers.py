@@ -13,7 +13,7 @@ from __future__ import annotations
 
 from enum import Enum
 
-from shared.graph.graph import EdgeType, Vertex, Edge, VertexType, GraphClient
+from shared.graph.graph import Edge, EdgeType, GraphClient, Vertex, VertexType
 from shared.logger.logger import get_logger
 
 logger = get_logger("aether.graph.layers")
@@ -73,6 +73,12 @@ _EDGE_LAYER_MAP: dict[str, RelationshipLayer] = {
     EdgeType.GOVERNED_BY: RelationshipLayer.A2A,
     EdgeType.DEPENDS_ON: RelationshipLayer.A2A,
     EdgeType.PERFORMED_ACTION: RelationshipLayer.A2A,
+    EdgeType.HAS_RECOMMENDATION: RelationshipLayer.A2H,
+    EdgeType.SUPPORTED_BY: RelationshipLayer.A2H,
+    EdgeType.SELECTED_BY: RelationshipLayer.A2H,
+    EdgeType.EXECUTED_AS: RelationshipLayer.A2A,
+    EdgeType.PRODUCED: RelationshipLayer.A2A,
+    EdgeType.UPDATES_CONFIDENCE_FOR: RelationshipLayer.A2A,
 }
 
 

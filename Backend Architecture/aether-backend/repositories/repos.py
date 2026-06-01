@@ -11,17 +11,16 @@ Backend selection:
 
 from __future__ import annotations
 
+import asyncio
 import json
 import os
+import re
 from abc import ABC
 from typing import Any, Optional, TypeVar
 
-import asyncio
-import re
-
+from shared.cache.cache import TTL, CacheClient, CacheKey
 from shared.common.common import NotFoundError, utc_now
-from shared.cache.cache import CacheClient, CacheKey, TTL
-from shared.graph.graph import GraphClient, Vertex, Edge, VertexType, EdgeType
+from shared.graph.graph import Edge, EdgeType, GraphClient, Vertex, VertexType
 from shared.logger.logger import get_logger
 
 logger = get_logger("aether.repository")
@@ -130,8 +129,12 @@ def reset_in_memory_stores() -> None:
     """Test helper: drop every in-memory backing store.
 
     Production code uses Postgres; the in-memory backend is local/dev-only.
-    Tests that need isolated state can call this from their fixtures.
+    Tests that need isolated state can call this from their fixtures. Existing
+    repository singletons hold references to their table dicts, so clear each
+    dict before dropping the registry mapping.
     """
+    for store in _IN_MEMORY_STORES.values():
+        store.clear()
     _IN_MEMORY_STORES.clear()
 
 

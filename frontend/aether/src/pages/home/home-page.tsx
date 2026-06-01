@@ -1,5 +1,6 @@
 import { Card, CardHeader, CardContent, Button, Badge } from '@aether/ui';
 import { useAuth } from '@aether-app/features/auth';
+import { DecisionIntelligencePanel } from '@aether-app/components/decision-intelligence-panel';
 
 export function HomePage() {
   const { user, logout } = useAuth();
@@ -30,6 +31,8 @@ export function HomePage() {
             </p>
           </CardContent>
         </Card>
+
+        <DecisionIntelligencePanel />
       </div>
     </div>
   );

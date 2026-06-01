@@ -26,8 +26,8 @@ logger = get_logger("aether.graph")
 try:
     from gremlin_python.driver.driver_remote_connection import DriverRemoteConnection
     from gremlin_python.process.anonymous_traversal import traversal
-    from gremlin_python.process.graph_traversal import GraphTraversalSource, __
-    from gremlin_python.process.traversal import T, Cardinality
+    from gremlin_python.process.graph_traversal import __
+    from gremlin_python.process.traversal import Cardinality, T
     GREMLIN_AVAILABLE = True
 except ImportError:
     GREMLIN_AVAILABLE = False
@@ -75,6 +75,10 @@ class VertexType:
     # Intelligence Graph — Record nodes
     PAYMENT = "Payment"
     ACTION_RECORD = "ActionRecord"
+    RECOMMENDATION = "Recommendation"
+    DECISION_RECORD = "DecisionRecord"
+    OUTCOME_OBSERVATION = "OutcomeObservation"
+    PLAYBOOK_RUN = "PlaybookRun"
 
     # Web3 Coverage — Registry-native graph objects
     CHAIN = "Chain"
@@ -230,6 +234,14 @@ class EdgeType:
 
     # Intelligence Graph — Action tracking
     PERFORMED_ACTION = "PERFORMED_ACTION"  # Agent → ActionRecord
+
+    # Decision & Outcome Intelligence OODA loop
+    HAS_RECOMMENDATION = "HAS_RECOMMENDATION"
+    SUPPORTED_BY = "SUPPORTED_BY"
+    SELECTED_BY = "SELECTED_BY"
+    EXECUTED_AS = "EXECUTED_AS"
+    PRODUCED = "PRODUCED"
+    UPDATES_CONFIDENCE_FOR = "UPDATES_CONFIDENCE_FOR"
 
     # ── Web3 Coverage — Wallet ↔ Entity edges ──────────────────────────
     USES_PROTOCOL = "USES_PROTOCOL"           # Wallet → Protocol
@@ -731,7 +743,7 @@ class _NeptuneGraphBackend:
         return results
 
     async def query(self, gremlin: str) -> list[dict]:
-        g = await self._ensure_connected()
+        await self._ensure_connected()
         try:
             # Submit raw Gremlin string via the connection's client
             if self._connection and hasattr(self._connection, '_client'):
