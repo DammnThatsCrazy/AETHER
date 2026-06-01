@@ -3,6 +3,23 @@
   "generated_from": "docs/**/*.{md,mdx}",
   "docs": [
     {
+      "path": "docs/ACTION-DISPATCH.md",
+      "title": "Governed Action Dispatch",
+      "slug": "ai/action-dispatch",
+      "section": "ai",
+      "visibility": "I",
+      "audience": [
+        "architect",
+        "dev-senior",
+        "ops"
+      ],
+      "status": "beta",
+      "since_version": "8.9.0",
+      "estimated_read_minutes": 4,
+      "toc_depth": 3,
+      "canonical_owner": "platform@aether"
+    },
+    {
       "path": "docs/AGENT-CONTROLLER.md",
       "title": "Agent Controller — Multi-Controller Architecture",
       "slug": "ai/agent-controller",
@@ -331,6 +348,48 @@
       "estimated_read_minutes": 15,
       "toc_depth": 3,
       "canonical_owner": "graph@aether"
+    },
+    {
+      "path": "docs/INVESTIGATION-WORKSPACE.md",
+      "title": "Investigation Workspace",
+      "slug": "ai/investigation-workspace",
+      "section": "ai",
+      "visibility": "I",
+      "audience": [
+        "ai",
+        "architect",
+        "dev-senior",
+        "ops"
+      ],
+      "status": "beta",
+      "since_version": "8.9.0",
+      "estimated_read_minutes": 5,
+      "toc_depth": 3,
+      "canonical_owner": "platform@aether",
+      "flags": [
+        "AETHER_RECOMMENDATIONS_ENABLED",
+        "AETHER_DECISION_RECORDS_ENABLED",
+        "AETHER_OUTCOME_FEEDBACK_ENABLED"
+      ]
+    },
+    {
+      "path": "docs/KYBER-REVENUE-INTELLIGENCE.md",
+      "title": "Kyber Revenue Intelligence",
+      "slug": "ai/kyber-revenue-intelligence",
+      "section": "ai",
+      "visibility": "I",
+      "audience": [
+        "ai",
+        "architect",
+        "dev-senior",
+        "ops",
+        "exec"
+      ],
+      "status": "beta",
+      "since_version": "8.9.0",
+      "flags": [
+        "KYBER_RECOMMENDATION_OBSERVABILITY_ENABLED"
+      ]
     },
     {
       "path": "docs/KYBER-STRATEGIC-OBSERVABILITY.md",

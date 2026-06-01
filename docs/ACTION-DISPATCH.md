@@ -1,6 +1,21 @@
 ---
 title: Governed Action Dispatch
-description: Tenant-scoped integration dispatch for approved Decision & Outcome Intelligence actions.
+slug: ai/action-dispatch
+section: ai
+visibility: I
+audience: [architect, dev-senior, ops]
+status: beta
+since_version: "8.9.0"
+source_files:
+  - Backend Architecture/aether-backend/services/intelligence/routes.py
+  - Backend Architecture/aether-backend/services/intelligence/action_targets/base.py
+  - Backend Architecture/aether-backend/services/intelligence/action_targets/registry.py
+related:
+  - ai/integration-actions
+  - ai/decision-outcome-intelligence
+canonical_owner: platform@aether
+estimated_read_minutes: 4
+toc_depth: 3
 ---
 
 # Governed Action Dispatch
