@@ -32,6 +32,6 @@ Tenant-facing endpoints require authenticated tenant permissions and force the r
 
 Each generated export includes an `integrity_hash` over the generated payload and expires after seven days.
 
-## Audit export billing dimension
 
-Audit export generation is a metered usage dimension. High export volume without audit or enterprise package support creates internal revenue leakage signals; tenant-facing billing views show export usage without internal pricing strategy.
+## GTM usage notes
+Audit Export Brief collateral may describe available export types, integrity hashes, tenant-scoped access, and retention notes. It must not represent exports as external compliance certification or authorization evidence by itself.

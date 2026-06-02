@@ -39,3 +39,8 @@ The ledger reports recommendations generated and viewed, decisions recorded, act
 ## Governance and rollout
 
 The ledger is read-only and requires tenant `read` permission. It does not mutate graph records or emit lifecycle events. Feature flags remain disabled by default for gradual rollout.
+
+
+## Value review and EBR inputs
+
+Outcome Ledger metrics now feed tenant Value Review, customer health, expansion scoring, renewal risk scoring, and EBR generation. Commercial claims should reference observed outcomes and distinguish expected, pending, and observed value.

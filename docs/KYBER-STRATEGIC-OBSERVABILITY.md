@@ -39,6 +39,6 @@ Kyber may show tenant-level account health to Olympus Labs operators with `admin
 
 Kyber now includes enterprise/government packaging and deployment readiness command views: solution packages, package detail, package readiness, deployment modes, deployment readiness, audit export health, and tenant-package fit. Government entries are planning tracks only and do not claim certification.
 
-## Revenue Operations observability
 
-Kyber now includes RevOps overview, tenant billing table, contract profiles, usage detail, invoice previews, revenue leakage feed, value-created events, and expansion billing opportunities under admin-only routes.
+## GTM, pricing, and sales readiness
+Kyber now includes internal GTM surfaces for pricing architecture, materials catalog, buyer personas, ROI calculator definitions, and sales readiness aggregation. These surfaces support Olympus Labs sales execution without changing Aether tenant-facing architecture.

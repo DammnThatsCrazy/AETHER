@@ -96,10 +96,12 @@ export function AppShell({ children }: AppShellProps) {
           <NavItem to="/users" label="Users" glyph="[u]" />
           <NavItem to="/campaigns" label="Campaigns" glyph="[c]" />
           <NavItem to="/graph" label="Graph" glyph="[g]" />
+          <NavItem to="/onboarding" label="Onboarding" glyph="[on]" />
           <NavItem to="/settings" label="Settings" glyph="[:]" />
           <NavItem to="/billing" label="Billing" glyph="[$]" />
           <NavItem to="/me" label="Profile" glyph="[~]" />
           <NavItem to="/audit-exports" label="Audit Exports" glyph="[a]" />
+          <NavItem to="/value-review" label="Value Review" glyph="[v]" />
         </nav>
 
         {/* Footer */}
