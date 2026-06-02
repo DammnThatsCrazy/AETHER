@@ -1,6 +1,22 @@
+# GTM Materials
 
-## Customer Onboarding and Implementation Lifecycle
+Kyber maintains an internal catalog of sales collateral for Aether solution packages.
 
-Customer onboarding now connects package selection to implementation execution. Each package can instantiate a tenant implementation plan with package-specific steps, success criteria, recommended playbooks, recommended integrations, and audit exports. Aether exposes only the tenant's own checklist and readiness state, while Kyber exposes cross-tenant implementation operations for Olympus admins.
+## Materials catalog
+Master Aether Platform One-Pager, Olympus Labs Company One-Pager, package one-pagers, government-planning briefs, Enterprise Technical Architecture Brief, Security & Governance Brief, Audit Export Brief, Pricing Architecture Sheet, ROI Calculator, Procurement FAQ, Pilot Proposal Template, Case Study Template, and Buyer Objection Handling Guide.
 
-Rollout should account for deployment mode, audit requirements, feature flags, human-in-the-loop approval controls, and known gaps in customer telemetry until SDK, graph, recommendation, playbook, integration, and outcome signals are fully connected.
+## Safe claims
+Use tenant isolation, approval routing, audit exports, package mapping, deployment readiness, and outcome-observation language.
+
+## Prohibited claims
+Do not claim external compliance certification, authorization to operate, classified-workload support, production self-hosting, or guaranteed ROI.
+
+## Procurement language
+Describe Aether as the tenant-facing product. Describe Kyber as Olympus Labs' internal GTM, pricing, readiness, and revenue-command system.
+
+## Pilot proposal structure
+1. Buyer pain and target package.
+2. Tenant-scoped data sources and integrations.
+3. Human approval and audit-export controls.
+4. ROI assumptions and disclaimer.
+5. Success criteria and known gaps.

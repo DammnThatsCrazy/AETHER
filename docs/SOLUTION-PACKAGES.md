@@ -21,8 +21,6 @@ Each package defines buyer personas, use cases, included modules, required featu
 
 Kyber exposes package list/detail, readiness reports, deployment mode support, tenant-package fit, known gaps, and recommended next actions through `/v1/admin/kyber/solution-packages` and related readiness endpoints.
 
-## Customer Onboarding and Implementation Lifecycle
 
-Customer onboarding now connects package selection to implementation execution. Each package can instantiate a tenant implementation plan with package-specific steps, success criteria, recommended playbooks, recommended integrations, and audit exports. Aether exposes only the tenant's own checklist and readiness state, while Kyber exposes cross-tenant implementation operations for Olympus admins.
-
-Rollout should account for deployment mode, audit requirements, feature flags, human-in-the-loop approval controls, and known gaps in customer telemetry until SDK, graph, recommendation, playbook, integration, and outcome signals are fully connected.
+## GTM and pricing addendum
+Solution packages now map to Kyber GTM materials, buyer personas, pricing dimensions, ROI calculator definitions, and sales readiness checks. Government-planning packages must remain planning-only and must not claim certifications or authorizations.

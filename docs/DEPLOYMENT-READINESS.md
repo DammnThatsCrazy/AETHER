@@ -14,8 +14,6 @@ Deployment readiness tracks supportable modes without overstating compliance. A 
 
 Kyber tracks access controls, audit exports, logging, tenant isolation, integration security, incident response docs, data retention docs, AI risk management docs, deployment documentation, and known gaps.
 
-## Customer Onboarding and Implementation Lifecycle
 
-Customer onboarding now connects package selection to implementation execution. Each package can instantiate a tenant implementation plan with package-specific steps, success criteria, recommended playbooks, recommended integrations, and audit exports. Aether exposes only the tenant's own checklist and readiness state, while Kyber exposes cross-tenant implementation operations for Olympus admins.
-
-Rollout should account for deployment mode, audit requirements, feature flags, human-in-the-loop approval controls, and known gaps in customer telemetry until SDK, graph, recommendation, playbook, integration, and outcome signals are fully connected.
+## Sales readiness linkage
+Kyber sales readiness uses deployment readiness to identify packages missing supportable deployment artifacts. Government-ready planning and self-hosted future remain planning language unless implementation and approvals are completed.

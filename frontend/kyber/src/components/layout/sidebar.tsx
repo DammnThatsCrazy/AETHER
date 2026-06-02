@@ -20,6 +20,11 @@ const NAV_ITEMS: NavItem[] = [
   { path: '/cis',             label: 'CIS',             glyph: '◎' },
   { path: '/packages',        label: 'Packages',        glyph: '▣' },
   { path: '/deployment-readiness', label: 'Deploy Ready', glyph: '▤' },
+  { path: '/sales-readiness', label: 'Sales Ready', glyph: '$' },
+  { path: '/pricing-architecture', label: 'Pricing', glyph: '≋' },
+  { path: '/gtm-materials', label: 'GTM Materials', glyph: '▥' },
+  { path: '/buyer-personas', label: 'Personas', glyph: '◌' },
+  { path: '/roi-calculators', label: 'ROI Calcs', glyph: '%' },
   { path: '/diagnostics',     label: 'Diagnostics',     glyph: '⚙' },
   { path: '/lab',             label: 'Lab',             glyph: '⚗' },
 ];
