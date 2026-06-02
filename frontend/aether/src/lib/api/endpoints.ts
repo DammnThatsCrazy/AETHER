@@ -44,6 +44,15 @@ const buildQS = (params: Record<string, string | number | boolean | undefined>) 
 // ─── API ─────────────────────────────────────────────────────────────────────
 export const api = {
 
+
+  valueReview: {
+    overview: () => restClient.get('/v1/value-review', wrap(unknownSchema)).then(r => r.data),
+    summary: () => restClient.get('/v1/value-review/summary', wrap(unknownSchema)).then(r => r.data),
+    recommendations: () => restClient.get('/v1/value-review/recommendations', wrap(unknownSchema)).then(r => r.data),
+    playbooks: () => restClient.get('/v1/value-review/playbooks', wrap(unknownSchema)).then(r => r.data),
+    nextSteps: () => restClient.get('/v1/value-review/next-steps', wrap(unknownSchema)).then(r => r.data),
+  },
+
   // ── Profile — full + all contextual sub-resources ─────────────────────────
   profile: {
     /** Full holistic profile — identity, consent, timeline, graph, intelligence, lake data. */
@@ -505,6 +514,18 @@ export const api = {
 
     playbookPerformanceSummary: () =>
       restClient.get(`/v1/intelligence/playbooks/performance/summary`, wrap(unknownSchema)).then(r => r.data),
+
+    auditExportTypes: () =>
+      restClient.get('/v1/intelligence/audit-exports/types', wrap(unknownSchema)).then(r => r.data),
+
+    createAuditExport: (payload: Record<string, unknown>) =>
+      restClient.post('/v1/intelligence/audit-exports', wrap(unknownSchema), payload).then(r => r.data),
+
+    auditExport: (exportId: string) =>
+      restClient.get(`/v1/intelligence/audit-exports/${exportId}`, wrap(unknownSchema)).then(r => r.data),
+
+    downloadAuditExport: (exportId: string) =>
+      restClient.get(`/v1/intelligence/audit-exports/${exportId}/download`, wrap(unknownSchema)).then(r => r.data),
   },
 
   // ── Analytics ─────────────────────────────────────────────────────────────
@@ -948,6 +969,23 @@ export const api = {
     invoices: () =>
       restClient.get('/v1/billing/invoices', wrap(unknownSchema))
         .then(r => r.data as { invoices: Array<{ id: string; amount: number; currency: string; status: string; period_start: string; period_end: string; invoice_url: string | null }> }),
+
+    plan: () =>
+      restClient.get('/v1/billing/plan', wrap(unknownSchema)).then(r => r.data),
+
+    entitlements: () =>
+      restClient.get('/v1/billing/entitlements', wrap(unknownSchema)).then(r => r.data),
+
+    usageSummary: () =>
+      restClient.get('/v1/billing/usage/summary', wrap(unknownSchema)).then(r => r.data),
+
+    invoicePreviews: () =>
+      restClient.get('/v1/billing/invoice-previews', wrap(unknownSchema)).then(r => r.data),
+
+    valueCreated: () =>
+      restClient.get('/v1/billing/value-created', wrap(unknownSchema)).then(r => r.data),
+
+
   },
 
   // ── Enterprise contact ─────────────────────────────────────────────────────

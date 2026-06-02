@@ -16,6 +16,7 @@ Endpoints:
 from __future__ import annotations
 
 import uuid
+from collections import Counter
 from typing import Any, Literal
 
 from config.settings import settings
@@ -74,8 +75,28 @@ from services.intelligence.repositories import (
     RecommendationFeedbackRepository,
     RecommendationRepository,
     RevenueMeteringEventRepository,
+    AuditExportRepository,
 )
 from services.lake.features import materialize_wallet_features
+
+from services.intelligence.solution_packages import (
+    AUDIT_EXPORT_TYPES,
+    BUYER_PERSONAS,
+    DEPLOYMENT_MODES,
+    GTM_MATERIALS,
+    PRICING_MODELS,
+    ROI_CALCULATORS,
+    SOLUTION_PACKAGES,
+    AuditExportRequest,
+    gtm_materials_for_package,
+    audit_export_type_map,
+    personas_for_package,
+    roi_calculators_for_package,
+    make_export_record,
+    pdf_summary_payload,
+    redact_secrets,
+    to_csv_payload,
+)
 
 logger = get_logger("aether.service.intelligence")
 router = APIRouter(prefix="/v1/intelligence", tags=["Intelligence"])
@@ -244,6 +265,7 @@ _outcomes = OutcomeRepository()
 _playbooks = PlaybookRepository()
 _playbook_runs = PlaybookRunRepository()
 _feedback = RecommendationFeedbackRepository()
+_audit_exports = AuditExportRepository()
 _ooda = GraphNativeRecommendationEngine()
 _ledger = OutcomeLedgerAggregator()
 
@@ -1065,6 +1087,292 @@ async def _all_tenant_ledgers(limit: int = 1000) -> dict[str, dict]:
     tenants = sorted({r.get("tenant_id") for r in recs if r.get("tenant_id")})
     return {tenant_id: await _tenant_ledger(tenant_id, limit=limit) for tenant_id in tenants}
 
+# ── Enterprise + Government Packaging, Audit Exports, Deployment Readiness ──
+
+def _markets(pkg: dict[str, Any]) -> list[str]:
+    market = pkg.get("market", [])
+    return market if isinstance(market, list) else [str(market)]
+
+
+def _package_by_id(package_id: str) -> dict[str, Any] | None:
+    return next((p.model_dump() for p in SOLUTION_PACKAGES if p.package_id == package_id), None)
+
+
+def _readiness_for_package(pkg: dict[str, Any]) -> dict[str, Any]:
+    gaps = []
+    if "government_planning" in _markets(pkg):
+        gaps.append("Government/public-sector package is planning-only and has no certification or authorization claim.")
+    if pkg.get("readiness_status") not in {"sales_ready", "enterprise_ready"}:
+        gaps.append("Additional customer evidence, docs, and tests required before sales-ready positioning.")
+    return {
+        "package_id": pkg["package_id"],
+        "readiness_status": pkg["readiness_status"],
+        "feature_completeness": "core_modules_mapped" if pkg.get("included_modules") else "missing_modules",
+        "documentation_completeness": "documented_with_known_gaps",
+        "test_coverage_status": "backend_contract_and_route_coverage_added",
+        "audit_export_support": "available" if pkg.get("required_audit_exports") else "not_required",
+        "access_control_status": "tenant_scoped_permissions_required",
+        "integration_support_status": "recommended_integrations_identified",
+        "deployment_support_status": "planning" if "government_planning" in _markets(pkg) else "mapped",
+        "pricing_defined": bool(pkg.get("pricing_levers")),
+        "sales_collateral_status": "package_definition_ready" if pkg.get("readiness_status") in {"sales_ready", "pilot_ready"} else "planning_only",
+        "known_gaps": gaps,
+        "recommended_next_actions": ["Validate package with target tenant usage", "Complete missing deployment artifacts before raising readiness", "Review required audit exports with buyer security team"],
+        "generated_at": utc_now().isoformat(),
+    }
+
+
+async def _tenant_usage_metrics(tenant_id: str, limit: int = 1000) -> dict[str, Any]:
+    recs = await _recommendations.find_many({"tenant_id": tenant_id}, limit=limit)
+    decisions = await _decisions.find_many({"tenant_id": tenant_id}, limit=limit)
+    actions = await _actions.find_many({"tenant_id": tenant_id}, limit=limit)
+    dispatches = await _dispatches.find_many({"tenant_id": tenant_id}, limit=limit)
+    outcomes = await _outcomes.find_many({"tenant_id": tenant_id}, limit=limit)
+    playbooks = await _playbooks.find_many({"tenant_id": tenant_id}, limit=limit)
+    type_counts = Counter(str(r.get("recommendation_type", "unknown")) for r in recs)
+    outcome_types = Counter(str(o.get("outcome_type", "unknown")) for o in outcomes)
+    return {"recommendations": len(recs), "decisions": len(decisions), "actions": len(actions), "dispatches": len(dispatches), "outcomes": len(outcomes), "playbooks": len(playbooks), "recommendation_types": dict(type_counts), "outcome_types": dict(outcome_types), "success_outcomes": sum(1 for o in outcomes if o.get("label") == "success"), "failure_outcomes": sum(1 for o in outcomes if o.get("label") == "failure"), "observed_value": round(sum(float(o.get("value") or 0) for o in outcomes), 2)}
+
+
+def _tenant_package_fit_from_metrics(tenant_id: str, metrics_data: dict[str, Any]) -> list[dict[str, Any]]:
+    rt = metrics_data.get("recommendation_types", {})
+    ot = metrics_data.get("outcome_types", {})
+    profiles = {
+        "revenue_intelligence_graph": rt.get("retention", 0) + rt.get("expansion", 0) + rt.get("attribution_optimization", 0) + rt.get("journey_optimization", 0) + ot.get("revenue", 0),
+        "fraud_risk_intelligence_graph": rt.get("fraud_review", 0) + ot.get("avoided_loss", 0) + metrics_data.get("decisions", 0),
+        "agent_governance_graph": rt.get("agent_governance", 0) + metrics_data.get("dispatches", 0) + metrics_data.get("failure_outcomes", 0),
+        "operational_decision_intelligence": rt.get("operational_failure", 0) + metrics_data.get("playbooks", 0) + metrics_data.get("actions", 0),
+        "program_integrity_graph": rt.get("fraud_review", 0) + rt.get("case_prioritization", 0) + metrics_data.get("decisions", 0),
+        "critical_infrastructure_coordination_graph": rt.get("operational_failure", 0) + metrics_data.get("actions", 0) + metrics_data.get("dispatches", 0),
+    }
+    max_score = max([*profiles.values(), 1])
+    rows = []
+    for package_id, raw in profiles.items():
+        pkg = _package_by_id(package_id) or {"name": package_id}
+        score = round(min(1.0, raw / max_score), 4)
+        rows.append({"tenant_id": tenant_id, "package_id": package_id, "package_name": pkg.get("name"), "package_fit_score": score, "suggested_package": score >= 0.75, "supporting_metrics": metrics_data, "recommended_sales_motion": "expansion_or_pilot" if score >= 0.75 else "nurture_with_readiness_discovery"})
+    return sorted(rows, key=lambda r: r["package_fit_score"], reverse=True)
+
+
+async def _all_tenant_fits() -> list[dict[str, Any]]:
+    recs = await _recommendations.find_many({}, limit=2000)
+    tenants = sorted({r.get("tenant_id") for r in recs if r.get("tenant_id")})
+    fits = []
+    for tenant_id in tenants:
+        fits.extend(_tenant_package_fit_from_metrics(tenant_id, await _tenant_usage_metrics(tenant_id)))
+    return fits
+
+
+def _export_matches(item: dict[str, Any], body: AuditExportRequest) -> bool:
+    if body.entity_id and item.get("entity_id") != body.entity_id:
+        return False
+    if body.recommendation_id and item.get("recommendation_id") != body.recommendation_id:
+        return False
+    if body.playbook_id and item.get("playbook_id") != body.playbook_id:
+        return False
+    return True
+
+
+async def _build_audit_payload(tenant_id: str, body: AuditExportRequest) -> Any:
+    recs = [r for r in await _recommendations.find_many({"tenant_id": tenant_id}, limit=1000) if _export_matches(r, body)]
+    decisions = [d for d in await _decisions.find_many({"tenant_id": tenant_id}, limit=1000) if _export_matches(d, body) or not body.recommendation_id]
+    actions = await _actions.find_many({"tenant_id": tenant_id}, limit=1000)
+    dispatches = await _dispatches.find_many({"tenant_id": tenant_id}, limit=1000)
+    receipts = await _delivery_receipts.find_many({}, limit=1000)
+    outcomes = [o for o in await _outcomes.find_many({"tenant_id": tenant_id}, limit=1000) if _export_matches(o, body)]
+    playbooks = [p for p in await _playbooks.find_many({"tenant_id": tenant_id}, limit=1000) if not body.playbook_id or p.get("playbook_id") == body.playbook_id]
+    runs = [r for r in await _playbook_runs.find_many({"tenant_id": tenant_id}, limit=1000) if not body.playbook_id or r.get("playbook_id") == body.playbook_id]
+    if not body.include_evidence:
+        recs = [{k: v for k, v in r.items() if k != "evidence"} for r in recs]
+    if not body.include_confidence_deltas:
+        outcomes = [{k: v for k, v in o.items() if k != "confidence_delta"} for o in outcomes]
+    if body.export_type == "recommendation_audit":
+        payload = recs
+    elif body.export_type == "decision_audit":
+        payload = decisions
+    elif body.export_type == "action_dispatch_audit":
+        receipt_by_dispatch = {r.get("dispatch_id"): r for r in receipts} if body.include_dispatch_receipts else {}
+        payload = [{"action": a, "dispatches": [d for d in dispatches if d.get("action_id") == a.get("action_id")], "delivery_receipts": [receipt_by_dispatch[d.get("dispatch_id")] for d in dispatches if d.get("action_id") == a.get("action_id") and d.get("dispatch_id") in receipt_by_dispatch], "authorization_metadata_present": bool(a.get("authorization_metadata")), "idempotency_keys": [d.get("idempotency_key") for d in dispatches if d.get("action_id") == a.get("action_id") and d.get("idempotency_key")], "status_transitions": [a.get("status"), *[d.get("status") for d in dispatches if d.get("action_id") == a.get("action_id")]]} for a in actions]
+    elif body.export_type == "outcome_audit":
+        payload = outcomes
+    elif body.export_type == "playbook_run_audit":
+        payload = {"playbooks": playbooks, "runs": runs, "generated_recommendations": recs, "linked_decisions": decisions, "linked_actions": actions, "linked_outcomes": outcomes, "roi_metrics": (await _tenant_ledger(tenant_id)).get("by_playbook", [])}
+    elif body.export_type == "agent_governance_audit":
+        agent_recs = [r for r in recs if r.get("recommendation_type") == "agent_governance" or "agent" in str(r.get("policy_governance_flags", [])).lower()]
+        payload = {"recommendations": agent_recs, "approvals": decisions, "actions": actions, "dispatches": dispatches, "outcomes": outcomes, "governance_notes": "Tenant-scoped agent governance audit; raw secrets excluded."}
+    elif body.export_type == "tenant_value_audit":
+        ledger = await _tenant_ledger(tenant_id)
+        labels = Counter(o.get("label", "unknown") for o in outcomes)
+        payload = {"outcome_ledger_summary": ledger.get("summary"), "playbook_roi": ledger.get("by_playbook"), "recommendation_family_performance": ledger.get("by_recommendation_type"), "observed_value": ledger.get("summary", {}).get("observed_value"), "pending_value": max(float(ledger.get("summary", {}).get("expected_value", 0)) - float(ledger.get("summary", {}).get("observed_value", 0)), 0), "counts": dict(labels)}
+    elif body.export_type == "package_readiness_audit":
+        payload = {"solution_packages": [p.model_dump() for p in SOLUTION_PACKAGES], "readiness_reports": [_readiness_for_package(p.model_dump()) for p in SOLUTION_PACKAGES], "deployment_modes": [m.model_dump() for m in DEPLOYMENT_MODES]}
+    else:
+        raise BadRequestError("Unknown audit export type")
+    payload = redact_secrets(payload)
+    if body.format == "csv":
+        rows = payload if isinstance(payload, list) else [payload]
+        return to_csv_payload(rows)
+    if body.format == "pdf_summary":
+        return pdf_summary_payload(body.export_type, payload)
+    return payload
+
+
+@router.get("/audit-exports/types")
+async def list_audit_export_types(request: Request):
+    request.state.tenant.require_permission("read")
+    return APIResponse(data={"items": [t.model_dump() for t in AUDIT_EXPORT_TYPES], "count": len(AUDIT_EXPORT_TYPES)}).to_dict()
+
+
+@router.post("/audit-exports")
+async def create_audit_export(body: AuditExportRequest, request: Request):
+    tenant = request.state.tenant
+    tenant.require_permission("write")
+    if body.tenant_id and body.tenant_id != tenant.tenant_id:
+        raise BadRequestError("Audit export tenant_id must match the authenticated tenant")
+    export_type = audit_export_type_map().get(body.export_type)
+    if export_type is None:
+        raise BadRequestError("Unknown audit export type")
+    if body.format not in export_type.supported_formats:
+        raise BadRequestError("Unsupported format for export type")
+    payload = await _build_audit_payload(tenant.tenant_id, body)
+    requested_by = getattr(tenant, "user_id", None) or getattr(tenant, "actor_id", None) or "tenant_user"
+    record = make_export_record(tenant_id=tenant.tenant_id, requested_by=requested_by, request=body, payload=payload)
+    saved = record.model_dump()
+    saved["payload"] = payload
+    await _audit_exports.insert(record.export_id, saved)
+    public = record.model_dump()
+    return APIResponse(data=public).to_dict()
+
+
+@router.get("/audit-exports/{export_id}")
+async def get_audit_export(export_id: str, request: Request):
+    tenant = request.state.tenant
+    tenant.require_permission("read")
+    record = await _audit_exports.find_by_id_or_fail(export_id)
+    if record.get("tenant_id") != tenant.tenant_id:
+        from shared.common.common import NotFoundError
+        raise NotFoundError("audit export")
+    return APIResponse(data={k: v for k, v in record.items() if k != "payload"}).to_dict()
+
+
+@router.get("/audit-exports/{export_id}/download")
+async def download_audit_export(export_id: str, request: Request):
+    tenant = request.state.tenant
+    tenant.require_permission("read")
+    record = await _audit_exports.find_by_id_or_fail(export_id)
+    if record.get("tenant_id") != tenant.tenant_id:
+        from shared.common.common import NotFoundError
+        raise NotFoundError("audit export")
+    return APIResponse(data={"export_id": export_id, "format": record.get("format"), "integrity_hash": record.get("integrity_hash"), "payload": record.get("payload")}).to_dict()
+
+
+@kyber_admin_router.get("/solution-packages")
+async def kyber_solution_packages(request: Request):
+    request.state.tenant.require_permission("admin")
+    fits = await _all_tenant_fits()
+    demand = Counter(f["package_id"] for f in fits if f["suggested_package"])
+    return APIResponse(data={"items": [{**p.model_dump(), "active_tenant_demand": demand.get(p.package_id, 0), "known_gaps": _readiness_for_package(p.model_dump())["known_gaps"]} for p in SOLUTION_PACKAGES], "tenant_package_fit": fits}).to_dict()
+
+
+@kyber_admin_router.get("/solution-packages/{package_id}")
+async def kyber_solution_package_detail(package_id: str, request: Request):
+    request.state.tenant.require_permission("admin")
+    pkg = _package_by_id(package_id)
+    if not pkg:
+        from shared.common.common import NotFoundError
+        raise NotFoundError("solution package")
+    fits = [f for f in await _all_tenant_fits() if f["package_id"] == package_id]
+    return APIResponse(data={**pkg, "readiness_report": _readiness_for_package(pkg), "deployment_modes_detail": [m.model_dump() for m in DEPLOYMENT_MODES if m.name in pkg.get("deployment_modes", [])], "tenants_matching": [f for f in fits if f["suggested_package"]]}).to_dict()
+
+
+@kyber_admin_router.get("/package-readiness")
+async def kyber_package_readiness(request: Request):
+    request.state.tenant.require_permission("admin")
+    reports = [_readiness_for_package(p.model_dump()) for p in SOLUTION_PACKAGES]
+    return APIResponse(data={"items": reports, "count": len(reports)}).to_dict()
+
+
+@kyber_admin_router.get("/deployment-modes")
+async def kyber_deployment_modes(request: Request):
+    request.state.tenant.require_permission("admin")
+    return APIResponse(data={"items": [m.model_dump() for m in DEPLOYMENT_MODES], "count": len(DEPLOYMENT_MODES)}).to_dict()
+
+
+@kyber_admin_router.get("/deployment-readiness")
+async def kyber_deployment_readiness(request: Request):
+    request.state.tenant.require_permission("admin")
+    items = [m.model_dump() | {"checklist": {"access_controls": "required", "audit_exports": "implemented", "logging": "required", "tenant_isolation": "required", "integration_security": "secret_refs_only", "incident_response_docs": "required", "data_retention_docs": "required", "ai_risk_management_docs": "required", "deployment_documentation": "required", "known_gaps": m.known_gaps}} for m in DEPLOYMENT_MODES]
+    return APIResponse(data={"items": items}).to_dict()
+
+
+@kyber_admin_router.get("/audit-export-health")
+async def kyber_audit_export_health(request: Request):
+    request.state.tenant.require_permission("admin")
+    exports = await _audit_exports.find_many({}, limit=1000)
+    return APIResponse(data={"export_volume": len(exports), "export_success": sum(1 for e in exports if e.get("status") == "generated"), "export_failure": sum(1 for e in exports if e.get("status") == "failed"), "stale_or_expired_exports": sum(1 for e in exports if e.get("status") == "expired"), "export_types_used": dict(Counter(e.get("export_type") for e in exports)), "tenants_requesting_exports": sorted({e.get("tenant_id") for e in exports if e.get("tenant_id")})}).to_dict()
+
+
+
+@kyber_admin_router.get("/gtm/materials")
+async def kyber_gtm_materials(request: Request):
+    request.state.tenant.require_permission("admin")
+    return APIResponse(data={"items": [m.model_dump() for m in GTM_MATERIALS], "count": len(GTM_MATERIALS)}).to_dict()
+
+
+@kyber_admin_router.get("/gtm/materials/{material_id}")
+async def kyber_gtm_material_detail(material_id: str, request: Request):
+    request.state.tenant.require_permission("admin")
+    material = next((m.model_dump() for m in GTM_MATERIALS if m.material_id == material_id), None)
+    if not material:
+        from shared.common.common import NotFoundError
+        raise NotFoundError("gtm material")
+    return APIResponse(data=material).to_dict()
+
+
+@kyber_admin_router.get("/gtm/buyer-personas")
+async def kyber_gtm_buyer_personas(request: Request):
+    request.state.tenant.require_permission("admin")
+    return APIResponse(data={"items": [p.model_dump() for p in BUYER_PERSONAS], "count": len(BUYER_PERSONAS)}).to_dict()
+
+
+@kyber_admin_router.get("/gtm/pricing-models")
+async def kyber_gtm_pricing_models(request: Request):
+    request.state.tenant.require_permission("admin")
+    return APIResponse(data={"items": [p.model_dump() for p in PRICING_MODELS], "count": len(PRICING_MODELS)}).to_dict()
+
+
+@kyber_admin_router.get("/gtm/roi-calculators")
+async def kyber_gtm_roi_calculators(request: Request):
+    request.state.tenant.require_permission("admin")
+    return APIResponse(data={"items": [c.model_dump() for c in ROI_CALCULATORS], "count": len(ROI_CALCULATORS)}).to_dict()
+
+
+@kyber_admin_router.get("/gtm/sales-readiness")
+async def kyber_gtm_sales_readiness(request: Request):
+    request.state.tenant.require_permission("admin")
+    items = []
+    for pkg_model in SOLUTION_PACKAGES:
+        pkg = pkg_model.model_dump()
+        readiness = _readiness_for_package(pkg)
+        materials = gtm_materials_for_package(pkg_model.package_id)
+        personas = personas_for_package(pkg_model.package_id)
+        calculators = roi_calculators_for_package(pkg_model.package_id)
+        has_audit = bool(pkg.get("required_audit_exports"))
+        deployment_ready = pkg.get("readiness_status") in {"sales_ready", "enterprise_ready", "pilot_ready"}
+        ready = pkg.get("readiness_status") == "sales_ready" and bool(materials) and bool(personas) and bool(calculators) and has_audit and deployment_ready
+        next_actions = []
+        if not materials:
+            next_actions.append("Create package collateral before sales motion.")
+        if not calculators:
+            next_actions.append("Add ROI calculator or mark calculator gap in sales notes.")
+        if not has_audit:
+            next_actions.append("Map required audit exports for procurement/security review.")
+        if not deployment_ready:
+            next_actions.append("Complete deployment readiness artifacts; use planning language only.")
+        if "government_planning" in _markets(pkg):
+            next_actions.append("Keep public-sector language planning-only; do not claim certification, authorization, FedRAMP, StateRAMP, or ATO.")
+        items.append({"package_id": pkg_model.package_id, "package_name": pkg_model.name, "readiness_status": pkg_model.readiness_status, "ready_to_sell": ready, "material_count": len(materials), "persona_count": len(personas), "roi_calculator_count": len(calculators), "missing_collateral": not bool(materials), "missing_roi_calculator": not bool(calculators), "missing_audit_export_support": not has_audit, "missing_deployment_readiness": not deployment_ready, "known_gaps": readiness["known_gaps"], "recommended_next_sales_actions": next_actions or ["Use approved sales-ready collateral and capture buyer feedback."]})
+    return APIResponse(data={"items": items, "ready_to_sell_count": sum(1 for i in items if i["ready_to_sell"]), "generated_at": utc_now().isoformat()}).to_dict()
 
 @kyber_admin_router.get("/recommendation-health")
 async def kyber_recommendation_health(request: Request):

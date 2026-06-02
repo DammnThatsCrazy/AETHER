@@ -182,6 +182,7 @@ from services.diagnostics.routes import router as diagnostics_router
 from services.providers.routes import router as providers_router
 from services.lake.routes import router as lake_router
 from services.intelligence.routes import kyber_admin_router, router as intelligence_router
+from services.intelligence.customer_success import admin_router as customer_success_admin_router, tenant_router as value_review_router
 from services.intelligence.extraction_intel import router as extraction_intel_router
 from services.profile.routes import router as profile_router, profile360_router
 from services.population.routes import router as population_router
@@ -201,7 +202,7 @@ from services.admin.billing_subscription_routes import router as admin_billing_s
 from services.admin.webhook_routes import router as stripe_webhook_router
 from services.registration.routes import router as registration_router
 from services.me.routes import router as me_router
-from services.billing.routes import router as billing_router, admin_overage_router
+from services.billing.routes import router as billing_router, admin_overage_router, kyber_revops_router
 from services.auth.routes import router as auth_router, admin_auth_router
 from services.contact.routes import router as contact_router
 from services.recommendations.routes import router as recommendations_router
@@ -229,6 +230,7 @@ from services.sdk.routes import router as sdk_router
 from services.sdk_health.routes import router as sdk_health_router
 from services.sdk_drift.routes import router as sdk_drift_router
 from services.sdk_config.routes import router as sdk_config_router
+from services.onboarding.routes import router as onboarding_router, admin_router as onboarding_admin_router
 
 # ML predict routes — imported from the ML serving package when available.
 # When ML_SERVING_INLINE=true (E2 consolidated image) the predict routes are
@@ -399,6 +401,8 @@ def create_app() -> FastAPI:
     app.include_router(lake_router)
     app.include_router(intelligence_router)
     app.include_router(kyber_admin_router)
+    app.include_router(customer_success_admin_router)
+    app.include_router(value_review_router)
     app.include_router(extraction_intel_router)
     # pnl_router and social_router define /v1/profile/{id}/pnl and
     # /v1/profile/{id}/social-intelligence with richer responses than
@@ -424,6 +428,7 @@ def create_app() -> FastAPI:
     app.include_router(me_router)
     app.include_router(billing_router)
     app.include_router(admin_overage_router)
+    app.include_router(kyber_revops_router)
     app.include_router(auth_router)
     app.include_router(admin_auth_router)
     app.include_router(contact_router)
@@ -449,6 +454,8 @@ def create_app() -> FastAPI:
     app.include_router(sdk_health_router)   # SDK health monitoring: heartbeats + fleet status
     app.include_router(sdk_drift_router)    # SDK drift detection: schema, stale, replay storm
     app.include_router(sdk_config_router)   # SDK remote config: signed manifests + rollouts
+    app.include_router(onboarding_router)      # Customer onboarding center
+    app.include_router(onboarding_admin_router) # Kyber implementation lifecycle
 
     # ── ML serving inline (E2 consolidated image) ───────────────────────
     # When ML_SERVING_INLINE=true the predict routes are handled in-process

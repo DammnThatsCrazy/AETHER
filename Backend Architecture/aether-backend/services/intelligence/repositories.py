@@ -69,3 +69,44 @@ class ActionDeliveryReceiptRepository(BaseRepository):
 class RevenueMeteringEventRepository(BaseRepository):
     def __init__(self) -> None:
         super().__init__("revenue_metering_events")
+
+
+class AuditExportRepository(BaseRepository):
+    def __init__(self) -> None:
+        super().__init__("audit_exports_intelligence")
+
+class CustomerSuccessAccountRepository(BaseRepository):
+    def __init__(self) -> None:
+        super().__init__("customer_success_accounts")
+
+    async def list_for_tenant(self, tenant_id: str, limit: int = 50) -> list[dict]:
+        return await self.find_many(filters={"tenant_id": tenant_id}, limit=limit)
+
+
+class CustomerSuccessTriggerRepository(BaseRepository):
+    def __init__(self) -> None:
+        super().__init__("customer_success_triggers")
+
+    async def open_for_tenant_type(self, tenant_id: str, trigger_type: str) -> list[dict]:
+        rows = await self.find_many(filters={"tenant_id": tenant_id, "trigger_type": trigger_type}, limit=100)
+        return [row for row in rows if row.get("status") in (None, "open", "in_progress")]
+
+
+class ExpansionOpportunityRepository(BaseRepository):
+    def __init__(self) -> None:
+        super().__init__("customer_expansion_opportunities")
+
+
+class RenewalRiskRepository(BaseRepository):
+    def __init__(self) -> None:
+        super().__init__("customer_renewal_risks")
+
+
+class ExecutiveBusinessReviewRepository(BaseRepository):
+    def __init__(self) -> None:
+        super().__init__("executive_business_reviews")
+
+
+class AccountPlanRepository(BaseRepository):
+    def __init__(self) -> None:
+        super().__init__("account_plans")

@@ -125,3 +125,7 @@ The implementation is additive: JSONB-backed repositories auto-create tables in 
 ## Rollout and migration notes
 
 Feature flags continue to default disabled. Existing recommendation APIs remain present, but persistence is now behind `write` permission: tenants should call preview for read-only analyst exploration and generate only when they intend to create an auditable graph-native recommendation record. Existing outcome/recommendation mismatch protection, approved-decision action constraints, and elevated/critical approval metadata requirements remain enforced.
+
+## Enterprise packaging and audit exports
+
+Decision records now feed tenant-scoped audit exports and Kyber solution package readiness. Exports preserve actor, approval, selected/rejected action, reason/comment, and timestamp evidence without exposing cross-tenant data. See `docs/AUDIT-EXPORTS.md` and `docs/SOLUTION-PACKAGES.md`.

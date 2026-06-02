@@ -1082,6 +1082,44 @@ export const api = {
         restClient.get(`/v1/admin/kyber/vertical-solution-signals${buildQS({ window })}`, wrap(unknownSchema)).then(r => r.data),
       revenueOpportunities: (window = '30d') =>
         restClient.get(`/v1/admin/kyber/revenue-opportunities${buildQS({ window })}`, wrap(unknownSchema)).then(r => r.data),
+      solutionPackages: () =>
+        restClient.get('/v1/admin/kyber/solution-packages', wrap(unknownSchema)).then(r => r.data),
+      solutionPackage: (packageId: string) =>
+        restClient.get(`/v1/admin/kyber/solution-packages/${packageId}`, wrap(unknownSchema)).then(r => r.data),
+      packageReadiness: () =>
+        restClient.get('/v1/admin/kyber/package-readiness', wrap(unknownSchema)).then(r => r.data),
+      deploymentModes: () =>
+        restClient.get('/v1/admin/kyber/deployment-modes', wrap(unknownSchema)).then(r => r.data),
+      deploymentReadiness: () =>
+        restClient.get('/v1/admin/kyber/deployment-readiness', wrap(unknownSchema)).then(r => r.data),
+      revopsOverview: () =>
+        restClient.get('/v1/admin/kyber/revops/overview', wrap(unknownSchema)).then(r => r.data),
+      revopsContracts: () =>
+        restClient.get('/v1/admin/kyber/revops/contracts', wrap(unknownSchema)).then(r => r.data),
+      revopsUsage: () =>
+        restClient.get('/v1/admin/kyber/revops/usage', wrap(unknownSchema)).then(r => r.data),
+      revopsInvoicePreviews: () =>
+        restClient.get('/v1/admin/kyber/revops/invoice-previews', wrap(unknownSchema)).then(r => r.data),
+      revopsValueCreated: () =>
+        restClient.get('/v1/admin/kyber/revops/value-created', wrap(unknownSchema)).then(r => r.data),
+      revopsRevenueLeakage: () =>
+        restClient.get('/v1/admin/kyber/revops/revenue-leakage', wrap(unknownSchema)).then(r => r.data),
+      revopsExpansionBillingOpportunities: () =>
+        restClient.get('/v1/admin/kyber/revops/expansion-billing-opportunities', wrap(unknownSchema)).then(r => r.data),
+      auditExportHealth: () =>
+        restClient.get('/v1/admin/kyber/audit-export-health', wrap(unknownSchema)).then(r => r.data),
+      gtmMaterials: () =>
+        restClient.get('/v1/admin/kyber/gtm/materials', wrap(unknownSchema)).then(r => r.data),
+      gtmMaterial: (materialId: string) =>
+        restClient.get(`/v1/admin/kyber/gtm/materials/${materialId}`, wrap(unknownSchema)).then(r => r.data),
+      buyerPersonas: () =>
+        restClient.get('/v1/admin/kyber/gtm/buyer-personas', wrap(unknownSchema)).then(r => r.data),
+      pricingModels: () =>
+        restClient.get('/v1/admin/kyber/gtm/pricing-models', wrap(unknownSchema)).then(r => r.data),
+      roiCalculators: () =>
+        restClient.get('/v1/admin/kyber/gtm/roi-calculators', wrap(unknownSchema)).then(r => r.data),
+      salesReadiness: () =>
+        restClient.get('/v1/admin/kyber/gtm/sales-readiness', wrap(unknownSchema)).then(r => r.data),
     },
   },
 
