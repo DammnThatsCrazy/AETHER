@@ -42,3 +42,8 @@ A playbook defines trigger conditions, recommendation families, candidate action
 ## Package ROI and audit exports
 
 Playbook definitions, run history, generated recommendations, linked decisions/actions/outcomes, and ROI metrics are included in `playbook_run_audit` exports and in Kyber package readiness views.
+
+
+## Customer success usage
+
+Playbook adoption and ROI now contribute to account health, expansion readiness, renewal risk, EBR summaries, and playbook-underused triggers.
