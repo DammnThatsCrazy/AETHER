@@ -26,3 +26,16 @@ Tenant-scoped audit exports, package readiness reporting, deployment readiness c
 ## Planned work
 
 Evidence packets, agency-specific control mapping, incident/retention/AI-risk documentation reviews, deployment runbooks, and certification/authorization processes if Olympus Labs chooses to pursue them.
+
+## Governance control plane (implemented)
+
+The evidence-packet track is now partially implemented by the security &
+governance control plane: access control, policy engine, audit ledger, tenant
+isolation verifier, break-glass operator access, data retention, audit-export
+governance, integration security, and **governance evidence packs**. See
+[SECURITY-GOVERNANCE-CONTROLS.md](./SECURITY-GOVERNANCE-CONTROLS.md) and
+[GOVERNANCE-EVIDENCE-PACKS.md](./GOVERNANCE-EVIDENCE-PACKS.md).
+
+These provide security-review evidence with explicit known gaps. They are **not**
+FedRAMP, IL-level, or any other authorization. Certification/authorization remains
+a planning track and is pursued only if Olympus Labs chooses to.

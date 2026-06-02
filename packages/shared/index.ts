@@ -29,3 +29,4 @@ export * from './feedback-types';
 export * from './solution-packages';
 export * from './gtm-pricing';
 export * from './customer-onboarding';
+export * from './security-governance';

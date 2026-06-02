@@ -53,6 +53,16 @@ export const api = {
     nextSteps: () => restClient.get('/v1/value-review/next-steps', wrap(unknownSchema)).then(r => r.data),
   },
 
+  // ─── Security & Governance (tenant-scoped only) ────────────────────────────
+  security: {
+    myPermissions: () => restClient.get('/v1/security/me/permissions', wrap(unknownSchema)).then(r => r.data),
+    auditEvents: (limit = 50) => restClient.get(`/v1/security/audit-events${buildQS({ limit })}`, wrap(unknownSchema)).then(r => r.data),
+    policies: (limit = 50) => restClient.get(`/v1/security/policies${buildQS({ limit })}`, wrap(unknownSchema)).then(r => r.data),
+    dataRetention: () => restClient.get('/v1/security/data-retention', wrap(unknownSchema)).then(r => r.data),
+    dataRequests: (limit = 50) => restClient.get(`/v1/security/data-requests${buildQS({ limit })}`, wrap(unknownSchema)).then(r => r.data),
+    createDataRequest: (body: Record<string, unknown>) => restClient.post('/v1/security/data-requests', wrap(unknownSchema), body).then(r => r.data),
+  },
+
   // ── Profile — full + all contextual sub-resources ─────────────────────────
   profile: {
     /** Full holistic profile — identity, consent, timeline, graph, intelligence, lake data. */
