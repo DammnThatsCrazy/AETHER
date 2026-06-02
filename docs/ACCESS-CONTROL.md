@@ -31,8 +31,15 @@ to `PermissionGrant`s and evaluates `domain × action × scope` access checks.
 ## Role assignment
 
 Tenant users are mapped from the existing auth `Role` (`admin`/`editor`/`viewer`)
-plus permissions (`tenant_roles_from_context`). Kyber admin principals are treated
-as `olympus_admin` for aggregate access.
+plus permissions (`tenant_roles_from_context`).
+
+**No Aether tenant may access Kyber.** Kyber security routes are gated by
+`require_kyber_operator()`, which is fail-closed: an operator is recognised ONLY
+by a signal that tenant tokens never carry — the configured `kyber:operator`
+permission (`KYBER_OPERATOR_PERMISSION`) or membership in the operator allowlist
+(`KYBER_OPERATOR_TENANT_IDS`). A regular tenant holding the legacy `admin`
+permission is **denied**. A verified operator with `admin` is mapped to
+`olympus_admin`; other verified operators map to `olympus_operator`.
 
 ## Tenant vs Kyber visibility
 

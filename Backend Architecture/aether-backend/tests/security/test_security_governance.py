@@ -155,6 +155,39 @@ async def test_audit_chain_is_verifiable():
     assert result["events_checked"] == 3
 
 
+async def test_global_chain_verifies_per_tenant():
+    # Codex P2: a global (tenant_id omitted) verification must track a separate
+    # previous hash per tenant; otherwise the second tenant's first event is
+    # falsely flagged as broken.
+    ledger = AuditLedger()
+    for tid in ("t1", "t2", "t1", "t2"):
+        await ledger.record(
+            actor_id="u", actor_type='tenant_user', event_type="t", resource_type="r",
+            action="read", outcome='allowed', tenant_id=tid,
+        )
+    result = await ledger.verify_chain()  # global
+    assert result["chain_intact"] is True
+    assert result["chains_verified"] == 2
+    assert result["broken_event_ids"] == []
+
+
+async def test_audit_metadata_tampering_is_detected():
+    # Codex P2: metadata/ip/user_agent are part of the tamper-evident record.
+    ledger = AuditLedger()
+    ev = await ledger.record(
+        actor_id="u1", actor_type='tenant_user', event_type="t", resource_type="r",
+        action="read", outcome='allowed', tenant_id='t1',
+        metadata={"target": "tenant-a"}, ip_address="10.0.0.9",
+    )
+    repo = ledger._repo
+    raw = await repo.find_by_id(ev.audit_event_id)
+    raw["metadata"] = {"target": "tenant-b"}  # tamper after the fact
+    await repo.update(ev.audit_event_id, raw)
+    result = await ledger.verify_chain('t1')
+    assert result["chain_intact"] is False
+    assert ev.audit_event_id in result["broken_event_ids"]
+
+
 # ── Break-glass lifecycle ─────────────────────────────────────────────────────
 
 async def test_break_glass_request_approve_revoke():
@@ -167,6 +200,19 @@ async def test_break_glass_request_approve_revoke():
     revoked = await svc.revoke(request_id=req.request_id, revoked_by='op2')
     assert revoked.status == 'revoked'
     assert await svc.has_active_grant('t1', 'op1') is False
+
+
+async def test_break_glass_requires_different_approver():
+    # Codex P1: the requester may not approve their own break-glass grant.
+    svc = BreakGlassService()
+    req = await svc.request(tenant_id='t1', requested_by='op1', reason='incident', requested_scope='read')
+    with pytest.raises(Exception):
+        await svc.approve(request_id=req.request_id, approved_by='op1')
+    # Request stays un-approved, so no active grant is created.
+    assert await svc.has_active_grant('t1', 'op1') is False
+    # A different operator can still approve.
+    approved = await svc.approve(request_id=req.request_id, approved_by='op2')
+    assert approved.status == 'approved'
 
 
 async def test_break_glass_requires_reason():
@@ -290,7 +336,11 @@ async def test_webhook_signing_roundtrip():
 
 # ── Integration security dispatch governance ──────────────────────────────────
 
-async def test_integration_dispatch_requires_idempotency_and_dedupes():
+async def test_integration_dispatch_requires_idempotency_and_dedupes(monkeypatch):
+    from services.security import policy_engine as pe_mod
+    # Resolve the test hostname to a public IP so the SSRF guard allows it
+    # deterministically without real DNS.
+    monkeypatch.setattr(pe_mod, "_resolve_host", lambda host: ["93.184.216.34"])
     sec = IntegrationSecurity()
     with pytest.raises(Exception):
         await sec.authorize_dispatch(
@@ -317,3 +367,69 @@ async def test_integration_repeated_failures_detected():
     for _ in range(5):
         result = await sec.record_failure(tenant_id='t1', integration_id='i1')
     assert result["repeated_failures_detected"] is True
+
+
+# ── SSRF: hostnames resolving to private targets ──────────────────────────────
+
+async def test_webhook_blocks_hostname_resolving_to_private(monkeypatch):
+    # Codex P2: a hostname that resolves to a private/metadata IP must be blocked,
+    # not just literal private IPs.
+    from services.security import policy_engine as pe_mod
+    monkeypatch.setattr(pe_mod, "_resolve_host", lambda host: ["169.254.169.254"])
+    unsafe, why = pe_mod._is_unsafe_destination("https://internal.evil.example/hook")
+    assert unsafe is True and "private/reserved" in why
+
+
+async def test_webhook_blocks_unresolvable_hostname(monkeypatch):
+    import socket
+    from services.security import policy_engine as pe_mod
+
+    def _boom(host):
+        raise socket.gaierror("no address")
+
+    monkeypatch.setattr(pe_mod, "_resolve_host", _boom)
+    unsafe, why = pe_mod._is_unsafe_destination("https://does-not-resolve.example/hook")
+    assert unsafe is True and "could not be resolved" in why
+
+
+async def test_webhook_allows_hostname_resolving_to_public(monkeypatch):
+    from services.security import policy_engine as pe_mod
+    monkeypatch.setattr(pe_mod, "_resolve_host", lambda host: ["93.184.216.34"])
+    unsafe, _ = pe_mod._is_unsafe_destination("https://hooks.example.com/x")
+    assert unsafe is False
+
+
+# ── Operator-only Kyber access (no Aether tenant may access Kyber) ─────────────
+
+class _FakeTenant:
+    def __init__(self, tenant_id, permissions):
+        self.tenant_id = tenant_id
+        self.user_id = "u-" + tenant_id
+        self.permissions = list(permissions)
+
+    def has_permission(self, perm):
+        return perm in self.permissions
+
+
+async def test_tenant_admin_is_not_a_kyber_operator(monkeypatch):
+    from services.security import request_context as rc
+    from config.settings import settings
+    # A normal Aether tenant — even with the legacy "admin" permission — is denied.
+    tenant_admin = _FakeTenant("tenant_001", ["admin", "read", "write", "export"])
+    assert rc.is_kyber_operator(tenant_admin) is False
+    # An operator holding the dedicated permission is allowed.
+    operator = _FakeTenant("olympus_ops", [settings.security_governance.kyber_operator_permission])
+    assert rc.is_kyber_operator(operator) is True
+
+
+async def test_operator_allowlist_recognizes_operator(monkeypatch):
+    import dataclasses
+
+    from config.settings import settings
+    from services.security import request_context as rc
+    patched = dataclasses.replace(
+        settings.security_governance, kyber_operator_tenant_ids=["olympus_internal"],
+    )
+    monkeypatch.setattr(settings, "security_governance", patched)
+    assert rc.is_kyber_operator(_FakeTenant("olympus_internal", [])) is True
+    assert rc.is_kyber_operator(_FakeTenant("tenant_001", ["admin"])) is False

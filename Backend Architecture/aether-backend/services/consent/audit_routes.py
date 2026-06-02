@@ -30,6 +30,7 @@ from fastapi import APIRouter, Request
 from pydantic import BaseModel, Field
 
 from repositories.repos import ConsentRepository
+from services.security.export_governance import audit_export_governance
 from shared.common.common import APIResponse, BadRequestError, NotFoundError
 from shared.logger.logger import get_logger, metrics
 from shared.store import get_store
@@ -105,6 +106,7 @@ class ExportRequest(BaseModel):
     from_ts: Optional[str] = None
     to_ts: Optional[str] = None
     report_type: str = Field(default="custom")
+    approval_id: Optional[str] = Field(default=None, description="Required for high-risk export types")
 
 
 def _now() -> str:
@@ -220,6 +222,19 @@ async def request_export(body: ExportRequest, request: Request):
             rows.append(row)
 
     export_id = str(uuid.uuid4())
+    # Governance: enforce export permission, block cross-tenant export, flag
+    # high-risk exports, and attach an integrity hash + expiry. Emits/records via
+    # the security policy engine + audit ledger.
+    governance = await audit_export_governance.authorize_create(
+        actor_id=getattr(tenant, "user_id", None) or tenant.tenant_id,
+        actor_type='tenant_user', tenant_id=tenant.tenant_id,
+        export_type=body.report_type,
+        has_export_permission=tenant.has_permission("export") or tenant.has_permission("admin"),
+        target_tenant=tenant.tenant_id,
+        approval_id=getattr(body, "approval_id", None),
+        manifest={"sources": sources, "row_count": len(rows), "per_source": per_source},
+        ip_address=request.client.host if request.client else None,
+    )
     record = {
         "export_id": export_id,
         "tenant_id": tenant.tenant_id,
@@ -232,6 +247,10 @@ async def request_export(body: ExportRequest, request: Request):
         "to_ts": body.to_ts,
         "status": "complete",
         "created_at": _now(),
+        "integrity_hash": governance["integrity_hash"],
+        "expires_at": governance["expires_at"],
+        "high_risk": governance["high_risk"],
+        "policy_decision_id": governance["policy_decision_id"],
     }
     await _export_store.set(f"{tenant.tenant_id}:{export_id}", record)
     metrics.increment(
@@ -257,6 +276,14 @@ async def get_export(export_id: str, request: Request):
     record = await _export_store.get(f"{tenant.tenant_id}:{export_id}")
     if not record:
         raise NotFoundError(f"Export not found: {export_id}")
+    # Governance: enforce permission + expiry on download, and audit the access.
+    await audit_export_governance.authorize_download(
+        actor_id=getattr(tenant, "user_id", None) or tenant.tenant_id,
+        actor_type='tenant_user', tenant_id=tenant.tenant_id, export_id=export_id,
+        has_export_permission=tenant.has_permission("export") or tenant.has_permission("admin"),
+        expires_at=record.get("expires_at"),
+        ip_address=request.client.host if request.client else None,
+    )
     return APIResponse(data=record).to_dict()
 
 

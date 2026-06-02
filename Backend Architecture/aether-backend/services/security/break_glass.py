@@ -70,6 +70,17 @@ class BreakGlassService:
         row = await self._load(request_id)
         if row.get("status") != 'requested':
             raise BadRequestError(f"cannot approve request in status {row.get('status')!r}")
+        # Break-glass must be second-actor approved: the requester cannot grant
+        # their own emergency access, or has_active_grant() would let an operator
+        # self-authorize tenant access end to end.
+        if approved_by == row.get("requested_by"):
+            await audit_ledger.record(
+                actor_id=approved_by, actor_type='olympus_operator',
+                event_type="break_glass.self_approval_blocked",
+                resource_type="break_glass_request", action="approve",
+                outcome='blocked', tenant_id=row.get("tenant_id"), resource_id=request_id,
+            )
+            raise BadRequestError("break-glass approval requires a different operator than the requester")
         window_hours = int(row.get("window_hours", DEFAULT_WINDOW_HOURS))
         now = utc_now()
         row.update({

@@ -22,7 +22,9 @@ here.**
   secrets are replaced, never echoed back.
 - **Destination safety** — `validate_destination(...)` blocks unsafe targets
   (loopback, private ranges, cloud metadata endpoints) and enforces an optional
-  per-tenant allowlist.
+  per-tenant allowlist. Hostnames are **resolved** and rejected if any resolved
+  address is private/reserved (and rejected fail-closed if they do not resolve),
+  so internal-only or DNS-rebinding names cannot bypass the literal-IP guard.
 - **Secret redaction** — `redact_config(...)` strips secret-bearing fields from
   any config returned via API/UI.
 - **Dispatch safety** — retry-limit enforcement, idempotency-key enforcement, and

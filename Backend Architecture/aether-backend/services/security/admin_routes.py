@@ -45,7 +45,7 @@ from .evidence_packs import evidence_pack_service
 from .isolation_verifier import tenant_isolation_verifier
 from .policy_engine import policy_engine
 from .repositories import SecurityAuditEventRepository
-from .request_context import operator_actor
+from .request_context import require_kyber_operator
 from .retention import data_retention_service
 
 logger = get_logger("aether.security.admin_routes")
@@ -55,8 +55,9 @@ _audit_repo = SecurityAuditEventRepository()
 
 
 def _require_admin(request: Request):
-    request.state.tenant.require_permission("admin")
-    return operator_actor(request)
+    # Fail-closed Olympus-operator gate. No Aether tenant — even one holding the
+    # legacy "admin" permission — may access these cross-tenant security routes.
+    return require_kyber_operator(request)
 
 
 @admin_router.get("/overview")

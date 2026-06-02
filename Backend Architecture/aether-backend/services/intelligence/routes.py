@@ -654,6 +654,23 @@ async def _dispatch_action(action_id: str, body: DispatchActionRequest, request:
     action, decision, recommendation = await _load_dispatch_context(tenant.tenant_id, action_id)
     if decision.get("decision_status") != "approved":
         raise BadRequestError("Actions can only be dispatched for approved decisions")
+    # Governance policy: elevated/critical dispatch requires an approval_id. This
+    # mirrors the check on POST /actions and routes the decision through the
+    # security policy engine (which records a SecurityAuditEvent on block).
+    from services.security.policy_engine import policy_engine
+    selected_action = decision.get("selected_action") or {}
+    approval_level = selected_action.get("requires_approval_level", "none")
+    approval_id = (
+        (body.approval_metadata or {}).get("approval_id")
+        or (action.get("authorization_metadata") or {}).get("approval_id")
+    )
+    dispatch_policy = await policy_engine.check_action_dispatch(
+        actor_id=tenant.user_id or tenant.tenant_id, actor_type='tenant_user',
+        tenant_id=tenant.tenant_id, decision_status="approved", action_id=action_id,
+        is_elevated=approval_level in {"elevated", "critical"}, approval_id=approval_id,
+    )
+    if not dispatch_policy.allowed:
+        raise BadRequestError(dispatch_policy.reason)
     config = None
     if body.config_id:
         raw_config = await _integrations.find_by_id_or_fail(body.config_id)

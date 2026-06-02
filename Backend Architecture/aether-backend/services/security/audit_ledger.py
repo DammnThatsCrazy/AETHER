@@ -45,6 +45,12 @@ def _canonical(event: SecurityAuditEvent, prev_hash: str) -> str:
         "action": event.action,
         "outcome": event.outcome,
         "policy_decision_id": event.policy_decision_id,
+        # Persisted "what / from where" detail is part of the tamper-evident
+        # record: hashing it means edits to metadata, ip_address, or user_agent
+        # break verify_chain(). metadata is already secret-sanitized at record().
+        "metadata": event.metadata,
+        "ip_address": event.ip_address,
+        "user_agent": event.user_agent,
         # created_at is intentionally excluded: the persistence layer assigns its
         # own created_at on insert, so hashing it would break verification. Order
         # and tamper-evidence come from the chained prev_hash + immutable ids.
@@ -110,26 +116,35 @@ class AuditLedger:
         return event
 
     async def verify_chain(self, tenant_id: Optional[str] = None) -> dict[str, Any]:
-        """Re-walk a tenant's events and confirm the integrity_hash chain holds."""
+        """Re-walk events and confirm the integrity_hash chain holds.
+
+        Events are chained per tenant (chain_key = tenant_id or ""), so a global
+        verification (tenant_id omitted) must track a separate previous hash per
+        chain — otherwise the first event of the second tenant would be compared
+        against the first tenant's tail and falsely reported as broken.
+        """
         raw_events = (
             await self._repo.list_for_tenant(tenant_id or "", limit=10_000)
             if tenant_id else await self._repo.list_all(limit=10_000)
         )
         events = sorted(
             raw_events,
-            key=lambda e: (e.get("created_at", ""), e.get("_chain_seq", 0)),
+            key=lambda e: (e.get("tenant_id") or "", e.get("created_at", ""), e.get("_chain_seq", 0)),
         )
-        prev = ""
+        prev_by_chain: dict[str, str] = {}
         broken: list[str] = []
         for raw in events:
             ev = SecurityAuditEvent(**raw)
+            chain_key = ev.tenant_id or ""
+            prev = prev_by_chain.get(chain_key, "")
             expected = compute_integrity_hash(ev, prev)
             if ev.integrity_hash != expected:
                 broken.append(ev.audit_event_id)
-            prev = ev.integrity_hash or expected
+            prev_by_chain[chain_key] = ev.integrity_hash or expected
         return {
             "tenant_id": tenant_id,
             "events_checked": len(events),
+            "chains_verified": len(prev_by_chain),
             "chain_intact": not broken,
             "broken_event_ids": broken,
         }

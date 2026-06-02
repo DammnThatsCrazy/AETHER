@@ -10,8 +10,9 @@ from typing import Optional
 
 from fastapi import Request
 
+from config.settings import settings
 from shared.auth.auth import Role
-from shared.common.common import UnauthorizedError
+from shared.common.common import ForbiddenError, UnauthorizedError
 
 from .contracts import AccessRole, ActorType
 
@@ -65,15 +66,43 @@ def tenant_actor(request: Request) -> ActorContext:
     )
 
 
+def is_kyber_operator(tenant) -> bool:  # noqa: ANN001
+    """True only for Olympus operators. No Aether tenant may access Kyber.
+
+    A regular Aether tenant — even one holding the legacy ``admin`` permission —
+    is NOT an operator. An operator is recognised exclusively by a signal that
+    tenant tokens never carry: the configured ``kyber:operator`` permission, or
+    membership in the configured operator tenant-id allowlist.
+    """
+    cfg = settings.security_governance
+    if tenant is None:
+        return False
+    if tenant.has_permission(cfg.kyber_operator_permission):
+        return True
+    return bool(tenant.tenant_id) and tenant.tenant_id in cfg.kyber_operator_tenant_ids
+
+
+def require_kyber_operator(request: Request):  # noqa: ANN201
+    """Fail-closed gate for Kyber security routes. Denies all Aether tenants."""
+    tenant = getattr(request.state, "tenant", None)
+    if tenant is None:
+        raise UnauthorizedError("authentication required")
+    if not is_kyber_operator(tenant):
+        raise ForbiddenError(
+            "Kyber operator access required; Aether tenants may not access Kyber"
+        )
+    return operator_actor(request)
+
+
 def operator_actor(request: Request) -> ActorContext:
-    """Olympus operator context. Routes still call require_permission('admin')
-    before using this — it does not replace that gate."""
+    """Olympus operator context. Callers MUST gate with require_kyber_operator()
+    first — this builds the context but does not itself authorize access."""
     tenant = getattr(request.state, "tenant", None)
     if tenant is None:
         raise UnauthorizedError("authentication required")
     ip, ua = _client_meta(request)
-    # An admin-permissioned principal on a Kyber route is treated as olympus_admin
-    # for aggregate access; finer operator roles are assigned via future provisioning.
+    # A verified operator with the legacy admin permission gets olympus_admin
+    # (all-tenant admin); other verified operators get olympus_operator.
     roles: list[AccessRole] = ['olympus_admin'] if tenant.has_permission("admin") else ['olympus_operator']
     return ActorContext(
         actor_id=tenant.user_id or tenant.tenant_id,
