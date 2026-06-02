@@ -11,6 +11,7 @@ export const ROUTES = {
   REVIEW: '/review',
   REVIEW_BATCH: '/review/:batchId',
   LAB: '/lab',
+  IMPLEMENTATION: '/implementation',
   CIS: '/cis',
   CIS_MUTATIONS: '/cis/mutations',
   CIS_FORENSICS: '/cis/forensics/:nodeId',
