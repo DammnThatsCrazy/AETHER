@@ -54,8 +54,13 @@ def audit_routes(monkeypatch):
 
 
 def make_request(tenant_id: str = "t-001"):
-    tenant = SimpleNamespace(tenant_id=tenant_id, require_permission=lambda perm: None)
-    return SimpleNamespace(state=SimpleNamespace(tenant=tenant))
+    tenant = SimpleNamespace(
+        tenant_id=tenant_id,
+        user_id=f"u-{tenant_id}",
+        require_permission=lambda perm: None,
+        has_permission=lambda perm: True,
+    )
+    return SimpleNamespace(state=SimpleNamespace(tenant=tenant), client=None)
 
 
 async def seed_records(audit_routes, tenant_id: str = "t-001"):
