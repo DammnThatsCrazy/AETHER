@@ -1,3 +1,13 @@
+---
+title: Executive Business Reviews
+slug: kyber/executive-business-reviews
+section: kyber
+visibility: I
+audience: [exec, ops, architect]
+status: stable
+since_version: "8.9.0"
+---
+
 # Executive Business Reviews
 
 Executive Business Reviews summarize account state, package state, implementation progress, usage, outcome ledger performance, playbook ROI, recommendation-family performance, integration health, value created, open gaps, expansion opportunities, and a next-90-day plan.

@@ -1,3 +1,13 @@
+---
+title: Solution Packages
+slug: enterprise/solution-packages
+section: enterprise
+visibility: I
+audience: [exec, buyer, ops]
+status: stable
+since_version: "8.9.0"
+---
+
 # Solution Packages
 
 Aether packages existing graph-native OODA, Outcome Ledger, Recommendation Families, Investigations, Playbook ROI, Action Dispatch, and Kyber Strategic Observability into sellable bundles. These are not separate products and do not bypass tenant isolation, consent, governance, approvals, auditability, or human-in-the-loop controls.

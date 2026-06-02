@@ -1,3 +1,13 @@
+---
+title: Buyer Personas
+slug: enterprise/buyer-personas
+section: enterprise
+visibility: I
+audience: [exec, buyer, ops]
+status: stable
+since_version: "8.9.0"
+---
+
 # Buyer Personas
 
 Kyber maps buyer personas to pain, desired outcomes, objections, proof needs, collateral, and pricing sensitivity.

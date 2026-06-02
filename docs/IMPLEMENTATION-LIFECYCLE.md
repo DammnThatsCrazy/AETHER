@@ -1,3 +1,13 @@
+---
+title: Implementation Lifecycle
+slug: kyber/implementation-lifecycle
+section: kyber
+visibility: I
+audience: [exec, ops, architect]
+status: stable
+since_version: "8.9.0"
+---
+
 # Implementation Lifecycle
 
 The implementation lifecycle tracks required steps, blockers, success criteria, scoring, and expansion readiness for each tenant.

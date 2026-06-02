@@ -1,3 +1,13 @@
+---
+title: Customer Success Triggers
+slug: kyber/customer-success-triggers
+section: kyber
+visibility: I
+audience: [exec, ops, architect]
+status: stable
+since_version: "8.9.0"
+---
+
 # Customer Success Triggers
 
 Customer success triggers identify onboarding stalls, value proof, and expansion readiness.

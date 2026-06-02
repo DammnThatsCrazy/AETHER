@@ -1,3 +1,13 @@
+---
+title: Enterprise Packaging
+slug: enterprise/enterprise-packaging
+section: enterprise
+visibility: I
+audience: [exec, buyer, ops]
+status: stable
+since_version: "8.9.0"
+---
+
 # Enterprise Packaging
 
 Enterprise packaging makes Aether commercially legible without adding a separate product layer. Packages map existing modules to buyer personas, use cases, audit needs, deployment modes, pricing levers, tenant demand, and next actions.

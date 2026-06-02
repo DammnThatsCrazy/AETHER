@@ -1,3 +1,13 @@
+---
+title: Onboarding Templates
+slug: kyber/onboarding-templates
+section: kyber
+visibility: I
+audience: [exec, ops, architect]
+status: stable
+since_version: "8.9.0"
+---
+
 # Onboarding Templates
 
 Package templates define default implementation steps, success criteria, recommended playbooks, integrations, and audit exports.

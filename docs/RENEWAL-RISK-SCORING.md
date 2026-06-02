@@ -1,3 +1,13 @@
+---
+title: Renewal Risk Scoring
+slug: kyber/renewal-risk-scoring
+section: kyber
+visibility: I
+audience: [exec, ops, architect]
+status: stable
+since_version: "8.9.0"
+---
+
 # Renewal Risk Scoring
 
 Renewal risk scoring highlights tenants that need customer-success intervention before renewal.

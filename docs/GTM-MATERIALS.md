@@ -1,3 +1,13 @@
+---
+title: GTM Materials
+slug: enterprise/gtm-materials
+section: enterprise
+visibility: I
+audience: [exec, buyer, ops]
+status: stable
+since_version: "8.9.0"
+---
+
 # GTM Materials
 
 Kyber maintains an internal catalog of sales collateral for Aether solution packages.

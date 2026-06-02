@@ -1,3 +1,13 @@
+---
+title: Government Readiness Planning
+slug: enterprise/government-readiness-planning
+section: enterprise
+visibility: I
+audience: [exec, buyer, ops]
+status: stable
+since_version: "8.9.0"
+---
+
 # Government Readiness Planning
 
 Aether/Kyber includes government-planning package definitions for Program Integrity, Critical Infrastructure Coordination, and Agent Governance. These are readiness tracks only.

@@ -15,6 +15,7 @@ const CampaignsPage = lazy(() => import('@aether-app/pages/campaigns').then(m =>
 const GraphPage = lazy(() => import('@aether-app/pages/graph').then(m => ({ default: m.GraphPage })));
 const SettingsPage = lazy(() => import('@aether-app/pages/settings/settings-page').then(m => ({ default: m.SettingsPage })));
 const BillingPage = lazy(() => import('@aether-app/pages/billing/billing-page').then(m => ({ default: m.BillingPage })));
+const UsagePlanPage = lazy(() => import('@aether-app/pages/usage-plan').then(m => ({ default: m.UsagePlanPage })));
 const MePage = lazy(() => import('@aether-app/pages/me/me-page').then(m => ({ default: m.MePage })));
 const GeoPage = lazy(() => import('@aether-app/pages/geo').then(m => ({ default: m.GeoPage })));
 const OnboardingPage = lazy(() => import('@aether-app/pages/onboarding').then(m => ({ default: m.OnboardingPage })));

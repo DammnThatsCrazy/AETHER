@@ -336,7 +336,8 @@ async def kyber_get_contract(tenant_id: str, request: Request):
 @kyber_revops_router.post("/contracts/{tenant_id}")
 async def kyber_create_contract(tenant_id: str, body: TenantContractProfile, request: Request):
     request.state.tenant.require_permission("admin")
-    payload = body.model_dump(); payload["tenant_id"] = tenant_id
+    payload = body.model_dump()
+    payload["tenant_id"] = tenant_id
     return APIResponse(data=await _contract_profiles.insert(payload["contract_profile_id"], payload)).to_dict()
 
 
@@ -346,7 +347,8 @@ async def kyber_update_contract(tenant_id: str, body: dict, request: Request):
     existing = await _contract_profiles.get_for_tenant(tenant_id)
     if not existing:
         raise NotFoundError("contract profile")
-    body.pop("tenant_id", None); body.pop("contract_profile_id", None)
+    body.pop("tenant_id", None)
+    body.pop("contract_profile_id", None)
     return APIResponse(data=await _contract_profiles.update(existing["contract_profile_id"], body)).to_dict()
 
 
@@ -360,14 +362,16 @@ async def kyber_list_entitlements(tenant_id: str, request: Request):
 @kyber_revops_router.post("/entitlements/{tenant_id}")
 async def kyber_create_entitlement(tenant_id: str, body: TenantEntitlement, request: Request):
     request.state.tenant.require_permission("admin")
-    payload = body.model_dump(); payload["tenant_id"] = tenant_id
+    payload = body.model_dump()
+    payload["tenant_id"] = tenant_id
     return APIResponse(data=await _tenant_entitlements.insert(payload["entitlement_id"], payload)).to_dict()
 
 
 @kyber_revops_router.patch("/entitlements/{entitlement_id}")
 async def kyber_update_entitlement(entitlement_id: str, body: dict, request: Request):
     request.state.tenant.require_permission("admin")
-    body.pop("tenant_id", None); body.pop("entitlement_id", None)
+    body.pop("tenant_id", None)
+    body.pop("entitlement_id", None)
     return APIResponse(data=await _tenant_entitlements.update(entitlement_id, body)).to_dict()
 
 

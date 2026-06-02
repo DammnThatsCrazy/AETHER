@@ -1,3 +1,13 @@
+---
+title: Expansion Opportunity Engine
+slug: kyber/expansion-opportunity-engine
+section: kyber
+visibility: I
+audience: [exec, ops, architect]
+status: stable
+since_version: "8.9.0"
+---
+
 # Expansion Opportunity Engine
 
 The Expansion Opportunity Engine identifies package, module, integration, deployment, services, audit export, enterprise, and government-planning motions from observed customer value and adoption.

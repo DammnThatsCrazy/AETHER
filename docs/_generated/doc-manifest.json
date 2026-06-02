@@ -3,6 +3,20 @@
   "generated_from": "docs/**/*.{md,mdx}",
   "docs": [
     {
+      "path": "docs/ACCOUNT-PLANS.md",
+      "title": "Account Plans",
+      "slug": "kyber/account-plans",
+      "section": "kyber",
+      "visibility": "I",
+      "audience": [
+        "exec",
+        "ops",
+        "architect"
+      ],
+      "status": "stable",
+      "since_version": "8.9.0"
+    },
+    {
       "path": "docs/ACTION-DISPATCH.md",
       "title": "Governed Action Dispatch",
       "slug": "ai/action-dispatch",
@@ -86,6 +100,20 @@
       "canonical_owner": "platform@aether"
     },
     {
+      "path": "docs/AUDIT-EXPORTS.md",
+      "title": "Audit Exports",
+      "slug": "enterprise/audit-exports",
+      "section": "enterprise",
+      "visibility": "I",
+      "audience": [
+        "exec",
+        "buyer",
+        "ops"
+      ],
+      "status": "stable",
+      "since_version": "8.9.0"
+    },
+    {
       "path": "docs/AUTOMATION.md",
       "title": "Documentation Automation",
       "slug": "operations/doc-automation",
@@ -134,6 +162,34 @@
       "estimated_read_minutes": 60,
       "toc_depth": 3,
       "canonical_owner": "backend@aether"
+    },
+    {
+      "path": "docs/BILLING-REVENUE-OPS.md",
+      "title": "Billing, Usage Metering, Contracts, and Revenue Operations",
+      "slug": "enterprise/billing-revenue-ops",
+      "section": "enterprise",
+      "visibility": "I",
+      "audience": [
+        "exec",
+        "buyer",
+        "ops"
+      ],
+      "status": "stable",
+      "since_version": "8.9.0"
+    },
+    {
+      "path": "docs/BUYER-PERSONAS.md",
+      "title": "Buyer Personas",
+      "slug": "enterprise/buyer-personas",
+      "section": "enterprise",
+      "visibility": "I",
+      "audience": [
+        "exec",
+        "buyer",
+        "ops"
+      ],
+      "status": "stable",
+      "since_version": "8.9.0"
     },
     {
       "path": "docs/CHANGELOG.md",
@@ -219,6 +275,62 @@
       "canonical_owner": "compliance@aether"
     },
     {
+      "path": "docs/CONTRACT-PROFILES.md",
+      "title": "Billing, Usage Metering, Contracts, and Revenue Operations",
+      "slug": "enterprise/contract-profiles",
+      "section": "enterprise",
+      "visibility": "I",
+      "audience": [
+        "exec",
+        "buyer",
+        "ops"
+      ],
+      "status": "stable",
+      "since_version": "8.9.0"
+    },
+    {
+      "path": "docs/CUSTOMER-ONBOARDING.md",
+      "title": "Customer Onboarding",
+      "slug": "kyber/customer-onboarding",
+      "section": "kyber",
+      "visibility": "I",
+      "audience": [
+        "exec",
+        "ops",
+        "architect"
+      ],
+      "status": "stable",
+      "since_version": "8.9.0"
+    },
+    {
+      "path": "docs/CUSTOMER-SUCCESS-AUTOMATION.md",
+      "title": "Customer Success Automation",
+      "slug": "kyber/customer-success-automation",
+      "section": "kyber",
+      "visibility": "I",
+      "audience": [
+        "exec",
+        "ops",
+        "architect"
+      ],
+      "status": "stable",
+      "since_version": "8.9.0"
+    },
+    {
+      "path": "docs/CUSTOMER-SUCCESS-TRIGGERS.md",
+      "title": "Customer Success Triggers",
+      "slug": "kyber/customer-success-triggers",
+      "section": "kyber",
+      "visibility": "I",
+      "audience": [
+        "exec",
+        "ops",
+        "architect"
+      ],
+      "status": "stable",
+      "since_version": "8.9.0"
+    },
+    {
       "path": "docs/DATA-INGESTION.md",
       "title": "Data Ingestion — Architecture & API Reference",
       "slug": "data/ingestion",
@@ -263,6 +375,20 @@
       ]
     },
     {
+      "path": "docs/DEPLOYMENT-READINESS.md",
+      "title": "Deployment Readiness",
+      "slug": "enterprise/deployment-readiness",
+      "section": "enterprise",
+      "visibility": "I",
+      "audience": [
+        "exec",
+        "buyer",
+        "ops"
+      ],
+      "status": "stable",
+      "since_version": "8.9.0"
+    },
+    {
       "path": "docs/ECONOMIC-OBSERVABILITY.md",
       "title": "Economic Observability",
       "slug": "concepts/economic-observability",
@@ -278,6 +404,76 @@
       "estimated_read_minutes": 10,
       "toc_depth": 3,
       "canonical_owner": "platform@aether"
+    },
+    {
+      "path": "docs/ENTERPRISE-PACKAGING.md",
+      "title": "Enterprise Packaging",
+      "slug": "enterprise/enterprise-packaging",
+      "section": "enterprise",
+      "visibility": "I",
+      "audience": [
+        "exec",
+        "buyer",
+        "ops"
+      ],
+      "status": "stable",
+      "since_version": "8.9.0"
+    },
+    {
+      "path": "docs/ENTERPRISE-SALES-NARRATIVE.md",
+      "title": "Enterprise Sales Narrative",
+      "slug": "enterprise/enterprise-sales-narrative",
+      "section": "enterprise",
+      "visibility": "I",
+      "audience": [
+        "exec",
+        "buyer",
+        "ops"
+      ],
+      "status": "stable",
+      "since_version": "8.9.0"
+    },
+    {
+      "path": "docs/ENTITLEMENTS.md",
+      "title": "Billing, Usage Metering, Contracts, and Revenue Operations",
+      "slug": "enterprise/entitlements",
+      "section": "enterprise",
+      "visibility": "I",
+      "audience": [
+        "exec",
+        "buyer",
+        "ops"
+      ],
+      "status": "stable",
+      "since_version": "8.9.0"
+    },
+    {
+      "path": "docs/EXECUTIVE-BUSINESS-REVIEWS.md",
+      "title": "Executive Business Reviews",
+      "slug": "kyber/executive-business-reviews",
+      "section": "kyber",
+      "visibility": "I",
+      "audience": [
+        "exec",
+        "ops",
+        "architect"
+      ],
+      "status": "stable",
+      "since_version": "8.9.0"
+    },
+    {
+      "path": "docs/EXPANSION-OPPORTUNITY-ENGINE.md",
+      "title": "Expansion Opportunity Engine",
+      "slug": "kyber/expansion-opportunity-engine",
+      "section": "kyber",
+      "visibility": "I",
+      "audience": [
+        "exec",
+        "ops",
+        "architect"
+      ],
+      "status": "stable",
+      "since_version": "8.9.0"
     },
     {
       "path": "docs/FRONTEND-ARCHITECTURE.md",
@@ -296,6 +492,48 @@
       "canonical_owner": "frontend@aether"
     },
     {
+      "path": "docs/GOVERNMENT-GTM-PLANNING.md",
+      "title": "Government GTM Planning",
+      "slug": "enterprise/government-gtm-planning",
+      "section": "enterprise",
+      "visibility": "I",
+      "audience": [
+        "exec",
+        "buyer",
+        "ops"
+      ],
+      "status": "stable",
+      "since_version": "8.9.0"
+    },
+    {
+      "path": "docs/GOVERNMENT-READINESS-PLANNING.md",
+      "title": "Government Readiness Planning",
+      "slug": "enterprise/government-readiness-planning",
+      "section": "enterprise",
+      "visibility": "I",
+      "audience": [
+        "exec",
+        "buyer",
+        "ops"
+      ],
+      "status": "stable",
+      "since_version": "8.9.0"
+    },
+    {
+      "path": "docs/GTM-MATERIALS.md",
+      "title": "GTM Materials",
+      "slug": "enterprise/gtm-materials",
+      "section": "enterprise",
+      "visibility": "I",
+      "audience": [
+        "exec",
+        "buyer",
+        "ops"
+      ],
+      "status": "stable",
+      "since_version": "8.9.0"
+    },
+    {
       "path": "docs/IDENTITY-RESOLUTION.md",
       "title": "Identity Resolution",
       "slug": "concepts/identity-resolution",
@@ -310,6 +548,20 @@
       "estimated_read_minutes": 12,
       "toc_depth": 3,
       "canonical_owner": "identity@aether"
+    },
+    {
+      "path": "docs/IMPLEMENTATION-LIFECYCLE.md",
+      "title": "Implementation Lifecycle",
+      "slug": "kyber/implementation-lifecycle",
+      "section": "kyber",
+      "visibility": "I",
+      "audience": [
+        "exec",
+        "ops",
+        "architect"
+      ],
+      "status": "stable",
+      "since_version": "8.9.0"
     },
     {
       "path": "docs/INTEGRATION-ACTIONS.md",
@@ -371,6 +623,20 @@
         "AETHER_DECISION_RECORDS_ENABLED",
         "AETHER_OUTCOME_FEEDBACK_ENABLED"
       ]
+    },
+    {
+      "path": "docs/INVOICE-PREVIEWS.md",
+      "title": "Billing, Usage Metering, Contracts, and Revenue Operations",
+      "slug": "enterprise/invoice-previews",
+      "section": "enterprise",
+      "visibility": "I",
+      "audience": [
+        "exec",
+        "buyer",
+        "ops"
+      ],
+      "status": "stable",
+      "since_version": "8.9.0"
     },
     {
       "path": "docs/KYBER-REVENUE-INTELLIGENCE.md",
@@ -476,6 +742,20 @@
       "canonical_owner": "security@aether"
     },
     {
+      "path": "docs/ONBOARDING-TEMPLATES.md",
+      "title": "Onboarding Templates",
+      "slug": "kyber/onboarding-templates",
+      "section": "kyber",
+      "visibility": "I",
+      "audience": [
+        "exec",
+        "ops",
+        "architect"
+      ],
+      "status": "stable",
+      "since_version": "8.9.0"
+    },
+    {
       "path": "docs/OPERATIONAL-INTELLIGENCE-AUDIT.md",
       "title": "Operational Intelligence — Stub vs. Production Audit",
       "slug": "operations/operational-intelligence-audit",
@@ -550,6 +830,20 @@
       ]
     },
     {
+      "path": "docs/PRICING-ARCHITECTURE.md",
+      "title": "Pricing Architecture",
+      "slug": "enterprise/pricing-architecture",
+      "section": "enterprise",
+      "visibility": "I",
+      "audience": [
+        "exec",
+        "buyer",
+        "ops"
+      ],
+      "status": "stable",
+      "since_version": "8.9.0"
+    },
+    {
       "path": "docs/PRODUCTION-READINESS.md",
       "title": "Production Readiness Review",
       "slug": "operations/production-readiness",
@@ -619,6 +913,20 @@
       ]
     },
     {
+      "path": "docs/RENEWAL-RISK-SCORING.md",
+      "title": "Renewal Risk Scoring",
+      "slug": "kyber/renewal-risk-scoring",
+      "section": "kyber",
+      "visibility": "I",
+      "audience": [
+        "exec",
+        "ops",
+        "architect"
+      ],
+      "status": "stable",
+      "since_version": "8.9.0"
+    },
+    {
       "path": "docs/REPO-INDEX.md",
       "title": "Repository Index",
       "slug": "reference/repo-index",
@@ -636,6 +944,34 @@
       "canonical_owner": "platform@aether"
     },
     {
+      "path": "docs/REVENUE-LEAKAGE.md",
+      "title": "Billing, Usage Metering, Contracts, and Revenue Operations",
+      "slug": "enterprise/revenue-leakage",
+      "section": "enterprise",
+      "visibility": "I",
+      "audience": [
+        "exec",
+        "buyer",
+        "ops"
+      ],
+      "status": "stable",
+      "since_version": "8.9.0"
+    },
+    {
+      "path": "docs/ROI-CALCULATORS.md",
+      "title": "ROI Calculators",
+      "slug": "enterprise/roi-calculators",
+      "section": "enterprise",
+      "visibility": "I",
+      "audience": [
+        "exec",
+        "buyer",
+        "ops"
+      ],
+      "status": "stable",
+      "since_version": "8.9.0"
+    },
+    {
       "path": "docs/ROLLBACK-RUNBOOK.md",
       "title": "Rollback Runbook",
       "slug": "operations/rollback",
@@ -649,6 +985,20 @@
       "estimated_read_minutes": 10,
       "toc_depth": 3,
       "canonical_owner": "platform@aether"
+    },
+    {
+      "path": "docs/SALES-READINESS.md",
+      "title": "Sales Readiness",
+      "slug": "enterprise/sales-readiness",
+      "section": "enterprise",
+      "visibility": "I",
+      "audience": [
+        "exec",
+        "buyer",
+        "ops"
+      ],
+      "status": "stable",
+      "since_version": "8.9.0"
     },
     {
       "path": "docs/SDK-ANDROID.md",
@@ -763,6 +1113,20 @@
       "canonical_owner": "platform@aether"
     },
     {
+      "path": "docs/SOLUTION-PACKAGES.md",
+      "title": "Solution Packages",
+      "slug": "enterprise/solution-packages",
+      "section": "enterprise",
+      "visibility": "I",
+      "audience": [
+        "exec",
+        "buyer",
+        "ops"
+      ],
+      "status": "stable",
+      "since_version": "8.9.0"
+    },
+    {
       "path": "docs/STABLECOIN-RAILS.md",
       "title": "Stablecoin Rails",
       "slug": "concepts/stablecoin-rails",
@@ -845,6 +1209,48 @@
       "estimated_read_minutes": 4,
       "toc_depth": 3,
       "canonical_owner": "backend@aether"
+    },
+    {
+      "path": "docs/USAGE-METERING.md",
+      "title": "Billing, Usage Metering, Contracts, and Revenue Operations",
+      "slug": "enterprise/usage-metering",
+      "section": "enterprise",
+      "visibility": "I",
+      "audience": [
+        "exec",
+        "buyer",
+        "ops"
+      ],
+      "status": "stable",
+      "since_version": "8.9.0"
+    },
+    {
+      "path": "docs/VALUE-BASED-PRICING-SUPPORT.md",
+      "title": "Billing, Usage Metering, Contracts, and Revenue Operations",
+      "slug": "enterprise/value-based-pricing-support",
+      "section": "enterprise",
+      "visibility": "I",
+      "audience": [
+        "exec",
+        "buyer",
+        "ops"
+      ],
+      "status": "stable",
+      "since_version": "8.9.0"
+    },
+    {
+      "path": "docs/VALUE-REVIEW.md",
+      "title": "Value Review",
+      "slug": "kyber/value-review",
+      "section": "kyber",
+      "visibility": "I",
+      "audience": [
+        "exec",
+        "ops",
+        "architect"
+      ],
+      "status": "stable",
+      "since_version": "8.9.0"
     },
     {
       "path": "docs/X402_AUDIT_REPORT.md",
