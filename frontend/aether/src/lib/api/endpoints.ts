@@ -960,6 +960,23 @@ export const api = {
     invoices: () =>
       restClient.get('/v1/billing/invoices', wrap(unknownSchema))
         .then(r => r.data as { invoices: Array<{ id: string; amount: number; currency: string; status: string; period_start: string; period_end: string; invoice_url: string | null }> }),
+
+    plan: () =>
+      restClient.get('/v1/billing/plan', wrap(unknownSchema)).then(r => r.data),
+
+    entitlements: () =>
+      restClient.get('/v1/billing/entitlements', wrap(unknownSchema)).then(r => r.data),
+
+    usageSummary: () =>
+      restClient.get('/v1/billing/usage/summary', wrap(unknownSchema)).then(r => r.data),
+
+    invoicePreviews: () =>
+      restClient.get('/v1/billing/invoice-previews', wrap(unknownSchema)).then(r => r.data),
+
+    valueCreated: () =>
+      restClient.get('/v1/billing/value-created', wrap(unknownSchema)).then(r => r.data),
+
+
   },
 
   // ── Enterprise contact ─────────────────────────────────────────────────────

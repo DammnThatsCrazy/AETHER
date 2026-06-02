@@ -35,3 +35,7 @@ Integration actions require an approved decision before queued or executed statu
 ## Audit export readiness
 
 Action dispatch evidence is available through `action_dispatch_audit`, including actions, dispatches, delivery receipts, authorization metadata presence, status transitions, and idempotency keys. Connector secrets remain redacted and tenant-scoped.
+
+## Metering and RevOps
+
+Integration deliveries and premium connector usage should emit usage metering events. Observed value from integration actions can create value-created events for internal invoice preview and expansion analysis.

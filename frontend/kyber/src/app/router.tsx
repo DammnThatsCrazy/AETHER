@@ -20,6 +20,7 @@ const CisPage = lazy(() => import('@kyber/pages/cis').then(m => ({ default: m.Ci
 const InvestigationsPage = lazy(() => import('@kyber/pages/investigations').then(m => ({ default: m.InvestigationsPage })));
 const SolutionPackagesPage = lazy(() => import('@kyber/pages/packages').then(m => ({ default: m.SolutionPackagesPage })));
 const DeploymentReadinessPage = lazy(() => import('@kyber/pages/deployment-readiness').then(m => ({ default: m.DeploymentReadinessPage })));
+const RevenueOperationsPage = lazy(() => import('@kyber/pages/revenue-operations').then(m => ({ default: m.RevenueOperationsPage })));
 
 function PageSuspense({ children }: { readonly children: React.ReactNode }) {
   return (
@@ -65,6 +66,7 @@ export function AppRouter() {
                 <Route path="/packages" element={<PageSuspense><SolutionPackagesPage /></PageSuspense>} />
                 <Route path="/packages/:packageId" element={<PageSuspense><SolutionPackagesPage /></PageSuspense>} />
                 <Route path="/deployment-readiness" element={<PageSuspense><DeploymentReadinessPage /></PageSuspense>} />
+                <Route path="/revenue-operations" element={<PageSuspense><RevenueOperationsPage /></PageSuspense>} />
                 <Route path="*" element={<Navigate to="/mission" replace />} />
               </Routes>
             </AppShell>

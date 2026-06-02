@@ -201,7 +201,7 @@ from services.admin.billing_subscription_routes import router as admin_billing_s
 from services.admin.webhook_routes import router as stripe_webhook_router
 from services.registration.routes import router as registration_router
 from services.me.routes import router as me_router
-from services.billing.routes import router as billing_router, admin_overage_router
+from services.billing.routes import router as billing_router, admin_overage_router, kyber_revops_router
 from services.auth.routes import router as auth_router, admin_auth_router
 from services.contact.routes import router as contact_router
 from services.recommendations.routes import router as recommendations_router
@@ -424,6 +424,7 @@ def create_app() -> FastAPI:
     app.include_router(me_router)
     app.include_router(billing_router)
     app.include_router(admin_overage_router)
+    app.include_router(kyber_revops_router)
     app.include_router(auth_router)
     app.include_router(admin_auth_router)
     app.include_router(contact_router)

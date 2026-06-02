@@ -27,3 +27,5 @@ export * from './ecommerce-types';
 export * from './feature-flag-types';
 export * from './feedback-types';
 export * from './solution-packages';
+
+export * from './billing-revenue-ops';

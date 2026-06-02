@@ -31,3 +31,7 @@ Tenant-facing endpoints require authenticated tenant permissions and force the r
 - `GET /v1/intelligence/audit-exports/{export_id}/download`
 
 Each generated export includes an `integrity_hash` over the generated payload and expires after seven days.
+
+## Audit export billing dimension
+
+Audit export generation is a metered usage dimension. High export volume without audit or enterprise package support creates internal revenue leakage signals; tenant-facing billing views show export usage without internal pricing strategy.
