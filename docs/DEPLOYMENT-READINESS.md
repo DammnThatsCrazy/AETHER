@@ -28,6 +28,17 @@ Kyber tracks access controls, audit exports, logging, tenant isolation, integrat
 ## Sales readiness linkage
 Kyber sales readiness uses deployment readiness to identify packages missing supportable deployment artifacts. Government-ready planning and self-hosted future remain planning language unless implementation and approvals are completed.
 
+## Security & governance control plane
+Deployment readiness now draws on the governance control plane for demonstrable
+controls: centralized access control, a policy engine, a tamper-evident audit
+ledger, the tenant isolation verifier, break-glass operator access, data retention
+policies, audit-export governance, and integration security. Governance evidence
+packs (`access_control`, `tenant_isolation`, `audit_logging`, `data_retention`,
+`integration_security`, `ai_recommendation_governance`, `operator_access`)
+package these for a buyer's security review. See
+[SECURITY-GOVERNANCE-CONTROLS.md](./SECURITY-GOVERNANCE-CONTROLS.md). These are
+security-review evidence only — **no certification or authorization is claimed**.
+
 ## Reliability & Operational Resilience
 
 Reliability, SRE, incident response, SLOs, runbooks, and tenant-safe system

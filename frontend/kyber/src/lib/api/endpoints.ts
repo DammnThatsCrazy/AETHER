@@ -1134,6 +1134,41 @@ export const api = {
         restClient.post(`/v1/admin/kyber/customer-success/ebr/${tenantId}/generate`, wrap(unknownSchema), {}).then(r => r.data),
       customerSuccessTriggersGenerate: () =>
         restClient.post('/v1/admin/kyber/customer-success/triggers/generate', wrap(unknownSchema), {}).then(r => r.data),
+      // ── Security & Governance Command Center ──────────────────────────────
+      securityOverview: () =>
+        restClient.get('/v1/admin/kyber/security/overview', wrap(unknownSchema)).then(r => r.data),
+      securityAuditEvents: (tenantId?: string) =>
+        restClient.get(`/v1/admin/kyber/security/audit-events${buildQS({ tenant_id: tenantId })}`, wrap(unknownSchema)).then(r => r.data),
+      securityPolicyDecisions: (tenantId?: string) =>
+        restClient.get(`/v1/admin/kyber/security/policy-decisions${buildQS({ tenant_id: tenantId })}`, wrap(unknownSchema)).then(r => r.data),
+      securityTenantIsolation: (run = false) =>
+        restClient.get(`/v1/admin/kyber/security/tenant-isolation${buildQS({ run })}`, wrap(unknownSchema)).then(r => r.data),
+      securityOperatorAccess: () =>
+        restClient.get('/v1/admin/kyber/security/operator-access', wrap(unknownSchema)).then(r => r.data),
+      securityDataRetention: (tenantId?: string) =>
+        restClient.get(`/v1/admin/kyber/security/data-retention${buildQS({ tenant_id: tenantId })}`, wrap(unknownSchema)).then(r => r.data),
+      securityCreateRetentionPolicy: (body: Record<string, unknown>) =>
+        restClient.post('/v1/admin/kyber/security/data-retention/policies', wrap(unknownSchema), body).then(r => r.data),
+      securityUpdateRetentionPolicy: (policyId: string, body: Record<string, unknown>) =>
+        restClient.patch(`/v1/admin/kyber/security/data-retention/policies/${policyId}`, wrap(unknownSchema), body).then(r => r.data),
+      securityDataRequests: (tenantId?: string) =>
+        restClient.get(`/v1/admin/kyber/security/data-requests${buildQS({ tenant_id: tenantId })}`, wrap(unknownSchema)).then(r => r.data),
+      securityProcessDataRequest: (dataRequestId: string, body: Record<string, unknown>) =>
+        restClient.patch(`/v1/admin/kyber/security/data-requests/${dataRequestId}`, wrap(unknownSchema), body).then(r => r.data),
+      securityEvidencePacks: (tenantId?: string) =>
+        restClient.get(`/v1/admin/kyber/security/governance-evidence-packs${buildQS({ tenant_id: tenantId })}`, wrap(unknownSchema)).then(r => r.data),
+      securityGenerateEvidencePack: (body: Record<string, unknown>) =>
+        restClient.post('/v1/admin/kyber/security/governance-evidence-packs/generate', wrap(unknownSchema), body).then(r => r.data),
+      securityBreakGlassList: (tenantId?: string) =>
+        restClient.get(`/v1/admin/kyber/security/break-glass${buildQS({ tenant_id: tenantId })}`, wrap(unknownSchema)).then(r => r.data),
+      securityBreakGlassRequest: (body: Record<string, unknown>) =>
+        restClient.post('/v1/admin/kyber/security/break-glass/request', wrap(unknownSchema), body).then(r => r.data),
+      securityBreakGlassApprove: (requestId: string) =>
+        restClient.post(`/v1/admin/kyber/security/break-glass/${requestId}/approve`, wrap(unknownSchema), {}).then(r => r.data),
+      securityBreakGlassDeny: (requestId: string, reason = '') =>
+        restClient.post(`/v1/admin/kyber/security/break-glass/${requestId}/deny`, wrap(unknownSchema), { reason }).then(r => r.data),
+      securityBreakGlassRevoke: (requestId: string) =>
+        restClient.post(`/v1/admin/kyber/security/break-glass/${requestId}/revoke`, wrap(unknownSchema), {}).then(r => r.data),
 
       // ── Reliability command center ─────────────────────────────────────
       reliabilityOverview: () =>

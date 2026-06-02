@@ -43,6 +43,16 @@ Kyber now includes enterprise/government packaging and deployment readiness comm
 ## GTM, pricing, and sales readiness
 Kyber now includes internal GTM surfaces for pricing architecture, materials catalog, buyer personas, ROI calculator definitions, and sales readiness aggregation. These surfaces support Olympus Labs sales execution without changing Aether tenant-facing architecture.
 
+## Security & Governance Command Center
+Kyber now includes a Security & Governance Command Center with nine views:
+Security Overview, Policy Decision Log, Audit Event Explorer, Tenant Isolation
+Dashboard, Operator Access Dashboard, Break-Glass Access Board, Data Retention
+Dashboard, Data Request Queue, and Governance Evidence Packs. These are operator
+surfaces under `/v1/admin/kyber/security/*` and are **aggregate-only** for
+cross-tenant data — a single tenant's private records require an assigned role or
+an approved break-glass grant. See
+[SECURITY-GOVERNANCE-CONTROLS.md](./SECURITY-GOVERNANCE-CONTROLS.md).
+
 ## Reliability & Operational Resilience
 
 Reliability, SRE, incident response, SLOs, runbooks, and tenant-safe system

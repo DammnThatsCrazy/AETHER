@@ -3,6 +3,19 @@
   "generated_from": "docs/**/*.{md,mdx}",
   "docs": [
     {
+      "path": "docs/ACCESS-CONTROL.md",
+      "title": "Access Control",
+      "slug": "enterprise/access-control",
+      "section": "enterprise",
+      "visibility": "I",
+      "audience": [
+        "ops",
+        "security"
+      ],
+      "status": "stable",
+      "since_version": "13.0.0"
+    },
+    {
       "path": "docs/ACCOUNT-PLANS.md",
       "title": "Account Plans",
       "slug": "kyber/account-plans",
@@ -100,6 +113,19 @@
       "canonical_owner": "platform@aether"
     },
     {
+      "path": "docs/AUDIT-EVENT-LEDGER.md",
+      "title": "Security Audit Event Ledger",
+      "slug": "enterprise/audit-event-ledger",
+      "section": "enterprise",
+      "visibility": "I",
+      "audience": [
+        "ops",
+        "security"
+      ],
+      "status": "stable",
+      "since_version": "13.0.0"
+    },
+    {
       "path": "docs/AUDIT-EXPORTS.md",
       "title": "Audit Exports",
       "slug": "enterprise/audit-exports",
@@ -176,6 +202,19 @@
       ],
       "status": "stable",
       "since_version": "8.9.0"
+    },
+    {
+      "path": "docs/BREAK-GLASS-ACCESS.md",
+      "title": "Break-Glass Operator Access",
+      "slug": "enterprise/break-glass-access",
+      "section": "enterprise",
+      "visibility": "I",
+      "audience": [
+        "ops",
+        "security"
+      ],
+      "status": "stable",
+      "since_version": "13.0.0"
     },
     {
       "path": "docs/BUYER-PERSONAS.md",
@@ -349,6 +388,20 @@
       "canonical_owner": "ingest@aether"
     },
     {
+      "path": "docs/DATA-RETENTION.md",
+      "title": "Data Retention & Data Requests",
+      "slug": "enterprise/data-retention",
+      "section": "enterprise",
+      "visibility": "I",
+      "audience": [
+        "ops",
+        "security",
+        "compliance"
+      ],
+      "status": "stable",
+      "since_version": "13.0.0"
+    },
+    {
       "path": "docs/DECISION-OUTCOME-INTELLIGENCE.md",
       "title": "Decision & Outcome Intelligence",
       "slug": "ai/decision-outcome-intelligence",
@@ -492,6 +545,20 @@
       "canonical_owner": "frontend@aether"
     },
     {
+      "path": "docs/GOVERNANCE-EVIDENCE-PACKS.md",
+      "title": "Governance Evidence Packs",
+      "slug": "enterprise/governance-evidence-packs",
+      "section": "enterprise",
+      "visibility": "I",
+      "audience": [
+        "exec",
+        "buyer",
+        "security"
+      ],
+      "status": "stable",
+      "since_version": "13.0.0"
+    },
+    {
       "path": "docs/GOVERNMENT-GTM-PLANNING.md",
       "title": "Government GTM Planning",
       "slug": "enterprise/government-gtm-planning",
@@ -599,6 +666,19 @@
         "AETHER_DECISION_RECORDS_ENABLED",
         "AETHER_OUTCOME_FEEDBACK_ENABLED"
       ]
+    },
+    {
+      "path": "docs/INTEGRATION-SECURITY.md",
+      "title": "Integration Security",
+      "slug": "enterprise/integration-security",
+      "section": "enterprise",
+      "visibility": "I",
+      "audience": [
+        "ops",
+        "security"
+      ],
+      "status": "stable",
+      "since_version": "13.0.0"
     },
     {
       "path": "docs/INTELLIGENCE-GRAPH.md",
@@ -859,6 +939,19 @@
         "AETHER_PLAYBOOKS_ENABLED",
         "AETHER_RECOMMENDATIONS_ENABLED"
       ]
+    },
+    {
+      "path": "docs/POLICY-ENGINE.md",
+      "title": "Policy Engine",
+      "slug": "enterprise/policy-engine",
+      "section": "enterprise",
+      "visibility": "I",
+      "audience": [
+        "ops",
+        "security"
+      ],
+      "status": "stable",
+      "since_version": "13.0.0"
     },
     {
       "path": "docs/POSTMORTEMS.md",
@@ -1167,14 +1260,15 @@
       "visibility": "I",
       "audience": [
         "exec",
+        "buyer",
         "ops",
         "architect",
         "security",
         "compliance"
       ],
-      "status": "beta",
+      "status": "stable",
       "since_version": "9.0.0",
-      "estimated_read_minutes": 4,
+      "estimated_read_minutes": 6,
       "canonical_owner": "platform@aether"
     },
     {
@@ -1337,6 +1431,19 @@
       "estimated_read_minutes": 4,
       "toc_depth": 3,
       "canonical_owner": "backend@aether"
+    },
+    {
+      "path": "docs/TENANT-ISOLATION-VERIFICATION.md",
+      "title": "Tenant Isolation Verification",
+      "slug": "enterprise/tenant-isolation-verification",
+      "section": "enterprise",
+      "visibility": "I",
+      "audience": [
+        "ops",
+        "security"
+      ],
+      "status": "stable",
+      "since_version": "13.0.0"
     },
     {
       "path": "docs/TENANT-STATUS.md",

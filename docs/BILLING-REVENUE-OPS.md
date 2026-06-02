@@ -50,6 +50,16 @@ Tenant routes under `/v1/billing/*` return customer-safe plan and usage informat
 
 This layer is billing-ready and audit-friendly. Production rollout should connect scheduled metering hooks from ingestion, graph, Profile360, recommendations, decisions, actions, outcomes, playbooks, audit exports, integrations, deployment, and managed workflow systems. External payment collection, taxes, exact SKU prices, and ERP export are future integrations.
 
+## Security & governance controls
+Billing and contract data are governed by the security control plane. The `billing`
+domain in `AccessControlService` gates billing/admin access (the
+`tenant_billing_admin` and `olympus_revops` roles), the policy engine enforces
+`billing.admin_access`, and billing contract changes emit `SecurityAuditEvent`s.
+Data retention treats `billing_record` as a preserved resource type — billing
+records are **not** deleted when retention requires their preservation. See
+[SECURITY-GOVERNANCE-CONTROLS.md](./SECURITY-GOVERNANCE-CONTROLS.md) and
+[DATA-RETENTION.md](./DATA-RETENTION.md).
+
 ## Reliability & Operational Resilience
 
 Reliability, SRE, incident response, SLOs, runbooks, and tenant-safe system

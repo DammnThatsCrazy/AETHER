@@ -26,6 +26,7 @@ const GTMMaterialsPage = lazy(() => import('@kyber/pages/gtm').then(m => ({ defa
 const BuyerPersonasPage = lazy(() => import('@kyber/pages/gtm').then(m => ({ default: m.BuyerPersonasPage })));
 const ROICalculatorsPage = lazy(() => import('@kyber/pages/gtm').then(m => ({ default: m.ROICalculatorsPage })));
 const SalesReadinessPage = lazy(() => import('@kyber/pages/gtm').then(m => ({ default: m.SalesReadinessPage })));
+const SecurityPage = lazy(() => import('@kyber/pages/security').then(m => ({ default: m.SecurityPage })));
 const ReliabilityPage = lazy(() => import('@kyber/pages/reliability').then(m => ({ default: m.ReliabilityPage })));
 
 function PageSuspense({ children }: { readonly children: React.ReactNode }) {
@@ -81,6 +82,7 @@ export function AppRouter() {
                 <Route path="/buyer-personas" element={<PageSuspense><BuyerPersonasPage /></PageSuspense>} />
                 <Route path="/roi-calculators" element={<PageSuspense><ROICalculatorsPage /></PageSuspense>} />
                 <Route path="/sales-readiness" element={<PageSuspense><SalesReadinessPage /></PageSuspense>} />
+                <Route path="/security" element={<PageSuspense><SecurityPage /></PageSuspense>} />
                 <Route path="*" element={<Navigate to="/mission" replace />} />
               </Routes>
             </AppShell>

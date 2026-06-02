@@ -225,6 +225,8 @@ from services.entity_intelligence.routes import router as entity_intelligence_ro
 from services.profile360_workers import attach_profile360_workers
 from services.investigation.routes import router as investigation_router
 from services.governance.routes import router as governance_router
+from services.security.routes import router as security_router
+from services.security.admin_routes import admin_router as security_admin_router
 from services.events.routes import router as events_router
 from services.sdk.routes import router as sdk_router
 from services.sdk_health.routes import router as sdk_health_router
@@ -449,6 +451,8 @@ def create_app() -> FastAPI:
     app.include_router(entity_intelligence_router)
     app.include_router(investigation_router)
     app.include_router(governance_router)
+    app.include_router(security_router)
+    app.include_router(security_admin_router)
     app.include_router(events_router)
     app.include_router(user_agents_router)  # Profile 360: user/org-owned agents (always-on)
     app.include_router(sdk_router)          # SDK utilities: cross-device identity resolution
