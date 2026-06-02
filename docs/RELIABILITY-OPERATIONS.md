@@ -1,9 +1,9 @@
 ---
 title: Reliability Operations
 slug: reliability/operations
-section: reliability
+section: operations
 visibility: I
-audience: [exec, ops, architect, sre]
+audience: [exec, ops, architect]
 status: beta
 since_version: "9.0.0"
 source_files:

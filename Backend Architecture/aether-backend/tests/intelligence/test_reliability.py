@@ -174,6 +174,25 @@ async def test_incident_create_update_resolve():
 
 
 @pytest.mark.asyncio
+async def test_terminal_incident_not_linked_on_create():
+    # A backfilled resolved incident must not mark its services as "open".
+    inc = await incident_service.create({
+        "title": "Backfill", "severity": "sev3", "status": "resolved",
+        "affected_services": ["outcomes"],
+    })
+    svc = await service_registry.get("outcomes")
+    assert inc["incident_id"] not in (svc["open_incident_ids"] or [])
+    # And it must not count toward current tenant impact.
+    await incident_service.create({
+        "title": "Old", "severity": "sev3", "status": "closed",
+        "affected_services": ["outcomes"], "affected_tenants": ["tenant-z"],
+    })
+    summary = await tenant_impact.internal_summary()
+    assert summary["impacted_tenant_count"] == 0
+    assert summary["historically_impacted_tenant_count"] == 1
+
+
+@pytest.mark.asyncio
 async def test_incident_tenant_isolation():
     await incident_service.create({
         "title": "Tenant A only", "severity": "sev3",

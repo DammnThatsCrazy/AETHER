@@ -356,8 +356,12 @@ class IncidentService:
         incident_id = data.get("incident_id") or f"inc_{uuid.uuid4().hex[:12]}"
         incident = IncidentRecord(incident_id=incident_id, **{k: v for k, v in data.items() if k != "incident_id"})
         stored = await self.repo.insert(incident_id, incident.model_dump())
-        for service_key in incident.affected_services:
-            await service_registry.link_incident(service_key, incident_id)
+        # Only link to service open-incident lists when the incident is active.
+        # Terminal incidents (resolved/closed) created via backfill must not
+        # surface as "open" on the service health dashboard.
+        if incident.status not in ("resolved", "closed"):
+            for service_key in incident.affected_services:
+                await service_registry.link_incident(service_key, incident_id)
         await self._record_audit(incident_id, "created", actor, {"severity": incident.severity, "status": incident.status})
         return stored
 

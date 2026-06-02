@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useParams } from 'react-router-dom';
 import {
   Badge,
   Card,
@@ -52,6 +53,7 @@ const INCIDENT_LANES: { readonly key: string; readonly label: string }[] = [
 ];
 
 export function ReliabilityPage() {
+  const { incidentId } = useParams<{ incidentId?: string }>();
   const { data, loading, error } = useReliability();
   const [selectedIncident, setSelectedIncident] = useState<AnyRecord | null>(null);
 
@@ -68,7 +70,10 @@ export function ReliabilityPage() {
   const summary = overview.service_health_summary ?? {};
   const sloStatus = overview.slo_status ?? {};
 
-  const detail = selectedIncident ?? incidents[0] ?? null;
+  // Honor a deep link (/reliability/incidents/:incidentId) when present, then a
+  // clicked selection, then fall back to the first incident.
+  const routedIncident = incidentId ? incidents.find((i) => i.incident_id === incidentId) ?? null : null;
+  const detail = selectedIncident ?? routedIncident ?? incidents[0] ?? null;
 
   return (
     <PageWrapper

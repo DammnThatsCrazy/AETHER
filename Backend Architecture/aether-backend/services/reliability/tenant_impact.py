@@ -164,12 +164,20 @@ class TenantImpactAnalyzer:
         }
 
     async def internal_summary(self) -> dict[str, Any]:
-        """Cross-tenant impact rollup for Kyber operators."""
+        """Cross-tenant impact rollup for Kyber operators.
+
+        ``impacted_tenant_count`` reflects *current* impact only — tenants tied to
+        an active (non-terminal) incident. Resolved/closed incidents are excluded
+        so the count stays consistent with ``open_incident_count``.
+        """
         incidents = await incident_service.list()
-        tenant_ids = sorted({t for inc in incidents for t in (inc.get("affected_tenants") or [])})
-        per_tenant = [await self.compute(tid) for tid in tenant_ids]
+        active_incidents = [i for i in incidents if i.get("status") not in ("resolved", "closed")]
+        currently_impacted = sorted({t for inc in active_incidents for t in (inc.get("affected_tenants") or [])})
+        all_impacted = sorted({t for inc in incidents for t in (inc.get("affected_tenants") or [])})
+        per_tenant = [await self.compute(tid) for tid in all_impacted]
         return {
-            "impacted_tenant_count": len(tenant_ids),
+            "impacted_tenant_count": len(currently_impacted),
+            "historically_impacted_tenant_count": len(all_impacted),
             "tenants": per_tenant,
             "generated_at": now_iso(),
         }

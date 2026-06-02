@@ -1,9 +1,9 @@
 ---
 title: SLO Tracking
 slug: reliability/slo-tracking
-section: reliability
+section: operations
 visibility: I
-audience: [ops, sre, exec, architect]
+audience: [ops, exec, architect]
 status: beta
 since_version: "9.0.0"
 source_files:

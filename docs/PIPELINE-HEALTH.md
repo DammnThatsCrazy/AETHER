@@ -1,9 +1,9 @@
 ---
 title: Pipeline Health
 slug: reliability/pipeline-health
-section: reliability
+section: operations
 visibility: I
-audience: [ops, sre, architect]
+audience: [ops, architect]
 status: beta
 since_version: "9.0.0"
 source_files:

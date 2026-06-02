@@ -1,9 +1,9 @@
 ---
 title: Tenant System Status
 slug: reliability/tenant-status
-section: reliability
-visibility: E
-audience: [tenant, ops, architect]
+section: operations
+visibility: P
+audience: [buyer, ops, architect]
 status: beta
 since_version: "9.0.0"
 source_files:
