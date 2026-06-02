@@ -20,3 +20,7 @@ Each package defines buyer personas, use cases, included modules, required featu
 ## Rollout notes
 
 Kyber exposes package list/detail, readiness reports, deployment mode support, tenant-package fit, known gaps, and recommended next actions through `/v1/admin/kyber/solution-packages` and related readiness endpoints.
+
+
+## GTM and pricing addendum
+Solution packages now map to Kyber GTM materials, buyer personas, pricing dimensions, ROI calculator definitions, and sales readiness checks. Government-planning packages must remain planning-only and must not claim certifications or authorizations.

@@ -81,10 +81,17 @@ from services.lake.features import materialize_wallet_features
 
 from services.intelligence.solution_packages import (
     AUDIT_EXPORT_TYPES,
+    BUYER_PERSONAS,
     DEPLOYMENT_MODES,
+    GTM_MATERIALS,
+    PRICING_MODELS,
+    ROI_CALCULATORS,
     SOLUTION_PACKAGES,
     AuditExportRequest,
+    gtm_materials_for_package,
     audit_export_type_map,
+    personas_for_package,
+    roi_calculators_for_package,
     make_export_record,
     pdf_summary_payload,
     redact_secrets,
@@ -1304,6 +1311,68 @@ async def kyber_audit_export_health(request: Request):
     exports = await _audit_exports.find_many({}, limit=1000)
     return APIResponse(data={"export_volume": len(exports), "export_success": sum(1 for e in exports if e.get("status") == "generated"), "export_failure": sum(1 for e in exports if e.get("status") == "failed"), "stale_or_expired_exports": sum(1 for e in exports if e.get("status") == "expired"), "export_types_used": dict(Counter(e.get("export_type") for e in exports)), "tenants_requesting_exports": sorted({e.get("tenant_id") for e in exports if e.get("tenant_id")})}).to_dict()
 
+
+
+@kyber_admin_router.get("/gtm/materials")
+async def kyber_gtm_materials(request: Request):
+    request.state.tenant.require_permission("admin")
+    return APIResponse(data={"items": [m.model_dump() for m in GTM_MATERIALS], "count": len(GTM_MATERIALS)}).to_dict()
+
+
+@kyber_admin_router.get("/gtm/materials/{material_id}")
+async def kyber_gtm_material_detail(material_id: str, request: Request):
+    request.state.tenant.require_permission("admin")
+    material = next((m.model_dump() for m in GTM_MATERIALS if m.material_id == material_id), None)
+    if not material:
+        from shared.common.common import NotFoundError
+        raise NotFoundError("gtm material")
+    return APIResponse(data=material).to_dict()
+
+
+@kyber_admin_router.get("/gtm/buyer-personas")
+async def kyber_gtm_buyer_personas(request: Request):
+    request.state.tenant.require_permission("admin")
+    return APIResponse(data={"items": [p.model_dump() for p in BUYER_PERSONAS], "count": len(BUYER_PERSONAS)}).to_dict()
+
+
+@kyber_admin_router.get("/gtm/pricing-models")
+async def kyber_gtm_pricing_models(request: Request):
+    request.state.tenant.require_permission("admin")
+    return APIResponse(data={"items": [p.model_dump() for p in PRICING_MODELS], "count": len(PRICING_MODELS)}).to_dict()
+
+
+@kyber_admin_router.get("/gtm/roi-calculators")
+async def kyber_gtm_roi_calculators(request: Request):
+    request.state.tenant.require_permission("admin")
+    return APIResponse(data={"items": [c.model_dump() for c in ROI_CALCULATORS], "count": len(ROI_CALCULATORS)}).to_dict()
+
+
+@kyber_admin_router.get("/gtm/sales-readiness")
+async def kyber_gtm_sales_readiness(request: Request):
+    request.state.tenant.require_permission("admin")
+    items = []
+    for pkg_model in SOLUTION_PACKAGES:
+        pkg = pkg_model.model_dump()
+        readiness = _readiness_for_package(pkg)
+        materials = gtm_materials_for_package(pkg_model.package_id)
+        personas = personas_for_package(pkg_model.package_id)
+        calculators = roi_calculators_for_package(pkg_model.package_id)
+        has_audit = bool(pkg.get("required_audit_exports"))
+        deployment_ready = pkg.get("readiness_status") in {"sales_ready", "enterprise_ready", "pilot_ready"}
+        ready = pkg.get("readiness_status") == "sales_ready" and bool(materials) and bool(personas) and bool(calculators) and has_audit and deployment_ready
+        next_actions = []
+        if not materials:
+            next_actions.append("Create package collateral before sales motion.")
+        if not calculators:
+            next_actions.append("Add ROI calculator or mark calculator gap in sales notes.")
+        if not has_audit:
+            next_actions.append("Map required audit exports for procurement/security review.")
+        if not deployment_ready:
+            next_actions.append("Complete deployment readiness artifacts; use planning language only.")
+        if "government_planning" in _markets(pkg):
+            next_actions.append("Keep public-sector language planning-only; do not claim certification, authorization, FedRAMP, StateRAMP, or ATO.")
+        items.append({"package_id": pkg_model.package_id, "package_name": pkg_model.name, "readiness_status": pkg_model.readiness_status, "ready_to_sell": ready, "material_count": len(materials), "persona_count": len(personas), "roi_calculator_count": len(calculators), "missing_collateral": not bool(materials), "missing_roi_calculator": not bool(calculators), "missing_audit_export_support": not has_audit, "missing_deployment_readiness": not deployment_ready, "known_gaps": readiness["known_gaps"], "recommended_next_sales_actions": next_actions or ["Use approved sales-ready collateral and capture buyer feedback."]})
+    return APIResponse(data={"items": items, "ready_to_sell_count": sum(1 for i in items if i["ready_to_sell"]), "generated_at": utc_now().isoformat()}).to_dict()
 
 @kyber_admin_router.get("/recommendation-health")
 async def kyber_recommendation_health(request: Request):
