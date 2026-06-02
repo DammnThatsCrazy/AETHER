@@ -38,3 +38,8 @@ Kyber may show tenant-level account health to Olympus Labs operators with `admin
 ## Packaging command extensions
 
 Kyber now includes enterprise/government packaging and deployment readiness command views: solution packages, package detail, package readiness, deployment modes, deployment readiness, audit export health, and tenant-package fit. Government entries are planning tracks only and do not claim certification.
+
+
+## Customer Success command center
+
+Kyber now includes Customer Success Automation for account health, expansion opportunities, renewal risks, EBR generation, and account plans. It preserves the strategic observability rule that cross-tenant views are aggregate/operator summaries, not raw tenant-private intelligence. See docs/CUSTOMER-SUCCESS-AUTOMATION.md.

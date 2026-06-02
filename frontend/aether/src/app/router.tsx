@@ -18,6 +18,7 @@ const BillingPage = lazy(() => import('@aether-app/pages/billing/billing-page').
 const MePage = lazy(() => import('@aether-app/pages/me/me-page').then(m => ({ default: m.MePage })));
 const GeoPage = lazy(() => import('@aether-app/pages/geo').then(m => ({ default: m.GeoPage })));
 const AuditExportsPage = lazy(() => import('@aether-app/pages/audit-exports').then(m => ({ default: m.AuditExportsPage })));
+const ValueReviewPage = lazy(() => import('@aether-app/pages/value-review').then(m => ({ default: m.ValueReviewPage })));
 
 function PageSuspense({ children }: { readonly children: React.ReactNode }) {
   return (
@@ -67,6 +68,7 @@ export function AppRouter() {
                 <Route path="/geo" element={<PageSuspense><GeoPage /></PageSuspense>} />
                 <Route path="/geo/:level/:geoId" element={<PageSuspense><GeoPage /></PageSuspense>} />
                 <Route path="/audit-exports" element={<PageSuspense><AuditExportsPage /></PageSuspense>} />
+                <Route path="/value-review" element={<PageSuspense><ValueReviewPage /></PageSuspense>} />
                 <Route path="*" element={<Navigate to="/settings" replace />} />
               </Routes>
             </AppShell>

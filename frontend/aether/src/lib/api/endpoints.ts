@@ -44,6 +44,15 @@ const buildQS = (params: Record<string, string | number | boolean | undefined>) 
 // ─── API ─────────────────────────────────────────────────────────────────────
 export const api = {
 
+
+  valueReview: {
+    overview: () => restClient.get('/v1/value-review', wrap(unknownSchema)).then(r => r.data),
+    summary: () => restClient.get('/v1/value-review/summary', wrap(unknownSchema)).then(r => r.data),
+    recommendations: () => restClient.get('/v1/value-review/recommendations', wrap(unknownSchema)).then(r => r.data),
+    playbooks: () => restClient.get('/v1/value-review/playbooks', wrap(unknownSchema)).then(r => r.data),
+    nextSteps: () => restClient.get('/v1/value-review/next-steps', wrap(unknownSchema)).then(r => r.data),
+  },
+
   // ── Profile — full + all contextual sub-resources ─────────────────────────
   profile: {
     /** Full holistic profile — identity, consent, timeline, graph, intelligence, lake data. */

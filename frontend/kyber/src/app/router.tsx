@@ -20,6 +20,7 @@ const CisPage = lazy(() => import('@kyber/pages/cis').then(m => ({ default: m.Ci
 const InvestigationsPage = lazy(() => import('@kyber/pages/investigations').then(m => ({ default: m.InvestigationsPage })));
 const SolutionPackagesPage = lazy(() => import('@kyber/pages/packages').then(m => ({ default: m.SolutionPackagesPage })));
 const DeploymentReadinessPage = lazy(() => import('@kyber/pages/deployment-readiness').then(m => ({ default: m.DeploymentReadinessPage })));
+const CustomerSuccessPage = lazy(() => import('@kyber/pages/customer-success').then(m => ({ default: m.CustomerSuccessPage })));
 
 function PageSuspense({ children }: { readonly children: React.ReactNode }) {
   return (
@@ -65,6 +66,7 @@ export function AppRouter() {
                 <Route path="/packages" element={<PageSuspense><SolutionPackagesPage /></PageSuspense>} />
                 <Route path="/packages/:packageId" element={<PageSuspense><SolutionPackagesPage /></PageSuspense>} />
                 <Route path="/deployment-readiness" element={<PageSuspense><DeploymentReadinessPage /></PageSuspense>} />
+                <Route path="/customer-success" element={<PageSuspense><CustomerSuccessPage /></PageSuspense>} />
                 <Route path="*" element={<Navigate to="/mission" replace />} />
               </Routes>
             </AppShell>
