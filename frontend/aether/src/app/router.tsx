@@ -66,6 +66,7 @@ export function AppRouter() {
                 <Route path="/settings" element={<PageSuspense><SettingsPage /></PageSuspense>} />
                 <Route path="/onboarding" element={<PageSuspense><OnboardingPage /></PageSuspense>} />
                 <Route path="/billing" element={<PageSuspense><BillingPage /></PageSuspense>} />
+                <Route path="/usage-plan" element={<PageSuspense><UsagePlanPage /></PageSuspense>} />
                 <Route path="/me" element={<PageSuspense><MePage /></PageSuspense>} />
                 <Route path="/geo" element={<PageSuspense><GeoPage /></PageSuspense>} />
                 <Route path="/geo/:level/:geoId" element={<PageSuspense><GeoPage /></PageSuspense>} />
