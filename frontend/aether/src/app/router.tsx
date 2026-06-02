@@ -17,6 +17,7 @@ const SettingsPage = lazy(() => import('@aether-app/pages/settings/settings-page
 const BillingPage = lazy(() => import('@aether-app/pages/billing/billing-page').then(m => ({ default: m.BillingPage })));
 const MePage = lazy(() => import('@aether-app/pages/me/me-page').then(m => ({ default: m.MePage })));
 const GeoPage = lazy(() => import('@aether-app/pages/geo').then(m => ({ default: m.GeoPage })));
+const OnboardingPage = lazy(() => import('@aether-app/pages/onboarding').then(m => ({ default: m.OnboardingPage })));
 const AuditExportsPage = lazy(() => import('@aether-app/pages/audit-exports').then(m => ({ default: m.AuditExportsPage })));
 const ValueReviewPage = lazy(() => import('@aether-app/pages/value-review').then(m => ({ default: m.ValueReviewPage })));
 
@@ -63,6 +64,7 @@ export function AppRouter() {
                 <Route path="/campaigns" element={<PageSuspense><CampaignsPage /></PageSuspense>} />
                 <Route path="/graph" element={<PageSuspense><GraphPage /></PageSuspense>} />
                 <Route path="/settings" element={<PageSuspense><SettingsPage /></PageSuspense>} />
+                <Route path="/onboarding" element={<PageSuspense><OnboardingPage /></PageSuspense>} />
                 <Route path="/billing" element={<PageSuspense><BillingPage /></PageSuspense>} />
                 <Route path="/me" element={<PageSuspense><MePage /></PageSuspense>} />
                 <Route path="/geo" element={<PageSuspense><GeoPage /></PageSuspense>} />

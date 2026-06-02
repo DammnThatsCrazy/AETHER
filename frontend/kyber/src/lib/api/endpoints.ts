@@ -1094,20 +1094,18 @@ export const api = {
         restClient.get('/v1/admin/kyber/deployment-readiness', wrap(unknownSchema)).then(r => r.data),
       auditExportHealth: () =>
         restClient.get('/v1/admin/kyber/audit-export-health', wrap(unknownSchema)).then(r => r.data),
-      customerSuccessOverview: () =>
-        restClient.get('/v1/admin/kyber/customer-success/overview', wrap(unknownSchema)).then(r => r.data),
-      customerSuccessAccounts: () =>
-        restClient.get('/v1/admin/kyber/customer-success/accounts', wrap(unknownSchema)).then(r => r.data),
-      customerSuccessTriggersGenerate: () =>
-        restClient.post('/v1/admin/kyber/customer-success/triggers/generate', wrap(unknownSchema), {}).then(r => r.data),
-      expansionOpportunities: () =>
-        restClient.get('/v1/admin/kyber/customer-success/expansion-opportunities', wrap(unknownSchema)).then(r => r.data),
-      renewalRisks: () =>
-        restClient.get('/v1/admin/kyber/customer-success/renewal-risks', wrap(unknownSchema)).then(r => r.data),
-      generateEbr: (tenantId: string) =>
-        restClient.post(`/v1/admin/kyber/customer-success/ebr/${tenantId}/generate`, wrap(unknownSchema), {}).then(r => r.data),
-      accountPlan: (tenantId: string) =>
-        restClient.get(`/v1/admin/kyber/customer-success/account-plans/${tenantId}`, wrap(unknownSchema)).then(r => r.data),
+      gtmMaterials: () =>
+        restClient.get('/v1/admin/kyber/gtm/materials', wrap(unknownSchema)).then(r => r.data),
+      gtmMaterial: (materialId: string) =>
+        restClient.get(`/v1/admin/kyber/gtm/materials/${materialId}`, wrap(unknownSchema)).then(r => r.data),
+      buyerPersonas: () =>
+        restClient.get('/v1/admin/kyber/gtm/buyer-personas', wrap(unknownSchema)).then(r => r.data),
+      pricingModels: () =>
+        restClient.get('/v1/admin/kyber/gtm/pricing-models', wrap(unknownSchema)).then(r => r.data),
+      roiCalculators: () =>
+        restClient.get('/v1/admin/kyber/gtm/roi-calculators', wrap(unknownSchema)).then(r => r.data),
+      salesReadiness: () =>
+        restClient.get('/v1/admin/kyber/gtm/sales-readiness', wrap(unknownSchema)).then(r => r.data),
     },
   },
 

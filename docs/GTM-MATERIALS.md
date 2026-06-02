@@ -1,15 +1,22 @@
 # GTM Materials
 
-GTM materials translate Aether value proof, package fit, implementation readiness, and safe commercial claims into sales and customer-success collateral.
+Kyber maintains an internal catalog of sales collateral for Aether solution packages.
 
-## Customer success and expansion bridge
+## Materials catalog
+Master Aether Platform One-Pager, Olympus Labs Company One-Pager, package one-pagers, government-planning briefs, Enterprise Technical Architecture Brief, Security & Governance Brief, Audit Export Brief, Pricing Architecture Sheet, ROI Calculator, Procurement FAQ, Pilot Proposal Template, Case Study Template, and Buyer Objection Handling Guide.
 
-Customer Success Automation identifies value-proven tenants, expansion-ready tenants, renewal risks, EBR readiness, and measurable proof points for Olympus Labs. GTM motions can use these summaries to prepare customer-safe narratives and expansion motions.
+## Safe claims
+Use tenant isolation, approval routing, audit exports, package mapping, deployment readiness, and outcome-observation language.
 
-## Safe commercial claims
+## Prohibited claims
+Do not claim external compliance certification, authorization to operate, classified-workload support, production self-hosting, or guaranteed ROI.
 
-Claims must distinguish observed value from expected value and pending value. Expansion opportunity estimates are planning signals, not guaranteed revenue outcomes or compliance claims.
+## Procurement language
+Describe Aether as the tenant-facing product. Describe Kyber as Olympus Labs' internal GTM, pricing, readiness, and revenue-command system.
 
-## Rollout notes
-
-Use EBRs and Value Reviews as the approved bridge between product usage and commercial conversations. Tenant-private raw evidence remains tenant-scoped and should not appear in cross-tenant collateral.
+## Pilot proposal structure
+1. Buyer pain and target package.
+2. Tenant-scoped data sources and integrations.
+3. Human approval and audit-export controls.
+4. ROI assumptions and disclaimer.
+5. Success criteria and known gaps.

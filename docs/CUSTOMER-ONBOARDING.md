@@ -1,15 +1,20 @@
 # Customer Onboarding
 
-Customer onboarding captures implementation status, blockers, setup gaps, integration readiness, and first value milestones for Aether tenants.
+Aether customer onboarding turns a signed tenant into a live implementation without creating a separate product layer. The lifecycle builds on tenant isolation, SDK ingestion, graph activation, OODA intelligence, outcome ledger, playbooks, integrations, audit exports, and Kyber strategic observability.
 
-## Customer success handoff
+## Tenant Activation Lifecycle
 
-Onboarding blockers and implementation completion signals feed Customer Success Automation. They contribute to customer health scoring, renewal-risk scoring, and `implementation_intervention_needed` triggers when tenants are not progressing toward activation or value proof.
+Stages are: `prospect`, `signed`, `tenant_created`, `sdk_pending`, `sdk_live`, `event_mapping_in_progress`, `graph_building`, `graph_active`, `recommendations_enabled`, `playbooks_configured`, `integrations_connected`, `outcomes_capturing`, `value_proven`, and `expansion_ready`.
 
-## Visibility
+## Tenant vs Kyber Visibility
 
-Tenant-facing Value Review can show setup gaps for the current tenant only. Kyber admin views can summarize blocker counts and recommended implementation interventions for Olympus Labs operators without exposing raw tenant-private onboarding evidence across tenants.
+- Aether tenants see only their own plan, checklist, blockers, SDK instructions, event requirements, and go-live readiness through `/v1/onboarding/*`.
+- Kyber operators use `/v1/admin/kyber/onboarding/*` and must have admin permission to manage all implementation plans, blockers, readiness, and customer success triggers.
 
-## Rollout notes
+## Feature Flags and Rollout Notes
 
-Onboarding signals should remain tenant-scoped, auditable, and consent-aware. Future onboarding questionnaires and implementation milestones can be added as scoring inputs without creating a separate product layer.
+Roll out behind the existing tenant/package enablement process. Create a plan from a package template after contract signature, confirm deployment mode, assign an Olympus owner, and then expose the tenant checklist.
+
+## Known Gaps
+
+Automated metrics should be connected to live SDK, graph job, recommendation, playbook, integration, and ledger telemetry as each deployment hardens.

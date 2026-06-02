@@ -19,8 +19,13 @@ const TenantsPage = lazy(() => import('@kyber/pages/tenants').then(m => ({ defau
 const CisPage = lazy(() => import('@kyber/pages/cis').then(m => ({ default: m.CisPage })));
 const InvestigationsPage = lazy(() => import('@kyber/pages/investigations').then(m => ({ default: m.InvestigationsPage })));
 const SolutionPackagesPage = lazy(() => import('@kyber/pages/packages').then(m => ({ default: m.SolutionPackagesPage })));
+const ImplementationPage = lazy(() => import('@kyber/pages/implementation').then(m => ({ default: m.ImplementationPage })));
 const DeploymentReadinessPage = lazy(() => import('@kyber/pages/deployment-readiness').then(m => ({ default: m.DeploymentReadinessPage })));
-const CustomerSuccessPage = lazy(() => import('@kyber/pages/customer-success').then(m => ({ default: m.CustomerSuccessPage })));
+const PricingArchitecturePage = lazy(() => import('@kyber/pages/gtm').then(m => ({ default: m.PricingArchitecturePage })));
+const GTMMaterialsPage = lazy(() => import('@kyber/pages/gtm').then(m => ({ default: m.GTMMaterialsPage })));
+const BuyerPersonasPage = lazy(() => import('@kyber/pages/gtm').then(m => ({ default: m.BuyerPersonasPage })));
+const ROICalculatorsPage = lazy(() => import('@kyber/pages/gtm').then(m => ({ default: m.ROICalculatorsPage })));
+const SalesReadinessPage = lazy(() => import('@kyber/pages/gtm').then(m => ({ default: m.SalesReadinessPage })));
 
 function PageSuspense({ children }: { readonly children: React.ReactNode }) {
   return (
@@ -59,6 +64,8 @@ export function AppRouter() {
                 <Route path="/lab" element={<PageSuspense><LabPage /></PageSuspense>} />
                 <Route path="/tenants" element={<PageSuspense><TenantsPage /></PageSuspense>} />
                 <Route path="/tenants/:tenantId" element={<PageSuspense><TenantsPage /></PageSuspense>} />
+                <Route path="/implementation" element={<PageSuspense><ImplementationPage /></PageSuspense>} />
+                <Route path="/implementation/:tenantId" element={<PageSuspense><ImplementationPage /></PageSuspense>} />
                 <Route path="/cis" element={<PageSuspense><CisPage /></PageSuspense>} />
                 <Route path="/cis/forensics/:nodeId" element={<PageSuspense><CisPage /></PageSuspense>} />
                 <Route path="/investigations" element={<PageSuspense><InvestigationsPage /></PageSuspense>} />
@@ -66,7 +73,11 @@ export function AppRouter() {
                 <Route path="/packages" element={<PageSuspense><SolutionPackagesPage /></PageSuspense>} />
                 <Route path="/packages/:packageId" element={<PageSuspense><SolutionPackagesPage /></PageSuspense>} />
                 <Route path="/deployment-readiness" element={<PageSuspense><DeploymentReadinessPage /></PageSuspense>} />
-                <Route path="/customer-success" element={<PageSuspense><CustomerSuccessPage /></PageSuspense>} />
+                <Route path="/pricing-architecture" element={<PageSuspense><PricingArchitecturePage /></PageSuspense>} />
+                <Route path="/gtm-materials" element={<PageSuspense><GTMMaterialsPage /></PageSuspense>} />
+                <Route path="/buyer-personas" element={<PageSuspense><BuyerPersonasPage /></PageSuspense>} />
+                <Route path="/roi-calculators" element={<PageSuspense><ROICalculatorsPage /></PageSuspense>} />
+                <Route path="/sales-readiness" element={<PageSuspense><SalesReadinessPage /></PageSuspense>} />
                 <Route path="*" element={<Navigate to="/mission" replace />} />
               </Routes>
             </AppShell>

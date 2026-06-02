@@ -230,6 +230,7 @@ from services.sdk.routes import router as sdk_router
 from services.sdk_health.routes import router as sdk_health_router
 from services.sdk_drift.routes import router as sdk_drift_router
 from services.sdk_config.routes import router as sdk_config_router
+from services.onboarding.routes import router as onboarding_router, admin_router as onboarding_admin_router
 
 # ML predict routes — imported from the ML serving package when available.
 # When ML_SERVING_INLINE=true (E2 consolidated image) the predict routes are
@@ -452,6 +453,8 @@ def create_app() -> FastAPI:
     app.include_router(sdk_health_router)   # SDK health monitoring: heartbeats + fleet status
     app.include_router(sdk_drift_router)    # SDK drift detection: schema, stale, replay storm
     app.include_router(sdk_config_router)   # SDK remote config: signed manifests + rollouts
+    app.include_router(onboarding_router)      # Customer onboarding center
+    app.include_router(onboarding_admin_router) # Kyber implementation lifecycle
 
     # ── ML serving inline (E2 consolidated image) ───────────────────────
     # When ML_SERVING_INLINE=true the predict routes are handled in-process

@@ -31,3 +31,7 @@ Tenant-facing endpoints require authenticated tenant permissions and force the r
 - `GET /v1/intelligence/audit-exports/{export_id}/download`
 
 Each generated export includes an `integrity_hash` over the generated payload and expires after seven days.
+
+
+## GTM usage notes
+Audit Export Brief collateral may describe available export types, integrity hashes, tenant-scoped access, and retention notes. It must not represent exports as external compliance certification or authorization evidence by itself.
