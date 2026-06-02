@@ -1,3 +1,13 @@
+---
+title: Sales Readiness
+slug: enterprise/sales-readiness
+section: enterprise
+visibility: I
+audience: [exec, buyer, ops]
+status: stable
+since_version: "8.9.0"
+---
+
 # Sales Readiness
 
 Sales readiness aggregates solution packages, GTM collateral, buyer personas, ROI calculators, audit export support, and deployment readiness.

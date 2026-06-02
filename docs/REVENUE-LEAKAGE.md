@@ -1,3 +1,13 @@
+---
+title: Billing, Usage Metering, Contracts, and Revenue Operations
+slug: enterprise/revenue-leakage
+section: enterprise
+visibility: I
+audience: [exec, buyer, ops]
+status: stable
+since_version: "8.9.0"
+---
+
 # Billing, Usage Metering, Contracts, and Revenue Operations
 
 Olympus Labs now has an internal, billing-ready revenue operations layer. It tracks tenant contract profiles, package entitlements, tenant-safe usage, billable metering events, value-created events, draft invoice previews, revenue leakage signals, and expansion billing opportunities without requiring immediate payment collection or a new external billing provider.

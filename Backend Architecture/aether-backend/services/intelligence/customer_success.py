@@ -281,7 +281,8 @@ class ExpansionScorer:
         return score, []
 
     def opportunities(self, tenant_id: str, metrics: dict[str, Any], score: float) -> list[ExpansionOpportunity]:
-        now = now_iso(); rows: list[ExpansionOpportunity] = []
+        now = now_iso()
+        rows: list[ExpansionOpportunity] = []
         if score >= 0.55:
             rows.append(ExpansionOpportunity(opportunity_id=str(uuid.uuid5(uuid.NAMESPACE_URL, f"{tenant_id}:enterprise_upgrade")), tenant_id=tenant_id, opportunity_type="enterprise_upgrade", recommended_package_id="decision_intelligence_pro", supporting_metrics={"expansion_score": score, "observed_value_total": metrics["observed_value_total"]}, estimated_revenue_potential=max(5000, round(metrics["observed_value_total"] * 0.25, 2)), confidence=score, recommended_sales_motion="CSM-led value review with AE expansion follow-up", next_step="Package observed value proof and propose enterprise modules.", created_at=now, updated_at=now))
         if metrics["failed_integrations"] == 0 and metrics["integration_adoption_rate"] < 0.5 and metrics["outcome_capture_rate"] >= 0.3:
@@ -436,7 +437,8 @@ async def account_detail(tenant_id: str, request: Request):
 async def patch_account(tenant_id: str, body: AccountPatch, request: Request):
     require_admin(request)
     account = (await get_or_build_account(tenant_id)).model_dump()
-    account.update(body.model_dump(exclude_none=True)); account["updated_at"] = now_iso()
+    account.update(body.model_dump(exclude_none=True))
+    account["updated_at"] = now_iso()
     return APIResponse(data=await _accounts.update(tenant_id, account)).to_dict()
 
 
@@ -517,7 +519,9 @@ async def create_account_plan(tenant_id: str, body: AccountPlanInput, request: R
 async def patch_account_plan(tenant_id: str, body: AccountPlanInput, request: Request):
     require_admin(request)
     existing = await _account_plans.find_by_id_or_fail(tenant_id)
-    patch = body.model_dump(exclude_unset=True); patch["updated_at"] = now_iso(); existing.update(patch)
+    patch = body.model_dump(exclude_unset=True)
+    patch["updated_at"] = now_iso()
+    existing.update(patch)
     return APIResponse(data=await _account_plans.update(tenant_id, existing)).to_dict()
 
 
@@ -545,14 +549,16 @@ async def value_review_summary(request: Request):
 @tenant_router.get("/recommendations")
 async def value_review_recommendations(request: Request):
     request.state.tenant.require_permission("read")
-    tid = current_tenant_id(request); metrics = await usage_metrics(tid)
+    tid = current_tenant_id(request)
+    metrics = await usage_metrics(tid)
     return APIResponse(data={"recommendations_acted_upon": metrics["decisions_recorded"], "incomplete_loops": metrics["incomplete_loop_count"]}).to_dict()
 
 
 @tenant_router.get("/playbooks")
 async def value_review_playbooks(request: Request):
     request.state.tenant.require_permission("read")
-    tid = current_tenant_id(request); metrics = await usage_metrics(tid)
+    tid = current_tenant_id(request)
+    metrics = await usage_metrics(tid)
     return APIResponse(data={"top_playbooks": [], "playbook_adoption_rate": metrics["playbook_adoption_rate"]}).to_dict()
 
 

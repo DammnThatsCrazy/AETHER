@@ -28,3 +28,4 @@ export * from './feature-flag-types';
 export * from './feedback-types';
 export * from './solution-packages';
 export * from './gtm-pricing';
+export * from './customer-onboarding';

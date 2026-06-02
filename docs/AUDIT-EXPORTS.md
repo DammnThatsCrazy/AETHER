@@ -1,3 +1,13 @@
+---
+title: Audit Exports
+slug: enterprise/audit-exports
+section: enterprise
+visibility: I
+audience: [exec, buyer, ops]
+status: stable
+since_version: "8.9.0"
+---
+
 # Audit Exports
 
 Audit exports provide tenant-scoped evidence for graph-native recommendations, decisions, actions, dispatches, outcomes, playbook runs, agent governance, tenant value, and package readiness.

@@ -235,7 +235,8 @@ class MeteringService:
 
 class EntitlementService:
     def __init__(self, contracts: TenantContractProfileRepository | None = None, entitlements: TenantEntitlementRepository | None = None) -> None:
-        self.contracts = contracts or TenantContractProfileRepository(); self.entitlements = entitlements or TenantEntitlementRepository()
+        self.contracts = contracts or TenantContractProfileRepository()
+        self.entitlements = entitlements or TenantEntitlementRepository()
     async def profile(self, tenant_id: str) -> dict | None: return await self.contracts.get_for_tenant(tenant_id)
     async def evaluate(self, tenant_id: str, usage: dict[str, float] | None = None, package_id: str | None = None) -> dict[str, Any]:
         contract = await self.profile(tenant_id)
@@ -262,13 +263,20 @@ class EntitlementService:
 
 class UsageSummaryService:
     def __init__(self, events: UsageMeteringEventRepository | None = None, entitlements: EntitlementService | None = None, summaries: BillableUsageSummaryRepository | None = None) -> None:
-        self.events = events or UsageMeteringEventRepository(); self.entitlements = entitlements or EntitlementService(); self.summaries = summaries or BillableUsageSummaryRepository()
+        self.events = events or UsageMeteringEventRepository()
+        self.entitlements = entitlements or EntitlementService()
+        self.summaries = summaries or BillableUsageSummaryRepository()
     async def calculate(self, tenant_id: str, start: str, end: str, package_id: str | None = None, persist: bool = False) -> dict:
         records = await self.events.list_for_tenant_period(tenant_id, start, end)
         if package_id: records = [r for r in records if r.get('package_id') in (None, package_id)]
-        usage = Counter(); source_ids = defaultdict(list); billable = 0; non_billable = 0
+        usage = Counter()
+        source_ids = defaultdict(list)
+        billable = 0
+        non_billable = 0
         for r in records:
-            dim = r.get('event_type'); qty = float(r.get('quantity') or 0); usage[dim] += qty
+            dim = r.get('event_type')
+            qty = float(r.get('quantity') or 0)
+            usage[dim] += qty
             source_ids[dim].append(r.get('metering_event_id') or r.get('id'))
             if r.get('billable'): billable += 1
             else: non_billable += 1
@@ -283,7 +291,11 @@ class UsageSummaryService:
 
 class InvoicePreviewService:
     def __init__(self) -> None:
-        self.contracts = TenantContractProfileRepository(); self.entitlements = EntitlementService(); self.summary = UsageSummaryService(entitlements=self.entitlements); self.previews = InvoicePreviewRepository(); self.values = ValueCreatedEventRepository()
+        self.contracts = TenantContractProfileRepository()
+        self.entitlements = EntitlementService()
+        self.summary = UsageSummaryService(entitlements=self.entitlements)
+        self.previews = InvoicePreviewRepository()
+        self.values = ValueCreatedEventRepository()
     async def generate(self, tenant_id: str, start: str, end: str) -> dict:
         contract = await self.contracts.get_for_tenant(tenant_id)
         usage = await self.summary.calculate(tenant_id, start, end, contract.get('package_id') if contract else None)
@@ -302,7 +314,9 @@ class InvoicePreviewService:
 
 class ValueCreatedEventService:
     def __init__(self) -> None:
-        self.values = ValueCreatedEventRepository(); self.contracts = TenantContractProfileRepository(); self.metering = MeteringService()
+        self.values = ValueCreatedEventRepository()
+        self.contracts = TenantContractProfileRepository()
+        self.metering = MeteringService()
     async def create(self, event: ValueCreatedEvent) -> dict:
         contract = await self.contracts.get_for_tenant(event.tenant_id)
         data = event.model_dump()
@@ -317,12 +331,16 @@ class ValueCreatedEventService:
 
 class RevenueLeakageService:
     def __init__(self) -> None:
-        self.entitlements = EntitlementService(); self.summary = UsageSummaryService(entitlements=self.entitlements); self.signals = RevenueLeakageSignalRepository(); self.values = ValueCreatedEventRepository()
+        self.entitlements = EntitlementService()
+        self.summary = UsageSummaryService(entitlements=self.entitlements)
+        self.signals = RevenueLeakageSignalRepository()
+        self.values = ValueCreatedEventRepository()
     async def detect(self, tenant_id: str, start: str, end: str) -> list[dict]:
         usage = await self.summary.calculate(tenant_id, start, end)
         evaluation = await self.entitlements.evaluate(tenant_id, usage['usage_by_dimension'])
         contract = evaluation['contract_profile'] or {}
-        existing_keys = set(); signals: list[dict] = []
+        existing_keys = set()
+        signals: list[dict] = []
         async def add(leakage_type: LeakageType, reason: str, metrics: dict[str, Any], severity: Severity, action: str):
             key = f"{tenant_id}:{leakage_type}:{reason}:{start}:{end}"
             if key in existing_keys: return
@@ -349,7 +367,9 @@ class RevenueLeakageService:
 
 class ExpansionBillingService:
     def __init__(self) -> None:
-        self.summary = UsageSummaryService(); self.leakage = RevenueLeakageSignalRepository(); self.values = ValueCreatedEventRepository()
+        self.summary = UsageSummaryService()
+        self.leakage = RevenueLeakageSignalRepository()
+        self.values = ValueCreatedEventRepository()
     async def opportunities(self, tenant_id: str | None = None, start: str | None = None, end: str | None = None) -> list[dict]:
         filters = {'tenant_id': tenant_id} if tenant_id else None
         signals = await self.leakage.find_many(filters=filters, limit=1000)

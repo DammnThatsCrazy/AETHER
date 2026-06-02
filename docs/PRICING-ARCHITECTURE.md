@@ -1,3 +1,13 @@
+---
+title: Pricing Architecture
+slug: enterprise/pricing-architecture
+section: enterprise
+visibility: I
+audience: [exec, buyer, ops]
+status: stable
+since_version: "8.9.0"
+---
+
 # Pricing Architecture
 
 Aether pricing is structure-first. This document defines pricing levers for sales and procurement conversations without assigning dollar amounts.

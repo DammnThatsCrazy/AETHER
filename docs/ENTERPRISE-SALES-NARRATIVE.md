@@ -1,3 +1,13 @@
+---
+title: Enterprise Sales Narrative
+slug: enterprise/enterprise-sales-narrative
+section: enterprise
+visibility: I
+audience: [exec, buyer, ops]
+status: stable
+since_version: "8.9.0"
+---
+
 # Enterprise Sales Narrative
 
 Aether is sold as graph-native decision, outcome, revenue, risk, governance, and operations intelligence. Kyber is Olympus Labs' internal command system for package readiness, pricing architecture, buyer mapping, and revenue execution.

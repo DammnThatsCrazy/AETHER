@@ -1,3 +1,13 @@
+---
+title: Value Review
+slug: kyber/value-review
+section: kyber
+visibility: I
+audience: [exec, ops, architect]
+status: stable
+since_version: "8.9.0"
+---
+
 # Value Review
 
 Value Review is the tenant-facing bridge from everyday Aether usage to renewal and EBR conversations.

@@ -34,7 +34,7 @@ BACKEND_ROOT = Path(__file__).parent.parent.parent / "Backend Architecture" / "a
 def backend_module_path():
     """Isolate backend imports and stub broken system jwt/cryptography."""
     original = list(sys.path)
-    original_mods = set(sys.modules.keys())
+    original_modules = dict(sys.modules)
 
     for prefix in ("config", "services", "shared", "middleware", "dependencies", "repositories"):
         sys.modules.pop(prefix, None)
@@ -81,9 +81,17 @@ def backend_module_path():
         yield
     finally:
         sys.path[:] = original
+        # Restore sys.modules to its pre-context state. This context replaces the
+        # real `jwt`/`cryptography` with stubs (no encode/decode); without
+        # restoring the originals the stub `jwt` leaks into later tests on the
+        # same xdist worker when the real module was already imported, causing
+        # AttributeError: module 'jwt' has no attribute 'encode'.
         for name in list(sys.modules):
-            if name not in original_mods:
+            if name not in original_modules:
                 sys.modules.pop(name, None)
+        for name, module in original_modules.items():
+            if sys.modules.get(name) is not module:
+                sys.modules[name] = module
 
 
 # ═══════════════════════════════════════════════════════════════════════════

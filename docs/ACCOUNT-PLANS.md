@@ -1,3 +1,13 @@
+---
+title: Account Plans
+slug: kyber/account-plans
+section: kyber
+visibility: I
+audience: [exec, ops, architect]
+status: stable
+since_version: "8.9.0"
+---
+
 # Account Plans
 
 Account Plans capture the Kyber-side success and expansion plan for a tenant.

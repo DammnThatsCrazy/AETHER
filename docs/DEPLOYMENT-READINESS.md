@@ -1,3 +1,13 @@
+---
+title: Deployment Readiness
+slug: enterprise/deployment-readiness
+section: enterprise
+visibility: I
+audience: [exec, buyer, ops]
+status: stable
+since_version: "8.9.0"
+---
+
 # Deployment Readiness
 
 Deployment readiness tracks supportable modes without overstating compliance. A mode is not marked ready unless required artifacts and controls exist.

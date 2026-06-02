@@ -1,3 +1,13 @@
+---
+title: Customer Success Automation
+slug: kyber/customer-success-automation
+section: kyber
+visibility: I
+audience: [exec, ops, architect]
+status: stable
+since_version: "8.9.0"
+---
+
 # Customer Success Automation
 
 Customer Success Automation turns Aether usage, OODA loops, outcome ledger evidence, playbook ROI, package fit, and integration health into Kyber account health, expansion, renewal, EBR, and next-action workflows.

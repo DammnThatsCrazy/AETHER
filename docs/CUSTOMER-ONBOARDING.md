@@ -1,3 +1,13 @@
+---
+title: Customer Onboarding
+slug: kyber/customer-onboarding
+section: kyber
+visibility: I
+audience: [exec, ops, architect]
+status: stable
+since_version: "8.9.0"
+---
+
 # Customer Onboarding
 
 Aether customer onboarding turns a signed tenant into a live implementation without creating a separate product layer. The lifecycle builds on tenant isolation, SDK ingestion, graph activation, OODA intelligence, outcome ledger, playbooks, integrations, audit exports, and Kyber strategic observability.

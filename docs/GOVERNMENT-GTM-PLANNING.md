@@ -1,3 +1,13 @@
+---
+title: Government GTM Planning
+slug: enterprise/government-gtm-planning
+section: enterprise
+visibility: I
+audience: [exec, buyer, ops]
+status: stable
+since_version: "8.9.0"
+---
+
 # Government GTM Planning
 
 Government-facing package content is planning-only. Aether remains the tenant-facing product; Kyber remains the internal readiness and GTM command system.

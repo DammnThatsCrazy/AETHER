@@ -1,3 +1,13 @@
+---
+title: ROI Calculators
+slug: enterprise/roi-calculators
+section: enterprise
+visibility: I
+audience: [exec, buyer, ops]
+status: stable
+since_version: "8.9.0"
+---
+
 # ROI Calculators
 
 ROI calculators in Kyber are directional planning definitions, not guarantee engines.
