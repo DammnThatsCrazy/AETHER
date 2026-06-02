@@ -1169,6 +1169,38 @@ export const api = {
         restClient.post(`/v1/admin/kyber/security/break-glass/${requestId}/deny`, wrap(unknownSchema), { reason }).then(r => r.data),
       securityBreakGlassRevoke: (requestId: string) =>
         restClient.post(`/v1/admin/kyber/security/break-glass/${requestId}/revoke`, wrap(unknownSchema), {}).then(r => r.data),
+
+      // ── Reliability command center ─────────────────────────────────────
+      reliabilityOverview: () =>
+        restClient.get('/v1/admin/kyber/reliability/overview', wrap(unknownSchema)).then(r => r.data),
+      reliabilityServices: () =>
+        restClient.get('/v1/admin/kyber/reliability/services', wrap(unknownSchema)).then(r => r.data),
+      reliabilityPipelines: () =>
+        restClient.get('/v1/admin/kyber/reliability/pipelines', wrap(unknownSchema)).then(r => r.data),
+      reliabilityQueues: () =>
+        restClient.get('/v1/admin/kyber/reliability/queues', wrap(unknownSchema)).then(r => r.data),
+      reliabilitySlos: () =>
+        restClient.get('/v1/admin/kyber/reliability/slos', wrap(unknownSchema)).then(r => r.data),
+      incidents: (status?: string) =>
+        restClient.get(`/v1/admin/kyber/incidents${buildQS({ status })}`, wrap(unknownSchema)).then(r => r.data),
+      incident: (incidentId: string) =>
+        restClient.get(`/v1/admin/kyber/incidents/${incidentId}`, wrap(unknownSchema)).then(r => r.data),
+      createIncident: (body: unknown) =>
+        restClient.post('/v1/admin/kyber/incidents', wrap(unknownSchema), body).then(r => r.data),
+      patchIncident: (incidentId: string, body: unknown) =>
+        restClient.patch(`/v1/admin/kyber/incidents/${incidentId}`, wrap(unknownSchema), body).then(r => r.data),
+      runbooks: () =>
+        restClient.get('/v1/admin/kyber/runbooks', wrap(unknownSchema)).then(r => r.data),
+      createRunbook: (body: unknown) =>
+        restClient.post('/v1/admin/kyber/runbooks', wrap(unknownSchema), body).then(r => r.data),
+      patchRunbook: (runbookId: string, body: unknown) =>
+        restClient.patch(`/v1/admin/kyber/runbooks/${runbookId}`, wrap(unknownSchema), body).then(r => r.data),
+      postmortems: () =>
+        restClient.get('/v1/admin/kyber/postmortems', wrap(unknownSchema)).then(r => r.data),
+      createPostmortem: (body: unknown) =>
+        restClient.post('/v1/admin/kyber/postmortems', wrap(unknownSchema), body).then(r => r.data),
+      patchPostmortem: (postmortemId: string, body: unknown) =>
+        restClient.patch(`/v1/admin/kyber/postmortems/${postmortemId}`, wrap(unknownSchema), body).then(r => r.data),
     },
   },
 

@@ -1,11 +1,22 @@
 ---
-title: Security & Governance Controls
-slug: enterprise/security-governance-controls
-section: enterprise
+title: Security, Governance & Enterprise Controls
+slug: security/governance-controls
+section: security
 visibility: I
-audience: [exec, buyer, ops, security]
+audience: [exec, buyer, ops, architect, security, compliance]
 status: stable
-since_version: "13.0.0"
+since_version: "9.0.0"
+source_files:
+  - Backend Architecture/aether-backend/services/security/policy_engine.py
+  - Backend Architecture/aether-backend/services/security/access_control.py
+  - Backend Architecture/aether-backend/services/governance/routes.py
+  - Backend Architecture/aether-backend/services/reliability/service.py
+related:
+  - compliance
+  - reliability/operations
+  - reliability/incident-response
+canonical_owner: platform@aether
+estimated_read_minutes: 6
 ---
 
 # Security, Compliance & Governance Controls
@@ -63,6 +74,11 @@ Request → existing auth/tenant context
   governed records, the isolation verifier, operator-access model, and evidence
   packs. Kyber views are **aggregate-only** by construction.
 
+| Surface | Visibility |
+|---|---|
+| `/v1/security/*`, `/v1/status*` (Aether) | Tenant-safe, single-tenant, no infra internals |
+| `/v1/admin/kyber/*` (Kyber) | Internal, operator/admin gated |
+
 ## Operator access model
 
 Olympus operators have scoped roles (`assigned_tenant` / `all_tenants_aggregate`
@@ -98,6 +114,20 @@ audited `DataRequest` records.
 policies, audit-event summaries, verifier results, and **explicit known gaps**.
 They are evidence for a security reviewer — not a certification artifact.
 
+## Reliability integration with governance/audit
+
+- **Incident audit trail** — every incident create/update is recorded via
+  `IncidentAuditRepository` and logged (best-effort, never breaks the flow).
+  This trail is internal only.
+- **Security audit health** — the `security_audit` service and
+  `rb_security_audit_event_failure` runbook (sev1) protect audit-event integrity
+  and chain of custody during incidents.
+- **Tenant-safe surfaces** — tenant System Status exposes only whitelisted,
+  single-tenant fields; infrastructure internals, other tenants, and
+  security-sensitive internals are never exposed. Enforced by no-leakage tests.
+
+For the full compliance posture see [COMPLIANCE.md](COMPLIANCE.md).
+
 ## Known gaps (honest)
 
 - No external certification/attestation is claimed or implied.
@@ -106,9 +136,13 @@ They are evidence for a security reviewer — not a certification artifact.
   sink is planned.
 - Operator role provisioning/federation lives in the existing auth layer and is
   not unified into this control plane yet.
+- Incident audit entries are stored in a dedicated internal table rather than the
+  unified security audit ledger (planned).
 
 ## Rollout notes
 
 - Additive: existing permission checks and approval flows are untouched.
-- Routes are registered in `main.py`; UIs are new pages in `apps`/`frontend`.
+- Routes are registered in `main.py`; UIs are new pages in `frontend/`.
 - Backend tests: `tests/security/`. Frontend tests: Kyber + Aether security pages.
+- Reliability controls are additive and do not change existing governance,
+  auditability, or security guarantees. No external SLA/certification is claimed.

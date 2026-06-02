@@ -39,3 +39,14 @@ Action dispatch evidence is available through `action_dispatch_audit`, including
 ## Metering and RevOps
 
 Integration deliveries and premium connector usage should emit usage metering events. Observed value from integration actions can create value-created events for internal invoice preview and expansion analysis.
+
+## Reliability & Operational Resilience
+
+Reliability, SRE, incident response, SLOs, runbooks, and tenant-safe system
+status are documented in [Reliability Operations](RELIABILITY-OPERATIONS.md) and
+related docs ([Incident Response](INCIDENT-RESPONSE.md),
+[SLO Tracking](SLO-TRACKING.md), [SRE Runbooks](SRE-RUNBOOKS.md),
+[Tenant System Status](TENANT-STATUS.md), [Pipeline Health](PIPELINE-HEALTH.md),
+[Queue & Worker Health](QUEUE-WORKER-HEALTH.md), [Postmortems](POSTMORTEMS.md)).
+These controls are additive and do not weaken tenant isolation, governance,
+auditability, or security. No external SLA or certification is claimed.

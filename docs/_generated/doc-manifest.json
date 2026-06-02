@@ -564,6 +564,22 @@
       "since_version": "8.9.0"
     },
     {
+      "path": "docs/INCIDENT-RESPONSE.md",
+      "title": "Incident Response",
+      "slug": "reliability/incident-response",
+      "section": "operations",
+      "visibility": "I",
+      "audience": [
+        "ops",
+        "exec",
+        "architect"
+      ],
+      "status": "beta",
+      "since_version": "9.0.0",
+      "estimated_read_minutes": 5,
+      "canonical_owner": "platform@aether"
+    },
+    {
       "path": "docs/INTEGRATION-ACTIONS.md",
       "title": "Integration Actions",
       "slug": "ai/integration-actions",
@@ -808,6 +824,21 @@
       ]
     },
     {
+      "path": "docs/PIPELINE-HEALTH.md",
+      "title": "Pipeline Health",
+      "slug": "reliability/pipeline-health",
+      "section": "operations",
+      "visibility": "I",
+      "audience": [
+        "ops",
+        "architect"
+      ],
+      "status": "beta",
+      "since_version": "9.0.0",
+      "estimated_read_minutes": 3,
+      "canonical_owner": "platform@aether"
+    },
+    {
       "path": "docs/PLAYBOOKS.md",
       "title": "Playbooks",
       "slug": "ai/playbooks",
@@ -828,6 +859,22 @@
         "AETHER_PLAYBOOKS_ENABLED",
         "AETHER_RECOMMENDATIONS_ENABLED"
       ]
+    },
+    {
+      "path": "docs/POSTMORTEMS.md",
+      "title": "Incident Postmortems",
+      "slug": "reliability/postmortems",
+      "section": "operations",
+      "visibility": "I",
+      "audience": [
+        "ops",
+        "exec",
+        "architect"
+      ],
+      "status": "beta",
+      "since_version": "9.0.0",
+      "estimated_read_minutes": 3,
+      "canonical_owner": "platform@aether"
     },
     {
       "path": "docs/PRICING-ARCHITECTURE.md",
@@ -892,6 +939,21 @@
       "canonical_owner": "backend@aether"
     },
     {
+      "path": "docs/QUEUE-WORKER-HEALTH.md",
+      "title": "Queue & Worker Health",
+      "slug": "reliability/queue-worker-health",
+      "section": "operations",
+      "visibility": "I",
+      "audience": [
+        "ops",
+        "architect"
+      ],
+      "status": "beta",
+      "since_version": "9.0.0",
+      "estimated_read_minutes": 3,
+      "canonical_owner": "platform@aether"
+    },
+    {
       "path": "docs/RECOMMENDATION-FAMILIES.md",
       "title": "Recommendation Families",
       "slug": "ai/recommendation-families",
@@ -911,6 +973,23 @@
         "AETHER_RECOMMENDATIONS_ENABLED",
         "AETHER_RECOMMENDATION_CONFIDENCE_THRESHOLD"
       ]
+    },
+    {
+      "path": "docs/RELIABILITY-OPERATIONS.md",
+      "title": "Reliability Operations",
+      "slug": "reliability/operations",
+      "section": "operations",
+      "visibility": "I",
+      "audience": [
+        "exec",
+        "ops",
+        "architect"
+      ],
+      "status": "beta",
+      "since_version": "9.0.0",
+      "estimated_read_minutes": 8,
+      "toc_depth": 3,
+      "canonical_owner": "platform@aether"
     },
     {
       "path": "docs/RENEWAL-RISK-SCORING.md",
@@ -1081,6 +1160,24 @@
       "canonical_owner": "security@aether"
     },
     {
+      "path": "docs/SECURITY-GOVERNANCE-CONTROLS.md",
+      "title": "Security, Governance & Enterprise Controls",
+      "slug": "security/governance-controls",
+      "section": "security",
+      "visibility": "I",
+      "audience": [
+        "exec",
+        "ops",
+        "architect",
+        "security",
+        "compliance"
+      ],
+      "status": "beta",
+      "since_version": "9.0.0",
+      "estimated_read_minutes": 4,
+      "canonical_owner": "platform@aether"
+    },
+    {
       "path": "docs/SEMANTIC-CONTEXT-INTELLIGENCE.md",
       "title": "Semantic Context Intelligence Layer",
       "slug": "ai/semantic-context",
@@ -1096,6 +1193,22 @@
       "estimated_read_minutes": 15,
       "toc_depth": 3,
       "canonical_owner": "ai@aether"
+    },
+    {
+      "path": "docs/SLO-TRACKING.md",
+      "title": "SLO Tracking",
+      "slug": "reliability/slo-tracking",
+      "section": "operations",
+      "visibility": "I",
+      "audience": [
+        "ops",
+        "exec",
+        "architect"
+      ],
+      "status": "beta",
+      "since_version": "9.0.0",
+      "estimated_read_minutes": 4,
+      "canonical_owner": "platform@aether"
     },
     {
       "path": "docs/SMOKE-TEST-CHECKLIST.md",
@@ -1125,6 +1238,21 @@
       ],
       "status": "stable",
       "since_version": "8.9.0"
+    },
+    {
+      "path": "docs/SRE-RUNBOOKS.md",
+      "title": "SRE Runbooks",
+      "slug": "reliability/sre-runbooks",
+      "section": "operations",
+      "visibility": "I",
+      "audience": [
+        "ops",
+        "architect"
+      ],
+      "status": "beta",
+      "since_version": "9.0.0",
+      "estimated_read_minutes": 5,
+      "canonical_owner": "platform@aether"
     },
     {
       "path": "docs/STABLECOIN-RAILS.md",
@@ -1209,6 +1337,22 @@
       "estimated_read_minutes": 4,
       "toc_depth": 3,
       "canonical_owner": "backend@aether"
+    },
+    {
+      "path": "docs/TENANT-STATUS.md",
+      "title": "Tenant System Status",
+      "slug": "reliability/tenant-status",
+      "section": "operations",
+      "visibility": "P",
+      "audience": [
+        "buyer",
+        "ops",
+        "architect"
+      ],
+      "status": "beta",
+      "since_version": "9.0.0",
+      "estimated_read_minutes": 4,
+      "canonical_owner": "platform@aether"
     },
     {
       "path": "docs/USAGE-METERING.md",

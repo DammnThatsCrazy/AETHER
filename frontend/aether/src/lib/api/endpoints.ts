@@ -44,6 +44,13 @@ const buildQS = (params: Record<string, string | number | boolean | undefined>) 
 // ─── API ─────────────────────────────────────────────────────────────────────
 export const api = {
 
+  // ── System status — tenant-safe reliability visibility ────────────────────
+  status: {
+    overview: () => restClient.get('/v1/status', wrap(unknownSchema)).then(r => r.data),
+    incidents: () => restClient.get('/v1/status/incidents', wrap(unknownSchema)).then(r => r.data),
+    dataFreshness: () => restClient.get('/v1/status/data-freshness', wrap(unknownSchema)).then(r => r.data),
+    integrations: () => restClient.get('/v1/status/integrations', wrap(unknownSchema)).then(r => r.data),
+  },
 
   valueReview: {
     overview: () => restClient.get('/v1/value-review', wrap(unknownSchema)).then(r => r.data),
