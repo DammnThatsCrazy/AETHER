@@ -412,6 +412,22 @@ class DecisionOutcomeIntelligenceConfig:
     confidence_threshold: float = float(_env("AETHER_RECOMMENDATION_CONFIDENCE_THRESHOLD", "0.35"))
 
 
+@dataclass(frozen=True)
+class SecurityGovernanceConfig:
+    """Governance control-plane settings.
+
+    Kyber security routes are restricted to Olympus operators. An operator is
+    recognised ONLY by an explicit signal that Aether tenant tokens never carry:
+    the ``kyber:operator`` permission, or membership in this allowlist of
+    internal operator tenant IDs. No regular Aether tenant — even one holding the
+    legacy ``admin`` permission — may access Kyber.
+    """
+    kyber_operator_permission: str = _env("KYBER_OPERATOR_PERMISSION", "kyber:operator")
+    kyber_operator_tenant_ids: list[str] = field(default_factory=lambda: _env_list(
+        "KYBER_OPERATOR_TENANT_IDS", ""
+    ))
+
+
 # ---------------------------------------------------------------------------
 # Master settings
 # ---------------------------------------------------------------------------
@@ -437,6 +453,7 @@ class Settings:
     # Intelligence Graph
     intelligence_graph: IntelligenceGraphConfig = field(default_factory=IntelligenceGraphConfig)
     decision_outcome: DecisionOutcomeIntelligenceConfig = field(default_factory=DecisionOutcomeIntelligenceConfig)
+    security_governance: SecurityGovernanceConfig = field(default_factory=SecurityGovernanceConfig)
     quicknode: QuickNodeConfig = field(default_factory=QuickNodeConfig)
 
     # Provider Gateway

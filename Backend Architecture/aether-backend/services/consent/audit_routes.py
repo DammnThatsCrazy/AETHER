@@ -22,6 +22,8 @@ Endpoints:
 
 from __future__ import annotations
 
+import hashlib
+import json
 import uuid
 from datetime import datetime, timezone
 from typing import Any, Awaitable, Callable, Optional
@@ -30,6 +32,7 @@ from fastapi import APIRouter, Request
 from pydantic import BaseModel, Field
 
 from repositories.repos import ConsentRepository
+from services.security.export_governance import audit_export_governance
 from shared.common.common import APIResponse, BadRequestError, NotFoundError
 from shared.logger.logger import get_logger, metrics
 from shared.store import get_store
@@ -105,6 +108,7 @@ class ExportRequest(BaseModel):
     from_ts: Optional[str] = None
     to_ts: Optional[str] = None
     report_type: str = Field(default="custom")
+    approval_id: Optional[str] = Field(default=None, description="Required for high-risk export types")
 
 
 def _now() -> str:
@@ -220,6 +224,37 @@ async def request_export(body: ExportRequest, request: Request):
             rows.append(row)
 
     export_id = str(uuid.uuid4())
+    # Map the route's actual report/source combination to a governance export
+    # type. A full multi-source export (every audit source, unfiltered) is a
+    # high-risk "full_audit_log" and requires approval; narrower exports keep
+    # their report_type (non-sensitive unless it matches a sensitive type).
+    is_full_audit = set(sources) >= set(AUDIT_SOURCES)
+    effective_export_type = "full_audit_log" if is_full_audit else body.report_type
+    # Hash a canonical digest of the actual exported rows, not just the summary,
+    # so row-level tampering/corruption changes the integrity hash even when the
+    # source list and counts are unchanged.
+    rows_digest = hashlib.sha256(
+        json.dumps(rows, sort_keys=True, default=str).encode("utf-8")
+    ).hexdigest()
+    # Governance: enforce export permission, block cross-tenant export, flag
+    # high-risk exports, and attach an integrity hash + expiry. Emits/records via
+    # the security policy engine + audit ledger.
+    governance = await audit_export_governance.authorize_create(
+        actor_id=getattr(tenant, "user_id", None) or tenant.tenant_id,
+        actor_type='tenant_user', tenant_id=tenant.tenant_id,
+        export_type=effective_export_type,
+        has_export_permission=tenant.has_permission("export") or tenant.has_permission("admin"),
+        target_tenant=tenant.tenant_id,
+        approval_id=getattr(body, "approval_id", None),
+        manifest={
+            "report_type": body.report_type,
+            "sources": sources,
+            "row_count": len(rows),
+            "per_source": per_source,
+            "rows_digest": rows_digest,
+        },
+        ip_address=request.client.host if request.client else None,
+    )
     record = {
         "export_id": export_id,
         "tenant_id": tenant.tenant_id,
@@ -232,6 +267,10 @@ async def request_export(body: ExportRequest, request: Request):
         "to_ts": body.to_ts,
         "status": "complete",
         "created_at": _now(),
+        "integrity_hash": governance["integrity_hash"],
+        "expires_at": governance["expires_at"],
+        "high_risk": governance["high_risk"],
+        "policy_decision_id": governance["policy_decision_id"],
     }
     await _export_store.set(f"{tenant.tenant_id}:{export_id}", record)
     metrics.increment(
@@ -257,6 +296,14 @@ async def get_export(export_id: str, request: Request):
     record = await _export_store.get(f"{tenant.tenant_id}:{export_id}")
     if not record:
         raise NotFoundError(f"Export not found: {export_id}")
+    # Governance: enforce permission + expiry on download, and audit the access.
+    await audit_export_governance.authorize_download(
+        actor_id=getattr(tenant, "user_id", None) or tenant.tenant_id,
+        actor_type='tenant_user', tenant_id=tenant.tenant_id, export_id=export_id,
+        has_export_permission=tenant.has_permission("export") or tenant.has_permission("admin"),
+        expires_at=record.get("expires_at"),
+        ip_address=request.client.host if request.client else None,
+    )
     return APIResponse(data=record).to_dict()
 
 

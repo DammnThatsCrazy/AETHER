@@ -14,7 +14,9 @@ Supported policy keys:
 """
 from __future__ import annotations
 
+import asyncio
 import ipaddress
+import socket
 from typing import Any, Optional
 from urllib.parse import urlparse
 
@@ -38,6 +40,23 @@ _SENSITIVE_KEYS = frozenset({
 _BLOCKED_HOSTS = {"localhost", "metadata.google.internal"}
 
 
+def _ip_is_unsafe(ip: ipaddress._BaseAddress) -> bool:
+    """True if an IP must never be a webhook destination (SSRF / metadata)."""
+    return (
+        ip.is_private or ip.is_loopback or ip.is_link_local
+        or ip.is_reserved or ip.is_multicast or ip.is_unspecified
+    )
+
+
+def _resolve_host(host: str) -> list[str]:
+    """Resolve a hostname to its IP addresses. Patchable in tests.
+
+    Raises socket.gaierror (or OSError) when the name does not resolve.
+    """
+    infos = socket.getaddrinfo(host, None)
+    return sorted({info[4][0] for info in infos})
+
+
 def _is_unsafe_destination(url: str) -> tuple[bool, str]:
     try:
         parsed = urlparse(url)
@@ -50,13 +69,47 @@ def _is_unsafe_destination(url: str) -> tuple[bool, str]:
         return True, "missing host"
     if host in _BLOCKED_HOSTS:
         return True, f"host {host!r} is blocked"
+    # Literal IP: check directly.
     try:
         ip = ipaddress.ip_address(host)
-        if ip.is_private or ip.is_loopback or ip.is_link_local or ip.is_reserved:
+        if _ip_is_unsafe(ip):
             return True, f"destination IP {host} is private/reserved"
+        return False, "destination ok"
     except ValueError:
-        pass  # hostname, not a literal IP — allowed
+        pass  # not a literal IP — resolve the hostname below
+    # Hostname: resolve it and reject if ANY resolved address is unsafe. A name
+    # that does not resolve is rejected (fail-closed) so internal-only or
+    # DNS-rebinding hostnames cannot slip past the literal-IP guard.
+    try:
+        addrs = _resolve_host(host)
+    except (socket.gaierror, OSError):
+        return True, f"destination host {host!r} could not be resolved"
+    if not addrs:
+        return True, f"destination host {host!r} did not resolve to any address"
+    for addr in addrs:
+        try:
+            if _ip_is_unsafe(ipaddress.ip_address(addr)):
+                return True, f"host {host!r} resolves to private/reserved address {addr}"
+        except ValueError:
+            return True, f"host {host!r} resolved to an unparseable address {addr!r}"
     return False, "destination ok"
+
+
+DNS_RESOLVE_TIMEOUT_S = 5.0
+
+
+async def evaluate_destination_safety(url: str, timeout: float = DNS_RESOLVE_TIMEOUT_S) -> tuple[bool, str]:
+    """Async wrapper around `_is_unsafe_destination`.
+
+    `_is_unsafe_destination` performs a synchronous, potentially slow DNS lookup;
+    running it directly inside an async request handler would block the event
+    loop. Offload it to a bounded threadpool with a timeout, and fail-closed
+    (treat as unsafe) if the resolver is slow/wedged.
+    """
+    try:
+        return await asyncio.wait_for(asyncio.to_thread(_is_unsafe_destination, url), timeout)
+    except asyncio.TimeoutError:
+        return True, "destination safety check timed out"
 
 
 class PolicyEngine:
@@ -213,7 +266,7 @@ class PolicyEngine:
             )
             return await self._finalize(d, actor_type=actor_type, **audit)
         if destination_url:
-            unsafe, why = _is_unsafe_destination(destination_url)
+            unsafe, why = await evaluate_destination_safety(destination_url)
             if unsafe:
                 d = self._decision(
                     policy_key="webhook.dispatch_safety", actor_id=actor_id,

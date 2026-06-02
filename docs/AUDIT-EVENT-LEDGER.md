@@ -19,6 +19,15 @@ sensitive governance actions, persisted via `SecurityAuditEventRepository`.
   (no secrets — keys/values matching credential patterns are dropped or redacted).
 - Each event is assigned an `integrity_hash` chained to the previous event for the
   same tenant (`compute_integrity_hash`), so deletion or reordering is detectable.
+  The hash covers the persisted "what / from where" detail too — `metadata`
+  (post-sanitization), `ip_address`, and `user_agent` — so editing those fields
+  also breaks `verify_chain()`. A global verification tracks a **separate previous
+  hash per tenant**, so independent per-tenant chains each verify correctly.
+- **Backward compatibility:** events recorded before the detail fields were part
+  of the canonical form (v1) are still verified. `verify_chain()` accepts either
+  the v2 (detail-inclusive) or v1 (legacy) hash for each row, so untouched
+  historical events do not show as broken after the canonical shape changed,
+  while tampering with current (v2) events is still detected.
 - Events capture `actor_id`, `actor_type` (`tenant_user`/`olympus_operator`/
   `system`/`agent`), `event_type`, `resource_type`/`resource_id`, `action`,
   `outcome` (`allowed`/`blocked`/`failed`), optional `policy_decision_id`,

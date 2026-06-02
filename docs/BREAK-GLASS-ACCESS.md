@@ -18,7 +18,9 @@ tenant.
 
 - **Request** requires a `reason` and a `requested_scope` (`BreakGlassRequest`).
 - **Approve / deny** are explicit operator actions; approval sets `starts_at` and
-  a time-boxed `expires_at`.
+  a time-boxed `expires_at`. Approval is **second-actor only** — the requester
+  cannot approve their own request (`approved_by == requested_by` is rejected and
+  audited), so break-glass is genuinely approval-gated end to end.
 - **Revoke** ends an active grant early; grants **auto-expire** on read once
   past `expires_at` (status → `expired`).
 - Every transition (`requested`/`approved`/`denied`/`revoked`/`expired`) and every
@@ -46,8 +48,8 @@ distinct from the requester.
 
 ## Planned controls
 
-- Mandatory second-approver for production tenants.
 - Automatic notification to the tenant when break-glass access is exercised.
+- Multi-approver (N-of-M) approval for the highest-risk scopes.
 
 ## Known gaps / not certified
 

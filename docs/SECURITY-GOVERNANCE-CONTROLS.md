@@ -81,10 +81,20 @@ Request → existing auth/tenant context
 
 ## Operator access model
 
+**No Aether tenant may access Kyber for any reason.** The Kyber security routes
+(`/v1/admin/kyber/security/*`) are gated fail-closed by `require_kyber_operator()`:
+an operator is recognised only by the `kyber:operator` permission (checked against
+the token's raw permission list, not `has_permission()`) or membership in the
+`KYBER_OPERATOR_TENANT_IDS` allowlist — signals a normal tenant token never
+carries. A tenant holding the legacy `admin` permission — even `Role.ADMIN` — is
+denied. Reads require operator access; privileged mutations additionally require
+the `admin` permission.
+
 Olympus operators have scoped roles (`assigned_tenant` / `all_tenants_aggregate`
 / `all_tenants_admin`). Access to a specific tenant's private records requires an
-assigned role or an approved, time-boxed **break-glass** grant. Every break-glass
-grant and every access used under it is audited.
+assigned role or an approved, time-boxed **break-glass** grant. Break-glass
+approval must come from a **different operator than the requester** (no
+self-approval). Every break-glass grant and every access used under it is audited.
 
 ## Policy enforcement model
 

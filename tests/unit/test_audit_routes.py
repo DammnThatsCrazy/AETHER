@@ -54,8 +54,13 @@ def audit_routes(monkeypatch):
 
 
 def make_request(tenant_id: str = "t-001"):
-    tenant = SimpleNamespace(tenant_id=tenant_id, require_permission=lambda perm: None)
-    return SimpleNamespace(state=SimpleNamespace(tenant=tenant))
+    tenant = SimpleNamespace(
+        tenant_id=tenant_id,
+        user_id=f"u-{tenant_id}",
+        require_permission=lambda perm: None,
+        has_permission=lambda perm: True,
+    )
+    return SimpleNamespace(state=SimpleNamespace(tenant=tenant), client=None)
 
 
 async def seed_records(audit_routes, tenant_id: str = "t-001"):
@@ -175,8 +180,10 @@ async def test_get_trail_404(audit_routes):
 @pytest.mark.asyncio
 async def test_request_export_includes_rows_from_all_sources(audit_routes):
     await seed_records(audit_routes)
-    body = audit_routes.ExportRequest(format="json", report_type="soc2")
+    # Full multi-source exports are governed as high-risk and require approval.
+    body = audit_routes.ExportRequest(format="json", report_type="soc2", approval_id="appr-test")
     res = await audit_routes.request_export(body, make_request())
+    assert res["data"]["high_risk"] is True
     assert res["data"]["row_count"] == 7
     assert res["data"]["status"] == "complete"
     assert res["data"]["per_source"]["agent_audit"] == 2
@@ -196,7 +203,7 @@ async def test_request_export_invalid_format(audit_routes):
 @pytest.mark.asyncio
 async def test_list_and_get_exports(audit_routes):
     await seed_records(audit_routes)
-    body = audit_routes.ExportRequest(format="json")
+    body = audit_routes.ExportRequest(format="json", approval_id="appr-test")
     created = await audit_routes.request_export(body, make_request())
     eid = created["data"]["export_id"]
 
