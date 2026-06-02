@@ -49,3 +49,14 @@ Tenant routes under `/v1/billing/*` return customer-safe plan and usage informat
 ## Rollout notes and known gaps
 
 This layer is billing-ready and audit-friendly. Production rollout should connect scheduled metering hooks from ingestion, graph, Profile360, recommendations, decisions, actions, outcomes, playbooks, audit exports, integrations, deployment, and managed workflow systems. External payment collection, taxes, exact SKU prices, and ERP export are future integrations.
+
+## Reliability & Operational Resilience
+
+Reliability, SRE, incident response, SLOs, runbooks, and tenant-safe system
+status are documented in [Reliability Operations](RELIABILITY-OPERATIONS.md) and
+related docs ([Incident Response](INCIDENT-RESPONSE.md),
+[SLO Tracking](SLO-TRACKING.md), [SRE Runbooks](SRE-RUNBOOKS.md),
+[Tenant System Status](TENANT-STATUS.md), [Pipeline Health](PIPELINE-HEALTH.md),
+[Queue & Worker Health](QUEUE-WORKER-HEALTH.md), [Postmortems](POSTMORTEMS.md)).
+These controls are additive and do not weaken tenant isolation, governance,
+auditability, or security. No external SLA or certification is claimed.

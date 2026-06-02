@@ -52,3 +52,21 @@ export type {
   PageFetcher,
   UsePaginatedQueryResult,
 } from './query/index';
+
+export type {
+  ServiceHealthStatus,
+  ServiceHealthRecord,
+  PipelineHealthRecord,
+  QueueHealthRecord,
+  IncidentRecord,
+  IncidentSeverity,
+  IncidentStatus,
+  OperationalRunbook,
+  ServiceLevelObjective,
+  SLOWindow,
+  SLOStatus,
+  IncidentPostmortem,
+  PostmortemStatus,
+  TenantStatusSummary,
+  TenantSafeIncident,
+} from './types/reliability';
