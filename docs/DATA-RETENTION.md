@@ -3,7 +3,7 @@ title: Data Retention & Data Requests
 slug: enterprise/data-retention
 section: enterprise
 visibility: I
-audience: [ops, security, legal]
+audience: [ops, security, compliance]
 status: stable
 since_version: "13.0.0"
 ---
