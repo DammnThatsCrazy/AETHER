@@ -180,8 +180,10 @@ async def test_get_trail_404(audit_routes):
 @pytest.mark.asyncio
 async def test_request_export_includes_rows_from_all_sources(audit_routes):
     await seed_records(audit_routes)
-    body = audit_routes.ExportRequest(format="json", report_type="soc2")
+    # Full multi-source exports are governed as high-risk and require approval.
+    body = audit_routes.ExportRequest(format="json", report_type="soc2", approval_id="appr-test")
     res = await audit_routes.request_export(body, make_request())
+    assert res["data"]["high_risk"] is True
     assert res["data"]["row_count"] == 7
     assert res["data"]["status"] == "complete"
     assert res["data"]["per_source"]["agent_audit"] == 2
@@ -201,7 +203,7 @@ async def test_request_export_invalid_format(audit_routes):
 @pytest.mark.asyncio
 async def test_list_and_get_exports(audit_routes):
     await seed_records(audit_routes)
-    body = audit_routes.ExportRequest(format="json")
+    body = audit_routes.ExportRequest(format="json", approval_id="appr-test")
     created = await audit_routes.request_export(body, make_request())
     eid = created["data"]["export_id"]
 

@@ -14,6 +14,7 @@ Supported policy keys:
 """
 from __future__ import annotations
 
+import asyncio
 import ipaddress
 import socket
 from typing import Any, Optional
@@ -92,6 +93,23 @@ def _is_unsafe_destination(url: str) -> tuple[bool, str]:
         except ValueError:
             return True, f"host {host!r} resolved to an unparseable address {addr!r}"
     return False, "destination ok"
+
+
+DNS_RESOLVE_TIMEOUT_S = 5.0
+
+
+async def evaluate_destination_safety(url: str, timeout: float = DNS_RESOLVE_TIMEOUT_S) -> tuple[bool, str]:
+    """Async wrapper around `_is_unsafe_destination`.
+
+    `_is_unsafe_destination` performs a synchronous, potentially slow DNS lookup;
+    running it directly inside an async request handler would block the event
+    loop. Offload it to a bounded threadpool with a timeout, and fail-closed
+    (treat as unsafe) if the resolver is slow/wedged.
+    """
+    try:
+        return await asyncio.wait_for(asyncio.to_thread(_is_unsafe_destination, url), timeout)
+    except asyncio.TimeoutError:
+        return True, "destination safety check timed out"
 
 
 class PolicyEngine:
@@ -248,7 +266,7 @@ class PolicyEngine:
             )
             return await self._finalize(d, actor_type=actor_type, **audit)
         if destination_url:
-            unsafe, why = _is_unsafe_destination(destination_url)
+            unsafe, why = await evaluate_destination_safety(destination_url)
             if unsafe:
                 d = self._decision(
                     policy_key="webhook.dispatch_safety", actor_id=actor_id,

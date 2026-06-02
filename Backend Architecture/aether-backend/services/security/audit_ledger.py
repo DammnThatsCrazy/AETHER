@@ -33,7 +33,7 @@ _TENANT_TAIL: dict[str, str] = {}
 _TENANT_SEQ: dict[str, int] = {}
 
 
-def _canonical(event: SecurityAuditEvent, prev_hash: str) -> str:
+def _canonical(event: SecurityAuditEvent, prev_hash: str, *, include_detail: bool = True) -> str:
     payload = {
         "audit_event_id": event.audit_event_id,
         "tenant_id": event.tenant_id,
@@ -45,22 +45,23 @@ def _canonical(event: SecurityAuditEvent, prev_hash: str) -> str:
         "action": event.action,
         "outcome": event.outcome,
         "policy_decision_id": event.policy_decision_id,
-        # Persisted "what / from where" detail is part of the tamper-evident
-        # record: hashing it means edits to metadata, ip_address, or user_agent
-        # break verify_chain(). metadata is already secret-sanitized at record().
-        "metadata": event.metadata,
-        "ip_address": event.ip_address,
-        "user_agent": event.user_agent,
         # created_at is intentionally excluded: the persistence layer assigns its
         # own created_at on insert, so hashing it would break verification. Order
         # and tamper-evidence come from the chained prev_hash + immutable ids.
         "prev_hash": prev_hash,
     }
+    if include_detail:
+        # v2: persisted "what / from where" detail is part of the tamper-evident
+        # record, so editing metadata/ip_address/user_agent breaks verify_chain().
+        # metadata is already secret-sanitized at record() time.
+        payload["metadata"] = event.metadata
+        payload["ip_address"] = event.ip_address
+        payload["user_agent"] = event.user_agent
     return json.dumps(payload, sort_keys=True, default=str)
 
 
-def compute_integrity_hash(event: SecurityAuditEvent, prev_hash: str = "") -> str:
-    return hashlib.sha256(_canonical(event, prev_hash).encode("utf-8")).hexdigest()
+def compute_integrity_hash(event: SecurityAuditEvent, prev_hash: str = "", *, include_detail: bool = True) -> str:
+    return hashlib.sha256(_canonical(event, prev_hash, include_detail=include_detail).encode("utf-8")).hexdigest()
 
 
 class AuditLedger:
@@ -137,10 +138,15 @@ class AuditLedger:
             ev = SecurityAuditEvent(**raw)
             chain_key = ev.tenant_id or ""
             prev = prev_by_chain.get(chain_key, "")
-            expected = compute_integrity_hash(ev, prev)
-            if ev.integrity_hash != expected:
+            # v2 events hash metadata/ip/user_agent; pre-existing v1 events do
+            # not. Accept either so historical, untouched rows verify cleanly
+            # after the canonical shape changed (backcompat), while still
+            # detecting tampering of v2 events.
+            expected_v2 = compute_integrity_hash(ev, prev, include_detail=True)
+            expected_v1 = compute_integrity_hash(ev, prev, include_detail=False)
+            if ev.integrity_hash not in (expected_v2, expected_v1):
                 broken.append(ev.audit_event_id)
-            prev_by_chain[chain_key] = ev.integrity_hash or expected
+            prev_by_chain[chain_key] = ev.integrity_hash or expected_v2
         return {
             "tenant_id": tenant_id,
             "events_checked": len(events),

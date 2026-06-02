@@ -402,12 +402,16 @@ async def test_webhook_allows_hostname_resolving_to_public(monkeypatch):
 # ── Operator-only Kyber access (no Aether tenant may access Kyber) ─────────────
 
 class _FakeTenant:
-    def __init__(self, tenant_id, permissions):
+    def __init__(self, tenant_id, permissions, role_admin=False):
         self.tenant_id = tenant_id
         self.user_id = "u-" + tenant_id
         self.permissions = list(permissions)
+        self._role_admin = role_admin
 
     def has_permission(self, perm):
+        # Mirror TenantContext: Role.ADMIN returns True for EVERY permission.
+        if self._role_admin:
+            return True
         return perm in self.permissions
 
 
@@ -417,9 +421,55 @@ async def test_tenant_admin_is_not_a_kyber_operator(monkeypatch):
     # A normal Aether tenant — even with the legacy "admin" permission — is denied.
     tenant_admin = _FakeTenant("tenant_001", ["admin", "read", "write", "export"])
     assert rc.is_kyber_operator(tenant_admin) is False
-    # An operator holding the dedicated permission is allowed.
+    # A Role.ADMIN tenant whose has_permission() returns True for everything must
+    # STILL be denied — the gate inspects the raw permission list, not has_permission.
+    role_admin = _FakeTenant("tenant_002", ["read"], role_admin=True)
+    assert role_admin.has_permission(settings.security_governance.kyber_operator_permission) is True
+    assert rc.is_kyber_operator(role_admin) is False
+    # An operator holding the dedicated permission grant is allowed.
     operator = _FakeTenant("olympus_ops", [settings.security_governance.kyber_operator_permission])
     assert rc.is_kyber_operator(operator) is True
+
+
+class _FakeRequest:
+    def __init__(self, tenant):
+        from types import SimpleNamespace
+        self.state = SimpleNamespace(tenant=tenant)
+        self.client = None
+        self.headers = {}
+
+
+class _GateTenant:
+    def __init__(self, tenant_id, permissions):
+        self.tenant_id = tenant_id
+        self.user_id = "u-" + tenant_id
+        self.permissions = list(permissions)
+
+    def has_permission(self, perm):
+        return perm in self.permissions
+
+    def require_permission(self, perm):
+        from shared.common.common import ForbiddenError
+        if perm not in self.permissions:
+            raise ForbiddenError(f"missing {perm}")
+
+
+async def test_kyber_mutation_requires_operator_and_admin():
+    from services.security import admin_routes
+    op_perm = "kyber:operator"
+    # Read gate: a non-admin operator passes.
+    read_only_op = _GateTenant("op", [op_perm])
+    assert admin_routes._require_admin(_FakeRequest(read_only_op)) is not None
+    # Mutation gate: the same non-admin operator is rejected (needs admin too).
+    with pytest.raises(Exception):
+        admin_routes._require_privileged(_FakeRequest(read_only_op))
+    # Mutation gate: an operator WITH admin passes.
+    admin_op = _GateTenant("op2", [op_perm, "admin"])
+    assert admin_routes._require_privileged(_FakeRequest(admin_op)) is not None
+    # A plain tenant admin (no operator grant) is rejected at both gates.
+    tenant_admin = _GateTenant("tenant_001", ["admin"])
+    with pytest.raises(Exception):
+        admin_routes._require_admin(_FakeRequest(tenant_admin))
 
 
 async def test_operator_allowlist_recognizes_operator(monkeypatch):

@@ -54,6 +54,10 @@ permission is enforced via the policy engine, cross-tenant export attempts are
 blocked, sensitive export types (`full_audit_log`, `cross_resource`,
 `operator_access`, `raw_events`) require an `approval_id`, exports carry a
 `high_risk` flag plus an `integrity_hash` and an expiry (downloads past expiry are
-blocked), and both creation and download emit `SecurityAuditEvent`s. See
+blocked), and both creation and download emit `SecurityAuditEvent`s. A **full
+multi-source export** (every audit source, unfiltered) is mapped to
+`full_audit_log` and treated as high-risk requiring approval. The integrity hash
+is computed over a **digest of the actual exported rows** (not just the
+source/count summary), so row-level tampering changes the hash. See
 [SECURITY-GOVERNANCE-CONTROLS.md](./SECURITY-GOVERNANCE-CONTROLS.md). This governs
 exports; it does not make them external compliance certification.

@@ -69,17 +69,21 @@ def tenant_actor(request: Request) -> ActorContext:
 def is_kyber_operator(tenant) -> bool:  # noqa: ANN001
     """True only for Olympus operators. No Aether tenant may access Kyber.
 
-    A regular Aether tenant — even one holding the legacy ``admin`` permission —
-    is NOT an operator. An operator is recognised exclusively by a signal that
-    tenant tokens never carry: the configured ``kyber:operator`` permission, or
-    membership in the configured operator tenant-id allowlist.
+    A regular Aether tenant — even one with ``Role.ADMIN`` — is NOT an operator.
+    We deliberately inspect the RAW permission list (not ``has_permission()``,
+    which returns True for every permission when ``role == Role.ADMIN``) so a
+    role-admin tenant cannot pass this operator-only gate. An operator is
+    recognised only by the configured ``kyber:operator`` permission grant or
+    membership in the operator tenant-id allowlist.
     """
     cfg = settings.security_governance
     if tenant is None:
         return False
-    if tenant.has_permission(cfg.kyber_operator_permission):
+    raw_permissions = getattr(tenant, "permissions", None) or []
+    if cfg.kyber_operator_permission in raw_permissions:
         return True
-    return bool(tenant.tenant_id) and tenant.tenant_id in cfg.kyber_operator_tenant_ids
+    tenant_id = getattr(tenant, "tenant_id", None)
+    return bool(tenant_id) and tenant_id in cfg.kyber_operator_tenant_ids
 
 
 def require_kyber_operator(request: Request):  # noqa: ANN201

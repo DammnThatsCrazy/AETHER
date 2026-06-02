@@ -22,6 +22,8 @@ Endpoints:
 
 from __future__ import annotations
 
+import hashlib
+import json
 import uuid
 from datetime import datetime, timezone
 from typing import Any, Awaitable, Callable, Optional
@@ -222,17 +224,35 @@ async def request_export(body: ExportRequest, request: Request):
             rows.append(row)
 
     export_id = str(uuid.uuid4())
+    # Map the route's actual report/source combination to a governance export
+    # type. A full multi-source export (every audit source, unfiltered) is a
+    # high-risk "full_audit_log" and requires approval; narrower exports keep
+    # their report_type (non-sensitive unless it matches a sensitive type).
+    is_full_audit = set(sources) >= set(AUDIT_SOURCES)
+    effective_export_type = "full_audit_log" if is_full_audit else body.report_type
+    # Hash a canonical digest of the actual exported rows, not just the summary,
+    # so row-level tampering/corruption changes the integrity hash even when the
+    # source list and counts are unchanged.
+    rows_digest = hashlib.sha256(
+        json.dumps(rows, sort_keys=True, default=str).encode("utf-8")
+    ).hexdigest()
     # Governance: enforce export permission, block cross-tenant export, flag
     # high-risk exports, and attach an integrity hash + expiry. Emits/records via
     # the security policy engine + audit ledger.
     governance = await audit_export_governance.authorize_create(
         actor_id=getattr(tenant, "user_id", None) or tenant.tenant_id,
         actor_type='tenant_user', tenant_id=tenant.tenant_id,
-        export_type=body.report_type,
+        export_type=effective_export_type,
         has_export_permission=tenant.has_permission("export") or tenant.has_permission("admin"),
         target_tenant=tenant.tenant_id,
         approval_id=getattr(body, "approval_id", None),
-        manifest={"sources": sources, "row_count": len(rows), "per_source": per_source},
+        manifest={
+            "report_type": body.report_type,
+            "sources": sources,
+            "row_count": len(rows),
+            "per_source": per_source,
+            "rows_digest": rows_digest,
+        },
         ip_address=request.client.host if request.client else None,
     )
     record = {

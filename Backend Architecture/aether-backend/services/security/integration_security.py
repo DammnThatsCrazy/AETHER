@@ -19,7 +19,7 @@ from shared.logger.logger import get_logger
 
 from .audit_ledger import audit_ledger
 from .contracts import ActorType, sanitize_metadata
-from .policy_engine import policy_engine, _is_unsafe_destination
+from .policy_engine import evaluate_destination_safety, policy_engine
 
 logger = get_logger("aether.security.integration_security")
 
@@ -94,8 +94,11 @@ class IntegrationSecurity:
             resource_id=integration_id, metadata=redact_config(change),
         )
 
-    def validate_destination(self, url: str, allowlist: Optional[list[str]] = None) -> None:
-        unsafe, why = _is_unsafe_destination(url)
+    async def validate_destination(self, url: str, allowlist: Optional[list[str]] = None) -> None:
+        # DNS resolution is offloaded to a bounded threadpool (see
+        # evaluate_destination_safety) so a slow/wedged resolver never blocks the
+        # async dispatch path / FastAPI event loop.
+        unsafe, why = await evaluate_destination_safety(url)
         if unsafe:
             raise BadRequestError(f"unsafe webhook destination: {why}")
         if allowlist:
@@ -118,7 +121,7 @@ class IntegrationSecurity:
         if dedupe_key in _SEEN_IDEMPOTENCY:
             return {"deduplicated": True, "dispatched": False}
 
-        self.validate_destination(destination_url, allowlist)
+        await self.validate_destination(destination_url, allowlist)
         decision = await policy_engine.check_integration_dispatch(
             actor_id=actor_id, actor_type=actor_type, tenant_id=tenant_id,
             integration_enabled=integration_enabled, destination_url=destination_url,

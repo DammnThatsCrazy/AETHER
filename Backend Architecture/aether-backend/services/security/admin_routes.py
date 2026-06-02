@@ -55,9 +55,18 @@ _audit_repo = SecurityAuditEventRepository()
 
 
 def _require_admin(request: Request):
-    # Fail-closed Olympus-operator gate. No Aether tenant — even one holding the
-    # legacy "admin" permission — may access these cross-tenant security routes.
+    # Read-tier gate: fail-closed Olympus-operator check. No Aether tenant — even
+    # one holding the legacy "admin" permission — may access these routes.
     return require_kyber_operator(request)
+
+
+def _require_privileged(request: Request):
+    # Mutation-tier gate: operator AND admin. A read-only `kyber:operator` token
+    # must not be able to edit retention policies, process data requests, or
+    # approve/deny/revoke break-glass grants.
+    actor = require_kyber_operator(request)
+    request.state.tenant.require_permission("admin")
+    return actor
 
 
 @admin_router.get("/overview")
@@ -145,7 +154,7 @@ class RetentionPolicyBody(BaseModel):
 
 @admin_router.post("/data-retention/policies")
 async def create_retention_policy(body: RetentionPolicyBody, request: Request) -> dict:
-    actor = _require_admin(request)
+    actor = _require_privileged(request)
     pol = await data_retention_service.create_policy(
         tenant_id=body.tenant_id, resource_type=body.resource_type,
         retention_days=body.retention_days, delete_behavior=body.delete_behavior,
@@ -164,7 +173,7 @@ class RetentionPolicyUpdate(BaseModel):
 
 @admin_router.patch("/data-retention/policies/{policy_id}")
 async def update_retention_policy(policy_id: str, body: RetentionPolicyUpdate, request: Request) -> dict:
-    actor = _require_admin(request)
+    actor = _require_privileged(request)
     updates = {k: v for k, v in body.model_dump().items() if v is not None}
     row = await data_retention_service.update_policy(policy_id, updates, actor_id=actor.actor_id)
     return APIResponse(data=row).to_dict()
@@ -186,7 +195,7 @@ class DataRequestUpdate(BaseModel):
 
 @admin_router.patch("/data-requests/{data_request_id}")
 async def process_data_request(data_request_id: str, body: DataRequestUpdate, request: Request) -> dict:
-    actor = _require_admin(request)
+    actor = _require_privileged(request)
     row = await data_retention_service.process_request(
         data_request_id, status=body.status, result_summary=body.result_summary,
         actor_id=actor.actor_id,
@@ -210,7 +219,7 @@ class EvidencePackBody(BaseModel):
 
 @admin_router.post("/governance-evidence-packs/generate")
 async def generate_evidence_pack(body: EvidencePackBody, request: Request) -> dict:
-    actor = _require_admin(request)
+    actor = _require_privileged(request)
     pack = await evidence_pack_service.generate(
         pack_type=body.pack_type, requested_by=actor.actor_id, tenant_id=body.tenant_id,
     )
@@ -228,7 +237,7 @@ class BreakGlassBody(BaseModel):
 
 @admin_router.post("/break-glass/request")
 async def break_glass_request(body: BreakGlassBody, request: Request) -> dict:
-    actor = _require_admin(request)
+    actor = _require_privileged(request)
     req = await break_glass_service.request(
         tenant_id=body.tenant_id, requested_by=actor.actor_id, reason=body.reason,
         requested_scope=body.requested_scope, window_hours=body.window_hours,
@@ -238,7 +247,7 @@ async def break_glass_request(body: BreakGlassBody, request: Request) -> dict:
 
 @admin_router.post("/break-glass/{request_id}/approve")
 async def break_glass_approve(request_id: str, request: Request) -> dict:
-    actor = _require_admin(request)
+    actor = _require_privileged(request)
     req = await break_glass_service.approve(request_id=request_id, approved_by=actor.actor_id)
     return APIResponse(data=req.model_dump()).to_dict()
 
@@ -249,14 +258,14 @@ class DenyBody(BaseModel):
 
 @admin_router.post("/break-glass/{request_id}/deny")
 async def break_glass_deny(request_id: str, body: DenyBody, request: Request) -> dict:
-    actor = _require_admin(request)
+    actor = _require_privileged(request)
     req = await break_glass_service.deny(request_id=request_id, approved_by=actor.actor_id, reason=body.reason)
     return APIResponse(data=req.model_dump()).to_dict()
 
 
 @admin_router.post("/break-glass/{request_id}/revoke")
 async def break_glass_revoke(request_id: str, request: Request) -> dict:
-    actor = _require_admin(request)
+    actor = _require_privileged(request)
     req = await break_glass_service.revoke(request_id=request_id, revoked_by=actor.actor_id)
     return APIResponse(data=req.model_dump()).to_dict()
 
