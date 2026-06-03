@@ -477,6 +477,19 @@ class PartnerEcosystemConfig:
 
 
 # ---------------------------------------------------------------------------
+# Inbound data-provider / connector ingestion
+# ---------------------------------------------------------------------------
+
+@dataclass(frozen=True)
+class ConnectorsConfig:
+    """Non-SDK connector ingestion. Master switch is OFF by default; per-connector
+    enablement is per-tenant config (also off by default). Provider credentials
+    are required only when a connector is enabled for a tenant."""
+    enabled: bool = _env_bool("AETHER_CONNECTORS_ENABLED", False)
+    kyber_connector_health_enabled: bool = _env_bool("KYBER_CONNECTOR_HEALTH_ENABLED", False)
+
+
+# ---------------------------------------------------------------------------
 # Master settings
 # ---------------------------------------------------------------------------
 
@@ -543,6 +556,9 @@ class Settings:
 
     # Partner ecosystem / marketplace / developer platform (future-flagged only)
     partner_ecosystem: PartnerEcosystemConfig = field(default_factory=PartnerEcosystemConfig)
+
+    # Inbound connector ingestion (master switch; per-tenant config gates each)
+    connectors: ConnectorsConfig = field(default_factory=ConnectorsConfig)
 
     def __post_init__(self):
         _is_non_local = self.env != Environment.LOCAL
