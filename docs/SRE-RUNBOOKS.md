@@ -14,7 +14,7 @@ related:
   - reliability/incident-response
 canonical_owner: platform@aether
 estimated_read_minutes: 5
-last_synced_commit: e590613
+last_synced_commit: e6904a0
 ---
 # SRE Runbooks
 

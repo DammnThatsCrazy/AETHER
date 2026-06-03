@@ -501,6 +501,84 @@
       ]
     },
     {
+      "path": "docs/DEMO-APP-UX.md",
+      "title": "Demo App UX",
+      "slug": "operations/demo-app-ux",
+      "section": "operations",
+      "visibility": "I",
+      "audience": [
+        "dev-senior",
+        "ops"
+      ],
+      "status": "beta",
+      "since_version": "8.9.0",
+      "estimated_read_minutes": 3,
+      "canonical_owner": "platform@aether"
+    },
+    {
+      "path": "docs/DEMO-APP.md",
+      "title": "Demo App",
+      "slug": "operations/demo-app",
+      "section": "operations",
+      "visibility": "I",
+      "audience": [
+        "exec",
+        "buyer",
+        "dev-senior",
+        "ops"
+      ],
+      "status": "beta",
+      "since_version": "8.9.0",
+      "estimated_read_minutes": 4,
+      "canonical_owner": "platform@aether"
+    },
+    {
+      "path": "docs/DEMO-DATA.md",
+      "title": "Demo Data",
+      "slug": "operations/demo-data",
+      "section": "operations",
+      "visibility": "I",
+      "audience": [
+        "dev-senior",
+        "ops"
+      ],
+      "status": "beta",
+      "since_version": "8.9.0",
+      "estimated_read_minutes": 3,
+      "canonical_owner": "platform@aether"
+    },
+    {
+      "path": "docs/DEMO-SALES-SCRIPT.md",
+      "title": "Demo Sales Script",
+      "slug": "tutorials/demo-sales-script",
+      "section": "tutorials",
+      "visibility": "I",
+      "audience": [
+        "exec",
+        "buyer"
+      ],
+      "status": "beta",
+      "since_version": "8.9.0",
+      "estimated_read_minutes": 4,
+      "canonical_owner": "platform@aether"
+    },
+    {
+      "path": "docs/DEMO-WALKTHROUGH.md",
+      "title": "Demo Walkthrough",
+      "slug": "tutorials/demo-walkthrough",
+      "section": "tutorials",
+      "visibility": "I",
+      "audience": [
+        "exec",
+        "buyer",
+        "ops"
+      ],
+      "status": "beta",
+      "since_version": "8.9.0",
+      "estimated_read_minutes": 5,
+      "canonical_owner": "platform@aether"
+    },
+    {
       "path": "docs/DEPLOYMENT-HOSTING-READINESS.md",
       "title": "Deployment & Hosting Readiness",
       "slug": "operations/deployment-hosting-readiness",
