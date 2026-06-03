@@ -1201,6 +1201,32 @@ export const api = {
         restClient.post('/v1/admin/kyber/postmortems', wrap(unknownSchema), body).then(r => r.data),
       patchPostmortem: (postmortemId: string, body: unknown) =>
         restClient.patch(`/v1/admin/kyber/postmortems/${postmortemId}`, wrap(unknownSchema), body).then(r => r.data),
+
+      // ── Intelligence Quality / Drift Detection (aggregate-only) ───────────
+      intelligenceQualityOverview: () =>
+        restClient.get('/v1/admin/kyber/intelligence-quality/overview', wrap(unknownSchema)).then(r => r.data),
+      intelligenceQualityTenants: () =>
+        restClient.get('/v1/admin/kyber/intelligence-quality/tenants', wrap(unknownSchema)).then(r => r.data),
+      intelligenceQualityDriftEvents: (driftType?: string, status?: string) =>
+        restClient.get(`/v1/admin/kyber/intelligence-quality/drift-events${buildQS({ drift_type: driftType, status })}`, wrap(unknownSchema)).then(r => r.data),
+      intelligenceQualitySchemaDrift: () =>
+        restClient.get('/v1/admin/kyber/intelligence-quality/schema-drift', wrap(unknownSchema)).then(r => r.data),
+      intelligenceQualityIdentity: () =>
+        restClient.get('/v1/admin/kyber/intelligence-quality/identity', wrap(unknownSchema)).then(r => r.data),
+      intelligenceQualityGraph: () =>
+        restClient.get('/v1/admin/kyber/intelligence-quality/graph', wrap(unknownSchema)).then(r => r.data),
+      intelligenceQualityRecommendations: () =>
+        restClient.get('/v1/admin/kyber/intelligence-quality/recommendations', wrap(unknownSchema)).then(r => r.data),
+      intelligenceQualityOutcomes: () =>
+        restClient.get('/v1/admin/kyber/intelligence-quality/outcomes', wrap(unknownSchema)).then(r => r.data),
+      intelligenceQualityPlaybooks: () =>
+        restClient.get('/v1/admin/kyber/intelligence-quality/playbooks', wrap(unknownSchema)).then(r => r.data),
+      intelligenceQualityContamination: () =>
+        restClient.get('/v1/admin/kyber/intelligence-quality/contamination', wrap(unknownSchema)).then(r => r.data),
+      acknowledgeDriftEvent: (driftEventId: string) =>
+        restClient.post(`/v1/admin/kyber/intelligence-quality/drift-events/${driftEventId}/acknowledge`, wrap(unknownSchema), {}).then(r => r.data),
+      resolveDriftEvent: (driftEventId: string, body: unknown = {}) =>
+        restClient.post(`/v1/admin/kyber/intelligence-quality/drift-events/${driftEventId}/resolve`, wrap(unknownSchema), body).then(r => r.data),
     },
   },
 

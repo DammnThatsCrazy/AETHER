@@ -21,6 +21,8 @@ const NAV_ITEMS: NavItem[] = [
   { path: '/packages',        label: 'Packages',        glyph: '▣' },
   { path: '/deployment-readiness', label: 'Deploy Ready', glyph: '▤' },
   { path: '/reliability',     label: 'Reliability',     glyph: '◐' },
+  { path: '/intelligence-quality', label: 'Intel Quality', glyph: '◉' },
+  { path: '/revops',          label: 'RevOps',          glyph: '₿' },
   { path: '/sales-readiness', label: 'Sales Ready', glyph: '$' },
   { path: '/pricing-architecture', label: 'Pricing', glyph: '≋' },
   { path: '/gtm-materials', label: 'GTM Materials', glyph: '▥' },

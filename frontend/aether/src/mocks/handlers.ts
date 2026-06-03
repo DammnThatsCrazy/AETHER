@@ -345,4 +345,40 @@ export const handlers = [
   http.post(`${API}/v1/auth/token`, () =>
     HttpResponse.json({ data: { access_token: 'mock_access_token', refresh_token: 'mock_refresh', expires_in: 3600 }, status: 'ok', timestamp: new Date().toISOString() }),
   ),
+
+  // ── Data Quality / Intelligence Quality (tenant-facing) ─────────────────────────
+  http.get(`${API}/v1/data-quality/overview`, () =>
+    HttpResponse.json({ data: {
+      score: {
+        tenant_id: 'tenant_demo_001', scope: 'tenant',
+        event_quality_score: 0.96, schema_stability_score: 0.97, identity_resolution_score: 0.93,
+        graph_quality_score: 0.94, profile_quality_score: 0.92, recommendation_quality_score: 0.9,
+        outcome_feedback_quality_score: 0.91, playbook_quality_score: 0.9,
+        overall_intelligence_quality_score: 0.929, status: 'healthy',
+      },
+      dimensions: {
+        event_quality_score: { score: 0.96, status: 'healthy' },
+        schema_stability_score: { score: 0.97, status: 'healthy' },
+        identity_resolution_score: { score: 0.93, status: 'healthy' },
+        graph_quality_score: { score: 0.94, status: 'healthy' },
+        profile_quality_score: { score: 0.92, status: 'healthy' },
+        recommendation_quality_score: { score: 0.9, status: 'healthy' },
+        outcome_feedback_quality_score: { score: 0.91, status: 'healthy' },
+        playbook_quality_score: { score: 0.9, status: 'healthy' },
+      },
+      open_drift_event_count: 0, drift_by_severity: {},
+    }, status: 'ok', timestamp: new Date().toISOString() }),
+  ),
+  http.get(`${API}/v1/data-quality/events`, () =>
+    HttpResponse.json({ data: { dimension: 'event_quality_score', event_volume: 1000000, schema_validation_failure_rate: 0.004, duplicate_event_count: 210, late_arriving_event_count: 95, quality_score: 0.96, status: 'healthy' }, status: 'ok', timestamp: new Date().toISOString() }),
+  ),
+  http.get(`${API}/v1/data-quality/recommendations`, () =>
+    HttpResponse.json({ data: { dimension: 'recommendation_quality_score', success_rate: 0.71, low_confidence_recommendation_rate: 0.11, suppression_rate: 0.09, quality_score: 0.9, status: 'healthy' }, status: 'ok', timestamp: new Date().toISOString() }),
+  ),
+  http.get(`${API}/v1/data-quality/graph`, () =>
+    HttpResponse.json({ data: { dimension: 'graph_quality_score', orphaned_vertices: 73, dangling_edges: 12, missing_expected_edges: 41, quality_score: 0.94, status: 'healthy' }, status: 'ok', timestamp: new Date().toISOString() }),
+  ),
+  http.get(`${API}/v1/data-quality/:dimension`, ({ params }) =>
+    HttpResponse.json({ data: { dimension: params.dimension, quality_score: 0.92, status: 'healthy' }, status: 'ok', timestamp: new Date().toISOString() }),
+  ),
 ];

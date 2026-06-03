@@ -70,6 +70,19 @@ export const api = {
     createDataRequest: (body: Record<string, unknown>) => restClient.post('/v1/security/data-requests', wrap(unknownSchema), body).then(r => r.data),
   },
 
+  // ─── Data Quality / Intelligence Quality (tenant-scoped only) ──────────────
+  dataQuality: {
+    overview: () => restClient.get('/v1/data-quality/overview', wrap(unknownSchema)).then(r => r.data),
+    events: () => restClient.get('/v1/data-quality/events', wrap(unknownSchema)).then(r => r.data),
+    schema: () => restClient.get('/v1/data-quality/schema', wrap(unknownSchema)).then(r => r.data),
+    identity: () => restClient.get('/v1/data-quality/identity', wrap(unknownSchema)).then(r => r.data),
+    graph: () => restClient.get('/v1/data-quality/graph', wrap(unknownSchema)).then(r => r.data),
+    profile: () => restClient.get('/v1/data-quality/profile', wrap(unknownSchema)).then(r => r.data),
+    recommendations: () => restClient.get('/v1/data-quality/recommendations', wrap(unknownSchema)).then(r => r.data),
+    outcomes: () => restClient.get('/v1/data-quality/outcomes', wrap(unknownSchema)).then(r => r.data),
+    playbooks: () => restClient.get('/v1/data-quality/playbooks', wrap(unknownSchema)).then(r => r.data),
+  },
+
   // ── Profile — full + all contextual sub-resources ─────────────────────────
   profile: {
     /** Full holistic profile — identity, consent, timeline, graph, intelligence, lake data. */

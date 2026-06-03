@@ -27,6 +27,7 @@ GovernanceDomain = Literal[
     'profile', 'graph', 'recommendations', 'decisions', 'actions', 'dispatches',
     'outcomes', 'playbooks', 'integrations', 'audit_exports', 'billing',
     'onboarding', 'customer_success', 'kyber_admin', 'security', 'governance',
+    'reliability', 'data_quality',
 ]
 
 PermissionAction = Literal[

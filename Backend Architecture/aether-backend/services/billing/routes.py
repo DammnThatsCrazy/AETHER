@@ -22,6 +22,7 @@ from typing import Optional
 from fastapi import APIRouter, Query, Request
 from pydantic import BaseModel
 
+from config.settings import settings
 from shared.auth.auth import PlanTier
 from shared.billing import stripe_client, stripe_repository
 from shared.common.common import APIResponse, BadRequestError, NotFoundError
@@ -214,6 +215,13 @@ _invoice_preview_service = InvoicePreviewService()
 _value_created_service = ValueCreatedEventService()
 _revenue_leakage_service = RevenueLeakageService()
 _expansion_billing_service = ExpansionBillingService()
+
+# External billing provider readiness (behind flags; internal-only by default).
+from services.billing.providers import (
+    get_billing_provider,
+    load_mappings,
+    provider_status_summary,
+)
 
 
 def _current_billing_window() -> tuple[str, str]:
@@ -443,3 +451,36 @@ async def kyber_expansion_billing_opportunities(request: Request, tenant_id: Opt
     request.state.tenant.require_permission("admin")
     items = await _expansion_billing_service.opportunities(tenant_id=tenant_id)
     return APIResponse(data={"items": items, "count": len(items)}).to_dict()
+
+
+# ── External billing provider readiness (behind flags) ───────────────────────
+
+@kyber_revops_router.get("/provider-status")
+async def kyber_billing_provider_status(request: Request):
+    """Operator view of external billing provider/sync status. No secrets."""
+    request.state.tenant.require_permission("admin")
+    return APIResponse(data=provider_status_summary()).to_dict()
+
+
+@kyber_revops_router.get("/product-mappings")
+async def kyber_billing_product_mappings(request: Request):
+    """Product/price mapping catalog + status (provider ids only, no secrets)."""
+    request.state.tenant.require_permission("admin")
+    mappings = [m.model_dump() for m in load_mappings()]
+    return APIResponse(data={"items": mappings, "count": len(mappings)}).to_dict()
+
+
+@router.get("/payment-status")
+async def get_billing_payment_status(request: Request):
+    """Tenant-facing payment status. Customer-safe: shows provider-managed status
+    only when an external provider is enabled; otherwise internally managed.
+    Never exposes revenue leakage, overage strategy, or provider debug details."""
+    tenant = _require_tenant(request)
+    provider = get_billing_provider()
+    status = await provider.sync_payment_status(tenant_id=tenant.tenant_id)
+    return APIResponse(data={
+        "tenant_id": tenant.tenant_id,
+        "payment_status": status,
+        "billing_provider_mode": provider.provider_type,
+        "external_billing_enabled": settings.external_billing.external_billing_enabled,
+    }).to_dict()
