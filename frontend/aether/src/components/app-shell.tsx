@@ -104,6 +104,7 @@ export function AppShell({ children }: AppShellProps) {
           <NavItem to="/value-review" label="Value Review" glyph="[v]" />
           <NavItem to="/security" label="Security" glyph="[s]" />
           <NavItem to="/system-status" label="System Status" glyph="[s]" />
+          <NavItem to="/data-quality" label="Data Quality" glyph="[q]" />
         </nav>
 
         {/* Footer */}

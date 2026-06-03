@@ -234,6 +234,10 @@ from services.sdk_drift.routes import router as sdk_drift_router
 from services.sdk_config.routes import router as sdk_config_router
 from services.onboarding.routes import router as onboarding_router, admin_router as onboarding_admin_router
 from services.reliability import admin_router as reliability_admin_router, tenant_router as reliability_status_router
+from services.data_quality import (
+    admin_router as data_quality_admin_router,
+    tenant_router as data_quality_tenant_router,
+)
 
 # ML predict routes — imported from the ML serving package when available.
 # When ML_SERVING_INLINE=true (E2 consolidated image) the predict routes are
@@ -501,6 +505,17 @@ def create_app() -> FastAPI:
         from services.cis.routes import router as cis_router
         app.include_router(cis_router)
         logger.info("Cognitive Integrity System (CIS) routes mounted")
+
+    # ── Data Quality / Intelligence Quality (feature-flagged) ───────────
+    dq = settings.data_quality
+    if dq.enabled:
+        app.include_router(data_quality_tenant_router)
+        logger.info("Data Quality: tenant routes mounted (/v1/data-quality)")
+    else:
+        logger.info("Data Quality: tenant routes disabled (set AETHER_DATA_QUALITY_ENABLED=true)")
+    if dq.kyber_intelligence_quality_enabled:
+        app.include_router(data_quality_admin_router)
+        logger.info("Intelligence Quality: Kyber admin routes mounted (/v1/admin/kyber/intelligence-quality)")
 
     if ig.enable_x402_layer:
         from services.x402.routes import router as x402_router

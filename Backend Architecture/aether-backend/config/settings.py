@@ -429,6 +429,54 @@ class SecurityGovernanceConfig:
 
 
 # ---------------------------------------------------------------------------
+# Data Quality, Drift Detection & Graph Intelligence Reliability
+# ---------------------------------------------------------------------------
+
+@dataclass(frozen=True)
+class DataQualityConfig:
+    """Tenant-facing data-quality views + Kyber intelligence-quality command
+    center. Both default OFF; routes mount only when enabled."""
+    enabled: bool = _env_bool("AETHER_DATA_QUALITY_ENABLED", False)
+    kyber_intelligence_quality_enabled: bool = _env_bool("KYBER_INTELLIGENCE_QUALITY_ENABLED", False)
+    watch_threshold: float = float(_env("AETHER_DATA_QUALITY_WATCH_THRESHOLD", "0.8"))
+    critical_threshold: float = float(_env("AETHER_DATA_QUALITY_CRITICAL_THRESHOLD", "0.6"))
+
+
+# ---------------------------------------------------------------------------
+# External billing / payment provider readiness (behind flags)
+# ---------------------------------------------------------------------------
+
+@dataclass(frozen=True)
+class ExternalBillingConfig:
+    """Provider-safe external billing integration. Defaults to internal-only; no
+    external billing env vars are required for local dev unless sync is enabled.
+    The internal billing/revops layer is unaffected when these are off."""
+    external_billing_enabled: bool = _env_bool("AETHER_EXTERNAL_BILLING_ENABLED", False)
+    stripe_billing_enabled: bool = _env_bool("AETHER_STRIPE_BILLING_ENABLED", False)
+    kyber_provider_sync_enabled: bool = _env_bool("KYBER_BILLING_PROVIDER_SYNC_ENABLED", False)
+    provider_mode: str = _env("BILLING_PROVIDER_MODE", "internal_only")
+    stripe_secret_key: str = _env("STRIPE_SECRET_KEY", "")
+    stripe_webhook_secret: str = _env("STRIPE_WEBHOOK_SECRET", "")
+    stripe_product_mapping_json: str = _env("STRIPE_PRODUCT_MAPPING_JSON", "")
+    stripe_price_mapping_json: str = _env("STRIPE_PRICE_MAPPING_JSON", "")
+
+
+# ---------------------------------------------------------------------------
+# Partner ecosystem / marketplace / developer platform — FUTURE-FLAGGED ONLY
+# ---------------------------------------------------------------------------
+
+@dataclass(frozen=True)
+class PartnerEcosystemConfig:
+    """Partner ecosystem, marketplace, and developer platform are intentionally
+    NOT implemented in this pass. These flags default OFF and gate nothing yet;
+    they exist so the work can be shipped later without a config migration."""
+    partner_ecosystem_enabled: bool = _env_bool("AETHER_PARTNER_ECOSYSTEM_ENABLED", False)
+    marketplace_enabled: bool = _env_bool("AETHER_MARKETPLACE_ENABLED", False)
+    developer_platform_enabled: bool = _env_bool("AETHER_DEVELOPER_PLATFORM_ENABLED", False)
+    kyber_partner_ecosystem_enabled: bool = _env_bool("KYBER_PARTNER_ECOSYSTEM_ENABLED", False)
+
+
+# ---------------------------------------------------------------------------
 # Master settings
 # ---------------------------------------------------------------------------
 
@@ -486,6 +534,15 @@ class Settings:
 
     # Cognitive Integrity System
     cis: CISConfig = field(default_factory=CISConfig)
+
+    # Data Quality / Drift / Intelligence Quality
+    data_quality: DataQualityConfig = field(default_factory=DataQualityConfig)
+
+    # External billing / payment provider readiness (behind flags)
+    external_billing: ExternalBillingConfig = field(default_factory=ExternalBillingConfig)
+
+    # Partner ecosystem / marketplace / developer platform (future-flagged only)
+    partner_ecosystem: PartnerEcosystemConfig = field(default_factory=PartnerEcosystemConfig)
 
     def __post_init__(self):
         _is_non_local = self.env != Environment.LOCAL

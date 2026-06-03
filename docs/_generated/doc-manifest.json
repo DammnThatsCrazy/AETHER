@@ -388,6 +388,27 @@
       "canonical_owner": "ingest@aether"
     },
     {
+      "path": "docs/DATA-QUALITY.md",
+      "title": "Data Quality & Intelligence Quality",
+      "slug": "data/data-quality",
+      "section": "data",
+      "visibility": "I",
+      "audience": [
+        "ai",
+        "architect",
+        "dev-senior",
+        "ops"
+      ],
+      "status": "beta",
+      "since_version": "8.9.0",
+      "estimated_read_minutes": 6,
+      "canonical_owner": "platform@aether",
+      "flags": [
+        "AETHER_DATA_QUALITY_ENABLED",
+        "KYBER_INTELLIGENCE_QUALITY_ENABLED"
+      ]
+    },
+    {
       "path": "docs/DATA-RETENTION.md",
       "title": "Data Retention & Data Requests",
       "slug": "enterprise/data-retention",
@@ -428,6 +449,22 @@
       ]
     },
     {
+      "path": "docs/DEPLOYMENT-HOSTING-READINESS.md",
+      "title": "Deployment & Hosting Readiness",
+      "slug": "operations/deployment-hosting-readiness",
+      "section": "operations",
+      "visibility": "I",
+      "audience": [
+        "architect",
+        "ops",
+        "dev-senior"
+      ],
+      "status": "beta",
+      "since_version": "8.9.0",
+      "estimated_read_minutes": 6,
+      "canonical_owner": "platform@aether"
+    },
+    {
       "path": "docs/DEPLOYMENT-READINESS.md",
       "title": "Deployment Readiness",
       "slug": "enterprise/deployment-readiness",
@@ -440,6 +477,27 @@
       ],
       "status": "stable",
       "since_version": "8.9.0"
+    },
+    {
+      "path": "docs/DRIFT-DETECTION.md",
+      "title": "Drift Detection",
+      "slug": "data/drift-detection",
+      "section": "data",
+      "visibility": "I",
+      "audience": [
+        "ai",
+        "architect",
+        "dev-senior",
+        "ops"
+      ],
+      "status": "beta",
+      "since_version": "8.9.0",
+      "estimated_read_minutes": 5,
+      "canonical_owner": "platform@aether",
+      "flags": [
+        "AETHER_DATA_QUALITY_ENABLED",
+        "KYBER_INTELLIGENCE_QUALITY_ENABLED"
+      ]
     },
     {
       "path": "docs/ECONOMIC-OBSERVABILITY.md",
@@ -529,6 +587,27 @@
       "since_version": "8.9.0"
     },
     {
+      "path": "docs/EXTERNAL-BILLING-INTEGRATION.md",
+      "title": "External Billing Integration",
+      "slug": "operations/external-billing-integration",
+      "section": "operations",
+      "visibility": "I",
+      "audience": [
+        "architect",
+        "dev-senior",
+        "ops"
+      ],
+      "status": "beta",
+      "since_version": "8.9.0",
+      "estimated_read_minutes": 6,
+      "canonical_owner": "platform@aether",
+      "flags": [
+        "AETHER_EXTERNAL_BILLING_ENABLED",
+        "AETHER_STRIPE_BILLING_ENABLED",
+        "KYBER_BILLING_PROVIDER_SYNC_ENABLED"
+      ]
+    },
+    {
       "path": "docs/FRONTEND-ARCHITECTURE.md",
       "title": "Aether Frontend Architecture & Designer Handoff",
       "slug": "architecture/frontend",
@@ -587,6 +666,46 @@
       "since_version": "8.9.0"
     },
     {
+      "path": "docs/GRAPH-INTELLIGENCE-RELIABILITY.md",
+      "title": "Graph Intelligence Reliability",
+      "slug": "data/graph-intelligence-reliability",
+      "section": "data",
+      "visibility": "I",
+      "audience": [
+        "ai",
+        "architect",
+        "dev-senior",
+        "ops"
+      ],
+      "status": "beta",
+      "since_version": "8.9.0",
+      "estimated_read_minutes": 5,
+      "canonical_owner": "platform@aether",
+      "flags": [
+        "AETHER_DATA_QUALITY_ENABLED",
+        "KYBER_INTELLIGENCE_QUALITY_ENABLED"
+      ]
+    },
+    {
+      "path": "docs/GRAPH-QUALITY.md",
+      "title": "Graph Quality",
+      "slug": "data/graph-quality",
+      "section": "data",
+      "visibility": "I",
+      "audience": [
+        "ai",
+        "dev-senior",
+        "ops"
+      ],
+      "status": "beta",
+      "since_version": "8.9.0",
+      "estimated_read_minutes": 4,
+      "canonical_owner": "platform@aether",
+      "flags": [
+        "AETHER_DATA_QUALITY_ENABLED"
+      ]
+    },
+    {
       "path": "docs/GTM-MATERIALS.md",
       "title": "GTM Materials",
       "slug": "enterprise/gtm-materials",
@@ -599,6 +718,25 @@
       ],
       "status": "stable",
       "since_version": "8.9.0"
+    },
+    {
+      "path": "docs/IDENTITY-RESOLUTION-QUALITY.md",
+      "title": "Identity Resolution Quality",
+      "slug": "data/identity-resolution-quality",
+      "section": "data",
+      "visibility": "I",
+      "audience": [
+        "ai",
+        "dev-senior",
+        "ops"
+      ],
+      "status": "beta",
+      "since_version": "8.9.0",
+      "estimated_read_minutes": 4,
+      "canonical_owner": "platform@aether",
+      "flags": [
+        "AETHER_DATA_QUALITY_ENABLED"
+      ]
     },
     {
       "path": "docs/IDENTITY-RESOLUTION.md",
@@ -774,6 +912,41 @@
       ]
     },
     {
+      "path": "docs/LIVE-TELEMETRY-WIRING.md",
+      "title": "Live Telemetry Wiring",
+      "slug": "operations/live-telemetry-wiring",
+      "section": "operations",
+      "visibility": "I",
+      "audience": [
+        "architect",
+        "dev-senior",
+        "ops"
+      ],
+      "status": "beta",
+      "since_version": "8.9.0",
+      "estimated_read_minutes": 5,
+      "canonical_owner": "platform@aether",
+      "flags": [
+        "AETHER_DATA_QUALITY_ENABLED"
+      ]
+    },
+    {
+      "path": "docs/LOCAL-DEVELOPMENT.md",
+      "title": "Local Development",
+      "slug": "operations/local-development",
+      "section": "operations",
+      "visibility": "I",
+      "audience": [
+        "dev-junior",
+        "dev-senior",
+        "ops"
+      ],
+      "status": "stable",
+      "since_version": "8.9.0",
+      "estimated_read_minutes": 6,
+      "canonical_owner": "platform@aether"
+    },
+    {
       "path": "docs/MIGRATION-RUNBOOK.md",
       "title": "Migration Runbook",
       "slug": "operations/migration",
@@ -880,6 +1053,26 @@
       "canonical_owner": "platform@aether"
     },
     {
+      "path": "docs/OUTCOME-FEEDBACK-QUALITY.md",
+      "title": "Outcome Feedback Quality",
+      "slug": "data/outcome-feedback-quality",
+      "section": "data",
+      "visibility": "I",
+      "audience": [
+        "ai",
+        "dev-senior",
+        "ops"
+      ],
+      "status": "beta",
+      "since_version": "8.9.0",
+      "estimated_read_minutes": 4,
+      "canonical_owner": "platform@aether",
+      "flags": [
+        "AETHER_DATA_QUALITY_ENABLED",
+        "AETHER_OUTCOME_FEEDBACK_ENABLED"
+      ]
+    },
+    {
       "path": "docs/OUTCOME-LEDGER.md",
       "title": "Outcome Ledger",
       "slug": "ai/outcome-ledger",
@@ -917,6 +1110,26 @@
       "since_version": "9.0.0",
       "estimated_read_minutes": 3,
       "canonical_owner": "platform@aether"
+    },
+    {
+      "path": "docs/PLAYBOOK-DRIFT.md",
+      "title": "Playbook Drift",
+      "slug": "data/playbook-drift",
+      "section": "data",
+      "visibility": "I",
+      "audience": [
+        "ai",
+        "dev-senior",
+        "ops"
+      ],
+      "status": "beta",
+      "since_version": "8.9.0",
+      "estimated_read_minutes": 4,
+      "canonical_owner": "platform@aether",
+      "flags": [
+        "AETHER_DATA_QUALITY_ENABLED",
+        "AETHER_PLAYBOOKS_ENABLED"
+      ]
     },
     {
       "path": "docs/PLAYBOOKS.md",
@@ -1000,6 +1213,22 @@
       "canonical_owner": "platform@aether"
     },
     {
+      "path": "docs/PRODUCTIZATION-CHECKLIST.md",
+      "title": "Productization Checklist",
+      "slug": "operations/productization-checklist",
+      "section": "operations",
+      "visibility": "I",
+      "audience": [
+        "exec",
+        "architect",
+        "ops"
+      ],
+      "status": "beta",
+      "since_version": "8.9.0",
+      "estimated_read_minutes": 6,
+      "canonical_owner": "platform@aether"
+    },
+    {
       "path": "docs/PRODUCTIZATION.md",
       "title": "Productization Gap Analysis — First Paying Customer",
       "slug": "productization",
@@ -1065,6 +1294,26 @@
       "flags": [
         "AETHER_RECOMMENDATIONS_ENABLED",
         "AETHER_RECOMMENDATION_CONFIDENCE_THRESHOLD"
+      ]
+    },
+    {
+      "path": "docs/RECOMMENDATION-QUALITY.md",
+      "title": "Recommendation Quality",
+      "slug": "data/recommendation-quality",
+      "section": "data",
+      "visibility": "I",
+      "audience": [
+        "ai",
+        "dev-senior",
+        "ops"
+      ],
+      "status": "beta",
+      "since_version": "8.9.0",
+      "estimated_read_minutes": 4,
+      "canonical_owner": "platform@aether",
+      "flags": [
+        "AETHER_DATA_QUALITY_ENABLED",
+        "AETHER_RECOMMENDATIONS_ENABLED"
       ]
     },
     {
@@ -1171,6 +1420,25 @@
       ],
       "status": "stable",
       "since_version": "8.9.0"
+    },
+    {
+      "path": "docs/SCHEMA-DRIFT.md",
+      "title": "Schema Drift",
+      "slug": "data/schema-drift",
+      "section": "data",
+      "visibility": "I",
+      "audience": [
+        "ai",
+        "dev-senior",
+        "ops"
+      ],
+      "status": "beta",
+      "since_version": "8.9.0",
+      "estimated_read_minutes": 4,
+      "canonical_owner": "platform@aether",
+      "flags": [
+        "AETHER_DATA_QUALITY_ENABLED"
+      ]
     },
     {
       "path": "docs/SDK-ANDROID.md",
@@ -1431,6 +1699,27 @@
       "estimated_read_minutes": 4,
       "toc_depth": 3,
       "canonical_owner": "backend@aether"
+    },
+    {
+      "path": "docs/TENANT-DATA-CONTAMINATION.md",
+      "title": "Tenant Data Contamination",
+      "slug": "data/tenant-data-contamination",
+      "section": "security",
+      "visibility": "I",
+      "audience": [
+        "security",
+        "architect",
+        "ops",
+        "ai"
+      ],
+      "status": "beta",
+      "since_version": "8.9.0",
+      "estimated_read_minutes": 5,
+      "canonical_owner": "platform@aether",
+      "flags": [
+        "AETHER_DATA_QUALITY_ENABLED",
+        "KYBER_INTELLIGENCE_QUALITY_ENABLED"
+      ]
     },
     {
       "path": "docs/TENANT-ISOLATION-VERIFICATION.md",

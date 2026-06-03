@@ -1,0 +1,69 @@
+---
+title: Productization Checklist
+slug: operations/productization-checklist
+section: operations
+visibility: I
+audience: [exec, architect, ops]
+status: beta
+since_version: "8.9.0"
+canonical_owner: platform@aether
+estimated_read_minutes: 6
+---
+
+# Productization Checklist
+
+A running checklist of the productization surfaces and their readiness. See
+[Productization](PRODUCTIZATION.md) for the gap analysis this complements.
+
+## Governance & Control Plane
+
+- [x] Centralized access control (tenant + Olympus roles, permission domains incl.
+      `reliability`, `data_quality`)
+- [x] Policy engine, security audit ledger (tamper-evident), tenant isolation
+      verifier
+- [x] Break-glass operator access, data retention + data requests, governance
+      evidence packs
+- [x] Routes: `/v1/security/*`, `/v1/admin/kyber/security/*`
+
+## Reliability / SRE
+
+- [x] Service / pipeline / queue health registries, incidents, runbooks, SLOs,
+      postmortems, tenant impact
+- [x] Tenant-safe status: `/v1/status/*`; operator: `/v1/admin/kyber/reliability/*`
+
+## Data Quality / Intelligence Quality
+
+- [x] Intelligence quality score + drift detection + contamination escalation
+- [x] Tenant `/v1/data-quality/*`, operator `/v1/admin/kyber/intelligence-quality/*`
+- [x] Aether Data Quality page, Kyber Intelligence Quality page
+
+## Live Telemetry
+
+- [x] Flag-guarded live signals with in-memory fallback across onboarding,
+      customer success, billing/revops, reliability, and data quality
+
+## External Billing Readiness
+
+- [x] `BillingProvider` interface; internal-only default; Stripe stub behind flags
+- [x] Provider/mapping status in RevOps; tenant payment status
+
+## Frontend
+
+- [x] Aether tenant surfaces (onboarding, value, usage, security, status, data
+      quality, audit exports)
+- [x] Kyber operator surfaces (reliability, intelligence quality, revops, security,
+      implementation, packages, deployment readiness, GTM)
+
+## Deployment & Local Dev
+
+- [x] Env-driven config, safe-by-default feature flags, documented local commands
+- [x] `.env.example` covers all new flags and placeholders
+
+## Partner ecosystem / marketplace / developer platform
+
+Partner ecosystem, marketplace, and developer-platform functionality are
+**future-flagged and intentionally not implemented in this pass**. The flags
+`AETHER_PARTNER_ECOSYSTEM_ENABLED`, `AETHER_MARKETPLACE_ENABLED`,
+`AETHER_DEVELOPER_PLATFORM_ENABLED`, and `KYBER_PARTNER_ECOSYSTEM_ENABLED` exist,
+default off, and gate nothing yet. No partner models, routes, UI, or external
+partner APIs are shipped. This can be built later without a config migration.

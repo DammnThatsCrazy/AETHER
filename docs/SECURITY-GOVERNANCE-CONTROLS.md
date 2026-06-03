@@ -17,6 +17,7 @@ related:
   - reliability/incident-response
 canonical_owner: platform@aether
 estimated_read_minutes: 6
+last_synced_commit: bcade82
 ---
 
 # Security, Compliance & Governance Controls
