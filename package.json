@@ -21,7 +21,15 @@
     "clean": "rm -rf packages/*/dist packages/*/node_modules",
     "docs": "typedoc --entryPoints packages/web/src/index.ts --out docs/api",
     "deps:circular": "python scripts/check_circular_deps.py packages/web/src packages/react-native/src frontend/kyber/src",
-    "deps:unused": "npx --yes depcheck@^1.4 packages/web && npx --yes depcheck@^1.4 packages/react-native && npx --yes depcheck@^1.4 frontend/kyber"
+    "deps:unused": "npx --yes depcheck@^1.4 packages/web && npx --yes depcheck@^1.4 packages/react-native && npx --yes depcheck@^1.4 frontend/kyber",
+    "security:secrets": "python scripts/security/secret_scan.py",
+    "security:deps": "npm audit --omit=dev || true; (command -v pip-audit >/dev/null && pip-audit || echo 'pip-audit not installed (optional)')",
+    "security:vuln": "echo 'Run a container/image scanner (e.g. trivy) against built images; see docs/VULNERABILITY-MANAGEMENT.md' ",
+    "security:sbom": "npx --yes @cyclonedx/cyclonedx-npm@^1 --output-file sbom.json || echo 'SBOM tool unavailable; see docs/DEPENDENCY-AUDIT.md'",
+    "security:licenses": "npx --yes license-checker@^25 --summary || echo 'license-checker unavailable; see docs/DEPENDENCY-AUDIT.md'",
+    "security:audit": "npm run security:secrets && npm run security:deps",
+    "compliance:readiness": "python scripts/compliance/readiness.py",
+    "compliance:evidence": "python scripts/compliance/readiness.py --json"
   },
   "devDependencies": {
     "@types/node": "^20.0.0",

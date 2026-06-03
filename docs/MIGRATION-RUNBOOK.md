@@ -11,7 +11,7 @@ source_files:
 canonical_owner: platform@aether
 estimated_read_minutes: 8
 toc_depth: 3
-last_synced_commit: e6904a0
+last_synced_commit: f536c12
 ---
 # Migration Runbook — Aether Platform v8.8.0
 

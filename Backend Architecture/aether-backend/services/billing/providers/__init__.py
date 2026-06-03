@@ -21,11 +21,14 @@ from services.billing.providers.base import (
 )
 from services.billing.providers.internal import InternalOnlyProvider
 from services.billing.providers.mappings import load_mappings, mapping_status_summary
+from services.billing.providers.offline import EnterpriseContractProvider, ManualInvoiceProvider
 from services.billing.providers.stripe_provider import StripeBillingProvider
 
 __all__ = [
     "BillingProvider",
     "InternalOnlyProvider",
+    "ManualInvoiceProvider",
+    "EnterpriseContractProvider",
     "StripeBillingProvider",
     "ProviderType",
     "PaymentStatus",
@@ -34,6 +37,7 @@ __all__ = [
     "ProviderDisabledError",
     "get_billing_provider",
     "provider_status_summary",
+    "provider_health",
     "load_mappings",
     "mapping_status_summary",
 ]
@@ -57,7 +61,25 @@ def get_billing_provider() -> BillingProvider:
     provider_type = resolve_provider_type()
     if provider_type == "stripe":
         return StripeBillingProvider()
+    if provider_type == "manual_invoice":
+        return ManualInvoiceProvider()
+    if provider_type == "enterprise_contract":
+        return EnterpriseContractProvider()
     return InternalOnlyProvider(provider_type=provider_type)
+
+
+def provider_health() -> dict:
+    """Billing-provider health (no secrets). Internal/offline providers are
+    always healthy; the Stripe provider is healthy only when configured."""
+    provider = get_billing_provider()
+    configured = provider.is_configured()
+    healthy = configured or provider.provider_type != "stripe"
+    return {
+        "provider_type": provider.provider_type,
+        "configured": configured,
+        "healthy": healthy,
+        "invoice_export_mode": provider.invoice_export_mode(),
+    }
 
 
 def provider_status_summary() -> dict:
@@ -73,6 +95,7 @@ def provider_status_summary() -> dict:
         "provider_sync_enabled": cfg.kyber_provider_sync_enabled,
         "stripe_billing_enabled": cfg.stripe_billing_enabled,
         "invoice_export_mode": provider.invoice_export_mode(),
+        "provider_health": provider_health(),
         "product_mapping_status": summary,
         "unmapped_usage_dimensions": summary["unmapped_usage_dimensions"],
         "failed_billing_syncs": [],  # populated by sync workers in deployment
