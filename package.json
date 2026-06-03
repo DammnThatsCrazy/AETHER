@@ -10,7 +10,8 @@
     "frontend/aether",
     "frontend/kyber",
     "frontend/shared",
-    "frontend/docs"
+    "frontend/docs",
+    "frontend/demo"
   ],
   "scripts": {
     "build": "npm run build --workspaces --if-present",
