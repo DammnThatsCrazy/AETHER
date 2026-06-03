@@ -17,7 +17,7 @@ ContractStatus = Literal['draft','active','pending_signature','expired','cancell
 BillingModel = Literal['flat_subscription','usage_based','hybrid','enterprise_contract','value_based','pilot']
 BillingPeriod = Literal['monthly','quarterly','annual','custom']
 ResetPeriod = Literal['monthly','quarterly','annual','never']
-MeteringEventType = Literal['event_ingested','entity_resolved','graph_operation','profile_query','recommendation_generated','decision_recorded','action_logged','action_dispatched','outcome_observed','playbook_run','audit_export_generated','integration_delivery','premium_connector_used','deployment_mode_active','managed_workflow_triggered','value_created']
+MeteringEventType = Literal['event_ingested','entity_resolved','graph_operation','profile_query','recommendation_generated','recommendation_previewed','decision_recorded','confidence_updated','action_logged','action_dispatched','outcome_observed','playbook_run','investigation_opened','audit_export_generated','integration_delivery','connector_sync','webhook_ingested','sdk_event_ingested','premium_connector_used','deployment_mode_active','managed_workflow_triggered','value_created']
 InvoiceStatus = Literal['draft','review_ready','approved','exported']
 ValueSourceType = Literal['outcome','playbook','recommendation_family','integration_action','manual_adjustment']
 ValueType = Literal['retained_revenue','expansion_revenue','avoided_loss','campaign_waste_reduced','operational_savings','agent_failure_cost_reduced','manual_review_savings']
@@ -30,6 +30,9 @@ DIMENSION_LABELS = {
     'profile_query': 'Profile360 queries', 'recommendation_generated': 'Recommendations generated', 'decision_recorded': 'Decisions recorded',
     'action_logged': 'Actions logged', 'action_dispatched': 'Actions dispatched', 'outcome_observed': 'Outcomes observed',
     'playbook_run': 'Playbook runs', 'audit_export_generated': 'Audit exports generated', 'integration_delivery': 'Integration deliveries',
+    'recommendation_previewed': 'Recommendations previewed', 'confidence_updated': 'Confidence updates',
+    'investigation_opened': 'Investigations opened', 'connector_sync': 'Connector syncs',
+    'webhook_ingested': 'Webhook events ingested', 'sdk_event_ingested': 'SDK events ingested',
     'premium_connector_used': 'Premium connector usage', 'deployment_mode_active': 'Deployment mode activations',
     'managed_workflow_triggered': 'Managed workflow triggers', 'value_created': 'Value-created events',
 }
