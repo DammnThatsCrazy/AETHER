@@ -24,6 +24,7 @@ const ValueReviewPage = lazy(() => import('@aether-app/pages/value-review').then
 const SecurityPage = lazy(() => import('@aether-app/pages/security').then(m => ({ default: m.SecurityPage })));
 const SystemStatusPage = lazy(() => import('@aether-app/pages/system-status').then(m => ({ default: m.SystemStatusPage })));
 const DataQualityPage = lazy(() => import('@aether-app/pages/data-quality').then(m => ({ default: m.DataQualityPage })));
+const ConnectorsPage = lazy(() => import('@aether-app/pages/connectors').then(m => ({ default: m.ConnectorsPage })));
 
 function PageSuspense({ children }: { readonly children: React.ReactNode }) {
   return (
@@ -79,6 +80,7 @@ export function AppRouter() {
                 <Route path="/security" element={<PageSuspense><SecurityPage /></PageSuspense>} />
                 <Route path="/system-status" element={<PageSuspense><SystemStatusPage /></PageSuspense>} />
                 <Route path="/data-quality" element={<PageSuspense><DataQualityPage /></PageSuspense>} />
+                <Route path="/integrations" element={<PageSuspense><ConnectorsPage /></PageSuspense>} />
                 <Route path="*" element={<Navigate to="/settings" replace />} />
               </Routes>
             </AppShell>
