@@ -83,6 +83,15 @@ export const api = {
     playbooks: () => restClient.get('/v1/data-quality/playbooks', wrap(unknownSchema)).then(r => r.data),
   },
 
+  // ─── Integrations / Connectors (non-SDK ingestion, tenant-scoped) ──────────
+  connectors: {
+    list: () => restClient.get('/v1/integrations/connectors', wrap(unknownSchema)).then(r => r.data),
+    get: (t: string) => restClient.get(`/v1/integrations/connectors/${t}`, wrap(unknownSchema)).then(r => r.data),
+    configure: (t: string, body: Record<string, unknown>) => restClient.put(`/v1/integrations/connectors/${t}`, wrap(unknownSchema), body).then(r => r.data),
+    test: (t: string) => restClient.post(`/v1/integrations/connectors/${t}/test`, wrap(unknownSchema), {}).then(r => r.data),
+    sync: (t: string) => restClient.post(`/v1/integrations/connectors/${t}/sync`, wrap(unknownSchema), {}).then(r => r.data),
+  },
+
   // ── Profile — full + all contextual sub-resources ─────────────────────────
   profile: {
     /** Full holistic profile — identity, consent, timeline, graph, intelligence, lake data. */

@@ -381,4 +381,16 @@ export const handlers = [
   http.get(`${API}/v1/data-quality/:dimension`, ({ params }) =>
     HttpResponse.json({ data: { dimension: params.dimension, quality_score: 0.92, status: 'healthy' }, status: 'ok', timestamp: new Date().toISOString() }),
   ),
+
+  // ── Integrations / Connectors ───────────────────────────────────────────────
+  http.get(`${API}/v1/integrations/connectors`, () =>
+    HttpResponse.json({ data: { items: [
+      { connector_type: 'slack', label: 'Slack', category: 'messaging', description: 'Ingest Slack activity.', premium: false, enabled: false, sync_status: 'never_synced' },
+      { connector_type: 'webhook', label: 'Generic Signed Webhook', category: 'webhook', description: 'Ingest events via HMAC-signed webhook.', premium: false, enabled: true, sync_status: 'healthy' },
+      { connector_type: 'shopify', label: 'Shopify', category: 'commerce', description: 'Ingest orders and customers.', premium: false, enabled: false, sync_status: 'never_synced' },
+      { connector_type: 'stripe', label: 'Stripe (ingestion)', category: 'billing', description: 'Ingest payment events.', premium: false, enabled: false, sync_status: 'never_synced' },
+      { connector_type: 'hubspot', label: 'HubSpot', category: 'crm', description: 'Ingest contacts and deals.', premium: true, enabled: false, sync_status: 'never_synced' },
+      { connector_type: 'segment', label: 'Segment', category: 'product_analytics', description: 'Ingest track/identify events.', premium: false, enabled: false, sync_status: 'never_synced' },
+    ] }, status: 'ok', timestamp: new Date().toISOString() }),
+  ),
 ];

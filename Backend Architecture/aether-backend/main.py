@@ -517,6 +517,19 @@ def create_app() -> FastAPI:
         app.include_router(data_quality_admin_router)
         logger.info("Intelligence Quality: Kyber admin routes mounted (/v1/admin/kyber/intelligence-quality)")
 
+    # ── Inbound connector ingestion (feature-flagged, master switch) ────
+    if settings.connectors.enabled:
+        from services.integrations.connectors import (
+            admin_router as connectors_admin_router,
+            router as connectors_router,
+        )
+        app.include_router(connectors_router)
+        if settings.connectors.kyber_connector_health_enabled:
+            app.include_router(connectors_admin_router)
+        logger.info("Connectors: ingestion routes mounted (/v1/integrations/connectors)")
+    else:
+        logger.info("Connectors: disabled (set AETHER_CONNECTORS_ENABLED=true to enable)")
+
     if ig.enable_x402_layer:
         from services.x402.routes import router as x402_router
         app.include_router(x402_router)

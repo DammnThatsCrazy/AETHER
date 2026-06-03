@@ -1227,6 +1227,10 @@ export const api = {
         restClient.post(`/v1/admin/kyber/intelligence-quality/drift-events/${driftEventId}/acknowledge`, wrap(unknownSchema), {}).then(r => r.data),
       resolveDriftEvent: (driftEventId: string, body: unknown = {}) =>
         restClient.post(`/v1/admin/kyber/intelligence-quality/drift-events/${driftEventId}/resolve`, wrap(unknownSchema), body).then(r => r.data),
+
+      // ── Connector health (aggregate-only) ─────────────────────────────────
+      connectorsOverview: () =>
+        restClient.get('/v1/admin/kyber/connectors/overview', wrap(unknownSchema)).then(r => r.data),
     },
   },
 
