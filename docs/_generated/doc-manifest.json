@@ -80,6 +80,21 @@
       "canonical_owner": "commerce@aether"
     },
     {
+      "path": "docs/APP-ROUTING-DOMAINS.md",
+      "title": "App Routing & Domains",
+      "slug": "operations/app-routing-domains",
+      "section": "operations",
+      "visibility": "I",
+      "audience": [
+        "ops",
+        "architect"
+      ],
+      "status": "beta",
+      "since_version": "8.9.0",
+      "estimated_read_minutes": 3,
+      "canonical_owner": "platform@aether"
+    },
+    {
       "path": "docs/APPROVAL-MODEL.md",
       "title": "Agentic Commerce — Approval Model",
       "slug": "ai/approval-model",
@@ -479,6 +494,37 @@
       "since_version": "8.9.0"
     },
     {
+      "path": "docs/DEPLOYMENT-RUNBOOK.md",
+      "title": "Deployment Runbook",
+      "slug": "operations/deployment-runbook",
+      "section": "operations",
+      "visibility": "I",
+      "audience": [
+        "ops",
+        "dev-senior",
+        "architect"
+      ],
+      "status": "beta",
+      "since_version": "8.9.0",
+      "estimated_read_minutes": 6,
+      "canonical_owner": "platform@aether"
+    },
+    {
+      "path": "docs/DOMAIN-DNS-READINESS.md",
+      "title": "Domain & DNS Readiness",
+      "slug": "operations/domain-dns-readiness",
+      "section": "operations",
+      "visibility": "I",
+      "audience": [
+        "ops",
+        "architect"
+      ],
+      "status": "beta",
+      "since_version": "8.9.0",
+      "estimated_read_minutes": 3,
+      "canonical_owner": "platform@aether"
+    },
+    {
       "path": "docs/DRIFT-DETECTION.md",
       "title": "Drift Detection",
       "slug": "data/drift-detection",
@@ -557,6 +603,22 @@
       ],
       "status": "stable",
       "since_version": "8.9.0"
+    },
+    {
+      "path": "docs/ENVIRONMENT-VARIABLES.md",
+      "title": "Environment Variables",
+      "slug": "operations/environment-variables",
+      "section": "operations",
+      "visibility": "I",
+      "audience": [
+        "dev-senior",
+        "architect",
+        "ops"
+      ],
+      "status": "stable",
+      "since_version": "8.9.0",
+      "estimated_read_minutes": 5,
+      "canonical_owner": "platform@aether"
     },
     {
       "path": "docs/EXECUTIVE-BUSINESS-REVIEWS.md",
@@ -718,6 +780,22 @@
       ],
       "status": "stable",
       "since_version": "8.9.0"
+    },
+    {
+      "path": "docs/HEALTHCHECKS.md",
+      "title": "Healthchecks",
+      "slug": "operations/healthchecks",
+      "section": "operations",
+      "visibility": "I",
+      "audience": [
+        "ops",
+        "dev-senior",
+        "architect"
+      ],
+      "status": "stable",
+      "since_version": "8.9.0",
+      "estimated_read_minutes": 3,
+      "canonical_owner": "platform@aether"
     },
     {
       "path": "docs/IDENTITY-RESOLUTION-QUALITY.md",
@@ -1025,6 +1103,22 @@
       "since_version": "8.9.0"
     },
     {
+      "path": "docs/OODA-USAGE-DIMENSIONS.md",
+      "title": "OODA & Outcome Usage Dimensions",
+      "slug": "operations/ooda-usage-dimensions",
+      "section": "operations",
+      "visibility": "I",
+      "audience": [
+        "architect",
+        "dev-senior",
+        "ops"
+      ],
+      "status": "beta",
+      "since_version": "8.9.0",
+      "estimated_read_minutes": 5,
+      "canonical_owner": "platform@aether"
+    },
+    {
       "path": "docs/OPERATIONAL-INTELLIGENCE-AUDIT.md",
       "title": "Operational Intelligence — Stub vs. Production Audit",
       "slug": "operations/operational-intelligence-audit",
@@ -1095,6 +1189,22 @@
         "AETHER_DECISION_RECORDS_ENABLED",
         "AETHER_OUTCOME_FEEDBACK_ENABLED"
       ]
+    },
+    {
+      "path": "docs/OUTCOME-PRICING-DIMENSIONS.md",
+      "title": "Outcome Pricing Dimensions",
+      "slug": "operations/outcome-pricing-dimensions",
+      "section": "operations",
+      "visibility": "I",
+      "audience": [
+        "exec",
+        "architect",
+        "ops"
+      ],
+      "status": "beta",
+      "since_version": "8.9.0",
+      "estimated_read_minutes": 4,
+      "canonical_owner": "platform@aether"
     },
     {
       "path": "docs/PIPELINE-HEALTH.md",
@@ -1183,6 +1293,22 @@
       "canonical_owner": "platform@aether"
     },
     {
+      "path": "docs/PREPRODUCTION-READINESS.md",
+      "title": "Pre-production Readiness",
+      "slug": "operations/preproduction-readiness",
+      "section": "operations",
+      "visibility": "I",
+      "audience": [
+        "exec",
+        "architect",
+        "ops"
+      ],
+      "status": "beta",
+      "since_version": "8.9.0",
+      "estimated_read_minutes": 5,
+      "canonical_owner": "platform@aether"
+    },
+    {
       "path": "docs/PRICING-ARCHITECTURE.md",
       "title": "Pricing Architecture",
       "slug": "enterprise/pricing-architecture",
@@ -1195,6 +1321,22 @@
       ],
       "status": "stable",
       "since_version": "8.9.0"
+    },
+    {
+      "path": "docs/PRODUCTION-DEPLOYMENT.md",
+      "title": "Production Deployment",
+      "slug": "self-hosting/production-deployment",
+      "section": "self-hosting",
+      "visibility": "I",
+      "audience": [
+        "ops",
+        "architect",
+        "dev-senior"
+      ],
+      "status": "beta",
+      "since_version": "8.9.0",
+      "estimated_read_minutes": 6,
+      "canonical_owner": "platform@aether"
     },
     {
       "path": "docs/PRODUCTION-READINESS.md",
@@ -1273,6 +1415,22 @@
       "status": "beta",
       "since_version": "9.0.0",
       "estimated_read_minutes": 3,
+      "canonical_owner": "platform@aether"
+    },
+    {
+      "path": "docs/RATE-LIMITS-AND-BURSTS.md",
+      "title": "Rate Limits & Bursts",
+      "slug": "operations/rate-limits-and-bursts",
+      "section": "operations",
+      "visibility": "I",
+      "audience": [
+        "dev-senior",
+        "architect",
+        "ops"
+      ],
+      "status": "stable",
+      "since_version": "8.9.0",
+      "estimated_read_minutes": 4,
       "canonical_owner": "platform@aether"
     },
     {
@@ -1521,6 +1679,22 @@
       "canonical_owner": "security@aether"
     },
     {
+      "path": "docs/SECRETS-MANAGEMENT.md",
+      "title": "Secrets Management",
+      "slug": "security/secrets-management",
+      "section": "security",
+      "visibility": "I",
+      "audience": [
+        "security",
+        "ops",
+        "architect"
+      ],
+      "status": "beta",
+      "since_version": "8.9.0",
+      "estimated_read_minutes": 5,
+      "canonical_owner": "platform@aether"
+    },
+    {
       "path": "docs/SECURITY-GOVERNANCE-CONTROLS.md",
       "title": "Security, Governance & Enterprise Controls",
       "slug": "security/governance-controls",
@@ -1600,6 +1774,22 @@
       ],
       "status": "stable",
       "since_version": "8.9.0"
+    },
+    {
+      "path": "docs/SQUARESPACE-WEBSITE-READINESS.md",
+      "title": "Squarespace Website Readiness",
+      "slug": "operations/squarespace-website-readiness",
+      "section": "operations",
+      "visibility": "I",
+      "audience": [
+        "ops",
+        "exec",
+        "buyer"
+      ],
+      "status": "beta",
+      "since_version": "8.9.0",
+      "estimated_read_minutes": 3,
+      "canonical_owner": "platform@aether"
     },
     {
       "path": "docs/SRE-RUNBOOKS.md",
