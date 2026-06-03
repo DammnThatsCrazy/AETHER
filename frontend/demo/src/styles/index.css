@@ -1,0 +1,11 @@
+@import '@aether/ui/styles/tokens.css';
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  body {
+    @apply bg-surface-base text-text-primary font-sans antialiased;
+  }
+}
