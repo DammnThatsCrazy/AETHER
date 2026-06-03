@@ -329,6 +329,26 @@
       "canonical_owner": "compliance@aether"
     },
     {
+      "path": "docs/CONNECTORS.md",
+      "title": "Connectors",
+      "slug": "operations/connectors",
+      "section": "operations",
+      "visibility": "I",
+      "audience": [
+        "architect",
+        "dev-senior",
+        "ops"
+      ],
+      "status": "beta",
+      "since_version": "8.9.0",
+      "estimated_read_minutes": 6,
+      "canonical_owner": "platform@aether",
+      "flags": [
+        "AETHER_CONNECTORS_ENABLED",
+        "KYBER_CONNECTOR_HEALTH_ENABLED"
+      ]
+    },
+    {
       "path": "docs/CONTRACT-PROFILES.md",
       "title": "Billing, Usage Metering, Contracts, and Revenue Operations",
       "slug": "enterprise/contract-profiles",
@@ -383,6 +403,23 @@
       ],
       "status": "stable",
       "since_version": "8.9.0"
+    },
+    {
+      "path": "docs/DATA-INGESTION-PATHS.md",
+      "title": "Data Ingestion Paths",
+      "slug": "operations/data-ingestion-paths",
+      "section": "operations",
+      "visibility": "I",
+      "audience": [
+        "architect",
+        "dev-senior",
+        "ops",
+        "ai"
+      ],
+      "status": "stable",
+      "since_version": "8.9.0",
+      "estimated_read_minutes": 4,
+      "canonical_owner": "platform@aether"
     },
     {
       "path": "docs/DATA-INGESTION.md",
@@ -686,6 +723,24 @@
       "canonical_owner": "frontend@aether"
     },
     {
+      "path": "docs/GA4-CONNECTOR.md",
+      "title": "GA4 Connector",
+      "slug": "operations/ga4-connector",
+      "section": "operations",
+      "visibility": "I",
+      "audience": [
+        "dev-senior",
+        "ops"
+      ],
+      "status": "beta",
+      "since_version": "8.9.0",
+      "estimated_read_minutes": 2,
+      "canonical_owner": "platform@aether",
+      "flags": [
+        "AETHER_CONNECTORS_ENABLED"
+      ]
+    },
+    {
       "path": "docs/GOVERNANCE-EVIDENCE-PACKS.md",
       "title": "Governance Evidence Packs",
       "slug": "enterprise/governance-evidence-packs",
@@ -796,6 +851,24 @@
       "since_version": "8.9.0",
       "estimated_read_minutes": 3,
       "canonical_owner": "platform@aether"
+    },
+    {
+      "path": "docs/HUBSPOT-CONNECTOR.md",
+      "title": "HubSpot Connector",
+      "slug": "operations/hubspot-connector",
+      "section": "operations",
+      "visibility": "I",
+      "audience": [
+        "dev-senior",
+        "ops"
+      ],
+      "status": "beta",
+      "since_version": "8.9.0",
+      "estimated_read_minutes": 3,
+      "canonical_owner": "platform@aether",
+      "flags": [
+        "AETHER_CONNECTORS_ENABLED"
+      ]
     },
     {
       "path": "docs/IDENTITY-RESOLUTION-QUALITY.md",
@@ -949,6 +1022,42 @@
       ],
       "status": "stable",
       "since_version": "8.9.0"
+    },
+    {
+      "path": "docs/JIRA-LINEAR-CONNECTORS.md",
+      "title": "Jira & Linear Connectors",
+      "slug": "operations/jira-linear-connectors",
+      "section": "operations",
+      "visibility": "I",
+      "audience": [
+        "dev-senior",
+        "ops"
+      ],
+      "status": "beta",
+      "since_version": "8.9.0",
+      "estimated_read_minutes": 3,
+      "canonical_owner": "platform@aether",
+      "flags": [
+        "AETHER_CONNECTORS_ENABLED"
+      ]
+    },
+    {
+      "path": "docs/KLAVIYO-CONNECTOR.md",
+      "title": "Klaviyo Connector",
+      "slug": "operations/klaviyo-connector",
+      "section": "operations",
+      "visibility": "I",
+      "audience": [
+        "dev-senior",
+        "ops"
+      ],
+      "status": "beta",
+      "since_version": "8.9.0",
+      "estimated_read_minutes": 2,
+      "canonical_owner": "platform@aether",
+      "flags": [
+        "AETHER_CONNECTORS_ENABLED"
+      ]
     },
     {
       "path": "docs/KYBER-REVENUE-INTELLIGENCE.md",
@@ -1277,6 +1386,24 @@
       "since_version": "13.0.0"
     },
     {
+      "path": "docs/POSTHOG-CONNECTOR.md",
+      "title": "PostHog Connector",
+      "slug": "operations/posthog-connector",
+      "section": "operations",
+      "visibility": "I",
+      "audience": [
+        "dev-senior",
+        "ops"
+      ],
+      "status": "beta",
+      "since_version": "8.9.0",
+      "estimated_read_minutes": 2,
+      "canonical_owner": "platform@aether",
+      "flags": [
+        "AETHER_CONNECTORS_ENABLED"
+      ]
+    },
+    {
       "path": "docs/POSTMORTEMS.md",
       "title": "Incident Postmortems",
       "slug": "reliability/postmortems",
@@ -1580,6 +1707,24 @@
       "since_version": "8.9.0"
     },
     {
+      "path": "docs/SALESFORCE-CONNECTOR.md",
+      "title": "Salesforce Connector",
+      "slug": "operations/salesforce-connector",
+      "section": "operations",
+      "visibility": "I",
+      "audience": [
+        "dev-senior",
+        "ops"
+      ],
+      "status": "beta",
+      "since_version": "8.9.0",
+      "estimated_read_minutes": 3,
+      "canonical_owner": "platform@aether",
+      "flags": [
+        "AETHER_CONNECTORS_ENABLED"
+      ]
+    },
+    {
       "path": "docs/SCHEMA-DRIFT.md",
       "title": "Schema Drift",
       "slug": "data/schema-drift",
@@ -1714,6 +1859,24 @@
       "canonical_owner": "platform@aether"
     },
     {
+      "path": "docs/SEGMENT-CONNECTOR.md",
+      "title": "Segment Connector",
+      "slug": "operations/segment-connector",
+      "section": "operations",
+      "visibility": "I",
+      "audience": [
+        "dev-senior",
+        "ops"
+      ],
+      "status": "beta",
+      "since_version": "8.9.0",
+      "estimated_read_minutes": 2,
+      "canonical_owner": "platform@aether",
+      "flags": [
+        "AETHER_CONNECTORS_ENABLED"
+      ]
+    },
+    {
       "path": "docs/SEMANTIC-CONTEXT-INTELLIGENCE.md",
       "title": "Semantic Context Intelligence Layer",
       "slug": "ai/semantic-context",
@@ -1729,6 +1892,42 @@
       "estimated_read_minutes": 15,
       "toc_depth": 3,
       "canonical_owner": "ai@aether"
+    },
+    {
+      "path": "docs/SHOPIFY-CONNECTOR.md",
+      "title": "Shopify Connector",
+      "slug": "operations/shopify-connector",
+      "section": "operations",
+      "visibility": "I",
+      "audience": [
+        "dev-senior",
+        "ops"
+      ],
+      "status": "beta",
+      "since_version": "8.9.0",
+      "estimated_read_minutes": 3,
+      "canonical_owner": "platform@aether",
+      "flags": [
+        "AETHER_CONNECTORS_ENABLED"
+      ]
+    },
+    {
+      "path": "docs/SLACK-CONNECTOR.md",
+      "title": "Slack Connector",
+      "slug": "operations/slack-connector",
+      "section": "operations",
+      "visibility": "I",
+      "audience": [
+        "dev-senior",
+        "ops"
+      ],
+      "status": "beta",
+      "since_version": "8.9.0",
+      "estimated_read_minutes": 3,
+      "canonical_owner": "platform@aether",
+      "flags": [
+        "AETHER_CONNECTORS_ENABLED"
+      ]
     },
     {
       "path": "docs/SLO-TRACKING.md",
@@ -1838,6 +2037,24 @@
       "estimated_read_minutes": 6,
       "toc_depth": 3,
       "canonical_owner": "billing@aether"
+    },
+    {
+      "path": "docs/STRIPE-CONNECTOR.md",
+      "title": "Stripe Connector",
+      "slug": "operations/stripe-connector",
+      "section": "operations",
+      "visibility": "I",
+      "audience": [
+        "dev-senior",
+        "ops"
+      ],
+      "status": "beta",
+      "since_version": "8.9.0",
+      "estimated_read_minutes": 3,
+      "canonical_owner": "platform@aether",
+      "flags": [
+        "AETHER_CONNECTORS_ENABLED"
+      ]
     },
     {
       "path": "docs/SUBSYSTEM-CACHE.md",
@@ -1983,6 +2200,25 @@
       "since_version": "8.9.0"
     },
     {
+      "path": "docs/WEBHOOK-INGESTION.md",
+      "title": "Webhook Ingestion",
+      "slug": "operations/webhook-ingestion",
+      "section": "operations",
+      "visibility": "I",
+      "audience": [
+        "dev-senior",
+        "security",
+        "ops"
+      ],
+      "status": "beta",
+      "since_version": "8.9.0",
+      "estimated_read_minutes": 4,
+      "canonical_owner": "platform@aether",
+      "flags": [
+        "AETHER_CONNECTORS_ENABLED"
+      ]
+    },
+    {
       "path": "docs/X402_AUDIT_REPORT.md",
       "title": "x402 Protocol Support Audit",
       "slug": "security/x402-audit",
@@ -1998,6 +2234,24 @@
       "estimated_read_minutes": 12,
       "toc_depth": 3,
       "canonical_owner": "security@aether"
+    },
+    {
+      "path": "docs/ZENDESK-INTERCOM-CONNECTORS.md",
+      "title": "Zendesk & Intercom Connectors",
+      "slug": "operations/zendesk-intercom-connectors",
+      "section": "operations",
+      "visibility": "I",
+      "audience": [
+        "dev-senior",
+        "ops"
+      ],
+      "status": "beta",
+      "since_version": "8.9.0",
+      "estimated_read_minutes": 3,
+      "canonical_owner": "platform@aether",
+      "flags": [
+        "AETHER_CONNECTORS_ENABLED"
+      ]
     },
     {
       "path": "docs/architecture/BACKEND_INTELLIGENCE_ARCHITECTURE.md",

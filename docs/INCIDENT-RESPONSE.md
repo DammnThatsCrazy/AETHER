@@ -15,7 +15,7 @@ related:
   - reliability/postmortems
 canonical_owner: platform@aether
 estimated_read_minutes: 5
-last_synced_commit: 96fc0f0
+last_synced_commit: e590613
 ---
 # Incident Response
 
