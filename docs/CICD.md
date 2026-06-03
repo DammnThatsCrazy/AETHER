@@ -15,7 +15,7 @@ source_files:
 canonical_owner: platform@aether
 estimated_read_minutes: 12
 toc_depth: 3
-last_synced_commit: bcade82
+last_synced_commit: 94cdfaf
 ---
 
 # CI/CD Pipeline — Stages, Gates & SDK Release

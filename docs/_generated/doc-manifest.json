@@ -3,6 +3,22 @@
   "generated_from": "docs/**/*.{md,mdx}",
   "docs": [
     {
+      "path": "docs/ACCESS-CONTROL-REVIEW.md",
+      "title": "Access Control Review",
+      "slug": "security/access-control-review",
+      "section": "security",
+      "visibility": "I",
+      "audience": [
+        "security",
+        "architect",
+        "ops"
+      ],
+      "status": "beta",
+      "since_version": "8.9.0",
+      "estimated_read_minutes": 3,
+      "canonical_owner": "platform@aether"
+    },
+    {
       "path": "docs/ACCESS-CONTROL.md",
       "title": "Access Control",
       "slug": "enterprise/access-control",
@@ -190,6 +206,26 @@
       "canonical_owner": "backend@aether"
     },
     {
+      "path": "docs/BILLING-PROVIDER-INTERFACE.md",
+      "title": "Billing Provider Interface",
+      "slug": "operations/billing-provider-interface",
+      "section": "operations",
+      "visibility": "I",
+      "audience": [
+        "architect",
+        "dev-senior",
+        "ops"
+      ],
+      "status": "beta",
+      "since_version": "8.9.0",
+      "estimated_read_minutes": 4,
+      "canonical_owner": "platform@aether",
+      "flags": [
+        "AETHER_EXTERNAL_BILLING_ENABLED",
+        "AETHER_STRIPE_BILLING_ENABLED"
+      ]
+    },
+    {
       "path": "docs/BILLING-REVENUE-OPS.md",
       "title": "Billing, Usage Metering, Contracts, and Revenue Operations",
       "slug": "enterprise/billing-revenue-ops",
@@ -294,6 +330,21 @@
       "estimated_read_minutes": 3,
       "toc_depth": 3,
       "canonical_owner": "commerce@aether"
+    },
+    {
+      "path": "docs/COMPLIANCE-EVIDENCE-INVENTORY.md",
+      "title": "Compliance Evidence Inventory",
+      "slug": "compliance/compliance-evidence-inventory",
+      "section": "compliance",
+      "visibility": "I",
+      "audience": [
+        "security",
+        "compliance"
+      ],
+      "status": "beta",
+      "since_version": "8.9.0",
+      "estimated_read_minutes": 3,
+      "canonical_owner": "platform@aether"
     },
     {
       "path": "docs/COMPLIANCE.md",
@@ -409,6 +460,22 @@
       ]
     },
     {
+      "path": "docs/DATA-RETENTION-REVIEW.md",
+      "title": "Data Retention Review",
+      "slug": "compliance/data-retention-review",
+      "section": "compliance",
+      "visibility": "I",
+      "audience": [
+        "security",
+        "compliance",
+        "ops"
+      ],
+      "status": "beta",
+      "since_version": "8.9.0",
+      "estimated_read_minutes": 3,
+      "canonical_owner": "platform@aether"
+    },
+    {
       "path": "docs/DATA-RETENTION.md",
       "title": "Data Retention & Data Requests",
       "slug": "enterprise/data-retention",
@@ -447,6 +514,22 @@
         "KYBER_RECOMMENDATION_OBSERVABILITY_ENABLED",
         "AETHER_RECOMMENDATION_CONFIDENCE_THRESHOLD"
       ]
+    },
+    {
+      "path": "docs/DEPENDENCY-AUDIT.md",
+      "title": "Dependency Audit",
+      "slug": "security/dependency-audit",
+      "section": "security",
+      "visibility": "I",
+      "audience": [
+        "security",
+        "dev-senior",
+        "ops"
+      ],
+      "status": "beta",
+      "since_version": "8.9.0",
+      "estimated_read_minutes": 2,
+      "canonical_owner": "platform@aether"
     },
     {
       "path": "docs/DEPLOYMENT-HOSTING-READINESS.md",
@@ -608,6 +691,23 @@
       ]
     },
     {
+      "path": "docs/FEDRAMP-PLANNING.md",
+      "title": "FedRAMP Planning",
+      "slug": "compliance/fedramp-planning",
+      "section": "compliance",
+      "visibility": "I",
+      "audience": [
+        "security",
+        "compliance",
+        "exec",
+        "architect"
+      ],
+      "status": "experimental",
+      "since_version": "8.9.0",
+      "estimated_read_minutes": 5,
+      "canonical_owner": "platform@aether"
+    },
+    {
       "path": "docs/FRONTEND-ARCHITECTURE.md",
       "title": "Aether Frontend Architecture & Designer Handoff",
       "slug": "architecture/frontend",
@@ -622,6 +722,22 @@
       "estimated_read_minutes": 35,
       "toc_depth": 4,
       "canonical_owner": "frontend@aether"
+    },
+    {
+      "path": "docs/GDPR-READINESS.md",
+      "title": "GDPR Readiness",
+      "slug": "compliance/gdpr-readiness",
+      "section": "compliance",
+      "visibility": "I",
+      "audience": [
+        "security",
+        "compliance",
+        "exec"
+      ],
+      "status": "beta",
+      "since_version": "8.9.0",
+      "estimated_read_minutes": 5,
+      "canonical_owner": "platform@aether"
     },
     {
       "path": "docs/GOVERNANCE-EVIDENCE-PACKS.md",
@@ -767,6 +883,21 @@
       ],
       "status": "stable",
       "since_version": "8.9.0"
+    },
+    {
+      "path": "docs/INCIDENT-RESPONSE-TABLETOP.md",
+      "title": "Incident Response Tabletop",
+      "slug": "security/incident-response-tabletop",
+      "section": "security",
+      "visibility": "I",
+      "audience": [
+        "security",
+        "ops"
+      ],
+      "status": "beta",
+      "since_version": "8.9.0",
+      "estimated_read_minutes": 4,
+      "canonical_owner": "platform@aether"
     },
     {
       "path": "docs/INCIDENT-RESPONSE.md",
@@ -947,6 +1078,21 @@
       "canonical_owner": "platform@aether"
     },
     {
+      "path": "docs/LOGGING-REVIEW.md",
+      "title": "Logging Review",
+      "slug": "security/logging-review",
+      "section": "security",
+      "visibility": "I",
+      "audience": [
+        "security",
+        "ops"
+      ],
+      "status": "beta",
+      "since_version": "8.9.0",
+      "estimated_read_minutes": 3,
+      "canonical_owner": "platform@aether"
+    },
+    {
       "path": "docs/MIGRATION-RUNBOOK.md",
       "title": "Migration Runbook",
       "slug": "operations/migration",
@@ -1097,6 +1243,36 @@
       ]
     },
     {
+      "path": "docs/PAYMENT-OPERATIONS.md",
+      "title": "Payment Operations",
+      "slug": "operations/payment-operations",
+      "section": "operations",
+      "visibility": "I",
+      "audience": [
+        "ops",
+        "exec"
+      ],
+      "status": "beta",
+      "since_version": "8.9.0",
+      "estimated_read_minutes": 3,
+      "canonical_owner": "platform@aether"
+    },
+    {
+      "path": "docs/PENETRATION-TEST-READINESS.md",
+      "title": "Penetration-Test Readiness",
+      "slug": "security/penetration-test-readiness",
+      "section": "security",
+      "visibility": "I",
+      "audience": [
+        "security",
+        "ops"
+      ],
+      "status": "beta",
+      "since_version": "8.9.0",
+      "estimated_read_minutes": 3,
+      "canonical_owner": "platform@aether"
+    },
+    {
       "path": "docs/PIPELINE-HEALTH.md",
       "title": "Pipeline Health",
       "slug": "reliability/pipeline-health",
@@ -1195,6 +1371,22 @@
       ],
       "status": "stable",
       "since_version": "8.9.0"
+    },
+    {
+      "path": "docs/PRIVACY-REVIEW.md",
+      "title": "Privacy Review",
+      "slug": "compliance/privacy-review",
+      "section": "compliance",
+      "visibility": "I",
+      "audience": [
+        "security",
+        "compliance",
+        "exec"
+      ],
+      "status": "beta",
+      "since_version": "8.9.0",
+      "estimated_read_minutes": 3,
+      "canonical_owner": "platform@aether"
     },
     {
       "path": "docs/PRODUCTION-READINESS.md",
@@ -1521,6 +1713,22 @@
       "canonical_owner": "security@aether"
     },
     {
+      "path": "docs/SECRET-SCANNING.md",
+      "title": "Secret Scanning",
+      "slug": "security/secret-scanning",
+      "section": "security",
+      "visibility": "I",
+      "audience": [
+        "security",
+        "dev-senior",
+        "ops"
+      ],
+      "status": "beta",
+      "since_version": "8.9.0",
+      "estimated_read_minutes": 2,
+      "canonical_owner": "platform@aether"
+    },
+    {
       "path": "docs/SECURITY-GOVERNANCE-CONTROLS.md",
       "title": "Security, Governance & Enterprise Controls",
       "slug": "security/governance-controls",
@@ -1537,6 +1745,39 @@
       "status": "stable",
       "since_version": "9.0.0",
       "estimated_read_minutes": 6,
+      "canonical_owner": "platform@aether"
+    },
+    {
+      "path": "docs/SECURITY-QUESTIONNAIRE-LIBRARY.md",
+      "title": "Security Questionnaire Library",
+      "slug": "security/security-questionnaire-library",
+      "section": "security",
+      "visibility": "I",
+      "audience": [
+        "security",
+        "exec",
+        "buyer"
+      ],
+      "status": "beta",
+      "since_version": "8.9.0",
+      "estimated_read_minutes": 4,
+      "canonical_owner": "platform@aether"
+    },
+    {
+      "path": "docs/SECURITY-READINESS.md",
+      "title": "Security Readiness",
+      "slug": "security/security-readiness",
+      "section": "security",
+      "visibility": "I",
+      "audience": [
+        "security",
+        "architect",
+        "ops",
+        "exec"
+      ],
+      "status": "beta",
+      "since_version": "8.9.0",
+      "estimated_read_minutes": 5,
       "canonical_owner": "platform@aether"
     },
     {
@@ -1585,6 +1826,22 @@
       "since_version": "8.8.0",
       "estimated_read_minutes": 10,
       "toc_depth": 3,
+      "canonical_owner": "platform@aether"
+    },
+    {
+      "path": "docs/SOC2-READINESS.md",
+      "title": "SOC 2 Readiness",
+      "slug": "compliance/soc2-readiness",
+      "section": "compliance",
+      "visibility": "I",
+      "audience": [
+        "security",
+        "compliance",
+        "exec"
+      ],
+      "status": "beta",
+      "since_version": "8.9.0",
+      "estimated_read_minutes": 5,
       "canonical_owner": "platform@aether"
     },
     {
@@ -1648,6 +1905,25 @@
       "estimated_read_minutes": 6,
       "toc_depth": 3,
       "canonical_owner": "billing@aether"
+    },
+    {
+      "path": "docs/STRIPE-READINESS.md",
+      "title": "Stripe Readiness",
+      "slug": "operations/stripe-readiness",
+      "section": "operations",
+      "visibility": "I",
+      "audience": [
+        "ops",
+        "architect",
+        "exec"
+      ],
+      "status": "beta",
+      "since_version": "8.9.0",
+      "estimated_read_minutes": 4,
+      "canonical_owner": "platform@aether",
+      "flags": [
+        "AETHER_STRIPE_BILLING_ENABLED"
+      ]
     },
     {
       "path": "docs/SUBSYSTEM-CACHE.md",
@@ -1751,6 +2027,22 @@
       "canonical_owner": "platform@aether"
     },
     {
+      "path": "docs/THREAT-MODEL.md",
+      "title": "Threat Model",
+      "slug": "security/threat-model",
+      "section": "security",
+      "visibility": "I",
+      "audience": [
+        "security",
+        "architect",
+        "dev-senior"
+      ],
+      "status": "beta",
+      "since_version": "8.9.0",
+      "estimated_read_minutes": 5,
+      "canonical_owner": "platform@aether"
+    },
+    {
       "path": "docs/USAGE-METERING.md",
       "title": "Billing, Usage Metering, Contracts, and Revenue Operations",
       "slug": "enterprise/usage-metering",
@@ -1791,6 +2083,21 @@
       ],
       "status": "stable",
       "since_version": "8.9.0"
+    },
+    {
+      "path": "docs/VULNERABILITY-MANAGEMENT.md",
+      "title": "Vulnerability Management",
+      "slug": "security/vulnerability-management",
+      "section": "security",
+      "visibility": "I",
+      "audience": [
+        "security",
+        "ops"
+      ],
+      "status": "beta",
+      "since_version": "8.9.0",
+      "estimated_read_minutes": 3,
+      "canonical_owner": "platform@aether"
     },
     {
       "path": "docs/X402_AUDIT_REPORT.md",
