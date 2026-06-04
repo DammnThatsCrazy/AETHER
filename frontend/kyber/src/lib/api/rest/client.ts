@@ -35,9 +35,11 @@ async function request<T>(
   options?: RequestOptions,
 ): Promise<T> {
   const correlationId = generateCorrelationId();
-  // Use relative paths in browser — Vite proxy (dev) or nginx (prod) routes to backend.
-  // Absolute base URL used only for SSR or explicit override.
-  const url = path;
+  // Use env-driven API URLs outside local-mocked mode so hosted Kyber can
+  // talk to the backend control plane directly; keep relative paths for mocks
+  // and same-origin deployments.
+  const baseUrl = getRuntimeMode() === 'live' ? env.VITE_API_BASE_URL.replace(/\/$/, '') : '';
+  const url = path.startsWith('http') ? path : `${baseUrl}${path}`;
 
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',

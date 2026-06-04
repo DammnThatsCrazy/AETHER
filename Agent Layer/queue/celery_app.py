@@ -52,20 +52,35 @@ try:
         task_queue_max_priority=10,
         task_default_priority=5,
 
-        # Routing: discovery and enrichment get dedicated queues
+        # Routing: all production controller queues are explicitly routable.
         task_routes={
             "queue.tasks.execute_discovery_task": {"queue": "discovery"},
             "queue.tasks.execute_enrichment_task": {"queue": "enrichment"},
+            "queue.tasks.execute_verification_task": {"queue": "verification"},
+            "queue.tasks.execute_commit_task": {"queue": "commit"},
+            "queue.tasks.execute_recovery_task": {"queue": "recovery"},
             "queue.tasks.execute_task": {"queue": "default"},
         },
 
         # Default queue
         task_default_queue="default",
 
-        # Retry defaults
+        # Retry / dead-letter / hosted worker safety defaults
         task_acks_late=True,
         task_reject_on_worker_lost=True,
+        task_track_started=True,
+        task_time_limit=int(os.getenv("CELERY_TASK_TIME_LIMIT", "900")),
+        task_soft_time_limit=int(os.getenv("CELERY_TASK_SOFT_TIME_LIMIT", "840")),
+        task_default_retry_delay=int(os.getenv("CELERY_RETRY_DELAY", "30")),
+        task_publish_retry=True,
+        task_publish_retry_policy={"max_retries": 3, "interval_start": 1, "interval_step": 2, "interval_max": 10},
         worker_prefetch_multiplier=4,
+        worker_send_task_events=True,
+        task_send_sent_event=True,
+        broker_transport_options={
+            "visibility_timeout": int(os.getenv("CELERY_VISIBILITY_TIMEOUT", "3600")),
+            "queue_order_strategy": "priority",
+        },
 
         # Result expiry (24 hours)
         result_expires=86400,

@@ -119,6 +119,27 @@ if _app is not None:
         result = _run_with_worker(task)
         return _result_to_dict(result)
 
+    @_app.task(name="queue.tasks.execute_verification_task", bind=True, max_retries=3, default_retry_delay=30, queue="verification")
+    def execute_verification_task(self, task_data: dict[str, Any]) -> dict[str, Any]:
+        """Celery task routed to the 'verification' queue."""
+        task = _dict_to_task(task_data)
+        result = _run_with_worker(task)
+        return _result_to_dict(result)
+
+    @_app.task(name="queue.tasks.execute_commit_task", bind=True, max_retries=3, default_retry_delay=30, queue="commit")
+    def execute_commit_task(self, task_data: dict[str, Any]) -> dict[str, Any]:
+        """Celery task routed to the human-approved commit queue."""
+        task = _dict_to_task(task_data)
+        result = _run_with_worker(task)
+        return _result_to_dict(result)
+
+    @_app.task(name="queue.tasks.execute_recovery_task", bind=True, max_retries=5, default_retry_delay=60, queue="recovery")
+    def execute_recovery_task(self, task_data: dict[str, Any]) -> dict[str, Any]:
+        """Celery task routed to the recovery queue."""
+        task = _dict_to_task(task_data)
+        result = _run_with_worker(task)
+        return _result_to_dict(result)
+
 
 # ---------------------------------------------------------------------------
 # Worker resolution (shared between Celery and in-memory modes)
@@ -175,21 +196,13 @@ def submit_celery_task(task: AgentTask) -> Optional[str]:
     task_data = _task_to_dict(task)
     celery_priority = _PRIORITY_TO_CELERY.get(task.priority, 5)
 
+    headers = {"idempotency_key": task.task_id, "worker_type": task.worker_type.value}
     if task.worker_type in _DISCOVERY_TYPES:
-        async_result = execute_discovery_task.apply_async(
-            args=[task_data],
-            priority=celery_priority,
-        )
+        async_result = execute_discovery_task.apply_async(args=[task_data], priority=celery_priority, headers=headers)
     elif task.worker_type in _ENRICHMENT_TYPES:
-        async_result = execute_enrichment_task.apply_async(
-            args=[task_data],
-            priority=celery_priority,
-        )
+        async_result = execute_enrichment_task.apply_async(args=[task_data], priority=celery_priority, headers=headers)
     else:
-        async_result = execute_task.apply_async(
-            args=[task_data],
-            priority=celery_priority,
-        )
+        async_result = execute_task.apply_async(args=[task_data], priority=celery_priority, headers=headers)
 
     logger.info(
         f"Task {task.task_id} submitted to Celery "
