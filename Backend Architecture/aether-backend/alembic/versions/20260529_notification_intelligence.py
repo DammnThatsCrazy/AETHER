@@ -1,7 +1,7 @@
 """Notification Intelligence — create notification pipeline tables
 
 Revision ID: 20260529_notif_intel
-Revises: 20260528_cis_canonical_state
+Revises: cis001a2b3c4d
 Create Date: 2026-05-29
 """
 
@@ -10,7 +10,7 @@ import sqlalchemy as sa
 from sqlalchemy.dialects.postgresql import JSONB, ARRAY, TEXT
 
 revision = "20260529_notif_intel"
-down_revision = "20260528_cis_canonical_state"
+down_revision = "cis001a2b3c4d"
 branch_labels = None
 depends_on = None
 
