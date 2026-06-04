@@ -6,6 +6,89 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ---
 
+## [Unreleased] — Hosted Agent Control Plane
+
+### Added — Tenant-scoped, production-safe control plane for the Agent Layer
+
+- **Durable runtime repository** (`services/agent/runtime_repository.py`) —
+  persists objectives, plans, plan steps, checkpoints, events, review
+  batches, staged mutations, controller heartbeats, worker runs, catalyst
+  triggers, and kill-switch state through the shared `get_store`
+  abstraction, replacing in-memory-only operator surfaces.
+- **Operator API routes** under `/v1/agent/*` (`services/agent/routes.py`)
+  — controller health, objective submit/list/detail,
+  pause/resume/cancel, dispatch, review-batch list and approve/reject,
+  timeline/events, controller heartbeat/status, and tenant-scoped
+  kill-switch. Responses use a consistent envelope with request
+  correlation, RBAC/tenant checks, idempotency keys, and secret
+  redaction.
+- **Hardened queue/worker behavior** (`Agent Layer/queue/celery_app.py`,
+  `Agent Layer/queue/tasks.py`) — explicit queue routing for `discovery`,
+  `enrichment`, `verification`, `commit`, and `recovery`; idempotency
+  headers; and safer Celery defaults (time limits, retry policies,
+  visibility timeout, worker events).
+- **Kyber control-plane wiring** — environment-driven REST base URL in
+  live modes plus control-plane client endpoints and hooks
+  (`frontend/kyber/src/lib/api`,
+  `frontend/kyber/src/features/agent/use-agent-control-plane.ts`) for
+  health, objectives, review, dispatch, events, controllers, and
+  kill-switch, while preserving local mocked/demo behavior.
+- **Migration + runbook** — `alembic/versions/20260604_agent_control_plane.py`
+  adds the control-plane tables and indexes; `docs/AGENT-LAYER-PRODUCTION.md`
+  documents required envs, the migration, and operator workflows.
+- **Tests** (`tests/test_agent_control_plane.py`) — objective submission,
+  staged-mutation review and approval, secret redaction, tenant
+  isolation, controller heartbeat aggregation, and kill-switch behavior.
+- **Compatibility**: preserves the existing controller architecture and
+  human-approval workflow; unattended canonical graph mutation remains
+  blocked and local mocked/demo mode is intact.
+
+---
+
+## [Unreleased] — Cross-Device Journey Lifecycle
+
+### Added — Canonical journey events, SDK APIs, and backend stitching
+
+- **Shared contracts** (`packages/shared/events.ts`) — added the journey
+  event family and consent mapping plus `JourneyPayload`,
+  `JourneyContext`, `JourneyLifecycleEventType`, and `JourneyStatus`
+  types. Canonical `EventType` now supports `journey_started`,
+  `journey_paused`, `journey_resumed`, `journey_continued`,
+  `journey_completed`, `journey_abandoned`, and `journey_checkpoint`.
+- **Web SDK journey APIs** (`packages/web`) — `startJourney`,
+  `pauseJourney`, `resumeJourney`, `continueJourney`, `completeJourney`,
+  `abandonJourney`, `checkpointJourney`, `getCurrentJourney`, and the
+  `onJourneyResumed` listener, with SPA route checkpointing and
+  page-visibility pause/continue. Identity-resolve responses now map into
+  `resumeJourney` flows. Journey events are consent-gated (analytics) via
+  `event-queue.ts`.
+- **Native SDK + RN parity** — matching public journey methods on Android
+  (`packages/android`), iOS (`packages/ios`), and the React Native bridge
+  (`packages/react-native`), additive so existing host apps keep working.
+- **Ingestion validation + normalization** (`Data Ingestion Layer`) —
+  validator accepts and schema-checks the new journey types and
+  normalizes legacy/ad-hoc encodings server-side; new Prometheus metrics
+  `journey_events_received_total`, `journey_events_invalid_total`, and
+  `journey_events_normalized_total`.
+- **Backend stitching service + APIs**
+  (`Backend Architecture/aether-backend/services/journeys/`) — in-process
+  `JourneyStitchingService` (stitching, confidence scoring, handoff
+  detection). Tenant APIs: `GET /v1/journeys/users/{user_id}`,
+  `GET /v1/journeys/{journey_id}`, `.../timeline`, `.../handoffs`, and
+  `GET /v1/journeys/summary`. Admin/Kyber APIs under
+  `/v1/admin/journey-health/*` for cross-tenant health, SDK parity,
+  dropped events, and stitching diagnostics. Identity-resolve responses
+  now populate `confidence` / `confidence_signals` so the Web SDK emits a
+  canonical `journey_resumed` event instead of an ad-hoc top-level event.
+- **Docs**: journey lifecycle payload documented in
+  `docs/EVENT-SCHEMA-REFERENCE.md`.
+- **Compatibility**: **backward compatible — no migration required**. All
+  journey APIs are additive, legacy `track`-based encodings are normalized
+  server-side, and existing SDK event types and consent behavior are
+  unchanged.
+
+---
+
 ## [Unreleased] — Economic Observability Primitives
 
 ### Added — Agentic transaction awareness on the existing graph

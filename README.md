@@ -460,8 +460,8 @@ tests/                                 Python test suite (163+ tests)
 | [Operations Runbook](docs/OPERATIONS-RUNBOOK.md) | Failure modes, recovery, operational procedures |
 | [Secret Rotation](docs/SECRET-ROTATION.md) | Secret generation and rotation procedures |
 | [Extraction Defense](docs/MODEL-EXTRACTION-DEFENSE.md) | ML model extraction defense architecture |
-| [Provider Matrix](PROVIDER_MATRIX.md) | 24 providers with auth, env vars, health states |
-| [Execution Tracker](EXECUTION_TRACKER.md) | Phase completion status across all workstreams |
+| [Agent Layer Production](docs/AGENT-LAYER-PRODUCTION.md) | Hosted agent control plane: envs, migration, operator workflows |
+| [Connectors](docs/CONNECTORS.md) | Inbound connector framework with auth, env vars, health states |
 | [Changelog](docs/CHANGELOG.md) | Version history |
 | [Contributing](CONTRIBUTING.md) | Development setup, standards, PR process |
 
