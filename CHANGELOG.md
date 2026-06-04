@@ -6,9 +6,94 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ---
 
-## [Unreleased] — Economic Observability Primitives
+## [Unreleased]
 
-### Added — Agentic transaction awareness on the existing graph
+### Hosted Agent Control Plane
+
+#### Added — Tenant-scoped, production-safe control plane for the Agent Layer
+
+- **Durable runtime repository** (`services/agent/runtime_repository.py`) —
+  persists objectives, plans, plan steps, checkpoints, events, review
+  batches, staged mutations, controller heartbeats, worker runs, catalyst
+  triggers, and kill-switch state through the shared `get_store`
+  abstraction, replacing in-memory-only operator surfaces.
+- **Operator API routes** under `/v1/agent/*` (`services/agent/routes.py`)
+  — controller health, objective submit/list/detail,
+  pause/resume/cancel, dispatch, review-batch list and approve/reject,
+  timeline/events, controller heartbeat/status, and tenant-scoped
+  kill-switch. Responses use a consistent envelope with request
+  correlation, RBAC/tenant checks, idempotency keys, and secret
+  redaction.
+- **Hardened queue/worker behavior** (`Agent Layer/queue/celery_app.py`,
+  `Agent Layer/queue/tasks.py`) — explicit queue routing for `discovery`,
+  `enrichment`, `verification`, `commit`, and `recovery`; idempotency
+  headers; and safer Celery defaults (time limits, retry policies,
+  visibility timeout, worker events).
+- **Kyber control-plane wiring** — environment-driven REST base URL in
+  live modes plus control-plane client endpoints and hooks
+  (`frontend/kyber/src/lib/api`,
+  `frontend/kyber/src/features/agent/use-agent-control-plane.ts`) for
+  health, objectives, review, dispatch, events, controllers, and
+  kill-switch, while preserving local mocked/demo behavior.
+- **Migration + runbook** — `alembic/versions/20260604_agent_control_plane.py`
+  adds the control-plane tables and indexes; `docs/AGENT-LAYER-PRODUCTION.md`
+  documents required envs, the migration, and operator workflows.
+- **Tests** (`tests/test_agent_control_plane.py`) — objective submission,
+  staged-mutation review and approval, secret redaction, tenant
+  isolation, controller heartbeat aggregation, and kill-switch behavior.
+- **Compatibility**: preserves the existing controller architecture and
+  human-approval workflow; unattended canonical graph mutation remains
+  blocked and local mocked/demo mode is intact.
+
+---
+
+### Cross-Device Journey Lifecycle
+
+#### Added — Canonical journey events, SDK APIs, and backend stitching
+
+- **Shared contracts** (`packages/shared/events.ts`) — added the journey
+  event family and consent mapping plus `JourneyPayload`,
+  `JourneyContext`, `JourneyLifecycleEventType`, and `JourneyStatus`
+  types. Canonical `EventType` now supports `journey_started`,
+  `journey_paused`, `journey_resumed`, `journey_continued`,
+  `journey_completed`, `journey_abandoned`, and `journey_checkpoint`.
+- **Web SDK journey APIs** (`packages/web`) — `startJourney`,
+  `pauseJourney`, `resumeJourney`, `continueJourney`, `completeJourney`,
+  `abandonJourney`, `checkpointJourney`, `getCurrentJourney`, and the
+  `onJourneyResumed` listener, with SPA route checkpointing and
+  page-visibility pause/continue. Identity-resolve responses now map into
+  `resumeJourney` flows. Journey events are consent-gated (analytics) via
+  `event-queue.ts`.
+- **Native SDK + RN parity** — matching public journey methods on Android
+  (`packages/android`), iOS (`packages/ios`), and the React Native bridge
+  (`packages/react-native`), additive so existing host apps keep working.
+- **Ingestion validation + normalization** (`Data Ingestion Layer`) —
+  validator accepts and schema-checks the new journey types and
+  normalizes legacy/ad-hoc encodings server-side; new Prometheus metrics
+  `journey_events_received_total`, `journey_events_invalid_total`, and
+  `journey_events_normalized_total`.
+- **Backend stitching service + APIs**
+  (`Backend Architecture/aether-backend/services/journeys/`) — in-process
+  `JourneyStitchingService` (stitching, confidence scoring, handoff
+  detection). Tenant APIs: `GET /v1/journeys/users/{user_id}`,
+  `GET /v1/journeys/{journey_id}`, `.../timeline`, `.../handoffs`, and
+  `GET /v1/journeys/summary`. Admin/Kyber APIs under
+  `/v1/admin/journey-health/*` for cross-tenant health, SDK parity,
+  dropped events, and stitching diagnostics. Identity-resolve responses
+  now populate `confidence` / `confidence_signals` so the Web SDK emits a
+  canonical `journey_resumed` event instead of an ad-hoc top-level event.
+- **Docs**: journey lifecycle payload documented in
+  `docs/EVENT-SCHEMA-REFERENCE.md`.
+- **Compatibility**: **backward compatible — no migration required**. All
+  journey APIs are additive, legacy `track`-based encodings are normalized
+  server-side, and existing SDK event types and consent behavior are
+  unchanged.
+
+---
+
+### Economic Observability Primitives
+
+#### Added — Agentic transaction awareness on the existing graph
 
 - **Added economic observability primitives** in `packages/shared/economic.ts`,
   re-exported from `@aether/shared`. Surface includes:
@@ -57,9 +142,9 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ---
 
-## [Unreleased] — Self-Serve Plans P1-P4, Pooled Quota & Per-Service Overage
+### Self-Serve Plans P1-P4, Pooled Quota & Per-Service Overage
 
-### Added — Self-serve plans, monthly quotas, overage billing
+#### Added — Self-serve plans, monthly quotas, overage billing
 
 - **Four-plan model (P1-P4)** replacing the legacy FREE/PRO/ENTERPRISE
   three-tier system. Plans are defined in
@@ -123,7 +208,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
   startup), `QUOTA_REDIS_TTL_DAYS` (default 35), `QUOTA_FLUSH_INTERVAL_S`
   (default 60).
 
-### Changed
+#### Changed
 
 - **Middleware ordering** (`middleware/middleware.py`) — refactored to
   Auth → Burst RPM → Feature Gate → Monthly Quota → Extraction Defense
@@ -139,7 +224,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 - **`TokenBucketLimiter` → `BurstRateLimiter`** — old class name kept
   as an alias for one release of soft deprecation.
 
-### Deprecated
+#### Deprecated
 
 - **Legacy `RateLimitConfig.{free,pro,enterprise}_rpm`** — retained on
   the settings dataclass for compatibility but no longer consulted by
@@ -147,7 +232,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 - **`APIKeyTier`** — to be removed in a future release once tenant
   records carry `plan_tier` directly.
 
-### Migration Notes
+#### Migration Notes
 
 - Existing API keys continue to work; their legacy tier is mapped to a
   PlanTier on auth. To assign a tenant to a specific plan, store
