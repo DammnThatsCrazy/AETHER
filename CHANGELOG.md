@@ -6,9 +6,11 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ---
 
-## [Unreleased] — Hosted Agent Control Plane
+## [Unreleased]
 
-### Added — Tenant-scoped, production-safe control plane for the Agent Layer
+### Hosted Agent Control Plane
+
+#### Added — Tenant-scoped, production-safe control plane for the Agent Layer
 
 - **Durable runtime repository** (`services/agent/runtime_repository.py`) —
   persists objectives, plans, plan steps, checkpoints, events, review
@@ -45,9 +47,9 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ---
 
-## [Unreleased] — Cross-Device Journey Lifecycle
+### Cross-Device Journey Lifecycle
 
-### Added — Canonical journey events, SDK APIs, and backend stitching
+#### Added — Canonical journey events, SDK APIs, and backend stitching
 
 - **Shared contracts** (`packages/shared/events.ts`) — added the journey
   event family and consent mapping plus `JourneyPayload`,
@@ -89,9 +91,9 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ---
 
-## [Unreleased] — Economic Observability Primitives
+### Economic Observability Primitives
 
-### Added — Agentic transaction awareness on the existing graph
+#### Added — Agentic transaction awareness on the existing graph
 
 - **Added economic observability primitives** in `packages/shared/economic.ts`,
   re-exported from `@aether/shared`. Surface includes:
@@ -140,9 +142,9 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ---
 
-## [Unreleased] — Self-Serve Plans P1-P4, Pooled Quota & Per-Service Overage
+### Self-Serve Plans P1-P4, Pooled Quota & Per-Service Overage
 
-### Added — Self-serve plans, monthly quotas, overage billing
+#### Added — Self-serve plans, monthly quotas, overage billing
 
 - **Four-plan model (P1-P4)** replacing the legacy FREE/PRO/ENTERPRISE
   three-tier system. Plans are defined in
@@ -206,7 +208,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
   startup), `QUOTA_REDIS_TTL_DAYS` (default 35), `QUOTA_FLUSH_INTERVAL_S`
   (default 60).
 
-### Changed
+#### Changed
 
 - **Middleware ordering** (`middleware/middleware.py`) — refactored to
   Auth → Burst RPM → Feature Gate → Monthly Quota → Extraction Defense
@@ -222,7 +224,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 - **`TokenBucketLimiter` → `BurstRateLimiter`** — old class name kept
   as an alias for one release of soft deprecation.
 
-### Deprecated
+#### Deprecated
 
 - **Legacy `RateLimitConfig.{free,pro,enterprise}_rpm`** — retained on
   the settings dataclass for compatibility but no longer consulted by
@@ -230,7 +232,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 - **`APIKeyTier`** — to be removed in a future release once tenant
   records carry `plan_tier` directly.
 
-### Migration Notes
+#### Migration Notes
 
 - Existing API keys continue to work; their legacy tier is mapped to a
   PlanTier on auth. To assign a tenant to a specific plan, store
