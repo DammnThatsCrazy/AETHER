@@ -14,7 +14,7 @@ Usage:
     tasks = await store.find(tenant_id="t-001")
 
 The store automatically:
-  - Uses Redis when REDIS_HOST is configured (multi-instance safe)
+  - Uses Redis when REDIS_HOST or REDIS_URL is configured (multi-instance safe)
   - Falls back to in-memory with threading locks (single-instance)
   - Provides TTL-based expiration
   - Supports filtered queries by field value
@@ -278,8 +278,11 @@ def get_store(name: str, prefer_redis: bool = True) -> DurableStore:
         A DurableStore instance (Redis-backed or in-memory).
     """
     if name not in _stores:
-        redis_host = os.getenv("REDIS_HOST", "")
-        if prefer_redis and redis_host:
+        # RedisStore connects via REDIS_URL (falling back to REDIS_HOST/PORT), so
+        # honour either here — otherwise a hosted deployment that sets only the
+        # common REDIS_URL silently gets an in-memory store and fails closed.
+        redis_configured = os.getenv("REDIS_HOST", "") or os.getenv("REDIS_URL", "")
+        if prefer_redis and redis_configured:
             _stores[name] = RedisStore(name)
         else:
             _stores[name] = InMemoryStore(name)

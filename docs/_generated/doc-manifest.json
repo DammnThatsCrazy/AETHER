@@ -79,6 +79,18 @@
       "canonical_owner": "agent@aether"
     },
     {
+      "path": "docs/AGENT-LAYER-PRODUCTION.md",
+      "title": "Agent Layer Production Readiness",
+      "slug": "operations/agent-layer-production",
+      "section": "operations",
+      "visibility": "I",
+      "audience": [
+        "ops",
+        "architect"
+      ],
+      "status": "stable"
+    },
+    {
       "path": "docs/AGENTIC_COMMERCE_BUILD_SPEC.md",
       "title": "Agentic Commerce — Day-1 Build Specification",
       "slug": "concepts/agentic-commerce-spec",

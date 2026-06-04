@@ -220,8 +220,54 @@ export const api = {
     submitTask: (workerType: string, priority: string, payload: Record<string, unknown>) =>
       restClient.post('/v1/agent/tasks', wrap(taskSchema), { worker_type: workerType, priority, payload }),
 
-    killSwitch: (action: string) =>
-      restClient.post('/v1/agent/kill-switch', wrap(z.object({ kill_switch: z.boolean(), action: z.string() })), { action }),
+    killSwitch: (action: string, reason = '') =>
+      restClient.post('/v1/agent/kill-switch', wrap(z.object({ kill_switch: z.boolean(), action: z.string(), state: z.unknown().optional() })), { action, reason }).then(r => r.data),
+
+    health: () =>
+      restClient.get('/v1/agent/health', wrap(unknownSchema)).then(r => r.data),
+
+    controllersStatus: () =>
+      restClient.get('/v1/agent/controllers/status', wrap(unknownSchema)).then(r => r.data),
+
+    submitObjective: (goal: string, payload: Record<string, unknown> = {}, options?: { objectiveType?: string; severity?: string; priority?: number; idempotencyKey?: string }) =>
+      restClient.post('/v1/agent/objectives', wrap(unknownSchema), {
+        goal,
+        payload,
+        objective_type: options?.objectiveType ?? 'operator_directive',
+        severity: options?.severity ?? 'medium',
+        priority: options?.priority ?? 2,
+        idempotency_key: options?.idempotencyKey ?? '',
+      }).then(r => r.data),
+
+    objectives: (status?: string, limit = 100) =>
+      restClient.get(`/v1/agent/objectives${buildQS({ status, limit })}`, wrap(unknownSchema)).then(r => r.data),
+
+    objective: (objectiveId: string) =>
+      restClient.get(`/v1/agent/objectives/${objectiveId}`, wrap(unknownSchema)).then(r => r.data),
+
+    pauseObjective: (objectiveId: string, reason = '') =>
+      restClient.post(`/v1/agent/objectives/${objectiveId}/pause`, wrap(unknownSchema), { reason }).then(r => r.data),
+
+    resumeObjective: (objectiveId: string, reason = '') =>
+      restClient.post(`/v1/agent/objectives/${objectiveId}/resume`, wrap(unknownSchema), { reason }).then(r => r.data),
+
+    cancelObjective: (objectiveId: string, reason = '') =>
+      restClient.post(`/v1/agent/objectives/${objectiveId}/cancel`, wrap(unknownSchema), { reason }).then(r => r.data),
+
+    dispatch: (objectiveId: string, controller = 'nous') =>
+      restClient.post('/v1/agent/dispatch', wrap(unknownSchema), { objective_id: objectiveId, controller }).then(r => r.data),
+
+    reviewBatches: (status?: string, limit = 100) =>
+      restClient.get(`/v1/agent/review-batches${buildQS({ status, limit })}`, wrap(unknownSchema)).then(r => r.data),
+
+    approveReviewBatch: (batchId: string, notes = '') =>
+      restClient.post(`/v1/agent/review-batches/${batchId}/approve`, wrap(unknownSchema), { notes }).then(r => r.data),
+
+    rejectReviewBatch: (batchId: string, notes = '') =>
+      restClient.post(`/v1/agent/review-batches/${batchId}/reject`, wrap(unknownSchema), { notes }).then(r => r.data),
+
+    events: (params?: { objectiveId?: string; limit?: number }) =>
+      restClient.get(`/v1/agent/events${buildQS({ objective_id: params?.objectiveId, limit: params?.limit })}`, wrap(unknownSchema)).then(r => r.data),
 
     agentGraph: (agentId: string, layer = 'all') =>
       restClient.get(`/v1/agent/${agentId}/graph?layer=${layer}`, wrap(unknownSchema)).then(r => r.data),
