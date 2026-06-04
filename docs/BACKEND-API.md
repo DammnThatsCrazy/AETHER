@@ -202,7 +202,7 @@ mapping status.
 
 ## Billing Endpoints
 
-Both billing endpoints require the `billing` permission.
+The following admin tenant billing endpoints require the `billing` permission.
 
 ### GET /v1/admin/tenants/{tenant_id}/billing
 
