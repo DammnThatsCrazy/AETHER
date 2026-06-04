@@ -1,3 +1,12 @@
+---
+title: Agent Layer Production Readiness
+slug: operations/agent-layer-production
+section: operations
+visibility: I
+audience: [ops, architect]
+status: stable
+---
+
 # Agent Layer production readiness
 
 As of June 4, 2026, the Agent Layer is **not production-ready unless the hosted control-plane additions are enabled and backed by durable storage**. The controller model remains intact (Governance, Nous, Intake, Discovery, Enrichment, Verification, Commit, Recovery, Kinesis, Catalyst, and Cycle), but production operation requires Kyber to use the `/v1/agent/*` control-plane routes and the durable repository boundary.
