@@ -84,15 +84,42 @@ def test_secret_scan_runs_clean_or_advisory():
     assert "secret_scan:" in res.stdout
 
 
-def test_secret_scan_patterns_detect_and_skip():
+def _load_secret_scan():
     import importlib.util
     spec = importlib.util.spec_from_file_location("secret_scan", ROOT / "scripts/security/secret_scan.py")
     assert spec and spec.loader
     mod = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(mod)
+    return mod
+
+
+def _flags(mod, line: str) -> bool:
+    """Replicate scan()'s per-line decision: a finding survives unless the matched
+    value itself is a placeholder."""
+    for _name, pat in mod.PATTERNS:
+        match = pat.search(line)
+        if match and not mod.PLACEHOLDER_RE.search(match.group(0)):
+            return True
+    return False
+
+
+def test_secret_scan_patterns_detect_and_skip():
+    mod = _load_secret_scan()
     patterns = dict(mod.PATTERNS)
     assert patterns["aws_access_key"].search("AKIAIOSFODNN7EXAMPLE")
     assert patterns["private_key_block"].search("-----BEGIN RSA PRIVATE KEY-----")
+
+
+def test_secret_scan_reports_real_key_despite_inline_comment():
+    # Codex P2: an inline comment must NOT suppress a real key on the same line.
+    # The secret-shaped value is assembled at runtime (no scannable vendor-key
+    # literal lives in the source tree, so this test never trips push-protection).
+    mod = _load_secret_scan()
+    real = "A1b2C3d4" + "E5f6G7h8" + "J9k0L1m2"  # 24-char high-entropy, no vendor prefix
+    assert _flags(mod, f'api_key = "{real}"  # example prod value')
+    assert _flags(mod, f'api_token = "{real}"  # placeholder until rotated')
+    # A genuinely-placeholder *value* is still suppressed.
+    assert not _flags(mod, 'api_key = "your-api-key-placeholder-xxxxxxxx"')
 
 
 def test_compliance_readiness_is_readiness_only():
