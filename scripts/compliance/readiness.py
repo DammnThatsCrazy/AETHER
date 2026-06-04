@@ -19,20 +19,24 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent.parent
 
+# Backend source lives under this subtree; evidence paths are repo-root-relative
+# so (ROOT / evidence).exists() resolves correctly from `npm run compliance:*`.
+_BK = "Backend Architecture/aether-backend"
+
 # control_id -> (description, evidence path/doc, readiness)
 CONTROLS: list[tuple[str, str, str, str]] = [
-    ("AC-tenant-isolation", "Tenant isolation enforced + verifier", "services/security/isolation_verifier.py", "implemented"),
-    ("AC-rbac", "Role/permission access control", "services/security/access_control.py", "implemented"),
-    ("AC-break-glass", "Time-boxed operator break-glass + approval", "services/security/break_glass.py", "implemented"),
-    ("AU-audit-ledger", "Tamper-evident audit event ledger", "services/security/audit_ledger.py", "implemented"),
-    ("AU-export-governance", "Governed, integrity-hashed audit exports", "services/security/export_governance.py", "implemented"),
+    ("AC-tenant-isolation", "Tenant isolation enforced + verifier", f"{_BK}/services/security/isolation_verifier.py", "implemented"),
+    ("AC-rbac", "Role/permission access control", f"{_BK}/services/security/access_control.py", "implemented"),
+    ("AC-break-glass", "Time-boxed operator break-glass + approval", f"{_BK}/services/security/break_glass.py", "implemented"),
+    ("AU-audit-ledger", "Tamper-evident audit event ledger", f"{_BK}/services/security/audit_ledger.py", "implemented"),
+    ("AU-export-governance", "Governed, integrity-hashed audit exports", f"{_BK}/services/security/export_governance.py", "implemented"),
     ("SC-secrets", "No secrets in logs/UI/exports; vault + sanitization", "docs/SECRETS-MANAGEMENT.md", "implemented"),
-    ("SC-webhook-signing", "HMAC-signed webhooks + verification", "services/security/integration_security.py", "implemented"),
-    ("SC-rate-limit", "Per-plan rate limits + quota", "shared/rate_limit/", "implemented"),
-    ("DM-retention", "Data retention policies + audit-preserving deletion", "services/security/retention.py", "implemented"),
-    ("DM-data-requests", "DSR / data-request handling", "services/consent/", "implemented"),
-    ("RE-reliability", "Service/pipeline/queue health, incidents, SLOs", "services/reliability/", "implemented"),
-    ("DQ-data-quality", "Data quality + drift + contamination escalation", "services/data_quality/", "implemented"),
+    ("SC-webhook-signing", "HMAC-signed webhooks + verification", f"{_BK}/services/security/integration_security.py", "implemented"),
+    ("SC-rate-limit", "Per-plan rate limits + quota", f"{_BK}/shared/rate_limit", "implemented"),
+    ("DM-retention", "Data retention policies + audit-preserving deletion", f"{_BK}/services/security/retention.py", "implemented"),
+    ("DM-data-requests", "DSR / data-request handling", f"{_BK}/services/consent", "implemented"),
+    ("RE-reliability", "Service/pipeline/queue health, incidents, SLOs", f"{_BK}/services/reliability", "implemented"),
+    ("DQ-data-quality", "Data quality + drift + contamination escalation", f"{_BK}/services/data_quality", "implemented"),
     ("VM-dependency-audit", "Dependency audit tooling", "docs/DEPENDENCY-AUDIT.md", "tooling-available"),
     ("VM-secret-scan", "Secret scanning tooling", "scripts/security/secret_scan.py", "tooling-available"),
     ("IR-incident-response", "Incident response + tabletop", "docs/INCIDENT-RESPONSE-TABLETOP.md", "documented"),
