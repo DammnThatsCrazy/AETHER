@@ -38,6 +38,8 @@ PUBLIC_PATHS: frozenset[str] = frozenset({
     "/v1/auth/register",
     "/v1/auth/verify-email",
     "/v1/auth/resend-verification",
+    # Public plan catalog used during signup and upgrade discovery.
+    "/v1/billing/plans",
     # Email+password login (returns session API key).
     "/v1/auth/login",
     # SSO via Auth0 (Google, Apple, Microsoft, Twitter/X, Slack).

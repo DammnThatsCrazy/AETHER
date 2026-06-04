@@ -121,6 +121,7 @@ signature-verification failures.
 | `/v1/auth/sso/callback` | POST | Auth0 JWT → API key (SSO finish) |
 | `/v1/auth/sso/providers` | GET | List configured SSO providers (no auth) |
 | `/v1/auth/recover` | POST | Recover lost API key via signed email |
+| `/v1/billing/plans` | GET | Public plan catalog for signup and upgrade discovery |
 | `/v1/admin/billing/stripe/webhook` | POST | Stripe-signed webhook (subscription + invoice events) |
 
 ### Self-service caller endpoints (`/v1/me/*`, API key required)
