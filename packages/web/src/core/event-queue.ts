@@ -37,6 +37,9 @@ const CONSENT_MAP: Record<string, string> = {
   // Core analytics
   track: 'analytics', page: 'analytics', screen: 'analytics',
   heartbeat: 'analytics', error: 'analytics', performance: 'analytics',
+  journey_started: 'analytics', journey_paused: 'analytics', journey_resumed: 'analytics',
+  journey_continued: 'analytics', journey_completed: 'analytics', journey_abandoned: 'analytics',
+  journey_checkpoint: 'analytics',
   identify: 'analytics',
   // Marketing
   experiment: 'marketing', conversion: 'marketing',

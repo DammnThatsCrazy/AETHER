@@ -19,9 +19,26 @@ const VALID_EVENT_TYPES: Set<EventType> = new Set([
   'experiment',
   'consent',
   'heartbeat',
+  'journey_started',
+  'journey_paused',
+  'journey_resumed',
+  'journey_continued',
+  'journey_completed',
+  'journey_abandoned',
+  'journey_checkpoint',
 ]);
 
 const MAX_BATCH_SIZE = 500;
+
+const JOURNEY_EVENT_TYPES = new Set([
+  'journey_started',
+  'journey_paused',
+  'journey_resumed',
+  'journey_continued',
+  'journey_completed',
+  'journey_abandoned',
+  'journey_checkpoint',
+]);
 
 /**
  * Validate the top-level batch payload structure.
@@ -233,6 +250,12 @@ export function validateEvent(event: unknown, index: number): BaseEvent {
     );
   }
 
+  if (JOURNEY_EVENT_TYPES.has(String(obj.type))) {
+    validateJourneyProperties(obj, index);
+  } else if (obj.type === 'track') {
+    normalizeLegacyJourneyTrack(obj);
+  }
+
   if (obj.properties !== undefined && (typeof obj.properties !== 'object' || obj.properties === null)) {
     throw new ValidationError(
       `Event at index ${index}: "properties" must be an object if provided`,
@@ -245,4 +268,52 @@ export function validateEvent(event: unknown, index: number): BaseEvent {
   }
 
   return event as BaseEvent;
+}
+
+
+function normalizeLegacyJourneyTrack(obj: Record<string, unknown>): void {
+  const props = obj.properties && typeof obj.properties === 'object' && obj.properties !== null
+    ? obj.properties as Record<string, unknown>
+    : undefined;
+  const legacyName = props?.event ?? obj.event;
+  if (typeof legacyName !== 'string' || !JOURNEY_EVENT_TYPES.has(legacyName)) return;
+  obj.properties = {
+    ...props,
+    event: legacyName,
+    journeyEventType: legacyName,
+    normalizedFrom: 'legacy_track_event',
+  };
+}
+
+function validateJourneyProperties(obj: Record<string, unknown>, index: number): void {
+  if (obj.properties === undefined) return;
+  if (typeof obj.properties !== 'object' || obj.properties === null || Array.isArray(obj.properties)) {
+    throw new ValidationError(`Event at index ${index}: journey "properties" must be an object if provided`, {
+      index,
+      field: 'properties',
+      received: typeof obj.properties,
+    });
+  }
+  const props = obj.properties as Record<string, unknown>;
+  const stringFields = [
+    'journeyId', 'journeyName', 'journeyType', 'stepId', 'stepName', 'previousStepId',
+    'nextExpectedStepId', 'journeyStatus', 'pauseReason', 'resumeReason', 'completionReason',
+    'abandonmentReason', 'handoffFromSessionId', 'handoffFromDeviceId', 'handoffToDeviceId',
+    'sourceSessionId', 'sourceAnonymousId', 'sourceUserId', 'targetSessionId', 'targetAnonymousId',
+    'targetUserId',
+  ];
+  for (const field of stringFields) {
+    if (props[field] !== undefined && typeof props[field] !== 'string') {
+      throw new ValidationError(`Event at index ${index}: journey property "${field}" must be a string`, { index, field });
+    }
+  }
+  if (props.confidence !== undefined && (typeof props.confidence !== 'number' || props.confidence < 0 || props.confidence > 1)) {
+    throw new ValidationError(`Event at index ${index}: journey property "confidence" must be a number between 0 and 1`, { index, field: 'confidence' });
+  }
+  if (props.handoffLatencyMs !== undefined && (typeof props.handoffLatencyMs !== 'number' || props.handoffLatencyMs < 0)) {
+    throw new ValidationError(`Event at index ${index}: journey property "handoffLatencyMs" must be a non-negative number`, { index, field: 'handoffLatencyMs' });
+  }
+  if (props.confidenceSignals !== undefined && !Array.isArray(props.confidenceSignals)) {
+    throw new ValidationError(`Event at index ${index}: journey property "confidenceSignals" must be an array`, { index, field: 'confidenceSignals' });
+  }
 }

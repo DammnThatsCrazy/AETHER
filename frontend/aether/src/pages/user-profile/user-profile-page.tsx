@@ -271,7 +271,8 @@ function JourneysTab({ userId }: { userId: string }) {
         ? <EmptyState title="No journeys" description="No multi-step journeys have been tracked yet." />
         : journeys.map((j, ji) => {
             const jr = asRecord(j);
-            const steps = asList(jr.steps);
+            const steps = asList(jr.timeline ?? jr.steps);
+            const handoffs = asList(jr.handoffs);
             const pct = Math.round(Number(jr.completion_rate ?? 0) * 100);
             return (
               <Card key={ji} className="mb-4">
@@ -281,11 +282,14 @@ function JourneysTab({ userId }: { userId: string }) {
                       <span className="text-sm font-medium text-text-primary">Journey {ji + 1}</span>
                       {!!jr.converted && <Badge variant="success" size="sm">Converted</Badge>}
                       {!!jr.entry_channel && <Badge variant="default" size="sm">{fmt(jr.entry_channel)}</Badge>}
+                      {!!jr.status && <Badge variant={jr.status === 'completed' ? 'success' : jr.status === 'abandoned' ? 'danger' : 'warning'} size="sm">{fmt(jr.status)}</Badge>}
+                      {jr.confidence !== undefined && <Badge variant={Number(jr.confidence) >= 0.8 ? 'success' : Number(jr.confidence) >= 0.6 ? 'warning' : 'danger'} size="sm">confidence {Math.round(Number(jr.confidence) * 100)}%</Badge>}
                     </div>
                     <div className="flex items-center gap-3 text-xs text-text-secondary">
                       <span>{pct}% complete</span>
                       <span>{fmtDuration(jr.total_time_ms as number)}</span>
                       <span>{relTime(jr.started_at as string)}</span>
+                      <span>{handoffs.length} handoffs</span>
                     </div>
                   </div>
                   {/* Completion bar */}
@@ -294,6 +298,20 @@ function JourneysTab({ userId }: { userId: string }) {
                   </div>
                 </CardHeader>
                 <CardContent>
+                  {handoffs.length > 0 && (
+                    <div className="mb-3 rounded-md border border-border-default bg-surface-raised p-3 text-xs text-text-secondary">
+                      <div className="font-medium text-text-primary mb-1">Cross-device handoffs</div>
+                      {handoffs.map((h, hi) => {
+                        const hr = asRecord(h);
+                        return <div key={hi} className="flex flex-wrap gap-2">
+                          <span>{fmt(hr.from_device_type)} → {fmt(hr.to_device_type)}</span>
+                          <span>sessions {fmt(hr.from_session_id)} → {fmt(hr.to_session_id)}</span>
+                          <span>confidence {Math.round(Number(hr.confidence ?? 0) * 100)}%</span>
+                          <span>{asList(hr.confidence_signals).join(' + ') || 'signals pending'}</span>
+                        </div>;
+                      })}
+                    </div>
+                  )}
                   <DataTable<JourneyRow>
                     keyExtractor={s => `step-${ji}-${String(s._stepNum ?? s.step_name ?? s.event_type ?? 'step')}`}
                     data={steps.map((s, idx) => ({ ...asRecord(s), _stepNum: idx + 1 })) as JourneyRow[]}
@@ -301,8 +319,8 @@ function JourneysTab({ userId }: { userId: string }) {
                     columns={[
                       { key: 'n', header: '#', render: s => <span className="text-text-muted">{fmt(s._stepNum)}</span> },
                       { key: 'name', header: 'Step', render: s => <span className="font-medium text-text-primary">{fmt(s.step_name ?? s.event_type)}</span> },
-                      { key: 'channel', header: 'Channel', render: s => s.channel ? <Badge variant="default" size="sm">{fmt(s.channel)}</Badge> : <span className="text-text-muted">—</span> },
-                      { key: 'campaign', header: 'Campaign', render: s => s.campaign_name ? <span className="text-text-secondary text-xs">{fmt(s.campaign_name)}</span> : <span className="text-text-muted">—</span> },
+                      { key: 'device', header: 'Device', render: s => <span className="text-text-secondary text-xs">{fmt(s.device_type ?? s.platform)}</span> },
+                      { key: 'signals', header: 'Signals', render: s => <span className="text-text-secondary text-xs">{asList(s.confidence_signals).join(' + ') || '—'}</span> },
                       { key: 'time', header: 'Time on step', render: s => fmtDuration(s.time_on_step_ms as number) },
                       { key: 'status', header: 'Status', render: s => {
                         if (s.is_abandonment) return <Badge variant="danger" size="sm">Abandoned</Badge>;

@@ -18,6 +18,13 @@ export type EventType =
   | 'error'
   | 'performance'
   | 'experiment'
+  | 'journey_started'
+  | 'journey_paused'
+  | 'journey_resumed'
+  | 'journey_continued'
+  | 'journey_completed'
+  | 'journey_abandoned'
+  | 'journey_checkpoint'
   | 'consent'
   | 'heartbeat';
 
@@ -43,6 +50,10 @@ export interface EventContext {
   timezone?: string;
   userAgent?: string;
   consent?: ConsentState;
+  fingerprint?: { id: string };
+  trafficSource?: Record<string, unknown>;
+  network?: Record<string, unknown>;
+  journey?: Record<string, unknown>;
 }
 
 export interface PageContext {
@@ -311,6 +322,9 @@ export interface IngestionMetrics {
   eventsProcessed: number;
   eventsFailed: number;
   eventsDropped: number;
+  journeyEventsReceived?: number;
+  journeyEventsInvalid?: number;
+  journeyEventsNormalized?: number;
   batchesReceived: number;
   avgBatchSize: number;
   avgProcessingMs: number;

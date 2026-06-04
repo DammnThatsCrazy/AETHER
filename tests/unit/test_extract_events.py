@@ -105,7 +105,7 @@ def test_parse_record_raises_on_missing(ee):
 def test_live_extract_has_canonical_families(ee, live_text):
     payload = ee.build_payload(live_text)
     assert payload["families"] == [
-        "core", "identity", "consent", "commerce", "wallet", "agent", "x402",
+        "core", "journey", "identity", "consent", "commerce", "wallet", "agent", "x402",
     ]
 
 

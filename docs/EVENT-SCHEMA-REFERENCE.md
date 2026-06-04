@@ -31,3 +31,11 @@ agent); events outside the map are always allowed. The mapping is enforced in th
 SDK and validated against the canonical consent set.
 
 See [API Reference](API-REFERENCE.md) and [SDK API Contracts](SDK-API-CONTRACTS.md).
+
+## Journey lifecycle payload
+
+`journey_*` events use `JourneyPayload` from `packages/shared/events.ts`. The payload is
+additive and supports optional backend-assigned `journeyId`, journey type/name, current
+and adjacent step IDs, lifecycle reasons, cross-device handoff source/target session and
+device IDs, handoff latency, confidence score, confidence signals, source/target
+anonymous/user identifiers, campaign/referrer attribution, and metadata.

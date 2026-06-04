@@ -17,6 +17,7 @@ placed into tiers.
 | Core analytics (track/identify/conversion) | A | ✔ | ✔ | ✔ | ✔ |
 | Page / screen tracking | A | ✔ (page) | ✔ (screen) | ✔ (screen) | ✔ (screen) |
 | Session / heartbeat | A | ✔ | ✔ | ✔ | ✔ |
+| Journey lifecycle API + canonical events | A | ✔ | ✔ | ✔ | ✔ |
 | Identity hydration | A | ✔ | ✔ | ✔ | ✔ |
 | Consent (5 purposes) | A | ✔ | ✔ | ✔ | ✔ |
 | Campaign / deep-link / UTM | A | ✔ | ✔ | ✔ | ✔ |
