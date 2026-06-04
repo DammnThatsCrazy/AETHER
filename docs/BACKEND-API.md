@@ -134,36 +134,31 @@ permission gate beyond authentication.
 | `/v1/me/api-keys/{key_id}` | DELETE | Revoke an API key |
 | `/v1/me/account` | DELETE | Self-service account deletion (GDPR Article 17) |
 
-### Self-service billing (`/v1/billing/*`)
+### Self-service billing (`/v1/billing/*`, API key required)
 
-`/v1/billing/plans` is public for signup and upgrade discovery. The remaining
-self-service billing endpoints require an authenticated tenant API key and scope
-all returned data to the caller's tenant. Checkout and portal creation remain
-Stripe-mediated: they create real Stripe sessions when Stripe billing is enabled
-and fully configured, return mocked URLs only in local mock mode, and fail closed
-when configuration is incomplete outside local development.
+The billing surface is provider-safe and defaults to internal-only behavior for
+local and flag-disabled deployments. Stripe checkout and portal URLs are
+returned only when Stripe billing is configured; otherwise the billing provider
+reports an internal/offline mode and no external provider secrets are exposed.
+Supported provider modes are `internal_only`, `stripe`, `manual_invoice`, and
+`enterprise_contract`. Manual invoice mode exports an operator-managed invoice
+artifact, while enterprise contract mode settles approved previews out of band.
 
-The tenant-facing payment-status endpoint and the Kyber provider-readiness
-surface use the provider-safe billing abstraction. That abstraction defaults to
-`internal_only` and supports `stripe`, `manual_invoice`, and
-`enterprise_contract` behind explicit external-billing flags; no provider secrets
-are returned in customer or operator responses.
-
-| Endpoint | Method | Auth | Purpose |
-|---|---|---|---|
-| `/v1/billing/plans` | GET | Public | Plan catalog for self-service signup and upgrades |
-| `/v1/billing/checkout` | POST | API key | Create a Stripe Checkout session, or a local mocked URL in local mock mode |
-| `/v1/billing/portal` | POST | API key | Create a Stripe Billing Portal session, or a local mocked URL in local mock mode |
-| `/v1/billing/invoices` | GET | API key | List invoices for the caller's tenant |
-| `/v1/billing/invoices/{invoice_id}` | GET | API key | Get one invoice's full payload for the caller's tenant |
-| `/v1/billing/plan` | GET | API key | Caller-safe contract profile and enabled billing modules |
-| `/v1/billing/entitlements` | GET | API key | Caller-safe tenant entitlements |
-| `/v1/billing/usage` | GET | API key | Caller tenant usage events for a requested or current billing window |
-| `/v1/billing/usage/summary` | GET | API key | Caller tenant billable-usage summary |
-| `/v1/billing/invoice-previews` | GET | API key | Caller-safe invoice previews with internal pricing notes removed |
-| `/v1/billing/value-created` | GET | API key | Caller-safe value-created events for value-based billing review |
-| `/v1/billing/payment-status` | GET | API key | Caller-safe payment status and active provider mode |
-| `/v1/admin/billing/overage-cycle` | POST | Admin | Trigger the monthly overage invoice cycle (also auto-runs as a lifespan cron) |
+| Endpoint | Method | Purpose |
+|---|---|---|
+| `/v1/billing/plans` | GET | Public plan catalog for self-service signup and upgrades |
+| `/v1/billing/checkout` | POST | Create a Stripe Checkout session URL for plan upgrade when Stripe is enabled |
+| `/v1/billing/portal` | POST | Create a Stripe Billing Portal session URL when Stripe is enabled |
+| `/v1/billing/invoices` | GET | List invoices for the caller's tenant |
+| `/v1/billing/invoices/{invoice_id}` | GET | Get one invoice's full payload |
+| `/v1/billing/plan` | GET | Caller-safe contract profile and enabled billing modules |
+| `/v1/billing/entitlements` | GET | Caller-safe tenant entitlements |
+| `/v1/billing/usage` | GET | Caller tenant usage events for a requested or current billing window |
+| `/v1/billing/usage/summary` | GET | Caller tenant billable-usage summary |
+| `/v1/billing/invoice-previews` | GET | Caller-safe invoice previews with internal pricing notes removed |
+| `/v1/billing/value-created` | GET | Caller-safe value-created events for value-based billing review |
+| `/v1/billing/payment-status` | GET | Caller-safe payment status and active provider mode |
+| `/v1/admin/billing/overage-cycle` | POST | Trigger the monthly overage invoice cycle (admin; also auto-runs as a lifespan cron) |
 
 ### Kyber revenue-operations billing (`/v1/admin/kyber/revops/*`, admin permission required)
 
