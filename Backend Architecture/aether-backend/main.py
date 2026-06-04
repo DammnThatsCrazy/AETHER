@@ -369,7 +369,7 @@ def create_app() -> FastAPI:
         allow_origins=settings.api.cors_origins,
         allow_credentials=True,
         allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-        allow_headers=["Authorization", "Content-Type", "X-API-Key", "X-Request-ID"],
+        allow_headers=["Authorization", "Content-Type", "X-API-Key", "X-Request-ID", "X-Correlation-ID", "X-Kyber-Environment"],
         expose_headers=[
             "X-Request-ID",
             "X-Response-Time",

@@ -27,6 +27,33 @@ function generateCorrelationId(): string {
   return `kyber-${Date.now()}-${++requestCounter}`;
 }
 
+/**
+ * Resolve the REST base URL for the current runtime/environment.
+ *
+ * - Mocked mode: relative (MSW intercepts).
+ * - local-live: the dev server and backend are different origins with no proxy,
+ *   so use the explicit absolute base (defaults to http://localhost:8000).
+ * - staging/production: the nginx image proxies /v1 same-origin, and its CSP is
+ *   `connect-src 'self'`. Keep relative paths so hosted calls stay same-origin
+ *   (no CSP/CORS breakage, and never fall back to the operator's localhost when
+ *   VITE_API_BASE_URL is unset). Only go absolute when an explicit base that is
+ *   neither localhost nor the page origin is configured — an opt-in cross-origin
+ *   backend whose CSP/CORS the operator is expected to allow.
+ */
+function resolveApiBaseUrl(): string {
+  if (getRuntimeMode() !== 'live') return '';
+  const configured = (env.VITE_API_BASE_URL ?? '').trim().replace(/\/$/, '');
+  if (env.VITE_KYBER_ENV === 'local-live') return configured;
+  if (!configured) return '';
+  if (/\/\/(localhost|127\.0\.0\.1)(:|\/|$)/.test(configured)) return '';
+  try {
+    if (typeof window !== 'undefined' && new URL(configured).origin === window.location.origin) return '';
+  } catch {
+    return '';
+  }
+  return configured;
+}
+
 async function request<T>(
   method: string,
   path: string,
@@ -35,10 +62,7 @@ async function request<T>(
   options?: RequestOptions,
 ): Promise<T> {
   const correlationId = generateCorrelationId();
-  // Use env-driven API URLs outside local-mocked mode so hosted Kyber can
-  // talk to the backend control plane directly; keep relative paths for mocks
-  // and same-origin deployments.
-  const baseUrl = getRuntimeMode() === 'live' ? env.VITE_API_BASE_URL.replace(/\/$/, '') : '';
+  const baseUrl = resolveApiBaseUrl();
   const url = path.startsWith('http') ? path : `${baseUrl}${path}`;
 
   const headers: Record<string, string> = {

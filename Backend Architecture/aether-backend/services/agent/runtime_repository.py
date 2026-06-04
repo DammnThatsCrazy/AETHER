@@ -11,11 +11,20 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import uuid
 from datetime import datetime, timezone
 from typing import Any
 
+from shared.common.common import BadRequestError, ConflictError
 from shared.store import DurableStore, get_store
+
+
+# A controller heartbeat older than this is treated as stale (worker likely dead)
+# so a one-off "healthy" beat can't mark a controller healthy forever.
+HEARTBEAT_STALE_SECONDS = int(os.getenv("AGENT_HEARTBEAT_STALE_SECONDS", "90"))
+# Objective statuses from which a dispatch / resume must not silently revive work.
+TERMINAL_OBJECTIVE_STATUSES = {"completed", "failed", "cancelled"}
 
 
 OBJECTIVE_STATUSES = {"queued", "active", "paused", "blocked", "awaiting_review", "completed", "failed", "cancelled"}
@@ -44,6 +53,19 @@ def utc_now() -> str:
 
 def new_id(prefix: str) -> str:
     return f"{prefix}_{uuid.uuid4().hex}"
+
+
+def _age_seconds(iso_ts: str | None) -> float:
+    """Seconds since an ISO-8601 timestamp; +inf when unparseable/missing."""
+    if not iso_ts:
+        return float("inf")
+    try:
+        ts = datetime.fromisoformat(iso_ts)
+        if ts.tzinfo is None:
+            ts = ts.replace(tzinfo=timezone.utc)
+        return (datetime.now(timezone.utc) - ts).total_seconds()
+    except (ValueError, TypeError):
+        return float("inf")
 
 
 def stable_idempotency_key(tenant_id: str, payload: dict[str, Any]) -> str:
@@ -169,11 +191,23 @@ class AgentRuntimeRepository:
         rows.sort(key=lambda row: row.get("created_at", ""), reverse=True)
         return rows[:limit]
 
-    async def transition_objective(self, tenant_id: str, objective_id: str, action: str, actor_id: str, request_id: str) -> dict[str, Any] | None:
+    async def transition_objective(self, tenant_id: str, objective_id: str, action: str, actor_id: str, request_id: str, reason: str = "") -> dict[str, Any] | None:
         objective = await self.get_objective(tenant_id, objective_id)
         if objective is None:
             return None
+        current = objective.get("status")
+        # Guard illegal lifecycle transitions so a stray request can't revive a
+        # terminal objective (e.g. resuming a cancelled one) or pause finished work.
+        allowed_from = {
+            "pause": {"queued", "active", "awaiting_review", "blocked"},
+            "resume": {"paused"},
+            "cancel": {"queued", "active", "paused", "awaiting_review", "blocked"},
+        }
+        if current not in allowed_from[action]:
+            raise ConflictError(f"Cannot {action} objective in status '{current}'")
         status_map = {"pause": "paused", "resume": "active", "cancel": "cancelled"}
+        # Explicit event names — f"{action}d" would emit "objective.canceld" for cancel.
+        event_map = {"pause": "objective.paused", "resume": "objective.resumed", "cancel": "objective.cancelled"}
         objective["status"] = status_map[action]
         objective["updated_at"] = utc_now()
         if action == "pause":
@@ -181,13 +215,22 @@ class AgentRuntimeRepository:
         if action == "cancel":
             objective["cancelled_at"] = objective["updated_at"]
         await self.objectives.set(objective_id, objective)
-        await self.append_event(tenant_id, f"objective.{action}d", "operator", {"status": objective["status"]}, objective_id, actor_id, request_id)
+        payload = {"status": objective["status"]}
+        if reason:
+            # Preserve the operator's justification on the audit/timeline event.
+            payload["reason"] = sanitize_payload({"reason": reason}).get("reason", "")
+        await self.append_event(tenant_id, event_map[action], "operator", payload, objective_id, actor_id, request_id)
         return objective
 
     async def record_dispatch(self, tenant_id: str, objective_id: str, controller: str, actor_id: str, request_id: str) -> dict[str, Any] | None:
         objective = await self.get_objective(tenant_id, objective_id)
         if objective is None:
             return None
+        current = objective.get("status")
+        # Do not silently revive a paused/cancelled/terminal objective into active
+        # work — that would undo an operator's deliberate lifecycle decision.
+        if current in TERMINAL_OBJECTIVE_STATUSES or current == "paused":
+            raise ConflictError(f"Cannot dispatch objective in status '{current}'")
         now = utc_now()
         objective["status"] = "active"
         objective["updated_at"] = now
@@ -227,20 +270,51 @@ class AgentRuntimeRepository:
 
     async def controller_status(self, tenant_id: str) -> list[dict[str, Any]]:
         heartbeats = await self.heartbeats.find(tenant_id=tenant_id)
-        by_controller = {row["controller"]: row for row in heartbeats}
         now = utc_now()
-        return [
-            by_controller.get(controller, {
-                "tenant_id": tenant_id,
-                "controller": controller,
-                "worker_id": None,
-                "status": "unknown",
-                "queue_depth": 0,
-                "metadata": {},
-                "updated_at": now,
+        grouped: dict[str, list[dict[str, Any]]] = {}
+        for row in heartbeats:
+            grouped.setdefault(row.get("controller"), []).append(row)
+        statuses: list[dict[str, Any]] = []
+        for controller in CONTROLLERS:
+            rows = grouped.get(controller, [])
+            if not rows:
+                statuses.append({
+                    "tenant_id": tenant_id, "controller": controller, "worker_id": None,
+                    "status": "unknown", "queue_depth": 0, "worker_count": 0,
+                    "workers": [], "metadata": {}, "updated_at": now,
+                })
+                continue
+            workers: list[dict[str, Any]] = []
+            total_depth = 0
+            live_states: list[str] = []
+            for r in rows:
+                # Horizontally-scaled workers each heartbeat under their own
+                # worker_id; sum their depths and expire stale rows instead of
+                # collapsing to one arbitrary record.
+                stale = _age_seconds(r.get("updated_at")) > HEARTBEAT_STALE_SECONDS
+                wstatus = "stale" if stale else r.get("status", "unknown")
+                depth = int(r.get("queue_depth", 0) or 0)
+                total_depth += depth
+                live_states.append(wstatus)
+                workers.append({
+                    "worker_id": r.get("worker_id"), "status": wstatus,
+                    "queue_depth": depth, "updated_at": r.get("updated_at"), "stale": stale,
+                })
+            if any(s == "healthy" for s in live_states):
+                agg = "healthy"
+            elif any(s not in ("stale", "unknown") for s in live_states):
+                agg = "degraded"
+            else:
+                agg = "stale"
+            latest = max(rows, key=lambda r: r.get("updated_at", ""))
+            statuses.append({
+                "tenant_id": tenant_id, "controller": controller,
+                "worker_id": latest.get("worker_id"), "status": agg,
+                "queue_depth": total_depth, "worker_count": len(workers),
+                "workers": workers, "metadata": latest.get("metadata", {}),
+                "updated_at": latest.get("updated_at", now),
             })
-            for controller in CONTROLLERS
-        ]
+        return statuses
 
     async def create_review_batch(self, tenant_id: str, objective_id: str, mutations: list[dict[str, Any]], actor_id: str, request_id: str) -> dict[str, Any]:
         now = utc_now()
@@ -338,10 +412,13 @@ class AgentRuntimeRepository:
         await self.append_event(tenant_id, f"objective.{objective['status']}", "review_queue", objective, objective_id, reviewer, request_id)
 
     async def events_for_tenant(self, tenant_id: str, limit: int = 100, objective_id: str | None = None) -> list[dict[str, Any]]:
+        # Always read from the tenant event list and filter in memory. Calling
+        # find() would scan the agent_events namespace, which also matches the
+        # list key (aether:agent_events:list:<tenant>) and trips Redis WRONGTYPE
+        # on GET once any event has been appended.
+        rows = await self.events.get_list(tenant_id, limit=max(limit, 1000) if objective_id else limit)
         if objective_id:
-            rows = await self.events.find(tenant_id=tenant_id, objective_id=objective_id)
-        else:
-            rows = await self.events.get_list(tenant_id, limit=limit)
+            rows = [row for row in rows if row.get("objective_id") == objective_id]
         rows.sort(key=lambda row: row.get("created_at", ""), reverse=True)
         return rows[:limit]
 

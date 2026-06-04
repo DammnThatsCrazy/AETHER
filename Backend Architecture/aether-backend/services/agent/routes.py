@@ -160,7 +160,9 @@ async def controller_health(request: Request):
         "agent_awaiting_review": len(review_batches),
         "agent_kill_switch_state": int(bool(kill_switch.get("enabled"))),
     }.items():
-        metrics.increment(name, value=0 if value == 0 else value)
+        # These are point-in-time snapshots; observe them (gauge semantics) so a
+        # 10s Kyber health poll doesn't inflate the counts into the thousands.
+        metrics.observe(name, float(value))
     return _envelope({
         "kill_switch": kill_switch,
         "controllers": controllers,
@@ -237,7 +239,7 @@ async def get_objective(objective_id: str, request: Request):
 async def pause_objective(objective_id: str, body: ObjectiveAction, request: Request):
     tenant = request.state.tenant
     tenant.require_permission("agent:pause")
-    objective = await _runtime_repo.transition_objective(tenant.tenant_id, objective_id, "pause", _actor_id(request), _request_id(request))
+    objective = await _runtime_repo.transition_objective(tenant.tenant_id, objective_id, "pause", _actor_id(request), _request_id(request), reason=body.reason)
     if objective is None:
         raise NotFoundError("Objective")
     return _envelope(objective, request)
@@ -247,7 +249,7 @@ async def pause_objective(objective_id: str, body: ObjectiveAction, request: Req
 async def resume_objective(objective_id: str, body: ObjectiveAction, request: Request):
     tenant = request.state.tenant
     tenant.require_permission("agent:dispatch")
-    objective = await _runtime_repo.transition_objective(tenant.tenant_id, objective_id, "resume", _actor_id(request), _request_id(request))
+    objective = await _runtime_repo.transition_objective(tenant.tenant_id, objective_id, "resume", _actor_id(request), _request_id(request), reason=body.reason)
     if objective is None:
         raise NotFoundError("Objective")
     return _envelope(objective, request)
@@ -257,7 +259,7 @@ async def resume_objective(objective_id: str, body: ObjectiveAction, request: Re
 async def cancel_objective(objective_id: str, body: ObjectiveAction, request: Request):
     tenant = request.state.tenant
     tenant.require_permission("agent:pause")
-    objective = await _runtime_repo.transition_objective(tenant.tenant_id, objective_id, "cancel", _actor_id(request), _request_id(request))
+    objective = await _runtime_repo.transition_objective(tenant.tenant_id, objective_id, "cancel", _actor_id(request), _request_id(request), reason=body.reason)
     if objective is None:
         raise NotFoundError("Objective")
     return _envelope(objective, request)
@@ -275,6 +277,21 @@ async def dispatch_step(body: DispatchRequest, request: Request):
     run = await _runtime_repo.record_dispatch(tenant.tenant_id, body.objective_id, body.controller, _actor_id(request), _request_id(request))
     if run is None:
         raise NotFoundError("Objective")
+    # Actually enqueue the run for a worker to consume — recording the run row
+    # alone leaves dispatch reporting success while no controller ever picks it
+    # up. Publish on the agent task topic with the routing/idempotency metadata.
+    await _producer.publish(Event(
+        topic=Topic.AGENT_TASK_STARTED,
+        tenant_id=tenant.tenant_id,
+        source_service="agent",
+        payload={
+            "run_id": run["run_id"],
+            "objective_id": run["objective_id"],
+            "controller": run["controller"],
+            "queue": run["queue"],
+            "idempotency_key": run["idempotency_key"],
+        },
+    ))
     metrics.increment("agent_worker_runs_queued", labels={"controller": body.controller, "queue": run["queue"]})
     return _envelope(run, request)
 
@@ -322,7 +339,10 @@ async def timeline_events(request: Request, objective_id: str | None = None, lim
 @router.post("/controllers/heartbeat")
 async def controller_heartbeat(body: ControllerHeartbeat, request: Request):
     tenant = request.state.tenant
-    tenant.require_any_permission("agent:heartbeat", "agent:manage")
+    # Heartbeats drive health/stale-worker detection, so they must come from a
+    # worker service credential — not any operator holding agent:manage, who
+    # could otherwise make a dead controller look healthy.
+    tenant.require_permission("agent:heartbeat")
     if body.controller not in CONTROLLERS:
         raise BadRequestError(f"Unknown controller: {body.controller}")
     heartbeat = await _runtime_repo.heartbeat(tenant.tenant_id, body.controller, body.status, body.queue_depth, body.worker_id, body.metadata, _request_id(request))
@@ -355,6 +375,18 @@ async def agent_status(request: Request):
         "kill_switch_state": kill_switch if isinstance(kill_switch, dict) else None,
         "active_workers": sum(1 for c in data["controllers"] if c.get("status") in {"healthy", "degraded"}),
         "worker_types": VALID_WORKER_TYPES,
+        # Kyber's Command/Mission views render status.workers; map controller
+        # health rows back into that array so they aren't left empty.
+        "workers": [
+            {
+                "worker_type": c.get("controller"),
+                "status": c.get("status", "unknown"),
+                "current_task": None,
+                "queue_depth": c.get("queue_depth", 0),
+                "worker_count": c.get("worker_count", 0),
+            }
+            for c in data["controllers"]
+        ],
     })
     return _envelope(data, request)
 
@@ -379,6 +411,12 @@ async def submit_task(body: TaskSubmission, request: Request):
     """
     tenant = request.state.tenant
     tenant.require_permission("agent:manage")
+
+    # Honour the tenant emergency stop here too — the legacy task path must not
+    # be a way to keep queuing agent work after the kill switch is engaged.
+    kill_switch = await _runtime_repo.get_kill_switch(tenant.tenant_id)
+    if kill_switch.get("enabled"):
+        raise ConflictError("Agent kill switch is engaged; release it before submitting tasks")
 
     if body.worker_type not in VALID_WORKER_TYPES:
         raise BadRequestError(

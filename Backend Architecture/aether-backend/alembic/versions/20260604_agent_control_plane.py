@@ -25,6 +25,9 @@ TABLES = [
     "agent_controller_heartbeats",
     "agent_worker_runs",
     "catalyst_wake_triggers",
+    # Backs get_store("agent_control"); without it POST /v1/agent/kill-switch
+    # has no durable table to persist tenant emergency-stop state.
+    "agent_control",
 ]
 
 

@@ -7,7 +7,7 @@ import pytest
 
 os.environ.setdefault("AETHER_ENV", "local")
 
-from shared.common.common import BadRequestError  # noqa: E402
+from shared.common.common import BadRequestError, ConflictError  # noqa: E402
 from services.agent.routes import (  # noqa: E402
     ControllerHeartbeat,
     DispatchRequest,
@@ -17,6 +17,7 @@ from services.agent.routes import (  # noqa: E402
     ReviewDecision,
     agent_status,
     approve_review_batch,
+    cancel_objective,
     controller_health,
     controller_heartbeat,
     controllers_status,
@@ -24,7 +25,9 @@ from services.agent.routes import (  # noqa: E402
     get_objective,
     list_objectives,
     list_review_batches,
+    pause_objective,
     reject_review_batch,
+    resume_objective,
     submit_objective,
     timeline_events,
     toggle_kill_switch,
@@ -73,9 +76,22 @@ async def test_objective_lifecycle_review_and_tenant_isolation():
     detail = await get_objective(objective["objective_id"], tenant_a)
     assert detail["data"]["objective"]["objective_id"] == objective["objective_id"]
 
-    paused = await __import__("services.agent.routes", fromlist=["pause_objective"]).pause_objective(objective["objective_id"], ObjectiveAction(reason="operator hold"), tenant_a)
+    paused = await pause_objective(objective["objective_id"], ObjectiveAction(reason="operator hold"), tenant_a)
     assert paused["data"]["status"] == "paused"
+    # The operator's reason must be preserved on the timeline event.
+    pause_events = await timeline_events(tenant_a, objective_id=objective["objective_id"], limit=50)
+    assert any(
+        e["event_type"] == "objective.paused" and e.get("payload", {}).get("reason") == "operator hold"
+        for e in pause_events["data"]["events"]
+    )
 
+    # Dispatching a paused objective must be rejected, not silently revived.
+    with pytest.raises(ConflictError):
+        await dispatch_step(DispatchRequest(objective_id=objective["objective_id"], controller="nous"), tenant_a)
+
+    # Resume (only valid from paused), then dispatch the now-active objective.
+    resumed = await resume_objective(objective["objective_id"], ObjectiveAction(reason="back to work"), tenant_a)
+    assert resumed["data"]["status"] == "active"
     run = await dispatch_step(DispatchRequest(objective_id=objective["objective_id"], controller="nous"), tenant_a)
     assert run["data"]["queue"] == "default"
 
@@ -179,3 +195,32 @@ async def test_health_queue_depth_sums_routed_controllers():
     depths = {q["name"]: q["depth"] for q in health["data"]["queues"]}
     assert depths["default"] >= 3  # nous contributes to default
     assert depths["discovery"] == 2
+
+
+@pytest.mark.asyncio
+async def test_cancel_emits_correct_event_and_blocks_resume():
+    request = FakeRequest("tenant-cancel")
+    submitted = await submit_objective(ObjectiveSubmission(goal="Cancel me"), request)
+    oid = submitted["data"]["objective_id"]
+    cancelled = await cancel_objective(oid, ObjectiveAction(reason="unsafe"), request)
+    assert cancelled["data"]["status"] == "cancelled"
+    types = {e["event_type"] for e in (await timeline_events(request, objective_id=oid, limit=50))["data"]["events"]}
+    assert "objective.cancelled" in types  # not the misspelled "objective.canceld"
+    assert "objective.canceld" not in types
+    # Resume must not revive a cancelled (terminal) objective.
+    with pytest.raises(ConflictError):
+        await resume_objective(oid, ObjectiveAction(reason="oops"), request)
+
+
+@pytest.mark.asyncio
+async def test_controller_status_aggregates_workers_and_status_exposes_them():
+    request = FakeRequest("tenant-workers")
+    # Two workers heartbeat for the same controller (horizontal scaling).
+    await controller_heartbeat(ControllerHeartbeat(controller="discovery", status="healthy", queue_depth=3, worker_id="w1"), request)
+    await controller_heartbeat(ControllerHeartbeat(controller="discovery", status="healthy", queue_depth=4, worker_id="w2"), request)
+    disc = next(c for c in (await controllers_status(request))["data"]["controllers"] if c["controller"] == "discovery")
+    assert disc["worker_count"] == 2
+    assert disc["queue_depth"] == 7  # 3 + 4 aggregated, not collapsed to one row
+    # /status must surface a workers array for Kyber's Command/Mission views.
+    st = await agent_status(request)
+    assert "discovery" in {w["worker_type"] for w in st["data"]["workers"]}
