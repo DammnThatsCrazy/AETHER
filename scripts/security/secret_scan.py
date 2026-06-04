@@ -40,6 +40,13 @@ PATTERNS: list[tuple[str, re.Pattern[str]]] = [
         r"(?i)(secret|password|api[_-]?key|token|private[_-]?key)\s*[:=]\s*['\"][A-Za-z0-9/+=_\-]{24,}['\"]")),
 ]
 
+# Suppress a finding ONLY when the matched secret value is itself an obvious
+# placeholder — never skip a whole line, so a real key with an inline comment
+# like `# example prod value` is still reported.
+PLACEHOLDER_RE = re.compile(
+    r"(?i)(placeholder|change[-_]?me|example|dummy|redacted|your[-_]?(api|secret|token|key)|x{6,}|\.\.\.)"
+)
+
 
 def tracked_text_files() -> list[Path]:
     out = subprocess.run(["git", "ls-files"], capture_output=True, text=True, cwd=ROOT)
@@ -65,12 +72,16 @@ def scan() -> list[tuple[str, int, str]]:
         except (UnicodeDecodeError, OSError):
             continue
         for i, line in enumerate(text.splitlines(), 1):
-            if "placeholder" in line.lower() or "change-me" in line.lower() or "example" in line.lower():
-                continue
             for name, pat in PATTERNS:
-                if pat.search(line):
-                    findings.append((str(path.relative_to(ROOT)), i, name))
+                match = pat.search(line)
+                if not match:
+                    continue
+                # Only the matched secret value is inspected for placeholder-ness,
+                # not surrounding text/comments.
+                if PLACEHOLDER_RE.search(match.group(0)):
                     break
+                findings.append((str(path.relative_to(ROOT)), i, name))
+                break
     return findings
 
 
