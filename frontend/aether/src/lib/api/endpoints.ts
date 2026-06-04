@@ -126,9 +126,12 @@ export const api = {
     platforms: (userId: string) =>
       restClient.get(`/v1/profile/${userId}/platforms`, wrap(unknownSchema)).then(r => r.data),
 
-    /** Cross-session journey chains — steps, drop-off flags, campaign linkage ("where"). */
+    /** Cross-session journey chains — steps, drop-off flags, campaign linkage ("where").
+     *  Backed by the persisted Profile360 aggregator; the in-memory journey
+     *  stitcher (/v1/journeys/*) is not yet wired to ingestion, so reading from
+     *  it here would drop existing journey-chain data. */
     journeys: (userId: string) =>
-      restClient.get(`/v1/journeys/users/${userId}`, wrap(unknownSchema)).then(r => r.data as JourneysResponse),
+      restClient.get(`/v1/profile/${userId}/journeys`, wrap(unknownSchema)).then(r => r.data as JourneysResponse),
 
     /**
      * Web3 wallet profiles for every wallet linked to the user.

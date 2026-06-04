@@ -3,7 +3,7 @@
 // Unified JS API bridging to native iOS/Android modules
 // =============================================================================
 
-import { NativeModules, NativeEventEmitter, Platform, AppState } from 'react-native';
+import { NativeModules, NativeEventEmitter, Platform } from 'react-native';
 import { useState, useEffect, useCallback, createContext, useContext, ReactNode } from 'react';
 import React from 'react';
 import { semanticContext } from './context/SemanticContext';
@@ -306,14 +306,13 @@ export function AetherProvider({
     RNFeatureFlags.initialize(config.apiKey, endpoint);
     RNFeedback.initialize(config.apiKey, endpoint);
 
-    let appStateSub: { remove: () => void } | undefined;
-
     setIsInitialized(true);
 
-    appStateSub = AppState.addEventListener('change', (state) => {
-      if (state === 'active') Aether.continueJourney('app_active', { resumeReason: 'app_state_active' });
-      if (state === 'background' || state === 'inactive') Aether.pauseJourney(state, { pauseReason: `app_state_${state}` });
-    });
+    // Journey foreground/background lifecycle is emitted by the native SDKs
+    // (Android onStart/onStop, iOS willEnterForeground). Emitting the same
+    // transitions again from a JS AppState listener would double-count every
+    // active/background change in the stitcher, so lifecycle emission is left
+    // to native.
 
     // Fetch server config (non-blocking, fire-and-forget)
     fetch(`${endpoint}/v1/config?apiKey=${config.apiKey}`)
@@ -332,7 +331,6 @@ export function AetherProvider({
 
     return () => {
       journeySub?.remove();
-      appStateSub?.remove();
       semanticContext.destroy();
       RNEcommerce.destroy();
       RNFeatureFlags.destroy();

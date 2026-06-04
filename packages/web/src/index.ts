@@ -65,6 +65,7 @@ class AetherSDK implements AetherSDKInterface {
   private currentJourney: CurrentJourney | null = null;
   private journeyResumeListeners: Array<(identity: ResolvedIdentity) => void> = [];
   private lastJourneyPauseAt: number | null = null;
+  private journeyVisibilityHandler: (() => void) | null = null;
   private lastRouteCheckpointPath: string | null = null;
 
   // Wallet change listeners
@@ -276,6 +277,12 @@ class AetherSDK implements AetherSDKInterface {
     this.sessionManager?.reset();
     this.web3Module?.disconnect();
     this._lastEmailHash = undefined;
+    // A reset creates a fresh anonymous identity/session, so any in-flight
+    // journey must be cleared too — otherwise the next checkpoint/complete
+    // reuses the previous user's journeyId under the new identity and the
+    // stitcher links two identities into one journey.
+    this.currentJourney = null;
+    this.lastJourneyPauseAt = null;
     this.log('info', 'SDK reset — new anonymous identity created');
   }
 
@@ -321,7 +328,12 @@ class AetherSDK implements AetherSDKInterface {
     this.plugins = [];
     this.walletChangeListeners = [];
     this.journeyResumeListeners = [];
+    if (this.journeyVisibilityHandler && typeof document !== 'undefined') {
+      document.removeEventListener('visibilitychange', this.journeyVisibilityHandler);
+    }
+    this.journeyVisibilityHandler = null;
     this.currentJourney = null;
+    this.lastJourneyPauseAt = null;
     this.initialized = false;
   }
 
@@ -754,7 +766,13 @@ class AetherSDK implements AetherSDKInterface {
 
   private setupJourneyLifecycleTracking(): void {
     if (typeof document === 'undefined' || typeof window === 'undefined') return;
-    document.addEventListener('visibilitychange', () => {
+    // Remove a handler left by a prior init() so re-initialization (destroy()
+    // then init()) does not stack duplicate listeners that each emit journey
+    // pause/continue/abandon events on a single visibility change.
+    if (this.journeyVisibilityHandler) {
+      document.removeEventListener('visibilitychange', this.journeyVisibilityHandler);
+    }
+    this.journeyVisibilityHandler = () => {
       if (!this.currentJourney) return;
       if (document.visibilityState === 'hidden') {
         this.pauseJourney('page_hidden');
@@ -766,7 +784,8 @@ class AetherSDK implements AetherSDKInterface {
       } else {
         this.continueJourney(this.currentJourney.stepId ?? this.currentJourney.stepName ?? 'foreground', { resumeReason: 'page_visible' });
       }
-    });
+    };
+    document.addEventListener('visibilitychange', this.journeyVisibilityHandler);
   }
 
   private async resolveIdentity(opts: {

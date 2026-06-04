@@ -236,6 +236,16 @@ class JourneyStitchingService:
             "overlink_warnings": len([j for j in journeys if "fingerprint_match" in j.confidence_signals and not (set(j.confidence_signals) & STRONG_SIGNALS)]),
         }
 
+    def dropped_events(self, tenant_id: str | None = None, limit: int = 200) -> list[dict[str, Any]]:
+        """Return recorded dropped/invalid journey events for operator diagnostics.
+
+        The diagnostics endpoint surfaces these so operators can see tenant /
+        event / reason details, not just a count. Kept consistent with the
+        ``dropped_invalid_events`` count reported by ``health()``.
+        """
+        items = [d for d in self._dropped if tenant_id is None or d.get("tenant_id") == tenant_id]
+        return items[-limit:]
+
 
 def serialize_journey(journey: JourneyRecord) -> dict[str, Any]:
     return {
