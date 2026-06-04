@@ -35,3 +35,23 @@ Contracts are versioned with the monorepo; breaking changes bump `schema_version
 in the manifest and follow the [SDK Release Checklist](SDK-RELEASE-CHECKLIST.md).
 
 See [SDKs](SDKS.md) and [Event Schema Reference](EVENT-SCHEMA-REFERENCE.md).
+
+## Journey lifecycle API
+
+All SDKs expose platform-idiomatic equivalents of:
+
+```ts
+startJourney(nameOrType, properties?)
+pauseJourney(reason?, properties?)
+resumeJourney(reason?, properties?)
+continueJourney(stepIdOrName, properties?)
+completeJourney(reason?, properties?)
+abandonJourney(reason?, properties?)
+checkpointJourney(stepIdOrName, properties?)
+getCurrentJourney()
+onJourneyResumed(callback)
+```
+
+These APIs emit the canonical `journey_*` event family. Existing legacy `track` calls
+with journey lifecycle names remain accepted during migration, but new SDK behavior must
+prefer first-class `journey_*` event types so validators do not drop `journey_resumed`.

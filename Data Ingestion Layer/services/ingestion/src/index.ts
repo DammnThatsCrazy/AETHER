@@ -62,6 +62,9 @@ class IngestionServer {
     eventsProcessed: 0,
     eventsFailed: 0,
     eventsDropped: 0,
+    journeyEventsReceived: 0,
+    journeyEventsInvalid: 0,
+    journeyEventsNormalized: 0,
     batchesReceived: 0,
     avgBatchSize: 0,
     avgProcessingMs: 0,
@@ -375,12 +378,22 @@ class IngestionServer {
     const errors: Array<{ index: number; error: string }> = [];
 
     for (let i = 0; i < batchPayload.batch.length; i++) {
+      const rawEvent = batchPayload.batch[i] as Record<string, unknown>;
+      const rawProps = rawEvent?.properties as Record<string, unknown> | undefined;
+      const rawType = String(rawEvent?.type ?? '');
+      const legacyJourneyName = rawType === 'track' ? String(rawProps?.event ?? rawEvent?.event ?? '') : '';
+      const isRawJourney = rawType.startsWith('journey_') || legacyJourneyName.startsWith('journey_');
+      if (isRawJourney) this.metrics.journeyEventsReceived = (this.metrics.journeyEventsReceived ?? 0) + 1;
       try {
         const validEvent = validateEvent(batchPayload.batch[i], i);
         validEvents.push(validEvent);
       } catch (err) {
         if (err instanceof ValidationError) {
           errors.push({ index: i, error: err.message });
+          const failedRaw = batchPayload.batch[i] as Record<string, unknown>;
+          if (String(failedRaw?.type ?? '').startsWith('journey_')) {
+            this.metrics.journeyEventsInvalid = (this.metrics.journeyEventsInvalid ?? 0) + 1;
+          }
           if (this.config.processing.deadLetterEnabled) {
             this.dlq.push(batchPayload.batch[i], err.message);
           }
@@ -390,6 +403,7 @@ class IngestionServer {
       }
     }
 
+    this.metrics.journeyEventsNormalized = (this.metrics.journeyEventsNormalized ?? 0) + validEvents.filter((e) => e.type === 'track' && typeof e.properties?.journeyEventType === 'string').length;
     this.metrics.eventsReceived += batchPayload.batch.length;
     this.metrics.batchesReceived++;
     this.metrics.eventsFailed += errors.length;
@@ -514,6 +528,18 @@ class IngestionServer {
       '# HELP aether_ingestion_events_failed_total Total events that failed processing',
       '# TYPE aether_ingestion_events_failed_total counter',
       `aether_ingestion_events_failed_total ${this.metrics.eventsFailed}`,
+      '',
+      '# HELP journey_events_received_total Total journey lifecycle events received',
+      '# TYPE journey_events_received_total counter',
+      `journey_events_received_total ${this.metrics.journeyEventsReceived ?? 0}`,
+      '',
+      '# HELP journey_events_invalid_total Total invalid journey lifecycle events',
+      '# TYPE journey_events_invalid_total counter',
+      `journey_events_invalid_total ${this.metrics.journeyEventsInvalid ?? 0}`,
+      '',
+      '# HELP journey_events_normalized_total Total legacy journey track events normalized',
+      '# TYPE journey_events_normalized_total counter',
+      `journey_events_normalized_total ${this.metrics.journeyEventsNormalized ?? 0}`,
       '',
       '# HELP aether_ingestion_events_dropped_total Total events dropped (duplicates)',
       '# TYPE aether_ingestion_events_dropped_total counter',

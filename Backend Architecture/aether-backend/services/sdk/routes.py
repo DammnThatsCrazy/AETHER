@@ -56,6 +56,8 @@ class ResolvedIdentity(BaseModel):
     wallet_addresses: list[str] = Field(default_factory=list)
     wallet_refs: list[dict] = Field(default_factory=list)
     resolved_at: str
+    confidence: float = 0.0
+    confidence_signals: list[str] = Field(default_factory=list)
 
 
 class IdentityResolveResponse(BaseModel):
@@ -178,6 +180,8 @@ async def resolve_identity(
                         wallet_addresses=[w["address"] for w in wallets],
                         wallet_refs=wallets,
                         resolved_at=utc_now().isoformat(),
+                        confidence=0.97,
+                        confidence_signals=["user_id_match", "timestamp_proximity"],
                     ),
                 )
 
@@ -208,6 +212,11 @@ async def resolve_identity(
                     wallet_addresses=[w["address"] for w in all_wallets],
                     wallet_refs=all_wallets,
                     resolved_at=utc_now().isoformat(),
+                    # Wallet is a deterministic, strong match; surface real
+                    # confidence/signals so a journey_resumed event stitches to
+                    # the prior journey instead of defaulting to 0.0.
+                    confidence=0.95,
+                    confidence_signals=["wallet_match"],
                 ),
             )
 
@@ -240,6 +249,8 @@ async def resolve_identity(
                     wallet_addresses=[w["address"] for w in all_wallets],
                     wallet_refs=all_wallets,
                     resolved_at=utc_now().isoformat(),
+                    confidence=0.95,
+                    confidence_signals=["wallet_match"],
                 ),
             )
 
@@ -302,6 +313,8 @@ async def resolve_identity(
                         wallet_addresses=[w["address"] for w in wallets],
                         wallet_refs=wallets,
                         resolved_at=utc_now().isoformat(),
+                        confidence=0.97,
+                        confidence_signals=["user_id_match", "timestamp_proximity"],
                     ),
                 )
 
@@ -354,6 +367,11 @@ async def resolve_identity(
                         f"[sdk/resolve] fingerprint matched prior anon={prior_anon_id[:8]}… "
                         f"caller={caller_anon_id[:8]}… confidence={confidence:.2f}"
                     )
+                    fp_signals = ["fingerprint_match"]
+                    if sigs and sigs.canvas_hash and best.get("canvas_hash") and sigs.canvas_hash == best["canvas_hash"]:
+                        fp_signals.append("canvas_match")
+                    if ip_subnet and ip_subnet == best.get("ip_subnet"):
+                        fp_signals.append("ip_subnet_match")
                     return IdentityResolveResponse(
                         resolved=True,
                         identity=ResolvedIdentity(
@@ -361,6 +379,8 @@ async def resolve_identity(
                             wallet_addresses=[w["address"] for w in wallets],
                             wallet_refs=wallets,
                             resolved_at=utc_now().isoformat(),
+                            confidence=round(confidence, 2),
+                            confidence_signals=fp_signals,
                         ),
                     )
 
@@ -399,6 +419,11 @@ async def resolve_identity(
                             f"prior anon={prior_anon_id[:8]}… caller={caller_anon_id[:8]}… "
                             f"confidence={confidence:.2f}"
                         )
+                        fp_signals = ["fingerprint_match", "canvas_match"]
+                        if sigs.webgl_renderer and sigs.webgl_renderer == best.get("webgl_renderer"):
+                            fp_signals.append("webgl_match")
+                        if ip_subnet and ip_subnet == best.get("ip_subnet"):
+                            fp_signals.append("ip_subnet_match")
                         return IdentityResolveResponse(
                             resolved=True,
                             identity=ResolvedIdentity(
@@ -406,6 +431,8 @@ async def resolve_identity(
                                 wallet_addresses=[w["address"] for w in wallets],
                                 wallet_refs=wallets,
                                 resolved_at=utc_now().isoformat(),
+                                confidence=round(confidence, 2),
+                                confidence_signals=fp_signals,
                             ),
                         )
 
