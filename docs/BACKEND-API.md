@@ -169,6 +169,33 @@ are returned in customer or operator responses.
 | `/v1/billing/value-created` | GET | API key | Caller-safe value-created events for value-based billing review |
 | `/v1/billing/payment-status` | GET | API key | Caller-safe payment status and active provider mode |
 
+### Kyber revenue-operations billing (`/v1/admin/kyber/revops/*`, admin permission required)
+
+These operator endpoints expose revenue-operations state without returning
+billing-provider secrets or customer-hidden pricing rationale. Provider readiness
+endpoints are safe to run in internal/offline mode and summarize external billing
+configuration only as booleans, provider mode, invoice export mode, and product
+mapping status.
+
+| Endpoint | Method | Purpose |
+|---|---|---|
+| `/v1/admin/kyber/revops/overview` | GET | Revenue-operations summary, including billing-model mix |
+| `/v1/admin/kyber/revops/contracts` | GET | List tenant contract profiles |
+| `/v1/admin/kyber/revops/contracts/{tenant_id}` | GET/POST/PATCH | Read, create, or update one tenant contract profile |
+| `/v1/admin/kyber/revops/entitlements/{tenant_id}` | GET/POST | List or create tenant entitlements |
+| `/v1/admin/kyber/revops/entitlements/{entitlement_id}` | PATCH | Update one tenant entitlement |
+| `/v1/admin/kyber/revops/usage` | GET | List all metered usage events |
+| `/v1/admin/kyber/revops/usage/{tenant_id}` | GET | List one tenant's metered usage events for a requested or current billing window |
+| `/v1/admin/kyber/revops/metering-events` | POST | Record a metered usage event |
+| `/v1/admin/kyber/revops/invoice-previews` | GET | List invoice previews |
+| `/v1/admin/kyber/revops/invoice-previews/{tenant_id}/generate` | POST | Generate an invoice preview for a billing window |
+| `/v1/admin/kyber/revops/invoice-previews/{invoice_preview_id}` | PATCH | Move an invoice preview through `draft`, `review_ready`, `approved`, or `exported` |
+| `/v1/admin/kyber/revops/value-created` | GET | List value-created events |
+| `/v1/admin/kyber/revops/revenue-leakage` | GET | List or recalculate revenue leakage signals |
+| `/v1/admin/kyber/revops/expansion-billing-opportunities` | GET | List expansion billing opportunities |
+| `/v1/admin/kyber/revops/provider-status` | GET | Provider mode, health, sync flags, invoice export mode, and mapping status without secrets |
+| `/v1/admin/kyber/revops/product-mappings` | GET | Product/price mapping catalog and mapping completeness without secrets |
+
 ### Admin tenant lifecycle (admin permission required)
 
 | Endpoint | Method | Purpose |
