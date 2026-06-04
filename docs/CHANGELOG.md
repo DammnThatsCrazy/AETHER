@@ -11,9 +11,55 @@ source_files:
 canonical_owner: release@aether
 estimated_read_minutes: 10
 toc_depth: 3
-last_synced_commit: 4ca75de
+last_synced_commit: dac9cef
 ---
 # Changelog
+
+## Unreleased — Hosted Agent Control Plane
+
+### Tenant-scoped control plane for the Agent Layer
+- **Durable runtime repository** (`services/agent/runtime_repository.py`)
+  persists objectives, plans, steps, checkpoints, events, review batches,
+  staged mutations, controller heartbeats, worker runs, catalyst triggers,
+  and kill-switch state via the shared `get_store` abstraction.
+- **Operator API** under `/v1/agent/*` (`services/agent/routes.py`):
+  controller health, objective submit/list/detail, pause/resume/cancel,
+  dispatch, review-batch approve/reject, timeline/events, heartbeat/status,
+  and tenant-scoped kill-switch — with a consistent envelope, RBAC/tenant
+  checks, idempotency keys, and secret redaction.
+- **Hardened queue/worker** (`Agent Layer/queue/*`) — explicit routing for
+  discovery/enrichment/verification/commit/recovery, idempotency headers,
+  and safer Celery defaults.
+- **Kyber wiring** — env-driven REST base URL and control-plane hooks in
+  live modes; local mocked/demo mode preserved.
+- **Migration + runbook** — `20260604_agent_control_plane.py`;
+  `docs/AGENT-LAYER-PRODUCTION.md` covers envs, migration, and operator
+  workflows. Unattended canonical graph mutation remains blocked.
+
+---
+
+## Unreleased — Cross-Device Journey Lifecycle
+
+### Canonical journey events, SDK APIs, backend stitching
+- **Shared contracts** (`packages/shared/events.ts`) — journey event family,
+  consent mapping, and `JourneyPayload`/`JourneyContext` types. New canonical
+  types: `journey_started/paused/resumed/continued/completed/abandoned/
+  checkpoint`.
+- **SDK APIs** — Web (`startJourney`…`checkpointJourney`,
+  `getCurrentJourney`, `onJourneyResumed`, SPA checkpointing, visibility
+  pause/continue) plus matching additive methods on Android, iOS, and the RN
+  bridge. Journey events are consent-gated (analytics).
+- **Ingestion** — validator accepts and normalizes journey types (including
+  legacy encodings); new metrics `journey_events_{received,invalid,
+  normalized}_total`.
+- **Backend stitching** (`services/journeys/`) — `JourneyStitchingService`
+  (confidence scoring, handoff detection) with tenant APIs under
+  `/v1/journeys/*` and admin health under `/v1/admin/journey-health/*`.
+  Identity-resolve responses now carry `confidence`/`confidence_signals` so
+  the Web SDK emits a canonical `journey_resumed` event.
+- **Backward compatible** — all journey APIs additive; no migration required.
+
+---
 
 ## Unreleased — Self-Serve Plans P1-P4, Pooled Quota & Per-Service Overage
 
