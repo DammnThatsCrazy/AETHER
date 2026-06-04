@@ -1056,6 +1056,22 @@
       "canonical_owner": "frontend@aether"
     },
     {
+      "path": "docs/FRONTEND-QA.md",
+      "title": "Frontend QA",
+      "slug": "operations/frontend-qa",
+      "section": "operations",
+      "visibility": "I",
+      "audience": [
+        "dev-senior",
+        "ops",
+        "architect"
+      ],
+      "status": "beta",
+      "since_version": "8.9.0",
+      "estimated_read_minutes": 5,
+      "canonical_owner": "platform@aether"
+    },
+    {
       "path": "docs/GA4-CONNECTOR.md",
       "title": "GA4 Connector",
       "slug": "operations/ga4-connector",
@@ -2817,6 +2833,21 @@
       ],
       "status": "stable",
       "since_version": "8.9.0"
+    },
+    {
+      "path": "docs/UX-HANDOFF-NOTES.md",
+      "title": "UX Handoff Notes",
+      "slug": "operations/ux-handoff-notes",
+      "section": "operations",
+      "visibility": "I",
+      "audience": [
+        "dev-senior",
+        "exec"
+      ],
+      "status": "beta",
+      "since_version": "8.9.0",
+      "estimated_read_minutes": 4,
+      "canonical_owner": "platform@aether"
     },
     {
       "path": "docs/VALUE-BASED-PRICING-SUPPORT.md",
