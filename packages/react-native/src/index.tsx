@@ -3,7 +3,7 @@
 // Unified JS API bridging to native iOS/Android modules
 // =============================================================================
 
-import { NativeModules, NativeEventEmitter, Platform } from 'react-native';
+import { NativeModules, NativeEventEmitter, Platform, AppState } from 'react-native';
 import { useState, useEffect, useCallback, createContext, useContext, ReactNode } from 'react';
 import React from 'react';
 import { semanticContext } from './context/SemanticContext';
@@ -88,6 +88,38 @@ const Aether = {
 
   hydrateIdentity(data: IdentityData): void {
     AetherNative?.hydrateIdentity(data);
+  },
+
+  startJourney(nameOrType: string, properties?: Record<string, unknown>): void {
+    AetherNative?.startJourney(nameOrType, properties ?? {});
+  },
+
+  pauseJourney(reason?: string, properties?: Record<string, unknown>): void {
+    AetherNative?.pauseJourney(reason ?? '', properties ?? {});
+  },
+
+  resumeJourney(reason?: string, properties?: Record<string, unknown>): void {
+    AetherNative?.resumeJourney(reason ?? '', properties ?? {});
+  },
+
+  continueJourney(stepIdOrName: string, properties?: Record<string, unknown>): void {
+    AetherNative?.continueJourney(stepIdOrName, properties ?? {});
+  },
+
+  completeJourney(reason?: string, properties?: Record<string, unknown>): void {
+    AetherNative?.completeJourney(reason ?? '', properties ?? {});
+  },
+
+  abandonJourney(reason?: string, properties?: Record<string, unknown>): void {
+    AetherNative?.abandonJourney(reason ?? '', properties ?? {});
+  },
+
+  checkpointJourney(stepIdOrName: string, properties?: Record<string, unknown>): void {
+    AetherNative?.checkpointJourney(stepIdOrName, properties ?? {});
+  },
+
+  async getCurrentJourney(): Promise<Record<string, unknown> | null> {
+    return AetherNative?.getCurrentJourney?.() ?? null;
   },
 
   async getIdentity(): Promise<Identity> {
@@ -274,7 +306,14 @@ export function AetherProvider({
     RNFeatureFlags.initialize(config.apiKey, endpoint);
     RNFeedback.initialize(config.apiKey, endpoint);
 
+    let appStateSub: { remove: () => void } | undefined;
+
     setIsInitialized(true);
+
+    appStateSub = AppState.addEventListener('change', (state) => {
+      if (state === 'active') Aether.continueJourney('app_active', { resumeReason: 'app_state_active' });
+      if (state === 'background' || state === 'inactive') Aether.pauseJourney(state, { pauseReason: `app_state_${state}` });
+    });
 
     // Fetch server config (non-blocking, fire-and-forget)
     fetch(`${endpoint}/v1/config?apiKey=${config.apiKey}`)
@@ -293,6 +332,7 @@ export function AetherProvider({
 
     return () => {
       journeySub?.remove();
+      appStateSub?.remove();
       semanticContext.destroy();
       RNEcommerce.destroy();
       RNFeatureFlags.destroy();

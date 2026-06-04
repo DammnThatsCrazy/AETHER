@@ -21,6 +21,7 @@ const NAV_ITEMS: NavItem[] = [
   { path: '/packages',        label: 'Packages',        glyph: '▣' },
   { path: '/deployment-readiness', label: 'Deploy Ready', glyph: '▤' },
   { path: '/reliability',     label: 'Reliability',     glyph: '◐' },
+  { path: '/journey-health',  label: 'Journey Health',  glyph: '↔' },
   { path: '/intelligence-quality', label: 'Intel Quality', glyph: '◉' },
   { path: '/connectors', label: 'Connectors', glyph: '⇄' },
   { path: '/revops',          label: 'RevOps',          glyph: '₿' },

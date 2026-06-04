@@ -116,6 +116,8 @@ object Aether : DefaultLifecycleObserver {
     private var appStartTimeMs: Long = SystemClock.elapsedRealtime()
     private var foregroundStartMs: Long = 0L
     private var lastActivityMs: Long = 0L
+    private var currentJourneyId: String? = null
+    private var currentJourneyName: String? = null
     private val CLICK_ID_PARAMS = setOf(
         "gclid", "msclkid", "fbclid", "ttclid", "twclid",
         "li_fat_id", "rdt_cid", "scid", "dclid", "epik",
@@ -178,6 +180,47 @@ object Aether : DefaultLifecycleObserver {
         props.putAll(properties)
         enqueueEvent("track", props)
     }
+
+
+    fun startJourney(nameOrType: String, properties: Map<String, Any?> = emptyMap()) {
+        currentJourneyId = (properties["journeyId"] as? String) ?: UUID.randomUUID().toString()
+        currentJourneyName = nameOrType
+        enqueueEvent("journey_started", properties + mapOf("journeyId" to currentJourneyId, "journeyName" to nameOrType, "journeyType" to nameOrType, "journeyStatus" to "started"))
+    }
+
+    fun pauseJourney(reason: String? = null, properties: Map<String, Any?> = emptyMap()) {
+        currentJourneyId ?: return
+        enqueueEvent("journey_paused", properties + mapOf("journeyId" to currentJourneyId, "pauseReason" to (reason ?: ""), "journeyStatus" to "paused"))
+    }
+
+    fun resumeJourney(reason: String? = null, properties: Map<String, Any?> = emptyMap()) {
+        if (currentJourneyId == null) currentJourneyId = (properties["journeyId"] as? String) ?: UUID.randomUUID().toString()
+        enqueueEvent("journey_resumed", properties + mapOf("journeyId" to currentJourneyId, "resumeReason" to (reason ?: ""), "journeyStatus" to "resumed"))
+    }
+
+    fun continueJourney(stepIdOrName: String, properties: Map<String, Any?> = emptyMap()) {
+        currentJourneyId ?: return
+        enqueueEvent("journey_continued", properties + mapOf("journeyId" to currentJourneyId, "stepId" to stepIdOrName, "stepName" to stepIdOrName, "journeyStatus" to "continued"))
+    }
+
+    fun completeJourney(reason: String? = null, properties: Map<String, Any?> = emptyMap()) {
+        currentJourneyId ?: return
+        enqueueEvent("journey_completed", properties + mapOf("journeyId" to currentJourneyId, "completionReason" to (reason ?: ""), "journeyStatus" to "completed"))
+        currentJourneyId = null
+    }
+
+    fun abandonJourney(reason: String? = null, properties: Map<String, Any?> = emptyMap()) {
+        currentJourneyId ?: return
+        enqueueEvent("journey_abandoned", properties + mapOf("journeyId" to currentJourneyId, "abandonmentReason" to (reason ?: ""), "journeyStatus" to "abandoned"))
+        currentJourneyId = null
+    }
+
+    fun checkpointJourney(stepIdOrName: String, properties: Map<String, Any?> = emptyMap()) {
+        currentJourneyId ?: return
+        enqueueEvent("journey_checkpoint", properties + mapOf("journeyId" to currentJourneyId, "stepId" to stepIdOrName, "stepName" to stepIdOrName, "journeyStatus" to "checkpoint"))
+    }
+
+    fun getCurrentJourney(): Map<String, Any?>? = currentJourneyId?.let { mapOf("journeyId" to it, "journeyName" to currentJourneyName) }
 
     fun screenView(screenName: String, properties: Map<String, Any?> = emptyMap()) {
         screenCount++
@@ -411,6 +454,7 @@ object Aether : DefaultLifecycleObserver {
         foregroundStartMs = now
         lastActivityMs = now
         track("app_foreground", mapOf("networkType" to getNetworkType()))
+        continueJourney("app_foreground", mapOf("resumeReason" to "process_start"))
     }
 
     override fun onStop(owner: LifecycleOwner) {
@@ -418,6 +462,7 @@ object Aether : DefaultLifecycleObserver {
         lastActivityMs = now
         val sessionDurationMs = if (foregroundStartMs > 0) now - foregroundStartMs else 0L
         track("app_background", mapOf("sessionDurationMs" to sessionDurationMs))
+        pauseJourney("process_stop", mapOf("sessionDurationMs" to sessionDurationMs))
         flush()
     }
 

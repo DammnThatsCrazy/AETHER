@@ -56,6 +56,8 @@ class ResolvedIdentity(BaseModel):
     wallet_addresses: list[str] = Field(default_factory=list)
     wallet_refs: list[dict] = Field(default_factory=list)
     resolved_at: str
+    confidence: float = 0.0
+    confidence_signals: list[str] = Field(default_factory=list)
 
 
 class IdentityResolveResponse(BaseModel):
@@ -178,6 +180,8 @@ async def resolve_identity(
                         wallet_addresses=[w["address"] for w in wallets],
                         wallet_refs=wallets,
                         resolved_at=utc_now().isoformat(),
+                        confidence=0.97,
+                        confidence_signals=["user_id_match", "timestamp_proximity"],
                     ),
                 )
 
@@ -302,6 +306,8 @@ async def resolve_identity(
                         wallet_addresses=[w["address"] for w in wallets],
                         wallet_refs=wallets,
                         resolved_at=utc_now().isoformat(),
+                        confidence=0.97,
+                        confidence_signals=["user_id_match", "timestamp_proximity"],
                     ),
                 )
 

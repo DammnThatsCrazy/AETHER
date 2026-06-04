@@ -80,6 +80,48 @@ class AetherNativeModule(private val reactContext: ReactApplicationContext) :
         })
     }
 
+
+    @ReactMethod
+    fun startJourney(nameOrType: String, properties: ReadableMap) {
+        Aether.startJourney(nameOrType, properties.toHashMap().mapValues { it.value })
+    }
+
+    @ReactMethod
+    fun pauseJourney(reason: String, properties: ReadableMap) {
+        Aether.pauseJourney(reason, properties.toHashMap().mapValues { it.value })
+    }
+
+    @ReactMethod
+    fun resumeJourney(reason: String, properties: ReadableMap) {
+        Aether.resumeJourney(reason, properties.toHashMap().mapValues { it.value })
+    }
+
+    @ReactMethod
+    fun continueJourney(stepIdOrName: String, properties: ReadableMap) {
+        Aether.continueJourney(stepIdOrName, properties.toHashMap().mapValues { it.value })
+    }
+
+    @ReactMethod
+    fun completeJourney(reason: String, properties: ReadableMap) {
+        Aether.completeJourney(reason, properties.toHashMap().mapValues { it.value })
+    }
+
+    @ReactMethod
+    fun abandonJourney(reason: String, properties: ReadableMap) {
+        Aether.abandonJourney(reason, properties.toHashMap().mapValues { it.value })
+    }
+
+    @ReactMethod
+    fun checkpointJourney(stepIdOrName: String, properties: ReadableMap) {
+        Aether.checkpointJourney(stepIdOrName, properties.toHashMap().mapValues { it.value })
+    }
+
+    @ReactMethod
+    fun getCurrentJourney(promise: Promise) {
+        val current = Aether.getCurrentJourney()
+        if (current == null) promise.resolve(null) else promise.resolve(Arguments.makeNativeMap(current))
+    }
+
     @ReactMethod
     fun getIdentity(promise: Promise) {
         val result = Arguments.createMap().apply {

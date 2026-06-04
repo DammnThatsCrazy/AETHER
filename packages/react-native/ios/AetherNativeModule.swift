@@ -81,6 +81,47 @@ class AetherNativeModule: RCTEventEmitter {
         ])
     }
 
+
+    @objc
+    func startJourney(_ nameOrType: String, properties: NSDictionary) {
+        Aether.shared.startJourney(nameOrType, properties: (properties as? [String: Any])?.mapValues { AnyCodable($0) } ?? [:])
+    }
+
+    @objc
+    func pauseJourney(_ reason: String, properties: NSDictionary) {
+        Aether.shared.pauseJourney(reason, properties: (properties as? [String: Any])?.mapValues { AnyCodable($0) } ?? [:])
+    }
+
+    @objc
+    func resumeJourney(_ reason: String, properties: NSDictionary) {
+        Aether.shared.resumeJourney(reason, properties: (properties as? [String: Any])?.mapValues { AnyCodable($0) } ?? [:])
+    }
+
+    @objc
+    func continueJourney(_ stepIdOrName: String, properties: NSDictionary) {
+        Aether.shared.continueJourney(stepIdOrName, properties: (properties as? [String: Any])?.mapValues { AnyCodable($0) } ?? [:])
+    }
+
+    @objc
+    func completeJourney(_ reason: String, properties: NSDictionary) {
+        Aether.shared.completeJourney(reason, properties: (properties as? [String: Any])?.mapValues { AnyCodable($0) } ?? [:])
+    }
+
+    @objc
+    func abandonJourney(_ reason: String, properties: NSDictionary) {
+        Aether.shared.abandonJourney(reason, properties: (properties as? [String: Any])?.mapValues { AnyCodable($0) } ?? [:])
+    }
+
+    @objc
+    func checkpointJourney(_ stepIdOrName: String, properties: NSDictionary) {
+        Aether.shared.checkpointJourney(stepIdOrName, properties: (properties as? [String: Any])?.mapValues { AnyCodable($0) } ?? [:])
+    }
+
+    @objc
+    func getCurrentJourney(_ resolve: @escaping RCTPromiseResolveBlock, rejecter reject: RCTPromiseRejectBlock) {
+        resolve(Aether.shared.getCurrentJourney() ?? NSNull())
+    }
+
     @objc
     func getIdentity(_ resolve: @escaping RCTPromiseResolveBlock, rejecter reject: RCTPromiseRejectBlock) {
         resolve([

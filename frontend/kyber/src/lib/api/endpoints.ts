@@ -1527,6 +1527,17 @@ export const api = {
   },
 
   // ── SDK Health Monitoring ──────────────────────────────────────────────────
+  journeyHealth: {
+    overview: () =>
+      restClient.get('/v1/admin/journey-health', wrap(unknownSchema)).then(r => r.data),
+    tenant: (tenantId: string) =>
+      restClient.get(`/v1/admin/journey-health/tenants/${encodeURIComponent(tenantId)}`, wrap(unknownSchema)).then(r => r.data),
+    sdkParity: () =>
+      restClient.get('/v1/admin/journey-health/sdk-parity', wrap(unknownSchema)).then(r => r.data),
+    droppedEvents: () =>
+      restClient.get('/v1/admin/journey-health/dropped-events', wrap(unknownSchema)).then(r => r.data),
+  },
+
   sdkHealth: {
     fleet: () =>
       restClient.get('/v1/diagnostics/sdk/health', wrap(unknownSchema)).then(r => r.data),

@@ -128,7 +128,7 @@ export const api = {
 
     /** Cross-session journey chains — steps, drop-off flags, campaign linkage ("where"). */
     journeys: (userId: string) =>
-      restClient.get(`/v1/profile/${userId}/journeys`, wrap(unknownSchema)).then(r => r.data as JourneysResponse),
+      restClient.get(`/v1/journeys/users/${userId}`, wrap(unknownSchema)).then(r => r.data as JourneysResponse),
 
     /**
      * Web3 wallet profiles for every wallet linked to the user.

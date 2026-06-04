@@ -73,3 +73,25 @@ fiat / stripe / invoice / onchain / x402 / internal_credit.
 Mirrored in `packages/shared/events.ts::EVENT_CONSENT_PURPOSE` and
 `packages/web/src/core/event-queue.ts::CONSENT_MAP`. An event whose required
 purpose is not granted is **dropped before transport** by the SDK.
+
+## Journey lifecycle (family: `journey`) — purpose: `analytics`
+
+| Type | Emitted by | Notes |
+|---|---|---|
+| `journey_started` | `startJourney()` | Explicit host-app journey start. |
+| `journey_paused` | `pauseJourney()` / app background / page hidden | Client observation only; backend owns final state. |
+| `journey_resumed` | `resumeJourney()` / `/sdk/identity/resolve` match | Canonical top-level type; no longer emitted as an unregistered event. |
+| `journey_continued` | foreground/resume within timeout | Same-device/session continuation. |
+| `journey_completed` | `completeJourney()` | Explicit host-app completion. |
+| `journey_abandoned` | `abandonJourney()` / safe client timeout | Backend may derive abandonment when client inference is unsafe. |
+| `journey_checkpoint` | `checkpointJourney()` / throttled SPA route checkpoint | Non-terminal step marker. |
+
+Journey payloads may include `journeyId`, `journeyName`, `journeyType`, step IDs/names,
+status/reason fields, handoff source/target session/device identifiers, latency,
+confidence, confidence signals, campaign/referrer attribution, and metadata. Journey
+events default to `analytics` consent unless commerce, web3, or agent-specific data is
+also emitted through its canonical event family.
+
+Legacy `track` events remain accepted when `properties.event` is one of the journey
+lifecycle names above. Ingestion normalizes those records for internal journey stitching
+without breaking existing `track`, `page`, or `screen` behavior.

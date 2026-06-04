@@ -67,3 +67,26 @@ for **server-to-server connector ingestion only**. SDKs must not target it.
 Every SDK sets `context.library.name = '@aether/{platform}'` and
 `context.library.version = <semver>`. The contract schema version lives in
 `packages/shared/schema-version.ts` and is bumped only on breaking changes.
+
+## Cross-device journey continuity
+
+Canonical journey lifecycle events are first-class `EventType` values and are accepted on
+`POST /v1/batch`. The ingestion validator also accepts legacy `track` envelopes whose
+`properties.event` is a journey lifecycle name and annotates them as normalized legacy
+journey records.
+
+Ingestion safeguards:
+
+- Event IDs are used for idempotency/deduplication.
+- Tenant/API-key scope is preserved before any stitching decision.
+- Journey payload shape is validated (`confidence` is 0..1, handoff latency is
+  non-negative, known journey fields have stable scalar/array types).
+- Journey events remain subject to analytics consent by default; commerce/web3/agent
+  payloads must continue to use their stricter canonical event families.
+- SDKs continue to use `/v1/batch`; server-to-server ingestion endpoints are not an SDK
+  transport path.
+
+Backend stitching is transparent and conservative: `userId`, wallet, and email-hash
+matches are strong signals; `anonymousId` is medium/high within the same install;
+fingerprint, campaign/referrer, timestamp proximity, and behavior are support signals.
+Fingerprint alone must never promote a sensitive identity link to high confidence.

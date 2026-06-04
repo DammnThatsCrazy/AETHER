@@ -15,6 +15,7 @@ import type {
   VMType, ConsentCallback, ConnectedWallet, ResolvedIdentity,
   ConsentState, ConsentBannerConfig, WalletInterface, ConsentInterface,
   CommerceInterface, AgentInterface, X402Interface,
+  CurrentJourney, JourneyLifecycleEventType, JourneyPayload,
 } from './types';
 import { EventQueue } from './core/event-queue';
 import { SessionManager } from './core/session';
@@ -61,6 +62,10 @@ class AetherSDK implements AetherSDKInterface {
   private initialized = false;
   private debug = false;
   private _lastEmailHash: string | undefined = undefined;
+  private currentJourney: CurrentJourney | null = null;
+  private journeyResumeListeners: Array<(identity: ResolvedIdentity) => void> = [];
+  private lastJourneyPauseAt: number | null = null;
+  private lastRouteCheckpointPath: string | null = null;
 
   // Wallet change listeners
   private walletChangeListeners: ((wallets: ConnectedWallet[]) => void)[] = [];
@@ -97,6 +102,7 @@ class AetherSDK implements AetherSDKInterface {
 
     this.pageView();
     this.setupSPATracking();
+    this.setupJourneyLifecycleTracking();
 
     if (config.privacy?.respectDNT && navigator.doNotTrack === '1') {
       this.log('info', 'DNT detected — limiting data collection');
@@ -124,6 +130,85 @@ class AetherSDK implements AetherSDKInterface {
   conversion(event: string, value?: number, properties?: Record<string, unknown>): void {
     this.enqueueEvent('conversion', { event, value, ...properties });
     this.sessionManager?.recordEvent();
+  }
+
+
+  startJourney(nameOrType: string, properties?: JourneyPayload): CurrentJourney | null {
+    const timestamp = now();
+    const journey: CurrentJourney = {
+      journeyId: String(properties?.journeyId ?? generateId()),
+      journeyName: properties?.journeyName ?? nameOrType,
+      journeyType: properties?.journeyType ?? nameOrType,
+      journeyStatus: 'started',
+      startedAt: timestamp,
+      updatedAt: timestamp,
+      ...properties,
+    };
+    this.currentJourney = journey;
+    this.emitJourneyEvent('journey_started', journey);
+    return this.currentJourney;
+  }
+
+  pauseJourney(reason?: string, properties?: JourneyPayload): void {
+    if (!this.currentJourney) return;
+    this.lastJourneyPauseAt = Date.now();
+    this.updateJourney('paused', { pauseReason: reason, ...properties });
+    this.emitJourneyEvent('journey_paused', this.currentJourney);
+  }
+
+  resumeJourney(reason?: string, properties?: JourneyPayload): void {
+    if (!this.currentJourney) {
+      this.currentJourney = {
+        journeyId: properties?.journeyId ?? generateId(),
+        journeyName: properties?.journeyName,
+        journeyType: properties?.journeyType,
+        journeyStatus: 'resumed',
+        startedAt: now(),
+        updatedAt: now(),
+        ...properties,
+      };
+    }
+    if (!this.currentJourney) return;
+    const latency = this.lastJourneyPauseAt ? Date.now() - this.lastJourneyPauseAt : undefined;
+    this.updateJourney('resumed', { resumeReason: reason, handoffLatencyMs: latency, ...properties });
+    this.emitJourneyEvent('journey_resumed', this.currentJourney);
+  }
+
+  continueJourney(stepIdOrName: string, properties?: JourneyPayload): void {
+    if (!this.currentJourney) return;
+    this.updateJourney('continued', { stepId: properties?.stepId ?? stepIdOrName, stepName: properties?.stepName ?? stepIdOrName, ...properties });
+    this.emitJourneyEvent('journey_continued', this.currentJourney);
+  }
+
+  completeJourney(reason?: string, properties?: JourneyPayload): void {
+    if (!this.currentJourney) return;
+    this.updateJourney('completed', { completionReason: reason, ...properties });
+    this.emitJourneyEvent('journey_completed', this.currentJourney);
+    this.currentJourney = null;
+  }
+
+  abandonJourney(reason?: string, properties?: JourneyPayload): void {
+    if (!this.currentJourney) return;
+    this.updateJourney('abandoned', { abandonmentReason: reason, ...properties });
+    this.emitJourneyEvent('journey_abandoned', this.currentJourney);
+    this.currentJourney = null;
+  }
+
+  checkpointJourney(stepIdOrName: string, properties?: JourneyPayload): void {
+    if (!this.currentJourney) return;
+    this.updateJourney('checkpoint', { stepId: properties?.stepId ?? stepIdOrName, stepName: properties?.stepName ?? stepIdOrName, ...properties });
+    this.emitJourneyEvent('journey_checkpoint', this.currentJourney);
+  }
+
+  getCurrentJourney(): CurrentJourney | null {
+    return this.currentJourney ? { ...this.currentJourney } : null;
+  }
+
+  onJourneyResumed(callback: (identity: ResolvedIdentity) => void): () => void {
+    this.journeyResumeListeners.push(callback);
+    return () => {
+      this.journeyResumeListeners = this.journeyResumeListeners.filter((cb) => cb !== callback);
+    };
   }
 
   hydrateIdentity(data: IdentityData): void {
@@ -235,6 +320,8 @@ class AetherSDK implements AetherSDKInterface {
     this.config = null;
     this.plugins = [];
     this.walletChangeListeners = [];
+    this.journeyResumeListeners = [];
+    this.currentJourney = null;
     this.initialized = false;
   }
 
@@ -645,6 +732,43 @@ class AetherSDK implements AetherSDKInterface {
     this.log('debug', `Event: ${type}`, properties);
   }
 
+
+  private updateJourney(status: NonNullable<CurrentJourney['journeyStatus']>, properties: JourneyPayload): void {
+    if (!this.currentJourney) return;
+    this.currentJourney = {
+      ...this.currentJourney,
+      ...properties,
+      journeyStatus: status,
+      updatedAt: now(),
+    };
+  }
+
+  private emitJourneyEvent(type: JourneyLifecycleEventType, properties: JourneyPayload): void {
+    const payload: JourneyPayload = {
+      ...properties,
+      journeyStatus: properties.journeyStatus ?? type.replace('journey_', '') as JourneyPayload['journeyStatus'],
+    };
+    this.enqueueEvent(type, payload as Record<string, unknown>);
+    this.sessionManager?.recordEvent();
+  }
+
+  private setupJourneyLifecycleTracking(): void {
+    if (typeof document === 'undefined' || typeof window === 'undefined') return;
+    document.addEventListener('visibilitychange', () => {
+      if (!this.currentJourney) return;
+      if (document.visibilityState === 'hidden') {
+        this.pauseJourney('page_hidden');
+        return;
+      }
+      const timeout = this.config?.journeyTimeoutMs ?? 30 * 60 * 1000;
+      if (this.lastJourneyPauseAt && Date.now() - this.lastJourneyPauseAt > timeout) {
+        this.abandonJourney('client_inactivity_timeout');
+      } else {
+        this.continueJourney(this.currentJourney.stepId ?? this.currentJourney.stepName ?? 'foreground', { resumeReason: 'page_visible' });
+      }
+    });
+  }
+
   private async resolveIdentity(opts: {
     wallets?: { address: string; vm: VMType }[];
     userId?: string;
@@ -673,6 +797,7 @@ class AetherSDK implements AetherSDKInterface {
     };
 
     let resolved: ResolvedIdentity | null = null;
+    let rawIdentity: Record<string, unknown> | null = null;
     try {
       const res = await fetch(`${endpoint}/sdk/identity/resolve`, {
         method: 'POST',
@@ -689,6 +814,7 @@ class AetherSDK implements AetherSDKInterface {
 
       // Map snake_case backend fields to camelCase TypeScript type
       const raw = data.identity;
+      rawIdentity = raw;
       const rawWalletRefs = (raw.wallet_refs ?? []) as Array<{ address: string; vm: string }>;
       const resolvedAt = ((raw.resolved_at ?? raw.resolvedAt) as string) ?? '';
       const mapped: ResolvedIdentity = {
@@ -722,13 +848,20 @@ class AetherSDK implements AetherSDKInterface {
       wallets: resolved.wallets,
     });
 
-    this.enqueueEvent('journey_resumed', {
-      resolvedAnonymousId: resolved.anonymousId,
-      resolvedUserId: resolved.userId ?? null,
+    this.resumeJourney('identity_resolved', {
+      sourceAnonymousId: resolved.anonymousId,
+      targetAnonymousId: currentAnonymousId,
+      targetUserId: resolved.userId,
+      confidence: typeof rawIdentity?.confidence === 'number' ? rawIdentity.confidence : undefined,
+      confidenceSignals: Array.isArray(rawIdentity?.confidence_signals) ? rawIdentity.confidence_signals as string[] : undefined,
+      metadata: { resolvedUserId: resolved.userId ?? null },
     });
 
     this.log('info', 'Journey resumed from prior device');
     this.config.onJourneyResumed?.(resolved);
+    for (const callback of this.journeyResumeListeners) {
+      try { callback(resolved); } catch { /* listener errors are isolated */ }
+    }
   }
 
   private async _hashEmail(email?: string): Promise<string | undefined> {
@@ -745,11 +878,19 @@ class AetherSDK implements AetherSDKInterface {
 
   private setupSPATracking(): void {
     if (typeof window === 'undefined') return;
+    const checkpoint = () => {
+      if (!this.currentJourney) return;
+      const path = window.location.pathname + window.location.search;
+      if (path === this.lastRouteCheckpointPath) return;
+      this.lastRouteCheckpointPath = path;
+      this.checkpointJourney(path, { stepName: document.title || path, metadata: { source: 'spa_route' } });
+    };
+    const onRoute = () => { this.pageView(); checkpoint(); };
     const origPush = history.pushState;
     const origReplace = history.replaceState;
-    history.pushState = (...args) => { origPush.apply(history, args); setTimeout(() => this.pageView(), 0); };
-    history.replaceState = (...args) => { origReplace.apply(history, args); setTimeout(() => this.pageView(), 0); };
-    window.addEventListener('popstate', () => { setTimeout(() => this.pageView(), 0); });
+    history.pushState = (...args) => { origPush.apply(history, args); setTimeout(onRoute, 0); };
+    history.replaceState = (...args) => { origReplace.apply(history, args); setTimeout(onRoute, 0); };
+    window.addEventListener('popstate', () => { setTimeout(onRoute, 0); });
   }
 
   private log(level: 'debug' | 'info' | 'warn' | 'error', ...args: unknown[]): void {
