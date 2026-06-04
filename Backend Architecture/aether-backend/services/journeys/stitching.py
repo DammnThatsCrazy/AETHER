@@ -79,21 +79,29 @@ class JourneyStitchingService:
         signals: list[str] = []
         score = 0.0
         if user_id:
-            signals.append("user_id_match"); score += 0.72
+            signals.append("user_id_match")
+            score += 0.72
         if wallet:
-            signals.append("wallet_match"); score += 0.68
+            signals.append("wallet_match")
+            score += 0.68
         if email_hash:
-            signals.append("email_hash_match"); score += 0.66
+            signals.append("email_hash_match")
+            score += 0.66
         if anonymous_id:
-            signals.append("anonymous_id_match"); score += 0.46
+            signals.append("anonymous_id_match")
+            score += 0.46
         if fingerprint:
-            signals.append("fingerprint_match"); score += 0.28
+            signals.append("fingerprint_match")
+            score += 0.28
         if campaign:
-            signals.append("campaign_continuity"); score += 0.12
+            signals.append("campaign_continuity")
+            score += 0.12
         if timestamp_proximity:
-            signals.append("timestamp_proximity"); score += 0.08
+            signals.append("timestamp_proximity")
+            score += 0.08
         if behavioral_continuity:
-            signals.append("behavioral_continuity"); score += 0.10
+            signals.append("behavioral_continuity")
+            score += 0.10
         if "fingerprint_match" in signals and not (set(signals) & (STRONG_SIGNALS | {"anonymous_id_match"})):
             score = min(score, 0.49)
         return min(round(score, 2), 0.99), signals
