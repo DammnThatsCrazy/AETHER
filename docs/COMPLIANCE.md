@@ -15,7 +15,7 @@ source_files:
 canonical_owner: compliance@aether
 estimated_read_minutes: 12
 toc_depth: 3
-last_synced_commit: f536c12
+last_synced_commit: 2b7f6db
 ---
 
 # Compliance Framework — GDPR & SOC 2

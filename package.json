@@ -29,7 +29,12 @@
     "security:licenses": "npx --yes license-checker@^25 --summary || echo 'license-checker unavailable; see docs/DEPENDENCY-AUDIT.md'",
     "security:audit": "npm run security:secrets && npm run security:deps",
     "compliance:readiness": "python scripts/compliance/readiness.py",
-    "compliance:evidence": "python scripts/compliance/readiness.py --json"
+    "compliance:evidence": "python scripts/compliance/readiness.py --json",
+    "api:openapi": "python scripts/export_openapi.py",
+    "load:gen": "python tests/load/generate_synthetic.py",
+    "load:smoke": "python tests/load/generate_synthetic.py --tenants 3 --events 100 >/dev/null && echo 'load smoke ok (synthetic generation)'",
+    "load:ingestion": "locust -f tests/load/locustfile.py --host ${AETHER_HOST:-http://localhost:8000} || echo 'locust not installed; see docs/LOAD-TESTING.md'",
+    "load:all": "npm run load:smoke"
   },
   "devDependencies": {
     "@types/node": "^20.0.0",

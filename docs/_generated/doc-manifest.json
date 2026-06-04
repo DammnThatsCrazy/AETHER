@@ -96,6 +96,83 @@
       "canonical_owner": "commerce@aether"
     },
     {
+      "path": "docs/API-AUTH.md",
+      "title": "API Authentication",
+      "slug": "api/api-auth",
+      "section": "api",
+      "visibility": "I",
+      "audience": [
+        "dev-junior",
+        "dev-senior"
+      ],
+      "status": "stable",
+      "since_version": "8.9.0",
+      "estimated_read_minutes": 3,
+      "canonical_owner": "platform@aether"
+    },
+    {
+      "path": "docs/API-ERRORS.md",
+      "title": "API Errors",
+      "slug": "api/api-errors",
+      "section": "api",
+      "visibility": "I",
+      "audience": [
+        "dev-junior",
+        "dev-senior"
+      ],
+      "status": "stable",
+      "since_version": "8.9.0",
+      "estimated_read_minutes": 2,
+      "canonical_owner": "platform@aether"
+    },
+    {
+      "path": "docs/API-PAGINATION-FILTERING.md",
+      "title": "API Pagination & Filtering",
+      "slug": "api/api-pagination-filtering",
+      "section": "api",
+      "visibility": "I",
+      "audience": [
+        "dev-junior",
+        "dev-senior"
+      ],
+      "status": "stable",
+      "since_version": "8.9.0",
+      "estimated_read_minutes": 2,
+      "canonical_owner": "platform@aether"
+    },
+    {
+      "path": "docs/API-RATE-LIMITS.md",
+      "title": "API Rate Limits",
+      "slug": "api/api-rate-limits",
+      "section": "api",
+      "visibility": "I",
+      "audience": [
+        "dev-junior",
+        "dev-senior",
+        "ops"
+      ],
+      "status": "stable",
+      "since_version": "8.9.0",
+      "estimated_read_minutes": 2,
+      "canonical_owner": "platform@aether"
+    },
+    {
+      "path": "docs/API-REFERENCE.md",
+      "title": "API Reference",
+      "slug": "api/api-reference",
+      "section": "api",
+      "visibility": "I",
+      "audience": [
+        "dev-junior",
+        "dev-senior",
+        "architect"
+      ],
+      "status": "stable",
+      "since_version": "8.9.0",
+      "estimated_read_minutes": 4,
+      "canonical_owner": "platform@aether"
+    },
+    {
       "path": "docs/APP-ROUTING-DOMAINS.md",
       "title": "App Routing & Domains",
       "slug": "operations/app-routing-domains",
@@ -219,6 +296,36 @@
       "estimated_read_minutes": 60,
       "toc_depth": 3,
       "canonical_owner": "backend@aether"
+    },
+    {
+      "path": "docs/BACKFILL-JOBS.md",
+      "title": "Backfill Jobs",
+      "slug": "data/backfill-jobs",
+      "section": "data",
+      "visibility": "I",
+      "audience": [
+        "dev-senior",
+        "ops"
+      ],
+      "status": "beta",
+      "since_version": "8.9.0",
+      "estimated_read_minutes": 3,
+      "canonical_owner": "platform@aether"
+    },
+    {
+      "path": "docs/BACKUP-RESTORE.md",
+      "title": "Backup & Restore",
+      "slug": "operations/backup-restore",
+      "section": "operations",
+      "visibility": "I",
+      "audience": [
+        "ops",
+        "architect"
+      ],
+      "status": "beta",
+      "since_version": "8.9.0",
+      "estimated_read_minutes": 3,
+      "canonical_owner": "platform@aether"
     },
     {
       "path": "docs/BILLING-PROVIDER-INTERFACE.md",
@@ -456,6 +563,22 @@
       "since_version": "8.9.0"
     },
     {
+      "path": "docs/DATA-DURABILITY.md",
+      "title": "Data Durability",
+      "slug": "data/data-durability",
+      "section": "data",
+      "visibility": "I",
+      "audience": [
+        "architect",
+        "ops",
+        "dev-senior"
+      ],
+      "status": "beta",
+      "since_version": "8.9.0",
+      "estimated_read_minutes": 4,
+      "canonical_owner": "platform@aether"
+    },
+    {
       "path": "docs/DATA-INGESTION-PATHS.md",
       "title": "Data Ingestion Paths",
       "slug": "operations/data-ingestion-paths",
@@ -489,6 +612,22 @@
       "estimated_read_minutes": 10,
       "toc_depth": 3,
       "canonical_owner": "ingest@aether"
+    },
+    {
+      "path": "docs/DATA-MIGRATIONS.md",
+      "title": "Data Migrations",
+      "slug": "data/data-migrations",
+      "section": "data",
+      "visibility": "I",
+      "audience": [
+        "dev-senior",
+        "ops",
+        "architect"
+      ],
+      "status": "beta",
+      "since_version": "8.9.0",
+      "estimated_read_minutes": 4,
+      "canonical_owner": "platform@aether"
     },
     {
       "path": "docs/DATA-QUALITY.md",
@@ -816,6 +955,22 @@
       "status": "stable",
       "since_version": "8.9.0",
       "estimated_read_minutes": 5,
+      "canonical_owner": "platform@aether"
+    },
+    {
+      "path": "docs/EVENT-SCHEMA-REFERENCE.md",
+      "title": "Event Schema Reference",
+      "slug": "api/event-schema-reference",
+      "section": "api",
+      "visibility": "I",
+      "audience": [
+        "dev-senior",
+        "ai",
+        "architect"
+      ],
+      "status": "beta",
+      "since_version": "8.9.0",
+      "estimated_read_minutes": 3,
       "canonical_owner": "platform@aether"
     },
     {
@@ -1327,6 +1482,22 @@
       ]
     },
     {
+      "path": "docs/LOAD-TESTING.md",
+      "title": "Load Testing",
+      "slug": "operations/load-testing",
+      "section": "operations",
+      "visibility": "I",
+      "audience": [
+        "ops",
+        "dev-senior",
+        "architect"
+      ],
+      "status": "beta",
+      "since_version": "8.9.0",
+      "estimated_read_minutes": 4,
+      "canonical_owner": "platform@aether"
+    },
+    {
       "path": "docs/LOCAL-DEVELOPMENT.md",
       "title": "Local Development",
       "slug": "operations/local-development",
@@ -1563,6 +1734,21 @@
       "audience": [
         "security",
         "ops"
+      ],
+      "status": "beta",
+      "since_version": "8.9.0",
+      "estimated_read_minutes": 3,
+      "canonical_owner": "platform@aether"
+    },
+    {
+      "path": "docs/PERFORMANCE-BASELINES.md",
+      "title": "Performance Baselines",
+      "slug": "operations/performance-baselines",
+      "section": "operations",
+      "visibility": "I",
+      "audience": [
+        "ops",
+        "architect"
       ],
       "status": "beta",
       "since_version": "8.9.0",
@@ -1995,6 +2181,21 @@
       ]
     },
     {
+      "path": "docs/SCALE-TESTING.md",
+      "title": "Scale Testing",
+      "slug": "operations/scale-testing",
+      "section": "operations",
+      "visibility": "I",
+      "audience": [
+        "ops",
+        "architect"
+      ],
+      "status": "beta",
+      "since_version": "8.9.0",
+      "estimated_read_minutes": 3,
+      "canonical_owner": "platform@aether"
+    },
+    {
       "path": "docs/SCHEMA-DRIFT.md",
       "title": "Schema Drift",
       "slug": "data/schema-drift",
@@ -2030,6 +2231,36 @@
       "canonical_owner": "sdk@aether"
     },
     {
+      "path": "docs/SDK-API-CONTRACTS.md",
+      "title": "SDK API Contracts",
+      "slug": "api/sdk-api-contracts",
+      "section": "api",
+      "visibility": "I",
+      "audience": [
+        "dev-senior",
+        "architect"
+      ],
+      "status": "beta",
+      "since_version": "8.9.0",
+      "estimated_read_minutes": 3,
+      "canonical_owner": "platform@aether"
+    },
+    {
+      "path": "docs/SDK-EVENT-SCHEMAS.md",
+      "title": "SDK Event Schemas",
+      "slug": "sdks/sdk-event-schemas",
+      "section": "sdks",
+      "visibility": "I",
+      "audience": [
+        "dev-senior",
+        "ai"
+      ],
+      "status": "beta",
+      "since_version": "8.9.0",
+      "estimated_read_minutes": 3,
+      "canonical_owner": "platform@aether"
+    },
+    {
       "path": "docs/SDK-IOS.md",
       "title": "Aether iOS SDK — Integration Guide",
       "slug": "sdks/ios",
@@ -2062,6 +2293,21 @@
       "canonical_owner": "sdk@aether"
     },
     {
+      "path": "docs/SDK-RELEASE-CHECKLIST.md",
+      "title": "SDK Release Checklist",
+      "slug": "sdks/sdk-release-checklist",
+      "section": "sdks",
+      "visibility": "I",
+      "audience": [
+        "dev-senior",
+        "ops"
+      ],
+      "status": "beta",
+      "since_version": "8.9.0",
+      "estimated_read_minutes": 3,
+      "canonical_owner": "platform@aether"
+    },
+    {
       "path": "docs/SDK-WEB.md",
       "title": "Aether Web SDK — Integration Guide",
       "slug": "sdks/web",
@@ -2076,6 +2322,22 @@
       "estimated_read_minutes": 12,
       "toc_depth": 3,
       "canonical_owner": "sdk@aether"
+    },
+    {
+      "path": "docs/SDKS.md",
+      "title": "SDKs",
+      "slug": "sdks/sdks",
+      "section": "sdks",
+      "visibility": "I",
+      "audience": [
+        "dev-junior",
+        "dev-senior",
+        "architect"
+      ],
+      "status": "stable",
+      "since_version": "8.9.0",
+      "estimated_read_minutes": 4,
+      "canonical_owner": "platform@aether"
     },
     {
       "path": "docs/SECRET-ROTATION.md",
@@ -2357,6 +2619,21 @@
       "canonical_owner": "commerce@aether"
     },
     {
+      "path": "docs/STRESS-TEST-SCENARIOS.md",
+      "title": "Stress-Test Scenarios",
+      "slug": "operations/stress-test-scenarios",
+      "section": "operations",
+      "visibility": "I",
+      "audience": [
+        "ops",
+        "dev-senior"
+      ],
+      "status": "beta",
+      "since_version": "8.9.0",
+      "estimated_read_minutes": 3,
+      "canonical_owner": "platform@aether"
+    },
+    {
       "path": "docs/STRIPE-BILLING.md",
       "title": "Stripe Billing — P1–P4 Integration",
       "slug": "concepts/stripe-billing",
@@ -2577,6 +2854,21 @@
       "visibility": "I",
       "audience": [
         "security",
+        "ops"
+      ],
+      "status": "beta",
+      "since_version": "8.9.0",
+      "estimated_read_minutes": 3,
+      "canonical_owner": "platform@aether"
+    },
+    {
+      "path": "docs/WEBHOOK-EVENTS.md",
+      "title": "Webhook Events",
+      "slug": "api/webhook-events",
+      "section": "api",
+      "visibility": "I",
+      "audience": [
+        "dev-senior",
         "ops"
       ],
       "status": "beta",

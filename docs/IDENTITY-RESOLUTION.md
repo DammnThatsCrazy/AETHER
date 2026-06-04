@@ -12,7 +12,7 @@ source_files:
 canonical_owner: identity@aether
 estimated_read_minutes: 12
 toc_depth: 3
-last_synced_commit: f536c12
+last_synced_commit: 2b7f6db
 ---
 # Aether Identity Resolution v8.8.0 — Technical Guide
 
