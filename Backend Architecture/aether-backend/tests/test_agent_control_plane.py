@@ -7,6 +7,7 @@ import pytest
 
 os.environ.setdefault("AETHER_ENV", "local")
 
+from shared.common.common import BadRequestError  # noqa: E402
 from services.agent.routes import (  # noqa: E402
     ControllerHeartbeat,
     DispatchRequest,
@@ -14,13 +15,16 @@ from services.agent.routes import (  # noqa: E402
     ObjectiveAction,
     ObjectiveSubmission,
     ReviewDecision,
+    agent_status,
     approve_review_batch,
+    controller_health,
     controller_heartbeat,
     controllers_status,
     dispatch_step,
     get_objective,
     list_objectives,
     list_review_batches,
+    reject_review_batch,
     submit_objective,
     timeline_events,
     toggle_kill_switch,
@@ -98,3 +102,80 @@ async def test_controller_heartbeat_and_kill_switch():
     assert engaged["data"]["kill_switch"] is True
     released = await toggle_kill_switch(KillSwitchAction(action="release", reason="recovered"), request)
     assert released["data"]["kill_switch"] is False
+
+
+@pytest.mark.asyncio
+async def test_status_kill_switch_is_boolean():
+    # Kyber validates /v1/agent/status kill_switch as z.boolean(); the endpoint
+    # must keep that shape while exposing the full record separately.
+    request = FakeRequest("tenant-status")
+    await toggle_kill_switch(KillSwitchAction(action="engage", reason="incident"), request)
+    status = await agent_status(request)
+    assert status["data"]["kill_switch"] is True
+    assert isinstance(status["data"]["kill_switch"], bool)
+    assert status["data"]["kill_switch_state"]["enabled"] is True
+
+
+@pytest.mark.asyncio
+async def test_idempotent_objective_retry_does_not_duplicate_review_batches():
+    request = FakeRequest("tenant-idem")
+    submission = ObjectiveSubmission(
+        goal="Stage enrichment once",
+        idempotency_key="fixed-key-1",
+        payload={"staged_mutations": [{"mutation_class": 2, "operation": "upsert", "target": {"node": "n1"}}]},
+    )
+    first = await submit_objective(submission, request)
+    second = await submit_objective(submission, request)
+    assert first["data"]["objective_id"] == second["data"]["objective_id"]
+    batches = await list_review_batches(request, status="pending")
+    assert batches["data"]["total"] == 1
+
+
+@pytest.mark.asyncio
+async def test_invalid_mutation_class_is_rejected_without_persisting():
+    request = FakeRequest("tenant-badclass")
+    with pytest.raises(BadRequestError):
+        await submit_objective(ObjectiveSubmission(
+            goal="Bad mutation class",
+            payload={"staged_mutations": [{"mutation_class": 9, "operation": "upsert"}]},
+        ), request)
+    # The objective must not have been persisted before the validation failure.
+    listed = await list_objectives(request)
+    assert listed["data"]["total"] == 0
+
+
+@pytest.mark.asyncio
+async def test_objective_advances_out_of_review_after_decision():
+    request = FakeRequest("tenant-advance")
+    submitted = await submit_objective(ObjectiveSubmission(
+        goal="Advance after approval",
+        payload={"staged_mutations": [{"mutation_class": 1, "operation": "upsert"}]},
+    ), request)
+    objective_id = submitted["data"]["objective_id"]
+    assert submitted["data"]["status"] == "awaiting_review"
+    batch_id = (await list_review_batches(request, status="pending"))["data"]["batches"][0]["batch_id"]
+    await approve_review_batch(batch_id, ReviewDecision(notes="ok"), request)
+    detail = await get_objective(objective_id, request)
+    assert detail["data"]["objective"]["status"] == "active"
+
+    # A rejection blocks the objective instead.
+    rejected = await submit_objective(ObjectiveSubmission(
+        goal="Block after rejection",
+        payload={"staged_mutations": [{"mutation_class": 1, "operation": "upsert"}]},
+    ), request)
+    reject_batch = (await list_review_batches(request, status="pending"))["data"]["batches"][0]["batch_id"]
+    await reject_review_batch(reject_batch, ReviewDecision(notes="no"), request)
+    detail2 = await get_objective(rejected["data"]["objective_id"], request)
+    assert detail2["data"]["objective"]["status"] == "blocked"
+
+
+@pytest.mark.asyncio
+async def test_health_queue_depth_sums_routed_controllers():
+    request = FakeRequest("tenant-queues")
+    # nous routes to the default queue; discovery routes to its own queue.
+    await controller_heartbeat(ControllerHeartbeat(controller="nous", status="healthy", queue_depth=3, worker_id="w1"), request)
+    await controller_heartbeat(ControllerHeartbeat(controller="discovery", status="healthy", queue_depth=2, worker_id="w2"), request)
+    health = await controller_health(request)
+    depths = {q["name"]: q["depth"] for q in health["data"]["queues"]}
+    assert depths["default"] >= 3  # nous contributes to default
+    assert depths["discovery"] == 2

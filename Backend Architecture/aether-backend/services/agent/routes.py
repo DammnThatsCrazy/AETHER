@@ -31,9 +31,32 @@ from shared.logger.logger import get_logger, metrics
 from shared.scoring.trust_score import TrustScoreComposite
 from shared.store import get_store
 from services.agent.runtime_repository import (
-    CONTROLLERS, QUEUES, REVIEW_STATUSES, OBJECTIVE_STATUSES,
+    CONTROLLERS, QUEUES, REVIEW_STATUSES, OBJECTIVE_STATUSES, MUTATION_CLASSES,
     get_agent_runtime_repository, stable_idempotency_key, utc_now,
 )
+
+
+def _queue_for_controller(name: str) -> str:
+    """Map a controller to the Celery queue it is routed to.
+
+    Mirrors ``Agent Layer/queue/celery_app.py`` task_routes: the named
+    controller queues route 1:1, everything else falls to ``default``.
+    """
+    return name if name in QUEUES else "default"
+
+
+def _validate_mutation_classes(staged: Any) -> None:
+    """Reject malformed staged-mutation classes before anything is persisted."""
+    if not isinstance(staged, list):
+        return
+    for mutation in staged:
+        raw = mutation.get("mutation_class", mutation.get("class", 1)) if isinstance(mutation, dict) else None
+        try:
+            mutation_class = int(raw)
+        except (TypeError, ValueError):
+            raise BadRequestError("mutation_class must be an integer in 1, 2, 3, 4, or 5")
+        if mutation_class not in MUTATION_CLASSES:
+            raise BadRequestError("mutation_class must be one of 1, 2, 3, 4, or 5")
 
 logger = get_logger("aether.service.agent")
 router = APIRouter(prefix="/v1/agent", tags=["Agent"])
@@ -141,7 +164,14 @@ async def controller_health(request: Request):
     return _envelope({
         "kill_switch": kill_switch,
         "controllers": controllers,
-        "queues": [{"name": queue, "depth": sum(1 for c in controllers if c.get("queue_depth", 0) and c.get("controller") == queue)} for queue in QUEUES],
+        "queues": [
+            {"name": queue, "depth": sum(
+                int(c.get("queue_depth", 0) or 0)
+                for c in controllers
+                if _queue_for_controller(c.get("controller", "")) == queue
+            )}
+            for queue in QUEUES
+        ],
         "objectives": {"active": active, "blocked": blocked, "failed": failed, "total": len(objectives)},
         "review": {"awaiting_review": len(review_batches)},
     }, request)
@@ -155,13 +185,22 @@ async def submit_objective(body: ObjectiveSubmission, request: Request):
     if kill_switch.get("enabled"):
         raise ConflictError("Agent kill switch is engaged; release it before submitting objectives")
     payload = body.payload
+    staged = payload.get("staged_mutations") if isinstance(payload, dict) else None
+    # Validate client-controlled mutation classes BEFORE persisting the objective,
+    # so a malformed payload returns 400 instead of a 500 that strands a queued
+    # objective with no review batch.
+    _validate_mutation_classes(staged)
     idem = body.idempotency_key or stable_idempotency_key(tenant.tenant_id, body.model_dump())
     objective = await _runtime_repo.create_objective(
         tenant.tenant_id, body.goal, body.objective_type, body.severity, body.priority,
         payload, _actor_id(request), idem, _request_id(request),
     )
-    staged = payload.get("staged_mutations") if isinstance(payload, dict) else None
-    if isinstance(staged, list) and staged:
+    # Idempotent retries (same idempotency key) return the existing objective; only
+    # stage a review batch the first time so retries don't pile up duplicate
+    # pending approvals for a single objective.
+    if isinstance(staged, list) and staged and not await _runtime_repo.review_batches_for_objective(
+        tenant.tenant_id, objective["objective_id"]
+    ):
         await _runtime_repo.create_review_batch(tenant.tenant_id, objective["objective_id"], staged, _actor_id(request), _request_id(request))
         objective["status"] = "awaiting_review"
         objective["updated_at"] = utc_now()
@@ -306,7 +345,14 @@ async def agent_status(request: Request):
     tenant.require_permission("agent:manage")
     health = await controller_health(request)
     data = dict(health["data"])
+    kill_switch = data.get("kill_switch")
     data.update({
+        # /v1/agent/status exposes kill_switch as a boolean (Kyber's client schema
+        # validates z.boolean()); surface the full record under kill_switch_state
+        # so the richer health() shape is still available without breaking the
+        # status contract.
+        "kill_switch": bool(kill_switch.get("enabled")) if isinstance(kill_switch, dict) else bool(kill_switch),
+        "kill_switch_state": kill_switch if isinstance(kill_switch, dict) else None,
         "active_workers": sum(1 for c in data["controllers"] if c.get("status") in {"healthy", "degraded"}),
         "worker_types": VALID_WORKER_TYPES,
     })

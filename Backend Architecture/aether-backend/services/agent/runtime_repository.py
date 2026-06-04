@@ -287,6 +287,9 @@ class AgentRuntimeRepository:
         batches.sort(key=lambda row: row.get("created_at", ""), reverse=True)
         return batches[:limit]
 
+    async def review_batches_for_objective(self, tenant_id: str, objective_id: str) -> list[dict[str, Any]]:
+        return await self.review_batches.find(tenant_id=tenant_id, objective_id=objective_id)
+
     async def review_decision(self, tenant_id: str, batch_id: str, decision: str, reviewer: str, notes: str, request_id: str) -> dict[str, Any] | None:
         batch = await self.review_batches.get(batch_id)
         if not batch or batch.get("tenant_id") != tenant_id:
@@ -308,7 +311,31 @@ class AgentRuntimeRepository:
                 await self.staged_mutations.set(mutation_id, mutation)
                 await self.append_event(tenant_id, f"mutation.{mutation_status}", "review_queue", mutation, batch.get("objective_id", ""), reviewer, request_id)
         await self.append_event(tenant_id, f"batch.{batch['status']}", "review_queue", batch, batch.get("objective_id", ""), reviewer, request_id)
+        await self._advance_objective_after_review(tenant_id, batch.get("objective_id", ""), batch["status"], reviewer, request_id)
         return batch
+
+    async def _advance_objective_after_review(self, tenant_id: str, objective_id: str, batch_status: str, reviewer: str, request_id: str) -> None:
+        """Move an objective out of ``awaiting_review`` once no pending batches remain.
+
+        Without this an objective stays stuck in ``awaiting_review`` forever after
+        its only review batch is approved/rejected. An approval releases it back to
+        active work; a rejection blocks it for operator follow-up.
+        """
+        if not objective_id:
+            return
+        pending = [
+            b for b in await self.review_batches.find(tenant_id=tenant_id, objective_id=objective_id)
+            if b.get("status") == "pending"
+        ]
+        if pending:
+            return
+        objective = await self.objectives.get(objective_id)
+        if not objective or objective.get("tenant_id") != tenant_id or objective.get("status") != "awaiting_review":
+            return
+        objective["status"] = "active" if batch_status == "approved" else "blocked"
+        objective["updated_at"] = utc_now()
+        await self.objectives.set(objective_id, objective)
+        await self.append_event(tenant_id, f"objective.{objective['status']}", "review_queue", objective, objective_id, reviewer, request_id)
 
     async def events_for_tenant(self, tenant_id: str, limit: int = 100, objective_id: str | None = None) -> list[dict[str, Any]]:
         if objective_id:
