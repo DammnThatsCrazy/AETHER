@@ -148,16 +148,18 @@ async def controller_health(request: Request):
     tenant.require_permission("agent:manage")
     controllers = await _runtime_repo.controller_status(tenant.tenant_id)
     kill_switch = await _runtime_repo.get_kill_switch(tenant.tenant_id)
-    objectives = await _runtime_repo.list_objectives(tenant.tenant_id, limit=500)
-    review_batches = await _runtime_repo.list_review_batches(tenant.tenant_id, status="pending", limit=500)
-    active = sum(1 for objective in objectives if objective.get("status") == "active")
-    blocked = sum(1 for objective in objectives if objective.get("status") == "blocked")
-    failed = sum(1 for objective in objectives if objective.get("status") == "failed")
+    # Uncapped counts so health/metrics don't under-report backlog past the first
+    # 500 rows in large tenants.
+    active = await _runtime_repo.count_objectives(tenant.tenant_id, status="active")
+    blocked = await _runtime_repo.count_objectives(tenant.tenant_id, status="blocked")
+    failed = await _runtime_repo.count_objectives(tenant.tenant_id, status="failed")
+    total_objectives = await _runtime_repo.count_objectives(tenant.tenant_id)
+    awaiting_review = await _runtime_repo.count_review_batches(tenant.tenant_id, status="pending")
     for name, value in {
         "agent_active_objectives": active,
         "agent_blocked_objectives": blocked,
         "agent_failed_objectives": failed,
-        "agent_awaiting_review": len(review_batches),
+        "agent_awaiting_review": awaiting_review,
         "agent_kill_switch_state": int(bool(kill_switch.get("enabled"))),
     }.items():
         # These are point-in-time snapshots; observe them (gauge semantics) so a
@@ -174,8 +176,8 @@ async def controller_health(request: Request):
             )}
             for queue in QUEUES
         ],
-        "objectives": {"active": active, "blocked": blocked, "failed": failed, "total": len(objectives)},
-        "review": {"awaiting_review": len(review_batches)},
+        "objectives": {"active": active, "blocked": blocked, "failed": failed, "total": total_objectives},
+        "review": {"awaiting_review": awaiting_review},
     }, request)
 
 
@@ -274,25 +276,28 @@ async def dispatch_step(body: DispatchRequest, request: Request):
     kill_switch = await _runtime_repo.get_kill_switch(tenant.tenant_id)
     if kill_switch.get("enabled"):
         raise ConflictError("Agent kill switch is engaged; dispatch is disabled")
-    run = await _runtime_repo.record_dispatch(tenant.tenant_id, body.objective_id, body.controller, _actor_id(request), _request_id(request))
-    if run is None:
+    result = await _runtime_repo.record_dispatch(tenant.tenant_id, body.objective_id, body.controller, _actor_id(request), _request_id(request))
+    if result is None:
         raise NotFoundError("Objective")
-    # Actually enqueue the run for a worker to consume — recording the run row
-    # alone leaves dispatch reporting success while no controller ever picks it
-    # up. Publish on the agent task topic with the routing/idempotency metadata.
-    await _producer.publish(Event(
-        topic=Topic.AGENT_TASK_STARTED,
-        tenant_id=tenant.tenant_id,
-        source_service="agent",
-        payload={
-            "run_id": run["run_id"],
-            "objective_id": run["objective_id"],
-            "controller": run["controller"],
-            "queue": run["queue"],
-            "idempotency_key": run["idempotency_key"],
-        },
-    ))
-    metrics.increment("agent_worker_runs_queued", labels={"controller": body.controller, "queue": run["queue"]})
+    run = result["run"]
+    # Only enqueue (and meter) when a new run was created — an idempotent retry
+    # reuses the in-flight run and must not publish duplicate work. Recording the
+    # row alone never reaches a worker, so publish on the agent task topic with
+    # the routing/idempotency metadata.
+    if result["created"]:
+        await _producer.publish(Event(
+            topic=Topic.AGENT_TASK_STARTED,
+            tenant_id=tenant.tenant_id,
+            source_service="agent",
+            payload={
+                "run_id": run["run_id"],
+                "objective_id": run["objective_id"],
+                "controller": run["controller"],
+                "queue": run["queue"],
+                "idempotency_key": run["idempotency_key"],
+            },
+        ))
+        metrics.increment("agent_worker_runs_queued", labels={"controller": body.controller, "queue": run["queue"]})
     return _envelope(run, request)
 
 

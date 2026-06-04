@@ -76,6 +76,11 @@ async def test_objective_lifecycle_review_and_tenant_isolation():
     detail = await get_objective(objective["objective_id"], tenant_a)
     assert detail["data"]["objective"]["objective_id"] == objective["objective_id"]
 
+    # An objective still in awaiting_review is not runnable — dispatch must not
+    # bypass the human review gate.
+    with pytest.raises(ConflictError):
+        await dispatch_step(DispatchRequest(objective_id=objective["objective_id"], controller="nous"), tenant_a)
+
     paused = await pause_objective(objective["objective_id"], ObjectiveAction(reason="operator hold"), tenant_a)
     assert paused["data"]["status"] == "paused"
     # The operator's reason must be preserved on the timeline event.
@@ -224,3 +229,14 @@ async def test_controller_status_aggregates_workers_and_status_exposes_them():
     # /status must surface a workers array for Kyber's Command/Mission views.
     st = await agent_status(request)
     assert "discovery" in {w["worker_type"] for w in st["data"]["workers"]}
+
+
+@pytest.mark.asyncio
+async def test_dispatch_is_idempotent_per_objective_controller():
+    request = FakeRequest("tenant-dispatch-idem")
+    submitted = await submit_objective(ObjectiveSubmission(goal="Run once"), request)
+    oid = submitted["data"]["objective_id"]
+    first = await dispatch_step(DispatchRequest(objective_id=oid, controller="nous"), request)
+    # A retry / double-click reuses the in-flight run instead of queuing duplicate work.
+    second = await dispatch_step(DispatchRequest(objective_id=oid, controller="nous"), request)
+    assert first["data"]["run_id"] == second["data"]["run_id"]

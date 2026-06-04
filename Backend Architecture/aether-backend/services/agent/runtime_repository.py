@@ -128,6 +128,11 @@ class AgentRuntimeRepository:
         }
         await self.events.set(event["event_id"], event)
         await self.events.append_list(tenant_id, event)
+        if objective_id:
+            # Maintain a per-objective list so an objective's timeline can be
+            # read in full without scanning the namespace or being capped by
+            # unrelated tenant events.
+            await self.events.append_list(f"obj:{objective_id}", event)
         return event
 
     async def create_objective(
@@ -191,6 +196,18 @@ class AgentRuntimeRepository:
         rows.sort(key=lambda row: row.get("created_at", ""), reverse=True)
         return rows[:limit]
 
+    async def count_objectives(self, tenant_id: str, status: str | None = None) -> int:
+        # Uncapped count for health snapshots — list_objectives slices to a
+        # limit, which would under-report backlog in large tenants.
+        if status:
+            return await self.objectives.count(tenant_id=tenant_id, status=status)
+        return await self.objectives.count(tenant_id=tenant_id)
+
+    async def count_review_batches(self, tenant_id: str, status: str | None = None) -> int:
+        if status:
+            return await self.review_batches.count(tenant_id=tenant_id, status=status)
+        return await self.review_batches.count(tenant_id=tenant_id)
+
     async def transition_objective(self, tenant_id: str, objective_id: str, action: str, actor_id: str, request_id: str, reason: str = "") -> dict[str, Any] | None:
         objective = await self.get_objective(tenant_id, objective_id)
         if objective is None:
@@ -227,10 +244,20 @@ class AgentRuntimeRepository:
         if objective is None:
             return None
         current = objective.get("status")
-        # Do not silently revive a paused/cancelled/terminal objective into active
-        # work — that would undo an operator's deliberate lifecycle decision.
-        if current in TERMINAL_OBJECTIVE_STATUSES or current == "paused":
+        # Only dispatch objectives that are actually runnable. This blocks paused,
+        # cancelled/terminal, AND awaiting_review/blocked — so dispatch can't
+        # bypass the human review gate or undo a rejection.
+        if current not in {"queued", "active"}:
             raise ConflictError(f"Cannot dispatch objective in status '{current}'")
+        idem = stable_idempotency_key(tenant_id, {"objective_id": objective_id, "controller": controller})
+        # Idempotent retries / double-clicks reuse the in-flight run instead of
+        # queuing duplicate work for the same objective+controller.
+        existing = [
+            r for r in await self.worker_runs.find(tenant_id=tenant_id, objective_id=objective_id)
+            if r.get("idempotency_key") == idem and r.get("status") in {"queued", "running"}
+        ]
+        if existing:
+            return {"run": existing[0], "created": False}
         now = utc_now()
         objective["status"] = "active"
         objective["updated_at"] = now
@@ -243,7 +270,7 @@ class AgentRuntimeRepository:
             "queue": queue_for_controller(controller),
             "status": "queued",
             "attempt": 1,
-            "idempotency_key": stable_idempotency_key(tenant_id, {"objective_id": objective_id, "controller": controller}),
+            "idempotency_key": idem,
             "created_at": now,
             "updated_at": now,
             "heartbeat_at": now,
@@ -251,7 +278,7 @@ class AgentRuntimeRepository:
         }
         await self.worker_runs.set(run["run_id"], run)
         await self.append_event(tenant_id, "step.dispatched", controller, run, objective_id, actor_id, request_id)
-        return run
+        return {"run": run, "created": True}
 
     async def heartbeat(self, tenant_id: str, controller: str, status: str, queue_depth: int, worker_id: str, metadata: dict[str, Any], request_id: str) -> dict[str, Any]:
         heartbeat = {
@@ -294,7 +321,11 @@ class AgentRuntimeRepository:
                 stale = _age_seconds(r.get("updated_at")) > HEARTBEAT_STALE_SECONDS
                 wstatus = "stale" if stale else r.get("status", "unknown")
                 depth = int(r.get("queue_depth", 0) or 0)
-                total_depth += depth
+                # Keep the stale worker row for visibility, but exclude its last
+                # reported depth from the live queue total — otherwise a dead
+                # worker shows phantom backlog forever.
+                if not stale:
+                    total_depth += depth
                 live_states.append(wstatus)
                 workers.append({
                     "worker_id": r.get("worker_id"), "status": wstatus,
@@ -412,13 +443,15 @@ class AgentRuntimeRepository:
         await self.append_event(tenant_id, f"objective.{objective['status']}", "review_queue", objective, objective_id, reviewer, request_id)
 
     async def events_for_tenant(self, tenant_id: str, limit: int = 100, objective_id: str | None = None) -> list[dict[str, Any]]:
-        # Always read from the tenant event list and filter in memory. Calling
-        # find() would scan the agent_events namespace, which also matches the
-        # list key (aether:agent_events:list:<tenant>) and trips Redis WRONGTYPE
-        # on GET once any event has been appended.
-        rows = await self.events.get_list(tenant_id, limit=max(limit, 1000) if objective_id else limit)
+        # Read from a list, never find(): find() scans the agent_events namespace,
+        # which also matches the list keys and trips Redis WRONGTYPE on GET.
         if objective_id:
-            rows = [row for row in rows if row.get("objective_id") == objective_id]
+            # The objective's own list isn't diluted by other objectives' events,
+            # so an older objective's timeline can't be pushed out of the window.
+            rows = await self.events.get_list(f"obj:{objective_id}", limit=max(limit, 1000))
+            rows = [row for row in rows if row.get("tenant_id") == tenant_id]
+        else:
+            rows = await self.events.get_list(tenant_id, limit=limit)
         rows.sort(key=lambda row: row.get("created_at", ""), reverse=True)
         return rows[:limit]
 
