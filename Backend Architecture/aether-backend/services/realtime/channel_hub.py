@@ -114,14 +114,20 @@ class ChannelHub:
         self._wired = True
         logger.info("ChannelHub attached to %d topics", len(_CHANNEL_TOPICS))
 
+    MAX_SUBSCRIBERS_PER_CHANNEL = 500
+
     async def subscribe(
         self, tenant_id: str, channels: list[str]
     ) -> dict[str, asyncio.Queue]:
         queues: dict[str, asyncio.Queue] = {}
         async with self._lock:
             for ch in channels:
+                bucket = self._subs.setdefault((tenant_id, ch), set())
+                if len(bucket) >= self.MAX_SUBSCRIBERS_PER_CHANNEL:
+                    logger.warning("ChannelHub: subscriber limit reached for (%s, %s)", tenant_id, ch)
+                    continue
                 q: asyncio.Queue = asyncio.Queue(maxsize=256)
-                self._subs.setdefault((tenant_id, ch), set()).add(q)
+                bucket.add(q)
                 queues[ch] = q
         return queues
 

@@ -6,7 +6,7 @@ import uuid
 from typing import Any, Optional
 
 from repositories.repos import BaseRepository
-from shared.common.common import NotFoundError, utc_now
+from shared.common.common import ForbiddenError, NotFoundError, utc_now
 
 from .models import NoesisQueryRequest, NoesisResponse
 
@@ -37,6 +37,8 @@ class NoesisConversationStore:
             "response": safe_response,
         }
         if existing:
+            if existing.get("tenant_id") != effective_tenant_id or existing.get("surface") != request.surface:
+                raise ForbiddenError("Conversation belongs to a different tenant or surface")
             messages = list(existing.get("messages", []))
             record = {
                 **existing,

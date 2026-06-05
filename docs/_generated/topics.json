@@ -744,6 +744,15 @@
       ]
     },
     {
+      "name": "Admin audit",
+      "topics": [
+        {
+          "member": "ADMIN_API_KEY_CREATED",
+          "value": "aether.admin.api_key.created"
+        }
+      ]
+    },
+    {
       "name": "Dead letter",
       "topics": [
         {
@@ -1369,6 +1378,10 @@
     {
       "member": "RECOMMENDATION_CONFIDENCE_UPDATED",
       "value": "aether.recommendation.confidence_updated"
+    },
+    {
+      "member": "ADMIN_API_KEY_CREATED",
+      "value": "aether.admin.api_key.created"
     },
     {
       "member": "DEAD_LETTER",

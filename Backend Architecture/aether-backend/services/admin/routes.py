@@ -27,12 +27,27 @@ from shared.common.common import (
 from shared.logger.logger import get_logger
 from shared.plans.catalog import PLAN_CATALOG
 from repositories.repos import AdminRepository, APIKeyRepository
+from shared.events.events import EventProducer, Event, Topic
 
 logger = get_logger("aether.service.admin")
 router = APIRouter(prefix="/v1/admin", tags=["Admin"])
 
 _repo = AdminRepository()
 _key_repo = APIKeyRepository()
+_producer = EventProducer()
+
+_API_KEY_RATE_LIMIT = 10  # max keys per tenant per hour
+_rate_limit_cache: dict[str, list[float]] = {}
+
+
+def _check_api_key_rate_limit(tenant_id: str) -> None:
+    import time
+    now = time.monotonic()
+    window = _rate_limit_cache.setdefault(tenant_id, [])
+    _rate_limit_cache[tenant_id] = [t for t in window if now - t < 3600]
+    if len(_rate_limit_cache[tenant_id]) >= _API_KEY_RATE_LIMIT:
+        raise BadRequestError(f"Rate limit exceeded: max {_API_KEY_RATE_LIMIT} API keys per tenant per hour")
+    _rate_limit_cache[tenant_id].append(now)
 
 
 def _resolve_plan_tier(request: Request, fallback: str = "P1") -> PlanTier:
@@ -136,6 +151,7 @@ async def update_tenant(tenant_id: str, body: TenantUpdate, request: Request):
 async def create_api_key(tenant_id: str, body: APIKeyCreate, request: Request):
     """Create a new API key for a tenant. Registers it in both the key repo and the auth cache."""
     request.state.tenant.require_permission("admin")
+    _check_api_key_rate_limit(tenant_id)
     raw_key = f"ak_{uuid.uuid4().hex[:24]}"
     hashed = hashlib.sha256(raw_key.encode()).hexdigest()
 
@@ -161,6 +177,17 @@ async def create_api_key(tenant_id: str, body: APIKeyCreate, request: Request):
         )
     except Exception as e:
         logger.warning(f"Failed to register key in auth cache: {e}")
+
+    actor = getattr(request.state.tenant, "entity_id", "unknown")
+    logger.info("API key created: tenant=%s name=%s actor=%s", tenant_id, body.name, actor)
+    try:
+        await _producer.publish(Event(
+            topic=Topic.ADMIN_API_KEY_CREATED,
+            tenant_id=tenant_id,
+            payload={"name": body.name, "tier": body.tier, "actor": actor},
+        ))
+    except Exception:
+        pass
 
     return APIResponse(data={
         "api_key": raw_key,

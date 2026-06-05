@@ -20,6 +20,9 @@ JOURNEY_EVENT_TYPES = {
     "journey_checkpoint",
 }
 
+MAX_STEPS_PER_JOURNEY = 500
+MAX_EVENT_PAYLOAD_BYTES = 65_536
+
 STRONG_SIGNALS = {"user_id_match", "wallet_match", "email_hash_match"}
 SUPPORT_SIGNALS = {"anonymous_id_match", "fingerprint_match", "campaign_continuity", "timestamp_proximity", "behavioral_continuity"}
 
@@ -107,6 +110,10 @@ class JourneyStitchingService:
         return min(round(score, 2), 0.99), signals
 
     def ingest_event(self, tenant_id: str, event: dict[str, Any]) -> JourneyRecord | None:
+        import json as _json
+        if len(_json.dumps(event, default=str)) > MAX_EVENT_PAYLOAD_BYTES:
+            self._dropped.append({"reason": "payload_too_large", "event_id": event.get("id")})
+            return None
         event_id = str(event.get("id") or uuid.uuid4())
         if (tenant_id, event_id) in self._event_ids:
             return None
@@ -180,6 +187,9 @@ class JourneyStitchingService:
             confidence=confidence,
             confidence_signals=signals,
         )
+        if len(record.events) >= MAX_STEPS_PER_JOURNEY:
+            self._dropped.append({"reason": "max_steps_exceeded", "journey_id": journey_id, "event_id": event_id})
+            return record
         last = record.events[-1] if record.events else None
         record.events.append(event_record)
         if last and (last.session_id != event_record.session_id or last.device_type != event_record.device_type):

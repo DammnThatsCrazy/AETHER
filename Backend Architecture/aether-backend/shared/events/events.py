@@ -272,6 +272,9 @@ class Topic(str, Enum):
     OUTCOME_OBSERVED = "aether.outcome.observed"
     RECOMMENDATION_CONFIDENCE_UPDATED = "aether.recommendation.confidence_updated"
 
+    # Admin audit
+    ADMIN_API_KEY_CREATED = "aether.admin.api_key.created"
+
     # Dead letter
     DEAD_LETTER = "aether.dlq"
 
