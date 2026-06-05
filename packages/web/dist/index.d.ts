@@ -1,4 +1,4 @@
-import type { AetherConfig, AetherSDKInterface, AetherPlugin, IdentityData, Identity, WalletInterface, ConsentInterface, CommerceInterface, AgentInterface, X402Interface } from './types';
+import type { AetherConfig, AetherSDKInterface, AetherPlugin, IdentityData, Identity, ResolvedIdentity, WalletInterface, ConsentInterface, CommerceInterface, AgentInterface, X402Interface, CurrentJourney, JourneyPayload } from './types';
 import { EcommerceModule } from './modules/ecommerce';
 import { FormAnalyticsModule } from './modules/form-analytics';
 import { FeatureFlagModule } from './modules/feature-flags';
@@ -26,11 +26,27 @@ declare class AetherSDK implements AetherSDKInterface {
     private initialized;
     private debug;
     private _lastEmailHash;
+    private heartbeatTimer;
+    private sdkInstanceId;
+    private currentJourney;
+    private journeyResumeListeners;
+    private lastJourneyPauseAt;
+    private journeyVisibilityHandler;
+    private lastRouteCheckpointPath;
     private walletChangeListeners;
     init(config: AetherConfig): void;
     track(event: string, properties?: Record<string, unknown>): void;
     pageView(page?: string, properties?: Record<string, unknown>): void;
     conversion(event: string, value?: number, properties?: Record<string, unknown>): void;
+    startJourney(nameOrType: string, properties?: JourneyPayload): CurrentJourney | null;
+    pauseJourney(reason?: string, properties?: JourneyPayload): void;
+    resumeJourney(reason?: string, properties?: JourneyPayload): void;
+    continueJourney(stepIdOrName: string, properties?: JourneyPayload): void;
+    completeJourney(reason?: string, properties?: JourneyPayload): void;
+    abandonJourney(reason?: string, properties?: JourneyPayload): void;
+    checkpointJourney(stepIdOrName: string, properties?: JourneyPayload): void;
+    getCurrentJourney(): CurrentJourney | null;
+    onJourneyResumed(callback: (identity: ResolvedIdentity) => void): () => void;
     hydrateIdentity(data: IdentityData): void;
     getIdentity(): Identity | null;
     reset(): void;
@@ -52,6 +68,12 @@ declare class AetherSDK implements AetherSDKInterface {
     funnel: FunnelModule;
     forms: FormAnalyticsModule;
     use(plugin: AetherPlugin): void;
+    /** Stable per-install SDK instance id, persisted across reloads. */
+    private getSdkInstanceId;
+    /** Begin periodic self-identification heartbeats to the SDK fleet endpoint. */
+    private startHeartbeat;
+    /** Report this SDK instance's identity and health to the backend fleet. */
+    private sendHeartbeat;
     /** Fetch configuration from backend (feature flags, funnel definitions, etc.) */
     private fetchConfig;
     private initCore;
@@ -59,6 +81,9 @@ declare class AetherSDK implements AetherSDKInterface {
     private initWeb2;
     private initAnalytics;
     private enqueueEvent;
+    private updateJourney;
+    private emitJourneyEvent;
+    private setupJourneyLifecycleTracking;
     private resolveIdentity;
     private _hashEmail;
     private setupSPATracking;
