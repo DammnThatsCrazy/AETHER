@@ -309,16 +309,34 @@ export function AetherProvider({
     RNFeatureFlags.initialize(config.apiKey, endpoint);
     RNFeedback.initialize(config.apiKey, endpoint);
 
-    // SDK fleet self-identification. For GDPR opt-in deployments the native
-    // layer owns consent, so defer heartbeats until consent is handled there.
+    // SDK fleet self-identification. For GDPR opt-in deployments, defer
+    // heartbeats until the user grants analytics consent (consent is owned by
+    // the native layer and surfaced via Aether.consent).
     let healthAgent: RNHealthAgent | null = null;
-    if (!config.privacy?.gdprMode) {
+    let consentUnsub: (() => void) | undefined;
+    const startHealthAgent = () => {
+      if (healthAgent) return;
       healthAgent = new RNHealthAgent({
         endpoint,
         apiKey: config.apiKey,
         appVersion: config.appVersion,
       });
       healthAgent.start();
+    };
+
+    if (config.privacy?.gdprMode) {
+      Aether.consent.getState()
+        .then((state) => { if (state?.analytics) startHealthAgent(); })
+        .catch(() => { /* consent unavailable — stay deferred */ });
+      consentUnsub = Aether.consent.onUpdate((state) => {
+        if (state?.analytics) {
+          startHealthAgent();
+          consentUnsub?.();
+          consentUnsub = undefined;
+        }
+      });
+    } else {
+      startHealthAgent();
     }
 
     setIsInitialized(true);
@@ -346,6 +364,7 @@ export function AetherProvider({
 
     return () => {
       journeySub?.remove();
+      consentUnsub?.();
       healthAgent?.stop();
       semanticContext.destroy();
       RNEcommerce.destroy();

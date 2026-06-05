@@ -8,8 +8,6 @@ interface QueueConfig {
     retry: Required<RetryConfig>;
     headers: Record<string, string>;
     onError?: (error: Error, events: AetherEvent[]) => void;
-    /** Called when events are filtered out by consent (reported to fleet health). */
-    onDropped?: (count: number) => void;
     /** Called after each batch send attempt with round-trip latency and success. */
     onAttempt?: (latencyMs: number, success: boolean) => void;
 }

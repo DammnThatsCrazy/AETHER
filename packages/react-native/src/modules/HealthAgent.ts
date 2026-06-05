@@ -36,9 +36,14 @@ type AsyncStorageLike = {
 
 function resolveAsyncStorage(): AsyncStorageLike | null {
   try {
-    // eslint-disable-next-line @typescript-eslint/no-var-requires
-    const mod = require('@react-native-async-storage/async-storage');
-    return (mod.default ?? mod) as AsyncStorageLike;
+    // Resolve the module name indirectly: Metro statically follows *literal*
+    // require() strings at bundle time and would hard-fail apps that have not
+    // installed this optional peer dependency. A computed specifier is opaque
+    // to that static analysis, so the require stays a soft runtime lookup.
+    const moduleName = ['@react-native-async-storage', 'async-storage'].join('/');
+    const dynamicRequire = require as unknown as (id: string) => Record<string, unknown>;
+    const mod = dynamicRequire(moduleName);
+    return (mod.default ?? mod) as unknown as AsyncStorageLike;
   } catch {
     return null;
   }
