@@ -548,9 +548,10 @@ class AnalyticsRepository:
     async def get_event(self, event_id: str) -> dict:
         return await self._events.find_by_id_or_fail(event_id)
 
-    async def dashboard_summary(self, tenant_id: str) -> dict:
-        events = await self._events.count(filters={"tenant_id": tenant_id})
-        sessions = await self._sessions.count(filters={"tenant_id": tenant_id})
+    async def dashboard_summary(self, tenant_id: str | None = None) -> dict:
+        filters = {"tenant_id": tenant_id} if tenant_id else None
+        events = await self._events.count(filters=filters)
+        sessions = await self._sessions.count(filters=filters)
         return {
             "period": "24h",
             "total_events": events,
