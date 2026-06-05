@@ -1,14 +1,14 @@
 import { useState } from 'react';
 import { NoesisWorkspace, type NoesisMessageItem } from '@aether/ui';
-import { useNoesisQuery } from '@kyber/features/noesis-command';
+import { useNoesisQuery } from '@aether-app/features/noesis';
 
 const SUGGESTED_PROMPTS = [
-  'Show tenants with unhealthy SDK telemetry.',
-  'Summarize graph health across all tenants.',
-  'Find high-risk wallet clusters this week.',
-  'Show unresolved intelligence alerts.',
-  'Which agents are producing abnormal activity?',
-  'Find graph drift or contamination events.',
+  'Show my highest-value user segments.',
+  'Which campaigns created the best users this week?',
+  'Find users with abnormal purchase behavior.',
+  'Summarize wallet activity over the last 7 days.',
+  'Show reward opportunities.',
+  'Explain this user’s Profile 360.',
 ];
 
 export function NoesisPage() {
@@ -31,16 +31,16 @@ export function NoesisPage() {
 
   return (
     <NoesisWorkspace
-      title="Noesis Command"
-      subtitle="Ask cross-tenant, permission-gated questions about graph health, SDK telemetry, alerts, agents, tenants, rewards, orchestration, and investigations."
-      placeholder="Ask Noesis to inspect graph health, unresolved alerts, failing SDK telemetry, risky clusters, or a specific tenant/entity…"
+      title="Ask Aether"
+      subtitle="Use natural language to query your tenant’s intelligence graph, profiles, campaigns, rewards, consent-safe activity, wallets, agents, and alerts."
+      placeholder="Ask about your graph health, high-value users, wallet activity, campaign quality, rewards, identity clusters, or a specific profile…"
       suggestedPrompts={SUGGESTED_PROMPTS}
       messages={messages}
       isLoading={query.isLoading}
       error={query.error}
-      surfaceTone="kyber"
-      emptyTitle="Noesis is ready for operator intelligence"
-      emptyDescription="Use natural language to route into safe read-only graph, health, alert, tenant, agent, reward, and entity lookups."
+      surfaceTone="aether"
+      emptyTitle="Ask Noesis about your graph"
+      emptyDescription="Answers are tenant-scoped and route through read-only graph intelligence endpoints."
       onSubmit={handleSubmit}
     />
   );
