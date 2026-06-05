@@ -3,7 +3,7 @@ title: Economic Value Framing
 slug: concepts/economic-value-framing
 section: concepts
 visibility: P
-audience: [dev-senior, product]
+audience: [dev-senior, architect]
 status: stable
 since_version: "8.9.0"
 source_files:

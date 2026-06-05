@@ -3,7 +3,7 @@ title: TVL vs GMV vs Revenue Metrics
 slug: concepts/tvl-gmv-revenue-metrics
 section: concepts
 visibility: P
-audience: [dev-senior, product]
+audience: [dev-senior, architect]
 status: stable
 since_version: "8.9.0"
 source_files:

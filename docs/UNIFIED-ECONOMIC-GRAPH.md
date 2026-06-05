@@ -3,7 +3,7 @@ title: Unified Economic Graph
 slug: concepts/unified-economic-graph
 section: concepts
 visibility: P
-audience: [dev-senior, product]
+audience: [dev-senior, architect]
 status: stable
 since_version: "8.9.0"
 source_files:
