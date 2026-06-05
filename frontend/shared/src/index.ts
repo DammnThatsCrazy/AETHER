@@ -70,3 +70,6 @@ export type {
   TenantStatusSummary,
   TenantSafeIncident,
 } from './types/reliability';
+
+export { NoesisWorkspace } from './components/noesis-workspace';
+export type { NoesisAction, NoesisGraphPayload, NoesisMessageItem, NoesisResponsePayload } from './components/noesis-workspace';
