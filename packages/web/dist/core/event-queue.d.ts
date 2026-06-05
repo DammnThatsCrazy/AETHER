@@ -8,6 +8,8 @@ interface QueueConfig {
     retry: Required<RetryConfig>;
     headers: Record<string, string>;
     onError?: (error: Error, events: AetherEvent[]) => void;
+    /** Called after each batch send attempt with round-trip latency and success. */
+    onAttempt?: (latencyMs: number, success: boolean) => void;
 }
 export declare class EventQueue {
     private queue;

@@ -7,7 +7,6 @@ from typing import Any, Optional
 
 from repositories.repos import BaseRepository
 from shared.common.common import NotFoundError, utc_now
-from datetime import datetime, timedelta, timezone
 
 from .models import NoesisQueryRequest, NoesisResponse
 
@@ -70,64 +69,6 @@ class NoesisConversationStore:
             filters["tenant_id"] = tenant_id
         rows = await self._repo.find_many(filters=filters, limit=min(max(limit, 1), 100))
         return [self._summary(row) for row in rows]
-
-
-    async def export_for_scope(
-        self,
-        *,
-        surface: str,
-        tenant_id: Optional[str],
-        limit: int = 500,
-    ) -> dict[str, Any]:
-        filters: Optional[dict[str, Any]] = {"surface": surface}
-        if tenant_id:
-            filters["tenant_id"] = tenant_id
-        rows = await self._repo.find_many(filters=filters, limit=min(max(limit, 1), 1000))
-        redacted = [self._redact_record(row) for row in rows]
-        return {"conversations": redacted, "count": len(redacted)}
-
-    async def delete(self, conversation_id: str, *, tenant_id: Optional[str], surface: str) -> dict[str, Any]:
-        record = await self.get(conversation_id, tenant_id=tenant_id, surface=surface)
-        await self._repo.delete(conversation_id)
-        return {
-            "deleted": True,
-            "conversation_id": conversation_id,
-            "tenant_id": record.get("tenant_id", ""),
-            "surface": record.get("surface", surface),
-        }
-
-    def _redact_record(self, record: dict[str, Any]) -> dict[str, Any]:
-        redacted = {**record}
-        messages = []
-        for message in record.get("messages", []):
-            msg = dict(message)
-            response = msg.get("response")
-            if isinstance(response, dict):
-                response = dict(response)
-                response.pop("query_debug", None)
-                msg["response"] = response
-            messages.append(msg)
-        redacted["messages"] = messages
-        return redacted
-
-
-    async def purge_expired(self, *, retention_days: int, surface: Optional[str] = None) -> dict[str, Any]:
-        cutoff = datetime.now(timezone.utc) - timedelta(days=max(retention_days, 1))
-        filters = {"surface": surface} if surface else None
-        rows = await self._repo.find_many(filters=filters, limit=1000)
-        deleted: list[str] = []
-        for row in rows:
-            updated_at = str(row.get("updated_at") or row.get("created_at") or "")
-            try:
-                updated = datetime.fromisoformat(updated_at.replace("Z", "+00:00"))
-            except ValueError:
-                continue
-            if updated < cutoff:
-                conversation_id = str(row.get("conversation_id") or row.get("id") or "")
-                if conversation_id:
-                    await self._repo.delete(conversation_id)
-                    deleted.append(conversation_id)
-        return {"deleted": len(deleted), "conversation_ids": deleted, "retention_days": retention_days}
 
     async def get(self, conversation_id: str, *, tenant_id: Optional[str], surface: str) -> dict[str, Any]:
         record = await self._repo.find_by_id(conversation_id)
