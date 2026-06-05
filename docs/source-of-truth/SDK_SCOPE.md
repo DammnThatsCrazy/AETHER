@@ -48,3 +48,17 @@ deliver observations.
 - **No backend duplication**: workflow logic never lives in the client.
 - **Optional tiers are optional**: commerce, agent, wallet, x402 surfaces
   only activate when the host app calls them.
+
+## Journey continuity boundary
+
+SDKs expose a consistent journey API (`startJourney`, `pauseJourney`, `resumeJourney`,
+`continueJourney`, `completeJourney`, `abandonJourney`, `checkpointJourney`,
+`getCurrentJourney`, and supported `onJourneyResumed` callbacks). These methods emit
+canonical observations only. The backend stitches sessions, assigns/merges journey IDs,
+computes handoff confidence, and decides whether a journey is linked, ambiguous, active,
+abandoned, or completed.
+
+SDKs must not make identity truth decisions. Fingerprints are collected only where
+allowed by consent and are support signals, not sole proof. Cross-device linking is
+always tenant-scoped and requires valid consent plus stronger identity evidence when the
+link is sensitive.

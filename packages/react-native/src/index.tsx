@@ -90,6 +90,38 @@ const Aether = {
     AetherNative?.hydrateIdentity(data);
   },
 
+  startJourney(nameOrType: string, properties?: Record<string, unknown>): void {
+    AetherNative?.startJourney(nameOrType, properties ?? {});
+  },
+
+  pauseJourney(reason?: string, properties?: Record<string, unknown>): void {
+    AetherNative?.pauseJourney(reason ?? '', properties ?? {});
+  },
+
+  resumeJourney(reason?: string, properties?: Record<string, unknown>): void {
+    AetherNative?.resumeJourney(reason ?? '', properties ?? {});
+  },
+
+  continueJourney(stepIdOrName: string, properties?: Record<string, unknown>): void {
+    AetherNative?.continueJourney(stepIdOrName, properties ?? {});
+  },
+
+  completeJourney(reason?: string, properties?: Record<string, unknown>): void {
+    AetherNative?.completeJourney(reason ?? '', properties ?? {});
+  },
+
+  abandonJourney(reason?: string, properties?: Record<string, unknown>): void {
+    AetherNative?.abandonJourney(reason ?? '', properties ?? {});
+  },
+
+  checkpointJourney(stepIdOrName: string, properties?: Record<string, unknown>): void {
+    AetherNative?.checkpointJourney(stepIdOrName, properties ?? {});
+  },
+
+  async getCurrentJourney(): Promise<Record<string, unknown> | null> {
+    return AetherNative?.getCurrentJourney?.() ?? null;
+  },
+
   async getIdentity(): Promise<Identity> {
     return AetherNative?.getIdentity() ?? { anonymousId: '', traits: {} };
   },
@@ -275,6 +307,12 @@ export function AetherProvider({
     RNFeedback.initialize(config.apiKey, endpoint);
 
     setIsInitialized(true);
+
+    // Journey foreground/background lifecycle is emitted by the native SDKs
+    // (Android onStart/onStop, iOS willEnterForeground). Emitting the same
+    // transitions again from a JS AppState listener would double-count every
+    // active/background change in the stitcher, so lifecycle emission is left
+    // to native.
 
     // Fetch server config (non-blocking, fire-and-forget)
     fetch(`${endpoint}/v1/config?apiKey=${config.apiKey}`)

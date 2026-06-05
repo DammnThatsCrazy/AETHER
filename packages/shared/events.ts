@@ -21,6 +21,14 @@ export type EventType =
   | 'error'
   | 'performance'
   | 'experiment'
+  // Journey lifecycle
+  | 'journey_started'
+  | 'journey_paused'
+  | 'journey_resumed'
+  | 'journey_continued'
+  | 'journey_completed'
+  | 'journey_abandoned'
+  | 'journey_checkpoint'
   // Identity
   | 'identify'
   | 'consent'
@@ -48,6 +56,7 @@ export type EventType =
 
 export type EventFamily =
   | 'core'
+  | 'journey'
   | 'identity'
   | 'consent'
   | 'commerce'
@@ -59,6 +68,9 @@ export type EventFamily =
 export const EVENT_FAMILY: Record<EventType, EventFamily> = {
   track: 'core', page: 'core', screen: 'core', heartbeat: 'core',
   error: 'core', performance: 'core', experiment: 'core',
+  journey_started: 'journey', journey_paused: 'journey', journey_resumed: 'journey',
+  journey_continued: 'journey', journey_completed: 'journey', journey_abandoned: 'journey',
+  journey_checkpoint: 'journey',
   identify: 'identity',
   consent: 'consent',
   conversion: 'commerce',
@@ -78,6 +90,9 @@ export const EVENT_FAMILY: Record<EventType, EventFamily> = {
 export const EVENT_CONSENT_PURPOSE: Record<EventType, string> = {
   track: 'analytics', page: 'analytics', screen: 'analytics',
   heartbeat: 'analytics', error: 'analytics', performance: 'analytics',
+  journey_started: 'analytics', journey_paused: 'analytics', journey_resumed: 'analytics',
+  journey_continued: 'analytics', journey_completed: 'analytics', journey_abandoned: 'analytics',
+  journey_checkpoint: 'analytics',
   identify: 'analytics',
   experiment: 'marketing', conversion: 'marketing',
   consent: 'analytics',
@@ -175,6 +190,89 @@ export interface DataQualityRecord {
   [k: string]: number | undefined;
 }
 
+
+// ---------------------------------------------------------------------------
+// Cross-device journey continuity
+// ---------------------------------------------------------------------------
+
+export type JourneyLifecycleEventType =
+  | 'journey_started'
+  | 'journey_paused'
+  | 'journey_resumed'
+  | 'journey_continued'
+  | 'journey_completed'
+  | 'journey_abandoned'
+  | 'journey_checkpoint';
+
+export type JourneyStatus =
+  | 'started'
+  | 'paused'
+  | 'resumed'
+  | 'continued'
+  | 'completed'
+  | 'abandoned'
+  | 'checkpoint';
+
+export interface JourneyAttributionContext {
+  source?: string;
+  medium?: string;
+  campaign?: string;
+  content?: string;
+  term?: string;
+  clickId?: string;
+  referrer?: string;
+  deepLink?: string;
+  [key: string]: unknown;
+}
+
+export interface JourneyPayload {
+  journeyId?: string;
+  journeyName?: string;
+  journeyType?: string;
+  stepId?: string;
+  stepName?: string;
+  previousStepId?: string;
+  nextExpectedStepId?: string;
+  journeyStatus?: JourneyStatus;
+  pauseReason?: string;
+  resumeReason?: string;
+  completionReason?: string;
+  abandonmentReason?: string;
+  handoffFromSessionId?: string;
+  handoffFromDeviceId?: string;
+  handoffToDeviceId?: string;
+  handoffLatencyMs?: number;
+  confidence?: number;
+  confidenceSignals?: string[];
+  sourceSessionId?: string;
+  sourceAnonymousId?: string;
+  sourceUserId?: string;
+  targetSessionId?: string;
+  targetAnonymousId?: string;
+  targetUserId?: string;
+  campaignAttribution?: JourneyAttributionContext;
+  referrerAttribution?: JourneyAttributionContext;
+  metadata?: Record<string, unknown>;
+  [key: string]: unknown;
+}
+
+export interface JourneyLifecycleEvent extends BaseEvent {
+  type: JourneyLifecycleEventType;
+  properties: JourneyPayload;
+}
+
+export interface JourneyContext {
+  journeyId?: string;
+  journeyName?: string;
+  journeyType?: string;
+  currentStepId?: string;
+  currentStepName?: string;
+  status?: JourneyStatus;
+  lastLifecycleEvent?: JourneyLifecycleEventType;
+  confidence?: number;
+  confidenceSignals?: string[];
+}
+
 export interface EventContext {
   library: LibraryContext;
   page?: PageContext;
@@ -187,6 +285,7 @@ export interface EventContext {
   userAgent?: string;
   consent?: ConsentState;
   provenance?: Provenance;
+  journey?: JourneyContext;
   /** Optional tenant/org binding for B2B + hybrid companies. */
   tenantId?: string;
   orgId?: string;

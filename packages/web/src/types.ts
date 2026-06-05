@@ -52,7 +52,10 @@ export interface AetherConfig {
    * Receives the merged identity from the backend.
    */
   onJourneyResumed?: (identity: ResolvedIdentity) => void;
+  /** Client-side inactivity window before an incomplete journey is considered abandoned. */
+  journeyTimeoutMs?: number;
 }
+
 
 /**
  * Module toggles read by AetherSDK.init().
@@ -392,6 +395,14 @@ export type EventType =
   | 'error'
   | 'performance'
   | 'experiment'
+  // Journey lifecycle
+  | 'journey_started'
+  | 'journey_paused'
+  | 'journey_resumed'
+  | 'journey_continued'
+  | 'journey_completed'
+  | 'journey_abandoned'
+  | 'journey_checkpoint'
   // Identity
   | 'identify'
   | 'consent'
@@ -417,7 +428,58 @@ export type EventType =
   // x402 (optional)
   | 'x402_payment';
 
+
+export type JourneyLifecycleEventType =
+  | 'journey_started'
+  | 'journey_paused'
+  | 'journey_resumed'
+  | 'journey_continued'
+  | 'journey_completed'
+  | 'journey_abandoned'
+  | 'journey_checkpoint';
+
+export type JourneyStatus = 'started' | 'paused' | 'resumed' | 'continued' | 'completed' | 'abandoned' | 'checkpoint';
+
+export interface JourneyPayload {
+  journeyId?: string;
+  journeyName?: string;
+  journeyType?: string;
+  stepId?: string;
+  stepName?: string;
+  previousStepId?: string;
+  nextExpectedStepId?: string;
+  journeyStatus?: JourneyStatus;
+  pauseReason?: string;
+  resumeReason?: string;
+  completionReason?: string;
+  abandonmentReason?: string;
+  handoffFromSessionId?: string;
+  handoffFromDeviceId?: string;
+  handoffToDeviceId?: string;
+  handoffLatencyMs?: number;
+  confidence?: number;
+  confidenceSignals?: string[];
+  sourceSessionId?: string;
+  sourceAnonymousId?: string;
+  sourceUserId?: string;
+  targetSessionId?: string;
+  targetAnonymousId?: string;
+  targetUserId?: string;
+  campaignAttribution?: Record<string, unknown>;
+  referrerAttribution?: Record<string, unknown>;
+  metadata?: Record<string, unknown>;
+  [key: string]: unknown;
+}
+
+export interface CurrentJourney extends JourneyPayload {
+  journeyId: string;
+  journeyStatus: JourneyStatus;
+  startedAt: string;
+  updatedAt: string;
+}
+
 export interface BaseEvent {
+
   id: string;
   type: EventType;
   timestamp: string;
@@ -442,6 +504,7 @@ export interface EventContext {
   semantic?: Record<string, unknown>;
   trafficSource?: Record<string, unknown>;
   network?: NetworkContext;
+  journey?: Pick<CurrentJourney, 'journeyId' | 'journeyName' | 'journeyType' | 'journeyStatus'>;
 }
 
 export interface NetworkContext {
@@ -742,7 +805,13 @@ export interface ContractActionEvent extends BaseEvent {
   };
 }
 
+export interface JourneyLifecycleEvent extends BaseEvent {
+  type: JourneyLifecycleEventType;
+  properties: JourneyPayload;
+}
+
 export type AetherEvent =
+  | JourneyLifecycleEvent
   | TrackEvent
   | PageEvent
   | IdentifyEvent
@@ -1003,6 +1072,15 @@ export interface AetherSDKInterface {
   reset(): void;
   flush(): Promise<void>;
   destroy(): void;
+  startJourney(nameOrType: string, properties?: JourneyPayload): CurrentJourney | null;
+  pauseJourney(reason?: string, properties?: JourneyPayload): void;
+  resumeJourney(reason?: string, properties?: JourneyPayload): void;
+  continueJourney(stepIdOrName: string, properties?: JourneyPayload): void;
+  completeJourney(reason?: string, properties?: JourneyPayload): void;
+  abandonJourney(reason?: string, properties?: JourneyPayload): void;
+  checkpointJourney(stepIdOrName: string, properties?: JourneyPayload): void;
+  getCurrentJourney(): CurrentJourney | null;
+  onJourneyResumed(callback: (identity: ResolvedIdentity) => void): () => void;
   wallet: WalletInterface;
   consent: ConsentInterface;
   /** Thin emitter for commerce/access events (rail-agnostic). */

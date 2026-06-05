@@ -4,6 +4,7 @@
   "schema_version": "1.0.0",
   "families": [
     "core",
+    "journey",
     "identity",
     "consent",
     "commerce",
@@ -60,6 +61,48 @@
       "family": "core",
       "consent_purpose": "marketing",
       "section_comment": "Core analytics"
+    },
+    {
+      "name": "journey_started",
+      "family": "journey",
+      "consent_purpose": "analytics",
+      "section_comment": "Journey lifecycle"
+    },
+    {
+      "name": "journey_paused",
+      "family": "journey",
+      "consent_purpose": "analytics",
+      "section_comment": "Journey lifecycle"
+    },
+    {
+      "name": "journey_resumed",
+      "family": "journey",
+      "consent_purpose": "analytics",
+      "section_comment": "Journey lifecycle"
+    },
+    {
+      "name": "journey_continued",
+      "family": "journey",
+      "consent_purpose": "analytics",
+      "section_comment": "Journey lifecycle"
+    },
+    {
+      "name": "journey_completed",
+      "family": "journey",
+      "consent_purpose": "analytics",
+      "section_comment": "Journey lifecycle"
+    },
+    {
+      "name": "journey_abandoned",
+      "family": "journey",
+      "consent_purpose": "analytics",
+      "section_comment": "Journey lifecycle"
+    },
+    {
+      "name": "journey_checkpoint",
+      "family": "journey",
+      "consent_purpose": "analytics",
+      "section_comment": "Journey lifecycle"
     },
     {
       "name": "identify",

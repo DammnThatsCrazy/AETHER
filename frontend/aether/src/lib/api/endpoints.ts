@@ -44,6 +44,13 @@ const buildQS = (params: Record<string, string | number | boolean | undefined>) 
 // ─── API ─────────────────────────────────────────────────────────────────────
 export const api = {
 
+  // ── System status — tenant-safe reliability visibility ────────────────────
+  status: {
+    overview: () => restClient.get('/v1/status', wrap(unknownSchema)).then(r => r.data),
+    incidents: () => restClient.get('/v1/status/incidents', wrap(unknownSchema)).then(r => r.data),
+    dataFreshness: () => restClient.get('/v1/status/data-freshness', wrap(unknownSchema)).then(r => r.data),
+    integrations: () => restClient.get('/v1/status/integrations', wrap(unknownSchema)).then(r => r.data),
+  },
 
   valueReview: {
     overview: () => restClient.get('/v1/value-review', wrap(unknownSchema)).then(r => r.data),
@@ -51,6 +58,38 @@ export const api = {
     recommendations: () => restClient.get('/v1/value-review/recommendations', wrap(unknownSchema)).then(r => r.data),
     playbooks: () => restClient.get('/v1/value-review/playbooks', wrap(unknownSchema)).then(r => r.data),
     nextSteps: () => restClient.get('/v1/value-review/next-steps', wrap(unknownSchema)).then(r => r.data),
+  },
+
+  // ─── Security & Governance (tenant-scoped only) ────────────────────────────
+  security: {
+    myPermissions: () => restClient.get('/v1/security/me/permissions', wrap(unknownSchema)).then(r => r.data),
+    auditEvents: (limit = 50) => restClient.get(`/v1/security/audit-events${buildQS({ limit })}`, wrap(unknownSchema)).then(r => r.data),
+    policies: (limit = 50) => restClient.get(`/v1/security/policies${buildQS({ limit })}`, wrap(unknownSchema)).then(r => r.data),
+    dataRetention: () => restClient.get('/v1/security/data-retention', wrap(unknownSchema)).then(r => r.data),
+    dataRequests: (limit = 50) => restClient.get(`/v1/security/data-requests${buildQS({ limit })}`, wrap(unknownSchema)).then(r => r.data),
+    createDataRequest: (body: Record<string, unknown>) => restClient.post('/v1/security/data-requests', wrap(unknownSchema), body).then(r => r.data),
+  },
+
+  // ─── Data Quality / Intelligence Quality (tenant-scoped only) ──────────────
+  dataQuality: {
+    overview: () => restClient.get('/v1/data-quality/overview', wrap(unknownSchema)).then(r => r.data),
+    events: () => restClient.get('/v1/data-quality/events', wrap(unknownSchema)).then(r => r.data),
+    schema: () => restClient.get('/v1/data-quality/schema', wrap(unknownSchema)).then(r => r.data),
+    identity: () => restClient.get('/v1/data-quality/identity', wrap(unknownSchema)).then(r => r.data),
+    graph: () => restClient.get('/v1/data-quality/graph', wrap(unknownSchema)).then(r => r.data),
+    profile: () => restClient.get('/v1/data-quality/profile', wrap(unknownSchema)).then(r => r.data),
+    recommendations: () => restClient.get('/v1/data-quality/recommendations', wrap(unknownSchema)).then(r => r.data),
+    outcomes: () => restClient.get('/v1/data-quality/outcomes', wrap(unknownSchema)).then(r => r.data),
+    playbooks: () => restClient.get('/v1/data-quality/playbooks', wrap(unknownSchema)).then(r => r.data),
+  },
+
+  // ─── Integrations / Connectors (non-SDK ingestion, tenant-scoped) ──────────
+  connectors: {
+    list: () => restClient.get('/v1/integrations/connectors', wrap(unknownSchema)).then(r => r.data),
+    get: (t: string) => restClient.get(`/v1/integrations/connectors/${t}`, wrap(unknownSchema)).then(r => r.data),
+    configure: (t: string, body: Record<string, unknown>) => restClient.put(`/v1/integrations/connectors/${t}`, wrap(unknownSchema), body).then(r => r.data),
+    test: (t: string) => restClient.post(`/v1/integrations/connectors/${t}/test`, wrap(unknownSchema), {}).then(r => r.data),
+    sync: (t: string) => restClient.post(`/v1/integrations/connectors/${t}/sync`, wrap(unknownSchema), {}).then(r => r.data),
   },
 
   // ── Profile — full + all contextual sub-resources ─────────────────────────
@@ -87,7 +126,10 @@ export const api = {
     platforms: (userId: string) =>
       restClient.get(`/v1/profile/${userId}/platforms`, wrap(unknownSchema)).then(r => r.data),
 
-    /** Cross-session journey chains — steps, drop-off flags, campaign linkage ("where"). */
+    /** Cross-session journey chains — steps, drop-off flags, campaign linkage ("where").
+     *  Backed by the persisted Profile360 aggregator; the in-memory journey
+     *  stitcher (/v1/journeys/*) is not yet wired to ingestion, so reading from
+     *  it here would drop existing journey-chain data. */
     journeys: (userId: string) =>
       restClient.get(`/v1/profile/${userId}/journeys`, wrap(unknownSchema)).then(r => r.data as JourneysResponse),
 

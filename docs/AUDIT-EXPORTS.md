@@ -45,3 +45,19 @@ Each generated export includes an `integrity_hash` over the generated payload an
 
 ## GTM usage notes
 Audit Export Brief collateral may describe available export types, integrity hashes, tenant-scoped access, and retention notes. It must not represent exports as external compliance certification or authorization evidence by itself.
+
+## Audit export governance
+The live audit export endpoints (`POST /v1/audit/exports` create and
+`GET /v1/audit/exports/{export_id}` download) are wired through
+`AuditExportGovernance` (`services/security/export_governance.py`): export
+permission is enforced via the policy engine, cross-tenant export attempts are
+blocked, sensitive export types (`full_audit_log`, `cross_resource`,
+`operator_access`, `raw_events`) require an `approval_id`, exports carry a
+`high_risk` flag plus an `integrity_hash` and an expiry (downloads past expiry are
+blocked), and both creation and download emit `SecurityAuditEvent`s. A **full
+multi-source export** (every audit source, unfiltered) is mapped to
+`full_audit_log` and treated as high-risk requiring approval. The integrity hash
+is computed over a **digest of the actual exported rows** (not just the
+source/count summary), so row-level tampering changes the hash. See
+[SECURITY-GOVERNANCE-CONTROLS.md](./SECURITY-GOVERNANCE-CONTROLS.md). This governs
+exports; it does not make them external compliance certification.

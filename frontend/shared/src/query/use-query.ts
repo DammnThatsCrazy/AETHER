@@ -39,12 +39,6 @@ export function useQuery<T>({
     };
   }, []);
 
-  useEffect(() => {
-    return queryCache.subscribe(key, () => {
-      if (mountedRef.current) forceUpdate(n => n + 1);
-    });
-  }, [key]);
-
   const execute = useCallback(
     async (force = false): Promise<void> => {
       if (!enabled) return;
@@ -96,6 +90,18 @@ export function useQuery<T>({
     },
     [key, staleTime, enabled],
   );
+
+  useEffect(() => {
+    return queryCache.subscribe(key, () => {
+      if (!mountedRef.current) return;
+      forceUpdate(n => n + 1);
+      // Refetch on cache notifications: after invalidate() the entry is gone
+      // (isStale → fetch), so an invalidateKeys mutation actually refreshes the
+      // view; after our own set() the entry is fresh, so execute() early-returns
+      // and we don't loop on our own writes.
+      void execute();
+    });
+  }, [key, execute]);
 
   useEffect(() => {
     void execute();

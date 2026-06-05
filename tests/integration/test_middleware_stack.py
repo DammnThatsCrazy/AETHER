@@ -169,6 +169,7 @@ class TestAuthMiddlewareIntegration:
         with backend_module_path():
             middleware_mod = importlib.import_module("middleware.middleware")
             assert "/v1/health" in middleware_mod._PUBLIC_PATHS
+            assert "/v1/billing/plans" in middleware_mod._PUBLIC_PATHS
             assert "/v1/admin/billing/stripe/webhook" in middleware_mod._PUBLIC_PATHS
 
     def test_jwt_manual_path_encodes_and_decodes(self, monkeypatch):
@@ -337,7 +338,9 @@ class TestFeatureGateMiddlewareIntegration:
             public = gate_mod.PUBLIC_PATHS
             assert "/v1/health" in public
             assert "/docs" in public
+            assert "/v1/billing/plans" in public
             assert "/v1/admin/billing/stripe/webhook" in public
+            assert gate_mod.FeatureGate().is_public("/v1/billing/plans") is True
 
     def test_higher_plan_has_more_service_access(self, monkeypatch):
         """P4 has access to more services than P1 (service_count in plan catalog)."""

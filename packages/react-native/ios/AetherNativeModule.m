@@ -22,4 +22,16 @@ RCT_EXTERN_METHOD(getConsentState:(RCTPromiseResolveBlock)resolve rejecter:(RCTP
 RCT_EXTERN_METHOD(grantConsent:(NSArray *)purposes)
 RCT_EXTERN_METHOD(revokeConsent:(NSArray *)purposes)
 
+// Journey lifecycle APIs — without these externs the Swift implementations are
+// not registered with the bridge, so AetherNative.startJourney(...) and the
+// other journey methods are undefined (silent no-ops) on iOS.
+RCT_EXTERN_METHOD(startJourney:(NSString *)nameOrType properties:(NSDictionary *)properties)
+RCT_EXTERN_METHOD(pauseJourney:(NSString *)reason properties:(NSDictionary *)properties)
+RCT_EXTERN_METHOD(resumeJourney:(NSString *)reason properties:(NSDictionary *)properties)
+RCT_EXTERN_METHOD(continueJourney:(NSString *)stepIdOrName properties:(NSDictionary *)properties)
+RCT_EXTERN_METHOD(completeJourney:(NSString *)reason properties:(NSDictionary *)properties)
+RCT_EXTERN_METHOD(abandonJourney:(NSString *)reason properties:(NSDictionary *)properties)
+RCT_EXTERN_METHOD(checkpointJourney:(NSString *)stepIdOrName properties:(NSDictionary *)properties)
+RCT_EXTERN_METHOD(getCurrentJourney:(RCTPromiseResolveBlock)resolve rejecter:(RCTPromiseRejectBlock)reject)
+
 @end

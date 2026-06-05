@@ -23,13 +23,40 @@ from fastapi import APIRouter, Request
 from pydantic import BaseModel, Field
 
 from config.settings import settings
-from shared.common.common import APIResponse, BadRequestError, NotFoundError
+from shared.common.common import APIResponse, BadRequestError, ConflictError, NotFoundError
 from shared.events.events import Event, EventProducer, Topic
 from shared.graph.graph import Edge, EdgeType, GraphClient, Vertex, VertexType
 from shared.graph.relationship_layers import get_cross_layer_paths, get_layer_subgraph, RelationshipLayer
 from shared.logger.logger import get_logger, metrics
 from shared.scoring.trust_score import TrustScoreComposite
 from shared.store import get_store
+from services.agent.runtime_repository import (
+    CONTROLLERS, QUEUES, REVIEW_STATUSES, OBJECTIVE_STATUSES, MUTATION_CLASSES,
+    get_agent_runtime_repository, stable_idempotency_key, utc_now,
+)
+
+
+def _queue_for_controller(name: str) -> str:
+    """Map a controller to the Celery queue it is routed to.
+
+    Mirrors ``Agent Layer/queue/celery_app.py`` task_routes: the named
+    controller queues route 1:1, everything else falls to ``default``.
+    """
+    return name if name in QUEUES else "default"
+
+
+def _validate_mutation_classes(staged: Any) -> None:
+    """Reject malformed staged-mutation classes before anything is persisted."""
+    if not isinstance(staged, list):
+        return
+    for mutation in staged:
+        raw = mutation.get("mutation_class", mutation.get("class", 1)) if isinstance(mutation, dict) else None
+        try:
+            mutation_class = int(raw)
+        except (TypeError, ValueError):
+            raise BadRequestError("mutation_class must be an integer in 1, 2, 3, 4, or 5")
+        if mutation_class not in MUTATION_CLASSES:
+            raise BadRequestError("mutation_class must be one of 1, 2, 3, 4, or 5")
 
 logger = get_logger("aether.service.agent")
 router = APIRouter(prefix="/v1/agent", tags=["Agent"])
@@ -38,6 +65,27 @@ router = APIRouter(prefix="/v1/agent", tags=["Agent"])
 _graph = GraphClient()
 _producer = EventProducer()
 _trust_scorer = TrustScoreComposite()
+
+_runtime_repo = get_agent_runtime_repository()
+
+
+def _request_id(request: Request) -> str:
+    return getattr(request.state, "request_id", "") or request.headers.get("X-Correlation-ID", "")
+
+
+def _actor_id(request: Request) -> str:
+    tenant = request.state.tenant
+    return getattr(tenant, "user_id", None) or getattr(tenant, "tenant_id", "operator")
+
+
+def _envelope(data: Any, request: Request, status: str = "success", meta: dict[str, Any] | None = None) -> dict[str, Any]:
+    return {
+        "data": data,
+        "status": status,
+        "timestamp": utc_now(),
+        "meta": {"request_id": _request_id(request), **(meta or {})},
+    }
+
 
 VALID_WORKER_TYPES = [
     "web_crawler", "api_scanner", "social_listener",
@@ -55,18 +103,297 @@ class TaskSubmission(BaseModel):
 
 class KillSwitchAction(BaseModel):
     action: str = Field(..., pattern="^(engage|release)$")
+    reason: str = ""
+
+
+class ObjectiveSubmission(BaseModel):
+    goal: str = Field(..., min_length=3, max_length=4000)
+    objective_type: str = Field(default="operator_directive", max_length=128)
+    severity: str = Field(default="medium", pattern="^(critical|high|medium|low|background)$")
+    priority: int = Field(default=2, ge=0, le=9)
+    payload: dict[str, Any] = Field(default_factory=dict)
+    idempotency_key: str = ""
+
+
+class ObjectiveAction(BaseModel):
+    reason: str = ""
+
+
+class DispatchRequest(BaseModel):
+    objective_id: str
+    controller: str = Field(default="nous")
+
+
+class ReviewDecision(BaseModel):
+    notes: str = ""
+
+
+class ControllerHeartbeat(BaseModel):
+    controller: str
+    status: str = Field(default="healthy", pattern="^(healthy|degraded|failed|unknown)$")
+    queue_depth: int = Field(default=0, ge=0)
+    worker_id: str = "kyber"
+    metadata: dict[str, Any] = Field(default_factory=dict)
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# HOSTED AGENT LAYER CONTROL PLANE — Kyber operator API
+# ═══════════════════════════════════════════════════════════════════════════
+
+
+@router.get("/health")
+async def controller_health(request: Request):
+    """Aggregate controller health, queue depths and durable kill-switch state."""
+    tenant = request.state.tenant
+    tenant.require_permission("agent:manage")
+    controllers = await _runtime_repo.controller_status(tenant.tenant_id)
+    kill_switch = await _runtime_repo.get_kill_switch(tenant.tenant_id)
+    # Uncapped counts so health/metrics don't under-report backlog past the first
+    # 500 rows in large tenants.
+    active = await _runtime_repo.count_objectives(tenant.tenant_id, status="active")
+    blocked = await _runtime_repo.count_objectives(tenant.tenant_id, status="blocked")
+    failed = await _runtime_repo.count_objectives(tenant.tenant_id, status="failed")
+    total_objectives = await _runtime_repo.count_objectives(tenant.tenant_id)
+    awaiting_review = await _runtime_repo.count_review_batches(tenant.tenant_id, status="pending")
+    for name, value in {
+        "agent_active_objectives": active,
+        "agent_blocked_objectives": blocked,
+        "agent_failed_objectives": failed,
+        "agent_awaiting_review": awaiting_review,
+        "agent_kill_switch_state": int(bool(kill_switch.get("enabled"))),
+    }.items():
+        # These are point-in-time snapshots; observe them (gauge semantics) so a
+        # 10s Kyber health poll doesn't inflate the counts into the thousands.
+        metrics.observe(name, float(value))
+    return _envelope({
+        "kill_switch": kill_switch,
+        "controllers": controllers,
+        "queues": [
+            {"name": queue, "depth": sum(
+                int(c.get("queue_depth", 0) or 0)
+                for c in controllers
+                if _queue_for_controller(c.get("controller", "")) == queue
+            )}
+            for queue in QUEUES
+        ],
+        "objectives": {"active": active, "blocked": blocked, "failed": failed, "total": total_objectives},
+        "review": {"awaiting_review": awaiting_review},
+    }, request)
+
+
+@router.post("/objectives")
+async def submit_objective(body: ObjectiveSubmission, request: Request):
+    tenant = request.state.tenant
+    tenant.require_permission("agent:manage")
+    kill_switch = await _runtime_repo.get_kill_switch(tenant.tenant_id)
+    if kill_switch.get("enabled"):
+        raise ConflictError("Agent kill switch is engaged; release it before submitting objectives")
+    payload = body.payload
+    staged = payload.get("staged_mutations") if isinstance(payload, dict) else None
+    # Validate client-controlled mutation classes BEFORE persisting the objective,
+    # so a malformed payload returns 400 instead of a 500 that strands a queued
+    # objective with no review batch.
+    _validate_mutation_classes(staged)
+    idem = body.idempotency_key or stable_idempotency_key(tenant.tenant_id, body.model_dump())
+    objective = await _runtime_repo.create_objective(
+        tenant.tenant_id, body.goal, body.objective_type, body.severity, body.priority,
+        payload, _actor_id(request), idem, _request_id(request),
+    )
+    # Idempotent retries (same idempotency key) return the existing objective; only
+    # stage a review batch the first time so retries don't pile up duplicate
+    # pending approvals for a single objective.
+    if isinstance(staged, list) and staged and not await _runtime_repo.review_batches_for_objective(
+        tenant.tenant_id, objective["objective_id"]
+    ):
+        await _runtime_repo.create_review_batch(tenant.tenant_id, objective["objective_id"], staged, _actor_id(request), _request_id(request))
+        objective["status"] = "awaiting_review"
+        objective["updated_at"] = utc_now()
+        await _runtime_repo.objectives.set(objective["objective_id"], objective)
+    metrics.increment("agent_objectives_created", labels={"type": body.objective_type})
+    return _envelope(objective, request)
+
+
+@router.get("/objectives")
+async def list_objectives(request: Request, status: str | None = None, limit: int = 100):
+    tenant = request.state.tenant
+    tenant.require_permission("agent:manage")
+    if status and status not in OBJECTIVE_STATUSES:
+        raise BadRequestError(f"Invalid objective status: {status}")
+    rows = await _runtime_repo.list_objectives(tenant.tenant_id, status=status, limit=limit)
+    return _envelope({"objectives": rows, "total": len(rows)}, request)
+
+
+@router.get("/objectives/{objective_id}")
+async def get_objective(objective_id: str, request: Request):
+    tenant = request.state.tenant
+    tenant.require_permission("agent:manage")
+    objective = await _runtime_repo.get_objective(tenant.tenant_id, objective_id)
+    if objective is None:
+        raise NotFoundError("Objective")
+    plans = await _runtime_repo.plans.find(tenant_id=tenant.tenant_id, objective_id=objective_id)
+    steps = await _runtime_repo.steps.find(tenant_id=tenant.tenant_id, objective_id=objective_id)
+    checkpoints = await _runtime_repo.checkpoints.find(tenant_id=tenant.tenant_id, objective_id=objective_id)
+    events = await _runtime_repo.events_for_tenant(tenant.tenant_id, limit=100, objective_id=objective_id)
+    return _envelope({"objective": objective, "plans": plans, "steps": steps, "checkpoints": checkpoints, "events": events}, request)
+
+
+@router.post("/objectives/{objective_id}/pause")
+async def pause_objective(objective_id: str, body: ObjectiveAction, request: Request):
+    tenant = request.state.tenant
+    tenant.require_permission("agent:pause")
+    objective = await _runtime_repo.transition_objective(tenant.tenant_id, objective_id, "pause", _actor_id(request), _request_id(request), reason=body.reason)
+    if objective is None:
+        raise NotFoundError("Objective")
+    return _envelope(objective, request)
+
+
+@router.post("/objectives/{objective_id}/resume")
+async def resume_objective(objective_id: str, body: ObjectiveAction, request: Request):
+    tenant = request.state.tenant
+    tenant.require_permission("agent:dispatch")
+    objective = await _runtime_repo.transition_objective(tenant.tenant_id, objective_id, "resume", _actor_id(request), _request_id(request), reason=body.reason)
+    if objective is None:
+        raise NotFoundError("Objective")
+    return _envelope(objective, request)
+
+
+@router.post("/objectives/{objective_id}/cancel")
+async def cancel_objective(objective_id: str, body: ObjectiveAction, request: Request):
+    tenant = request.state.tenant
+    tenant.require_permission("agent:pause")
+    objective = await _runtime_repo.transition_objective(tenant.tenant_id, objective_id, "cancel", _actor_id(request), _request_id(request), reason=body.reason)
+    if objective is None:
+        raise NotFoundError("Objective")
+    return _envelope(objective, request)
+
+
+@router.post("/dispatch")
+async def dispatch_step(body: DispatchRequest, request: Request):
+    tenant = request.state.tenant
+    tenant.require_permission("agent:dispatch")
+    if body.controller not in CONTROLLERS:
+        raise BadRequestError(f"Unknown controller: {body.controller}")
+    kill_switch = await _runtime_repo.get_kill_switch(tenant.tenant_id)
+    if kill_switch.get("enabled"):
+        raise ConflictError("Agent kill switch is engaged; dispatch is disabled")
+    result = await _runtime_repo.record_dispatch(tenant.tenant_id, body.objective_id, body.controller, _actor_id(request), _request_id(request))
+    if result is None:
+        raise NotFoundError("Objective")
+    run = result["run"]
+    # Only enqueue (and meter) when a new run was created — an idempotent retry
+    # reuses the in-flight run and must not publish duplicate work. Recording the
+    # row alone never reaches a worker, so publish on the agent task topic with
+    # the routing/idempotency metadata.
+    if result["created"]:
+        await _producer.publish(Event(
+            topic=Topic.AGENT_TASK_STARTED,
+            tenant_id=tenant.tenant_id,
+            source_service="agent",
+            payload={
+                "run_id": run["run_id"],
+                "objective_id": run["objective_id"],
+                "controller": run["controller"],
+                "queue": run["queue"],
+                "idempotency_key": run["idempotency_key"],
+            },
+        ))
+        metrics.increment("agent_worker_runs_queued", labels={"controller": body.controller, "queue": run["queue"]})
+    return _envelope(run, request)
+
+
+@router.get("/review-batches")
+async def list_review_batches(request: Request, status: str | None = None, limit: int = 100):
+    tenant = request.state.tenant
+    tenant.require_permission("agent:manage")
+    if status and status not in REVIEW_STATUSES:
+        raise BadRequestError(f"Invalid review status: {status}")
+    batches = await _runtime_repo.list_review_batches(tenant.tenant_id, status=status, limit=limit)
+    return _envelope({"batches": batches, "total": len(batches)}, request)
+
+
+@router.post("/review-batches/{batch_id}/approve")
+async def approve_review_batch(batch_id: str, body: ReviewDecision, request: Request):
+    tenant = request.state.tenant
+    tenant.require_permission("agent:approve")
+    batch = await _runtime_repo.review_decision(tenant.tenant_id, batch_id, "approve", _actor_id(request), body.notes, _request_id(request))
+    if batch is None:
+        raise NotFoundError("Review batch")
+    metrics.increment("agent_mutation_approvals")
+    return _envelope(batch, request)
+
+
+@router.post("/review-batches/{batch_id}/reject")
+async def reject_review_batch(batch_id: str, body: ReviewDecision, request: Request):
+    tenant = request.state.tenant
+    tenant.require_permission("agent:approve")
+    batch = await _runtime_repo.review_decision(tenant.tenant_id, batch_id, "reject", _actor_id(request), body.notes, _request_id(request))
+    if batch is None:
+        raise NotFoundError("Review batch")
+    metrics.increment("agent_mutation_rejections")
+    return _envelope(batch, request)
+
+
+@router.get("/events")
+async def timeline_events(request: Request, objective_id: str | None = None, limit: int = 100):
+    tenant = request.state.tenant
+    tenant.require_permission("agent:manage")
+    events = await _runtime_repo.events_for_tenant(tenant.tenant_id, limit=limit, objective_id=objective_id)
+    return _envelope({"events": events, "total": len(events)}, request)
+
+
+@router.post("/controllers/heartbeat")
+async def controller_heartbeat(body: ControllerHeartbeat, request: Request):
+    tenant = request.state.tenant
+    # Heartbeats drive health/stale-worker detection, so they must come from a
+    # worker service credential — not any operator holding agent:manage, who
+    # could otherwise make a dead controller look healthy.
+    tenant.require_permission("agent:heartbeat")
+    if body.controller not in CONTROLLERS:
+        raise BadRequestError(f"Unknown controller: {body.controller}")
+    heartbeat = await _runtime_repo.heartbeat(tenant.tenant_id, body.controller, body.status, body.queue_depth, body.worker_id, body.metadata, _request_id(request))
+    metrics.increment("agent_controller_heartbeats", labels={"controller": body.controller, "status": body.status})
+    return _envelope(heartbeat, request)
+
+
+@router.get("/controllers/status")
+async def controllers_status(request: Request):
+    tenant = request.state.tenant
+    tenant.require_permission("agent:manage")
+    controllers = await _runtime_repo.controller_status(tenant.tenant_id)
+    return _envelope({"controllers": controllers, "total": len(controllers)}, request)
 
 
 @router.get("/status")
 async def agent_status(request: Request):
     """Get current agent layer status."""
-    request.state.tenant.require_permission("agent:manage")
-    return APIResponse(data={
-        "kill_switch": False,
-        "queue_depth": 0,
-        "active_workers": 0,
+    tenant = request.state.tenant
+    tenant.require_permission("agent:manage")
+    health = await controller_health(request)
+    data = dict(health["data"])
+    kill_switch = data.get("kill_switch")
+    data.update({
+        # /v1/agent/status exposes kill_switch as a boolean (Kyber's client schema
+        # validates z.boolean()); surface the full record under kill_switch_state
+        # so the richer health() shape is still available without breaking the
+        # status contract.
+        "kill_switch": bool(kill_switch.get("enabled")) if isinstance(kill_switch, dict) else bool(kill_switch),
+        "kill_switch_state": kill_switch if isinstance(kill_switch, dict) else None,
+        "active_workers": sum(1 for c in data["controllers"] if c.get("status") in {"healthy", "degraded"}),
         "worker_types": VALID_WORKER_TYPES,
-    }).to_dict()
+        # Kyber's Command/Mission views render status.workers; map controller
+        # health rows back into that array so they aren't left empty.
+        "workers": [
+            {
+                "worker_type": c.get("controller"),
+                "status": c.get("status", "unknown"),
+                "current_task": None,
+                "queue_depth": c.get("queue_depth", 0),
+                "worker_count": c.get("worker_count", 0),
+            }
+            for c in data["controllers"]
+        ],
+    })
+    return _envelope(data, request)
 
 
 # ── Durable Task & Audit Stores ───────────────────────────────────────
@@ -89,6 +416,12 @@ async def submit_task(body: TaskSubmission, request: Request):
     """
     tenant = request.state.tenant
     tenant.require_permission("agent:manage")
+
+    # Honour the tenant emergency stop here too — the legacy task path must not
+    # be a way to keep queuing agent work after the kill switch is engaged.
+    kill_switch = await _runtime_repo.get_kill_switch(tenant.tenant_id)
+    if kill_switch.get("enabled"):
+        raise ConflictError("Agent kill switch is engaged; release it before submitting tasks")
 
     if body.worker_type not in VALID_WORKER_TYPES:
         raise BadRequestError(
@@ -141,13 +474,17 @@ async def submit_task(body: TaskSubmission, request: Request):
         task_id, body.worker_type, body.priority, tenant.tenant_id,
     )
 
-    return APIResponse(data={
+    return _envelope({
         "task_id": task_id,
         "worker_type": body.worker_type,
         "priority": body.priority,
         "status": "queued",
         "created_at": now,
-    }).to_dict()
+        "started_at": None,
+        "completed_at": None,
+        "result": None,
+        "error": None,
+    }, request)
 
 
 @router.get("/tasks/{task_id}")
@@ -164,7 +501,7 @@ async def get_task(task_id: str, request: Request):
     if task is None or task.get("tenant_id") != tenant.tenant_id:
         raise NotFoundError("Task")
 
-    return APIResponse(data={
+    return _envelope({
         "task_id": task["task_id"],
         "worker_type": task["worker_type"],
         "priority": task["priority"],
@@ -174,7 +511,7 @@ async def get_task(task_id: str, request: Request):
         "completed_at": task["completed_at"],
         "result": task["result"],
         "error": task["error"],
-    }).to_dict()
+    }, request)
 
 
 @router.get("/audit")
@@ -192,21 +529,22 @@ async def get_audit_trail(request: Request, limit: int = 50):
         tenant_records, key=lambda r: r.get("timestamp", ""), reverse=True
     )[:limit]
 
-    return APIResponse(data={
+    return _envelope({
         "records": records,
         "total": len(tenant_records),
-    }).to_dict()
+    }, request)
 
 
 @router.post("/kill-switch")
 async def toggle_kill_switch(body: KillSwitchAction, request: Request):
-    """Engage or release the agent kill switch."""
-    request.state.tenant.require_permission("admin")
-    logger.warning(f"Kill switch action: {body.action}")
-    return APIResponse(data={
-        "kill_switch": body.action == "engage",
-        "action": body.action,
-    }).to_dict()
+    """Engage or release the tenant-scoped agent kill switch."""
+    tenant = request.state.tenant
+    tenant.require_permission("admin")
+    enabled = body.action == "engage"
+    state = await _runtime_repo.set_kill_switch(tenant.tenant_id, enabled, _actor_id(request), body.reason, _request_id(request))
+    logger.warning("Agent kill switch action=%s tenant=%s request_id=%s", body.action, tenant.tenant_id, _request_id(request))
+    metrics.increment("agent_kill_switch_toggled", labels={"enabled": str(enabled).lower()})
+    return _envelope({"kill_switch": enabled, "action": body.action, "state": state}, request)
 
 
 # ═══════════════════════════════════════════════════════════════════════════

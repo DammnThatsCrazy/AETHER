@@ -16,6 +16,7 @@ related:
 canonical_owner: platform@aether
 estimated_read_minutes: 5
 toc_depth: 3
+last_synced_commit: 4ca75de
 ---
 # Kyber Strategic Observability
 
@@ -42,3 +43,24 @@ Kyber now includes enterprise/government packaging and deployment readiness comm
 
 ## GTM, pricing, and sales readiness
 Kyber now includes internal GTM surfaces for pricing architecture, materials catalog, buyer personas, ROI calculator definitions, and sales readiness aggregation. These surfaces support Olympus Labs sales execution without changing Aether tenant-facing architecture.
+
+## Security & Governance Command Center
+Kyber now includes a Security & Governance Command Center with nine views:
+Security Overview, Policy Decision Log, Audit Event Explorer, Tenant Isolation
+Dashboard, Operator Access Dashboard, Break-Glass Access Board, Data Retention
+Dashboard, Data Request Queue, and Governance Evidence Packs. These are operator
+surfaces under `/v1/admin/kyber/security/*` and are **aggregate-only** for
+cross-tenant data — a single tenant's private records require an assigned role or
+an approved break-glass grant. See
+[SECURITY-GOVERNANCE-CONTROLS.md](./SECURITY-GOVERNANCE-CONTROLS.md).
+
+## Reliability & Operational Resilience
+
+Reliability, SRE, incident response, SLOs, runbooks, and tenant-safe system
+status are documented in [Reliability Operations](RELIABILITY-OPERATIONS.md) and
+related docs ([Incident Response](INCIDENT-RESPONSE.md),
+[SLO Tracking](SLO-TRACKING.md), [SRE Runbooks](SRE-RUNBOOKS.md),
+[Tenant System Status](TENANT-STATUS.md), [Pipeline Health](PIPELINE-HEALTH.md),
+[Queue & Worker Health](QUEUE-WORKER-HEALTH.md), [Postmortems](POSTMORTEMS.md)).
+These controls are additive and do not weaken tenant isolation, governance,
+auditability, or security. No external SLA or certification is claimed.

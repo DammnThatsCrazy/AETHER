@@ -220,8 +220,54 @@ export const api = {
     submitTask: (workerType: string, priority: string, payload: Record<string, unknown>) =>
       restClient.post('/v1/agent/tasks', wrap(taskSchema), { worker_type: workerType, priority, payload }),
 
-    killSwitch: (action: string) =>
-      restClient.post('/v1/agent/kill-switch', wrap(z.object({ kill_switch: z.boolean(), action: z.string() })), { action }),
+    killSwitch: (action: string, reason = '') =>
+      restClient.post('/v1/agent/kill-switch', wrap(z.object({ kill_switch: z.boolean(), action: z.string(), state: z.unknown().optional() })), { action, reason }).then(r => r.data),
+
+    health: () =>
+      restClient.get('/v1/agent/health', wrap(unknownSchema)).then(r => r.data),
+
+    controllersStatus: () =>
+      restClient.get('/v1/agent/controllers/status', wrap(unknownSchema)).then(r => r.data),
+
+    submitObjective: (goal: string, payload: Record<string, unknown> = {}, options?: { objectiveType?: string; severity?: string; priority?: number; idempotencyKey?: string }) =>
+      restClient.post('/v1/agent/objectives', wrap(unknownSchema), {
+        goal,
+        payload,
+        objective_type: options?.objectiveType ?? 'operator_directive',
+        severity: options?.severity ?? 'medium',
+        priority: options?.priority ?? 2,
+        idempotency_key: options?.idempotencyKey ?? '',
+      }).then(r => r.data),
+
+    objectives: (status?: string, limit = 100) =>
+      restClient.get(`/v1/agent/objectives${buildQS({ status, limit })}`, wrap(unknownSchema)).then(r => r.data),
+
+    objective: (objectiveId: string) =>
+      restClient.get(`/v1/agent/objectives/${objectiveId}`, wrap(unknownSchema)).then(r => r.data),
+
+    pauseObjective: (objectiveId: string, reason = '') =>
+      restClient.post(`/v1/agent/objectives/${objectiveId}/pause`, wrap(unknownSchema), { reason }).then(r => r.data),
+
+    resumeObjective: (objectiveId: string, reason = '') =>
+      restClient.post(`/v1/agent/objectives/${objectiveId}/resume`, wrap(unknownSchema), { reason }).then(r => r.data),
+
+    cancelObjective: (objectiveId: string, reason = '') =>
+      restClient.post(`/v1/agent/objectives/${objectiveId}/cancel`, wrap(unknownSchema), { reason }).then(r => r.data),
+
+    dispatch: (objectiveId: string, controller = 'nous') =>
+      restClient.post('/v1/agent/dispatch', wrap(unknownSchema), { objective_id: objectiveId, controller }).then(r => r.data),
+
+    reviewBatches: (status?: string, limit = 100) =>
+      restClient.get(`/v1/agent/review-batches${buildQS({ status, limit })}`, wrap(unknownSchema)).then(r => r.data),
+
+    approveReviewBatch: (batchId: string, notes = '') =>
+      restClient.post(`/v1/agent/review-batches/${batchId}/approve`, wrap(unknownSchema), { notes }).then(r => r.data),
+
+    rejectReviewBatch: (batchId: string, notes = '') =>
+      restClient.post(`/v1/agent/review-batches/${batchId}/reject`, wrap(unknownSchema), { notes }).then(r => r.data),
+
+    events: (params?: { objectiveId?: string; limit?: number }) =>
+      restClient.get(`/v1/agent/events${buildQS({ objective_id: params?.objectiveId, limit: params?.limit })}`, wrap(unknownSchema)).then(r => r.data),
 
     agentGraph: (agentId: string, layer = 'all') =>
       restClient.get(`/v1/agent/${agentId}/graph?layer=${layer}`, wrap(unknownSchema)).then(r => r.data),
@@ -1134,6 +1180,103 @@ export const api = {
         restClient.post(`/v1/admin/kyber/customer-success/ebr/${tenantId}/generate`, wrap(unknownSchema), {}).then(r => r.data),
       customerSuccessTriggersGenerate: () =>
         restClient.post('/v1/admin/kyber/customer-success/triggers/generate', wrap(unknownSchema), {}).then(r => r.data),
+      // ── Security & Governance Command Center ──────────────────────────────
+      securityOverview: () =>
+        restClient.get('/v1/admin/kyber/security/overview', wrap(unknownSchema)).then(r => r.data),
+      securityAuditEvents: (tenantId?: string) =>
+        restClient.get(`/v1/admin/kyber/security/audit-events${buildQS({ tenant_id: tenantId })}`, wrap(unknownSchema)).then(r => r.data),
+      securityPolicyDecisions: (tenantId?: string) =>
+        restClient.get(`/v1/admin/kyber/security/policy-decisions${buildQS({ tenant_id: tenantId })}`, wrap(unknownSchema)).then(r => r.data),
+      securityTenantIsolation: (run = false) =>
+        restClient.get(`/v1/admin/kyber/security/tenant-isolation${buildQS({ run })}`, wrap(unknownSchema)).then(r => r.data),
+      securityOperatorAccess: () =>
+        restClient.get('/v1/admin/kyber/security/operator-access', wrap(unknownSchema)).then(r => r.data),
+      securityDataRetention: (tenantId?: string) =>
+        restClient.get(`/v1/admin/kyber/security/data-retention${buildQS({ tenant_id: tenantId })}`, wrap(unknownSchema)).then(r => r.data),
+      securityCreateRetentionPolicy: (body: Record<string, unknown>) =>
+        restClient.post('/v1/admin/kyber/security/data-retention/policies', wrap(unknownSchema), body).then(r => r.data),
+      securityUpdateRetentionPolicy: (policyId: string, body: Record<string, unknown>) =>
+        restClient.patch(`/v1/admin/kyber/security/data-retention/policies/${policyId}`, wrap(unknownSchema), body).then(r => r.data),
+      securityDataRequests: (tenantId?: string) =>
+        restClient.get(`/v1/admin/kyber/security/data-requests${buildQS({ tenant_id: tenantId })}`, wrap(unknownSchema)).then(r => r.data),
+      securityProcessDataRequest: (dataRequestId: string, body: Record<string, unknown>) =>
+        restClient.patch(`/v1/admin/kyber/security/data-requests/${dataRequestId}`, wrap(unknownSchema), body).then(r => r.data),
+      securityEvidencePacks: (tenantId?: string) =>
+        restClient.get(`/v1/admin/kyber/security/governance-evidence-packs${buildQS({ tenant_id: tenantId })}`, wrap(unknownSchema)).then(r => r.data),
+      securityGenerateEvidencePack: (body: Record<string, unknown>) =>
+        restClient.post('/v1/admin/kyber/security/governance-evidence-packs/generate', wrap(unknownSchema), body).then(r => r.data),
+      securityBreakGlassList: (tenantId?: string) =>
+        restClient.get(`/v1/admin/kyber/security/break-glass${buildQS({ tenant_id: tenantId })}`, wrap(unknownSchema)).then(r => r.data),
+      securityBreakGlassRequest: (body: Record<string, unknown>) =>
+        restClient.post('/v1/admin/kyber/security/break-glass/request', wrap(unknownSchema), body).then(r => r.data),
+      securityBreakGlassApprove: (requestId: string) =>
+        restClient.post(`/v1/admin/kyber/security/break-glass/${requestId}/approve`, wrap(unknownSchema), {}).then(r => r.data),
+      securityBreakGlassDeny: (requestId: string, reason = '') =>
+        restClient.post(`/v1/admin/kyber/security/break-glass/${requestId}/deny`, wrap(unknownSchema), { reason }).then(r => r.data),
+      securityBreakGlassRevoke: (requestId: string) =>
+        restClient.post(`/v1/admin/kyber/security/break-glass/${requestId}/revoke`, wrap(unknownSchema), {}).then(r => r.data),
+
+      // ── Reliability command center ─────────────────────────────────────
+      reliabilityOverview: () =>
+        restClient.get('/v1/admin/kyber/reliability/overview', wrap(unknownSchema)).then(r => r.data),
+      reliabilityServices: () =>
+        restClient.get('/v1/admin/kyber/reliability/services', wrap(unknownSchema)).then(r => r.data),
+      reliabilityPipelines: () =>
+        restClient.get('/v1/admin/kyber/reliability/pipelines', wrap(unknownSchema)).then(r => r.data),
+      reliabilityQueues: () =>
+        restClient.get('/v1/admin/kyber/reliability/queues', wrap(unknownSchema)).then(r => r.data),
+      reliabilitySlos: () =>
+        restClient.get('/v1/admin/kyber/reliability/slos', wrap(unknownSchema)).then(r => r.data),
+      incidents: (status?: string) =>
+        restClient.get(`/v1/admin/kyber/incidents${buildQS({ status })}`, wrap(unknownSchema)).then(r => r.data),
+      incident: (incidentId: string) =>
+        restClient.get(`/v1/admin/kyber/incidents/${incidentId}`, wrap(unknownSchema)).then(r => r.data),
+      createIncident: (body: unknown) =>
+        restClient.post('/v1/admin/kyber/incidents', wrap(unknownSchema), body).then(r => r.data),
+      patchIncident: (incidentId: string, body: unknown) =>
+        restClient.patch(`/v1/admin/kyber/incidents/${incidentId}`, wrap(unknownSchema), body).then(r => r.data),
+      runbooks: () =>
+        restClient.get('/v1/admin/kyber/runbooks', wrap(unknownSchema)).then(r => r.data),
+      createRunbook: (body: unknown) =>
+        restClient.post('/v1/admin/kyber/runbooks', wrap(unknownSchema), body).then(r => r.data),
+      patchRunbook: (runbookId: string, body: unknown) =>
+        restClient.patch(`/v1/admin/kyber/runbooks/${runbookId}`, wrap(unknownSchema), body).then(r => r.data),
+      postmortems: () =>
+        restClient.get('/v1/admin/kyber/postmortems', wrap(unknownSchema)).then(r => r.data),
+      createPostmortem: (body: unknown) =>
+        restClient.post('/v1/admin/kyber/postmortems', wrap(unknownSchema), body).then(r => r.data),
+      patchPostmortem: (postmortemId: string, body: unknown) =>
+        restClient.patch(`/v1/admin/kyber/postmortems/${postmortemId}`, wrap(unknownSchema), body).then(r => r.data),
+
+      // ── Intelligence Quality / Drift Detection (aggregate-only) ───────────
+      intelligenceQualityOverview: () =>
+        restClient.get('/v1/admin/kyber/intelligence-quality/overview', wrap(unknownSchema)).then(r => r.data),
+      intelligenceQualityTenants: () =>
+        restClient.get('/v1/admin/kyber/intelligence-quality/tenants', wrap(unknownSchema)).then(r => r.data),
+      intelligenceQualityDriftEvents: (driftType?: string, status?: string) =>
+        restClient.get(`/v1/admin/kyber/intelligence-quality/drift-events${buildQS({ drift_type: driftType, status })}`, wrap(unknownSchema)).then(r => r.data),
+      intelligenceQualitySchemaDrift: () =>
+        restClient.get('/v1/admin/kyber/intelligence-quality/schema-drift', wrap(unknownSchema)).then(r => r.data),
+      intelligenceQualityIdentity: () =>
+        restClient.get('/v1/admin/kyber/intelligence-quality/identity', wrap(unknownSchema)).then(r => r.data),
+      intelligenceQualityGraph: () =>
+        restClient.get('/v1/admin/kyber/intelligence-quality/graph', wrap(unknownSchema)).then(r => r.data),
+      intelligenceQualityRecommendations: () =>
+        restClient.get('/v1/admin/kyber/intelligence-quality/recommendations', wrap(unknownSchema)).then(r => r.data),
+      intelligenceQualityOutcomes: () =>
+        restClient.get('/v1/admin/kyber/intelligence-quality/outcomes', wrap(unknownSchema)).then(r => r.data),
+      intelligenceQualityPlaybooks: () =>
+        restClient.get('/v1/admin/kyber/intelligence-quality/playbooks', wrap(unknownSchema)).then(r => r.data),
+      intelligenceQualityContamination: () =>
+        restClient.get('/v1/admin/kyber/intelligence-quality/contamination', wrap(unknownSchema)).then(r => r.data),
+      acknowledgeDriftEvent: (driftEventId: string) =>
+        restClient.post(`/v1/admin/kyber/intelligence-quality/drift-events/${driftEventId}/acknowledge`, wrap(unknownSchema), {}).then(r => r.data),
+      resolveDriftEvent: (driftEventId: string, body: unknown = {}) =>
+        restClient.post(`/v1/admin/kyber/intelligence-quality/drift-events/${driftEventId}/resolve`, wrap(unknownSchema), body).then(r => r.data),
+
+      // ── Connector health (aggregate-only) ─────────────────────────────────
+      connectorsOverview: () =>
+        restClient.get('/v1/admin/kyber/connectors/overview', wrap(unknownSchema)).then(r => r.data),
     },
   },
 
@@ -1430,6 +1573,17 @@ export const api = {
   },
 
   // ── SDK Health Monitoring ──────────────────────────────────────────────────
+  journeyHealth: {
+    overview: () =>
+      restClient.get('/v1/admin/journey-health', wrap(unknownSchema)).then(r => r.data),
+    tenant: (tenantId: string) =>
+      restClient.get(`/v1/admin/journey-health/tenants/${encodeURIComponent(tenantId)}`, wrap(unknownSchema)).then(r => r.data),
+    sdkParity: () =>
+      restClient.get('/v1/admin/journey-health/sdk-parity', wrap(unknownSchema)).then(r => r.data),
+    droppedEvents: () =>
+      restClient.get('/v1/admin/journey-health/dropped-events', wrap(unknownSchema)).then(r => r.data),
+  },
+
   sdkHealth: {
     fleet: () =>
       restClient.get('/v1/diagnostics/sdk/health', wrap(unknownSchema)).then(r => r.data),

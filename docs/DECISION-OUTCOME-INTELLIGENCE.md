@@ -29,6 +29,7 @@ related:
 canonical_owner: platform@aether
 estimated_read_minutes: 6
 toc_depth: 3
+last_synced_commit: 4ca75de
 ---
 # Decision & Outcome Intelligence
 

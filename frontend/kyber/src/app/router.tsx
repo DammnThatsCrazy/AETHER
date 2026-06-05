@@ -26,6 +26,12 @@ const GTMMaterialsPage = lazy(() => import('@kyber/pages/gtm').then(m => ({ defa
 const BuyerPersonasPage = lazy(() => import('@kyber/pages/gtm').then(m => ({ default: m.BuyerPersonasPage })));
 const ROICalculatorsPage = lazy(() => import('@kyber/pages/gtm').then(m => ({ default: m.ROICalculatorsPage })));
 const SalesReadinessPage = lazy(() => import('@kyber/pages/gtm').then(m => ({ default: m.SalesReadinessPage })));
+const SecurityPage = lazy(() => import('@kyber/pages/security').then(m => ({ default: m.SecurityPage })));
+const ReliabilityPage = lazy(() => import('@kyber/pages/reliability').then(m => ({ default: m.ReliabilityPage })));
+const IntelligenceQualityPage = lazy(() => import('@kyber/pages/intelligence-quality').then(m => ({ default: m.IntelligenceQualityPage })));
+const ConnectorsPage = lazy(() => import('@kyber/pages/connectors').then(m => ({ default: m.ConnectorsPage })));
+const RevenueOperationsPage = lazy(() => import('@kyber/pages/revenue-operations').then(m => ({ default: m.RevenueOperationsPage })));
+const JourneyHealthPage = lazy(() => import('@kyber/pages/journey-health').then(m => ({ default: m.JourneyHealthPage })));
 
 function PageSuspense({ children }: { readonly children: React.ReactNode }) {
   return (
@@ -73,11 +79,18 @@ export function AppRouter() {
                 <Route path="/packages" element={<PageSuspense><SolutionPackagesPage /></PageSuspense>} />
                 <Route path="/packages/:packageId" element={<PageSuspense><SolutionPackagesPage /></PageSuspense>} />
                 <Route path="/deployment-readiness" element={<PageSuspense><DeploymentReadinessPage /></PageSuspense>} />
+                <Route path="/reliability" element={<PageSuspense><ReliabilityPage /></PageSuspense>} />
+                <Route path="/journey-health" element={<PageSuspense><JourneyHealthPage /></PageSuspense>} />
+                <Route path="/reliability/incidents/:incidentId" element={<PageSuspense><ReliabilityPage /></PageSuspense>} />
+                <Route path="/intelligence-quality" element={<PageSuspense><IntelligenceQualityPage /></PageSuspense>} />
+                <Route path="/connectors" element={<PageSuspense><ConnectorsPage /></PageSuspense>} />
+                <Route path="/revops" element={<PageSuspense><RevenueOperationsPage /></PageSuspense>} />
                 <Route path="/pricing-architecture" element={<PageSuspense><PricingArchitecturePage /></PageSuspense>} />
                 <Route path="/gtm-materials" element={<PageSuspense><GTMMaterialsPage /></PageSuspense>} />
                 <Route path="/buyer-personas" element={<PageSuspense><BuyerPersonasPage /></PageSuspense>} />
                 <Route path="/roi-calculators" element={<PageSuspense><ROICalculatorsPage /></PageSuspense>} />
                 <Route path="/sales-readiness" element={<PageSuspense><SalesReadinessPage /></PageSuspense>} />
+                <Route path="/security" element={<PageSuspense><SecurityPage /></PageSuspense>} />
                 <Route path="*" element={<Navigate to="/mission" replace />} />
               </Routes>
             </AppShell>

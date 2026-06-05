@@ -58,6 +58,7 @@ public struct PrivacyConfig {
 
 public enum AetherEventType: String, Codable {
     case track, screen, identify, conversion, wallet, transaction, error, consent
+    case journey_started, journey_paused, journey_resumed, journey_continued, journey_completed, journey_abandoned, journey_checkpoint
 }
 
 public struct AetherEvent: Codable {
@@ -172,6 +173,8 @@ public final class Aether: NSObject {
     private var config: AetherConfig?
     private var eventQueue: [AetherEvent] = []
     private var sessionId: String = UUID().uuidString
+    private var currentJourneyId: String? = nil
+    private var currentJourneyName: String? = nil
     private var anonymousId: String = ""
     private var userId: String?
     private var walletAddress: String?
@@ -259,6 +262,55 @@ public final class Aether: NSObject {
 
     public func track(_ event: String, properties: [String: AnyCodable] = [:]) {
         enqueueEvent(type: .track, properties: ["event": AnyCodable(event)].merging(properties) { _, new in new })
+    }
+
+
+    public func startJourney(_ nameOrType: String, properties: [String: AnyCodable] = [:]) {
+        currentJourneyId = properties["journeyId"]?.value as? String ?? UUID().uuidString
+        currentJourneyName = nameOrType
+        var props = properties; props["journeyId"] = AnyCodable(currentJourneyId ?? ""); props["journeyName"] = AnyCodable(nameOrType); props["journeyType"] = AnyCodable(nameOrType); props["journeyStatus"] = AnyCodable("started")
+        enqueueEvent(type: .journey_started, properties: props)
+    }
+
+    public func pauseJourney(_ reason: String? = nil, properties: [String: AnyCodable] = [:]) {
+        guard let journeyId = currentJourneyId else { return }
+        var props = properties; props["journeyId"] = AnyCodable(journeyId); props["pauseReason"] = AnyCodable(reason ?? ""); props["journeyStatus"] = AnyCodable("paused")
+        enqueueEvent(type: .journey_paused, properties: props)
+    }
+
+    public func resumeJourney(_ reason: String? = nil, properties: [String: AnyCodable] = [:]) {
+        if currentJourneyId == nil { currentJourneyId = properties["journeyId"]?.value as? String ?? UUID().uuidString }
+        var props = properties; props["journeyId"] = AnyCodable(currentJourneyId ?? ""); props["resumeReason"] = AnyCodable(reason ?? ""); props["journeyStatus"] = AnyCodable("resumed")
+        enqueueEvent(type: .journey_resumed, properties: props)
+    }
+
+    public func continueJourney(_ stepIdOrName: String, properties: [String: AnyCodable] = [:]) {
+        guard let journeyId = currentJourneyId else { return }
+        var props = properties; props["journeyId"] = AnyCodable(journeyId); props["stepId"] = AnyCodable(stepIdOrName); props["stepName"] = AnyCodable(stepIdOrName); props["journeyStatus"] = AnyCodable("continued")
+        enqueueEvent(type: .journey_continued, properties: props)
+    }
+
+    public func completeJourney(_ reason: String? = nil, properties: [String: AnyCodable] = [:]) {
+        guard let journeyId = currentJourneyId else { return }
+        var props = properties; props["journeyId"] = AnyCodable(journeyId); props["completionReason"] = AnyCodable(reason ?? ""); props["journeyStatus"] = AnyCodable("completed")
+        enqueueEvent(type: .journey_completed, properties: props); currentJourneyId = nil
+    }
+
+    public func abandonJourney(_ reason: String? = nil, properties: [String: AnyCodable] = [:]) {
+        guard let journeyId = currentJourneyId else { return }
+        var props = properties; props["journeyId"] = AnyCodable(journeyId); props["abandonmentReason"] = AnyCodable(reason ?? ""); props["journeyStatus"] = AnyCodable("abandoned")
+        enqueueEvent(type: .journey_abandoned, properties: props); currentJourneyId = nil
+    }
+
+    public func checkpointJourney(_ stepIdOrName: String, properties: [String: AnyCodable] = [:]) {
+        guard let journeyId = currentJourneyId else { return }
+        var props = properties; props["journeyId"] = AnyCodable(journeyId); props["stepId"] = AnyCodable(stepIdOrName); props["stepName"] = AnyCodable(stepIdOrName); props["journeyStatus"] = AnyCodable("checkpoint")
+        enqueueEvent(type: .journey_checkpoint, properties: props)
+    }
+
+    public func getCurrentJourney() -> [String: AnyCodable]? {
+        guard let journeyId = currentJourneyId else { return nil }
+        return ["journeyId": AnyCodable(journeyId), "journeyName": AnyCodable(currentJourneyName)]
     }
 
     public func screenView(_ screenName: String, properties: [String: AnyCodable] = [:]) {
@@ -701,6 +753,7 @@ public final class Aether: NSObject {
             }
             self.lastActivityDate = now
             self.track("app_foreground")
+            self.continueJourney("app_foreground", properties: ["resumeReason": AnyCodable("application_active")])
         }
         NotificationCenter.default.addObserver(forName: UIApplication.didEnterBackgroundNotification, object: nil, queue: .main) { [weak self] _ in
             self?.lastActivityDate = Date()

@@ -225,12 +225,20 @@ from services.entity_intelligence.routes import router as entity_intelligence_ro
 from services.profile360_workers import attach_profile360_workers
 from services.investigation.routes import router as investigation_router
 from services.governance.routes import router as governance_router
+from services.security.routes import router as security_router
+from services.security.admin_routes import admin_router as security_admin_router
 from services.events.routes import router as events_router
 from services.sdk.routes import router as sdk_router
+from services.journeys.routes import router as journeys_router, admin_router as journey_health_router
 from services.sdk_health.routes import router as sdk_health_router
 from services.sdk_drift.routes import router as sdk_drift_router
 from services.sdk_config.routes import router as sdk_config_router
 from services.onboarding.routes import router as onboarding_router, admin_router as onboarding_admin_router
+from services.reliability import admin_router as reliability_admin_router, tenant_router as reliability_status_router
+from services.data_quality import (
+    admin_router as data_quality_admin_router,
+    tenant_router as data_quality_tenant_router,
+)
 
 # ML predict routes — imported from the ML serving package when available.
 # When ML_SERVING_INLINE=true (E2 consolidated image) the predict routes are
@@ -361,7 +369,7 @@ def create_app() -> FastAPI:
         allow_origins=settings.api.cors_origins,
         allow_credentials=True,
         allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-        allow_headers=["Authorization", "Content-Type", "X-API-Key", "X-Request-ID"],
+        allow_headers=["Authorization", "Content-Type", "X-API-Key", "X-Request-ID", "X-Correlation-ID", "X-Kyber-Environment"],
         expose_headers=[
             "X-Request-ID",
             "X-Response-Time",
@@ -448,14 +456,20 @@ def create_app() -> FastAPI:
     app.include_router(entity_intelligence_router)
     app.include_router(investigation_router)
     app.include_router(governance_router)
+    app.include_router(security_router)
+    app.include_router(security_admin_router)
     app.include_router(events_router)
     app.include_router(user_agents_router)  # Profile 360: user/org-owned agents (always-on)
     app.include_router(sdk_router)          # SDK utilities: cross-device identity resolution
+    app.include_router(journeys_router)     # Cross-device journey continuity APIs
+    app.include_router(journey_health_router) # Kyber journey health diagnostics
     app.include_router(sdk_health_router)   # SDK health monitoring: heartbeats + fleet status
     app.include_router(sdk_drift_router)    # SDK drift detection: schema, stale, replay storm
     app.include_router(sdk_config_router)   # SDK remote config: signed manifests + rollouts
     app.include_router(onboarding_router)      # Customer onboarding center
     app.include_router(onboarding_admin_router) # Kyber implementation lifecycle
+    app.include_router(reliability_admin_router)  # Kyber reliability command center
+    app.include_router(reliability_status_router) # Tenant-safe system status
 
     # ── ML serving inline (E2 consolidated image) ───────────────────────
     # When ML_SERVING_INLINE=true the predict routes are handled in-process
@@ -494,6 +508,30 @@ def create_app() -> FastAPI:
         from services.cis.routes import router as cis_router
         app.include_router(cis_router)
         logger.info("Cognitive Integrity System (CIS) routes mounted")
+
+    # ── Data Quality / Intelligence Quality (feature-flagged) ───────────
+    dq = settings.data_quality
+    if dq.enabled:
+        app.include_router(data_quality_tenant_router)
+        logger.info("Data Quality: tenant routes mounted (/v1/data-quality)")
+    else:
+        logger.info("Data Quality: tenant routes disabled (set AETHER_DATA_QUALITY_ENABLED=true)")
+    if dq.kyber_intelligence_quality_enabled:
+        app.include_router(data_quality_admin_router)
+        logger.info("Intelligence Quality: Kyber admin routes mounted (/v1/admin/kyber/intelligence-quality)")
+
+    # ── Inbound connector ingestion (feature-flagged, master switch) ────
+    if settings.connectors.enabled:
+        from services.integrations.connectors import (
+            admin_router as connectors_admin_router,
+            router as connectors_router,
+        )
+        app.include_router(connectors_router)
+        if settings.connectors.kyber_connector_health_enabled:
+            app.include_router(connectors_admin_router)
+        logger.info("Connectors: ingestion routes mounted (/v1/integrations/connectors)")
+    else:
+        logger.info("Connectors: disabled (set AETHER_CONNECTORS_ENABLED=true to enable)")
 
     if ig.enable_x402_layer:
         from services.x402.routes import router as x402_router

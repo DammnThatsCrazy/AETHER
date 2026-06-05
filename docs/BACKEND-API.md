@@ -11,7 +11,7 @@ source_files:
 canonical_owner: backend@aether
 estimated_read_minutes: 60
 toc_depth: 3
-last_synced_commit: 91d4d49
+last_synced_commit: 268ca67
 ---
 # Aether Backend API v8.8.0 — Endpoint Specification
 
@@ -100,12 +100,16 @@ Example 403:
 }
 ```
 
-## Customer-Facing Sign-Up, Auth, and Self-Service (no API key required)
+## Customer-Facing Sign-Up, Auth, and Self-Service
 
-These endpoints intentionally bypass API-key auth so prospective customers can
-register without one. The Stripe webhook is also HTTP-unauthenticated but verifies
-a Stripe-signed payload. Operators should ensure IP-rate-limiting is active on
-these paths and alert on signature-verification failures.
+This section separates unauthenticated signup/auth flows from tenant-scoped
+self-service APIs. The public endpoints below intentionally bypass API-key auth
+so prospective customers can register without one. The Stripe webhook is also
+HTTP-unauthenticated but verifies a Stripe-signed payload. Operators should
+ensure IP-rate-limiting is active on these paths and alert on
+signature-verification failures.
+
+### Public signup/auth/webhook endpoints (no API key required)
 
 | Endpoint | Method | Purpose |
 |---|---|---|
@@ -117,6 +121,7 @@ these paths and alert on signature-verification failures.
 | `/v1/auth/sso/callback` | POST | Auth0 JWT → API key (SSO finish) |
 | `/v1/auth/sso/providers` | GET | List configured SSO providers (no auth) |
 | `/v1/auth/recover` | POST | Recover lost API key via signed email |
+| `/v1/billing/plans` | GET | Public plan catalog for signup and upgrade discovery |
 | `/v1/admin/billing/stripe/webhook` | POST | Stripe-signed webhook (subscription + invoice events) |
 
 ### Self-service caller endpoints (`/v1/me/*`, API key required)
@@ -134,18 +139,62 @@ permission gate beyond authentication.
 | `/v1/me/api-keys/{key_id}` | DELETE | Revoke an API key |
 | `/v1/me/account` | DELETE | Self-service account deletion (GDPR Article 17) |
 
-### Self-service billing (`/v1/billing/*`, API key required)
+### Self-service billing (`/v1/billing/*`)
 
-Stripe-mediated billing for paying customers. Requires the tenant to have a
-Stripe customer object provisioned by the registration flow.
+`/v1/billing/plans` is public for signup and upgrade discovery. The remaining
+self-service billing endpoints require an authenticated tenant API key and scope
+all returned data to the caller's tenant. Checkout and portal creation remain
+Stripe-mediated: they create real Stripe sessions when Stripe billing is enabled
+and fully configured, return mocked URLs only in local mock mode, and fail closed
+when configuration is incomplete outside local development.
+
+The tenant-facing payment-status endpoint and the Kyber provider-readiness
+surface use the provider-safe billing abstraction. That abstraction defaults to
+`internal_only` and supports `stripe`, `manual_invoice`, and
+`enterprise_contract` behind explicit external-billing flags; no provider secrets
+are returned in customer or operator responses.
+
+| Endpoint | Method | Auth | Purpose |
+|---|---|---|---|
+| `/v1/billing/plans` | GET | Public | Plan catalog for self-service signup and upgrades |
+| `/v1/billing/checkout` | POST | API key | Create a Stripe Checkout session, or a local mocked URL in local mock mode |
+| `/v1/billing/portal` | POST | API key | Create a Stripe Billing Portal session, or a local mocked URL in local mock mode |
+| `/v1/billing/invoices` | GET | API key | List invoices for the caller's tenant |
+| `/v1/billing/invoices/{invoice_id}` | GET | API key | Get one invoice's full payload for the caller's tenant |
+| `/v1/billing/plan` | GET | API key | Caller-safe contract profile and enabled billing modules |
+| `/v1/billing/entitlements` | GET | API key | Caller-safe tenant entitlements |
+| `/v1/billing/usage` | GET | API key | Caller tenant usage events for a requested or current billing window |
+| `/v1/billing/usage/summary` | GET | API key | Caller tenant billable-usage summary |
+| `/v1/billing/invoice-previews` | GET | API key | Caller-safe invoice previews with internal pricing notes removed |
+| `/v1/billing/value-created` | GET | API key | Caller-safe value-created events for value-based billing review |
+| `/v1/billing/payment-status` | GET | API key | Caller-safe payment status and active provider mode |
+
+### Kyber revenue-operations billing (`/v1/admin/kyber/revops/*`, admin permission required)
+
+These operator endpoints expose revenue-operations state without returning
+billing-provider secrets or customer-hidden pricing rationale. Provider readiness
+endpoints are safe to run in internal/offline mode and summarize external billing
+configuration only as booleans, provider mode, invoice export mode, and product
+mapping status.
 
 | Endpoint | Method | Purpose |
 |---|---|---|
-| `/v1/billing/checkout` | POST | Create a Stripe Checkout session URL for plan upgrade |
-| `/v1/billing/portal` | POST | Create a Stripe Billing Portal session URL |
-| `/v1/billing/invoices` | GET | List invoices for the caller's tenant |
-| `/v1/billing/invoices/{invoice_id}` | GET | Get one invoice's full payload |
-| `/v1/admin/billing/overage-cycle` | POST | Trigger the monthly overage invoice cycle (admin; also auto-runs as a lifespan cron) |
+| `/v1/admin/kyber/revops/overview` | GET | Revenue-operations summary, including billing-model mix |
+| `/v1/admin/kyber/revops/contracts` | GET | List tenant contract profiles |
+| `/v1/admin/kyber/revops/contracts/{tenant_id}` | GET/POST/PATCH | Read, create, or update one tenant contract profile |
+| `/v1/admin/kyber/revops/entitlements/{tenant_id}` | GET/POST | List or create tenant entitlements |
+| `/v1/admin/kyber/revops/entitlements/{entitlement_id}` | PATCH | Update one tenant entitlement |
+| `/v1/admin/kyber/revops/usage` | GET | List all metered usage events |
+| `/v1/admin/kyber/revops/usage/{tenant_id}` | GET | List one tenant's metered usage events for a requested or current billing window |
+| `/v1/admin/kyber/revops/metering-events` | POST | Record a metered usage event |
+| `/v1/admin/kyber/revops/invoice-previews` | GET | List invoice previews |
+| `/v1/admin/kyber/revops/invoice-previews/{tenant_id}/generate` | POST | Generate an invoice preview for a billing window |
+| `/v1/admin/kyber/revops/invoice-previews/{invoice_preview_id}` | PATCH | Move an invoice preview through `draft`, `review_ready`, `approved`, or `exported` |
+| `/v1/admin/kyber/revops/value-created` | GET | List value-created events |
+| `/v1/admin/kyber/revops/revenue-leakage` | GET | List or recalculate revenue leakage signals |
+| `/v1/admin/kyber/revops/expansion-billing-opportunities` | GET | List expansion billing opportunities |
+| `/v1/admin/kyber/revops/provider-status` | GET | Provider mode, health, sync flags, invoice export mode, and mapping status without secrets |
+| `/v1/admin/kyber/revops/product-mappings` | GET | Product/price mapping catalog and mapping completeness without secrets |
 
 ### Admin tenant lifecycle (admin permission required)
 
@@ -162,7 +211,44 @@ Stripe customer object provisioned by the registration flow.
 
 ## Billing Endpoints
 
-Both billing endpoints require the `billing` permission.
+### Admin billing operations
+
+These endpoints are operator/admin surfaces and are not part of tenant
+self-service billing. The overage cycle also runs from the backend lifespan cron.
+
+| Endpoint | Method | Auth | Purpose |
+|---|---|---|---|
+| `/v1/admin/billing/overage-cycle` | POST | Admin | Trigger the monthly overage invoice cycle |
+
+### Kyber revenue-operations billing (`/v1/admin/kyber/revops/*`, admin permission required)
+
+These operator endpoints expose revenue-operations state without returning
+billing-provider secrets or customer-hidden pricing rationale. Provider readiness
+endpoints are safe to run in internal/offline mode and summarize external billing
+configuration only as booleans, provider mode, invoice export mode, and product
+mapping status.
+
+| Endpoint | Method | Purpose |
+|---|---|---|
+| `/v1/admin/kyber/revops/overview` | GET | Revenue-operations summary, including billing-model mix |
+| `/v1/admin/kyber/revops/contracts` | GET | List tenant contract profiles |
+| `/v1/admin/kyber/revops/contracts/{tenant_id}` | GET/POST/PATCH | Read, create, or update one tenant contract profile |
+| `/v1/admin/kyber/revops/entitlements/{tenant_id}` | GET/POST | List or create tenant entitlements |
+| `/v1/admin/kyber/revops/entitlements/{entitlement_id}` | PATCH | Update one tenant entitlement |
+| `/v1/admin/kyber/revops/usage` | GET | List all metered usage events |
+| `/v1/admin/kyber/revops/usage/{tenant_id}` | GET | List one tenant's metered usage events for a requested or current billing window |
+| `/v1/admin/kyber/revops/metering-events` | POST | Record a metered usage event |
+| `/v1/admin/kyber/revops/invoice-previews` | GET | List invoice previews |
+| `/v1/admin/kyber/revops/invoice-previews/{tenant_id}/generate` | POST | Generate an invoice preview for a billing window |
+| `/v1/admin/kyber/revops/invoice-previews/{invoice_preview_id}` | PATCH | Move an invoice preview through `draft`, `review_ready`, `approved`, or `exported` |
+| `/v1/admin/kyber/revops/value-created` | GET | List value-created events |
+| `/v1/admin/kyber/revops/revenue-leakage` | GET | List or recalculate revenue leakage signals |
+| `/v1/admin/kyber/revops/expansion-billing-opportunities` | GET | List expansion billing opportunities |
+| `/v1/admin/kyber/revops/provider-status` | GET | Provider mode, health, sync flags, invoice export mode, and mapping status without secrets |
+| `/v1/admin/kyber/revops/product-mappings` | GET | Product/price mapping catalog and mapping completeness without secrets |
+
+
+The following admin tenant billing endpoints require the `billing` permission.
 
 ### GET /v1/admin/tenants/{tenant_id}/billing
 

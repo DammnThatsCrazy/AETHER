@@ -21,6 +21,24 @@ humans, organizations, AI agents, and onchain protocols.
 - [`docs/source-of-truth/PLATFORM_PARITY.md`](docs/source-of-truth/PLATFORM_PARITY.md) — tiers A/B/C
 - [`docs/architecture/BACKEND_INTELLIGENCE_ARCHITECTURE.md`](docs/architecture/BACKEND_INTELLIGENCE_ARCHITECTURE.md) — additive backend intelligence architecture blueprint
 
+## Apps & productization
+
+Three frontends (all run locally in `local-mocked` mode with no backend):
+**Aether** (tenant, `frontend/aether`, :5175), **Kyber** (operator, `frontend/kyber`, :5174),
+and the **Demo App** (`frontend/demo`, :5177) — a closed synthetic value-loop demo.
+Ingestion works **with or without the SDK** (SDK or connectors/signed webhooks).
+
+- Local dev & deployment: [`docs/LOCAL-DEVELOPMENT.md`](docs/LOCAL-DEVELOPMENT.md), [`docs/PRODUCTION-DEPLOYMENT.md`](docs/PRODUCTION-DEPLOYMENT.md), [`docs/ENVIRONMENT-VARIABLES.md`](docs/ENVIRONMENT-VARIABLES.md)
+- Connectors & ingestion: [`docs/CONNECTORS.md`](docs/CONNECTORS.md), [`docs/DATA-INGESTION-PATHS.md`](docs/DATA-INGESTION-PATHS.md)
+- Demo: [`docs/DEMO-APP.md`](docs/DEMO-APP.md) · API: [`docs/API-REFERENCE.md`](docs/API-REFERENCE.md) · SDKs: [`docs/SDKS.md`](docs/SDKS.md)
+- Readiness: [`docs/PRODUCTIZATION-CHECKLIST.md`](docs/PRODUCTIZATION-CHECKLIST.md), [`docs/SECURITY-READINESS.md`](docs/SECURITY-READINESS.md), [`docs/PREPRODUCTION-READINESS.md`](docs/PREPRODUCTION-READINESS.md)
+
+```bash
+npm run test:all        # docs + backend + frontend + load smoke
+npm run security:audit  # secret scan + dependency audit
+npm run compliance:readiness   # readiness inventory (not certification)
+```
+
 ## Architecture
 
 Aether is a **hybrid Python/FastAPI + Node/TypeScript** monorepo with four operational planes:
@@ -442,8 +460,8 @@ tests/                                 Python test suite (163+ tests)
 | [Operations Runbook](docs/OPERATIONS-RUNBOOK.md) | Failure modes, recovery, operational procedures |
 | [Secret Rotation](docs/SECRET-ROTATION.md) | Secret generation and rotation procedures |
 | [Extraction Defense](docs/MODEL-EXTRACTION-DEFENSE.md) | ML model extraction defense architecture |
-| [Provider Matrix](PROVIDER_MATRIX.md) | 24 providers with auth, env vars, health states |
-| [Execution Tracker](EXECUTION_TRACKER.md) | Phase completion status across all workstreams |
+| [Agent Layer Production](docs/AGENT-LAYER-PRODUCTION.md) | Hosted agent control plane: envs, migration, operator workflows |
+| [Connectors](docs/CONNECTORS.md) | Inbound connector framework with auth, env vars, health states |
 | [Changelog](docs/CHANGELOG.md) | Version history |
 | [Contributing](CONTRIBUTING.md) | Development setup, standards, PR process |
 
