@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 import { NoesisWorkspace, type NoesisMessageItem } from '@aether/ui';
@@ -8,7 +8,6 @@ const messages: NoesisMessageItem[] = [{
   role: 'assistant',
   content: 'Found 1 alert.',
   response: {
-    conversation_id: 'conv-1',
     answer: 'Found 1 alert.',
     mode: 'deterministic',
     intent: 'alert_lookup',
@@ -22,42 +21,49 @@ const messages: NoesisMessageItem[] = [{
 }];
 
 describe('NoesisWorkspace', () => {
-  it('renders history controls and invokes conversation actions', async () => {
-    const onSelectConversation = vi.fn();
-    const onDeleteConversation = vi.fn();
-    const onExportConversations = vi.fn();
-    const onNewConversation = vi.fn();
+  it('renders messages and suggested prompts in empty state', async () => {
+    const onSubmit = vi.fn();
     render(
       <NoesisWorkspace
         title="Ask Aether"
         subtitle="Graph intelligence"
         placeholder="Ask Noesis"
         suggestedPrompts={['Show alerts']}
+        messages={[]}
+        isLoading={false}
+        surfaceTone="aether"
+        emptyTitle="Empty"
+        emptyDescription="Ask a question"
+        onSubmit={onSubmit}
+      />,
+    );
+
+    expect(screen.getByText('Ask Aether')).toBeInTheDocument();
+    expect(screen.getByText('Empty')).toBeInTheDocument();
+    expect(screen.getByText('Show alerts')).toBeInTheDocument();
+
+    await userEvent.click(screen.getByText('Show alerts'));
+    expect(onSubmit).toHaveBeenCalledWith('Show alerts');
+  });
+
+  it('renders assistant response with graph context', () => {
+    render(
+      <NoesisWorkspace
+        title="Ask Aether"
+        subtitle="Graph intelligence"
+        placeholder="Ask Noesis"
+        suggestedPrompts={[]}
         messages={messages}
         isLoading={false}
         surfaceTone="aether"
         emptyTitle="Empty"
         emptyDescription="Ask a question"
-        conversations={[{ conversation_id: 'conv-1', title: 'Alert review', last_message: 'Found 1 alert.', message_count: 2 }]}
-        activeConversationId="conv-1"
-        onSelectConversation={onSelectConversation}
-        onDeleteConversation={onDeleteConversation}
-        onExportConversations={onExportConversations}
-        onNewConversation={onNewConversation}
         onSubmit={vi.fn()}
       />,
     );
 
-    expect(screen.getByText('History')).toBeInTheDocument();
-    expect(screen.getByText('Alert review')).toBeInTheDocument();
-    await userEvent.click(screen.getByText('Export'));
-    await userEvent.click(screen.getByText('New'));
-    await userEvent.click(screen.getByText('Delete'));
-    await userEvent.click(screen.getByText('Alert review'));
-
-    await waitFor(() => expect(onExportConversations).toHaveBeenCalled());
-    expect(onNewConversation).toHaveBeenCalled();
-    expect(onDeleteConversation).toHaveBeenCalledWith('conv-1');
-    expect(onSelectConversation).toHaveBeenCalledWith('conv-1');
+    expect(screen.getByText('Found 1 alert.')).toBeInTheDocument();
+    expect(screen.getByText('deterministic')).toBeInTheDocument();
+    expect(screen.getByText('alert_lookup')).toBeInTheDocument();
   });
 });
