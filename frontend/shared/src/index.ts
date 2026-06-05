@@ -72,4 +72,4 @@ export type {
 } from './types/reliability';
 
 export { NoesisWorkspace } from './components/noesis-workspace';
-export type { NoesisAction, NoesisConversationSummary, NoesisGraphPayload, NoesisMessageItem, NoesisResponsePayload } from './components/noesis-workspace';
+export type { NoesisAction, NoesisGraphPayload, NoesisMessageItem, NoesisResponsePayload } from './components/noesis-workspace';

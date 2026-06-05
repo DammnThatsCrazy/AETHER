@@ -20,9 +20,9 @@ from repositories.repos import (
     CampaignRepository,
     EntityRepository,
     ProvidersRepository,
+    WalletRepository,
 )
 
-from .conversations import NoesisConversationStore
 from .models import NoesisAction, NoesisGraph, NoesisQueryRequest, NoesisResponse, QueryPlan
 from .provider import EnvironmentNoesisPlanProvider, NoesisPlanProvider
 
@@ -44,7 +44,6 @@ class NoesisService:
         graph: GraphClient,
         analytics: AnalyticsRepository,
         provider: Optional[NoesisPlanProvider] = None,
-        conversation_store: Optional[NoesisConversationStore] = None,
     ) -> None:
         self.graph = graph
         self.analytics = analytics
@@ -57,7 +56,7 @@ class NoesisService:
         self.agents = AgentConfigRepository()
         self.agent_executions = AgentExecutionRepository()
         self.providers = ProvidersRepository()
-        self.conversations = conversation_store or NoesisConversationStore()
+        self.wallets = WalletRepository()
 
     async def query(self, body: NoesisQueryRequest, tenant: TenantContext) -> NoesisResponse:
         scope = self._resolve_scope(body, tenant)
@@ -71,16 +70,11 @@ class NoesisService:
                 plan = self._validate_plan(llm_plan, scope)
                 mode = "llm_text_to_query"
             else:
-                response = self._unsupported_response(body, warnings)
-                conversation_id = await self.conversations.record_turn(body, response, scope.effective_tenant_id)
-                response.conversation_id = conversation_id
-                return response
+                return self._unsupported_response(body, warnings)
 
         response = await self._dispatch(plan, scope, body)
         response.mode = mode  # type: ignore[assignment]
         response.warnings.extend(warnings)
-        conversation_id = await self.conversations.record_turn(body, response, scope.effective_tenant_id)
-        response.conversation_id = conversation_id
         if not scope.debug_allowed:
             response.query_debug = None
         metrics.increment("noesis_query", labels={"surface": body.surface, "intent": response.intent, "mode": response.mode})
@@ -103,7 +97,8 @@ class NoesisService:
                 raise ForbiddenError("Kyber cross-tenant Noesis requires operator permission")
             if not requested and not is_operator:
                 return Scope(body.surface, tenant.tenant_id, False, False)
-            wants_all_tenants = not requested and any(token in body.message.lower() for token in ("all tenants", "across tenants", "across all tenants"))
+            low_msg = body.message.lower()
+            wants_all_tenants = not requested and any(token in low_msg for token in ("all tenants", "across tenants", "across all tenants", "tenants with", "show tenants", "list tenants"))
             return Scope(body.surface, requested or ("" if wants_all_tenants else tenant.tenant_id), wants_all_tenants or bool(requested and requested != tenant.tenant_id), is_operator)
         raise BadRequestError("Unsupported Noesis surface")
 
@@ -172,52 +167,72 @@ class NoesisService:
         return {"tenant_id": scope.effective_tenant_id}
 
     async def _entity_search(self, plan: QueryPlan, scope: Scope) -> NoesisResponse:
-        rows = await self.entities.find_many(filters=self._tenant_filter(scope), limit=plan.limit)
         needle = (plan.target or "").lower()
+        fetch_limit = max(plan.limit * 10, 200) if needle else plan.limit
+        rows = await self.entities.find_many(filters=self._tenant_filter(scope), limit=fetch_limit)
         if needle:
             rows = [r for r in rows if needle in str(r.get("entity_id", r.get("id", ""))).lower() or needle in str(r.get("display_name", "")).lower() or needle in str(r.get("entity_type", "")).lower()]
+        rows = rows[: plan.limit]
         return self._response(plan, f"Found {len(rows)} tenant-scoped entities matching your request.", rows, self._entity_actions(rows, scope))
 
     async def _graph_lookup(self, plan: QueryPlan, scope: Scope) -> NoesisResponse:
         if not plan.target:
             return self._ambiguous(plan, "Which graph node or entity should I inspect?")
         vertex = await self.graph.get_vertex(plan.target)
-        if vertex and vertex.properties.get("tenant_id") not in (scope.effective_tenant_id, None, ""):
-            vertex = None
+        if vertex:
+            vtid = vertex.properties.get("tenant_id")
+            if scope.cross_tenant and not scope.effective_tenant_id:
+                pass
+            elif vtid not in (scope.effective_tenant_id, None, ""):
+                vertex = None
         neighbors = await self.graph.get_neighbors(plan.target, direction="both") if vertex else []
-        safe_neighbors = [v for v in neighbors if v.properties.get("tenant_id") in (scope.effective_tenant_id, None, "")]
+        if scope.cross_tenant and not scope.effective_tenant_id:
+            safe_neighbors = list(neighbors)
+        else:
+            safe_neighbors = [v for v in neighbors if v.properties.get("tenant_id") in (scope.effective_tenant_id, None, "")]
         edges = await self.graph.get_edges(plan.target, direction="both") if vertex else []
+        visible_node_ids = {v.vertex_id for v in ([vertex] if vertex else []) + safe_neighbors}
         nodes = [self._vertex_to_node(v) for v in ([vertex] if vertex else []) + safe_neighbors]
-        graph_edges = [self._edge_to_dict(e) for e in edges if e.properties.get("tenant_id") in (scope.effective_tenant_id, None, "")]
+        graph_edges = [self._edge_to_dict(e) for e in edges if e.from_vertex_id in visible_node_ids and e.to_vertex_id in visible_node_ids]
         actions = [NoesisAction(type="highlight_graph", label="Highlight graph neighborhood", node_ids=[n["id"] for n in nodes], edge_ids=[e["id"] for e in graph_edges])]
         if vertex:
             actions.append(NoesisAction(type="open_inspector", label="Open inspector", entity_id=vertex.vertex_id, entity_type=str(vertex.vertex_type)))
-            graph_href = f"/noesis/graph?focus={vertex.vertex_id}" if scope.surface == "kyber" else f"/graph?entity={vertex.vertex_id}"
-            actions.append(NoesisAction(type="navigate", label="Open graph workspace", href=graph_href))
+            actions.append(NoesisAction(type="navigate", label="Open graph workspace", href=f"/graph?entity={vertex.vertex_id}"))
         answer = f"{plan.target} has {len(safe_neighbors)} visible neighboring nodes in this tenant scope."
         return self._response(plan, answer, nodes, actions, NoesisGraph(nodes=nodes, edges=graph_edges, highlights=[plan.target]))
 
     async def _alert_lookup(self, plan: QueryPlan, scope: Scope) -> NoesisResponse:
-        rows = await self.alerts.find_many(filters=self._tenant_filter(scope), limit=plan.limit)
-        unresolved = [r for r in rows if str(r.get("status", "open")).lower() not in ("resolved", "closed")]
+        fetch_limit = max(plan.limit * 10, 200)
+        rows = await self.alerts.find_many(filters=self._tenant_filter(scope), limit=fetch_limit)
+        unresolved = [r for r in rows if str(r.get("status", "open")).lower() not in ("resolved", "closed")][: plan.limit]
         actions = [NoesisAction(type="navigate", label="Open alerts", href="/review")]
         return self._response(plan, f"Found {len(unresolved)} unresolved alert records in scope.", unresolved, actions)
 
     async def _tenant_summary(self, plan: QueryPlan, scope: Scope) -> NoesisResponse:
         if scope.surface != "kyber":
             raise ForbiddenError("Tenant summaries are Kyber-only")
-        tenant = await self.tenants.find_by_id(scope.effective_tenant_id) if scope.effective_tenant_id else None
-        summary = await self.analytics.dashboard_summary(scope.effective_tenant_id) if scope.effective_tenant_id else {"period": "all", "total_events": 0, "total_sessions": 0}
-        alerts = await self.alerts.count(filters=self._tenant_filter(scope))
-        entities = await self.entities.count(filters=self._tenant_filter(scope))
-        result = {"tenant": tenant or {"tenant_id": scope.effective_tenant_id or "all-authorized-tenants"}, "analytics": summary, "alerts": alerts, "entities": entities}
-        label = scope.effective_tenant_id or "authorized tenants"
-        href = f"/tenants/{scope.effective_tenant_id}" if scope.effective_tenant_id else "/tenants"
+        target_tid = plan.target if plan.target and scope.cross_tenant else scope.effective_tenant_id
+        tenant = await self.tenants.find_by_id(target_tid) if target_tid else None
+        summary = await self.analytics.dashboard_summary(target_tid) if target_tid else {"period": "all", "total_events": 0, "total_sessions": 0}
+        target_filter = {"tenant_id": target_tid} if target_tid else None
+        alerts = await self.alerts.count(filters=target_filter)
+        entities = await self.entities.count(filters=target_filter)
+        result = {"tenant": tenant or {"tenant_id": target_tid or "all-authorized-tenants"}, "analytics": summary, "alerts": alerts, "entities": entities}
+        label = target_tid or "authorized tenants"
+        href = f"/tenants/{target_tid}" if target_tid else "/tenants"
         return self._response(plan, f"Tenant scope {label} has {entities} entities, {alerts} alert records, and {summary.get('total_events', 0)} tracked events.", [result], [NoesisAction(type="navigate", label="Open tenants", href=href)])
 
     async def _typed_lookup(self, plan: QueryPlan, scope: Scope) -> NoesisResponse:
+        if plan.intent == "wallet_lookup":
+            fetch_limit = max(plan.limit * 10, 200)
+            rows = await self.wallets.find_many(filters=self._tenant_filter(scope), limit=fetch_limit)
+            needle = (plan.target or "").lower()
+            if needle:
+                rows = [r for r in rows if needle in str(r).lower()]
+            rows = rows[: plan.limit]
+            return self._response(plan, f"Found {len(rows)} wallet records in the authorized tenant scope.", rows, self._entity_actions(rows, scope))
         filters: dict[str, Any] = self._tenant_filter(scope) or {}
-        if plan.entity_type and plan.intent != "wallet_lookup":
+        if plan.entity_type:
             filters["entity_type"] = plan.entity_type
         rows = await self.entities.find_many(filters=filters, limit=plan.limit)
         if plan.intent == "agent_lookup":
@@ -230,10 +245,13 @@ class NoesisService:
         return self._response(plan, f"Found {len(rows)} {kind} records in the authorized tenant scope.", rows, self._entity_actions(rows, scope))
 
     async def _health_lookup(self, plan: QueryPlan, scope: Scope) -> NoesisResponse:
-        provider_rows = await self.providers.find_many(filters=self._tenant_filter(scope), limit=plan.limit)
+        provider_rows = [self._redact_deep(r) for r in await self.providers.find_many(filters=self._tenant_filter(scope), limit=plan.limit)]
         failed_agents = (await self.agent_executions.find_many(filters={"status": "failed"}, limit=plan.limit)) if scope.cross_tenant and not scope.effective_tenant_id else await self.agent_executions.list_failed(scope.effective_tenant_id, limit=plan.limit)
-        summary = await self.analytics.dashboard_summary(scope.effective_tenant_id)
-        result = {"sdk_or_provider_records": provider_rows, "failed_agent_executions": failed_agents, "analytics_summary": summary}
+        if scope.cross_tenant and not scope.effective_tenant_id:
+            summary = await self.analytics.dashboard_summary(None)
+        else:
+            summary = await self.analytics.dashboard_summary(scope.effective_tenant_id)
+        result = {"sdk_or_provider_records": provider_rows, "failed_agent_executions": [self._redact_deep(r) for r in failed_agents], "analytics_summary": summary}
         return self._response(plan, f"Health summary: {len(provider_rows)} provider/SDK records, {len(failed_agents)} failed agent executions, and {summary.get('total_events', 0)} events in the dashboard summary.", [result], [NoesisAction(type="navigate", label="Open diagnostics", href="/diagnostics"), NoesisAction(type="navigate", label="Open system status", href="/system-status")])
 
     async def _campaign_reward_lookup(self, plan: QueryPlan, scope: Scope) -> NoesisResponse:
@@ -294,8 +312,15 @@ class NoesisService:
         return {"id": edge_id, "source": edge.from_vertex_id, "target": edge.to_vertex_id, "type": edge.edge_type, "properties": self._redact(edge.properties)}
 
     def _redact(self, row: dict[str, Any]) -> dict[str, Any]:
-        blocked = {"key_hash", "api_key", "secret", "token", "password"}
-        return {k: ("[redacted]" if k.lower() in blocked else v) for k, v in row.items()}
+        return self._redact_deep(row)
+
+    def _redact_deep(self, value: Any) -> Any:
+        blocked = {"key_hash", "api_key", "secret", "token", "password", "credentials"}
+        if isinstance(value, dict):
+            return {k: ("[redacted]" if k.lower() in blocked else self._redact_deep(v)) for k, v in value.items()}
+        if isinstance(value, list):
+            return [self._redact_deep(item) for item in value]
+        return value
 
     def _search_terms(self, text: str) -> str:
         return re.sub(r"^(find|search|show me|take me to)\s+", "", text.strip(), flags=re.I)

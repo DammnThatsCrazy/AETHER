@@ -1,6 +1,6 @@
-import { useEffect, useState } from 'react';
-import { NoesisWorkspace, type NoesisConversationSummary, type NoesisMessageItem } from '@aether/ui';
-import { getNoesisConversation, listNoesisConversations, useNoesisQuery } from '@kyber/features/noesis-command';
+import { useState, useEffect, useRef } from 'react';
+import { NoesisWorkspace, type NoesisMessageItem } from '@aether/ui';
+import { useNoesisQuery } from '@kyber/features/noesis-command';
 
 const SUGGESTED_PROMPTS = [
   'Show tenants with unhealthy SDK telemetry.',
@@ -13,55 +13,32 @@ const SUGGESTED_PROMPTS = [
 
 export function NoesisPage() {
   const [messages, setMessages] = useState<NoesisMessageItem[]>([]);
-  const [conversationId, setConversationId] = useState<string | undefined>(undefined);
-  const [conversations, setConversations] = useState<NoesisConversationSummary[]>([]);
-  const [isHistoryLoading, setIsHistoryLoading] = useState(false);
   const query = useNoesisQuery();
-
-  async function refreshConversations() {
-    setIsHistoryLoading(true);
-    try {
-      setConversations(await listNoesisConversations());
-    } finally {
-      setIsHistoryLoading(false);
-    }
-  }
-
-  useEffect(() => {
-    void refreshConversations();
-  }, []);
-
-  async function handleSelectConversation(id: string) {
-    setIsHistoryLoading(true);
-    try {
-      const record = await getNoesisConversation(id);
-      setConversationId(record.conversation_id);
-      setMessages([...record.messages]);
-    } finally {
-      setIsHistoryLoading(false);
-    }
-  }
-
-  function handleNewConversation() {
-    setConversationId(undefined);
-    setMessages([]);
-  }
+  const focusHandled = useRef(false);
 
   async function handleSubmit(message: string) {
     const userMessage: NoesisMessageItem = { id: `user-${Date.now()}`, role: 'user', content: message };
     setMessages(prev => [...prev, userMessage]);
-    const response = await query.mutate({ message, conversationId, context: { current_page: window.location.pathname } });
+    const response = await query.mutate({ message, context: { current_page: window.location.pathname } });
     if (response) {
-      setConversationId(response.conversation_id);
       setMessages(prev => [...prev, {
         id: `assistant-${Date.now()}`,
         role: 'assistant',
         content: response.answer,
         response,
       }]);
-      void refreshConversations();
     }
   }
+
+  useEffect(() => {
+    if (focusHandled.current) return;
+    const params = new URLSearchParams(window.location.search);
+    const focus = params.get('focus');
+    if (focus) {
+      focusHandled.current = true;
+      void handleSubmit(`what is connected to entity ${focus}`);
+    }
+  }, []);
 
   return (
     <NoesisWorkspace
@@ -75,11 +52,6 @@ export function NoesisPage() {
       surfaceTone="kyber"
       emptyTitle="Noesis is ready for operator intelligence"
       emptyDescription="Use natural language to route into safe read-only graph, health, alert, tenant, agent, reward, and entity lookups."
-      conversations={conversations}
-      activeConversationId={conversationId}
-      isHistoryLoading={isHistoryLoading}
-      onSelectConversation={handleSelectConversation}
-      onNewConversation={handleNewConversation}
       onSubmit={handleSubmit}
     />
   );
