@@ -116,6 +116,9 @@ async def get_my_profile(request: Request):
         },
         "billing": billing,
         "api_key_count": key_count,
+        # Whether the caller may manage tenant-wide SDK remote config
+        # (publish / rollback). Drives admin-gated controls in the dashboard.
+        "is_admin": tenant.has_permission("admin"),
     }).to_dict()
 
 

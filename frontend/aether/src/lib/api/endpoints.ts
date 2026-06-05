@@ -960,6 +960,7 @@ export const api = {
         plan: { plan_id: string; display_name: string; monthly_quota: number; burst_rpm: number };
         billing: { subscription_status: string; current_period_end: string | null };
         api_key_count: number;
+        is_admin: boolean;
       }),
 
     /** Current-period event and RPM usage. */
@@ -1005,9 +1006,13 @@ export const api = {
     /** SDK instances that have gone silent (no heartbeat within threshold). */
     silent: () =>
       restClient.get('/v1/diagnostics/sdk/silent', wrap(unknownSchema)).then(r => r.data),
-    /** Active remote-config manifest for the tenant. */
+    /**
+     * Active remote-config manifest for the tenant (admin, ungated).
+     * Uses the management endpoint that bypasses SDK cohort/rollout gating so
+     * the settings UI always reflects the latest published manifest.
+     */
     manifest: () =>
-      restClient.get('/v1/config/sdk/manifest', wrap(unknownSchema)).then(r => r.data),
+      restClient.get('/v1/config/sdk/manifest/active', wrap(unknownSchema)).then(r => r.data),
     /** Publish a new manifest version (requires admin permission). */
     publishManifest: (body: Record<string, unknown>) =>
       restClient.put('/v1/config/sdk/manifest', wrap(unknownSchema), body).then(r => r.data),

@@ -137,6 +137,24 @@ class SDKConfigService:
         )
         return manifest
 
+    async def get_active_manifest(self, tenant_id: str) -> Optional[SDKManifest]:
+        """
+        Return the tenant's current active manifest WITHOUT rollout gating.
+
+        Used by the tenant settings UI (and other admin surfaces) which must
+        always see the latest published manifest they are managing — never the
+        cohort-gated view an individual SDK instance would receive. Returns the
+        default manifest when nothing has been published yet.
+        """
+        current_raw = await self._manifest_store.get(self._current_key(tenant_id))
+        if current_raw is None:
+            return self._default_manifest()
+        return SDKManifest(**{
+            k: current_raw[k]
+            for k in SDKManifest.__dataclass_fields__
+            if k in current_raw
+        })
+
     # ── Manifest Publishing ───────────────────────────────────────────────
 
     async def publish_manifest(
