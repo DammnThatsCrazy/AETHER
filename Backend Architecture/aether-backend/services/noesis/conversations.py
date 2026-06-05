@@ -70,45 +70,6 @@ class NoesisConversationStore:
         rows = await self._repo.find_many(filters=filters, limit=min(max(limit, 1), 100))
         return [self._summary(row) for row in rows]
 
-
-    async def export_for_scope(
-        self,
-        *,
-        surface: str,
-        tenant_id: Optional[str],
-        limit: int = 500,
-    ) -> dict[str, Any]:
-        filters: Optional[dict[str, Any]] = {"surface": surface}
-        if tenant_id:
-            filters["tenant_id"] = tenant_id
-        rows = await self._repo.find_many(filters=filters, limit=min(max(limit, 1), 1000))
-        redacted = [self._redact_record(row) for row in rows]
-        return {"conversations": redacted, "count": len(redacted)}
-
-    async def delete(self, conversation_id: str, *, tenant_id: Optional[str], surface: str) -> dict[str, Any]:
-        record = await self.get(conversation_id, tenant_id=tenant_id, surface=surface)
-        await self._repo.delete(conversation_id)
-        return {
-            "deleted": True,
-            "conversation_id": conversation_id,
-            "tenant_id": record.get("tenant_id", ""),
-            "surface": record.get("surface", surface),
-        }
-
-    def _redact_record(self, record: dict[str, Any]) -> dict[str, Any]:
-        redacted = {**record}
-        messages = []
-        for message in record.get("messages", []):
-            msg = dict(message)
-            response = msg.get("response")
-            if isinstance(response, dict):
-                response = dict(response)
-                response.pop("query_debug", None)
-                msg["response"] = response
-            messages.append(msg)
-        redacted["messages"] = messages
-        return redacted
-
     async def get(self, conversation_id: str, *, tenant_id: Optional[str], surface: str) -> dict[str, Any]:
         record = await self._repo.find_by_id(conversation_id)
         if not record or record.get("surface") != surface:

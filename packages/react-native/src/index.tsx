@@ -10,6 +10,7 @@ import { semanticContext } from './context/SemanticContext';
 import { RNEcommerce } from './modules/Ecommerce';
 import { RNFeatureFlags } from './modules/FeatureFlags';
 import { RNFeedback } from './modules/Feedback';
+import { RNHealthAgent } from './modules/HealthAgent';
 import type { ConsentState, ConsentPurpose } from '@aether/shared/consent';
 
 const { AetherNative } = NativeModules;
@@ -28,6 +29,8 @@ export interface ResolvedIdentity {
 export interface AetherRNConfig {
   apiKey: string;
   environment?: 'production' | 'staging' | 'development';
+  /** Host app version, reported in SDK fleet heartbeats. */
+  appVersion?: string;
   debug?: boolean;
   endpoint?: string;
   modules?: {
@@ -306,6 +309,36 @@ export function AetherProvider({
     RNFeatureFlags.initialize(config.apiKey, endpoint);
     RNFeedback.initialize(config.apiKey, endpoint);
 
+    // SDK fleet self-identification. For GDPR opt-in deployments, defer
+    // heartbeats until the user grants analytics consent (consent is owned by
+    // the native layer and surfaced via Aether.consent).
+    let healthAgent: RNHealthAgent | null = null;
+    let consentUnsub: (() => void) | undefined;
+    const startHealthAgent = () => {
+      if (healthAgent) return;
+      healthAgent = new RNHealthAgent({
+        endpoint,
+        apiKey: config.apiKey,
+        appVersion: config.appVersion,
+      });
+      healthAgent.start();
+    };
+
+    if (config.privacy?.gdprMode) {
+      Aether.consent.getState()
+        .then((state) => { if (state?.analytics) startHealthAgent(); })
+        .catch(() => { /* consent unavailable — stay deferred */ });
+      consentUnsub = Aether.consent.onUpdate((state) => {
+        if (state?.analytics) {
+          startHealthAgent();
+          consentUnsub?.();
+          consentUnsub = undefined;
+        }
+      });
+    } else {
+      startHealthAgent();
+    }
+
     setIsInitialized(true);
 
     // Journey foreground/background lifecycle is emitted by the native SDKs
@@ -331,6 +364,8 @@ export function AetherProvider({
 
     return () => {
       journeySub?.remove();
+      consentUnsub?.();
+      healthAgent?.stop();
       semanticContext.destroy();
       RNEcommerce.destroy();
       RNFeatureFlags.destroy();

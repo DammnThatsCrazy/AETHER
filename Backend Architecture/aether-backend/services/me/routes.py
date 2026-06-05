@@ -34,11 +34,17 @@ router = APIRouter(prefix="/v1/me", tags=["Me"])
 _key_repo = APIKeyRepository()
 
 _VALID_PERMISSIONS = {"read", "write", "ingest", "analytics", "billing"}
+_VALID_PLATFORMS = {"web", "ios", "android", "react-native", "node", "other"}
 
 
 class APIKeyCreateRequest(BaseModel):
     name: str = Field(..., min_length=1, max_length=100)
     permissions: list[str] = Field(default_factory=lambda: ["read"])
+    platform: str | None = Field(
+        default=None,
+        description="Optional SDK platform this key is intended for "
+        "(web|ios|android|react-native|node|other).",
+    )
 
 
 class APIKeyRenameRequest(BaseModel):
@@ -110,6 +116,9 @@ async def get_my_profile(request: Request):
         },
         "billing": billing,
         "api_key_count": key_count,
+        # Whether the caller may manage tenant-wide SDK remote config
+        # (publish / rollback). Drives admin-gated controls in the dashboard.
+        "is_admin": tenant.has_permission("admin"),
     }).to_dict()
 
 
@@ -209,6 +218,13 @@ async def create_my_api_key(body: APIKeyCreateRequest, request: Request):
         from shared.common.common import BadRequestError
         raise BadRequestError(f"Invalid permissions: {invalid}. Valid: {sorted(_VALID_PERMISSIONS)}")
 
+    # Validate optional platform tag
+    if body.platform is not None and body.platform not in _VALID_PLATFORMS:
+        from shared.common.common import BadRequestError
+        raise BadRequestError(
+            f"Invalid platform: {body.platform!r}. Valid: {sorted(_VALID_PLATFORMS)}"
+        )
+
     raw_key = f"ak_{uuid.uuid4().hex[:24]}"
     hashed = hashlib.sha256(raw_key.encode()).hexdigest()
 
@@ -217,6 +233,7 @@ async def create_my_api_key(body: APIKeyCreateRequest, request: Request):
         "name": body.name,
         "tier": tenant.api_key_tier.value,
         "permissions": body.permissions,
+        "platform": body.platform,
         "key_hash": hashed,
         "last_used_at": None,
     })
@@ -242,6 +259,7 @@ async def create_my_api_key(body: APIKeyCreateRequest, request: Request):
         "id": record["id"],
         "name": body.name,
         "permissions": body.permissions,
+        "platform": body.platform,
         "message": "Store this key securely — it will not be shown again.",
     }).to_dict()
 

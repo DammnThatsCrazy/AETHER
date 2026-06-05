@@ -1,7 +1,7 @@
 import { useMutation, useQuery } from '@aether/ui';
 import { api } from '@aether-app/lib/api/endpoints';
 
-export type ApiKey = { id: string; name: string; tier: string; permissions: string[]; last_used_at: string | null };
+export type ApiKey = { id: string; name: string; tier: string; permissions: string[]; platform: string | null; last_used_at: string | null };
 
 export function useApiKeys() {
   return useQuery<ApiKey[]>({
@@ -12,7 +12,7 @@ export function useApiKeys() {
 
 export function useCreateApiKey() {
   return useMutation({
-    mutationFn: (payload: { name: string; tier?: string; permissions?: string[] }) =>
+    mutationFn: (payload: { name: string; tier?: string; permissions?: string[]; platform?: string | null }) =>
       api.settings.createKey(payload),
   });
 }
