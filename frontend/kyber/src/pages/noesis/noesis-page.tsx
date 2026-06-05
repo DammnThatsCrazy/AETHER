@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { NoesisWorkspace, type NoesisMessageItem } from '@aether/ui';
 import { useNoesisQuery } from '@kyber/features/noesis-command';
 
@@ -13,15 +13,14 @@ const SUGGESTED_PROMPTS = [
 
 export function NoesisPage() {
   const [messages, setMessages] = useState<NoesisMessageItem[]>([]);
-  const [conversationId, setConversationId] = useState<string | undefined>(undefined);
   const query = useNoesisQuery();
+  const focusHandled = useRef(false);
 
   async function handleSubmit(message: string) {
     const userMessage: NoesisMessageItem = { id: `user-${Date.now()}`, role: 'user', content: message };
     setMessages(prev => [...prev, userMessage]);
-    const response = await query.mutate({ message, conversationId, context: { current_page: window.location.pathname } });
+    const response = await query.mutate({ message, context: { current_page: window.location.pathname } });
     if (response) {
-      setConversationId(response.conversation_id);
       setMessages(prev => [...prev, {
         id: `assistant-${Date.now()}`,
         role: 'assistant',
@@ -30,6 +29,16 @@ export function NoesisPage() {
       }]);
     }
   }
+
+  useEffect(() => {
+    if (focusHandled.current) return;
+    const params = new URLSearchParams(window.location.search);
+    const focus = params.get('focus');
+    if (focus) {
+      focusHandled.current = true;
+      void handleSubmit(`what is connected to entity ${focus}`);
+    }
+  }, []);
 
   return (
     <NoesisWorkspace

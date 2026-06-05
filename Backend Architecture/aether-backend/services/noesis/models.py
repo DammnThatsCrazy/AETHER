@@ -50,7 +50,6 @@ class NoesisError(BaseModel):
 
 
 class NoesisResponse(BaseModel):
-    conversation_id: Optional[str] = None
     answer: str
     mode: NoesisMode
     intent: str
@@ -86,25 +85,3 @@ class QueryPlan(BaseModel):
     limit: int = Field(default=10, ge=1, le=50)
     confidence: float = Field(default=0.5, ge=0.0, le=1.0)
     source: Literal["deterministic", "llm"] = "deterministic"
-
-
-class NoesisConversationMessage(BaseModel):
-    role: Literal["user", "assistant"]
-    content: str
-    created_at: Optional[str] = None
-    response: Optional[dict[str, Any]] = None
-
-
-class NoesisConversationRecord(BaseModel):
-    conversation_id: str
-    surface: NoesisSurface
-    tenant_id: str
-    created_at: str
-    updated_at: str
-    title: str = "Noesis conversation"
-    messages: list[NoesisConversationMessage] = Field(default_factory=list)
-
-
-class NoesisConversationList(BaseModel):
-    conversations: list[dict[str, Any]] = Field(default_factory=list)
-    count: int = 0

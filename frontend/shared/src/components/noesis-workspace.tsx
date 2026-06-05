@@ -24,7 +24,6 @@ export interface NoesisGraphPayload {
 }
 
 export interface NoesisResponsePayload {
-  readonly conversation_id?: string | undefined;
   readonly answer: string;
   readonly mode: 'deterministic' | 'llm_text_to_query' | 'fallback';
   readonly intent: string;

@@ -18,6 +18,12 @@ export declare class FeatureFlagModule {
     isEnabled(key: string): boolean;
     /** Get a typed flag value with a default fallback */
     getValue<T>(key: string, defaultValue: T): T;
+    /**
+     * Merge feature toggles delivered by the remote SDK manifest into the active
+     * flag set. Called by the SDK when a new manifest is received so that
+     * tenant-published feature flags take effect on installed SDKs.
+     */
+    applyManifestFeatures(features: Record<string, boolean>): void;
     /** Force-refresh flags from backend */
     refresh(): Promise<void>;
     /** Stop refresh timer and clean up */

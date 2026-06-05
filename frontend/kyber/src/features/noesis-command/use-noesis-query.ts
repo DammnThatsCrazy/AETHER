@@ -5,7 +5,6 @@ import type { NoesisResponsePayload } from '@aether/ui';
 
 export interface NoesisQueryInput {
   readonly message: string;
-  readonly conversationId?: string | undefined;
   readonly tenantId?: string | undefined;
   readonly context?: Record<string, unknown> | undefined;
 }
@@ -16,7 +15,6 @@ export const noesis = {
   async query(input: NoesisQueryInput): Promise<NoesisResponsePayload> {
     const response = await restClient.post('/v1/noesis/query', noesisResponseSchema, {
       message: input.message,
-      conversation_id: input.conversationId,
       surface: 'kyber',
       tenant_id: input.tenantId,
       context: input.context ?? { current_page: window.location.pathname },
@@ -27,12 +25,4 @@ export const noesis = {
 
 export function useNoesisQuery() {
   return useMutation<NoesisQueryInput, NoesisResponsePayload>({ mutationFn: noesis.query });
-}
-
-
-export async function listNoesisConversations(surface: 'kyber' | 'aether', tenantId?: string): Promise<unknown> {
-  const query = new URLSearchParams({ surface });
-  if (tenantId) query.set('tenant_id', tenantId);
-  const response = await restClient.get(`/v1/noesis/conversations?${query.toString()}`, noesisResponseSchema);
-  return response.data;
 }

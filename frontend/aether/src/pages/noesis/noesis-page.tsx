@@ -13,15 +13,13 @@ const SUGGESTED_PROMPTS = [
 
 export function NoesisPage() {
   const [messages, setMessages] = useState<NoesisMessageItem[]>([]);
-  const [conversationId, setConversationId] = useState<string | undefined>(undefined);
   const query = useNoesisQuery();
 
   async function handleSubmit(message: string) {
     const userMessage: NoesisMessageItem = { id: `user-${Date.now()}`, role: 'user', content: message };
     setMessages(prev => [...prev, userMessage]);
-    const response = await query.mutate({ message, conversationId, context: { current_page: window.location.pathname } });
+    const response = await query.mutate({ message, context: { current_page: window.location.pathname } });
     if (response) {
-      setConversationId(response.conversation_id);
       setMessages(prev => [...prev, {
         id: `assistant-${Date.now()}`,
         role: 'assistant',

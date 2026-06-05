@@ -122,31 +122,3 @@ async def test_unsupported_intent_returns_refinement(service: NoesisService, ten
     assert response.error is not None
     assert response.error.code == "unsupported_intent"
     assert response.actions[0].type == "refine_query"
-
-
-@pytest.mark.asyncio
-async def test_query_records_conversation_history(service: NoesisService, tenant: TenantContext):
-    repo = EntityRepository()
-    await repo.create_entity("entity-a", "tenant-a", "human", "Alice", None, {})
-
-    response = await service.query(
-        NoesisQueryRequest(message="find Alice", surface="aether", conversation_id="conv-a"),
-        tenant,
-    )
-    record = await service.conversations.get("conv-a", tenant_id="tenant-a", surface="aether")
-
-    assert response.conversation_id == "conv-a"
-    assert record["tenant_id"] == "tenant-a"
-    assert [m["role"] for m in record["messages"]] == ["user", "assistant"]
-    assert "query_debug" not in record["messages"][1]["response"]
-
-
-@pytest.mark.asyncio
-async def test_conversation_store_does_not_cross_tenants(service: NoesisService, tenant: TenantContext):
-    await service.query(
-        NoesisQueryRequest(message="show unresolved alerts", surface="aether", conversation_id="conv-private"),
-        tenant,
-    )
-
-    with pytest.raises(Exception):
-        await service.conversations.get("conv-private", tenant_id="tenant-b", surface="aether")

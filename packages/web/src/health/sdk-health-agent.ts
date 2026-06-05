@@ -41,6 +41,13 @@ export interface SDKHealthAgentConfig {
   rolloutCohort?: string;
   /** Secret for HMAC signing (must match SDK_CONFIG_SECRET on backend) */
   signingSecret?: string;
+  /** Extra HTTP headers (e.g. gateway/proxy headers) merged into every request. */
+  customHeaders?: Record<string, string>;
+  /**
+   * Provides live auth/consent/wallet state at heartbeat time so the fleet view
+   * reflects reality rather than optimistic defaults. Called on each heartbeat.
+   */
+  getDynamicState?: () => { authValid: boolean; consentValid: boolean; walletConnected: boolean };
 }
 
 export interface SDKHeartbeatPayload {
@@ -116,6 +123,8 @@ export class SDKHealthAgent {
       configVersion: '0',
       rolloutCohort: 'default',
       signingSecret: '',
+      customHeaders: {},
+      getDynamicState: () => ({ authValid: true, consentValid: true, walletConnected: false }),
       ...config,
     };
     this.eventQueue = eventQueue;
@@ -194,6 +203,7 @@ export class SDKHealthAgent {
             'Authorization': `Bearer ${this.config.apiKey}`,
             'X-Aether-SDK': 'web',
             'X-Aether-SDK-Version': SDK_VERSION,
+            ...this.config.customHeaders,
           },
           body: JSON.stringify(payload),
           // keepalive ensures delivery even on page unload
@@ -229,6 +239,7 @@ export class SDKHealthAgent {
         headers: {
           'Authorization': `Bearer ${this.config.apiKey}`,
           'X-Aether-SDK': 'web',
+          ...this.config.customHeaders,
         },
       });
 
@@ -274,6 +285,7 @@ export class SDKHealthAgent {
   // ── Payload Construction ───────────────────────────────────────────────
 
   private buildHeartbeatPayload(): SDKHeartbeatPayload {
+    const dynamic = this.config.getDynamicState();
     return {
       sdk_id: this.config.sdkId,
       sdk_version: SDK_VERSION,
@@ -285,9 +297,9 @@ export class SDKHealthAgent {
       endpoint_latency_ms: this.metrics.lastLatencyMs,
       ingestion_success_rate: this.metrics.lastSuccessRate,
       schema_hash: this.computeSchemaHash(),
-      auth_valid: true,
-      consent_valid: true,
-      wallet_connected: false,
+      auth_valid: dynamic.authValid,
+      consent_valid: dynamic.consentValid,
+      wallet_connected: dynamic.walletConnected,
       config_version: this.config.configVersion,
       rollout_cohort: this.config.rolloutCohort,
     };
