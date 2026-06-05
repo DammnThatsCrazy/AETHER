@@ -62,6 +62,8 @@ class AetherSDK implements AetherSDKInterface {
   private initialized = false;
   private debug = false;
   private _lastEmailHash: string | undefined = undefined;
+  private heartbeatTimer: ReturnType<typeof setInterval> | null = null;
+  private sdkInstanceId: string | null = null;
   private currentJourney: CurrentJourney | null = null;
   private journeyResumeListeners: Array<(identity: ResolvedIdentity) => void> = [];
   private lastJourneyPauseAt: number | null = null;
@@ -104,6 +106,10 @@ class AetherSDK implements AetherSDKInterface {
     this.pageView();
     this.setupSPATracking();
     this.setupJourneyLifecycleTracking();
+
+    // Self-identify to the backend SDK fleet so tenants can see and manage
+    // this instance from their Aether settings (health, version, platform).
+    this.startHeartbeat();
 
     if (config.privacy?.respectDNT && navigator.doNotTrack === '1') {
       this.log('info', 'DNT detected — limiting data collection');
@@ -292,6 +298,10 @@ class AetherSDK implements AetherSDKInterface {
 
   destroy(): void {
     this.log('info', 'Destroying Aether SDK');
+    if (this.heartbeatTimer !== null) {
+      clearInterval(this.heartbeatTimer);
+      this.heartbeatTimer = null;
+    }
     this.flush();
     this.autoDiscovery?.destroy();
     this.consentModule?.destroy();
@@ -499,6 +509,62 @@ class AetherSDK implements AetherSDKInterface {
   // =========================================================================
   // BACKEND CONFIG — replaces UpdateManager
   // =========================================================================
+
+  /** Stable per-install SDK instance id, persisted across reloads. */
+  private getSdkInstanceId(): string {
+    if (this.sdkInstanceId) return this.sdkInstanceId;
+    const storageKey = 'aether_sdk_instance_id';
+    try {
+      if (typeof localStorage !== 'undefined') {
+        const existing = localStorage.getItem(storageKey);
+        if (existing) {
+          this.sdkInstanceId = existing;
+          return existing;
+        }
+        const generated = `web_${generateId()}`;
+        localStorage.setItem(storageKey, generated);
+        this.sdkInstanceId = generated;
+        return generated;
+      }
+    } catch {
+      // localStorage unavailable (SSR / privacy mode) — fall back to ephemeral id
+    }
+    this.sdkInstanceId = `web_${generateId()}`;
+    return this.sdkInstanceId;
+  }
+
+  /** Begin periodic self-identification heartbeats to the SDK fleet endpoint. */
+  private startHeartbeat(): void {
+    if (typeof window === 'undefined') return;
+    // Send one immediately, then on a fixed interval.
+    void this.sendHeartbeat();
+    this.heartbeatTimer = setInterval(() => { void this.sendHeartbeat(); }, 60_000);
+  }
+
+  /** Report this SDK instance's identity and health to the backend fleet. */
+  private async sendHeartbeat(): Promise<void> {
+    if (!this.config) return;
+    const endpoint = this.config.endpoint ?? DEFAULT_ENDPOINT;
+    try {
+      await fetch(`${endpoint}/v1/diagnostics/sdk/heartbeat`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${this.config.apiKey}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          sdk_id: this.getSdkInstanceId(),
+          sdk_version: SDK_VERSION,
+          platform: 'web',
+          app_version: this.config.appVersion ?? '',
+          queue_depth: this.eventQueue?.size ?? 0,
+        }),
+        keepalive: true,
+      });
+    } catch {
+      // Non-fatal — fleet visibility is best-effort and must never block the app.
+    }
+  }
 
   /** Fetch configuration from backend (feature flags, funnel definitions, etc.) */
   private async fetchConfig(): Promise<void> {

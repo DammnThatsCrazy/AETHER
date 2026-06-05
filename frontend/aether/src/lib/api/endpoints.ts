@@ -984,14 +984,39 @@ export const api = {
   settings: {
     listKeys: () =>
       restClient.get('/v1/me/api-keys', wrap(unknownSchema))
-        .then(r => r.data as { keys: Array<{ id: string; name: string; tier: string; permissions: string[]; last_used_at: string | null }> }),
+        .then(r => r.data as { keys: Array<{ id: string; name: string; tier: string; permissions: string[]; platform: string | null; last_used_at: string | null }> }),
 
-    createKey: (payload: { name: string; tier?: string; permissions?: string[] }) =>
+    createKey: (payload: { name: string; tier?: string; permissions?: string[]; platform?: string | null }) =>
       restClient.post('/v1/me/api-keys', wrap(unknownSchema), payload)
-        .then(r => r.data as { id: string; name: string; key: string; api_key: string; tier: string; permissions: string[] }),
+        .then(r => r.data as { id: string; name: string; key: string; api_key: string; tier: string; permissions: string[]; platform: string | null }),
 
     revokeKey: (id: string) =>
       restClient.delete(`/v1/me/api-keys/${id}`, wrap(unknownSchema)),
+  },
+
+  // ── SDK fleet health & remote config (tenant-scoped) ────────────────────────
+  sdk: {
+    /** Fleet health summary for the caller's tenant. */
+    fleet: () =>
+      restClient.get('/v1/diagnostics/sdk/health', wrap(unknownSchema)).then(r => r.data),
+    /** Health score for a single SDK instance. */
+    sdkScore: (sdkId: string) =>
+      restClient.get(`/v1/diagnostics/sdk/health/${encodeURIComponent(sdkId)}`, wrap(unknownSchema)).then(r => r.data),
+    /** SDK instances that have gone silent (no heartbeat within threshold). */
+    silent: () =>
+      restClient.get('/v1/diagnostics/sdk/silent', wrap(unknownSchema)).then(r => r.data),
+    /** Active remote-config manifest for the tenant. */
+    manifest: () =>
+      restClient.get('/v1/config/sdk/manifest', wrap(unknownSchema)).then(r => r.data),
+    /** Publish a new manifest version (requires admin permission). */
+    publishManifest: (body: Record<string, unknown>) =>
+      restClient.put('/v1/config/sdk/manifest', wrap(unknownSchema), body).then(r => r.data),
+    /** Rollout adoption status + manifest versioning metadata (admin). */
+    rolloutStatus: () =>
+      restClient.get('/v1/config/sdk/rollout', wrap(unknownSchema)).then(r => r.data),
+    /** Roll back to the previous manifest version (admin). */
+    rollback: () =>
+      restClient.post('/v1/config/sdk/rollout/rollback', wrap(unknownSchema), {}).then(r => r.data),
   },
 
   // ── Billing & plans ────────────────────────────────────────────────────────

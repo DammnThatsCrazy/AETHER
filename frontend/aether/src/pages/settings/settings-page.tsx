@@ -24,6 +24,7 @@ import { useApiKeys, useCreateApiKey, useRevokeApiKey } from '@aether-app/featur
 import type { ApiKey } from '@aether-app/features/account';
 import { queryCache } from '@aether/ui';
 import { OutcomeLedgerPanel } from '@aether-app/components/outcome-ledger-panel';
+import { SdkFleetSection } from './sdk-fleet-section';
 
 function formatRelative(iso: string | null): string {
   if (!iso) return 'never';
@@ -85,9 +86,13 @@ interface NewKeyModalProps {
 const ALL_PERMISSIONS = ['read', 'write', 'ingest', 'analytics'] as const;
 type Permission = typeof ALL_PERMISSIONS[number];
 
+const SDK_PLATFORMS = ['', 'web', 'ios', 'android', 'react-native', 'node', 'other'] as const;
+type SdkPlatform = typeof SDK_PLATFORMS[number];
+
 function NewKeyModal({ open, onClose, onCreated }: NewKeyModalProps) {
   const [name, setName] = useState('');
   const [permissions, setPermissions] = useState<Permission[]>(['read']);
+  const [platform, setPlatform] = useState<SdkPlatform>('');
   const { mutate, isLoading } = useCreateApiKey();
 
   function togglePermission(perm: Permission) {
@@ -99,11 +104,12 @@ function NewKeyModal({ open, onClose, onCreated }: NewKeyModalProps) {
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!name.trim()) return;
-    const result = await mutate({ name: name.trim(), permissions });
+    const result = await mutate({ name: name.trim(), permissions, platform: platform || null });
     if (result) {
       onCreated((result as { api_key?: string; key?: string }).api_key ?? (result as { key: string }).key);
       setName('');
       setPermissions(['read']);
+      setPlatform('');
     }
   }
 
@@ -125,6 +131,19 @@ function NewKeyModal({ open, onClose, onCreated }: NewKeyModalProps) {
               placeholder="e.g. Production, iOS App"
               className="bg-surface-raised text-text-primary border border-border-default rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-border-focus placeholder:text-text-muted"
             />
+          </div>
+          <div className="flex flex-col gap-1">
+            <label htmlFor="key-platform" className="text-xs text-text-secondary">SDK platform (optional)</label>
+            <select
+              id="key-platform"
+              value={platform}
+              onChange={e => setPlatform(e.target.value as SdkPlatform)}
+              className="bg-surface-raised text-text-primary border border-border-default rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-border-focus"
+            >
+              {SDK_PLATFORMS.map(p => (
+                <option key={p || 'any'} value={p}>{p === '' ? 'Any / unspecified' : p}</option>
+              ))}
+            </select>
           </div>
           <div className="flex flex-col gap-1.5">
             <span className="text-xs text-text-secondary">Permissions</span>
@@ -286,6 +305,15 @@ export function SettingsPage() {
               render: (row: ApiKey) => <Badge variant="default" size="sm">{row.tier}</Badge>,
             },
             {
+              key: 'platform',
+              header: 'Platform',
+              render: (row: ApiKey) => (
+                row.platform
+                  ? <Badge variant="default" size="sm">{row.platform}</Badge>
+                  : <span className="text-xs text-text-muted">any</span>
+              ),
+            },
+            {
               key: 'permissions',
               header: 'Permissions',
               render: (row: ApiKey) => (
@@ -339,6 +367,12 @@ export function SettingsPage() {
           onClose={() => setRevealKey(null)}
         />
       )}
+      </div>
+
+      <TerminalSeparator />
+
+      <div className="max-w-3xl">
+        <SdkFleetSection />
       </div>
     </div>
   );
