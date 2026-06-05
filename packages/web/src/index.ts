@@ -62,6 +62,8 @@ class AetherSDK implements AetherSDKInterface {
   private initialized = false;
   private debug = false;
   private _lastEmailHash: string | undefined = undefined;
+  private heartbeatTimer: ReturnType<typeof setInterval> | null = null;
+  private sdkInstanceId: string | null = null;
   private currentJourney: CurrentJourney | null = null;
   private journeyResumeListeners: Array<(identity: ResolvedIdentity) => void> = [];
   private lastJourneyPauseAt: number | null = null;
