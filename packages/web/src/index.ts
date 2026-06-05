@@ -308,6 +308,9 @@ class AetherSDK implements AetherSDKInterface {
     this.healthAgentConsentUnsub = null;
     this.healthAgent?.stop();
     this.healthAgent = null;
+    // Clear remote manifest state so a subsequent init() for a different
+    // tenant/key starts from defaults rather than the prior manifest's switches.
+    this.remoteFeatures = {};
     this.flush();
     this.autoDiscovery?.destroy();
     this.consentModule?.destroy();
@@ -619,7 +622,7 @@ class AetherSDK implements AetherSDKInterface {
     if (type.startsWith('agent_') || type === 'a2h_interaction') return 'agent';
     if (type.startsWith('payment_') || type.startsWith('approval_')
       || type.startsWith('entitlement_') || type.startsWith('access_')
-      || type === 'x402_payment') return 'commerce';
+      || type === 'x402_payment' || type === 'conversion') return 'commerce';
     if (type === 'wallet' || type === 'transaction' || type === 'contract_action') return 'web3';
     if (type === 'consent') return null; // never suppress consent signals
     return 'analytics';
