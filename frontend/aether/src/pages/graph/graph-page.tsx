@@ -1,4 +1,5 @@
-import { useState, useCallback, useMemo } from 'react';
+import { useState, useCallback, useEffect, useMemo } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import {
   Badge, Button, Card, CardContent, CardHeader, CardTitle,
   EmptyState, ErrorState, LoadingState, ScrollArea,
@@ -209,6 +210,8 @@ const NODE_COLUMNS = [
 // ── Page ──────────────────────────────────────────────────────────────────────
 
 export function GraphPage() {
+  const [searchParams] = useSearchParams();
+  const deepLinkedEntity = searchParams.get('entity') ?? searchParams.get('selected_entity');
   const {
     nodes, edges, clusters,
     isLoading, error,
@@ -254,6 +257,15 @@ export function GraphPage() {
     setHighlightedCluster(null);
     setInspector({ type: 'node', node, neighbors: getNeighbors(node.id) });
   }, [pathMode, pathSource, edges, getNeighbors]);
+
+  useEffect(() => {
+    if (!deepLinkedEntity || isLoading || error) return;
+    const node = nodes.find(n => n.id === deepLinkedEntity);
+    if (!node) return;
+    setViewMode('graph');
+    setHighlightedCluster(null);
+    setInspector({ type: 'node', node, neighbors: getNeighbors(node.id) });
+  }, [deepLinkedEntity, nodes, getNeighbors, isLoading, error]);
 
   const handleSelectEdge = useCallback((edge: GraphEdge | null) => {
     if (!edge) { setInspector(null); return; }
