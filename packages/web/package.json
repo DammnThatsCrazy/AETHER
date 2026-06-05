@@ -11,6 +11,12 @@
       "import": "./src/index.ts",
       "require": "./src/index.ts",
       "default": "./src/index.ts"
+    },
+    "./health": {
+      "types": "./dist/health/index.d.ts",
+      "import": "./src/health/index.ts",
+      "require": "./src/health/index.ts",
+      "default": "./src/health/index.ts"
     }
   },
   "files": [
