@@ -233,6 +233,7 @@ from services.journeys.routes import router as journeys_router, admin_router as 
 from services.sdk_health.routes import router as sdk_health_router
 from services.sdk_drift.routes import router as sdk_drift_router
 from services.sdk_config.routes import router as sdk_config_router
+from services.noesis.routes import router as noesis_router
 from services.onboarding.routes import router as onboarding_router, admin_router as onboarding_admin_router
 from services.reliability import admin_router as reliability_admin_router, tenant_router as reliability_status_router
 from services.data_quality import (
@@ -466,6 +467,7 @@ def create_app() -> FastAPI:
     app.include_router(sdk_health_router)   # SDK health monitoring: heartbeats + fleet status
     app.include_router(sdk_drift_router)    # SDK drift detection: schema, stale, replay storm
     app.include_router(sdk_config_router)   # SDK remote config: signed manifests + rollouts
+    app.include_router(noesis_router)        # Noesis: graph-native natural-language intelligence
     app.include_router(onboarding_router)      # Customer onboarding center
     app.include_router(onboarding_admin_router) # Kyber implementation lifecycle
     app.include_router(reliability_admin_router)  # Kyber reliability command center
