@@ -25,6 +25,7 @@ import type {
   EntityCluster, RelationshipSummary, GraphNodeKind,
 } from './graph-relationships';
 import type { Provenance } from './provenance';
+import type { UnifiedEconomicBreakdown } from './economic-metrics';
 import type { TierProfile } from './tier';
 import type { AssetComposition } from './asset-composition';
 import type { PNLSummary } from './pnl';
@@ -155,6 +156,10 @@ export interface Profile360SubResources {
 
   // Financial (Web2 + Web3 unified)
   readonly financials?: UnifiedFinancialProfile;
+
+  // Economic intelligence (unified decomposable breakdown)
+  //   GET /v1/profile/{id}/economic → economic
+  readonly economic?: UnifiedEconomicBreakdown;
 
   // Intelligence and risk
   readonly intelligence?: IntelligenceProfile;
