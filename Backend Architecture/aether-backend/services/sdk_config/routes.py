@@ -72,17 +72,20 @@ async def get_manifest(
 @router.get("/manifest/active")
 async def get_active_manifest(request: Request):
     """
-    Admin: return the tenant's current active manifest without rollout gating.
+    Return the tenant's current active manifest without rollout gating.
 
     The SDK-facing `GET /manifest` endpoint applies cohort gating based on the
     caller's `sdk_id`; a management surface calling it with no id can land
     outside a staged rollout and see a stale/previous manifest. This endpoint
-    always returns the latest published manifest so the settings UI shows and
-    toggles the real current config.
+    always returns the latest published manifest so the settings UI shows the
+    real current config.
+
+    Read-only and available to any authenticated tenant member (non-admins get
+    a read-only view of the fleet settings page). Mutations — publish and
+    rollback — remain admin-gated below.
     """
     ctx = trace_request(request, service="sdk_config")
     caller = request.state.tenant
-    caller.require_permission("admin")
 
     svc = get_sdk_config_service()
     manifest = await svc.get_active_manifest(caller.tenant_id)

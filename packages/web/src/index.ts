@@ -67,6 +67,8 @@ class AetherSDK implements AetherSDKInterface {
   private healthAgent: SDKHealthAgent | null = null;
   private healthAgentConsentUnsub: (() => void) | null = null;
   private sdkInstanceId: string | null = null;
+  /** Remote-config feature switches from the active manifest (empty = all on). */
+  private remoteFeatures: Record<string, boolean> = {};
   private currentJourney: CurrentJourney | null = null;
   private journeyResumeListeners: Array<(identity: ResolvedIdentity) => void> = [];
   private lastJourneyPauseAt: number | null = null;
@@ -599,10 +601,34 @@ class AetherSDK implements AetherSDKInterface {
 
   /** Apply a remote-config manifest received from the backend to live modules. */
   private applyRemoteManifest(manifest: RemoteSDKManifest): void {
-    if (manifest.features && this.featureFlags) {
-      this.featureFlags.applyManifestFeatures(manifest.features);
+    if (manifest.features) {
+      // Stored on the SDK itself so built-in analytics/web3/commerce emission is
+      // gated even when the optional FeatureFlagModule is not enabled.
+      this.remoteFeatures = { ...manifest.features };
+      // Mirror into the cache-only flag module when the app opted into it.
+      this.featureFlags?.applyManifestFeatures(manifest.features);
     }
     this.log('info', `Applied SDK manifest v${manifest.manifest_version}`);
+  }
+
+  /**
+   * Built-in feature category an event belongs to, for remote-config gating.
+   * Returns null for events not governed by a manifest feature switch.
+   */
+  private static featureForEvent(type: string): string | null {
+    if (type.startsWith('agent_') || type === 'a2h_interaction') return 'agent';
+    if (type.startsWith('payment_') || type.startsWith('approval_')
+      || type.startsWith('entitlement_') || type.startsWith('access_')
+      || type === 'x402_payment') return 'commerce';
+    if (type === 'wallet' || type === 'transaction' || type === 'contract_action') return 'web3';
+    if (type === 'consent') return null; // never suppress consent signals
+    return 'analytics';
+  }
+
+  /** Whether an event type is explicitly disabled by the active remote manifest. */
+  private isRemotelyDisabled(type: string): boolean {
+    const feature = AetherSDK.featureForEvent(type);
+    return feature !== null && this.remoteFeatures[feature] === false;
   }
 
   /** Fetch configuration from backend (feature flags, funnel definitions, etc.) */
@@ -659,9 +685,6 @@ class AetherSDK implements AetherSDKInterface {
       headers: config.advanced?.customHeaders ?? {},
       onError: (err) => this.log('error', 'Event send failed:', err.message),
       // Feed real ingestion metrics into the fleet-health heartbeat.
-      onDropped: (count) => {
-        for (let i = 0; i < count; i++) this.healthAgent?.recordDroppedEvent();
-      },
       onAttempt: (latencyMs, success) => this.healthAgent?.recordAttempt(latencyMs, success),
     });
 
@@ -814,6 +837,12 @@ class AetherSDK implements AetherSDKInterface {
 
   private enqueueEvent(type: string, properties: Record<string, unknown>): void {
     if (!this.eventQueue || !this.identityManager || !this.sessionManager) return;
+
+    // Honor remote-config feature switches published from the tenant fleet UI.
+    if (this.isRemotelyDisabled(type)) {
+      this.log('debug', `Event suppressed by remote manifest: ${type}`);
+      return;
+    }
 
     const session = this.sessionManager.getSession();
     const identity = this.identityManager.getIdentity();

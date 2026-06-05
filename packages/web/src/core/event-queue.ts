@@ -19,8 +19,6 @@ interface QueueConfig {
   retry: Required<RetryConfig>;
   headers: Record<string, string>;
   onError?: (error: Error, events: AetherEvent[]) => void;
-  /** Called when events are filtered out by consent (reported to fleet health). */
-  onDropped?: (count: number) => void;
   /** Called after each batch send attempt with round-trip latency and success. */
   onAttempt?: (latencyMs: number, success: boolean) => void;
 }
@@ -78,7 +76,6 @@ export class EventQueue {
       endpoint: config.endpoint,
       apiKey: config.apiKey,
       onError: config.onError,
-      onDropped: config.onDropped,
       onAttempt: config.onAttempt,
     };
     this.restoreQueue();
@@ -104,9 +101,8 @@ export class EventQueue {
     const batch = this.queue.splice(0, this.config.batchSize);
     const allowedEvents = this.filterByConsent(batch);
 
-    const droppedByConsent = batch.length - allowedEvents.length;
-    if (droppedByConsent > 0) this.config.onDropped?.(droppedByConsent);
-
+    // Consent filtering is intentional, not an ingestion failure — it must not
+    // count against health metrics, so it is deliberately not reported as a drop.
     if (allowedEvents.length === 0) {
       this.isFlushing = false;
       return;

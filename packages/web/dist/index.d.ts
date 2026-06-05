@@ -29,6 +29,8 @@ declare class AetherSDK implements AetherSDKInterface {
     private healthAgent;
     private healthAgentConsentUnsub;
     private sdkInstanceId;
+    /** Remote-config feature switches from the active manifest (empty = all on). */
+    private remoteFeatures;
     private currentJourney;
     private journeyResumeListeners;
     private lastJourneyPauseAt;
@@ -83,6 +85,13 @@ declare class AetherSDK implements AetherSDKInterface {
     private launchHealthAgent;
     /** Apply a remote-config manifest received from the backend to live modules. */
     private applyRemoteManifest;
+    /**
+     * Built-in feature category an event belongs to, for remote-config gating.
+     * Returns null for events not governed by a manifest feature switch.
+     */
+    private static featureForEvent;
+    /** Whether an event type is explicitly disabled by the active remote manifest. */
+    private isRemotelyDisabled;
     /** Fetch configuration from backend (feature flags, funnel definitions, etc.) */
     private fetchConfig;
     private initCore;
