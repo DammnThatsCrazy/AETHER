@@ -14,6 +14,7 @@ export * from './agent';
 export * from './events';
 export * from './capabilities';
 export * from './economic';
+export * from './economic-metrics';
 export * from './contextual';
 export * from './graph-relationships';
 export * from './intelligence';

@@ -912,6 +912,19 @@
       "canonical_owner": "platform@aether"
     },
     {
+      "path": "docs/ECONOMIC-VALUE-FRAMING.md",
+      "title": "Economic Value Framing",
+      "slug": "concepts/economic-value-framing",
+      "section": "concepts",
+      "visibility": "P",
+      "audience": [
+        "dev-senior",
+        "architect"
+      ],
+      "status": "stable",
+      "since_version": "8.9.0"
+    },
+    {
       "path": "docs/ENTERPRISE-PACKAGING.md",
       "title": "Enterprise Packaging",
       "slug": "enterprise/enterprise-packaging",
@@ -1450,6 +1463,19 @@
       "flags": [
         "AETHER_CONNECTORS_ENABLED"
       ]
+    },
+    {
+      "path": "docs/KYBER-ECONOMIC-OBSERVABILITY.md",
+      "title": "Kyber Economic Observability",
+      "slug": "concepts/kyber-economic-observability",
+      "section": "kyber",
+      "visibility": "I",
+      "audience": [
+        "dev-senior",
+        "ops"
+      ],
+      "status": "stable",
+      "since_version": "8.9.0"
     },
     {
       "path": "docs/KYBER-REVENUE-INTELLIGENCE.md",
@@ -2831,6 +2857,32 @@
       "since_version": "8.9.0",
       "estimated_read_minutes": 5,
       "canonical_owner": "platform@aether"
+    },
+    {
+      "path": "docs/TVL-GMV-REVENUE-METRICS.md",
+      "title": "TVL vs GMV vs Revenue Metrics",
+      "slug": "concepts/tvl-gmv-revenue-metrics",
+      "section": "concepts",
+      "visibility": "P",
+      "audience": [
+        "dev-senior",
+        "architect"
+      ],
+      "status": "stable",
+      "since_version": "8.9.0"
+    },
+    {
+      "path": "docs/UNIFIED-ECONOMIC-GRAPH.md",
+      "title": "Unified Economic Graph",
+      "slug": "concepts/unified-economic-graph",
+      "section": "concepts",
+      "visibility": "P",
+      "audience": [
+        "dev-senior",
+        "architect"
+      ],
+      "status": "stable",
+      "since_version": "8.9.0"
     },
     {
       "path": "docs/USAGE-METERING.md",

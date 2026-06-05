@@ -169,6 +169,7 @@ from services.identity.routes import router as identity_router
 from services.analytics.routes import router as analytics_router
 from services.ml_serving.routes import router as ml_router
 from services.campaign.routes import router as campaign_router
+from services.economic.routes import router as economic_router
 from services.consent.routes import router as consent_router
 from services.notification_intelligence.routes import router as notification_router
 from services.admin.routes import router as admin_router
@@ -396,6 +397,7 @@ def create_app() -> FastAPI:
     app.include_router(analytics_router)
     app.include_router(ml_router)
     app.include_router(campaign_router)
+    app.include_router(economic_router)
     app.include_router(consent_router)
     app.include_router(notification_router)
     app.include_router(admin_router)
