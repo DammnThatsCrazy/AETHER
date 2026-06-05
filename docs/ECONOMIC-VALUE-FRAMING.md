@@ -1,3 +1,20 @@
+---
+title: Economic Value Framing
+slug: concepts/economic-value-framing
+section: concepts
+visibility: P
+audience: [dev-senior, product]
+status: stable
+since_version: "8.9.0"
+source_files:
+  - packages/shared/economic-metrics.ts
+  - Backend Architecture/aether-backend/services/economic/routes.py
+related:
+  - concepts/unified-economic-graph
+  - concepts/tvl-gmv-revenue-metrics
+  - concepts/kyber-economic-observability
+---
+
 # Aether — Economic Value Framing
 
 ## Strategic Distinction

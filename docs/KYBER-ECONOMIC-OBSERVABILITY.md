@@ -1,3 +1,19 @@
+---
+title: Kyber Economic Observability
+slug: concepts/kyber-economic-observability
+section: kyber
+visibility: I
+audience: [dev-senior, ops]
+status: stable
+since_version: "8.9.0"
+source_files:
+  - Backend Architecture/aether-backend/services/economic/routes.py
+  - packages/shared/economic-metrics.ts
+related:
+  - concepts/economic-value-framing
+  - concepts/unified-economic-graph
+---
+
 # Aether — Kyber Economic Observability
 
 ## Overview

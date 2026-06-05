@@ -84,7 +84,7 @@ export type EconomicValueDomain =
   | 'hybrid'
   | 'internal';
 
-export type AttributionModel =
+export type EconomicAttributionModel =
   | 'first_touch'
   | 'last_touch'
   | 'linear'
@@ -125,7 +125,7 @@ export interface EconomicMetricProvenance {
   block_number?: number;
   transaction_hash?: string;
   pricing_source?: string;
-  attribution_model?: AttributionModel;
+  attribution_model?: EconomicAttributionModel;
   confidence?: number;
   computed_at: string;
 }
@@ -282,7 +282,7 @@ export interface CampaignEconomicMetrics {
   cac?: EconomicMetricAmount;
   ltv?: EconomicMetricAmount;
   payback_period_days?: number;
-  attribution_model: AttributionModel;
+  attribution_model: EconomicAttributionModel;
   attribution_window: AttributionWindow;
   attribution_confidence?: number;
   influenced_wallet_connects?: number;
@@ -442,8 +442,9 @@ export function sumAmounts(
     total.normalized_currency = 'USD';
   }
   if (currencies.length === 1) {
-    total.native_currency = currencies[0];
-    total.native_amount = byCurrency[currencies[0]];
+    const key = currencies[0]!;
+    total.native_currency = key;
+    total.native_amount = byCurrency[key]!;
   }
 
   return { total, byCurrency, warnings };
@@ -575,78 +576,89 @@ export function buildUnifiedBreakdown(input: BuildBreakdownInput): UnifiedEconom
   const warnings: EconomicMetricWarning[] = [];
   const tvoComponents: EconomicMetricAmount[] = [];
 
-  const web2 = input.web2 ? {
-    gmv: input.web2.gmv,
-    tpv: input.web2.tpv,
-    revenue: input.web2.revenue,
-    net_revenue: input.web2.net_revenue,
-    arr: input.web2.arr,
-    mrr: input.web2.mrr,
-  } : undefined;
-
-  if (input.web2?.revenue) tvoComponents.push(input.web2.revenue);
-  if (input.web2) warnings.push(...input.web2.warnings);
-
-  const web3: UnifiedEconomicBreakdown['web3'] = {};
-  if (input.web3_tvl) {
-    web3.tvl = { usd_amount: input.web3_tvl.total_tvl_usd, normalized_currency: 'USD' };
-    tvoComponents.push(web3.tvl);
-    warnings.push(...input.web3_tvl.warnings);
-  }
-  if (input.web3_exposure) {
-    web3.protocol_exposure = { usd_amount: input.web3_exposure.total_exposure_usd, normalized_currency: 'USD' };
-    tvoComponents.push(web3.protocol_exposure);
-    warnings.push(...input.web3_exposure.warnings);
+  let web2: UnifiedEconomicBreakdown['web2'];
+  if (input.web2) {
+    const w2: NonNullable<UnifiedEconomicBreakdown['web2']> = {};
+    if (input.web2.gmv) w2.gmv = input.web2.gmv;
+    if (input.web2.tpv) w2.tpv = input.web2.tpv;
+    if (input.web2.revenue) { w2.revenue = input.web2.revenue; tvoComponents.push(input.web2.revenue); }
+    if (input.web2.net_revenue) w2.net_revenue = input.web2.net_revenue;
+    if (input.web2.arr) w2.arr = input.web2.arr;
+    if (input.web2.mrr) w2.mrr = input.web2.mrr;
+    web2 = w2;
+    warnings.push(...input.web2.warnings);
   }
 
-  const agentic = input.agent ? {
-    authorized_budget: input.agent.authorized_budget,
-    spend: input.agent.spend,
-    remaining_budget: input.agent.remaining_budget,
-    revenue_generated: input.agent.revenue_generated,
-    x402_settlement_value: input.agent.x402_settlement_value,
-    internal_credit_flow: input.agent.internal_credit_flow,
-  } : undefined;
+  let web3: UnifiedEconomicBreakdown['web3'];
+  if (input.web3_tvl || input.web3_exposure) {
+    const w3: NonNullable<UnifiedEconomicBreakdown['web3']> = {};
+    if (input.web3_tvl && input.web3_tvl.total_tvl_usd !== undefined) {
+      const tvlAmt: EconomicMetricAmount = { usd_amount: input.web3_tvl.total_tvl_usd, normalized_currency: 'USD' };
+      w3.tvl = tvlAmt;
+      tvoComponents.push(tvlAmt);
+      warnings.push(...input.web3_tvl.warnings);
+    }
+    if (input.web3_exposure && input.web3_exposure.total_exposure_usd !== undefined) {
+      const expAmt: EconomicMetricAmount = { usd_amount: input.web3_exposure.total_exposure_usd, normalized_currency: 'USD' };
+      w3.protocol_exposure = expAmt;
+      tvoComponents.push(expAmt);
+      warnings.push(...input.web3_exposure.warnings);
+    }
+    web3 = w3;
+  }
 
-  if (input.agent?.spend) tvoComponents.push(input.agent.spend);
-  if (input.agent?.x402_settlement_value) tvoComponents.push(input.agent.x402_settlement_value);
-  if (input.agent) warnings.push(...input.agent.warnings);
+  let agentic: UnifiedEconomicBreakdown['agentic'];
+  if (input.agent) {
+    const ag: NonNullable<UnifiedEconomicBreakdown['agentic']> = {};
+    if (input.agent.authorized_budget) ag.authorized_budget = input.agent.authorized_budget;
+    if (input.agent.spend) { ag.spend = input.agent.spend; tvoComponents.push(input.agent.spend); }
+    if (input.agent.remaining_budget) ag.remaining_budget = input.agent.remaining_budget;
+    if (input.agent.revenue_generated) ag.revenue_generated = input.agent.revenue_generated;
+    if (input.agent.x402_settlement_value) { ag.x402_settlement_value = input.agent.x402_settlement_value; tvoComponents.push(input.agent.x402_settlement_value); }
+    if (input.agent.internal_credit_flow) ag.internal_credit_flow = input.agent.internal_credit_flow;
+    agentic = ag;
+    warnings.push(...input.agent.warnings);
+  }
 
-  let campaignSummary: UnifiedEconomicBreakdown['campaigns'] | undefined;
+  let campaigns: UnifiedEconomicBreakdown['campaigns'];
   if (input.campaigns && input.campaigns.length > 0) {
     const allSpends = input.campaigns.map(c => c.spend).filter(Boolean);
     const allRevenues = input.campaigns.map(c => c.attributed_revenue).filter((a): a is EconomicMetricAmount => !!a);
     const totalConversions = input.campaigns.reduce((sum, c) => sum + (c.conversions ?? 0), 0);
     const spendResult = sumAmounts(allSpends);
     const revenueResult = sumAmounts(allRevenues);
-    campaignSummary = {
-      spend: spendResult.total,
-      attributed_revenue: revenueResult.total,
-      roas: computeROAS(revenueResult.total, spendResult.total),
-      conversions: totalConversions || undefined,
-    };
+    const cs: NonNullable<UnifiedEconomicBreakdown['campaigns']> = {};
+    cs.spend = spendResult.total;
+    cs.attributed_revenue = revenueResult.total;
+    const roas = computeROAS(revenueResult.total, spendResult.total);
+    if (roas !== undefined) cs.roas = roas;
+    if (totalConversions > 0) cs.conversions = totalConversions;
+    campaigns = cs;
     if (spendResult.total) tvoComponents.push(spendResult.total);
     for (const c of input.campaigns) warnings.push(...c.warnings);
   }
 
   const { total: tvo, byCurrency, warnings: sumWarnings } = sumAmounts(tvoComponents);
 
-  return {
+  const result: UnifiedEconomicBreakdown = {
     entity_id: input.entity_id,
     entity_type: input.entity_type,
     tenant_id: input.tenant_id,
     window: input.window,
     total_value_observed: tvo,
-    web2,
-    web3: (web3.tvl || web3.protocol_exposure) ? web3 : undefined,
-    agentic,
-    campaigns: campaignSummary,
-    byCurrency: Object.keys(byCurrency).length > 0
-      ? Object.fromEntries(Object.entries(byCurrency).map(([k, v]) => [k, { native_amount: v, native_currency: k }]))
-      : undefined,
     warnings: [...warnings, ...sumWarnings],
     computed_at: input.computed_at ?? new Date().toISOString(),
   };
+  if (web2) result.web2 = web2;
+  if (web3) result.web3 = web3;
+  if (agentic) result.agentic = agentic;
+  if (campaigns) result.campaigns = campaigns;
+  if (Object.keys(byCurrency).length > 0) {
+    result.byCurrency = Object.fromEntries(
+      Object.entries(byCurrency).map(([k, v]) => [k, { native_amount: v, native_currency: k }]),
+    );
+  }
+  return result;
 }
 
 // ---------------------------------------------------------------------------

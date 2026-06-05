@@ -1,3 +1,19 @@
+---
+title: Unified Economic Graph
+slug: concepts/unified-economic-graph
+section: concepts
+visibility: P
+audience: [dev-senior, product]
+status: stable
+since_version: "8.9.0"
+source_files:
+  - packages/shared/economic-metrics.ts
+  - packages/shared/graph-relationships.ts
+related:
+  - concepts/economic-value-framing
+  - concepts/tvl-gmv-revenue-metrics
+---
+
 # Aether — Unified Economic Graph
 
 ## Overview

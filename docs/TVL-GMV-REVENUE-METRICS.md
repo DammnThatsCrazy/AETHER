@@ -1,3 +1,18 @@
+---
+title: TVL vs GMV vs Revenue Metrics
+slug: concepts/tvl-gmv-revenue-metrics
+section: concepts
+visibility: P
+audience: [dev-senior, product]
+status: stable
+since_version: "8.9.0"
+source_files:
+  - packages/shared/economic-metrics.ts
+related:
+  - concepts/economic-value-framing
+  - concepts/unified-economic-graph
+---
+
 # Aether — TVL vs. GMV vs. Revenue Metric Guide
 
 ## Definitions
