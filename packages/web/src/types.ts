@@ -27,6 +27,8 @@ export interface AetherConfig {
   apiKey: string;
   /** Deployment environment */
   environment?: 'production' | 'staging' | 'development';
+  /** Host application version, reported in SDK fleet heartbeats */
+  appVersion?: string;
   /** Enable debug logging */
   debug?: boolean;
   /** Data collection endpoint override */
