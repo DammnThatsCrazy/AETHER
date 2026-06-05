@@ -9,6 +9,7 @@ import { ErrorBoundary } from './error-boundary';
 const MissionPage = lazy(() => import('@kyber/pages/mission').then(m => ({ default: m.MissionPage })));
 const LivePage = lazy(() => import('@kyber/pages/live').then(m => ({ default: m.LivePage })));
 const NoesisPage = lazy(() => import('@kyber/pages/noesis').then(m => ({ default: m.NoesisPage })));
+const NoesisGraphExplorerPage = lazy(() => import('@kyber/pages/noesis').then(m => ({ default: m.NoesisGraphExplorerPage })));
 const EntitiesPage = lazy(() => import('@kyber/pages/entities').then(m => ({ default: m.EntitiesPage })));
 const CommandPage = lazy(() => import('@kyber/pages/command').then(m => ({ default: m.CommandPage })));
 const DiagnosticsPage = lazy(() => import('@kyber/pages/diagnostics').then(m => ({ default: m.DiagnosticsPage })));
@@ -60,6 +61,7 @@ export function AppRouter() {
                 <Route path="/mission" element={<PageSuspense><MissionPage /></PageSuspense>} />
                 <Route path="/live" element={<PageSuspense><LivePage /></PageSuspense>} />
                 <Route path="/noesis" element={<PageSuspense><NoesisPage /></PageSuspense>} />
+                <Route path="/noesis/graph" element={<PageSuspense><NoesisGraphExplorerPage /></PageSuspense>} />
                 <Route path="/entities" element={<PageSuspense><EntitiesPage /></PageSuspense>} />
                 <Route path="/entities/:type/:id" element={<PageSuspense><EntitiesPage /></PageSuspense>} />
                 <Route path="/profile360/:type/:id" element={<PageSuspense><Profile360Page /></PageSuspense>} />

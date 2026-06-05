@@ -20,6 +20,17 @@ export interface SDKHealthAgentConfig {
     rolloutCohort?: string;
     /** Secret for HMAC signing (must match SDK_CONFIG_SECRET on backend) */
     signingSecret?: string;
+    /** Extra HTTP headers (e.g. gateway/proxy headers) merged into every request. */
+    customHeaders?: Record<string, string>;
+    /**
+     * Provides live auth/consent/wallet state at heartbeat time so the fleet view
+     * reflects reality rather than optimistic defaults. Called on each heartbeat.
+     */
+    getDynamicState?: () => {
+        authValid: boolean;
+        consentValid: boolean;
+        walletConnected: boolean;
+    };
 }
 export interface SDKHeartbeatPayload {
     sdk_id: string;

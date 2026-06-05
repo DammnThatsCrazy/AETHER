@@ -566,7 +566,7 @@ export function MissionPage() {
         </Card>
 
         {/* Graph Mini-Map Teaser */}
-        <Card className="cursor-pointer hover:border-accent transition-colors" onClick={() => window.location.href = '/noesis'}>
+        <Card className="cursor-pointer hover:border-accent transition-colors" onClick={() => window.location.href = '/noesis/graph'}>
           <CardHeader>
             <CardTitle>Graph Overview</CardTitle>
           </CardHeader>

@@ -182,7 +182,7 @@ export function Profile360GraphView({ entity, neighborhood, onDrill }: { readonl
       <Card>
         <CardHeader>
           <CardTitle>Graph Visualization</CardTitle>
-          <a href={`/noesis?focus=${entity.id}`} className="text-sm text-blue-400 hover:text-blue-300 underline">Open in Noesis →</a>
+          <a href={`/noesis/graph?focus=${entity.id}`} className="text-sm text-blue-400 hover:text-blue-300 underline">Open in Noesis →</a>
         </CardHeader>
         <CardContent>
           <div className="h-[420px]">

@@ -469,7 +469,7 @@ export function Entity360View({
               <div className="flex items-center justify-between">
                 <CardTitle>Graph Neighborhood</CardTitle>
                 <a
-                  href={`/noesis?focus=${entity.id}`}
+                  href={`/noesis?focus=${encodeURIComponent(entity.id)}`}
                   className="text-sm text-blue-400 hover:text-blue-300 underline"
                 >
                   View in Noesis &rarr;

@@ -26,8 +26,11 @@ declare class AetherSDK implements AetherSDKInterface {
     private initialized;
     private debug;
     private _lastEmailHash;
-    private heartbeatTimer;
+    private healthAgent;
+    private healthAgentConsentUnsub;
     private sdkInstanceId;
+    /** Remote-config feature switches from the active manifest (empty = all on). */
+    private remoteFeatures;
     private currentJourney;
     private journeyResumeListeners;
     private lastJourneyPauseAt;
@@ -70,10 +73,25 @@ declare class AetherSDK implements AetherSDKInterface {
     use(plugin: AetherPlugin): void;
     /** Stable per-install SDK instance id, persisted across reloads. */
     private getSdkInstanceId;
-    /** Begin periodic self-identification heartbeats to the SDK fleet endpoint. */
-    private startHeartbeat;
-    /** Report this SDK instance's identity and health to the backend fleet. */
-    private sendHeartbeat;
+    /**
+     * Start the SDK health agent (fleet heartbeats + remote-config manifest).
+     *
+     * Honors privacy settings: skips entirely under DNT, and for opt-in
+     * deployments (GDPR mode / opt-in cookie consent) waits until analytics
+     * consent is granted before reporting any identity or metadata.
+     */
+    private startHealthAgent;
+    /** Instantiate and start the health agent (idempotent). */
+    private launchHealthAgent;
+    /** Apply a remote-config manifest received from the backend to live modules. */
+    private applyRemoteManifest;
+    /**
+     * Built-in feature category an event belongs to, for remote-config gating.
+     * Returns null for events not governed by a manifest feature switch.
+     */
+    private static featureForEvent;
+    /** Whether an event type is explicitly disabled by the active remote manifest. */
+    private isRemotelyDisabled;
     /** Fetch configuration from backend (feature flags, funnel definitions, etc.) */
     private fetchConfig;
     private initCore;

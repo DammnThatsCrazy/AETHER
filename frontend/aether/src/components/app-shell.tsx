@@ -96,6 +96,7 @@ export function AppShell({ children }: AppShellProps) {
           <NavItem to="/users" label="Users" glyph="[u]" />
           <NavItem to="/campaigns" label="Campaigns" glyph="[c]" />
           <NavItem to="/graph" label="Graph" glyph="[g]" />
+          <NavItem to="/noesis" label="Noesis" glyph="[n]" />
           <NavItem to="/onboarding" label="Onboarding" glyph="[on]" />
           <NavItem to="/settings" label="Settings" glyph="[:]" />
           <NavItem to="/billing" label="Billing" glyph="[$]" />

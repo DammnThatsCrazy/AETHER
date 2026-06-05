@@ -34,6 +34,8 @@ import { FunnelModule } from './modules/funnels';
 import type { FunnelDefinition } from './modules/funnels';
 import { PerformanceModule } from './modules/performance';
 import { DeviceFingerprintCollector } from './core/fingerprint';
+import { SDKHealthAgent } from './health/sdk-health-agent';
+import type { SDKManifest as RemoteSDKManifest } from './health/sdk-health-agent';
 import { generateId, now, getPageContext, getDeviceContext, getCampaignContext } from './utils';
 import { createModuleProxy } from './utils/module-proxy';
 
@@ -62,8 +64,11 @@ class AetherSDK implements AetherSDKInterface {
   private initialized = false;
   private debug = false;
   private _lastEmailHash: string | undefined = undefined;
-  private heartbeatTimer: ReturnType<typeof setInterval> | null = null;
+  private healthAgent: SDKHealthAgent | null = null;
+  private healthAgentConsentUnsub: (() => void) | null = null;
   private sdkInstanceId: string | null = null;
+  /** Remote-config feature switches from the active manifest (empty = all on). */
+  private remoteFeatures: Record<string, boolean> = {};
   private currentJourney: CurrentJourney | null = null;
   private journeyResumeListeners: Array<(identity: ResolvedIdentity) => void> = [];
   private lastJourneyPauseAt: number | null = null;
@@ -107,13 +112,14 @@ class AetherSDK implements AetherSDKInterface {
     this.setupSPATracking();
     this.setupJourneyLifecycleTracking();
 
-    // Self-identify to the backend SDK fleet so tenants can see and manage
-    // this instance from their Aether settings (health, version, platform).
-    this.startHeartbeat();
-
     if (config.privacy?.respectDNT && navigator.doNotTrack === '1') {
       this.log('info', 'DNT detected — limiting data collection');
     }
+
+    // Self-identify to the backend SDK fleet and apply remote config. Gated on
+    // analytics consent + DNT so it never collects ahead of the SDK's own
+    // pre-consent guard.
+    this.startHealthAgent();
 
     this.initialized = true;
     this.log('info', 'Aether SDK v7.0.0 initialized — Tier 2 thin client');
@@ -298,10 +304,13 @@ class AetherSDK implements AetherSDKInterface {
 
   destroy(): void {
     this.log('info', 'Destroying Aether SDK');
-    if (this.heartbeatTimer !== null) {
-      clearInterval(this.heartbeatTimer);
-      this.heartbeatTimer = null;
-    }
+    this.healthAgentConsentUnsub?.();
+    this.healthAgentConsentUnsub = null;
+    this.healthAgent?.stop();
+    this.healthAgent = null;
+    // Clear remote manifest state so a subsequent init() for a different
+    // tenant/key starts from defaults rather than the prior manifest's switches.
+    this.remoteFeatures = {};
     this.flush();
     this.autoDiscovery?.destroy();
     this.consentModule?.destroy();
@@ -533,37 +542,96 @@ class AetherSDK implements AetherSDKInterface {
     return this.sdkInstanceId;
   }
 
-  /** Begin periodic self-identification heartbeats to the SDK fleet endpoint. */
-  private startHeartbeat(): void {
-    if (typeof window === 'undefined') return;
-    // Send one immediately, then on a fixed interval.
-    void this.sendHeartbeat();
-    this.heartbeatTimer = setInterval(() => { void this.sendHeartbeat(); }, 60_000);
+  /**
+   * Start the SDK health agent (fleet heartbeats + remote-config manifest).
+   *
+   * Honors privacy settings: skips entirely under DNT, and for opt-in
+   * deployments (GDPR mode / opt-in cookie consent) waits until analytics
+   * consent is granted before reporting any identity or metadata.
+   */
+  private startHealthAgent(): void {
+    if (typeof window === 'undefined' || !this.config) return;
+
+    if (this.config.privacy?.respectDNT && navigator.doNotTrack === '1') {
+      this.log('info', 'Health agent disabled — Do Not Track is enabled');
+      return;
+    }
+
+    const requiresOptIn =
+      this.config.privacy?.gdprMode === true ||
+      this.config.privacy?.cookieConsent === 'opt-in';
+
+    if (requiresOptIn && !(this.consentModule?.hasConsent('analytics') ?? false)) {
+      // Defer until the visitor grants analytics consent, then start once.
+      this.healthAgentConsentUnsub = this.consentModule?.onUpdate(() => {
+        if (this.consentModule?.hasConsent('analytics')) {
+          this.launchHealthAgent();
+        }
+      }) ?? null;
+      return;
+    }
+
+    this.launchHealthAgent();
   }
 
-  /** Report this SDK instance's identity and health to the backend fleet. */
-  private async sendHeartbeat(): Promise<void> {
-    if (!this.config) return;
+  /** Instantiate and start the health agent (idempotent). */
+  private launchHealthAgent(): void {
+    if (this.healthAgent || !this.config) return;
+    // Consent satisfied (or not required) — stop listening for further changes.
+    this.healthAgentConsentUnsub?.();
+    this.healthAgentConsentUnsub = null;
+
     const endpoint = this.config.endpoint ?? DEFAULT_ENDPOINT;
-    try {
-      await fetch(`${endpoint}/v1/diagnostics/sdk/heartbeat`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${this.config.apiKey}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          sdk_id: this.getSdkInstanceId(),
-          sdk_version: SDK_VERSION,
-          platform: 'web',
-          app_version: this.config.appVersion ?? '',
-          queue_depth: this.eventQueue?.size ?? 0,
+    this.healthAgent = new SDKHealthAgent(
+      {
+        endpoint,
+        apiKey: this.config.apiKey,
+        sdkId: this.getSdkInstanceId(),
+        appVersion: this.config.appVersion ?? '',
+        platform: 'web',
+        customHeaders: this.config.advanced?.customHeaders ?? {},
+        getDynamicState: () => ({
+          authValid: true,
+          consentValid: this.consentModule?.hasConsent('analytics') ?? true,
+          walletConnected: (this.identityManager?.getWallets().length ?? 0) > 0,
         }),
-        keepalive: true,
-      });
-    } catch {
-      // Non-fatal — fleet visibility is best-effort and must never block the app.
+      },
+      this.eventQueue!,
+    );
+    this.healthAgent.onManifestUpdate((manifest) => this.applyRemoteManifest(manifest));
+    this.healthAgent.start();
+  }
+
+  /** Apply a remote-config manifest received from the backend to live modules. */
+  private applyRemoteManifest(manifest: RemoteSDKManifest): void {
+    if (manifest.features) {
+      // Stored on the SDK itself so built-in analytics/web3/commerce emission is
+      // gated even when the optional FeatureFlagModule is not enabled.
+      this.remoteFeatures = { ...manifest.features };
+      // Mirror into the cache-only flag module when the app opted into it.
+      this.featureFlags?.applyManifestFeatures(manifest.features);
     }
+    this.log('info', `Applied SDK manifest v${manifest.manifest_version}`);
+  }
+
+  /**
+   * Built-in feature category an event belongs to, for remote-config gating.
+   * Returns null for events not governed by a manifest feature switch.
+   */
+  private static featureForEvent(type: string): string | null {
+    if (type.startsWith('agent_') || type === 'a2h_interaction') return 'agent';
+    if (type.startsWith('payment_') || type.startsWith('approval_')
+      || type.startsWith('entitlement_') || type.startsWith('access_')
+      || type === 'x402_payment' || type === 'conversion') return 'commerce';
+    if (type === 'wallet' || type === 'transaction' || type === 'contract_action') return 'web3';
+    if (type === 'consent') return null; // never suppress consent signals
+    return 'analytics';
+  }
+
+  /** Whether an event type is explicitly disabled by the active remote manifest. */
+  private isRemotelyDisabled(type: string): boolean {
+    const feature = AetherSDK.featureForEvent(type);
+    return feature !== null && this.remoteFeatures[feature] === false;
   }
 
   /** Fetch configuration from backend (feature flags, funnel definitions, etc.) */
@@ -619,6 +687,8 @@ class AetherSDK implements AetherSDKInterface {
       retry: config.advanced?.retry,
       headers: config.advanced?.customHeaders ?? {},
       onError: (err) => this.log('error', 'Event send failed:', err.message),
+      // Feed real ingestion metrics into the fleet-health heartbeat.
+      onAttempt: (latencyMs, success) => this.healthAgent?.recordAttempt(latencyMs, success),
     });
 
     this.consentModule = new ConsentModule({
@@ -770,6 +840,12 @@ class AetherSDK implements AetherSDKInterface {
 
   private enqueueEvent(type: string, properties: Record<string, unknown>): void {
     if (!this.eventQueue || !this.identityManager || !this.sessionManager) return;
+
+    // Honor remote-config feature switches published from the tenant fleet UI.
+    if (this.isRemotelyDisabled(type)) {
+      this.log('debug', `Event suppressed by remote manifest: ${type}`);
+      return;
+    }
 
     const session = this.sessionManager.getSession();
     const identity = this.identityManager.getIdentity();
