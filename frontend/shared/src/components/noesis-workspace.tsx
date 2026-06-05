@@ -24,7 +24,6 @@ export interface NoesisGraphPayload {
 }
 
 export interface NoesisResponsePayload {
-  readonly conversation_id?: string | undefined;
   readonly answer: string;
   readonly mode: 'deterministic' | 'llm_text_to_query' | 'fallback';
   readonly intent: string;
@@ -45,14 +44,6 @@ export interface NoesisMessageItem {
   readonly response?: NoesisResponsePayload | undefined;
 }
 
-export interface NoesisConversationSummary {
-  readonly conversation_id: string;
-  readonly title: string;
-  readonly updated_at?: string | undefined;
-  readonly message_count?: number | undefined;
-  readonly last_message?: string | undefined;
-}
-
 interface NoesisWorkspaceProps {
   readonly title: string;
   readonly subtitle: string;
@@ -64,13 +55,6 @@ interface NoesisWorkspaceProps {
   readonly surfaceTone: 'kyber' | 'aether';
   readonly emptyTitle: string;
   readonly emptyDescription: string;
-  readonly conversations?: readonly NoesisConversationSummary[] | undefined;
-  readonly activeConversationId?: string | undefined;
-  readonly isHistoryLoading?: boolean | undefined;
-  readonly onSelectConversation?: ((conversationId: string) => Promise<void> | void) | undefined;
-  readonly onNewConversation?: (() => void) | undefined;
-  readonly onDeleteConversation?: ((conversationId: string) => Promise<void> | void) | undefined;
-  readonly onExportConversations?: (() => Promise<void> | void) | undefined;
   readonly onSubmit: (message: string) => Promise<void> | void;
 }
 
@@ -206,13 +190,6 @@ export function NoesisWorkspace({
   surfaceTone,
   emptyTitle,
   emptyDescription,
-  conversations,
-  activeConversationId,
-  isHistoryLoading,
-  onSelectConversation,
-  onNewConversation,
-  onDeleteConversation,
-  onExportConversations,
   onSubmit,
 }: NoesisWorkspaceProps) {
   const hasMessages = messages.length > 0;
@@ -227,90 +204,33 @@ export function NoesisWorkspace({
           <p className="text-[10px] uppercase tracking-widest text-text-muted font-mono">{accent}</p>
         </header>
 
-        <div className="grid gap-4 lg:grid-cols-[260px_minmax(0,1fr)]">
-          {conversations ? (
-            <aside className="rounded-2xl border border-border-default bg-surface-raised/70 p-3">
-              <div className="mb-3 flex items-center justify-between gap-2">
-                <div>
-                  <h2 className="text-sm font-medium text-text-primary">History</h2>
-                  <p className="text-[10px] text-text-muted font-mono">Tenant-scoped turns</p>
-                </div>
-                <div className="flex items-center gap-1">
-                  {onExportConversations ? <Button variant="ghost" size="sm" onClick={onExportConversations}>Export</Button> : null}
-                  {onNewConversation ? <Button variant="ghost" size="sm" onClick={onNewConversation}>New</Button> : null}
-                </div>
-              </div>
-              {isHistoryLoading ? <LoadingState lines={3} /> : null}
-              {!isHistoryLoading && conversations.length === 0 ? (
-                <p className="text-xs text-text-muted">No previous Noesis conversations.</p>
-              ) : null}
-              <div className="space-y-2">
-                {conversations.map(conversation => (
+        <PromptForm placeholder={placeholder} isLoading={isLoading} onSubmit={onSubmit} />
+
+        {!hasMessages ? (
+          <Card className="bg-surface-raised/60">
+            <CardContent className="space-y-4 py-6">
+              <EmptyState title={emptyTitle} description={emptyDescription} />
+              <div className="grid gap-2 md:grid-cols-2 lg:grid-cols-3">
+                {suggestedPrompts.map(prompt => (
                   <button
-                    key={conversation.conversation_id}
+                    key={prompt}
                     type="button"
-                    onClick={() => void onSelectConversation?.(conversation.conversation_id)}
-                    className={cn(
-                      'w-full rounded-lg border px-3 py-2 text-left transition',
-                      activeConversationId === conversation.conversation_id
-                        ? 'border-accent/50 bg-accent/10'
-                        : 'border-border-subtle bg-surface-sunken/40 hover:border-accent/40',
-                    )}
+                    onClick={() => void onSubmit(prompt)}
+                    className="rounded-lg border border-border-subtle bg-surface-sunken/60 px-3 py-3 text-left text-xs text-text-secondary transition hover:border-accent/50 hover:text-text-primary"
                   >
-                    <div className="flex items-start justify-between gap-2">
-                      <div className="min-w-0 flex-1">
-                        <div className="truncate text-xs font-medium text-text-primary">{conversation.title}</div>
-                        <div className="mt-1 truncate text-[10px] text-text-muted">{conversation.last_message ?? ''}</div>
-                        <div className="mt-1 text-[10px] text-text-muted font-mono">{conversation.message_count ?? 0} messages</div>
-                      </div>
-                      {onDeleteConversation ? (
-                        <span
-                          role="button"
-                          tabIndex={0}
-                          onClick={(event) => { event.stopPropagation(); void onDeleteConversation(conversation.conversation_id); }}
-                          onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); event.stopPropagation(); void onDeleteConversation(conversation.conversation_id); } }}
-                          className="rounded px-1.5 py-0.5 text-[10px] text-text-muted hover:bg-danger/10 hover:text-danger"
-                        >
-                          Delete
-                        </span>
-                      ) : null}
-                    </div>
+                    {prompt}
                   </button>
                 ))}
               </div>
-            </aside>
-          ) : null}
-
-          <section className="min-w-0 space-y-5">
-            <PromptForm placeholder={placeholder} isLoading={isLoading} onSubmit={onSubmit} />
-
-            {!hasMessages ? (
-              <Card className="bg-surface-raised/60">
-                <CardContent className="space-y-4 py-6">
-                  <EmptyState title={emptyTitle} description={emptyDescription} />
-                  <div className="grid gap-2 md:grid-cols-2 lg:grid-cols-3">
-                    {suggestedPrompts.map(prompt => (
-                      <button
-                        key={prompt}
-                        type="button"
-                        onClick={() => void onSubmit(prompt)}
-                        className="rounded-lg border border-border-subtle bg-surface-sunken/60 px-3 py-3 text-left text-xs text-text-secondary transition hover:border-accent/50 hover:text-text-primary"
-                      >
-                        {prompt}
-                      </button>
-                    ))}
-                  </div>
-                </CardContent>
-              </Card>
-            ) : (
-              <div className="space-y-4 pb-8">
-                {messages.map(message => <MessageBubble key={message.id} message={message} />)}
-                {isLoading ? <LoadingState lines={3} /> : null}
-              </div>
-            )}
-            {error ? <div className="rounded border border-danger/30 bg-danger/10 px-3 py-2 text-sm text-danger">{error}</div> : null}
-          </section>
-        </div>
+            </CardContent>
+          </Card>
+        ) : (
+          <div className="space-y-4 pb-8">
+            {messages.map(message => <MessageBubble key={message.id} message={message} />)}
+            {isLoading ? <LoadingState lines={3} /> : null}
+          </div>
+        )}
+        {error ? <div className="rounded border border-danger/30 bg-danger/10 px-3 py-2 text-sm text-danger">{error}</div> : null}
       </div>
     </div>
   );

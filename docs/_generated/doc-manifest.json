@@ -3071,6 +3071,17 @@
       "canonical_owner": "frontend@aether"
     },
     {
+      "path": "docs/internal/noesis.md",
+      "title": "Noesis Graph Intelligence",
+      "slug": "internal/noesis",
+      "section": "architecture",
+      "visibility": "I",
+      "audience": [
+        "dev-senior"
+      ],
+      "status": "beta"
+    },
+    {
       "path": "docs/internal/tooling/docs-pipeline.md",
       "title": "Documentation Pipeline",
       "slug": "tooling/docs-pipeline",

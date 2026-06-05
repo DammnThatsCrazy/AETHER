@@ -1,6 +1,6 @@
-import { useEffect, useState } from 'react';
-import { NoesisWorkspace, type NoesisConversationSummary, type NoesisMessageItem } from '@aether/ui';
-import { deleteNoesisConversation, exportNoesisConversations, getNoesisConversation, listNoesisConversations, noesis } from '@kyber/features/noesis-command';
+import { useState, useEffect, useRef } from 'react';
+import { NoesisWorkspace, type NoesisMessageItem } from '@aether/ui';
+import { useNoesisQuery } from '@kyber/features/noesis-command';
 
 const SUGGESTED_PROMPTS = [
   'Show tenants with unhealthy SDK telemetry.',
@@ -13,88 +13,32 @@ const SUGGESTED_PROMPTS = [
 
 export function NoesisPage() {
   const [messages, setMessages] = useState<NoesisMessageItem[]>([]);
-  const [conversationId, setConversationId] = useState<string | undefined>(undefined);
-  const [conversations, setConversations] = useState<NoesisConversationSummary[]>([]);
-  const [isHistoryLoading, setIsHistoryLoading] = useState(false);
-  const [isQueryLoading, setIsQueryLoading] = useState(false);
-  const [queryError, setQueryError] = useState<string | null>(null);
-  const [streamStatus, setStreamStatus] = useState<string | null>(null);
-
-  async function refreshConversations() {
-    setIsHistoryLoading(true);
-    try {
-      setConversations(await listNoesisConversations());
-    } finally {
-      setIsHistoryLoading(false);
-    }
-  }
-
-  useEffect(() => {
-    void refreshConversations();
-  }, []);
-
-  async function handleSelectConversation(id: string) {
-    setIsHistoryLoading(true);
-    try {
-      const record = await getNoesisConversation(id);
-      setConversationId(record.conversation_id);
-      setMessages([...record.messages]);
-    } finally {
-      setIsHistoryLoading(false);
-    }
-  }
-
-  function handleNewConversation() {
-    setConversationId(undefined);
-    setMessages([]);
-  }
-
-  async function handleDeleteConversation(id: string) {
-    await deleteNoesisConversation(id);
-    if (conversationId === id) handleNewConversation();
-    await refreshConversations();
-  }
-
-  async function handleExportConversations() {
-    const payload = await exportNoesisConversations();
-    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = `noesis-conversations-${Date.now()}.json`;
-    link.click();
-    URL.revokeObjectURL(url);
-  }
+  const query = useNoesisQuery();
+  const focusHandled = useRef(false);
 
   async function handleSubmit(message: string) {
     const userMessage: NoesisMessageItem = { id: `user-${Date.now()}`, role: 'user', content: message };
     setMessages(prev => [...prev, userMessage]);
-    setIsQueryLoading(true);
-    setQueryError(null);
-    setStreamStatus('Connecting to Noesis…');
-    try {
-      const response = await noesis.streamQuery(
-        { message, conversationId, context: { current_page: window.location.pathname } },
-        event => {
-          if (event.type === 'status') setStreamStatus(event.data.message ?? event.data.stage ?? null);
-          if (event.type === 'answer' && event.data.answer) setStreamStatus('Composing graph-backed answer…');
-        },
-      );
-      setConversationId(response.conversation_id);
+    const response = await query.mutate({ message, context: { current_page: window.location.pathname } });
+    if (response) {
       setMessages(prev => [...prev, {
         id: `assistant-${Date.now()}`,
         role: 'assistant',
         content: response.answer,
         response,
       }]);
-      void refreshConversations();
-    } catch (error) {
-      setQueryError(error instanceof Error ? error.message : 'Noesis query failed');
-    } finally {
-      setStreamStatus(null);
-      setIsQueryLoading(false);
     }
   }
+
+  useEffect(() => {
+    if (focusHandled.current) return;
+    const params = new URLSearchParams(window.location.search);
+    const focus = params.get('focus');
+    if (focus) {
+      focusHandled.current = true;
+      void handleSubmit(`what is connected to entity ${focus}`);
+    }
+  }, []);
 
   return (
     <NoesisWorkspace
@@ -103,18 +47,11 @@ export function NoesisPage() {
       placeholder="Ask Noesis to inspect graph health, unresolved alerts, failing SDK telemetry, risky clusters, or a specific tenant/entity…"
       suggestedPrompts={SUGGESTED_PROMPTS}
       messages={messages}
-      isLoading={isQueryLoading}
-      error={queryError ?? streamStatus}
+      isLoading={query.isLoading}
+      error={query.error}
       surfaceTone="kyber"
       emptyTitle="Noesis is ready for operator intelligence"
       emptyDescription="Use natural language to route into safe read-only graph, health, alert, tenant, agent, reward, and entity lookups."
-      conversations={conversations}
-      activeConversationId={conversationId}
-      isHistoryLoading={isHistoryLoading}
-      onSelectConversation={handleSelectConversation}
-      onNewConversation={handleNewConversation}
-      onDeleteConversation={handleDeleteConversation}
-      onExportConversations={handleExportConversations}
       onSubmit={handleSubmit}
     />
   );
