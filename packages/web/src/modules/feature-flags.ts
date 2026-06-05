@@ -62,6 +62,19 @@ export class FeatureFlagModule {
     return defaultValue;
   }
 
+  /**
+   * Merge feature toggles delivered by the remote SDK manifest into the active
+   * flag set. Called by the SDK when a new manifest is received so that
+   * tenant-published feature flags take effect on installed SDKs.
+   */
+  applyManifestFeatures(features: Record<string, boolean>): void {
+    for (const [key, enabled] of Object.entries(features)) {
+      const existing = this.flags.get(key);
+      this.flags.set(key, { key, enabled, value: existing?.value });
+    }
+    this.persistCache();
+  }
+
   /** Force-refresh flags from backend */
   async refresh(): Promise<void> {
     if (!this.config) return;

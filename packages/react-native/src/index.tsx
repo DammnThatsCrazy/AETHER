@@ -10,6 +10,7 @@ import { semanticContext } from './context/SemanticContext';
 import { RNEcommerce } from './modules/Ecommerce';
 import { RNFeatureFlags } from './modules/FeatureFlags';
 import { RNFeedback } from './modules/Feedback';
+import { RNHealthAgent } from './modules/HealthAgent';
 import type { ConsentState, ConsentPurpose } from '@aether/shared/consent';
 
 const { AetherNative } = NativeModules;
@@ -28,6 +29,8 @@ export interface ResolvedIdentity {
 export interface AetherRNConfig {
   apiKey: string;
   environment?: 'production' | 'staging' | 'development';
+  /** Host app version, reported in SDK fleet heartbeats. */
+  appVersion?: string;
   debug?: boolean;
   endpoint?: string;
   modules?: {
@@ -306,6 +309,18 @@ export function AetherProvider({
     RNFeatureFlags.initialize(config.apiKey, endpoint);
     RNFeedback.initialize(config.apiKey, endpoint);
 
+    // SDK fleet self-identification. For GDPR opt-in deployments the native
+    // layer owns consent, so defer heartbeats until consent is handled there.
+    let healthAgent: RNHealthAgent | null = null;
+    if (!config.privacy?.gdprMode) {
+      healthAgent = new RNHealthAgent({
+        endpoint,
+        apiKey: config.apiKey,
+        appVersion: config.appVersion,
+      });
+      healthAgent.start();
+    }
+
     setIsInitialized(true);
 
     // Journey foreground/background lifecycle is emitted by the native SDKs
@@ -331,6 +346,7 @@ export function AetherProvider({
 
     return () => {
       journeySub?.remove();
+      healthAgent?.stop();
       semanticContext.destroy();
       RNEcommerce.destroy();
       RNFeatureFlags.destroy();

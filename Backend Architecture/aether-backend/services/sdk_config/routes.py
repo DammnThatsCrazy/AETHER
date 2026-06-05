@@ -69,6 +69,31 @@ async def get_manifest(
     return APIResponse(data=manifest.to_dict()).to_dict()
 
 
+@router.get("/manifest/active")
+async def get_active_manifest(request: Request):
+    """
+    Admin: return the tenant's current active manifest without rollout gating.
+
+    The SDK-facing `GET /manifest` endpoint applies cohort gating based on the
+    caller's `sdk_id`; a management surface calling it with no id can land
+    outside a staged rollout and see a stale/previous manifest. This endpoint
+    always returns the latest published manifest so the settings UI shows and
+    toggles the real current config.
+    """
+    ctx = trace_request(request, service="sdk_config")
+    caller = request.state.tenant
+    caller.require_permission("admin")
+
+    svc = get_sdk_config_service()
+    manifest = await svc.get_active_manifest(caller.tenant_id)
+
+    if manifest is None:
+        return APIResponse(data={"manifest": None}).to_dict()
+
+    emit_latency("sdk_manifest_active_fetch", ctx.elapsed_ms())
+    return APIResponse(data=manifest.to_dict()).to_dict()
+
+
 @router.put("/manifest")
 async def publish_manifest(body: PublishManifestRequest, request: Request):
     """Admin: publish a new signed manifest version with optional staged rollout."""

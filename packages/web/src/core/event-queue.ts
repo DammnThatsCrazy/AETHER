@@ -19,6 +19,10 @@ interface QueueConfig {
   retry: Required<RetryConfig>;
   headers: Record<string, string>;
   onError?: (error: Error, events: AetherEvent[]) => void;
+  /** Called when events are filtered out by consent (reported to fleet health). */
+  onDropped?: (count: number) => void;
+  /** Called after each batch send attempt with round-trip latency and success. */
+  onAttempt?: (latencyMs: number, success: boolean) => void;
 }
 
 const DEFAULT_RETRY: Required<RetryConfig> = {
@@ -74,6 +78,8 @@ export class EventQueue {
       endpoint: config.endpoint,
       apiKey: config.apiKey,
       onError: config.onError,
+      onDropped: config.onDropped,
+      onAttempt: config.onAttempt,
     };
     this.restoreQueue();
     this.startFlushTimer();
@@ -98,15 +104,21 @@ export class EventQueue {
     const batch = this.queue.splice(0, this.config.batchSize);
     const allowedEvents = this.filterByConsent(batch);
 
+    const droppedByConsent = batch.length - allowedEvents.length;
+    if (droppedByConsent > 0) this.config.onDropped?.(droppedByConsent);
+
     if (allowedEvents.length === 0) {
       this.isFlushing = false;
       return;
     }
 
+    const start = Date.now();
     try {
       await this.sendBatch(allowedEvents);
+      this.config.onAttempt?.(Date.now() - start, true);
       this.persistQueue();
     } catch (error) {
+      this.config.onAttempt?.(Date.now() - start, false);
       this.queue.unshift(...allowedEvents);
       this.persistQueue();
       this.config.onError?.(error as Error, allowedEvents);

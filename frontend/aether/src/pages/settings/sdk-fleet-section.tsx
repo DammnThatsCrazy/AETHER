@@ -20,6 +20,7 @@ import {
   useRollbackManifest,
   usePublishManifest,
 } from '@aether-app/features/sdk';
+import { useMeProfile } from '@aether-app/features/account';
 import type { SilentSDK } from '@aether-app/types/sdk';
 
 function pct(n: number): string {
@@ -121,12 +122,16 @@ function RemoteConfig() {
   const { toast } = useToast();
   const { data: manifest, isLoading: mLoading } = useSdkManifest();
   const { data: rollout, isLoading: rLoading } = useSdkRollout();
+  const { data: me } = useMeProfile();
   const { mutate: rollback, isLoading: rollingBack } = useRollbackManifest();
   const { mutate: publish, isLoading: publishing } = usePublishManifest();
   const [features, setFeatures] = useState<Record<string, boolean> | null>(null);
 
   if (mLoading || rLoading) return <Skeleton className="h-24 w-full" />;
 
+  // Publishing and rollback require the tenant-admin permission (enforced by
+  // the backend). Non-admins get a read-only view of the active config.
+  const isAdmin = me?.is_admin ?? false;
   const activeFeatures = features ?? manifest?.features ?? {};
   const featureKeys = Object.keys(activeFeatures);
 
@@ -143,7 +148,19 @@ function RemoteConfig() {
 
   async function handlePublish() {
     if (!features) return;
-    const res = await publish({ features });
+    // Preserve every existing manifest field; a feature toggle must not reset
+    // min/schema versions, rollout percentage, endpoints, or flags back to the
+    // backend's publish defaults.
+    const res = await publish({
+      features,
+      ...(manifest ? {
+        min_sdk_version: manifest.min_sdk_version,
+        schema_version: manifest.schema_version,
+        rollout_percentage: manifest.rollout_percentage,
+        endpoints: manifest.endpoints,
+        flags: manifest.flags,
+      } : {}),
+    });
     if (res) {
       queryCache.invalidate('sdk-manifest');
       queryCache.invalidate('sdk-rollout');
@@ -155,6 +172,7 @@ function RemoteConfig() {
   }
 
   function toggleFeature(key: string) {
+    if (!isAdmin) return;
     const base = features ?? manifest?.features ?? {};
     setFeatures({ ...base, [key]: !base[key] });
   }
@@ -190,12 +208,13 @@ function RemoteConfig() {
                   type="button"
                   role="switch"
                   aria-checked={activeFeatures[key]}
+                  disabled={!isAdmin}
                   onClick={() => toggleFeature(key)}
                   className={`px-2 py-1 rounded text-xs font-mono border transition-colors ${
                     activeFeatures[key]
                       ? 'bg-accent/20 border-accent text-accent'
                       : 'bg-surface-base border-border-default text-text-muted'
-                  }`}
+                  } ${isAdmin ? '' : 'opacity-60 cursor-not-allowed'}`}
                 >
                   {key}
                 </button>
@@ -204,26 +223,32 @@ function RemoteConfig() {
           </div>
         )}
 
-        <div className="flex items-center gap-2 pt-1">
-          <Button
-            variant="primary"
-            size="sm"
-            disabled={!features || publishing}
-            onClick={() => { void handlePublish(); }}
-          >
-            {publishing ? '[···]' : 'Publish changes'}
-          </Button>
-          {rollout?.has_rollback_available && (
+        {!isAdmin ? (
+          <p className="text-xs text-text-muted pt-1">
+            Read-only — an admin permission is required to change SDK remote config.
+          </p>
+        ) : (
+          <div className="flex items-center gap-2 pt-1">
             <Button
-              variant="ghost"
+              variant="primary"
               size="sm"
-              disabled={rollingBack}
-              onClick={() => { void handleRollback(); }}
+              disabled={!features || publishing}
+              onClick={() => { void handlePublish(); }}
             >
-              {rollingBack ? '[···]' : `Roll back to v${rollout.previous_version ?? ''}`}
+              {publishing ? '[···]' : 'Publish changes'}
             </Button>
-          )}
-        </div>
+            {rollout?.has_rollback_available && (
+              <Button
+                variant="ghost"
+                size="sm"
+                disabled={rollingBack}
+                onClick={() => { void handleRollback(); }}
+              >
+                {rollingBack ? '[···]' : `Roll back to v${rollout.previous_version ?? ''}`}
+              </Button>
+            )}
+          </div>
+        )}
       </CardContent>
     </Card>
   );
