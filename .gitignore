@@ -15,6 +15,28 @@ packages/web/dist/**/*.js.map
 Smart Contracts/artifacts/
 Smart Contracts/cache/
 *.tsbuildinfo
+
+# In-place TypeScript compilation artifacts (Data Ingestion Layer, Data Lake Architecture)
+Data Ingestion Layer/**/*.js
+Data Ingestion Layer/**/*.js.map
+Data Ingestion Layer/**/*.d.ts
+Data Lake Architecture/**/*.js
+Data Lake Architecture/**/*.js.map
+Data Lake Architecture/**/*.d.ts
+
+# In-place TypeScript compilation artifacts (docs, frontend, packages)
+docs/**/*.js
+docs/**/*.js.map
+docs/**/*.d.ts
+!docs/_generated/**
+frontend/**/*.js
+frontend/**/*.js.map
+frontend/**/*.d.ts
+packages/**/*.js
+packages/**/*.js.map
+packages/**/*.d.ts
+# Keep committed web dist declarations
+!packages/web/dist/**/*.d.ts
 *.egg-info/
 __pycache__/
 *.pyc
