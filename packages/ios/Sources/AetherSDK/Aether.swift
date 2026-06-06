@@ -239,6 +239,13 @@ public final class Aether: NSObject {
         .agent_task: "agent", .agent_decision: "agent", .a2h_interaction: "agent"
     ]
 
+    private static let sensitiveKeys: Set<String> = [
+        "privatekey", "private_key", "seedphrase", "seed_phrase", "mnemonic",
+        "secret", "secretkey", "secret_key", "password", "pin",
+        "cardnumber", "card_number", "pan", "cvv", "cvc", "cvv2",
+        "paymenttoken", "payment_token", "authcode", "auth_code"
+    ]
+
     private let serialQueue = DispatchQueue(label: "com.aether.sdk.serial")
     private let defaults = UserDefaults(suiteName: "com.aether.sdk")!
     private static let maxQueueSize = 500
@@ -476,16 +483,17 @@ public final class Aether: NSObject {
     // MARK: - Wallet Tracking
 
     public func walletConnected(address: String, walletType: String? = nil, chainId: String? = nil) {
-        walletAddress = address
-        defaults.set(address, forKey: "walletAddress")
+        let normalized = normalizeWalletAddress(address)
+        walletAddress = normalized
+        defaults.set(normalized, forKey: "walletAddress")
         enqueueEvent(type: .wallet, properties: [
             "action": AnyCodable("connect"),
-            "address": AnyCodable(address),
+            "address": AnyCodable(normalized),
             "walletType": AnyCodable(walletType ?? "unknown"),
             "chainId": AnyCodable(chainId ?? "unknown")
         ])
         if config?.autoResumeJourney == true {
-            resolveIdentity(walletAddress: address, userId: userId, email: email)
+            resolveIdentity(walletAddress: normalized, userId: userId, email: email)
         }
     }
 
@@ -511,6 +519,67 @@ public final class Aether: NSObject {
         var props = properties
         props["contract"] = AnyCodable(contract); props["action"] = AnyCodable(action); props["vm"] = AnyCodable(vm)
         enqueueEvent(type: .contract_action, properties: props)
+    }
+
+    // MARK: - Apple Pay Tracking
+    // Call from PKPaymentAuthorizationControllerDelegate callbacks.
+
+    public func trackApplePayPayment(
+        status: String,
+        amount: Double? = nil,
+        currency: String? = nil,
+        properties: [String: AnyCodable]? = nil
+    ) {
+        var props: [String: AnyCodable] = [
+            "action":   AnyCodable(status),
+            "provider": AnyCodable("apple_pay")
+        ]
+        if let amount = amount   { props["amount"]   = AnyCodable(amount) }
+        if let currency = currency { props["currency"] = AnyCodable(currency) }
+        if let extra = properties  { props.merge(extra) { _, new in new } }
+        let eventType: AetherEventType
+        switch status {
+        case "completed": eventType = .payment_completed
+        case "failed":    eventType = .payment_failed
+        default:          eventType = .payment_initiated
+        }
+        enqueueEvent(type: eventType, properties: props)
+    }
+
+    // MARK: - WalletConnect Tracking
+    // Call after a WalletConnect v2 session is established or resumed.
+
+    public func trackWalletConnectSession(
+        topic: String,
+        address: String? = nil,
+        chainId: String? = nil,
+        properties: [String: AnyCodable]? = nil
+    ) {
+        var props: [String: AnyCodable] = [
+            "action":   AnyCodable("walletconnect_session"),
+            "topic":    AnyCodable(topic),
+            "provider": AnyCodable("walletconnect")
+        ]
+        if let address = address   { props["address"]  = AnyCodable(normalizeWalletAddress(address)) }
+        if let chainId = chainId   { props["chainId"]  = AnyCodable(chainId) }
+        if let extra = properties  { props.merge(extra) { _, new in new } }
+        if let address = address {
+            walletConnected(address: address, walletType: "walletconnect", chainId: chainId)
+        } else {
+            enqueueEvent(type: .wallet, properties: props)
+        }
+    }
+
+    // MARK: - Wallet Capability API
+
+    public func getWalletCapabilities() -> [String: Any] {
+        return [
+            "connected":    walletAddress != nil,
+            "addresses":    walletAddress.map { [["address": $0, "vm": "evm", "walletType": "unknown"]] } ?? [],
+            "supportedVMs": ["evm", "svm", "bitcoin", "movevm", "near", "tvm", "cosmos"],
+            "applePay":     isApplePayAvailable(),
+            "googlePay":    false
+        ]
     }
 
     // MARK: - Consent Management
@@ -624,11 +693,13 @@ public final class Aether: NSObject {
             log("Dropping non-canonical event type: \(type.rawValue). Use track(_:properties:) for custom events.")
             return
         }
-        if type != .consent && !consentState.contains(purpose) {
+        let gdprMode = config?.privacy.gdprMode ?? false
+        if type != .consent && gdprMode && !consentState.contains(purpose) {
             log("Dropping \(type.rawValue) before enqueue because \(purpose) consent is not granted")
             return
         }
 
+        let scrubbedProps = scrubSensitiveFields(properties)
         let event = AetherEvent(
             id: UUID().uuidString,
             type: type,
@@ -636,7 +707,7 @@ public final class Aether: NSObject {
             sessionId: sessionId,
             anonymousId: anonymousId,
             userId: userId,
-            properties: properties,
+            properties: scrubbedProps,
             context: buildContext()
         )
 
@@ -949,6 +1020,27 @@ public final class Aether: NSObject {
     private func log(_ message: String) {
         guard config?.debug == true else { return }
         print("[Aether SDK] \(message)")
+    }
+
+    private func scrubSensitiveFields(_ props: [String: AnyCodable]) -> [String: AnyCodable] {
+        Dictionary(uniqueKeysWithValues: props.map { key, value in
+            (key, Self.sensitiveKeys.contains(key.lowercased()) ? AnyCodable("[REDACTED]") : value)
+        })
+    }
+
+    private func normalizeWalletAddress(_ address: String, vm: String = "evm") -> String {
+        switch vm.lowercased() {
+        case "evm": return address.lowercased()
+        default:    return address.trimmingCharacters(in: .whitespaces)
+        }
+    }
+
+    private func isApplePayAvailable() -> Bool {
+        #if canImport(PassKit)
+        return true
+        #else
+        return false
+        #endif
     }
 }
 
