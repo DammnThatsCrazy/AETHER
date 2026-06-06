@@ -20,9 +20,15 @@ placed into tiers.
 | Error/performance where platform appropriate | A | ✔ | ✔ | ✔ | ✔ | Native lifecycle/error capture is platform-scoped. |
 | Journey lifecycle API + canonical events | A | ✔ | ✔ | ✔ | ✔ | Start/pause/resume/continue/complete/abandon/checkpoint/current journey. |
 | Identity hydration/reset/session/anonymous ID | A | ✔ | ✔ | ✔ | ✔ | Email is hashed before identity resolve where implemented. |
-| Consent pre-send enforcement | A | ✔ | ✔ | ✔ | ✔ | Consent events are never blocked; unknown raw event types are dropped. |
+| Consent pre-send enforcement (opt-in and opt-out) | A | ✔ | ✔ | ✔ | ✔ | `gdprMode=false` → opt-out (all events pass). `gdprMode=true` → explicit opt-in. Consent events are never blocked. |
+| Sensitive field scrubber | A | — | ✔ | ✔ | Native-owned | SENSITIVE_KEYS set (privateKey/seedPhrase/cardNumber/cvv/pan/password/paymentToken etc.) redacted before queue. Web SDK does not collect these fields. |
 | Commerce/access canonical emitters | A | ✔ | ✔ | ✔ | ✔ | `payment_*`, approvals, entitlements, access, ecommerce helpers. |
 | Wallet/web3 manual emitters | A | ✔ | ✔ | ✔ | ✔ | Manual wallet, transaction, contract action; backend owns enrichment. |
+| EVM address normalization | B | ✔ | ✔ | ✔ | Native-owned | `walletConnected` lowercases EVM addresses before storage and transport. |
+| WalletConnect v2 session tracking | B | — | ✔ | ✔ | ✔ | `trackWalletConnectSession(topic, address?, chainId?)` emits wallet event and resolves identity. |
+| Apple Pay payment tracking | C | — | ✔ | — | iOS only | `trackApplePayPayment(status, amount?, currency?)` via PassKit delegate callbacks. |
+| Google Pay payment tracking | C | — | — | ✔ | Android only | `trackGooglePayPayment(status, amount?, currency?)` via PaymentsClient callbacks. |
+| Wallet capability API | B | — | ✔ | ✔ | ✔ | `getWalletCapabilities()` returns connected state, addresses, supportedVMs, applePay/googlePay availability. |
 | Multi-VM metadata support | B | ✔ | Partial | Partial | Partial | Native/RN expose manual typed metadata; no full automatic detection. |
 | Agent canonical emitters | A | ✔ | ✔ | ✔ | ✔ | `agent_task`, `agent_decision`, `a2h_interaction`. |
 | x402 payment emitter | A | ✔ | ✔ | ✔ | ✔ | Commerce consent required. |
@@ -50,5 +56,6 @@ None. All Tier A rows are satisfied.
 - Native rewards client (web only today).
 - Full automatic native multi-VM wallet detection (manual emitters ship now).
 - Durable native queue persistence beyond bounded in-memory retry queues.
-- Native health payloads do not yet expose every Web health metric such as schema hash and endpoint latency. 
+- Native health payloads do not yet expose every Web health metric such as schema hash and endpoint latency.
 - Native plugin hooks (web only today).
+- Web SDK sensitive field scrubber (Web collects no payment/key fields by design; scrubber added to native only).

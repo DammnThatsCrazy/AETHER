@@ -373,14 +373,15 @@ object Aether : DefaultLifecycleObserver {
     // =========================================================================
 
     fun walletConnected(address: String, walletType: String = "unknown", chainId: String = "unknown") {
-        walletAddress = address
-        prefs?.edit()?.putString("walletAddress", address)?.apply()
+        val normalized = normalizeWalletAddress(address)
+        walletAddress = normalized
+        prefs?.edit()?.putString("walletAddress", normalized)?.apply()
         enqueueEvent("wallet", mapOf(
-            "action" to "connect", "address" to address,
+            "action" to "connect", "address" to normalized,
             "walletType" to walletType, "chainId" to chainId
         ))
         if (config?.autoResumeJourney == true) {
-            scope.launch { resolveIdentity(walletAddress = address, userId = userId, email = email) }
+            scope.launch { resolveIdentity(walletAddress = normalized, userId = userId, email = email) }
         }
     }
 
@@ -400,6 +401,73 @@ object Aether : DefaultLifecycleObserver {
     fun contractAction(contract: String, action: String, vm: String = "evm", properties: Map<String, Any?> = emptyMap()) {
         enqueueEvent("contract_action", properties + mapOf("contract" to contract, "action" to action, "vm" to vm))
     }
+
+    // =========================================================================
+    // GOOGLE PAY TRACKING
+    // Call this from your PaymentsClient result callbacks with the payment status.
+    // =========================================================================
+
+    fun trackGooglePayPayment(
+        status: String,
+        amount: Double? = null,
+        currency: String? = null,
+        properties: Map<String, Any?> = emptyMap()
+    ) {
+        val props = mutableMapOf<String, Any?>(
+            "action"   to status,
+            "provider" to "google_pay"
+        )
+        amount?.let { props["amount"] = it }
+        currency?.let { props["currency"] = it }
+        props.putAll(properties)
+        val eventType = when (status) {
+            "completed" -> "payment_completed"
+            "failed"    -> "payment_failed"
+            else        -> "payment_initiated"
+        }
+        enqueueEvent(eventType, props)
+    }
+
+    // =========================================================================
+    // WALLETCONNECT TRACKING
+    // Call this after a WalletConnect v2 session is established or resumed.
+    // =========================================================================
+
+    fun trackWalletConnectSession(
+        topic: String,
+        address: String? = null,
+        chainId: String? = null,
+        properties: Map<String, Any?> = emptyMap()
+    ) {
+        val props = mutableMapOf<String, Any?>(
+            "action"   to "walletconnect_session",
+            "topic"    to topic,
+            "provider" to "walletconnect"
+        )
+        address?.let { props["address"] = normalizeWalletAddress(it) }
+        chainId?.let { props["chainId"] = it }
+        props.putAll(properties)
+        if (address != null) {
+            walletConnected(address, "walletconnect", chainId ?: "unknown")
+        } else {
+            enqueueEvent("wallet", props)
+        }
+    }
+
+    // =========================================================================
+    // WALLET CAPABILITY API
+    // Returns which wallet/payment capabilities are active for this session.
+    // =========================================================================
+
+    fun getWalletCapabilities(): Map<String, Any?> = mapOf(
+        "connected"    to (walletAddress != null),
+        "addresses"    to listOfNotNull(walletAddress?.let {
+            mapOf("address" to it, "vm" to "evm", "walletType" to "unknown")
+        }),
+        "supportedVMs" to listOf("evm", "svm", "bitcoin", "movevm", "near", "tvm", "cosmos"),
+        "googlePay"    to false,
+        "applePay"     to false,
+    )
 
     // =========================================================================
     // CONSENT MANAGEMENT
@@ -551,11 +619,13 @@ object Aether : DefaultLifecycleObserver {
             return
         }
         val purpose = EVENT_CONSENT_PURPOSE[type]
-        if (type != "consent" && (purpose == null || !consentState.contains(purpose))) {
+        val gdprMode = config?.privacy?.gdprMode ?: false
+        if (type != "consent" && gdprMode && (purpose == null || !consentState.contains(purpose))) {
             log("Dropping $type before enqueue because $purpose consent is not granted")
             return
         }
 
+        val scrubbed = scrubSensitiveFields(properties)
         val event = JSONObject().apply {
             put("id", UUID.randomUUID().toString())
             put("type", type)
@@ -563,7 +633,7 @@ object Aether : DefaultLifecycleObserver {
             put("sessionId", sessionId)
             put("anonymousId", anonymousId)
             put("userId", userId ?: JSONObject.NULL)
-            put("properties", JSONObject(properties.mapValues { it.value ?: JSONObject.NULL }))
+            put("properties", JSONObject(scrubbed.mapValues { it.value ?: JSONObject.NULL }))
             put("context", buildContext())
         }
 
@@ -594,7 +664,7 @@ object Aether : DefaultLifecycleObserver {
         batch: List<JSONObject>,
         cfg: AetherConfig,
         retryCount: Int,
-    ) = withContext(Dispatchers.IO) {
+    ): Unit = withContext(Dispatchers.IO) {
         val maxRetries = 3
         try {
             val url = URL("${cfg.endpoint}/v1/batch")
@@ -820,6 +890,7 @@ object Aether : DefaultLifecycleObserver {
     private fun log(message: String) {
         if (config?.debug == true) Log.d(TAG, message)
     }
+
 
     // =========================================================================
     // DEVICE FINGERPRINT

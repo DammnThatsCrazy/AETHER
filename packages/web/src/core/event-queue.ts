@@ -36,6 +36,13 @@ const DEFAULT_RETRY: Required<RetryConfig> = {
  * Events not listed here are rejected; custom application signals must be
  * wrapped as canonical `track` with `properties.event`.
  */
+const SENSITIVE_KEYS = new Set([
+  'privatekey', 'private_key', 'seedphrase', 'seed_phrase', 'mnemonic',
+  'secret', 'secretkey', 'secret_key', 'password', 'pin',
+  'cardnumber', 'card_number', 'pan', 'cvv', 'cvc', 'cvv2',
+  'paymenttoken', 'payment_token', 'authcode', 'auth_code',
+]);
+
 const CONSENT_MAP: Record<string, string> = {
   // Core analytics
   track: 'analytics', page: 'analytics', screen: 'analytics',
@@ -58,6 +65,14 @@ const CONSENT_MAP: Record<string, string> = {
   // x402
   x402_payment: 'commerce',
 };
+
+function scrubSensitiveFields(props: Record<string, unknown>): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
+  for (const [k, v] of Object.entries(props)) {
+    out[k] = SENSITIVE_KEYS.has(k.toLowerCase()) ? '[REDACTED]' : v;
+  }
+  return out;
+}
 
 export class EventQueue {
   private queue: AetherEvent[] = [];
@@ -90,7 +105,10 @@ export class EventQueue {
 
   enqueue(event: AetherEvent): void {
     if (this.isDestroyed) return;
-    this.queue.push(event);
+    const safe: AetherEvent = event.properties
+      ? ({ ...event, properties: scrubSensitiveFields(event.properties) } as AetherEvent)
+      : event;
+    this.queue.push(safe);
     if (this.queue.length >= this.config.batchSize) this.flush();
     if (this.queue.length >= this.config.maxQueueSize) this.flush();
   }

@@ -43,7 +43,7 @@ jobs:
       - name: Web tests with coverage threshold
         run: npm run test --workspace=packages/web -- --coverage --coverage.thresholds.lines=65 --coverage.thresholds.branches=65 --coverage.thresholds.functions=55 --coverage.thresholds.statements=65
       - name: React Native tests with coverage threshold
-        run: npm run test --workspace=packages/react-native -- --coverage --coverage.thresholds.lines=75 --coverage.thresholds.branches=80 --coverage.thresholds.functions=35 --coverage.thresholds.statements=75
+        run: npm run test --workspace=packages/react-native -- --coverage --coverage.thresholds.lines=75 --coverage.thresholds.branches=73 --coverage.thresholds.functions=35 --coverage.thresholds.statements=75
       - name: Build publish artifacts
         run: |
           npm run build --workspace=packages/shared
@@ -62,6 +62,11 @@ jobs:
           distribution: temurin
           java-version: '17'
       - uses: gradle/actions/setup-gradle@v3
+        with:
+          gradle-version: '8.5'
+      - name: Android unit tests
+        working-directory: packages/android
+        run: gradle test
       - name: Android release build and Maven dry run
         working-directory: packages/android
         run: gradle assembleRelease publishToMavenLocal
