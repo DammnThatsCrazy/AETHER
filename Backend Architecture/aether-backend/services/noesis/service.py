@@ -37,7 +37,7 @@ from .models import (
     NoesisResponse,
     QueryPlan,
 )
-from .provider import EnvironmentNoesisPlanProvider, NoesisPlanProvider
+from .provider import NoesisPlanProvider, ProductionNoesisPlanProvider
 
 logger = get_logger("aether.service.noesis")
 
@@ -60,7 +60,7 @@ class NoesisService:
     ) -> None:
         self.graph = graph
         self.analytics = analytics
-        self.provider = provider or EnvironmentNoesisPlanProvider()
+        self.provider = provider or ProductionNoesisPlanProvider()
         self.entities = EntityRepository()
         self.alerts = AlertRepository()
         self.tenants = AdminRepository()
