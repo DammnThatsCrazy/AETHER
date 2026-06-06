@@ -123,12 +123,6 @@ object Aether : DefaultLifecycleObserver {
         "li_fat_id", "rdt_cid", "scid", "dclid", "epik",
         "irclickid", "aff_id"
     )
-    internal val SENSITIVE_KEYS: Set<String> = setOf(
-        "privatekey", "private_key", "seedphrase", "seed_phrase", "mnemonic",
-        "secret", "secretkey", "secret_key", "password", "pin",
-        "cardnumber", "card_number", "pan", "cvv", "cvc", "cvv2",
-        "paymenttoken", "payment_token", "authcode", "auth_code"
-    )
     private val EVENT_CONSENT_PURPOSE = mapOf(
         "track" to "analytics", "page" to "analytics", "screen" to "analytics",
         "heartbeat" to "analytics", "error" to "analytics", "performance" to "analytics",
@@ -897,16 +891,6 @@ object Aether : DefaultLifecycleObserver {
         if (config?.debug == true) Log.d(TAG, message)
     }
 
-    internal fun scrubSensitiveFields(props: Map<String, Any?>): Map<String, Any?> =
-        props.mapValues { (key, value) ->
-            if (key.lowercase() in SENSITIVE_KEYS) "[REDACTED]" else value
-        }
-
-    internal fun normalizeWalletAddress(address: String, vm: String = "evm"): String =
-        when (vm.lowercase()) {
-            "evm" -> address.lowercase()
-            else  -> address.trim()
-        }
 
     // =========================================================================
     // DEVICE FINGERPRINT

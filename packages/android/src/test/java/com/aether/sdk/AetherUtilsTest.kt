@@ -29,7 +29,7 @@ class AetherUtilsTest {
         )
         for (field in sensitiveFields) {
             val input = mapOf(field to "super-secret-value", "safe" to "kept")
-            val scrubbed = Aether.scrubSensitiveFields(input)
+            val scrubbed = scrubSensitiveFields(input)
             assertEquals("Expected $field to be redacted", "[REDACTED]", scrubbed[field])
             assertEquals("Non-sensitive field must be preserved for $field", "kept", scrubbed["safe"])
         }
@@ -43,7 +43,7 @@ class AetherUtilsTest {
             "CVV"        to "999",
             "CardNumber" to "4111111111111111",
         )
-        val scrubbed = Aether.scrubSensitiveFields(input)
+        val scrubbed = scrubSensitiveFields(input)
         assertEquals("[REDACTED]", scrubbed["Password"])
         assertEquals("[REDACTED]", scrubbed["PASSWORD"])
         assertEquals("[REDACTED]", scrubbed["CVV"])
@@ -58,7 +58,7 @@ class AetherUtilsTest {
             "currency" to "USD",
             "label"    to "checkout",
         )
-        val scrubbed = Aether.scrubSensitiveFields(input)
+        val scrubbed = scrubSensitiveFields(input)
         assertEquals("u_123", scrubbed["userId"])
         assertEquals(99.99, scrubbed["amount"])
         assertEquals("USD", scrubbed["currency"])
@@ -68,13 +68,13 @@ class AetherUtilsTest {
     @Test
     fun scrubSensitiveFields_doesNotMutateInput() {
         val input = mapOf("password" to "original")
-        Aether.scrubSensitiveFields(input)
+        scrubSensitiveFields(input)
         assertEquals("original", input["password"])
     }
 
     @Test
     fun sensitiveKeys_containsExactly20Entries() {
-        assertEquals(20, Aether.SENSITIVE_KEYS.size)
+        assertEquals(20, SENSITIVE_KEYS.size)
     }
 
     @Test
@@ -85,7 +85,7 @@ class AetherUtilsTest {
             "cardnumber", "card_number", "pan", "cvv", "cvc", "cvv2",
             "paymenttoken", "payment_token", "authcode", "auth_code",
         )
-        assertEquals(expected, Aether.SENSITIVE_KEYS)
+        assertEquals(expected, SENSITIVE_KEYS)
     }
 
     // -------------------------------------------------------------------------
@@ -94,18 +94,18 @@ class AetherUtilsTest {
 
     @Test
     fun normalizeWalletAddress_lowercasesEVMAddresses() {
-        assertEquals("0xabcdef123456", Aether.normalizeWalletAddress("0xABCDEF123456"))
-        assertEquals("0xabcdef",       Aether.normalizeWalletAddress("0XAbCdEf"))
+        assertEquals("0xabcdef123456", normalizeWalletAddress("0xABCDEF123456"))
+        assertEquals("0xabcdef",       normalizeWalletAddress("0XAbCdEf"))
     }
 
     @Test
     fun normalizeWalletAddress_trimsWhitespaceForNonEVMChains() {
-        assertEquals("SOLANA_ADDR", Aether.normalizeWalletAddress("  SOLANA_ADDR  ", vm = "svm"))
-        assertEquals("BTC_ADDR",    Aether.normalizeWalletAddress("  BTC_ADDR  ",    vm = "bitcoin"))
+        assertEquals("SOLANA_ADDR", normalizeWalletAddress("  SOLANA_ADDR  ", vm = "svm"))
+        assertEquals("BTC_ADDR",    normalizeWalletAddress("  BTC_ADDR  ",    vm = "bitcoin"))
     }
 
     @Test
     fun normalizeWalletAddress_defaultsToEVM() {
-        assertEquals("0xabcd", Aether.normalizeWalletAddress("0xABCD"))
+        assertEquals("0xabcd", normalizeWalletAddress("0xABCD"))
     }
 }
