@@ -62,6 +62,8 @@ jobs:
           distribution: temurin
           java-version: '17'
       - uses: gradle/actions/setup-gradle@v3
+        with:
+          gradle-version: '8.5'
       - name: Android release build and Maven dry run
         working-directory: packages/android
         run: gradle assembleRelease publishToMavenLocal
