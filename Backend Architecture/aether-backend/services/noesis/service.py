@@ -173,6 +173,94 @@ class NoesisService:
 
         return response
 
+    async def query_stream(
+        self,
+        body: NoesisQueryRequest,
+        tenant: TenantContext,
+        *,
+        request_id: str | None = None,
+    ):
+        """Async generator that yields SSE event dicts as query phases complete.
+
+        Phases:
+          1. {"type": "intent", "intent": "...", "confidence": 0.xx}  — after classification
+          2. {"type": "results", "count": N}                           — after data fetch
+          3. {"type": "complete", ...full NoesisResponse fields...}    — final answer
+          4. {"type": "error", "error": "...", "code": "..."}          — on any error
+        """
+        import json as _json
+
+        request_id = request_id or str(uuid.uuid4())
+
+        def _sse(data: dict) -> str:
+            return f"data: {_json.dumps(data)}\n\n"
+
+        try:
+            # Kill-switch + canary gate
+            if not self.flags.noesis_enabled:
+                yield _sse({"type": "error", "error": "Noesis unavailable", "code": "service_unavailable"})
+                return
+            if not self.flags.is_tenant_allowed(tenant.tenant_id):
+                yield _sse({"type": "error", "error": "Noesis not yet available for this tenant", "code": "forbidden"})
+                return
+
+            scope = self._resolve_scope(body, tenant)
+
+            safety_response = self._check_safety(body, scope, request_id)
+            if safety_response is not None:
+                yield _sse({"type": "complete", **safety_response.model_dump(exclude_none=True)})
+                return
+
+            await self._check_rate_limit(scope)
+
+            history: list[dict] = []
+            if body.conversation_id:
+                history = await self.conversation_store.get_recent(
+                    body.conversation_id, scope.effective_tenant_id
+                )
+
+            plan = self._classify(body, scope, history)
+            mode = "deterministic"
+
+            yield _sse({"type": "intent", "intent": plan.intent, "confidence": plan.confidence})
+
+            if plan.intent == "unsupported":
+                llm_plan = await self.provider.plan(body, scope.effective_tenant_id, history or None)
+                if llm_plan is not None:
+                    plan = self._validate_plan(llm_plan, scope)
+                    mode = "llm_text_to_query"
+                else:
+                    resp = self._unsupported_response(body, [])
+                    yield _sse({"type": "complete", **resp.model_dump(exclude_none=True)})
+                    return
+
+            self._assert_read_only(plan)
+
+            response = await self._dispatch(plan, scope, body)
+            response.mode = mode  # type: ignore[assignment]
+            if not scope.debug_allowed:
+                response.query_debug = None
+
+            yield _sse({"type": "results", "count": len(response.results)})
+
+            if body.conversation_id and response.intent not in ("rejected", "unsupported"):
+                await self.conversation_store.append(
+                    body.conversation_id,
+                    scope.effective_tenant_id,
+                    body.message,
+                    response.intent,
+                    response.mode,
+                    response.answer,
+                )
+
+            yield _sse({"type": "complete", **response.model_dump(exclude_none=True)})
+
+        except (ForbiddenError, BadRequestError, RateLimitedError, ServiceUnavailableError) as exc:
+            yield _sse({"type": "error", "error": str(exc), "code": type(exc).__name__.lower().replace("error", "")})
+        except Exception as exc:
+            logger.error("Noesis stream unexpected error", extra={"request_id": request_id, "error": str(exc)})
+            yield _sse({"type": "error", "error": "Internal Noesis error", "code": "internal_error"})
+
     # ─── Safety & guards ──────────────────────────────────────────────────
 
     def _check_safety(self, body: NoesisQueryRequest, scope: Scope, request_id: str) -> NoesisResponse | None:

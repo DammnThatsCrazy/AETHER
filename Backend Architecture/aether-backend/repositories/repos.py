@@ -1607,3 +1607,92 @@ class SlackOAuthStateRepository(BaseRepository):
         for state_id in expired_ids:
             await self.delete(state_id)
         return len(expired_ids)
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# RECOMMENDATIONS + SIGNALS REPOSITORIES
+# ═══════════════════════════════════════════════════════════════════════════
+
+
+class RecommendationRepository(BaseRepository):
+    """Retarget recommendation records with status lifecycle tracking.
+
+    Table: retarget_recommendations
+    Keyed by recommendation_id (UUID). Tenant-scoped.
+    """
+
+    def __init__(self) -> None:
+        super().__init__("retarget_recommendations")
+
+    async def get(self, recommendation_id: str, tenant_id: str) -> Optional[dict]:
+        rec = await self.find_by_id(recommendation_id)
+        if rec and rec.get("tenant_id") == tenant_id:
+            return rec
+        return None
+
+    async def create(self, recommendation: dict) -> dict:
+        return await self.insert(recommendation["recommendation_id"], recommendation)
+
+    async def update_status(
+        self,
+        recommendation_id: str,
+        tenant_id: str,
+        status: str,
+        **fields: Any,
+    ) -> Optional[dict]:
+        rec = await self.get(recommendation_id, tenant_id)
+        if rec is None:
+            return None
+        updated = {**rec, "status": status, **fields}
+        return await self.update(recommendation_id, updated)
+
+    async def list_for_entity(
+        self,
+        entity_id: str,
+        tenant_id: str,
+        status: Optional[str] = None,
+        limit: int = 20,
+    ) -> list[dict]:
+        filters: dict[str, Any] = {"entity_id": entity_id, "tenant_id": tenant_id}
+        if status:
+            filters["status"] = status
+        return await self.find_many(filters=filters, limit=limit, sort_by="created_at", sort_order="desc")
+
+
+class SignalRepository(BaseRepository):
+    """Behavioral signal instances per entity.
+
+    Table: behavioral_signals
+    Keyed by signal_id (composite: TEMPLATE_ID:entity_id:hex). Tenant-scoped.
+    """
+
+    def __init__(self) -> None:
+        super().__init__("behavioral_signals")
+
+    async def upsert_signal(self, signal: dict) -> dict:
+        return await self.insert(signal["signal_id"], signal)
+
+    async def list_for_entity(
+        self,
+        entity_id: str,
+        tenant_id: str,
+        sentiment: Optional[str] = None,
+        severity: Optional[str] = None,
+        include_stale: bool = False,
+        limit: int = 50,
+    ) -> list[dict]:
+        filters: dict[str, Any] = {"entity_id": entity_id, "tenant_id": tenant_id}
+        if sentiment:
+            filters["sentiment"] = sentiment
+        if severity:
+            filters["severity"] = severity
+        rows = await self.find_many(filters=filters, limit=limit, sort_by="created_at", sort_order="desc")
+        if not include_stale:
+            rows = [r for r in rows if not r.get("is_stale", False)]
+        return rows
+
+    async def delete_for_entity(self, entity_id: str, tenant_id: str) -> int:
+        rows = await self.list_for_entity(entity_id, tenant_id, include_stale=True, limit=1000)
+        for r in rows:
+            await self.delete(r["signal_id"])
+        return len(rows)
