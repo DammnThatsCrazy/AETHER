@@ -239,7 +239,7 @@ public final class Aether: NSObject {
         .agent_task: "agent", .agent_decision: "agent", .a2h_interaction: "agent"
     ]
 
-    private static let sensitiveKeys: Set<String> = [
+    static let sensitiveKeys: Set<String> = [
         "privatekey", "private_key", "seedphrase", "seed_phrase", "mnemonic",
         "secret", "secretkey", "secret_key", "password", "pin",
         "cardnumber", "card_number", "pan", "cvv", "cvc", "cvv2",
@@ -1022,13 +1022,13 @@ public final class Aether: NSObject {
         print("[Aether SDK] \(message)")
     }
 
-    private func scrubSensitiveFields(_ props: [String: AnyCodable]) -> [String: AnyCodable] {
+    func scrubSensitiveFields(_ props: [String: AnyCodable]) -> [String: AnyCodable] {
         Dictionary(uniqueKeysWithValues: props.map { key, value in
             (key, Self.sensitiveKeys.contains(key.lowercased()) ? AnyCodable("[REDACTED]") : value)
         })
     }
 
-    private func normalizeWalletAddress(_ address: String, vm: String = "evm") -> String {
+    func normalizeWalletAddress(_ address: String, vm: String = "evm") -> String {
         switch vm.lowercased() {
         case "evm": return address.lowercased()
         default:    return address.trimmingCharacters(in: .whitespaces)
