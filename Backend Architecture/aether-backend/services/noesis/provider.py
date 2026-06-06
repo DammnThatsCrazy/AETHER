@@ -39,7 +39,12 @@ _ESTIMATED_REQUEST_TOKENS = 800
 
 
 class NoesisPlanProvider(Protocol):
-    async def plan(self, request: NoesisQueryRequest, effective_tenant_id: str) -> QueryPlan | None:
+    async def plan(
+        self,
+        request: NoesisQueryRequest,
+        effective_tenant_id: str,
+        history: list[dict] | None = None,
+    ) -> QueryPlan | None:
         """Return a structured query plan or None when unavailable."""
 
 
@@ -106,7 +111,12 @@ def _parse_plan_json(raw: str, effective_tenant_id: str) -> QueryPlan | None:
 class EnvironmentNoesisPlanProvider:
     """Minimal provider for tests: reads a fixed plan from NOESIS_LLM_PLAN_JSON."""
 
-    async def plan(self, request: NoesisQueryRequest, effective_tenant_id: str) -> QueryPlan | None:
+    async def plan(
+        self,
+        request: NoesisQueryRequest,
+        effective_tenant_id: str,
+        history: list[dict] | None = None,
+    ) -> QueryPlan | None:
         raw = os.getenv("NOESIS_LLM_PLAN_JSON", "").strip()
         if not raw:
             return None
@@ -146,7 +156,12 @@ class AnthropicNoesisPlanProvider:
         self._budget = budget or NoesisTokenBudget()
         self._system_prompt = build_system_prompt()
 
-    async def plan(self, request: NoesisQueryRequest, effective_tenant_id: str) -> QueryPlan | None:
+    async def plan(
+        self,
+        request: NoesisQueryRequest,
+        effective_tenant_id: str,
+        history: list[dict] | None = None,
+    ) -> QueryPlan | None:
         if not self.enabled:
             return None
         if not self.api_key:
@@ -158,7 +173,9 @@ class AnthropicNoesisPlanProvider:
             return None
 
         context_hint = _build_context_hint(request)
-        user_message = build_user_message(request.message, effective_tenant_id, request.surface, context_hint)
+        user_message = build_user_message(
+            request.message, effective_tenant_id, request.surface, context_hint, history
+        )
 
         for attempt in range(1, self.max_retries + 2):
             try:
@@ -235,7 +252,12 @@ class OpenAINoesisPlanProvider:
         self._budget = budget or NoesisTokenBudget()
         self._system_prompt = build_system_prompt()
 
-    async def plan(self, request: NoesisQueryRequest, effective_tenant_id: str) -> QueryPlan | None:
+    async def plan(
+        self,
+        request: NoesisQueryRequest,
+        effective_tenant_id: str,
+        history: list[dict] | None = None,
+    ) -> QueryPlan | None:
         if not self.enabled:
             return None
         if not self.api_key:
@@ -247,7 +269,9 @@ class OpenAINoesisPlanProvider:
             return None
 
         context_hint = _build_context_hint(request)
-        user_message = build_user_message(request.message, effective_tenant_id, request.surface, context_hint)
+        user_message = build_user_message(
+            request.message, effective_tenant_id, request.surface, context_hint, history
+        )
 
         for attempt in range(1, self.max_retries + 2):
             try:
@@ -326,8 +350,13 @@ class ProductionNoesisPlanProvider:
             self._inner = AnthropicNoesisPlanProvider(budget)
             self.provider_name = "anthropic"
 
-    async def plan(self, request: NoesisQueryRequest, effective_tenant_id: str) -> QueryPlan | None:
-        return await self._inner.plan(request, effective_tenant_id)
+    async def plan(
+        self,
+        request: NoesisQueryRequest,
+        effective_tenant_id: str,
+        history: list[dict] | None = None,
+    ) -> QueryPlan | None:
+        return await self._inner.plan(request, effective_tenant_id, history)
 
 
 # ─── Helpers ─────────────────────────────────────────────────────────────────

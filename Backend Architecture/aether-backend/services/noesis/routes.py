@@ -9,7 +9,7 @@ from fastapi.responses import JSONResponse
 
 from dependencies.providers import get_cache, get_graph
 from repositories.repos import AnalyticsRepository
-from shared.common.common import APIResponse, BadRequestError, ForbiddenError
+from shared.common.common import APIResponse, BadRequestError, ForbiddenError, RateLimitedError, ServiceUnavailableError
 from shared.graph.graph import GraphClient
 from shared.logger.logger import get_logger
 
@@ -37,6 +37,25 @@ async def query_noesis(
         response = await service.query(body, request.state.tenant, request_id=request_id)
         data = response.model_dump(exclude_none=True)
         result = APIResponse(data=data).to_dict()
+    except RateLimitedError as exc:
+        retry_after = exc.details.get("retry_after_seconds", 60)
+        logger.warning("Noesis rate limited", extra={"request_id": request_id, "retry_after": retry_after})
+        return JSONResponse(
+            status_code=429,
+            content={"error": "Rate limit exceeded", "retry_after_seconds": retry_after, "request_id": request_id},
+            headers={
+                "x-request-id": request_id,
+                "x-correlation-id": correlation_id,
+                "retry-after": str(retry_after),
+            },
+        )
+    except ServiceUnavailableError as exc:
+        logger.warning("Noesis unavailable", extra={"request_id": request_id, "error": str(exc)})
+        return JSONResponse(
+            status_code=503,
+            content={"error": str(exc), "request_id": request_id},
+            headers={"x-request-id": request_id, "x-correlation-id": correlation_id},
+        )
     except ForbiddenError as exc:
         logger.warning("Noesis forbidden", extra={"request_id": request_id, "error": str(exc)})
         return JSONResponse(
@@ -59,13 +78,14 @@ async def query_noesis(
             headers={"x-request-id": request_id, "x-correlation-id": correlation_id},
         )
 
-    # Attach request/correlation IDs and rate-limit placeholder headers
+    # Real rate-limit headers from service state
+    rl = service._rate_limit_state
     headers = {
         "x-request-id": request_id,
         "x-correlation-id": correlation_id,
-        "x-ratelimit-limit": "60",
-        "x-ratelimit-remaining": "59",
-        "x-ratelimit-reset": "60",
+        "x-ratelimit-limit": str(rl.limit if rl else 60),
+        "x-ratelimit-remaining": str(rl.remaining if rl else 59),
+        "x-ratelimit-reset": str(rl.reset_seconds if rl else 60),
     }
 
     return JSONResponse(content=result, headers=headers)

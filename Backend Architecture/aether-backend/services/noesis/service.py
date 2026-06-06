@@ -8,7 +8,7 @@ from dataclasses import dataclass
 from typing import Any, Iterable, Optional
 
 from shared.auth.auth import Role, TenantContext
-from shared.common.common import BadRequestError, ForbiddenError
+from shared.common.common import BadRequestError, ForbiddenError, RateLimitedError, ServiceUnavailableError
 from shared.graph.graph import GraphClient, Vertex
 from shared.logger.logger import get_logger, metrics
 from repositories.repos import (
@@ -24,6 +24,8 @@ from repositories.repos import (
     WalletRepository,
 )
 
+from .conversation import NoesisConversationStore
+from .flags import NoesisFlags
 from .models import (
     INJECTION_PATTERNS,
     MAX_LIMIT,
@@ -38,6 +40,7 @@ from .models import (
     QueryPlan,
 )
 from .provider import NoesisPlanProvider, ProductionNoesisPlanProvider
+from .rate_limiter import NoesisRateLimiter, RateLimitState
 
 logger = get_logger("aether.service.noesis")
 
@@ -57,10 +60,17 @@ class NoesisService:
         graph: GraphClient,
         analytics: AnalyticsRepository,
         provider: Optional[NoesisPlanProvider] = None,
+        rate_limiter: Optional[NoesisRateLimiter] = None,
+        conversation_store: Optional[NoesisConversationStore] = None,
+        flags: Optional[NoesisFlags] = None,
     ) -> None:
         self.graph = graph
         self.analytics = analytics
         self.provider = provider or ProductionNoesisPlanProvider()
+        self.rate_limiter = rate_limiter or NoesisRateLimiter()
+        self.conversation_store = conversation_store or NoesisConversationStore()
+        self.flags = flags or NoesisFlags()
+        self._rate_limit_state: RateLimitState | None = None
         self.entities = EntityRepository()
         self.alerts = AlertRepository()
         self.tenants = AdminRepository()
@@ -73,6 +83,17 @@ class NoesisService:
 
     async def query(self, body: NoesisQueryRequest, tenant: TenantContext, *, request_id: str | None = None) -> NoesisResponse:
         request_id = request_id or str(uuid.uuid4())
+
+        # Master kill-switch
+        if not self.flags.noesis_enabled:
+            raise ServiceUnavailableError("Noesis")
+
+        # Canary gating — block before scope resolution to avoid leaking tenant state
+        if not self.flags.is_tenant_allowed(tenant.tenant_id):
+            logger.info("Noesis canary gate blocked", extra={"tenant_id": tenant.tenant_id})
+            metrics.increment("noesis_canary_blocked")
+            raise ForbiddenError("Noesis is not yet available for this tenant")
+
         scope = self._resolve_scope(body, tenant)
 
         # Safety: reject write-like and injection prompts
@@ -80,16 +101,24 @@ class NoesisService:
         if safety_response is not None:
             return safety_response
 
-        self._check_rate_limit(scope)
+        # Real rate limiting — increments counters, raises RateLimitedError if exceeded
+        await self._check_rate_limit(scope)
 
-        plan = self._classify(body, scope)
+        # Conversation history for multi-turn continuity
+        history: list[dict] = []
+        if body.conversation_id:
+            history = await self.conversation_store.get_recent(
+                body.conversation_id, scope.effective_tenant_id
+            )
+
+        plan = self._classify(body, scope, history)
         mode = "deterministic"
         warnings: list[str] = []
         fallback_triggered = False
         provider_used: str | None = None
 
         if plan.intent == "unsupported":
-            llm_plan = await self.provider.plan(body, scope.effective_tenant_id)
+            llm_plan = await self.provider.plan(body, scope.effective_tenant_id, history or None)
             provider_used = getattr(self.provider, "provider_name", None) or type(self.provider).__name__
             if llm_plan is not None:
                 plan = self._validate_plan(llm_plan, scope)
@@ -130,6 +159,18 @@ class NoesisService:
             result_count=len(response.results), debug_returned=response.query_debug is not None,
             fallback_triggered=fallback_triggered, provider_used=provider_used,
         ))
+
+        # Persist the turn to conversation store for multi-turn continuity
+        if body.conversation_id and response.intent not in ("rejected", "unsupported"):
+            await self.conversation_store.append(
+                body.conversation_id,
+                scope.effective_tenant_id,
+                body.message,
+                response.intent,
+                response.mode,
+                response.answer,
+            )
+
         return response
 
     # ─── Safety & guards ──────────────────────────────────────────────────
@@ -175,9 +216,9 @@ class NoesisService:
                     )
         return None
 
-    def _check_rate_limit(self, scope: Scope) -> None:
-        """Placeholder for rate limiting. Logs but does not block."""
-        logger.info("Noesis rate limit check", extra={"tenant": scope.effective_tenant_id, "surface": scope.surface})
+    async def _check_rate_limit(self, scope: Scope) -> None:
+        """Enforce per-tenant QPM and daily quota via NoesisRateLimiter."""
+        self._rate_limit_state = await self.rate_limiter.check_and_increment(scope.effective_tenant_id)
 
     def _assert_read_only(self, plan: QueryPlan) -> None:
         """Verify plan is for a supported read-only intent."""
@@ -215,7 +256,12 @@ class NoesisService:
             return Scope(body.surface, requested or ("" if wants_all_tenants else tenant.tenant_id), wants_all_tenants or bool(requested and requested != tenant.tenant_id), is_operator)
         raise BadRequestError("Unsupported Noesis surface")
 
-    def _classify(self, body: NoesisQueryRequest, scope: Scope) -> QueryPlan:
+    def _classify(
+        self,
+        body: NoesisQueryRequest,
+        scope: Scope,
+        history: list[dict] | None = None,
+    ) -> QueryPlan:
         text = body.message.strip()
         low = text.lower()
         target = self._extract_target(text) or body.context.selected_entity_id
@@ -223,6 +269,13 @@ class NoesisService:
         limit = 10
         if "all" in low and len(low) < 80:
             limit = 25
+
+        # Prior intent from conversation history — used to carry forward when ambiguous
+        prior_intent: str | None = None
+        if history:
+            last = history[-1]
+            if last.get("intent") in SUPPORTED_INTENTS:
+                prior_intent = last["intent"]
 
         # Collect candidate intents for ambiguity detection
         candidates: list[tuple[str, float]] = []
@@ -249,6 +302,12 @@ class NoesisService:
             candidates.append(("entity_search", 0.64))
 
         if not candidates:
+            # If conversation history provides a prior intent, carry it forward with low confidence
+            if prior_intent:
+                return QueryPlan(
+                    intent=prior_intent, target=target, tenant_id=scope.effective_tenant_id,
+                    time_range=time_range, confidence=0.4, limit=limit,
+                )
             return QueryPlan(intent="unsupported", target=target, tenant_id=scope.effective_tenant_id, time_range=time_range, confidence=0.2)
 
         # Ambiguity: if multiple strong candidates, ask for clarification
