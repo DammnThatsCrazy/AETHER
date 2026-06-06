@@ -4,12 +4,26 @@
 // =============================================================================
 
 import Foundation
-import UIKit
 import CryptoKit
-import MetricKit
 import Network
+
+#if canImport(UIKit)
+import UIKit
+#elseif canImport(AppKit)
+import AppKit
+#endif
+
+#if canImport(MetricKit)
+import MetricKit
+#endif
+
+#if canImport(AppTrackingTransparency)
 import AppTrackingTransparency
+#endif
+
+#if canImport(AdSupport)
 import AdSupport
+#endif
 
 // MARK: - Configuration
 
@@ -148,6 +162,7 @@ public struct IdentityData {
 
 struct DeviceFingerprint {
     static func generate() -> String {
+        #if canImport(UIKit)
         let signals = [
             UIDevice.current.identifierForVendor?.uuidString ?? "",
             UIDevice.current.model,
@@ -160,6 +175,17 @@ struct DeviceFingerprint {
             String(ProcessInfo.processInfo.processorCount),
             String(ProcessInfo.processInfo.physicalMemory),
         ]
+        #else
+        let signals = [
+            Host.current().localizedName ?? "",
+            "macOS",
+            ProcessInfo.processInfo.operatingSystemVersionString,
+            Locale.current.identifier,
+            TimeZone.current.identifier,
+            String(ProcessInfo.processInfo.processorCount),
+            String(ProcessInfo.processInfo.physicalMemory),
+        ]
+        #endif
         return sha256(signals.joined(separator: "|"))
     }
 
@@ -248,17 +274,21 @@ public final class Aether: NSObject {
         // Setup lifecycle observers
         setupLifecycleObservers()
 
-        // Auto screen tracking via swizzling
+        // Auto screen tracking via swizzling (iOS only)
+        #if canImport(UIKit)
         if config.modules.screenTracking {
             UIViewController.swizzleViewDidAppear()
         }
+        #endif
 
         self.fingerprintId = DeviceFingerprint.generate()
 
         // Request App Tracking Transparency authorization if required (iOS 14.5+)
+        #if canImport(AppTrackingTransparency)
         if config.privacy.respectATT {
             requestTrackingAuthorization()
         }
+        #endif
 
         isInitialized = true
         log("Aether iOS SDK initialized (v8.9.0)")
@@ -267,7 +297,9 @@ public final class Aether: NSObject {
         emitSessionStart()
 
         // MetricKit: subscribe for diagnostic/performance payloads (iOS 13+)
+        #if canImport(MetricKit)
         MXMetricManager.shared.add(self)
+        #endif
 
         if config.autoResumeJourney {
             resolveIdentity(walletAddress: walletAddress, userId: nil, email: nil)
@@ -697,11 +729,20 @@ public final class Aether: NSObject {
 
     private func buildContext() -> EventContext {
         let granted = Set(consentState)
+
+        #if canImport(UIKit)
+        let osName = "iOS"
+        let osVersion = UIDevice.current.systemVersion
+        #else
+        let osName = "macOS"
+        let osVersion = ProcessInfo.processInfo.operatingSystemVersionString
+        #endif
+
         return EventContext(
             library: .init(name: "aether-ios", version: "8.9.0"),
             device: .init(
-                osName: "iOS",
-                osVersion: UIDevice.current.systemVersion,
+                osName: osName,
+                osVersion: osVersion,
                 locale: Locale.current.identifier,
                 timezone: TimeZone.current.identifier
             ),
@@ -722,14 +763,23 @@ public final class Aether: NSObject {
     private func emitSessionStart() {
         let startupMs = Int(Date().timeIntervalSince(appStartDate) * 1000)
         let memoryUsedMB = memoryUsageMB()
+
+        #if canImport(UIKit)
+        let osVersion = UIDevice.current.systemVersion
+        let deviceModel = UIDevice.current.model
+        #else
+        let osVersion = ProcessInfo.processInfo.operatingSystemVersionString
+        let deviceModel = "Mac"
+        #endif
+
         enqueueEvent(type: .track, properties: [
             "event":          AnyCodable("session_start"),
             "startupTimeMs":  AnyCodable(startupMs),
             "memoryUsedMB":   AnyCodable(memoryUsedMB),
             "thermalState":   AnyCodable(thermalStateString()),
             "networkType":    AnyCodable(currentNetworkType),
-            "osVersion":      AnyCodable(UIDevice.current.systemVersion),
-            "device":         AnyCodable(UIDevice.current.model),
+            "osVersion":      AnyCodable(osVersion),
+            "device":         AnyCodable(deviceModel),
         ])
     }
 
@@ -755,8 +805,9 @@ public final class Aether: NSObject {
         }
     }
 
+    #if canImport(AppTrackingTransparency)
     private func requestTrackingAuthorization() {
-        if #available(iOS 14.5, *) {
+        if #available(iOS 14.5, macOS 12.0, *) {
             // Must be called after the first UIApplicationDidBecomeActive
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
                 ATTrackingManager.requestTrackingAuthorization { [weak self] status in
@@ -768,15 +819,21 @@ public final class Aether: NSObject {
                     case .notDetermined:       statusStr = "not_determined"
                     @unknown default:          statusStr = "unknown"
                     }
-                    self?.enqueueEvent(type: .track, properties: [
+                    var props: [String: AnyCodable] = [
                         "event": AnyCodable("att_authorization"),
                         "status": AnyCodable(statusStr),
-                        "idfa": AnyCodable(status == .authorized ? ASIdentifierManager.shared().advertisingIdentifier.uuidString : ""),
-                    ])
+                    ]
+                    #if canImport(AdSupport)
+                    props["idfa"] = AnyCodable(status == .authorized ? ASIdentifierManager.shared().advertisingIdentifier.uuidString : "")
+                    #else
+                    props["idfa"] = AnyCodable("")
+                    #endif
+                    self?.enqueueEvent(type: .track, properties: props)
                 }
             }
         }
     }
+    #endif
 
     private func startNetworkMonitor() {
         networkMonitor.pathUpdateHandler = { [weak self] path in
@@ -799,6 +856,7 @@ public final class Aether: NSObject {
     }
 
     private func setupLifecycleObservers() {
+        #if canImport(UIKit)
         NotificationCenter.default.addObserver(forName: UIApplication.didEnterBackgroundNotification, object: nil, queue: .main) { [weak self] _ in
             self?.flush()
         }
@@ -820,6 +878,12 @@ public final class Aether: NSObject {
         NotificationCenter.default.addObserver(forName: UIApplication.didEnterBackgroundNotification, object: nil, queue: .main) { [weak self] _ in
             self?.lastActivityDate = Date()
         }
+        #else
+        // macOS lifecycle: observe NSApplication termination
+        NotificationCenter.default.addObserver(forName: NSApplication.willTerminateNotification, object: nil, queue: .main) { [weak self] _ in
+            self?.flush()
+        }
+        #endif
     }
 
     private func sha256(_ string: String) -> String {
@@ -890,6 +954,7 @@ public final class Aether: NSObject {
 
 // MARK: - MetricKit Delegate
 
+#if canImport(MetricKit)
 extension Aether: MXMetricManagerSubscriber {
     public func didReceive(_ payloads: [MXMetricPayload]) {
         for payload in payloads {
@@ -945,9 +1010,11 @@ extension Aether: MXMetricManagerSubscriber {
         }
     }
 }
+#endif
 
 // MARK: - UIViewController Swizzling for Auto Screen Tracking
 
+#if canImport(UIKit)
 extension UIViewController {
     static var hasSwizzled = false
 
@@ -974,6 +1041,7 @@ extension UIViewController {
         }
     }
 }
+#endif
 
 // MARK: - AnyCodable Helper
 

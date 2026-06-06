@@ -31,5 +31,10 @@
     "access": "public",
     "registry": "https://registry.npmjs.org"
   },
+  "devDependencies": {
+    "@vitest/coverage-v8": "^1.6.0",
+    "vitest": "^1.6.0",
+    "typescript": "^5.4.0"
+  },
   "license": "UNLICENSED"
 }

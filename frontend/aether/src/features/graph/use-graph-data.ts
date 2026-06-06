@@ -173,7 +173,7 @@ export function useGraphData() {
       // GET /v1/delegations returns { delegations: rows, count: N } (list shape).
       try {
         const delData = await api.graph.delegations({ limit: 500 });
-        delData.delegations.forEach((d, i) => addEdge(mapDelegationEdge(d, i)));
+        delData.delegations.forEach((d: unknown, i: number) => addEdge(mapDelegationEdge(d, i)));
       } catch { /* delegation endpoint may be empty or unavailable */ }
 
       // 3. Identity links for a sample of entities → H2H edges

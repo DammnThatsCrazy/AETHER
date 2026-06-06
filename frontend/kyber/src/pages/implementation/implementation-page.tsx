@@ -82,7 +82,7 @@ export function ImplementationPage() {
                   <div>Value: <b>{detail.data.plan.value_readiness_score}</b></div>
                   <div>Expansion: <b>{detail.data.plan.expansion_readiness_score}</b></div>
                 </div>
-                <div className="space-y-2">{detail.data.steps.map(s => <div key={s.step_id} className="flex items-center gap-2 rounded border border-border-default p-2 text-xs"><StatusIndicator status={s.status === 'completed' ? 'healthy' : s.status === 'blocked' ? 'unhealthy' : 'degraded'} />{s.title}<span className="ml-auto text-text-muted">{s.category}</span></div>)}</div>
+                <div className="space-y-2">{detail.data.steps.map((s: { step_id: string; status: string; title: string; category: string }) => <div key={s.step_id} className="flex items-center gap-2 rounded border border-border-default p-2 text-xs"><StatusIndicator status={s.status === 'completed' ? 'healthy' : s.status === 'blocked' ? 'unhealthy' : 'degraded'} />{s.title}<span className="ml-auto text-text-muted">{s.category}</span></div>)}</div>
                 <div className="text-xs text-text-secondary">Success criteria: minimum events {detail.data.plan.success_criteria.minimum_event_volume}; go-live approved {String(detail.data.plan.success_criteria.go_live_approved)}</div>
               </>
             ) : <EmptyState title="No tenant selected" description="Select a tenant from the table or route to /implementation/:tenantId." />}

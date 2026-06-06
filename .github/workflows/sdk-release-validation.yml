@@ -72,7 +72,12 @@ jobs:
       - uses: actions/checkout@v4
       - name: Swift package tests with coverage
         working-directory: packages/ios
-        run: swift test --enable-code-coverage
+        run: |
+          xcodebuild test \
+            -scheme AetherSDK \
+            -destination 'platform=iOS Simulator,name=iPhone 16,OS=latest' \
+            -enableCodeCoverage YES \
+            -quiet
       - name: CocoaPods podspec dry-run lint
         run: |
           gem install cocoapods --no-document
