@@ -18,7 +18,7 @@ source_files:
 
 Noesis is Aether's graph-native natural-language intelligence layer. It exposes a shared read-only backend endpoint for both Kyber (internal operator console) and Aether (tenant-facing intelligence UI), plus dedicated frontend workspaces in each surface.
 
-**Status:** Production (GA). Phase 0 (stabilize beta) and Phase 1 (production deterministic Noesis) are complete.
+**Status:** Production (GA). Phase 0 (stabilize beta), Phase 1 (production deterministic Noesis), Phase 2 (LLM-assisted planner), and Phase 3 (rate limiting, canary gating, conversation persistence) are complete.
 
 ## GA contract
 
@@ -142,7 +142,4 @@ Both pages share the `NoesisWorkspace` UI component and render answers, result c
 
 ## Deferred work
 
-- Conversation store exists but is NOT wired into the GA query path. Will be enabled when persistence is standardized.
 - Streaming responses deferred until backend supports incremental answer composition.
-- Real rate limiting (currently placeholder headers and logging).
-- Wire production LLM provider through the existing provider gateway when policy and keys are configured.

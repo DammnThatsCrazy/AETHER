@@ -65,12 +65,25 @@ Your only job is to classify a user's natural-language question into a structure
 {_SCHEMA_INSTRUCTIONS}"""
 
 
-def build_user_message(message: str, effective_tenant_id: str, surface: str, context_hint: str | None) -> str:
+def build_user_message(
+    message: str,
+    effective_tenant_id: str,
+    surface: str,
+    context_hint: str | None,
+    history: list[dict] | None = None,
+) -> str:
     parts = [
         f"Surface: {surface}",
         f"Effective tenant ID (do not change): {effective_tenant_id}",
     ]
     if context_hint:
         parts.append(f"Context: {context_hint}")
+    if history:
+        recent = history[-3:]   # at most 3 prior turns to keep prompt concise
+        lines = [
+            f"  [{t.get('intent', '?')}] Q: {t.get('message', '')[:120]} → {t.get('answer', '')[:120]}"
+            for t in recent
+        ]
+        parts.append("Recent conversation (read-only context — do not change tenant_id):\n" + "\n".join(lines))
     parts.append(f"\nUser question: {message}")
     return "\n".join(parts)

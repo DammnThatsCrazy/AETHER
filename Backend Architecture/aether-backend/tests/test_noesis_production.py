@@ -29,7 +29,7 @@ class StaticProvider:
     def __init__(self, plan: QueryPlan | None):
         self._plan = plan
 
-    async def plan(self, request: NoesisQueryRequest, effective_tenant_id: str) -> QueryPlan | None:
+    async def plan(self, request: NoesisQueryRequest, effective_tenant_id: str, history=None) -> QueryPlan | None:
         return self._plan
 
 
