@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import re
+import uuid
 from dataclasses import dataclass
 from typing import Any, Iterable, Optional
 
@@ -23,7 +24,19 @@ from repositories.repos import (
     WalletRepository,
 )
 
-from .models import NoesisAction, NoesisGraph, NoesisQueryRequest, NoesisResponse, QueryPlan
+from .models import (
+    INJECTION_PATTERNS,
+    MAX_LIMIT,
+    SUPPORTED_FILTERS,
+    SUPPORTED_INTENTS,
+    WRITE_LIKE_KEYWORDS,
+    NoesisAction,
+    NoesisAuditEntry,
+    NoesisGraph,
+    NoesisQueryRequest,
+    NoesisResponse,
+    QueryPlan,
+)
 from .provider import EnvironmentNoesisPlanProvider, NoesisPlanProvider
 
 logger = get_logger("aether.service.noesis")
@@ -58,19 +71,45 @@ class NoesisService:
         self.providers = ProvidersRepository()
         self.wallets = WalletRepository()
 
-    async def query(self, body: NoesisQueryRequest, tenant: TenantContext) -> NoesisResponse:
+    async def query(self, body: NoesisQueryRequest, tenant: TenantContext, *, request_id: str | None = None) -> NoesisResponse:
+        request_id = request_id or str(uuid.uuid4())
         scope = self._resolve_scope(body, tenant)
+
+        # Safety: reject write-like and injection prompts
+        safety_response = self._check_safety(body, scope, request_id)
+        if safety_response is not None:
+            return safety_response
+
+        self._check_rate_limit(scope)
+
         plan = self._classify(body, scope)
         mode = "deterministic"
         warnings: list[str] = []
+        fallback_triggered = False
+        provider_used: str | None = None
 
         if plan.intent == "unsupported":
             llm_plan = await self.provider.plan(body, scope.effective_tenant_id)
+            provider_used = getattr(self.provider, "provider_name", None) or type(self.provider).__name__
             if llm_plan is not None:
                 plan = self._validate_plan(llm_plan, scope)
                 mode = "llm_text_to_query"
             else:
-                return self._unsupported_response(body, warnings)
+                fallback_triggered = True
+                resp = self._unsupported_response(body, warnings)
+                self._audit_log(NoesisAuditEntry(
+                    request_id=request_id, tenant_id=tenant.tenant_id,
+                    effective_tenant_id=scope.effective_tenant_id,
+                    requested_tenant_id=body.tenant_id,
+                    surface=body.surface, role=tenant.role.value if hasattr(tenant.role, "value") else str(tenant.role),
+                    permissions=list(tenant.permissions), intent="unsupported", mode="fallback",
+                    result_count=0, debug_returned=False, fallback_triggered=True,
+                    provider_used=provider_used,
+                ))
+                return resp
+
+        # Read-only guard before dispatch
+        self._assert_read_only(plan)
 
         response = await self._dispatch(plan, scope, body)
         response.mode = mode  # type: ignore[assignment]
@@ -82,7 +121,81 @@ class NoesisService:
             "Noesis query routed",
             extra={"surface": body.surface, "intent": response.intent, "mode": response.mode, "tenant_id": scope.effective_tenant_id, "cross_tenant": scope.cross_tenant},
         )
+        self._audit_log(NoesisAuditEntry(
+            request_id=request_id, tenant_id=tenant.tenant_id,
+            effective_tenant_id=scope.effective_tenant_id,
+            requested_tenant_id=body.tenant_id,
+            surface=body.surface, role=tenant.role.value if hasattr(tenant.role, "value") else str(tenant.role),
+            permissions=list(tenant.permissions), intent=response.intent, mode=response.mode,
+            result_count=len(response.results), debug_returned=response.query_debug is not None,
+            fallback_triggered=fallback_triggered, provider_used=provider_used,
+        ))
         return response
+
+    # ─── Safety & guards ──────────────────────────────────────────────────
+
+    def _check_safety(self, body: NoesisQueryRequest, scope: Scope, request_id: str) -> NoesisResponse | None:
+        """Reject write-like and injection prompts. Returns a safe response or None."""
+        low = body.message.lower()
+
+        # Injection pattern check
+        for pattern in INJECTION_PATTERNS:
+            if pattern in low:
+                logger.warning("Noesis injection pattern detected", extra={"pattern": pattern, "request_id": request_id})
+                metrics.increment("noesis_safety_reject", labels={"reason": "injection"})
+                return NoesisResponse(
+                    answer="I can only answer read-only intelligence questions. This request was not processed.",
+                    mode="fallback", intent="rejected", confidence=1.0,
+                    error={"code": "safety_rejection", "message": "Prompt matched an injection pattern.", "details": {}},
+                )
+
+        # Write-like keyword check — only flag if the keyword is the main verb
+        # "show deleted alerts" is fine; "delete this user" is not
+        sentences = re.split(r"[.!?\n]+", low)
+        for sentence in sentences:
+            sentence = sentence.strip()
+            if not sentence:
+                continue
+            words = sentence.split()
+            if not words:
+                continue
+            # Check first word or second word (after "please", "can you", etc.)
+            lead_words = words[:3]
+            for word in lead_words:
+                if word in WRITE_LIKE_KEYWORDS:
+                    # Allow passive/adjective usage like "show deleted", "find removed"
+                    if len(words) > 1 and words[0] in ("show", "find", "list", "get", "display", "search", "what", "which", "how"):
+                        break
+                    logger.warning("Noesis write-like prompt rejected", extra={"keyword": word, "request_id": request_id})
+                    metrics.increment("noesis_safety_reject", labels={"reason": "write_keyword"})
+                    return NoesisResponse(
+                        answer="Noesis is a read-only intelligence layer. Write, mutation, and administrative operations are not supported.",
+                        mode="fallback", intent="rejected", confidence=1.0,
+                        error={"code": "safety_rejection", "message": "Prompt contains a write-like instruction.", "details": {}},
+                    )
+        return None
+
+    def _check_rate_limit(self, scope: Scope) -> None:
+        """Placeholder for rate limiting. Logs but does not block."""
+        logger.info("Noesis rate limit check", extra={"tenant": scope.effective_tenant_id, "surface": scope.surface})
+
+    def _assert_read_only(self, plan: QueryPlan) -> None:
+        """Verify plan is for a supported read-only intent."""
+        if plan.intent not in SUPPORTED_INTENTS:
+            raise BadRequestError(f"Noesis does not support intent '{plan.intent}'")
+        # Check for mutation keywords in filter values
+        for v in plan.filters.values():
+            if isinstance(v, str) and any(kw in v.lower() for kw in WRITE_LIKE_KEYWORDS):
+                raise BadRequestError("Noesis plan contains mutation-like filter values")
+
+    def _audit_log(self, entry: NoesisAuditEntry) -> None:
+        """Structured audit log for every Noesis query."""
+        from shared.common.common import utc_now
+        entry.timestamp = entry.timestamp or utc_now()
+        logger.info("Noesis audit", extra=entry.model_dump())
+        metrics.increment("noesis_audit", labels={"intent": entry.intent, "mode": entry.mode, "surface": entry.surface})
+        if entry.rejected:
+            metrics.increment("noesis_rejected", labels={"reason": entry.rejection_reason or "unknown"})
 
     def _resolve_scope(self, body: NoesisQueryRequest, tenant: TenantContext) -> Scope:
         tenant.require_permission("read")
@@ -110,35 +223,89 @@ class NoesisService:
         limit = 10
         if "all" in low and len(low) < 80:
             limit = 25
-        if any(k in low for k in ("sdk", "telemetry", "health", "drift", "failing", "unhealthy")):
-            return QueryPlan(intent="health_lookup", target=target, tenant_id=scope.effective_tenant_id, time_range=time_range, confidence=0.82, limit=limit)
-        if any(k in low for k in ("alert", "unresolved", "incident")):
-            return QueryPlan(intent="alert_lookup", target=target, tenant_id=scope.effective_tenant_id, time_range=time_range, confidence=0.86, limit=limit)
-        if any(k in low for k in ("tenant", "customers")) and any(k in low for k in ("summary", "status", "lookup", "show")):
-            return QueryPlan(intent="tenant_summary", target=target, tenant_id=scope.effective_tenant_id, time_range=time_range, confidence=0.8, limit=limit)
-        if any(k in low for k in ("connected", "neighbors", "graph", "what is connected", "traversal")):
-            return QueryPlan(intent="graph_lookup", target=target, tenant_id=scope.effective_tenant_id, time_range=time_range, confidence=0.84, limit=limit)
-        if any(k in low for k in ("campaign", "reward", "spending", "valuable")):
-            return QueryPlan(intent="campaign_reward_lookup", target=target, tenant_id=scope.effective_tenant_id, time_range=time_range, confidence=0.78, limit=limit)
-        if any(k in low for k in ("risk", "cluster", "abnormal", "fraud")):
-            return QueryPlan(intent="risk_cluster_lookup", target=target, tenant_id=scope.effective_tenant_id, time_range=time_range, confidence=0.76, limit=limit)
+
+        # Collect candidate intents for ambiguity detection
+        candidates: list[tuple[str, float]] = []
+
+        if any(k in low for k in ("sdk", "telemetry", "health", "drift", "failing", "unhealthy", "diagnostics", "provider status", "system status", "uptime")):
+            candidates.append(("health_lookup", 0.82))
+        if any(k in low for k in ("alert", "unresolved", "incident", "open issues", "warnings", "critical")):
+            candidates.append(("alert_lookup", 0.86))
+        if any(k in low for k in ("tenant", "customers")) and any(k in low for k in ("summary", "status", "lookup", "show", "overview", "report")):
+            candidates.append(("tenant_summary", 0.8))
+        if any(k in low for k in ("connected", "neighbors", "graph", "what is connected", "traversal", "linked", "relationships", "edges", "adjacent")):
+            candidates.append(("graph_lookup", 0.84))
+        if any(k in low for k in ("campaign", "reward", "spending", "valuable", "loyalty", "incentive")):
+            candidates.append(("campaign_reward_lookup", 0.78))
+        if any(k in low for k in ("risk", "cluster", "abnormal", "fraud", "risky", "suspicious", "anomaly", "anomalies")):
+            candidates.append(("risk_cluster_lookup", 0.76))
         if "wallet" in low or _WALLET_RE.search(text):
-            return QueryPlan(intent="wallet_lookup", target=target or self._extract_wallet(text), entity_type="wallet", tenant_id=scope.effective_tenant_id, time_range=time_range, confidence=0.84, limit=limit)
+            candidates.append(("wallet_lookup", 0.84))
         if "agent" in low:
-            return QueryPlan(intent="agent_lookup", target=target, entity_type="agent", tenant_id=scope.effective_tenant_id, time_range=time_range, confidence=0.8, limit=limit)
-        if any(k in low for k in ("profile", "user", "identity")):
-            return QueryPlan(intent="profile_lookup", target=target, entity_type="human", tenant_id=scope.effective_tenant_id, time_range=time_range, confidence=0.78, limit=limit)
-        if any(k in low for k in ("find", "search", "show me", "take me")):
-            return QueryPlan(intent="entity_search", target=target or self._search_terms(text), tenant_id=scope.effective_tenant_id, time_range=time_range, confidence=0.64, limit=limit)
-        return QueryPlan(intent="unsupported", target=target, tenant_id=scope.effective_tenant_id, time_range=time_range, confidence=0.2)
+            candidates.append(("agent_lookup", 0.8))
+        if any(k in low for k in ("profile", "user", "identity", "person", "member", "customer")):
+            candidates.append(("profile_lookup", 0.78))
+        if any(k in low for k in ("find", "search", "show me", "take me", "list", "display", "look up")):
+            candidates.append(("entity_search", 0.64))
+
+        if not candidates:
+            return QueryPlan(intent="unsupported", target=target, tenant_id=scope.effective_tenant_id, time_range=time_range, confidence=0.2)
+
+        # Ambiguity: if multiple strong candidates, ask for clarification
+        strong = [(i, c) for i, c in candidates if c >= 0.7]
+        if len(strong) > 1:
+            # If there's a clear winner (highest confidence), use it
+            strong.sort(key=lambda x: x[1], reverse=True)
+            if strong[0][1] - strong[1][1] < 0.05:
+                # Too close — ambiguous
+                return QueryPlan(intent=strong[0][0], target=target, tenant_id=scope.effective_tenant_id, time_range=time_range, confidence=0.45, limit=limit)
+
+        best_intent, best_conf = candidates[0]
+
+        # Build the plan for the best match
+        if best_intent == "wallet_lookup":
+            return QueryPlan(intent="wallet_lookup", target=target or self._extract_wallet(text), entity_type="wallet", tenant_id=scope.effective_tenant_id, time_range=time_range, confidence=best_conf, limit=limit)
+        if best_intent == "agent_lookup":
+            return QueryPlan(intent="agent_lookup", target=target, entity_type="agent", tenant_id=scope.effective_tenant_id, time_range=time_range, confidence=best_conf, limit=limit)
+        if best_intent == "profile_lookup":
+            return QueryPlan(intent="profile_lookup", target=target, entity_type="human", tenant_id=scope.effective_tenant_id, time_range=time_range, confidence=best_conf, limit=limit)
+        if best_intent == "entity_search":
+            return QueryPlan(intent="entity_search", target=target or self._search_terms(text), tenant_id=scope.effective_tenant_id, time_range=time_range, confidence=best_conf, limit=limit)
+        return QueryPlan(intent=best_intent, target=target, tenant_id=scope.effective_tenant_id, time_range=time_range, confidence=best_conf, limit=limit)
 
     def _validate_plan(self, plan: QueryPlan, scope: Scope) -> QueryPlan:
         if plan.intent == "unsupported":
+            logger.warning("LLM plan returned unsupported intent", extra={"intent": plan.intent})
             raise BadRequestError("LLM plan did not map to a supported Noesis intent")
+        if plan.intent not in SUPPORTED_INTENTS:
+            logger.warning("LLM plan returned non-allowlisted intent", extra={"intent": plan.intent})
+            raise BadRequestError(f"LLM plan intent '{plan.intent}' is not allowlisted")
         if plan.tenant_id and plan.tenant_id != scope.effective_tenant_id:
+            logger.warning("LLM plan attempted tenant override", extra={"plan_tenant": plan.tenant_id, "effective": scope.effective_tenant_id})
             raise ForbiddenError("Generated Noesis plan attempted to change tenant scope")
+        # Reject cross-tenant from Aether surface
+        if scope.surface == "aether" and plan.tenant_id and plan.tenant_id != scope.effective_tenant_id:
+            logger.warning("LLM plan cross-tenant from aether blocked")
+            raise ForbiddenError("Cross-tenant queries are not allowed from Aether surface")
+        # Reject unsupported filters
+        for key in plan.filters:
+            if key not in SUPPORTED_FILTERS:
+                logger.warning("LLM plan unsupported filter rejected", extra={"filter": key})
+                raise BadRequestError(f"LLM plan filter '{key}' is not supported")
+        # Reject mutation-like filter values
+        for v in plan.filters.values():
+            if isinstance(v, str) and any(kw in v.lower() for kw in WRITE_LIKE_KEYWORDS):
+                logger.warning("LLM plan mutation filter value rejected")
+                raise BadRequestError("LLM plan contains mutation-like filter values")
+        # Reject unsafe date ranges (>90 days)
+        tr = plan.time_range or ""
+        if tr:
+            day_match = re.search(r"(\d+)\s*d", tr)
+            if day_match and int(day_match.group(1)) > 90:
+                logger.warning("LLM plan unsafe date range rejected", extra={"time_range": tr})
+                raise BadRequestError("LLM plan time range exceeds 90-day maximum")
         plan.tenant_id = scope.effective_tenant_id
-        plan.limit = min(max(plan.limit, 1), 50)
+        plan.limit = min(max(plan.limit, 1), MAX_LIMIT)
         plan.source = "llm"
         return plan
 
@@ -211,7 +378,13 @@ class NoesisService:
     async def _tenant_summary(self, plan: QueryPlan, scope: Scope) -> NoesisResponse:
         if scope.surface != "kyber":
             raise ForbiddenError("Tenant summaries are Kyber-only")
-        target_tid = plan.target if plan.target and scope.cross_tenant else scope.effective_tenant_id
+        # Prefer scope's effective tenant; only use plan.target if it looks like a
+        # tenant ID (not a keyword accidentally captured by _extract_target).
+        target_tid = scope.effective_tenant_id
+        if plan.target and scope.cross_tenant and plan.target != scope.effective_tenant_id:
+            candidate = await self.tenants.find_by_id(plan.target)
+            if candidate is not None:
+                target_tid = plan.target
         tenant = await self.tenants.find_by_id(target_tid) if target_tid else None
         summary = await self.analytics.dashboard_summary(target_tid) if target_tid else {"period": "all", "total_events": 0, "total_sessions": 0}
         target_filter = {"tenant_id": target_tid} if target_tid else None
@@ -315,7 +488,11 @@ class NoesisService:
         return self._redact_deep(row)
 
     def _redact_deep(self, value: Any) -> Any:
-        blocked = {"key_hash", "api_key", "secret", "token", "password", "credentials"}
+        blocked = {
+            "key_hash", "api_key", "secret", "token", "password", "credentials",
+            "authorization", "session_token", "refresh_token", "private_key",
+            "connection_string", "oauth_token", "webhook_secret", "x_api_key",
+        }
         if isinstance(value, dict):
             return {k: ("[redacted]" if k.lower() in blocked else self._redact_deep(v)) for k, v in value.items()}
         if isinstance(value, list):

@@ -116,7 +116,7 @@ async def test_llm_plan_fallback_is_validated(tenant: TenantContext):
 
 @pytest.mark.asyncio
 async def test_unsupported_intent_returns_refinement(service: NoesisService, tenant: TenantContext):
-    response = await service.query(NoesisQueryRequest(message="write a poem", surface="aether"), tenant)
+    response = await service.query(NoesisQueryRequest(message="what is the meaning of life", surface="aether"), tenant)
 
     assert response.mode == "fallback"
     assert response.error is not None

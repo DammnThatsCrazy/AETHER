@@ -1,4 +1,4 @@
-import { useState, type FormEvent, type ReactNode } from 'react';
+import { Component, useState, useRef, type FormEvent, type ReactNode, type ErrorInfo } from 'react';
 import { Badge } from './badge';
 import { Button } from './button';
 import { Card, CardContent, CardHeader, CardTitle } from './card';
@@ -138,6 +138,44 @@ function AssistantResponse({ response }: { readonly response: NoesisResponsePayl
   );
 }
 
+interface ResponseErrorBoundaryState {
+  readonly hasError: boolean;
+}
+
+class ResponseErrorBoundary extends Component<{ readonly children: ReactNode }, ResponseErrorBoundaryState> {
+  constructor(props: { readonly children: ReactNode }) {
+    super(props);
+    this.state = { hasError: false };
+  }
+
+  static getDerivedStateFromError(): ResponseErrorBoundaryState {
+    return { hasError: true };
+  }
+
+  override componentDidCatch(error: Error, info: ErrorInfo): void {
+    console.error('[NoesisWorkspace] Error rendering response:', error, info);
+  }
+
+  override render() {
+    if (this.state.hasError) {
+      return (
+        <div className="rounded border border-danger/30 bg-danger/10 px-3 py-2 text-xs text-danger">
+          Unable to render this response. The data may be malformed.
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
+
+function SafeAssistantResponse({ response }: { readonly response: NoesisResponsePayload }) {
+  return (
+    <ResponseErrorBoundary>
+      <AssistantResponse response={response} />
+    </ResponseErrorBoundary>
+  );
+}
+
 function MessageBubble({ message }: { readonly message: NoesisMessageItem }) {
   const isUser = message.role === 'user';
   return (
@@ -147,7 +185,7 @@ function MessageBubble({ message }: { readonly message: NoesisMessageItem }) {
         isUser ? 'border-accent/30 bg-accent/10 text-text-primary' : 'border-border-default bg-surface-raised text-text-primary',
       )}>
         <div className="mb-1 text-[10px] uppercase tracking-wide text-text-muted font-mono">{isUser ? 'You' : 'Noesis'}</div>
-        {message.response ? <AssistantResponse response={message.response} /> : <p className="text-sm">{message.content}</p>}
+        {message.response ? <SafeAssistantResponse response={message.response} /> : <p className="text-sm">{message.content}</p>}
       </div>
     </div>
   );
@@ -193,7 +231,19 @@ export function NoesisWorkspace({
   onSubmit,
 }: NoesisWorkspaceProps) {
   const hasMessages = messages.length > 0;
+  const submittingRef = useRef(false);
   const accent: ReactNode = surfaceTone === 'kyber' ? 'Internal operator graph command' : 'Tenant-safe intelligence copilot';
+
+  function guardedSubmit(message: string) {
+    if (submittingRef.current || isLoading) return;
+    submittingRef.current = true;
+    const result = onSubmit(message);
+    if (result && typeof result.then === 'function') {
+      void result.then(() => { submittingRef.current = false; }, () => { submittingRef.current = false; });
+    } else {
+      submittingRef.current = false;
+    }
+  }
   return (
     <div className="min-h-full rounded-2xl bg-[radial-gradient(circle_at_top,_rgba(86,143,255,0.18),_transparent_34%),linear-gradient(180deg,_rgba(7,10,18,0.96),_rgba(12,16,28,0.98))] p-5 text-text-primary">
       <div className="mx-auto flex max-w-6xl flex-col gap-5">
@@ -215,7 +265,8 @@ export function NoesisWorkspace({
                   <button
                     key={prompt}
                     type="button"
-                    onClick={() => void onSubmit(prompt)}
+                    disabled={isLoading}
+                    onClick={() => guardedSubmit(prompt)}
                     className="rounded-lg border border-border-subtle bg-surface-sunken/60 px-3 py-3 text-left text-xs text-text-secondary transition hover:border-accent/50 hover:text-text-primary"
                   >
                     {prompt}

@@ -3123,6 +3123,18 @@
       "canonical_owner": "frontend@aether"
     },
     {
+      "path": "docs/internal/noesis-security-checklist.md",
+      "title": "Noesis Production Security Checklist",
+      "slug": "internal/noesis-security-checklist",
+      "section": "security",
+      "visibility": "I",
+      "audience": [
+        "dev-senior",
+        "security"
+      ],
+      "status": "stable"
+    },
+    {
       "path": "docs/internal/noesis.md",
       "title": "Noesis Graph Intelligence",
       "slug": "internal/noesis",
@@ -3131,7 +3143,7 @@
       "audience": [
         "dev-senior"
       ],
-      "status": "beta"
+      "status": "stable"
     },
     {
       "path": "docs/internal/tooling/docs-pipeline.md",
@@ -3149,6 +3161,42 @@
       "estimated_read_minutes": 8,
       "toc_depth": 3,
       "canonical_owner": "platform@aether"
+    },
+    {
+      "path": "docs/noesis-ga-contract.md",
+      "title": "Noesis GA Production Contract",
+      "slug": "noesis-ga-contract",
+      "section": "architecture",
+      "visibility": "I",
+      "audience": [
+        "dev-senior",
+        "architect",
+        "security"
+      ],
+      "status": "stable"
+    },
+    {
+      "path": "docs/noesis-operator-runbook.md",
+      "title": "Noesis Operator Runbook",
+      "slug": "noesis-operator-runbook",
+      "section": "operations",
+      "visibility": "I",
+      "audience": [
+        "ops",
+        "dev-senior"
+      ],
+      "status": "stable"
+    },
+    {
+      "path": "docs/noesis-tenant-guide.md",
+      "title": "Noesis — Ask Aether",
+      "slug": "noesis-tenant-guide",
+      "section": "concepts",
+      "visibility": "C",
+      "audience": [
+        "buyer"
+      ],
+      "status": "stable"
     }
   ]
 }
