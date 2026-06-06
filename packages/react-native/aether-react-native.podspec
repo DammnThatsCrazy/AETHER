@@ -21,5 +21,7 @@ Pod::Spec.new do |s|
   s.dependency "React-Core"
   s.dependency "AetherSDK", "~> #{s.version.to_s.split('.').first}.0"
 
-  install_modules_dependencies(s)
+  # install_modules_dependencies is injected by react-native-builder-bob / RN Podfile helpers.
+  # Guard so `pod spec lint --quick` (no RN context) does not fail.
+  install_modules_dependencies(s) if respond_to?(:install_modules_dependencies, true)
 end
