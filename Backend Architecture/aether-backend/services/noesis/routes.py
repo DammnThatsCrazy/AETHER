@@ -31,7 +31,6 @@ async def query_noesis(
     request_id = str(uuid.uuid4())
     correlation_id = getattr(request.state, "correlation_id", None) or request.headers.get("x-correlation-id") or request_id
 
-    service = NoesisService(graph=graph, analytics=analytics)
     try:
         analytics = AnalyticsRepository(get_cache())
         service = NoesisService(graph=graph, analytics=analytics)
