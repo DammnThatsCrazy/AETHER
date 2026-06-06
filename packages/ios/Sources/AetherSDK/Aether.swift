@@ -356,7 +356,7 @@ public final class Aether: NSObject {
 
     public func getCurrentJourney() -> [String: AnyCodable]? {
         guard let journeyId = currentJourneyId else { return nil }
-        return ["journeyId": AnyCodable(journeyId), "journeyName": AnyCodable(currentJourneyName)]
+        return ["journeyId": AnyCodable(journeyId), "journeyName": AnyCodable(currentJourneyName as Any)]
     }
 
     public func screenView(_ screenName: String, properties: [String: AnyCodable] = [:]) {
@@ -960,17 +960,17 @@ extension Aether: MXMetricManagerSubscriber {
         for payload in payloads {
             var props: [String: AnyCodable] = [
                 "event":        AnyCodable("metrickit_payload"),
-                "appVersion":   AnyCodable(payload.metaData?.applicationBuildNumber ?? ""),
+                "appVersion":   AnyCodable(payload.latestApplicationVersion),
                 "periodStart":  AnyCodable(ISO8601DateFormatter().string(from: payload.timeStampBegin)),
                 "periodEnd":    AnyCodable(ISO8601DateFormatter().string(from: payload.timeStampEnd)),
             ]
 
             if let launch = payload.applicationLaunchMetrics {
-                props["resumeTimeP50Ms"]   = AnyCodable(launch.applicationResumeTime.histogram.buckets.first?.averageValue.converted(to: .milliseconds).value ?? 0)
-                props["coldLaunchTimeP50Ms"] = AnyCodable(launch.timeToFirstDrawKey.histogram.buckets.first?.averageValue.converted(to: .milliseconds).value ?? 0)
+                props["resumeBucketCount"]     = AnyCodable(launch.histogrammedApplicationResumeTime.totalBucketCount)
+                props["coldLaunchBucketCount"] = AnyCodable(launch.histogrammedTimeToFirstDraw.totalBucketCount)
             }
             if let hang = payload.applicationResponsivenessMetrics {
-                props["hangRatePerHour"] = AnyCodable(hang.hangRate.averageValue.value)
+                props["hangBucketCount"] = AnyCodable(hang.histogrammedApplicationHangTime.totalBucketCount)
             }
             if let cpu = payload.cpuMetrics {
                 props["cpuTimePerSecond"] = AnyCodable(cpu.cumulativeCPUTime.converted(to: .seconds).value)
@@ -996,7 +996,6 @@ extension Aether: MXMetricManagerSubscriber {
         for payload in payloads {
             var props: [String: AnyCodable] = [
                 "event":      AnyCodable("metrickit_diagnostic"),
-                "appVersion": AnyCodable(payload.metaData?.applicationBuildNumber ?? ""),
             ]
             if let crashes = payload.crashDiagnostics, !crashes.isEmpty {
                 props["crashCount"] = AnyCodable(crashes.count)
