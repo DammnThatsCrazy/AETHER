@@ -5,7 +5,7 @@ section: sdks
 visibility: P
 audience: [dev-junior, dev-senior]
 status: stable
-since_version: "8.8.0"
+since_version: "8.9.0"
 source_files:
   - packages/react-native/src/index.tsx
   - packages/shared/events.ts
@@ -16,7 +16,7 @@ toc_depth: 3
 last_synced_commit: b5063db
 ---
 
-# Aether React Native SDK v8.8.0 — Integration Guide
+# Aether React Native SDK v8.9.0 — Integration Guide
 
 ## Installation
 

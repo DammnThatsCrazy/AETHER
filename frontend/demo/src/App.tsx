@@ -26,10 +26,10 @@ function IngestionSimulator() {
   const [last, setLast] = useState<string | null>(null);
   async function send(kind: string) {
     try {
-      const res = await fetch('/v1/ingest/events', {
+      const res = await fetch('/v1/batch', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ event_type: kind, session_id: 'demo', properties: {} }),
+        body: JSON.stringify({ batch: [{ id: `demo_${Date.now()}`, type: 'track', timestamp: new Date().toISOString(), sessionId: 'demo', anonymousId: 'demo', properties: { event: kind } }] }),
       });
       const body = await res.json().catch(() => ({}));
       setCount((c) => c + 1);

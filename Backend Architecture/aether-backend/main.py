@@ -10,8 +10,8 @@ Routes:
     GET  /                              Root
     GET  /v1/health                     Health check (deep probe)
     GET  /v1/metrics                    Internal metrics
-    POST /v1/ingest/events              Single SDK event
-    POST /v1/ingest/events/batch        Batch SDK events
+    POST /v1/batch                    Canonical SDK batch events
+    POST /v1/ingest/events[/batch]    Deprecated server-side connector aliases
     POST /v1/ingest/feed                External API feed
     GET  /v1/identity/profiles/{id}     Get profile
     PUT  /v1/identity/profiles/{id}     Upsert profile

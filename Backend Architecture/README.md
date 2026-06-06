@@ -108,7 +108,7 @@ Aether Backend is a unified API gateway that mounts 31 domain-specific microserv
 | #  | Service          | Prefix                  | Description                                                  | Key Endpoints                                            |
 | -- | ---------------- | ----------------------- | ------------------------------------------------------------ | -------------------------------------------------------- |
 | 1  | **Gateway**      | `/`, `/v1/health`       | Health checks, root metadata, internal metrics               | `GET /v1/health`, `GET /v1/metrics`                      |
-| 2  | **Ingestion**    | `/v1/ingest`            | SDK event intake (single + batch), external API feeds        | `POST /v1/ingest/events`, `POST /v1/ingest/events/batch` |
+| 2  | **Ingestion**    | `/v1/ingest`            | SDK event intake (single + batch), external API feeds        | `POST /v1/batch`, `POST /v1/batch` |
 | 3  | **Identity**     | `/v1/identity`          | Profile CRUD, identity merge/resolution, graph traversal     | `GET /v1/identity/profiles/{id}`, `POST /v1/identity/merge` |
 | 4  | **Analytics**    | `/v1/analytics`         | Event queries, dashboards, data export, GraphQL, WebSocket   | `POST /v1/analytics/events/query`, `WS /v1/analytics/ws/events` |
 | 5  | **ML Serving**   | `/v1/ml`                | Model registry, single + batch prediction, feature serving   | `POST /v1/ml/predict`, `GET /v1/ml/features/{id}`        |
@@ -236,8 +236,8 @@ All endpoints are versioned under `/v1` and return consistent JSON envelopes:
 **Ingestion**
 | Method | Path | Description |
 | ------ | ---- | ----------- |
-| `POST` | `/v1/ingest/events` | Ingest a single SDK event |
-| `POST` | `/v1/ingest/events/batch` | Ingest a batch of SDK events |
+| `POST` | `/v1/batch` | Canonical SDK batch ingestion |
+| `POST` | `/v1/ingest/events[/batch]` | Deprecated compatibility aliases for server-side connectors |
 | `POST` | `/v1/ingest/feed` | Ingest from an external API feed |
 
 **Identity**

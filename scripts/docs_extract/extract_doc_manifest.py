@@ -8,7 +8,7 @@ doc-index rendering without having to parse or bundle the raw docs.
 Schema of the output::
 
     {
-      "version": "8.8.0",
+      "version": "8.9.0",
       "generated_from": "docs/**/*.{md,mdx}",
       "docs": [
         {

@@ -20,7 +20,7 @@ plan's docs-site topic page layout.
 Schema::
 
     {
-      "version": "8.8.0",
+      "version": "8.9.0",
       "generated_from": "Backend Architecture/aether-backend/shared/events/events.py",
       "sections": [
         {

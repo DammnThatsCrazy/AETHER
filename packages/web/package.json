@@ -2,21 +2,21 @@
   "name": "@aether/web",
   "version": "8.9.0",
   "description": "Aether SDK for Web \u2014 Behavioral analytics with thin-client architecture",
-  "main": "./src/index.ts",
-  "module": "./src/index.ts",
+  "main": "./dist/aether.cjs.js",
+  "module": "./dist/aether.esm.js",
   "types": "./dist/index.d.ts",
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
-      "import": "./src/index.ts",
-      "require": "./src/index.ts",
-      "default": "./src/index.ts"
+      "import": "./dist/aether.esm.js",
+      "require": "./dist/aether.cjs.js",
+      "default": "./dist/aether.esm.js"
     },
     "./health": {
       "types": "./dist/health/index.d.ts",
-      "import": "./src/health/index.ts",
-      "require": "./src/health/index.ts",
-      "default": "./src/health/index.ts"
+      "import": "./dist/health/index.js",
+      "require": "./dist/health/index.js",
+      "default": "./dist/health/index.js"
     }
   },
   "files": [
@@ -30,5 +30,8 @@
     "lint": "tsc --noEmit"
   },
   "sideEffects": false,
-  "license": "UNLICENSED"
+  "license": "UNLICENSED",
+  "dependencies": {
+    "@aether/shared": "^8.9.0"
+  }
 }

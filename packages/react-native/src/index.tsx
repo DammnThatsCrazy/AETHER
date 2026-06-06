@@ -155,7 +155,7 @@ const Aether = {
 
   // Wallet
   wallet: {
-    connect(address: string, options?: { type?: string; chainId?: number }): void {
+    connect(address: string, options?: { type?: string; chainId?: number; vm?: string }): void {
       AetherNative?.walletConnect(address, options ?? {});
     },
     disconnect(address: string): void {
@@ -164,6 +164,41 @@ const Aether = {
     transaction(txHash: string, options?: Record<string, unknown>): void {
       AetherNative?.walletTransaction(txHash, options ?? {});
     },
+    contractAction(contract: string, action: string, options?: Record<string, unknown>): void {
+      AetherNative?.contractAction?.(contract, action, options ?? {});
+    },
+  },
+
+  commerce: {
+    paymentInitiated(paymentId: string, amount: number, currency: string, properties?: Record<string, unknown>): void { AetherNative?.paymentInitiated?.(paymentId, amount, currency, properties ?? {}); },
+    paymentCompleted(paymentId: string, amount: number, currency: string, properties?: Record<string, unknown>): void { AetherNative?.paymentCompleted?.(paymentId, amount, currency, properties ?? {}); },
+    paymentFailed(paymentId: string, reason: string, properties?: Record<string, unknown>): void { AetherNative?.paymentFailed?.(paymentId, reason, properties ?? {}); },
+    approvalRequested(approvalId: string, scope: string, properties?: Record<string, unknown>): void { AetherNative?.approvalRequested?.(approvalId, scope, properties ?? {}); },
+    approvalResolved(approvalId: string, approved: boolean, properties?: Record<string, unknown>): void { AetherNative?.approvalResolved?.(approvalId, approved, properties ?? {}); },
+    entitlementGranted(entitlementId: string, properties?: Record<string, unknown>): void { AetherNative?.entitlementGranted?.(entitlementId, properties ?? {}); },
+    entitlementRevoked(entitlementId: string, properties?: Record<string, unknown>): void { AetherNative?.entitlementRevoked?.(entitlementId, properties ?? {}); },
+    accessGranted(resource: string, properties?: Record<string, unknown>): void { AetherNative?.accessGranted?.(resource, properties ?? {}); },
+    accessDenied(resource: string, reason: string, properties?: Record<string, unknown>): void { AetherNative?.accessDenied?.(resource, reason, properties ?? {}); },
+  },
+
+  agent: {
+    task(taskId: string, actorId: string, properties?: Record<string, unknown>): void { AetherNative?.agentTask?.(taskId, actorId, properties ?? {}); },
+    decision(decisionId: string, actorId: string, properties?: Record<string, unknown>): void { AetherNative?.agentDecision?.(decisionId, actorId, properties ?? {}); },
+    a2hInteraction(interactionId: string, actorId: string, properties?: Record<string, unknown>): void { AetherNative?.a2hInteraction?.(interactionId, actorId, properties ?? {}); },
+  },
+
+  x402: {
+    payment(paymentId: string, amount: string, currency: string, network: string, properties?: Record<string, unknown>): void {
+      AetherNative?.x402Payment?.(paymentId, amount, currency, network, properties ?? {});
+    },
+  },
+
+  capabilities: {
+    automaticWalletDetection: false,
+    manualMultiVmWalletEmitters: true,
+    nativeOfflinePersistence: true,
+    remoteManifest: true,
+    healthHeartbeat: true,
   },
 
   // Experiments

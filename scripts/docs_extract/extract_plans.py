@@ -15,7 +15,7 @@ service count, and three pricing options.
 Schema::
 
     {
-      "version": "8.8.0",
+      "version": "8.9.0",
       "generated_from": "Backend Architecture/aether-backend/shared/plans/catalog.py",
       "plans": [
         {

@@ -10,7 +10,7 @@ along with the feature-flag mapping for ``GraphLayerFlags``.
 Schema::
 
     {
-      "version": "8.8.0",
+      "version": "8.9.0",
       "generated_from": "packages/shared/capabilities.ts",
       "manifest_fields": [
         {"name": "schemaVersion", "type": "string", "optional": false,

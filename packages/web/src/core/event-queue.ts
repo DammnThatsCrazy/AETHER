@@ -8,7 +8,7 @@ import { storage } from '../utils';
 
 const QUEUE_STORAGE_KEY = 'event_queue';
 const MAX_STORED_EVENTS = 1000;
-const SDK_VERSION = '7.0.0';
+const SDK_VERSION = '8.9.0'; // synchronized by scripts/bump-sdk-version.sh and scripts/validate_sdk_release_alignment.py
 
 interface QueueConfig {
   endpoint: string;
@@ -33,7 +33,8 @@ const DEFAULT_RETRY: Required<RetryConfig> = {
 /**
  * Maps every canonical event type to its required consent purpose.
  * MUST stay in sync with packages/shared/events.ts EVENT_CONSENT_PURPOSE.
- * Events not listed here are always allowed through.
+ * Events not listed here are rejected; custom application signals must be
+ * wrapped as canonical `track` with `properties.event`.
  */
 const CONSENT_MAP: Record<string, string> = {
   // Core analytics
@@ -146,7 +147,7 @@ export class EventQueue {
     return events.filter((event) => {
       if ((event.type as string) === 'consent') return true;
       const purpose = CONSENT_MAP[event.type];
-      if (!purpose) return true; // Unknown event types are allowed through
+      if (!purpose) return false;
       return (consent as unknown as Record<string, boolean>)[purpose] === true;
     });
   }

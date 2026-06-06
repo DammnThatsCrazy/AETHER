@@ -74,7 +74,7 @@ curl -sf -H "Authorization: Bearer ${API_KEY}" ${BASE_URL}/v1/analytics/events/q
 
 ```bash
 # Ingest a test event
-curl -sf -X POST ${BASE_URL}/v1/ingest/events \
+curl -sf -X POST ${BASE_URL}/v1/batch \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer ${API_KEY}" \
   -d '{
@@ -140,7 +140,7 @@ curl -sf ${BASE_URL}/v1/metrics | head -20
 
 ```bash
 # Preflight request
-curl -sf -X OPTIONS ${BASE_URL}/v1/ingest/events \
+curl -sf -X OPTIONS ${BASE_URL}/v1/batch \
   -H "Origin: https://app.aether.io" \
   -H "Access-Control-Request-Method: POST" \
   -D - -o /dev/null 2>&1 | grep -i "access-control"

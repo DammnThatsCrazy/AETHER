@@ -17,7 +17,7 @@ is one option, not a requirement.**
 
 | Path | How | Endpoint | Metering dimension |
 | --- | --- | --- | --- |
-| **SDK** | Web/iOS/Android/React Native SDK batches events | `POST /v1/ingest/events`, `/batch` | `sdk_event_ingested` |
+| **SDK** | Web/iOS/Android/React Native SDK batches events | `POST /v1/batch` | `sdk_event_ingested` |
 | **Connector pull** | Provider sync (Shopify, HubSpot, GA4, …) | `POST /v1/integrations/connectors/{type}/sync` | `connector_sync` |
 | **Signed webhook** | Provider/system pushes HMAC-signed events | `POST /v1/integrations/connectors/{type}/webhook` (auth) / public endpoint | `webhook_ingested` |
 | **External API feed** | Batch/import feeds | `POST /v1/ingest/feed` | `event_ingested` |

@@ -3,6 +3,7 @@ name: Publish SDK
 # Triggered manually with an explicit version string.
 # Publishes:
 #   - @aether/shared          → npm
+#   - @aether/web             → npm
 #   - @aether/react-native    → npm
 #   - AetherSDK               → CocoaPods trunk
 #   - aether-react-native     → CocoaPods trunk
@@ -76,7 +77,10 @@ jobs:
         with:
           name: version-bumped
           path: |
+            package.json
             packages/shared/package.json
+            packages/web/package.json
+            packages/shared/sdk-version.ts
             packages/react-native/package.json
             packages/react-native/aether-react-native.podspec
             packages/android/gradle.properties
@@ -111,11 +115,15 @@ jobs:
 
       - name: Commit version bump
         run: |
-          git add packages/shared/package.json \
+          git add package.json \
+                  packages/shared/package.json \
+                  packages/shared/sdk-version.ts \
+                  packages/web/package.json \
                   packages/react-native/package.json \
                   packages/react-native/aether-react-native.podspec \
                   packages/android/gradle.properties \
-                  packages/ios/AetherSDK.podspec
+                  packages/ios/AetherSDK.podspec \
+                  packages/web/src packages/react-native/src packages/android/src packages/ios/Sources
           git commit -m "chore(sdk): bump version to $VERSION"
 
       - name: Create and push tag
@@ -151,12 +159,34 @@ jobs:
       - name: Build @aether/shared
         run: npm run build --workspace=packages/shared
 
+      - name: Build @aether/web
+        run: npm run build --workspace=packages/web
+
       - name: Build @aether/react-native
         run: npm run build --workspace=packages/react-native
+
+      - name: Validate SDK release alignment
+        run: python scripts/validate_sdk_release_alignment.py
+
+      - name: Pack and verify npm artifacts
+        run: |
+          set -euo pipefail
+          npm pack --workspace=packages/shared --dry-run
+          npm pack --workspace=packages/web --dry-run
+          npm pack --workspace=packages/react-native --dry-run
+          test -f packages/web/dist/aether.esm.js
+          test -f packages/web/dist/aether.cjs.js
+          test -f packages/react-native/dist/index.js
 
       - name: Publish @aether/shared
         if: ${{ !inputs.dry_run }}
         run: npm publish --workspace=packages/shared --access public
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      - name: Publish @aether/web
+        if: ${{ !inputs.dry_run }}
+        run: npm publish --workspace=packages/web --access public
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
@@ -171,6 +201,7 @@ jobs:
         run: |
           echo "DRY RUN — would publish:"
           npm pack --workspace=packages/shared --dry-run
+          npm pack --workspace=packages/web --dry-run
           npm pack --workspace=packages/react-native --dry-run
 
   # ── CocoaPods ────────────────────────────────────────────────────────────
@@ -246,6 +277,14 @@ jobs:
         working-directory: packages/android
         run: gradle assembleRelease
 
+      - name: Dry-run Maven publication to local repository
+        working-directory: packages/android
+        run: gradle publishToMavenLocal
+
+      - name: Verify Android AAR artifact
+        working-directory: packages/android
+        run: test -n "$(find build/outputs/aar -name '*release*.aar' -print -quit)"
+
       - name: Publish to GitHub Packages
         if: ${{ !inputs.dry_run }}
         working-directory: packages/android
@@ -295,7 +334,7 @@ jobs:
               '',
               '**Install**',
               '```',
-              `npm install @aether/react-native@${version}`,
+              `npm install @aether/web@${version} @aether/react-native@${version}`,
               '```',
               '',
               '**CocoaPods**',
