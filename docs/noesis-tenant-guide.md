@@ -1,10 +1,10 @@
 ---
 title: Noesis — Ask Aether
 slug: noesis-tenant-guide
-section: product
+section: concepts
 visibility: E
 audience: [tenant]
-status: ga
+status: stable
 ---
 
 # Noesis — Ask Aether

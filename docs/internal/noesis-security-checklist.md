@@ -4,7 +4,7 @@ slug: internal/noesis-security-checklist
 section: security
 visibility: I
 audience: [dev-senior, security]
-status: production
+status: stable
 ---
 
 # Noesis Production Security Checklist

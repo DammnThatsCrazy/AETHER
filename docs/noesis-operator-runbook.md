@@ -4,7 +4,7 @@ slug: noesis-operator-runbook
 section: operations
 visibility: I
 audience: [ops, dev-senior]
-status: ga
+status: stable
 ---
 
 # Noesis Operator Runbook

@@ -4,7 +4,7 @@ slug: internal/noesis
 section: architecture
 visibility: I
 audience: [dev-senior]
-status: production
+status: stable
 source_files:
   - Backend Architecture/aether-backend/services/noesis/service.py
   - Backend Architecture/aether-backend/services/noesis/routes.py

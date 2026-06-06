@@ -1,10 +1,10 @@
 ---
 title: Noesis GA Production Contract
 slug: noesis-ga-contract
-section: product
+section: architecture
 visibility: I
 audience: [dev-senior, product, security]
-status: ga-deterministic
+status: stable
 ---
 
 # Noesis GA Production Contract
