@@ -125,23 +125,31 @@ class BaseConnector:
             if any(s in key.lower() for s in ("secret", "token", "api_key", "password", "credential")):
                 raise ValueError(f"secret-like key {key!r} must not be stored in config; use the vault")
 
-    async def test_connection(self, config: ConnectorConfig) -> ConnectionTestResult:
-        """Default mocked test. Real adapters override with a live ping."""
+    async def test_connection(
+        self, config: ConnectorConfig, secret: Optional[str] = None
+    ) -> ConnectionTestResult:
+        """Default mocked test. Subclasses override with a live API ping.
+
+        When secret is provided and the environment is non-local, subclass
+        implementations should make a real API health-check call.
+        """
         if not config.enabled:
             return ConnectionTestResult(connector_type=self.connector_type, ok=False, status="disabled",
                                         detail="connector disabled")
         if self.requires_secret and not config.secret_configured:
             return ConnectionTestResult(connector_type=self.connector_type, ok=False, status="not_configured",
                                         detail="missing credential (configure secret in the vault)")
-        # TODO: real API ping when credentials + live mode are enabled.
         return ConnectionTestResult(connector_type=self.connector_type, ok=True, status="ok",
                                     detail="mocked connection ok (local mode)")
 
-    async def pull(self, config: ConnectorConfig, since: Optional[str] = None) -> list[NormalizedEvent]:
-        """Default mocked pull → no events. Real adapters override.
+    async def pull(
+        self, config: ConnectorConfig, since: Optional[str] = None, secret: Optional[str] = None
+    ) -> list[NormalizedEvent]:
+        """Default mocked pull → no events. Subclasses override.
 
-        TODO: implement the provider's list/sync API call here when credentials
-        and live mode are enabled. Must remain tenant-scoped and rate-limited.
+        When secret is provided and the environment is non-local, subclass
+        implementations make real API list/sync calls. Must remain tenant-scoped
+        and rate-limited.
         """
         return []
 

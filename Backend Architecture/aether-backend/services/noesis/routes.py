@@ -5,7 +5,7 @@ from __future__ import annotations
 import uuid
 
 from fastapi import APIRouter, Depends, Request
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, StreamingResponse
 
 from dependencies.providers import get_cache, get_graph
 from repositories.repos import AnalyticsRepository
@@ -89,3 +89,35 @@ async def query_noesis(
     }
 
     return JSONResponse(content=result, headers=headers)
+
+
+@router.post("/query/stream")
+async def query_noesis_stream(
+    body: NoesisQueryRequest,
+    request: Request,
+    graph: GraphClient = Depends(get_graph),
+):
+    """Stream a Noesis query as SSE events.
+
+    Yields three event phases:
+      data: {"type": "intent", "intent": "...", "confidence": 0.xx}
+      data: {"type": "results", "count": N}
+      data: {"type": "complete", ...full response...}
+
+    On error:
+      data: {"type": "error", "error": "...", "code": "..."}
+    """
+    request_id = str(uuid.uuid4())
+
+    analytics = AnalyticsRepository(get_cache())
+    service = NoesisService(graph=graph, analytics=analytics)
+
+    return StreamingResponse(
+        service.query_stream(body, request.state.tenant, request_id=request_id),
+        media_type="text/event-stream",
+        headers={
+            "x-request-id": request_id,
+            "cache-control": "no-cache",
+            "x-accel-buffering": "no",
+        },
+    )

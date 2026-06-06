@@ -76,6 +76,25 @@ async def _audit(tenant_id: str, actor_id: str, actor_type: str, event_type: str
 class ConnectorService:
     def __init__(self) -> None:
         self.repo = _configs
+        self._providers: Any = None
+
+    def _providers_repo(self):
+        if self._providers is None:
+            from repositories.repos import ProvidersRepository
+            self._providers = ProvidersRepository()
+        return self._providers
+
+    async def _resolve_secret(self, config: ConnectorConfig) -> Optional[str]:
+        """Look up the stored credential value from the vault via secret_ref."""
+        if not config.secret_ref:
+            return None
+        try:
+            record = await self._providers_repo().find_by_id(config.secret_ref)
+            if record:
+                return record.get("credential_value")
+        except Exception as exc:
+            logger.warning(f"Secret resolution failed for {config.connector_type}: {exc}")
+        return None
 
     async def list_for_tenant(self, tenant_id: str) -> list[dict[str, Any]]:
         """Descriptors merged with this tenant's config/status (no secrets)."""
@@ -132,7 +151,8 @@ class ConnectorService:
         cfg = await self.repo.find_by_id(_key(tenant_id, connector_type))
         config = ConnectorConfig(**cfg) if cfg else ConnectorConfig(
             tenant_id=tenant_id, connector_type=connector_type)  # type: ignore[arg-type]
-        return await connector.test_connection(config)
+        secret = await self._resolve_secret(config)
+        return await connector.test_connection(config, secret=secret)
 
     async def sync(self, tenant_id: str, connector_type: str, *, actor_id: str = "system",
                    since: Optional[str] = None) -> SyncResult:
@@ -145,7 +165,8 @@ class ConnectorService:
             tenant_id=tenant_id, connector_type=connector_type)  # type: ignore[arg-type]
         if not config.enabled:
             return SyncResult(connector_type=connector_type, status="disabled", detail="connector disabled")  # type: ignore[arg-type]
-        events = await connector.pull(config, since=since)
+        secret = await self._resolve_secret(config)
+        events = await connector.pull(config, since=since, secret=secret)
         status = "healthy"
         # Persist sync status (this is the connector's reliability/health signal).
         config.last_synced_at = now_iso()
