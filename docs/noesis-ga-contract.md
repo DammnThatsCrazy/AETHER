@@ -3,7 +3,7 @@ title: Noesis GA Production Contract
 slug: noesis-ga-contract
 section: architecture
 visibility: I
-audience: [dev-senior, product, security]
+audience: [dev-senior, architect, security]
 status: stable
 ---
 

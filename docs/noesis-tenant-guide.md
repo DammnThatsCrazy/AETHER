@@ -2,7 +2,7 @@
 title: Noesis — Ask Aether
 slug: noesis-tenant-guide
 section: concepts
-visibility: E
+visibility: C
 audience: [tenant]
 status: stable
 ---
