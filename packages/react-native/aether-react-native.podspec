@@ -19,7 +19,7 @@ Pod::Spec.new do |s|
   s.source_files = "packages/react-native/ios/**/*.{h,m,mm,swift}"
 
   s.dependency "React-Core"
-  s.dependency "AetherSDK", "~> #{s.version.split('.').first}.0"
+  s.dependency "AetherSDK", "~> #{s.version.to_s.split('.').first}.0"
 
   install_modules_dependencies(s)
 end

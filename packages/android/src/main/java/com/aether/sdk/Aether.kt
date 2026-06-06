@@ -594,7 +594,7 @@ object Aether : DefaultLifecycleObserver {
         batch: List<JSONObject>,
         cfg: AetherConfig,
         retryCount: Int,
-    ) = withContext(Dispatchers.IO) {
+    ): Unit = withContext(Dispatchers.IO) {
         val maxRetries = 3
         try {
             val url = URL("${cfg.endpoint}/v1/batch")
