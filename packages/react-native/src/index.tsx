@@ -167,12 +167,24 @@ const Aether = {
     contractAction(contract: string, action: string, options?: Record<string, unknown>): void {
       AetherNative?.contractAction?.(contract, action, options ?? {});
     },
+    walletConnectSession(topic: string, options?: { address?: string; chainId?: string; [k: string]: unknown }): void {
+      AetherNative?.trackWalletConnectSession?.(topic, options ?? {});
+    },
+    async getCapabilities(): Promise<Record<string, unknown>> {
+      return AetherNative?.getWalletCapabilities?.() ?? { connected: false, addresses: [], supportedVMs: [] };
+    },
   },
 
   commerce: {
     paymentInitiated(paymentId: string, amount: number, currency: string, properties?: Record<string, unknown>): void { AetherNative?.paymentInitiated?.(paymentId, amount, currency, properties ?? {}); },
     paymentCompleted(paymentId: string, amount: number, currency: string, properties?: Record<string, unknown>): void { AetherNative?.paymentCompleted?.(paymentId, amount, currency, properties ?? {}); },
     paymentFailed(paymentId: string, reason: string, properties?: Record<string, unknown>): void { AetherNative?.paymentFailed?.(paymentId, reason, properties ?? {}); },
+    applePayPayment(status: 'initiated' | 'completed' | 'failed', options?: { amount?: number; currency?: string; [k: string]: unknown }): void {
+      if (Platform.OS === 'ios') AetherNative?.trackApplePayPayment?.(status, options ?? {});
+    },
+    googlePayPayment(status: 'initiated' | 'completed' | 'failed', options?: { amount?: number; currency?: string; [k: string]: unknown }): void {
+      if (Platform.OS === 'android') AetherNative?.trackGooglePayPayment?.(status, options ?? {});
+    },
     approvalRequested(approvalId: string, scope: string, properties?: Record<string, unknown>): void { AetherNative?.approvalRequested?.(approvalId, scope, properties ?? {}); },
     approvalResolved(approvalId: string, approved: boolean, properties?: Record<string, unknown>): void { AetherNative?.approvalResolved?.(approvalId, approved, properties ?? {}); },
     entitlementGranted(entitlementId: string, properties?: Record<string, unknown>): void { AetherNative?.entitlementGranted?.(entitlementId, properties ?? {}); },
