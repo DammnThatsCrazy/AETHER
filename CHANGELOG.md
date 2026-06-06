@@ -8,6 +8,18 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+### SDK Productization Alignment
+
+#### Fixed — Release blockers for SDK 8.9.0
+
+- Synchronized SDK package versions, runtime constants, native metadata, generated docs, and release tooling around the 8.9.0 release line.
+- Canonicalized SDK ingestion on `POST /v1/batch`; legacy `/v1/ingest/events[/batch]` paths are documented as compatibility aliases for server-side ingestion/connectors, not SDK targets.
+- Added native iOS/Android pre-enqueue consent enforcement using the canonical event-to-purpose map; consent events remain unblocked and non-canonical raw event types are dropped with diagnostics.
+- Replaced Android raw `session_start` emission with canonical `track` + `properties.event = "session_start"`.
+- Expanded React Native, iOS, and Android SDK surfaces for commerce/access, wallet contract actions, agent events, x402 payments, capability flags, and release validation coverage.
+- Added release drift validation, SDK release validation CI, npm/CocoaPods/Maven dry-run artifact checks, and an SDK release readiness report.
+
+
 ### Hosted Agent Control Plane
 
 #### Added — Tenant-scoped, production-safe control plane for the Agent Layer

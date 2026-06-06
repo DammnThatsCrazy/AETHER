@@ -15,7 +15,7 @@
     "lint": "tsc --noEmit"
   },
   "dependencies": {
-    "@aether/shared": "^8.8.0"
+    "@aether/shared": "^8.9.0"
   },
   "peerDependencies": {
     "react": ">=18.0.0",

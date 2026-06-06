@@ -2279,7 +2279,7 @@
         "dev-senior"
       ],
       "status": "stable",
-      "since_version": "8.8.0",
+      "since_version": "8.9.0",
       "estimated_read_minutes": 10,
       "toc_depth": 3,
       "canonical_owner": "sdk@aether"
@@ -2325,7 +2325,7 @@
         "dev-senior"
       ],
       "status": "stable",
-      "since_version": "8.8.0",
+      "since_version": "8.9.0",
       "estimated_read_minutes": 10,
       "toc_depth": 3,
       "canonical_owner": "sdk@aether"
@@ -2341,7 +2341,7 @@
         "dev-senior"
       ],
       "status": "stable",
-      "since_version": "8.8.0",
+      "since_version": "8.9.0",
       "estimated_read_minutes": 9,
       "toc_depth": 3,
       "canonical_owner": "sdk@aether"
@@ -2362,6 +2362,21 @@
       "canonical_owner": "platform@aether"
     },
     {
+      "path": "docs/SDK-RELEASE-READINESS-REPORT.md",
+      "title": "SDK Release Readiness Report",
+      "slug": "sdks/release-readiness-report",
+      "section": "sdks",
+      "visibility": "I",
+      "audience": [
+        "dev-senior",
+        "architect"
+      ],
+      "status": "stable",
+      "since_version": "8.9.0",
+      "estimated_read_minutes": 6,
+      "canonical_owner": "sdk@aether"
+    },
+    {
       "path": "docs/SDK-WEB.md",
       "title": "Aether Web SDK — Integration Guide",
       "slug": "sdks/web",
@@ -2372,7 +2387,7 @@
         "dev-senior"
       ],
       "status": "stable",
-      "since_version": "8.8.0",
+      "since_version": "8.9.0",
       "estimated_read_minutes": 12,
       "toc_depth": 3,
       "canonical_owner": "sdk@aether"

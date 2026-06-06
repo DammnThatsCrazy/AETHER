@@ -9,7 +9,7 @@ docblock above the ``ConsentPurpose`` union.
 Schema::
 
     {
-      "version": "8.8.0",
+      "version": "8.9.0",
       "generated_from": "packages/shared/consent.ts",
       "purposes": [
         { "name": "analytics", "description": "..." },

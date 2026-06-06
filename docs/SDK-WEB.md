@@ -5,7 +5,7 @@ section: sdks
 visibility: P
 audience: [dev-junior, dev-senior]
 status: stable
-since_version: "8.8.0"
+since_version: "8.9.0"
 source_files:
   - packages/web/src/index.ts
   - packages/shared/events.ts
@@ -13,10 +13,10 @@ source_files:
 canonical_owner: sdk@aether
 estimated_read_minutes: 12
 toc_depth: 3
-last_synced_commit: d611c9c
+last_synced_commit: 306de9c1f6e47a3aeda6fc3302d7778c98417666
 ---
 
-# Aether Web SDK v8.8.0 — Integration Guide
+# Aether Web SDK v8.9.0 — Integration Guide
 
 ## Installation
 
@@ -25,13 +25,13 @@ last_synced_commit: d611c9c
 <script src="https://cdn.aether.io/sdk/v8/aether.min.js"></script>
 
 <!-- Or via npm -->
-npm install @aether/web-sdk
+npm install @aether/web
 ```
 
 ## Quick Start
 
 ```typescript
-import aether from '@aether/web-sdk';
+import aether from '@aether/web';
 
 aether.init({
   apiKey: 'your-api-key',

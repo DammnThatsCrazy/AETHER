@@ -18,10 +18,12 @@ event, consent, identity, wallet, and commerce contracts so payloads round-trip.
 
 ## Ingestion contract
 
-SDKs batch events and POST to `/v1/ingest/events` (single) and
-`/v1/ingest/events/batch` (1–500). Each event carries an `event_id` (idempotency).
-The backend validates, enriches, and publishes to the event store. See
-[Data Ingestion Paths](DATA-INGESTION-PATHS.md).
+SDKs batch canonical event envelopes and POST to `POST /v1/batch` (1–500
+events). Each event carries an SDK-generated `id` for idempotency. The backend
+validates against `packages/shared/events.ts`, enriches server-side, and publishes
+to the event store. `/v1/ingest/events` and `/v1/ingest/events/batch` are reserved
+for server-side ingestion/connectors and must not appear in SDK quickstarts. See
+[Source of Truth: Ingestion Contract](source-of-truth/INGESTION_CONTRACT.md).
 
 ## Config contract
 

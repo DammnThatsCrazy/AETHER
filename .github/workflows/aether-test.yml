@@ -46,6 +46,9 @@ jobs:
       - name: Install Node dependencies
         run: npm ci --ignore-scripts
 
+      - name: Build shared package
+        run: npm run build --workspace=packages/shared
+
       - name: Type check
         run: npm run typecheck
         working-directory: frontend/aether

@@ -212,6 +212,27 @@ class AetherNativeModule(private val reactContext: ReactApplicationContext) :
         Aether.walletTransaction(txHash, chainId, value, options.toHashMap().mapValues { it.value as? Any })
     }
 
+
+    @ReactMethod
+    fun contractAction(contract: String, action: String, options: ReadableMap) {
+        val vm = options.getString("vm") ?: "evm"
+        Aether.contractAction(contract, action, vm, options.toHashMap().mapValues { it.value })
+    }
+
+    @ReactMethod fun paymentInitiated(paymentId: String, amount: Double, currency: String, properties: ReadableMap) { Aether.paymentInitiated(paymentId, amount, currency, properties.toHashMap().mapValues { it.value }) }
+    @ReactMethod fun paymentCompleted(paymentId: String, amount: Double, currency: String, properties: ReadableMap) { Aether.paymentCompleted(paymentId, amount, currency, properties.toHashMap().mapValues { it.value }) }
+    @ReactMethod fun paymentFailed(paymentId: String, reason: String, properties: ReadableMap) { Aether.paymentFailed(paymentId, reason, properties.toHashMap().mapValues { it.value }) }
+    @ReactMethod fun approvalRequested(approvalId: String, scope: String, properties: ReadableMap) { Aether.approvalRequested(approvalId, scope, properties.toHashMap().mapValues { it.value }) }
+    @ReactMethod fun approvalResolved(approvalId: String, approved: Boolean, properties: ReadableMap) { Aether.approvalResolved(approvalId, approved, properties.toHashMap().mapValues { it.value }) }
+    @ReactMethod fun entitlementGranted(entitlementId: String, properties: ReadableMap) { Aether.entitlementGranted(entitlementId, properties.toHashMap().mapValues { it.value }) }
+    @ReactMethod fun entitlementRevoked(entitlementId: String, properties: ReadableMap) { Aether.entitlementRevoked(entitlementId, properties.toHashMap().mapValues { it.value }) }
+    @ReactMethod fun accessGranted(resource: String, properties: ReadableMap) { Aether.accessGranted(resource, properties.toHashMap().mapValues { it.value }) }
+    @ReactMethod fun accessDenied(resource: String, reason: String, properties: ReadableMap) { Aether.accessDenied(resource, reason, properties.toHashMap().mapValues { it.value }) }
+    @ReactMethod fun agentTask(taskId: String, actorId: String, properties: ReadableMap) { Aether.agentTask(taskId, actorId, properties = properties.toHashMap().mapValues { it.value }) }
+    @ReactMethod fun agentDecision(decisionId: String, actorId: String, properties: ReadableMap) { Aether.agentDecision(decisionId, actorId, properties.toHashMap().mapValues { it.value }) }
+    @ReactMethod fun a2hInteraction(interactionId: String, actorId: String, properties: ReadableMap) { Aether.a2hInteraction(interactionId, actorId, properties.toHashMap().mapValues { it.value }) }
+    @ReactMethod fun x402Payment(paymentId: String, amount: String, currency: String, network: String, properties: ReadableMap) { Aether.x402Payment(paymentId, amount, currency, network, properties.toHashMap().mapValues { it.value }) }
+
     @ReactMethod
     fun getFingerprint(promise: Promise) {
         promise.resolve(Aether.getFingerprintId())

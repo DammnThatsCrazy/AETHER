@@ -5,7 +5,7 @@ section: sdks
 visibility: P
 audience: [dev-junior, dev-senior]
 status: stable
-since_version: "8.8.0"
+since_version: "8.9.0"
 source_files:
   - packages/ios/Sources/AetherSDK/Aether.swift
   - packages/shared/events.ts
@@ -13,10 +13,10 @@ source_files:
 canonical_owner: sdk@aether
 estimated_read_minutes: 10
 toc_depth: 3
-last_synced_commit: faf7ab1
+last_synced_commit: 7c90d84437b4a3ab081671fb09a9a9884f12c1b5
 ---
 
-# Aether iOS SDK v8.8.0 — Integration Guide
+# Aether iOS SDK v8.9.0 — Integration Guide
 
 ## Installation
 

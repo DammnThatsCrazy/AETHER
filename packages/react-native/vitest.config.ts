@@ -15,5 +15,15 @@ export default defineConfig({
     globals: false,
     include: ['src/**/__tests__/**/*.test.ts', 'src/**/*.test.ts'],
     reporters: ['default'],
+    coverage: {
+      provider: 'v8',
+      all: false,
+      thresholds: {
+        lines: 75,
+        branches: 80,
+        functions: 35,
+        statements: 75,
+      },
+    },
   },
 });

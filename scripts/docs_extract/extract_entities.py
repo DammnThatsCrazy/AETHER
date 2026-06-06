@@ -9,7 +9,7 @@ union and preserves the section comments that group entities into planes
 Schema::
 
     {
-      "version": "8.8.0",
+      "version": "8.9.0",
       "generated_from": "packages/shared/entities.ts",
       "planes": [
         {

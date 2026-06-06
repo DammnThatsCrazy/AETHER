@@ -1,0 +1,85 @@
+name: SDK Release Validation
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'packages/shared/**'
+      - 'packages/web/**'
+      - 'packages/react-native/**'
+      - 'packages/ios/**'
+      - 'packages/android/**'
+      - 'docs/SDK*.md'
+      - 'docs/source-of-truth/**'
+      - 'scripts/validate_sdk_release_alignment.py'
+      - '.github/workflows/sdk-release-validation.yml'
+  pull_request:
+    paths:
+      - 'packages/shared/**'
+      - 'packages/web/**'
+      - 'packages/react-native/**'
+      - 'packages/ios/**'
+      - 'packages/android/**'
+      - 'docs/SDK*.md'
+      - 'docs/source-of-truth/**'
+      - 'scripts/validate_sdk_release_alignment.py'
+      - '.github/workflows/sdk-release-validation.yml'
+  workflow_dispatch:
+
+jobs:
+  sdk-js:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          cache: npm
+      - run: npm ci --ignore-scripts
+      - name: Release alignment drift gate
+        run: python scripts/validate_sdk_release_alignment.py
+      - name: Shared tests with coverage threshold
+        run: npm run test --workspace=packages/shared -- --coverage --coverage.thresholds.lines=95 --coverage.thresholds.branches=80 --coverage.thresholds.functions=95 --coverage.thresholds.statements=95
+      - name: Web tests with coverage threshold
+        run: npm run test --workspace=packages/web -- --coverage --coverage.thresholds.lines=65 --coverage.thresholds.branches=65 --coverage.thresholds.functions=55 --coverage.thresholds.statements=65
+      - name: React Native tests with coverage threshold
+        run: npm run test --workspace=packages/react-native -- --coverage --coverage.thresholds.lines=75 --coverage.thresholds.branches=80 --coverage.thresholds.functions=35 --coverage.thresholds.statements=75
+      - name: Build publish artifacts
+        run: |
+          npm run build --workspace=packages/shared
+          npm run build --workspace=packages/web
+          npm run build --workspace=packages/react-native
+          npm pack --workspace=packages/shared --dry-run
+          npm pack --workspace=packages/web --dry-run
+          npm pack --workspace=packages/react-native --dry-run
+
+  android:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: gradle/actions/setup-gradle@v3
+      - name: Android release build and Maven dry run
+        working-directory: packages/android
+        run: gradle assembleRelease publishToMavenLocal
+
+  ios:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Swift package tests with coverage
+        working-directory: packages/ios
+        run: |
+          xcodebuild test \
+            -scheme AetherSDK \
+            -destination 'platform=iOS Simulator,name=iPhone 16,OS=latest' \
+            -enableCodeCoverage YES \
+            -quiet
+      - name: CocoaPods podspec dry-run lint
+        run: |
+          gem install cocoapods --no-document
+          pod spec lint packages/ios/AetherSDK.podspec --allow-warnings --quick
+          pod spec lint packages/react-native/aether-react-native.podspec --allow-warnings --quick

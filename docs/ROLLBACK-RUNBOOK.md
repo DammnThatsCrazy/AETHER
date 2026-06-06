@@ -288,7 +288,7 @@ After any rollback, verify:
 
 - [ ] `GET /v1/health` returns `{"status": "healthy"}` with all dependencies OK
 - [ ] `GET /health` (ML serving) returns healthy with models loaded
-- [ ] Ingest a test event successfully via `POST /v1/ingest/events`
+- [ ] Ingest a test event successfully via `POST /v1/batch`
 - [ ] Query the test event back via `POST /v1/analytics/events/query`
 - [ ] ML prediction returns valid response via `POST /v1/ml/predict`
 - [ ] Prometheus metrics flowing: `curl http://localhost:9090/api/v1/query?query=up`

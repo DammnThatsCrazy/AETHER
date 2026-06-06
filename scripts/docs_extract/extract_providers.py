@@ -14,7 +14,7 @@ adapters and their Python class names.
 Schema::
 
     {
-      "version": "8.8.0",
+      "version": "8.9.0",
       "generated_from": "...categories.py",
       "category_enum_values": [
         {"name": "BLOCKCHAIN_RPC", "value": "blockchain_rpc"},

@@ -1,6 +1,6 @@
 Pod::Spec.new do |s|
   s.name         = "AetherSDK"
-  s.version      = "8.8.0"
+  s.version      = "8.9.0"
   s.summary      = "Aether native iOS analytics, feature flags, and identity SDK"
   s.description  = <<-DESC
     AetherSDK provides event batching, session management, device fingerprinting,

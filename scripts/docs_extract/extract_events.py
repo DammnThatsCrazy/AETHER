@@ -11,7 +11,7 @@ transport it.
 Schema of the output::
 
     {
-      "version": "8.8.0",
+      "version": "8.9.0",
       "generated_from": "packages/shared/events.ts",
       "schema_version": "1.0.0",
       "families": ["core", "identity", "consent", ...],

@@ -39,7 +39,7 @@ import type { SDKManifest as RemoteSDKManifest } from './health/sdk-health-agent
 import { generateId, now, getPageContext, getDeviceContext, getCampaignContext } from './utils';
 import { createModuleProxy } from './utils/module-proxy';
 
-const SDK_VERSION = '7.0.0';
+const SDK_VERSION = '8.9.0'; // synchronized by scripts/bump-sdk-version.sh and scripts/validate_sdk_release_alignment.py
 const DEFAULT_ENDPOINT = 'https://api.aether.io';
 
 class AetherSDK implements AetherSDKInterface {
@@ -122,7 +122,7 @@ class AetherSDK implements AetherSDKInterface {
     this.startHealthAgent();
 
     this.initialized = true;
-    this.log('info', 'Aether SDK v7.0.0 initialized — Tier 2 thin client');
+    this.log('info', 'Aether SDK v8.9.0 initialized — Tier 2 thin client');
   }
 
   track(event: string, properties?: Record<string, unknown>): void {
@@ -861,7 +861,7 @@ class AetherSDK implements AetherSDKInterface {
       userId: identity.userId,
       properties,
       context: {
-        library: { name: '@aether/sdk', version: SDK_VERSION },
+        library: { name: '@aether/web', version: SDK_VERSION },
         page: typeof window !== 'undefined' ? getPageContext() : undefined,
         device: typeof window !== 'undefined' ? getDeviceContext() : undefined,
         campaign: typeof window !== 'undefined' ? getCampaignContext() : undefined,

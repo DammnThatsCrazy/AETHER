@@ -86,7 +86,7 @@ data class IdentityData(
 
 object Aether : DefaultLifecycleObserver {
     private const val TAG = "AetherSDK"
-    private const val VERSION = "7.0.0"
+    private const val VERSION = "8.9.0"
     private const val PREFS_NAME = "com.aether.sdk"
 
     private var config: AetherConfig? = null
@@ -123,6 +123,24 @@ object Aether : DefaultLifecycleObserver {
         "li_fat_id", "rdt_cid", "scid", "dclid", "epik",
         "irclickid", "aff_id"
     )
+    private val EVENT_CONSENT_PURPOSE = mapOf(
+        "track" to "analytics", "page" to "analytics", "screen" to "analytics",
+        "heartbeat" to "analytics", "error" to "analytics", "performance" to "analytics",
+        "journey_started" to "analytics", "journey_paused" to "analytics",
+        "journey_resumed" to "analytics", "journey_continued" to "analytics",
+        "journey_completed" to "analytics", "journey_abandoned" to "analytics",
+        "journey_checkpoint" to "analytics", "identify" to "analytics",
+        "experiment" to "marketing", "conversion" to "marketing",
+        "consent" to "analytics",
+        "payment_initiated" to "commerce", "payment_completed" to "commerce",
+        "payment_failed" to "commerce", "approval_requested" to "commerce",
+        "approval_resolved" to "commerce", "entitlement_granted" to "commerce",
+        "entitlement_revoked" to "commerce", "access_granted" to "commerce",
+        "access_denied" to "commerce", "x402_payment" to "commerce",
+        "wallet" to "web3", "transaction" to "web3", "contract_action" to "web3",
+        "agent_task" to "agent", "agent_decision" to "agent", "a2h_interaction" to "agent"
+    )
+    private val CANONICAL_EVENT_TYPES = EVENT_CONSENT_PURPOSE.keys
     private val dateFormat = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", Locale.US).apply {
         timeZone = TimeZone.getTimeZone("UTC")
     }
@@ -379,6 +397,10 @@ object Aether : DefaultLifecycleObserver {
         enqueueEvent("transaction", props)
     }
 
+    fun contractAction(contract: String, action: String, vm: String = "evm", properties: Map<String, Any?> = emptyMap()) {
+        enqueueEvent("contract_action", properties + mapOf("contract" to contract, "action" to action, "vm" to vm))
+    }
+
     // =========================================================================
     // CONSENT MANAGEMENT
     //
@@ -424,6 +446,58 @@ object Aether : DefaultLifecycleObserver {
         )
         items?.let { props["items"] = it }
         enqueueEvent("conversion", props)
+    }
+
+    fun paymentInitiated(paymentId: String, amount: Double, currency: String, properties: Map<String, Any?> = emptyMap()) {
+        enqueueEvent("payment_initiated", properties + mapOf("paymentId" to paymentId, "amount" to amount, "currency" to currency))
+    }
+
+    fun paymentCompleted(paymentId: String, amount: Double, currency: String, properties: Map<String, Any?> = emptyMap()) {
+        enqueueEvent("payment_completed", properties + mapOf("paymentId" to paymentId, "amount" to amount, "currency" to currency))
+    }
+
+    fun paymentFailed(paymentId: String, reason: String, properties: Map<String, Any?> = emptyMap()) {
+        enqueueEvent("payment_failed", properties + mapOf("paymentId" to paymentId, "reason" to reason))
+    }
+
+    fun approvalRequested(approvalId: String, scope: String, properties: Map<String, Any?> = emptyMap()) {
+        enqueueEvent("approval_requested", properties + mapOf("approvalId" to approvalId, "scope" to scope))
+    }
+
+    fun approvalResolved(approvalId: String, approved: Boolean, properties: Map<String, Any?> = emptyMap()) {
+        enqueueEvent("approval_resolved", properties + mapOf("approvalId" to approvalId, "approved" to approved))
+    }
+
+    fun entitlementGranted(entitlementId: String, properties: Map<String, Any?> = emptyMap()) {
+        enqueueEvent("entitlement_granted", properties + mapOf("entitlementId" to entitlementId))
+    }
+
+    fun entitlementRevoked(entitlementId: String, properties: Map<String, Any?> = emptyMap()) {
+        enqueueEvent("entitlement_revoked", properties + mapOf("entitlementId" to entitlementId))
+    }
+
+    fun accessGranted(resource: String, properties: Map<String, Any?> = emptyMap()) {
+        enqueueEvent("access_granted", properties + mapOf("resource" to resource))
+    }
+
+    fun accessDenied(resource: String, reason: String, properties: Map<String, Any?> = emptyMap()) {
+        enqueueEvent("access_denied", properties + mapOf("resource" to resource, "reason" to reason))
+    }
+
+    fun agentTask(taskId: String, actorId: String, actorKind: String = "agent", properties: Map<String, Any?> = emptyMap()) {
+        enqueueEvent("agent_task", properties + mapOf("taskId" to taskId, "actorId" to actorId, "actorKind" to actorKind))
+    }
+
+    fun agentDecision(decisionId: String, actorId: String, properties: Map<String, Any?> = emptyMap()) {
+        enqueueEvent("agent_decision", properties + mapOf("decisionId" to decisionId, "actorId" to actorId))
+    }
+
+    fun a2hInteraction(interactionId: String, actorId: String, properties: Map<String, Any?> = emptyMap()) {
+        enqueueEvent("a2h_interaction", properties + mapOf("interactionId" to interactionId, "actorId" to actorId))
+    }
+
+    fun x402Payment(paymentId: String, amount: String, currency: String, network: String, properties: Map<String, Any?> = emptyMap()) {
+        enqueueEvent("x402_payment", properties + mapOf("paymentId" to paymentId, "amount" to amount, "currency" to currency, "network" to network))
     }
 
     // =========================================================================
@@ -472,6 +546,15 @@ object Aether : DefaultLifecycleObserver {
 
     private fun enqueueEvent(type: String, properties: Map<String, Any?>) {
         if (!isInitialized) return
+        if (!CANONICAL_EVENT_TYPES.contains(type)) {
+            log("Dropping non-canonical event type: $type. Use track(eventName, properties) for custom events.")
+            return
+        }
+        val purpose = EVENT_CONSENT_PURPOSE[type]
+        if (type != "consent" && (purpose == null || !consentState.contains(purpose))) {
+            log("Dropping $type before enqueue because $purpose consent is not granted")
+            return
+        }
 
         val event = JSONObject().apply {
             put("id", UUID.randomUUID().toString())
@@ -654,7 +737,8 @@ object Aether : DefaultLifecycleObserver {
         (ctx.getSystemService(Context.ACTIVITY_SERVICE) as? ActivityManager)?.getMemoryInfo(memInfo)
         val startupMs = SystemClock.elapsedRealtime() - appStartTimeMs
 
-        enqueueEvent("session_start", mapOf(
+        enqueueEvent("track", mapOf(
+            "event" to "session_start",
             "startupTimeMs"       to startupMs,
             "totalMemoryMB"       to (memInfo.totalMem / 1048576L),
             "availableMemoryMB"   to (memInfo.availMem / 1048576L),

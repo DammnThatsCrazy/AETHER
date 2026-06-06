@@ -5,7 +5,7 @@ section: sdks
 visibility: P
 audience: [dev-junior, dev-senior]
 status: stable
-since_version: "8.8.0"
+since_version: "8.9.0"
 source_files:
   - packages/android/src/main/java/com/aether/sdk/Aether.kt
   - packages/shared/events.ts
@@ -13,10 +13,10 @@ source_files:
 canonical_owner: sdk@aether
 estimated_read_minutes: 10
 toc_depth: 3
-last_synced_commit: faf7ab1
+last_synced_commit: 306de9c1f6e47a3aeda6fc3302d7778c98417666
 ---
 
-# Aether Android SDK v8.8.0 — Integration Guide
+# Aether Android SDK v8.9.0 — Integration Guide
 
 ## Installation
 

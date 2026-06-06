@@ -4,12 +4,26 @@
 // =============================================================================
 
 import Foundation
-import UIKit
 import CryptoKit
-import MetricKit
 import Network
+
+#if canImport(UIKit)
+import UIKit
+#elseif canImport(AppKit)
+import AppKit
+#endif
+
+#if canImport(MetricKit)
+import MetricKit
+#endif
+
+#if canImport(AppTrackingTransparency)
 import AppTrackingTransparency
+#endif
+
+#if canImport(AdSupport)
 import AdSupport
+#endif
 
 // MARK: - Configuration
 
@@ -56,9 +70,14 @@ public struct PrivacyConfig {
 
 // MARK: - Event Types
 
-public enum AetherEventType: String, Codable {
-    case track, screen, identify, conversion, wallet, transaction, error, consent
+public enum AetherEventType: String, Codable, CaseIterable {
+    case track, page, screen, heartbeat, error, performance, experiment
     case journey_started, journey_paused, journey_resumed, journey_continued, journey_completed, journey_abandoned, journey_checkpoint
+    case identify, consent
+    case conversion, payment_initiated, payment_completed, payment_failed, approval_requested, approval_resolved, entitlement_granted, entitlement_revoked, access_granted, access_denied
+    case wallet, transaction, contract_action
+    case agent_task, agent_decision, a2h_interaction
+    case x402_payment
 }
 
 public struct AetherEvent: Codable {
@@ -143,6 +162,7 @@ public struct IdentityData {
 
 struct DeviceFingerprint {
     static func generate() -> String {
+        #if canImport(UIKit)
         let signals = [
             UIDevice.current.identifierForVendor?.uuidString ?? "",
             UIDevice.current.model,
@@ -155,6 +175,17 @@ struct DeviceFingerprint {
             String(ProcessInfo.processInfo.processorCount),
             String(ProcessInfo.processInfo.physicalMemory),
         ]
+        #else
+        let signals = [
+            Host.current().localizedName ?? "",
+            "macOS",
+            ProcessInfo.processInfo.operatingSystemVersionString,
+            Locale.current.identifier,
+            TimeZone.current.identifier,
+            String(ProcessInfo.processInfo.processorCount),
+            String(ProcessInfo.processInfo.physicalMemory),
+        ]
+        #endif
         return sha256(signals.joined(separator: "|"))
     }
 
@@ -199,6 +230,15 @@ public final class Aether: NSObject {
         "irclickid", "aff_id"
     ]
 
+    private static let eventConsentPurpose: [AetherEventType: String] = [
+        .track: "analytics", .page: "analytics", .screen: "analytics", .heartbeat: "analytics", .error: "analytics", .performance: "analytics",
+        .journey_started: "analytics", .journey_paused: "analytics", .journey_resumed: "analytics", .journey_continued: "analytics", .journey_completed: "analytics", .journey_abandoned: "analytics", .journey_checkpoint: "analytics", .identify: "analytics",
+        .experiment: "marketing", .conversion: "marketing", .consent: "analytics",
+        .payment_initiated: "commerce", .payment_completed: "commerce", .payment_failed: "commerce", .approval_requested: "commerce", .approval_resolved: "commerce", .entitlement_granted: "commerce", .entitlement_revoked: "commerce", .access_granted: "commerce", .access_denied: "commerce", .x402_payment: "commerce",
+        .wallet: "web3", .transaction: "web3", .contract_action: "web3",
+        .agent_task: "agent", .agent_decision: "agent", .a2h_interaction: "agent"
+    ]
+
     private let serialQueue = DispatchQueue(label: "com.aether.sdk.serial")
     private let defaults = UserDefaults(suiteName: "com.aether.sdk")!
     private static let maxQueueSize = 500
@@ -234,26 +274,32 @@ public final class Aether: NSObject {
         // Setup lifecycle observers
         setupLifecycleObservers()
 
-        // Auto screen tracking via swizzling
+        // Auto screen tracking via swizzling (iOS only)
+        #if canImport(UIKit)
         if config.modules.screenTracking {
             UIViewController.swizzleViewDidAppear()
         }
+        #endif
 
         self.fingerprintId = DeviceFingerprint.generate()
 
         // Request App Tracking Transparency authorization if required (iOS 14.5+)
+        #if canImport(AppTrackingTransparency)
         if config.privacy.respectATT {
             requestTrackingAuthorization()
         }
+        #endif
 
         isInitialized = true
-        log("Aether iOS SDK initialized (v7.0.0)")
+        log("Aether iOS SDK initialized (v8.9.0)")
 
         fetchConfig()
         emitSessionStart()
 
         // MetricKit: subscribe for diagnostic/performance payloads (iOS 13+)
+        #if canImport(MetricKit)
         MXMetricManager.shared.add(self)
+        #endif
 
         if config.autoResumeJourney {
             resolveIdentity(walletAddress: walletAddress, userId: nil, email: nil)
@@ -461,6 +507,12 @@ public final class Aether: NSObject {
         enqueueEvent(type: .transaction, properties: props)
     }
 
+    public func contractAction(contract: String, action: String, vm: String = "evm", properties: [String: AnyCodable] = [:]) {
+        var props = properties
+        props["contract"] = AnyCodable(contract); props["action"] = AnyCodable(action); props["vm"] = AnyCodable(vm)
+        enqueueEvent(type: .contract_action, properties: props)
+    }
+
     // MARK: - Consent Management
     //
     // Canonical purposes (see packages/shared/consent.ts):
@@ -517,6 +569,40 @@ public final class Aether: NSObject {
         enqueueEvent(type: .conversion, properties: props)
     }
 
+    public func paymentInitiated(paymentId: String, amount: Double, currency: String, properties: [String: AnyCodable] = [:]) {
+        var props = properties; props["paymentId"] = AnyCodable(paymentId); props["amount"] = AnyCodable(amount); props["currency"] = AnyCodable(currency)
+        enqueueEvent(type: .payment_initiated, properties: props)
+    }
+
+    public func paymentCompleted(paymentId: String, amount: Double, currency: String, properties: [String: AnyCodable] = [:]) {
+        var props = properties; props["paymentId"] = AnyCodable(paymentId); props["amount"] = AnyCodable(amount); props["currency"] = AnyCodable(currency)
+        enqueueEvent(type: .payment_completed, properties: props)
+    }
+
+    public func paymentFailed(paymentId: String, reason: String, properties: [String: AnyCodable] = [:]) {
+        var props = properties; props["paymentId"] = AnyCodable(paymentId); props["reason"] = AnyCodable(reason)
+        enqueueEvent(type: .payment_failed, properties: props)
+    }
+
+    public func approvalRequested(approvalId: String, scope: String, properties: [String: AnyCodable] = [:]) {
+        var props = properties; props["approvalId"] = AnyCodable(approvalId); props["scope"] = AnyCodable(scope)
+        enqueueEvent(type: .approval_requested, properties: props)
+    }
+
+    public func approvalResolved(approvalId: String, approved: Bool, properties: [String: AnyCodable] = [:]) {
+        var props = properties; props["approvalId"] = AnyCodable(approvalId); props["approved"] = AnyCodable(approved)
+        enqueueEvent(type: .approval_resolved, properties: props)
+    }
+
+    public func entitlementGranted(entitlementId: String, properties: [String: AnyCodable] = [:]) { var props = properties; props["entitlementId"] = AnyCodable(entitlementId); enqueueEvent(type: .entitlement_granted, properties: props) }
+    public func entitlementRevoked(entitlementId: String, properties: [String: AnyCodable] = [:]) { var props = properties; props["entitlementId"] = AnyCodable(entitlementId); enqueueEvent(type: .entitlement_revoked, properties: props) }
+    public func accessGranted(resource: String, properties: [String: AnyCodable] = [:]) { var props = properties; props["resource"] = AnyCodable(resource); enqueueEvent(type: .access_granted, properties: props) }
+    public func accessDenied(resource: String, reason: String, properties: [String: AnyCodable] = [:]) { var props = properties; props["resource"] = AnyCodable(resource); props["reason"] = AnyCodable(reason); enqueueEvent(type: .access_denied, properties: props) }
+    public func agentTask(taskId: String, actorId: String, actorKind: String = "agent", properties: [String: AnyCodable] = [:]) { var props = properties; props["taskId"] = AnyCodable(taskId); props["actorId"] = AnyCodable(actorId); props["actorKind"] = AnyCodable(actorKind); enqueueEvent(type: .agent_task, properties: props) }
+    public func agentDecision(decisionId: String, actorId: String, properties: [String: AnyCodable] = [:]) { var props = properties; props["decisionId"] = AnyCodable(decisionId); props["actorId"] = AnyCodable(actorId); enqueueEvent(type: .agent_decision, properties: props) }
+    public func a2hInteraction(interactionId: String, actorId: String, properties: [String: AnyCodable] = [:]) { var props = properties; props["interactionId"] = AnyCodable(interactionId); props["actorId"] = AnyCodable(actorId); enqueueEvent(type: .a2h_interaction, properties: props) }
+    public func x402Payment(paymentId: String, amount: String, currency: String, network: String, properties: [String: AnyCodable] = [:]) { var props = properties; props["paymentId"] = AnyCodable(paymentId); props["amount"] = AnyCodable(amount); props["currency"] = AnyCodable(currency); props["network"] = AnyCodable(network); enqueueEvent(type: .x402_payment, properties: props) }
+
     // MARK: - Feature Flags (from server config)
 
     public func isFeatureEnabled(_ key: String, default defaultValue: Bool = false) -> Bool {
@@ -534,6 +620,14 @@ public final class Aether: NSObject {
 
     private func enqueueEvent(type: AetherEventType, properties: [String: AnyCodable]) {
         guard isInitialized else { return }
+        guard let purpose = Self.eventConsentPurpose[type] else {
+            log("Dropping non-canonical event type: \(type.rawValue). Use track(_:properties:) for custom events.")
+            return
+        }
+        if type != .consent && !consentState.contains(purpose) {
+            log("Dropping \(type.rawValue) before enqueue because \(purpose) consent is not granted")
+            return
+        }
 
         let event = AetherEvent(
             id: UUID().uuidString,
@@ -635,11 +729,20 @@ public final class Aether: NSObject {
 
     private func buildContext() -> EventContext {
         let granted = Set(consentState)
+
+        #if canImport(UIKit)
+        let osName = "iOS"
+        let osVersion = UIDevice.current.systemVersion
+        #else
+        let osName = "macOS"
+        let osVersion = ProcessInfo.processInfo.operatingSystemVersionString
+        #endif
+
         return EventContext(
-            library: .init(name: "aether-ios", version: "7.0.0"),
+            library: .init(name: "aether-ios", version: "8.9.0"),
             device: .init(
-                osName: "iOS",
-                osVersion: UIDevice.current.systemVersion,
+                osName: osName,
+                osVersion: osVersion,
                 locale: Locale.current.identifier,
                 timezone: TimeZone.current.identifier
             ),
@@ -660,14 +763,23 @@ public final class Aether: NSObject {
     private func emitSessionStart() {
         let startupMs = Int(Date().timeIntervalSince(appStartDate) * 1000)
         let memoryUsedMB = memoryUsageMB()
+
+        #if canImport(UIKit)
+        let osVersion = UIDevice.current.systemVersion
+        let deviceModel = UIDevice.current.model
+        #else
+        let osVersion = ProcessInfo.processInfo.operatingSystemVersionString
+        let deviceModel = "Mac"
+        #endif
+
         enqueueEvent(type: .track, properties: [
             "event":          AnyCodable("session_start"),
             "startupTimeMs":  AnyCodable(startupMs),
             "memoryUsedMB":   AnyCodable(memoryUsedMB),
             "thermalState":   AnyCodable(thermalStateString()),
             "networkType":    AnyCodable(currentNetworkType),
-            "osVersion":      AnyCodable(UIDevice.current.systemVersion),
-            "device":         AnyCodable(UIDevice.current.model),
+            "osVersion":      AnyCodable(osVersion),
+            "device":         AnyCodable(deviceModel),
         ])
     }
 
@@ -693,8 +805,9 @@ public final class Aether: NSObject {
         }
     }
 
+    #if canImport(AppTrackingTransparency)
     private func requestTrackingAuthorization() {
-        if #available(iOS 14.5, *) {
+        if #available(iOS 14.5, macOS 12.0, *) {
             // Must be called after the first UIApplicationDidBecomeActive
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
                 ATTrackingManager.requestTrackingAuthorization { [weak self] status in
@@ -706,15 +819,21 @@ public final class Aether: NSObject {
                     case .notDetermined:       statusStr = "not_determined"
                     @unknown default:          statusStr = "unknown"
                     }
-                    self?.enqueueEvent(type: .track, properties: [
+                    var props: [String: AnyCodable] = [
                         "event": AnyCodable("att_authorization"),
                         "status": AnyCodable(statusStr),
-                        "idfa": AnyCodable(status == .authorized ? ASIdentifierManager.shared().advertisingIdentifier.uuidString : ""),
-                    ])
+                    ]
+                    #if canImport(AdSupport)
+                    props["idfa"] = AnyCodable(status == .authorized ? ASIdentifierManager.shared().advertisingIdentifier.uuidString : "")
+                    #else
+                    props["idfa"] = AnyCodable("")
+                    #endif
+                    self?.enqueueEvent(type: .track, properties: props)
                 }
             }
         }
     }
+    #endif
 
     private func startNetworkMonitor() {
         networkMonitor.pathUpdateHandler = { [weak self] path in
@@ -737,6 +856,7 @@ public final class Aether: NSObject {
     }
 
     private func setupLifecycleObservers() {
+        #if canImport(UIKit)
         NotificationCenter.default.addObserver(forName: UIApplication.didEnterBackgroundNotification, object: nil, queue: .main) { [weak self] _ in
             self?.flush()
         }
@@ -758,6 +878,12 @@ public final class Aether: NSObject {
         NotificationCenter.default.addObserver(forName: UIApplication.didEnterBackgroundNotification, object: nil, queue: .main) { [weak self] _ in
             self?.lastActivityDate = Date()
         }
+        #else
+        // macOS lifecycle: observe NSApplication termination
+        NotificationCenter.default.addObserver(forName: NSApplication.willTerminateNotification, object: nil, queue: .main) { [weak self] _ in
+            self?.flush()
+        }
+        #endif
     }
 
     private func sha256(_ string: String) -> String {
@@ -828,6 +954,7 @@ public final class Aether: NSObject {
 
 // MARK: - MetricKit Delegate
 
+#if canImport(MetricKit)
 extension Aether: MXMetricManagerSubscriber {
     public func didReceive(_ payloads: [MXMetricPayload]) {
         for payload in payloads {
@@ -883,9 +1010,11 @@ extension Aether: MXMetricManagerSubscriber {
         }
     }
 }
+#endif
 
 // MARK: - UIViewController Swizzling for Auto Screen Tracking
 
+#if canImport(UIKit)
 extension UIViewController {
     static var hasSwizzled = false
 
@@ -912,6 +1041,7 @@ extension UIViewController {
         }
     }
 }
+#endif
 
 // MARK: - AnyCodable Helper
 

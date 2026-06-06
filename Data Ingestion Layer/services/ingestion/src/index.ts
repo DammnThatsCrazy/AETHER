@@ -188,6 +188,21 @@ class IngestionServer {
           await this.handleBatch(req, res);
           return;
         }
+        // Compatibility aliases only: SDKs must use /v1/batch. /v1/ingest/*
+        // is reserved for server-side ingestion/connectors and documented as
+        // deprecated for direct SDK traffic.
+        if (url === '/v1/ingest/events/batch') {
+          res.setHeader('Deprecation', 'true');
+          res.setHeader('Link', '</v1/batch>; rel="successor-version"');
+          await this.handleBatch(req, res);
+          return;
+        }
+        if (url === '/v1/ingest/events') {
+          res.setHeader('Deprecation', 'true');
+          res.setHeader('Link', '</v1/batch>; rel="successor-version"');
+          await this.handleTrack(req, res);
+          return;
+        }
         if (url === '/v1/track') {
           await this.handleTrack(req, res);
           return;
@@ -596,7 +611,8 @@ class IngestionServer {
       status: 'running',
       uptime: Math.floor((Date.now() - this.startTime) / 1000),
       endpoints: {
-        'POST /v1/batch': 'Ingest a batch of events',
+        'POST /v1/batch': 'Canonical SDK batch ingestion endpoint',
+          'POST /v1/ingest/events[/batch]': 'Deprecated compatibility aliases for server-side connectors; SDKs must use /v1/batch',
         'POST /v1/track': 'Single track event shorthand',
         'POST /v1/identify': 'Single identify event shorthand',
         'GET /health': 'Health check',

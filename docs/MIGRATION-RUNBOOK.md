@@ -128,7 +128,7 @@ Run the full smoke test checklist (see `docs/SMOKE-TEST-CHECKLIST.md`):
 curl -s http://localhost:8001/v1/health | jq .
 
 # Ingest test event
-curl -s -X POST http://localhost:8001/v1/ingest/events \
+curl -s -X POST http://localhost:8001/v1/batch \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer ${API_KEY}" \
   -d '{"events": [{"type": "test", "properties": {"key": "migration_check"}}]}'
