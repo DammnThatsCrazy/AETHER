@@ -20,7 +20,7 @@ source_files:
 canonical_owner: platform@aether
 estimated_read_minutes: 8
 toc_depth: 3
-last_synced_commit: 7c90d84437b4a3ab081671fb09a9a9884f12c1b5
+last_synced_commit: d4f3e04137f0cce549d4ddad94f63fbaf7e5c3c3
 ---
 
 # Documentation Pipeline
@@ -94,7 +94,20 @@ make docs-drift           # source-path + staleness check
 make docs-stamp           # re-stamp last_synced_commit at HEAD
 make extract-docs         # regenerate docs/_generated/*.json
 make docs                 # run the whole pipeline end-to-end
+
+# Repo-enforced consistency suite (runs all checks incl. docs)
+make repo-doctor          # full consistency check — no mutations
+make repo-doctor-fix      # regenerate generated docs + sync
+make docs-check           # docs/version/frontmatter/drift only (fast gate)
+make ci-check             # CI-safe full path — fails on any generated diff
+make docs-fix             # regenerate and sync docs only
 ```
+
+The `repo-doctor` family delegates to `scripts/repo_doctor.py`, which
+orchestrates all checks in a fixed deterministic order and exits non-zero
+on the first failure (or with `--continue-on-error`, after collecting all
+failures). This is the single command agents, developers, and CI should
+use for full consistency validation.
 
 ## Enforcement points
 
@@ -102,11 +115,15 @@ make docs                 # run the whole pipeline end-to-end
 `pre-commit install`. Mirrors the gates so contributors catch problems
 before pushing.
 
-**CI** (`.github/workflows/repo-health.yml`) — authoritative. On every
-push and PR it runs `validate_docs`, `validate_frontmatter`,
-`docs_drift`, regenerates `docs/_generated/`, and fails the build on
-any uncommitted drift — the same self-healing pattern the `REPO-INDEX`
-gate already used.
+**CI** — two workflows enforce documentation consistency:
+
+- `.github/workflows/repo-health.yml` — authoritative per-commit gate.
+  Runs `validate_docs`, `validate_frontmatter`, `docs_drift`,
+  regenerates `docs/_generated/`, and fails on uncommitted drift.
+- `.github/workflows/repo-consistency.yml` — PR/push gate that runs
+  `make ci-check` (the full `repo_doctor.py --ci` suite), covering
+  version alignment, generated docs, frontmatter, source-linked drift,
+  contracts, SDK alignment, and tests in a single step.
 
 ## Routine: changing a documented system
 

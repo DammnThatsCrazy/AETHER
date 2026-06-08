@@ -15,7 +15,7 @@ source_files:
 canonical_owner: platform@aether
 estimated_read_minutes: 12
 toc_depth: 3
-last_synced_commit: 935fa053c080dcdebaf116dcca21d33a40f44cfd
+last_synced_commit: 906a837a09b5094a4c6f84e1135294cf212320ee
 ---
 
 # CI/CD Pipeline — Stages, Gates & SDK Release
@@ -181,6 +181,26 @@ version in the manifest matches the git tag before publishing.
 4. On merge, the CD pipeline executes the full canary rollout.
 5. Immediately after merge to `main`, open a second PR to merge the hotfix into
    `develop` to keep branches in sync.
+
+## Repo consistency gate
+
+In addition to the eight deploy-oriented stages above, a dedicated
+**Repo Consistency** workflow (`.github/workflows/repo-consistency.yml`)
+runs `make ci-check` on every PR and push to `main`. It enforces:
+
+- version alignment (`pyproject.toml` is canonical)
+- generated docs freshness (`docs/_generated/` diff check)
+- docs sync freshness (`REPO-INDEX.md`, `AUTOMATION.md`)
+- docs frontmatter validity
+- source-linked docs drift (`--strict` mode)
+- contract / event / consent alignment
+- SDK release alignment
+- npm lockfile integrity + TypeScript build/test
+- Python tests
+
+This gate is separate from `repo-health.yml` and uses the single
+orchestrator script (`scripts/repo_doctor.py`) so the same command
+works locally (`make repo-doctor`) and in CI (`make ci-check`).
 
 ## Adding a new CI stage
 

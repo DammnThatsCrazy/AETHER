@@ -16,7 +16,8 @@
         dev dev-streaming dev-analytics dev-notebooks dev-full dev-down \
         docker-up docker-down docker-logs \
         smoke byok-reencrypt \
-        clean validate-docs validate-frontmatter extract-docs docs-drift docs-stamp docs bump-version help
+        clean validate-docs validate-frontmatter extract-docs docs-drift docs-stamp docs bump-version \
+        repo-doctor repo-doctor-fix docs-check ci-check docs-fix help
 
 # Centralized subsystem paths — single place to rename if directories move.
 BACKEND_DIR := Backend Architecture/aether-backend
@@ -182,6 +183,25 @@ docs: ## Run the full documentation pipeline (extract + sync + validate + drift)
 	python scripts/validate_frontmatter.py
 	python scripts/docs_drift.py
 	python scripts/validate_contracts.py
+
+# ---------------------------------------------------------------------------
+# Repo-Enforced Consistency (single command for humans, agents, and CI)
+# ---------------------------------------------------------------------------
+
+repo-doctor: ## Validate full repo consistency (no mutations)
+	python scripts/repo_doctor.py --check
+
+repo-doctor-fix: ## Regenerate generated docs + sync, then validate
+	python scripts/repo_doctor.py --fix
+
+docs-check: ## Docs/version/frontmatter/drift checks only (fast gate)
+	python scripts/repo_doctor.py --docs-only --check
+
+ci-check: ## CI-safe full validation; fails if generators produce a diff
+	python scripts/repo_doctor.py --ci
+
+docs-fix: ## Regenerate and sync docs only
+	python scripts/repo_doctor.py --docs-only --fix
 
 bump-version: ## Bump version across all files (usage: make bump-version V=8.4.0)
 	@if [ -z "$(V)" ]; then echo "Usage: make bump-version V=8.4.0"; exit 1; fi

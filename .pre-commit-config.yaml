@@ -42,6 +42,35 @@ repos:
         additional_dependencies: ["PyYAML>=6.0"]
         stages: [commit]
 
+      # Version alignment — runs on every commit to catch stale version strings
+      # introduced in package.json, SDK constants, or docs headers.
+      - id: aether-version-check
+        name: Aether version alignment check
+        entry: python scripts/bump_version.py --check
+        language: python
+        pass_filenames: false
+        always_run: true
+        stages: [commit]
+
+      # Pre-push: run the full docs gate before pushing to remote.
+      # Heavier than per-commit but still faster than waiting for CI.
+      - id: aether-docs-check-push
+        name: Aether docs consistency check (pre-push)
+        entry: make docs-check
+        language: system
+        pass_filenames: false
+        always_run: true
+        stages: [push]
+
+      # Pre-push: contract and SDK alignment before remote sees the branch.
+      - id: aether-contract-check-push
+        name: Aether contract + SDK alignment check (pre-push)
+        entry: bash -c 'python scripts/validate_contracts.py && python scripts/validate_sdk_release_alignment.py'
+        language: system
+        pass_filenames: false
+        always_run: true
+        stages: [push]
+
       # Re-derive docs/_generated/*.json - blocks commits that change a
       # canonical source without also committing the regenerated JSON.
       # The hook regenerates, then fails only on UNSTAGED drift — i.e.
