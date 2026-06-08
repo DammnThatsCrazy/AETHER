@@ -37,7 +37,7 @@ jobs:
       - name: Install Python dependencies
         run: |
           pip install uv
-          uv pip install --system -e ".[dev]"
+          uv pip install --system -e ".[dev,security,backend,agent,ml]"
 
       - name: Install Node dependencies
         run: npm ci --ignore-scripts
