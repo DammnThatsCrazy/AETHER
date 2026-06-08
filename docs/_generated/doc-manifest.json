@@ -859,6 +859,22 @@
       "canonical_owner": "platform@aether"
     },
     {
+      "path": "docs/DOCUMENTATION-OWNERSHIP.md",
+      "title": "Documentation Ownership Model",
+      "slug": "internal/documentation-ownership",
+      "section": "operations",
+      "visibility": "I",
+      "audience": [
+        "dev-junior",
+        "dev-senior",
+        "ops",
+        "architect"
+      ],
+      "status": "stable",
+      "since_version": "8.9.0",
+      "canonical_owner": "platform@aether"
+    },
+    {
       "path": "docs/DOMAIN-DNS-READINESS.md",
       "title": "Domain & DNS Readiness",
       "slug": "operations/domain-dns-readiness",
@@ -1549,6 +1565,22 @@
       "status": "beta",
       "since_version": "8.9.0",
       "estimated_read_minutes": 4,
+      "canonical_owner": "platform@aether"
+    },
+    {
+      "path": "docs/LOCAL-CLOUD-SYNC.md",
+      "title": "Local / Cloud Sync Contract",
+      "slug": "internal/local-cloud-sync",
+      "section": "operations",
+      "visibility": "I",
+      "audience": [
+        "dev-junior",
+        "dev-senior",
+        "ops",
+        "architect"
+      ],
+      "status": "stable",
+      "since_version": "8.9.0",
       "canonical_owner": "platform@aether"
     },
     {
