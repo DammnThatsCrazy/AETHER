@@ -1,7 +1,12 @@
 ---
-title: "Local / Cloud Sync Contract"
-description: "How local and cloud workspaces stay aligned with origin/main"
-category: "internal"
+title: Local / Cloud Sync Contract
+slug: internal/local-cloud-sync
+section: operations
+visibility: I
+audience: [dev-junior, dev-senior, ops, architect]
+status: stable
+since_version: "8.9.0"
+canonical_owner: platform@aether
 ---
 
 # Local / Cloud Sync Contract

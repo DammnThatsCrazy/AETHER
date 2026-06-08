@@ -1,7 +1,12 @@
 ---
-title: "Documentation Ownership Model"
-description: "Where facts live, who owns them, and how drift is enforced"
-category: "internal"
+title: Documentation Ownership Model
+slug: internal/documentation-ownership
+section: operations
+visibility: I
+audience: [dev-junior, dev-senior, ops, architect]
+status: stable
+since_version: "8.9.0"
+canonical_owner: platform@aether
 ---
 
 # Documentation Ownership Model
