@@ -1,0 +1,27 @@
+{
+  "name": "Aether Dev",
+  "image": "mcr.microsoft.com/devcontainers/python:3.11-bullseye",
+  "features": {
+    "ghcr.io/devcontainers/features/node:1": {
+      "version": "20"
+    }
+  },
+  "postCreateCommand": "pip install uv && uv pip install --system -e '.[dev,security,backend,agent]' && npm ci --ignore-scripts && pip install pre-commit && pre-commit install && pre-commit install --hook-type pre-push || true",
+  "customizations": {
+    "vscode": {
+      "settings": {
+        "git.autofetch": true,
+        "python.defaultInterpreterPath": "/usr/local/bin/python"
+      },
+      "extensions": [
+        "ms-python.python",
+        "ms-python.vscode-pylance",
+        "charliermarsh.ruff",
+        "dbaeumer.vscode-eslint"
+      ]
+    }
+  },
+  "remoteEnv": {
+    "PYTHONDONTWRITEBYTECODE": "1"
+  }
+}
