@@ -324,19 +324,25 @@ def main() -> None:
             skip("npm typecheck", "no typecheck script in root package.json", results)
 
         # ------------------------------------------------------------------
-        # 14. Python tests
+        # 14. Python tests — run separately to avoid conftest module
+        #     name collision between tests/ and ML Models/.../tests/
         # ------------------------------------------------------------------
         run(
-            [
-                "python", "-m", "pytest",
-                "tests/",
-                "ML Models/aether-ml/tests/",
-                "-v", "--tb=short",
-            ],
-            name="Python tests (core + ML)",
+            ["python", "-m", "pytest", "tests/", "-v", "--tb=short"],
+            name="Python tests (core)",
             results=results,
             stop_on_failure=stop,
         )
+        ml_tests_dir = Path("ML Models/aether-ml/tests")
+        if ml_tests_dir.exists():
+            run(
+                ["python", "-m", "pytest", str(ml_tests_dir), "-v", "--tb=short"],
+                name="Python tests (ML)",
+                results=results,
+                stop_on_failure=stop,
+            )
+        else:
+            skip("Python tests (ML)", f"{ml_tests_dir} not found", results)
 
     # ------------------------------------------------------------------
     # Final summary
