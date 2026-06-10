@@ -29,7 +29,7 @@ class X402EconomicGraph:
     def __init__(self, graph_client: Optional[GraphClient] = None):
         self._graph = graph_client or GraphClient()
         self._nodes: dict[str, X402Node] = {}
-        self._payments: list[CapturedX402Transaction] = []
+        self._payments: list[tuple[CapturedX402Transaction, str]] = []
         self._snapshot_task: Optional[asyncio.Task] = None
         self._lock = asyncio.Lock()
         self._recent_payments: dict[str, deque] = {}
@@ -65,8 +65,8 @@ class X402EconomicGraph:
             payee.total_received_usd += tx.amount_usd
             payee.transaction_count += 1
 
-            # Append to pending-flush buffer
-            self._payments.append(tx)
+            # Append to pending-flush buffer (store with tenant_id for scoped graph writes)
+            self._payments.append((tx, tenant_id))
 
             # Maintain per-agent bounded deque of last 20 payments
             if payer_key not in self._recent_payments:
@@ -86,44 +86,60 @@ class X402EconomicGraph:
         last_processed_idx = 0
 
         try:
-            for idx, tx in enumerate(payments_to_flush):
+            for idx, (tx, tenant_id) in enumerate(payments_to_flush):
                 try:
+                    # Build tenant-scoped vertex IDs for isolation
+                    payer_vid = f"{tenant_id}:{tx.payer_agent_id}" if tenant_id else tx.payer_agent_id
+                    payee_vid = f"{tenant_id}:{tx.payee_service_id}" if tenant_id else tx.payee_service_id
+
                     # Ensure payer (Agent) vertex exists
                     await self._graph.upsert_vertex(Vertex(
                         vertex_type=VertexType.AGENT,
-                        vertex_id=tx.payer_agent_id,
-                        properties={"node_role": "x402_payer"},
+                        vertex_id=payer_vid,
+                        properties={
+                            "node_role": "x402_payer",
+                            "agent_id": tx.payer_agent_id,
+                            "tenant_id": tenant_id,
+                        },
                     ))
 
                     # Ensure payee (Service) vertex exists
                     await self._graph.upsert_vertex(Vertex(
                         vertex_type=VertexType.SERVICE,
-                        vertex_id=tx.payee_service_id,
-                        properties={"node_role": "x402_payee"},
+                        vertex_id=payee_vid,
+                        properties={
+                            "node_role": "x402_payee",
+                            "service_id": tx.payee_service_id,
+                            "tenant_id": tenant_id,
+                        },
                     ))
 
-                    # Create PAYS edge
+                    # Create PAYS edge with deterministic ID for idempotency
                     await self._graph.add_edge(Edge(
                         edge_type=EdgeType.PAYS,
-                        from_vertex_id=tx.payer_agent_id,
-                        to_vertex_id=tx.payee_service_id,
+                        from_vertex_id=payer_vid,
+                        to_vertex_id=payee_vid,
                         properties={
+                            "edge_id": f"{tenant_id}:{tx.capture_id}:pays",
                             "amount": str(tx.amount_usd),
                             "token": tx.terms.token,
                             "chain": tx.terms.chain,
                             "capture_id": tx.capture_id,
                             "method": "x402",
+                            "tenant_id": tenant_id,
                         },
                     ))
 
-                    # Create CONSUMES edge (agent -> service)
+                    # Create CONSUMES edge (agent -> service) with deterministic ID
                     await self._graph.add_edge(Edge(
                         edge_type=EdgeType.CONSUMES,
-                        from_vertex_id=tx.payer_agent_id,
-                        to_vertex_id=tx.payee_service_id,
+                        from_vertex_id=payer_vid,
+                        to_vertex_id=payee_vid,
                         properties={
+                            "edge_id": f"{tenant_id}:{tx.capture_id}:consumes",
                             "api_call_url": tx.request_url,
                             "method": tx.request_method,
+                            "tenant_id": tenant_id,
                         },
                     ))
 

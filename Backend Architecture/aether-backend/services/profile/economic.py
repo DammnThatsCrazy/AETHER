@@ -59,11 +59,11 @@ class AgentProfile360EconomicComposer:
         self._behavior_profiles = behavior_profiles or BehaviorProfileRepository()
 
     async def compose(self, agent_id: str, tenant_id: str, limit: int = 100) -> dict[str, Any]:
-        intents = await self._payment_intents.list_for_agent(agent_id, limit=limit)
-        settlements = await self._settlements.list_for_agent(agent_id, limit=limit)
-        economic_identity = await self._economic_identities.find_by_id(agent_id)
-        executions = await self._executions.list_for_agent(agent_id, limit=limit)
-        active_delegations = await self._delegations.active_for(agent_id)
+        intents = await self._payment_intents.list_for_agent(agent_id, tenant_id, limit=limit)
+        settlements = await self._settlements.list_for_agent(agent_id, tenant_id, limit=limit)
+        economic_identity = await self._economic_identities.find_for_agent(agent_id, tenant_id)
+        executions = await self._executions.list_for_agent(agent_id, tenant_id, limit=limit)
+        active_delegations = await self._delegations.active_for(agent_id, tenant_id)
         behavior = await self._behavior_profiles.find_by_id(agent_id)
 
         provider_counts = Counter(i.get("provider", "") for i in intents)

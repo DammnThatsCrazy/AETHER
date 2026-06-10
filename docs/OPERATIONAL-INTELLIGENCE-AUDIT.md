@@ -16,7 +16,7 @@ source_files:
   - frontend/kyber/src/features/investigation/use-investigations.ts
   - frontend/kyber/src/features/governance/use-governance.ts
   - frontend/kyber/src/features/graph/use-graph-intelligence.ts
-last_synced_commit: 8659b94
+last_synced_commit: cd8539d
 ---
 
 # Operational Intelligence — Stub vs. Production Audit
@@ -93,10 +93,10 @@ Items marked **FIXED** have been addressed in the commit that accompanies this d
 | Component | File | Evidence of Production Readiness |
 |---|---|---|
 | **BaseRepository** | `repos.py:97+` | asyncpg connection pool, parameterized queries, UPSERT-on-conflict, full async |
-| **InvestigationRepository** | `repos.py:1293` | PostgreSQL-backed create/list_by_tenant with tenant isolation |
-| **GovernanceRepository** | `repos.py:1312` | PostgreSQL-backed; principal_id flat key for O(1) filtering |
-| **EventReplayRepository** | `repos.py:1335` | PostgreSQL-backed; `list_queued` for worker polling |
-| **EventEnvelopeRepository** | `repos.py:1348` | **New — PostgreSQL-backed** durable envelope storage with replayable filter |
+| **InvestigationRepository** | `repos.py:1463` | PostgreSQL-backed create/list_by_tenant with tenant isolation |
+| **GovernanceRepository** | `repos.py:1482` | PostgreSQL-backed; principal_id flat key for O(1) filtering |
+| **EventReplayRepository** | `repos.py:1505` | PostgreSQL-backed; `list_queued` for worker polling |
+| **EventEnvelopeRepository** | `repos.py:1519` | PostgreSQL-backed durable envelope storage with replayable filter |
 | **EventProducer** | `shared/events/events.py:328` | AIOKafka with acks=all, retries=3, exponential backoff, DLQ |
 | **EventConsumer** | `shared/events/events.py:438` | Concurrency-limited (semaphore=10), per-handler retry, dead-letter on exhaustion |
 | **ChannelHub** | `services/realtime/channel_hub.py` | 54 topics → 9 named channels; monotonic cursor; lock-protected fanout; QueueFull logged |

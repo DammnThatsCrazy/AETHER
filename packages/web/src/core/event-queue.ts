@@ -60,10 +60,28 @@ const CONSENT_MAP: Record<string, string> = {
   access_granted: 'commerce', access_denied: 'commerce',
   // Wallet / on-chain
   wallet: 'web3', transaction: 'web3', contract_action: 'web3',
-  // Agent
+  // Agent (legacy)
   agent_task: 'agent', agent_decision: 'agent', a2h_interaction: 'agent',
-  // x402
+  // Agent lifecycle
+  agent_registered: 'agent', agent_updated: 'agent',
+  agent_authorized: 'agent', agent_deauthorized: 'agent',
+  agent_capability_granted: 'agent', agent_capability_revoked: 'agent',
+  agent_task_created: 'agent', agent_task_decomposed: 'agent',
+  agent_task_started: 'agent', agent_task_completed: 'agent', agent_task_failed: 'agent',
+  agent_tool_called: 'agent', agent_resource_requested: 'agent',
+  agent_delegated_task: 'agent', agent_subagent_spawned: 'agent',
+  agent_policy_evaluated: 'agent', agent_handoff: 'agent',
+  agent_escalated_to_human: 'agent', agent_outcome_recorded: 'agent',
+  // x402 (legacy)
   x402_payment: 'commerce',
+  // x402 lifecycle
+  x402_resource_requested: 'commerce', x402_payment_required: 'commerce',
+  x402_quote_received: 'commerce', x402_authorization_requested: 'commerce',
+  x402_authorization_resolved: 'commerce', x402_payment_intent_created: 'commerce',
+  x402_payment_submitted: 'commerce', x402_payment_settled: 'commerce',
+  x402_payment_failed: 'commerce', x402_payment_timeout: 'commerce',
+  x402_receipt_verified: 'commerce', x402_access_granted: 'commerce',
+  x402_access_denied: 'commerce', x402_refund_or_reversal: 'commerce',
 };
 
 function scrubSensitiveFields(props: Record<string, unknown>): Record<string, unknown> {
