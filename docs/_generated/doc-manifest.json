@@ -3244,6 +3244,23 @@
         "buyer"
       ],
       "status": "stable"
+    },
+    {
+      "path": "docs/productization/aether_productization_audit.md",
+      "title": "AETHER Productization Audit",
+      "slug": "operations/productization-audit",
+      "section": "operations",
+      "visibility": "I",
+      "audience": [
+        "architect",
+        "ops",
+        "exec"
+      ],
+      "status": "stable",
+      "since_version": "8.9.0",
+      "estimated_read_minutes": 15,
+      "toc_depth": 3,
+      "canonical_owner": "platform@aether"
     }
   ]
 }

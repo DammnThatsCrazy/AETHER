@@ -923,6 +923,27 @@ Holistic user/entity omniview — composes data from all Aether subsystems into 
 
 ---
 
+### Economic Value Service (v8.9.0)
+
+Unified economic observability across Web2, Web3, agentic (x402), and campaign rails. Entity-scoped breakdowns plus tenant-level rollups. The agentic breakdown is composed from `PaymentIntentRepository` and `SettlementEventRepository` via `AgentProfile360EconomicComposer` (spend by currency normalized to USD, service call counts, settlement reliability) and degrades to an empty response on composer errors.
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/v1/profile/{entity_id}/economic` | Full economic breakdown for an entity (Web2 + Web3 + agentic + campaign) |
+| GET | `/v1/profile/{entity_id}/economic/web2` | Web2 GMV / revenue / payment volume |
+| GET | `/v1/profile/{entity_id}/economic/web3` | Web3 TVL / protocol exposure |
+| GET | `/v1/profile/{entity_id}/economic/agentic` | Agentic / x402 spend, service calls, settlement success rate |
+| GET | `/v1/profile/{entity_id}/economic/campaigns` | Campaign-attributed economic value |
+| GET | `/v1/profile/{entity_id}/economic/warnings` | Entity-level data-quality warnings (mixed currency, stale prices) |
+| GET | `/v1/economic/overview` | Tenant economic overview (Total Value Observed, domain split) |
+| GET | `/v1/economic/warnings` | Tenant-wide economic data-quality warnings |
+
+**Query params:** entity endpoints accept `?window=realtime|24h|7d|30d|90d|lifetime` (default `lifetime`; tenant overview defaults to `30d`).
+
+**Permissions:** `read` for all economic endpoints
+
+---
+
 ### Population Intelligence Service (v8.5.0)
 
 Macro-to-micro group intelligence. Supports segments, cohorts, clusters, communities, batches, archetypes, anomaly groups, lookalike groups, risk groups, and lifecycle groups.

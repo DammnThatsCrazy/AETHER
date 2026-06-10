@@ -1,0 +1,51 @@
+name: Production Status
+
+# Scheduled production-readiness routine. Runs the canonical scorecard +
+# live consistency checks (scripts/production_status.py) every 12 hours and
+# on demand. Requires no secrets and no external services; the report is
+# uploaded as a build artifact.
+
+on:
+  schedule:
+    - cron: '0 */12 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: production-status-${{ github.ref_name }}
+  cancel-in-progress: true
+
+jobs:
+  production-status:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # docs_drift.py compares last_synced_commit stamps against git
+          # history, so the full history is required.
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+          cache-dependency-path: 'pyproject.toml'
+
+      - name: Install Python dependencies (dev only)
+        run: |
+          pip install uv
+          uv pip install --system -e ".[dev]"
+
+      - name: Run production status routine (strict)
+        run: python scripts/production_status.py --strict --json production-status.json
+
+      - name: Upload report artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: production-status-report
+          path: production-status.json
+          retention-days: 30

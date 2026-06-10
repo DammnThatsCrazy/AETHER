@@ -202,6 +202,19 @@ This gate is separate from `repo-health.yml` and uses the single
 orchestrator script (`scripts/repo_doctor.py`) so the same command
 works locally (`make repo-doctor`) and in CI (`make ci-check`).
 
+## Production status routine
+
+A scheduled **Production Status** workflow
+(`.github/workflows/production-status.yml`) runs
+`scripts/production_status.py --strict` every 12 hours and on manual
+dispatch. It re-verifies the live consistency gates (version alignment,
+docs drift, contract alignment, SDK alignment), checks that required
+guardrail artifacts exist, and publishes the readiness scorecard +
+blocker list as a JSON build artifact. It requires no secrets and no
+external services. The same routine runs locally via
+`make production-status` (advisory) and `make release-gate`
+(repo consistency in CI mode + strict production status).
+
 ## Adding a new CI stage
 
 1. Add a stage class in `cicd/aether-cicd/stages/` implementing the `Stage`

@@ -101,6 +101,10 @@ make repo-doctor-fix      # regenerate generated docs + sync
 make docs-check           # docs/version/frontmatter/drift only (fast gate)
 make ci-check             # CI-safe full path — fails on any generated diff
 make docs-fix             # regenerate and sync docs only
+
+# Production readiness (scorecard + blockers + live consistency checks)
+make production-status    # advisory readiness report (scripts/production_status.py)
+make release-gate         # ci-check + strict production status
 ```
 
 The `repo-doctor` family delegates to `scripts/repo_doctor.py`, which

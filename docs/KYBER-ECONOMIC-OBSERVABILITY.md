@@ -65,10 +65,19 @@ The Kyber operator console surfaces economic observability for platform operator
 ## API Endpoints
 
 ```
-GET /v1/economic/overview           → Tenant economic overview
-GET /v1/economic/warnings           → Tenant-wide warnings
-GET /v1/profile/{id}/economic       → Entity economic breakdown
+GET /v1/economic/overview                    → Tenant economic overview
+GET /v1/economic/warnings                    → Tenant-wide warnings
+GET /v1/profile/{id}/economic                → Entity economic breakdown
+GET /v1/profile/{id}/economic/web2           → Web2 GMV / revenue / payment volume
+GET /v1/profile/{id}/economic/web3           → Web3 TVL / protocol exposure
+GET /v1/profile/{id}/economic/agentic        → Agentic/x402 spend, service calls, settlement success rate
+GET /v1/profile/{id}/economic/campaigns      → Campaign-attributed value
+GET /v1/profile/{id}/economic/warnings       → Entity-level data-quality warnings
 ```
+
+The `/economic/agentic` breakdown is composed live from payment intents and
+settlement events (`AgentProfile360EconomicComposer`); it returns an empty
+envelope rather than failing when composition errors occur.
 
 ## Implementation
 
