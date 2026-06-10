@@ -31,6 +31,7 @@ from typing import Any, Optional
 from fastapi import APIRouter, Query, Request
 from pydantic import BaseModel, Field
 
+from services.profile.economic import AgentProfile360EconomicComposer
 from shared.common.common import APIResponse, NotFoundError
 from shared.logger.logger import get_logger, metrics
 from shared.observability import trace_request, emit_latency
@@ -227,7 +228,32 @@ async def get_entity_agentic_economic(
     tenant_id = _get_tenant_id(request)
     logger.info("economic.agentic", entity_id=entity_id, tenant_id=tenant_id)
 
-    response = AgenticEconomicResponse()
+    try:
+        composer = AgentProfile360EconomicComposer()
+        composed = await composer.compose(agent_id=entity_id, tenant_id=tenant_id)
+
+        economic = composed.get("economic", {})
+        trust = composed.get("trust", {})
+        behavioral = composed.get("behavioral", {})
+
+        # Aggregate spend_by_currency into a single normalized USD amount
+        spend_by_currency: dict = economic.get("spend_by_currency", {})
+        total_spend_usd = sum(float(v) for v in spend_by_currency.values() if v)
+        spend_response = EconomicAmountResponse(
+            usd_amount=round(total_spend_usd, 4),
+            native_currency="USD",
+            price_source="aether_intent_aggregation",
+        ) if total_spend_usd else None
+
+        response = AgenticEconomicResponse(
+            spend=spend_response,
+            service_call_count=behavioral.get("execution_count") or economic.get("payment_intent_count"),
+            settlement_success_rate=trust.get("settlement_reliability"),
+        )
+    except Exception as exc:
+        logger.warning("economic.agentic.composer_error", entity_id=entity_id, error=str(exc))
+        response = AgenticEconomicResponse()
+
     emit_latency("economic.agentic", request)
     return APIResponse(data=response.model_dump()).to_dict()
 

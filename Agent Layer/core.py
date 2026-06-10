@@ -30,6 +30,10 @@ class AgentTask:
     completed_at: Optional[datetime] = None
     retries: int = 0
 
+    # Graph entity binding — the canonical AGENT vertex ID this task belongs to.
+    # Set by the controller after the agent vertex is created/resolved.
+    agent_id: Optional[str] = None
+
     # Populated after execution
     result: Optional[TaskResult] = None
 
