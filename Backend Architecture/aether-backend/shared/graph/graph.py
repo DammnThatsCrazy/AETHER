@@ -156,6 +156,13 @@ class VertexType:
     RETARGET_RECOMMENDATION = "RetargetRecommendation"
     AD_CAMPAIGN = "AdCampaign"
 
+    # ── Agent Lifecycle — Task / Tool / Outcome vertices (additive) ──────
+    TASK = "Task"                            # A unit of work assigned to an agent
+    TOOL = "Tool"                            # An external tool or capability called by an agent
+    OUTCOME = "Outcome"                      # Terminal result of a task/execution
+    POLICY = "Policy"                        # A governance or budget policy evaluated
+    CAPABILITY = "Capability"                # A granted capability scoped to an agent
+
     # ── Agentic Commerce — Control Plane vertices ──────────────────────
     PAYMENT_REQUIREMENT = "PaymentRequirement"
     PAYMENT_AUTHORIZATION = "PaymentAuthorization"
@@ -368,6 +375,27 @@ class EdgeType:
     REQUESTS_APPROVAL_FROM = "REQUESTS_APPROVAL_FROM"  # ApprovalRequest → User
     GOVERNED_BY_POLICY = "GOVERNED_BY_POLICY"     # Tenant/Agent → PolicyDecision
     FUNDED_FROM_TREASURY = "FUNDED_FROM_TREASURY"  # PaymentAuthorization → Treasury
+
+    # ── Agent Lifecycle — Ownership / Identity edges (additive) ──────────
+    OWNS_AGENT = "OWNS_AGENT"                        # User/Org → Agent (ownership)
+    AUTHORIZED_AGENT = "AUTHORIZED_AGENT"            # User/Org → Agent (authorization grant)
+    HAS_CAPABILITY = "HAS_CAPABILITY"                # Agent → Capability (granted capability)
+    REVOKED_CAPABILITY = "REVOKED_CAPABILITY"        # Agent → Capability (revoked)
+    ACTED_FOR = "ACTED_FOR"                          # Agent → User/Entity (acting on behalf of)
+
+    # ── Agent Lifecycle — Task control-flow edges (additive) ──────────────
+    CREATED_TASK = "CREATED_TASK"                    # Agent/User → Task
+    DECOMPOSED_INTO = "DECOMPOSED_INTO"              # Task → Task (subtask decomposition)
+    STARTED_TASK = "STARTED_TASK"                    # Agent → Task
+    COMPLETED_TASK = "COMPLETED_TASK"                # Agent → Task
+    FAILED_TASK = "FAILED_TASK"                      # Agent → Task
+    CALLED_TOOL = "CALLED_TOOL"                      # Agent → Tool (tool invocation)
+    REQUESTED_RESOURCE = "REQUESTED_RESOURCE"        # Agent → EconomicResource (resource request)
+    DELEGATED_TO = "DELEGATED_TO"                    # Agent/User → Agent (task delegation)
+    SPAWNED_SUBAGENT = "SPAWNED_SUBAGENT"            # Agent → Agent (dynamic subagent creation)
+    EVALUATED_BY_POLICY = "EVALUATED_BY_POLICY"      # Agent/Task → Policy (policy evaluation)
+    HANDED_OFF_TO = "HANDED_OFF_TO"                  # Agent → Agent (task handoff)
+    ESCALATED_TO_HUMAN = "ESCALATED_TO_HUMAN"        # Agent → User (human escalation)
 
     # ── Tier ──────────────────────────────────────────────────────────
     IN_TIER_GROUP = "IN_TIER_GROUP"                  # Entity → TierGroup

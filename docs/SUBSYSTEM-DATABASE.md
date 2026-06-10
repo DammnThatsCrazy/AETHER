@@ -12,7 +12,7 @@ source_files:
 canonical_owner: backend@aether
 estimated_read_minutes: 5
 toc_depth: 3
-last_synced_commit: 8659b94
+last_synced_commit: 9257a68
 ---
 
 # PostgreSQL / Repository Subsystem
@@ -69,6 +69,13 @@ Tables are created automatically on first access. No migration tool is required 
 | `operator_actions` | `OperatorActionRepository` | Operator approve/suppress/escalate/annotate audit |
 | `user_notification_channels` | `UserNotificationChannelRepository` | End-user Slack/Discord/Telegram/Webhook registrations |
 | `slack_oauth_states` | `SlackOAuthStateRepository` | Slack OAuth 2.0 CSRF state nonces (10-min TTL) |
+| `agent_executions` | `AgentExecutionRepository` | Per-execution reasoning log, confidence, policy log, task decomposition |
+| `delegations` | `DelegationRepository` | Scoped, time-bound, revocable entity-to-entity delegations (hot-path Redis-cached) |
+| `payment_intents` | `PaymentIntentRepository` | Pre-execution economic decisions: quotes, retries, budget eval, authorizations, settlements — full intent-to-outcome chain, tenant-scoped |
+| `settlement_events` | `SettlementEventRepository` | Settlement attempts and terminal outcomes for PaymentIntent records, tenant-scoped |
+| `economic_resources` | `EconomicResourceRepository` | Purchasable capabilities: inference, GPU compute, APIs, data, memory |
+| `facilitators` | `FacilitatorRepository` | x402 facilitators, trust brokers, and authorization rails |
+| `agent_economic_identities` | `AgentEconomicIdentityRepository` | Derived long-running economic identity per agent, keyed as `{tenant_id}:{agent_id}:economic_identity` |
 
 ## Data Lake Repositories
 
