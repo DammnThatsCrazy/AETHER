@@ -17,7 +17,8 @@
         docker-up docker-down docker-logs \
         smoke byok-reencrypt \
         clean validate-docs validate-frontmatter extract-docs docs-drift docs-stamp docs bump-version \
-        repo-doctor repo-doctor-fix docs-check ci-check docs-fix help
+        repo-doctor repo-doctor-fix docs-check ci-check docs-fix \
+        production-status release-gate help
 
 # Centralized subsystem paths — single place to rename if directories move.
 BACKEND_DIR := Backend Architecture/aether-backend
@@ -41,8 +42,9 @@ setup-minimal: ## Install minimal dependencies (security module only)
 # Testing
 # ---------------------------------------------------------------------------
 
-test: ## Run ALL tests across all subsystems (matches pyproject.toml testpaths)
-	python -m pytest tests/ "$(ML_DIR)/tests/" -v
+test: ## Run ALL tests across all subsystems (suites run separately to avoid conftest collision)
+	python -m pytest tests/ -v
+	python -m pytest "$(ML_DIR)/tests/" -v
 
 test-security: ## Run extraction defense tests only
 	python -m pytest tests/security/ -v
@@ -51,10 +53,11 @@ test-ml: ## Run ML model tests only
 	python -m pytest "$(ML_DIR)/tests/" -v
 
 test-coverage: ## Run tests with coverage report (all subsystems)
-	python -m pytest tests/ "$(ML_DIR)/tests/" \
+	python -m pytest tests/ \
 		--cov=security \
 		--cov="$(BACKEND_DIR)" \
 		--cov-report=term-missing -v
+	python -m pytest "$(ML_DIR)/tests/" --cov-report=term-missing -v
 
 # ---------------------------------------------------------------------------
 # Code Quality
@@ -206,6 +209,17 @@ docs-fix: ## Regenerate and sync docs only
 bump-version: ## Bump version across all files (usage: make bump-version V=8.4.0)
 	@if [ -z "$(V)" ]; then echo "Usage: make bump-version V=8.4.0"; exit 1; fi
 	python scripts/bump_version.py $(V)
+
+# ---------------------------------------------------------------------------
+# Production status & release gate
+# ---------------------------------------------------------------------------
+
+production-status: ## Readiness scorecard + blockers + live consistency checks (advisory)
+	python scripts/production_status.py
+
+release-gate: ## Full release gate: repo consistency (CI mode) + strict production status
+	python scripts/repo_doctor.py --ci
+	python scripts/production_status.py --strict
 
 # ---------------------------------------------------------------------------
 # Cleanup

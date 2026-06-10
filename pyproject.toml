@@ -99,10 +99,14 @@ all = [
 # Pytest — unified test discovery across all subsystems
 # ---------------------------------------------------------------------------
 
+# NOTE: "ML Models/aether-ml/tests" is NOT listed here. Both suites ship a
+# tests/conftest.py that resolves to the same module path, so a combined
+# invocation fails with ImportPathMismatchError. Run the ML suite separately:
+#   python -m pytest "ML Models/aether-ml/tests/"
+# (make test, scripts/repo_doctor.py, and CI all run the suites separately.)
 [tool.pytest.ini_options]
 testpaths = [
     "tests",
-    "ML Models/aether-ml/tests",
 ]
 pythonpath = ["."]
 markers = [

@@ -75,7 +75,16 @@ Never blindly stamp stale docs to silence CI.
 | `make repo-doctor-fix` | Regenerate generated docs + sync |
 | `make docs-check` | Docs-only fast gate |
 | `make ci-check` | CI-safe full path |
+| `make production-status` | Readiness scorecard + blockers (advisory) |
+| `make release-gate` | ci-check + strict production status |
 | `python scripts/bump_version.py --check` | Version alignment |
 | `python scripts/docs_drift.py --strict` | Source-linked docs drift |
 | `python scripts/validate_contracts.py` | Contract consistency |
 | `python scripts/validate_sdk_release_alignment.py` | SDK alignment |
+
+## Production claims rule
+
+`scripts/production_status.py` is the canonical readiness scorecard
+(`docs/productization/aether_productization_audit.md` is its dated
+narrative snapshot). Do not claim an area is production-ready in any doc
+unless the scorecard supports it; update both together.

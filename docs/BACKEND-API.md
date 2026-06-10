@@ -11,7 +11,7 @@ source_files:
 canonical_owner: backend@aether
 estimated_read_minutes: 60
 toc_depth: 3
-last_synced_commit: 9b8116d
+last_synced_commit: 8659b94
 ---
 # Aether Backend API v8.8.0 — Endpoint Specification
 
@@ -920,6 +920,27 @@ Holistic user/entity omniview — composes data from all Aether subsystems into 
 **Query params:** `include_timeline`, `include_graph`, `include_intelligence`, `include_lake` (all default true), `timeline_limit` (1–500). Intelligence extension endpoints also accept `?window=30d|60d|90d|lifetime`.
 
 **Permissions:** `read` for all profile endpoints
+
+---
+
+### Economic Value Service (v8.9.0)
+
+Unified economic observability across Web2, Web3, agentic (x402), and campaign rails. Entity-scoped breakdowns plus tenant-level rollups. The agentic breakdown is composed from `PaymentIntentRepository` and `SettlementEventRepository` via `AgentProfile360EconomicComposer` (spend by currency normalized to USD, service call counts, settlement reliability) and degrades to an empty response on composer errors.
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/v1/profile/{entity_id}/economic` | Full economic breakdown for an entity (Web2 + Web3 + agentic + campaign) |
+| GET | `/v1/profile/{entity_id}/economic/web2` | Web2 GMV / revenue / payment volume |
+| GET | `/v1/profile/{entity_id}/economic/web3` | Web3 TVL / protocol exposure |
+| GET | `/v1/profile/{entity_id}/economic/agentic` | Agentic / x402 spend, service calls, settlement success rate |
+| GET | `/v1/profile/{entity_id}/economic/campaigns` | Campaign-attributed economic value |
+| GET | `/v1/profile/{entity_id}/economic/warnings` | Entity-level data-quality warnings (mixed currency, stale prices) |
+| GET | `/v1/economic/overview` | Tenant economic overview (Total Value Observed, domain split) |
+| GET | `/v1/economic/warnings` | Tenant-wide economic data-quality warnings |
+
+**Query params:** entity endpoints accept `?window=realtime|24h|7d|30d|90d|lifetime` (default `lifetime`; tenant overview defaults to `30d`).
+
+**Permissions:** `read` for all economic endpoints
 
 ---
 

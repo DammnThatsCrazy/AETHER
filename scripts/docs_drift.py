@@ -51,6 +51,15 @@ SKIP_DIRS = {
     DOCS_ROOT / "source-of-truth",
 }
 
+# Managed by scripts/sync_docs.py; their freshness is enforced by
+# repo_doctor's diff-after-sync check. last_synced_commit stamps on these
+# are meaningless (commit 9b8116d removed them by hand after a stamp pass
+# added them) — exclude them so --update cannot reintroduce the churn.
+SYNC_MANAGED = {
+    DOCS_ROOT / "AUTOMATION.md",
+    DOCS_ROOT / "REPO-INDEX.md",
+}
+
 
 class DriftError(Exception):
     """A doc references a path that doesn't exist (always fatal)."""
@@ -69,6 +78,8 @@ def tracked_docs() -> list[Path]:
             continue
         path = ROOT / line
         if any(skip in path.parents for skip in SKIP_DIRS):
+            continue
+        if path in SYNC_MANAGED:
             continue
         out.append(path)
     return sorted(out)

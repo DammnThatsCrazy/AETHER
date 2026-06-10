@@ -15,7 +15,7 @@ source_files:
 canonical_owner: platform@aether
 estimated_read_minutes: 12
 toc_depth: 3
-last_synced_commit: 9b8116d
+last_synced_commit: 8659b94
 ---
 
 # CI/CD Pipeline — Stages, Gates & SDK Release
@@ -201,6 +201,19 @@ runs `make ci-check` on every PR and push to `main`. It enforces:
 This gate is separate from `repo-health.yml` and uses the single
 orchestrator script (`scripts/repo_doctor.py`) so the same command
 works locally (`make repo-doctor`) and in CI (`make ci-check`).
+
+## Production status routine
+
+A scheduled **Production Status** workflow
+(`.github/workflows/production-status.yml`) runs
+`scripts/production_status.py --strict` every 12 hours and on manual
+dispatch. It re-verifies the live consistency gates (version alignment,
+docs drift, contract alignment, SDK alignment), checks that required
+guardrail artifacts exist, and publishes the readiness scorecard +
+blocker list as a JSON build artifact. It requires no secrets and no
+external services. The same routine runs locally via
+`make production-status` (advisory) and `make release-gate`
+(repo consistency in CI mode + strict production status).
 
 ## Adding a new CI stage
 

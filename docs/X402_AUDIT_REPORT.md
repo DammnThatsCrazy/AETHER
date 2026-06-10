@@ -11,7 +11,7 @@ source_files:
 canonical_owner: security@aether
 estimated_read_minutes: 12
 toc_depth: 3
-last_synced_commit: 9b8116d
+last_synced_commit: 8659b94
 ---
 # x402 Protocol Support Audit — Aether Repository
 
@@ -279,6 +279,10 @@ Aether has a **production-grade x402 capture and analytics subsystem** that:
 - `FacilitatorRegistry` + `VerificationEngine` implement facilitator-aware verification with x402 wire format
 - `SettlementEngine` implements the full pending → clearing → settled / failed state machine
 - Idempotency store is now Redis-backed in staging/production for multi-instance safety
+- **Economic identity materialization** — `EconomicGraphMutations.write_agent_economic_identity()`
+  now idempotently materializes the `AGENT_ECONOMIC_IDENTITY` vertex and links it to its
+  `AGENT` vertex via the `ECONOMICALLY_IDENTIFIED_AS` edge, so the economic identity layer
+  defined in the graph schema is populated, not just declared
 - **Budget policy CRUD** has been added — operators can now cap per-subject spend
   via `POST/GET /v1/x402/policies/budget` and `GET /v1/x402/policies/budget/{subject_id}`.
   The policy engine consults these caps before reaching the approval queue,

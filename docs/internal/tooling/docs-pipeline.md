@@ -20,7 +20,7 @@ source_files:
 canonical_owner: platform@aether
 estimated_read_minutes: 8
 toc_depth: 3
-last_synced_commit: 9b8116d
+last_synced_commit: cbbadbd
 ---
 
 # Documentation Pipeline
@@ -59,7 +59,7 @@ This page is `I`.
 | `scripts/validate_docs.py` | Version-drift check across package manifests, changelogs, doc headers. |
 | `scripts/validate_frontmatter.py` | Validates every `docs/**/*.{md,mdx}` against `docs_schema.json`. Fails on invalid **or** missing frontmatter. |
 | `scripts/validate_contracts.py` | Cross-checks the generated artifacts: every event's consent purpose + family must exist in the canonical contracts. Catches cross-file drift the per-file generators can't. |
-| `scripts/docs_drift.py` | For each page with `source_files:`, verifies the paths exist (fatal if not) and — when `last_synced_commit:` is set — flags staleness. `--update` re-stamps every page at HEAD. |
+| `scripts/docs_drift.py` | For each page with `source_files:`, verifies the paths exist (fatal if not) and — when `last_synced_commit:` is set — flags staleness. `--update` re-stamps every page at HEAD. The sync-managed pages (`REPO-INDEX.md`, `AUTOMATION.md`) are excluded from drift checks and stamping; their freshness is enforced by repo-doctor's diff-after-sync check instead. |
 | `scripts/sync_docs.py` | Regenerates `docs/REPO-INDEX.md` and `docs/AUTOMATION.md` from the live tree. |
 | `scripts/docs_extract/run_all.py` | Runs every generator (see below). |
 
@@ -101,6 +101,10 @@ make repo-doctor-fix      # regenerate generated docs + sync
 make docs-check           # docs/version/frontmatter/drift only (fast gate)
 make ci-check             # CI-safe full path — fails on any generated diff
 make docs-fix             # regenerate and sync docs only
+
+# Production readiness (scorecard + blockers + live consistency checks)
+make production-status    # advisory readiness report (scripts/production_status.py)
+make release-gate         # ci-check + strict production status
 ```
 
 The `repo-doctor` family delegates to `scripts/repo_doctor.py`, which
