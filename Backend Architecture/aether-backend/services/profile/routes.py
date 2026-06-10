@@ -57,6 +57,7 @@ from shared.logger.logger import get_logger, metrics
 
 from services.profile.aggregator import Profile360Aggregator
 from services.profile.composer import ProfileComposer
+from services.profile.intelligence import IntelligenceAggregator
 from services.profile.resolver import ProfileResolver
 
 logger = get_logger("aether.service.profile")
@@ -508,6 +509,16 @@ def _get_aggregator(
     return _aggregator
 
 
+_intel_agg: Optional[IntelligenceAggregator] = None
+
+
+def _get_intel_agg() -> IntelligenceAggregator:
+    global _intel_agg
+    if _intel_agg is None:
+        _intel_agg = IntelligenceAggregator()
+    return _intel_agg
+
+
 @router.get("/{user_id}/summary")
 async def get_profile_summary(
     user_id: str,
@@ -645,6 +656,19 @@ async def get_profile_relationships(
     return APIResponse(data=await agg.relationships(user_id, tenant.tenant_id, limit=limit)).to_dict()
 
 
+@router.get("/{user_id}/campaigns")
+async def get_profile_campaigns(
+    user_id: str,
+    request: Request,
+    agg: Profile360Aggregator = Depends(_get_aggregator),
+    limit: int = Query(50, ge=1, le=200),
+):
+    """Campaign attribution derived from the analytics event stream."""
+    tenant = request.state.tenant
+    tenant.require_permission("read")
+    return APIResponse(data=await agg.campaigns(user_id, tenant.tenant_id, limit=limit)).to_dict()
+
+
 @router.get("/{user_id}/drill/{object_type}/{object_id}")
 async def drill_into_object(
     user_id: str,
@@ -721,17 +745,13 @@ async def get_tier(
     user_id: str,
     request: Request,
     window: str = Query(default="30d"),
+    intel: IntelligenceAggregator = Depends(_get_intel_agg),
 ):
     """Entity tier (Whale/Shark/Dolphin/Fish/Shrimp) + percentile rank within tenant population."""
-    request.state.tenant.require_permission("read")
+    tenant = request.state.tenant
+    tenant.require_permission("read")
     _validate_window(window)
-    return APIResponse(data={
-        "entity_id": user_id,
-        "kind": "tier",
-        "window": window,
-        "items": [],
-        "provenance": {"sources": ["gold_entity_tiers"]},
-    }).to_dict()
+    return APIResponse(data=await intel.tier(user_id, tenant.tenant_id, window=window)).to_dict()
 
 
 @router.get("/{user_id}/asset-composition")
@@ -739,17 +759,13 @@ async def get_asset_composition(
     user_id: str,
     request: Request,
     window: str = Query(default="30d"),
+    intel: IntelligenceAggregator = Depends(_get_intel_agg),
 ):
     """On-chain portfolio composition by asset category (stablecoin/ETH LST/BTC/altcoin/NFT)."""
-    request.state.tenant.require_permission("read")
+    tenant = request.state.tenant
+    tenant.require_permission("read")
     _validate_window(window)
-    return APIResponse(data={
-        "entity_id": user_id,
-        "kind": "asset_composition",
-        "window": window,
-        "items": [],
-        "provenance": {"sources": ["gold_asset_composition", "moralis"]},
-    }).to_dict()
+    return APIResponse(data=await intel.asset_composition(user_id, tenant.tenant_id, window=window)).to_dict()
 
 
 @router.get("/{user_id}/pnl")
@@ -757,17 +773,13 @@ async def get_pnl(
     user_id: str,
     request: Request,
     window: str = Query(default="30d"),
+    intel: IntelligenceAggregator = Depends(_get_intel_agg),
 ):
     """Realized + unrealized PNL and TVL delta. FIFO cost basis from silver_web3_events + CoinGecko prices."""
-    request.state.tenant.require_permission("read")
+    tenant = request.state.tenant
+    tenant.require_permission("read")
     _validate_window(window)
-    return APIResponse(data={
-        "entity_id": user_id,
-        "kind": "pnl",
-        "window": window,
-        "items": [],
-        "provenance": {"sources": ["gold_entity_pnl", "silver_web3_events", "coingecko"]},
-    }).to_dict()
+    return APIResponse(data=await intel.pnl(user_id, tenant.tenant_id, window=window)).to_dict()
 
 
 @router.get("/{user_id}/trading-profile")
@@ -775,17 +787,13 @@ async def get_trading_profile(
     user_id: str,
     request: Request,
     window: str = Query(default="30d"),
+    intel: IntelligenceAggregator = Depends(_get_intel_agg),
 ):
     """On-chain trading behavior: favorite pairs, protocol loyalty, gas strategy, slippage."""
-    request.state.tenant.require_permission("read")
+    tenant = request.state.tenant
+    tenant.require_permission("read")
     _validate_window(window)
-    return APIResponse(data={
-        "entity_id": user_id,
-        "kind": "trading_profile",
-        "window": window,
-        "items": [],
-        "provenance": {"sources": ["gold_trading_profile", "silver_web3_events"]},
-    }).to_dict()
+    return APIResponse(data=await intel.trading_profile(user_id, tenant.tenant_id, window=window)).to_dict()
 
 
 @router.get("/{user_id}/location-history")
@@ -794,18 +802,13 @@ async def get_location_history(
     request: Request,
     window: str = Query(default="30d"),
     limit: int = Query(default=20, ge=1, le=200),
+    intel: IntelligenceAggregator = Depends(_get_intel_agg),
 ):
     """City-level location history with classification (primary/secondary/rare/one_time)."""
-    request.state.tenant.require_permission("read")
+    tenant = request.state.tenant
+    tenant.require_permission("read")
     _validate_window(window)
-    return APIResponse(data={
-        "entity_id": user_id,
-        "kind": "location_history",
-        "window": window,
-        "items": [],
-        "pagination": {"limit": limit, "count": 0, "has_more": False},
-        "provenance": {"sources": ["gold_location_history"]},
-    }).to_dict()
+    return APIResponse(data=await intel.location_history(user_id, tenant.tenant_id, window=window, limit=limit)).to_dict()
 
 
 @router.get("/{user_id}/temporal-heatmap")
@@ -813,17 +816,13 @@ async def get_temporal_heatmap(
     user_id: str,
     request: Request,
     window: str = Query(default="30d"),
+    intel: IntelligenceAggregator = Depends(_get_intel_agg),
 ):
     """24x7 activity density matrix + streak data in entity's primary timezone."""
-    request.state.tenant.require_permission("read")
+    tenant = request.state.tenant
+    tenant.require_permission("read")
     _validate_window(window)
-    return APIResponse(data={
-        "entity_id": user_id,
-        "kind": "temporal_heatmap",
-        "window": window,
-        "items": [],
-        "provenance": {"sources": ["gold_temporal_heatmap"]},
-    }).to_dict()
+    return APIResponse(data=await intel.temporal_heatmap(user_id, tenant.tenant_id, window=window)).to_dict()
 
 
 @router.get("/{user_id}/social-intelligence")
@@ -831,17 +830,13 @@ async def get_social_intelligence(
     user_id: str,
     request: Request,
     window: str = Query(default="30d"),
+    intel: IntelligenceAggregator = Depends(_get_intel_agg),
 ):
     """Cross-platform social aggregation: Twitter, Farcaster, Lens, Discord, GitHub."""
-    request.state.tenant.require_permission("read")
+    tenant = request.state.tenant
+    tenant.require_permission("read")
     _validate_window(window)
-    return APIResponse(data={
-        "entity_id": user_id,
-        "kind": "social_intelligence",
-        "window": window,
-        "items": [],
-        "provenance": {"sources": ["gold_social_intelligence", "twitter", "farcaster", "lens", "discord", "github"]},
-    }).to_dict()
+    return APIResponse(data=await intel.social_intelligence(user_id, tenant.tenant_id, window=window)).to_dict()
 
 
 @router.get("/{user_id}/journey-economics")
@@ -850,18 +845,13 @@ async def get_journey_economics(
     request: Request,
     window: str = Query(default="30d"),
     limit: int = Query(default=20, ge=1, le=200),
+    intel: IntelligenceAggregator = Depends(_get_intel_agg),
 ):
     """Per-journey ROAS, CPA, LTV, and retarget score."""
-    request.state.tenant.require_permission("read")
+    tenant = request.state.tenant
+    tenant.require_permission("read")
     _validate_window(window)
-    return APIResponse(data={
-        "entity_id": user_id,
-        "kind": "journey_economics",
-        "window": window,
-        "items": [],
-        "pagination": {"limit": limit, "count": 0, "has_more": False},
-        "provenance": {"sources": ["gold_journey_economics", "gold_ad_spend"]},
-    }).to_dict()
+    return APIResponse(data=await intel.journey_economics(user_id, tenant.tenant_id, window=window, limit=limit)).to_dict()
 
 
 @router.get("/{user_id}/device-performance")
@@ -869,17 +859,13 @@ async def get_device_performance(
     user_id: str,
     request: Request,
     window: str = Query(default="30d"),
+    intel: IntelligenceAggregator = Depends(_get_intel_agg),
 ):
     """Conversion rate and average conversion value per device type."""
-    request.state.tenant.require_permission("read")
+    tenant = request.state.tenant
+    tenant.require_permission("read")
     _validate_window(window)
-    return APIResponse(data={
-        "entity_id": user_id,
-        "kind": "device_performance",
-        "window": window,
-        "items": [],
-        "provenance": {"sources": ["gold_journey_economics", "event_extension"]},
-    }).to_dict()
+    return APIResponse(data=await intel.device_performance(user_id, tenant.tenant_id, window=window)).to_dict()
 
 
 @router.get("/{user_id}/funnel")
@@ -888,17 +874,13 @@ async def get_funnel(
     request: Request,
     window: str = Query(default="30d"),
     campaign_id: str | None = Query(default=None),
+    intel: IntelligenceAggregator = Depends(_get_intel_agg),
 ):
     """Staged conversion funnel: Impression → Click → Visit → Connect → Swap → Liquidity."""
-    request.state.tenant.require_permission("read")
+    tenant = request.state.tenant
+    tenant.require_permission("read")
     _validate_window(window)
-    return APIResponse(data={
-        "entity_id": user_id,
-        "kind": "funnel",
-        "window": window,
-        "items": [],
-        "provenance": {"sources": ["gold_journey_economics", "event_extension"]},
-    }).to_dict()
+    return APIResponse(data=await intel.funnel(user_id, tenant.tenant_id, window=window, campaign_id=campaign_id)).to_dict()
 
 
 @router.get("/{user_id}/time-to-convert")
@@ -906,17 +888,13 @@ async def get_time_to_convert(
     user_id: str,
     request: Request,
     window: str = Query(default="30d"),
+    intel: IntelligenceAggregator = Depends(_get_intel_agg),
 ):
     """Median time between each funnel stage conversion."""
-    request.state.tenant.require_permission("read")
+    tenant = request.state.tenant
+    tenant.require_permission("read")
     _validate_window(window)
-    return APIResponse(data={
-        "entity_id": user_id,
-        "kind": "time_to_convert",
-        "window": window,
-        "items": [],
-        "provenance": {"sources": ["gold_journey_economics"]},
-    }).to_dict()
+    return APIResponse(data=await intel.time_to_convert(user_id, tenant.tenant_id, window=window)).to_dict()
 
 
 @router.get("/{user_id}/retarget-recommendations")
@@ -925,16 +903,12 @@ async def get_retarget_recommendations(
     request: Request,
     status: str | None = Query(default=None),
     limit: int = Query(default=20, ge=1, le=100),
+    intel: IntelligenceAggregator = Depends(_get_intel_agg),
 ):
     """Pending and historical retargeting recommendations for analyst review."""
-    request.state.tenant.require_permission("read")
-    return APIResponse(data={
-        "entity_id": user_id,
-        "kind": "retarget_recommendations",
-        "items": [],
-        "pagination": {"limit": limit, "count": 0, "has_more": False},
-        "provenance": {"sources": ["retarget_recommendations"]},
-    }).to_dict()
+    tenant = request.state.tenant
+    tenant.require_permission("read")
+    return APIResponse(data=await intel.retarget_recommendations(user_id, tenant.tenant_id, status=status, limit=limit)).to_dict()
 
 
 @router.get("/{user_id}/web2")
@@ -942,18 +916,13 @@ async def get_web2(
     user_id: str,
     request: Request,
     window: str = Query(default="30d"),
+    intel: IntelligenceAggregator = Depends(_get_intel_agg),
 ):
     """TradFi portfolio, bank accounts, credit signals, and income estimates (requires 'credit' consent)."""
-    request.state.tenant.require_permission("read")
+    tenant = request.state.tenant
+    tenant.require_permission("read")
     _validate_window(window)
-    # credit consent is required for this endpoint — enforced in the aggregator layer
-    return APIResponse(data={
-        "entity_id": user_id,
-        "kind": "web2",
-        "window": window,
-        "items": [],
-        "provenance": {"sources": ["plaid", "gold_credit_signals", "gold_tradfi_portfolio"]},
-    }).to_dict()
+    return APIResponse(data=await intel.web2(user_id, tenant.tenant_id, window=window)).to_dict()
 
 
 @router.get("/{user_id}/protocol-metrics")
@@ -961,17 +930,13 @@ async def get_protocol_metrics(
     user_id: str,
     request: Request,
     window: str = Query(default="30d"),
+    intel: IntelligenceAggregator = Depends(_get_intel_agg),
 ):
     """Protocol TVL history, volume, and fee revenue. Applicable to DAO/Protocol/DEX entity types."""
-    request.state.tenant.require_permission("read")
+    tenant = request.state.tenant
+    tenant.require_permission("read")
     _validate_window(window)
-    return APIResponse(data={
-        "entity_id": user_id,
-        "kind": "protocol_metrics",
-        "window": window,
-        "items": [],
-        "provenance": {"sources": ["defillama", "gold_web3_daily_metrics"]},
-    }).to_dict()
+    return APIResponse(data=await intel.protocol_metrics(user_id, tenant.tenant_id, window=window)).to_dict()
 
 
 @router.get("/{user_id}/governance-activity")
@@ -980,18 +945,13 @@ async def get_governance_activity(
     request: Request,
     window: str = Query(default="30d"),
     limit: int = Query(default=20, ge=1, le=100),
+    intel: IntelligenceAggregator = Depends(_get_intel_agg),
 ):
     """Governance proposals, votes, and participation rate. Applicable to DAO/Protocol entity types."""
-    request.state.tenant.require_permission("read")
+    tenant = request.state.tenant
+    tenant.require_permission("read")
     _validate_window(window)
-    return APIResponse(data={
-        "entity_id": user_id,
-        "kind": "governance_activity",
-        "window": window,
-        "items": [],
-        "pagination": {"limit": limit, "count": 0, "has_more": False},
-        "provenance": {"sources": ["snapshot", "silver_web3_events"]},
-    }).to_dict()
+    return APIResponse(data=await intel.governance_activity(user_id, tenant.tenant_id, window=window, limit=limit)).to_dict()
 
 # ── Decision & Outcome Intelligence subresources (additive) ─────────────
 

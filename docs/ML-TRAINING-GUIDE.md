@@ -11,7 +11,7 @@ source_files:
 canonical_owner: ml@aether
 estimated_read_minutes: 4
 toc_depth: 3
-last_synced_commit: e8d3706
+last_synced_commit: 9b8116d
 ---
 # ML Model Training Guide
 

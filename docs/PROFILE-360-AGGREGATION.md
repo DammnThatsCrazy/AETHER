@@ -9,10 +9,11 @@ since_version: "8.8.0"
 source_files:
   - Backend Architecture/aether-backend/services/profile/aggregator.py
   - Backend Architecture/aether-backend/services/profile/routes.py
+  - Backend Architecture/aether-backend/services/profile/intelligence.py
 canonical_owner: backend@aether
 estimated_read_minutes: 8
 toc_depth: 3
-last_synced_commit: e8d3706
+last_synced_commit: 9b8116d
 ---
 
 # Profile 360 Aggregation Layer
@@ -112,7 +113,39 @@ is what is documented below.
 | GET    | `/v1/profile/{id}/intelligence`                            | Risk + features + models                           |
 | GET    | `/v1/profile/{id}/lake/{domain}`                           | Gold-tier lake data                                |
 | GET    | `/v1/profile/{id}/flows`                                   | Asset transfers (raw list)                         |
+| GET    | `/v1/profile/{id}/campaigns`                               | Campaign attribution (derived from event stream)   |
 | GET    | `/v1/profile/resolve`                                      | Resolve any identifier to canonical id             |
+
+### Intelligence extension endpoints
+
+These endpoints are powered by `IntelligenceAggregator` (`services/profile/intelligence.py`)
+and query the Gold-tier intelligence repositories.  All support `?window=30d|60d|90d|lifetime`.
+When no Gold data exists for an entity they return an empty `items` list — never an error.
+
+| Method | Path                                              | Returns                                                     |
+|--------|---------------------------------------------------|-------------------------------------------------------------|
+| GET    | `/v1/profile/{id}/tier`                           | Entity tier (Whale/Shark/Dolphin/Fish/Shrimp) + percentile  |
+| GET    | `/v1/profile/{id}/asset-composition`              | On-chain portfolio by asset category + USD values           |
+| GET    | `/v1/profile/{id}/pnl`                            | Realized + unrealized PNL, TVL delta (FIFO cost basis)      |
+| GET    | `/v1/profile/{id}/trading-profile`                | Favorite pairs, protocol loyalty, gas strategy, slippage    |
+| GET    | `/v1/profile/{id}/location-history`               | City-level location history with classification             |
+| GET    | `/v1/profile/{id}/temporal-heatmap`               | 24×7 activity density matrix + streak data                  |
+| GET    | `/v1/profile/{id}/social-intelligence`            | Cross-platform social (Twitter/Farcaster/Lens/Discord/GH)   |
+| GET    | `/v1/profile/{id}/journey-economics`              | Per-journey ROAS, CPA, LTV, retarget score                  |
+| GET    | `/v1/profile/{id}/device-performance`             | Conversion rate + avg value per device type                 |
+| GET    | `/v1/profile/{id}/funnel`                         | Staged funnel (Impression→Click→Visit→Connect→Swap→LP)      |
+| GET    | `/v1/profile/{id}/time-to-convert`                | Median + P90 time between funnel stage transitions          |
+| GET    | `/v1/profile/{id}/retarget-recommendations`       | Pending/historical retargeting recommendations              |
+| GET    | `/v1/profile/{id}/web2`                           | TradFi portfolio + credit signals (requires `credit` consent) |
+| GET    | `/v1/profile/{id}/protocol-metrics`               | Protocol TVL, volume, fee revenue (DAO/DEX entity types)    |
+| GET    | `/v1/profile/{id}/governance-activity`            | Governance proposals + votes (DAO/Protocol entity types)    |
+
+The `/web2` endpoint enforces `credit` consent via `ConsentRepository` before serving any
+TradFi or credit data.  Entities without consent receive `{"items": [], "summary": {"consent_required": true}}`.
+
+Gold-tier data is populated by external ETL pipelines (Moralis, CoinGecko, DeFiLlama, Snapshot,
+Plaid).  Until an ETL pipeline has run for a given entity, these endpoints return an empty items
+list — this is correct behavior, not an error.
 
 Realtime fan-out for any of these dimensions is available via
 `/v1/realtime/sse?entity_id={id}` and `/v1/realtime/ws?entity_id={id}`,
