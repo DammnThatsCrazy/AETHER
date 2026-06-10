@@ -847,3 +847,192 @@ def test_aggregator_degrades_on_repo_failure_without_raising():
     out = _run(agg.wallets("user-1", "t-a"))
     assert out["items"] == []
     assert out["pagination"]["count"] == 0
+
+
+# ── Intelligence extension dimension tests ──────────────────────────
+
+def _make_aggregator_with_rich_events(*, tenant="t-a", entity="user-1"):
+    """Aggregator seeded with events covering multiple funnel stages, device types, and hours."""
+    analytics = _Analytics([
+        # Impression events (hour 9 Mon 2026-04-06)
+        {"id": "e1", "event_type": "impression", "user_id": entity,
+         "created_at": "2026-04-06T09:10:00Z",
+         "properties": {"user_id": entity, "session_id": "s1", "device_type": "mobile"}},
+        # Click (hour 9 same day)
+        {"id": "e2", "event_type": "click", "user_id": entity,
+         "created_at": "2026-04-06T09:20:00Z",
+         "properties": {"user_id": entity, "session_id": "s1", "device_type": "mobile"}},
+        # Visit (hour 10 same day)
+        {"id": "e3", "event_type": "page_view", "user_id": entity,
+         "created_at": "2026-04-06T10:00:00Z",
+         "properties": {"user_id": entity, "session_id": "s1", "device_type": "mobile"}},
+        # Swap / conversion (hour 10 same day, mobile)
+        {"id": "e4", "event_type": "swap_completed", "user_id": entity,
+         "created_at": "2026-04-06T10:30:00Z",
+         "properties": {"user_id": entity, "session_id": "s1", "device_type": "mobile", "value": "50"}},
+        # Desktop session — only visit, no conversion
+        {"id": "e5", "event_type": "page_view", "user_id": entity,
+         "created_at": "2026-04-07T14:00:00Z",
+         "properties": {"user_id": entity, "session_id": "s2", "device_type": "desktop"}},
+        # Another desktop session with conversion
+        {"id": "e6", "event_type": "trade_executed", "user_id": entity,
+         "created_at": "2026-04-07T14:30:00Z",
+         "properties": {"user_id": entity, "session_id": "s3", "device_type": "desktop", "value": "200"}},
+    ])
+    chains = _Repo([
+        {"id": "c-1", "chain_id": "c-1", "entity_id": entity, "tenant_id": tenant,
+         "journey_count": 3,
+         "spans_started_at": "2026-01-01T00:00:00Z",
+         "spans_last_seen_at": "2026-04-01T00:00:00Z"},
+        {"id": "c-2", "chain_id": "c-2", "entity_id": entity, "tenant_id": tenant,
+         "journey_count": 1,
+         "spans_started_at": "2026-02-01T00:00:00Z",
+         "spans_last_seen_at": "2026-03-01T00:00:00Z"},
+    ])
+    transfers = _Repo([
+        {"id": "tr-1", "transfer_id": "tr-1", "tenant_id": tenant,
+         "from_entity_id": "other", "to_entity_id": entity,
+         "amount": "100", "occurred_at": "2026-04-01T00:00:00Z"},
+    ])
+    agg = _make_aggregator(tenant=tenant, entity=entity)
+    agg._analytics = analytics
+    agg._journeys = chains
+    agg._transfers = transfers
+    return agg
+
+
+def test_temporal_heatmap_shape():
+    agg = _make_aggregator_with_rich_events()
+    out = _run(agg.temporal_heatmap("user-1", "t-a", window="lifetime"))
+    assert out["kind"] == "temporal_heatmap"
+    assert out["entity_id"] == "user-1"
+    # At least one bucket exists
+    assert len(out["items"]) > 0
+    for item in out["items"]:
+        assert "day_of_week" in item
+        assert "hour_of_day" in item
+        assert "count" in item
+        assert "density" in item
+        assert 0 <= item["density"] <= 1.0
+    summary = out["summary"]
+    assert summary["total_events"] > 0
+    assert summary["active_slots"] == len(out["items"])
+    assert 0 <= summary["peak_day_of_week"] <= 6
+    assert 0 <= summary["peak_hour_of_day"] <= 23
+
+
+def test_temporal_heatmap_window_filters_old_events():
+    agg = _make_aggregator(tenant="t-a", entity="user-1")
+    old_analytics = _Analytics([
+        {"id": "old", "event_type": "page_view", "user_id": "user-1",
+         "created_at": "2020-01-01T00:00:00Z",
+         "properties": {"user_id": "user-1"}},
+    ])
+    agg._analytics = old_analytics
+    out = _run(agg.temporal_heatmap("user-1", "t-a", window="30d"))
+    assert out["items"] == []
+    assert out["summary"]["total_events"] == 0
+
+
+def test_device_performance_shape_and_conversion():
+    agg = _make_aggregator_with_rich_events()
+    out = _run(agg.device_performance("user-1", "t-a", window="lifetime"))
+    assert out["kind"] == "device_performance"
+    items_by_device = {i["id"]: i for i in out["items"]}
+    # Mobile session converted
+    assert "mobile" in items_by_device
+    mobile = items_by_device["mobile"]
+    assert mobile["converted_sessions"] >= 1
+    assert mobile["conversion_rate"] > 0
+    # Desktop has two sessions: one without conversion (s2), one with (s3)
+    assert "desktop" in items_by_device
+    desk = items_by_device["desktop"]
+    assert desk["session_count"] >= 1
+    # Summary rates are computed
+    summary = out["summary"]
+    assert summary["total_sessions"] >= 2
+    assert 0 <= summary["overall_conversion_rate"] <= 1.0
+
+
+def test_funnel_stage_counts():
+    agg = _make_aggregator_with_rich_events()
+    out = _run(agg.funnel("user-1", "t-a", window="lifetime"))
+    assert out["kind"] == "funnel"
+    stages = {i["id"]: i for i in out["items"]}
+    assert set(stages.keys()) == {"impression", "click", "visit", "connect", "swap", "liquidity"}
+    # Events: 1 impression, 1 click, 2 page_views, 1 swap
+    assert stages["impression"]["count"] == 1
+    assert stages["click"]["count"] == 1
+    assert stages["swap"]["count"] >= 1
+    # Stages are in order
+    indices = [i["stage_index"] for i in out["items"]]
+    assert indices == sorted(indices)
+    # No drop rate on first stage
+    assert out["items"][0]["drop_rate"] is None
+
+
+def test_funnel_campaign_filter():
+    analytics = _Analytics([
+        {"id": "e1", "event_type": "impression", "user_id": "user-1",
+         "created_at": "2026-04-06T09:00:00Z",
+         "properties": {"user_id": "user-1", "campaign_id": "camp-A"}},
+        {"id": "e2", "event_type": "impression", "user_id": "user-1",
+         "created_at": "2026-04-06T09:00:00Z",
+         "properties": {"user_id": "user-1", "campaign_id": "camp-B"}},
+    ])
+    agg = _make_aggregator()
+    agg._analytics = analytics
+    out = _run(agg.funnel("user-1", "t-a", window="lifetime", campaign_id="camp-A"))
+    stages = {i["id"]: i for i in out["items"]}
+    assert stages["impression"]["count"] == 1
+
+
+def test_time_to_convert_statistics():
+    agg = _make_aggregator_with_rich_events()
+    out = _run(agg.time_to_convert("user-1", "t-a", window="lifetime"))
+    assert out["kind"] == "time_to_convert"
+    assert len(out["items"]) == 1
+    stat = out["items"][0]
+    # Two chains with durations:
+    # c-1: 2026-01-01 → 2026-04-01 ≈ 7776000000 ms
+    # c-2: 2026-02-01 → 2026-03-01 ≈ 2419200000 ms
+    assert stat["sample_size"] == 2
+    assert stat["median_ms"] is not None
+    assert stat["p25_ms"] is not None
+    assert stat["p75_ms"] is not None
+    # p25 ≤ median ≤ p75
+    assert stat["p25_ms"] <= stat["median_ms"] <= stat["p75_ms"]
+    summary = out["summary"]
+    assert summary["chain_count"] == 2
+    assert summary["median_ms"] is not None
+
+
+def test_time_to_convert_no_chains():
+    agg = _make_aggregator()
+    agg._journeys = _Repo([])
+    out = _run(agg.time_to_convert("user-1", "t-a", window="30d"))
+    assert out["items"][0]["sample_size"] == 0
+    assert out["items"][0]["median_ms"] is None
+
+
+def test_journey_economics_shape():
+    agg = _make_aggregator_with_rich_events()
+    out = _run(agg.journey_economics("user-1", "t-a", window="lifetime"))
+    assert out["kind"] == "journey_economics"
+    assert len(out["items"]) >= 1
+    item = out["items"][0]
+    assert "id" in item
+    assert "journey_count" in item
+    summary = out["summary"]
+    assert summary["chain_count"] >= 1
+    # Inflow from transfers (100 in window)
+    assert summary["total_inflow"] == 100.0
+    assert summary["avg_inflow_per_chain"] > 0
+
+
+def test_journey_economics_empty_chains():
+    agg = _make_aggregator()
+    agg._journeys = _Repo([])
+    out = _run(agg.journey_economics("user-1", "t-a", window="30d"))
+    assert out["items"] == []
+    assert out["summary"]["chain_count"] == 0

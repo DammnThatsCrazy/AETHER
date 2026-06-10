@@ -36,11 +36,37 @@ Design rules:
 from __future__ import annotations
 
 import asyncio
+import statistics
 from collections import Counter, defaultdict
+from datetime import datetime, timezone
 from typing import Any, Optional
 
 from shared.common.common import utc_now
 from shared.logger.logger import get_logger, metrics
+
+# Funnel stage taxonomy: ordered from top-of-funnel to conversion.
+# Keywords are matched as whole "words" (split on non-alphanumeric chars)
+# to avoid substring collisions (e.g. "view" inside "page_view").
+_FUNNEL_STAGES = [
+    ("impression", ["impression", "ad_view", "expose", "ad_seen", "banner"]),
+    ("click",      ["click", "tap", "follow_link"]),
+    ("visit",      ["page_view", "screen_view", "visit", "session_start"]),
+    ("connect",    ["connect", "login", "signup", "auth", "wallet_connected"]),
+    ("swap",       ["swap", "trade", "exchange", "convert"]),
+    ("liquidity",  ["liquidity", "deposit", "stake", "yield", "pool"]),
+]
+
+# Conversion events used for device-performance calculation.
+_CONVERSION_KEYWORDS = {"swap", "trade", "exchange", "convert", "deposit", "stake", "purchase", "checkout"}
+
+
+def _event_tokens(event_type: str) -> set[str]:
+    """Split event_type on non-alphanumeric chars into a set of lowercase tokens.
+
+    e.g. "page_view" → {"page", "view"}, "swap_completed" → {"swap", "completed"}
+    """
+    import re
+    return set(re.split(r"[^a-z0-9]+", event_type.lower()))
 
 logger = get_logger("aether.profile.aggregator")
 
@@ -971,6 +997,387 @@ class Profile360Aggregator:
             },
         }
 
+    # ── Intelligence Extension Dimensions ────────────────────────────
+
+    async def temporal_heatmap(
+        self, entity_id: str, tenant_id: str, window: str = "30d",
+    ) -> dict:
+        """24×7 activity density matrix + streak data derived from the event stream.
+
+        Returns a flat list of {day_of_week, hour_of_day, count} buckets that
+        cover the window. The sparse format is used — buckets with zero events
+        are omitted. The caller should render a full 7×24 grid by filling gaps
+        with zero. Summary includes the peak activity slot and current streak.
+        """
+        events: list[dict] = []
+        if self._analytics is not None:
+            events = await _safe("heatmap.analytics", self._analytics.query_events(
+                tenant_id, {"user_id": entity_id}, limit=2000,
+            ))
+        events = _tenant_filter(events, tenant_id)
+
+        window_start = _window_cutoff(window)
+        bucket: Counter[tuple[int, int]] = Counter()
+        dates_with_activity: set[str] = set()
+
+        for e in events:
+            ts_str = e.get("created_at") or e.get("timestamp")
+            if not ts_str:
+                continue
+            try:
+                ts = datetime.fromisoformat(str(ts_str).replace("Z", "+00:00"))
+            except (ValueError, TypeError):
+                continue
+            if window_start and ts < window_start:
+                continue
+            dow = ts.weekday()  # 0=Monday … 6=Sunday
+            hour = ts.hour
+            bucket[(dow, hour)] += 1
+            dates_with_activity.add(ts.date().isoformat())
+
+        items = [
+            {
+                "day_of_week": dow,
+                "hour_of_day": hour,
+                "count": count,
+                "density": _normalize_density(count, max(bucket.values()) if bucket else 1),
+            }
+            for (dow, hour), count in sorted(bucket.items())
+        ]
+
+        peak = max(bucket.items(), key=lambda kv: kv[1], default=((0, 0), 0))
+        streak = _compute_streak(sorted(dates_with_activity))
+        summary = {
+            "total_events": sum(bucket.values()),
+            "active_slots": len(bucket),
+            "peak_day_of_week": peak[0][0],
+            "peak_hour_of_day": peak[0][1],
+            "peak_count": peak[1],
+            "current_streak_days": streak,
+        }
+        return _envelope(entity_id, tenant_id, "temporal_heatmap", items, summary,
+                         len(items), ["analytics_events"])
+
+    async def device_performance(
+        self, entity_id: str, tenant_id: str, window: str = "30d",
+    ) -> dict:
+        """Conversion rate and average value per device type.
+
+        Derived from the analytics event stream: sessions are bucketed by
+        device_id, and sessions that include at least one conversion event
+        are counted as converted. Useful for spotting mobile vs. desktop
+        conversion gaps without an external attribution pipeline.
+        """
+        events: list[dict] = []
+        if self._analytics is not None:
+            events = await _safe("device_perf.analytics", self._analytics.query_events(
+                tenant_id, {"user_id": entity_id}, limit=2000,
+            ))
+        events = _tenant_filter(events, tenant_id)
+
+        window_start = _window_cutoff(window)
+        # {device_type → {sessions, converted_sessions, total_value}}
+        buckets: dict[str, dict] = defaultdict(lambda: {
+            "session_ids": set(),
+            "converted_sessions": set(),
+            "total_value": 0.0,
+        })
+
+        for e in events:
+            ts_str = e.get("created_at") or e.get("timestamp")
+            if window_start and ts_str:
+                try:
+                    ts = datetime.fromisoformat(str(ts_str).replace("Z", "+00:00"))
+                    if ts < window_start:
+                        continue
+                except (ValueError, TypeError):
+                    pass
+
+            props = e.get("properties") or {}
+            device_type = (
+                props.get("device_type")
+                or e.get("device_type")
+                or _infer_device_type(props.get("user_agent") or e.get("user_agent") or "")
+            )
+            if not device_type:
+                device_type = "unknown"
+
+            sid = props.get("session_id") or e.get("session_id") or "no_session"
+            b = buckets[device_type]
+            b["session_ids"].add(sid)
+
+            et_tokens = _event_tokens(e.get("event_type") or "")
+            if et_tokens & _CONVERSION_KEYWORDS:
+                b["converted_sessions"].add(sid)
+                try:
+                    b["total_value"] += float(props.get("value") or props.get("amount") or 0)
+                except (TypeError, ValueError):
+                    pass
+
+        items = []
+        for device_type, b in sorted(buckets.items()):
+            session_count = len(b["session_ids"])
+            converted = len(b["converted_sessions"])
+            conversion_rate = converted / session_count if session_count else 0.0
+            avg_value = b["total_value"] / converted if converted else 0.0
+            items.append({
+                "id": device_type,
+                "type": "device_type",
+                "displayLabel": device_type,
+                "session_count": session_count,
+                "converted_sessions": converted,
+                "conversion_rate": round(conversion_rate, 4),
+                "avg_conversion_value": round(avg_value, 4),
+                "total_value": round(b["total_value"], 4),
+                "timestamps": {},
+                "metadata": {},
+                "links": {"sessions": f"/v1/profile/{entity_id}/sessions"},
+            })
+        items.sort(key=lambda r: r["session_count"], reverse=True)
+        summary = {
+            "device_types": len(items),
+            "total_sessions": sum(i["session_count"] for i in items),
+            "total_converted": sum(i["converted_sessions"] for i in items),
+            "overall_conversion_rate": round(
+                sum(i["converted_sessions"] for i in items)
+                / max(sum(i["session_count"] for i in items), 1),
+                4,
+            ),
+        }
+        return _envelope(entity_id, tenant_id, "device_performance", items, summary,
+                         len(items), ["analytics_events"])
+
+    async def funnel(
+        self,
+        entity_id: str,
+        tenant_id: str,
+        window: str = "30d",
+        campaign_id: Optional[str] = None,
+    ) -> dict:
+        """Staged conversion funnel: Impression → Click → Visit → Connect → Swap → Liquidity.
+
+        Each stage is backed by the analytics event stream.  Events are matched
+        by keyword patterns against event_type so the funnel works without
+        custom instrumentation.  A campaign_id filter scopes the impression
+        events to a single campaign when provided.
+        """
+        events: list[dict] = []
+        if self._analytics is not None:
+            events = await _safe("funnel.analytics", self._analytics.query_events(
+                tenant_id, {"user_id": entity_id}, limit=2000,
+            ))
+        events = _tenant_filter(events, tenant_id)
+
+        window_start = _window_cutoff(window)
+        stage_counts: dict[str, int] = {s: 0 for s, _ in _FUNNEL_STAGES}
+
+        for e in events:
+            ts_str = e.get("created_at") or e.get("timestamp")
+            if window_start and ts_str:
+                try:
+                    ts = datetime.fromisoformat(str(ts_str).replace("Z", "+00:00"))
+                    if ts < window_start:
+                        continue
+                except (ValueError, TypeError):
+                    pass
+
+            if campaign_id:
+                props = e.get("properties") or {}
+                ec = props.get("campaign_id") or e.get("campaign_id")
+                if ec != campaign_id:
+                    continue
+
+            et_tokens = _event_tokens(e.get("event_type") or "")
+            for stage, keywords in _FUNNEL_STAGES:
+                if et_tokens & set(keywords):
+                    stage_counts[stage] += 1
+                    break
+
+        prev_count: Optional[int] = None
+        items = []
+        for idx, (stage, _) in enumerate(_FUNNEL_STAGES):
+            count = stage_counts[stage]
+            drop_rate = round(1.0 - count / prev_count, 4) if prev_count else 0.0
+            items.append({
+                "id": stage,
+                "type": "funnel_stage",
+                "displayLabel": stage.replace("_", " ").title(),
+                "stage_index": idx,
+                "count": count,
+                "drop_rate": drop_rate if idx > 0 else None,
+                "timestamps": {},
+                "metadata": {},
+                "links": {"timeline": f"/v1/profile/{entity_id}/timeline"},
+            })
+            if count > 0:
+                prev_count = count
+
+        overall_cvr = round(
+            stage_counts["swap"] / max(stage_counts["impression"], 1), 4,
+        ) if stage_counts["impression"] else 0.0
+        summary = {
+            "window": window,
+            "campaign_id": campaign_id,
+            "overall_conversion_rate": overall_cvr,
+            "top_of_funnel": stage_counts["impression"],
+            "bottom_of_funnel": stage_counts["liquidity"],
+        }
+        return _envelope(entity_id, tenant_id, "funnel", items, summary,
+                         len(items), ["analytics_events"])
+
+    async def time_to_convert(
+        self, entity_id: str, tenant_id: str, window: str = "30d",
+    ) -> dict:
+        """Median time between funnel stage conversions, derived from journey chains.
+
+        Each journey chain's span duration (spans_started_at → spans_last_seen_at)
+        provides a proxy for time-to-convert.  When multiple chains are available
+        we report the median, p25, and p75 for statistical stability.
+        """
+        chains = await self._scoped_find_many(
+            self._journeys, tenant_id=tenant_id,
+            filters={"entity_id": entity_id}, limit=200,
+        )
+        chains = _tenant_filter(chains, tenant_id)
+
+        window_start = _window_cutoff(window)
+        durations_ms: list[float] = []
+        journey_counts: list[int] = []
+
+        for c in chains:
+            start_str = c.get("spans_started_at")
+            end_str = c.get("spans_last_seen_at")
+            if not start_str or not end_str:
+                continue
+            try:
+                t0 = datetime.fromisoformat(str(start_str).replace("Z", "+00:00"))
+                t1 = datetime.fromisoformat(str(end_str).replace("Z", "+00:00"))
+            except (ValueError, TypeError):
+                continue
+            if window_start and t0 < window_start:
+                continue
+            delta_ms = (t1 - t0).total_seconds() * 1000
+            if delta_ms >= 0:
+                durations_ms.append(delta_ms)
+            jc = c.get("journey_count")
+            if jc is not None:
+                try:
+                    journey_counts.append(int(jc))
+                except (TypeError, ValueError):
+                    pass
+
+        def _stat(lst: list[float], q: float) -> Optional[float]:
+            if not lst:
+                return None
+            lst_sorted = sorted(lst)
+            idx = q * (len(lst_sorted) - 1)
+            lo, hi = int(idx), min(int(idx) + 1, len(lst_sorted) - 1)
+            return lst_sorted[lo] + (idx - lo) * (lst_sorted[hi] - lst_sorted[lo])
+
+        median_ms = _stat(durations_ms, 0.5)
+        p25_ms = _stat(durations_ms, 0.25)
+        p75_ms = _stat(durations_ms, 0.75)
+
+        items = [
+            {
+                "id": "overall",
+                "type": "time_to_convert_stat",
+                "displayLabel": "Overall time-to-convert",
+                "median_ms": round(median_ms, 1) if median_ms is not None else None,
+                "p25_ms": round(p25_ms, 1) if p25_ms is not None else None,
+                "p75_ms": round(p75_ms, 1) if p75_ms is not None else None,
+                "sample_size": len(durations_ms),
+                "timestamps": {},
+                "metadata": {},
+                "links": {"journeys": f"/v1/profile/{entity_id}/journeys"},
+            }
+        ]
+        summary = {
+            "window": window,
+            "chain_count": len(chains),
+            "median_ms": round(median_ms, 1) if median_ms is not None else None,
+            "avg_journeys_per_chain": round(
+                sum(journey_counts) / len(journey_counts), 2,
+            ) if journey_counts else None,
+        }
+        return _envelope(entity_id, tenant_id, "time_to_convert", items, summary,
+                         len(items), ["journey_chains"])
+
+    async def journey_economics(
+        self, entity_id: str, tenant_id: str, window: str = "30d", limit: int = 20,
+    ) -> dict:
+        """Per-journey-chain economic summary: revenue attributed, sessions, duration.
+
+        Provides ROAS/CPA proxy when ad-spend data is not available by using
+        transfer inflows as a revenue signal.  When gold_journey_economics is
+        wired this will be superseded; until then this gives the UI a real
+        dataset to render.
+        """
+        chains = await self._scoped_find_many(
+            self._journeys, tenant_id=tenant_id,
+            filters={"entity_id": entity_id}, limit=limit * 2,
+        )
+        chains = _tenant_filter(chains, tenant_id)
+
+        transfers = await self._transfers_for_entity(entity_id, tenant_id, limit=500)
+
+        window_start = _window_cutoff(window)
+        inflow_total = 0.0
+        for t in transfers:
+            if t.get("to_entity_id") != entity_id:
+                continue
+            ts_str = t.get("occurred_at")
+            if window_start and ts_str:
+                try:
+                    if datetime.fromisoformat(str(ts_str).replace("Z", "+00:00")) < window_start:
+                        continue
+                except (ValueError, TypeError):
+                    pass
+            try:
+                inflow_total += float(t.get("amount") or 0)
+            except (TypeError, ValueError):
+                pass
+
+        items = []
+        for c in chains[:limit]:
+            start_str = c.get("spans_started_at")
+            end_str = c.get("spans_last_seen_at")
+            duration_ms: Optional[float] = None
+            if start_str and end_str:
+                try:
+                    t0 = datetime.fromisoformat(str(start_str).replace("Z", "+00:00"))
+                    t1 = datetime.fromisoformat(str(end_str).replace("Z", "+00:00"))
+                    if window_start and t0 < window_start:
+                        continue
+                    duration_ms = (t1 - t0).total_seconds() * 1000
+                except (ValueError, TypeError):
+                    pass
+
+            journey_count = c.get("journey_count", 0)
+            items.append({
+                "id": c.get("chain_id") or c.get("id"),
+                "type": "journey_economics",
+                "displayLabel": f"chain:{(c.get('chain_id') or '')[:8]}",
+                "journey_count": journey_count,
+                "duration_ms": round(duration_ms, 1) if duration_ms is not None else None,
+                "timestamps": {
+                    "startedAt": c.get("spans_started_at"),
+                    "lastSeenAt": c.get("spans_last_seen_at"),
+                },
+                "metadata": {},
+                "links": {"chain": f"/v1/profile/{entity_id}/drill/journey/{c.get('chain_id')}"},
+            })
+
+        chain_count = len(items)
+        summary = {
+            "window": window,
+            "chain_count": chain_count,
+            "total_inflow": round(inflow_total, 4),
+            "avg_inflow_per_chain": round(inflow_total / chain_count, 4) if chain_count else 0.0,
+        }
+        return _envelope(entity_id, tenant_id, "journey_economics", items, summary,
+                         limit, ["journey_chains", "transfers"])
+
     # ── Drill ────────────────────────────────────────────────────────
 
     async def drill(
@@ -1061,6 +1468,53 @@ class Profile360Aggregator:
             "related": related,
             "computed_at": utc_now().isoformat(),
         }
+
+
+def _window_cutoff(window: str) -> Optional[datetime]:
+    """Return a tz-aware datetime representing the start of the analysis window.
+
+    Returns None for 'lifetime' (no cutoff).
+    """
+    days = {"30d": 30, "60d": 60, "90d": 90, "lifetime": None}.get(window)
+    if days is None:
+        return None
+    from datetime import timedelta
+    return datetime.now(timezone.utc) - timedelta(days=days)
+
+
+def _normalize_density(count: int, peak: int) -> float:
+    """Map count → [0.0, 1.0] relative to the peak bucket."""
+    if peak == 0:
+        return 0.0
+    return round(count / peak, 4)
+
+
+def _compute_streak(sorted_dates: list[str]) -> int:
+    """Return the current active-day streak from a sorted list of ISO date strings."""
+    if not sorted_dates:
+        return 0
+    today = datetime.now(timezone.utc).date().isoformat()
+    streak = 0
+    # Walk backwards from today; stop at first gap.
+    from datetime import date, timedelta
+    check = date.today()
+    dates_set = set(sorted_dates)
+    while check.isoformat() in dates_set:
+        streak += 1
+        check -= timedelta(days=1)
+    return streak
+
+
+def _infer_device_type(user_agent: str) -> str:
+    """Infer a broad device type from a User-Agent string."""
+    ua = user_agent.lower()
+    if "mobile" in ua or "android" in ua or "iphone" in ua:
+        return "mobile"
+    if "tablet" in ua or "ipad" in ua:
+        return "tablet"
+    if ua:
+        return "desktop"
+    return ""
 
 
 def _drill_not_found(entity_id: str, tenant_id: str, object_type: str, object_id: str) -> dict:

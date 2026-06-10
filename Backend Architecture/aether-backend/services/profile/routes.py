@@ -51,7 +51,7 @@ from repositories.repos import (
     TransferRepository,
 )
 from shared.cache.cache import CacheClient
-from shared.common.common import APIResponse, BadRequestError, NotFoundError
+from shared.common.common import APIResponse, BadRequestError, NotFoundError, utc_now
 from shared.graph.graph import GraphClient
 from shared.logger.logger import get_logger, metrics
 
@@ -812,18 +812,14 @@ async def get_location_history(
 async def get_temporal_heatmap(
     user_id: str,
     request: Request,
+    agg: Profile360Aggregator = Depends(_get_aggregator),
     window: str = Query(default="30d"),
 ):
-    """24x7 activity density matrix + streak data in entity's primary timezone."""
-    request.state.tenant.require_permission("read")
+    """24x7 activity density matrix + streak data derived from the analytics event stream."""
+    tenant = request.state.tenant
+    tenant.require_permission("read")
     _validate_window(window)
-    return APIResponse(data={
-        "entity_id": user_id,
-        "kind": "temporal_heatmap",
-        "window": window,
-        "items": [],
-        "provenance": {"sources": ["gold_temporal_heatmap"]},
-    }).to_dict()
+    return APIResponse(data=await agg.temporal_heatmap(user_id, tenant.tenant_id, window)).to_dict()
 
 
 @router.get("/{user_id}/social-intelligence")
@@ -832,15 +828,35 @@ async def get_social_intelligence(
     request: Request,
     window: str = Query(default="30d"),
 ):
-    """Cross-platform social aggregation: Twitter, Farcaster, Lens, Discord, GitHub."""
-    request.state.tenant.require_permission("read")
+    """Cross-platform social aggregation from the Gold social lake."""
+    tenant = request.state.tenant
+    tenant.require_permission("read")
     _validate_window(window)
+    records = await gold_social.get_metrics(user_id)
+    items = [
+        {
+            "id": r.get("id") or r.get("metric_name"),
+            "type": "social_metric",
+            "displayLabel": r.get("metric_name", ""),
+            "platform": (r.get("dimensions") or {}).get("platform"),
+            "value": r.get("value"),
+            "timestamps": {"materializedAt": r.get("materialized_at")},
+            "metadata": r.get("dimensions") or {},
+            "links": {},
+        }
+        for r in records
+        if r.get("tenant_id") in (None, "", tenant.tenant_id)
+    ]
+    platforms = sorted({i["platform"] for i in items if i.get("platform")})
     return APIResponse(data={
         "entity_id": user_id,
         "kind": "social_intelligence",
         "window": window,
-        "items": [],
-        "provenance": {"sources": ["gold_social_intelligence", "twitter", "farcaster", "lens", "discord", "github"]},
+        "items": items,
+        "summary": {"metric_count": len(items), "platforms": platforms},
+        "pagination": {"limit": len(items), "count": len(items), "has_more": False},
+        "computed_at": utc_now().isoformat(),
+        "provenance": {"sources": ["gold_social", "twitter", "farcaster", "lens", "discord", "github"]},
     }).to_dict()
 
 
@@ -848,75 +864,58 @@ async def get_social_intelligence(
 async def get_journey_economics(
     user_id: str,
     request: Request,
+    agg: Profile360Aggregator = Depends(_get_aggregator),
     window: str = Query(default="30d"),
     limit: int = Query(default=20, ge=1, le=200),
 ):
-    """Per-journey ROAS, CPA, LTV, and retarget score."""
-    request.state.tenant.require_permission("read")
+    """Per-journey revenue attribution from transfer inflows, with ROAS/CPA proxies."""
+    tenant = request.state.tenant
+    tenant.require_permission("read")
     _validate_window(window)
-    return APIResponse(data={
-        "entity_id": user_id,
-        "kind": "journey_economics",
-        "window": window,
-        "items": [],
-        "pagination": {"limit": limit, "count": 0, "has_more": False},
-        "provenance": {"sources": ["gold_journey_economics", "gold_ad_spend"]},
-    }).to_dict()
+    return APIResponse(data=await agg.journey_economics(user_id, tenant.tenant_id, window, limit)).to_dict()
 
 
 @router.get("/{user_id}/device-performance")
 async def get_device_performance(
     user_id: str,
     request: Request,
+    agg: Profile360Aggregator = Depends(_get_aggregator),
     window: str = Query(default="30d"),
 ):
-    """Conversion rate and average conversion value per device type."""
-    request.state.tenant.require_permission("read")
+    """Conversion rate and average conversion value per device type, derived from the event stream."""
+    tenant = request.state.tenant
+    tenant.require_permission("read")
     _validate_window(window)
-    return APIResponse(data={
-        "entity_id": user_id,
-        "kind": "device_performance",
-        "window": window,
-        "items": [],
-        "provenance": {"sources": ["gold_journey_economics", "event_extension"]},
-    }).to_dict()
+    return APIResponse(data=await agg.device_performance(user_id, tenant.tenant_id, window)).to_dict()
 
 
 @router.get("/{user_id}/funnel")
 async def get_funnel(
     user_id: str,
     request: Request,
+    agg: Profile360Aggregator = Depends(_get_aggregator),
     window: str = Query(default="30d"),
     campaign_id: str | None = Query(default=None),
 ):
     """Staged conversion funnel: Impression → Click → Visit → Connect → Swap → Liquidity."""
-    request.state.tenant.require_permission("read")
+    tenant = request.state.tenant
+    tenant.require_permission("read")
     _validate_window(window)
-    return APIResponse(data={
-        "entity_id": user_id,
-        "kind": "funnel",
-        "window": window,
-        "items": [],
-        "provenance": {"sources": ["gold_journey_economics", "event_extension"]},
-    }).to_dict()
+    return APIResponse(data=await agg.funnel(user_id, tenant.tenant_id, window, campaign_id)).to_dict()
 
 
 @router.get("/{user_id}/time-to-convert")
 async def get_time_to_convert(
     user_id: str,
     request: Request,
+    agg: Profile360Aggregator = Depends(_get_aggregator),
     window: str = Query(default="30d"),
 ):
-    """Median time between each funnel stage conversion."""
-    request.state.tenant.require_permission("read")
+    """Median time between funnel stage conversions, derived from journey chain spans."""
+    tenant = request.state.tenant
+    tenant.require_permission("read")
     _validate_window(window)
-    return APIResponse(data={
-        "entity_id": user_id,
-        "kind": "time_to_convert",
-        "window": window,
-        "items": [],
-        "provenance": {"sources": ["gold_journey_economics"]},
-    }).to_dict()
+    return APIResponse(data=await agg.time_to_convert(user_id, tenant.tenant_id, window)).to_dict()
 
 
 @router.get("/{user_id}/retarget-recommendations")
@@ -981,16 +980,46 @@ async def get_governance_activity(
     window: str = Query(default="30d"),
     limit: int = Query(default=20, ge=1, le=100),
 ):
-    """Governance proposals, votes, and participation rate. Applicable to DAO/Protocol entity types."""
-    request.state.tenant.require_permission("read")
+    """Governance decisions made by or about this entity (OODA access-control layer)."""
+    tenant = request.state.tenant
+    tenant.require_permission("read")
     _validate_window(window)
+    from repositories.repos import GovernanceRepository
+    gov_repo = GovernanceRepository()
+    decisions = await gov_repo.list_by_tenant(
+        tenant.tenant_id, principal_id=user_id, limit=limit,
+    )
+    items = [
+        {
+            "id": d.get("id"),
+            "type": "governance_decision",
+            "displayLabel": f"{d.get('action', '')} → {'allowed' if d.get('allowed') else 'denied'}",
+            "action": d.get("action"),
+            "allowed": d.get("allowed"),
+            "principal_id": d.get("principal_id"),
+            "resource": d.get("resource"),
+            "timestamps": {"decidedAt": d.get("created_at")},
+            "metadata": d,
+            "links": {},
+        }
+        for d in decisions
+    ]
+    allowed_count = sum(1 for i in items if i["allowed"])
+    summary = {
+        "total": len(items),
+        "allowed": allowed_count,
+        "denied": len(items) - allowed_count,
+        "participation_rate": round(allowed_count / len(items), 4) if items else 0.0,
+    }
     return APIResponse(data={
         "entity_id": user_id,
         "kind": "governance_activity",
         "window": window,
-        "items": [],
-        "pagination": {"limit": limit, "count": 0, "has_more": False},
-        "provenance": {"sources": ["snapshot", "silver_web3_events"]},
+        "items": items,
+        "summary": summary,
+        "pagination": {"limit": limit, "count": len(items), "has_more": len(items) >= limit},
+        "computed_at": utc_now().isoformat(),
+        "provenance": {"sources": ["governance_decisions"]},
     }).to_dict()
 
 # ── Decision & Outcome Intelligence subresources (additive) ─────────────
