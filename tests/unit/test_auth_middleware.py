@@ -18,6 +18,20 @@ from pathlib import Path
 
 import pytest
 
+
+def _has_working_cffi() -> bool:
+    try:
+        import _cffi_backend  # noqa: F401
+        return True
+    except (ImportError, Exception):
+        return False
+
+
+_needs_real_jwt = pytest.mark.skipif(
+    not _has_working_cffi(),
+    reason="cffi C-extension unavailable; real PyJWT required for JWT encode/decode tests",
+)
+
 ROOT = Path(__file__).resolve().parents[2]
 BACKEND_ROOT = ROOT / "Backend Architecture" / "aether-backend"
 
@@ -140,6 +154,7 @@ class TestAPIKeyValidation:
 # ═══════════════════════════════════════════════════════════════════════════
 
 
+@_needs_real_jwt
 class TestJWTValidation:
     """Tests for JWTHandler encode/decode cycle."""
 

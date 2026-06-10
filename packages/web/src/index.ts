@@ -1074,4 +1074,6 @@ const aether = new AetherSDK();
 
 export default aether;
 export { AetherSDK };
-export type { AetherConfig, AetherSDKInterface, ResolvedIdentity } from './types';
+export type { AetherConfig, AetherSDKInterface, ResolvedIdentity, JourneyPayload, CurrentJourney, JourneyStatus, JourneyLifecycleEventType } from './types';
+export { SDKHealthAgent } from './health';
+export type { SDKHealthAgentConfig, SDKHeartbeatPayload, SDKManifest, ManifestUpdateCallback } from './health';
