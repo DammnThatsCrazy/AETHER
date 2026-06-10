@@ -845,10 +845,45 @@ class AgentExecutionRepository(BaseRepository):
             "ended_at": ended_at,
         })
 
-    async def list_for_agent(self, agent_id: str, limit: int = 50) -> list[dict]:
-        return await self.find_many(
-            filters={"agent_id": agent_id}, limit=limit,
+    async def list_for_agent(self, agent_id: str, tenant_id: str = "", limit: int = 50) -> list[dict]:
+        filters: dict = {"agent_id": agent_id}
+        if tenant_id:
+            filters["tenant_id"] = tenant_id
+        return await self.find_many(filters=filters, limit=limit)
+
+    async def record_task_decomposition(
+        self,
+        execution_id: str,
+        tenant_id: str,
+        agent_id: str,
+        root_task_id: str,
+        subtask_ids: list[str],
+        metadata: Optional[dict] = None,
+    ) -> dict:
+        now = utc_now().isoformat()
+        record_id = f"{execution_id}:decomposition"
+        return await self.insert(record_id, {
+            "record_id": record_id,
+            "execution_id": execution_id,
+            "agent_id": agent_id,
+            "tenant_id": tenant_id,
+            "root_task_id": root_task_id,
+            "subtask_ids": subtask_ids or [],
+            "event_type": "task_decomposed",
+            "metadata": metadata or {},
+            "occurred_at": now,
+        })
+
+    async def list_task_tree(self, root_task_id: str, tenant_id: str) -> list[dict]:
+        """Return all execution records for a task tree, scoped to tenant."""
+        all_records = await self.find_many(
+            filters={"tenant_id": tenant_id}, limit=500,
         )
+        return [
+            r for r in all_records
+            if r.get("root_task_id") == root_task_id
+            or r.get("execution_id") == root_task_id
+        ]
 
     async def list_failed(self, tenant_id: str, limit: int = 50) -> list[dict]:
         results = await self.find_many(
@@ -892,7 +927,7 @@ class DelegationRepository(BaseRepository):
             "revoked_by_entity_id": None,
             "metadata": metadata or {},
         })
-        await self._invalidate_cache(grantee_entity_id)
+        await self._invalidate_cache(grantee_entity_id, tenant_id)
         return record
 
     async def revoke(
@@ -904,24 +939,29 @@ class DelegationRepository(BaseRepository):
         record["revoked_at"] = utc_now().isoformat()
         record["revoked_by_entity_id"] = revoked_by_entity_id
         updated = await self.update(delegation_id, record)
-        await self._invalidate_cache(record["grantee_entity_id"])
+        await self._invalidate_cache(record["grantee_entity_id"], record.get("tenant_id", ""))
         return updated
 
-    async def active_for(self, grantee_entity_id: str) -> list[dict]:
+    async def active_for(self, grantee_entity_id: str, tenant_id: str = "") -> list[dict]:
         """Return every currently-active delegation for an entity.
 
         Cached for 60s; invalidated on grant/revoke. The caller iterates and
         applies scope checks; this repo does no policy interpretation.
         """
-        cache_key = f"delegations:active:{grantee_entity_id}"
+        cache_key = (
+            f"delegations:active:{tenant_id}:{grantee_entity_id}"
+            if tenant_id
+            else f"delegations:active:{grantee_entity_id}"
+        )
         if self._cache is not None:
             cached = await self._cache.get_json(cache_key)
             if cached is not None:
                 return cached
 
-        all_for_grantee = await self.find_many(
-            filters={"grantee_entity_id": grantee_entity_id}, limit=200,
-        )
+        filters: dict = {"grantee_entity_id": grantee_entity_id}
+        if tenant_id:
+            filters["tenant_id"] = tenant_id
+        all_for_grantee = await self.find_many(filters=filters, limit=200)
         now_iso = utc_now().isoformat()
         active = [
             d for d in all_for_grantee
@@ -934,9 +974,12 @@ class DelegationRepository(BaseRepository):
             await self._cache.set_json(cache_key, active, TTL.SHORT)
         return active
 
-    async def _invalidate_cache(self, grantee_entity_id: str) -> None:
+    async def _invalidate_cache(self, grantee_entity_id: str, tenant_id: str = "") -> None:
         if self._cache is not None:
+            # Invalidate both legacy and tenant-scoped cache keys
             await self._cache.delete(f"delegations:active:{grantee_entity_id}")
+            if tenant_id:
+                await self._cache.delete(f"delegations:active:{tenant_id}:{grantee_entity_id}")
 
 
 class WalletRepository(BaseRepository):
@@ -1166,10 +1209,38 @@ class PaymentIntentRepository(BaseRepository):
             "metadata": metadata or {},
         })
 
-    async def list_for_agent(self, agent_id: str, limit: int = 100) -> list[dict]:
-        rows = await self.find_many(filters={"agent_id": agent_id}, limit=limit)
+    async def list_for_agent(self, agent_id: str, tenant_id: str = "", limit: int = 100) -> list[dict]:
+        filters: dict = {"agent_id": agent_id}
+        if tenant_id:
+            filters["tenant_id"] = tenant_id
+        rows = await self.find_many(filters=filters, limit=limit)
         rows.sort(key=lambda r: r.get("occurred_at", ""), reverse=True)
         return rows[:limit]
+
+    async def find_for_tenant(self, intent_id: str, tenant_id: str) -> Optional[dict]:
+        """Find a payment intent by ID scoped to a tenant."""
+        record = await self.find_by_id(intent_id)
+        if record is None:
+            return None
+        if record.get("tenant_id") != tenant_id:
+            return None
+        return record
+
+    async def update_status(
+        self,
+        intent_id: str,
+        tenant_id: str,
+        status: str,
+        metadata: Optional[dict] = None,
+    ) -> dict:
+        """Update the settlement_status of a payment intent (tenant-scoped)."""
+        record = await self.find_for_tenant(intent_id, tenant_id)
+        if record is None:
+            raise KeyError(f"PaymentIntent {intent_id!r} not found for tenant {tenant_id!r}")
+        record["settlement_status"] = status
+        if metadata:
+            record.setdefault("metadata", {}).update(metadata)
+        return await self.update(intent_id, record)
 
 
 class SettlementEventRepository(BaseRepository):
@@ -1214,15 +1285,40 @@ class SettlementEventRepository(BaseRepository):
             "metadata": metadata or {},
         })
 
-    async def list_for_intent(self, intent_id: str, limit: int = 100) -> list[dict]:
-        rows = await self.find_many(filters={"intent_id": intent_id}, limit=limit)
+    async def list_for_intent(self, intent_id: str, tenant_id: str = "", limit: int = 100) -> list[dict]:
+        filters: dict = {"intent_id": intent_id}
+        if tenant_id:
+            filters["tenant_id"] = tenant_id
+        rows = await self.find_many(filters=filters, limit=limit)
         rows.sort(key=lambda r: r.get("occurred_at", ""), reverse=True)
         return rows[:limit]
 
-    async def list_for_agent(self, agent_id: str, limit: int = 100) -> list[dict]:
-        rows = await self.find_many(filters={"agent_id": agent_id}, limit=limit)
+    async def list_for_agent(self, agent_id: str, tenant_id: str = "", limit: int = 100) -> list[dict]:
+        filters: dict = {"agent_id": agent_id}
+        if tenant_id:
+            filters["tenant_id"] = tenant_id
+        rows = await self.find_many(filters=filters, limit=limit)
         rows.sort(key=lambda r: r.get("occurred_at", ""), reverse=True)
         return rows[:limit]
+
+    async def mark_receipt_verified(
+        self,
+        settlement_event_id: str,
+        tenant_id: str,
+        receipt_id: str,
+        metadata: Optional[dict] = None,
+    ) -> dict:
+        """Mark a settlement event as receipt-verified (tenant-scoped)."""
+        record = await self.find_by_id(settlement_event_id)
+        if record is None or record.get("tenant_id") != tenant_id:
+            raise KeyError(
+                f"SettlementEvent {settlement_event_id!r} not found for tenant {tenant_id!r}"
+            )
+        record["receipt_id"] = receipt_id
+        record["receipt_verified_at"] = utc_now().isoformat()
+        if metadata:
+            record.setdefault("metadata", {}).update(metadata)
+        return await self.update(settlement_event_id, record)
 
 
 class EconomicResourceRepository(BaseRepository):
@@ -1304,6 +1400,11 @@ class AgentEconomicIdentityRepository(BaseRepository):
     def __init__(self) -> None:
         super().__init__("agent_economic_identities")
 
+    @staticmethod
+    def _agent_identity_key(tenant_id: str, agent_id: str) -> str:
+        """Return a tenant-scoped record key for an agent economic identity."""
+        return f"{tenant_id}:{agent_id}:economic_identity"
+
     async def upsert_identity(
         self,
         agent_id: str,
@@ -1319,7 +1420,9 @@ class AgentEconomicIdentityRepository(BaseRepository):
         failure_rates: Optional[dict] = None,
         metadata: Optional[dict] = None,
     ) -> dict:
+        record_id = self._agent_identity_key(tenant_id, agent_id)
         record = {
+            "record_id": record_id,
             "agent_id": agent_id,
             "tenant_id": tenant_id,
             "recurring_spend": recurring_spend or {},
@@ -1334,10 +1437,22 @@ class AgentEconomicIdentityRepository(BaseRepository):
             "metadata": metadata or {},
             "computed_at": utc_now().isoformat(),
         }
-        existing = await self.find_by_id(agent_id)
+        existing = await self.find_by_id(record_id)
         if existing:
-            return await self.update(agent_id, record)
-        return await self.insert(agent_id, record)
+            return await self.update(record_id, record)
+        return await self.insert(record_id, record)
+
+    async def find_for_agent(self, agent_id: str, tenant_id: str) -> Optional[dict]:
+        """Look up economic identity by tenant-scoped key; falls back to legacy agent_id key."""
+        scoped_key = self._agent_identity_key(tenant_id, agent_id)
+        record = await self.find_by_id(scoped_key)
+        if record is not None:
+            return record
+        # Migration safety: fall back to legacy key (agent_id only)
+        legacy = await self.find_by_id(agent_id)
+        if legacy is not None and legacy.get("tenant_id") == tenant_id:
+            return legacy
+        return None
 
 
 # ═══════════════════════════════════════════════════════════════════════════

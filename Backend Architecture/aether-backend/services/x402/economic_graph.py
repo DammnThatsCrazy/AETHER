@@ -29,7 +29,7 @@ class X402EconomicGraph:
     def __init__(self, graph_client: Optional[GraphClient] = None):
         self._graph = graph_client or GraphClient()
         self._nodes: dict[str, X402Node] = {}
-        self._payments: list[CapturedX402Transaction] = []
+        self._payments: list[tuple[CapturedX402Transaction, str]] = []
         self._snapshot_task: Optional[asyncio.Task] = None
         self._lock = asyncio.Lock()
         self._recent_payments: dict[str, deque] = {}
@@ -65,8 +65,8 @@ class X402EconomicGraph:
             payee.total_received_usd += tx.amount_usd
             payee.transaction_count += 1
 
-            # Append to pending-flush buffer
-            self._payments.append(tx)
+            # Append to pending-flush buffer (store with tenant_id for scoped graph writes)
+            self._payments.append((tx, tenant_id))
 
             # Maintain per-agent bounded deque of last 20 payments
             if payer_key not in self._recent_payments:
