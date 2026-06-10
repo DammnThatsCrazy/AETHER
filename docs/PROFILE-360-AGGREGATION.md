@@ -12,7 +12,7 @@ source_files:
 canonical_owner: backend@aether
 estimated_read_minutes: 8
 toc_depth: 3
-last_synced_commit: 4ca75de
+last_synced_commit: a64bf52
 ---
 
 # Profile 360 Aggregation Layer
@@ -113,6 +113,24 @@ is what is documented below.
 | GET    | `/v1/profile/{id}/lake/{domain}`                           | Gold-tier lake data                                |
 | GET    | `/v1/profile/{id}/flows`                                   | Asset transfers (raw list)                         |
 | GET    | `/v1/profile/resolve`                                      | Resolve any identifier to canonical id             |
+| GET    | `/v1/profile/{id}/recommendations`                         | Decision-engine recommendations linked to entity   |
+| GET    | `/v1/profile/{id}/outcomes`                                | Outcome history linked to entity                   |
+| GET    | `/v1/profile/{id}/outcome-ledger`                          | Full outcome ledger for entity                     |
+| GET    | `/v1/profile/{id}/temporal-heatmap`                        | 24×7 activity density matrix + streak (event stream derived) |
+| GET    | `/v1/profile/{id}/device-performance`                      | Conversion rate + avg value per device type (event stream derived) |
+| GET    | `/v1/profile/{id}/funnel`                                  | Impression→Click→Visit→Connect→Swap→Liquidity stage counts |
+| GET    | `/v1/profile/{id}/time-to-convert`                         | Median / p25 / p75 funnel span duration (journey chains) |
+| GET    | `/v1/profile/{id}/journey-economics`                       | Per-chain revenue attribution from transfers       |
+| GET    | `/v1/profile/{id}/social-intelligence`                     | Cross-platform social metrics from Gold social lake |
+| GET    | `/v1/profile/{id}/governance-activity`                     | Governance decisions for this entity               |
+| GET    | `/v1/profile/{id}/tier`                                    | Entity tier + percentile rank (pending: gold_entity_tiers) |
+| GET    | `/v1/profile/{id}/asset-composition`                       | On-chain portfolio composition (pending: gold_asset_composition) |
+| GET    | `/v1/profile/{id}/pnl`                                     | Realized + unrealized PNL (pending: gold_entity_pnl) |
+| GET    | `/v1/profile/{id}/trading-profile`                         | On-chain trading behavior (pending: gold_trading_profile) |
+| GET    | `/v1/profile/{id}/location-history`                        | City-level location history (pending: gold_location_history) |
+| GET    | `/v1/profile/{id}/retarget-recommendations`                | Retargeting recommendations (pending: retarget_recommendations) |
+| GET    | `/v1/profile/{id}/web2`                                    | TradFi + credit signals (pending: Plaid, gold_credit_signals) |
+| GET    | `/v1/profile/{id}/protocol-metrics`                        | Protocol TVL/volume/fees (pending: DefiLlama, gold_web3_daily_metrics) |
 
 Realtime fan-out for any of these dimensions is available via
 `/v1/realtime/sse?entity_id={id}` and `/v1/realtime/ws?entity_id={id}`,
@@ -257,6 +275,68 @@ A typical UI flow is:
 3. On a relevant `<topic>` event, re-fetch the affected drill endpoint
    (e.g. `/wallets`, `/financials`) — not the entire summary — to keep
    bandwidth low.
+
+---
+
+## Intelligence extension dimensions
+
+Five dimensions are now derived directly from the event stream and journey
+chain data without requiring Gold Lake materialization:
+
+### `temporal_heatmap` (`?window=30d|60d|90d|lifetime`)
+
+Returns a sparse `{day_of_week, hour_of_day, count, density}` list covering
+the window (buckets with zero events are omitted). The UI fills a full 7×24
+grid by treating missing buckets as zero. Summary includes `peak_day_of_week`,
+`peak_hour_of_day`, `current_streak_days`, and `total_events`.
+
+### `device_performance` (`?window=`)
+
+Groups analytics sessions by `device_type` (or UA-inferred device class when
+`device_type` is absent) and counts conversion events using token-based
+matching against a configurable keyword set
+(`swap`, `trade`, `exchange`, `convert`, `deposit`, `stake`, `purchase`, `checkout`).
+Returns `session_count`, `converted_sessions`, `conversion_rate`, and
+`avg_conversion_value` per device type.
+
+### `funnel` (`?window=` `&campaign_id=`)
+
+Six ordered stages — Impression, Click, Visit, Connect, Swap, Liquidity —
+matched against analytics event types using token-based keyword patterns
+(splits on non-alphanumeric chars to avoid substring collisions like
+`view` inside `page_view`). An optional `campaign_id` query param scopes
+impression matching to a single campaign. Returns ordered stage items with
+`count` and `drop_rate` (relative to previous stage).
+
+### `time_to_convert` (`?window=`)
+
+Computes median, p25, and p75 span duration in milliseconds across all
+journey chains for the entity in the window. Each chain contributes one data
+point: the elapsed time between `spans_started_at` and `spans_last_seen_at`.
+Returns a single stat item with `sample_size`, `median_ms`, `p25_ms`, `p75_ms`.
+
+### `journey_economics` (`?window=` `&limit=`)
+
+Per-journey-chain revenue proxy: attributes transfer inflows (from
+`TransferRepository`) to the entity and reports `total_inflow`,
+`avg_inflow_per_chain`, and per-chain duration. When `gold_journey_economics`
+is eventually wired, this endpoint will be superseded by ROAS/CPA data; until
+then it gives the UI a real, non-empty dataset.
+
+### Social and governance (wired to existing repos)
+
+- `social_intelligence` reads from `gold_social.get_metrics(entity_id)`,
+  returning any materialized social metrics with platform breakdown.
+- `governance_activity` reads from `GovernanceRepository.list_by_tenant`
+  scoped to `principal_id=entity_id`, returning access-control decisions with
+  allowed/denied counts and participation rate.
+
+### Remaining stubs (awaiting external data sources)
+
+`/tier`, `/asset-composition`, `/pnl`, `/trading-profile`,
+`/location-history`, `/retarget-recommendations`, `/web2`,
+`/protocol-metrics` return `items: []` with their documented `provenance`
+sources until the corresponding Gold Lake tables or external APIs are wired.
 
 ---
 

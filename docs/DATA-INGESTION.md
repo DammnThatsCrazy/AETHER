@@ -13,7 +13,7 @@ source_files:
 canonical_owner: ingest@aether
 estimated_read_minutes: 10
 toc_depth: 3
-last_synced_commit: 306de9c1f6e47a3aeda6fc3302d7778c98417666
+last_synced_commit: a64bf52
 ---
 
 # Data Ingestion — Architecture & API Reference

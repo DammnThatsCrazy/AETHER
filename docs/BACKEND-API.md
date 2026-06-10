@@ -11,7 +11,7 @@ source_files:
 canonical_owner: backend@aether
 estimated_read_minutes: 60
 toc_depth: 3
-last_synced_commit: b967f36
+last_synced_commit: a64bf52
 ---
 # Aether Backend API v8.8.0 — Endpoint Specification
 
@@ -890,6 +890,8 @@ Feature flag: `PROVIDER_GATEWAY_ENABLED=false` (default). Zero impact until acti
 
 Holistic user/entity omniview — composes data from all Aether subsystems into one canonical profile view. Does not duplicate data; aggregates from identity, analytics, consent, graph, intelligence, and lake subsystems.
 
+#### Omniview + composition endpoints
+
 | Method | Endpoint | Description |
 |--------|----------|-------------|
 | GET | `/v1/profile/{user_id}` | Full holistic profile (identity + identifiers + consent + timeline + graph + intelligence + lake + provenance) |
@@ -902,6 +904,42 @@ Holistic user/entity omniview — composes data from all Aether subsystems into 
 | GET | `/v1/profile/{user_id}/lake/{domain}` | Domain-specific Gold data (identity, market, onchain, social) |
 
 **Query params:** `include_timeline`, `include_graph`, `include_intelligence`, `include_lake` (all default true), `timeline_limit` (1–500)
+
+#### Aggregation layer drill endpoints
+
+The `Profile360Aggregator` exposes normalized, tenant-scoped, pagination-aware
+drill-down endpoints. See `docs/PROFILE-360-AGGREGATION.md` for the full
+response schema and extension guide.
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/v1/profile/{user_id}/summary` | Dashboard-ready snapshot (counts, financials, behavior, links) |
+| GET | `/v1/profile/{user_id}/wallets` | Owned wallets across all chains |
+| GET | `/v1/profile/{user_id}/sessions` | Session rollups with platform/device/event-count |
+| GET | `/v1/profile/{user_id}/devices` | Devices (deterministic identity-cluster + observed) |
+| GET | `/v1/profile/{user_id}/platforms` | Platform attribution from event stream |
+| GET | `/v1/profile/{user_id}/protocols` | Protocol interactions (event stream + payment intents) |
+| GET | `/v1/profile/{user_id}/journeys` | Cross-session journey chains |
+| GET | `/v1/profile/{user_id}/rewards` | Reward events earned |
+| GET | `/v1/profile/{user_id}/financials` | Inflow/outflow/settlement aggregation |
+| GET | `/v1/profile/{user_id}/relationships` | Typed normalized relationships (ownership, delegation, flows) |
+| GET | `/v1/profile/{user_id}/agents` | Agents owned by this entity |
+| GET | `/v1/profile/{user_id}/delegations` | Granted/received delegations |
+| GET | `/v1/profile/{user_id}/behavior` | Latest derived behavior snapshot |
+| GET | `/v1/profile/{user_id}/drill/{object_type}/{object_id}` | Generic deep drill (agent, wallet, delegation, transfer, journey, …) |
+| GET | `/v1/profile/{user_id}/temporal-heatmap` | 24×7 activity density matrix + streak (event stream derived) |
+| GET | `/v1/profile/{user_id}/device-performance` | Conversion rate + avg value per device type |
+| GET | `/v1/profile/{user_id}/funnel` | Impression→Click→Visit→Connect→Swap→Liquidity stage counts |
+| GET | `/v1/profile/{user_id}/time-to-convert` | Median/p25/p75 stage span durations from journey chains |
+| GET | `/v1/profile/{user_id}/journey-economics` | Per-chain revenue attribution from transfer inflows |
+| GET | `/v1/profile/{user_id}/social-intelligence` | Social metrics from Gold social lake |
+| GET | `/v1/profile/{user_id}/governance-activity` | Governance decisions scoped to this entity |
+| GET | `/v1/profile/{user_id}/recommendations` | Decision-engine recommendations |
+| GET | `/v1/profile/{user_id}/outcomes` | Outcome history |
+| GET | `/v1/profile/{user_id}/outcome-ledger` | Full outcome ledger for entity |
+
+All aggregation endpoints support `?limit=` (1–500). Intelligence extension
+endpoints also support `?window=30d|60d|90d|lifetime` (default `30d`).
 
 **Permissions:** `read` for all profile endpoints
 

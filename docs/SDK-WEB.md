@@ -13,7 +13,7 @@ source_files:
 canonical_owner: sdk@aether
 estimated_read_minutes: 12
 toc_depth: 3
-last_synced_commit: 306de9c1f6e47a3aeda6fc3302d7778c98417666
+last_synced_commit: a64bf52
 ---
 
 # Aether Web SDK v8.9.0 — Integration Guide
@@ -117,6 +117,50 @@ aether.init({
 
 The same `ResolvedIdentity` shape is re-exported from the Aether SDK so
 React Native and the Web SDK can share types.
+
+### Journey Lifecycle API
+
+The SDK exposes a first-class journey API for tracking multi-step, cross-device user flows. Each journey has a unique `journeyId` and carries a `JourneyStatus` through its lifecycle.
+
+```typescript
+import type { JourneyPayload, CurrentJourney, JourneyStatus, JourneyLifecycleEventType } from '@aether/web';
+
+// Start a new journey
+const journey: CurrentJourney = aether.startJourney('onboarding', {
+  journeyType: 'onboarding',
+  campaignAttribution: { source: 'email' },
+});
+
+// Record a checkpoint (e.g. on SPA route change)
+aether.checkpointJourney('step_2_profile', { stepName: 'Profile setup' });
+
+// Continue after returning to the tab
+aether.continueJourney('profile_form_visible');
+
+// Pause when the tab goes hidden (done automatically by visibility handler)
+aether.pauseJourney('page_hidden');
+
+// Resume when tab comes back into view
+aether.resumeJourney('page_visible');
+
+// Complete or abandon
+aether.completeJourney('profile_saved');
+aether.abandonJourney('user_navigated_away');
+
+// Inspect current journey
+const current: CurrentJourney | null = aether.getCurrentJourney();
+
+// Listen for cross-device journey resumptions (same as onJourneyResumed config callback)
+const unsub = aether.onJourneyResumed((resolved) => {
+  restoreSession(resolved.userId);
+});
+```
+
+`JourneyStatus` values: `'started'` | `'paused'` | `'resumed'` | `'continued'` | `'completed'` | `'abandoned'` | `'checkpoint'`
+
+`JourneyLifecycleEventType` values: `'journey_started'` | `'journey_paused'` | `'journey_resumed'` | `'journey_continued'` | `'journey_completed'` | `'journey_abandoned'` | `'journey_checkpoint'`
+
+Tab visibility changes automatically pause and resume (or abandon after `journeyTimeoutMs`) the active journey. SPA route changes automatically emit checkpoint events.
 
 ### Device Fingerprint
 
@@ -417,6 +461,29 @@ Browser DOM / Wallets
 - No heatmap grid building
 
 All of the above are handled by the Aether backend.
+
+## SDK Health Agent
+
+`SDKHealthAgent` is an internal subsystem that reports heartbeats to the backend fleet-health API and receives remote-config manifests in return. It is instantiated automatically by `init()` and is not normally called directly.
+
+```typescript
+import { SDKHealthAgent } from '@aether/web';
+import type {
+  SDKHealthAgentConfig,
+  SDKHeartbeatPayload,
+  SDKManifest,
+  ManifestUpdateCallback,
+} from '@aether/web';
+```
+
+| Type | Description |
+|---|---|
+| `SDKHealthAgentConfig` | Constructor options: `endpoint`, `apiKey`, `sdkId`, `appVersion`, `platform`, `customHeaders`, `getDynamicState` |
+| `SDKHeartbeatPayload` | Shape of a single heartbeat event sent to `POST /sdk/health/heartbeat` |
+| `SDKManifest` | Remote-config manifest returned by the backend: `manifest_version`, `features` map, `ttl_seconds` |
+| `ManifestUpdateCallback` | `(manifest: SDKManifest) => void` — called whenever a new manifest is applied |
+
+The health agent is started only after analytics consent is granted in GDPR/opt-in deployments. When a new manifest is received, its `features` map is applied to the SDK's remote-feature gate and mirrored into the `FeatureFlagModule` cache if the module is enabled.
 
 ## Intelligence Graph Event Types
 
