@@ -454,6 +454,12 @@ class Profile360Aggregator:
             entity_id, tenant_id, prop_key="platform", kind="platforms", limit=limit,
         )
 
+    async def campaigns(self, entity_id: str, tenant_id: str, limit: int = 50) -> dict:
+        """Campaign attribution derived from the analytics event stream."""
+        return await self._attribution_breakdown(
+            entity_id, tenant_id, prop_key="campaign_id", kind="campaigns", limit=limit,
+        )
+
     async def protocols(self, entity_id: str, tenant_id: str, limit: int = 50) -> dict:
         # Protocol attribution can arrive on either the event payload itself
         # or on payment intents (x402/economic graph).

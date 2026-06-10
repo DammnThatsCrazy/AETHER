@@ -343,3 +343,20 @@ gold_governance = GoldRepository("governance")
 bronze_tradfi = BronzeRepository("tradfi")
 silver_tradfi = SilverRepository("tradfi")
 gold_tradfi = GoldRepository("tradfi")
+
+# Intelligence surface repos — consumed by Profile 360 intelligence extension endpoints.
+# These are populated by external ETL pipelines (Moralis, CoinGecko, DeFiLlama, Snapshot,
+# Plaid, etc.) via GoldRepository.materialize().  The BaseRepository pattern means they
+# operate in-memory during local/test runs and against asyncpg in production.
+gold_entity_tiers = GoldRepository("entity_tiers")
+gold_asset_composition = GoldRepository("asset_composition")
+gold_entity_pnl = GoldRepository("entity_pnl")
+gold_trading_profile = GoldRepository("trading_profile")
+gold_location_history = GoldRepository("location_history")
+gold_temporal_heatmap = GoldRepository("temporal_heatmap")
+gold_social_intelligence = GoldRepository("social_intelligence")
+gold_journey_economics = GoldRepository("journey_economics")
+gold_ad_spend = GoldRepository("ad_spend")
+gold_credit_signals = GoldRepository("credit_signals")
+gold_tradfi_portfolio = GoldRepository("tradfi_portfolio")
+gold_web3_daily_metrics = GoldRepository("web3_daily_metrics")
