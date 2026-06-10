@@ -241,6 +241,51 @@ class EconomicGraphMutations:
         await self._graph.add_edge(e)
         self._trace("edge", EdgeType.GRANTS_ACCESS_TO, e.properties)
 
+    async def write_agent_economic_identity(
+        self,
+        agent_id: str,
+        tenant_id: str,
+        properties: Optional[dict] = None,
+    ) -> None:
+        """Materialize AGENT_ECONOMIC_IDENTITY vertex and link it to the AGENT vertex.
+
+        Idempotent — safe to call on every x402 payment cycle or profile refresh.
+        Creates the ECONOMICALLY_IDENTIFIED_AS edge (Agent → AgentEconomicIdentity)
+        so the graph can traverse from any agent to its economic identity node.
+        """
+        eid_vertex_id = _tkey(tenant_id, f"{agent_id}:economic_identity")
+        agent_vertex_id = _tkey(tenant_id, agent_id)
+
+        props = {
+            "agent_id": agent_id,
+            "tenant_id": tenant_id,
+            **(properties or {}),
+        }
+
+        identity_vertex = Vertex(
+            vertex_type=VertexType.AGENT_ECONOMIC_IDENTITY,
+            vertex_id=eid_vertex_id,
+            properties=props,
+        )
+        await self._graph.upsert_vertex(identity_vertex)
+        self._trace("vertex", VertexType.AGENT_ECONOMIC_IDENTITY, props)
+
+        # Ensure the AGENT vertex exists before adding the edge
+        await self._graph.upsert_vertex(Vertex(
+            vertex_type=VertexType.AGENT,
+            vertex_id=agent_vertex_id,
+            properties={"agent_id": agent_id, "tenant_id": tenant_id},
+        ))
+
+        edge = Edge(
+            edge_type=EdgeType.ECONOMICALLY_IDENTIFIED_AS,
+            from_vertex_id=agent_vertex_id,
+            to_vertex_id=eid_vertex_id,
+            properties={"tenant_id": tenant_id},
+        )
+        await self._graph.add_edge(edge)
+        self._trace("edge", EdgeType.ECONOMICALLY_IDENTIFIED_AS, edge.properties)
+
     async def write_grant_and_fulfillment(self, grant: AccessGrant, fulfillment: Fulfillment) -> None:
         gv = Vertex(
             vertex_type=VertexType.ACCESS_GRANT,
