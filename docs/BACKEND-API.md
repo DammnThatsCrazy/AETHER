@@ -11,7 +11,7 @@ source_files:
 canonical_owner: backend@aether
 estimated_read_minutes: 60
 toc_depth: 3
-last_synced_commit: e8d3706
+last_synced_commit: c63cb2f
 ---
 # Aether Backend API v8.8.0 — Endpoint Specification
 
@@ -900,8 +900,24 @@ Holistic user/entity omniview — composes data from all Aether subsystems into 
 | GET | `/v1/profile/{user_id}/provenance` | Source attribution across identity, onchain, social data |
 | GET | `/v1/profile/resolve` | Resolve any identifier to canonical profile_id (query params: `wallet`, `email`, `device`, `session`, `social`, `customer`) |
 | GET | `/v1/profile/{user_id}/lake/{domain}` | Domain-specific Gold data (identity, market, onchain, social) |
+| GET | `/v1/profile/{user_id}/campaigns` | Campaign attribution derived from analytics event stream |
+| GET | `/v1/profile/{user_id}/tier` | Entity tier (Whale/Shark/Dolphin/Fish/Shrimp) + percentile rank |
+| GET | `/v1/profile/{user_id}/asset-composition` | On-chain portfolio composition by asset category |
+| GET | `/v1/profile/{user_id}/pnl` | Realized + unrealized PNL, TVL delta |
+| GET | `/v1/profile/{user_id}/trading-profile` | On-chain trading behavior (pairs, protocol loyalty, gas) |
+| GET | `/v1/profile/{user_id}/location-history` | City-level location history with classification |
+| GET | `/v1/profile/{user_id}/temporal-heatmap` | 24×7 activity density matrix + streaks |
+| GET | `/v1/profile/{user_id}/social-intelligence` | Cross-platform social aggregation |
+| GET | `/v1/profile/{user_id}/journey-economics` | Per-journey ROAS, CPA, LTV, retarget score |
+| GET | `/v1/profile/{user_id}/device-performance` | Conversion rate per device type |
+| GET | `/v1/profile/{user_id}/funnel` | Staged conversion funnel (Impression→Swap→LP) |
+| GET | `/v1/profile/{user_id}/time-to-convert` | Median time between funnel stage transitions |
+| GET | `/v1/profile/{user_id}/retarget-recommendations` | Analyst-review retargeting recommendations |
+| GET | `/v1/profile/{user_id}/web2` | TradFi + credit signals (requires `credit` consent) |
+| GET | `/v1/profile/{user_id}/protocol-metrics` | Protocol TVL/volume/fees (DAO/DEX entities) |
+| GET | `/v1/profile/{user_id}/governance-activity` | Governance proposals + votes (DAO entities) |
 
-**Query params:** `include_timeline`, `include_graph`, `include_intelligence`, `include_lake` (all default true), `timeline_limit` (1–500)
+**Query params:** `include_timeline`, `include_graph`, `include_intelligence`, `include_lake` (all default true), `timeline_limit` (1–500). Intelligence extension endpoints also accept `?window=30d|60d|90d|lifetime`.
 
 **Permissions:** `read` for all profile endpoints
 

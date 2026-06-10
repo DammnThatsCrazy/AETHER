@@ -12,7 +12,7 @@ source_files:
 canonical_owner: backend@aether
 estimated_read_minutes: 5
 toc_depth: 3
-last_synced_commit: e8d3706
+last_synced_commit: c63cb2f
 ---
 
 # PostgreSQL / Repository Subsystem
@@ -69,6 +69,43 @@ Tables are created automatically on first access. No migration tool is required 
 | `operator_actions` | `OperatorActionRepository` | Operator approve/suppress/escalate/annotate audit |
 | `user_notification_channels` | `UserNotificationChannelRepository` | End-user Slack/Discord/Telegram/Webhook registrations |
 | `slack_oauth_states` | `SlackOAuthStateRepository` | Slack OAuth 2.0 CSRF state nonces (10-min TTL) |
+
+## Data Lake Repositories
+
+`repositories/lake.py` implements the Bronze / Silver / Gold medallion tiers using the same
+`BaseRepository` pattern (in-memory locally, asyncpg in production).
+
+**Domain instances** (Bronze + Silver + Gold for each):
+
+| Domain | Gold instance | Purpose |
+|--------|--------------|---------|
+| `market` | `gold_market` | Market price + volume data |
+| `onchain` | `gold_onchain` | On-chain events + wallet data |
+| `social` | `gold_social` | Cross-platform social data |
+| `identity` | `gold_identity` | Identity enrichment |
+| `governance` | `gold_governance` | DAO governance records |
+| `tradfi` | `gold_tradfi` | TradFi raw data |
+
+**Intelligence surface repos** (Gold only, consumed by `IntelligenceAggregator`):
+
+| Gold instance | Source (ETL) | Profile 360 endpoint |
+|--------------|-------------|----------------------|
+| `gold_entity_tiers` | Internal scorer | `/tier` |
+| `gold_asset_composition` | Moralis | `/asset-composition` |
+| `gold_entity_pnl` | CoinGecko + silver_web3_events | `/pnl` |
+| `gold_trading_profile` | silver_web3_events | `/trading-profile` |
+| `gold_location_history` | Analytics events | `/location-history` |
+| `gold_temporal_heatmap` | Analytics events | `/temporal-heatmap` |
+| `gold_social_intelligence` | Twitter, Farcaster, Lens, Discord, GitHub | `/social-intelligence` |
+| `gold_journey_economics` | gold_ad_spend + journey chains | `/journey-economics`, `/funnel`, `/device-performance`, `/time-to-convert`, `/retarget-recommendations` |
+| `gold_ad_spend` | Campaign tracking | (input to journey economics) |
+| `gold_credit_signals` | Plaid | `/web2` (credit consent required) |
+| `gold_tradfi_portfolio` | Plaid | `/web2` (credit consent required) |
+| `gold_web3_daily_metrics` | DeFiLlama | `/protocol-metrics` |
+
+Gold records use `GoldRepository.materialize(metric_name, entity_id, value, dimensions)`.
+The `IntelligenceAggregator` queries via `get_metrics(entity_id)` and applies
+`?window=30d|60d|90d|lifetime` filtering on the `materialized_at` timestamp.
 
 ## Environment Variables
 
