@@ -999,3 +999,119 @@ async def get_profile_outcome_ledger(user_id: str, request: Request, limit: int 
     feedback = [f for f in await RecommendationFeedbackRepository().find_many({"tenant_id": tenant.tenant_id}, limit=limit) if f.get("recommendation_id") in rec_ids]
     ledger = OutcomeLedgerAggregator().build(recs, decisions, actions, outcomes, feedback)
     return APIResponse(data={"entity_id": user_id, **ledger}).to_dict()
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# AGENT PROFILE 360 ROUTES
+# ═══════════════════════════════════════════════════════════════════════════
+
+from services.profile.agent import AgentProfile360Composer  # noqa: E402
+
+_agent_composer: Optional[AgentProfile360Composer] = None
+
+
+def _get_agent_composer() -> AgentProfile360Composer:
+    global _agent_composer
+    if _agent_composer is None:
+        _agent_composer = AgentProfile360Composer()
+    return _agent_composer
+
+
+@router.get("/{entity_id}/agent")
+async def get_agent_profile360(entity_id: str, request: Request):
+    """Full Agent Profile360 — all sections composed for the given agent."""
+    tenant = request.state.tenant
+    tenant.require_permission("read")
+    composer = _get_agent_composer()
+    profile = await composer.compose(entity_id, tenant.tenant_id)
+    return APIResponse(data=profile).to_dict()
+
+
+@router.get("/{entity_id}/agent/identity")
+async def get_agent_identity(entity_id: str, request: Request):
+    """Agent identity section."""
+    tenant = request.state.tenant
+    tenant.require_permission("read")
+    profile = await _get_agent_composer().compose(entity_id, tenant.tenant_id)
+    return APIResponse(data={"agent_id": entity_id, **profile["identity"]}).to_dict()
+
+
+@router.get("/{entity_id}/agent/delegation")
+async def get_agent_delegation(entity_id: str, request: Request):
+    """Agent delegation section."""
+    tenant = request.state.tenant
+    tenant.require_permission("read")
+    profile = await _get_agent_composer().compose(entity_id, tenant.tenant_id)
+    return APIResponse(data={"agent_id": entity_id, **profile["delegation"]}).to_dict()
+
+
+@router.get("/{entity_id}/agent/subagents")
+async def get_agent_subagents(entity_id: str, request: Request):
+    """Agent subagent graph section."""
+    tenant = request.state.tenant
+    tenant.require_permission("read")
+    profile = await _get_agent_composer().compose(entity_id, tenant.tenant_id)
+    return APIResponse(data={"agent_id": entity_id, **profile["subagent_graph"]}).to_dict()
+
+
+@router.get("/{entity_id}/agent/tasks")
+async def get_agent_tasks(entity_id: str, request: Request):
+    """Agent task history section."""
+    tenant = request.state.tenant
+    tenant.require_permission("read")
+    profile = await _get_agent_composer().compose(entity_id, tenant.tenant_id)
+    return APIResponse(data={"agent_id": entity_id, **profile["task_history"]}).to_dict()
+
+
+@router.get("/{entity_id}/agent/tools")
+async def get_agent_tools(entity_id: str, request: Request):
+    """Agent tool usage section."""
+    tenant = request.state.tenant
+    tenant.require_permission("read")
+    profile = await _get_agent_composer().compose(entity_id, tenant.tenant_id)
+    return APIResponse(data={"agent_id": entity_id, **profile["tool_usage"]}).to_dict()
+
+
+@router.get("/{entity_id}/agent/resources")
+async def get_agent_resources(entity_id: str, request: Request):
+    """Agent resource usage section."""
+    tenant = request.state.tenant
+    tenant.require_permission("read")
+    profile = await _get_agent_composer().compose(entity_id, tenant.tenant_id)
+    return APIResponse(data={"agent_id": entity_id, **profile["resource_usage"]}).to_dict()
+
+
+@router.get("/{entity_id}/agent/x402")
+async def get_agent_x402(entity_id: str, request: Request):
+    """Agent x402 flows section."""
+    tenant = request.state.tenant
+    tenant.require_permission("read")
+    profile = await _get_agent_composer().compose(entity_id, tenant.tenant_id)
+    return APIResponse(data={"agent_id": entity_id, **profile["x402_flows"]}).to_dict()
+
+
+@router.get("/{entity_id}/agent/trust")
+async def get_agent_trust(entity_id: str, request: Request):
+    """Agent trust section."""
+    tenant = request.state.tenant
+    tenant.require_permission("read")
+    profile = await _get_agent_composer().compose(entity_id, tenant.tenant_id)
+    return APIResponse(data={"agent_id": entity_id, **profile["trust"]}).to_dict()
+
+
+@router.get("/{entity_id}/agent/outcomes")
+async def get_agent_outcomes(entity_id: str, request: Request):
+    """Agent outcomes section."""
+    tenant = request.state.tenant
+    tenant.require_permission("read")
+    profile = await _get_agent_composer().compose(entity_id, tenant.tenant_id)
+    return APIResponse(data={"agent_id": entity_id, **profile["outcomes"]}).to_dict()
+
+
+@router.get("/{entity_id}/agent/graph")
+async def get_agent_graph(entity_id: str, request: Request):
+    """Agent graph section."""
+    tenant = request.state.tenant
+    tenant.require_permission("read")
+    profile = await _get_agent_composer().compose(entity_id, tenant.tenant_id)
+    return APIResponse(data={"agent_id": entity_id, **profile["graph"]}).to_dict()
