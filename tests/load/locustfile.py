@@ -6,6 +6,10 @@ Simulates realistic traffic patterns for:
   - Analytics exports (idempotent burst + polling)
   - Agent tasks (burst creation + status polling)
   - Campaign touchpoints (write/read-after-write consistency)
+  - Batch event ingest (/v1/ingest/batch — highest-volume production workload)
+  - Identity resolution (/v1/resolution/resolve — critical latency SLA)
+  - Profile360 (operator + tenant profile queries)
+  - Kyber operator summary (mission summary, tenant list, SDK fleet health)
 
 Usage:
     pip install locust
@@ -16,9 +20,10 @@ Headless mode with thresholds:
            --headless -u 50 -r 10 --run-time 5m \
            --csv results/load-test
 
-Staging signoff thresholds:
-    p95 < 200ms for GraphQL
-    p95 < 500ms for exports
+Staging signoff thresholds (see tests/load/thresholds.json for canonical values):
+    p95 < 200ms for /v1/ingest/batch and /v1/analytics/graphql
+    p95 < 300ms for /v1/resolution/resolve
+    p95 < 500ms for /v1/profile/profile360 and analytics exports
     p99 < 1000ms for agent tasks
     Error rate < 1%
     Zero data loss on concurrent touchpoint writes
@@ -254,6 +259,273 @@ class AgentTaskTasks(TaskSet):
 # Campaign Touchpoint Load Tests
 # =========================================================================
 
+# =========================================================================
+# Batch Ingest Load Tests
+# =========================================================================
+
+class BatchIngestTasks(TaskSet):
+    """Batch event ingest — the highest-volume production workload."""
+
+    headers = _api_headers()
+    _event_types = ("page_view", "click", "identify", "purchase", "wallet", "support_ticket")
+
+    def _make_event(self) -> dict:
+        return {
+            "event_id": str(uuid.uuid4()),
+            "event_type": random.choice(self._event_types),
+            "user_id": f"user-{_random_string()}",
+            "session_id": f"sess-{_random_string()}",
+            "timestamp": "2026-01-01T00:00:00Z",
+            "properties": {"load_test": True},
+        }
+
+    @task(10)
+    def batch_ingest_small(self):
+        """Small batch of 10 events — common high-frequency pattern."""
+        self.client.post(
+            "/v1/ingest/batch",
+            json={"events": [self._make_event() for _ in range(10)]},
+            headers=self.headers,
+            name="/v1/ingest/batch [small-10]",
+        )
+
+    @task(5)
+    def batch_ingest_medium(self):
+        """Medium batch of 50 events — typical scheduled flush."""
+        self.client.post(
+            "/v1/ingest/batch",
+            json={"events": [self._make_event() for _ in range(50)]},
+            headers=self.headers,
+            name="/v1/ingest/batch [medium-50]",
+        )
+
+    @task(3)
+    def batch_ingest_feed(self):
+        """Feed endpoint — alternative ingest path."""
+        self.client.post(
+            "/v1/ingest/feed",
+            json={"events": [self._make_event() for _ in range(20)]},
+            headers=self.headers,
+            name="/v1/ingest/feed [feed-20]",
+        )
+
+    @task(2)
+    def duplicate_event_handling(self):
+        """Send the same event_id twice — should be idempotent (no 500)."""
+        fixed_id = f"dedup-{_random_string()}"
+        event = self._make_event()
+        event["event_id"] = fixed_id
+        payload = {"events": [event, {**event}]}  # identical duplicate
+        with self.client.post(
+            "/v1/ingest/batch",
+            json=payload,
+            headers=self.headers,
+            name="/v1/ingest/batch [duplicate]",
+            catch_response=True,
+        ) as resp:
+            # 200 or 409 are both acceptable; 500 is a failure
+            if resp.status_code in (200, 409):
+                resp.success()
+
+    @task(1)
+    def schema_validation_rejection(self):
+        """Malformed payload — should be rejected with 400, not 500."""
+        with self.client.post(
+            "/v1/ingest/batch",
+            json={"events": [{"bad_field": "no event_type or user_id"}]},
+            headers=self.headers,
+            name="/v1/ingest/batch [schema-rejected]",
+            catch_response=True,
+        ) as resp:
+            if resp.status_code == 400:
+                resp.success()
+
+
+# =========================================================================
+# Identity Resolution Load Tests
+# =========================================================================
+
+class IdentityResolveTasks(TaskSet):
+    """Identity resolution — critical latency SLA (p95 < 300ms)."""
+
+    headers = _api_headers()
+
+    def _anchor(self, kind: str) -> dict:
+        return {"type": kind, "value": f"{kind}-{_random_string()}"}
+
+    @task(8)
+    def resolve_single_anchor(self):
+        """Single-anchor resolve — most common call pattern."""
+        self.client.post(
+            "/v1/resolution/resolve",
+            json={"anchors": [self._anchor("email")]},
+            headers=self.headers,
+            name="/v1/resolution/resolve [1-anchor]",
+        )
+
+    @task(5)
+    def resolve_three_anchors(self):
+        """Three-anchor merge — typical cross-device identity."""
+        self.client.post(
+            "/v1/resolution/resolve",
+            json={
+                "anchors": [
+                    self._anchor("email"),
+                    self._anchor("phone"),
+                    self._anchor("cookie"),
+                ]
+            },
+            headers=self.headers,
+            name="/v1/resolution/resolve [3-anchors]",
+        )
+
+    @task(2)
+    def resolve_five_anchors(self):
+        """Five-anchor merge — heavy identity graph traversal."""
+        self.client.post(
+            "/v1/resolution/resolve",
+            json={
+                "anchors": [self._anchor(k) for k in ("email", "phone", "cookie", "device_id", "user_id")]
+            },
+            headers=self.headers,
+            name="/v1/resolution/resolve [5-anchors]",
+        )
+
+    @task(3)
+    def resolve_anonymous_to_known(self):
+        """Anonymous → known resolution — SDK batch endpoint."""
+        self.client.post(
+            "/v1/sdk/batch",
+            json={
+                "events": [
+                    {
+                        "event_type": "identify",
+                        "anonymous_id": f"anon-{_random_string()}",
+                        "user_id": f"known-{_random_string()}",
+                        "traits": {"email": f"{_random_string()}@example.com"},
+                    }
+                ]
+            },
+            headers=self.headers,
+            name="/v1/sdk/batch [anon-to-known]",
+        )
+
+
+# =========================================================================
+# Profile360 Load Tests
+# =========================================================================
+
+class Profile360Tasks(TaskSet):
+    """Profile360 — operator and tenant profile queries (p95 < 500ms)."""
+
+    headers = _api_headers()
+    _windows = ("7d", "30d", "90d", "180d")
+
+    @task(8)
+    def profile360_default(self):
+        """Default intelligence window — most common operator query."""
+        user_id = f"user-{_random_string()}"
+        self.client.get(
+            f"/v1/profile/profile360?user_id={user_id}",
+            headers=self.headers,
+            name="/v1/profile/profile360 [default]",
+        )
+
+    @task(4)
+    def profile360_with_window(self):
+        """Explicit window parameter — tests query planner branching."""
+        user_id = f"user-{_random_string()}"
+        window = random.choice(self._windows)
+        self.client.get(
+            f"/v1/profile/profile360?user_id={user_id}&window={window}",
+            headers=self.headers,
+            name="/v1/profile/profile360 [windowed]",
+        )
+
+    @task(2)
+    def profile360_tenant_scoped(self):
+        """Tenant-scoped profile query — row-level isolation check."""
+        user_id = f"user-{_random_string()}"
+        tenant_id = f"tenant-{random.randint(1, 20)}"
+        self.client.get(
+            f"/v1/profile/profile360?user_id={user_id}&tenant_id={tenant_id}",
+            headers=self.headers,
+            name="/v1/profile/profile360 [tenant-scoped]",
+        )
+
+    @task(1)
+    def profile360_nonexistent(self):
+        """Unknown user — should 404 gracefully."""
+        with self.client.get(
+            f"/v1/profile/profile360?user_id=nonexistent-{uuid.uuid4()}",
+            headers=self.headers,
+            name="/v1/profile/profile360 [404]",
+            catch_response=True,
+        ) as resp:
+            if resp.status_code == 404:
+                resp.success()
+
+
+# =========================================================================
+# Kyber Operator Summary Load Tests
+# =========================================================================
+
+class KyberSummaryTasks(TaskSet):
+    """Kyber operator summary endpoints — internal use, admin API."""
+
+    headers = _api_headers(tenant_id="kyber-operator")
+
+    @task(5)
+    def mission_summary(self):
+        """Mission summary — top-level Kyber operator dashboard."""
+        self.client.get(
+            "/v1/admin/kyber/mission-summary",
+            headers=self.headers,
+            name="/v1/admin/kyber/mission-summary",
+        )
+
+    @task(4)
+    def tenant_list(self):
+        """Tenant list — operator visibility into active tenants."""
+        self.client.get(
+            "/v1/admin/kyber/tenants?limit=50",
+            headers=self.headers,
+            name="/v1/admin/kyber/tenants [list]",
+        )
+
+    @task(3)
+    def sdk_fleet_health(self):
+        """SDK fleet health — operator SDK heartbeat aggregation."""
+        self.client.get(
+            "/v1/admin/kyber/sdk-health",
+            headers=self.headers,
+            name="/v1/admin/kyber/sdk-health",
+        )
+
+    @task(2)
+    def tenant_detail(self):
+        """Single tenant detail — drilldown from operator view."""
+        tenant_id = f"tenant-{random.randint(1, 100)}"
+        self.client.get(
+            f"/v1/admin/kyber/tenants/{tenant_id}",
+            headers=self.headers,
+            name="/v1/admin/kyber/tenants/{id} [detail]",
+        )
+
+    @task(1)
+    def kyber_metrics(self):
+        """Kyber metrics endpoint — ingest/resolve throughput counters."""
+        self.client.get(
+            "/v1/admin/kyber/metrics",
+            headers=self.headers,
+            name="/v1/admin/kyber/metrics",
+        )
+
+
+# =========================================================================
+# Campaign Touchpoint Load Tests
+# =========================================================================
+
 class CampaignTasks(TaskSet):
     """Write/read-after-write consistency for campaign touchpoints."""
 
@@ -311,21 +583,25 @@ class CampaignTasks(TaskSet):
 # =========================================================================
 
 class SteadyStateUser(HttpUser):
-    """Normal production traffic — mixed workload."""
+    """Normal production traffic — mixed workload across all subsystems."""
     tasks = {
         GraphQLTasks: 4,
         ExportTasks: 2,
         AgentTaskTasks: 2,
         CampaignTasks: 2,
+        BatchIngestTasks: 4,
+        IdentityResolveTasks: 3,
+        Profile360Tasks: 2,
     }
     wait_time = between(0.5, 2.0)
 
 
 class BurstUser(HttpUser):
-    """Burst traffic — hammers agent tasks and GraphQL."""
+    """Burst traffic — hammers agent tasks, GraphQL, and batch ingest."""
     tasks = {
         GraphQLTasks: 6,
         AgentTaskTasks: 4,
+        BatchIngestTasks: 6,
     }
     wait_time = between(0.1, 0.5)
 
@@ -334,3 +610,21 @@ class ExportHeavyUser(HttpUser):
     """Export-heavy workload — tests idempotency under load."""
     tasks = {ExportTasks: 1}
     wait_time = between(0.2, 1.0)
+
+
+class IngestHeavyUser(HttpUser):
+    """Ingest-dominated workload — models SDK batch flush pattern."""
+    tasks = {
+        BatchIngestTasks: 8,
+        IdentityResolveTasks: 2,
+    }
+    wait_time = between(0.05, 0.3)
+
+
+class OperatorUser(HttpUser):
+    """Operator dashboard — Kyber summaries and Profile360."""
+    tasks = {
+        KyberSummaryTasks: 5,
+        Profile360Tasks: 3,
+    }
+    wait_time = between(1.0, 3.0)

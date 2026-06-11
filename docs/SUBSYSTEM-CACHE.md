@@ -11,7 +11,7 @@ source_files:
 canonical_owner: backend@aether
 estimated_read_minutes: 4
 toc_depth: 3
-last_synced_commit: 6404ee9
+last_synced_commit: fd2288c
 ---
 
 # Cache / Redis Subsystem
@@ -56,11 +56,7 @@ await cache.set_json("key", {"data": 1}, ttl=TTL.MEDIUM)
 value = await cache.get_json("key")
 await cache.delete("key")
 await cache.delete_pattern("aether:identity:*")
-# Atomic set-if-not-exists (returns True if claimed, False if already set)
-claimed = await cache.set_nx("aether:idempotency:key", "1", ttl=TTL.DAY)
 ```
-
-`set_nx` is used for idempotency claims on ingestion events — it atomically marks an event as seen without a separate get+set round-trip, eliminating the race condition where two concurrent requests both observe a miss and both proceed.
 
 ## Failure Modes
 

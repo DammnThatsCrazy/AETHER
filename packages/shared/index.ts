@@ -32,3 +32,8 @@ export * from './solution-packages';
 export * from './gtm-pricing';
 export * from './customer-onboarding';
 export * from './security-governance';
+
+// Kyber operator console contracts
+export * from './operator-scope';
+export * from './graph-health';
+export * from './kyber-command';

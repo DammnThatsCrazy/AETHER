@@ -11,7 +11,7 @@ source_files:
 canonical_owner: security@aether
 estimated_read_minutes: 12
 toc_depth: 3
-last_synced_commit: 6404ee9
+last_synced_commit: fd2288c
 ---
 # x402 Protocol Support Audit — Aether Repository
 
@@ -52,7 +52,7 @@ This is not speculative or merely extensible infrastructure. The x402 support is
 | **Payment response/receipt** | Implemented | `services/x402/models.py:33-37` — `PaymentResponse` (verified, receipt_id, settled_at) |
 | **Captured transaction record** | Implemented | `services/x402/models.py:40-54` — `CapturedX402Transaction` with USD conversion + fee elimination |
 | **Economic graph (in-memory)** | Implemented | `services/x402/economic_graph.py` — `X402EconomicGraph` with tenant-isolated nodes |
-| **Graph persistence (Neptune)** | Implemented | `economic_graph.py` — `snapshot_to_graph()` creates tenant-scoped `PAYS`/`CONSUMES` edges; vertex IDs use `{tenant_id}:{entity_id}` format; every edge carries `tenant_id` property for cross-tenant isolation |
+| **Graph persistence (Neptune)** | Implemented | `economic_graph.py:78-149` — `snapshot_to_graph()` creates `PAYS`/`CONSUMES` edges via GraphClient |
 | **API: capture endpoint** | Implemented | `services/x402/routes.py:24` — `POST /v1/x402/capture` (requires `x402:write`) |
 | **API: economic graph query** | Implemented | `services/x402/routes.py:47` — `GET /v1/x402/graph` (requires `x402:read`) |
 | **API: agent spending history** | Implemented | `services/x402/routes.py:56` — `GET /v1/x402/agent/{agent_id}` (requires `x402:read`) |
@@ -129,10 +129,8 @@ This is not speculative or merely extensible infrastructure. The x402 support is
 - `CapturedX402Transaction` is the full receipt: capture_id, payer, payee, terms, proof, response, USD amount, fee eliminated, timestamp
 - `PaymentResponse.verified` (bool) and `settled_at` (timestamp) capture settlement outcome
 - `ActionRecord` vertex tracks on-chain transactions (tx_hash, chain_id, vm_type)
-- `PAYS` edge properties include `capture_id`, `amount`, `token`, `chain`, `method="x402"`, `tenant_id`
-- Edge IDs are deterministic: `{tenant_id}:{capture_id}:pays` — idempotent across replays
-- `X402LifecycleMapper` routes 14 canonical lifecycle events to `PaymentIntentRepository` / `SettlementEventRepository` with tenant isolation; settlement state is now: intent_created → submitted → settled|failed|timeout
-- **Partial gap resolved:** Multi-state settlement lifecycle (intent→submitted→settled/failed/timeout) implemented via lifecycle mapper; full distributed retry/dispute flows remain Phase 2
+- `PAYS` edge properties include `capture_id`, `amount`, `token`, `chain`, `method="x402"`
+- **Gap:** No multi-state settlement lifecycle (e.g., pending → clearing → settled → disputed → failed)
 
 ### 2.6 Can the graph represent entitlements/access grants?
 
@@ -175,7 +173,7 @@ X402EconomicGraph.add_payment() — updates in-memory nodes (tenant-isolated)
     ↓
 [Every 30s or manual trigger] snapshot_to_graph()
     ↓
-Neptune: {tenant_id}:AGENT vertex + {tenant_id}:SERVICE vertex + PAYS edge (tenant_id property) + CONSUMES edge (tenant_id property)
+Neptune: AGENT vertex + SERVICE vertex + PAYS edge + CONSUMES edge
     ↓
 AuditAction.X402_CAPTURED logged in compliance audit trail
 ```
@@ -277,7 +275,7 @@ Aether has a **production-grade x402 capture and analytics subsystem** that:
 6. **Scopes** access via dedicated `x402:read`/`x402:write` permissions
 7. **Isolates** data per tenant for multi-tenancy
 
-**Update (post-audit):** The facilitator, idempotency, settlement gaps identified in the original audit have been closed, and tenant-scoped persistent graph writes have been added:
+**Update (post-audit):** The facilitator, idempotency, and settlement gaps identified in the original audit have been closed:
 - `FacilitatorRegistry` + `VerificationEngine` implement facilitator-aware verification with x402 wire format
 - `SettlementEngine` implements the full pending → clearing → settled / failed state machine
 - Idempotency store is now Redis-backed in staging/production for multi-instance safety

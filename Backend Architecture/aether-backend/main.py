@@ -242,6 +242,7 @@ from services.data_quality import (
     admin_router as data_quality_admin_router,
     tenant_router as data_quality_tenant_router,
 )
+from services.dune_feeder.routes import router as dune_feeder_router
 
 # ML predict routes — imported from the ML serving package when available.
 # When ML_SERVING_INLINE=true (E2 consolidated image) the predict routes are
@@ -419,6 +420,7 @@ def create_app() -> FastAPI:
     app.include_router(diagnostics_router)
     app.include_router(providers_router)
     app.include_router(lake_router)
+    app.include_router(dune_feeder_router)
     app.include_router(intelligence_router)
     app.include_router(kyber_admin_router)
     app.include_router(customer_success_admin_router)

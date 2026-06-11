@@ -12,7 +12,7 @@ source_files:
 canonical_owner: backend@aether
 estimated_read_minutes: 5
 toc_depth: 3
-last_synced_commit: 6404ee9
+last_synced_commit: fd2288c
 ---
 
 # PostgreSQL / Repository Subsystem
@@ -69,13 +69,6 @@ Tables are created automatically on first access. No migration tool is required 
 | `operator_actions` | `OperatorActionRepository` | Operator approve/suppress/escalate/annotate audit |
 | `user_notification_channels` | `UserNotificationChannelRepository` | End-user Slack/Discord/Telegram/Webhook registrations |
 | `slack_oauth_states` | `SlackOAuthStateRepository` | Slack OAuth 2.0 CSRF state nonces (10-min TTL) |
-| `agent_executions` | `AgentExecutionRepository` | Per-execution reasoning log, confidence, policy log, task decomposition |
-| `delegations` | `DelegationRepository` | Scoped, time-bound, revocable entity-to-entity delegations (hot-path Redis-cached) |
-| `payment_intents` | `PaymentIntentRepository` | Pre-execution economic decisions: quotes, retries, budget eval, authorizations, settlements — full intent-to-outcome chain, tenant-scoped |
-| `settlement_events` | `SettlementEventRepository` | Settlement attempts and terminal outcomes for PaymentIntent records, tenant-scoped |
-| `economic_resources` | `EconomicResourceRepository` | Purchasable capabilities: inference, GPU compute, APIs, data, memory |
-| `facilitators` | `FacilitatorRepository` | x402 facilitators, trust brokers, and authorization rails |
-| `agent_economic_identities` | `AgentEconomicIdentityRepository` | Derived long-running economic identity per agent, keyed as `{tenant_id}:{agent_id}:economic_identity` |
 
 ## Data Lake Repositories
 
@@ -92,7 +85,6 @@ Tables are created automatically on first access. No migration tool is required 
 | `identity` | `gold_identity` | Identity enrichment |
 | `governance` | `gold_governance` | DAO governance records |
 | `tradfi` | `gold_tradfi` | TradFi raw data |
-| `sdk_events` | — | Bronze + Silver tiers for `POST /v1/batch` SDK event ingestion (no Gold; consumed by intelligence workers) |
 
 **Intelligence surface repos** (Gold only, consumed by `IntelligenceAggregator`):
 
@@ -110,8 +102,6 @@ Tables are created automatically on first access. No migration tool is required 
 | `gold_credit_signals` | Plaid | `/web2` (credit consent required) |
 | `gold_tradfi_portfolio` | Plaid | `/web2` (credit consent required) |
 | `gold_web3_daily_metrics` | DeFiLlama | `/protocol-metrics` |
-
-`BronzeRepository.ingest()` returns `(record, is_new: bool)` — callers use the boolean to distinguish new inserts from duplicates without a separate read. `SilverRepository.upsert_record()` includes `tenant_id` in the `record_id` hash (`SHA256(tenant_id:entity_type:entity_id:source)[:24]`) to prevent cross-tenant data collisions.
 
 Gold records use `GoldRepository.materialize(metric_name, entity_id, value, dimensions)`.
 The `IntelligenceAggregator` queries via `get_metrics(entity_id)` and applies

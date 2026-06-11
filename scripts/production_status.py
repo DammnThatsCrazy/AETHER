@@ -172,29 +172,47 @@ AREAS: list[Area] = [
         4,
         "React SPA with mocked/live/staging/production modes, admin-guarded backend "
         "routes (/v1/admin/kyber, fleet, drift, intelligence quality), Playwright E2E "
-        "in CI. Operator data never mounted on tenant-facing routers.",
+        "in CI. Operator data never mounted on tenant-facing routers. Shared operator "
+        "contracts (operator-scope, graph-health, kyber-command) published to "
+        "packages/shared; Dune feeder health exposed via /v1/admin/dune-feeder/health.",
         [
             "frontend/kyber/",
             ".github/workflows/kyber-e2e.yml",
             "Backend Architecture/aether-backend/services/intelligence/routes.py",
+            "packages/shared/operator-scope.ts",
+            "packages/shared/graph-health.ts",
+            "packages/shared/kyber-command.ts",
         ],
     ),
     Area(
         "customer frontend (tenant app)",
-        3,
+        4,
         "React SPA with PKCE OIDC auth, typed API client, MSW fixtures isolated to "
-        "local-mocked mode. Tenant self-serve onboarding UI is missing (manual SQL + "
-        "API calls today) — that is the first-paying-customer blocker.",
-        ["frontend/aether/", "docs/PRODUCTIZATION.md"],
+        "local-mocked mode. Self-serve signup flow implemented: email registration → "
+        "6-digit OTP verify → tenant creation + API key reveal → SDK install guide "
+        "(Web, iOS, Android, React Native). SSO providers wired. Login page wired "
+        "against /v1/auth/login.",
+        [
+            "frontend/aether/src/pages/signup/signup-page.tsx",
+            "Backend Architecture/aether-backend/services/auth/routes.py",
+            "frontend/aether/src/app/router.tsx",
+        ],
     ),
     Area(
         "connectors (BYOK / source)",
-        2,
+        3,
         "Connector framework (descriptor, vault-backed secrets, sync status, webhook "
-        "parse, normalization to canonical envelope) is implemented and feature-"
-        "flagged, but most provider pulls are credential-gated TODOs validated only "
-        "against mocks.",
-        ["Backend Architecture/aether-backend/services/integrations/connectors/"],
+        "parse, normalization) is production-shaped. 9 of 14 adapters (Shopify, "
+        "HubSpot, Salesforce, Klaviyo, PostHog, GA4, Jira, Zendesk, Intercom) have "
+        "real HTTP pull() implementations behind credential gates. Slack live "
+        "auth.test wired. Mocked-HTTP tests cover pull() and test_connection() for "
+        "all wired adapters, proving real adapter logic without external calls. "
+        "Connector health rollup and Kyber tenant panel are exposed. Remaining gap: "
+        "real production secrets required for staging validation.",
+        [
+            "Backend Architecture/aether-backend/services/integrations/connectors/",
+            "tests/unit/test_connector_pulls.py",
+        ],
     ),
     Area(
         "Slack / action notifications",
@@ -210,14 +228,18 @@ AREAS: list[Area] = [
     ),
     Area(
         "Dune / data-lake feeders",
-        2,
-        "Dune is a read-only ANALYTICS_DATA provider (query execution, API-key auth) "
-        "and /v1/ingest/feed accepts external feeds, but there is no governed "
-        "Bronze->Silver->Gold feeder pipeline with per-row provenance and freshness "
-        "gates for Dune yet. Dune does not mutate canonical graph state.",
+        3,
+        "Governed DuneFeederService implemented: Dune query results ingest to Bronze "
+        "with per-row SHA-256 hash, provenance chain, freshness gate (configurable "
+        "max_age_seconds), and quality gate (schema + required-field validation). "
+        "Silver promotion is an explicit operator action (/v1/admin/dune-feeder/promote). "
+        "Rollback by source_tag supported. Graph isolation invariant enforced: service "
+        "has no graph mutation methods and is tested. Remaining gap: Gold "
+        "materialization and staging validation with live Dune credentials.",
         [
+            "Backend Architecture/aether-backend/services/dune_feeder/",
             "Backend Architecture/aether-backend/shared/providers/categories.py",
-            "Backend Architecture/aether-backend/services/ingestion/routes.py",
+            "tests/unit/test_dune_feeder.py",
         ],
     ),
     Area(
@@ -276,22 +298,26 @@ AREAS: list[Area] = [
     ),
     Area(
         "scale readiness",
-        2,
+        3,
         "Architecture is scale-shaped (Kafka, ClickHouse, medallion lake, partitioned "
-        "S3) and a Locust harness exists, but no load baselines are recorded in CI and "
-        "Neptune/identity-merge throughput is unproven at scale.",
-        ["tests/load/", "Data Lake Architecture/"],
+        "S3). Locust harness extended with /v1/ingest/batch, /v1/resolution/resolve, "
+        "Profile360, Kyber summary, and GraphQL scenarios. Synthetic in-memory "
+        "baselines recorded (tests/load/baseline_results.json) — all p95 latencies "
+        "within documented thresholds. Staging thresholds defined in "
+        "tests/load/thresholds.json. Remaining scale gap: real staging baselines on "
+        "provisioned infra; Neptune/identity-merge throughput unvalidated.",
+        [
+            "tests/load/locustfile.py",
+            "tests/load/synthetic_baseline.py",
+            "tests/load/thresholds.json",
+            "tests/load/baseline_results.json",
+            "Data Lake Architecture/",
+        ],
     ),
 ]
 
 
 BLOCKERS: list[Blocker] = [
-    Blocker(
-        "release-blocker",
-        "No tenant self-serve onboarding UI (manual SQL + API calls)",
-        "customer frontend (tenant app)",
-        "Build onboarding flow in frontend/aether against /v1/registration + /v1/me",
-    ),
     Blocker(
         "release-blocker",
         "Smart contracts have no external security audit",
@@ -318,21 +344,21 @@ BLOCKERS: list[Blocker] = [
     ),
     Blocker(
         "pre-production-blocker",
-        "Connector provider pulls are credential-gated TODOs",
+        "Connector staging validation requires real provider secrets",
         "connectors (BYOK / source)",
-        "Wire real API calls per connector behind existing vault secret flow",
+        "Provision staging secrets vault; run test_connection() + pull() against real providers",
     ),
     Blocker(
         "pre-production-blocker",
-        "No governed Dune feeder (provenance + freshness gates) into the lake",
+        "Dune feeder Gold materialization not yet implemented; staging validation pending",
         "Dune / data-lake feeders",
-        "Add read-only feeder writing Bronze with per-row provenance; gate Silver promotion on quality checks",
+        "Implement Gold materialization from Silver; run feeder against live Dune API in staging",
     ),
     Blocker(
         "scale-blocker",
-        "No load-test baselines recorded; Locust harness not in CI",
+        "Synthetic load baselines recorded; real staging load baselines still pending",
         "scale readiness",
-        "Record baseline RPS/latency for /v1/batch and identity resolve; add scheduled load smoke",
+        "Provision staging infra; run locustfile.py against staging; record p95/p99 and compare to thresholds.json",
     ),
     Blocker(
         "scale-blocker",
