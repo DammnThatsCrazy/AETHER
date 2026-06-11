@@ -647,17 +647,30 @@ class Profile360Aggregator:
         transfers = await self._transfers_for_entity(entity_id, tenant_id, limit=limit)
         transfers = _tenant_filter(transfers, tenant_id)
 
-        intents = await self._scoped_find_many(
-            self._intents, tenant_id=tenant_id,
-            filters={"agent_id": entity_id}, limit=limit,
+        # Resolve owned agent ids so agentic spend/settlements roll up to the owner profile.
+        owned_configs = await self._scoped_find_many(
+            self._agent_configs, tenant_id=tenant_id,
+            filters={"owner_entity_id": entity_id}, limit=200,
         )
-        intents = _tenant_filter(intents, tenant_id)
+        owned_configs = _tenant_filter(owned_configs, tenant_id)
+        agent_ids = list({c.get("agent_id") or c.get("id") for c in owned_configs if c.get("agent_id") or c.get("id")})
+        agent_ids_to_query = list({entity_id} | set(agent_ids))
 
-        settlements = await self._scoped_find_many(
-            self._settlements, tenant_id=tenant_id,
-            filters={"agent_id": entity_id}, limit=limit,
-        )
-        settlements = _tenant_filter(settlements, tenant_id)
+        intents: list[dict] = []
+        settlements: list[dict] = []
+        for aid in agent_ids_to_query:
+            batch = await self._scoped_find_many(
+                self._intents, tenant_id=tenant_id,
+                filters={"agent_id": aid}, limit=limit,
+            )
+            intents.extend(_tenant_filter(batch, tenant_id))
+            batch = await self._scoped_find_many(
+                self._settlements, tenant_id=tenant_id,
+                filters={"agent_id": aid}, limit=limit,
+            )
+            settlements.extend(_tenant_filter(batch, tenant_id))
+        intents = intents[:limit]
+        settlements = settlements[:limit]
 
         inflow = 0.0
         outflow = 0.0
@@ -1078,6 +1091,7 @@ class Profile360Aggregator:
             filters={"entity_id": entity_id}, limit=1,
         )
         rows = _tenant_filter(rows, tenant_id)
+        rows = [r for r in rows if not r.get("unlinked_at")]
         primary = rows[0] if rows else None
         return {
             "entity_id": entity_id,

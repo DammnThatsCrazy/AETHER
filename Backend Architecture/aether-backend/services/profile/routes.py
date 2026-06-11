@@ -1231,7 +1231,7 @@ async def get_profile_consent(
     try:
         from repositories.repos import ConsentRepository
         repo = ConsentRepository()
-        record = await repo.find_by_entity(user_id, tenant_id=tenant.tenant_id)
+        record = await repo.get_consent(tenant.tenant_id, user_id)
     except Exception:
         record = None
     if record is None or record.get("tenant_id") != tenant.tenant_id:
@@ -1267,7 +1267,7 @@ async def get_activation_eligibility(
     try:
         from repositories.repos import ConsentRepository
         repo = ConsentRepository()
-        record = await repo.find_by_entity(user_id, tenant_id=tenant.tenant_id)
+        record = await repo.get_consent(tenant.tenant_id, user_id)
     except Exception:
         record = None
     if record is None or record.get("tenant_id") != tenant.tenant_id:
@@ -1460,13 +1460,25 @@ async def get_agent_executions(
     tenant = request.state.tenant
     tenant.require_permission("read")
     try:
-        from repositories.repos import AgentExecutionRepository
-        repo = AgentExecutionRepository()
-        filters: dict = {"tenant_id": tenant.tenant_id, "entity_id": user_id}
-        if status:
-            filters["status"] = status
-        items = await repo.find_many(filters, limit=limit)
-        items = [i for i in items if i.get("tenant_id") == tenant.tenant_id]
+        from repositories.repos import AgentConfigRepository, AgentExecutionRepository
+        config_repo = AgentConfigRepository()
+        configs = await config_repo.find_many(
+            {"tenant_id": tenant.tenant_id, "owner_entity_id": user_id}, limit=200
+        )
+        agent_ids = [
+            c.get("agent_id") or c.get("id")
+            for c in configs
+            if c.get("tenant_id") == tenant.tenant_id and (c.get("agent_id") or c.get("id"))
+        ]
+        exec_repo = AgentExecutionRepository()
+        items = []
+        for agent_id in agent_ids:
+            filters: dict = {"tenant_id": tenant.tenant_id, "agent_id": agent_id}
+            if status:
+                filters["status"] = status
+            rows = await exec_repo.find_many(filters, limit=limit)
+            items.extend(r for r in rows if r.get("tenant_id") == tenant.tenant_id)
+        items = items[:limit]
     except Exception:
         items = []
     return APIResponse(data={
@@ -1489,10 +1501,21 @@ async def get_profile_actions(
     tenant = request.state.tenant
     tenant.require_permission("read")
     try:
-        from services.intelligence.repositories import DecisionRepository
-        repo = DecisionRepository()
-        items = await repo.find_many({"tenant_id": tenant.tenant_id, "entity_id": user_id}, limit=limit)
-        items = [i for i in items if i.get("tenant_id") == tenant.tenant_id]
+        from services.intelligence.repositories import DecisionRepository, RecommendationRepository
+        rec_repo = RecommendationRepository()
+        recs = await rec_repo.find_many(
+            {"tenant_id": tenant.tenant_id, "entity_id": user_id}, limit=limit
+        )
+        recs = [r for r in recs if r.get("tenant_id") == tenant.tenant_id]
+        rec_ids = [r.get("recommendation_id") or r.get("id") for r in recs if r.get("recommendation_id") or r.get("id")]
+        dec_repo = DecisionRepository()
+        items = []
+        for rec_id in rec_ids:
+            rows = await dec_repo.find_many(
+                {"tenant_id": tenant.tenant_id, "recommendation_id": rec_id}, limit=limit
+            )
+            items.extend(r for r in rows if r.get("tenant_id") == tenant.tenant_id)
+        items = items[:limit]
     except Exception:
         items = []
     return APIResponse(data={
@@ -1508,12 +1531,11 @@ async def get_profile_events(
     request: Request,
     limit: int = Query(default=100, ge=1, le=500),
     event_type: str | None = Query(default=None),
+    composer: ProfileComposer = Depends(_get_composer),
 ):
     """Raw event stream for this entity (alias to timeline with event_type filter)."""
     tenant = request.state.tenant
     tenant.require_permission("read")
-    from services.profile.composer import ProfileComposer
-    composer = ProfileComposer()
     params: dict = {"include_timeline": True, "timeline_limit": limit}
     if event_type:
         params["event_type_filter"] = event_type
