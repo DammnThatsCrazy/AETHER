@@ -221,6 +221,12 @@ release-gate: ## Full release gate: repo consistency (CI mode) + strict producti
 	python scripts/repo_doctor.py --ci
 	python scripts/production_status.py --strict
 
+load-smoke: ## Load smoke gate: 20 users, 30s against localhost:8000 (exits 2 if backend unreachable)
+	python scripts/load_smoke.py
+
+load-smoke-ci: ## Load smoke in CI — exits 0 when backend unreachable (non-blocking), fails on threshold breach
+	python scripts/load_smoke.py || [ $$? -eq 2 ]
+
 # ---------------------------------------------------------------------------
 # Cleanup
 # ---------------------------------------------------------------------------

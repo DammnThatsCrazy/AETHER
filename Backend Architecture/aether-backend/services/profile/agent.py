@@ -78,9 +78,11 @@ class AgentProfile360Composer:
         economic_identity = await self._economic_identities.find_for_agent(agent_id, tenant_id)
         behavior = await self._behavior_profiles.find_by_id(agent_id)
 
-        # Ownership guard: only expose config if it belongs to this tenant
+        # Ownership guard: only expose config/behavior if they belong to this tenant
         if agent_config and agent_config.get("tenant_id") != tenant_id:
             agent_config = None
+        if behavior and behavior.get("tenant_id") != tenant_id:
+            behavior = None
 
         # ── Computed counters ──────────────────────────────────────────────
         tool_counts: Counter[str] = Counter()
@@ -101,7 +103,7 @@ class AgentProfile360Composer:
         spend_by_currency: dict[str, Decimal] = defaultdict(lambda: Decimal("0"))
         for intent in intents:
             currency = intent.get("currency") or "UNKNOWN"
-            if intent.get("settlement_status") in {"settled", "paid", "success"}:
+            if intent.get("settlement_status") in {"settled", "paid", "success", "access_granted"}:
                 spend_by_currency[currency] += _decimal(intent.get("amount"))
 
         settled_count = sum(1 for s in settlements if s.get("status") in {"settled", "paid", "success"})

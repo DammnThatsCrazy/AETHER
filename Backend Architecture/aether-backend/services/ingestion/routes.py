@@ -16,6 +16,7 @@ from shared.common.common import APIResponse, BadRequestError, utc_now
 from shared.events.events import Event, EventProducer, Topic
 from shared.logger.logger import get_logger, metrics
 from dependencies.providers import get_producer
+from repositories.lake import BronzeRepository
 
 logger = get_logger("aether.service.ingestion")
 router = APIRouter(prefix="/v1/ingest", tags=["Ingestion"])
@@ -40,17 +41,27 @@ class APIFeedEvent(BaseModel):
     source: str = Field(..., description="e.g. dune, strategy, custom_api")
     entity_type: str
     data: dict[str, Any]
+    external_id: str = Field(
+        ...,
+        min_length=1,
+        max_length=256,
+        description="Deterministic provider record ID used for idempotency",
+    )
 
 
 # ── Routes ────────────────────────────────────────────────────────────
 
-@router.post("/events")
+@router.post("/events", deprecated=True)
 async def ingest_single_event(
     event: SDKEvent,
     request: Request,
     producer: EventProducer = Depends(get_producer),
 ):
-    """Ingest a single SDK event."""
+    """Deprecated: use POST /v1/batch instead.
+
+    Retained as a server-to-server alias with full validation and tenant scoping.
+    SDKs MUST use /v1/batch.
+    """
     tenant = request.state.tenant
     validated = _validate_and_normalize(event, tenant.tenant_id, request)
 
@@ -67,13 +78,16 @@ async def ingest_single_event(
     ).to_dict()
 
 
-@router.post("/events/batch")
+@router.post("/events/batch", deprecated=True)
 async def ingest_batch_events(
     batch: BatchEventsRequest,
     request: Request,
     producer: EventProducer = Depends(get_producer),
 ):
-    """Ingest a batch of SDK events (up to 500)."""
+    """Deprecated: use POST /v1/batch instead.
+
+    Retained as a server-to-server alias.  SDKs MUST use /v1/batch.
+    """
     tenant = request.state.tenant
     event_ids = []
 
@@ -102,24 +116,57 @@ async def ingest_api_feed(
     request: Request,
     producer: EventProducer = Depends(get_producer),
 ):
-    """Ingest data from external API feeds (Dune, Strategy, etc.)."""
+    """Ingest data from external API feeds (Dune, Strategy, etc.).
+
+    external_id is required for idempotency — the same (source, external_id)
+    pair from the same tenant is deduplicated.
+    """
+    from shared.auth.auth import Permissions
     tenant = request.state.tenant
+    tenant.require_permission(Permissions.WRITE)
+
+    received_at = utc_now().isoformat()
+    payload = {
+        "source": feed_event.source,
+        "entity_type": feed_event.entity_type,
+        "external_id": feed_event.external_id,
+        "data": feed_event.data,
+        "tenant_id": tenant.tenant_id,
+        "received_at": received_at,
+        "schema_version": "1.0",
+    }
+
+    # Durable Bronze write for idempotency and recovery
+    bronze = BronzeRepository("feeds")
+    result, is_new = await bronze.ingest(
+        source=feed_event.source,
+        source_tag=f"feed:{feed_event.source}",
+        provider_record_id=feed_event.external_id,
+        payload=payload,
+        schema_version="1.0",
+        entity_id=feed_event.external_id,
+        entity_type=feed_event.entity_type,
+        tenant_id=tenant.tenant_id,
+    )
+    is_duplicate = not is_new
+
+    if is_duplicate:
+        metrics.increment("api_feeds_duplicate", labels={"source": feed_event.source})
+        return APIResponse(
+            data={"status": "duplicate", "source": feed_event.source, "external_id": feed_event.external_id}
+        ).to_dict()
 
     await producer.publish(Event(
         topic=Topic.API_FEED_RAW,
         tenant_id=tenant.tenant_id,
-        source_service="ingestion",
-        payload={
-            "source": feed_event.source,
-            "entity_type": feed_event.entity_type,
-            "data": feed_event.data,
-            "received_at": utc_now().isoformat(),
-        },
+        source_service="ingestion.feed",
+        payload=payload,
     ))
 
     metrics.increment("api_feeds_ingested", labels={"source": feed_event.source})
+    metrics.increment("event_ingested", labels={"source": "feed"})
     return APIResponse(
-        data={"status": "accepted", "source": feed_event.source}
+        data={"status": "accepted", "source": feed_event.source, "external_id": feed_event.external_id}
     ).to_dict()
 
 

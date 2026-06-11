@@ -12,7 +12,7 @@ source_files:
 canonical_owner: backend@aether
 estimated_read_minutes: 5
 toc_depth: 3
-last_synced_commit: e59f365
+last_synced_commit: 2661f1b
 ---
 
 # PostgreSQL / Repository Subsystem
@@ -92,6 +92,7 @@ Tables are created automatically on first access. No migration tool is required 
 | `identity` | `gold_identity` | Identity enrichment |
 | `governance` | `gold_governance` | DAO governance records |
 | `tradfi` | `gold_tradfi` | TradFi raw data |
+| `sdk_events` | — | Bronze + Silver tiers for `POST /v1/batch` SDK event ingestion (no Gold; consumed by intelligence workers) |
 
 **Intelligence surface repos** (Gold only, consumed by `IntelligenceAggregator`):
 
@@ -109,6 +110,8 @@ Tables are created automatically on first access. No migration tool is required 
 | `gold_credit_signals` | Plaid | `/web2` (credit consent required) |
 | `gold_tradfi_portfolio` | Plaid | `/web2` (credit consent required) |
 | `gold_web3_daily_metrics` | DeFiLlama | `/protocol-metrics` |
+
+`BronzeRepository.ingest()` returns `(record, is_new: bool)` — callers use the boolean to distinguish new inserts from duplicates without a separate read. `SilverRepository.upsert_record()` includes `tenant_id` in the `record_id` hash (`SHA256(tenant_id:entity_type:entity_id:source)[:24]`) to prevent cross-tenant data collisions.
 
 Gold records use `GoldRepository.materialize(metric_name, entity_id, value, dimensions)`.
 The `IntelligenceAggregator` queries via `get_metrics(entity_id)` and applies

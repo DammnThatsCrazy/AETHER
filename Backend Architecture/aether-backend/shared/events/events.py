@@ -517,17 +517,50 @@ class EventProducer:
                 await asyncio.sleep(backoff)
 
     async def publish_batch(self, events: list[Event]) -> None:
-        """Publish a batch of events."""
+        """Publish a batch of events using Kafka batch send or individual publish."""
+        if not events:
+            return
         if self._kafka_producer:
-            batch = self._kafka_producer.create_batch()
+            # Use Kafka's native batch API for a single round-trip.
+            # Group events by topic so each topic gets one batch send.
+            from collections import defaultdict
+            by_topic: dict[str, list[Event]] = defaultdict(list)
             for event in events:
-                batch.append(
-                    value=event.serialize().encode("utf-8"),
-                    key=None,
-                    timestamp=None,
-                )
-            for event in events:
-                await self.publish(event)
+                by_topic[event.topic.value].append(event)
+
+            for topic_value, topic_events in by_topic.items():
+                try:
+                    batch = self._kafka_producer.create_batch()
+                    overflow_events: list[Event] = []
+                    for event in topic_events:
+                        appended = batch.append(
+                            value=event.serialize().encode("utf-8"),
+                            key=event.tenant_id.encode() if event.tenant_id else None,
+                            timestamp=None,
+                        )
+                        if appended is None:
+                            # Batch is full — fall back to individual publish for this event
+                            overflow_events.append(event)
+                    partitions = await self._kafka_producer.partitions_for(topic_value)
+                    partition = next(iter(partitions))
+                    await self._kafka_producer.send_batch(batch, topic_value, partition=partition)
+                    batched_count = len(topic_events) - len(overflow_events)
+                    metrics.increment(
+                        "events_published",
+                        value=batched_count,
+                        labels={"topic": topic_value},
+                    )
+                    # Publish overflow events individually
+                    for event in overflow_events:
+                        await self.publish(event)
+                except Exception as exc:
+                    logger.error("Batch publish failed for topic %s: %s", topic_value, exc)
+                    metrics.increment(
+                        "events_publish_failed",
+                        value=len(topic_events),
+                        labels={"topic": topic_value},
+                    )
+                    raise
         else:
             for event in events:
                 await self.publish(event)
@@ -568,7 +601,11 @@ class EventConsumer:
     MAX_CONCURRENT = 10
     MAX_HANDLER_RETRIES = 2
 
-    def __init__(self, group_id: str = "aether-backend") -> None:
+    def __init__(self, group_id: str = "") -> None:
+        # Include AETHER_ENV in the group_id so staging/production consumer groups
+        # never interfere with each other.
+        _env = os.getenv("AETHER_ENV", "local")
+        group_id = group_id or f"aether-backend-{_env}"
         self._handlers: dict[Topic, list[EventHandler]] = {}
         self._semaphore = asyncio.Semaphore(self.MAX_CONCURRENT)
         self._dlq: list[Event] = []
@@ -699,7 +736,12 @@ class EventConsumer:
                             break
 
     async def _send_to_dlq(self, event: Event, error: str) -> None:
-        """Send failed events to dead-letter queue."""
+        """Send failed events to dead-letter queue.
+
+        In non-local environments the DLQ event is published to the durable
+        DEAD_LETTER Kafka topic so it survives process restarts.  In local/dev
+        mode the event is appended to the in-memory list for test introspection.
+        """
         dlq_event = Event(
             topic=Topic.DEAD_LETTER,
             tenant_id=event.tenant_id,
@@ -714,9 +756,46 @@ class EventConsumer:
                 "failed_at": datetime.now(timezone.utc).isoformat(),
             },
         )
-        self._dlq.append(dlq_event)
-        metrics.increment("events_dead_lettered")
-        logger.warning(f"Event {event.event_id} sent to DLQ: {error}")
+        metrics.increment("events_dead_lettered", labels={"topic": event.topic.value})
+        logger.warning(
+            "Event %s dead-lettered (topic=%s error=%s)",
+            event.event_id, event.topic.value, error,
+        )
+
+        if _is_local_env():
+            # Local dev: keep in-memory for test assertions
+            self._dlq.append(dlq_event)
+            return
+
+        # Production/staging: publish to durable DLQ topic on Kafka/SQS
+        try:
+            if self._kafka_producer:
+                await self._kafka_producer.send_and_wait(
+                    Topic.DEAD_LETTER.value, dlq_event.serialize()
+                )
+            elif self._sqs_client:
+                import asyncio as _asyncio
+                loop = _asyncio.get_event_loop()
+                await loop.run_in_executor(
+                    None,
+                    lambda: self._sqs_client.send_message(  # type: ignore[union-attr]
+                        QueueUrl=self._sqs_queue_url,
+                        MessageBody=dlq_event.serialize(),
+                    ),
+                )
+            else:
+                # Fallback: log with full payload for manual recovery
+                logger.error(
+                    "DLQ publish unavailable — dead-lettered event: %s",
+                    dlq_event.serialize(),
+                )
+                self._dlq.append(dlq_event)
+        except Exception as exc:
+            logger.error(
+                "Failed to publish DLQ event %s: %s — logging for manual recovery",
+                event.event_id, exc,
+            )
+            self._dlq.append(dlq_event)
 
     async def stop(self) -> None:
         self._running = False

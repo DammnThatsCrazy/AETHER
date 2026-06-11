@@ -28,6 +28,9 @@ logger = get_logger("aether.service.connectors.routes")
 
 router = APIRouter(prefix="/v1/integrations/connectors", tags=["Integrations — Connectors"])
 admin_router = APIRouter(prefix="/v1/admin/kyber/connectors", tags=["Admin — Kyber Connectors"])
+# Public webhook router — no API key auth, HMAC-verified inside each handler.
+# Mounted under PUBLIC_PATH_PREFIXES in feature_gate.py.
+webhook_public_router = APIRouter(prefix="/v1/integrations/webhooks", tags=["Integrations — Webhooks"])
 
 
 def _tenant_id(request: Request, permission: str = "read") -> str:
@@ -116,6 +119,115 @@ async def ingest_connector_webhook(connector_type: str, request: Request):
     result = await connector_service.ingest_webhook(
         connector_type, tenant_id, raw_body=raw, signature=sig, timestamp=ts, secret=None,
     )
+    return APIResponse(data=result).to_dict()
+
+
+# ── Public provider webhook ingestion ─────────────────────────────────────────
+# This route is UNAUTHENTICATED by API key.  It is listed in PUBLIC_PATH_PREFIXES
+# so the middleware skips token auth.  Security is enforced inside the handler via
+# HMAC-SHA256 signature verification.
+#
+# Tenant routing: the tenant is resolved by looking up the connector config whose
+# stored webhook secret produces a valid HMAC for the incoming payload.  The
+# caller provides X-Aether-Tenant-ID so we can scope the secret lookup efficiently.
+# If X-Aether-Tenant-ID is missing or the HMAC fails, the request is rejected.
+#
+# Replay prevention: a 5-minute timestamp window is enforced; requests older than
+# 300 s are rejected.
+
+import hashlib as _hashlib
+import hmac as _hmac
+import time as _time
+import json as _json
+
+_WEBHOOK_TIMESTAMP_TOLERANCE_S = 300  # 5 minutes
+
+
+def _verify_hmac(secret: str, body: bytes, timestamp: str, signature: str) -> bool:
+    """Verify HMAC-SHA256 webhook signature with timestamp replay protection."""
+    try:
+        ts = int(timestamp)
+    except (ValueError, TypeError):
+        return False
+    age = abs(int(_time.time()) - ts)
+    if age > _WEBHOOK_TIMESTAMP_TOLERANCE_S:
+        return False
+    signing_payload = f"{timestamp}.".encode() + body
+    expected = _hmac.new(secret.encode(), signing_payload, _hashlib.sha256).hexdigest()
+    sig_hex = signature.removeprefix("v1=")
+    return _hmac.compare_digest(expected, sig_hex)
+
+
+@webhook_public_router.post("/{connector_type}")
+async def public_webhook_ingest(connector_type: str, request: Request):
+    """
+    Public provider webhook ingestion.
+
+    - No API key required.
+    - HMAC-SHA256 verified using the tenant's stored connector secret.
+    - Tenant resolved from X-Aether-Tenant-ID header.
+    - Replay prevention: 5-minute timestamp window.
+    - Idempotent: duplicate webhook event IDs are detected and skipped.
+
+    Headers:
+      X-Aether-Tenant-ID: <tenant_id>       (required — set by webhook registration)
+      X-Aether-Signature: <hmac_sha256_hex>  (required)
+      X-Aether-Timestamp: <unix_epoch_int>   (required)
+    """
+    from shared.common.common import BadRequestError, UnauthorizedError, ForbiddenError
+    from shared.logger.logger import metrics as _metrics
+
+    connector = get_connector(connector_type)
+    if connector is None:
+        raise NotFoundError("connector")
+
+    tenant_id = request.headers.get("X-Aether-Tenant-ID", "").strip()
+    if not tenant_id:
+        raise BadRequestError("X-Aether-Tenant-ID header is required")
+
+    signature = request.headers.get("X-Aether-Signature", "").strip()
+    timestamp = request.headers.get("X-Aether-Timestamp", "").strip()
+    if not signature or not timestamp:
+        _metrics.increment("connector_webhook_rejected_total", labels={
+            "connector": connector_type, "reason": "missing_signature",
+        })
+        raise BadRequestError("X-Aether-Signature and X-Aether-Timestamp are required")
+
+    # Resolve tenant's connector secret from vault
+    cfg_record = await connector_service.get(tenant_id, connector_type)
+    if not cfg_record or not cfg_record.get("enabled"):
+        _metrics.increment("connector_webhook_rejected_total", labels={
+            "connector": connector_type, "reason": "connector_disabled",
+        })
+        raise ForbiddenError("Connector not enabled for this tenant")
+
+    from services.integrations.connectors.base import ConnectorConfig
+    config = ConnectorConfig(**cfg_record) if cfg_record else None
+    secret: Optional[str] = None
+    if config and config.secret_configured:
+        secret = await connector_service._resolve_secret(config)
+
+    if not secret:
+        _metrics.increment("connector_webhook_rejected_total", labels={
+            "connector": connector_type, "reason": "secret_missing",
+        })
+        raise ForbiddenError("Connector webhook secret not configured")
+
+    raw_body = await request.body()
+
+    if not _verify_hmac(secret, raw_body, timestamp, signature):
+        _metrics.increment("connector_webhook_rejected_total", labels={
+            "connector": connector_type, "reason": "invalid_signature",
+        })
+        raise BadRequestError("Webhook signature verification failed")
+
+    # Signature verified — ingest the webhook
+    result = await connector_service.ingest_webhook(
+        connector_type, tenant_id,
+        raw_body=raw_body, signature=signature, timestamp=timestamp, secret=secret,
+    )
+    _metrics.increment("connector_webhook_received_total", labels={"connector": connector_type})
+
     return APIResponse(data=result).to_dict()
 
 

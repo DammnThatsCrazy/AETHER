@@ -16,7 +16,7 @@ source_files:
   - frontend/kyber/src/features/investigation/use-investigations.ts
   - frontend/kyber/src/features/governance/use-governance.ts
   - frontend/kyber/src/features/graph/use-graph-intelligence.ts
-last_synced_commit: e59f365
+last_synced_commit: 2661f1b
 ---
 
 # Operational Intelligence — Stub vs. Production Audit
@@ -97,7 +97,7 @@ Items marked **FIXED** have been addressed in the commit that accompanies this d
 | **GovernanceRepository** | `repos.py:1482` | PostgreSQL-backed; principal_id flat key for O(1) filtering |
 | **EventReplayRepository** | `repos.py:1505` | PostgreSQL-backed; `list_queued` for worker polling |
 | **EventEnvelopeRepository** | `repos.py:1519` | PostgreSQL-backed durable envelope storage with replayable filter |
-| **EventProducer** | `shared/events/events.py:328` | AIOKafka with acks=all, retries=3, exponential backoff, DLQ |
+| **EventProducer** | `shared/events/events.py:328` | AIOKafka with acks=all, retries=3, exponential backoff, DLQ; batch overflow falls back to individual publish; DLQ events include `original_payload` for replay |
 | **EventConsumer** | `shared/events/events.py:438` | Concurrency-limited (semaphore=10), per-handler retry, dead-letter on exhaustion |
 | **ChannelHub** | `services/realtime/channel_hub.py` | 54 topics → 9 named channels; monotonic cursor; lock-protected fanout; QueueFull logged |
 | **Investigation Routes** | `services/investigation/routes.py` | Full CRUD + state machine + evidence + annotations; EventProducer wired |

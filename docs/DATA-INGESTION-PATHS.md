@@ -19,9 +19,10 @@ is one option, not a requirement.**
 | --- | --- | --- | --- |
 | **SDK** | Web/iOS/Android/React Native SDK batches events | `POST /v1/batch` | `sdk_event_ingested` |
 | **Connector pull** | Provider sync (Shopify, HubSpot, GA4, …) | `POST /v1/integrations/connectors/{type}/sync` | `connector_sync` |
-| **Signed webhook** | Provider/system pushes HMAC-signed events | `POST /v1/integrations/connectors/{type}/webhook` (auth) / public endpoint | `webhook_ingested` |
-| **External API feed** | Batch/import feeds | `POST /v1/ingest/feed` | `event_ingested` |
-| **Manual / demo** | Synthetic/seeded events | Demo seed (Phase 3) | n/a |
+| **Public webhook** | Provider pushes HMAC-signed events (unauthenticated, tenant-resolved) | `POST /v1/integrations/webhooks/{connector_type}` | `webhook_ingested` |
+| **Authenticated webhook** | Tenant-authenticated manual/test webhook ingest | `POST /v1/integrations/connectors/{type}/webhook` | `webhook_ingested` |
+| **External API feed** | Server-to-server batch/import feeds (requires `external_id`) | `POST /v1/ingest/feed` | `event_ingested` |
+| **Internal replay** | Operator replay only — `EventPipelineEnvelope` path | `POST /v1/events/ingest` | n/a |
 
 ## Normalization
 
@@ -36,6 +37,22 @@ events are mapped per provider (`BaseConnector.parse_webhook` / `pull`).
 - Use **connectors/webhooks** to enrich the graph from existing SaaS systems
   with no code change in the customer's app.
 - Both can run together; events de-duplicate via `external_id`/event identity.
+
+## Durability and idempotency
+
+- **SDK (`/v1/batch`)**: Events are written to Bronze before acknowledgment. Idempotency key: `SHA256(tenant_id:event_id:schema_version)` — 24-hour dedup window. Duplicate events return `status: "duplicate"` and are not re-billed.
+- **Connector/webhook**: Idempotency via `tenant_id:connector_type:webhook_event_id:schema_version`.
+- **Feed**: Idempotency via `tenant_id:source:external_id:schema_version`. `external_id` is required.
+- **All paths**: Accepted events survive process restart via Bronze persistence or durable event bus (Kafka/SQS). In-memory event bus is blocked in staging/production.
+
+## Deprecated routes (internal only)
+
+```
+POST /v1/ingest/events        — deprecated; server-to-server only
+POST /v1/ingest/events/batch  — deprecated; server-to-server only
+```
+
+SDKs **must** use `/v1/batch`. The deprecated paths still apply tenant scoping, validation, and metering but are not part of the SDK contract.
 
 See [Connectors](CONNECTORS.md), [Webhook Ingestion](WEBHOOK-INGESTION.md),
 [SDKs](SDK-WEB.md), and [OODA & Outcome Usage Dimensions](OODA-USAGE-DIMENSIONS.md).
