@@ -15,7 +15,8 @@ related:
 canonical_owner: platform@aether
 estimated_read_minutes: 5
 last_synced_commit: 6404ee9
----# SRE Runbooks
+---
+# SRE Runbooks
 
 Operational runbooks are reusable response procedures for known failure classes.
 They are seeded as static definitions (`RUNBOOK_DEFINITIONS`) and editable via

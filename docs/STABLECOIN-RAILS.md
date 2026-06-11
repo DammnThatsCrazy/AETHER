@@ -12,7 +12,8 @@ canonical_owner: commerce@aether
 estimated_read_minutes: 2
 toc_depth: 3
 last_synced_commit: 6404ee9
----# Stablecoin Rails — Day-1 GA
+---
+# Stablecoin Rails — Day-1 GA
 
 ## Supported assets
 

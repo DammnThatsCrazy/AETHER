@@ -17,7 +17,8 @@ canonical_owner: platform@aether
 estimated_read_minutes: 5
 toc_depth: 3
 last_synced_commit: 6404ee9
----# Kyber Strategic Observability
+---
+# Kyber Strategic Observability
 
 Kyber strategic observability uses backend aggregate endpoints to show Olympus Labs operators which tenants are receiving value, which loops are broken, and which recommendation families or playbooks are performing.
 

@@ -1088,7 +1088,7 @@ class Profile360Aggregator:
         """Primary identity cluster this entity belongs to."""
         rows = await self._scoped_find_many(
             self._clusters, tenant_id=tenant_id,
-            filters={"entity_id": entity_id}, limit=1,
+            filters={"entity_id": entity_id}, limit=50,
         )
         rows = _tenant_filter(rows, tenant_id)
         rows = [r for r in rows if not r.get("unlinked_at")]
@@ -1334,11 +1334,16 @@ class Profile360Aggregator:
             filters={"owner_entity_id": entity_id}, limit=limit,
         )
         configs = _tenant_filter(configs, tenant_id)
-        execs = await self._scoped_find_many(
-            self._agent_execs, tenant_id=tenant_id,
-            filters={"agent_id": entity_id}, limit=limit,
-        )
-        execs = _tenant_filter(execs, tenant_id)
+        owned_agent_ids = list({c.get("agent_id") or c.get("id") for c in configs if c.get("agent_id") or c.get("id")})
+        all_agent_ids = list({entity_id} | set(owned_agent_ids))
+        execs: list[dict] = []
+        for aid in all_agent_ids:
+            batch = await self._scoped_find_many(
+                self._agent_execs, tenant_id=tenant_id,
+                filters={"agent_id": aid}, limit=limit,
+            )
+            execs.extend(_tenant_filter(batch, tenant_id))
+        execs = execs[:limit]
         items = [
             {
                 "id": r.get("agent_id") or r.get("id"),

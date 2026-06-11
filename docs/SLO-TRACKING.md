@@ -14,7 +14,8 @@ related:
 canonical_owner: platform@aether
 estimated_read_minutes: 4
 last_synced_commit: 6404ee9
----# SLO Tracking
+---
+# SLO Tracking
 
 Service Level Objectives are **internal objectives** used to manage reliability.
 They are **not** external SLA commitments and must not be presented as such.

@@ -15,7 +15,8 @@ related:
 canonical_owner: platform@aether
 estimated_read_minutes: 3
 last_synced_commit: 6404ee9
----# Pipeline Health
+---
+# Pipeline Health
 
 `PipelineHealthService` tracks the platform's critical data pipelines end to end.
 

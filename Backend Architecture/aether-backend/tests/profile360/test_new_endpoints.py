@@ -183,7 +183,7 @@ class TestAttributionEndpoint:
     @pytest.mark.asyncio
     async def test_attribution_invalid_window(self):
         from services.profile.routes import get_profile_attribution
-        from utils.errors import BadRequestError
+        from shared.common.common import BadRequestError
         agg = make_agg()
         req = make_request()
         with pytest.raises(BadRequestError):

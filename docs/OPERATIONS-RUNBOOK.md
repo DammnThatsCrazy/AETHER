@@ -13,7 +13,8 @@ canonical_owner: platform@aether
 estimated_read_minutes: 12
 toc_depth: 3
 last_synced_commit: 6404ee9
----# Operations Runbook v8.8.0
+---
+# Operations Runbook v8.8.0
 
 Operations guide for the Aether backend services.
 

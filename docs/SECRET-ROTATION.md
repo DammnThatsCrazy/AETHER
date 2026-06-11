@@ -12,7 +12,8 @@ canonical_owner: security@aether
 estimated_read_minutes: 2
 toc_depth: 3
 last_synced_commit: 6404ee9
----# Secret Rotation Runbook
+---
+# Secret Rotation Runbook
 
 Procedures for rotating production secrets without downtime.
 

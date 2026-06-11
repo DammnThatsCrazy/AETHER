@@ -560,8 +560,8 @@ export function Profile360AttributionPanel({ sections }: { readonly sections: re
 export function Profile360ClusterPanel({ sections }: { readonly sections: readonly Profile360Section[] }) {
   const section = sections.find(s => s.id === 'cluster-overview');
   const data = asRec(section?.data);
-  const clusters = Array.isArray(data.clusters) ? data.clusters : [];
-  const primary = asRec(data.primary_cluster);
+  const clusters = Array.isArray(data.all_clusters) ? data.all_clusters : [];
+  const primary = asRec(data.cluster);
 
   return (
     <div className="space-y-4 pt-2">
@@ -640,7 +640,7 @@ export function Profile360ClusterPanel({ sections }: { readonly sections: readon
 export function Profile360AgentsPanel({ sections }: { readonly sections: readonly Profile360Section[] }) {
   const section = sections.find(s => s.id === 'agents-overview');
   const data = asRec(section?.data);
-  const agents = Array.isArray(data.agents) ? data.agents : [];
+  const agents = Array.isArray(data.items) ? data.items : Array.isArray(data.agents) ? data.agents : [];
   const delegations = Array.isArray(data.delegations) ? data.delegations : [];
 
   return (
@@ -787,16 +787,17 @@ export function Profile360QualityPanel({ sections }: { readonly sections: readon
   const section = sections.find(s => s.id === 'quality-overview');
   const data = asRec(section?.data);
   const readiness = String(data.readiness_status ?? 'unknown');
+  const scoresObj = asRec(data.scores);
   const scores = [
-    { label: 'Completeness', value: data.completeness_score },
-    { label: 'Freshness', value: data.freshness_score },
-    { label: 'Confidence', value: data.confidence_score },
-    { label: 'Source coverage', value: data.source_coverage_score },
-    { label: 'Relationship density', value: data.relationship_density_score },
-    { label: 'Journey coverage', value: data.journey_coverage_score },
-    { label: 'Attribution coverage', value: data.attribution_coverage_score },
-    { label: 'Consent coverage', value: data.consent_coverage_score },
-    { label: 'Provenance coverage', value: data.provenance_coverage_score },
+    { label: 'Completeness', value: data.completeness ?? scoresObj.completeness },
+    { label: 'Freshness', value: data.freshness ?? scoresObj.freshness },
+    { label: 'Confidence', value: data.confidence ?? scoresObj.confidence },
+    { label: 'Source coverage', value: data.source_coverage ?? scoresObj.source_coverage },
+    { label: 'Relationship density', value: data.relationship_density ?? scoresObj.relationship_density },
+    { label: 'Journey coverage', value: data.journey_coverage ?? scoresObj.journey_coverage },
+    { label: 'Attribution coverage', value: data.attribution_coverage ?? scoresObj.attribution_coverage },
+    { label: 'Consent coverage', value: data.consent_coverage ?? scoresObj.consent_coverage },
+    { label: 'Provenance coverage', value: data.provenance_coverage ?? scoresObj.provenance_coverage },
   ].filter(s => s.value !== undefined && s.value !== null);
 
   const readinessVariant = readiness === 'release_grade' || readiness === 'strong' ? 'success' : readiness === 'usable' ? 'warning' : readiness === 'empty' ? 'danger' : 'default';

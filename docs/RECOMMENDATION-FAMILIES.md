@@ -18,7 +18,8 @@ canonical_owner: platform@aether
 estimated_read_minutes: 6
 toc_depth: 3
 last_synced_commit: 6404ee9
----# Recommendation Families
+---
+# Recommendation Families
 
 The OODA engine now delegates recommendation generation to a family registry instead of hardcoding one retention-specific function.
 

@@ -16,7 +16,8 @@ related:
 canonical_owner: platform@aether
 estimated_read_minutes: 5
 last_synced_commit: 6404ee9
----# Incident Response
+---
+# Incident Response
 
 `IncidentService` manages the full incident lifecycle and maintains an internal
 audit trail for every change.

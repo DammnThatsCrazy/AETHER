@@ -1536,13 +1536,7 @@ async def get_profile_events(
     """Raw event stream for this entity (alias to timeline with event_type filter)."""
     tenant = request.state.tenant
     tenant.require_permission("read")
-    params: dict = {"include_timeline": True, "timeline_limit": limit}
-    if event_type:
-        params["event_type_filter"] = event_type
-    profile = await composer.build(user_id, tenant.tenant_id, **params)
-    events = profile.get("timeline", [])
-    if event_type:
-        events = [e for e in events if e.get("type") == event_type or e.get("event_type") == event_type]
+    events = await composer.get_timeline(user_id, tenant.tenant_id, limit=limit, event_type=event_type)
     return APIResponse(data={
         "entity_id": user_id,
         "events": events,

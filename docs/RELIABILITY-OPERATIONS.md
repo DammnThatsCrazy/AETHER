@@ -22,7 +22,8 @@ canonical_owner: platform@aether
 estimated_read_minutes: 8
 toc_depth: 3
 last_synced_commit: 6404ee9
----# Reliability Operations
+---
+# Reliability Operations
 
 Aether's reliability layer makes the platform **operationally credible for
 enterprise and government use** without overclaiming SLAs or certifications. It

@@ -12,7 +12,8 @@ canonical_owner: commerce@aether
 estimated_read_minutes: 4
 toc_depth: 3
 last_synced_commit: 6404ee9
----# Agentic Commerce — Approval Model
+---
+# Agentic Commerce — Approval Model
 
 **Locked requirement:** Mandatory approval on ALL spend classes at Day-1 GA.
 

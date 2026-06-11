@@ -12,7 +12,8 @@ canonical_owner: security@aether
 estimated_read_minutes: 12
 toc_depth: 3
 last_synced_commit: 6404ee9
----# x402 Protocol Support Audit — Aether Repository
+---
+# x402 Protocol Support Audit — Aether Repository
 
 **Date:** 2026-04-04
 **Scope:** Full repository audit for x402 protocol support with emphasis on the intelligence graph
