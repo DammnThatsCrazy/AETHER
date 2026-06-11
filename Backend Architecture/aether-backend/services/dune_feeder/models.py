@@ -152,6 +152,7 @@ class FeederHealthStatus(BaseModel):
     status: str = Field(..., description="overall: ok | degraded | down")
     total_bronze_records: int
     total_silver_records: int
+    total_gold_records: int = Field(default=0, description="Number of materialized Gold aggregate records")
     unique_source_tags: int
     rejection_rate: float = Field(..., description="Fraction of rows rejected across all ingests")
     last_ingest_at: Optional[str] = None
@@ -159,4 +160,13 @@ class FeederHealthStatus(BaseModel):
     graph_isolation_enforced: bool = Field(
         default=True,
         description="Invariant: Dune data never writes directly to the graph",
+    )
+
+
+class FeederGoldMaterializeRequest(BaseModel):
+    """Admin API request body for materializing Gold aggregates from Silver rows."""
+    source_tag: str = Field(..., description="Batch identifier to materialize to Gold")
+    tenant_scope: Optional[str] = Field(
+        None,
+        description="Restrict materialization to records ingested under this tenant scope.",
     )

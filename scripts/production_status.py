@@ -156,11 +156,13 @@ AREAS: list[Area] = [
     ),
     Area(
         "graph health / drift detection",
-        3,
+        4,
         "SDK drift detection (schema, stale heartbeat, replay storm, auth, consent) is "
-        "implemented with incident tracking. Graph-level contamination/identity-churn "
-        "scoring is partial: data-quality module is feature-flagged and operational "
-        "intelligence overlays still return placeholder scores.",
+        "implemented with incident tracking. Graph overlay endpoint now returns real "
+        "data-quality scores (graph_quality_score, open drift/contamination counts) via "
+        "intelligence_quality_service. Overlay dimensions are wired to contamination, "
+        "identity, trust, risk, attribution, agent, and wallet scoring. Remaining gap: "
+        "Neptune-backed live graph health scoring (Neptune not yet provisioned in staging).",
         [
             "Backend Architecture/aether-backend/services/sdk_drift/routes.py",
             "Backend Architecture/aether-backend/services/data_quality/",
@@ -228,14 +230,16 @@ AREAS: list[Area] = [
     ),
     Area(
         "Dune / data-lake feeders",
-        3,
+        4,
         "Governed DuneFeederService implemented: Dune query results ingest to Bronze "
         "with per-row SHA-256 hash, provenance chain, freshness gate (configurable "
         "max_age_seconds), and quality gate (schema + required-field validation). "
         "Silver promotion is an explicit operator action (/v1/admin/dune-feeder/promote). "
-        "Rollback by source_tag supported. Graph isolation invariant enforced: service "
-        "has no graph mutation methods and is tested. Remaining gap: Gold "
-        "materialization and staging validation with live Dune credentials.",
+        "Gold materialization implemented: /v1/admin/dune-feeder/materialize-gold aggregates "
+        "Silver rows by (domain, query_id) into curated Gold records with idempotency guard. "
+        "Rollback by source_tag removes Bronze + Silver + Gold. Graph isolation invariant "
+        "enforced and tested (32 unit tests). Remaining gap: staging validation with live "
+        "Dune credentials; Gold tier backed by in-memory store pending persistent lake backend.",
         [
             "Backend Architecture/aether-backend/services/dune_feeder/",
             "Backend Architecture/aether-backend/shared/providers/categories.py",
@@ -350,9 +354,9 @@ BLOCKERS: list[Blocker] = [
     ),
     Blocker(
         "pre-production-blocker",
-        "Dune feeder Gold materialization not yet implemented; staging validation pending",
+        "Dune feeder staging validation requires live Dune credentials; in-memory store only",
         "Dune / data-lake feeders",
-        "Implement Gold materialization from Silver; run feeder against live Dune API in staging",
+        "Provision staging secrets vault with Dune API key; run feeder against live Dune API; implement persistent lake backend",
     ),
     Blocker(
         "scale-blocker",

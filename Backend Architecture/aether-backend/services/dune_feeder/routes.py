@@ -15,6 +15,7 @@ Endpoints:
 from __future__ import annotations
 
 import os
+from typing import Optional
 
 from fastapi import APIRouter, Request
 
@@ -34,6 +35,7 @@ def _require_memory_store_env() -> None:
         )
 
 from services.dune_feeder.models import (
+    FeederGoldMaterializeRequest,
     FeederIngestRequest,
     FeederRollbackRequest,
 )
@@ -129,6 +131,50 @@ async def audit_source_tag(source_tag: str, request: Request):
 
 
 # ── Silver promotion ──────────────────────────────────────────────────────────
+
+@router.post("/materialize-gold")
+async def materialize_gold(body: FeederGoldMaterializeRequest, request: Request):
+    """
+    Materialize Gold aggregates from all Silver rows with matching source_tag.
+
+    Gold records are domain-level aggregates: one per (source_tag, domain, query_id)
+    with merged row data, row_count, and avg_quality_score.  Silver rows that have
+    already been materialized are skipped to prevent double-counting.
+
+    Gold is the final curated tier — still isolated from the canonical graph.
+    Any graph candidate generation must go through a separate review queue.
+    """
+    _require_admin(request)
+    _require_memory_store_env()
+
+    if not body.source_tag or not body.source_tag.strip():
+        raise BadRequestError("source_tag must not be empty")
+
+    created = dune_feeder_service.promote_to_gold(body.source_tag, tenant_scope=body.tenant_scope)
+
+    metrics.increment(
+        "dune_feeder_api_materialize_gold",
+        labels={"source_tag": body.source_tag},
+    )
+    return APIResponse(data={
+        "source_tag": body.source_tag,
+        "gold_records_created": created,
+    }).to_dict()
+
+
+@router.get("/gold")
+async def list_gold_records(request: Request, source_tag: Optional[str] = None, tenant_scope: Optional[str] = None):
+    """
+    List Gold materialized records, optionally filtered by source_tag and tenant_scope.
+    """
+    _require_admin(request)
+
+    records = dune_feeder_service.get_gold_records(source_tag=source_tag, tenant_scope=tenant_scope)
+    return APIResponse(data={
+        "record_count": len(records),
+        "records": records,
+    }).to_dict()
+
 
 @router.post("/promote/{source_tag}")
 async def promote_to_silver(source_tag: str, request: Request):

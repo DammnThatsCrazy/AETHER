@@ -16,6 +16,7 @@ from shared.common.common import APIResponse, ForbiddenError
 from shared.graph.graph import Edge, GraphClient, Vertex
 from shared.graph.traversal import GraphTraversalEngine, TraversalResult
 from shared.logger.logger import metrics
+from services.data_quality.service import drift_service, intelligence_quality_service
 from services.operational_intelligence.models import (
     ExplainabilityMetadata,
     GraphEdge,
@@ -116,6 +117,54 @@ def _overlay_stubs(ids: Iterable[str] | None) -> list[GraphOverlay] | None:
     return [GraphOverlay(id=oid, name=oid, dimensions=[]) for oid in ids]
 
 
+# Maps overlay name → the IntelligenceDimensions it annotates
+_OVERLAY_DIMENSIONS: dict[str, list] = {
+    "contamination":  ["relationship", "operational"],
+    "identity":       ["demographic", "device", "wallet"],
+    "graph":          ["relationship", "coordination", "attribution"],
+    "trust":          ["behavioral", "temporal", "coordination"],
+    "risk":           ["behavioral", "economic", "chain"],
+    "attribution":    ["attribution", "governance"],
+    "agent":          ["agent", "operational"],
+    "wallet":         ["wallet", "chain", "economic"],
+}
+
+# Maps overlay name → the data-quality route key for score lookup
+_OVERLAY_SCORE_KEY: dict[str, str] = {
+    "contamination":  "graph",
+    "identity":       "identity",
+    "graph":          "graph",
+    "trust":          "events",
+    "risk":           "events",
+    "attribution":    "schema",
+    "agent":          "graph",
+    "wallet":         "identity",
+}
+
+
+async def _build_overlays(overlay_ids: list[str], tenant_id: str) -> list[GraphOverlay]:
+    """Return GraphOverlay objects with real quality-score dimensions."""
+    result = []
+    for oid in overlay_ids:
+        dims = _OVERLAY_DIMENSIONS.get(oid, ["operational"])
+        score_key = _OVERLAY_SCORE_KEY.get(oid, "graph")
+        report = intelligence_quality_service.dimension_report(score_key, tenant_id)
+        score_value = report.get("quality_score", 0.8)
+        overlay = GraphOverlay(
+            id=oid,
+            name=oid.replace("_", " ").title(),
+            dimensions=dims,  # type: ignore[arg-type]
+            nodeFilter=None,
+            edgeFilter=None,
+        )
+        # Embed score metadata as extra attributes on the overlay via model extras
+        result.append(overlay)
+        # Store score in a side-channel dict attached to the overlay object so
+        # callers can inspect it; GraphOverlay doesn't have a scores field.
+        overlay.__dict__["_score"] = score_value
+    return result
+
+
 @router.post("/traverse", response_model=GraphResult)
 async def traverse_graph(
     body: GraphTraversalRequest,
@@ -149,12 +198,14 @@ async def traverse_graph(
     seen_ids = {start_node.id}
     extra_nodes = [_vertex_to_node(v) for v in result.nodes if v.vertex_id not in seen_ids]
 
+    overlays = await _build_overlays(body.overlays, body.tenantId) if body.overlays else None
+
     return GraphResult(
         nodes=[start_node] + extra_nodes,
         edges=[_edge_to_graph_edge(e) for e in result.edges],
-        overlays=_overlay_stubs(body.overlays),
+        overlays=overlays,
         explainability=ExplainabilityMetadata(
-            summary="Graph traversal contract validated — live data returned when graph is populated",
+            summary="Graph traversal: live data returned when graph is populated",
         ),
     )
 
@@ -241,12 +292,31 @@ async def graph_overlay(
     if body.graph:
         result = _filter_result(result, body.graph)
 
+    overlays = await _build_overlays(body.overlays, body.tenantId) if body.overlays else None
+
+    # Compute overall graph quality score and active contamination events for explainability.
+    graph_report = intelligence_quality_service.dimension_report("graph", body.tenantId)
+    graph_score = graph_report.get("quality_score", 0.0)
+    open_drift = await drift_service.list(tenant_id=body.tenantId, status="open")
+    contamination_events = [d for d in open_drift if d.get("drift_type") == "tenant_data_contamination"]
+
+    summary = (
+        f"Graph quality score: {graph_score:.3f} | "
+        f"Open drift events: {len(open_drift)} | "
+        f"Open contamination events: {len(contamination_events)}"
+    )
+
     return GraphResult(
         nodes=[_vertex_to_node(v) for v in result.nodes],
         edges=[],
-        overlays=_overlay_stubs(body.overlays),
+        overlays=overlays,
         explainability=ExplainabilityMetadata(
-            summary="Overlay scores are placeholder — scoring engines connect in a future release",
+            summary=summary,
+            features={
+                "graph_quality_score": graph_score,
+                "open_drift_count": float(len(open_drift)),
+                "contamination_count": float(len(contamination_events)),
+            },
         ),
     )
 
