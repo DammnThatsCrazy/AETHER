@@ -1,5 +1,5 @@
 {
-  "version": "1.0",
+  "version": "1.1",
   "timestamp": "2026-06-10T20:44:54.620702+00:00",
   "config": {
     "requests_per_scenario": 500,
@@ -7,7 +7,7 @@
   },
   "results": [
     {
-      "scenario": "/v1/ingest/batch",
+      "scenario": "/v1/ingest/events/batch",
       "requests": 500,
       "errors": 0,
       "error_rate": 0.0,
@@ -20,7 +20,7 @@
       "elapsed_s": 2.8
     },
     {
-      "scenario": "/v1/resolution/resolve",
+      "scenario": "/sdk/identity/resolve",
       "requests": 500,
       "errors": 0,
       "error_rate": 0.0,
@@ -33,7 +33,7 @@
       "elapsed_s": 4.28
     },
     {
-      "scenario": "/v1/profile/profile360",
+      "scenario": "/v1/profile360/user/{id}",
       "requests": 500,
       "errors": 0,
       "error_rate": 0.0,

@@ -101,6 +101,21 @@ class TestFreshnessGate:
         # Age >= max_age → stale
         assert result.passed is False
 
+    def test_future_dated_timestamp_fails(self, feeder):
+        """pulled_at in the far future should be rejected (impossible provenance)."""
+        svc, _ = feeder
+        future = (datetime.now(timezone.utc) + timedelta(seconds=3600)).isoformat()
+        result = svc.check_freshness(future, max_age_seconds=3600)
+        assert result.passed is False
+        assert "future" in result.reason.lower()
+
+    def test_small_clock_skew_passes(self, feeder):
+        """Timestamps up to 5 minutes in the future are within clock-skew tolerance."""
+        svc, _ = feeder
+        near_future = (datetime.now(timezone.utc) + timedelta(seconds=60)).isoformat()
+        result = svc.check_freshness(near_future, max_age_seconds=3600)
+        assert result.passed is True
+
 
 class TestQualityGate:
     def test_valid_row_passes(self, feeder):
@@ -189,6 +204,27 @@ class TestBronzeLanding:
         )
         resp = svc.ingest(req)
         assert resp.rows_rejected >= 1
+
+    def test_quality_gate_passed_false_rejects_above_threshold(self, feeder):
+        """A row that quality.passed=False must be rejected even when its numeric score
+        exceeds the quality_threshold. E.g. 9/10 fields present → score=0.9 > 0.8
+        but the row has a missing required field so passed=False."""
+        svc, models_mod = feeder
+        # 10-field schema, 1 missing → score=0.9 which would pass a 0.8 threshold
+        # but passed=False because 'field_j' is missing
+        schema = {f"field_{c}": "str" for c in "abcdefghij"}
+        required = list(schema.keys())
+        row = {f"field_{c}": f"val_{c}" for c in "abcdefghi"}  # missing field_j
+        rows = [row]
+        req = _make_request(
+            models_mod, rows,
+            schema=schema,
+            required_fields=required,
+            quality_threshold=0.8,
+        )
+        resp = svc.ingest(req)
+        assert resp.rows_rejected == 1
+        assert resp.rows_accepted == 0
 
 
 class TestGraphIsolation:

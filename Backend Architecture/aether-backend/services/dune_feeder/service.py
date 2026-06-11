@@ -113,6 +113,19 @@ class DuneFeederService:
 
         age_seconds = (now - pull_dt).total_seconds()
 
+        # Reject clearly future-dated timestamps (allow up to 5 min clock skew)
+        if age_seconds < -300:
+            return FreshnessResult(
+                passed=False,
+                pulled_at=pulled_at,
+                age_seconds=age_seconds,
+                max_age_seconds=max_age_seconds,
+                reason=(
+                    f"pulled_at is {abs(age_seconds):.0f}s in the future; "
+                    "clock skew tolerance is 300s"
+                ),
+            )
+
         if age_seconds > max_age_seconds:
             return FreshnessResult(
                 passed=False,
@@ -256,7 +269,7 @@ class DuneFeederService:
                 required_fields=payload.required_fields,
             )
 
-            if quality.score < payload.quality_threshold:
+            if not quality.passed or quality.score < payload.quality_threshold:
                 rows_rejected += 1
                 _TOTAL_REJECTED += 1
                 reason = quality.reason or f"Quality score {quality.score:.2f} below threshold {payload.quality_threshold}"
