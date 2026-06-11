@@ -531,20 +531,28 @@ class EventProducer:
             for topic_value, topic_events in by_topic.items():
                 try:
                     batch = self._kafka_producer.create_batch()
+                    overflow_events: list[Event] = []
                     for event in topic_events:
-                        batch.append(
+                        appended = batch.append(
                             value=event.serialize().encode("utf-8"),
                             key=event.tenant_id.encode() if event.tenant_id else None,
                             timestamp=None,
                         )
+                        if appended is None:
+                            # Batch is full — fall back to individual publish for this event
+                            overflow_events.append(event)
                     partitions = await self._kafka_producer.partitions_for(topic_value)
                     partition = next(iter(partitions))
                     await self._kafka_producer.send_batch(batch, topic_value, partition=partition)
+                    batched_count = len(topic_events) - len(overflow_events)
                     metrics.increment(
                         "events_published",
-                        value=len(topic_events),
+                        value=batched_count,
                         labels={"topic": topic_value},
                     )
+                    # Publish overflow events individually
+                    for event in overflow_events:
+                        await self.publish(event)
                 except Exception as exc:
                     logger.error("Batch publish failed for topic %s: %s", topic_value, exc)
                     metrics.increment(
@@ -742,6 +750,7 @@ class EventConsumer:
             payload={
                 "original_topic": event.topic.value,
                 "original_event_id": event.event_id,
+                "original_payload": event.payload,
                 "error": error,
                 "retry_count": event.retry_count,
                 "failed_at": datetime.now(timezone.utc).isoformat(),

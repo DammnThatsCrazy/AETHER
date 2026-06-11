@@ -54,6 +54,7 @@ def make_raw_record(
         "idempotency_key": idempotency_key,
         "entity_id": entity_id or "",
         "entity_type": entity_type or "",
+        "tenant_id": tenant_id,
         "payload": payload,
         "ingested_at": now,
         "created_at": now,
@@ -86,8 +87,12 @@ class BronzeRepository(BaseRepository):
         entity_id: Optional[str] = None,
         entity_type: Optional[str] = None,
         tenant_id: str = "",
-    ) -> dict:
-        """Ingest a raw record. Idempotent — skips duplicates."""
+    ) -> tuple[dict, bool]:
+        """Ingest a raw record. Idempotent — skips duplicates.
+
+        Returns (record, is_new) where is_new is True for fresh inserts and
+        False when the record already existed (duplicate).
+        """
         record = make_raw_record(
             source=source,
             source_tag=source_tag,
@@ -105,12 +110,12 @@ class BronzeRepository(BaseRepository):
         )
         if existing:
             metrics.increment("lake_bronze_dedup", labels={"source": source})
-            return existing[0]
+            return existing[0], False
 
         result = await self.insert(record["id"], record)
         metrics.increment("lake_bronze_ingested", labels={"source": source})
         logger.info(f"Bronze ingested: source={source} tag={source_tag} id={provider_record_id}")
-        return result
+        return result, True
 
     async def ingest_batch(
         self,
@@ -122,7 +127,7 @@ class BronzeRepository(BaseRepository):
         """Batch ingest. Returns count of new records (excludes duplicates)."""
         count = 0
         for rec in records:
-            result = await self.ingest(
+            _, is_new = await self.ingest(
                 source=source,
                 source_tag=source_tag,
                 provider_record_id=rec.get("id", str(uuid.uuid4())),
@@ -131,7 +136,7 @@ class BronzeRepository(BaseRepository):
                 entity_type=rec.get("entity_type", ""),
                 tenant_id=tenant_id,
             )
-            if result.get("created_at") == result.get("ingested_at"):
+            if is_new:
                 count += 1
         return count
 
@@ -177,7 +182,7 @@ class SilverRepository(BaseRepository):
         tenant_id: str = "",
     ) -> dict:
         """Upsert a normalized record. Merges with existing entity data."""
-        record_id = hashlib.sha256(f"{entity_type}:{entity_id}:{source}".encode()).hexdigest()[:24]
+        record_id = hashlib.sha256(f"{tenant_id}:{entity_type}:{entity_id}:{source}".encode()).hexdigest()[:24]
 
         existing = await self.find_by_id(record_id)
         if existing:

@@ -251,6 +251,37 @@ async def ingest_batch(
                 "Ingestion temporarily unavailable — please retry"
             )
 
+    # ── Atomic idempotency claim AFTER Bronze write, BEFORE bus publish ───
+    # Build a lookup from event_id → index in results so we can update in-place.
+    event_id_to_result_idx: dict[str, int] = {}
+    for idx, r in enumerate(results):
+        event_id_to_result_idx[r.id] = idx
+
+    claimed_keys: list[str] = []
+    final_accepted_events: list[Event] = []
+    final_accepted_raw: list[dict] = []
+
+    for event, raw in zip(accepted_events, accepted_raw):
+        idempotency_key = _make_idempotency_key(tenant.tenant_id, raw["event_id"], SCHEMA_VERSION)
+        cache_key = f"aether:idempotency:{idempotency_key}"
+        try:
+            claimed = await registry.cache.set_nx(cache_key, "1", ttl=TTL.DAY)
+        except Exception:
+            claimed = True  # allow on cache error
+        if claimed:
+            claimed_keys.append(cache_key)
+            final_accepted_events.append(event)
+            final_accepted_raw.append(raw)
+        else:
+            # Concurrent request already claimed this key — mark as duplicate
+            result_idx = event_id_to_result_idx.get(raw["event_id"])
+            if result_idx is not None:
+                results[result_idx] = EventResult(id=raw["event_id"], status="duplicate")
+            metrics.increment("ingestion_event_duplicate_total")
+
+    accepted_events = final_accepted_events
+    accepted_raw = final_accepted_raw
+
     # ── Event bus publish ─────────────────────────────────────────────────
     if accepted_events:
         try:
@@ -265,6 +296,12 @@ async def ingest_batch(
                 "Event bus publish failed for batch %s: %s", batch_id, exc, exc_info=True
             )
             metrics.increment("ingestion_publish_failed_total")
+            # Release claimed idempotency keys so the SDK can retry cleanly
+            for key in claimed_keys:
+                try:
+                    await registry.cache.delete(key)
+                except Exception:
+                    pass
             # Bronze is already written — events are recoverable.
             # Do NOT return accepted to the client; let the SDK retry.
             raise ServiceUnavailableError(
@@ -330,7 +367,7 @@ async def _process_single_event(
     idempotency_key = _make_idempotency_key(tenant_id, sdk_event.id, SCHEMA_VERSION)
     cache_key = f"aether:idempotency:{idempotency_key}"
 
-    is_duplicate = await _check_and_claim_idempotency(cache, cache_key)
+    is_duplicate = await _check_idempotency(cache, cache_key)
     if is_duplicate:
         metrics.increment("ingestion_event_duplicate_total")
         return EventResult(id=sdk_event.id, status="duplicate")
@@ -345,19 +382,15 @@ def _make_idempotency_key(tenant_id: str, event_id: str, schema_version: str) ->
     return hashlib.sha256(raw.encode()).hexdigest()[:40]
 
 
-async def _check_and_claim_idempotency(cache: CacheClient, cache_key: str) -> bool:
+async def _check_idempotency(cache: CacheClient, cache_key: str) -> bool:
     """
-    Returns True if duplicate, False if new (and claims the key atomically).
-    Uses Redis SET NX with 24h TTL so retries within 24h are deduped.
+    Returns True if duplicate (key already exists), False if new.
+    Does NOT claim the key — atomic claim happens after Bronze write via set_nx.
     Falls back to False (allow) if cache unavailable (best-effort dedup).
     """
     try:
         existing = await cache.get(cache_key)
-        if existing:
-            return True
-        # Claim with 24h TTL — idempotency window
-        await cache.set(cache_key, "1", ttl=TTL.DAY)
-        return False
+        return bool(existing)
     except Exception as exc:
         logger.warning("Idempotency check failed (allowing event): %s", exc)
         return False

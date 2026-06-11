@@ -138,7 +138,7 @@ async def ingest_api_feed(
 
     # Durable Bronze write for idempotency and recovery
     bronze = BronzeRepository("feeds")
-    result = await bronze.ingest(
+    result, is_new = await bronze.ingest(
         source=feed_event.source,
         source_tag=f"feed:{feed_event.source}",
         provider_record_id=feed_event.external_id,
@@ -148,7 +148,7 @@ async def ingest_api_feed(
         entity_type=feed_event.entity_type,
         tenant_id=tenant.tenant_id,
     )
-    is_duplicate = result.get("ingested_at") != result.get("created_at")
+    is_duplicate = not is_new
 
     if is_duplicate:
         metrics.increment("api_feeds_duplicate", labels={"source": feed_event.source})

@@ -154,7 +154,8 @@ def _verify_hmac(secret: str, body: bytes, timestamp: str, signature: str) -> bo
         return False
     signing_payload = f"{timestamp}.".encode() + body
     expected = _hmac.new(secret.encode(), signing_payload, _hashlib.sha256).hexdigest()
-    return _hmac.compare_digest(expected, signature)
+    sig_hex = signature.removeprefix("v1=")
+    return _hmac.compare_digest(expected, sig_hex)
 
 
 @webhook_public_router.post("/{connector_type}")

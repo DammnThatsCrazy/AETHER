@@ -443,11 +443,17 @@ async def _lookup_api_key_from_db(key_hash: str) -> Optional[dict]:
         record = await repo.find_by_id(key_id)
         if not record:
             return None
+        # Validate full hash to prevent 48-bit prefix collisions
+        if record.get("key_hash") != key_hash:
+            return None
         # Normalize to the same shape that cache stores
+        tier_raw = record.get("tier", "free")
+        valid_tiers = {"free", "pro", "enterprise"}
+        tier_safe = tier_raw if tier_raw in valid_tiers else "free"
         return {
             "tenant_id": record.get("tenant_id", ""),
             "role": record.get("role", "viewer"),
-            "tier": record.get("tier", "free"),
+            "tier": tier_safe,
             "plan_tier": record.get("plan_tier"),
             "permissions": record.get("permissions", []),
         }

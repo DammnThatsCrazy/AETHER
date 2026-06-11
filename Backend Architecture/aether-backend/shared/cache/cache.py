@@ -165,6 +165,14 @@ class _InMemoryBackend:
     async def exists(self, key: str) -> bool:
         return not self._is_expired(key)
 
+    async def set_nx(self, key: str, value: str, ttl: int = TTL.MEDIUM) -> bool:
+        """Set key only if it does not exist. Returns True if claimed, False if already set."""
+        if not self._is_expired(key):
+            return False
+        expires_at = time.time() + ttl if ttl > 0 else None
+        self._store[key] = (value, expires_at)
+        return True
+
     async def incr(self, key: str, ttl: int = 60) -> int:
         if self._is_expired(key):
             expires_at = time.time() + ttl if ttl > 0 else None
@@ -234,6 +242,12 @@ class _RedisBackend:
     async def exists(self, key: str) -> bool:
         client = await self._ensure_connected()
         return bool(await client.exists(key))
+
+    async def set_nx(self, key: str, value: str, ttl: int = TTL.MEDIUM) -> bool:
+        """Set key only if it does not exist. Returns True if claimed, False if already set."""
+        client = await self._ensure_connected()
+        result = await client.set(key, value, nx=True, ex=ttl)
+        return bool(result)
 
     async def incr(self, key: str, ttl: int = 60) -> int:
         client = await self._ensure_connected()
@@ -455,6 +469,12 @@ class CacheClient:
 
     async def set_json(self, key: str, data: Any, ttl: int = TTL.MEDIUM) -> None:
         await self.set(key, json.dumps(data, default=str), ttl)
+
+    async def set_nx(self, key: str, value: str, ttl: int = TTL.MEDIUM) -> bool:
+        """Atomically set key only if it does not exist. Returns True if claimed."""
+        if self._backend is None:
+            await self.connect()
+        return await self._backend.set_nx(key, value, ttl)  # type: ignore[union-attr]
 
     async def delete(self, key: str) -> None:
         if self._backend is None:

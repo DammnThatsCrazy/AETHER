@@ -670,6 +670,11 @@ async def _authenticate_async(
     auth_header = request.headers.get("Authorization", "")
     if auth_header.startswith("Bearer "):
         token = auth_header[7:]
+        # Try API key first (SDK pattern); fall back to JWT (SSO/user pattern)
+        try:
+            return await api_key_validator.validate_async(token)
+        except Exception:
+            pass
         payload = jwt_handler.decode(token)
         return jwt_handler.extract_context(payload)
 
