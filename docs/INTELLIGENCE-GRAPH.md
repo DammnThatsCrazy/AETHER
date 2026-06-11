@@ -12,7 +12,7 @@ source_files:
 canonical_owner: graph@aether
 estimated_read_minutes: 15
 toc_depth: 3
-last_synced_commit: cd8539d
+last_synced_commit: c50d64c
 ---
 # Unified On-Chain Intelligence Graph v8.8.0
 
