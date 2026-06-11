@@ -13,7 +13,7 @@ estimated_read_minutes: 8
 toc_depth: 3
 last_synced_commit: 48fb9d4
 ---
-# Migration Runbook — Aether Platform v8.8.0
+# Migration Runbook — Aether Platform v8.9.0
 
 Procedures for deploying new versions of the Aether platform with zero or minimal downtime. Covers database migrations, service rollouts, and phased traffic shifting.
 
