@@ -12,7 +12,8 @@ source_files:
 canonical_owner: commerce@aether
 estimated_read_minutes: 45
 toc_depth: 3
-last_synced_commit: f877420
+last_synced_commit: 6ffb0a6
+
 ---
 # Aether Agentic Commerce — Day-1 Build Specification
 
@@ -141,8 +142,8 @@ Aether already has a capture-side x402 subsystem (L3b) and a commerce layer (L3a
 - `economic_analytics.py` — NEW. Aggregates from Gold lake + graph queries.
 
 **`services/agent/` (extend)**
-- Add `economic.py` — per-agent budget, treasury, delegation policy views; integrates with approval service.
-- `lifecycle_mapper.py` — NEW. `AgentLifecycleMapper` routes 19 canonical agent lifecycle events (`agent_registered`, `agent_task_created`, `agent_subagent_spawned`, etc.) to graph mutations and repositories; all vertex IDs tenant-scoped as `{tenant_id}:agent:{agent_id}`.
+- `economic.py` — NEW. `AgentEconomicViews` provides `budget_view()` (spend aggregation from `SettlementEventRepository`, pending count, success rate), `delegation_policy_view()` (active granted/received delegations, subagent slice keyed by `source=agent_subagent_spawned`), and `full_economic_profile()` (merged response). Wired to `GET /v1/commerce/agents/{id}/economics`.
+- `lifecycle_mapper.py` — NEW. `AgentLifecycleMapper` routes 19 canonical agent lifecycle events (`agent_registered`, `agent_task_created`, `agent_subagent_spawned`, etc.) to graph mutations and repositories; all vertex IDs tenant-scoped as `{tenant_id}:agent:{agent_id}`. `_handle_subagent_spawned` also writes a `DelegationRepository` record (deterministic ID: `{tenant_id}:{parent}:spawned:{child}`) so `Profile360Composer` and `delegation_policy_view()` find spawned subagents via the standard grantor query.
 
 **`services/intelligence/` (extend)**
 - Add graph query helpers for economic path tracing: `trace_payment_lifecycle(challenge_id)`.
