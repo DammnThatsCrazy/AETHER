@@ -192,20 +192,25 @@ AREAS: list[Area] = [
     ),
     Area(
         "connectors (BYOK / source)",
-        2,
-        "Connector framework (descriptor, vault-backed secrets, sync status, webhook "
-        "parse, normalization to canonical envelope) is implemented and feature-"
-        "flagged, but most provider pulls are credential-gated TODOs validated only "
-        "against mocks.",
+        3,
+        "14 production-shaped inbound connectors with real API calls credential-gated "
+        "behind vault secret flow (Shopify, Stripe, HubSpot, Salesforce, Klaviyo, "
+        "PostHog, GA4, Jira, Linear, Zendesk, Intercom — all real HTTP against live "
+        "APIs when secret provided). Sync health tracking (status, last_synced_at, "
+        "error_count, last_error_message) recorded per connector per tenant. Kyber "
+        "per-tenant health drill-down route added. Remaining gap: staging validation "
+        "with live credentials for high-value connectors.",
         ["Backend Architecture/aether-backend/services/integrations/connectors/"],
     ),
     Area(
         "Slack / action notifications",
-        3,
-        "Slack is correctly modeled as an action/messaging connector (auth.test "
-        "connection check, webhook parse, tenant-scoped secrets) and notification "
-        "routing exists; outbound channel mapping and per-tenant opt-in templates are "
-        "not yet productized.",
+        4,
+        "Slack inbound (webhook parse + auth.test connection check) and outbound "
+        "(chat.postMessage + chat.update via Block Kit, circuit breaker, retries) are "
+        "fully real. Per-tenant Slack channel mapping by severity (slack_channel_map) "
+        "and opt-in controls (operator_review_required, quiet_hours, rate limits) are "
+        "implemented. Slack OAuth flow (connect + callback) is wired. Minor gap: "
+        "per-tenant channel mapping not validated against a live workspace in staging.",
         [
             "Backend Architecture/aether-backend/services/integrations/connectors/adapters.py",
             "Backend Architecture/aether-backend/services/notification_intelligence/",
@@ -323,9 +328,11 @@ BLOCKERS: list[Blocker] = [
     ),
     Blocker(
         "pre-production-blocker",
-        "Connector provider pulls are credential-gated TODOs",
+        "Connectors not staging-validated with live credentials; no E2E test "
+        "for vault → pull → event ingestion path against a real provider API",
         "connectors (BYOK / source)",
-        "Wire real API calls per connector behind existing vault secret flow",
+        "Run connector smoke against staging with real Shopify/Stripe/Slack credentials; "
+        "add E2E test asserting vault secret → pull → Bronze ingest",
     ),
     Blocker(
         "pre-production-blocker",

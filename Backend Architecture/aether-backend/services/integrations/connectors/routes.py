@@ -243,3 +243,16 @@ async def connectors_overview(request: Request):
 async def connectors_health(request: Request):
     _require_operator(request)
     return APIResponse(data=await connector_service.overview()).to_dict()
+
+
+@admin_router.get("/tenants/{tenant_id}")
+async def connectors_health_for_tenant(tenant_id: str, request: Request):
+    """Per-connector health drill-down for a single tenant (Kyber operator view).
+
+    Returns sync status, last sync time, error count, and last error message for
+    every connector type — including unconfigured ones so the operator sees the
+    full connector surface for that tenant.
+    """
+    _require_operator(request)
+    items = await connector_service.health_for_tenant(tenant_id)
+    return APIResponse(data={"tenant_id": tenant_id, "items": items}).to_dict()

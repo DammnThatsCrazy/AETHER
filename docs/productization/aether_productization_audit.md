@@ -77,12 +77,12 @@ Classification legend: `release-blocker` | `pre-production-blocker` |
 | 5 | Smart contracts (EVM/Solana/NEAR/Cosmos rewards) have **no external security audit** | release-blocker | Open — do not deploy to mainnet with real funds |
 | 6 | Production infrastructure not provisioned; production secrets not configured; ML artifacts not trained | release-blocker / pre-production-blocker | Open — external prerequisites per `PRODUCTION-READINESS.md` |
 | 7 | Agent Layer hosted mode requires durable storage (in-memory fallback blocked in hosted modes) | release-blocker (agent GA only) | Open — per `AGENT-LAYER-PRODUCTION.md` |
-| 8 | Connector provider pulls are credential-gated TODOs (framework real, API calls mocked) | pre-production-blocker | Open |
+| 8 | Connector provider pulls are credential-gated TODOs (framework real, API calls mocked) | pre-production-blocker | **Partially fixed** — 14 production-shaped connectors with real API calls (Shopify, Stripe, HubSpot, Salesforce, Klaviyo, PostHog, GA4, Jira, Linear, Zendesk, Intercom) enabled when vault secret present; per-connector error tracking (error_count, last_error_at, last_error_message) added; Kyber per-tenant health drill-down wired. Remaining gap: staging validation with live credentials. |
 | 9 | Dune is a read-only provider, but no governed Bronze→Silver→Gold feeder with per-row provenance/freshness gates exists | pre-production-blocker | Open |
 | 10 | Graph-level drift/contamination scoring partial: data-quality module feature-flagged, operational-intelligence overlay scores are placeholders | pre-production-blocker | Open (SDK-level drift detection is real) |
 | 11 | No load baselines recorded; Locust harness exists but is not exercised in CI | scale-blocker | **Partially fixed** — locustfile extended with `/v1/batch` + `/sdk/identity/resolve` tasks and thresholds; `scripts/load_smoke.py` + `make load-smoke` added. Staging baselines not yet recorded. |
 | 12 | Neptune capacity/cost and identity-merge throughput unvalidated at scale | scale-blocker | Open |
-| 13 | Slack outbound notification channel-mapping/templates not productized (ingest connector + connection test are real) | nice-to-have | Open |
+| 13 | Slack outbound notification channel-mapping/templates not productized (ingest connector + connection test are real) | nice-to-have | **Fixed** — per-tenant Slack channel mapping by severity (slack_channel_map), opt-in controls (operator_review_required, quiet_hours, rate limits), Slack OAuth, and real outbound (chat.postMessage + Block Kit + retries) all confirmed present in notification_intelligence. |
 
 Findings that prior audits claimed and this audit **verified as resolved**:
 infrastructure stubs replaced with real Redis/Postgres/Neptune/Kafka clients;
@@ -110,8 +110,8 @@ Rubric: 0 absent · 1 stub/scaffold · 2 partial/pilot · 3 pre-production ·
 | graph health / drift detection | 3 |
 | Kyber (operator console) | 4 |
 | customer frontend (tenant app) | 4 |
-| connectors (BYOK / source) | 2 |
-| Slack / action notifications | 3 |
+| connectors (BYOK / source) | 3 |
+| Slack / action notifications | 4 |
 | Dune / data-lake feeders | 2 |
 | smart contracts / proofs / rewards | 3 |
 | security / compliance | 3 |
@@ -120,7 +120,7 @@ Rubric: 0 absent · 1 stub/scaffold · 2 partial/pilot · 3 pre-production ·
 | deployment / cloud readiness | 3 |
 | scale readiness | 3 |
 
-**Overall: ~3.5/5 — pre-production.** The 4-rated areas are genuinely
+**Overall: ~3.6/5 — pre-production.** The 4-rated areas are genuinely
 release-shaped; nothing scores 5 because nothing has carried production
 traffic at scale yet, and claiming otherwise would be a false readiness claim.
 

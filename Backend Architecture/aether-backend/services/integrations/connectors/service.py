@@ -166,16 +166,34 @@ class ConnectorService:
         if not config.enabled:
             return SyncResult(connector_type=connector_type, status="disabled", detail="connector disabled")  # type: ignore[arg-type]
         secret = await self._resolve_secret(config)
-        events = await connector.pull(config, since=since, secret=secret)
-        status = "healthy"
-        # Persist sync status (this is the connector's reliability/health signal).
+        try:
+            events = await connector.pull(config, since=since, secret=secret)
+            status = "healthy"
+            error_detail: Optional[str] = None
+        except Exception as exc:
+            logger.warning(f"connector pull failed tenant={tenant_id} type={connector_type}: {exc}")
+            events = []
+            status = "failed"
+            error_detail = str(exc)[:500]
+        # Persist sync status and error history (connector health signal).
         config.last_synced_at = now_iso()
-        config.sync_status = status
+        config.sync_status = status  # type: ignore[assignment]
         config.updated_at = now_iso()
+        if error_detail:
+            config.error_count += 1
+            config.last_error_at = config.last_synced_at
+            config.last_error_message = error_detail
+        elif status == "healthy":
+            # Reset error run on success — keeps error_count as cumulative total.
+            pass
         await self.repo.insert(key, config.model_dump())
         await _meter(tenant_id, "connector_sync", connector_type, "connector")
-        await _audit(tenant_id, actor_id, "system", "connector_sync", connector_type, "allowed",
-                     {"events": len(events)})
+        await _audit(tenant_id, actor_id, "system", "connector_sync", connector_type,
+                     "allowed" if status == "healthy" else "blocked",
+                     {"events": len(events), "status": status})
+        if status == "failed":
+            return SyncResult(connector_type=connector_type, status=status,  # type: ignore[arg-type]
+                              events_ingested=0, detail=error_detail or "pull failed")
         return SyncResult(connector_type=connector_type, status=status,  # type: ignore[arg-type]
                           events_ingested=len(events), events=events,
                           detail="mocked sync (no external API in local mode)")
@@ -210,21 +228,51 @@ class ConnectorService:
         return {"accepted": True, "verified": verified, "events_ingested": len(events),
                 "events": [e.model_dump() for e in events]}
 
+    async def health_for_tenant(self, tenant_id: str) -> list[dict[str, Any]]:
+        """Per-connector health detail for a single tenant (Kyber drill-down)."""
+        rows = {r["connector_type"]: r for r in await self.repo.find_many(
+            filters={"tenant_id": tenant_id}, limit=1000)}
+        out: list[dict[str, Any]] = []
+        for desc in list_descriptors():
+            ct = desc["connector_type"]
+            cfg = rows.get(ct)
+            out.append({
+                "connector_type": ct,
+                "label": desc["label"],
+                "category": desc["category"],
+                "enabled": bool(cfg["enabled"]) if cfg else False,
+                "secret_configured": bool(cfg["secret_configured"]) if cfg else False,
+                "sync_status": cfg["sync_status"] if cfg else "never_synced",
+                "last_synced_at": cfg.get("last_synced_at") if cfg else None,
+                "error_count": cfg.get("error_count", 0) if cfg else 0,
+                "last_error_at": cfg.get("last_error_at") if cfg else None,
+                "last_error_message": cfg.get("last_error_message") if cfg else None,
+            })
+        return out
+
     async def overview(self) -> dict[str, Any]:
-        """Aggregate-only connector status across all tenants (Kyber)."""
+        """Aggregate connector status across all tenants (Kyber fleet view)."""
         rows = await self.repo.find_many(limit=10000)
         by_status: dict[str, int] = {}
         by_type: dict[str, int] = {}
+        total_errors = 0
+        degraded_tenants: set[str] = set()
         for r in rows:
             if r.get("enabled"):
-                by_status[r.get("sync_status", "never_synced")] = by_status.get(r.get("sync_status", "never_synced"), 0) + 1
+                status = r.get("sync_status", "never_synced")
+                by_status[status] = by_status.get(status, 0) + 1
                 by_type[r["connector_type"]] = by_type.get(r["connector_type"], 0) + 1
+                total_errors += r.get("error_count", 0)
+                if status in ("degraded", "failed"):
+                    degraded_tenants.add(r.get("tenant_id", ""))
         return {
             "available_connectors": len(CONNECTORS),
             "configured_count": len(rows),
             "enabled_count": sum(1 for r in rows if r.get("enabled")),
             "enabled_by_status": by_status,
             "enabled_by_type": by_type,
+            "total_error_count": total_errors,
+            "degraded_tenant_count": len(degraded_tenants),
         }
 
 
