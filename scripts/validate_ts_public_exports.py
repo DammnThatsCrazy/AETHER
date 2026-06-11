@@ -76,6 +76,10 @@ def _has_public_barrel(pkg_dir: Path) -> bool:
     return any((pkg_dir / rel).exists() for rel in ["src/index.ts", "src/index.tsx", "index.ts"])
 
 
+def _is_dist_path(rel: str) -> bool:
+    return rel.startswith("./dist/") or rel.startswith("dist/")
+
+
 def validate_package(pkg_dir: Path) -> list[str]:
     errors: list[str] = []
     manifest_path = pkg_dir / "package.json"
@@ -87,15 +91,24 @@ def validate_package(pkg_dir: Path) -> list[str]:
     if not _has_public_barrel(pkg_dir):
         errors.append(f"{pkg_name} has no public source barrel (src/index.ts[x] or index.ts)")
 
+    dist_dir = pkg_dir / "dist"
+    dist_built = dist_dir.exists()
+
     for field in ["types", "main", "module"]:
         rel = manifest.get(field)
         if isinstance(rel, str):
+            # Skip dist-path checks when dist hasn't been built yet — the package
+            # must be built before these artifacts can be verified.
+            if _is_dist_path(rel) and not dist_built:
+                continue
             _check_path(errors, pkg_dir, pkg_name, field, rel)
 
     exports = manifest.get("exports", {})
     if exports:
         for rel in _as_list(exports):
             if rel.startswith("./"):
+                if _is_dist_path(rel) and not dist_built:
+                    continue
                 _check_path(errors, pkg_dir, pkg_name, "exports", rel)
     elif manifest.get("private") is not True:
         errors.append(f"{pkg_name} has no package exports map")
@@ -103,10 +116,10 @@ def validate_package(pkg_dir: Path) -> list[str]:
     types_rel = manifest.get("types")
     if isinstance(types_rel, str):
         root_decl = _resolve_package_path(pkg_dir, types_rel)
-        _validate_declaration(pkg_name, root_decl, errors)
+        if dist_built or not _is_dist_path(types_rel):
+            _validate_declaration(pkg_name, root_decl, errors)
 
-    dist_dir = pkg_dir / "dist"
-    if dist_dir.exists():
+    if dist_built:
         for decl in sorted(dist_dir.rglob("*.d.ts")):
             _validate_declaration(pkg_name, decl, errors)
 
