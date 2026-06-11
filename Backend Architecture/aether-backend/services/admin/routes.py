@@ -1064,12 +1064,15 @@ from collections import Counter, defaultdict  # noqa: E402
 
 from repositories.repos import (  # noqa: E402
     AgentConfigRepository,
+    BehaviorProfileRepository,
     PaymentIntentRepository,
     SettlementEventRepository,
     DelegationRepository,
 )
+from services.security.request_context import require_kyber_operator as _require_kyber_operator  # noqa: E402
 
 _op_agent_configs = AgentConfigRepository()
+_op_behavior_profiles = BehaviorProfileRepository()
 _op_payment_intents = PaymentIntentRepository()
 _op_settlements = SettlementEventRepository()
 _op_delegations = DelegationRepository()
@@ -1077,12 +1080,13 @@ _op_delegations = DelegationRepository()
 _LIMIT = 10000
 
 
-@router.get("/v1/operator/agentic/overview")
+@router.get("/operator/agentic/overview")
 async def operator_agentic_overview(request: Request):
     """Aggregate agentic + x402 metrics across all tenants."""
     _require_kyber_operator(request)
 
     agents = await _op_agent_configs.find_many(limit=_LIMIT)
+    behavior_profiles = await _op_behavior_profiles.find_many(limit=_LIMIT)
     intents = await _op_payment_intents.find_many(limit=_LIMIT)
     settlements = await _op_settlements.find_many(limit=_LIMIT)
 
@@ -1092,8 +1096,8 @@ async def operator_agentic_overview(request: Request):
     timeout_count = sum(1 for s in settlements if s.get("status") == "timeout")
     total = len(settlements)
 
-    # High-risk: agents whose behavior_profile risk_score > 0.7 (best-effort)
-    high_risk = sum(1 for a in agents if float((a.get("risk_score") or 0)) > 0.7)
+    # High-risk: agents whose behavior_profile risk_score > 0.7
+    high_risk = sum(1 for bp in behavior_profiles if float((bp.get("risk_score") or 0)) > 0.7)
 
     return APIResponse(data={
         "tenant_count": len(tenant_ids),
@@ -1108,7 +1112,7 @@ async def operator_agentic_overview(request: Request):
     }).to_dict()
 
 
-@router.get("/v1/operator/agentic/agents")
+@router.get("/operator/agentic/agents")
 async def operator_agentic_agents(request: Request):
     """List all agents across tenants."""
     _require_kyber_operator(request)
@@ -1116,7 +1120,7 @@ async def operator_agentic_agents(request: Request):
     return APIResponse(data={"agents": agents, "count": len(agents)}).to_dict()
 
 
-@router.get("/v1/operator/agentic/x402/flows")
+@router.get("/operator/agentic/x402/flows")
 async def operator_x402_flows(request: Request):
     """x402 payment intent explorer across all tenants."""
     _require_kyber_operator(request)
@@ -1124,7 +1128,7 @@ async def operator_x402_flows(request: Request):
     return APIResponse(data={"flows": intents, "count": len(intents)}).to_dict()
 
 
-@router.get("/v1/operator/agentic/x402/failures")
+@router.get("/operator/agentic/x402/failures")
 async def operator_x402_failures(request: Request):
     """Failed settlement events across all tenants."""
     _require_kyber_operator(request)
@@ -1133,7 +1137,7 @@ async def operator_x402_failures(request: Request):
     return APIResponse(data={"failures": failures, "count": len(failures)}).to_dict()
 
 
-@router.get("/v1/operator/agentic/x402/timeouts")
+@router.get("/operator/agentic/x402/timeouts")
 async def operator_x402_timeouts(request: Request):
     """Timeout settlement events across all tenants."""
     _require_kyber_operator(request)
@@ -1142,7 +1146,7 @@ async def operator_x402_timeouts(request: Request):
     return APIResponse(data={"timeouts": timeouts, "count": len(timeouts)}).to_dict()
 
 
-@router.get("/v1/operator/agentic/settlements")
+@router.get("/operator/agentic/settlements")
 async def operator_agentic_settlements(request: Request):
     """All settlement events across all tenants."""
     _require_kyber_operator(request)
@@ -1150,7 +1154,7 @@ async def operator_agentic_settlements(request: Request):
     return APIResponse(data={"settlements": settlements, "count": len(settlements)}).to_dict()
 
 
-@router.get("/v1/operator/agentic/delegations")
+@router.get("/operator/agentic/delegations")
 async def operator_agentic_delegations(request: Request):
     """All delegations across all tenants."""
     _require_kyber_operator(request)
@@ -1158,7 +1162,7 @@ async def operator_agentic_delegations(request: Request):
     return APIResponse(data={"delegations": delegations, "count": len(delegations)}).to_dict()
 
 
-@router.get("/v1/operator/agentic/subagents")
+@router.get("/operator/agentic/subagents")
 async def operator_agentic_subagents(request: Request):
     """Subagent relationships (delegations where grantee is a known agent)."""
     _require_kyber_operator(request)
@@ -1172,7 +1176,7 @@ async def operator_agentic_subagents(request: Request):
     return APIResponse(data={"subagent_relationships": subagent_links, "count": len(subagent_links)}).to_dict()
 
 
-@router.get("/v1/operator/agentic/anomalies")
+@router.get("/operator/agentic/anomalies")
 async def operator_agentic_anomalies(request: Request):
     """Rule-based anomaly flags across all tenants."""
     _require_kyber_operator(request)

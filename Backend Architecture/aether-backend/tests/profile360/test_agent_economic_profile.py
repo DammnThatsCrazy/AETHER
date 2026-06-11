@@ -89,7 +89,7 @@ def test_economic_repositories_capture_agent_payment_flow():
     assert _run(facilitators.find_by_id("fac_x402"))["protocols"] == ["x402"]
     assert len(_run(intents.list_for_agent("agent_1"))) == 1
     assert len(_run(settlements.list_for_agent("agent_1"))) == 1
-    assert _run(identities.find_by_id("agent_1"))["provider_preferences"][0]["id"] == "compute-co"
+    assert _run(identities.find_for_agent("agent_1", "t1"))["provider_preferences"][0]["id"] == "compute-co"
 
 
 def test_agent_profile360_economic_composer_returns_frontend_ready_sections():
