@@ -11,7 +11,7 @@ source_files:
 canonical_owner: backend@aether
 estimated_read_minutes: 60
 toc_depth: 3
-last_synced_commit: f1b0453
+last_synced_commit: 7b33dd6
 ---
 # Aether Backend API v8.8.0 — Endpoint Specification
 
@@ -1933,9 +1933,13 @@ validation), SHA-256 row provenance hashes, rollback by `source_tag`, and graph 
 |--------|------|-------------|
 | `POST` | `/v1/admin/dune-feeder/ingest` | Land a `DuneQueryResult` in Bronze with freshness + quality gates |
 | `GET` | `/v1/admin/dune-feeder/health` | Health metrics: total Bronze records, unique source tags, graph isolation flag |
-| `POST` | `/v1/admin/dune-feeder/rollback` | Remove all Bronze records for a given `source_tag` |
+| `POST` | `/v1/admin/dune-feeder/rollback` | Remove Bronze+Silver records for a `source_tag`; scoped to `tenant_scope` when provided |
 | `GET` | `/v1/admin/dune-feeder/audit/{tag}` | Return provenance chain and row hashes for a `source_tag` |
 | `POST` | `/v1/admin/dune-feeder/promote/{tag}` | Promote validated Bronze rows for `source_tag` to Silver (explicit operator action) |
+
+**Environment availability:** Ingest, rollback, and promote endpoints require `AETHER_ENV=local` or
+`AETHER_ENV=test`. In staging/production these endpoints return 503 until a persistent lake
+repository backend is configured. Health and audit are available in all environments.
 
 **Ingest request shape:**
 ```json
@@ -1949,11 +1953,22 @@ validation), SHA-256 row provenance hashes, rollback by `source_tag`, and graph 
   },
   "source_tag": "onchain_2026_06_11_001",
   "domain": "onchain",
+  "tenant_scope": "tenant_abc",
   "schema": { "address": "str", "balance": "float" },
   "required_fields": ["address", "balance"],
   "max_age_seconds": 3600,
   "quality_threshold": 0.8
 }
 ```
+
+**Rollback request shape:**
+```json
+{
+  "source_tag": "onchain_2026_06_11_001",
+  "tenant_scope": "tenant_abc"
+}
+```
+When `tenant_scope` is supplied, only records whose stored `tenant_scope` matches are deleted,
+preventing cross-tenant `source_tag` collisions from destroying unowned rows.
 
 **Required permissions:** `admin`

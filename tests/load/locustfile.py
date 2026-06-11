@@ -271,10 +271,10 @@ class BatchIngestTasks(TaskSet):
 
     def _make_event(self) -> dict:
         return {
-            "event_id": str(uuid.uuid4()),
             "event_type": random.choice(self._event_types),
             "user_id": f"user-{_random_string()}",
             "session_id": f"sess-{_random_string()}",
+            "device_id": f"device-{_random_string()}",
             "timestamp": "2026-01-01T00:00:00Z",
             "properties": {"load_test": True},
         }
@@ -301,21 +301,26 @@ class BatchIngestTasks(TaskSet):
 
     @task(3)
     def batch_ingest_feed(self):
-        """Feed endpoint — alternative ingest path."""
+        """Feed endpoint — single APIFeedEvent with source/entity_type/data."""
         self.client.post(
             "/v1/ingest/feed",
-            json={"events": [self._make_event() for _ in range(20)]},
+            json={
+                "source": random.choice(("dune", "strategy", "custom_api")),
+                "entity_type": random.choice(("wallet", "user", "contract")),
+                "data": {"load_test": True, "ts": "2026-01-01T00:00:00Z"},
+            },
             headers=self.headers,
-            name="/v1/ingest/feed [feed-20]",
+            name="/v1/ingest/feed [feed-single]",
         )
 
     @task(2)
     def duplicate_event_handling(self):
-        """Send the same event_id twice — should be idempotent (no 500)."""
-        fixed_id = f"dedup-{_random_string()}"
+        """Send two identical events — backend must not 500 on duplicate content."""
         event = self._make_event()
-        event["event_id"] = fixed_id
-        payload = {"events": [event, {**event}]}  # identical duplicate
+        # Pin session_id so both entries are content-identical
+        event["session_id"] = "dedup-session"
+        event["device_id"] = "dedup-device"
+        payload = {"events": [event, {**event}]}
         with self.client.post(
             "/v1/ingest/events/batch",
             json=payload,
@@ -329,15 +334,16 @@ class BatchIngestTasks(TaskSet):
 
     @task(1)
     def schema_validation_rejection(self):
-        """Malformed payload — should be rejected with 400, not 500."""
+        """Malformed payload — FastAPI returns 422 (Pydantic), backend may return 400."""
         with self.client.post(
             "/v1/ingest/events/batch",
-            json={"events": [{"bad_field": "no event_type or user_id"}]},
+            json={"events": [{"bad_field": "no event_type or session_id"}]},
             headers=self.headers,
             name="/v1/ingest/events/batch [schema-rejected]",
             catch_response=True,
         ) as resp:
-            if resp.status_code == 400:
+            # FastAPI Pydantic validation → 422; backend custom validation → 400
+            if resp.status_code in (400, 422):
                 resp.success()
 
 
@@ -350,42 +356,42 @@ class IdentityResolveTasks(TaskSet):
 
     headers = _api_headers()
 
-    def _anchor(self, kind: str) -> dict:
-        return {"type": kind, "value": f"{kind}-{_random_string()}"}
+    def _wallet_ref(self) -> dict:
+        return {"address": f"0x{_random_string()}", "vm": "evm"}
 
     @task(8)
-    def resolve_single_anchor(self):
-        """Single-anchor resolve — most common call pattern."""
+    def resolve_anonymous_only(self):
+        """Anonymous-only resolve — minimum required payload."""
         self.client.post(
             "/sdk/identity/resolve",
-            json={"anchors": [self._anchor("email")]},
+            json={"anonymous_id": f"anon-{_random_string()}"},
             headers=self.headers,
             name="/sdk/identity/resolve [1-anchor]",
         )
 
     @task(5)
-    def resolve_three_anchors(self):
-        """Three-anchor merge — typical cross-device identity."""
+    def resolve_with_wallets(self):
+        """Anonymous + 3 wallets — typical cross-device identity."""
         self.client.post(
             "/sdk/identity/resolve",
             json={
-                "anchors": [
-                    self._anchor("email"),
-                    self._anchor("phone"),
-                    self._anchor("cookie"),
-                ]
+                "anonymous_id": f"anon-{_random_string()}",
+                "wallets": [self._wallet_ref() for _ in range(3)],
             },
             headers=self.headers,
             name="/sdk/identity/resolve [3-anchors]",
         )
 
     @task(2)
-    def resolve_five_anchors(self):
-        """Five-anchor merge — heavy identity graph traversal."""
+    def resolve_full_identity(self):
+        """All optional signals — heavy identity graph traversal."""
         self.client.post(
             "/sdk/identity/resolve",
             json={
-                "anchors": [self._anchor(k) for k in ("email", "phone", "cookie", "device_id", "user_id")]
+                "anonymous_id": f"anon-{_random_string()}",
+                "wallets": [self._wallet_ref() for _ in range(5)],
+                "user_id": f"user-{_random_string()}",
+                "email_hash": f"hash-{_random_string()}",
             },
             headers=self.headers,
             name="/sdk/identity/resolve [5-anchors]",
@@ -393,13 +399,13 @@ class IdentityResolveTasks(TaskSet):
 
     @task(3)
     def resolve_anonymous_to_known(self):
-        """Anonymous → known resolution — SDK batch endpoint."""
+        """Anonymous → known resolution — anonymous_id + user_id."""
         self.client.post(
             "/sdk/identity/resolve",
             json={
                 "anonymous_id": f"anon-{_random_string()}",
                 "user_id": f"known-{_random_string()}",
-                "traits": {"email": f"{_random_string()}@example.com"},
+                "email_hash": f"hash-{_random_string()}",
             },
             headers=self.headers,
             name="/sdk/identity/resolve [anon-to-known]",
@@ -478,12 +484,12 @@ class KyberSummaryTasks(TaskSet):
         )
 
     @task(4)
-    def tenant_list(self):
-        """Tenant list — operator visibility into active tenants."""
+    def dune_feeder_health(self):
+        """Dune feeder health — operator Bronze/Silver tier status."""
         self.client.get(
-            "/v1/admin/tenants?limit=50",
+            "/v1/admin/dune-feeder/health",
             headers=self.headers,
-            name="/v1/admin/tenants [list]",
+            name="/v1/admin/dune-feeder/health",
         )
 
     @task(3)

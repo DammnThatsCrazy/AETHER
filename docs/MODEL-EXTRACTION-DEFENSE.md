@@ -11,7 +11,7 @@ source_files:
 canonical_owner: security@aether
 estimated_read_minutes: 8
 toc_depth: 3
-last_synced_commit: f1b0453
+last_synced_commit: 7b33dd6
 ---
 # Model Extraction Defense v8.8.0
 
