@@ -1054,3 +1054,183 @@ async def kyber_revenue_opportunities(request: Request, window: Window = "30d"):
     observability = await _kyber_observability(window)
     items = [item.model_dump() for item in observability.revenue_opportunities()]
     return APIResponse(data=observability.response({"items": items, "count": len(items)})).to_dict()
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# KYBER OPERATOR — AGENTIC OBSERVABILITY
+# ═══════════════════════════════════════════════════════════════════════════
+
+from collections import Counter, defaultdict  # noqa: E402
+
+from repositories.repos import (  # noqa: E402
+    AgentConfigRepository,
+    PaymentIntentRepository,
+    SettlementEventRepository,
+    DelegationRepository,
+)
+
+_op_agent_configs = AgentConfigRepository()
+_op_payment_intents = PaymentIntentRepository()
+_op_settlements = SettlementEventRepository()
+_op_delegations = DelegationRepository()
+
+_LIMIT = 10000
+
+
+@router.get("/v1/operator/agentic/overview")
+async def operator_agentic_overview(request: Request):
+    """Aggregate agentic + x402 metrics across all tenants."""
+    _require_kyber_operator(request)
+
+    agents = await _op_agent_configs.find_many(limit=_LIMIT)
+    intents = await _op_payment_intents.find_many(limit=_LIMIT)
+    settlements = await _op_settlements.find_many(limit=_LIMIT)
+
+    tenant_ids = {a.get("tenant_id") for a in agents if a.get("tenant_id")}
+    settled_count = sum(1 for s in settlements if s.get("status") in {"settled", "paid", "success"})
+    failed_count = sum(1 for s in settlements if s.get("status") in {"failed"})
+    timeout_count = sum(1 for s in settlements if s.get("status") == "timeout")
+    total = len(settlements)
+
+    # High-risk: agents whose behavior_profile risk_score > 0.7 (best-effort)
+    high_risk = sum(1 for a in agents if float((a.get("risk_score") or 0)) > 0.7)
+
+    return APIResponse(data={
+        "tenant_count": len(tenant_ids),
+        "active_agent_count": len(agents),
+        "x402_flow_count": len(intents),
+        "payment_intent_count": len(intents),
+        "settlement_event_count": total,
+        "settlement_success_rate": round(settled_count / total, 4) if total else 0.0,
+        "failed_settlement_count": failed_count,
+        "timeout_count": timeout_count,
+        "high_risk_agent_count": high_risk,
+    }).to_dict()
+
+
+@router.get("/v1/operator/agentic/agents")
+async def operator_agentic_agents(request: Request):
+    """List all agents across tenants."""
+    _require_kyber_operator(request)
+    agents = await _op_agent_configs.find_many(limit=_LIMIT)
+    return APIResponse(data={"agents": agents, "count": len(agents)}).to_dict()
+
+
+@router.get("/v1/operator/agentic/x402/flows")
+async def operator_x402_flows(request: Request):
+    """x402 payment intent explorer across all tenants."""
+    _require_kyber_operator(request)
+    intents = await _op_payment_intents.find_many(limit=_LIMIT)
+    return APIResponse(data={"flows": intents, "count": len(intents)}).to_dict()
+
+
+@router.get("/v1/operator/agentic/x402/failures")
+async def operator_x402_failures(request: Request):
+    """Failed settlement events across all tenants."""
+    _require_kyber_operator(request)
+    settlements = await _op_settlements.find_many(limit=_LIMIT)
+    failures = [s for s in settlements if s.get("status") in {"failed"}]
+    return APIResponse(data={"failures": failures, "count": len(failures)}).to_dict()
+
+
+@router.get("/v1/operator/agentic/x402/timeouts")
+async def operator_x402_timeouts(request: Request):
+    """Timeout settlement events across all tenants."""
+    _require_kyber_operator(request)
+    settlements = await _op_settlements.find_many(limit=_LIMIT)
+    timeouts = [s for s in settlements if s.get("status") == "timeout"]
+    return APIResponse(data={"timeouts": timeouts, "count": len(timeouts)}).to_dict()
+
+
+@router.get("/v1/operator/agentic/settlements")
+async def operator_agentic_settlements(request: Request):
+    """All settlement events across all tenants."""
+    _require_kyber_operator(request)
+    settlements = await _op_settlements.find_many(limit=_LIMIT)
+    return APIResponse(data={"settlements": settlements, "count": len(settlements)}).to_dict()
+
+
+@router.get("/v1/operator/agentic/delegations")
+async def operator_agentic_delegations(request: Request):
+    """All delegations across all tenants."""
+    _require_kyber_operator(request)
+    delegations = await _op_delegations.find_many(limit=_LIMIT)
+    return APIResponse(data={"delegations": delegations, "count": len(delegations)}).to_dict()
+
+
+@router.get("/v1/operator/agentic/subagents")
+async def operator_agentic_subagents(request: Request):
+    """Subagent relationships (delegations where grantee is a known agent)."""
+    _require_kyber_operator(request)
+    delegations = await _op_delegations.find_many(limit=_LIMIT)
+    agents = await _op_agent_configs.find_many(limit=_LIMIT)
+    agent_ids = {a.get("agent_id") for a in agents if a.get("agent_id")}
+    subagent_links = [
+        d for d in delegations
+        if d.get("grantee_entity_id") in agent_ids or d.get("grantor_entity_id") in agent_ids
+    ]
+    return APIResponse(data={"subagent_relationships": subagent_links, "count": len(subagent_links)}).to_dict()
+
+
+@router.get("/v1/operator/agentic/anomalies")
+async def operator_agentic_anomalies(request: Request):
+    """Rule-based anomaly flags across all tenants."""
+    _require_kyber_operator(request)
+
+    settlements = await _op_settlements.find_many(limit=_LIMIT)
+    intents = await _op_payment_intents.find_many(limit=_LIMIT)
+
+    # Count per agent
+    failed_by_agent: Counter = Counter()
+    timeout_by_agent: Counter = Counter()
+    spend_by_agent: dict[str, float] = defaultdict(float)
+
+    for s in settlements:
+        agent_id = s.get("agent_id", "")
+        if s.get("status") in {"failed"}:
+            failed_by_agent[agent_id] += 1
+        if s.get("status") == "timeout":
+            timeout_by_agent[agent_id] += 1
+
+    for i in intents:
+        agent_id = i.get("agent_id", "")
+        try:
+            spend_by_agent[agent_id] += float(i.get("amount") or 0)
+        except (TypeError, ValueError):
+            pass
+
+    # Compute average spend for spike detection
+    spend_values = list(spend_by_agent.values())
+    avg_spend = sum(spend_values) / len(spend_values) if spend_values else 0.0
+
+    anomalies: list[dict] = []
+
+    for agent_id, count in failed_by_agent.items():
+        if count > 3:
+            anomalies.append({
+                "type": "repeated_payment_failure",
+                "agent_id": agent_id,
+                "failed_count": count,
+                "threshold": 3,
+            })
+
+    for agent_id, count in timeout_by_agent.items():
+        if count > 5:
+            anomalies.append({
+                "type": "payment_timeout_spike",
+                "agent_id": agent_id,
+                "timeout_count": count,
+                "threshold": 5,
+            })
+
+    for agent_id, total_spend in spend_by_agent.items():
+        if avg_spend > 0 and total_spend > avg_spend * 5:
+            anomalies.append({
+                "type": "agent_spend_limit_exceeded",
+                "agent_id": agent_id,
+                "total_spend": total_spend,
+                "avg_spend": avg_spend,
+                "ratio": round(total_spend / avg_spend, 2),
+            })
+
+    return APIResponse(data={"anomalies": anomalies, "count": len(anomalies)}).to_dict()
