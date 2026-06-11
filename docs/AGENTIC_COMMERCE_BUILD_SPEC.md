@@ -12,7 +12,7 @@ source_files:
 canonical_owner: commerce@aether
 estimated_read_minutes: 45
 toc_depth: 3
-last_synced_commit: af65923
+last_synced_commit: f1b0453
 ---
 # Aether Agentic Commerce — Day-1 Build Specification
 
@@ -129,7 +129,8 @@ Aether already has a capture-side x402 subsystem (L3b) and a commerce layer (L3a
 - `resources.py` — NEW. `ProtectedResourceRegistry` with registration, classification, lookup. Seeded with all Aether-native protected resources.
 - `routes.py` — EXTEND: add `POST /v1/x402/challenge`, `POST /v1/x402/verify`, `POST /v1/x402/settle`, `GET /v1/x402/entitlements/{id}`, `POST /v1/x402/access/preflight`, `GET /v1/x402/resources`, `POST /v1/x402/resources`, `GET /v1/x402/facilitators`, `GET /v1/x402/policies`, `POST /v1/x402/policies/simulate`, explainability endpoints.
 - `interceptor.py` — KEEP. Legacy v1 ingest delegates to `control_plane.handle_legacy_capture()`.
-- `economic_graph.py` — KEEP. Now writes augmented edges via `economic_mutations.py`.
+- `economic_graph.py` — KEEP. Writes tenant-scoped vertex IDs (`{tenant_id}:{entity_id}` format) and deterministic edge IDs (`{tenant_id}:{capture_id}:pays`) directly via `snapshot_to_graph()`; idempotent on replay.
+- `lifecycle_mapper.py` — NEW. `X402LifecycleMapper` routes 14 canonical x402 lifecycle events (`x402_payment_intent_created`, `x402_payment_settled`, `x402_payment_failed`, etc.) to repositories with full tenant isolation.
 
 **`services/x402/approvals_routes.py`** (NEW)
 - `GET /v1/x402/approvals` (queue), `POST /v1/x402/approvals/{id}/assign`, `.../decide`, `.../escalate`, `.../revoke`, `.../replay`, `.../evidence`, `.../preview`.
@@ -141,6 +142,7 @@ Aether already has a capture-side x402 subsystem (L3b) and a commerce layer (L3a
 
 **`services/agent/` (extend)**
 - Add `economic.py` — per-agent budget, treasury, delegation policy views; integrates with approval service.
+- `lifecycle_mapper.py` — NEW. `AgentLifecycleMapper` routes 19 canonical agent lifecycle events (`agent_registered`, `agent_task_created`, `agent_subagent_spawned`, etc.) to graph mutations and repositories; all vertex IDs tenant-scoped as `{tenant_id}:agent:{agent_id}`.
 
 **`services/intelligence/` (extend)**
 - Add graph query helpers for economic path tracing: `trace_payment_lifecycle(challenge_id)`.
@@ -155,9 +157,11 @@ Aether already has a capture-side x402 subsystem (L3b) and a commerce layer (L3a
 - Add SIWX session binding for entitlement reuse.
 
 **`shared/graph/` (extend)**
-- `graph.py` — EXTEND `VertexType` with 18 new constants, `EdgeType` with 22 new constants.
+- `graph.py` — EXTEND `VertexType` with new node constants (TASK, TOOL, OUTCOME, POLICY, CAPABILITY, AGENT_ECONOMIC_IDENTITY, etc.) and `EdgeType` with new relationship constants (OWNS_AGENT, CREATED_TASK, DECOMPOSED_INTO, SPAWNED_SUBAGENT, CALLED_TOOL, DELEGATED_TO, etc.).
 - `economic_schema.py` — NEW. Documents owner/tenant/provenance/DSR/visualization per vertex/edge.
-- `economic_mutations.py` — NEW. Deterministic graph builders for each lifecycle stage.
+
+**`services/x402/` (additional files)**
+- `economic_mutations.py` — NEW (in `services/x402/`, not `shared/graph/`). Deterministic graph builders for each x402 lifecycle stage.
 
 **`shared/events/` (extend)**
 - `events.py` — EXTEND `Topic` enum.

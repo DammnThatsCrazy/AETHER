@@ -11,7 +11,7 @@ source_files:
 canonical_owner: security@aether
 estimated_read_minutes: 2
 toc_depth: 3
-last_synced_commit: af65923
+last_synced_commit: f1b0453
 ---
 # Secret Rotation Runbook
 

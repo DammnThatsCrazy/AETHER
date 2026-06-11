@@ -15,7 +15,7 @@ related:
   - reliability/incident-response
 canonical_owner: platform@aether
 estimated_read_minutes: 4
-last_synced_commit: af65923
+last_synced_commit: f1b0453
 ---
 # Tenant System Status
 

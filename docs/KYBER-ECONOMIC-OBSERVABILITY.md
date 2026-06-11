@@ -12,7 +12,7 @@ source_files:
 related:
   - concepts/economic-value-framing
   - concepts/unified-economic-graph
-last_synced_commit: af65923
+last_synced_commit: f1b0453
 ---
 
 # Aether — Kyber Economic Observability

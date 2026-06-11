@@ -13,7 +13,7 @@ related:
   - concepts/unified-economic-graph
   - concepts/tvl-gmv-revenue-metrics
   - concepts/kyber-economic-observability
-last_synced_commit: af65923
+last_synced_commit: f1b0453
 ---
 
 # Aether — Economic Value Framing
