@@ -11,7 +11,7 @@ source_files:
 canonical_owner: security@aether
 estimated_read_minutes: 12
 toc_depth: 3
-last_synced_commit: 5316c08
+last_synced_commit: e59f365
 ---
 # x402 Protocol Support Audit — Aether Repository
 
@@ -129,8 +129,10 @@ This is not speculative or merely extensible infrastructure. The x402 support is
 - `CapturedX402Transaction` is the full receipt: capture_id, payer, payee, terms, proof, response, USD amount, fee eliminated, timestamp
 - `PaymentResponse.verified` (bool) and `settled_at` (timestamp) capture settlement outcome
 - `ActionRecord` vertex tracks on-chain transactions (tx_hash, chain_id, vm_type)
-- `PAYS` edge properties include `capture_id`, `amount`, `token`, `chain`, `method="x402"`
-- **Gap:** No multi-state settlement lifecycle (e.g., pending → clearing → settled → disputed → failed)
+- `PAYS` edge properties include `capture_id`, `amount`, `token`, `chain`, `method="x402"`, `tenant_id`
+- Edge IDs are deterministic: `{tenant_id}:{capture_id}:pays` — idempotent across replays
+- `X402LifecycleMapper` routes 14 canonical lifecycle events to `PaymentIntentRepository` / `SettlementEventRepository` with tenant isolation; settlement state is now: intent_created → submitted → settled|failed|timeout
+- **Partial gap resolved:** Multi-state settlement lifecycle (intent→submitted→settled/failed/timeout) implemented via lifecycle mapper; full distributed retry/dispute flows remain Phase 2
 
 ### 2.6 Can the graph represent entitlements/access grants?
 

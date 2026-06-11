@@ -12,7 +12,7 @@ source_files:
 canonical_owner: frontend@aether
 estimated_read_minutes: 10
 toc_depth: 3
-last_synced_commit: 5316c08
+last_synced_commit: 401ceb7
 ---
 # Aether Profile360 Frontend Architecture
 
