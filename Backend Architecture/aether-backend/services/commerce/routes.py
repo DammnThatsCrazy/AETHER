@@ -1,6 +1,6 @@
 """
 Aether Service — Commerce Routes (L3a)
-Payment recording, agent hiring, fee elimination reporting.
+Payment recording, agent hiring, fee elimination reporting, and per-agent economics.
 """
 
 from __future__ import annotations
@@ -12,11 +12,13 @@ from shared.logger.logger import get_logger
 
 from .models import AgentHireRecord, PaymentRecord
 from .service import CommerceService
+from services.agent.economic import AgentEconomicViews
 
 logger = get_logger("aether.service.commerce.routes")
 router = APIRouter(prefix="/v1/commerce", tags=["Commerce"])
 
 _service = CommerceService()
+_agent_economics = AgentEconomicViews()
 
 
 @router.post("/payments")
@@ -48,4 +50,13 @@ async def agent_spend_history(agent_id: str, request: Request):
     """Get spending history for a specific agent."""
     request.state.tenant.require_permission("commerce:read")
     result = await _service.get_agent_spend(agent_id)
+    return APIResponse(data=result).to_dict()
+
+
+@router.get("/agents/{agent_id}/economics")
+async def agent_economic_profile(agent_id: str, request: Request):
+    """Full economic profile: budget usage, delegation policy, and economic identity."""
+    request.state.tenant.require_permission("commerce:read")
+    tenant_id = request.state.tenant.tenant_id
+    result = await _agent_economics.full_economic_profile(agent_id, tenant_id)
     return APIResponse(data=result).to_dict()
