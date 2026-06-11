@@ -385,12 +385,19 @@ export const handlers = [
   // ── Integrations / Connectors ───────────────────────────────────────────────
   http.get(`${API}/v1/integrations/connectors`, () =>
     HttpResponse.json({ data: { items: [
-      { connector_type: 'slack', label: 'Slack', category: 'messaging', description: 'Ingest Slack activity.', premium: false, enabled: false, sync_status: 'never_synced' },
-      { connector_type: 'webhook', label: 'Generic Signed Webhook', category: 'webhook', description: 'Ingest events via HMAC-signed webhook.', premium: false, enabled: true, sync_status: 'healthy' },
-      { connector_type: 'shopify', label: 'Shopify', category: 'commerce', description: 'Ingest orders and customers.', premium: false, enabled: false, sync_status: 'never_synced' },
-      { connector_type: 'stripe', label: 'Stripe (ingestion)', category: 'billing', description: 'Ingest payment events.', premium: false, enabled: false, sync_status: 'never_synced' },
-      { connector_type: 'hubspot', label: 'HubSpot', category: 'crm', description: 'Ingest contacts and deals.', premium: true, enabled: false, sync_status: 'never_synced' },
-      { connector_type: 'segment', label: 'Segment', category: 'product_analytics', description: 'Ingest track/identify events.', premium: false, enabled: false, sync_status: 'never_synced' },
+      { connector_type: 'slack', label: 'Slack', category: 'messaging', description: 'Ingest Slack activity.', premium: false, enabled: false, sync_status: 'never_synced', requires_secret: true, secret_configured: false },
+      { connector_type: 'webhook', label: 'Generic Signed Webhook', category: 'webhook', description: 'Ingest events via HMAC-signed webhook.', premium: false, enabled: true, sync_status: 'healthy', requires_secret: false, secret_configured: false },
+      { connector_type: 'shopify', label: 'Shopify', category: 'commerce', description: 'Ingest orders and customers.', premium: false, enabled: false, sync_status: 'never_synced', requires_secret: true, secret_configured: false },
+      { connector_type: 'stripe', label: 'Stripe (ingestion)', category: 'billing', description: 'Ingest payment events.', premium: false, enabled: false, sync_status: 'never_synced', requires_secret: true, secret_configured: false },
+      { connector_type: 'hubspot', label: 'HubSpot', category: 'crm', description: 'Ingest contacts and deals.', premium: true, enabled: false, sync_status: 'never_synced', requires_secret: true, secret_configured: false },
+      { connector_type: 'segment', label: 'Segment', category: 'product_analytics', description: 'Ingest track/identify events.', premium: false, enabled: false, sync_status: 'never_synced', requires_secret: false, secret_configured: false },
     ] }, status: 'ok', timestamp: new Date().toISOString() }),
+  ),
+
+  http.put(`${API}/v1/integrations/connectors/:connectorType`, () =>
+    HttpResponse.json({ data: { ok: true }, status: 'ok', timestamp: new Date().toISOString() }),
+  ),
+  http.post(`${API}/v1/integrations/connectors/:connectorType/test`, () =>
+    HttpResponse.json({ data: { ok: true, message: 'Connection test passed.' }, status: 'ok', timestamp: new Date().toISOString() }),
   ),
 ];
