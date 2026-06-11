@@ -16,11 +16,11 @@ function Metric({ label, value }: { readonly label: string; readonly value: unkn
   );
 }
 
-function statusColor(status: string): 'success' | 'warning' | 'danger' | 'neutral' {
+function statusColor(status: string): 'success' | 'warning' | 'danger' | 'default' {
   if (status === 'healthy') return 'success';
   if (status === 'degraded') return 'warning';
   if (status === 'failed') return 'danger';
-  return 'neutral';
+  return 'default';
 }
 
 function formatTs(ts: string | null | undefined): string {
@@ -115,8 +115,8 @@ export function ConnectorsPage() {
                         <td className="py-2 px-2 font-semibold text-text-primary">{row.label}</td>
                         <td className="py-2 px-2 text-text-muted">{row.category}</td>
                         <td className="py-2 px-2">
-                          {row.supports_pull && <Badge variant="neutral">pull</Badge>}
-                          {row.supports_webhook && <Badge variant="neutral">webhook</Badge>}
+                          {row.supports_pull && <Badge variant="default">pull</Badge>}
+                          {row.supports_webhook && <Badge variant="default">webhook</Badge>}
                         </td>
                         <td className="py-2 px-2 text-right">{row.enabled_tenants}</td>
                         <td className="py-2 px-2">

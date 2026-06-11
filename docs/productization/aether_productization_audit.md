@@ -11,7 +11,7 @@ source_files:
 canonical_owner: platform@aether
 estimated_read_minutes: 15
 toc_depth: 3
-last_synced_commit: f6fab1b
+last_synced_commit: 48fb9d4
 ---
 
 # AETHER Productization Audit
@@ -79,7 +79,7 @@ Classification legend: `release-blocker` | `pre-production-blocker` |
 | 7 | Agent Layer hosted mode requires durable storage (in-memory fallback blocked in hosted modes) | release-blocker (agent GA only) | Open — per `AGENT-LAYER-PRODUCTION.md` |
 | 8 | Connector provider pulls are credential-gated TODOs (framework real, API calls mocked) | pre-production-blocker | Open |
 | 9 | Dune is a read-only provider, but no governed Bronze→Silver→Gold feeder with per-row provenance/freshness gates exists | pre-production-blocker | Open |
-| 10 | Graph-level drift/contamination scoring partial: data-quality module feature-flagged; operational-intelligence overlay placeholder scores replaced with real layer-coverage scoring (H2H/H2A/A2H/A2A) in v8.9.0 | pre-production-blocker | **Partially Fixed** (overlay scoring real; contamination detection still feature-flagged) |
+| 10 | Graph-level drift/contamination scoring partial: data-quality module feature-flagged, operational-intelligence overlay scores are placeholders | pre-production-blocker | Open (SDK-level drift detection is real) |
 | 11 | No load baselines recorded; Locust harness exists but is not exercised in CI | scale-blocker | **Partially fixed** — locustfile extended with `/v1/batch` + `/sdk/identity/resolve` tasks and thresholds; `scripts/load_smoke.py` + `make load-smoke` added. Staging baselines not yet recorded. |
 | 12 | Neptune capacity/cost and identity-merge throughput unvalidated at scale | scale-blocker | Open |
 | 13 | Slack outbound notification channel-mapping/templates not productized (ingest connector + connection test are real) | nice-to-have | Open |
@@ -105,9 +105,9 @@ Rubric: 0 absent · 1 stub/scaffold · 2 partial/pilot · 3 pre-production ·
 | SDKs | 4 |
 | identity resolution | 4 |
 | Profile 360 | 4 |
-| Neptune relationships (H2H/H2A/A2H/A2A) | 4 |
+| Neptune relationships (H2H/H2A/A2H/A2A) | 3 |
 | graph mutation safety | 4 |
-| graph health / drift detection | 4 |
+| graph health / drift detection | 3 |
 | Kyber (operator console) | 4 |
 | customer frontend (tenant app) | 4 |
 | connectors (BYOK / source) | 2 |
@@ -180,10 +180,9 @@ traffic at scale yet, and claiming otherwise would be a false readiness claim.
    provenance, freshness checks, and quality gates before Silver promotion;
    no direct graph mutation. Accept: Dune rows traceable end-to-end with
    provenance; Kyber shows feeder health.
-4. **Graph health scoring completion** — overlay scoring is now deterministic
-   (H2H/H2A/A2H/A2A layer counts from real graph data, v8.9.0). Remaining:
-   contamination metrics (cluster churn, merge/split rates, orphan nodes, edge
-   growth) still feature-flagged in data-quality module. Accept:
+4. **Graph health scoring completion** — replace placeholder
+   operational-intelligence overlay scores with real metrics (cluster churn,
+   merge/split rates, orphan nodes, edge growth); surface in Kyber. Accept:
    drift tests for healthy vs contaminated fixtures pass.
 5. **Load baseline + scale gate** — scheduled Locust smoke against staging,
    recorded baselines, thresholds in CI. Accept: documented RPS/latency

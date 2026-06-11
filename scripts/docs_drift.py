@@ -292,12 +292,21 @@ def main() -> int:
         if not sha:
             print("error: cannot read HEAD SHA — is this a git repo?", file=sys.stderr)
             return 1
+        # Only re-stamp docs whose source files have actually changed since their
+        # current last_synced_commit. Stamping clean docs to HEAD is what causes
+        # 60+ last_synced_commit conflicts on every rebase — both branches update
+        # the same field to different SHAs on every docs-drift pass.
         updated = 0
+        skipped = 0
         for path in tracked_docs():
-            if stamp_doc(path, sha):
-                updated += 1
-                print(f"  stamped {path.relative_to(ROOT)} -> {sha}")
-        print(f"docs_drift --update: stamped {updated} docs at {sha}.")
+            report = check_doc(path)
+            if report["stale"]:
+                if stamp_doc(path, sha):
+                    updated += 1
+                    print(f"  stamped {path.relative_to(ROOT)} -> {sha}")
+            else:
+                skipped += 1
+        print(f"docs_drift --update: stamped {updated} docs at {sha} ({skipped} already clean, skipped).")
         return 0
 
     reports = [check_doc(p) for p in tracked_docs()]

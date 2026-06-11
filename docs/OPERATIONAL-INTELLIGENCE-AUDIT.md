@@ -16,7 +16,7 @@ source_files:
   - frontend/kyber/src/features/investigation/use-investigations.ts
   - frontend/kyber/src/features/governance/use-governance.ts
   - frontend/kyber/src/features/graph/use-graph-intelligence.ts
-last_synced_commit: f6fab1b
+last_synced_commit: 48fb9d4
 ---
 
 # Operational Intelligence — Stub vs. Production Audit
@@ -106,8 +106,7 @@ Items marked **FIXED** have been addressed in the commit that accompanies this d
 | **Replay Worker** | `services/events/worker.py` | Polls queued jobs; filters envelopes from durable repo; republishes via producer; dry-run support |
 | **Kyber investigation hooks** | `apps/kyber/src/features/investigation/` | useInvestigations, useInvestigation, useCreateInvestigation, useTransitionInvestigationStatus, useAddInvestigationEvidence, useAddInvestigationAnnotation — all wired to live endpoints |
 | **Kyber governance hooks** | `apps/kyber/src/features/governance/` | useGovernanceDecisions, useGovernanceAudit, useEvaluateGovernance — all wired |
-| **Kyber graph intelligence hooks** | `apps/kyber/src/features/graph/` | use-graph-intelligence.ts + use-entity-intelligence.ts — wired to /v1/graph/*; use-graph-health.ts surfaces four-layer (H2H/H2A/A2H/A2A) health metrics |
-| **Graph relationship layers** | `shared/graph/relationship_layers.py` | All four layers enforced: H2H (identity), H2A (delegation), A2H (agent→human notifications/recommendations/escalations), A2A (economic/orchestration). Overlay scoring is deterministic (not placeholder) as of v8.9.0. |
+| **Kyber graph intelligence hooks** | `apps/kyber/src/features/graph/` | use-graph-intelligence.ts + use-entity-intelligence.ts — wired to /v1/graph/* |
 | **Shared TS contracts** | `packages/shared/operational-intelligence.ts` | InvestigationCase, GovernanceDecision, ReplayJobResponse, RealtimeChannel — mirrors Pydantic models |
 | **topics.json** | `docs/_generated/topics.json` | All 7 new operational intelligence topics present (101 total) |
 | **PaymentIntentRepository** | `repos.py` | `record_intent`, `list_for_agent(agent_id, tenant_id)`, `find_for_tenant(intent_id, tenant_id)`, `update_status` — all tenant-scoped; in-memory locally, PostgreSQL in staging/production |
@@ -117,6 +116,7 @@ Items marked **FIXED** have been addressed in the commit that accompanies this d
 | **FacilitatorRepository** | `repos.py` | `upsert_facilitator`, `list_active(tenant_id)` — x402 facilitator/trust-broker registry |
 | **X402LifecycleMapper** | `services/x402/lifecycle_mapper.py` | Routes 14 canonical x402 events to repositories; idempotent via event_id; full tenant isolation |
 | **AgentLifecycleMapper** | `services/agent/lifecycle_mapper.py` | Routes 19 canonical agent lifecycle events to graph mutations + repos; all vertex IDs use `{tenant_id}:agent:{id}` format |
+| **Four-layer graph coverage** | `/v1/graph/*` + `shared/graph-contract.ts` | All four interaction layers implemented: H2H (human↔human), H2A (human→agent), A2H (agent→human), A2A (agent↔agent). `classifyEdgeType` routes each edge type to its layer; `countEdgesByLayer` aggregates per-layer stats exposed via `/v1/graph/health`. |
 
 ---
 

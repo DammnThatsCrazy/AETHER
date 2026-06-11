@@ -1,0 +1,76 @@
+{
+  "version": "1.1",
+  "timestamp": "2026-06-10T20:44:54.620702+00:00",
+  "config": {
+    "requests_per_scenario": 500,
+    "concurrency": 8
+  },
+  "results": [
+    {
+      "scenario": "/v1/ingest/events/batch",
+      "requests": 500,
+      "errors": 0,
+      "error_rate": 0.0,
+      "rps": 178.7,
+      "p50_ms": 32.79,
+      "p95_ms": 39.13,
+      "p99_ms": 41.04,
+      "threshold_ms": 200,
+      "passed": true,
+      "elapsed_s": 2.8
+    },
+    {
+      "scenario": "/sdk/identity/resolve",
+      "requests": 500,
+      "errors": 0,
+      "error_rate": 0.0,
+      "rps": 116.9,
+      "p50_ms": 50.46,
+      "p95_ms": 60.11,
+      "p99_ms": 72.77,
+      "threshold_ms": 300,
+      "passed": true,
+      "elapsed_s": 4.28
+    },
+    {
+      "scenario": "/v1/profile360/user/{id}",
+      "requests": 500,
+      "errors": 0,
+      "error_rate": 0.0,
+      "rps": 78.5,
+      "p50_ms": 78.19,
+      "p95_ms": 93.81,
+      "p99_ms": 1092.61,
+      "threshold_ms": 500,
+      "passed": true,
+      "elapsed_s": 6.37
+    },
+    {
+      "scenario": "/v1/analytics/graphql",
+      "requests": 500,
+      "errors": 0,
+      "error_rate": 0.0,
+      "rps": 147.0,
+      "p50_ms": 38.54,
+      "p95_ms": 46.23,
+      "p99_ms": 58.86,
+      "threshold_ms": 200,
+      "passed": true,
+      "elapsed_s": 3.4
+    },
+    {
+      "scenario": "/v1/agent/tasks",
+      "requests": 500,
+      "errors": 0,
+      "error_rate": 0.0,
+      "rps": 94.9,
+      "p50_ms": 66.0,
+      "p95_ms": 77.69,
+      "p99_ms": 300.14,
+      "threshold_ms": 1000,
+      "passed": true,
+      "elapsed_s": 5.27
+    }
+  ],
+  "overall_passed": true
+}
