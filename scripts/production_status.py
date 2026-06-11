@@ -181,10 +181,12 @@ AREAS: list[Area] = [
     ),
     Area(
         "customer frontend (tenant app)",
-        3,
+        4,
         "React SPA with PKCE OIDC auth, typed API client, MSW fixtures isolated to "
-        "local-mocked mode. Tenant self-serve onboarding UI is missing (manual SQL + "
-        "API calls today) — that is the first-paying-customer blocker.",
+        "local-mocked mode. Self-serve tenant onboarding is implemented: 3-step signup "
+        "(register → OTP → API key reveal with SDK snippets), onboarding checklist, "
+        "API key CRUD, account/usage/billing dashboard. No operator SQL required for "
+        "first-paying-customer path.",
         ["frontend/aether/", "docs/PRODUCTIZATION.md"],
     ),
     Area(
@@ -286,12 +288,6 @@ AREAS: list[Area] = [
 
 
 BLOCKERS: list[Blocker] = [
-    Blocker(
-        "release-blocker",
-        "No tenant self-serve onboarding UI (manual SQL + API calls)",
-        "customer frontend (tenant app)",
-        "Build onboarding flow in frontend/aether against /v1/registration + /v1/me",
-    ),
     Blocker(
         "release-blocker",
         "Smart contracts have no external security audit",

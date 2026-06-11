@@ -42,10 +42,10 @@ What the June 2026 audit found:
   validation, source-linked docs drift (strict), contract/event/consent
   cross-validation, SDK release alignment, npm build/test, and both Python
   test suites. CI enforces all of it plus JS coverage thresholds.
-- The gaps are **operational and go-to-market, not architectural**: tenant
-  onboarding UI, provisioned infrastructure + secrets, trained ML artifacts,
-  external smart-contract audit, real (non-mocked) connector API calls, a
-  governed Dune feeder pipeline, and load-test baselines.
+- The gaps are **operational and go-to-market, not architectural**: provisioned
+  infrastructure + secrets, trained ML artifacts, external smart-contract audit,
+  real (non-mocked) connector API calls, a governed Dune feeder pipeline, and
+  load-test baselines.
 
 What this audit pass changed (June 2026):
 
@@ -72,7 +72,7 @@ Classification legend: `release-blocker` | `pre-production-blocker` |
 | 1 | 6 source-linked docs stale after v8.9.0 merges (`BACKEND-API`, `KYBER-ECONOMIC-OBSERVABILITY`, `X402_AUDIT_REPORT`, `ECONOMIC-VALUE-FRAMING`, `COMMERCE-OPERATOR-RUNBOOK`, `AGENTIC_COMMERCE_BUILD_SPEC`) | docs-drift | **Fixed** — content reviewed/updated, stamped |
 | 2 | `make test` and bare `pytest` broken: combined invocation of both suites hits `ImportPathMismatchError` | test-drift | **Fixed** — suites run separately; documented in `pyproject.toml` |
 | 3 | No single production-status routine; readiness claims scattered across `PRODUCTION-READINESS.md`, `PRODUCTIZATION.md`, `PRODUCTIZATION-CHECKLIST.md`, `AGENT-LAYER-PRODUCTION.md`, `scripts/compliance/readiness.py` | nice-to-have (was drift risk) | **Fixed** — `scripts/production_status.py` is now canonical |
-| 4 | Tenant self-serve onboarding UI missing (manual SQL + API calls) | release-blocker | Open — see `docs/PRODUCTIZATION.md` |
+| 4 | Tenant self-serve onboarding UI (3-step signup, OTP verification, API key reveal, SDK snippets, onboarding checklist, API key CRUD) | release-blocker | **Fixed** — implemented in `frontend/aether` signup → onboarding → settings pages |
 | 5 | Smart contracts (EVM/Solana/NEAR/Cosmos rewards) have **no external security audit** | release-blocker | Open — do not deploy to mainnet with real funds |
 | 6 | Production infrastructure not provisioned; production secrets not configured; ML artifacts not trained | release-blocker / pre-production-blocker | Open — external prerequisites per `PRODUCTION-READINESS.md` |
 | 7 | Agent Layer hosted mode requires durable storage (in-memory fallback blocked in hosted modes) | release-blocker (agent GA only) | Open — per `AGENT-LAYER-PRODUCTION.md` |
@@ -108,7 +108,7 @@ Rubric: 0 absent · 1 stub/scaffold · 2 partial/pilot · 3 pre-production ·
 | graph mutation safety | 4 |
 | graph health / drift detection | 3 |
 | Kyber (operator console) | 4 |
-| customer frontend (tenant app) | 3 |
+| customer frontend (tenant app) | 4 |
 | connectors (BYOK / source) | 2 |
 | Slack / action notifications | 3 |
 | Dune / data-lake feeders | 2 |
@@ -119,16 +119,13 @@ Rubric: 0 absent · 1 stub/scaffold · 2 partial/pilot · 3 pre-production ·
 | deployment / cloud readiness | 3 |
 | scale readiness | 2 |
 
-**Overall: ~3.3/5 — pre-production.** The 4-rated areas are genuinely
+**Overall: ~3.4/5 — pre-production.** The 4-rated areas are genuinely
 release-shaped; nothing scores 5 because nothing has carried production
 traffic at scale yet, and claiming otherwise would be a false readiness claim.
 
 ## 4. Release Blockers (ordered)
 
-1. **Tenant onboarding UI** — high. Without self-serve tenant creation the
-   first paying customer requires manual SQL. Fix: onboarding flow in
-   `frontend/aether` against `/v1/registration` + `/v1/me`.
-2. **Production infra + secrets** — high. Terraform exists but is not
+1. **Production infra + secrets** — high. Terraform exists but is not
    provisioned; run the stack + `scripts/bootstrap_aws_secrets.py`.
 3. **External smart-contract audit** — high (blocks mainnet only). The
    contracts are tested but unaudited; checklist in
@@ -166,10 +163,9 @@ traffic at scale yet, and claiming otherwise would be a false readiness claim.
 
 ## 7. Recommended Next PR Sequence
 
-1. **Tenant self-serve onboarding** — `frontend/aether` signup →
-   tenant + API-key provisioning against existing `/v1/registration`.
-   Accept: a new tenant can sign up, get keys, and send a first event
-   without operator SQL. (Clears blocker #1.)
+1. ~~**Tenant self-serve onboarding**~~ — **Done** (PR #287). `frontend/aether`
+   signup → OTP → API key reveal → onboarding checklist → settings. A new
+   tenant can sign up, get keys, and send a first event without operator SQL.
 2. **Connector productization wave 1 (Slack outbound + 2 source
    connectors)** — wire real credential-gated API calls for the highest-value
    connectors; add per-tenant channel mapping + opt-in templates for Slack
