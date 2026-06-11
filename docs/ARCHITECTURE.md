@@ -13,7 +13,7 @@ source_files:
 canonical_owner: platform@aether
 estimated_read_minutes: 20
 toc_depth: 3
-last_synced_commit: fd2288c
+last_synced_commit: af65923
 ---
 # Aether vNext — Architecture Guide
 
@@ -23,11 +23,11 @@ Aether is a **hybrid Python/FastAPI + Node/TypeScript** platform with four opera
 
 1. **SDK Plane** — Thin-client SDKs (Web, iOS, Android, React Native) collect raw events, fingerprints, wallet interactions, and session data. SDKs ship raw data to the backend.
 
-2. **Backend Plane** — Python/FastAPI with 60+ service routers handling ingestion, identity, analytics, ML inference, graph, rewards, lake management, profile intelligence, population omniview, expectation engine, behavioral continuity, RWA intelligence, Web3 coverage, cross-domain TradFi/Web2 intelligence, extraction defense mesh, privacy/policy control plane, **notification intelligence** (`/v1/notifications/intelligence/*` — event-driven multi-channel operator alerts + end-user Slack/Discord/Telegram/Webhook delivery), plus the customer-facing productization surface: **registration** (`POST /v1/tenants`), **auth** (`/v1/auth/*` — email+password+OTP signup, Auth0 SSO callback, API-key recovery), **caller profile** (`/v1/me/*` — paginated self-service API keys), **billing** (`/v1/billing/*` — Stripe Checkout + Billing Portal + invoices), **Stripe webhook** (`/v1/admin/billing/stripe/webhook`, signature-verified), **SDK utilities** (`/sdk/identity/resolve` — cross-device identity), and a monthly overage cron task + SLA expiry worker running in the app lifespan. Infrastructure: PostgreSQL (asyncpg), Redis (redis.asyncio), Neptune (gremlinpython), Kafka (aiokafka, 145 topics), S3, Prometheus.
+2. **Backend Plane** — Python/FastAPI with 65+ service routers handling ingestion, identity, analytics, ML inference, graph, rewards, lake management, profile intelligence, population omniview, expectation engine, behavioral continuity, RWA intelligence, Web3 coverage, cross-domain TradFi/Web2 intelligence, extraction defense mesh, privacy/policy control plane, **notification intelligence** (`/v1/notifications/intelligence/*` — event-driven multi-channel operator alerts + end-user Slack/Discord/Telegram/Webhook delivery), **Dune Analytics feeder** (`/v1/admin/dune-feeder/*` — governed Bronze→Silver data-lake pipeline with freshness/quality gates, SHA-256 row provenance, rollback-by-tag, and graph isolation), plus the customer-facing productization surface: **registration** (`POST /v1/tenants`), **auth** (`/v1/auth/*` — email+password+OTP signup, Auth0 SSO callback, API-key recovery), **caller profile** (`/v1/me/*` — paginated self-service API keys), **billing** (`/v1/billing/*` — Stripe Checkout + Billing Portal + invoices), **Stripe webhook** (`/v1/admin/billing/stripe/webhook`, signature-verified), **SDK utilities** (`/sdk/identity/resolve` — cross-device identity), and a monthly overage cron task + SLA expiry worker running in the app lifespan. Infrastructure: PostgreSQL (asyncpg), Redis (redis.asyncio), Neptune (gremlinpython), Kafka (aiokafka, 145 topics), S3, Prometheus.
 
 3. **Data Lake Plane** — Medallion architecture (Bronze/Silver/Gold) for raw data persistence, validation, feature materialization, and intelligence output generation. Lake data feeds ML training, graph mutations, and intelligence APIs.
 
-4. **Frontend Plane** — Two React/Vite SPAs backed by the same `@aether/ui` shared component library (`packages/ui`). **Kyber** (`apps/kyber`, port 5174) is the internal operator control surface — investigation, live monitoring, entity management, and approvals. **Aether** (`apps/aether`, port 5175) is the customer-facing web app — account management and commerce. Both apps use PKCE OIDC auth and communicate exclusively with the backend REST API.
+4. **Frontend Plane** — Two React/Vite SPAs backed by the same `@aether/ui` shared component library (`packages/ui`). **Kyber** (`apps/kyber`, port 5174) is the internal operator control surface — investigation, live monitoring, entity management, and approvals. **Aether** (`apps/aether`, port 5175) is the customer-facing web app — account management and commerce. Both apps use PKCE OIDC auth and communicate exclusively with the backend REST API. Shared TypeScript operator contracts live in `packages/shared/`: `operator-scope.ts` (`GraphScope`, `ScopedGraphResponse<T>`, provenance/freshness/redaction envelopes), `graph-health.ts` (`GraphHealthScore`, `GraphDriftEvent`, `ContaminationEvent`, `TenantHealthRollup`), and `kyber-command.ts` (`KyberCommandEnvelope`, `KyberCommandReviewEnvelope`).
 
 ### Data Flow
 
@@ -292,6 +292,11 @@ Resolution Consumer (real-time)
 | `/v1/providers/usage` | GET | Per-tenant provider usage stats |
 | `/v1/providers/health` | GET | Provider health + circuit breaker states |
 | `/v1/providers/test` | POST | Test a provider call |
+| `/v1/admin/dune-feeder/ingest` | POST | Land Dune query results in Bronze with freshness + quality gates (admin) |
+| `/v1/admin/dune-feeder/health` | GET | Dune feeder health: Bronze record counts, graph isolation flag (admin) |
+| `/v1/admin/dune-feeder/rollback` | POST | Roll back Bronze records by source_tag (admin) |
+| `/v1/admin/dune-feeder/audit/{tag}` | GET | Provenance chain + row hashes for a source_tag (admin) |
+| `/v1/admin/dune-feeder/promote/{tag}` | POST | Promote Bronze rows to Silver for a source_tag (admin) |
 
 ## Event Flow
 

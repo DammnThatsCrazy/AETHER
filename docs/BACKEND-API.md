@@ -11,7 +11,7 @@ source_files:
 canonical_owner: backend@aether
 estimated_read_minutes: 60
 toc_depth: 3
-last_synced_commit: fd2288c
+last_synced_commit: af65923
 ---
 # Aether Backend API v8.8.0 — Endpoint Specification
 
@@ -1918,3 +1918,42 @@ Event-driven multi-channel operator notification pipeline. Ingests intelligence 
 - `notifications:approve` — operator approve/suppress/escalate
 - `notifications:manage` — config management
 - `notifications:channels:write` — channel registration/removal
+
+---
+
+### Dune Analytics Feeder Service (v8.9.0)
+
+Governed Bronze→Silver data-lake feeder for Dune Analytics query results. All routes require
+`admin` permission and are mounted under `/v1/admin/dune-feeder/`. The service enforces:
+freshness gates (configurable max-age), per-row quality gates (schema + required-field
+validation), SHA-256 row provenance hashes, rollback by `source_tag`, and graph isolation
+(no direct graph mutation from this service).
+
+| Method | Path | Description |
+|--------|------|-------------|
+| `POST` | `/v1/admin/dune-feeder/ingest` | Land a `DuneQueryResult` in Bronze with freshness + quality gates |
+| `GET` | `/v1/admin/dune-feeder/health` | Health metrics: total Bronze records, unique source tags, graph isolation flag |
+| `POST` | `/v1/admin/dune-feeder/rollback` | Remove all Bronze records for a given `source_tag` |
+| `GET` | `/v1/admin/dune-feeder/audit/{tag}` | Return provenance chain and row hashes for a `source_tag` |
+| `POST` | `/v1/admin/dune-feeder/promote/{tag}` | Promote validated Bronze rows for `source_tag` to Silver (explicit operator action) |
+
+**Ingest request shape:**
+```json
+{
+  "query_result": {
+    "query_id": "123456",
+    "execution_id": "exec_abc",
+    "query_name": "onchain_balances",
+    "rows": [{ "address": "0xabc", "balance": 100.0 }],
+    "pulled_at": "2026-06-11T00:00:00Z"
+  },
+  "source_tag": "onchain_2026_06_11_001",
+  "domain": "onchain",
+  "schema": { "address": "str", "balance": "float" },
+  "required_fields": ["address", "balance"],
+  "max_age_seconds": 3600,
+  "quality_threshold": 0.8
+}
+```
+
+**Required permissions:** `admin`

@@ -12,7 +12,7 @@ source_files:
 canonical_owner: platform@aether
 estimated_read_minutes: 12
 toc_depth: 3
-last_synced_commit: fd2288c
+last_synced_commit: af65923
 ---
 # Operations Runbook v8.8.0
 
@@ -277,6 +277,55 @@ at the HTTP layer but verifies a Stripe-signed payload — failures should alert
 
 These start during app `lifespan` startup and are cancelled on shutdown. Restart loops
 during deploys are normal; persistent failures should page billing oncall.
+
+---
+
+## Dune Analytics Feeder Operations
+
+The `DuneFeederService` (`services/dune_feeder/`) manages governed Bronze→Silver landing for
+Dune Analytics query results. It is an in-memory store in `AETHER_ENV=local`; staging/production
+should persist to the data lake.
+
+### Health Check
+
+```
+GET /v1/admin/dune-feeder/health
+```
+
+Returns `total_bronze_records`, `total_silver_records`, `unique_source_tags`, and
+`graph_isolation_enforced: true`. If `graph_isolation_enforced` is ever `false`, stop all
+ingestion and investigate — the service must never write to the graph.
+
+### Rollback
+
+To remove a bad batch from Bronze before it can be promoted:
+
+```
+POST /v1/admin/dune-feeder/rollback
+{ "source_tag": "<tag>" }
+```
+
+Returns `deleted` count. Verify with `GET /v1/admin/dune-feeder/audit/<tag>` (should return
+empty list).
+
+### Silver Promotion
+
+Silver promotion is an explicit operator action — never automatic:
+
+```
+POST /v1/admin/dune-feeder/promote/<tag>
+```
+
+Check `GET /v1/admin/dune-feeder/audit/<tag>` first to confirm provenance is clean and
+`quality_score` is acceptable before promoting.
+
+### Failure Modes
+
+| Failure | Behaviour | Recovery |
+|---------|-----------|----------|
+| Freshness gate failure | 400 `BadRequestError`; no rows land | Re-pull Dune query with fresher `pulled_at` |
+| Quality threshold failure | Rows with score below threshold are rejected; partial ingest succeeds | Investigate schema mismatches; roll back and re-ingest |
+| Service crash before promote | Bronze rows persist; Silver rows do not | Restart service; resume from Bronze via audit + promote |
 
 ---
 
