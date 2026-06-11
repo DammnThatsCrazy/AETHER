@@ -235,4 +235,3 @@ async def list_gold_records(
         "record_count": len(records),
         "records": records,
     }).to_dict()
-# test
