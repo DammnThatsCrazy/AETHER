@@ -448,14 +448,16 @@ class Profile360Tasks(TaskSet):
 
     @task(1)
     def profile360_nonexistent(self):
-        """Unknown user — should 404 gracefully."""
+        """Unknown user — Profile360 returns 200 with status=unknown for missing identities."""
         with self.client.get(
             f"/v1/profile360/user/nonexistent-{uuid.uuid4()}",
             headers=self.headers,
-            name="/v1/profile360/user/{id} [404]",
+            name="/v1/profile360/user/{id} [miss]",
             catch_response=True,
         ) as resp:
-            if resp.status_code == 404:
+            # ProfileComposer falls back to {"status": "unknown"} on miss (HTTP 200),
+            # not a 404, so both 200 and 404 are valid non-error responses.
+            if resp.status_code in (200, 404):
                 resp.success()
 
 

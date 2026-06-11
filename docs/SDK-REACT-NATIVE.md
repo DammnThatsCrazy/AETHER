@@ -14,7 +14,7 @@ source_files:
 canonical_owner: sdk@aether
 estimated_read_minutes: 9
 toc_depth: 3
-last_synced_commit: f6fab1b
+last_synced_commit: c66e4dd
 ---
 
 # Aether React Native SDK v8.9.0 — Integration Guide

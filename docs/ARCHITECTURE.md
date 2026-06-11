@@ -13,7 +13,7 @@ source_files:
 canonical_owner: platform@aether
 estimated_read_minutes: 20
 toc_depth: 3
-last_synced_commit: f6fab1b
+last_synced_commit: c66e4dd
 ---
 # Aether vNext — Architecture Guide
 
@@ -386,7 +386,7 @@ All four SDKs expose the same core public API surface:
 | **Undo capability** | `RESOLVED_AS` edges store full signal snapshots. Merges can be reversed by restoring the secondary profile. |
 | **Privacy** | All PII (email, phone, IP) stored as SHA-256 hashes only. Raw values never persisted in graph or audit trail. |
 
-## Model Extraction Defense (v8.9.0)
+## Model Extraction Defense (v8.8.0)
 
 The ML serving pipeline is wrapped with a modular defense layer that protects against model extraction and knowledge distillation attacks.
 

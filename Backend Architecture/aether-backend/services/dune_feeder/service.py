@@ -50,6 +50,7 @@ def _hash_row(row: dict) -> str:
 
 _BRONZE_STORE: dict[str, DuneBronzeRecord] = {}   # record_id -> record
 _SILVER_STORE: dict[str, DuneBronzeRecord] = {}   # record_id -> promoted copy
+_GOLD_STORE: dict[str, dict] = {}                 # gold_id -> materialized aggregate
 
 # Totals for health metrics
 _TOTAL_SUBMITTED: int = 0
@@ -63,6 +64,7 @@ def _reset_stores() -> None:
     global _TOTAL_SUBMITTED, _TOTAL_REJECTED, _LAST_INGEST_AT, _LAST_INGEST_SOURCE_TAG
     _BRONZE_STORE.clear()
     _SILVER_STORE.clear()
+    _GOLD_STORE.clear()
     _TOTAL_SUBMITTED = 0
     _TOTAL_REJECTED = 0
     _LAST_INGEST_AT = None
@@ -175,10 +177,12 @@ class DuneFeederService:
 
         # Type check (best-effort)
         if schema:
-            _TYPE_MAP: dict[str, type] = {
+            # "number" accepts both int and float — integer JSON values are valid
+            # numeric values and would otherwise be rejected by isinstance(1, float).
+            _TYPE_MAP: dict[str, type | tuple] = {
                 "str": str, "string": str,
                 "int": int, "integer": int,
-                "float": float, "number": float,
+                "float": float, "number": (int, float),
                 "bool": bool, "boolean": bool,
                 "list": list, "dict": dict,
             }
@@ -450,19 +454,27 @@ class DuneFeederService:
             if r.source_tag == source_tag
             and (tenant_scope is None or r.tenant_scope == tenant_scope)
         ]
+        gold_ids = [
+            gid for gid, g in _GOLD_STORE.items()
+            if g.get("source_tag") == source_tag
+            and (tenant_scope is None or g.get("tenant_scope") == tenant_scope)
+        ]
 
         for rid in bronze_ids:
             del _BRONZE_STORE[rid]
         for rid in silver_ids:
             del _SILVER_STORE[rid]
+        for gid in gold_ids:
+            del _GOLD_STORE[gid]
 
-        total = len(bronze_ids) + len(silver_ids)
+        total = len(bronze_ids) + len(silver_ids) + len(gold_ids)
         logger.info(
             "Dune rollback complete",
             extra={
                 "source_tag": source_tag,
                 "bronze_deleted": len(bronze_ids),
                 "silver_deleted": len(silver_ids),
+                "gold_deleted": len(gold_ids),
             },
         )
         metrics.increment("dune_feeder_rollback", labels={"source_tag": source_tag})
@@ -516,12 +528,111 @@ class DuneFeederService:
             status=overall,
             total_bronze_records=total_bronze,
             total_silver_records=total_silver,
+            total_gold_records=len(_GOLD_STORE),
             unique_source_tags=len(unique_tags),
             rejection_rate=rejection_rate,
             last_ingest_at=_LAST_INGEST_AT,
             last_ingest_source_tag=_LAST_INGEST_SOURCE_TAG,
             graph_isolation_enforced=True,
         )
+
+    # ── Gold materialization ──────────────────────────────────────────────────
+
+    def promote_to_gold(self, source_tag: str, tenant_scope: Optional[str] = None) -> int:
+        """
+        Materialize Gold aggregates from Silver rows with matching source_tag.
+
+        Gold records are domain-level aggregates keyed by (source_tag, domain,
+        query_id, tenant_scope) — the tenant_scope is always part of the key so
+        rows from different tenants that share a tag are never merged.
+
+        Silver rows that have already contributed to a Gold record are stamped
+        and skipped on re-calls (idempotent).
+
+        Returns:
+            Number of new Gold records created.
+        """
+        from collections import defaultdict
+
+        eligible: list[DuneBronzeRecord] = [
+            r for r in _SILVER_STORE.values()
+            if r.source_tag == source_tag
+            and r.promotion_status == "silver"
+            and (tenant_scope is None or r.tenant_scope == tenant_scope)
+            and not (r.provenance_chain and r.provenance_chain[-1].notes
+                     and r.provenance_chain[-1].notes.startswith("gold_materialized"))
+        ]
+
+        if not eligible:
+            return 0
+
+        # Key includes tenant_scope to prevent cross-tenant row merging (P1 fix)
+        groups: dict[tuple, list[DuneBronzeRecord]] = defaultdict(list)
+        for rec in eligible:
+            groups[(rec.domain, rec.query_id, rec.tenant_scope)].append(rec)
+
+        now_iso = _utc_now_iso()
+        created = 0
+
+        for (domain, query_id, rec_tenant), rows in groups.items():
+            gold_id = str(uuid.uuid4())
+            avg_quality = round(sum(r.quality_score for r in rows) / len(rows), 4)
+            sorted_rows = sorted(rows, key=lambda r: r.row_index)
+
+            gold_record: dict = {
+                "gold_id": gold_id,
+                "provider": "dune",
+                "source_tag": source_tag,
+                "domain": domain,
+                "query_id": query_id,
+                "query_name": rows[0].query_name,
+                "execution_id": rows[0].execution_id,
+                "tenant_scope": rec_tenant,
+                "materialized_at": now_iso,
+                "row_count": len(rows),
+                "avg_quality_score": avg_quality,
+                "data": [r.row_data for r in sorted_rows],
+                "provenance": {
+                    "source_record_ids": [r.record_id for r in rows],
+                    "materialization_step": "gold_materialization",
+                    "actor": "dune_feeder_service",
+                },
+            }
+            _GOLD_STORE[gold_id] = gold_record
+            created += 1
+
+            for rec in rows:
+                updated = rec.model_copy(
+                    update={
+                        "provenance_chain": rec.provenance_chain + [
+                            ProvenanceStep(
+                                step="gold_materialization",
+                                actor="dune_feeder_service",
+                                timestamp=now_iso,
+                                notes=f"gold_materialized gold_id={gold_id}",
+                            )
+                        ],
+                    }
+                )
+                _SILVER_STORE[rec.record_id] = updated
+                _BRONZE_STORE[rec.record_id] = updated
+
+        logger.info(
+            "Dune rows materialized to Gold",
+            extra={"source_tag": source_tag, "gold_records_created": created},
+        )
+        metrics.increment("dune_feeder_promote_gold", labels={"source_tag": source_tag})
+        return created
+
+    def get_gold_records(self, source_tag: Optional[str] = None, tenant_scope: Optional[str] = None) -> list[dict]:
+        """Return Gold records filtered by source_tag and/or tenant_scope."""
+        records = list(_GOLD_STORE.values())
+        if source_tag is not None:
+            records = [r for r in records if r.get("source_tag") == source_tag]
+        if tenant_scope is not None:
+            records = [r for r in records if r.get("tenant_scope") == tenant_scope]
+        records.sort(key=lambda r: r.get("materialized_at", ""), reverse=True)
+        return records
 
 
 # Module-level singleton (mirrors pattern in other services)

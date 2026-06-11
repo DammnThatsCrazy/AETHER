@@ -11,9 +11,9 @@ source_files:
 canonical_owner: platform@aether
 estimated_read_minutes: 10
 toc_depth: 3
-last_synced_commit: f6fab1b
+last_synced_commit: c66e4dd
 ---
-# Smoke Test & Post-Deploy Verification Checklist — Aether Platform v8.9.0
+# Smoke Test & Post-Deploy Verification Checklist — Aether Platform v8.8.0
 
 Run after every deployment. Failures in the **Smoke Tests** section are rollback triggers. Failures in **Extended Verification** may be acceptable depending on context.
 

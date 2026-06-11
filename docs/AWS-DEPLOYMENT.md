@@ -14,14 +14,14 @@ source_files:
 canonical_owner: platform@aether
 estimated_read_minutes: 14
 toc_depth: 3
-last_synced_commit: f6fab1b
+last_synced_commit: c66e4dd
 ---
 
 # AWS Deployment — Infrastructure Reference
 
 Internal reference for Aether's AWS infrastructure. All resources are managed
 by Terraform (`AWS Deployment/aether-aws/terraform/`) and deployed via the
-Python orchestrator (`AWS Deployment/aether-aws/main.py`). The orchestrator now guards its local `scripts/` imports so repo-level validation imports cannot shadow AWS deployment helper modules during tests.
+Python orchestrator (`AWS Deployment/aether-aws/main.py`).
 
 ## Account topology
 

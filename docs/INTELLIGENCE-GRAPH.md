@@ -12,9 +12,9 @@ source_files:
 canonical_owner: graph@aether
 estimated_read_minutes: 15
 toc_depth: 3
-last_synced_commit: f6fab1b
+last_synced_commit: c66e4dd
 ---
-# Unified On-Chain Intelligence Graph v8.9.0
+# Unified On-Chain Intelligence Graph v8.8.0
 
 ## Overview
 
@@ -226,12 +226,9 @@ Full graph traversal, path-finding, and overlay services via `GraphTraversalEngi
 | `POST` | `/v1/graph/traverse` | BFS traversal from a root vertex — depth, edge-type, and tenant-scope filters |
 | `POST` | `/v1/graph/path` | Shortest-path (Dijkstra) between two vertices |
 | `POST` | `/v1/graph/temporal` | Temporal BFS — traverse edges created within a time window |
-| `POST` | `/v1/graph/overlay` | Overlay scores (layer_coverage, risk, trust) for the tenant's graph; scoped to `tenantId` vertices only |
+| `POST` | `/v1/graph/overlay` | Fetch all vertices matching type/tenant predicates (uses `get_all_vertices()`) |
 | `POST` | `/v1/graph/filter` | Filter vertices by risk level, relationship type, or property predicate |
 | `GET` | `/v1/graph/contracts` | List smart-contract vertices visible in the tenant's graph |
-| `GET` | `/v1/graph/health` | Layer coverage health card: `layer_counts` (H2H/H2A/A2H/A2A + `unknown`), `all_four_layers_present`, backend mode; scoped to tenant |
-
-**`layer_counts` field note:** All responses that include `layer_counts` (health, overlay, traverse) now carry a fifth key `"unknown"` counting edges whose `edge_type` is not in `_EDGE_LAYER_MAP` (e.g. Web3 cross-domain edges such as `USES_PROTOCOL`, `HOLDS_TOKEN`). This prevents unclassified edges from inflating H2H counts. Consumers that sum all four named layers to get a total should also read the `"unknown"` bucket or use `edge_count` from the same response.
 
 ### Agent Extensions
 

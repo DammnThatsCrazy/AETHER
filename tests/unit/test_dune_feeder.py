@@ -319,3 +319,111 @@ class TestHealth:
         h = svc.get_health()
         assert h.total_bronze_records == 2
         assert h.unique_source_tags == 1
+
+
+class TestQualityGateNumberType:
+    def test_number_schema_accepts_integer_values(self, feeder):
+        """'number' type in schema must accept integer JSON values (Codex P2 fix)."""
+        svc, models_mod = feeder
+        rows = [{"count": 42, "volume": 1000}]
+        req = models_mod.FeederIngestRequest(
+            query_result=models_mod.DuneQueryResult(
+                query_id="q1",
+                execution_id="e1",
+                query_name="count_query",
+                rows=rows,
+                pulled_at=_now_iso(),
+            ),
+            source_tag="test_number_type",
+            domain="onchain",
+            schema={"count": "number", "volume": "number"},
+            required_fields=["count", "volume"],
+        )
+        resp = svc.ingest(req)
+        assert resp.rows_accepted == 1
+        assert resp.rows_rejected == 0
+
+
+class TestGoldMaterialization:
+    def test_materialize_gold_from_silver(self, feeder):
+        svc, models_mod = feeder
+        rows = [{"address": "0xabc"}, {"address": "0xdef"}]
+        req = _make_request(models_mod, rows)
+        svc.ingest(req)
+        svc.promote_to_silver("test_batch_001")
+        created = svc.promote_to_gold("test_batch_001")
+        assert created >= 1
+
+    def test_materialize_gold_idempotent(self, feeder):
+        svc, models_mod = feeder
+        rows = [{"address": "0xabc"}]
+        req = _make_request(models_mod, rows)
+        svc.ingest(req)
+        svc.promote_to_silver("test_batch_001")
+        first = svc.promote_to_gold("test_batch_001")
+        second = svc.promote_to_gold("test_batch_001")
+        assert first >= 1
+        assert second == 0
+
+    def test_materialize_gold_cross_tenant_isolation(self, feeder):
+        """Gold grouping key must include tenant_scope (Codex P1 fix)."""
+        svc, models_mod = feeder
+        for tenant in ("tenant_a", "tenant_b"):
+            req = models_mod.FeederIngestRequest(
+                query_result=models_mod.DuneQueryResult(
+                    query_id="q1",
+                    execution_id=f"exec_{tenant}",
+                    query_name="shared_query",
+                    rows=[{"address": f"0x{tenant}"}],
+                    pulled_at=_now_iso(),
+                ),
+                source_tag="shared_tag",
+                domain="onchain",
+                tenant_scope=tenant,
+            )
+            svc.ingest(req)
+            svc.promote_to_silver("shared_tag", tenant_scope=tenant)
+        created = svc.promote_to_gold("shared_tag")
+        # Each tenant produces its own Gold record — no cross-tenant merging
+        assert created == 2
+        records = svc.get_gold_records(source_tag="shared_tag")
+        tenant_scopes = {r["tenant_scope"] for r in records}
+        assert "tenant_a" in tenant_scopes
+        assert "tenant_b" in tenant_scopes
+
+    def test_materialize_gold_unknown_tag_returns_zero(self, feeder):
+        svc, _ = feeder
+        assert svc.promote_to_gold("nonexistent_xyz") == 0
+
+    def test_get_gold_records_filtered_by_source_tag(self, feeder):
+        svc, models_mod = feeder
+        rows = [{"address": "0xabc"}]
+        req = _make_request(models_mod, rows)
+        svc.ingest(req)
+        svc.promote_to_silver("test_batch_001")
+        svc.promote_to_gold("test_batch_001")
+        records = svc.get_gold_records(source_tag="test_batch_001")
+        assert len(records) >= 1
+        assert records[0]["source_tag"] == "test_batch_001"
+        assert records[0]["row_count"] >= 1
+
+    def test_rollback_removes_gold_records(self, feeder):
+        svc, models_mod = feeder
+        rows = [{"address": "0xabc"}]
+        req = _make_request(models_mod, rows)
+        svc.ingest(req)
+        svc.promote_to_silver("test_batch_001")
+        svc.promote_to_gold("test_batch_001")
+        assert len(svc.get_gold_records(source_tag="test_batch_001")) >= 1
+        svc.rollback("test_batch_001")
+        assert len(svc.get_gold_records(source_tag="test_batch_001")) == 0
+
+    def test_health_reflects_gold_count(self, feeder):
+        svc, models_mod = feeder
+        rows = [{"address": "0xabc"}]
+        req = _make_request(models_mod, rows)
+        svc.ingest(req)
+        svc.promote_to_silver("test_batch_001")
+        svc.promote_to_gold("test_batch_001")
+        h = svc.get_health()
+        assert h.total_gold_records >= 1
