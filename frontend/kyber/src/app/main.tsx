@@ -15,9 +15,19 @@ if (!validation.ok) {
 
 async function bootstrap() {
   if (isLocalMocked()) {
-    const { worker } = await import('../mocks/browser');
-    await worker.start({ onUnhandledRequest: 'bypass' });
-    log.info('[KYBER] MSW mock service worker started');
+    try {
+      const { worker } = await import('../mocks/browser');
+      // Timeout guards against service worker registration hanging in headless/CI environments.
+      await Promise.race([
+        worker.start({ onUnhandledRequest: 'bypass' }),
+        new Promise<void>((_, reject) =>
+          setTimeout(() => reject(new Error('MSW startup timeout')), 5000),
+        ),
+      ]);
+      log.info('[KYBER] MSW mock service worker started');
+    } catch (e) {
+      log.warn('[KYBER] MSW startup skipped (rendering without mocks):', e);
+    }
   }
 
   const root = document.getElementById('root');
