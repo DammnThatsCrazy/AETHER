@@ -42,18 +42,64 @@ interface BaseEvent {
 Bearer token = `apiKey` from Aether dashboard. Rate-limited server-side via
 token bucket (`aether:ratelimit:{api_key}`).
 
+## Response body
+
+```json
+{
+  "accepted": 2,
+  "duplicates": 1,
+  "rejected": 0,
+  "events": [
+    { "id": "client-event-id", "status": "accepted" },
+    { "id": "client-event-id-2", "status": "duplicate" },
+    { "id": "client-event-id-3", "status": "accepted" }
+  ],
+  "batchId": "server-batch-uuid",
+  "receivedAt": "2024-06-01T12:00:01.000Z"
+}
+```
+
+Statuses:
+- `accepted` — event validated, written to Bronze, published to event bus.
+- `duplicate` — same `(tenant_id, event_id, schema_version)` was already accepted. No double billing.
+- `rejected` — event failed validation (unknown type, malformed payload, etc.). `reason` field explains why.
+
+A single bad event does **not** fail the whole batch.
+
+## Durability
+
+The accepted path is:
+1. Validate per-event
+2. Check tenant-scoped idempotency in Redis (Postgres fallback on miss)
+3. **Write to durable Bronze tier** (`bronze_sdk_events`)
+4. Publish to Kafka `aether.sdk.events.validated`
+5. Return `accepted`
+
+If step 3 or 4 fails, the server returns 503 and the SDK retries. Bronze writes are idempotent — retries are safe.
+
+## Idempotency
+
+Key: `SHA256(tenant_id:event_id:schema_version)` — tenant-scoped so two tenants sending the same event_id are tracked independently. Dedup window: 24 hours.
+
 ## Backend routing
 
-The `/v1/batch` path is served by the **Data Lake ingestion service**
-(`Data Lake Architecture/aether-Datalake-backend/services/ingestion/`).
+`POST /v1/batch` is implemented in:
+```
+Backend Architecture/aether-backend/services/ingestion/batch.py
+```
+
 From there events flow into Kafka (`aether.sdk.events.validated`) and into
-Bronze/Silver/Gold lake tiers.
+Bronze/Silver/Gold lake tiers via ingestion workers.
 
-## Not for SDK use
+## Deprecated aliases (server-to-server only, not for SDKs)
 
-The FastAPI path `POST /v1/ingest/events[/batch]` in
-`Backend Architecture/aether-backend/services/ingestion/routes.py` is used
-for **server-to-server connector ingestion only**. SDKs must not target it.
+```
+POST /v1/ingest/events        — deprecated single-event alias
+POST /v1/ingest/events/batch  — deprecated batch alias
+POST /v1/ingest/feed          — server-to-server external feed (requires external_id)
+```
+
+SDKs **must** use `/v1/batch`. These aliases are retained for internal tools only and are marked deprecated in the OpenAPI schema.
 
 ## Retries & offline
 

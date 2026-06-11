@@ -33,7 +33,10 @@ from shared.auth.auth import (
 )
 from shared.logger.logger import get_logger, set_request_context, metrics
 from shared.plans.catalog import PLAN_CATALOG
-from shared.rate_limit.feature_gate import PUBLIC_PATHS as _GATE_PUBLIC_PATHS
+from shared.rate_limit.feature_gate import (
+    PUBLIC_PATHS as _GATE_PUBLIC_PATHS,
+    PUBLIC_PATH_PREFIXES as _GATE_PUBLIC_PATH_PREFIXES,
+)
 from config.settings import settings
 from dependencies.providers import get_registry
 
@@ -131,6 +134,13 @@ def _get_mesh_components():
 _PUBLIC_PATHS = set(_GATE_PUBLIC_PATHS) | {"/v1/metrics"}
 
 
+def _is_public_path(path: str) -> bool:
+    """True if the path is exact-matched in PUBLIC_PATHS or prefix-matched in PUBLIC_PATH_PREFIXES."""
+    if path in _PUBLIC_PATHS:
+        return True
+    return any(path.startswith(prefix) for prefix in _GATE_PUBLIC_PATH_PREFIXES)
+
+
 def _resolve_plan_tier(context: TenantContext) -> PlanTier:
     """Pick the PlanTier for a tenant context.
 
@@ -224,7 +234,7 @@ def register_middleware(app: FastAPI) -> None:
         access_tier_header: Optional[str] = None
 
         # --- Auth (skip public paths) ---
-        if request.url.path not in _PUBLIC_PATHS:
+        if not _is_public_path(request.url.path):
             try:
                 registry = get_registry()
                 context = await _authenticate_async(

@@ -17,6 +17,7 @@ from typing import Any, Optional
 from enum import Enum
 
 from shared.common.common import UnauthorizedError, ForbiddenError, utc_now
+from shared.cache.cache import TTL  # noqa: E402 — used in _lookup_api_key_from_db
 from config.settings import settings
 
 
@@ -403,7 +404,16 @@ class APIKeyValidator:
         key_data = await self._cache.get_json(cache_key)
 
         if not key_data:
-            raise UnauthorizedError("Invalid API key")
+            # Redis miss — fall back to durable Postgres lookup so API keys
+            # survive cache restarts.  Repopulate cache on hit.
+            key_data = await _lookup_api_key_from_db(key_hash)
+            if key_data:
+                try:
+                    await self._cache.set_json(cache_key, key_data, ttl=TTL.DAY)
+                except Exception:
+                    pass  # Cache repopulation is best-effort
+            else:
+                raise UnauthorizedError("Invalid API key")
 
         ctx = self._build_context(key_data)
         ctx = await _maybe_apply_billing_plan_tier(ctx)
@@ -418,6 +428,31 @@ class APIKeyValidator:
     def _build_context(key_data: dict) -> TenantContext:  # noqa: D401
         """See module-level helper below for billing-account override."""
         return _build_context_from_key_data(key_data)
+
+
+async def _lookup_api_key_from_db(key_hash: str) -> Optional[dict]:
+    """Durable Postgres fallback for API key lookup when Redis misses.
+
+    Only called on cache miss.  Returns None if the key is not found or if
+    the DB is unavailable (best-effort — missing key still means unauthorized).
+    """
+    try:
+        from repositories.repos import APIKeyRepository
+        repo = APIKeyRepository()
+        key_id = key_hash[:12]
+        record = await repo.find_by_id(key_id)
+        if not record:
+            return None
+        # Normalize to the same shape that cache stores
+        return {
+            "tenant_id": record.get("tenant_id", ""),
+            "role": record.get("role", "viewer"),
+            "tier": record.get("tier", "free"),
+            "plan_tier": record.get("plan_tier"),
+            "permissions": record.get("permissions", []),
+        }
+    except Exception:
+        return None
 
 
 async def _update_last_used_at(key_hash: str) -> None:

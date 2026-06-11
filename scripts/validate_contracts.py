@@ -88,6 +88,121 @@ def check_consent_purposes_self_consistent(events: dict, consent: dict) -> list[
     return errors
 
 
+def check_python_backend_event_types(events: dict) -> list[str]:
+    """Python CANONICAL_EVENT_TYPES must exactly match the generated event registry.
+
+    Reads the source file directly to avoid requiring all backend runtime
+    dependencies to be installed in the docs/CI validation environment.
+    """
+    import ast
+    import re
+    from pathlib import Path as _Path
+
+    errors: list[str] = []
+    ts_names = {ev["name"] for ev in events.get("events", [])}
+
+    batch_path = (
+        _Path(__file__).resolve().parent.parent
+        / "Backend Architecture" / "aether-backend"
+        / "services" / "ingestion" / "batch.py"
+    )
+    if not batch_path.exists():
+        errors.append(
+            "services/ingestion/batch.py not found — "
+            "POST /v1/batch ingestion endpoint is missing."
+        )
+        return errors
+
+    source = batch_path.read_text(encoding="utf-8")
+
+    # Extract the frozenset literal assigned to CANONICAL_EVENT_TYPES
+    # Pattern: CANONICAL_EVENT_TYPES: frozenset[str] = frozenset({...})
+    match = re.search(
+        r"CANONICAL_EVENT_TYPES[^=]*=\s*frozenset\(\{([^}]+)\}\)",
+        source,
+        re.DOTALL,
+    )
+    if not match:
+        errors.append(
+            "Could not parse CANONICAL_EVENT_TYPES from services/ingestion/batch.py. "
+            "Ensure it is a frozenset literal."
+        )
+        return errors
+
+    # Extract quoted strings from the frozenset body
+    py_names = set(re.findall(r'"([a-z_0-9]+)"', match.group(1)))
+    if not py_names:
+        errors.append("CANONICAL_EVENT_TYPES parsed but appears empty.")
+        return errors
+
+    only_ts = ts_names - py_names
+    only_py = py_names - ts_names
+    if only_ts:
+        errors.append(
+            f"Event type(s) in generated registry but NOT in Python CANONICAL_EVENT_TYPES: "
+            f"{sorted(only_ts)}. Update services/ingestion/batch.py."
+        )
+    if only_py:
+        errors.append(
+            f"Event type(s) in Python CANONICAL_EVENT_TYPES but NOT in generated registry: "
+            f"{sorted(only_py)}. Update packages/shared/events.ts or batch.py."
+        )
+
+    return errors
+
+
+def check_sdk_endpoint_not_ingest_events(events: dict) -> list[str]:
+    """SDK source files must not reference /v1/ingest/events or /v1/ingest/events/batch.
+
+    Those are deprecated server-to-server aliases; SDKs must use /v1/batch.
+    """
+    import subprocess
+    from pathlib import Path as _Path
+
+    errors: list[str] = []
+    sdk_dir = _Path(__file__).resolve().parent.parent / "packages"
+    bad_patterns = ["/v1/ingest/events", "/v1/ingest/events/batch"]
+
+    for pattern in bad_patterns:
+        try:
+            result = subprocess.run(
+                ["grep", "-r", "--include=*.ts", "--include=*.tsx",
+                 "--include=*.swift", "--include=*.kt", "--include=*.java",
+                 "-l", pattern, str(sdk_dir)],
+                capture_output=True, text=True,
+            )
+            if result.stdout.strip():
+                files = result.stdout.strip().split("\n")
+                errors.append(
+                    f"SDK source files reference deprecated endpoint {pattern!r}: "
+                    f"{files}. SDKs must use /v1/batch."
+                )
+        except FileNotFoundError:
+            pass  # grep not available — skip
+
+    return errors
+
+
+def check_no_api_key_in_query_params(events: dict) -> list[str]:
+    """SDK event-queue files must not send the API key as a URL query parameter."""
+    from pathlib import Path as _Path
+
+    errors: list[str] = []
+    sdk_files = [
+        _Path(__file__).resolve().parent.parent / "packages" / "web" / "src" / "core" / "event-queue.ts",
+    ]
+    for path in sdk_files:
+        if not path.exists():
+            continue
+        source = path.read_text(encoding="utf-8")
+        if "?token=" in source:
+            errors.append(
+                f"{path.relative_to(_Path(__file__).resolve().parent.parent)}: "
+                f"API key sent as ?token= query param. Use Authorization header instead."
+            )
+    return errors
+
+
 def main() -> int:
     events = _load("events.json")
     consent = _load("consent.json")
@@ -111,8 +226,11 @@ def main() -> int:
     errors += check_event_consent_purposes(events, consent)
     errors += check_event_families(events)
     errors += check_consent_purposes_self_consistent(events, consent)
+    errors += check_python_backend_event_types(events)
+    errors += check_sdk_endpoint_not_ingest_events(events)
+    errors += check_no_api_key_in_query_params(events)
 
-    checks_run = 3
+    checks_run = 6
     if errors:
         print(f"contract validator: {checks_run} checks, {len(errors)} inconsistencies.")
         print()

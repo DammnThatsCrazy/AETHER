@@ -28,15 +28,22 @@ never in connector config or API responses.
 
 ## Endpoints
 
-- **Authenticated (shipped today)**: `POST /v1/integrations/connectors/{type}/webhook`
+- **Public external delivery** (requires `AETHER_CONNECTORS_ENABLED=true`):
+  `POST /v1/integrations/webhooks/{connector_type}`
+  — unauthenticated, HMAC-SHA256 verified. Tenant resolved from the
+  `X-Aether-Tenant-ID` header. The connector must be enabled for that tenant
+  and its secret must be configured. Required headers:
+  - `X-Aether-Tenant-ID: <tenant_id>` — set when registering the webhook with the provider
+  - `X-Aether-Signature: <hmac_sha256_hex>`
+  - `X-Aether-Timestamp: <unix_epoch>`
+  Replay prevention: 5-minute timestamp window. Duplicate `webhook_event_id` is skipped.
+  This path is listed in `PUBLIC_PATH_PREFIXES` so the middleware skips API-key auth;
+  security is enforced entirely by HMAC verification inside the handler.
+
+- **Authenticated (testing/manual)**: `POST /v1/integrations/connectors/{type}/webhook`
   — tenant from the authenticated context; used for testing and first-party
   delivery. Verifies the signature when a secret is configured; in local/mocked
   mode it accepts and flags `verified: false`.
-- **Public external delivery (activation step)**: a production
-  `POST /v1/integrations/webhooks/{connector}` endpoint (unauthenticated,
-  HMAC-verified, tenant resolved from the signature/route) is a credential-gated
-  TODO — it requires adding the path to the middleware `PUBLIC_PATHS` allowlist
-  and per-tenant routing. Disabled by default.
 
 ## Safety
 

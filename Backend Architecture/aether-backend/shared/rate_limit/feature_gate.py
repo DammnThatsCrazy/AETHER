@@ -47,6 +47,14 @@ PUBLIC_PATHS: frozenset[str] = frozenset({
     "/v1/auth/sso/providers",
 })
 
+# Path prefixes that bypass Aether API key auth.
+# Each entry is a prefix string — any path starting with it is public.
+# These routes MUST authenticate themselves (e.g. HMAC signature verification).
+PUBLIC_PATH_PREFIXES: frozenset[str] = frozenset({
+    # Provider webhooks: unauthenticated by API key; HMAC-verified inside the handler.
+    "/v1/integrations/webhooks/",
+})
+
 
 @dataclass
 class GateResult:

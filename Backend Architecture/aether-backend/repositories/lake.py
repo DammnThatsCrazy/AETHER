@@ -36,11 +36,14 @@ def make_raw_record(
     schema_version: str = "1.0",
     entity_id: Optional[str] = None,
     entity_type: Optional[str] = None,
+    tenant_id: str = "",
 ) -> dict:
     """Create a canonical raw record with required audit fields."""
     now = utc_now().isoformat()
+    # tenant_id is included so two tenants with the same provider_record_id
+    # are never considered duplicates.
     idempotency_key = hashlib.sha256(
-        f"{source}:{provider_record_id}:{schema_version}".encode()
+        f"{tenant_id}:{source}:{provider_record_id}:{schema_version}".encode()
     ).hexdigest()[:32]
     return {
         "id": str(uuid.uuid4()),
@@ -93,12 +96,12 @@ class BronzeRepository(BaseRepository):
             schema_version=schema_version,
             entity_id=entity_id,
             entity_type=entity_type,
+            tenant_id=tenant_id,
         )
-        record["tenant_id"] = tenant_id
 
-        # Idempotency check
+        # Idempotency check — always scoped by tenant_id to prevent cross-tenant collision
         existing = await self.find_many(
-            filters={"idempotency_key": record["idempotency_key"]}, limit=1
+            filters={"idempotency_key": record["idempotency_key"], "tenant_id": tenant_id}, limit=1
         )
         if existing:
             metrics.increment("lake_bronze_dedup", labels={"source": source})

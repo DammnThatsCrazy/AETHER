@@ -231,18 +231,38 @@ export class EventQueue {
   }
 
   private sendBeacon(events: AetherEvent[]): boolean {
-    if (typeof navigator === 'undefined' || !navigator.sendBeacon) return false;
+    // Use fetch with keepalive:true instead of sendBeacon.
+    // sendBeacon does not support Authorization headers, which would force
+    // the API key into the URL query string — visible in proxy logs and referrer
+    // headers. fetch+keepalive is supported in all modern browsers and behaves
+    // identically for page-unload scenarios.
+    const allowed = this.filterByConsent(events);
+    if (allowed.length === 0) return true;
     const payload = JSON.stringify({
-      batch: this.filterByConsent(events),
+      batch: allowed,
       sentAt: new Date().toISOString(),
       context: { library: { name: '@aether/sdk', version: SDK_VERSION } },
     });
-    const blob = new Blob([payload], { type: 'application/json' });
-    // API key sent via query param (sendBeacon does not support custom headers)
-    return navigator.sendBeacon(
-      `${this.config.endpoint}/v1/batch?token=${encodeURIComponent(this.config.apiKey)}`,
-      blob,
-    );
+    try {
+      fetch(`${this.config.endpoint}/v1/batch`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${this.config.apiKey}`,
+          'X-Aether-SDK': 'web',
+          ...this.config.headers,
+        },
+        body: payload,
+        keepalive: true,
+      }).catch(() => {
+        // Unload flush is best-effort; silently drop if fetch fails.
+        // The queue was already cleared by the caller — retries happen
+        // via the persistent queue on next page load.
+      });
+      return true;
+    } catch {
+      return false;
+    }
   }
 
   private startFlushTimer(): void {

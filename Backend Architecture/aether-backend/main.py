@@ -165,6 +165,7 @@ logger = get_logger("aether.main")
 # Import all service routers
 from services.gateway.routes import router as gateway_router
 from services.ingestion.routes import router as ingestion_router
+from services.ingestion.batch import router as batch_router
 from services.identity.routes import router as identity_router
 from services.analytics.routes import router as analytics_router
 from services.ml_serving.routes import router as ml_router
@@ -280,6 +281,13 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     from services.billing.cron import run_monthly_overage_cron
     overage_cron_task = asyncio.create_task(run_monthly_overage_cron())
 
+    # Ingestion workers — sdk_bronze_writer, silver_normalizer, identity_signal_emitter
+    try:
+        from services.ingestion.workers import attach_ingestion_workers
+        attach_ingestion_workers(registry.consumer, registry.producer)
+    except Exception as e:  # pragma: no cover — defensive
+        logger.warning(f"Ingestion worker wiring skipped: {e}")
+
     # Profile 360 — attach derived workers to the shared consumer.
     # Strictly additive: workers consume new topics + a few existing ones,
     # write to new tables only, and never mutate existing service state.
@@ -392,7 +400,8 @@ def create_app() -> FastAPI:
 
     # ── Mount all 17 core service routers ──────────────────────────
     app.include_router(gateway_router)
-    app.include_router(ingestion_router)
+    app.include_router(batch_router)      # POST /v1/batch — canonical SDK ingestion
+    app.include_router(ingestion_router)  # POST /v1/ingest/feed (server-side feed)
     app.include_router(identity_router)
     app.include_router(analytics_router)
     app.include_router(ml_router)
@@ -530,10 +539,14 @@ def create_app() -> FastAPI:
             admin_router as connectors_admin_router,
             router as connectors_router,
         )
+        from services.integrations.connectors.routes import webhook_public_router
         app.include_router(connectors_router)
+        # Public webhook route always mounted when connectors are enabled;
+        # security is enforced by HMAC verification inside the handler.
+        app.include_router(webhook_public_router)
         if settings.connectors.kyber_connector_health_enabled:
             app.include_router(connectors_admin_router)
-        logger.info("Connectors: ingestion routes mounted (/v1/integrations/connectors)")
+        logger.info("Connectors: ingestion routes mounted (/v1/integrations/connectors + /v1/integrations/webhooks)")
     else:
         logger.info("Connectors: disabled (set AETHER_CONNECTORS_ENABLED=true to enable)")
 
