@@ -13,7 +13,7 @@ source_files:
 canonical_owner: agent@aether
 estimated_read_minutes: 12
 toc_depth: 3
-last_synced_commit: 2661f1b
+last_synced_commit: f877420
 ---
 # Agent Controller — Multi-Controller Architecture
 
