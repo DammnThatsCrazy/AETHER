@@ -373,7 +373,7 @@ class DuneFeederService:
 
     # ── Silver promotion ──────────────────────────────────────────────────────
 
-    def promote_to_silver(self, source_tag: str) -> int:
+    def promote_to_silver(self, source_tag: str, tenant_scope: Optional[str] = None) -> int:
         """
         Promote all valid Bronze rows with matching source_tag to Silver.
 
@@ -382,6 +382,7 @@ class DuneFeederService:
 
         Args:
             source_tag: Batch identifier to promote.
+            tenant_scope: When provided, only promote rows belonging to this tenant.
 
         Returns:
             Number of rows promoted.
@@ -389,6 +390,8 @@ class DuneFeederService:
         promoted = 0
         for record_id, record in list(_BRONZE_STORE.items()):
             if record.source_tag != source_tag:
+                continue
+            if tenant_scope is not None and record.tenant_scope != tenant_scope:
                 continue
             if record.promotion_status != "bronze":
                 continue
@@ -425,21 +428,27 @@ class DuneFeederService:
 
     # ── Rollback ──────────────────────────────────────────────────────────────
 
-    def rollback(self, source_tag: str) -> int:
+    def rollback(self, source_tag: str, tenant_scope: Optional[str] = None) -> int:
         """
         Remove all Bronze and Silver records with matching source_tag.
 
         Args:
             source_tag: Batch identifier to roll back.
+            tenant_scope: When provided, only delete records belonging to this tenant.
+                          Prevents cross-tenant tag collisions from deleting unowned rows.
 
         Returns:
             Total number of records deleted.
         """
         bronze_ids = [
-            rid for rid, r in _BRONZE_STORE.items() if r.source_tag == source_tag
+            rid for rid, r in _BRONZE_STORE.items()
+            if r.source_tag == source_tag
+            and (tenant_scope is None or r.tenant_scope == tenant_scope)
         ]
         silver_ids = [
-            rid for rid, r in _SILVER_STORE.items() if r.source_tag == source_tag
+            rid for rid, r in _SILVER_STORE.items()
+            if r.source_tag == source_tag
+            and (tenant_scope is None or r.tenant_scope == tenant_scope)
         ]
 
         for rid in bronze_ids:
@@ -461,12 +470,13 @@ class DuneFeederService:
 
     # ── Audit ─────────────────────────────────────────────────────────────────
 
-    def audit(self, source_tag: str) -> list[dict]:
+    def audit(self, source_tag: str, tenant_scope: Optional[str] = None) -> list[dict]:
         """
         Return all Bronze records for a source_tag (audit trail).
 
         Args:
             source_tag: Batch identifier to audit.
+            tenant_scope: When provided, only return records for this tenant.
 
         Returns:
             List of record dicts (serialised DuneBronzeRecord).
@@ -474,6 +484,7 @@ class DuneFeederService:
         records = [
             r.model_dump() for r in _BRONZE_STORE.values()
             if r.source_tag == source_tag
+            and (tenant_scope is None or r.tenant_scope == tenant_scope)
         ]
         records.sort(key=lambda r: r["row_index"])
         return records

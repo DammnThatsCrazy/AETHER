@@ -14,10 +14,24 @@ Endpoints:
 
 from __future__ import annotations
 
+import os
+
 from fastapi import APIRouter, Request
 
-from shared.common.common import APIResponse, BadRequestError, NotFoundError
+from shared.common.common import APIResponse, BadRequestError, NotFoundError, ServiceUnavailableError
 from shared.logger.logger import get_logger, metrics
+
+_MEMORY_STORE_ENVS = frozenset({"local", "test"})
+
+
+def _require_memory_store_env() -> None:
+    """Raise 503 if running outside local/test — in-memory store is not durable."""
+    env = os.getenv("AETHER_ENV", "local")
+    if env not in _MEMORY_STORE_ENVS:
+        raise ServiceUnavailableError(
+            "Dune feeder in-memory store is only available in local/test environments. "
+            "Configure a persistent lake repository backend before enabling this endpoint in staging/production."
+        )
 
 from services.dune_feeder.models import (
     FeederIngestRequest,
@@ -46,6 +60,7 @@ async def ingest_dune_result(body: FeederIngestRequest, request: Request):
     Graph state is NEVER mutated by this endpoint.
     """
     _require_admin(request)
+    _require_memory_store_env()
 
     response = dune_feeder_service.ingest(body)
 
@@ -79,8 +94,9 @@ async def rollback_source_tag(body: FeederRollbackRequest, request: Request):
     rolling back.
     """
     _require_admin(request)
+    _require_memory_store_env()
 
-    deleted = dune_feeder_service.rollback(body.source_tag)
+    deleted = dune_feeder_service.rollback(body.source_tag, tenant_scope=body.tenant_scope)
 
     metrics.increment("dune_feeder_api_rollback", labels={"source_tag": body.source_tag})
     return APIResponse(data={
@@ -126,6 +142,7 @@ async def promote_to_silver(source_tag: str, request: Request):
     Any graph candidate generation must go through a separate review queue.
     """
     _require_admin(request)
+    _require_memory_store_env()
 
     if not source_tag or not source_tag.strip():
         raise BadRequestError("source_tag must not be empty")

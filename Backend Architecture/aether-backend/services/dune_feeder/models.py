@@ -138,6 +138,13 @@ class FeederIngestResponse(BaseModel):
 class FeederRollbackRequest(BaseModel):
     """Admin API request body for rolling back records by source_tag."""
     source_tag: str = Field(..., description="Batch identifier to roll back (removes from bronze and silver)")
+    tenant_scope: Optional[str] = Field(
+        None,
+        description=(
+            "Restrict rollback to records ingested under this tenant scope. "
+            "When set, only records whose tenant_scope matches are deleted."
+        ),
+    )
 
 
 class FeederHealthStatus(BaseModel):
