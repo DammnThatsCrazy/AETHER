@@ -11,7 +11,7 @@ source_files:
 canonical_owner: platform@aether
 estimated_read_minutes: 15
 toc_depth: 3
-last_synced_commit: 6404ee9
+last_synced_commit: 2661f1b
 ---
 
 # AETHER Productization Audit
@@ -73,14 +73,14 @@ Classification legend: `release-blocker` | `pre-production-blocker` |
 | 1 | 6 source-linked docs stale after v8.9.0 merges (`BACKEND-API`, `KYBER-ECONOMIC-OBSERVABILITY`, `X402_AUDIT_REPORT`, `ECONOMIC-VALUE-FRAMING`, `COMMERCE-OPERATOR-RUNBOOK`, `AGENTIC_COMMERCE_BUILD_SPEC`) | docs-drift | **Fixed** — content reviewed/updated, stamped |
 | 2 | `make test` and bare `pytest` broken: combined invocation of both suites hits `ImportPathMismatchError` | test-drift | **Fixed** — suites run separately; documented in `pyproject.toml` |
 | 3 | No single production-status routine; readiness claims scattered across `PRODUCTION-READINESS.md`, `PRODUCTIZATION.md`, `PRODUCTIZATION-CHECKLIST.md`, `AGENT-LAYER-PRODUCTION.md`, `scripts/compliance/readiness.py` | nice-to-have (was drift risk) | **Fixed** — `scripts/production_status.py` is now canonical |
-| 4 | Tenant self-serve onboarding UI missing (manual SQL + API calls) | release-blocker | Open — see `docs/PRODUCTIZATION.md` |
+| 4 | Tenant self-serve onboarding UI missing (manual SQL + API calls) | release-blocker | **Fixed** — 3-step signup (email→OTP→API key reveal), plan selection, SSO, billing portal, API key mgmt, usage dashboard, implementation checklist all shipped in PR #288 |
 | 5 | Smart contracts (EVM/Solana/NEAR/Cosmos rewards) have **no external security audit** | release-blocker | Open — do not deploy to mainnet with real funds |
 | 6 | Production infrastructure not provisioned; production secrets not configured; ML artifacts not trained | release-blocker / pre-production-blocker | Open — external prerequisites per `PRODUCTION-READINESS.md` |
 | 7 | Agent Layer hosted mode requires durable storage (in-memory fallback blocked in hosted modes) | release-blocker (agent GA only) | Open — per `AGENT-LAYER-PRODUCTION.md` |
 | 8 | Connector provider pulls are credential-gated TODOs (framework real, API calls mocked) | pre-production-blocker | Open |
 | 9 | Dune is a read-only provider, but no governed Bronze→Silver→Gold feeder with per-row provenance/freshness gates exists | pre-production-blocker | Open |
 | 10 | Graph-level drift/contamination scoring partial: data-quality module feature-flagged, operational-intelligence overlay scores are placeholders | pre-production-blocker | Open (SDK-level drift detection is real) |
-| 11 | No load baselines recorded; Locust harness exists but is not exercised in CI | scale-blocker | Open |
+| 11 | No load baselines recorded; Locust harness exists but is not exercised in CI | scale-blocker | **Partially fixed** — locustfile extended with `/v1/batch` + `/sdk/identity/resolve` tasks and thresholds; `scripts/load_smoke.py` + `make load-smoke` added. Staging baselines not yet recorded. |
 | 12 | Neptune capacity/cost and identity-merge throughput unvalidated at scale | scale-blocker | Open |
 | 13 | Slack outbound notification channel-mapping/templates not productized (ingest connector + connection test are real) | nice-to-have | Open |
 
@@ -109,7 +109,7 @@ Rubric: 0 absent · 1 stub/scaffold · 2 partial/pilot · 3 pre-production ·
 | graph mutation safety | 4 |
 | graph health / drift detection | 3 |
 | Kyber (operator console) | 4 |
-| customer frontend (tenant app) | 3 |
+| customer frontend (tenant app) | 4 |
 | connectors (BYOK / source) | 2 |
 | Slack / action notifications | 3 |
 | Dune / data-lake feeders | 2 |
@@ -118,17 +118,17 @@ Rubric: 0 absent · 1 stub/scaffold · 2 partial/pilot · 3 pre-production ·
 | CI / tests | 4 |
 | docs | 4 |
 | deployment / cloud readiness | 3 |
-| scale readiness | 2 |
+| scale readiness | 3 |
 
-**Overall: ~3.3/5 — pre-production.** The 4-rated areas are genuinely
+**Overall: ~3.5/5 — pre-production.** The 4-rated areas are genuinely
 release-shaped; nothing scores 5 because nothing has carried production
 traffic at scale yet, and claiming otherwise would be a false readiness claim.
 
 ## 4. Release Blockers (ordered)
 
-1. **Tenant onboarding UI** — high. Without self-serve tenant creation the
-   first paying customer requires manual SQL. Fix: onboarding flow in
-   `frontend/aether` against `/v1/registration` + `/v1/me`.
+1. ~~**Tenant onboarding UI**~~ — **Fixed in PR #288.** Full self-serve
+   signup→OTP→billing flow shipped; implementation checklist wired to
+   `/v1/onboarding/*`. Remaining gap: no E2E tests for the critical path.
 2. **Production infra + secrets** — high. Terraform exists but is not
    provisioned; run the stack + `scripts/bootstrap_aws_secrets.py`.
 3. **External smart-contract audit** — high (blocks mainnet only). The

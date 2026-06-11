@@ -2,6 +2,8 @@
 Aether Backend — Load & Soak Testing (Locust)
 
 Simulates realistic traffic patterns for:
+  - SDK batch ingestion (POST /v1/batch — primary hot path)
+  - Identity resolution (GET /sdk/identity/resolve)
   - GraphQL queries (high QPS, complexity rejection)
   - Analytics exports (idempotent burst + polling)
   - Agent tasks (burst creation + status polling)
@@ -17,11 +19,17 @@ Headless mode with thresholds:
            --csv results/load-test
 
 Staging signoff thresholds:
-    p95 < 200ms for GraphQL
-    p95 < 500ms for exports
+    p95 < 150ms  for POST /v1/batch (10-event payload)
+    p95 < 300ms  for GET /sdk/identity/resolve
+    p95 < 200ms  for GraphQL
+    p95 < 500ms  for exports
     p99 < 1000ms for agent tasks
     Error rate < 1%
     Zero data loss on concurrent touchpoint writes
+
+CI smoke gate (scripts/load_smoke.py):
+    20 users, 30 seconds, host http://localhost:8000
+    Fails build if p95 batch > 500ms or error rate > 5%
 """
 
 from __future__ import annotations
@@ -49,13 +57,141 @@ def _api_headers(tenant_id: str = "load-test-tenant") -> dict:
 
 
 # =========================================================================
+# SDK Batch Ingestion Load Tests  (primary hot path — POST /v1/batch)
+# =========================================================================
+
+CANONICAL_EVENT_TYPES = [
+    "page_view", "click", "identify", "session_start", "session_end",
+    "purchase", "wallet_connected", "custom",
+]
+
+
+def _batch_event(tenant_id: str) -> dict:
+    return {
+        "event_id": str(uuid.uuid4()),
+        "event_type": random.choice(CANONICAL_EVENT_TYPES),
+        "timestamp": "2026-06-11T00:00:00Z",
+        "anonymous_id": f"anon-{_random_string(12)}",
+        "properties": {"page": f"/{_random_string(6)}", "load_test": True},
+    }
+
+
+class BatchIngestionTasks(TaskSet):
+    """SDK batch ingestion workload — the ingestion hot path."""
+
+    def _headers(self) -> dict:
+        return {
+            "Authorization": f"Bearer test-key-{self.user.tenant_id}",
+            "Content-Type": "application/json",
+            "X-Request-ID": str(uuid.uuid4()),
+        }
+
+    @task(10)
+    def small_batch(self):
+        """Typical SDK flush: 10 events."""
+        self.client.post(
+            "/v1/batch",
+            json={"events": [_batch_event(self.user.tenant_id) for _ in range(10)]},
+            headers=self._headers(),
+            name="/v1/batch [10-events]",
+        )
+
+    @task(3)
+    def single_event(self):
+        """Single-event flush — mobile SDK pattern."""
+        self.client.post(
+            "/v1/batch",
+            json={"events": [_batch_event(self.user.tenant_id)]},
+            headers=self._headers(),
+            name="/v1/batch [1-event]",
+        )
+
+    @task(1)
+    def large_batch(self):
+        """Near-limit batch: 100 events."""
+        self.client.post(
+            "/v1/batch",
+            json={"events": [_batch_event(self.user.tenant_id) for _ in range(100)]},
+            headers=self._headers(),
+            name="/v1/batch [100-events]",
+        )
+
+    @task(1)
+    def duplicate_event(self):
+        """Same event_id twice — should return duplicate status, not error."""
+        event = _batch_event(self.user.tenant_id)
+        with self.client.post(
+            "/v1/batch",
+            json={"events": [event]},
+            headers=self._headers(),
+            name="/v1/batch [first-write]",
+            catch_response=True,
+        ) as resp:
+            if resp.status_code in (200, 207):
+                resp.success()
+        with self.client.post(
+            "/v1/batch",
+            json={"events": [event]},
+            headers=self._headers(),
+            name="/v1/batch [duplicate]",
+            catch_response=True,
+        ) as resp:
+            if resp.status_code in (200, 207):
+                resp.success()
+
+
+# =========================================================================
+# Identity Resolution Load Tests
+# =========================================================================
+
+class IdentityResolutionTasks(TaskSet):
+    """Cross-device identity resolve — the identity hot path."""
+
+    def _headers(self) -> dict:
+        return {
+            "Authorization": f"Bearer test-key-{self.user.tenant_id}",
+            "Content-Type": "application/json",
+            "X-Request-ID": str(uuid.uuid4()),
+        }
+
+    @task(8)
+    def resolve_anonymous(self):
+        """Resolve anonymous device fingerprint."""
+        self.client.get(
+            f"/sdk/identity/resolve?anonymous_id=anon-{_random_string(12)}&fingerprint={_random_string(16)}",
+            headers=self._headers(),
+            name="/sdk/identity/resolve [anon]",
+        )
+
+    @task(4)
+    def resolve_identified(self):
+        """Resolve known user_id — exercises deterministic merge path."""
+        self.client.get(
+            f"/sdk/identity/resolve?user_id=user-{random.randint(1, 10000)}",
+            headers=self._headers(),
+            name="/sdk/identity/resolve [user]",
+        )
+
+    @task(2)
+    def resolve_wallet(self):
+        """Resolve by wallet address — Web3 identity path."""
+        self.client.get(
+            f"/sdk/identity/resolve?wallet_address=0x{_random_string(40)}",
+            headers=self._headers(),
+            name="/sdk/identity/resolve [wallet]",
+        )
+
+
+# =========================================================================
 # GraphQL Load Tests
 # =========================================================================
 
 class GraphQLTasks(TaskSet):
     """High-QPS GraphQL query workload."""
 
-    headers = _api_headers()
+    @property
+    def headers(self):
+        return _api_headers(getattr(self.user, "tenant_id", "load-test-tenant"))
 
     @task(10)
     def valid_events_query(self):
@@ -131,7 +267,9 @@ class GraphQLTasks(TaskSet):
 class ExportTasks(TaskSet):
     """Idempotent export requests + polling."""
 
-    headers = _api_headers()
+    @property
+    def headers(self):
+        return _api_headers(getattr(self.user, "tenant_id", "load-test-tenant"))
 
     @task(5)
     def create_export(self):
@@ -190,7 +328,9 @@ class ExportTasks(TaskSet):
 class AgentTaskTasks(TaskSet):
     """Burst task creation + status polling."""
 
-    headers = _api_headers()
+    @property
+    def headers(self):
+        return _api_headers(getattr(self.user, "tenant_id", "load-test-tenant"))
     worker_types = [
         "web_crawler", "api_scanner", "social_listener",
         "entity_resolver", "profile_enricher", "quality_scorer",
@@ -257,7 +397,9 @@ class AgentTaskTasks(TaskSet):
 class CampaignTasks(TaskSet):
     """Write/read-after-write consistency for campaign touchpoints."""
 
-    headers = _api_headers()
+    @property
+    def headers(self):
+        return _api_headers(getattr(self.user, "tenant_id", "load-test-tenant"))
 
     def on_start(self):
         """Create a test campaign to write touchpoints to."""
@@ -310,27 +452,39 @@ class CampaignTasks(TaskSet):
 # User Profiles
 # =========================================================================
 
-class SteadyStateUser(HttpUser):
+class _TenantUser(HttpUser):
+    """Base class: assigns a stable per-user tenant_id for isolation."""
+    abstract = True
+
+    def on_start(self):
+        self.tenant_id = f"load-test-{_random_string(8)}"
+
+
+class SDKIngestionUser(_TenantUser):
+    """SDK ingestion workload — primary load profile."""
+    tasks = {BatchIngestionTasks: 8, IdentityResolutionTasks: 2}
+    wait_time = between(0.05, 0.3)
+
+
+class SteadyStateUser(_TenantUser):
     """Normal production traffic — mixed workload."""
     tasks = {
-        GraphQLTasks: 4,
-        ExportTasks: 2,
-        AgentTaskTasks: 2,
-        CampaignTasks: 2,
+        BatchIngestionTasks: 4,
+        GraphQLTasks: 3,
+        ExportTasks: 1,
+        AgentTaskTasks: 1,
+        CampaignTasks: 1,
     }
     wait_time = between(0.5, 2.0)
 
 
-class BurstUser(HttpUser):
-    """Burst traffic — hammers agent tasks and GraphQL."""
-    tasks = {
-        GraphQLTasks: 6,
-        AgentTaskTasks: 4,
-    }
-    wait_time = between(0.1, 0.5)
+class BurstUser(_TenantUser):
+    """Burst ingestion — tests back-pressure at high RPS."""
+    tasks = {BatchIngestionTasks: 8, GraphQLTasks: 2}
+    wait_time = between(0.05, 0.2)
 
 
-class ExportHeavyUser(HttpUser):
+class ExportHeavyUser(_TenantUser):
     """Export-heavy workload — tests idempotency under load."""
     tasks = {ExportTasks: 1}
     wait_time = between(0.2, 1.0)

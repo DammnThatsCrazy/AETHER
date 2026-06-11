@@ -181,10 +181,13 @@ AREAS: list[Area] = [
     ),
     Area(
         "customer frontend (tenant app)",
-        3,
+        4,
         "React SPA with PKCE OIDC auth, typed API client, MSW fixtures isolated to "
-        "local-mocked mode. Tenant self-serve onboarding UI is missing (manual SQL + "
-        "API calls today) — that is the first-paying-customer blocker.",
+        "local-mocked mode. Full self-serve onboarding flow shipped: 3-step signup "
+        "(email+password → OTP → API key reveal), plan selection (P1-P4), SSO "
+        "(Google/Apple/Slack/Microsoft), billing portal (Stripe), API key management, "
+        "usage dashboard, and implementation checklist (/v1/onboarding/*). Gap: no "
+        "Cypress/Playwright E2E tests for the auth+onboarding critical path.",
         ["frontend/aether/", "docs/PRODUCTIZATION.md"],
     ),
     Area(
@@ -276,21 +279,23 @@ AREAS: list[Area] = [
     ),
     Area(
         "scale readiness",
-        2,
+        3,
         "Architecture is scale-shaped (Kafka, ClickHouse, medallion lake, partitioned "
-        "S3) and a Locust harness exists, but no load baselines are recorded in CI and "
-        "Neptune/identity-merge throughput is unproven at scale.",
-        ["tests/load/", "Data Lake Architecture/"],
+        "S3). Locust harness covers /v1/batch and /sdk/identity/resolve with per-endpoint "
+        "thresholds; `make load-smoke` / `scripts/load_smoke.py` runs the smoke gate. "
+        "Gaps: no recorded staging baselines yet; Neptune/identity-merge throughput "
+        "unproven at scale.",
+        ["tests/load/", "scripts/load_smoke.py", "Data Lake Architecture/"],
     ),
 ]
 
 
 BLOCKERS: list[Blocker] = [
     Blocker(
-        "release-blocker",
-        "No tenant self-serve onboarding UI (manual SQL + API calls)",
+        "pre-production-blocker",
+        "No E2E tests for tenant onboarding critical path (signup → OTP → billing)",
         "customer frontend (tenant app)",
-        "Build onboarding flow in frontend/aether against /v1/registration + /v1/me",
+        "Add Cypress or Playwright suite covering signup, OTP verify, API key reveal, billing portal",
     ),
     Blocker(
         "release-blocker",
@@ -330,9 +335,9 @@ BLOCKERS: list[Blocker] = [
     ),
     Blocker(
         "scale-blocker",
-        "No load-test baselines recorded; Locust harness not in CI",
+        "No staging load baselines recorded; smoke gate runs locally only",
         "scale readiness",
-        "Record baseline RPS/latency for /v1/batch and identity resolve; add scheduled load smoke",
+        "Run `make load-smoke` against staging; record p95/p99 baselines in docs/LOAD-BASELINES.md",
     ),
     Blocker(
         "scale-blocker",
