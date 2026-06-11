@@ -43,7 +43,8 @@
     "test:connectors": "python -m pytest tests/unit/test_connectors.py -q",
     "test:security": "npm run security:secrets && python -m pytest tests/unit/test_p4_security_billing.py -q",
     "test:load:smoke": "npm run load:smoke",
-    "test:all": "npm run test:docs && npm run test:backend && npm run test:frontend && npm run test:load:smoke"
+    "test:all": "npm run test:docs && npm run test:backend && npm run test:frontend && npm run test:load:smoke",
+    "validate:ts-public-exports": "python scripts/validate_ts_public_exports.py"
   },
   "devDependencies": {
     "@types/node": "^20.0.0",

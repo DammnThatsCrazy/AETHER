@@ -13,7 +13,7 @@ estimated_read_minutes: 10
 toc_depth: 3
 last_synced_commit: 401ceb7
 ---
-# Rollback Runbook — Aether Platform v8.8.0
+# Rollback Runbook — Aether Platform v8.9.0
 
 Step-by-step procedures for rolling back the Aether platform after a failed deployment or production incident.
 

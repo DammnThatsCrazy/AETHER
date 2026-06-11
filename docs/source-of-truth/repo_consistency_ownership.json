@@ -1,0 +1,94 @@
+{
+  "version": 1,
+  "description": "AETHER source-of-truth ownership map. Each category defines the derived surfaces and validators that must move with source changes.",
+  "change_categories": [
+    {
+      "id": "canonical_version",
+      "name": "pyproject.toml version",
+      "source_globs": ["pyproject.toml"],
+      "required_changed_globs": ["package.json", "packages/**/package.json", "frontend/**/package.json", "Data Ingestion Layer/**/package.json", "Data Lake Architecture/**/package.json", "docs/**/*.md", "packages/ios/**", "packages/android/**"],
+      "required_commands": ["python scripts/bump_version.py --check", "python scripts/validate_docs.py", "python scripts/validate_sdk_release_alignment.py"],
+      "remediation": "Run python scripts/bump_version.py <version>, then make repo-doctor-fix."
+    },
+    {
+      "id": "backend_routes",
+      "name": "backend route added/changed",
+      "source_globs": ["Backend Architecture/**/routes/**/*.py", "Backend Architecture/**/routers/**/*.py", "Backend Architecture/**/main.py", "Backend Architecture/**/api/**/*.py"],
+      "required_changed_globs": ["docs/_generated/**", "docs/REPO-INDEX.md", "docs/BACKEND-API.md", "docs/source-of-truth/**", "packages/shared/**", "frontend/shared/**", "frontend/kyber/**", "tests/**"],
+      "required_commands": ["python scripts/docs_extract/run_all.py", "python scripts/validate_contracts.py", "npm run typecheck", "python -m pytest tests/ -v --tb=short"],
+      "remediation": "Regenerate docs, update API docs/contracts/client types, and add or update route tests."
+    },
+    {
+      "id": "event_schema",
+      "name": "event schema changed",
+      "source_globs": ["packages/shared/events.ts", "schemas/**", "contracts/**", "Backend Architecture/**/events/**/*.py"],
+      "required_changed_globs": ["docs/_generated/**", "docs/source-of-truth/**", "docs/SDK-API-CONTRACTS.md", "packages/shared/**", "packages/web/**", "packages/react-native/**", "tests/**"],
+      "required_commands": ["python scripts/validate_contracts.py", "python scripts/validate_sdk_release_alignment.py", "npm run typecheck"],
+      "remediation": "Update contract docs, SDK types, validation fixtures, generated docs, and tests."
+    },
+    {
+      "id": "consent_tenant_auth",
+      "name": "consent/tenant/auth behavior changed",
+      "source_globs": ["Backend Architecture/**/auth/**/*.py", "Backend Architecture/**/tenant/**/*.py", "Backend Architecture/**/consent/**/*.py", "packages/shared/consent.ts", "packages/web/src/consent/**", "tests/**/tenant*.py", "tests/**/auth*.py"],
+      "required_changed_globs": ["docs/source-of-truth/**", "docs/**/*CONSENT*.md", "docs/**/*AUTH*.md", "packages/shared/**", "packages/web/**", "tests/**"],
+      "required_commands": ["python scripts/validate_contracts.py", "python scripts/docs_drift.py --strict", "python -m pytest tests/ -v --tb=short"],
+      "remediation": "Update source-linked docs, contract validators, SDK consent surfaces, and behavior tests."
+    },
+    {
+      "id": "sdk_public_api",
+      "name": "SDK public method changed",
+      "source_globs": ["packages/web/src/index.ts", "packages/web/src/**/*.ts", "packages/react-native/src/index.tsx", "packages/react-native/src/**/*.ts", "packages/shared/index.ts", "packages/shared/*.ts"],
+      "required_changed_globs": ["packages/**/src/index.ts", "packages/**/src/index.tsx", "packages/**/package.json", "packages/**/dist/**/*.d.ts", "docs/SDK*.md", "docs/_generated/**", "tests/**", "scripts/validate_ts_public_exports.py"],
+      "required_commands": ["python scripts/validate_ts_public_exports.py", "python scripts/validate_sdk_release_alignment.py", "npm run typecheck", "npm run build", "npm test"],
+      "remediation": "Export public types from package barrels, regenerate declarations, update SDK docs, and add package-root import tests."
+    },
+    {
+      "id": "package_public_type",
+      "name": "package public type changed",
+      "source_globs": ["packages/**/*.ts", "packages/**/*.tsx"],
+      "required_changed_globs": ["packages/**/src/index.ts", "packages/**/src/index.tsx", "packages/shared/index.ts", "packages/**/dist/**/*.d.ts", "tests/**"],
+      "required_commands": ["python scripts/validate_ts_public_exports.py", "npm run typecheck", "npm run build"],
+      "remediation": "Update barrel exports and declaration outputs with the source change."
+    },
+    {
+      "id": "profile360",
+      "name": "Profile 360 route/model changed",
+      "source_globs": ["**/*profile360*", "**/*Profile360*", "**/*profile-360*"],
+      "required_changed_globs": ["docs/**", "frontend/kyber/**", "packages/shared/**", "tests/**"],
+      "required_commands": ["python scripts/validate_contracts.py", "npm run typecheck", "python -m pytest tests/ -v --tb=short"],
+      "remediation": "Update Profile 360 docs, frontend types, tests, and Kyber/SHIKI-adjacent surfaces where applicable."
+    },
+    {
+      "id": "kyber_operator",
+      "name": "Kyber operator route/model changed",
+      "source_globs": ["frontend/kyber/**", "Backend Architecture/**/*operator*", "Backend Architecture/**/*kyber*"],
+      "required_changed_globs": ["docs/**", "frontend/kyber/**", "packages/shared/**", "tests/**"],
+      "required_commands": ["npm run typecheck", "npm run build", "python -m pytest tests/ -v --tb=short"],
+      "remediation": "Update Kyber operator docs, frontend types, and route/model tests."
+    },
+    {
+      "id": "generated_docs_source",
+      "name": "generated docs source changed",
+      "source_globs": ["scripts/docs_extract/**", "scripts/sync_docs.py", "scripts/validate_docs.py"],
+      "required_changed_globs": ["docs/_generated/**", "docs/REPO-INDEX.md", "docs/AUTOMATION.md", "tests/**"],
+      "required_commands": ["python scripts/docs_extract/run_all.py", "python scripts/sync_docs.py", "git diff --exit-code -- docs/_generated docs/REPO-INDEX.md docs/AUTOMATION.md"],
+      "remediation": "Regenerate and commit docs/_generated plus sync-managed docs, and add/update generator tests."
+    },
+    {
+      "id": "source_linked_docs",
+      "name": "docs source-linked content changed",
+      "source_globs": ["docs/**/*.md", "!docs/_generated/**", "!docs/REPO-INDEX.md", "!docs/AUTOMATION.md"],
+      "required_changed_globs": ["docs/**/*.md"],
+      "required_commands": ["python scripts/validate_frontmatter.py", "python scripts/docs_drift.py --strict"],
+      "remediation": "Validate frontmatter and stamp source-linked docs only after review."
+    },
+    {
+      "id": "workflow_check_command",
+      "name": "workflow/check command changed",
+      "source_globs": [".github/workflows/**", "Makefile", "scripts/repo_doctor.py", "scripts/validate_consistency_ownership.py", "scripts/validate_ts_public_exports.py"],
+      "required_changed_globs": ["Makefile", ".github/workflows/**", "docs/AUTOMATION.md", "docs/source-of-truth/REPO_CONSISTENCY_OWNERSHIP.md", "tests/**"],
+      "required_commands": ["make docs-check", "make repo-doctor", "make ci-check", "python -m pytest tests/unit/test_repo_doctor_cli.py -q"],
+      "remediation": "Keep Makefile, workflows, docs, repo_doctor, and parser tests synchronized."
+    }
+  ]
+}
