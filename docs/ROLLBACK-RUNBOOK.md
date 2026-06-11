@@ -11,7 +11,7 @@ source_files:
 canonical_owner: platform@aether
 estimated_read_minutes: 10
 toc_depth: 3
-last_synced_commit: 5bc5329
+last_synced_commit: 6404ee9
 ---
 # Rollback Runbook — Aether Platform v8.8.0
 
