@@ -176,9 +176,12 @@ class ConnectorService:
         await _meter(tenant_id, "connector_sync", connector_type, "connector")
         await _audit(tenant_id, actor_id, "system", "connector_sync", connector_type, "allowed",
                      {"events": len(events)})
+        import os
+        mode = os.getenv("AETHER_ENV", "local").lower()
+        detail = f"live sync ({connector_type})" if mode != "local" else f"local mode — no external API call ({connector_type})"
         return SyncResult(connector_type=connector_type, status=status,  # type: ignore[arg-type]
                           events_ingested=len(events), events=events,
-                          detail="mocked sync (no external API in local mode)")
+                          detail=detail)
 
     async def ingest_webhook(self, connector_type: str, tenant_id: str, *, raw_body: bytes,
                              signature: Optional[str] = None, timestamp: Optional[str] = None,
@@ -215,16 +218,43 @@ class ConnectorService:
         rows = await self.repo.find_many(limit=10000)
         by_status: dict[str, int] = {}
         by_type: dict[str, int] = {}
+
+        # Per-type detail: status breakdown + latest sync timestamp per connector type.
+        type_detail: dict[str, dict[str, Any]] = {}
+        for desc in list_descriptors():
+            ct = desc["connector_type"]
+            type_detail[ct] = {
+                "connector_type": ct,
+                "label": desc["label"],
+                "category": desc.get("category", ""),
+                "supports_pull": desc.get("supports_pull", False),
+                "supports_webhook": desc.get("supports_webhook", False),
+                "enabled_tenants": 0,
+                "status_breakdown": {},
+                "last_synced_at": None,
+            }
+
         for r in rows:
+            ct = r.get("connector_type", "")
             if r.get("enabled"):
-                by_status[r.get("sync_status", "never_synced")] = by_status.get(r.get("sync_status", "never_synced"), 0) + 1
-                by_type[r["connector_type"]] = by_type.get(r["connector_type"], 0) + 1
+                status = r.get("sync_status", "never_synced")
+                by_status[status] = by_status.get(status, 0) + 1
+                by_type[ct] = by_type.get(ct, 0) + 1
+                if ct in type_detail:
+                    td = type_detail[ct]
+                    td["enabled_tenants"] += 1
+                    td["status_breakdown"][status] = td["status_breakdown"].get(status, 0) + 1
+                    last = r.get("last_synced_at")
+                    if last and (td["last_synced_at"] is None or last > td["last_synced_at"]):
+                        td["last_synced_at"] = last
+
         return {
             "available_connectors": len(CONNECTORS),
             "configured_count": len(rows),
             "enabled_count": sum(1 for r in rows if r.get("enabled")),
             "enabled_by_status": by_status,
             "enabled_by_type": by_type,
+            "by_type_detail": list(type_detail.values()),
         }
 
 

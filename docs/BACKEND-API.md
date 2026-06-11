@@ -11,7 +11,7 @@ source_files:
 canonical_owner: backend@aether
 estimated_read_minutes: 60
 toc_depth: 3
-last_synced_commit: 4c37b04
+last_synced_commit: 828e055
 ---
 # Aether Backend API v8.8.0 — Endpoint Specification
 
@@ -1868,6 +1868,46 @@ Returns the last 50 canary detection events with API key (masked), IP, canary ID
 | `ENABLE_QUERY_ANALYSIS` | `true` | Enable pattern detection and risk scoring |
 | `WATERMARK_SECRET_KEY` | (default) | Secret for watermark generation (change in production) |
 | `CANARY_SECRET_SEED` | (default) | Seed for canary input generation (change in production) |
+
+## Connector Ingestion (v8.9.0)
+
+Feature-flagged inbound connector framework (enable with `AETHER_CONNECTORS_ENABLED=true`). 14 connector adapters support pull and/or webhook ingest; real API calls execute when `AETHER_ENV != local` and a vault secret is configured.
+
+### Tenant Connector Management (`/v1/integrations/connectors`)
+
+| Method | Path | Description |
+|--------|------|-------------|
+| `GET` | `/v1/integrations/connectors` | List all connectors with tenant config merged (no secrets) |
+| `GET` | `/v1/integrations/connectors/{type}` | Get descriptor + tenant config for one connector type |
+| `PUT` | `/v1/integrations/connectors/{type}` | Configure connector (name, non-secret config, enabled flag) |
+| `POST` | `/v1/integrations/connectors/{type}/test` | Run live connection test (real API call when vault secret present) |
+| `POST` | `/v1/integrations/connectors/{type}/sync` | Pull events from source; records `last_synced_at` and `sync_status` |
+| `POST` | `/v1/integrations/connectors/{type}/webhook` | Authenticated webhook ingest (for testing; production uses public path) |
+
+### Public Webhook Ingest (`/v1/integrations/webhooks`)
+
+| Method | Path | Description |
+|--------|------|-------------|
+| `POST` | `/v1/integrations/webhooks/{type}` | Unauthenticated, HMAC-SHA256-verified webhook from provider; tenant resolved from `X-Aether-Tenant-ID` header; 5-min replay window enforced |
+
+### Kyber Operator Connector Health (`/v1/admin/kyber/connectors`)
+
+| Method | Path | Description |
+|--------|------|-------------|
+| `GET` | `/v1/admin/kyber/connectors/overview` | Aggregate health: counts by type/status + `by_type_detail` array with per-type `enabled_tenants`, `status_breakdown`, and `last_synced_at` |
+| `GET` | `/v1/admin/kyber/connectors/health` | Alias of overview |
+
+### Slack Outbound Notifications (`/v1/integrations/slack-notify`)
+
+Per-tenant channel mapping and template-based outbound Slack delivery for platform events (connector errors, agent alerts, billing overages, graph contamination).
+
+| Method | Path | Description |
+|--------|------|-------------|
+| `PUT` | `/v1/integrations/slack-notify` | Configure channel mapping: `default_channel`, `channel_map` (event family → channel), `templates`, `bot_token_ref` (vault reference) |
+| `GET` | `/v1/integrations/slack-notify` | Get current Slack outbound config (bot token omitted) |
+| `POST` | `/v1/integrations/slack-notify/test` | Send a test message to the configured default channel |
+
+Event families supported in `channel_map`: `connector.error`, `connector.healthy`, `agent.kill_switch`, `billing.overage`, `graph.contamination`, `default`.
 
 ## Notification Intelligence Service (v8.8.0)
 
