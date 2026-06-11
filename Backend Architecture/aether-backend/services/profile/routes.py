@@ -992,11 +992,20 @@ async def get_profile_outcome_ledger(user_id: str, request: Request, limit: int 
     )
     recs = await RecommendationRepository().list_for_tenant(tenant.tenant_id, limit=limit, entity_id=user_id)
     rec_ids = {r.get("recommendation_id") or r.get("id") for r in recs}
-    decisions = [d for d in await DecisionRepository().find_many({"tenant_id": tenant.tenant_id}, limit=limit) if d.get("recommendation_id") in rec_ids]
+    decisions: list[dict] = []
+    for rec_id in rec_ids:
+        batch = await DecisionRepository().find_many({"tenant_id": tenant.tenant_id, "recommendation_id": rec_id}, limit=limit)
+        decisions.extend(batch)
     decision_ids = {d.get("decision_id") for d in decisions}
-    actions = [a for a in await ActionFeedbackRepository().find_many({"tenant_id": tenant.tenant_id}, limit=limit) if a.get("decision_id") in decision_ids]
+    actions: list[dict] = []
+    for dec_id in decision_ids:
+        batch = await ActionFeedbackRepository().find_many({"tenant_id": tenant.tenant_id, "decision_id": dec_id}, limit=limit)
+        actions.extend(batch)
     outcomes = await OutcomeRepository().list_for_tenant(tenant.tenant_id, limit=limit, entity_id=user_id)
-    feedback = [f for f in await RecommendationFeedbackRepository().find_many({"tenant_id": tenant.tenant_id}, limit=limit) if f.get("recommendation_id") in rec_ids]
+    feedback: list[dict] = []
+    for rec_id in rec_ids:
+        batch = await RecommendationFeedbackRepository().find_many({"tenant_id": tenant.tenant_id, "recommendation_id": rec_id}, limit=limit)
+        feedback.extend(batch)
     ledger = OutcomeLedgerAggregator().build(recs, decisions, actions, outcomes, feedback)
     return APIResponse(data={"entity_id": user_id, **ledger}).to_dict()
 

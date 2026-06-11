@@ -553,9 +553,11 @@ async function fetchProfile360(type: Profile360EntityType, id: string): Promise<
 
   const normalized = normalizeProfile360Payload(asRecord(profile), id, type);
   if (normalized) {
+    const mergedRaw = { ...asRecord(normalized.raw), ...extraDimensions };
     return {
       ...normalized,
-      raw: { ...asRecord(normalized.raw), ...extraDimensions },
+      sections: buildSections(normalized.entity, mergedRaw),
+      raw: mergedRaw,
     };
   }
 
@@ -606,7 +608,7 @@ export function useProfile360(type: Profile360EntityType, id: string) {
   }, [type, id]);
 
   const ws = useWebSocket({
-    path: `/v1/profile/${id}/stream`,
+    path: id ? `/v1/realtime/ws?entity_id=${id}` : '',
     enabled: Boolean(id),
     onMessage: (message) => profile360Actions.applyLiveMessage(message as Profile360LiveMessage),
   });

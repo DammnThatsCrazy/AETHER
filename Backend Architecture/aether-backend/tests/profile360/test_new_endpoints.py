@@ -112,11 +112,12 @@ class TestClusterEndpoints:
 
     @pytest.mark.asyncio
     async def test_merge_history_graceful_degradation(self):
-        """merge-history returns empty envelope when IdentityGraphRepository unavailable."""
+        """merge-history returns empty envelope when IdentityGraphRepository unavailable.
+        The route wraps the lazy import in except Exception, so calling without
+        a real repository already exercises the graceful-degradation path."""
         from services.profile.routes import get_merge_history
         req = make_request()
-        with patch("repositories.identity_graph_repository.IdentityGraphRepository", side_effect=ImportError):
-            result = await get_merge_history(ENTITY_ID, req, limit=10)
+        result = await get_merge_history(ENTITY_ID, req, limit=10)
         assert result["data"]["items"] == []
         assert result["data"]["source_status"] == "missing"
 
@@ -125,8 +126,7 @@ class TestClusterEndpoints:
         """split-history returns empty envelope when IdentityGraphRepository unavailable."""
         from services.profile.routes import get_split_history
         req = make_request()
-        with patch("repositories.identity_graph_repository.IdentityGraphRepository", side_effect=ImportError):
-            result = await get_split_history(ENTITY_ID, req, limit=10)
+        result = await get_split_history(ENTITY_ID, req, limit=10)
         assert result["data"]["items"] == []
         assert result["data"]["source_status"] == "missing"
 
@@ -446,8 +446,7 @@ class TestEconomicSubRoutes:
         from services.profile.routes import get_economic_web2
         req = make_request()
         mock_intel = MagicMock()
-        mock_intel.web2_spend = AsyncMock(return_value={"total_spend_usd": 0.0, "items": []})
-        mock_intel.web2_revenue = AsyncMock(return_value={"total_revenue_usd": 0.0})
+        mock_intel.web2 = AsyncMock(return_value={"entity_id": ENTITY_ID, "window": "30d"})
         result = await get_economic_web2(ENTITY_ID, req, window="30d", intel=mock_intel)
         assert result["data"]["entity_id"] == ENTITY_ID
 
@@ -467,11 +466,9 @@ class TestEconomicSubRoutes:
     @pytest.mark.asyncio
     async def test_economic_agentic_returns_envelope(self):
         from services.profile.routes import get_economic_agentic
+        agg = make_agg()
         req = make_request()
-        mock_intel = MagicMock()
-        mock_intel.agent_spend = AsyncMock(return_value={"total_usd": 0.0, "items": []})
-        mock_intel.agent_settlements = AsyncMock(return_value={"items": [], "count": 0})
-        result = await get_economic_agentic(ENTITY_ID, req, window="30d", intel=mock_intel)
+        result = await get_economic_agentic(ENTITY_ID, req, agg=agg)
         assert result["data"]["entity_id"] == ENTITY_ID
 
     @pytest.mark.asyncio
@@ -479,14 +476,16 @@ class TestEconomicSubRoutes:
         from services.profile.routes import get_economic_campaigns
         agg = make_agg()
         req = make_request()
-        result = await get_economic_campaigns(ENTITY_ID, req, agg, window="30d")
+        mock_intel = MagicMock()
+        mock_intel.journey_economics = AsyncMock(return_value={"items": [], "count": 0})
+        result = await get_economic_campaigns(ENTITY_ID, req, agg, window="30d", intel=mock_intel)
         assert result["data"]["entity_id"] == ENTITY_ID
-        assert "items" in result["data"]
+        assert "campaigns" in result["data"]
 
     @pytest.mark.asyncio
     async def test_economic_invalid_window(self):
         from services.profile.routes import get_economic_web3
-        from utils.errors import BadRequestError
+        from shared.common.common import BadRequestError
         req = make_request()
         mock_intel = MagicMock()
         with pytest.raises(BadRequestError):
@@ -495,7 +494,7 @@ class TestEconomicSubRoutes:
     @pytest.mark.asyncio
     async def test_economic_web2_invalid_window(self):
         from services.profile.routes import get_economic_web2
-        from utils.errors import BadRequestError
+        from shared.common.common import BadRequestError
         req = make_request()
         mock_intel = MagicMock()
         with pytest.raises(BadRequestError):
