@@ -15,8 +15,7 @@ related:
 canonical_owner: platform@aether
 estimated_read_minutes: 3
 last_synced_commit: 6404ee9
----
-# Queue & Worker Health
+---# Queue & Worker Health
 
 `QueueHealthService` tracks queue depth and worker health for the platform's
 background processing surfaces. Because no unified queue broker abstraction

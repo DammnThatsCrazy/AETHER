@@ -14,7 +14,6 @@ estimated_read_minutes: 5
 toc_depth: 3
 last_synced_commit: 6404ee9
 ---
-
 # PostgreSQL / Repository Subsystem
 
 ## Architecture

@@ -17,7 +17,6 @@ estimated_read_minutes: 12
 toc_depth: 3
 last_synced_commit: 6404ee9
 ---
-
 # Compliance Framework — GDPR & SOC 2
 
 This page describes Aether's compliance posture, data-protection controls, and

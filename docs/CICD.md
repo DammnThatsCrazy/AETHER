@@ -17,7 +17,6 @@ estimated_read_minutes: 12
 toc_depth: 3
 last_synced_commit: 6404ee9
 ---
-
 # CI/CD Pipeline — Stages, Gates & SDK Release
 
 Internal reference for Aether's automated delivery pipeline. The CI/CD system is

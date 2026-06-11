@@ -15,7 +15,6 @@ estimated_read_minutes: 12
 toc_depth: 3
 last_synced_commit: 6404ee9
 ---
-
 # Aether Web SDK v8.9.0 — Integration Guide
 
 ## Installation

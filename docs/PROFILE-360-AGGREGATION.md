@@ -15,7 +15,6 @@ estimated_read_minutes: 8
 toc_depth: 3
 last_synced_commit: 6404ee9
 ---
-
 # Profile 360 Aggregation Layer
 
 The Profile 360 aggregation layer is the frontend-facing read API for any
@@ -115,6 +114,75 @@ is what is documented below.
 | GET    | `/v1/profile/{id}/flows`                                   | Asset transfers (raw list)                         |
 | GET    | `/v1/profile/{id}/campaigns`                               | Campaign attribution (derived from event stream)   |
 | GET    | `/v1/profile/resolve`                                      | Resolve any identifier to canonical id             |
+
+### Identity cluster endpoints
+
+| Method | Path                                                        | Returns                                              |
+|--------|-------------------------------------------------------------|------------------------------------------------------|
+| GET    | `/v1/profile/{id}/cluster`                                  | Primary identity cluster                             |
+| GET    | `/v1/profile/{id}/clusters`                                 | All clusters this entity belongs to                  |
+| GET    | `/v1/profile/{id}/identity-confidence`                      | Identity confidence score breakdown                  |
+| GET    | `/v1/profile/{id}/merge-history`                            | Identity merge history (empty envelope if unavailable) |
+| GET    | `/v1/profile/{id}/split-history`                            | Identity split history (empty envelope if unavailable) |
+
+Cluster endpoints are read-only proxies to `IdentityClusterRepository` via `Profile360Aggregator.cluster/clusters/identity_confidence`. Merge and split history gracefully return an empty envelope with `source_status: "missing"` when `IdentityGraphRepository` is not provisioned — this is correct pre-production behavior.
+
+### Attribution endpoint
+
+| Method | Path                                                        | Returns                                              |
+|--------|-------------------------------------------------------------|------------------------------------------------------|
+| GET    | `/v1/profile/{id}/attribution`                              | Multi-touch attribution: first/last touch + touchpoints |
+
+Backed by `Profile360Aggregator.attribution`. Accepts `?window=30d|60d|90d|lifetime`. Returns `first_touch`, `last_touch`, `touchpoints[]`, and `conversion_status`.
+
+### Consent and activation endpoints
+
+| Method | Path                                                        | Returns                                              |
+|--------|-------------------------------------------------------------|------------------------------------------------------|
+| GET    | `/v1/profile/{id}/consent`                                  | Consent state, activation eligibility, DSR state, use-case permissions |
+| GET    | `/v1/profile/{id}/activation-eligibility`                   | Activation eligibility: `allowed/observe_only/restricted/blocked` |
+
+When `ConsentRepository` returns no record, or the record belongs to a different tenant, both endpoints return a stable unknown-consent envelope — no 404, no 500. The `activation_eligibility` defaults to `observe_only` when consent is missing.
+
+### Profile quality and freshness endpoints
+
+| Method | Path                                                        | Returns                                              |
+|--------|-------------------------------------------------------------|------------------------------------------------------|
+| GET    | `/v1/profile/{id}/quality`                                  | Quality scorecard: completeness/freshness/confidence/readiness |
+| GET    | `/v1/profile/{id}/data-freshness`                           | Per-dimension freshness with last-update timestamps  |
+
+`/quality` returns `readiness_status: empty|partial|usable|strong|release_grade` plus nine normalized scores. `/data-freshness` returns per-dimension objects with `freshness_status: fresh|aging|stale|unknown` and the last update timestamp for each.
+
+### Economic sub-routes
+
+| Method | Path                                                        | Returns                                              |
+|--------|-------------------------------------------------------------|------------------------------------------------------|
+| GET    | `/v1/profile/{id}/economic`                                 | Unified economic summary (Web2 + Web3)               |
+| GET    | `/v1/profile/{id}/economic/web2`                            | TradFi/Web2 financial signals (requires `credit` consent) |
+| GET    | `/v1/profile/{id}/economic/web3`                            | On-chain: asset composition + PNL + trading profile  |
+| GET    | `/v1/profile/{id}/economic/agentic`                         | Agentic spend: delegations + agent summary           |
+| GET    | `/v1/profile/{id}/economic/campaigns`                       | Campaign-level ROAS, CPA, LTV                        |
+| GET    | `/v1/profile/{id}/economic/warnings`                        | Economic risk warnings derived from quality + freshness |
+
+`/economic/*` routes compose `IntelligenceAggregator` + `Profile360Aggregator` reads. All sub-routes accept `?window=30d|60d|90d|lifetime` where applicable.
+
+### Agent executions, actions, and events
+
+| Method | Path                                                        | Returns                                              |
+|--------|-------------------------------------------------------------|------------------------------------------------------|
+| GET    | `/v1/profile/{id}/agent-executions`                         | Execution history (as owner or participant)          |
+| GET    | `/v1/profile/{id}/actions`                                  | Decisions executed by or for this entity             |
+| GET    | `/v1/profile/{id}/events`                                   | Raw event stream with optional `?event_type=` filter |
+
+`/agent-executions` gracefully returns an empty envelope with `source_status: "missing"` when `AgentExecutionRepository` is unavailable. `/events` is an alias to the timeline with type filtering applied server-side.
+
+### Decision and outcome endpoints
+
+| Method | Path                                                        | Returns                                              |
+|--------|-------------------------------------------------------------|------------------------------------------------------|
+| GET    | `/v1/profile/{id}/recommendations`                          | Intelligence recommendations for this entity         |
+| GET    | `/v1/profile/{id}/outcomes`                                 | Outcome history                                      |
+| GET    | `/v1/profile/{id}/outcome-ledger`                           | Full ledger: recs → decisions → actions → outcomes → feedback |
 
 ### Intelligence extension endpoints
 

@@ -30,8 +30,7 @@ canonical_owner: platform@aether
 estimated_read_minutes: 6
 toc_depth: 3
 last_synced_commit: 6404ee9
----
-# Decision & Outcome Intelligence
+---# Decision & Outcome Intelligence
 
 Aether extends the existing intelligence graph into a graph-native OODA loop: **Observe → Orient → Recommend → Decide → Act → Learn**. This is not a separate decision-engine product or parallel application layer; it is an additive extension of the existing SDK ingestion, profile, intelligence, graph, event, approval, action, and observability patterns.
 

@@ -12,8 +12,7 @@ canonical_owner: security@aether
 estimated_read_minutes: 8
 toc_depth: 3
 last_synced_commit: 6404ee9
----
-# Model Extraction Defense v8.8.0
+---# Model Extraction Defense v8.8.0
 
 Modular defense layer against model extraction and knowledge distillation attacks on the Aether ML serving pipeline.
 

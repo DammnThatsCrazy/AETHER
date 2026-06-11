@@ -14,7 +14,6 @@ source_files:
   - frontend/shared/src/components/noesis-workspace.tsx
 last_synced_commit: 6404ee9
 ---
-
 # Noesis
 
 Noesis is Aether's graph-native natural-language intelligence layer. It exposes a shared read-only backend endpoint for both Kyber (internal operator console) and Aether (tenant-facing intelligence UI), plus dedicated frontend workspaces in each surface.

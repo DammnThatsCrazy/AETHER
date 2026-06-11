@@ -20,8 +20,7 @@ canonical_owner: platform@aether
 estimated_read_minutes: 5
 toc_depth: 3
 last_synced_commit: 6404ee9
----
-# Outcome Ledger
+---# Outcome Ledger
 
 The Outcome Ledger turns graph-native OODA records into tenant-visible ROI without creating a separate product layer. It aggregates recommendations, decisions, actions, outcomes, and confidence feedback using tenant-scoped repositories.
 

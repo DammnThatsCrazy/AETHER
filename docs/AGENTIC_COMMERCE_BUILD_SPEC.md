@@ -13,8 +13,7 @@ canonical_owner: commerce@aether
 estimated_read_minutes: 45
 toc_depth: 3
 last_synced_commit: 6404ee9
----
-# Aether Agentic Commerce — Day-1 Build Specification
+---# Aether Agentic Commerce — Day-1 Build Specification
 
 **Document:** Production build spec for extending Aether's x402/commerce/graph foundation into a fully productized Aether-native Agentic Commerce control plane.
 **Scope:** Extension of existing monorepo. Not a rewrite. Not a refactor.

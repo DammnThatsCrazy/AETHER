@@ -13,7 +13,6 @@ related:
   - concepts/unified-economic-graph
 last_synced_commit: 6404ee9
 ---
-
 # Aether — TVL vs. GMV vs. Revenue Metric Guide
 
 ## Definitions

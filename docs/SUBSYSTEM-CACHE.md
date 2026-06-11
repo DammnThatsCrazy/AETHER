@@ -13,7 +13,6 @@ estimated_read_minutes: 4
 toc_depth: 3
 last_synced_commit: 6404ee9
 ---
-
 # Cache / Redis Subsystem
 
 ## Architecture

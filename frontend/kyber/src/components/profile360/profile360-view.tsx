@@ -15,6 +15,14 @@ import {
   Profile360WalletsPanel,
   Profile360BehavioralPanel,
   Profile360AttributionPanel,
+  Profile360ClusterPanel,
+  Profile360AgentsPanel,
+  Profile360ConsentPanel,
+  Profile360QualityPanel,
+  Profile360RecommendationsPanel,
+  Profile360OutcomesPanel,
+  Profile360IntelligencePanel,
+  Profile360ProvenancePanel,
 } from './profile360-contextual-panels';
 import { KyberSocialIntelligencePanel } from './social-intelligence-panel';
 
@@ -28,12 +36,20 @@ const views: { id: Profile360ViewId | 'social'; label: string }[] = [
   { id: 'identity', label: 'Identity' },
   { id: 'system', label: 'System' },
   { id: 'financial', label: 'Financial' },
+  { id: 'cluster', label: 'Cluster' },
   { id: 'sessions', label: 'Sessions' },
   { id: 'journeys', label: 'Journeys' },
   { id: 'social', label: 'Social' },
   { id: 'wallets', label: 'Web3' },
   { id: 'behavioral', label: 'Behavioral' },
   { id: 'attribution', label: 'Attribution' },
+  { id: 'agents', label: 'Agents' },
+  { id: 'intelligence', label: 'Intelligence' },
+  { id: 'recommendations', label: 'Recommendations' },
+  { id: 'outcomes', label: 'Outcomes' },
+  { id: 'consent', label: 'Consent' },
+  { id: 'provenance', label: 'Provenance' },
+  { id: 'quality', label: 'Quality' },
   { id: 'graph', label: 'Graph' },
   { id: 'timeline', label: 'Timeline' },
   { id: 'analytics', label: 'Analytics' },
@@ -136,6 +152,14 @@ export function Profile360View({ type, id, onBack }: Profile360ViewProps) {
         <TabsContent value="wallets"><Profile360WalletsPanel sections={sections.wallets ?? []} /></TabsContent>
         <TabsContent value="behavioral"><Profile360BehavioralPanel sections={sections.behavioral ?? []} window={timeWindow} /></TabsContent>
         <TabsContent value="attribution"><Profile360AttributionPanel sections={sections.attribution ?? []} /></TabsContent>
+        <TabsContent value="cluster"><Profile360ClusterPanel sections={sections.cluster ?? []} /></TabsContent>
+        <TabsContent value="agents"><Profile360AgentsPanel sections={sections.agents ?? []} /></TabsContent>
+        <TabsContent value="intelligence"><Profile360IntelligencePanel sections={sections.intelligence ?? []} /></TabsContent>
+        <TabsContent value="recommendations"><Profile360RecommendationsPanel sections={sections.recommendations ?? []} /></TabsContent>
+        <TabsContent value="outcomes"><Profile360OutcomesPanel sections={sections.outcomes ?? []} /></TabsContent>
+        <TabsContent value="consent"><Profile360ConsentPanel sections={sections.consent ?? []} /></TabsContent>
+        <TabsContent value="provenance"><Profile360ProvenancePanel sections={sections.provenance ?? []} /></TabsContent>
+        <TabsContent value="quality"><Profile360QualityPanel sections={sections.quality ?? []} /></TabsContent>
         <TabsContent value="graph"><Profile360GraphPanel graph={graph} highlightedNodeIds={highlightedNodeIds} onHighlight={actions.highlightNodes} onDrill={onDrill} /></TabsContent>
         <TabsContent value="timeline"><Profile360TimelinePanel events={timeline} onHighlight={actions.highlightNodes} onDrill={onDrill} /></TabsContent>
         <TabsContent value="analytics"><Profile360SectionGrid sections={sections.analytics ?? []} onDrill={onDrill} /></TabsContent>

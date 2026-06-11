@@ -367,6 +367,170 @@ export const api = {
 
     resolve: (params: { wallet?: string; email?: string; device?: string; session?: string; social?: string; customer?: string }) =>
       restClient.get(`/v1/profile/resolve${buildQS(params)}`, wrap(z.object({ resolved_user_id: z.string() }))).then(r => r.data),
+
+    /** Agent profiles linked to this entity. */
+    agents: (userId: string) =>
+      restClient.get(`/v1/profile/${userId}/agents`, wrap(unknownSchema)).then(r => r.data),
+
+    /** Active and historical delegations. */
+    delegations: (userId: string, opts?: { role?: 'grantor' | 'grantee' | 'both'; active?: boolean }) =>
+      restClient.get(`/v1/profile/${userId}/delegations${buildQS({ ...opts })}`, wrap(unknownSchema)).then(r => r.data),
+
+    /** Asset transfer flows in/out of this entity. */
+    flows: (userId: string, limit = 100) =>
+      restClient.get(`/v1/profile/${userId}/flows?limit=${limit}`, wrap(unknownSchema)).then(r => r.data),
+
+    /** Behavior snapshot: automation ratio, decision latency, anomaly flags. */
+    behavior: (userId: string) =>
+      restClient.get(`/v1/profile/${userId}/behavior`, wrap(unknownSchema)).then(r => r.data),
+
+    /** Next-action predictions and risk projections. */
+    predictions: (userId: string) =>
+      restClient.get(`/v1/profile/${userId}/predictions`, wrap(unknownSchema)).then(r => r.data),
+
+    /** Campaign attribution derived from the analytics stream. */
+    campaigns: (userId: string, limit = 50) =>
+      restClient.get(`/v1/profile/${userId}/campaigns?limit=${limit}`, wrap(unknownSchema)).then(r => r.data),
+
+    /** Multi-touch attribution touchpoints (first/last touch, conversion chain). */
+    attribution: (userId: string, window = '30d') =>
+      restClient.get(`/v1/profile/${userId}/attribution?window=${window}`, wrap(unknownSchema)).then(r => r.data),
+
+    /** Consent state, activation eligibility, DSR state, allowed use-cases. */
+    consent: (userId: string) =>
+      restClient.get(`/v1/profile/${userId}/consent`, wrap(unknownSchema)).then(r => r.data),
+
+    /** Activation eligibility: allowed/observe_only/restricted/blocked. */
+    activationEligibility: (userId: string) =>
+      restClient.get(`/v1/profile/${userId}/activation-eligibility`, wrap(unknownSchema)).then(r => r.data),
+
+    /** Profile quality scorecard: completeness, freshness, confidence, readiness. */
+    quality: (userId: string) =>
+      restClient.get(`/v1/profile/${userId}/quality`, wrap(unknownSchema)).then(r => r.data),
+
+    /** Per-dimension data freshness: sources, last update, stale warnings. */
+    dataFreshness: (userId: string) =>
+      restClient.get(`/v1/profile/${userId}/data-freshness`, wrap(unknownSchema)).then(r => r.data),
+
+    /** Unified economic profile (Web2 + Web3 + agentic). */
+    economic: (userId: string, window = '30d') =>
+      restClient.get(`/v1/profile/${userId}/economic?window=${window}`, wrap(unknownSchema)).then(r => r.data),
+
+    /** Economic sub-view: Web3 asset composition, PNL, trading profile. */
+    economicWeb3: (userId: string, window = '30d') =>
+      restClient.get(`/v1/profile/${userId}/economic/web3?window=${window}`, wrap(unknownSchema)).then(r => r.data),
+
+    /** Economic sub-view: TradFi/Web2 financial signals (requires 'credit' consent). */
+    economicWeb2: (userId: string, window = '30d') =>
+      restClient.get(`/v1/profile/${userId}/economic/web2?window=${window}`, wrap(unknownSchema)).then(r => r.data),
+
+    /** Economic sub-view: Agentic spend, delegations, settlement summary. */
+    economicAgentic: (userId: string) =>
+      restClient.get(`/v1/profile/${userId}/economic/agentic`, wrap(unknownSchema)).then(r => r.data),
+
+    /** Economic sub-view: Campaign-level ROAS, CPA, LTV. */
+    economicCampaigns: (userId: string, window = '30d') =>
+      restClient.get(`/v1/profile/${userId}/economic/campaigns?window=${window}`, wrap(unknownSchema)).then(r => r.data),
+
+    /** Economic risk warnings: anomalies, source gaps, stale flags. */
+    economicWarnings: (userId: string) =>
+      restClient.get(`/v1/profile/${userId}/economic/warnings`, wrap(unknownSchema)).then(r => r.data),
+
+    /** Agent execution history (as owner or participant). */
+    agentExecutions: (userId: string, opts?: { limit?: number; status?: string }) =>
+      restClient.get(`/v1/profile/${userId}/agent-executions${buildQS({ ...opts })}`, wrap(unknownSchema)).then(r => r.data),
+
+    /** Entity-level actions (decisions executed, operations initiated). */
+    actions: (userId: string, limit = 100) =>
+      restClient.get(`/v1/profile/${userId}/actions?limit=${limit}`, wrap(unknownSchema)).then(r => r.data),
+
+    /** Raw event stream (alias to timeline with optional type filter). */
+    events: (userId: string, opts?: { limit?: number; event_type?: string }) =>
+      restClient.get(`/v1/profile/${userId}/events${buildQS({ ...opts })}`, wrap(unknownSchema)).then(r => r.data),
+
+    /** Entity tier (Whale/Shark/Dolphin/Fish/Shrimp) + percentile rank. */
+    tier: (userId: string, window = '30d') =>
+      restClient.get(`/v1/profile/${userId}/tier?window=${window}`, wrap(unknownSchema)).then(r => r.data),
+
+    /** On-chain portfolio composition by asset category. */
+    assetComposition: (userId: string, window = '30d') =>
+      restClient.get(`/v1/profile/${userId}/asset-composition?window=${window}`, wrap(unknownSchema)).then(r => r.data),
+
+    /** Realized + unrealized PNL and TVL delta. */
+    pnl: (userId: string, window = '30d') =>
+      restClient.get(`/v1/profile/${userId}/pnl?window=${window}`, wrap(unknownSchema)).then(r => r.data),
+
+    /** On-chain trading behavior: favorite pairs, protocol loyalty, gas strategy. */
+    tradingProfile: (userId: string, window = '30d') =>
+      restClient.get(`/v1/profile/${userId}/trading-profile?window=${window}`, wrap(unknownSchema)).then(r => r.data),
+
+    /** City-level location history. */
+    locationHistory: (userId: string, opts?: { window?: string; limit?: number }) =>
+      restClient.get(`/v1/profile/${userId}/location-history${buildQS({ ...opts })}`, wrap(unknownSchema)).then(r => r.data),
+
+    /** 24×7 activity heatmap in entity's primary timezone. */
+    temporalHeatmap: (userId: string, window = '30d') =>
+      restClient.get(`/v1/profile/${userId}/temporal-heatmap?window=${window}`, wrap(unknownSchema)).then(r => r.data),
+
+    /** Per-journey ROAS, CPA, LTV, retarget score. */
+    journeyEconomics: (userId: string, opts?: { window?: string; limit?: number }) =>
+      restClient.get(`/v1/profile/${userId}/journey-economics${buildQS({ ...opts })}`, wrap(unknownSchema)).then(r => r.data),
+
+    /** Conversion rate and average value per device type. */
+    devicePerformance: (userId: string, window = '30d') =>
+      restClient.get(`/v1/profile/${userId}/device-performance?window=${window}`, wrap(unknownSchema)).then(r => r.data),
+
+    /** Staged conversion funnel. */
+    funnel: (userId: string, opts?: { window?: string; campaign_id?: string }) =>
+      restClient.get(`/v1/profile/${userId}/funnel${buildQS({ ...opts })}`, wrap(unknownSchema)).then(r => r.data),
+
+    /** Median time between funnel stage conversions. */
+    timeToConvert: (userId: string, window = '30d') =>
+      restClient.get(`/v1/profile/${userId}/time-to-convert?window=${window}`, wrap(unknownSchema)).then(r => r.data),
+
+    /** Retargeting recommendations for analyst review. */
+    retargetRecommendations: (userId: string, opts?: { status?: string; limit?: number }) =>
+      restClient.get(`/v1/profile/${userId}/retarget-recommendations${buildQS({ ...opts })}`, wrap(unknownSchema)).then(r => r.data),
+
+    /** Protocol metrics: TVL, volume, fee revenue (DAO/Protocol entity types). */
+    protocolMetrics: (userId: string, window = '30d') =>
+      restClient.get(`/v1/profile/${userId}/protocol-metrics?window=${window}`, wrap(unknownSchema)).then(r => r.data),
+
+    /** Governance proposals, votes, participation rate. */
+    governanceActivity: (userId: string, opts?: { window?: string; limit?: number }) =>
+      restClient.get(`/v1/profile/${userId}/governance-activity${buildQS({ ...opts })}`, wrap(unknownSchema)).then(r => r.data),
+
+    /** Entity recommendations: intelligence, retarget, next best action. */
+    recommendations: (userId: string, limit = 20) =>
+      restClient.get(`/v1/profile/${userId}/recommendations?limit=${limit}`, wrap(unknownSchema)).then(r => r.data),
+
+    /** Outcome history linked to this entity. */
+    outcomes: (userId: string, limit = 20) =>
+      restClient.get(`/v1/profile/${userId}/outcomes?limit=${limit}`, wrap(unknownSchema)).then(r => r.data),
+
+    /** Full outcome ledger: recs → decisions → actions → outcomes → feedback. */
+    outcomeLedger: (userId: string, limit = 100) =>
+      restClient.get(`/v1/profile/${userId}/outcome-ledger?limit=${limit}`, wrap(unknownSchema)).then(r => r.data),
+
+    /** Primary identity cluster. */
+    cluster: (userId: string) =>
+      restClient.get(`/v1/profile/${userId}/cluster`, wrap(unknownSchema)).then(r => r.data),
+
+    /** All clusters this entity belongs to. */
+    clusters: (userId: string) =>
+      restClient.get(`/v1/profile/${userId}/clusters`, wrap(unknownSchema)).then(r => r.data),
+
+    /** Identity confidence score breakdown. */
+    identityConfidence: (userId: string) =>
+      restClient.get(`/v1/profile/${userId}/identity-confidence`, wrap(unknownSchema)).then(r => r.data),
+
+    /** Identity merge history (empty envelope if unavailable). */
+    mergeHistory: (userId: string, limit = 50) =>
+      restClient.get(`/v1/profile/${userId}/merge-history?limit=${limit}`, wrap(unknownSchema)).then(r => r.data),
+
+    /** Identity split history (empty envelope if unavailable). */
+    splitHistory: (userId: string, limit = 50) =>
+      restClient.get(`/v1/profile/${userId}/split-history?limit=${limit}`, wrap(unknownSchema)).then(r => r.data),
   },
 
   // ── Profile360 normalized surfaces ─────────────────────────────────────────

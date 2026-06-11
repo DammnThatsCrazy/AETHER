@@ -15,8 +15,7 @@ related:
 canonical_owner: platform@aether
 estimated_read_minutes: 3
 last_synced_commit: 6404ee9
----
-# Incident Postmortems
+---# Incident Postmortems
 
 Postmortems capture the learning from significant incidents. Runbooks indicate
 when a postmortem is required (`postmortem_required`), and incidents can be moved

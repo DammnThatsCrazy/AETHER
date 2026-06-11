@@ -18,7 +18,6 @@ estimated_read_minutes: 4
 toc_depth: 3
 last_synced_commit: 6404ee9
 ---
-
 # Governed Action Dispatch
 
 Action Dispatch connects approved Decision & Outcome Intelligence actions to external operator systems while preserving human-in-the-loop governance.

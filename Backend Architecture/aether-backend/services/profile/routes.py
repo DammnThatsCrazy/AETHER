@@ -1114,4 +1114,415 @@ async def get_agent_graph(entity_id: str, request: Request):
     tenant = request.state.tenant
     tenant.require_permission("read")
     profile = await _get_agent_composer().compose(entity_id, tenant.tenant_id)
-    return APIResponse(data={"agent_id": entity_id, **profile["graph"]}).to_dict()
+    return APIResponse(data={"agent_id": entity_id, **profile["graph"]}).to_dict()# ── Identity Cluster Endpoints ───────────────────────────────────────
+
+@router.get("/{user_id}/cluster")
+async def get_profile_cluster(
+    user_id: str,
+    request: Request,
+    agg: Profile360Aggregator = Depends(_get_aggregator),
+):
+    """Primary identity cluster this entity belongs to."""
+    tenant = request.state.tenant
+    tenant.require_permission("read")
+    data = await agg.cluster(user_id, tenant.tenant_id)
+    return APIResponse(data=data).to_dict()
+
+
+@router.get("/{user_id}/clusters")
+async def get_profile_clusters(
+    user_id: str,
+    request: Request,
+    agg: Profile360Aggregator = Depends(_get_aggregator),
+):
+    """All identity clusters this entity is a member of."""
+    tenant = request.state.tenant
+    tenant.require_permission("read")
+    data = await agg.clusters(user_id, tenant.tenant_id)
+    return APIResponse(data=data).to_dict()
+
+
+@router.get("/{user_id}/identity-confidence")
+async def get_identity_confidence(
+    user_id: str,
+    request: Request,
+    agg: Profile360Aggregator = Depends(_get_aggregator),
+):
+    """Identity confidence score breakdown for this entity."""
+    tenant = request.state.tenant
+    tenant.require_permission("read")
+    data = await agg.identity_confidence(user_id, tenant.tenant_id)
+    return APIResponse(data=data).to_dict()
+
+
+@router.get("/{user_id}/merge-history")
+async def get_merge_history(
+    user_id: str,
+    request: Request,
+    limit: int = Query(default=50, ge=1, le=200),
+):
+    """Identity merge history for this entity. Returns empty envelope when unavailable."""
+    tenant = request.state.tenant
+    tenant.require_permission("read")
+    try:
+        from repositories.identity_graph_repository import IdentityGraphRepository
+        repo = IdentityGraphRepository()
+        items = await repo.get_merge_history(user_id, tenant_id=tenant.tenant_id, limit=limit)
+    except Exception:
+        items = []
+    return APIResponse(data={
+        "entity_id": user_id,
+        "items": items,
+        "count": len(items),
+        "source_status": "available" if items else "missing",
+    }).to_dict()
+
+
+@router.get("/{user_id}/split-history")
+async def get_split_history(
+    user_id: str,
+    request: Request,
+    limit: int = Query(default=50, ge=1, le=200),
+):
+    """Identity split history for this entity. Returns empty envelope when unavailable."""
+    tenant = request.state.tenant
+    tenant.require_permission("read")
+    try:
+        from repositories.identity_graph_repository import IdentityGraphRepository
+        repo = IdentityGraphRepository()
+        items = await repo.get_split_history(user_id, tenant_id=tenant.tenant_id, limit=limit)
+    except Exception:
+        items = []
+    return APIResponse(data={
+        "entity_id": user_id,
+        "items": items,
+        "count": len(items),
+        "source_status": "available" if items else "missing",
+    }).to_dict()
+
+
+# ── Attribution Endpoint ────────────────────────────────────────────
+
+@router.get("/{user_id}/attribution")
+async def get_profile_attribution(
+    user_id: str,
+    request: Request,
+    agg: Profile360Aggregator = Depends(_get_aggregator),
+    window: str = Query(default="30d"),
+):
+    """Multi-touch attribution touchpoints, first/last touch, and conversion chain."""
+    tenant = request.state.tenant
+    tenant.require_permission("read")
+    _validate_window(window)
+    data = await agg.attribution(user_id, tenant.tenant_id, window=window)
+    return APIResponse(data=data).to_dict()
+
+
+# ── Consent & Activation Endpoints ─────────────────────────────────
+
+@router.get("/{user_id}/consent")
+async def get_profile_consent(
+    user_id: str,
+    request: Request,
+):
+    """Consent state, activation eligibility, allowed/restricted use cases, DSR state."""
+    tenant = request.state.tenant
+    tenant.require_permission("read")
+    try:
+        from repositories.repos import ConsentRepository
+        repo = ConsentRepository()
+        record = await repo.find_by_entity(user_id, tenant_id=tenant.tenant_id)
+    except Exception:
+        record = None
+    if record is None or record.get("tenant_id") != tenant.tenant_id:
+        return APIResponse(data={
+            "entity_id": user_id,
+            "consent_status": "unknown",
+            "activation_eligibility": "observe_only",
+            "allowed_use_cases": [],
+            "restricted_use_cases": [],
+            "blocked_use_cases": [],
+            "consent_sources": [],
+            "last_consent_update": None,
+            "retention_status": "unknown",
+            "redaction_state": "none",
+            "dsr_state": "none",
+            "source_status": "missing",
+        }).to_dict()
+    return APIResponse(data={
+        "entity_id": user_id,
+        **{k: v for k, v in record.items() if k != "tenant_id"},
+        "source_status": "available",
+    }).to_dict()
+
+
+@router.get("/{user_id}/activation-eligibility")
+async def get_activation_eligibility(
+    user_id: str,
+    request: Request,
+):
+    """Whether this entity may be activated for targeting, observation, or is blocked."""
+    tenant = request.state.tenant
+    tenant.require_permission("read")
+    try:
+        from repositories.repos import ConsentRepository
+        repo = ConsentRepository()
+        record = await repo.find_by_entity(user_id, tenant_id=tenant.tenant_id)
+    except Exception:
+        record = None
+    if record is None or record.get("tenant_id") != tenant.tenant_id:
+        return APIResponse(data={
+            "entity_id": user_id,
+            "activation_eligibility": "observe_only",
+            "allowed_use_cases": [],
+            "restricted_use_cases": [],
+            "blocked_use_cases": [],
+            "consent_status": "unknown",
+            "source_status": "missing",
+        }).to_dict()
+    return APIResponse(data={
+        "entity_id": user_id,
+        "activation_eligibility": record.get("activation_eligibility", "observe_only"),
+        "allowed_use_cases": record.get("allowed_use_cases", []),
+        "restricted_use_cases": record.get("restricted_use_cases", []),
+        "blocked_use_cases": record.get("blocked_use_cases", []),
+        "consent_status": record.get("consent_status", "unknown"),
+        "source_status": "available",
+    }).to_dict()
+
+
+# ── Profile Quality & Freshness Endpoints ──────────────────────────
+
+@router.get("/{user_id}/quality")
+async def get_profile_quality(
+    user_id: str,
+    request: Request,
+    agg: Profile360Aggregator = Depends(_get_aggregator),
+):
+    """Profile quality scorecard: completeness, freshness, confidence, readiness status."""
+    tenant = request.state.tenant
+    tenant.require_permission("read")
+    data = await agg.quality(user_id, tenant.tenant_id)
+    return APIResponse(data=data).to_dict()
+
+
+@router.get("/{user_id}/data-freshness")
+async def get_data_freshness(
+    user_id: str,
+    request: Request,
+    agg: Profile360Aggregator = Depends(_get_aggregator),
+):
+    """Per-dimension data freshness: sources, last update, stale status, warnings."""
+    tenant = request.state.tenant
+    tenant.require_permission("read")
+    data = await agg.data_freshness(user_id, tenant.tenant_id)
+    return APIResponse(data=data).to_dict()
+
+
+# ── Economic Sub-Routes ────────────────────────────────────────────
+
+@router.get("/{user_id}/economic")
+async def get_profile_economic(
+    user_id: str,
+    request: Request,
+    window: str = Query(default="30d"),
+    intel: IntelligenceAggregator = Depends(_get_intel_agg),
+):
+    """Unified economic profile: Web2 + Web3 + agentic activity summary."""
+    tenant = request.state.tenant
+    tenant.require_permission("read")
+    _validate_window(window)
+    financials = await intel.pnl(user_id, tenant.tenant_id, window=window)
+    web3 = await intel.asset_composition(user_id, tenant.tenant_id, window=window)
+    return APIResponse(data={
+        "entity_id": user_id,
+        "window": window,
+        "financials": financials,
+        "web3": web3,
+        "computed_at": financials.get("computed_at"),
+    }).to_dict()
+
+
+@router.get("/{user_id}/economic/web2")
+async def get_economic_web2(
+    user_id: str,
+    request: Request,
+    window: str = Query(default="30d"),
+    intel: IntelligenceAggregator = Depends(_get_intel_agg),
+):
+    """TradFi portfolio and Web2 financial signals (requires 'credit' consent)."""
+    tenant = request.state.tenant
+    tenant.require_permission("read")
+    _validate_window(window)
+    return APIResponse(data=await intel.web2(user_id, tenant.tenant_id, window=window)).to_dict()
+
+
+@router.get("/{user_id}/economic/web3")
+async def get_economic_web3(
+    user_id: str,
+    request: Request,
+    window: str = Query(default="30d"),
+    intel: IntelligenceAggregator = Depends(_get_intel_agg),
+):
+    """On-chain asset composition, PNL, and trading profile."""
+    tenant = request.state.tenant
+    tenant.require_permission("read")
+    _validate_window(window)
+    asset_comp = await intel.asset_composition(user_id, tenant.tenant_id, window=window)
+    pnl = await intel.pnl(user_id, tenant.tenant_id, window=window)
+    trading = await intel.trading_profile(user_id, tenant.tenant_id, window=window)
+    return APIResponse(data={
+        "entity_id": user_id,
+        "window": window,
+        "asset_composition": asset_comp,
+        "pnl": pnl,
+        "trading_profile": trading,
+    }).to_dict()
+
+
+@router.get("/{user_id}/economic/agentic")
+async def get_economic_agentic(
+    user_id: str,
+    request: Request,
+    agg: Profile360Aggregator = Depends(_get_aggregator),
+):
+    """Agentic economic identity: delegations, agent spend, settlement summary."""
+    tenant = request.state.tenant
+    tenant.require_permission("read")
+    delegations = await agg.delegations(user_id, tenant.tenant_id)
+    agents = await agg.agents(user_id, tenant.tenant_id)
+    return APIResponse(data={
+        "entity_id": user_id,
+        "delegations": delegations,
+        "agents": agents,
+    }).to_dict()
+
+
+@router.get("/{user_id}/economic/campaigns")
+async def get_economic_campaigns(
+    user_id: str,
+    request: Request,
+    agg: Profile360Aggregator = Depends(_get_aggregator),
+    window: str = Query(default="30d"),
+    intel: IntelligenceAggregator = Depends(_get_intel_agg),
+):
+    """Campaign-level economic attribution: ROAS, CPA, LTV per campaign."""
+    tenant = request.state.tenant
+    tenant.require_permission("read")
+    _validate_window(window)
+    campaigns = await agg.campaigns(user_id, tenant.tenant_id)
+    economics = await intel.journey_economics(user_id, tenant.tenant_id, window=window)
+    return APIResponse(data={
+        "entity_id": user_id,
+        "window": window,
+        "campaigns": campaigns,
+        "journey_economics": economics,
+    }).to_dict()
+
+
+@router.get("/{user_id}/economic/warnings")
+async def get_economic_warnings(
+    user_id: str,
+    request: Request,
+    agg: Profile360Aggregator = Depends(_get_aggregator),
+):
+    """Economic risk warnings: anomalies, source gaps, stale data flags."""
+    tenant = request.state.tenant
+    tenant.require_permission("read")
+    quality = await agg.quality(user_id, tenant.tenant_id)
+    freshness = await agg.data_freshness(user_id, tenant.tenant_id)
+    warnings = []
+    for dim in quality.get("missing_dimensions", []):
+        warnings.append({"type": "missing_dimension", "dimension": dim, "severity": "warning"})
+    for dim in quality.get("stale_dimensions", []):
+        warnings.append({"type": "stale_dimension", "dimension": dim, "severity": "warning"})
+    if quality.get("contradiction_count", 0) > 0:
+        warnings.append({"type": "data_contradiction", "count": quality["contradiction_count"], "severity": "error"})
+    return APIResponse(data={
+        "entity_id": user_id,
+        "warnings": warnings,
+        "warning_count": len(warnings),
+        "quality_summary": quality,
+        "freshness_summary": freshness,
+    }).to_dict()
+
+
+# ── Agent Executions ───────────────────────────────────────────────
+
+@router.get("/{user_id}/agent-executions")
+async def get_agent_executions(
+    user_id: str,
+    request: Request,
+    limit: int = Query(default=50, ge=1, le=200),
+    status: str | None = Query(default=None),
+):
+    """Agent execution history for this entity (as owner or participant)."""
+    tenant = request.state.tenant
+    tenant.require_permission("read")
+    try:
+        from repositories.repos import AgentExecutionRepository
+        repo = AgentExecutionRepository()
+        filters: dict = {"tenant_id": tenant.tenant_id, "entity_id": user_id}
+        if status:
+            filters["status"] = status
+        items = await repo.find_many(filters, limit=limit)
+        items = [i for i in items if i.get("tenant_id") == tenant.tenant_id]
+    except Exception:
+        items = []
+    return APIResponse(data={
+        "entity_id": user_id,
+        "items": items,
+        "count": len(items),
+        "source_status": "available" if items else "missing",
+    }).to_dict()
+
+
+# ── Actions & Events ───────────────────────────────────────────────
+
+@router.get("/{user_id}/actions")
+async def get_profile_actions(
+    user_id: str,
+    request: Request,
+    limit: int = Query(default=100, ge=1, le=500),
+):
+    """Entity-level actions (decisions executed, operations initiated)."""
+    tenant = request.state.tenant
+    tenant.require_permission("read")
+    try:
+        from services.intelligence.repositories import DecisionRepository
+        repo = DecisionRepository()
+        items = await repo.find_many({"tenant_id": tenant.tenant_id, "entity_id": user_id}, limit=limit)
+        items = [i for i in items if i.get("tenant_id") == tenant.tenant_id]
+    except Exception:
+        items = []
+    return APIResponse(data={
+        "entity_id": user_id,
+        "items": items,
+        "count": len(items),
+    }).to_dict()
+
+
+@router.get("/{user_id}/events")
+async def get_profile_events(
+    user_id: str,
+    request: Request,
+    limit: int = Query(default=100, ge=1, le=500),
+    event_type: str | None = Query(default=None),
+):
+    """Raw event stream for this entity (alias to timeline with event_type filter)."""
+    tenant = request.state.tenant
+    tenant.require_permission("read")
+    from services.profile.composer import ProfileComposer
+    composer = ProfileComposer()
+    params: dict = {"include_timeline": True, "timeline_limit": limit}
+    if event_type:
+        params["event_type_filter"] = event_type
+    profile = await composer.build(user_id, tenant.tenant_id, **params)
+    events = profile.get("timeline", [])
+    if event_type:
+        events = [e for e in events if e.get("type") == event_type or e.get("event_type") == event_type]
+    return APIResponse(data={
+        "entity_id": user_id,
+        "events": events,
+        "count": len(events),
+    }).to_dict()

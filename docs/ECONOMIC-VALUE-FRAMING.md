@@ -15,7 +15,6 @@ related:
   - concepts/kyber-economic-observability
 last_synced_commit: 6404ee9
 ---
-
 # Aether — Economic Value Framing
 
 ## Strategic Distinction

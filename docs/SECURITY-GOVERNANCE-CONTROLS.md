@@ -19,7 +19,6 @@ canonical_owner: platform@aether
 estimated_read_minutes: 6
 last_synced_commit: 6404ee9
 ---
-
 # Security, Compliance & Governance Controls
 
 Aether/Kyber ships a **governance control plane** that lets enterprise and

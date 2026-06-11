@@ -13,8 +13,7 @@ canonical_owner: frontend@aether
 estimated_read_minutes: 10
 toc_depth: 3
 last_synced_commit: 6404ee9
----
-# Aether Profile360 Frontend Architecture
+---# Aether Profile360 Frontend Architecture
 
 This document records the incremental Profile360 migration for the existing Kyber/Aether frontend. It intentionally preserves the current compact entity-card, Entity 360 page, timeline, graph, connections, and event-feed UX while making every backend identity, graph, temporal, financial, reward, delegation, and execution-trace datum surfaceable.
 
@@ -49,8 +48,9 @@ Profile360 is implemented as progressive disclosure:
 1. Keep the compact top identity pattern recognizable.
 2. Add a summary card that adapts by entity type.
 3. Add a drill stack that records Human → Agent → Wallet → Transaction → Protocol → Session → Journey → Event → Trace navigation without changing routes.
-4. Add six additive views: Identity, System, Financial, Graph, Analytics, Debug.
+4. Add 21 additive view tabs: Identity, System, Financial, Cluster, Sessions, Journeys, Social, Web3, Behavioral, Attribution, Agents, Intelligence, Recommendations, Outcomes, Consent, Provenance, Quality, Graph, Timeline, Analytics, Debug.
 5. Keep older Overview/Timeline/Graph/Trust/Notes/Actions tabs as familiar deep detail surfaces during migration.
+6. New tabs added in this iteration: Cluster, Agents, Intelligence, Recommendations, Outcomes, Consent, Provenance, Quality — each backed by a dedicated panel component in `profile360-contextual-panels.tsx`.
 
 ## 4. Updated component hierarchy
 

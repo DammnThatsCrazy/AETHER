@@ -12,8 +12,7 @@ canonical_owner: commerce@aether
 estimated_read_minutes: 3
 toc_depth: 3
 last_synced_commit: 6404ee9
----
-# Commerce Operator Runbook
+---# Commerce Operator Runbook
 
 ## 1. Stuck approval (past SLA)
 

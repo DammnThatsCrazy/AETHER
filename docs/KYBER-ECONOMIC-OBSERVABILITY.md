@@ -14,7 +14,6 @@ related:
   - concepts/unified-economic-graph
 last_synced_commit: 6404ee9
 ---
-
 # Aether — Kyber Economic Observability
 
 ## Overview

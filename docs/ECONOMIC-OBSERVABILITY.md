@@ -12,8 +12,7 @@ canonical_owner: platform@aether
 estimated_read_minutes: 10
 toc_depth: 3
 last_synced_commit: 6404ee9
----
-# Economic Observability
+---# Economic Observability
 
 Aether's economic observability layer adds agentic transaction awareness to the
 existing graph contracts **without introducing a new graph layer or breaking

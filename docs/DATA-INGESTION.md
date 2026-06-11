@@ -15,7 +15,6 @@ estimated_read_minutes: 10
 toc_depth: 3
 last_synced_commit: 6404ee9
 ---
-
 # Data Ingestion — Architecture & API Reference
 
 The Aether Ingestion Layer is a Node.js / TypeScript service that accepts

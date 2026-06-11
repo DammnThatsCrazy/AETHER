@@ -18,7 +18,6 @@ source_files:
   - frontend/kyber/src/features/graph/use-graph-intelligence.ts
 last_synced_commit: 6404ee9
 ---
-
 # Operational Intelligence — Stub vs. Production Audit
 
 **Scope:** PRs #107–#115 — operational intelligence services (investigation, governance, event

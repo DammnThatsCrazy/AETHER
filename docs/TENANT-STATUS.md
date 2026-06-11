@@ -16,8 +16,7 @@ related:
 canonical_owner: platform@aether
 estimated_read_minutes: 4
 last_synced_commit: 6404ee9
----
-# Tenant System Status
+---# Tenant System Status
 
 Tenants get a safe, scoped view of their own workspace health in Aether's
 **System Status** page. It exposes only the calling tenant's data and never any

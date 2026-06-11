@@ -14,8 +14,7 @@ canonical_owner: agent@aether
 estimated_read_minutes: 12
 toc_depth: 3
 last_synced_commit: 6404ee9
----
-# Agent Controller — Multi-Controller Architecture
+---# Agent Controller — Multi-Controller Architecture
 
 > **vNext** — Internal Autonomy Architecture
 

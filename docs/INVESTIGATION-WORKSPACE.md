@@ -20,8 +20,7 @@ canonical_owner: platform@aether
 estimated_read_minutes: 5
 toc_depth: 3
 last_synced_commit: 6404ee9
----
-# Investigation Workspace
+---# Investigation Workspace
 
 Every recommendation can be opened as an investigation workspace without leaving Aether. The workspace is read-only, tenant-scoped, and composed from the existing OODA records and graph/profile/evidence references.
 

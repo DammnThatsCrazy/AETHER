@@ -14,8 +14,7 @@ canonical_owner: commerce@aether
 estimated_read_minutes: 8
 toc_depth: 3
 last_synced_commit: 6404ee9
----
-# Aether Agentic Commerce — Control Plane
+---# Aether Agentic Commerce — Control Plane
 
 **Status:** Day-1 GA (feature-flagged via `COMMERCE_CONTROL_PLANE_ENABLED=true`)
 **Layer:** L3b+ (extends existing x402 capture L3b)

@@ -22,7 +22,6 @@ estimated_read_minutes: 8
 toc_depth: 3
 last_synced_commit: 6404ee9
 ---
-
 # Documentation Pipeline
 
 > Internal reference for the tooling that keeps Aether's documentation

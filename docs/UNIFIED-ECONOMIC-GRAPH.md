@@ -14,7 +14,6 @@ related:
   - concepts/tvl-gmv-revenue-metrics
 last_synced_commit: 6404ee9
 ---
-
 # Aether — Unified Economic Graph
 
 ## Overview
