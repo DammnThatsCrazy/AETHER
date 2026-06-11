@@ -12,7 +12,7 @@ source_files:
 canonical_owner: platform@aether
 estimated_read_minutes: 12
 toc_depth: 3
-last_synced_commit: c66e4dd
+last_synced_commit: 48fb9d4
 ---
 # Operations Runbook v8.8.0
 

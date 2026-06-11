@@ -11,7 +11,7 @@ source_files:
 canonical_owner: backend@aether
 estimated_read_minutes: 60
 toc_depth: 3
-last_synced_commit: c66e4dd
+last_synced_commit: 48fb9d4
 
 ---
 # Aether Backend API v8.9.0 — Endpoint Specification
@@ -1777,6 +1777,40 @@ Read-side behavioral profile output computed by the `BehaviorScorer` Profile 360
 | GET | `/v1/behavior/{entity_id}/history` | Historical behavior snapshots; `window` (e.g. `7d`) and `limit` query params |
 
 **Permissions:** `read`
+
+---
+
+## Dune Analytics Feeder (Admin — `/v1/admin/dune-feeder/*`)
+
+Governed Bronze→Silver→Gold data-lake pipeline. All endpoints require `admin` or `kyber:operator` permission.
+
+| Method | Path | Description |
+|--------|------|-------------|
+| POST | `/v1/admin/dune-feeder/ingest` | Land a Dune query result in Bronze (freshness + quality gates) |
+| GET | `/v1/admin/dune-feeder/health` | Feeder health: Bronze/Silver/Gold counts, rejection rate |
+| POST | `/v1/admin/dune-feeder/rollback` | Remove all Bronze + Silver + Gold records for a `source_tag` |
+| GET | `/v1/admin/dune-feeder/audit/{source_tag}` | Full Bronze audit trail for a batch (tenant-scoped) |
+| POST | `/v1/admin/dune-feeder/promote/{source_tag}` | Promote eligible Bronze rows to Silver |
+| POST | `/v1/admin/dune-feeder/materialize-gold` | Aggregate Silver rows into curated Gold records |
+| GET | `/v1/admin/dune-feeder/gold` | List Gold records, filtered by `source_tag` and/or `tenant_scope` |
+
+**Environment availability:** `ingest`, `rollback`, `promote`, and `materialize-gold` are only available when `AETHER_ENV=local` or `AETHER_ENV=test`. In staging/production a persistent lake backend must be configured.
+
+**Gold grouping key:** `(source_tag, domain, query_id, tenant_scope)` — tenant scope is always included so rows from different tenants sharing a source_tag are never merged.
+
+**Audit tenant scoping:** `GET /audit/{source_tag}` derives the effective scope from the authenticated caller. Tenant admins are restricted to their own Bronze rows; `kyber:operator` (platform admin) can pass an explicit `?tenant_scope=` to scope the view.
+
+**Rollback request:**
+```json
+{ "source_tag": "dune-run-2026-06-11", "tenant_scope": "tenant-abc" }
+```
+
+**Materialize-gold request:**
+```json
+{ "source_tag": "dune-run-2026-06-11", "tenant_scope": "tenant-abc" }
+```
+
+**Graph isolation invariant:** this service has no graph mutation methods. Dune data never writes directly to the canonical graph.
 
 ---
 
