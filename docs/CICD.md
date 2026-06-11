@@ -74,6 +74,10 @@ pipeline and blocks the merge.
 - Pytest via `python -m pytest tests/ -n auto --tb=short` for core Python tests; ML tests run when `ML Models/**` changes.
 - Gate: **all tests pass**.
 
+### Repo consistency gate
+
+GitHub Actions uses the same canonical commands as local and cloud-agent workflows: `make docs-check` for docs-only drift and `make ci-check` for the complete repo-doctor suite. Generated-doc failures print `git diff --stat` and `git diff --name-only` for `docs/_generated`, `docs/REPO-INDEX.md`, and `docs/AUTOMATION.md`, followed by the remediation command `make repo-doctor-fix`.
+
 ### 4. Integration tests
 
 - Spins up ephemeral Docker Compose stack (Postgres, Redis, Kafka, ClickHouse)

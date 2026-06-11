@@ -115,6 +115,50 @@ def commits_touching_after(declared: str, paths: list[str]) -> list[str]:
     return [line for line in result.stdout.splitlines() if line]
 
 
+def latest_commit_touching_after(declared: str, paths: list[str]) -> str | None:
+    """Return latest full SHA touching paths after declared, or None."""
+    if not paths or not declared:
+        return None
+    result = subprocess.run(
+        ["git", "log", "-1", f"{declared}..HEAD", "--format=%H", "--", *paths],
+        capture_output=True,
+        text=True,
+        cwd=ROOT,
+    )
+    if result.returncode != 0:
+        return None
+    return result.stdout.strip() or None
+
+
+def is_ancestor(older: str, newer: str) -> bool:
+    """Return True when older is the same as, or an ancestor of, newer."""
+    if older == newer:
+        return True
+    return subprocess.run(
+        ["git", "merge-base", "--is-ancestor", older, newer],
+        cwd=ROOT,
+    ).returncode == 0
+
+
+def doc_reviewed_after_sources(declared: str, doc_path: Path, source_paths: list[str]) -> bool:
+    """Return True when the doc changed in the same range at/after sources.
+
+    This prevents false positives for PR commits that update source files and
+    their reviewed source-linked docs in the same commit. Future source-only
+    commits still become stale because their latest source commit will no longer
+    be an ancestor of the latest doc commit in the range.
+    """
+    try:
+        doc_rel = str(doc_path.relative_to(ROOT))
+    except ValueError:
+        doc_rel = str(doc_path)
+    latest_source = latest_commit_touching_after(declared, source_paths)
+    latest_doc = latest_commit_touching_after(declared, [doc_rel])
+    if not latest_source or not latest_doc:
+        return False
+    return is_ancestor(latest_source, latest_doc)
+
+
 def check_doc(path: Path) -> dict:
     """Return a report dict for one doc.
 
@@ -150,7 +194,7 @@ def check_doc(path: Path) -> dict:
         # are older than the stamp should NOT be flagged stale.
         present_sources = [s for s in sources if (ROOT / s).exists()]
         newer = commits_touching_after(declared, present_sources)
-        if newer:
+        if newer and not doc_reviewed_after_sources(declared, path, present_sources):
             stale = True
             detail = (
                 f"last_synced_commit={declared}; sources have been modified "

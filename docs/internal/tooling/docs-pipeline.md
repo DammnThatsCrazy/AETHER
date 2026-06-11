@@ -62,6 +62,9 @@ This page is `I`.
 | `scripts/docs_drift.py` | For each page with `source_files:`, verifies the paths exist (fatal if not) and — when `last_synced_commit:` is set — flags staleness. `--update` re-stamps every page at HEAD. The sync-managed pages (`REPO-INDEX.md`, `AUTOMATION.md`) are excluded from drift checks and stamping; their freshness is enforced by repo-doctor's diff-after-sync check instead. |
 | `scripts/sync_docs.py` | Regenerates `docs/REPO-INDEX.md` and `docs/AUTOMATION.md` from the live tree. |
 | `scripts/docs_extract/run_all.py` | Runs every generator (see below). |
+| `scripts/validate_consistency_ownership.py` | Enforces the source-to-derived ownership map so source changes move with docs, contracts, SDK exports, and tests. |
+| `scripts/validate_ts_public_exports.py` | Validates SDK package export maps, declaration entrypoints, and public TypeScript boundaries. |
+| `scripts/repo_doctor.py` | Canonical orchestrator for docs, contracts, SDK alignment, TypeScript, generated diffs, and local/CI diagnostics. |
 
 ## Generators
 
