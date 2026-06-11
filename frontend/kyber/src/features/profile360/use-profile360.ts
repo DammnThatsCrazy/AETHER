@@ -605,6 +605,35 @@ export function useProfile360(type: Profile360EntityType, id: string) {
     onMessage: (message) => profile360Actions.applyLiveMessage(message as Profile360LiveMessage),
   });
 
+  // Timeline append/prepend stream
+  useWebSocket({
+    path: `/v1/profile/${id}/timeline/stream`,
+    enabled: Boolean(id),
+    onMessage: (raw) => {
+      const msg = raw as Record<string, unknown>;
+      const event = msg.event ?? msg.data;
+      if (event) {
+        profile360Actions.applyLiveMessage({ entityId: id, event: toTimelineEvent(event, `live-${Date.now()}`) } as Profile360LiveMessage);
+      }
+    },
+  });
+
+  // Graph node/edge mutation stream
+  useWebSocket({
+    path: `/v1/profile/${id}/graph/stream`,
+    enabled: Boolean(id),
+    onMessage: (raw) => {
+      const msg = raw as Record<string, unknown>;
+      const nodeRaw = msg.node as Record<string, unknown> | undefined;
+      const edgeRaw = msg.edge as Record<string, unknown> | undefined;
+      const node = nodeRaw ? normalizeNode(nodeRaw, 0) : undefined;
+      const edge = edgeRaw ? normalizeEdge(edgeRaw, 0) : undefined;
+      if (node || edge) {
+        profile360Actions.applyLiveMessage({ entityId: id, node, edge } as Profile360LiveMessage);
+      }
+    },
+  });
+
   useEffect(() => {
     profile360Actions.setWebsocketStatus(ws.status);
   }, [ws.status]);

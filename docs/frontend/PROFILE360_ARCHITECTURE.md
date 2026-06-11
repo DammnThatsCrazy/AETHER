@@ -152,12 +152,16 @@ Implemented now:
 - `apps/kyber/src/components/graph/graph-toolbar.tsx`: adds filters for new graph node types.
 - `apps/kyber/src/lib/schemas/index.ts`: accepts expanded entity taxonomy.
 
+Additionally implemented (migration steps 3–6):
+
+- `apps/kyber/src/features/profile360/profile360-store.ts`: normalized `Profile360State` store with 17 dimension caches, per-entity loading/error/stale keys, stream status, and live-message upsert reducers.
+- `apps/kyber/src/features/profile360/use-profile360.ts`: fetches all 19 profile dimensions (sessions, devices, journeys, wallets, attribution, signals, cluster, clusters, agents, consent, quality, recommendations, outcomes, intelligence, provenance) in parallel; wires timeline/graph delta websocket streams alongside the main profile stream.
+- `apps/kyber/src/components/profile360/profile360-timeline-panel.tsx`: windowed timeline rendering — events beyond 200 are paged in 100-at-a-time with a "Load more" control.
+
 Next steps:
 
-- Add `profile360-store.ts` using `Profile360StateSlice`.
-- Add entity-scoped websocket subscriptions and normalized upsert reducers.
-- Add virtualized long timeline rendering once event counts exceed the compact threshold.
 - Add graph chunking/clustering controls for very large neighborhoods.
+- Gradually deprecate duplicated legacy tab content once parity is verified.
 
 ## 12. React implementations
 
@@ -183,8 +187,8 @@ Frontend adapters should perform thin field normalization only. Backend should p
 
 1. Ship additive Profile360 components alongside existing tabs.
 2. Feed mocked and existing profile APIs through adapters.
-3. Introduce normalized Profile360 store.
-4. Move drill stack from local state to store.
-5. Connect websocket streams as normalized deltas.
-6. Add virtualization and graph chunking behind thresholds.
+3. ✅ Introduce normalized Profile360 store.
+4. ✅ Move drill stack from local state to store.
+5. ✅ Connect websocket streams as normalized deltas (profile, timeline, graph streams).
+6. ✅ Add timeline virtualization (page-windowed at 200-event threshold).
 7. Gradually deprecate duplicated legacy tab content once parity is verified.
