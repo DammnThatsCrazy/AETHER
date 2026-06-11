@@ -17,19 +17,66 @@ const overlayOptions = [
   { value: 'anomaly', label: 'Anomaly' },
 ];
 
+const typeOptions = [
+  { value: 'all', label: 'All types' },
+  { value: 'human', label: 'Human' },
+  { value: 'agent', label: 'Agent' },
+  { value: 'wallet', label: 'Wallet' },
+  { value: 'session', label: 'Session' },
+  { value: 'journey', label: 'Journey' },
+  { value: 'transaction', label: 'Transaction' },
+  { value: 'organization', label: 'Organization' },
+];
+
+const CHUNK_THRESHOLD = 150;
+const CHUNK_SIZE = 150;
+
+function chunkByDegree(nodes: readonly GraphNode[], edges: readonly GraphEdge[], limit: number): { nodes: GraphNode[]; edges: GraphEdge[] } {
+  const degree = new Map<string, number>();
+  for (const e of edges) {
+    degree.set(e.source, (degree.get(e.source) ?? 0) + 1);
+    degree.set(e.target, (degree.get(e.target) ?? 0) + 1);
+  }
+  const sorted = [...nodes].sort((a, b) => (degree.get(b.id) ?? 0) - (degree.get(a.id) ?? 0));
+  const kept = new Set(sorted.slice(0, limit).map((n) => n.id));
+  return {
+    nodes: sorted.slice(0, limit),
+    edges: edges.filter((e) => kept.has(e.source) && kept.has(e.target)),
+  };
+}
+
 export function Profile360GraphPanel({ graph, highlightedNodeIds, onHighlight, onDrill }: Profile360GraphPanelProps) {
   const [overlay, setOverlay] = useState<GraphOverlay>('none');
   const [query, setQuery] = useState('');
+  const [typeFilter, setTypeFilter] = useState('all');
+  const [chunkPage, setChunkPage] = useState(0);
   const [selectedNode, setSelectedNode] = useState<GraphNode | null>(null);
   const [selectedEdge, setSelectedEdge] = useState<GraphEdge | null>(null);
 
-  const visibleGraph = useMemo(() => {
-    if (!query.trim()) return graph;
-    const q = query.toLowerCase();
-    const nodes = graph.nodes.filter((node) => node.label.toLowerCase().includes(q) || node.id.toLowerCase().includes(q) || node.type.toLowerCase().includes(q));
-    const nodeIds = new Set(nodes.map((node) => node.id));
-    return { ...graph, nodes, edges: graph.edges.filter((edge) => nodeIds.has(edge.source) && nodeIds.has(edge.target)) };
-  }, [graph, query]);
+  const filteredGraph = useMemo(() => {
+    let nodes = graph.nodes as GraphNode[];
+    let edges = graph.edges as GraphEdge[];
+    if (typeFilter !== 'all') {
+      const nodeIds = new Set(nodes.filter((n) => n.type === typeFilter).map((n) => n.id));
+      nodes = nodes.filter((n) => nodeIds.has(n.id));
+      edges = edges.filter((e) => nodeIds.has(e.source) && nodeIds.has(e.target));
+    }
+    if (query.trim()) {
+      const q = query.toLowerCase();
+      const nodeIds = new Set(nodes.filter((n) => n.label.toLowerCase().includes(q) || n.id.toLowerCase().includes(q) || n.type.toLowerCase().includes(q)).map((n) => n.id));
+      nodes = nodes.filter((n) => nodeIds.has(n.id));
+      edges = edges.filter((e) => nodeIds.has(e.source) && nodeIds.has(e.target));
+    }
+    return { nodes, edges };
+  }, [graph, query, typeFilter]);
+
+  const needsChunking = filteredGraph.nodes.length > CHUNK_THRESHOLD;
+  const chunkLimit = (chunkPage + 1) * CHUNK_SIZE;
+  const visibleGraph = useMemo(
+    () => needsChunking ? chunkByDegree(filteredGraph.nodes, filteredGraph.edges, chunkLimit) : filteredGraph,
+    [filteredGraph, needsChunking, chunkLimit],
+  );
+  const hasMoreChunks = needsChunking && chunkLimit < filteredGraph.nodes.length;
 
   return (
     <div className="grid grid-cols-1 xl:grid-cols-[1fr_320px] gap-4">
@@ -39,12 +86,19 @@ export function Profile360GraphPanel({ graph, highlightedNodeIds, onHighlight, o
             <CardTitle>Relationship graph</CardTitle>
             <p className="mt-1 text-xs text-text-secondary">Expand attribution paths, highlight ownership/delegation edges, and filter the timeline from node selections.</p>
           </div>
-          <div className="flex items-center gap-2">
-            <Input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search nodes" className="w-48" />
+          <div className="flex items-center gap-2 flex-wrap">
+            <Input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search nodes" className="w-40" />
+            <Select value={typeFilter} onChange={(value) => { setTypeFilter(value); setChunkPage(0); }} options={typeOptions} />
             <Select value={overlay} onChange={(value) => setOverlay(value as GraphOverlay)} options={overlayOptions} />
           </div>
         </CardHeader>
         <CardContent>
+          {needsChunking && (
+            <div className="mb-2 flex items-center justify-between text-xs text-text-muted border-b border-border-subtle pb-2">
+              <span>Showing {visibleGraph.nodes.length} of {filteredGraph.nodes.length} nodes (sorted by degree)</span>
+              {hasMoreChunks && <Button size="sm" variant="secondary" onClick={() => setChunkPage((p) => p + 1)}>Show {Math.min(CHUNK_SIZE, filteredGraph.nodes.length - chunkLimit)} more</Button>}
+            </div>
+          )}
           <GraphCanvas
             nodes={[...visibleGraph.nodes]}
             edges={[...visibleGraph.edges]}
