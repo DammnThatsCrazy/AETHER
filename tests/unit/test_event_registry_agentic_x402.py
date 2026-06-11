@@ -1,0 +1,97 @@
+"""Verify that all agentic x402 and agent lifecycle events are registered in the SDK CONSENT_MAP."""
+
+from __future__ import annotations
+
+import re
+from pathlib import Path
+
+EVENT_QUEUE_PATH = Path(__file__).parents[2] / "packages/web/src/core/event-queue.ts"
+
+
+def _read_consent_map() -> str:
+    return EVENT_QUEUE_PATH.read_text(encoding="utf-8")
+
+
+X402_LIFECYCLE_EVENTS = [
+    "x402_resource_requested",
+    "x402_payment_required",
+    "x402_quote_received",
+    "x402_authorization_requested",
+    "x402_authorization_resolved",
+    "x402_payment_intent_created",
+    "x402_payment_submitted",
+    "x402_payment_settled",
+    "x402_payment_failed",
+    "x402_payment_timeout",
+    "x402_receipt_verified",
+    "x402_access_granted",
+    "x402_access_denied",
+    "x402_refund_or_reversal",
+    "x402_payment",  # legacy
+]
+
+AGENT_LIFECYCLE_EVENTS = [
+    "agent_registered",
+    "agent_updated",
+    "agent_authorized",
+    "agent_deauthorized",
+    "agent_capability_granted",
+    "agent_capability_revoked",
+    "agent_task_created",
+    "agent_task_decomposed",
+    "agent_task_started",
+    "agent_task_completed",
+    "agent_task_failed",
+    "agent_tool_called",
+    "agent_resource_requested",
+    "agent_delegated_task",
+    "agent_subagent_spawned",
+    "agent_policy_evaluated",
+    "agent_handoff",
+    "agent_escalated_to_human",
+    "agent_outcome_recorded",
+    "agent_task",       # legacy
+    "agent_decision",   # legacy
+    "a2h_interaction",  # legacy
+]
+
+
+def test_all_x402_lifecycle_events_are_in_consent_map():
+    content = _read_consent_map()
+    missing = [ev for ev in X402_LIFECYCLE_EVENTS if ev not in content]
+    assert not missing, f"Missing x402 events from CONSENT_MAP: {missing}"
+
+
+def test_all_agent_lifecycle_events_are_in_consent_map():
+    content = _read_consent_map()
+    missing = [ev for ev in AGENT_LIFECYCLE_EVENTS if ev not in content]
+    assert not missing, f"Missing agent events from CONSENT_MAP: {missing}"
+
+
+def test_x402_lifecycle_events_require_commerce_consent():
+    content = _read_consent_map()
+    for ev in X402_LIFECYCLE_EVENTS:
+        pattern = rf"['\"]?{re.escape(ev)}['\"]?\s*:\s*['\"]commerce['\"]"
+        assert re.search(pattern, content), (
+            f"Event {ev!r} must map to 'commerce' in CONSENT_MAP"
+        )
+
+
+def test_agent_lifecycle_events_require_agent_consent():
+    content = _read_consent_map()
+    for ev in AGENT_LIFECYCLE_EVENTS:
+        pattern = rf"['\"]?{re.escape(ev)}['\"]?\s*:\s*['\"]agent['\"]"
+        assert re.search(pattern, content), (
+            f"Event {ev!r} must map to 'agent' in CONSENT_MAP"
+        )
+
+
+def test_legacy_x402_payment_still_present():
+    content = _read_consent_map()
+    assert "x402_payment" in content
+
+
+def test_legacy_agent_events_still_present():
+    content = _read_consent_map()
+    for ev in ("agent_task", "agent_decision", "a2h_interaction"):
+        assert ev in content, f"Legacy event {ev!r} missing from CONSENT_MAP"

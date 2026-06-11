@@ -17,7 +17,7 @@ related:
 canonical_owner: platform@aether
 estimated_read_minutes: 6
 toc_depth: 3
-last_synced_commit: cd8539d
+last_synced_commit: 401ceb7
 ---
 # Recommendation Families
 
