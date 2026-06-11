@@ -18,6 +18,7 @@ export * from './economic';
 export * from './economic-metrics';
 export * from './contextual';
 export * from './graph-relationships';
+export * from './graph-contract';
 export * from './intelligence';
 export * from './financials';
 export * from './profile360-contract';
