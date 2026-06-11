@@ -19,7 +19,8 @@
       "default": "./dist/health/index.js"
     },
     "./lifecycle-payloads": {
-      "types": "./dist/types/lifecycle-payloads.d.ts"
+      "types": "./dist/types/lifecycle-payloads.d.ts",
+      "default": "./dist/types/lifecycle-payloads.js"
     }
   },
   "files": [

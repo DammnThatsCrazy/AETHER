@@ -16,7 +16,7 @@ related:
   - ai/kyber-strategic-observability
   - ai/playbooks
   - ai/recommendation-families
-last_synced_commit: 2661f1b
+last_synced_commit: f6fab1b
 ---
 
 # Kyber Revenue Intelligence

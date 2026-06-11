@@ -239,9 +239,13 @@ async def get_cross_layer_paths(
 
 
 def get_layer_stats(edges: list[Edge]) -> dict[str, int]:
-    """Count edges by relationship layer."""
-    counts = {layer.value: 0 for layer in RelationshipLayer}
+    """Count edges by relationship layer. Unclassified edges are counted under 'unknown'."""
+    counts: dict[str, int] = {layer.value: 0 for layer in RelationshipLayer}
+    counts["unknown"] = 0
     for edge in edges:
-        layer = classify_edge(edge)
-        counts[layer.value] += 1
+        layer = _EDGE_LAYER_MAP.get(edge.edge_type)
+        if layer is None:
+            counts["unknown"] += 1
+        else:
+            counts[layer.value] += 1
     return counts

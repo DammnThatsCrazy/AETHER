@@ -345,6 +345,7 @@ class GraphOverlay(ContractModel):
     dimensions: list[IntelligenceDimension]
     nodeFilter: Optional[GraphQueryFilter] = None
     edgeFilter: Optional[GraphQueryFilter] = None
+    properties: Optional[dict[str, Any]] = None
 
 
 class GraphTraversalRequest(TenantScopedRequest):

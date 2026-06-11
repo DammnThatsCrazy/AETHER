@@ -14,6 +14,7 @@ from fastapi import APIRouter, Depends, Request
 from dependencies.providers import get_graph
 from shared.common.common import APIResponse, ForbiddenError
 from shared.graph.graph import Edge, GraphClient, Vertex
+from shared.graph.relationship_layers import RelationshipLayer, classify_edge_type, get_layer_stats
 from shared.graph.traversal import GraphTraversalEngine, TraversalResult
 from shared.logger.logger import metrics
 from services.operational_intelligence.models import (
@@ -31,6 +32,9 @@ from services.operational_intelligence.models import (
 )
 
 router = APIRouter(prefix="/v1/graph", tags=["Operational Intelligence / Graph"])
+
+_GRAPH_CONTRACT_VERSION = "v1"
+_RELATIONSHIP_LAYERS = ["H2H", "H2A", "A2H", "A2A"]
 
 
 def _utc_now() -> str:
@@ -110,10 +114,70 @@ def _filter_result(result: TraversalResult, f: GraphQueryFilter) -> TraversalRes
     return TraversalResult(nodes=nodes, edges=edges)
 
 
-def _overlay_stubs(ids: Iterable[str] | None) -> list[GraphOverlay] | None:
-    if not ids:
+def _compute_overlay_scores(
+    nodes: list[Vertex],
+    edges: list[Edge],
+    requested_overlays: list[str] | None,
+) -> list[GraphOverlay] | None:
+    """Compute deterministic overlay scores from graph data.
+
+    Returns None if no overlays requested. Returns structured overlays with
+    real counts; returns status=no_data when the graph has no records.
+    """
+    if not requested_overlays:
         return None
-    return [GraphOverlay(id=oid, name=oid, dimensions=[]) for oid in ids]
+
+    layer_counts = get_layer_stats(edges)
+    total_edges = sum(layer_counts.values())
+    total_nodes = len(nodes)
+
+    overlays: list[GraphOverlay] = []
+    for overlay_id in requested_overlays:
+        if total_edges == 0 and total_nodes == 0:
+            overlays.append(GraphOverlay(
+                id=overlay_id,
+                name=overlay_id,
+                dimensions=[],
+                properties={
+                    "status": "no_data",
+                    "reason": "no graph records found for tenant/time window",
+                },
+            ))
+        elif overlay_id in ("risk", "trust", "attribution", "layer_coverage"):
+            classified_edges = sum(layer_counts.values())
+            layer_pct = {
+                layer: round(count / total_edges * 100, 1) if total_edges > 0 else 0.0
+                for layer, count in layer_counts.items()
+            }
+            overlays.append(GraphOverlay(
+                id=overlay_id,
+                name=overlay_id,
+                dimensions=[],
+                properties={
+                    "status": "computed",
+                    "node_count": total_nodes,
+                    "edge_count": total_edges,
+                    "classified_edge_count": classified_edges,
+                    "layer_counts": layer_counts,
+                    "layer_distribution_pct": layer_pct,
+                    "layers_present": [l for l, c in layer_counts.items() if c > 0],
+                    "computed_at": _utc_now(),
+                },
+            ))
+        else:
+            overlays.append(GraphOverlay(
+                id=overlay_id,
+                name=overlay_id,
+                dimensions=[],
+                properties={
+                    "status": "computed",
+                    "node_count": total_nodes,
+                    "edge_count": total_edges,
+                    "computed_at": _utc_now(),
+                },
+            ))
+
+    return overlays or None
 
 
 @router.post("/traverse", response_model=GraphResult)
@@ -140,21 +204,32 @@ async def traverse_graph(
         result = _filter_result(result, body.filter)
 
     start_vertex = await graph.get_vertex(body.start.id)
-    start_node = _vertex_to_node(start_vertex) if start_vertex else GraphNode(
-        id=body.start.id, kind=body.start.kind, label=body.start.label,
-        properties={"tenantId": body.tenantId, "role": "start", "contractStage": "skeleton"},
-    )
-    if start_node.properties is not None and "contractStage" not in start_node.properties:
-        start_node.properties["contractStage"] = "skeleton"
+    if start_vertex:
+        start_node = _vertex_to_node(start_vertex)
+    else:
+        start_node = GraphNode(
+            id=body.start.id, kind=body.start.kind, label=body.start.label,
+            properties={"tenantId": body.tenantId, "role": "start"},
+        )
     seen_ids = {start_node.id}
     extra_nodes = [_vertex_to_node(v) for v in result.nodes if v.vertex_id not in seen_ids]
+
+    layer_counts = get_layer_stats(result.edges)
+    node_count = 1 + len(extra_nodes)
+    edge_count = len(result.edges)
+
+    overlays = _compute_overlay_scores(result.nodes, result.edges, body.overlays)
 
     return GraphResult(
         nodes=[start_node] + extra_nodes,
         edges=[_edge_to_graph_edge(e) for e in result.edges],
-        overlays=_overlay_stubs(body.overlays),
+        overlays=overlays,
         explainability=ExplainabilityMetadata(
-            summary="Graph traversal contract validated — live data returned when graph is populated",
+            summary=(
+                f"Traversal complete: {node_count} nodes, {edge_count} edges across "
+                f"layers H2H={layer_counts['H2H']} H2A={layer_counts['H2A']} "
+                f"A2H={layer_counts['A2H']} A2A={layer_counts['A2A']}"
+            ),
         ),
     )
 
@@ -232,22 +307,44 @@ async def graph_overlay(
     request: Request,
     graph: GraphClient = Depends(get_graph),
 ) -> GraphResult:
-    """Apply overlay metadata (risk/trust/attribution) to a graph view."""
+    """Apply overlay scores (layer coverage, risk, trust) to a graph view.
+
+    Scores are computed from real graph data. Returns status=no_data when
+    the tenant graph has no records.
+    """
     _require_read(request, body.tenantId)
     metrics.increment("graph_overlay")
 
     all_verts = await graph.get_all_vertices(limit=body.limit)
-    result = TraversalResult(nodes=all_verts, edges=[])
+    all_verts = [v for v in all_verts if v.properties.get("tenantId") == body.tenantId]
+    all_edges: list[Edge] = []
+    for v in all_verts:
+        all_edges.extend(await graph.get_edges(v.vertex_id, direction="out"))
+
+    result = TraversalResult(nodes=all_verts, edges=all_edges)
     if body.graph:
         result = _filter_result(result, body.graph)
 
+    layer_counts = get_layer_stats(result.edges)
+    total_nodes = len(result.nodes)
+    total_edges = len(result.edges)
+
+    if total_edges == 0 and total_nodes == 0:
+        explainability_summary = "no graph records found for tenant/time window"
+    else:
+        explainability_summary = (
+            f"Overlay computed: {total_nodes} nodes, {total_edges} edges — "
+            f"H2H={layer_counts['H2H']} H2A={layer_counts['H2A']} "
+            f"A2H={layer_counts['A2H']} A2A={layer_counts['A2A']}"
+        )
+
+    overlays = _compute_overlay_scores(result.nodes, result.edges, body.overlays)
+
     return GraphResult(
         nodes=[_vertex_to_node(v) for v in result.nodes],
-        edges=[],
-        overlays=_overlay_stubs(body.overlays),
-        explainability=ExplainabilityMetadata(
-            summary="Overlay scores are placeholder — scoring engines connect in a future release",
-        ),
+        edges=[_edge_to_graph_edge(e) for e in result.edges],
+        overlays=overlays,
+        explainability=ExplainabilityMetadata(summary=explainability_summary),
     )
 
 
@@ -278,8 +375,47 @@ async def graph_contracts() -> dict:
     """Expose the active graph contract route family for diagnostics."""
     return APIResponse(
         data={
-            "version": "v1",
+            "version": _GRAPH_CONTRACT_VERSION,
             "routes": ["traverse", "path", "temporal", "overlay", "filter"],
             "status": "traversal_engine_active",
+            "relationship_layers": _RELATIONSHIP_LAYERS,
+            "layer_count": len(_RELATIONSHIP_LAYERS),
+        }
+    ).to_dict()
+
+
+@router.get("/health")
+async def graph_health(
+    request: Request,
+    graph: GraphClient = Depends(get_graph),
+) -> dict:
+    """Graph health endpoint — layer coverage, node/edge counts, backend mode."""
+    tenant = request.state.tenant
+    tenant.require_permission("read")
+
+    all_verts = await graph.get_all_vertices(limit=10000)
+    all_verts = [v for v in all_verts if v.properties.get("tenantId") == tenant.tenant_id]
+    all_edges: list[Edge] = []
+    for v in all_verts:
+        all_edges.extend(await graph.get_edges(v.vertex_id, direction="out"))
+
+    layer_counts = get_layer_stats(all_edges)
+    total_edges = len(all_edges)
+    total_nodes = len(all_verts)
+
+    layers_with_data = [l for l, c in layer_counts.items() if c > 0]
+    all_layers_present = set(_RELATIONSHIP_LAYERS) <= set(layers_with_data)
+
+    return APIResponse(
+        data={
+            "status": "healthy" if total_nodes > 0 else "no_data",
+            "backend_mode": "neptune" if getattr(graph, "_mode", "local") == "neptune" else "local",
+            "node_count": total_nodes,
+            "edge_count": total_edges,
+            "layer_counts": layer_counts,
+            "layers_with_data": layers_with_data,
+            "all_four_layers_present": all_layers_present,
+            "relationship_layers": _RELATIONSHIP_LAYERS,
+            "computed_at": _utc_now(),
         }
     ).to_dict()

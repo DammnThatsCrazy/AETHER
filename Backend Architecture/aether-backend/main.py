@@ -539,14 +539,15 @@ def create_app() -> FastAPI:
             admin_router as connectors_admin_router,
             router as connectors_router,
         )
-        from services.integrations.connectors.routes import webhook_public_router
+        from services.integrations.connectors.routes import webhook_public_router, slack_notify_router
         app.include_router(connectors_router)
         # Public webhook route always mounted when connectors are enabled;
         # security is enforced by HMAC verification inside the handler.
         app.include_router(webhook_public_router)
+        app.include_router(slack_notify_router)
         if settings.connectors.kyber_connector_health_enabled:
             app.include_router(connectors_admin_router)
-        logger.info("Connectors: ingestion routes mounted (/v1/integrations/connectors + /v1/integrations/webhooks)")
+        logger.info("Connectors: ingestion routes mounted (/v1/integrations/connectors + /v1/integrations/webhooks + /v1/integrations/slack-notify)")
     else:
         logger.info("Connectors: disabled (set AETHER_CONNECTORS_ENABLED=true to enable)")
 

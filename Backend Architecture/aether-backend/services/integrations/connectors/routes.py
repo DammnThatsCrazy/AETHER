@@ -243,3 +243,65 @@ async def connectors_overview(request: Request):
 async def connectors_health(request: Request):
     _require_operator(request)
     return APIResponse(data=await connector_service.overview()).to_dict()
+
+
+# ── Slack outbound channel configuration ──────────────────────────────────────
+
+slack_notify_router = APIRouter(
+    prefix="/v1/integrations/slack-notify", tags=["Integrations — Slack Outbound"]
+)
+
+
+class SlackChannelConfigBody(BaseModel):
+    default_channel: str
+    bot_token_ref: Optional[str] = None
+    channel_map: Optional[dict[str, str]] = None
+    templates: Optional[dict[str, str]] = None
+    enabled: Optional[bool] = True
+
+
+@slack_notify_router.put("")
+async def configure_slack_notify(body: SlackChannelConfigBody, request: Request):
+    """Configure per-tenant Slack outbound channel mapping and templates."""
+    tenant_id = _tenant_id(request, "write")
+    from repositories.repos import BaseRepository
+    repo = BaseRepository("slack_channel_configs")
+    record: dict[str, Any] = {
+        "tenant_id": tenant_id,
+        "default_channel": body.default_channel,
+        "channel_map": body.channel_map or {},
+        "templates": body.templates or {},
+        "enabled": body.enabled if body.enabled is not None else True,
+    }
+    if body.bot_token_ref:
+        record["bot_token_ref"] = body.bot_token_ref
+    stored = await repo.insert(tenant_id, record)
+    return APIResponse(data=_strip_secrets_shallow(stored)).to_dict()
+
+
+@slack_notify_router.get("")
+async def get_slack_notify_config(request: Request):
+    """Get the tenant's current Slack outbound configuration (no tokens)."""
+    tenant_id = _tenant_id(request)
+    from repositories.repos import BaseRepository
+    repo = BaseRepository("slack_channel_configs")
+    record = await repo.find_by_id(tenant_id)
+    if not record:
+        return APIResponse(data={"configured": False}).to_dict()
+    return APIResponse(data={**_strip_secrets_shallow(record), "configured": True}).to_dict()
+
+
+@slack_notify_router.post("/test")
+async def test_slack_notify(request: Request):
+    """Send a test Slack message using the tenant's configured channel."""
+    tenant_id = _tenant_id(request, "write")
+    from services.integrations.slack_notify import slack_notify
+    ok = await slack_notify.send(
+        tenant_id, "default",
+        {"event_type": "test", "tenant_id": tenant_id, "message": "Aether Slack test notification"},
+    )
+    return APIResponse(data={"delivered": ok, "note": "local mode skips delivery" if not ok else "sent"}).to_dict()
+
+
+def _strip_secrets_shallow(record: dict[str, Any]) -> dict[str, Any]:
+    return {k: v for k, v in record.items() if "token" not in k.lower() and "secret" not in k.lower()}
