@@ -11,7 +11,7 @@ source_files:
 canonical_owner: backend@aether
 estimated_read_minutes: 4
 toc_depth: 3
-last_synced_commit: 5c97fc8
+last_synced_commit: 5bc5329
 ---
 
 # Events / Kafka Subsystem
@@ -64,3 +64,5 @@ Topics are organized by domain:
 - Kafka unreachable in local → falls back to in-memory list
 - Publish failure → retries 3 times with exponential backoff, then raises
 - Consumer handler failure → retries twice, then sends to DLQ
+- Kafka batch overflow (`batch.append()` returns `None`) → overflow events fall back to individual `publish()` calls, ensuring no silent drops when a batch payload exceeds broker limits
+- DLQ events include `original_payload` so failed events are replayable without data loss
