@@ -12,7 +12,7 @@ source_files:
   - Backend Architecture/aether-backend/services/noesis/provider.py
   - Backend Architecture/aether-backend/services/noesis/flags.py
   - frontend/shared/src/components/noesis-workspace.tsx
-last_synced_commit: 57bf28c
+last_synced_commit: 554dd93
 ---
 # Noesis
 
