@@ -11,7 +11,8 @@ source_files:
 canonical_owner: backend@aether
 estimated_read_minutes: 60
 toc_depth: 3
-last_synced_commit: 2661f1b
+last_synced_commit: c8c6cb6
+
 ---
 # Aether Backend API v8.8.0 — Endpoint Specification
 
@@ -769,6 +770,7 @@ Three service groups are available when Intelligence Graph feature flags are ena
 | POST | `/v1/commerce/hires` | Record agent hire + create `HIRED` edge |
 | GET | `/v1/commerce/fees/report` | Fee elimination report for tenant |
 | GET | `/v1/commerce/agent/{id}/spend` | Agent spend history |
+| GET | `/v1/commerce/agents/{id}/economics` | Full economic profile: budget usage, delegation policy, economic identity |
 
 ### On-Chain Service (L0)
 
