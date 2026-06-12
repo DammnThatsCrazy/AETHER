@@ -37,7 +37,7 @@ export interface GraphHealthData {
 export function useGraphHealth(tenantId: string | null) {
   return useQuery({
     key: tenantId ? `graph-health:${tenantId}` : '',
-    fetcher: () => api.graph.health(tenantId!) as Promise<{ data: GraphHealthData }>,
+    fetcher: () => api.graph.health(tenantId!) as Promise<GraphHealthData>,
     staleTime: STALE,
     enabled: !!tenantId,
   });
@@ -82,15 +82,15 @@ export function useGraphLayerCoverage(params: {
 /** Check whether all four layers are present in a tenant's graph. */
 export function useGraphFourLayerPresence(tenantId: string | null) {
   const health = useGraphHealth(tenantId);
-  const allPresent = health.data?.data?.all_four_layers_present ?? false;
+  const allPresent = health.data?.all_four_layers_present ?? false;
   const missingLayers = GRAPH_LAYERS.filter(
-    (l) => !(health.data?.data?.layers_with_data ?? []).includes(l),
+    (l) => !(health.data?.layers_with_data ?? []).includes(l),
   );
 
   return {
     ...health,
     allPresent,
     missingLayers,
-    layerCounts: health.data?.data?.layer_counts ?? { H2H: 0, H2A: 0, A2H: 0, A2A: 0 },
+    layerCounts: health.data?.layer_counts ?? { H2H: 0, H2A: 0, A2H: 0, A2A: 0 },
   };
 }

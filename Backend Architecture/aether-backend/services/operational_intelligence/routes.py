@@ -316,6 +316,7 @@ async def graph_overlay(
     metrics.increment("graph_overlay")
 
     all_verts = await graph.get_all_vertices(limit=body.limit)
+    all_verts = [v for v in all_verts if v.properties.get("tenantId") == body.tenantId]
     all_edges: list[Edge] = []
     for v in all_verts:
         all_edges.extend(await graph.get_edges(v.vertex_id, direction="out"))
@@ -341,7 +342,7 @@ async def graph_overlay(
 
     return GraphResult(
         nodes=[_vertex_to_node(v) for v in result.nodes],
-        edges=[_edge_to_graph_edge(e) for e in all_edges if e in result.edges or True],
+        edges=[_edge_to_graph_edge(e) for e in result.edges],
         overlays=overlays,
         explainability=ExplainabilityMetadata(summary=explainability_summary),
     )
@@ -393,6 +394,7 @@ async def graph_health(
     tenant.require_permission("read")
 
     all_verts = await graph.get_all_vertices(limit=10000)
+    all_verts = [v for v in all_verts if v.properties.get("tenantId") == tenant.tenant_id]
     all_edges: list[Edge] = []
     for v in all_verts:
         all_edges.extend(await graph.get_edges(v.vertex_id, direction="out"))
