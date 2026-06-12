@@ -3261,6 +3261,36 @@
       "estimated_read_minutes": 15,
       "toc_depth": 3,
       "canonical_owner": "platform@aether"
+    },
+    {
+      "path": "docs/source-of-truth/GRAPH_CONTRACT.md",
+      "title": "Intelligence Graph Contract",
+      "slug": "source-of-truth/graph-contract",
+      "section": "source-of-truth",
+      "visibility": "internal",
+      "audience": [
+        "architect",
+        "dev-senior",
+        "ai"
+      ],
+      "status": "stable",
+      "since_version": "8.9.0",
+      "canonical_owner": "graph@aether"
+    },
+    {
+      "path": "docs/source-of-truth/GRAPH_LAYER_PARITY.md",
+      "title": "Graph Layer Parity Checklist",
+      "slug": "source-of-truth/graph-layer-parity",
+      "section": "source-of-truth",
+      "visibility": "internal",
+      "audience": [
+        "architect",
+        "dev-senior",
+        "ai"
+      ],
+      "status": "stable",
+      "since_version": "8.9.0",
+      "canonical_owner": "graph@aether"
     }
   ]
 }
