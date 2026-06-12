@@ -247,6 +247,7 @@ class ConnectorService:
                     last = r.get("last_synced_at")
                     if last and (td["last_synced_at"] is None or last > td["last_synced_at"]):
                         td["last_synced_at"] = last
+
         return {
             "available_connectors": len(CONNECTORS),
             "configured_count": len(rows),

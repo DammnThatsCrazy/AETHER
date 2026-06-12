@@ -13,8 +13,9 @@ related:
   - concepts/unified-economic-graph
   - concepts/tvl-gmv-revenue-metrics
   - concepts/kyber-economic-observability
-last_synced_commit: b3e9ddb
+last_synced_commit: 48fb9d4
 ---
+
 # Aether — Economic Value Framing
 
 ## Strategic Distinction

@@ -12,7 +12,7 @@ source_files:
 canonical_owner: frontend@aether
 estimated_read_minutes: 10
 toc_depth: 3
-last_synced_commit: b3e9ddb
+last_synced_commit: 48fb9d4
 ---
 # Aether Profile360 Frontend Architecture
 
@@ -49,9 +49,8 @@ Profile360 is implemented as progressive disclosure:
 1. Keep the compact top identity pattern recognizable.
 2. Add a summary card that adapts by entity type.
 3. Add a drill stack that records Human → Agent → Wallet → Transaction → Protocol → Session → Journey → Event → Trace navigation without changing routes.
-4. Add 21 additive view tabs: Identity, System, Financial, Cluster, Sessions, Journeys, Social, Web3, Behavioral, Attribution, Agents, Intelligence, Recommendations, Outcomes, Consent, Provenance, Quality, Graph, Timeline, Analytics, Debug.
+4. Add six additive views: Identity, System, Financial, Graph, Analytics, Debug.
 5. Keep older Overview/Timeline/Graph/Trust/Notes/Actions tabs as familiar deep detail surfaces during migration.
-6. New tabs added in this iteration: Cluster, Agents, Intelligence, Recommendations, Outcomes, Consent, Provenance, Quality — each backed by a dedicated panel component in `profile360-contextual-panels.tsx`.
 
 ## 4. Updated component hierarchy
 
@@ -153,16 +152,12 @@ Implemented now:
 - `apps/kyber/src/components/graph/graph-toolbar.tsx`: adds filters for new graph node types.
 - `apps/kyber/src/lib/schemas/index.ts`: accepts expanded entity taxonomy.
 
-Additionally implemented (migration steps 3–6):
-
-- `apps/kyber/src/features/profile360/profile360-store.ts`: normalized `Profile360State` store with 17 dimension caches, per-entity loading/error/stale keys, stream status, and live-message upsert reducers.
-- `apps/kyber/src/features/profile360/use-profile360.ts`: fetches all 19 profile dimensions (sessions, devices, journeys, wallets, attribution, signals, cluster, clusters, agents, consent, quality, recommendations, outcomes, intelligence, provenance) in parallel; wires timeline/graph delta websocket streams alongside the main profile stream.
-- `apps/kyber/src/components/profile360/profile360-timeline-panel.tsx`: windowed timeline rendering — events beyond 200 are paged in 100-at-a-time with a "Load more" control.
-
 Next steps:
 
+- Add `profile360-store.ts` using `Profile360StateSlice`.
+- Add entity-scoped websocket subscriptions and normalized upsert reducers.
+- Add virtualized long timeline rendering once event counts exceed the compact threshold.
 - Add graph chunking/clustering controls for very large neighborhoods.
-- Gradually deprecate duplicated legacy tab content once parity is verified.
 
 ## 12. React implementations
 
@@ -188,8 +183,8 @@ Frontend adapters should perform thin field normalization only. Backend should p
 
 1. Ship additive Profile360 components alongside existing tabs.
 2. Feed mocked and existing profile APIs through adapters.
-3. ✅ Introduce normalized Profile360 store.
-4. ✅ Move drill stack from local state to store.
-5. ✅ Connect websocket streams as normalized deltas (profile, timeline, graph streams).
-6. ✅ Add timeline virtualization (page-windowed at 200-event threshold).
+3. Introduce normalized Profile360 store.
+4. Move drill stack from local state to store.
+5. Connect websocket streams as normalized deltas.
+6. Add virtualization and graph chunking behind thresholds.
 7. Gradually deprecate duplicated legacy tab content once parity is verified.

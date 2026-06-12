@@ -15,8 +15,9 @@ source_files:
 canonical_owner: compliance@aether
 estimated_read_minutes: 12
 toc_depth: 3
-last_synced_commit: b3e9ddb
+last_synced_commit: 48fb9d4
 ---
+
 # Compliance Framework — GDPR & SOC 2
 
 This page describes Aether's compliance posture, data-protection controls, and

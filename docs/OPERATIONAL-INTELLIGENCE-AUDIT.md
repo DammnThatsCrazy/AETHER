@@ -16,8 +16,9 @@ source_files:
   - frontend/kyber/src/features/investigation/use-investigations.ts
   - frontend/kyber/src/features/governance/use-governance.ts
   - frontend/kyber/src/features/graph/use-graph-intelligence.ts
-last_synced_commit: b3e9ddb
+last_synced_commit: 48fb9d4
 ---
+
 # Operational Intelligence — Stub vs. Production Audit
 
 **Scope:** PRs #107–#115 — operational intelligence services (investigation, governance, event

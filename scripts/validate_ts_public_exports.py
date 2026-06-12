@@ -92,7 +92,10 @@ def validate_package(pkg_dir: Path) -> list[str]:
         errors.append(f"{pkg_name} has no public source barrel (src/index.ts[x] or index.ts)")
 
     dist_dir = pkg_dir / "dist"
-    dist_built = dist_dir.exists()
+    # dist is considered "built" only when JS artifacts are present.
+    # Declaration-only dist/ (*.d.ts committed to git) does not count as built —
+    # JS files are gitignored and only exist after npm run build.
+    dist_built = dist_dir.exists() and any(dist_dir.rglob("*.js"))
 
     for field in ["types", "main", "module"]:
         rel = manifest.get(field)

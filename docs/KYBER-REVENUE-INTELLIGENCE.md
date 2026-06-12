@@ -16,8 +16,9 @@ related:
   - ai/kyber-strategic-observability
   - ai/playbooks
   - ai/recommendation-families
-last_synced_commit: b3e9ddb
+last_synced_commit: 48fb9d4
 ---
+
 # Kyber Revenue Intelligence
 
 Kyber Revenue Intelligence turns aggregate OODA value signals into internal Olympus Labs expansion, packaging, customer success, and vertical solution recommendations.

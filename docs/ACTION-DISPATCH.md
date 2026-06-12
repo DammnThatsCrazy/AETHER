@@ -16,8 +16,9 @@ related:
 canonical_owner: platform@aether
 estimated_read_minutes: 4
 toc_depth: 3
-last_synced_commit: b3e9ddb
+last_synced_commit: 48fb9d4
 ---
+
 # Governed Action Dispatch
 
 Action Dispatch connects approved Decision & Outcome Intelligence actions to external operator systems while preserving human-in-the-loop governance.
