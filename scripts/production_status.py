@@ -231,6 +231,7 @@ AREAS: list[Area] = [
         [
             "Backend Architecture/aether-backend/services/dune_feeder/service.py",
             "Backend Architecture/aether-backend/services/dune_feeder/routes.py",
+            "Backend Architecture/aether-backend/services/dune_feeder/models.py",
             "frontend/kyber/src/pages/dune-feeder/dune-feeder-page.tsx",
         ],
     ),
