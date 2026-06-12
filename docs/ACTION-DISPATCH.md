@@ -16,7 +16,7 @@ related:
 canonical_owner: platform@aether
 estimated_read_minutes: 4
 toc_depth: 3
-last_synced_commit: f6fab1b
+last_synced_commit: bc4e43d
 ---
 
 # Governed Action Dispatch
