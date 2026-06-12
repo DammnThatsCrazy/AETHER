@@ -98,6 +98,11 @@ def _get_resolver() -> IdentityResolutionService:
     return _resolver
 
 
+def get_identity_resolver() -> IdentityResolutionService:
+    """Public accessor used by the ingestion pipeline and other services."""
+    return _get_resolver()
+
+
 def _get_resolution_repo() -> IdentityResolutionRepository:
     _get_resolver()  # ensure initialized
     assert _resolution_repo is not None
