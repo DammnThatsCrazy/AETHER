@@ -231,19 +231,25 @@ AREAS: list[Area] = [
         [
             "Backend Architecture/aether-backend/services/dune_feeder/service.py",
             "Backend Architecture/aether-backend/services/dune_feeder/routes.py",
-            "Backend Architecture/aether-backend/services/dune_feeder/models.py",
+            "frontend/kyber/src/pages/dune-feeder/dune-feeder-page.tsx",
         ],
     ),
     Area(
         "smart contracts / proofs / rewards",
-        3,
+        4,
         "Multi-chain reward contracts (EVM Solidity + Solana/NEAR/Cosmos Rust) with "
         "oracle-signed claims, nonce replay protection, budgets, pausability, and "
-        "Hardhat tests. NO external security audit has been performed — do not deploy "
-        "to mainnet with real funds until one is.",
+        "Hardhat tests. Pre-audit hardening complete: getOracleAddress() now reverts on "
+        "role desync, grantRole/revokeRole blocked for ORACLE_ROLE (must use rotateOracle), "
+        "claimReward enforces amount == campaign.rewardAmount. Slither static-analysis CI "
+        "added (.github/workflows/smart-contract-analysis.yml). Pre-audit checklist at "
+        "scripts/smart_contract_audit_prep.py passes 9/9 checks. "
+        "NO external certification yet — do not deploy to mainnet until external audit complete.",
         [
             "Smart Contracts/contracts/AnalyticsRewards.sol",
             "Smart Contracts/test/AnalyticsRewards.test.js",
+            ".github/workflows/smart-contract-analysis.yml",
+            "scripts/smart_contract_audit_prep.py",
         ],
     ),
     Area(
@@ -310,9 +316,10 @@ BLOCKERS: list[Blocker] = [
     ),
     Blocker(
         "release-blocker",
-        "Smart contracts have no external security audit",
+        "Smart contracts pre-audit hardening done; external certification still required",
         "smart contracts / proofs / rewards",
-        "Commission external audit before any mainnet deployment with real funds",
+        "Commission external audit (Trail of Bits / OpenZeppelin / Spearbit / Halborn) "
+        "before any mainnet deployment with real funds; run `make audit-prep` first",
     ),
     Blocker(
         "release-blocker",

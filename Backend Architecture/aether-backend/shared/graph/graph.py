@@ -182,6 +182,7 @@ class VertexType:
     APPROVAL_REQUEST = "ApprovalRequest"
     APPROVAL_DECISION = "ApprovalDecision"
     PROTECTED_RESOURCE = "ProtectedResource"
+    ECONOMIC_CLUSTER = "EconomicCluster"
 
 
 class EdgeType:

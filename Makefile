@@ -217,6 +217,9 @@ bump-version: ## Bump version across all files (usage: make bump-version V=8.4.0
 production-status: ## Readiness scorecard + blockers + live consistency checks (advisory)
 	python scripts/production_status.py
 
+audit-prep: ## Smart contract pre-audit checklist (exit 1 if blockers found with --check)
+	python scripts/smart_contract_audit_prep.py
+
 release-gate: ## Full release gate: repo consistency (CI mode) + strict production status
 	python scripts/repo_doctor.py --ci
 	python scripts/production_status.py --strict

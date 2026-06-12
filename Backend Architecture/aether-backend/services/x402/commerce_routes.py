@@ -486,6 +486,61 @@ async def replay_approval(approval_id: str, request: Request):
     ).to_dict()
 
 
+@approvals_router.post("/{approval_id}/escalate")
+async def escalate_approval(approval_id: str, request: Request):
+    """Escalate an approval to a higher authority."""
+    _require_perm(request, "approvals:write")
+    service = get_approval_service()
+    body = await request.json()
+    escalate_to = body.get("escalate_to", "")
+    reason = body.get("reason", f"escalated to {escalate_to}")
+    actor_id = getattr(request.state.tenant, "user_id", None) or "system"
+    try:
+        result = await service.decide(
+            tenant_id=_tenant_id(request),
+            approval_id=approval_id,
+            action="escalate",
+            decided_by=actor_id,
+            reason=reason,
+        )
+        return APIResponse(data=result.model_dump()).to_dict()
+    except ValueError as e:
+        raise HTTPException(status_code=422, detail=str(e))
+
+
+@approvals_router.get("/{approval_id}/preview")
+async def graph_impact_preview(approval_id: str, request: Request):
+    """Preview which graph vertices/edges will be written if approved."""
+    _require_perm(request, "approvals:read")
+    service = get_approval_service()
+    approval = await service.get(_tenant_id(request), approval_id)
+    if not approval:
+        raise HTTPException(status_code=404, detail="Approval not found")
+    tenant_id = _tenant_id(request)
+    preview = {
+        "approval_id": approval_id,
+        "challenge_id": approval.challenge_id,
+        "expected_vertices": [
+            {"type": "PaymentAuthorization", "id": f"{tenant_id}:auth:{approval_id}"},
+            {"type": "ApprovalDecision", "id": f"{tenant_id}:decision:{approval_id}"},
+        ],
+        "expected_edges": [
+            {
+                "type": "AUTHORIZED_BY",
+                "from": f"{tenant_id}:req:{approval.challenge_id}",
+                "to": f"{tenant_id}:auth:{approval_id}",
+            },
+            {
+                "type": "APPROVED_BY",
+                "from": f"{tenant_id}:decision:{approval_id}",
+                "to": f"{tenant_id}:user:{approval.assigned_to or 'unknown'}",
+            },
+        ],
+        "note": "preview only — no graph mutations until decision is submitted",
+    }
+    return APIResponse(data=preview).to_dict()
+
+
 # ─── Entitlements ──────────────────────────────────────────────────────
 
 entitlements_router = APIRouter(prefix="/v1/entitlements", tags=["entitlements"])

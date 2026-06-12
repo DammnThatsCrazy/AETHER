@@ -365,7 +365,11 @@ contract AnalyticsRewards is
     }
 
     /// @inheritdoc IAnalyticsRewards
+    /// @dev Returns the stored oracleSigner. Reverts if the stored address has
+    ///      lost ORACLE_ROLE — this surfaces any desync between the stored value
+    ///      and on-chain role state so monitoring systems get an unambiguous signal.
     function getOracleAddress() external view override returns (address) {
+        if (!hasRole(ORACLE_ROLE, oracleSigner)) revert SignerNotOracle(oracleSigner);
         return oracleSigner;
     }
 
