@@ -1,6 +1,7 @@
 """
 Aether Service — Commerce Routes (L3a)
-Payment recording, agent hiring, fee elimination reporting, and per-agent economics.
+Payment recording, agent hiring, fee elimination reporting, per-agent economics,
+and cross-cutting analytics (revenue, cluster spend, treasury, facilitator performance).
 """
 
 from __future__ import annotations
@@ -12,6 +13,7 @@ from shared.logger.logger import get_logger
 
 from .models import AgentHireRecord, PaymentRecord
 from .service import CommerceService
+from .economic_analytics import CommerceEconomicAnalytics
 from services.agent.economic import AgentEconomicViews
 
 logger = get_logger("aether.service.commerce.routes")
@@ -19,6 +21,7 @@ router = APIRouter(prefix="/v1/commerce", tags=["Commerce"])
 
 _service = CommerceService()
 _agent_economics = AgentEconomicViews()
+_analytics = CommerceEconomicAnalytics()
 
 
 @router.post("/payments")
@@ -59,4 +62,40 @@ async def agent_economic_profile(agent_id: str, request: Request):
     request.state.tenant.require_permission("commerce:read")
     tenant_id = request.state.tenant.tenant_id
     result = await _agent_economics.full_economic_profile(agent_id, tenant_id)
+    return APIResponse(data=result).to_dict()
+
+
+@router.get("/revenue/{service_id}")
+async def service_revenue(service_id: str, request: Request, period: str = "30d"):
+    """Service revenue over a time window (settled payments attributed to service_id)."""
+    request.state.tenant.require_permission("commerce:read")
+    tenant_id = request.state.tenant.tenant_id
+    result = await _analytics.service_revenue(service_id, tenant_id, period)
+    return APIResponse(data=result).to_dict()
+
+
+@router.get("/cluster/{cluster_id}/spend")
+async def cluster_spend(cluster_id: str, request: Request, period: str = "30d"):
+    """Cluster spend analytics: settled volume and unique agents for a cluster."""
+    request.state.tenant.require_permission("commerce:read")
+    tenant_id = request.state.tenant.tenant_id
+    result = await _analytics.cluster_spend(cluster_id, tenant_id, period)
+    return APIResponse(data=result).to_dict()
+
+
+@router.get("/treasury")
+async def treasury_balance(request: Request):
+    """Treasury balance, preferred rails, and spend runway estimate."""
+    request.state.tenant.require_permission("commerce:admin")
+    tenant_id = request.state.tenant.tenant_id
+    result = await _analytics.treasury_balance(tenant_id)
+    return APIResponse(data=result).to_dict()
+
+
+@router.get("/facilitators/performance")
+async def facilitator_performance(request: Request, period: str = "30d"):
+    """Per-facilitator performance matrix: volume, success rate, transaction count."""
+    request.state.tenant.require_permission("commerce:read")
+    tenant_id = request.state.tenant.tenant_id
+    result = await _analytics.facilitator_performance(tenant_id, period)
     return APIResponse(data=result).to_dict()
