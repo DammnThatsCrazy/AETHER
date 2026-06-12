@@ -2,3 +2,8 @@ export { ApprovalModal } from './approval-modal';
 export { ActionClassBadge } from './action-class-badge';
 export { ExplanationTrace } from './explanation-trace';
 export { RevertButton } from './revert-button';
+export { ApprovalCard } from './approval-card';
+export { DecisionForm } from './decision-form';
+export { EvidencePanel } from './evidence-panel';
+export { EscalationRouter } from './escalation-router';
+export { GraphImpactPreview } from './graph-impact-preview';

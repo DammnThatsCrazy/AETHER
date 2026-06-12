@@ -78,6 +78,7 @@ Graph can be rebuilt from lake state or incrementally updated.
 | **L2** | Agent Behavioral | Autonomous agent lifecycle tracking | `registerAgent()`, task states, decision logs, ground truth |
 | **L3a** | Commerce | Payment tracking, agent hiring, fee analysis | Payment records, hire events, fee elimination reports |
 | **L3b** | x402 Interceptor | HTTP 402-based micropayment capture | Payment headers, economic graph edges, per-call cost tracking |
+| **L3b+** | x402 Control Plane | Full commerce lifecycle — challenge → approval → settlement → entitlement | `ProtectedResourceRegistry`, `ApprovalService`, `SettlementTracker`, `EntitlementService` |
 | **L4** | ML Intelligence | Scoring and anomaly detection | 9 existing models + Trust Score composite + Bytecode Risk scorer |
 | **L5** | Unified Graph | Cross-layer relationship store | 18+ vertex types, 48+ edge types, Neptune (gremlinpython) with in-memory fallback for local dev |
 
@@ -404,3 +405,97 @@ Per-operation circuit breaker prevents cascading failures:
 - **Closed** (normal) → opens after 5 consecutive failures
 - **Open** (blocking) → rejects all calls for 30 seconds
 - **Half-open** (testing) → allows one call through to test recovery
+
+---
+
+## L3b+ Control Plane — Commerce Graph Additions (v8.9.0)
+
+The x402 Commerce Control Plane (L3b+) extends the Intelligence Graph with
+vertices and edges that represent the full payment lifecycle. All additions
+are written deterministically from the control plane; the graph is fully
+rebuildable from Silver lake tables.
+
+### New Vertex Types
+
+| Vertex | Description | Tenant scope | DSR |
+|---|---|---|---|
+| `PAYMENT_REQUIREMENT` | HTTP 402 challenge issued for a protected resource | prefixed | pseudonymize |
+| `PAYMENT_AUTHORIZATION` | Authorization granted after approval decision | prefixed | pseudonymize |
+| `PAYMENT_RECEIPT` | On-chain receipt after verification | prefixed | retain (financial) |
+| `SETTLEMENT` | Settlement FSM record (pending → settled/failed/disputed) | prefixed | retain |
+| `ENTITLEMENT` | Access entitlement minted after settlement | prefixed | pseudonymize |
+| `ACCESS_GRANT` | Final access grant record | prefixed | pseudonymize |
+| `FULFILLMENT` | Fulfillment record (latency, status) | prefixed | pseudonymize |
+| `APPROVAL_REQUEST` | Approval request in the approval queue | prefixed | pseudonymize |
+| `APPROVAL_DECISION` | Approver's decision (approve/reject/escalate) | prefixed | pseudonymize |
+| `POLICY_DECISION` | Policy engine evaluation result | prefixed | retain |
+| `FACILITATOR` | Payment facilitator (Circle, Aether Local, etc.) | global | N/A |
+| `STABLECOIN_ASSET` | Stablecoin asset + network (USDC/Base, USDC/Solana) | global | N/A |
+| `PRICE_POLICY` | Pricing policy bound to a protected resource | per-tenant | N/A |
+| `BUDGET_POLICY` | Per-agent/cluster budget constraint | per-tenant | N/A |
+| `TREASURY` | Tenant treasury balance and runway | per-tenant | N/A |
+| `SERVICE_PLAN` | Subscription plan definition | per-tenant | N/A |
+| `PAYMENT_ROUTE` | Routing decision (facilitator + chain selected) | per-tenant | N/A |
+| `ECONOMIC_CLUSTER` | Analytics cluster grouping agents by spend pattern | per-tenant | pseudonymize |
+
+All tenant-prefixed vertices use `{tenant_id}:{vertex_id}` keys consistent with
+the existing `X402EconomicGraph` pattern.
+
+### New Edge Types
+
+| Edge | From → To | Key Properties |
+|---|---|---|
+| `REQUIRES_PAYMENT` | ProtectedResource → PAYMENT_REQUIREMENT | amount_usd, chain, asset |
+| `AUTHORIZED_BY` | PAYMENT_REQUIREMENT → PAYMENT_AUTHORIZATION | decided_at |
+| `VERIFIED_BY` | PAYMENT_AUTHORIZATION → FACILITATOR | tx_hash, verified_at |
+| `SETTLED_BY` | PAYMENT_RECEIPT → SETTLEMENT | state, retries |
+| `GRANTS_ACCESS_TO` | ENTITLEMENT → ProtectedResource | scope, expires_at |
+| `FULFILLED_BY` | ACCESS_GRANT → FULFILLMENT | latency_ms, status |
+| `FUNDED_BY` | PAYMENT_AUTHORIZATION → TREASURY | amount_usd |
+| `ACCEPTS_ASSET` | ProtectedResource → STABLECOIN_ASSET | priority |
+| `GUARDED_BY_POLICY` | ProtectedResource → PRICE_POLICY/BUDGET_POLICY | active |
+| `ROUTES_VIA` | PAYMENT_AUTHORIZATION → PAYMENT_ROUTE | facilitator_id |
+| `REUSES_ENTITLEMENT` | AGENT → ENTITLEMENT | count, last_used |
+| `RETRIED_AS` | SETTLEMENT → SETTLEMENT | reason, attempt |
+| `ESCALATES_PAYMENT_TO` | APPROVAL_REQUEST → USER | reason |
+| `APPROVED_BY` | APPROVAL_DECISION → USER | role |
+| `GOVERNED_BY` | TENANT/AGENT → POLICY_DECISION | context |
+| `CONSTRAINED_BY` | AGENT/USER → BUDGET_POLICY | role |
+| `SUBSCRIBES_TO` | USER/AGENT → SERVICE_PLAN | started_at, expires_at |
+
+### Graph Query Purposes (L3b+)
+
+| Query | Readers | Purpose |
+|---|---|---|
+| `trace_payment_lifecycle(challenge_id)` | Kyber Noesis, Review | Full lifecycle trace |
+| `agent_entitlements(agent_id)` | Kyber Entities, SDK preflight | Active entitlements |
+| `service_revenue(service_id, window)` | Kyber Mission | Revenue rollup |
+| `cluster_spend(cluster_id)` | Kyber Entities, Diagnostics | Anomaly detection |
+| `policy_chain(resource_id)` | Kyber explainability | Which policies fire |
+| `facilitator_performance(facilitator_id)` | Kyber Command, Diagnostics | Reliability |
+| `approval_backlog(tenant_id)` | Kyber Mission | Queue depth + latency |
+
+### L3b+ API Extensions
+
+| Method | Path | Description |
+|---|---|---|
+| `POST` | `/v1/x402/challenge` | Issue PAYMENT-REQUIRED for a protected resource |
+| `POST` | `/v1/x402/verify` | Submit PaymentProof → receipt |
+| `POST` | `/v1/x402/settle` | Trigger settlement FSM |
+| `GET` | `/v1/x402/settlements/{id}` | Settlement state |
+| `GET` | `/v1/x402/explain/{challenge_id}` | Full lifecycle trace |
+| `GET` | `/v1/intelligence/commerce/lifecycle/{challenge_id}` | Commerce lifecycle trace (Intelligence service) |
+| `GET` | `/v1/analytics/commerce/kpi` | Commerce KPI dashboard |
+
+### Rebuildability
+
+All L3b+ graph state is rebuildable from Silver lake tables:
+- `settlement_events` → `SETTLEMENT` vertices + `SETTLED_BY` edges
+- `payment_intents` → `PAYMENT_REQUIREMENT` vertices
+- `approval_requests` → `APPROVAL_REQUEST` + `APPROVAL_DECISION` vertices
+- `entitlements` → `ENTITLEMENT` vertices + `GRANTS_ACCESS_TO` edges
+
+Trigger a rebuild via the existing lake-to-graph pipeline:
+```python
+await economic_graph.snapshot_to_graph(tenant_id)
+```
