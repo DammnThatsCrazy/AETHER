@@ -16,7 +16,7 @@ from pydantic import BaseModel, Field
 
 ConnectorType = Literal[
     "slack", "webhook", "shopify", "stripe", "hubspot", "salesforce",
-    "klaviyo", "segment", "posthog", "ga4", "jira", "linear", "zendesk", "intercom",
+    "klaviyo", "segment", "posthog", "ga4", "jira", "linear", "zendesk", "intercom", "dune",
 ]
 
 ConnectorCategory = Literal[
