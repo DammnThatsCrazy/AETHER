@@ -281,9 +281,11 @@ class DuneFeederService:
             ]
 
             row_hash = _hash_row(row)
-            # Deterministic key: same (source_tag, execution_id, row_index) always
-            # maps to the same record_id so retried ingest requests are idempotent.
-            record_id = f"dune:{payload.source_tag}:{qr.execution_id}:{idx}"
+            # Deterministic key: same (tenant_scope, source_tag, execution_id, row_index)
+            # maps to the same record_id so retried ingest requests are idempotent AND
+            # different tenants sharing a source_tag/execution_id get separate rows.
+            tenant_key = payload.tenant_scope or "global"
+            record_id = f"dune:{tenant_key}:{payload.source_tag}:{qr.execution_id}:{idx}"
 
             bronze_record = DuneBronzeRecord(
                 record_id=record_id,
@@ -476,7 +478,10 @@ class DuneFeederService:
         created = 0
 
         for (domain, query_id, rec_tenant), rows in groups.items():
-            gold_id = str(uuid.uuid4())
+            # Deterministic Gold ID keyed on the grouping tuple: concurrent or
+            # retried materialize-gold calls for the same group both compute the
+            # same ID and BaseRepository.insert ON CONFLICT DO UPDATE is idempotent.
+            gold_id = f"gold:{source_tag}:{domain}:{query_id}:{rec_tenant or 'global'}"
             avg_quality = round(sum(r.get("quality_score", 0.0) for r in rows) / len(rows), 4)
             sorted_rows = sorted(rows, key=lambda r: r.get("row_index", 0))
 

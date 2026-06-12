@@ -40,9 +40,16 @@ def _require_admin(request: Request) -> None:
 
 
 def _authenticated_tenant_scope(request: Request) -> Optional[str]:
-    """Return the tenant_scope of the authenticated caller, or None for platform admins."""
+    """Return the tenant_scope of the authenticated caller, or None for platform admins.
+
+    TenantContext has no is_platform_admin field.  Platform-level access is
+    indicated by Role.ADMIN (which makes has_permission() always return True)
+    or by the kyber:operator permission explicitly granted to Kyber operators.
+    """
     tenant = request.state.tenant
-    if hasattr(tenant, "tenant_id") and tenant.tenant_id and not getattr(tenant, "is_platform_admin", False):
+    if tenant.has_permission("kyber:operator"):
+        return None
+    if hasattr(tenant, "tenant_id") and tenant.tenant_id:
         return tenant.tenant_id
     return None
 

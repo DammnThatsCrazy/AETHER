@@ -1948,10 +1948,44 @@ class DuneFeederStatsRepository(BaseRepository):
         last_ingest_at: str,
         last_ingest_source_tag: str,
     ) -> None:
-        existing = await self.load()
-        await self.insert(self.STATS_KEY, {
-            "total_submitted": existing.get("total_submitted", 0) + submitted,
-            "total_rejected": existing.get("total_rejected", 0) + rejected,
-            "last_ingest_at": last_ingest_at,
-            "last_ingest_source_tag": last_ingest_source_tag,
-        })
+        pool = await self._ensure_pool()
+        if pool is None:
+            # In-memory store: Python's async is cooperative, no true concurrency.
+            existing = await self.load()
+            await self.insert(self.STATS_KEY, {
+                "total_submitted": existing.get("total_submitted", 0) + submitted,
+                "total_rejected": existing.get("total_rejected", 0) + rejected,
+                "last_ingest_at": last_ingest_at,
+                "last_ingest_source_tag": last_ingest_source_tag,
+            })
+            return
+
+        # Atomic PostgreSQL increment: a single statement avoids the
+        # read-modify-write race under concurrent ingest requests.
+        await self._ensure_table()
+        await pool.execute(
+            f"""
+            INSERT INTO {self.table_name} (id, data, tenant_id, created_at, updated_at)
+            VALUES ($1, jsonb_build_object(
+                'total_submitted', $2::bigint,
+                'total_rejected',  $3::bigint,
+                'last_ingest_at', $4::text,
+                'last_ingest_source_tag', $5::text
+            ), '', NOW(), NOW())
+            ON CONFLICT (id) DO UPDATE SET
+                data = jsonb_set(jsonb_set(jsonb_set(jsonb_set(
+                    {self.table_name}.data,
+                    '{{total_submitted}}',
+                    to_jsonb(COALESCE(({self.table_name}.data->>'total_submitted')::bigint, 0) + $2)
+                ), '{{total_rejected}}',
+                    to_jsonb(COALESCE(({self.table_name}.data->>'total_rejected')::bigint, 0) + $3)
+                ), '{{last_ingest_at}}', to_jsonb($4::text)
+                ), '{{last_ingest_source_tag}}', to_jsonb($5::text)),
+                updated_at = NOW()
+            """,
+            self.STATS_KEY,
+            submitted,
+            rejected,
+            last_ingest_at,
+            last_ingest_source_tag,
+        )
