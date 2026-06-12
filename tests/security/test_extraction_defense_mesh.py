@@ -742,18 +742,22 @@ class TestMultiKeyEvasion:
         engine = DistributedBudgetEngine()
         engine._mode = "in-memory"
 
-        # 5 different keys, same IP, hitting Tier 1 model
-        results = []
-        for key_idx in range(5):
-            for _ in range(15):
-                identity = ExtractionIdentity(
-                    api_key_id=f"evasion-key-{key_idx}",
-                    source_ip="10.0.0.99",
-                )
-                result = run_async(engine.check_and_increment(identity, "churn_prediction"))
-                results.append(result)
+        # Run all requests in a single event loop so all share the same time
+        # bucket. Using 75 separate run_async() calls risks spanning a minute
+        # boundary in slow CI environments, resetting the IP counter mid-run.
+        async def _run_all() -> list:
+            out = []
+            for key_idx in range(5):
+                for _ in range(15):
+                    identity = ExtractionIdentity(
+                        api_key_id=f"evasion-key-{key_idx}",
+                        source_ip="10.0.0.99",
+                    )
+                    out.append(await engine.check_and_increment(identity, "churn_prediction"))
+            return out
 
-        # Should have some blocked results (IP budget: 60/min for Tier 1)
+        # 5 different keys, same IP, hitting Tier 1 model (IP budget: 60/min)
+        results = run_async(_run_all())
         blocked = [r for r in results if not r.allowed]
         assert len(blocked) > 0
 
