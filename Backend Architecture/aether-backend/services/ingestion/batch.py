@@ -39,6 +39,7 @@ from shared.common.common import (
 from shared.events.events import Event, EventProducer, Topic
 from shared.logger.logger import get_logger, metrics
 from dependencies.providers import get_producer, get_registry
+from services.identity.routes import get_identity_resolver
 
 logger = get_logger("aether.service.ingestion.batch")
 router = APIRouter(prefix="/v1", tags=["Ingestion"])
@@ -251,6 +252,17 @@ async def ingest_batch(
                 "Ingestion temporarily unavailable — please retry"
             )
 
+    # ── Identity resolution (fire-and-forget, non-blocking) ────────────────
+    # Run after Bronze durability is confirmed. Resolution errors never fail
+    # ingestion — events are already durable and recoverable via recompute.
+    if accepted_raw:
+        import asyncio
+        resolver = get_identity_resolver()
+        for normalized in accepted_raw:
+            asyncio.ensure_future(
+                _resolve_identity_safe(resolver, normalized, tenant.tenant_id)
+            )
+
     # ── Atomic idempotency claim AFTER Bronze write, BEFORE bus publish ───
     # Build a lookup from event_id → index in results so we can update in-place.
     event_id_to_result_idx: dict[str, int] = {}
@@ -442,6 +454,28 @@ def _get_event_family(event_type: str) -> str:
         "x402_payment": "x402",
     }
     return _FAMILY_MAP.get(event_type, "core")
+
+
+async def _resolve_identity_safe(resolver, normalized: dict, tenant_id: str) -> None:
+    """Run identity resolution without propagating exceptions to the ingestion path."""
+    try:
+        from services.identity.schemas import IdentityResolveRequest
+        req = IdentityResolveRequest(
+            event_id=normalized["event_id"],
+            tenant_id=tenant_id,
+            user_id=normalized.get("user_id"),
+            anonymous_id=normalized.get("anonymous_id"),
+            session_id=normalized.get("session_id"),
+            properties=normalized.get("properties") or {},
+            context=normalized.get("context") or {},
+        )
+        await resolver.resolve_event(req.model_dump(), tenant_id)
+    except Exception as exc:
+        logger.warning(
+            "Identity resolution failed for event %s (tenant=%s): %s",
+            normalized.get("event_id"), tenant_id, exc,
+        )
+        metrics.increment("identity_resolve_error_total")
 
 
 def _scrub_sensitive_fields(
