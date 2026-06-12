@@ -11,8 +11,7 @@ source_files:
 canonical_owner: backend@aether
 estimated_read_minutes: 60
 toc_depth: 3
-last_synced_commit: 6ffb0a6
-
+last_synced_commit: 236aa4e
 ---
 # Aether Backend API v8.8.0 — Endpoint Specification
 
@@ -770,7 +769,6 @@ Three service groups are available when Intelligence Graph feature flags are ena
 | POST | `/v1/commerce/hires` | Record agent hire + create `HIRED` edge |
 | GET | `/v1/commerce/fees/report` | Fee elimination report for tenant |
 | GET | `/v1/commerce/agent/{id}/spend` | Agent spend history |
-| GET | `/v1/commerce/agents/{id}/economics` | Full economic profile: budget usage, delegation policy, economic identity |
 
 ### On-Chain Service (L0)
 
@@ -859,6 +857,7 @@ Feature flag: `PROVIDER_GATEWAY_ENABLED=false` (default). Zero impact until acti
 | Method | Endpoint | Description |
 |--------|----------|-------------|
 | POST | `/v1/lake/ingest` | Ingest provider data into Bronze tier (batch, source-tagged) |
+| POST | `/v1/lake/promote` | Promote Bronze rows to Silver after freshness + quality gates |
 | POST | `/v1/lake/rollback` | Rollback records by source_tag across specified tiers |
 | GET | `/v1/lake/audit/{domain}/{source_tag}` | Query audit trail for a source_tag |
 | POST | `/v1/lake/materialize` | Write Gold metric/feature/highlight |
@@ -870,7 +869,11 @@ Feature flag: `PROVIDER_GATEWAY_ENABLED=false` (default). Zero impact until acti
 
 **Required fields for ingest:** `domain`, `source`, `source_tag`, `records[]`
 
-**Permissions:** `write` for ingest/materialize, `read` for queries, `admin` for rollback/quality
+**Required fields for promote:** `domain`, `source_tag`. Optional gates: `entity_type`, `entity_id_field`, `required_fields[]`, `max_age_hours` (default 24), `null_rate_threshold` (default 0.3). Returns `promoted_count`, `rejected_count`, `promotion_rate`, and per-row `rejection_reasons` with quality gate details.
+
+**Permissions:** `write` for ingest/materialize/promote, `read` for queries, `admin` for rollback/quality
+
+**Kyber feeder health:** `GET /v1/admin/kyber/connectors/feeders` — per-run Dune feeder metrics (rows_ingested, rows_promoted, rows_rejected, promotion_rate, status) scoped by optional `?tenant_id=`.
 
 ---
 
