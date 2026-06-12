@@ -61,16 +61,16 @@ class DuneFeederService:
     """
 
     def __init__(self) -> None:
-        from repositories.repos import DuneBronzeRepository, DuneSilverRepository, DuneGoldRepository
+        from repositories.repos import (
+            DuneBronzeRepository,
+            DuneSilverRepository,
+            DuneGoldRepository,
+            DuneFeederStatsRepository,
+        )
         self._bronze = DuneBronzeRepository()
         self._silver = DuneSilverRepository()
         self._gold = DuneGoldRepository()
-        # Session-scoped counters for rejection-rate health metric (reset on restart;
-        # actual record counts come from repositories).
-        self._total_submitted: int = 0
-        self._total_rejected: int = 0
-        self._last_ingest_at: Optional[str] = None
-        self._last_ingest_source_tag: Optional[str] = None
+        self._stats = DuneFeederStatsRepository()
 
     # ── Freshness gate ────────────────────────────────────────────────────────
 
@@ -236,8 +236,6 @@ class DuneFeederService:
         rows_rejected = 0
         rejected_reasons: list[str] = []
 
-        self._total_submitted += len(qr.rows)
-
         for idx, row in enumerate(qr.rows):
             quality = self.check_quality(
                 row,
@@ -247,7 +245,6 @@ class DuneFeederService:
 
             if not quality.passed or quality.score < payload.quality_threshold:
                 rows_rejected += 1
-                self._total_rejected += 1
                 reason = quality.reason or f"Quality score {quality.score:.2f} below threshold {payload.quality_threshold}"
                 rejected_reasons.append(f"row[{idx}]: {reason}")
                 metrics.increment(
@@ -284,7 +281,9 @@ class DuneFeederService:
             ]
 
             row_hash = _hash_row(row)
-            record_id = str(uuid.uuid4())
+            # Deterministic key: same (source_tag, execution_id, row_index) always
+            # maps to the same record_id so retried ingest requests are idempotent.
+            record_id = f"dune:{payload.source_tag}:{qr.execution_id}:{idx}"
 
             bronze_record = DuneBronzeRecord(
                 record_id=record_id,
@@ -314,8 +313,13 @@ class DuneFeederService:
                 labels={"domain": payload.domain, "query_id": qr.query_id},
             )
 
-        self._last_ingest_at = now_iso
-        self._last_ingest_source_tag = payload.source_tag
+        # Persist cumulative stats so health metrics survive restarts.
+        await self._stats.increment(
+            submitted=len(qr.rows),
+            rejected=rows_rejected,
+            last_ingest_at=now_iso,
+            last_ingest_source_tag=payload.source_tag,
+        )
 
         logger.info(
             "Dune ingest complete",
@@ -414,33 +418,34 @@ class DuneFeederService:
 
     # ── Health ────────────────────────────────────────────────────────────────
 
-    async def get_health(self) -> FeederHealthStatus:
-        """Return feeder health metrics across all tiers."""
-        bronze_rows = await self._bronze.find_many(limit=10000)
-        silver_rows = await self._silver.find_many(limit=10000)
-        gold_rows = await self._gold.find_many(limit=10000)
+    async def get_health(self, tenant_scope: Optional[str] = None) -> FeederHealthStatus:
+        """Return feeder health metrics, scoped to tenant_scope for non-platform callers."""
+        tier_filters = {"tenant_scope": tenant_scope} if tenant_scope else None
 
-        unique_tags = {r.get("source_tag") for r in bronze_rows if r.get("source_tag")}
+        # Use count() to avoid the 10k row cap on tier totals.
+        total_bronze = await self._bronze.count(tier_filters)
+        total_silver = await self._silver.count(tier_filters)
+        total_gold = await self._gold.count(tier_filters)
 
-        rejection_rate = (
-            self._total_rejected / self._total_submitted
-            if self._total_submitted > 0
-            else 0.0
-        )
+        # Unique source tags: bounded by distinct Dune queries, not row count.
+        tag_rows = await self._bronze.find_many(filters=tier_filters, limit=10000)
+        unique_tags = {r.get("source_tag") for r in tag_rows if r.get("source_tag")}
 
-        overall = "ok"
-        if rejection_rate > 0.5:
-            overall = "degraded"
+        # Load persisted stats for restart-safe rejection rate and last-ingest fields.
+        stats = await self._stats.load()
+        total_submitted = stats.get("total_submitted", 0)
+        total_rejected = stats.get("total_rejected", 0)
+        rejection_rate = total_rejected / total_submitted if total_submitted > 0 else 0.0
 
         return FeederHealthStatus(
-            status=overall,
-            total_bronze_records=len(bronze_rows),
-            total_silver_records=len(silver_rows),
-            total_gold_records=len(gold_rows),
+            status="degraded" if rejection_rate > 0.5 else "ok",
+            total_bronze_records=total_bronze,
+            total_silver_records=total_silver,
+            total_gold_records=total_gold,
             unique_source_tags=len(unique_tags),
             rejection_rate=rejection_rate,
-            last_ingest_at=self._last_ingest_at,
-            last_ingest_source_tag=self._last_ingest_source_tag,
+            last_ingest_at=stats.get("last_ingest_at"),
+            last_ingest_source_tag=stats.get("last_ingest_source_tag"),
             graph_isolation_enforced=True,
         )
 

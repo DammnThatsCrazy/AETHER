@@ -1922,3 +1922,36 @@ class DuneGoldRepository(BaseRepository):
             if len(rows) < 500:
                 break
         return deleted
+
+
+class DuneFeederStatsRepository(BaseRepository):
+    """Singleton stats record for the Dune feeder service.
+
+    Persists cumulative submitted/rejected counts and last-ingest metadata so
+    that health metrics survive service restarts.  All writes use the fixed key
+    STATS_KEY via ON CONFLICT DO UPDATE (idempotent upsert).
+    """
+
+    STATS_KEY = "feeder_stats_v1"
+
+    def __init__(self) -> None:
+        super().__init__("dune_feeder_stats")
+
+    async def load(self) -> dict:
+        record = await self.find_by_id(self.STATS_KEY)
+        return record or {}
+
+    async def increment(
+        self,
+        submitted: int,
+        rejected: int,
+        last_ingest_at: str,
+        last_ingest_source_tag: str,
+    ) -> None:
+        existing = await self.load()
+        await self.insert(self.STATS_KEY, {
+            "total_submitted": existing.get("total_submitted", 0) + submitted,
+            "total_rejected": existing.get("total_rejected", 0) + rejected,
+            "last_ingest_at": last_ingest_at,
+            "last_ingest_source_tag": last_ingest_source_tag,
+        })

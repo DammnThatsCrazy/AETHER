@@ -81,7 +81,9 @@ async def feeder_health(request: Request):
     """Return health and operational metrics for the Dune feeder service."""
     _require_admin(request)
 
-    health = await dune_feeder_service.get_health()
+    # Non-platform-admin callers see only their own tenant's tier counts.
+    auth_scope = _authenticated_tenant_scope(request)
+    health = await dune_feeder_service.get_health(tenant_scope=auth_scope)
     return APIResponse(data=health.model_dump()).to_dict()
 
 
@@ -226,7 +228,10 @@ async def list_gold_records(
     """List Gold materialized records, optionally filtered by source_tag and tenant_scope."""
     _require_admin(request)
 
-    effective_scope = tenant_scope or _authenticated_tenant_scope(request)
+    # Non-platform-admin callers cannot read another tenant's Gold records via
+    # the query parameter; their authenticated scope always wins.
+    auth_scope = _authenticated_tenant_scope(request)
+    effective_scope = auth_scope if auth_scope is not None else tenant_scope
     records = await dune_feeder_service.get_gold_records(source_tag=source_tag, tenant_scope=effective_scope)
     return APIResponse(data={
         "record_count": len(records),
