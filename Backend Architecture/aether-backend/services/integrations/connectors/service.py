@@ -85,16 +85,26 @@ class ConnectorService:
         return self._providers
 
     async def _resolve_secret(self, config: ConnectorConfig) -> Optional[str]:
-        """Look up the stored credential value from the vault via secret_ref."""
+        """Look up the stored credential from the vault via secret_ref."""
         if not config.secret_ref:
             return None
         try:
             record = await self._providers_repo().find_by_id(config.secret_ref)
             if record:
-                return record.get("credential_value")
+                return record.get("api_key")
         except Exception as exc:
             logger.warning(f"Secret resolution failed for {config.connector_type}: {exc}")
         return None
+
+    async def _store_credential(self, tenant_id: str, connector_type: str, credential: str) -> str:
+        """Persist a raw credential to the vault and return its ref key."""
+        ref = f"connector:{tenant_id}:{connector_type}"
+        await self._providers_repo().upsert(ref, {
+            "api_key": credential,
+            "provider": connector_type,
+            "tenant_id": tenant_id,
+        })
+        return ref
 
     async def list_for_tenant(self, tenant_id: str) -> list[dict[str, Any]]:
         """Descriptors merged with this tenant's config/status (no secrets)."""
@@ -118,7 +128,8 @@ class ConnectorService:
 
     async def configure(self, tenant_id: str, connector_type: str, *, name: str = "",
                          config: dict[str, Any] | None = None, enabled: bool | None = None,
-                         secret_configured: bool | None = None, actor_id: str = "system") -> dict[str, Any]:
+                         secret_configured: bool | None = None, credential: str | None = None,
+                         actor_id: str = "system") -> dict[str, Any]:
         connector = get_connector(connector_type)
         if connector is None:
             raise ValueError(f"unknown connector {connector_type}")
@@ -132,7 +143,10 @@ class ConnectorService:
             record.config = _strip_secrets(config)  # never persist secrets
         if enabled is not None:
             record.enabled = enabled
-        if secret_configured is not None:
+        if credential:
+            record.secret_ref = await self._store_credential(tenant_id, connector_type, credential)
+            record.secret_configured = True
+        elif secret_configured is not None:
             record.secret_configured = secret_configured
         record.updated_at = now_iso()
         connector.validate_config(record)

@@ -109,7 +109,9 @@ export function ConnectorsPage() {
                 </thead>
                 <tbody>
                   {typeDetail.map((row) => {
-                    const dominantStatus = Object.entries(row.status_breakdown).sort((a, b) => b[1] - a[1])[0]?.[0] ?? 'never_synced';
+                    const STATUS_SEVERITY: Record<string, number> = { failed: 3, degraded: 2, never_synced: 1, healthy: 0 };
+                    const worstStatus = Object.keys(row.status_breakdown).sort((a, b) => (STATUS_SEVERITY[b] ?? 0) - (STATUS_SEVERITY[a] ?? 0))[0] ?? 'never_synced';
+                    const dominantStatus = worstStatus;
                     return (
                       <tr key={row.connector_type} className="border-b border-border-subtle hover:bg-surface-hover">
                         <td className="py-2 px-2 font-semibold text-text-primary">{row.label}</td>

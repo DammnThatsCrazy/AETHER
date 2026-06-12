@@ -108,7 +108,11 @@ async def rollback_source_tag(body: FeederRollbackRequest, request: Request):
     _require_admin(request)
     _require_memory_store_env()
 
-    deleted = dune_feeder_service.rollback(body.source_tag, tenant_scope=body.tenant_scope)
+    # Non-platform-admin callers are always scoped to their own tenant regardless
+    # of what tenant_scope they supplied in the request body.
+    auth_scope = _authenticated_tenant_scope(request)
+    effective_scope = auth_scope if auth_scope is not None else body.tenant_scope
+    deleted = dune_feeder_service.rollback(body.source_tag, tenant_scope=effective_scope)
 
     metrics.increment("dune_feeder_api_rollback", labels={"source_tag": body.source_tag})
     return APIResponse(data={

@@ -109,7 +109,7 @@ class SlackNotificationService:
             if record and record.get("bot_token_ref"):
                 vault = self._providers_repo()
                 cred = await vault.find_by_id(record["bot_token_ref"])
-                return cred.get("credential_value") if cred else None
+                return cred.get("api_key") if cred else None
         except Exception as exc:
             logger.warning(f"Slack token resolution failed for {tenant_id}: {exc}")
         return None

@@ -7,9 +7,9 @@ pluggable GraphClient (Neptune in production, in-memory in local dev).
 from __future__ import annotations
 
 from datetime import datetime, timezone
-from typing import Iterable
+from typing import Iterable, Optional
 
-from fastapi import APIRouter, Depends, Request
+from fastapi import APIRouter, Depends, Query, Request
 
 from dependencies.providers import get_graph
 from shared.common.common import APIResponse, ForbiddenError
@@ -449,13 +449,21 @@ async def graph_contracts() -> dict:
 async def graph_health(
     request: Request,
     graph: GraphClient = Depends(get_graph),
+    tenantId: Optional[str] = Query(None, description="Target tenant ID (Kyber operators only; defaults to the authenticated tenant)"),
 ) -> dict:
     """Graph health endpoint — layer coverage, node/edge counts, backend mode."""
     tenant = request.state.tenant
     tenant.require_permission("read")
 
+    # Kyber operators may pass tenantId to inspect a specific tenant's graph.
+    # Regular tenants are always scoped to their own ID.
+    effective_tenant_id = tenantId if tenantId and getattr(tenant, "is_platform_admin", False) else tenant.tenant_id
+    if tenantId and tenantId != tenant.tenant_id and not getattr(tenant, "is_platform_admin", False):
+        from shared.common.common import ForbiddenError
+        raise ForbiddenError("tenantId does not match authenticated tenant")
+
     all_verts = await graph.get_all_vertices(limit=10000)
-    all_verts = [v for v in all_verts if v.properties.get("tenantId") == tenant.tenant_id]
+    all_verts = [v for v in all_verts if v.properties.get("tenantId") == effective_tenant_id]
     all_edges: list[Edge] = []
     for v in all_verts:
         all_edges.extend(await graph.get_edges(v.vertex_id, direction="out"))
