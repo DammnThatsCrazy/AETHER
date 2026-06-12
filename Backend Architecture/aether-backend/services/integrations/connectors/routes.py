@@ -245,6 +245,20 @@ async def connectors_health(request: Request):
     return APIResponse(data=await connector_service.overview()).to_dict()
 
 
+@admin_router.get("/feeders")
+async def feeders_health(request: Request, tenant_id: Optional[str] = None, limit: int = 100):
+    """Kyber feeder health — recent Dune feeder run records across all tenants
+    (or scoped to a single tenant via ?tenant_id=).
+
+    Returns rows_ingested, rows_promoted, rows_rejected, promotion_rate, and
+    status per run so operators can diagnose freshness/quality gate failures.
+    """
+    _require_operator(request)
+    from services.integrations.dune_feeder.service import get_feeder_health
+    items = await get_feeder_health(tenant_id=tenant_id, limit=max(1, min(limit, 500)))
+    return APIResponse(data={"items": items, "count": len(items)}).to_dict()
+
+
 @admin_router.get("/tenants/{tenant_id}")
 async def connectors_health_for_tenant(tenant_id: str, request: Request):
     """Per-connector health drill-down for a single tenant (Kyber operator view).

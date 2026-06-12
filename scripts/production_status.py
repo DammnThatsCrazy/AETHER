@@ -218,11 +218,14 @@ AREAS: list[Area] = [
     ),
     Area(
         "Dune / data-lake feeders",
-        2,
-        "Dune is a read-only ANALYTICS_DATA provider (query execution, API-key auth) "
-        "and /v1/ingest/feed accepts external feeds, but there is no governed "
-        "Bronze->Silver->Gold feeder pipeline with per-row provenance and freshness "
-        "gates for Dune yet. Dune does not mutate canonical graph state.",
+        3,
+        "DuneConnector (read-only, credential-gated, per-row provenance) added to "
+        "connector fleet. PromotionService governs Bronze→Silver with freshness gate "
+        "(max_age_hours), null-rate gate, required-field gate, and entity_id gate; "
+        "each rejected row gets per-check failure reasons. POST /v1/lake/promote "
+        "triggers promotion; GET /v1/admin/feeders exposes per-run health in Kyber. "
+        "Remaining gap: no staging validation with a real Dune API key; no scheduled "
+        "polling worker (pull is on-demand via /sync).",
         [
             "Backend Architecture/aether-backend/shared/providers/categories.py",
             "Backend Architecture/aether-backend/services/ingestion/routes.py",
@@ -336,9 +339,10 @@ BLOCKERS: list[Blocker] = [
     ),
     Blocker(
         "pre-production-blocker",
-        "No governed Dune feeder (provenance + freshness gates) into the lake",
+        "Dune feeder not staging-validated; no scheduled polling worker (pull is on-demand only)",
         "Dune / data-lake feeders",
-        "Add read-only feeder writing Bronze with per-row provenance; gate Silver promotion on quality checks",
+        "Run DuneConnector sync against staging with a real API key; add a scheduled "
+        "worker (APScheduler or Celery beat) to automate periodic pulls per tenant config",
     ),
     Blocker(
         "scale-blocker",
