@@ -76,60 +76,29 @@ jobs:
           cache: 'pip'
           cache-dependency-path: 'pyproject.toml'
 
-      - name: Install Python dependencies (dev only)
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install Python dependencies (docs gate)
         run: |
           pip install uv
-          uv pip install --system -e ".[dev]"
+          uv pip install --system -e ".[dev,security,backend,agent]"
 
-      - name: Validate documentation versions
-        run: python scripts/validate_docs.py
+      - name: Install Node dependencies
+        run: npm ci --ignore-scripts
 
-      - name: Validate documentation frontmatter
-        run: python scripts/validate_frontmatter.py
+      - name: Run canonical docs consistency gate
+        run: make docs-check
 
-      - name: Detect doc source drift (strict)
-        run: python scripts/docs_drift.py --strict
-
-      - name: Regenerate docs/_generated artifacts
-        run: python scripts/docs_extract/run_all.py
-
-      - name: Validate contract cross-consistency
-        run: python scripts/validate_contracts.py
-
-      - name: Fail on uncommitted _generated drift
+      - name: Print generated-doc diagnostics on failure
+        if: failure()
         run: |
-          if [ -n "$(git status --porcelain docs/_generated/)" ]; then
-            echo 'docs/_generated/*.json drift detected. Run: make extract-docs'
-            git diff -- docs/_generated/
-            exit 1
-          fi
-
-      - name: Regenerate generated docs
-        run: python scripts/sync_docs.py
-
-      - name: Check env vars documented
-        run: |
-          for var in $(grep -oP '"\K[A-Z_]+(?=")' "${BACKEND_DIR}/config/settings.py" | sort -u); do
-            if ! grep -q "^${var}=" .env.example 2>/dev/null; then
-              echo "WARNING: $var not in .env.example"
-            fi
-          done
-
-      - name: Detect uncommitted generated-doc drift
-        id: drift
-        run: |
-          if [ -n "$(git status --porcelain docs/REPO-INDEX.md docs/AUTOMATION.md)" ]; then
-            echo "drift=true" >> "$GITHUB_OUTPUT"
-            git diff -- docs/REPO-INDEX.md docs/AUTOMATION.md
-          else
-            echo "drift=false" >> "$GITHUB_OUTPUT"
-          fi
-
-      - name: Fail PRs on drift
-        if: ${{ steps.drift.outputs.drift == 'true' && (github.event_name != 'push' || github.ref != 'refs/heads/main') }}
-        run: |
-          echo 'Generated docs are out of date. Run: python scripts/sync_docs.py'
-          exit 1
+          git diff --stat -- docs/_generated docs/REPO-INDEX.md docs/AUTOMATION.md || true
+          git diff --name-only -- docs/_generated docs/REPO-INDEX.md docs/AUTOMATION.md || true
+          echo 'Remediation: make repo-doctor-fix && commit docs/_generated docs/REPO-INDEX.md docs/AUTOMATION.md'
 
   docs-sync:
     # Write-capable job — auto-commits regenerated docs on push to main only.
@@ -160,14 +129,14 @@ jobs:
           uv pip install --system -e ".[dev]"
 
       - name: Regenerate generated docs
-        run: python scripts/sync_docs.py
+        run: make docs-fix
 
       - name: Commit if drifted
         run: |
-          if [ -n "$(git status --porcelain docs/REPO-INDEX.md docs/AUTOMATION.md)" ]; then
+          if [ -n "$(git status --porcelain docs/_generated docs/REPO-INDEX.md docs/AUTOMATION.md)" ]; then
             git config user.name 'github-actions[bot]'
             git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-            git add docs/REPO-INDEX.md docs/AUTOMATION.md
+            git add docs/_generated docs/REPO-INDEX.md docs/AUTOMATION.md
             git commit -m 'docs: synchronize generated repository documentation [skip ci]'
             git push origin HEAD:refs/heads/main
           fi
@@ -231,7 +200,7 @@ jobs:
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '18'
+          node-version: '20'
           cache: 'npm'
 
       - name: Install Node dependencies
@@ -242,6 +211,9 @@ jobs:
 
       - name: TypeScript lint/static checks
         run: npm run lint
+
+      - name: TypeScript public export/package boundary validation
+        run: npm run validate:ts-public-exports
 
       - name: TypeScript type check
         run: npm run typecheck

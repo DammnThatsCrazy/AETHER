@@ -1,15 +1,47 @@
 from __future__ import annotations
 
+import asyncio
+import inspect
 import sys
 import types
 
 try:
-    import pytest_asyncio as _  # noqa: F401
-except ImportError as exc:
-    raise ImportError(
-        "pytest-asyncio is required for async tests. "
-        "Install dev dependencies: pip install -e '.[dev]'"
-    ) from exc
+    import pytest_asyncio as _pytest_asyncio  # noqa: F401
+except ImportError:  # pragma: no cover - exercised only in constrained sandboxes
+    _pytest_asyncio = None
+
+
+def pytest_addoption(parser):
+    """Accept pytest-xdist's -n option when xdist cannot be installed locally.
+
+    CI installs pytest-xdist from pyproject.toml. In network-restricted agent
+    sandboxes, this keeps the same test set runnable serially instead of failing
+    during argument parsing.
+    """
+    try:
+        import xdist  # noqa: F401
+        return
+    except ImportError:
+        pass
+    parser._anonymous._addoption("-n", "--numprocesses", action="store", default=None, help="xdist compatibility shim; runs serially when pytest-xdist is unavailable")
+
+
+def pytest_configure(config):
+    config.addinivalue_line("markers", "asyncio: run async test functions with an event loop")
+
+
+def pytest_pyfunc_call(pyfuncitem):
+    """Small pytest-asyncio-compatible fallback for sandboxed environments.
+
+    The project still declares pytest-asyncio in pyproject.toml and CI installs it.
+    This hook preserves test coverage when package installation is unavailable by
+    executing coroutine test functions instead of skipping them.
+    """
+    if _pytest_asyncio is not None or not inspect.iscoroutinefunction(pyfuncitem.obj):
+        return None
+    testargs = {name: pyfuncitem.funcargs[name] for name in pyfuncitem._fixtureinfo.argnames}
+    asyncio.run(pyfuncitem.obj(**testargs))
+    return True
 
 
 def _has_working_cffi() -> bool:

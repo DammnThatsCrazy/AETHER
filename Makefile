@@ -198,13 +198,13 @@ repo-doctor-fix: ## Regenerate generated docs + sync, then validate
 	python scripts/repo_doctor.py --fix
 
 docs-check: ## Docs/version/frontmatter/drift checks only (fast gate)
-	python scripts/repo_doctor.py --docs-only --check
+	python scripts/repo_doctor.py --check --docs-only
 
 ci-check: ## CI-safe full validation; fails if generators produce a diff
 	python scripts/repo_doctor.py --ci
 
 docs-fix: ## Regenerate and sync docs only
-	python scripts/repo_doctor.py --docs-only --fix
+	python scripts/repo_doctor.py --fix --docs-only
 
 bump-version: ## Bump version across all files (usage: make bump-version V=8.4.0)
 	@if [ -z "$(V)" ]; then echo "Usage: make bump-version V=8.4.0"; exit 1; fi

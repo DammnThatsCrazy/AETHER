@@ -156,11 +156,13 @@ AREAS: list[Area] = [
     ),
     Area(
         "graph health / drift detection",
-        3,
+        4,
         "SDK drift detection (schema, stale heartbeat, replay storm, auth, consent) is "
-        "implemented with incident tracking. Graph-level contamination/identity-churn "
-        "scoring is partial: data-quality module is feature-flagged and operational "
-        "intelligence overlays still return placeholder scores.",
+        "implemented with incident tracking. Operational intelligence overlay scoring "
+        "now returns deterministic layer-coverage scores (H2H/H2A/A2H/A2A) computed "
+        "from real graph data; placeholder scoring removed. Graph-level "
+        "contamination/identity-churn detection remains feature-flagged in the "
+        "data-quality module.",
         [
             "Backend Architecture/aether-backend/services/sdk_drift/routes.py",
             "Backend Architecture/aether-backend/services/data_quality/",
