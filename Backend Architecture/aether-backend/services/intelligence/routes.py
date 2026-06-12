@@ -1449,4 +1449,76 @@ def _combine_summaries(summaries: list[dict[str, Any]]) -> dict[str, Any]:
     keys = ["recommendations_generated", "recommendations_viewed", "decisions_recorded", "actions_logged", "outcomes_observed", "expected_value", "observed_value", "stale_loops", "incomplete_loops", "failed_loops"]
     combined = {key: round(sum(float(s.get(key, 0)) for s in summaries), 2) for key in keys}
     combined["outcome_capture_rate"] = round(combined["outcomes_observed"] / combined["recommendations_generated"], 4) if combined["recommendations_generated"] else 0.0
+
+
+# ── Commerce Lifecycle Trace ──────────────────────────────────────────────────
+
+
+@router.get("/commerce/lifecycle/{challenge_id}")
+async def trace_payment_lifecycle(challenge_id: str, request: Request):
+    """
+    Full lifecycle trace for one payment challenge.
+    Returns the graph-linked chain: requirement → policy_decision → approval →
+    authorization → receipt → settlement → entitlement → grant → fulfillment.
+    Used by Kyber Noesis, Review page, and compliance audit.
+    """
+    request.state.tenant.require_permission("x402:read")
+    tenant_id = request.state.tenant.tenant_id
+
+    from services.x402.commerce_store import get_commerce_store
+    store = get_commerce_store()
+
+    requirement = await store.get_requirement(tenant_id, challenge_id)
+    if requirement is None:
+        from shared.common.common import NotFoundError
+        raise NotFoundError("PaymentRequirement")
+
+    authorization = await store.get_authorization(tenant_id, challenge_id)
+    receipt = await store.get_receipt(tenant_id, challenge_id)
+    settlement = await store.get_settlement(tenant_id, challenge_id) if receipt else None
+    entitlement = None
+    if authorization:
+        entitlement = await store.find_active_entitlement(
+            tenant_id,
+            authorization.holder_id,
+            requirement.resource_id,
+        )
+
+    trace = {
+        "challenge_id": challenge_id,
+        "tenant_id": tenant_id,
+        "requirement": requirement.model_dump() if requirement else None,
+        "authorization": authorization.model_dump() if authorization else None,
+        "receipt": receipt.model_dump() if receipt else None,
+        "settlement": settlement.model_dump() if settlement else None,
+        "entitlement": entitlement.model_dump() if entitlement else None,
+        "lifecycle_stage": _lifecycle_stage(requirement, authorization, receipt, settlement, entitlement),
+        "computed_at": __import__("datetime").datetime.now(__import__("datetime").timezone.utc).isoformat(),
+    }
+
+    # Fetch approval request by challenge_id reference
+    approvals = await store.list_approvals(tenant_id)
+    approval = next(
+        (a for a in approvals if a.reference_id == challenge_id), None
+    )
+    if approval:
+        trace["approval"] = approval.model_dump()
+
+    metrics.increment("intelligence_commerce_lifecycle_trace")
+    return APIResponse(data=trace).to_dict()
+
+
+def _lifecycle_stage(requirement, authorization, receipt, settlement, entitlement) -> str:
+    """Derive the most advanced lifecycle stage from available objects."""
+    if entitlement:
+        return "access_granted"
+    if settlement:
+        return f"settled:{settlement.state.value}"
+    if receipt:
+        return "receipt_verified"
+    if authorization:
+        return "authorized"
+    if requirement:
+        return "challenged"
+    return "unknown"
     return combined

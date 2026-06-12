@@ -817,8 +817,13 @@ Three service groups are available when Intelligence Graph feature flags are ena
 | POST | `/v1/diagnostics/errors/{fingerprint}/resolve` | Mark error as resolved |
 | POST | `/v1/diagnostics/errors/{fingerprint}/suppress` | Suppress alerts for known error |
 | GET | `/v1/diagnostics/circuit-breakers` | List all circuit breaker states |
+| GET | `/v1/diagnostics/commerce/verification-failures` | Recent payment verification failures with reason and tx_hash (`commerce:read`) |
+| GET | `/v1/diagnostics/commerce/settlement-timeouts` | Settlements stuck in pending/verifying beyond timeout (`commerce:read`) |
+| GET | `/v1/diagnostics/commerce/approval-expirations` | Approval requests expired without a decision (`commerce:read`) |
+| GET | `/v1/diagnostics/commerce/duplicate-payments` | Potential duplicate payment attempts within a time window (`commerce:read`) |
+| GET | `/v1/diagnostics/commerce/reconciliation-drift` | Payment intents with no corresponding settlement event (`commerce:read`) |
 
-All diagnostics endpoints require `admin` permission.
+All general diagnostics endpoints require `admin` permission. Commerce diagnostics require `commerce:read`.
 
 **Query Parameters (GET /errors):**
 - `service` (optional) — filter by service name
@@ -887,8 +892,31 @@ Feature flag: `PROVIDER_GATEWAY_ENABLED=false` (default). Zero impact until acti
 | GET | `/v1/intelligence/entity/{id}/cluster` | Identity cluster via graph relationships |
 | GET | `/v1/intelligence/alerts` | Anomaly alerts from Gold tier |
 | GET | `/v1/intelligence/wallet/{address}/profile` | Full wallet intelligence profile |
+| GET | `/v1/intelligence/commerce/lifecycle/{challenge_id}` | Full payment lifecycle trace: requirement → policy → approval → settlement → entitlement (`x402:read`) |
 
-**Permissions:** `read` for all intelligence endpoints
+**Permissions:** `read` for intelligence endpoints; `x402:read` for commerce lifecycle trace.
+
+---
+
+### Analytics Service Commerce KPI
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/v1/analytics/commerce/kpi` | Commerce KPI summary: spend rate, approval latency, settlement degradation, entitlement reuse rate (`commerce:read`) |
+
+**Query Parameters:** `period` — `"7d"`, `"30d"`, `"90d"`, `"all"` (default: `"30d"`)
+
+---
+
+### Identity Service — SIWX Session Binding
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| POST | `/v1/identity/siwx/bind` | Bind a SIWX session to an identity for entitlement reuse (`write`) |
+| GET | `/v1/identity/siwx/status/{session_id}` | Check SIWX session binding status |
+| DELETE | `/v1/identity/siwx/{session_id}` | Revoke a SIWX session binding (`write`) |
+
+SIWX (Sign-In With X) session bindings allow the entitlement service to reuse active payment entitlements for a wallet session without requiring a new payment challenge.
 
 ---
 
