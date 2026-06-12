@@ -1839,10 +1839,18 @@ class DuneBronzeRepository(BaseRepository):
         return await self.find_many(filters=filters, limit=limit, sort_by="row_index", sort_order="asc")
 
     async def delete_by_source_tag(self, source_tag: str, tenant_scope: Optional[str] = None) -> int:
-        rows = await self.find_by_source_tag(source_tag, tenant_scope=tenant_scope)
-        for r in rows:
-            await self.delete(r["record_id"])
-        return len(rows)
+        # Page through in batches so we never miss rows beyond the 10,000-row cap.
+        deleted = 0
+        while True:
+            rows = await self.find_by_source_tag(source_tag, tenant_scope=tenant_scope, limit=500)
+            if not rows:
+                break
+            for r in rows:
+                await self.delete(r["record_id"])
+            deleted += len(rows)
+            if len(rows) < 500:
+                break
+        return deleted
 
 
 class DuneSilverRepository(BaseRepository):
@@ -1865,10 +1873,17 @@ class DuneSilverRepository(BaseRepository):
         return await self.find_many(filters=filters, limit=limit)
 
     async def delete_by_source_tag(self, source_tag: str, tenant_scope: Optional[str] = None) -> int:
-        rows = await self.find_by_source_tag(source_tag, tenant_scope=tenant_scope)
-        for r in rows:
-            await self.delete(r["record_id"])
-        return len(rows)
+        deleted = 0
+        while True:
+            rows = await self.find_by_source_tag(source_tag, tenant_scope=tenant_scope, limit=500)
+            if not rows:
+                break
+            for r in rows:
+                await self.delete(r["record_id"])
+            deleted += len(rows)
+            if len(rows) < 500:
+                break
+        return deleted
 
 
 class DuneGoldRepository(BaseRepository):
@@ -1896,7 +1911,14 @@ class DuneGoldRepository(BaseRepository):
         return await self.find_many(filters=filters, limit=limit, sort_by="materialized_at", sort_order="desc")
 
     async def delete_by_source_tag(self, source_tag: str, tenant_scope: Optional[str] = None) -> int:
-        rows = await self.find_filtered(source_tag=source_tag, tenant_scope=tenant_scope)
-        for r in rows:
-            await self.delete(r["gold_id"])
-        return len(rows)
+        deleted = 0
+        while True:
+            rows = await self.find_filtered(source_tag=source_tag, tenant_scope=tenant_scope, limit=500)
+            if not rows:
+                break
+            for r in rows:
+                await self.delete(r["gold_id"])
+            deleted += len(rows)
+            if len(rows) < 500:
+                break
+        return deleted

@@ -43,18 +43,18 @@ function formatTs(ts: string | null | undefined): string {
 export function DuneFeederPage() {
   const health = useQuery({
     key: 'dune-feeder-health',
-    fetcher: () => api.admin.kyber.duneFeederHealth() as Promise<{ data: FeederHealth }>,
+    fetcher: () => api.admin.kyber.duneFeederHealth() as Promise<FeederHealth>,
     staleTime: 30_000,
   });
 
   const gold = useQuery({
     key: 'dune-feeder-gold',
-    fetcher: () => api.admin.kyber.duneFeederGold() as Promise<{ data: { records: GoldRecord[]; record_count: number } }>,
+    fetcher: () => api.admin.kyber.duneFeederGold() as Promise<{ records: GoldRecord[]; record_count: number }>,
     staleTime: 30_000,
   });
 
-  const h = (health.data as any)?.data as FeederHealth | undefined;
-  const goldRecords = ((gold.data as any)?.data?.records ?? []) as GoldRecord[];
+  const h = health.data as FeederHealth | undefined;
+  const goldRecords = ((gold.data as any)?.records ?? []) as GoldRecord[];
 
   return (
     <div className="p-6 space-y-6">

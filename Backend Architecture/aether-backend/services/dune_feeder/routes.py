@@ -60,6 +60,11 @@ async def ingest_dune_result(body: FeederIngestRequest, request: Request):
     """
     _require_admin(request)
 
+    # Non-platform-admin callers cannot ingest under a foreign tenant's scope.
+    auth_scope = _authenticated_tenant_scope(request)
+    if auth_scope is not None:
+        body = body.model_copy(update={"tenant_scope": auth_scope})
+
     response = await dune_feeder_service.ingest(body)
 
     metrics.increment(
@@ -129,7 +134,10 @@ async def audit_source_tag(
     """
     _require_admin(request)
 
-    effective_scope = tenant_scope or _authenticated_tenant_scope(request)
+    # Non-platform-admin callers cannot read another tenant's Bronze rows by
+    # passing ?tenant_scope=<other-tenant>; their scope always wins.
+    auth_scope = _authenticated_tenant_scope(request)
+    effective_scope = auth_scope if auth_scope is not None else tenant_scope
 
     records = await dune_feeder_service.audit(source_tag, tenant_scope=effective_scope)
     if not records:
@@ -161,7 +169,9 @@ async def promote_to_silver(source_tag: str, request: Request):
     if not source_tag or not source_tag.strip():
         raise BadRequestError("source_tag must not be empty")
 
-    promoted = await dune_feeder_service.promote_to_silver(source_tag)
+    # Restrict promotion to the caller's own tenant; platform admins promote all scopes.
+    auth_scope = _authenticated_tenant_scope(request)
+    promoted = await dune_feeder_service.promote_to_silver(source_tag, tenant_scope=auth_scope)
 
     metrics.increment(
         "dune_feeder_api_promote",
@@ -192,7 +202,10 @@ async def materialize_gold(body: FeederGoldMaterializeRequest, request: Request)
     if not body.source_tag or not body.source_tag.strip():
         raise BadRequestError("source_tag must not be empty")
 
-    created = await dune_feeder_service.promote_to_gold(body.source_tag, tenant_scope=body.tenant_scope)
+    # Non-platform-admin callers cannot materialize another tenant's Silver rows.
+    auth_scope = _authenticated_tenant_scope(request)
+    effective_scope = auth_scope if auth_scope is not None else body.tenant_scope
+    created = await dune_feeder_service.promote_to_gold(body.source_tag, tenant_scope=effective_scope)
 
     metrics.increment(
         "dune_feeder_api_materialize_gold",
