@@ -11,7 +11,7 @@ source_files:
 canonical_owner: commerce@aether
 estimated_read_minutes: 3
 toc_depth: 3
-last_synced_commit: 2661f1b
+last_synced_commit: 48fb9d4
 ---
 # Commerce Operator Runbook
 

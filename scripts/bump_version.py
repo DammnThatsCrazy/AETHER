@@ -35,7 +35,11 @@ PACKAGE_JSONS = [
     ROOT / "packages" / "shared" / "package.json",
     ROOT / "packages" / "web" / "package.json",
     ROOT / "packages" / "react-native" / "package.json",
-    ROOT / "apps" / "kyber" / "package.json",
+    ROOT / "frontend" / "aether" / "package.json",
+    ROOT / "frontend" / "kyber" / "package.json",
+    ROOT / "frontend" / "shared" / "package.json",
+    ROOT / "frontend" / "docs" / "package.json",
+    ROOT / "frontend" / "demo" / "package.json",
     ROOT / "Data Ingestion Layer" / "package.json",
     ROOT / "Data Ingestion Layer" / "packages" / "common" / "package.json",
     ROOT / "Data Ingestion Layer" / "packages" / "auth" / "package.json",
@@ -89,6 +93,14 @@ README_HEADERS = [
 ]
 
 VERSION_PATTERN = re.compile(r"v?\d+\.\d+\.\d+")
+
+# Packages with intentionally independent versioning. These are checked for
+# existence but are not forced to the pyproject.toml platform version.
+INDEPENDENT_PACKAGE_JSONS = {
+    ROOT / "Smart Contracts" / "package.json",
+    ROOT / "playground" / "package.json",
+}
+
 
 
 # ---------------------------------------------------------------------------
@@ -206,6 +218,86 @@ def update_android_version(new_version: str) -> None:
         print(f"  SKIP (no version found): {path.relative_to(ROOT)}")
 
 
+def _rel(path: Path) -> str:
+    try:
+        return str(path.relative_to(ROOT))
+    except ValueError:
+        return str(path)
+
+
+def check_version_alignment() -> int:
+    """Validate every repo-owned version surface against pyproject.toml."""
+    canonical = read_current_version()
+    errors: list[str] = []
+    warnings: list[str] = []
+
+    print(f"Current version: {canonical}")
+    print("Checking package.json versions against pyproject.toml...")
+    for package_json in PACKAGE_JSONS:
+        if not package_json.exists():
+            warnings.append(f"listed package file missing: {_rel(package_json)}")
+            continue
+        data = json.loads(package_json.read_text(encoding="utf-8"))
+        version = data.get("version")
+        if version != canonical:
+            errors.append(f"{_rel(package_json)} version {version!r} != {canonical!r}")
+        for dep_field in ["dependencies", "devDependencies", "peerDependencies"]:
+            deps = data.get(dep_field, {})
+            if not isinstance(deps, dict):
+                continue
+            for dep_name, dep_version in deps.items():
+                if dep_name.startswith("@aether/") and dep_version.startswith("^") and dep_version != f"^{canonical}":
+                    errors.append(f"{_rel(package_json)} {dep_field}.{dep_name} {dep_version!r} != ^{canonical}")
+
+    for package_json in sorted(INDEPENDENT_PACKAGE_JSONS):
+        if package_json.exists():
+            data = json.loads(package_json.read_text(encoding="utf-8"))
+            print(f"  independent package: {_rel(package_json)} version {data.get('version', '<missing>')}")
+
+    print("Checking documented version headings...")
+    for doc in DOC_HEADERS + README_HEADERS:
+        if not doc.exists():
+            warnings.append(f"listed doc missing: {_rel(doc)}")
+            continue
+        first_version_heading = None
+        for line in doc.read_text(encoding="utf-8").splitlines():
+            if line.startswith("#") and VERSION_PATTERN.search(line):
+                first_version_heading = line
+                break
+        if first_version_heading is None:
+            warnings.append(f"listed doc has no versioned heading: {_rel(doc)}")
+            continue
+        found = VERSION_PATTERN.search(first_version_heading)
+        if found and found.group().lstrip("v") != canonical:
+            errors.append(f"{_rel(doc)} heading version {found.group()!r} != {canonical!r}")
+
+    native_expectations = {
+        ROOT / "packages" / "ios" / "AetherSDK.podspec": [f's.version      = "{canonical}"', f's.version         = "{canonical}"'],
+        ROOT / "packages" / "android" / "gradle.properties": [f"sdkVersion={canonical}"],
+        ROOT / "packages" / "web" / "src" / "index.ts": [f"SDK_VERSION = '{canonical}'"],
+        ROOT / "packages" / "shared" / "sdk-version.ts": [f"SDK_VERSION = '{canonical}'"],
+    }
+    print("Checking SDK/native version constants...")
+    for path, needles in native_expectations.items():
+        if not path.exists():
+            warnings.append(f"listed version surface missing: {_rel(path)}")
+            continue
+        body = path.read_text(encoding="utf-8")
+        if not any(needle in body for needle in needles):
+            errors.append(f"{_rel(path)} missing synchronized version {canonical}")
+
+    for warning in warnings:
+        print(f"  warning: {warning}")
+    if errors:
+        print("Version alignment check failed:")
+        for error in errors:
+            print(f"  - {error}")
+        print(f"\nFix with: python scripts/bump_version.py {canonical}")
+        return 1
+    print("Version alignment check passed: pyproject.toml, package metadata, docs metadata, and SDK constants are synchronized.")
+    return 0
+
+
 # ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
@@ -219,8 +311,7 @@ def main() -> None:
         sys.exit(1)
 
     if sys.argv[1] == "--check":
-        print(f"Current version: {read_current_version()}")
-        sys.exit(0)
+        sys.exit(check_version_alignment())
 
     new_version = sys.argv[1].lstrip("v")
 

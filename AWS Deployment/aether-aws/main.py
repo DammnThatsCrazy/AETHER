@@ -14,8 +14,15 @@ import argparse
 import os
 import sys
 
-# Ensure imports work from package root
-sys.path.insert(0, os.path.dirname(__file__))
+# Ensure imports resolve to this demo package even when the monorepo root has
+# already imported its own top-level ``scripts`` namespace during test runs.
+AWS_DEMO_ROOT = os.path.dirname(__file__)
+sys.path.insert(0, AWS_DEMO_ROOT)
+_existing_scripts = sys.modules.get("scripts")
+if _existing_scripts is not None:
+    script_paths = [str(path) for path in getattr(_existing_scripts, "__path__", [])]
+    if not any(path.startswith(os.path.join(AWS_DEMO_ROOT, "scripts")) for path in script_paths):
+        sys.modules.pop("scripts", None)
 
 from config.aws_config import (
     ALL_ENVIRONMENTS,

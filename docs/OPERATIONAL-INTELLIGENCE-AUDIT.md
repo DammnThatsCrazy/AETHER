@@ -16,7 +16,7 @@ source_files:
   - frontend/kyber/src/features/investigation/use-investigations.ts
   - frontend/kyber/src/features/governance/use-governance.ts
   - frontend/kyber/src/features/graph/use-graph-intelligence.ts
-last_synced_commit: 2661f1b
+last_synced_commit: 48fb9d4
 ---
 
 # Operational Intelligence — Stub vs. Production Audit
@@ -116,6 +116,7 @@ Items marked **FIXED** have been addressed in the commit that accompanies this d
 | **FacilitatorRepository** | `repos.py` | `upsert_facilitator`, `list_active(tenant_id)` — x402 facilitator/trust-broker registry |
 | **X402LifecycleMapper** | `services/x402/lifecycle_mapper.py` | Routes 14 canonical x402 events to repositories; idempotent via event_id; full tenant isolation |
 | **AgentLifecycleMapper** | `services/agent/lifecycle_mapper.py` | Routes 19 canonical agent lifecycle events to graph mutations + repos; all vertex IDs use `{tenant_id}:agent:{id}` format |
+| **Four-layer graph coverage** | `/v1/graph/*` + `shared/graph-contract.ts` | All four interaction layers implemented: H2H (human↔human), H2A (human→agent), A2H (agent→human), A2A (agent↔agent). `classifyEdgeType` routes each edge type to its layer; `countEdgesByLayer` aggregates per-layer stats exposed via `/v1/graph/health`. |
 
 ---
 

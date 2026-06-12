@@ -146,7 +146,7 @@ Three additional services power the **Unified On-Chain Intelligence Graph**. All
 | `shared/scoring/trust_score.py`     | Composite trust score (on-chain + off-chain)     |
 | `shared/scoring/bytecode_risk.py`   | Smart-contract bytecode risk classifier          |
 | `shared/scoring/anomaly_config.py`  | Anomaly detection thresholds and rule sets        |
-| `shared/graph/relationship_layers.py` | H2H, H2A, and A2A relationship edge types       |
+| `shared/graph/relationship_layers.py` | H2H, H2A, A2H, and A2A relationship edge types  |
 
 ### Configuration
 
@@ -158,6 +158,7 @@ Three additional services power the **Unified On-Chain Intelligence Graph**. All
 | ----- | ----------------- | ---------------------------------------------- |
 | H2H   | Human-to-Human    | Existing identity graph (referrals, merges)     |
 | H2A   | Human-to-Agent    | User delegates tasks to autonomous agents       |
+| A2H   | Agent-to-Human    | Agent notifications, recommendations, escalations to humans |
 | A2A   | Agent-to-Agent    | Inter-agent collaboration and trust propagation |
 
 ### Agent Endpoints

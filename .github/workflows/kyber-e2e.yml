@@ -47,6 +47,9 @@ jobs:
       - name: Build shared package
         run: npm run build --workspace=packages/shared
 
+      - name: Build web SDK
+        run: npm run build --workspace=packages/web
+
       - name: Install Playwright browsers
         run: npx playwright install --with-deps chromium
         working-directory: frontend/kyber
