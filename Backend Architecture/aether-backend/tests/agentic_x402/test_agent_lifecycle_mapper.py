@@ -144,6 +144,55 @@ async def test_subagent_spawned_links_parent_to_child():
 
 
 @pytest.mark.asyncio
+async def test_subagent_spawned_creates_delegation_record():
+    """agent_subagent_spawned must write a delegation row so Profile360 finds it."""
+    delegations = DelegationRepository()
+    mapper = AgentLifecycleMapper(
+        graph_client=GraphClient(),
+        delegations=delegations,
+        executions=AgentExecutionRepository(),
+    )
+    await mapper.handle_event(
+        "agent_subagent_spawned",
+        {
+            "agent_id": PARENT_AGENT,
+            "parent_agent_id": AGENT,
+            "task_id": "task-xyz",
+        },
+        TENANT,
+    )
+    # The delegation should be discoverable via grantor lookup
+    granted = await delegations.find_many(
+        filters={"grantor_entity_id": PARENT_AGENT, "tenant_id": TENANT},
+        limit=10,
+    )
+    assert len(granted) >= 1, "Expected delegation record for spawned subagent"
+    record = granted[0]
+    assert record["grantee_entity_id"] == AGENT
+    assert record["tenant_id"] == TENANT
+    assert record.get("metadata", {}).get("source") == "agent_subagent_spawned"
+
+
+@pytest.mark.asyncio
+async def test_subagent_spawned_idempotent_delegation():
+    """Repeated agent_subagent_spawned events must not duplicate delegation rows."""
+    delegations = DelegationRepository()
+    mapper = AgentLifecycleMapper(
+        graph_client=GraphClient(),
+        delegations=delegations,
+        executions=AgentExecutionRepository(),
+    )
+    payload = {"agent_id": PARENT_AGENT, "parent_agent_id": AGENT}
+    await mapper.handle_event("agent_subagent_spawned", payload, TENANT)
+    await mapper.handle_event("agent_subagent_spawned", payload, TENANT)
+    granted = await delegations.find_many(
+        filters={"grantor_entity_id": PARENT_AGENT, "tenant_id": TENANT},
+        limit=10,
+    )
+    assert len(granted) == 1, "Duplicate delegation rows created on repeated spawn"
+
+
+@pytest.mark.asyncio
 async def test_agent_lifecycle_graph_writes_are_tenant_scoped():
     mapper = _make_mapper()
     await mapper.handle_event(

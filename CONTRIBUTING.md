@@ -115,3 +115,17 @@ This project is **proprietary and confidential**. See `LICENSE` for details.
 All contributions become property of Aether Platform under the same license terms.
 By submitting a contribution, you confirm you have the right to do so and agree
 to these terms.
+## Repo consistency preflight
+
+Before opening or updating a PR:
+
+1. Run `make repo-doctor-fix`.
+2. Run `make ci-check`.
+3. Commit all generated docs and sync outputs.
+4. Do not hand-edit generated docs.
+5. Do not bypass TypeScript/package export failures.
+6. If backend routes, schemas, contracts, SDK public types, Profile 360, or Kyber surfaces changed, update the required ownership-map surfaces.
+7. PR is not complete until `make ci-check` exits 0.
+
+See `docs/source-of-truth/REPO_CONSISTENCY_OWNERSHIP.md` for the enforced source-to-derived ownership map.
+

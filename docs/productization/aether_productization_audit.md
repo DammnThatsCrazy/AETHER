@@ -84,14 +84,14 @@ Classification legend: `release-blocker` | `pre-production-blocker` |
 | 1 | 6 source-linked docs stale after v8.9.0 merges (`BACKEND-API`, `KYBER-ECONOMIC-OBSERVABILITY`, `X402_AUDIT_REPORT`, `ECONOMIC-VALUE-FRAMING`, `COMMERCE-OPERATOR-RUNBOOK`, `AGENTIC_COMMERCE_BUILD_SPEC`) | docs-drift | **Fixed** — content reviewed/updated, stamped |
 | 2 | `make test` and bare `pytest` broken: combined invocation of both suites hits `ImportPathMismatchError` | test-drift | **Fixed** — suites run separately; documented in `pyproject.toml` |
 | 3 | No single production-status routine; readiness claims scattered across `PRODUCTION-READINESS.md`, `PRODUCTIZATION.md`, `PRODUCTIZATION-CHECKLIST.md`, `AGENT-LAYER-PRODUCTION.md`, `scripts/compliance/readiness.py` | nice-to-have (was drift risk) | **Fixed** — `scripts/production_status.py` is now canonical |
-| 4 | Tenant self-serve onboarding UI (3-step signup, OTP verification, API key reveal, SDK snippets, onboarding checklist, API key CRUD) | release-blocker | **Fixed** — implemented in `frontend/aether` signup → onboarding → settings pages |
+| 4 | Tenant self-serve onboarding UI missing (manual SQL + API calls) | release-blocker | **Fixed** — 3-step signup (email→OTP→API key reveal), plan selection, SSO, billing portal, API key mgmt, usage dashboard, implementation checklist all shipped in PR #288 |
 | 5 | Smart contracts (EVM/Solana/NEAR/Cosmos rewards) have **no external security audit** | release-blocker | Open — do not deploy to mainnet with real funds |
 | 6 | Production infrastructure not provisioned; production secrets not configured; ML artifacts not trained | release-blocker / pre-production-blocker | Open — external prerequisites per `PRODUCTION-READINESS.md` |
 | 7 | Agent Layer hosted mode requires durable storage (in-memory fallback blocked in hosted modes) | release-blocker (agent GA only) | Open — per `AGENT-LAYER-PRODUCTION.md` |
 | 8 | Connector provider pulls are credential-gated TODOs (framework real, API calls mocked) | pre-production-blocker | **Fixed** — all 14 adapters have real credential-gated API calls; Kyber shows per-connector last_synced_at and error counts |
 | 9 | Dune is a read-only provider, but no governed Bronze→Silver→Gold feeder with per-row provenance/freshness gates exists | pre-production-blocker | Open |
 | 10 | Graph-level drift/contamination scoring partial: data-quality module feature-flagged, operational-intelligence overlay scores are placeholders | pre-production-blocker | Open (SDK-level drift detection is real) |
-| 11 | No load baselines recorded; Locust harness exists but is not exercised in CI | scale-blocker | Open |
+| 11 | No load baselines recorded; Locust harness exists but is not exercised in CI | scale-blocker | **Partially fixed** — locustfile extended with `/v1/batch` + `/sdk/identity/resolve` tasks and thresholds; `scripts/load_smoke.py` + `make load-smoke` added. Staging baselines not yet recorded. |
 | 12 | Neptune capacity/cost and identity-merge throughput unvalidated at scale | scale-blocker | Open |
 | 13 | Slack outbound notification channel-mapping/templates not productized (ingest connector + connection test are real) | nice-to-have | **Fixed** — full notification_intelligence service: Block Kit templates, per-tenant channel map, OAuth flow, delivery router; tenant settings UI with Slack Connect |
 
@@ -129,15 +129,18 @@ Rubric: 0 absent · 1 stub/scaffold · 2 partial/pilot · 3 pre-production ·
 | CI / tests | 4 |
 | docs | 4 |
 | deployment / cloud readiness | 3 |
-| scale readiness | 2 |
+| scale readiness | 3 |
 
-**Overall: ~3.4/5 — pre-production.** The 4-rated areas are genuinely
+**Overall: ~3.5/5 — pre-production.** The 4-rated areas are genuinely
 release-shaped; nothing scores 5 because nothing has carried production
 traffic at scale yet, and claiming otherwise would be a false readiness claim.
 
 ## 4. Release Blockers (ordered)
 
-1. **Production infra + secrets** — high. Terraform exists but is not
+1. ~~**Tenant onboarding UI**~~ — **Fixed in PR #288.** Full self-serve
+   signup→OTP→billing flow shipped; implementation checklist wired to
+   `/v1/onboarding/*`. Remaining gap: no E2E tests for the critical path.
+2. **Production infra + secrets** — high. Terraform exists but is not
    provisioned; run the stack + `scripts/bootstrap_aws_secrets.py`.
 3. **External smart-contract audit** — high (blocks mainnet only). The
    contracts are tested but unaudited; checklist in

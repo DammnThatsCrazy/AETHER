@@ -14,7 +14,7 @@ estimated_read_minutes: 12
 toc_depth: 3
 last_synced_commit: b3e9ddb
 ---
-# Aether Identity Resolution v8.8.0 — Technical Guide
+# Aether Identity Resolution v8.9.0 — Technical Guide
 
 ## Overview
 

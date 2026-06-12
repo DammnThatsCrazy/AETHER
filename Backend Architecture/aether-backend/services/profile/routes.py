@@ -1168,15 +1168,19 @@ async def get_identity_confidence(
 async def get_merge_history(
     user_id: str,
     request: Request,
+    graph: GraphClient = Depends(get_graph),
     limit: int = Query(default=50, ge=1, le=200),
 ):
-    """Identity merge history for this entity. Returns empty envelope when unavailable."""
+    """Identity merge history: entities that were merged INTO this entity (RESOLVED_AS edges in)."""
     tenant = request.state.tenant
     tenant.require_permission("read")
     try:
-        from repositories.identity_graph_repository import IdentityGraphRepository
-        repo = IdentityGraphRepository()
-        items = await repo.get_merge_history(user_id, tenant_id=tenant.tenant_id, limit=limit)
+        from shared.graph.graph import EdgeType
+        neighbors = await graph.get_neighbors(user_id, edge_type=EdgeType.RESOLVED_AS, direction="in")
+        items = [
+            {"merged_entity_id": v.vertex_id, "merged_at": v.properties.get("merged_at"), "properties": v.properties}
+            for v in neighbors[:limit]
+        ]
     except Exception:
         items = []
     return APIResponse(data={
@@ -1191,15 +1195,19 @@ async def get_merge_history(
 async def get_split_history(
     user_id: str,
     request: Request,
+    graph: GraphClient = Depends(get_graph),
     limit: int = Query(default=50, ge=1, le=200),
 ):
-    """Identity split history for this entity. Returns empty envelope when unavailable."""
+    """Identity split history: entities this entity was resolved into (RESOLVED_AS edges out)."""
     tenant = request.state.tenant
     tenant.require_permission("read")
     try:
-        from repositories.identity_graph_repository import IdentityGraphRepository
-        repo = IdentityGraphRepository()
-        items = await repo.get_split_history(user_id, tenant_id=tenant.tenant_id, limit=limit)
+        from shared.graph.graph import EdgeType
+        neighbors = await graph.get_neighbors(user_id, edge_type=EdgeType.RESOLVED_AS, direction="out")
+        items = [
+            {"resolved_into_id": v.vertex_id, "resolved_at": v.properties.get("merged_at"), "properties": v.properties}
+            for v in neighbors[:limit]
+        ]
     except Exception:
         items = []
     return APIResponse(data={
@@ -1474,11 +1482,12 @@ async def get_agent_executions(
         configs = await config_repo.find_many(
             {"tenant_id": tenant.tenant_id, "owner_entity_id": user_id}, limit=200
         )
-        agent_ids = [
-            c.get("agent_id") or c.get("id")
-            for c in configs
-            if c.get("tenant_id") == tenant.tenant_id and (c.get("agent_id") or c.get("id"))
-        ]
+        agent_ids = list({
+            *(c.get("agent_id") or c.get("id")
+              for c in configs
+              if c.get("tenant_id") == tenant.tenant_id and (c.get("agent_id") or c.get("id"))),
+            user_id,  # include the profiled entity itself in case it is an agent
+        })
         exec_repo = AgentExecutionRepository()
         items = []
         for agent_id in agent_ids:

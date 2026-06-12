@@ -556,6 +556,22 @@ class AgentLifecycleMapper:
                 properties={"tenant_id": tenant_id, "spawned_at": payload.get("timestamp", "")},
             ))
             edges.append({"type": EdgeType.SPAWNED_SUBAGENT, "from": parent_vid, "to": child_vid})
+
+            # Persist a delegation record so Profile360 and active_for() can
+            # discover the relationship without querying graph edges directly.
+            delegation_id = payload.get("delegation_id") or f"{tenant_id}:{parent_agent_id}:spawned:{child_agent_id}"
+            existing = await self._delegations.find_by_id(delegation_id)
+            if existing is None:
+                await self._delegations.grant(
+                    delegation_id=delegation_id,
+                    tenant_id=tenant_id,
+                    grantor_entity_id=parent_agent_id,
+                    grantee_entity_id=child_agent_id,
+                    scope={"type": "subagent", "task_id": payload.get("task_id", "")},
+                    starts_at=payload.get("timestamp"),
+                    metadata={"source": "agent_subagent_spawned"},
+                )
+
         return {"status": "subagent_spawned", "edges": edges}
 
     # ─────────────────────────────────────────────────────────────────────

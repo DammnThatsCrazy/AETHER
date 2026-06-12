@@ -1533,6 +1533,14 @@ export const api = {
 
     agentX402: (agentId: string) =>
       restClient.get(`/v1/x402/agent/${agentId}`, wrap(unknownSchema)).then(r => r.data),
+
+    /** Graph health — layer coverage, backend mode, four-layer counts. */
+    health: (tenantId: string) =>
+      restClient.get(`/v1/graph/health${buildQS({ tenantId })}`, wrap(unknownSchema)).then(r => r.data),
+
+    /** Graph contracts — layer listing, route surface, version. */
+    contracts: () =>
+      restClient.get('/v1/graph/contracts', wrap(unknownSchema)).then(r => r.data),
   },
 
   // ── Investigations (case management — cross-tenant operator view) ──────────

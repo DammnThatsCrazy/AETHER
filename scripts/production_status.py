@@ -156,11 +156,13 @@ AREAS: list[Area] = [
     ),
     Area(
         "graph health / drift detection",
-        3,
+        4,
         "SDK drift detection (schema, stale heartbeat, replay storm, auth, consent) is "
-        "implemented with incident tracking. Graph-level contamination/identity-churn "
-        "scoring is partial: data-quality module is feature-flagged and operational "
-        "intelligence overlays still return placeholder scores.",
+        "implemented with incident tracking. Operational intelligence overlay scoring "
+        "now returns deterministic layer-coverage scores (H2H/H2A/A2H/A2A) computed "
+        "from real graph data; placeholder scoring removed. Graph-level "
+        "contamination/identity-churn detection remains feature-flagged in the "
+        "data-quality module.",
         [
             "Backend Architecture/aether-backend/services/sdk_drift/routes.py",
             "Backend Architecture/aether-backend/services/data_quality/",
@@ -183,10 +185,11 @@ AREAS: list[Area] = [
         "customer frontend (tenant app)",
         4,
         "React SPA with PKCE OIDC auth, typed API client, MSW fixtures isolated to "
-        "local-mocked mode. Self-serve tenant onboarding is implemented: 3-step signup "
-        "(register → OTP → API key reveal with SDK snippets), onboarding checklist, "
-        "API key CRUD, account/usage/billing dashboard. No operator SQL required for "
-        "first-paying-customer path.",
+        "local-mocked mode. Full self-serve onboarding flow shipped: 3-step signup "
+        "(email+password → OTP → API key reveal), plan selection (P1-P4), SSO "
+        "(Google/Apple/Slack/Microsoft), billing portal (Stripe), API key management, "
+        "usage dashboard, and implementation checklist (/v1/onboarding/*). Gap: no "
+        "Cypress/Playwright E2E tests for the auth+onboarding critical path.",
         ["frontend/aether/", "docs/PRODUCTIZATION.md"],
     ),
     Area(
@@ -283,16 +286,24 @@ AREAS: list[Area] = [
     ),
     Area(
         "scale readiness",
-        2,
+        3,
         "Architecture is scale-shaped (Kafka, ClickHouse, medallion lake, partitioned "
-        "S3) and a Locust harness exists, but no load baselines are recorded in CI and "
-        "Neptune/identity-merge throughput is unproven at scale.",
-        ["tests/load/", "Data Lake Architecture/"],
+        "S3). Locust harness covers /v1/batch and /sdk/identity/resolve with per-endpoint "
+        "thresholds; `make load-smoke` / `scripts/load_smoke.py` runs the smoke gate. "
+        "Gaps: no recorded staging baselines yet; Neptune/identity-merge throughput "
+        "unproven at scale.",
+        ["tests/load/", "scripts/load_smoke.py", "Data Lake Architecture/"],
     ),
 ]
 
 
 BLOCKERS: list[Blocker] = [
+    Blocker(
+        "pre-production-blocker",
+        "No E2E tests for tenant onboarding critical path (signup → OTP → billing)",
+        "customer frontend (tenant app)",
+        "Add Cypress or Playwright suite covering signup, OTP verify, API key reveal, billing portal",
+    ),
     Blocker(
         "release-blocker",
         "Smart contracts have no external security audit",
@@ -325,9 +336,9 @@ BLOCKERS: list[Blocker] = [
     ),
     Blocker(
         "scale-blocker",
-        "No load-test baselines recorded; Locust harness not in CI",
+        "No staging load baselines recorded; smoke gate runs locally only",
         "scale readiness",
-        "Record baseline RPS/latency for /v1/batch and identity resolve; add scheduled load smoke",
+        "Run `make load-smoke` against staging; record p95/p99 baselines in docs/LOAD-BASELINES.md",
     ),
     Blocker(
         "scale-blocker",

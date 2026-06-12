@@ -198,13 +198,13 @@ repo-doctor-fix: ## Regenerate generated docs + sync, then validate
 	python scripts/repo_doctor.py --fix
 
 docs-check: ## Docs/version/frontmatter/drift checks only (fast gate)
-	python scripts/repo_doctor.py --docs-only --check
+	python scripts/repo_doctor.py --check --docs-only
 
 ci-check: ## CI-safe full validation; fails if generators produce a diff
 	python scripts/repo_doctor.py --ci
 
 docs-fix: ## Regenerate and sync docs only
-	python scripts/repo_doctor.py --docs-only --fix
+	python scripts/repo_doctor.py --fix --docs-only
 
 bump-version: ## Bump version across all files (usage: make bump-version V=8.4.0)
 	@if [ -z "$(V)" ]; then echo "Usage: make bump-version V=8.4.0"; exit 1; fi
@@ -220,6 +220,12 @@ production-status: ## Readiness scorecard + blockers + live consistency checks (
 release-gate: ## Full release gate: repo consistency (CI mode) + strict production status
 	python scripts/repo_doctor.py --ci
 	python scripts/production_status.py --strict
+
+load-smoke: ## Load smoke gate: 20 users, 30s against localhost:8000 (exits 2 if backend unreachable)
+	python scripts/load_smoke.py
+
+load-smoke-ci: ## Load smoke in CI — exits 0 when backend unreachable (non-blocking), fails on threshold breach
+	python scripts/load_smoke.py || [ $$? -eq 2 ]
 
 # ---------------------------------------------------------------------------
 # Cleanup
