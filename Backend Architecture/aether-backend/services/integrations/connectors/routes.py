@@ -56,6 +56,7 @@ class ConnectorConfigure(BaseModel):
     config: Optional[dict[str, Any]] = None
     enabled: Optional[bool] = None
     secret_configured: Optional[bool] = None
+    credential: Optional[str] = None  # raw credential stored inline to vault; sets secret_ref
 
 
 @router.get("")
@@ -81,7 +82,8 @@ async def configure_connector(connector_type: str, body: ConnectorConfigure, req
         raise NotFoundError("connector")
     stored = await connector_service.configure(
         tenant_id, connector_type, name=body.name or "", config=body.config,
-        enabled=body.enabled, secret_configured=body.secret_configured, actor_id=_actor(request),
+        enabled=body.enabled, secret_configured=body.secret_configured,
+        credential=body.credential, actor_id=_actor(request),
     )
     return APIResponse(data=stored).to_dict()
 

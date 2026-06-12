@@ -71,6 +71,7 @@ export function AppRouter() {
                 <Route path="/graph" element={<PageSuspense><GraphPage /></PageSuspense>} />
                 <Route path="/noesis" element={<PageSuspense><NoesisPage /></PageSuspense>} />
                 <Route path="/settings" element={<PageSuspense><SettingsPage /></PageSuspense>} />
+                <Route path="/settings/notifications" element={<PageSuspense><SettingsPage /></PageSuspense>} />
                 <Route path="/onboarding" element={<PageSuspense><OnboardingPage /></PageSuspense>} />
                 <Route path="/billing" element={<PageSuspense><BillingPage /></PageSuspense>} />
                 <Route path="/usage-plan" element={<PageSuspense><UsagePlanPage /></PageSuspense>} />

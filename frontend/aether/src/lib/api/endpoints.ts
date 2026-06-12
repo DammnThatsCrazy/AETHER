@@ -799,7 +799,7 @@ export const api = {
       restClient.post(`/v1/events/replay/${jobId}/cancel`, unknownSchema, { tenantId }),
   },
 
-  // ── Notifications (webhooks + alert rules) ────────────────────────────────
+  // ── Notifications (webhooks + alert rules — legacy) ──────────────────────
   notifications: {
     /** List all webhook configs for this tenant. */
     webhooks: (tenantId: string, limit = 50) =>
@@ -816,6 +816,51 @@ export const api = {
     /** Create a new alert rule. */
     createAlert: (body: Record<string, unknown>) =>
       restClient.post('/v1/notifications/alerts', wrap(unknownSchema), body).then(r => r.data),
+  },
+
+  // ── Notification Intelligence Channels ────────────────────────────────────
+  notificationChannels: {
+    /** List all notification channels for the authenticated tenant. */
+    list: () =>
+      restClient.get('/v1/notifications/channels', wrap(unknownSchema)).then(r => r.data as unknown[]),
+
+    /** Register a new channel (Discord, Telegram, Webhook). */
+    register: (body: {
+      channel_type: string;
+      channel_name?: string;
+      channel_config?: Record<string, unknown>;
+      severity_filter?: string[];
+    }) =>
+      restClient.post('/v1/notifications/channels', wrap(unknownSchema), body).then(r => r.data),
+
+    /** Update a channel's filter/name. */
+    update: (channelId: string, body: { severity_filter?: string[]; active?: boolean; channel_name?: string }) =>
+      restClient.patch(`/v1/notifications/channels/${channelId}`, wrap(unknownSchema), body).then(r => r.data),
+
+    /** Delete a channel. */
+    remove: (channelId: string) =>
+      restClient.delete(`/v1/notifications/channels/${channelId}`, wrap(unknownSchema)).then(r => r.data),
+
+    /** Send a test message to verify a channel. */
+    test: (channelId: string) =>
+      restClient.post(`/v1/notifications/channels/${channelId}/test`, wrap(unknownSchema), {}).then(r => r.data),
+
+    /** Start Slack OAuth flow. Returns { redirect_url }. */
+    slackConnect: () =>
+      restClient.get('/v1/notifications/channels/slack/connect', wrap(unknownSchema)).then(r => r.data as { redirect_url?: string }),
+
+    /** Get tenant notification config (channel map, rate limits, etc). */
+    getConfig: (tenantId: string) =>
+      restClient.get(`/v1/notifications/config${buildQS({ tenantId })}`, wrap(unknownSchema)).then(r => r.data),
+
+    /** Update tenant notification config (channel map, Slack bot token, etc). */
+    updateConfig: (tenantId: string, body: {
+      slack_bot_token?: string;
+      slack_channel_map?: Record<string, string>;
+      rate_limit_per_minute?: number;
+      operator_review_required?: string[];
+    }) =>
+      restClient.put(`/v1/notifications/config${buildQS({ tenantId })}`, wrap(unknownSchema), body).then(r => r.data),
   },
 
   // ── Behavior Profile (read-side snapshots) ────────────────────────────────

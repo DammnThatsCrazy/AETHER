@@ -1,4 +1,5 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import {
   Button,
   Card,
@@ -25,6 +26,7 @@ import type { ApiKey } from '@aether-app/features/account';
 import { queryCache } from '@aether/ui';
 import { OutcomeLedgerPanel } from '@aether-app/components/outcome-ledger-panel';
 import { SdkFleetSection } from './sdk-fleet-section';
+import { NotificationsSection } from './notifications-section';
 
 function formatRelative(iso: string | null): string {
   if (!iso) return 'never';
@@ -238,7 +240,16 @@ function KeyRevealModal({ open, apiKey, onClose }: KeyRevealModalProps) {
 
 export function SettingsPage() {
   const { toast } = useToast();
+  const [searchParams, setSearchParams] = useSearchParams();
   const { data: keys, isLoading, error, refetch } = useApiKeys();
+
+  useEffect(() => {
+    const connected = searchParams.get('connected');
+    if (connected === 'slack') {
+      toast.success('Slack channel connected successfully');
+      setSearchParams({}, { replace: true });
+    }
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
   const { mutate: revoke } = useRevokeApiKey();
   const [newKeyOpen, setNewKeyOpen] = useState(false);
   const [revealKey, setRevealKey] = useState<string | null>(null);
@@ -373,6 +384,12 @@ export function SettingsPage() {
 
       <div className="max-w-3xl">
         <SdkFleetSection />
+      </div>
+
+      <TerminalSeparator />
+
+      <div className="max-w-3xl">
+        <NotificationsSection />
       </div>
     </div>
   );
