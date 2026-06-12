@@ -1,5 +1,5 @@
 import { createStore, useStore } from '@kyber/state';
-import type { Entity, Profile360PanelDrillItem, Profile360Graph, Profile360LiveMessage, Profile360Payload, Profile360State, TimelineEvent } from '@kyber/types';
+import type { Entity, Profile360PanelDrillItem, Profile360Graph, Profile360LiveMessage, Profile360Payload, Profile360State, Profile360Quality, Profile360Consent, Profile360Provenance, Profile360StreamStatus, TimelineEvent } from '@kyber/types';
 
 const initialState: Profile360State = {
   entities: {},
@@ -11,6 +11,23 @@ const initialState: Profile360State = {
   activeTimelineFilters: [],
   websocketStatus: 'disconnected',
   liveEvents: [],
+  summariesById: {},
+  clustersByEntityId: {},
+  journeysByEntityId: {},
+  campaignsByEntityId: {},
+  attributionByEntityId: {},
+  walletsByEntityId: {},
+  agentsByEntityId: {},
+  sessionsByEntityId: {},
+  devicesByEntityId: {},
+  recommendationsByEntityId: {},
+  qualityByEntityId: {},
+  consentByEntityId: {},
+  provenanceByEntityId: {},
+  streamStatusByEntityId: {},
+  loadingByKey: {},
+  errorsByKey: {},
+  staleByKey: {},
 };
 
 export const profile360Store = createStore<Profile360State>(initialState);
@@ -61,6 +78,64 @@ export const profile360Actions = {
   },
   setWebsocketStatus(status: Profile360State['websocketStatus']) {
     profile360Store.setState((state) => ({ ...state, websocketStatus: status }));
+  },
+  upsertDimension(entityId: string, dimension: string, data: unknown) {
+    const key = `${dimension}ByEntityId` as keyof typeof initialState;
+    profile360Store.setState((state) => ({
+      ...state,
+      [key]: { ...(state[key] as Record<string, unknown>), [entityId]: data },
+    }));
+  },
+  upsertQuality(entityId: string, quality: Profile360Quality) {
+    profile360Store.setState((state) => ({
+      ...state,
+      qualityByEntityId: { ...state.qualityByEntityId, [entityId]: quality },
+    }));
+  },
+  upsertConsent(entityId: string, consent: Profile360Consent) {
+    profile360Store.setState((state) => ({
+      ...state,
+      consentByEntityId: { ...state.consentByEntityId, [entityId]: consent },
+    }));
+  },
+  upsertProvenance(entityId: string, provenance: Profile360Provenance) {
+    profile360Store.setState((state) => ({
+      ...state,
+      provenanceByEntityId: { ...state.provenanceByEntityId, [entityId]: provenance },
+    }));
+  },
+  setLoading(key: string, loading: boolean) {
+    profile360Store.setState((state) => ({
+      ...state,
+      loadingByKey: { ...state.loadingByKey, [key]: loading },
+    }));
+  },
+  setError(key: string, error: string | null) {
+    profile360Store.setState((state) => ({
+      ...state,
+      errorsByKey: { ...state.errorsByKey, [key]: error },
+    }));
+  },
+  markStale(key: string) {
+    profile360Store.setState((state) => ({
+      ...state,
+      staleByKey: { ...state.staleByKey, [key]: true },
+    }));
+  },
+  clearStale(key: string) {
+    profile360Store.setState((state) => ({
+      ...state,
+      staleByKey: { ...state.staleByKey, [key]: false },
+    }));
+  },
+  setStreamStatus(entityId: string, status: Profile360StreamStatus) {
+    profile360Store.setState((state) => ({
+      ...state,
+      streamStatusByEntityId: { ...state.streamStatusByEntityId, [entityId]: status },
+    }));
+  },
+  resetDrillStack() {
+    profile360Store.setState((state) => ({ ...state, drillStack: [] }));
   },
   applyLiveMessage(message: Profile360LiveMessage) {
     profile360Store.setState((state) => {

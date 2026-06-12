@@ -554,3 +554,573 @@ export function Profile360AttributionPanel({ sections }: { readonly sections: re
     </div>
   );
 }
+
+// ── Cluster ───────────────────────────────────────────────────────────────────
+
+export function Profile360ClusterPanel({ sections }: { readonly sections: readonly Profile360Section[] }) {
+  const section = sections.find(s => s.id === 'cluster-overview');
+  const data = asRec(section?.data);
+  const clusters = Array.isArray(data.all_clusters) ? data.all_clusters : [];
+  const primary = asRec(data.cluster);
+
+  return (
+    <div className="space-y-4 pt-2">
+      {section?.metrics && section.metrics.length > 0 && (
+        <div className="grid grid-cols-3 gap-2">
+          {section.metrics.map(m => (
+            <div key={m.id} className="rounded border border-border-subtle bg-surface-raised p-2 text-center">
+              <div className="text-[10px] uppercase tracking-wide text-text-muted">{m.label}</div>
+              <div className={cn('mt-1 text-base font-semibold font-mono',
+                m.tone === 'good' ? 'text-success' : m.tone === 'warning' ? 'text-warning' : m.tone === 'danger' ? 'text-danger' : 'text-text-primary'
+              )}>{m.value}</div>
+            </div>
+          ))}
+        </div>
+      )}
+      {Boolean(primary.cluster_id) && (
+        <Card>
+          <CardHeader><CardTitle>Primary cluster</CardTitle></CardHeader>
+          <CardContent>
+            <div className="space-y-1.5 text-xs">
+              <div className="flex items-center justify-between">
+                <span className="text-text-muted">Cluster ID</span>
+                <code className="font-mono text-text-primary">{String(primary.cluster_id)}</code>
+              </div>
+              {primary.confidence !== undefined && (
+                <div className="flex items-center justify-between">
+                  <span className="text-text-muted">Confidence</span>
+                  <Badge variant={Number(primary.confidence) > 0.8 ? 'success' : Number(primary.confidence) > 0.5 ? 'warning' : 'default'} size="sm">
+                    {`${Math.round(Number(primary.confidence) * 100)}%`}
+                  </Badge>
+                </div>
+              )}
+              {primary.member_count !== undefined && (
+                <div className="flex items-center justify-between">
+                  <span className="text-text-muted">Members</span>
+                  <span className="font-mono text-text-primary">{String(primary.member_count)}</span>
+                </div>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+      {clusters.length === 0 && !primary.cluster_id ? (
+        <EmptyState title="No cluster membership" description="This entity has not been assigned to an identity cluster. Source: identity resolution graph." />
+      ) : (
+        clusters.length > 0 && (
+          <Card>
+            <CardHeader><CardTitle>All clusters ({clusters.length})</CardTitle></CardHeader>
+            <CardContent>
+              <ScrollArea maxHeight="360px">
+                <div className="space-y-2">
+                  {clusters.map((c, i) => {
+                    const cr = asRec(c);
+                    return (
+                      <div key={String(cr.cluster_id ?? i)} className="flex items-center justify-between py-2 px-3 border border-border-subtle rounded bg-surface-raised text-xs">
+                        <code className="font-mono text-text-muted truncate">{String(cr.cluster_id ?? cr.id ?? '—')}</code>
+                        <div className="flex items-center gap-2">
+                          {cr.confidence !== undefined && <Badge size="sm">{`${Math.round(Number(cr.confidence) * 100)}%`}</Badge>}
+                          {Boolean(cr.is_primary) && <Badge variant="accent" size="sm">primary</Badge>}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </ScrollArea>
+            </CardContent>
+          </Card>
+        )
+      )}
+    </div>
+  );
+}
+
+// ── Agents ────────────────────────────────────────────────────────────────────
+
+export function Profile360AgentsPanel({ sections }: { readonly sections: readonly Profile360Section[] }) {
+  const section = sections.find(s => s.id === 'agents-overview');
+  const data = asRec(section?.data);
+  const agents = Array.isArray(data.items) ? data.items : Array.isArray(data.agents) ? data.agents : [];
+  const delegations = Array.isArray(data.delegations) ? data.delegations : [];
+
+  return (
+    <div className="space-y-4 pt-2">
+      {section?.metrics && section.metrics.length > 0 && (
+        <div className="grid grid-cols-3 gap-2">
+          {section.metrics.map(m => (
+            <div key={m.id} className="rounded border border-border-subtle bg-surface-raised p-2 text-center">
+              <div className="text-[10px] uppercase tracking-wide text-text-muted">{m.label}</div>
+              <div className="mt-1 text-base font-semibold font-mono text-text-primary">{m.value}</div>
+            </div>
+          ))}
+        </div>
+      )}
+      {agents.length > 0 && (
+        <Card>
+          <CardHeader><CardTitle>Agents ({agents.length})</CardTitle></CardHeader>
+          <CardContent>
+            <ScrollArea maxHeight="320px">
+              <div className="space-y-2">
+                {agents.map((a, i) => {
+                  const ar = asRec(a);
+                  const status = String(ar.status ?? 'unknown');
+                  const exCount = typeof ar.execution_count === 'number' ? ar.execution_count : null;
+                  return (
+                    <div key={String(ar.agent_id ?? ar.id ?? i)} className="flex items-center justify-between py-2 px-3 border border-border-subtle rounded bg-surface-raised text-xs">
+                      <div className="min-w-0">
+                        <div className="font-medium text-text-primary truncate">{String(ar.name ?? ar.agent_name ?? ar.agent_id ?? '—')}</div>
+                        <div className="text-text-muted text-[10px] font-mono truncate">{String(ar.agent_id ?? ar.id ?? '')}</div>
+                      </div>
+                      <div className="flex items-center gap-2 shrink-0">
+                        {exCount !== null && <span className="text-text-muted">{exCount} execs</span>}
+                        <Badge variant={status === 'active' ? 'success' : status === 'error' ? 'danger' : 'default'} size="sm">{status}</Badge>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </ScrollArea>
+          </CardContent>
+        </Card>
+      )}
+      {delegations.length > 0 && (
+        <Card>
+          <CardHeader><CardTitle>Delegations ({delegations.length})</CardTitle></CardHeader>
+          <CardContent>
+            <ScrollArea maxHeight="280px">
+              <div className="space-y-2">
+                {delegations.map((d, i) => {
+                  const dr = asRec(d);
+                  const active = Boolean(dr.active ?? dr.is_active);
+                  return (
+                    <div key={String(dr.delegation_id ?? dr.id ?? i)} className="flex items-center justify-between py-1.5 px-3 border border-border-subtle rounded bg-surface-raised text-xs">
+                      <div className="text-text-muted font-mono truncate text-[10px]">{String(dr.delegation_id ?? dr.id ?? '—')}</div>
+                      <div className="flex items-center gap-1.5">
+                        <Badge size="sm">{String(dr.role ?? dr.type ?? 'delegation')}</Badge>
+                        <Badge variant={active ? 'success' : 'default'} size="sm">{active ? 'active' : 'expired'}</Badge>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </ScrollArea>
+          </CardContent>
+        </Card>
+      )}
+      {agents.length === 0 && delegations.length === 0 && (
+        <EmptyState title="No agents or delegations" description="No agent profiles or delegation relationships have been recorded for this entity." />
+      )}
+    </div>
+  );
+}
+
+// ── Consent ───────────────────────────────────────────────────────────────────
+
+export function Profile360ConsentPanel({ sections }: { readonly sections: readonly Profile360Section[] }) {
+  const section = sections.find(s => s.id === 'consent-overview');
+  const data = asRec(section?.data);
+  const consentStatus = String(data.consent_status ?? 'unknown');
+  const eligibility = String(data.activation_eligibility ?? 'observe_only');
+  const allowedUseCases: string[] = Array.isArray(data.allowed_use_cases) ? data.allowed_use_cases.map(String) : [];
+  const restrictedUseCases: string[] = Array.isArray(data.restricted_use_cases) ? data.restricted_use_cases.map(String) : [];
+  const blockedUseCases: string[] = Array.isArray(data.blocked_use_cases) ? data.blocked_use_cases.map(String) : [];
+  const dsrState = String(data.dsr_state ?? 'none');
+  const retentionStatus = String(data.retention_status ?? 'unknown');
+
+  const consentVariant = consentStatus === 'granted' ? 'success' : consentStatus === 'revoked' ? 'danger' : consentStatus === 'restricted' || consentStatus === 'partial' ? 'warning' : 'default';
+  const eligibilityVariant = eligibility === 'allowed' ? 'success' : eligibility === 'blocked' ? 'danger' : eligibility === 'restricted' ? 'warning' : 'default';
+
+  return (
+    <div className="space-y-4 pt-2">
+      <div className="grid grid-cols-2 gap-3">
+        <Card>
+          <CardHeader><CardTitle>Consent status</CardTitle></CardHeader>
+          <CardContent>
+            <Badge variant={consentVariant} size="md">{consentStatus}</Badge>
+            {Boolean(data.last_consent_update) && (
+              <p className="text-[10px] text-text-muted mt-2 font-mono">Updated: {String(data.last_consent_update)}</p>
+            )}
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader><CardTitle>Activation eligibility</CardTitle></CardHeader>
+          <CardContent>
+            <Badge variant={eligibilityVariant} size="md">{eligibility}</Badge>
+            <p className="text-[10px] text-text-muted mt-2">Retention: {retentionStatus} · DSR: {dsrState}</p>
+          </CardContent>
+        </Card>
+      </div>
+      {(allowedUseCases.length > 0 || restrictedUseCases.length > 0 || blockedUseCases.length > 0) ? (
+        <Card>
+          <CardHeader><CardTitle>Use case permissions</CardTitle></CardHeader>
+          <CardContent className="space-y-3">
+            {allowedUseCases.length > 0 && (
+              <div>
+                <p className="text-[10px] uppercase tracking-wide text-success mb-1">Allowed</p>
+                <div className="flex flex-wrap gap-1">{allowedUseCases.map(u => <Badge key={u} variant="success" size="sm">{u}</Badge>)}</div>
+              </div>
+            )}
+            {restrictedUseCases.length > 0 && (
+              <div>
+                <p className="text-[10px] uppercase tracking-wide text-warning mb-1">Restricted</p>
+                <div className="flex flex-wrap gap-1">{restrictedUseCases.map(u => <Badge key={u} variant="warning" size="sm">{u}</Badge>)}</div>
+              </div>
+            )}
+            {blockedUseCases.length > 0 && (
+              <div>
+                <p className="text-[10px] uppercase tracking-wide text-danger mb-1">Blocked</p>
+                <div className="flex flex-wrap gap-1">{blockedUseCases.map(u => <Badge key={u} variant="danger" size="sm">{u}</Badge>)}</div>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      ) : (
+        <EmptyState title="No consent data" description="Consent records are unavailable for this entity. Source: consent service." />
+      )}
+    </div>
+  );
+}
+
+// ── Quality ───────────────────────────────────────────────────────────────────
+
+export function Profile360QualityPanel({ sections }: { readonly sections: readonly Profile360Section[] }) {
+  const section = sections.find(s => s.id === 'quality-overview');
+  const data = asRec(section?.data);
+  const readiness = String(data.readiness_status ?? 'unknown');
+  const scoresObj = asRec(data.scores);
+  const scores = [
+    { label: 'Completeness', value: data.completeness ?? scoresObj.completeness },
+    { label: 'Freshness', value: data.freshness ?? scoresObj.freshness },
+    { label: 'Confidence', value: data.confidence ?? scoresObj.confidence },
+    { label: 'Source coverage', value: data.source_coverage ?? scoresObj.source_coverage },
+    { label: 'Relationship density', value: data.relationship_density ?? scoresObj.relationship_density },
+    { label: 'Journey coverage', value: data.journey_coverage ?? scoresObj.journey_coverage },
+    { label: 'Attribution coverage', value: data.attribution_coverage ?? scoresObj.attribution_coverage },
+    { label: 'Consent coverage', value: data.consent_coverage ?? scoresObj.consent_coverage },
+    { label: 'Provenance coverage', value: data.provenance_coverage ?? scoresObj.provenance_coverage },
+  ].filter(s => s.value !== undefined && s.value !== null);
+
+  const readinessVariant = readiness === 'release_grade' || readiness === 'strong' ? 'success' : readiness === 'usable' ? 'warning' : readiness === 'empty' ? 'danger' : 'default';
+  const missingDims: string[] = Array.isArray(data.missing_dimensions) ? data.missing_dimensions.map(String) : [];
+  const staleDims: string[] = Array.isArray(data.stale_dimensions) ? data.stale_dimensions.map(String) : [];
+
+  return (
+    <div className="space-y-4 pt-2">
+      <Card>
+        <CardHeader>
+          <div className="flex items-center justify-between w-full">
+            <CardTitle>Profile readiness</CardTitle>
+            <Badge variant={readinessVariant}>{readiness.replace('_', ' ')}</Badge>
+          </div>
+        </CardHeader>
+        {scores.length > 0 && (
+          <CardContent>
+            <div className="space-y-2">
+              {scores.map(({ label, value }) => {
+                const pct = Math.round(Number(value) * 100);
+                return (
+                  <div key={label} className="space-y-0.5">
+                    <div className="flex justify-between text-xs">
+                      <span className="text-text-secondary">{label}</span>
+                      <span className="font-mono text-text-primary">{pct}%</span>
+                    </div>
+                    <div className="h-1.5 rounded-full bg-surface-overlay overflow-hidden">
+                      <div className="h-full rounded-full bg-accent transition-all" style={{ width: `${pct}%` }} />
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </CardContent>
+        )}
+      </Card>
+      {(missingDims.length > 0 || staleDims.length > 0) && (
+        <Card>
+          <CardHeader><CardTitle>Gaps</CardTitle></CardHeader>
+          <CardContent className="space-y-3">
+            {missingDims.length > 0 && (
+              <div>
+                <p className="text-[10px] uppercase tracking-wide text-danger mb-1">Missing dimensions</p>
+                <div className="flex flex-wrap gap-1">{missingDims.map(d => <Badge key={d} variant="danger" size="sm">{d}</Badge>)}</div>
+              </div>
+            )}
+            {staleDims.length > 0 && (
+              <div>
+                <p className="text-[10px] uppercase tracking-wide text-warning mb-1">Stale dimensions</p>
+                <div className="flex flex-wrap gap-1">{staleDims.map(d => <Badge key={d} variant="warning" size="sm">{d}</Badge>)}</div>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
+      {scores.length === 0 && missingDims.length === 0 && (
+        <EmptyState title="No quality data" description="Profile quality has not been computed yet. Source: quality scorer." />
+      )}
+    </div>
+  );
+}
+
+// ── Recommendations ───────────────────────────────────────────────────────────
+
+export function Profile360RecommendationsPanel({ sections }: { readonly sections: readonly Profile360Section[] }) {
+  const section = sections.find(s => s.id === 'recommendations-overview');
+  const data = asRec(section?.data);
+  const items: unknown[] = Array.isArray(data.items) ? data.items : [];
+
+  return (
+    <div className="space-y-4 pt-2">
+      {section?.metrics && section.metrics.length > 0 && (
+        <div className="grid grid-cols-3 gap-2">
+          {section.metrics.map(m => (
+            <div key={m.id} className="rounded border border-border-subtle bg-surface-raised p-2 text-center">
+              <div className="text-[10px] uppercase tracking-wide text-text-muted">{m.label}</div>
+              <div className="mt-1 text-base font-semibold font-mono text-text-primary">{m.value}</div>
+            </div>
+          ))}
+        </div>
+      )}
+      {items.length === 0 ? (
+        <EmptyState title="No recommendations" description="No intelligence recommendations have been generated for this entity." />
+      ) : (
+        <div className="space-y-2">
+          {items.map((item, i) => {
+            const ir = asRec(item);
+            const status = String(ir.status ?? 'pending');
+            const confidence = typeof ir.confidence === 'number' ? Math.round(ir.confidence * 100) : null;
+            const eligibility = String(ir.activation_eligibility ?? '');
+            return (
+              <Card key={String(ir.recommendation_id ?? ir.id ?? i)}>
+                <CardContent className="pt-4">
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="flex-1 min-w-0">
+                      <div className="text-sm font-medium text-text-primary">{String(ir.title ?? ir.recommendation_type ?? 'Recommendation')}</div>
+                      {Boolean(ir.rationale) && <p className="text-xs text-text-secondary mt-1">{String(ir.rationale)}</p>}
+                    </div>
+                    <div className="flex flex-col items-end gap-1 shrink-0">
+                      {confidence !== null && <Badge variant={confidence > 70 ? 'success' : 'warning'} size="sm">{confidence}%</Badge>}
+                      <Badge variant={status === 'active' ? 'success' : status === 'blocked' ? 'danger' : 'default'} size="sm">{status}</Badge>
+                      {eligibility && eligibility !== 'allowed' && (
+                        <Badge variant={eligibility === 'blocked' ? 'danger' : 'warning'} size="sm">{eligibility}</Badge>
+                      )}
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Outcomes ──────────────────────────────────────────────────────────────────
+
+export function Profile360OutcomesPanel({ sections }: { readonly sections: readonly Profile360Section[] }) {
+  const section = sections.find(s => s.id === 'outcomes-overview');
+  const data = asRec(section?.data);
+  const items: unknown[] = Array.isArray(data.items) ? data.items : [];
+  const ledger = asRec(data.ledger);
+
+  return (
+    <div className="space-y-4 pt-2">
+      {Boolean(ledger.summary) && (
+        <Card>
+          <CardHeader><CardTitle>Outcome ledger summary</CardTitle></CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+              {Object.entries(asRec(ledger.summary)).map(([k, v]) => (
+                <div key={k} className="rounded border border-border-subtle bg-surface-raised p-2 text-center">
+                  <div className="text-[10px] uppercase tracking-wide text-text-muted">{k.replace(/_/g, ' ')}</div>
+                  <div className="mt-1 text-base font-semibold font-mono text-text-primary">{String(v)}</div>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+      {items.length === 0 ? (
+        <EmptyState title="No outcomes" description="No outcome history has been recorded for this entity." />
+      ) : (
+        <Card>
+          <CardHeader><CardTitle>Outcomes ({items.length})</CardTitle></CardHeader>
+          <CardContent>
+            <ScrollArea maxHeight="400px">
+              <div className="space-y-2">
+                {items.map((item, i) => {
+                  const or = asRec(item);
+                  const outcome = String(or.outcome_type ?? or.type ?? 'outcome');
+                  const status = String(or.status ?? '');
+                  const ts = String(or.created_at ?? or.timestamp ?? '');
+                  return (
+                    <div key={String(or.outcome_id ?? or.id ?? i)} className="flex items-center justify-between py-2 px-3 border border-border-subtle rounded bg-surface-raised text-xs">
+                      <div className="flex-1 min-w-0">
+                        <Badge size="sm">{outcome}</Badge>
+                        {Boolean(or.description) && <span className="ml-2 text-text-secondary">{String(or.description)}</span>}
+                      </div>
+                      <div className="flex items-center gap-2 shrink-0">
+                        {status && <Badge variant={status === 'completed' ? 'success' : status === 'failed' ? 'danger' : 'default'} size="sm">{status}</Badge>}
+                        {ts && <span className="text-[10px] font-mono text-text-muted">{ts.slice(0, 16)}</span>}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </ScrollArea>
+          </CardContent>
+        </Card>
+      )}
+    </div>
+  );
+}
+
+// ── Intelligence ──────────────────────────────────────────────────────────────
+
+export function Profile360IntelligencePanel({ sections }: { readonly sections: readonly Profile360Section[] }) {
+  const section = sections.find(s => s.id === 'intelligence-overview');
+  const data = asRec(section?.data);
+  const tier = String(data.tier ?? data.loyalty_tier ?? '');
+  const riskScore = typeof data.risk_score === 'number' ? data.risk_score : null;
+  const trustScore = typeof data.trust_score === 'number' ? data.trust_score : null;
+  const anomalyScore = typeof data.anomaly_score === 'number' ? data.anomaly_score : null;
+  const riskFlags: string[] = Array.isArray(data.risk_flags) ? data.risk_flags.map(String) : [];
+
+  return (
+    <div className="space-y-4 pt-2">
+      {section?.metrics && section.metrics.length > 0 && (
+        <div className="grid grid-cols-3 sm:grid-cols-5 gap-2">
+          {section.metrics.map(m => (
+            <div key={m.id} className="rounded border border-border-subtle bg-surface-raised p-2 text-center">
+              <div className="text-[10px] uppercase tracking-wide text-text-muted">{m.label}</div>
+              <div className={cn('mt-1 text-base font-semibold font-mono',
+                m.tone === 'good' ? 'text-success' : m.tone === 'warning' ? 'text-warning' : m.tone === 'danger' ? 'text-danger' : 'text-text-primary'
+              )}>{m.value}{m.unit ?? ''}</div>
+            </div>
+          ))}
+        </div>
+      )}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+        {riskScore !== null && (
+          <Card>
+            <CardHeader><CardTitle>Risk</CardTitle></CardHeader>
+            <CardContent>
+              <div className={cn('text-3xl font-bold font-mono', riskScore > 0.6 ? 'text-danger' : riskScore > 0.3 ? 'text-warning' : 'text-success')}>
+                {(riskScore * 100).toFixed(0)}%
+              </div>
+            </CardContent>
+          </Card>
+        )}
+        {trustScore !== null && (
+          <Card>
+            <CardHeader><CardTitle>Trust</CardTitle></CardHeader>
+            <CardContent>
+              <div className={cn('text-3xl font-bold font-mono', trustScore > 0.7 ? 'text-success' : trustScore > 0.4 ? 'text-warning' : 'text-danger')}>
+                {(trustScore * 100).toFixed(0)}%
+              </div>
+            </CardContent>
+          </Card>
+        )}
+        {anomalyScore !== null && (
+          <Card>
+            <CardHeader><CardTitle>Anomaly</CardTitle></CardHeader>
+            <CardContent>
+              <div className={cn('text-3xl font-bold font-mono', anomalyScore > 0.6 ? 'text-danger' : anomalyScore > 0.3 ? 'text-warning' : 'text-success')}>
+                {(anomalyScore * 100).toFixed(0)}%
+              </div>
+            </CardContent>
+          </Card>
+        )}
+      </div>
+      {tier && (
+        <Card>
+          <CardHeader><CardTitle>Entity tier</CardTitle></CardHeader>
+          <CardContent><Badge variant="accent" size="md">{tier}</Badge></CardContent>
+        </Card>
+      )}
+      {riskFlags.length > 0 && (
+        <Card>
+          <CardHeader><CardTitle>Risk flags ({riskFlags.length})</CardTitle></CardHeader>
+          <CardContent><div className="flex flex-wrap gap-1">{riskFlags.map(f => <Badge key={f} variant="danger" size="sm">{f}</Badge>)}</div></CardContent>
+        </Card>
+      )}
+      {riskScore === null && trustScore === null && section?.metrics?.length === 0 && (
+        <EmptyState title="No intelligence data" description="Intelligence scores have not been computed. Source: ML intelligence service." />
+      )}
+    </div>
+  );
+}
+
+// ── Provenance ────────────────────────────────────────────────────────────────
+
+export function Profile360ProvenancePanel({ sections }: { readonly sections: readonly Profile360Section[] }) {
+  const section = sections.find(s => s.id === 'provenance-overview');
+  const data = asRec(section?.data);
+  const sources: string[] = Array.isArray(data.sources) ? data.sources.map(String) : [];
+  const freshnessStatus = String(data.freshness_status ?? 'unknown');
+  const sourceWarnings: string[] = Array.isArray(data.source_warnings) ? data.source_warnings.map(String) : [];
+  const dimensions = asRec(data.dimensions);
+
+  const freshnessVariant = freshnessStatus === 'fresh' ? 'success' : freshnessStatus === 'stale' ? 'danger' : freshnessStatus === 'aging' ? 'warning' : 'default';
+
+  return (
+    <div className="space-y-4 pt-2">
+      <div className="grid grid-cols-2 gap-3">
+        <Card>
+          <CardHeader><CardTitle>Sources</CardTitle></CardHeader>
+          <CardContent>
+            <div className="text-3xl font-bold font-mono text-text-primary">{sources.length || String(data.source_count ?? '—')}</div>
+            {Boolean(data.primary_source) && <p className="text-xs text-text-muted mt-1">Primary: {String(data.primary_source)}</p>}
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader><CardTitle>Freshness</CardTitle></CardHeader>
+          <CardContent>
+            <Badge variant={freshnessVariant} size="md">{freshnessStatus}</Badge>
+            {Boolean(data.last_source_update) && <p className="text-[10px] text-text-muted mt-2 font-mono">{String(data.last_source_update).slice(0, 16)}</p>}
+          </CardContent>
+        </Card>
+      </div>
+      {sources.length > 0 && (
+        <Card>
+          <CardHeader><CardTitle>Source systems</CardTitle></CardHeader>
+          <CardContent><div className="flex flex-wrap gap-1">{sources.map(s => <Badge key={s} size="sm">{s}</Badge>)}</div></CardContent>
+        </Card>
+      )}
+      {sourceWarnings.length > 0 && (
+        <Card>
+          <CardHeader><CardTitle>Source warnings ({sourceWarnings.length})</CardTitle></CardHeader>
+          <CardContent>
+            <div className="space-y-1">
+              {sourceWarnings.map((w, i) => <p key={i} className="text-xs text-warning">{w}</p>)}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+      {Object.keys(dimensions).length > 0 && (
+        <Card>
+          <CardHeader><CardTitle>Per-dimension freshness</CardTitle></CardHeader>
+          <CardContent>
+            <div className="space-y-1.5">
+              {Object.entries(dimensions).map(([dim, dimData]) => {
+                const dd = asRec(dimData);
+                const dimFreshness = String(dd.freshness_status ?? dd.status ?? 'unknown');
+                return (
+                  <div key={dim} className="flex items-center justify-between text-xs py-1 border-b border-border-subtle last:border-0">
+                    <span className="text-text-secondary">{dim}</span>
+                    <div className="flex items-center gap-2">
+                      {Boolean(dd.last_updated) && <span className="text-[10px] font-mono text-text-muted">{String(dd.last_updated).slice(0, 10)}</span>}
+                      <Badge variant={dimFreshness === 'fresh' ? 'success' : dimFreshness === 'stale' ? 'danger' : dimFreshness === 'aging' ? 'warning' : 'default'} size="sm">{dimFreshness}</Badge>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+      {sources.length === 0 && sourceWarnings.length === 0 && Object.keys(dimensions).length === 0 && (
+        <EmptyState title="No provenance data" description="Data provenance has not been recorded. Source: connector pipeline." />
+      )}
+    </div>
+  );
+}

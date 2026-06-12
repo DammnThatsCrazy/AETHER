@@ -544,7 +544,7 @@ async def slack_oauth_connect(request: Request):
     redirect_uri = os.getenv("SLACK_REDIRECT_URI", "/v1/notifications/channels/slack/callback")
 
     state_record = {
-        "id": state,
+        "state": state,
         "tenant_id": tenant_id,
         "user_id": user_id,
         "redirect_uri": redirect_uri,

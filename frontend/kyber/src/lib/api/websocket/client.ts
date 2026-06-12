@@ -29,7 +29,8 @@ export class WebSocketClient {
     this.intentionallyClosed = false;
     const baseUrl = env.VITE_WS_BASE_URL;
     const token = getAccessToken();
-    const url = `${baseUrl}${this.options.path}${token ? `?token=${token}` : ''}`;
+    const sep = this.options.path.includes('?') ? '&' : '?';
+    const url = `${baseUrl}${this.options.path}${token ? `${sep}token=${token}` : ''}`;
 
     this.options.onStatusChange('connecting');
     log.info(`[WS] Connecting to ${this.options.path}`);

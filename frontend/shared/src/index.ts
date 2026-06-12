@@ -73,3 +73,13 @@ export type {
 
 export { NoesisWorkspace } from './components/noesis-workspace';
 export type { NoesisAction, NoesisGraphPayload, NoesisMessageItem, NoesisResponsePayload } from './components/noesis-workspace';
+
+export type { RelationshipLayer } from './types/graph-layers';
+export {
+  RELATIONSHIP_LAYERS,
+  LAYER_COUNT,
+  LAYER_DESCRIPTIONS,
+  EDGE_LAYER_MAP,
+  classifyEdgeType,
+  countEdgesByLayer,
+} from './types/graph-layers';

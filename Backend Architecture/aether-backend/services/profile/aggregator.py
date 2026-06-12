@@ -647,17 +647,30 @@ class Profile360Aggregator:
         transfers = await self._transfers_for_entity(entity_id, tenant_id, limit=limit)
         transfers = _tenant_filter(transfers, tenant_id)
 
-        intents = await self._scoped_find_many(
-            self._intents, tenant_id=tenant_id,
-            filters={"agent_id": entity_id}, limit=limit,
+        # Resolve owned agent ids so agentic spend/settlements roll up to the owner profile.
+        owned_configs = await self._scoped_find_many(
+            self._agent_configs, tenant_id=tenant_id,
+            filters={"owner_entity_id": entity_id}, limit=200,
         )
-        intents = _tenant_filter(intents, tenant_id)
+        owned_configs = _tenant_filter(owned_configs, tenant_id)
+        agent_ids = list({c.get("agent_id") or c.get("id") for c in owned_configs if c.get("agent_id") or c.get("id")})
+        agent_ids_to_query = list({entity_id} | set(agent_ids))
 
-        settlements = await self._scoped_find_many(
-            self._settlements, tenant_id=tenant_id,
-            filters={"agent_id": entity_id}, limit=limit,
-        )
-        settlements = _tenant_filter(settlements, tenant_id)
+        intents: list[dict] = []
+        settlements: list[dict] = []
+        for aid in agent_ids_to_query:
+            batch = await self._scoped_find_many(
+                self._intents, tenant_id=tenant_id,
+                filters={"agent_id": aid}, limit=limit,
+            )
+            intents.extend(_tenant_filter(batch, tenant_id))
+            batch = await self._scoped_find_many(
+                self._settlements, tenant_id=tenant_id,
+                filters={"agent_id": aid}, limit=limit,
+            )
+            settlements.extend(_tenant_filter(batch, tenant_id))
+        intents = intents[:limit]
+        settlements = settlements[:limit]
 
         inflow = 0.0
         outflow = 0.0
@@ -1067,6 +1080,287 @@ class Profile360Aggregator:
             "related": related,
             "computed_at": utc_now().isoformat(),
         }
+
+
+    # ── Identity Cluster Methods ──────────────────────────────────────
+
+    async def cluster(self, entity_id: str, tenant_id: str) -> dict:
+        """Primary identity cluster this entity belongs to."""
+        rows = await self._scoped_find_many(
+            self._clusters, tenant_id=tenant_id,
+            filters={"entity_id": entity_id}, limit=50,
+        )
+        rows = _tenant_filter(rows, tenant_id)
+        rows = [r for r in rows if not r.get("unlinked_at")]
+        primary = rows[0] if rows else None
+        return {
+            "entity_id": entity_id,
+            "tenant_id": tenant_id,
+            "kind": "cluster",
+            "cluster": primary,
+            "found": primary is not None,
+            "computed_at": utc_now().isoformat(),
+            "provenance": {"sources": ["identity_clusters"]},
+        }
+
+    async def clusters(self, entity_id: str, tenant_id: str, limit: int = 50) -> dict:
+        """All identity clusters this entity is a member of."""
+        rows = await self._scoped_find_many(
+            self._clusters, tenant_id=tenant_id,
+            filters={"entity_id": entity_id}, limit=limit,
+        )
+        rows = _tenant_filter(rows, tenant_id)
+        items = [
+            {
+                "id": r.get("cluster_id") or r.get("id"),
+                "type": "identity_cluster",
+                "displayLabel": r.get("cluster_id") or r.get("id"),
+                "identifier_type": r.get("identifier_type"),
+                "identifier_value": r.get("identifier_value"),
+                "confidence": r.get("confidence", 1.0),
+                "linked_at": r.get("linked_at"),
+                "unlinked_at": r.get("unlinked_at"),
+                "timestamps": {"linkedAt": _ts(r, "linked_at", "created_at")},
+                "metadata": r,
+            }
+            for r in rows
+        ]
+        summary = {
+            "cluster_count": len(items),
+            "active": sum(1 for i in items if not i.get("unlinked_at")),
+        }
+        return _envelope(entity_id, tenant_id, "clusters", items, summary, limit, ["identity_clusters"])
+
+    async def identity_confidence(self, entity_id: str, tenant_id: str) -> dict:
+        """Identity confidence score breakdown for this entity."""
+        rows = await self._scoped_find_many(
+            self._clusters, tenant_id=tenant_id,
+            filters={"entity_id": entity_id}, limit=200,
+        )
+        rows = _tenant_filter(rows, tenant_id)
+        active = [r for r in rows if not r.get("unlinked_at")]
+        scores = [float(r["confidence"]) for r in active if r.get("confidence") is not None]
+        avg_confidence = sum(scores) / len(scores) if scores else 0.0
+        breakdown = {}
+        for r in active:
+            itype = r.get("identifier_type") or "unknown"
+            breakdown.setdefault(itype, {"count": 0, "avg_confidence": 0.0, "scores": []})
+            if r.get("confidence") is not None:
+                breakdown[itype]["scores"].append(float(r["confidence"]))
+            breakdown[itype]["count"] += 1
+        for itype, v in breakdown.items():
+            s = v.pop("scores")
+            v["avg_confidence"] = sum(s) / len(s) if s else 0.0
+        return {
+            "entity_id": entity_id,
+            "tenant_id": tenant_id,
+            "kind": "identity_confidence",
+            "overall_confidence": avg_confidence,
+            "active_cluster_count": len(active),
+            "breakdown_by_type": breakdown,
+            "computed_at": utc_now().isoformat(),
+            "provenance": {"sources": ["identity_clusters"]},
+        }
+
+    # ── Attribution Method ────────────────────────────────────────────
+
+    async def attribution(self, entity_id: str, tenant_id: str, window: str = "30d") -> dict:
+        """Multi-touch attribution touchpoints, first/last touch, and conversion chain."""
+        campaigns_data = await self.campaigns(entity_id, tenant_id, limit=50)
+        items = campaigns_data.get("items", [])
+        first_touch = items[-1] if items else None
+        last_touch = items[0] if items else None
+        return {
+            "entity_id": entity_id,
+            "tenant_id": tenant_id,
+            "kind": "attribution",
+            "window": window,
+            "first_touch": first_touch,
+            "last_touch": last_touch,
+            "touchpoints": items,
+            "touchpoint_count": len(items),
+            "computed_at": utc_now().isoformat(),
+            "provenance": {"sources": ["analytics_events"]},
+        }
+
+    # ── Quality & Freshness Methods ───────────────────────────────────
+
+    async def quality(self, entity_id: str, tenant_id: str) -> dict:
+        """Profile quality scorecard: completeness, freshness, confidence, readiness."""
+        results = await asyncio.gather(
+            _safe("quality.entity", self._entities.find_by_id(entity_id)),
+            _safe("quality.behavior", self._behavior.find_by_id(entity_id)),
+            self._scoped_find_many(self._wallets, tenant_id=tenant_id,
+                                   filters={"owner_entity_id": entity_id}, limit=10),
+            self._transfers_for_entity(entity_id, tenant_id, limit=10),
+        )
+        entity, behavior, wallets, transfers = results
+        entity = entity if isinstance(entity, dict) and entity.get("tenant_id") in (None, "", tenant_id) else None
+        behavior = behavior if isinstance(behavior, dict) and behavior.get("tenant_id") in (None, "", tenant_id) else None
+        wallets = _tenant_filter(wallets or [], tenant_id)
+        transfers = _tenant_filter(transfers or [], tenant_id)
+
+        dimensions = {
+            "entity": entity is not None,
+            "behavior": behavior is not None,
+            "wallets": len(wallets) > 0,
+            "transfers": len(transfers) > 0,
+        }
+        present = [k for k, v in dimensions.items() if v]
+        missing = [k for k, v in dimensions.items() if not v]
+        completeness = len(present) / len(dimensions) if dimensions else 0.0
+
+        risk_score = (behavior or {}).get("risk_score")
+        anomaly_flags = (behavior or {}).get("anomaly_flags") or []
+
+        return {
+            "entity_id": entity_id,
+            "tenant_id": tenant_id,
+            "kind": "quality",
+            "completeness": completeness,
+            "present_dimensions": present,
+            "missing_dimensions": missing,
+            "stale_dimensions": [],
+            "contradiction_count": 0,
+            "risk_score": risk_score,
+            "anomaly_flags": anomaly_flags,
+            "readiness_status": "ready" if completeness >= 0.75 else "incomplete",
+            "computed_at": utc_now().isoformat(),
+            "provenance": {"sources": ["entities", "behavior_profiles", "entity_wallets", "transfers"]},
+        }
+
+    async def data_freshness(self, entity_id: str, tenant_id: str) -> dict:
+        """Per-dimension data freshness: sources, last update, stale status, warnings."""
+        results = await asyncio.gather(
+            _safe("freshness.entity", self._entities.find_by_id(entity_id)),
+            _safe("freshness.behavior", self._behavior.find_by_id(entity_id)),
+            self._scoped_find_many(self._wallets, tenant_id=tenant_id,
+                                   filters={"owner_entity_id": entity_id}, limit=10),
+            self._transfers_for_entity(entity_id, tenant_id, limit=10),
+        )
+        entity, behavior, wallets, transfers = results
+        entity = entity if isinstance(entity, dict) and entity.get("tenant_id") in (None, "", tenant_id) else None
+        behavior = behavior if isinstance(behavior, dict) and behavior.get("tenant_id") in (None, "", tenant_id) else None
+        wallets = _tenant_filter(wallets or [], tenant_id)
+        transfers = _tenant_filter(transfers or [], tenant_id)
+
+        dims = []
+        if entity:
+            dims.append({
+                "dimension": "entity",
+                "last_updated": _ts(entity, "updated_at", "created_at"),
+                "stale": False,
+                "source": "entities",
+            })
+        if behavior:
+            dims.append({
+                "dimension": "behavior",
+                "last_updated": _ts(behavior, "computed_at", "updated_at", "created_at"),
+                "stale": False,
+                "source": "behavior_profiles",
+            })
+        if wallets:
+            dims.append({
+                "dimension": "wallets",
+                "last_updated": _ts(wallets[0], "linked_at", "created_at") if wallets else None,
+                "stale": False,
+                "source": "entity_wallets",
+            })
+        if transfers:
+            dims.append({
+                "dimension": "transfers",
+                "last_updated": _ts(transfers[0], "occurred_at", "created_at") if transfers else None,
+                "stale": False,
+                "source": "transfers",
+            })
+
+        return {
+            "entity_id": entity_id,
+            "tenant_id": tenant_id,
+            "kind": "data_freshness",
+            "dimensions": dims,
+            "dimension_count": len(dims),
+            "stale_count": sum(1 for d in dims if d.get("stale")),
+            "computed_at": utc_now().isoformat(),
+            "provenance": {"sources": ["entities", "behavior_profiles", "entity_wallets", "transfers"]},
+        }
+
+    # ── Delegation & Agent Methods ────────────────────────────────────
+
+    async def delegations(self, entity_id: str, tenant_id: str, limit: int = 100) -> dict:
+        """Delegations granted by and received by this entity."""
+        granted = await self._scoped_find_many(
+            self._delegations, tenant_id=tenant_id,
+            filters={"grantor_entity_id": entity_id}, limit=limit,
+        )
+        received = await self._scoped_find_many(
+            self._delegations, tenant_id=tenant_id,
+            filters={"grantee_entity_id": entity_id}, limit=limit,
+        )
+        granted = _tenant_filter(granted, tenant_id)
+        received = _tenant_filter(received, tenant_id)
+        items = [
+            {
+                "id": r.get("delegation_id") or r.get("id"),
+                "type": "delegation",
+                "direction": "out" if r.get("grantor_entity_id") == entity_id else "in",
+                "displayLabel": f"delegation:{(r.get('delegation_id') or r.get('id') or '')[:8]}",
+                "scope": r.get("scope"),
+                "revoked_at": r.get("revoked_at"),
+                "timestamps": {
+                    "startsAt": r.get("starts_at"),
+                    "endsAt": r.get("ends_at"),
+                    "revokedAt": r.get("revoked_at"),
+                    "createdAt": _ts(r, "created_at"),
+                },
+                "metadata": r,
+                "links": {
+                    "counterparty": f"/v1/profile/{r.get('grantee_entity_id') if r.get('grantor_entity_id') == entity_id else r.get('grantor_entity_id')}",
+                },
+            }
+            for r in [*granted, *received]
+        ]
+        summary = {
+            "granted_count": len(granted),
+            "received_count": len(received),
+            "total": len(items),
+        }
+        return _envelope(entity_id, tenant_id, "delegations", items, summary, limit, ["delegations"])
+
+    async def agents(self, entity_id: str, tenant_id: str, limit: int = 100) -> dict:
+        """Agent configurations and executions owned by this entity."""
+        configs = await self._scoped_find_many(
+            self._agent_configs, tenant_id=tenant_id,
+            filters={"owner_entity_id": entity_id}, limit=limit,
+        )
+        configs = _tenant_filter(configs, tenant_id)
+        owned_agent_ids = list({c.get("agent_id") or c.get("id") for c in configs if c.get("agent_id") or c.get("id")})
+        all_agent_ids = list({entity_id} | set(owned_agent_ids))
+        execs: list[dict] = []
+        for aid in all_agent_ids:
+            batch = await self._scoped_find_many(
+                self._agent_execs, tenant_id=tenant_id,
+                filters={"agent_id": aid}, limit=limit,
+            )
+            execs.extend(_tenant_filter(batch, tenant_id))
+        execs = execs[:limit]
+        items = [
+            {
+                "id": r.get("agent_id") or r.get("id"),
+                "type": "agent_config",
+                "displayLabel": r.get("display_name") or r.get("agent_id") or r.get("id"),
+                "status": r.get("status"),
+                "timestamps": {"createdAt": _ts(r, "created_at")},
+                "metadata": r,
+                "links": {"executions": f"/v1/profile/{entity_id}/agent-executions"},
+            }
+            for r in configs
+        ]
+        summary = {
+            "agent_count": len(configs),
+            "execution_count": len(execs),
+        }
+        return _envelope(entity_id, tenant_id, "agents", items, summary, limit, ["agent_configs", "agent_executions"])
 
 
 def _drill_not_found(entity_id: str, tenant_id: str, object_type: str, object_id: str) -> dict:

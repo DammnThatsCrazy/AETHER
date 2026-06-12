@@ -37,7 +37,7 @@ export function ConnectorConfigModal({ connector, onClose, onSaved }: Props) {
         enabled,
         config: {},
       };
-      if (secret.trim()) body['secret'] = secret.trim();
+      if (secret.trim()) body['credential'] = secret.trim();
 
       await api.connectors.configure(connector.connector_type, body);
 

@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useState, useCallback } from 'react';
 import { Badge, Button, Card, CardContent, CardHeader, CardTitle, Input } from '@aether/ui';
 import { EventTimeline } from '@kyber/components/timelines';
 import type { Profile360Reference, TimelineEvent } from '@kyber/types';
@@ -9,9 +9,13 @@ interface Profile360TimelinePanelProps {
   readonly onDrill: (reference: Profile360Reference) => void;
 }
 
+const PAGE_SIZE = 100;
+const VIRTUAL_THRESHOLD = 200;
+
 export function Profile360TimelinePanel({ events, onHighlight, onDrill }: Profile360TimelinePanelProps) {
   const [query, setQuery] = useState('');
   const [eventType, setEventType] = useState<string>('all');
+  const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
 
   const eventTypes = useMemo(() => Array.from(new Set(events.map((event) => event.type))).sort(), [events]);
   const filteredEvents = useMemo(() => events.filter((event) => {
@@ -20,6 +24,15 @@ export function Profile360TimelinePanel({ events, onHighlight, onDrill }: Profil
     const matchesQuery = !q || event.title.toLowerCase().includes(q) || event.description.toLowerCase().includes(q) || event.type.toLowerCase().includes(q);
     return matchesType && matchesQuery;
   }), [eventType, events, query]);
+
+  // Reset visible window when filter changes
+  const prevQuery = useMemo(() => { setVisibleCount(PAGE_SIZE); return query; }, [query, eventType]); // eslint-disable-line react-hooks/exhaustive-deps
+  void prevQuery;
+
+  const isVirtualized = filteredEvents.length > VIRTUAL_THRESHOLD;
+  const visibleEvents = isVirtualized ? filteredEvents.slice(0, visibleCount) : filteredEvents;
+  const hasMore = isVirtualized && visibleCount < filteredEvents.length;
+  const loadMore = useCallback(() => setVisibleCount((n) => n + PAGE_SIZE), []);
 
   return (
     <div className="grid grid-cols-1 xl:grid-cols-[320px_1fr] gap-4">
@@ -49,7 +62,7 @@ export function Profile360TimelinePanel({ events, onHighlight, onDrill }: Profil
         </CardHeader>
         <CardContent>
           <EventTimeline
-            events={filteredEvents}
+            events={visibleEvents}
             maxHeight="640px"
             onEventClick={(event) => {
               const nodeIds = [event.metadata?.['entityId'], event.metadata?.['entity_id'], event.metadata?.['wallet'], event.metadata?.['agentId']].filter(Boolean).map(String);
@@ -57,6 +70,12 @@ export function Profile360TimelinePanel({ events, onHighlight, onDrill }: Profil
               onDrill({ id: event.id, type: 'session', label: event.title, description: event.description, metadata: { ...event.metadata, traceId: event.traceId } });
             }}
           />
+          {hasMore && (
+            <div className="mt-3 flex items-center justify-between text-xs text-text-muted border-t border-border-subtle pt-3">
+              <span>Showing {visibleCount} of {filteredEvents.length} events</span>
+              <Button size="sm" variant="secondary" onClick={loadMore}>Load {Math.min(PAGE_SIZE, filteredEvents.length - visibleCount)} more</Button>
+            </div>
+          )}
         </CardContent>
       </Card>
     </div>

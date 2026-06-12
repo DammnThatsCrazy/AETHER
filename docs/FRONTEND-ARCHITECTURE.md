@@ -13,7 +13,7 @@ source_files:
 canonical_owner: frontend@aether
 estimated_read_minutes: 35
 toc_depth: 4
-last_synced_commit: 521f3fb
+last_synced_commit: 716f9b8
 ---
 
 # Aether Frontend Architecture & Designer Handoff
@@ -54,6 +54,7 @@ There are two separate frontend applications. **Do not mix them up.**
 **Shared (`frontend/shared/` — npm package `@aether/ui`):**
 - Design system components used by both Aether and Kyber
 - `TimeWindowSelector`, `FreshnessIndicator`, `EvidenceDrawer`, `UsageBar`, `Toast`, etc.
+- Graph layer type contracts: `RelationshipLayer` (`H2H | H2A | A2H | A2A`), `RELATIONSHIP_LAYERS`, `LAYER_DESCRIPTIONS`, `EDGE_LAYER_MAP`, `classifyEdgeType`, `countEdgesByLayer` — shared between Aether and Kyber graph health features
 
 ---
 

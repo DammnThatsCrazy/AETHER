@@ -534,6 +534,11 @@ def create_app() -> FastAPI:
         app.include_router(data_quality_admin_router)
         logger.info("Intelligence Quality: Kyber admin routes mounted (/v1/admin/kyber/intelligence-quality)")
 
+    # ── Dune Analytics feeder (admin-only, always mounted) ──────────────
+    from services.dune_feeder.routes import router as dune_feeder_router
+    app.include_router(dune_feeder_router)
+    logger.info("Dune feeder: admin routes mounted (/v1/admin/dune-feeder)")
+
     # ── Inbound connector ingestion (feature-flagged, master switch) ────
     if settings.connectors.enabled:
         from services.integrations.connectors import (
@@ -554,7 +559,9 @@ def create_app() -> FastAPI:
 
     if ig.enable_x402_layer:
         from services.x402.routes import router as x402_router
+        from services.x402.challenge_middleware import register_challenge_middleware
         app.include_router(x402_router)
+        register_challenge_middleware(app)
         logger.info("Intelligence Graph: x402 Interceptor service (L3b) mounted")
 
         # Agentic Commerce control plane (L3b+) — mounted alongside legacy capture.

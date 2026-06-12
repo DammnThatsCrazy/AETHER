@@ -305,6 +305,19 @@ def main(argv: Sequence[str] | None = None) -> None:
         else:
             skip("npm ci", "no package-lock.json at root", results)
 
+        # Build packages/shared before typecheck — its dist/ is gitignored and required
+        # by Kyber/Aether TypeScript imports of @aether/shared. Mirrors what the
+        # dedicated typescript CI job does (npm run build --workspace=packages/shared).
+        shared_pkg = ROOT / "packages" / "shared"
+        if shared_pkg.exists():
+            run(
+                ["npm", "run", "build", "--workspace=packages/shared"],
+                name="npm build @aether/shared (pre-typecheck)",
+                results=results,
+                stop_on_failure=stop,
+                remediation="fix TypeScript compilation errors in packages/shared",
+            )
+
         scripts = _load_package_scripts()
         for script_name, label, remediation in [
             ("typecheck", "npm typecheck", "fix TypeScript errors and package export drift"),
