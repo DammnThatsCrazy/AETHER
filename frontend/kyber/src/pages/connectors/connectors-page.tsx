@@ -1,9 +1,15 @@
 import { useEffect, useState } from 'react';
-import { Card, CardContent, CardHeader, CardTitle, EmptyState, LoadingState } from '@aether/ui';
+import { Badge, Card, CardContent, CardHeader, CardTitle, EmptyState, LoadingState, StatusIndicator } from '@aether/ui';
 import { PageWrapper } from '@kyber/components/layout';
 import { api } from '@kyber/lib/api';
 
-type AnyRecord = Record<string, any>;
+type AnyRecord = Record<string, unknown>;
+
+interface TypeDetail {
+  enabled_count: number;
+  error_count: number;
+  last_synced_at: string | null;
+}
 
 function Metric({ label, value }: { readonly label: string; readonly value: unknown }) {
   return (
@@ -14,6 +20,24 @@ function Metric({ label, value }: { readonly label: string; readonly value: unkn
       </CardContent>
     </Card>
   );
+}
+
+function formatLastSync(iso: string | null): string {
+  if (!iso) return '—';
+  const diff = Date.now() - new Date(iso).getTime();
+  const h = Math.floor(diff / 3600000);
+  if (h < 1) return 'just now';
+  if (h < 24) return `${h}h ago`;
+  const d = Math.floor(h / 24);
+  if (d < 7) return `${d}d ago`;
+  return new Date(iso).toLocaleDateString();
+}
+
+function connectorHealth(detail: TypeDetail): 'healthy' | 'degraded' | 'unknown' {
+  if (detail.enabled_count === 0) return 'unknown';
+  if (detail.error_count > 0) return 'degraded';
+  if (!detail.last_synced_at) return 'unknown';
+  return 'healthy';
 }
 
 export function ConnectorsPage() {
@@ -34,6 +58,12 @@ export function ConnectorsPage() {
   const d = data ?? {};
   const byType = (d.enabled_by_type ?? {}) as Record<string, number>;
   const byStatus = (d.enabled_by_status ?? {}) as Record<string, number>;
+  const byTypeDetail = (d.by_type_detail ?? {}) as Record<string, TypeDetail>;
+
+  const allTypes = Array.from(new Set([
+    ...Object.keys(byTypeDetail),
+    ...Object.keys(byType),
+  ])).sort();
 
   return (
     <PageWrapper
@@ -46,6 +76,55 @@ export function ConnectorsPage() {
         <Metric label="Enabled" value={d.enabled_count} />
         <Metric label="Enabled types" value={Object.keys(byType).length} />
       </div>
+
+      {allTypes.length > 0 && (
+        <Card>
+          <CardHeader><CardTitle>Per-connector breakdown</CardTitle></CardHeader>
+          <CardContent>
+            <div className="overflow-x-auto">
+              <table className="w-full text-xs font-mono">
+                <thead>
+                  <tr className="text-left text-text-muted border-b border-border-default">
+                    <th className="pb-2 pr-4 font-normal">Connector</th>
+                    <th className="pb-2 pr-4 font-normal">Status</th>
+                    <th className="pb-2 pr-4 font-normal text-right">Enabled</th>
+                    <th className="pb-2 pr-4 font-normal text-right">Errors</th>
+                    <th className="pb-2 font-normal">Last sync</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {allTypes.map(ctype => {
+                    const detail: TypeDetail = byTypeDetail[ctype] ?? { enabled_count: 0, error_count: 0, last_synced_at: null };
+                    const health = connectorHealth(detail);
+                    return (
+                      <tr key={ctype} className="border-b border-border-default/50 last:border-0">
+                        <td className="py-2 pr-4">
+                          <span className="text-text-primary capitalize">{ctype.replace(/-/g, ' ')}</span>
+                        </td>
+                        <td className="py-2 pr-4">
+                          <span className="flex items-center gap-1.5">
+                            <StatusIndicator status={health} />
+                            <span className="text-text-secondary">{health}</span>
+                          </span>
+                        </td>
+                        <td className="py-2 pr-4 text-right text-text-secondary">{detail.enabled_count}</td>
+                        <td className="py-2 pr-4 text-right">
+                          {detail.error_count > 0
+                            ? <Badge variant="danger" size="sm">{detail.error_count}</Badge>
+                            : <span className="text-text-muted">0</span>
+                          }
+                        </td>
+                        <td className="py-2 text-text-secondary">{formatLastSync(detail.last_synced_at)}</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       <Card>
         <CardHeader><CardTitle>Enabled by status</CardTitle></CardHeader>
         <CardContent className="text-xs font-mono">

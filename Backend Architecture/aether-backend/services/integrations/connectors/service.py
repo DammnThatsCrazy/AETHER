@@ -215,16 +215,32 @@ class ConnectorService:
         rows = await self.repo.find_many(limit=10000)
         by_status: dict[str, int] = {}
         by_type: dict[str, int] = {}
+        by_type_detail: dict[str, dict[str, Any]] = {}
         for r in rows:
+            ctype = r["connector_type"]
+            if ctype not in by_type_detail:
+                by_type_detail[ctype] = {
+                    "enabled_count": 0,
+                    "error_count": 0,
+                    "last_synced_at": None,
+                }
+            detail = by_type_detail[ctype]
+            if r.get("sync_status") in ("failed", "degraded"):
+                detail["error_count"] += 1
+            lsa = r.get("last_synced_at")
+            if lsa and (detail["last_synced_at"] is None or lsa > detail["last_synced_at"]):
+                detail["last_synced_at"] = lsa
             if r.get("enabled"):
                 by_status[r.get("sync_status", "never_synced")] = by_status.get(r.get("sync_status", "never_synced"), 0) + 1
-                by_type[r["connector_type"]] = by_type.get(r["connector_type"], 0) + 1
+                by_type[ctype] = by_type.get(ctype, 0) + 1
+                detail["enabled_count"] += 1
         return {
             "available_connectors": len(CONNECTORS),
             "configured_count": len(rows),
             "enabled_count": sum(1 for r in rows if r.get("enabled")),
             "enabled_by_status": by_status,
             "enabled_by_type": by_type,
+            "by_type_detail": by_type_detail,
         }
 
 

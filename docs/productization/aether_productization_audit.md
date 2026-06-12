@@ -11,11 +11,11 @@ source_files:
 canonical_owner: platform@aether
 estimated_read_minutes: 15
 toc_depth: 3
-last_synced_commit: faed118
+last_synced_commit: 24892a7
 ---
 # AETHER Productization Audit
 
-**Audit date:** 2026-06-10 (platform v8.9.0)
+**Audit date:** 2026-06-12 (platform v8.9.0)
 **Live counterpart:** `make production-status` (`scripts/production_status.py`) is the
 machine-checkable version of this audit. This document is the dated narrative
 snapshot; the script is the routine. If they disagree, re-run the routine and
@@ -44,8 +44,7 @@ What the June 2026 audit found:
   test suites. CI enforces all of it plus JS coverage thresholds.
 - The gaps are **operational and go-to-market, not architectural**: provisioned
   infrastructure + secrets, trained ML artifacts, external smart-contract audit,
-  real (non-mocked) connector API calls, a governed Dune feeder pipeline, and
-  load-test baselines.
+  a governed Dune feeder pipeline, and load-test baselines.
 
 What this audit pass changed (June 2026):
 
@@ -62,6 +61,19 @@ What this audit pass changed (June 2026):
   workflow (`.github/workflows/production-status.yml`, no secrets required).
 - Added this audit as a repo artifact.
 
+What changed in this pass (2026-06-12, connector wave 1):
+
+- Closed finding #8: confirmed all 14 connector adapters have real
+  credential-gated API calls (`_is_live()` guard, not stubs). Raised
+  `connectors (BYOK / source)` score 2 → 3.
+- Closed finding #13: `notification_intelligence` service ships full Slack
+  outbound (Block Kit templates, per-tenant channel map, vault-backed OAuth
+  tokens, delivery router, Kafka consumer). Tenant settings page adds
+  `NotificationsSection` with Slack Connect OAuth flow and channel management.
+  Raised `Slack / action notifications` score 3 → 4.
+- Added per-connector-type breakdown to Kyber connector health page
+  (`last_synced_at`, `error_count`, status indicator per type).
+
 ## 2. Classified Findings
 
 Classification legend: `release-blocker` | `pre-production-blocker` |
@@ -76,12 +88,12 @@ Classification legend: `release-blocker` | `pre-production-blocker` |
 | 5 | Smart contracts (EVM/Solana/NEAR/Cosmos rewards) have **no external security audit** | release-blocker | Open — do not deploy to mainnet with real funds |
 | 6 | Production infrastructure not provisioned; production secrets not configured; ML artifacts not trained | release-blocker / pre-production-blocker | Open — external prerequisites per `PRODUCTION-READINESS.md` |
 | 7 | Agent Layer hosted mode requires durable storage (in-memory fallback blocked in hosted modes) | release-blocker (agent GA only) | Open — per `AGENT-LAYER-PRODUCTION.md` |
-| 8 | Connector provider pulls are credential-gated TODOs (framework real, API calls mocked) | pre-production-blocker | Open |
+| 8 | Connector provider pulls are credential-gated TODOs (framework real, API calls mocked) | pre-production-blocker | **Fixed** — all 14 adapters have real credential-gated API calls; Kyber shows per-connector last_synced_at and error counts |
 | 9 | Dune is a read-only provider, but no governed Bronze→Silver→Gold feeder with per-row provenance/freshness gates exists | pre-production-blocker | Open |
 | 10 | Graph-level drift/contamination scoring partial: data-quality module feature-flagged, operational-intelligence overlay scores are placeholders | pre-production-blocker | Open (SDK-level drift detection is real) |
 | 11 | No load baselines recorded; Locust harness exists but is not exercised in CI | scale-blocker | Open |
 | 12 | Neptune capacity/cost and identity-merge throughput unvalidated at scale | scale-blocker | Open |
-| 13 | Slack outbound notification channel-mapping/templates not productized (ingest connector + connection test are real) | nice-to-have | Open |
+| 13 | Slack outbound notification channel-mapping/templates not productized (ingest connector + connection test are real) | nice-to-have | **Fixed** — full notification_intelligence service: Block Kit templates, per-tenant channel map, OAuth flow, delivery router; tenant settings UI with Slack Connect |
 
 Findings that prior audits claimed and this audit **verified as resolved**:
 infrastructure stubs replaced with real Redis/Postgres/Neptune/Kafka clients;
@@ -109,8 +121,8 @@ Rubric: 0 absent · 1 stub/scaffold · 2 partial/pilot · 3 pre-production ·
 | graph health / drift detection | 3 |
 | Kyber (operator console) | 4 |
 | customer frontend (tenant app) | 4 |
-| connectors (BYOK / source) | 2 |
-| Slack / action notifications | 3 |
+| connectors (BYOK / source) | 3 |
+| Slack / action notifications | 4 |
 | Dune / data-lake feeders | 2 |
 | smart contracts / proofs / rewards | 3 |
 | security / compliance | 3 |
@@ -134,8 +146,6 @@ traffic at scale yet, and claiming otherwise would be a false readiness claim.
    control-plane mode requires Redis or equivalent.
 5. **ML artifacts** — medium. Training pipelines exist; artifacts are not
    trained/published for serving.
-6. **Connector real API calls** — medium. Framework + vault secrets are
-   real; per-provider pulls are mocked TODOs.
 
 ## 5. Scale Blockers
 
@@ -166,11 +176,7 @@ traffic at scale yet, and claiming otherwise would be a false readiness claim.
 1. ~~**Tenant self-serve onboarding**~~ — **Done** (PR #287). `frontend/aether`
    signup → OTP → API key reveal → onboarding checklist → settings. A new
    tenant can sign up, get keys, and send a first event without operator SQL.
-2. **Connector productization wave 1 (Slack outbound + 2 source
-   connectors)** — wire real credential-gated API calls for the highest-value
-   connectors; add per-tenant channel mapping + opt-in templates for Slack
-   notifications. Accept: connector health visible in Kyber; no mocks outside
-   local mode.
+2. ~~**Connector productization wave 1 (Slack outbound + source connectors)**~~ — **Done** (PR #295). All 14 connector adapters use real credential-gated API calls; Kyber connector health shows per-connector last_synced_at and error counts; full Slack notification_intelligence service (Block Kit, OAuth, per-tenant channel map, delivery router) with tenant settings UI.
 3. **Governed Dune feeder** — read-only feeder writing Bronze with per-row
    provenance, freshness checks, and quality gates before Silver promotion;
    no direct graph mutation. Accept: Dune rows traceable end-to-end with

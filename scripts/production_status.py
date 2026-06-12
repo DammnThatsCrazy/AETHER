@@ -191,23 +191,28 @@ AREAS: list[Area] = [
     ),
     Area(
         "connectors (BYOK / source)",
-        2,
-        "Connector framework (descriptor, vault-backed secrets, sync status, webhook "
-        "parse, normalization to canonical envelope) is implemented and feature-"
-        "flagged, but most provider pulls are credential-gated TODOs validated only "
-        "against mocks.",
-        ["Backend Architecture/aether-backend/services/integrations/connectors/"],
+        3,
+        "All 14 connector adapters have real credential-gated API call implementations "
+        "(gated by _is_live() in production mode). Framework covers vault-backed "
+        "secrets, sync-status tracking, webhook parse, normalization to canonical "
+        "envelope. Kyber connector health page now shows per-connector-type breakdown "
+        "with last_synced_at and error counts.",
+        ["Backend Architecture/aether-backend/services/integrations/connectors/",
+         "frontend/kyber/src/pages/connectors/"],
     ),
     Area(
         "Slack / action notifications",
-        3,
-        "Slack is correctly modeled as an action/messaging connector (auth.test "
-        "connection check, webhook parse, tenant-scoped secrets) and notification "
-        "routing exists; outbound channel mapping and per-tenant opt-in templates are "
-        "not yet productized.",
+        4,
+        "Full notification_intelligence service: Slack outbound via Block Kit "
+        "(chat.postMessage, severity-templated messages, action buttons), per-tenant "
+        "channel mapping with vault-backed tokens, circuit breaker + retry, Kafka "
+        "consumer attached at startup, OAuth flow with PKCE state. Tenant frontend "
+        "settings page includes Slack Connect button and per-channel management. "
+        "Minor gaps: webhook/email channels not yet self-serve in the frontend.",
         [
             "Backend Architecture/aether-backend/services/integrations/connectors/adapters.py",
             "Backend Architecture/aether-backend/services/notification_intelligence/",
+            "frontend/aether/src/pages/settings/notifications-section.tsx",
         ],
     ),
     Area(
@@ -311,12 +316,6 @@ BLOCKERS: list[Blocker] = [
         "ML model artifacts not trained/published for serving",
         "deployment / cloud readiness",
         "Run training pipelines in ML Models/aether-ml and publish artifacts",
-    ),
-    Blocker(
-        "pre-production-blocker",
-        "Connector provider pulls are credential-gated TODOs",
-        "connectors (BYOK / source)",
-        "Wire real API calls per connector behind existing vault secret flow",
     ),
     Blocker(
         "pre-production-blocker",
