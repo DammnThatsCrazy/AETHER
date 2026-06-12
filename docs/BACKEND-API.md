@@ -771,6 +771,10 @@ Three service groups are available when Intelligence Graph feature flags are ena
 | GET | `/v1/commerce/fees/report` | Fee elimination report for tenant |
 | GET | `/v1/commerce/agent/{id}/spend` | Agent spend history |
 | GET | `/v1/commerce/agents/{id}/economics` | Full economic profile: budget usage, delegation policy, economic identity |
+| GET | `/v1/commerce/revenue/{service_id}` | Service revenue over a time window (settled payments attributed to service) |
+| GET | `/v1/commerce/cluster/{id}/spend` | Cluster spend analytics: settled volume and unique agents |
+| GET | `/v1/commerce/treasury` | Treasury balance, preferred rails, and spend runway estimate (`commerce:admin`) |
+| GET | `/v1/commerce/facilitators/performance` | Per-facilitator performance matrix: volume, success rate, transaction count |
 
 ### On-Chain Service (L0)
 
