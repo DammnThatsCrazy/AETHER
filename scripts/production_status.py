@@ -231,8 +231,9 @@ AREAS: list[Area] = [
         "Remaining gap: no staging validation with a real Dune API key; no scheduled "
         "polling worker (pull is on-demand via /sync).",
         [
-            "Backend Architecture/aether-backend/shared/providers/categories.py",
-            "Backend Architecture/aether-backend/services/ingestion/routes.py",
+            "Backend Architecture/aether-backend/services/dune_feeder/service.py",
+            "Backend Architecture/aether-backend/services/dune_feeder/routes.py",
+            "frontend/kyber/src/pages/dune-feeder/dune-feeder-page.tsx",
         ],
     ),
     Area(
