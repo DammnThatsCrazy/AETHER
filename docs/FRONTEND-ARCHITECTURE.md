@@ -13,7 +13,7 @@ source_files:
 canonical_owner: frontend@aether
 estimated_read_minutes: 35
 toc_depth: 4
-last_synced_commit: 4c37b04
+last_synced_commit: 828e055
 ---
 
 # Aether Frontend Architecture & Designer Handoff
@@ -482,6 +482,7 @@ These components exist and should be extended — not replaced.
 | Timeline components | `apps/kyber/src/components/timelines/` | Reuse for Journey tab events |
 | WebSocket hook | `apps/kyber/src/hooks/use-websocket.ts` | Reuse for live freshness updates |
 | API endpoints | `apps/kyber/src/lib/api/endpoints.ts` | Extend with all new Profile360 sub-resource routes |
+| Connector health | `apps/kyber/src/pages/connectors/connectors-page.tsx` | Aggregate + per-type connector health table; reads `by_type_detail` from admin overview endpoint |
 
 Type contracts for all new sub-resources are in `packages/shared/`. The frontend imports from that package — do not duplicate types in `apps/kyber`.
 
