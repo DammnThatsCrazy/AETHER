@@ -13,7 +13,7 @@ source_files:
 canonical_owner: frontend@aether
 estimated_read_minutes: 35
 toc_depth: 4
-last_synced_commit: 24892a7
+last_synced_commit: b3e9ddb
 ---
 # Aether Frontend Architecture & Designer Handoff
 
@@ -39,6 +39,7 @@ There are two separate frontend applications. **Do not mix them up.**
 - **Recommendation cards** — pending retargeting / campaign actions for the tenant to approve
 - Campaign management, attribution dashboards
 - API key management, plan management, usage metering
+- Notification channel management (Slack Connect OAuth, channel list, test/remove)
 
 **Kyber (internal operator console) contains:**
 - Mission dashboard — real-time system health across all tenants
@@ -47,6 +48,7 @@ There are two separate frontend applications. **Do not mix them up.**
 - Entity admin — manage any entity across any tenant
 - Command center — controller management
 - Diagnostics — circuit breakers, error tracking, dependency health
+- Connector health — aggregate + per-connector-type view (enabled count, error count, last sync time)
 - Review / approval workflows — human-in-the-loop agent approvals
 - Lab — test fixtures and replay
 
@@ -504,9 +506,22 @@ Type contracts for all new sub-resources are in `packages/shared/`. The frontend
 | `EvidenceDrawer` | Expandable signal evidence panel | Medium |
 | `DelegationChainDiagram` | Linear chain visualization for agent operator flow | Low |
 
+## Tenant Notification Channel Components (Aether, v8.9.0)
+
+Self-serve channel management for paying tenants in `frontend/aether/src/pages/settings/` and `frontend/aether/src/features/notifications/`:
+
+| Component / Hook | Purpose |
+|---|---|
+| `NotificationsSection` | Settings-page section — lists connected channels with StatusIndicator, severity badges, Test/Remove actions |
+| `SlackConnectButton` | Initiates Slack OAuth flow (`/v1/notifications/channels/slack/connect`); handles redirect back with `?connected=slack` toast |
+| `useNotificationChannels` | CRUD hooks for tenant-side channel management (list, register, update, remove, test) |
+| `useNotificationConfig` | Fetches tenant notification config including `slack_channel_map` |
+
+The Slack OAuth callback redirects to `/settings/notifications?connected=slack`; `SettingsPage` reads the param and shows a success toast, then clears it.
+
 ## Notification Intelligence Components (Kyber, v8.8.0)
 
-Operator-facing and end-user notification components in `apps/kyber/src/features/notifications/`:
+Operator-facing notification components in `apps/kyber/src/features/notifications/`:
 
 | Component / Hook | Purpose |
 |---|---|
