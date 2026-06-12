@@ -47,7 +47,10 @@ def _authenticated_tenant_scope(request: Request) -> Optional[str]:
     or by the kyber:operator permission explicitly granted to Kyber operators.
     """
     tenant = request.state.tenant
-    if tenant.has_permission("kyber:operator"):
+    # Use raw permissions check — has_permission() returns True for Role.ADMIN
+    # on every permission string, which would incorrectly grant platform scope
+    # to ordinary tenant admins.
+    if "kyber:operator" in getattr(tenant, "permissions", []):
         return None
     if hasattr(tenant, "tenant_id") and tenant.tenant_id:
         return tenant.tenant_id

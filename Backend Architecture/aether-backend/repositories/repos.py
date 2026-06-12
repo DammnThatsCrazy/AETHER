@@ -1995,3 +1995,26 @@ class DuneFeederStatsRepository(BaseRepository):
             last_ingest_source_tag,
             tenant_scope or "",
         )
+
+    async def load_aggregate(self) -> dict:
+        """Aggregate stats across all tenant scopes (for platform-level health).
+
+        When the platform caller supplies no tenant_scope we must sum across every
+        per-tenant stats row — feeder_stats_global is empty after tenant-scoped
+        ingests, so reading only that row would always yield zeroes.
+        """
+        all_rows = await self.find_many(limit=10_000)
+        stat_rows = [r for r in all_rows if str(r.get("id", "")).startswith("feeder_stats_")]
+        total_submitted = sum(r.get("total_submitted", 0) for r in stat_rows)
+        total_rejected = sum(r.get("total_rejected", 0) for r in stat_rows)
+        dated = sorted(
+            [r for r in stat_rows if r.get("last_ingest_at")],
+            key=lambda r: r.get("last_ingest_at", ""),
+            reverse=True,
+        )
+        return {
+            "total_submitted": total_submitted,
+            "total_rejected": total_rejected,
+            "last_ingest_at": dated[0].get("last_ingest_at") if dated else None,
+            "last_ingest_source_tag": dated[0].get("last_ingest_source_tag") if dated else None,
+        }

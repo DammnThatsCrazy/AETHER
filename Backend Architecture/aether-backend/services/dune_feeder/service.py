@@ -284,8 +284,10 @@ class DuneFeederService:
             # Deterministic key: same (tenant_scope, source_tag, execution_id, row_index)
             # maps to the same record_id so retried ingest requests are idempotent AND
             # different tenants sharing a source_tag/execution_id get separate rows.
-            tenant_key = payload.tenant_scope or "global"
-            record_id = f"dune:{tenant_key}:{payload.source_tag}:{qr.execution_id}:{idx}"
+            # Hash the key tuple to avoid `:` collisions when components contain
+            # colons (e.g. URN-style tenant IDs or Dune execution IDs).
+            bronze_key = json.dumps([payload.tenant_scope or "global", payload.source_tag, qr.execution_id, idx])
+            record_id = "bronze:" + hashlib.sha256(bronze_key.encode()).hexdigest()
 
             bronze_record = DuneBronzeRecord(
                 record_id=record_id,
@@ -308,6 +310,12 @@ class DuneFeederService:
                 provenance_chain=provenance,
             )
 
+            # Skip if row already exists: preserves lifecycle state (Silver/Gold
+            # promotion) on retry rather than clobbering it back to "bronze".
+            existing = await self._bronze.find_by_id(record_id)
+            if existing is not None:
+                rows_accepted += 1
+                continue
             await self._bronze.insert(record_id, bronze_record.model_dump())
             rows_accepted += 1
             metrics.increment(
@@ -435,9 +443,12 @@ class DuneFeederService:
         tag_rows = await self._bronze.find_many(filters=tier_filters, limit=10000)
         unique_tags = {r.get("source_tag") for r in tag_rows if r.get("source_tag")}
 
-        # Load per-tenant stats so rejection_rate and last_ingest_* are scoped
-        # to the caller's tenant and do not expose another tenant's activity.
-        stats = await self._stats.load(tenant_scope=tenant_scope)
+        # Platform callers (tenant_scope=None) aggregate across all tenants;
+        # tenant-scoped callers only see their own rejection rate / last-ingest.
+        if tenant_scope is None:
+            stats = await self._stats.load_aggregate()
+        else:
+            stats = await self._stats.load(tenant_scope=tenant_scope)
         total_submitted = stats.get("total_submitted", 0)
         total_rejected = stats.get("total_rejected", 0)
         rejection_rate = total_rejected / total_submitted if total_submitted > 0 else 0.0
