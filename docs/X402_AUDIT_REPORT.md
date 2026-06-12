@@ -11,7 +11,7 @@ source_files:
 canonical_owner: security@aether
 estimated_read_minutes: 12
 toc_depth: 3
-last_synced_commit: 48fb9d4
+last_synced_commit: 70dcd8a
 ---
 # x402 Protocol Support Audit — Aether Repository
 
@@ -80,7 +80,7 @@ This is not speculative or merely extensible infrastructure. The x402 support is
 | **Settlement state machine** | Implemented | `services/x402/settlement.py` — multi-state lifecycle (pending → clearing → settled / failed); `SettlementEngine.start()` transitions `PaymentReceipt` through states |
 | **On-chain verification** | Partial | `services/x402/verification.py` — facilitator-delegated verification implemented for USDC/Base and USDC/Solana; direct on-chain ecrecover for arbitrary chains is not yet implemented |
 | **Entitlement / access gating** | Latent | Reward eligibility engine exists (`services/rewards/eligibility.py`) but x402 does not gate access — it is observational/capture-only |
-| **HTTP 402 response middleware** | Missing | No middleware that *returns* HTTP 402 to clients; x402 is capture-side only, not challenge-side |
+| **HTTP 402 response middleware** | Implemented | `services/x402/challenge_middleware.py` — `X402ChallengeMiddleware` intercepts requests to registered protected resources, returns HTTP 402 with `PAYMENT-REQUIRED` header, honors `X-Payment-Identifier` idempotency and active entitlements (SIWX reuse). Wired via `register_challenge_middleware()` controlled by `commerce_enable_challenge_middleware` setting. |
 
 ---
 
@@ -180,9 +180,9 @@ Neptune: {tenant_id}:AGENT vertex + {tenant_id}:SERVICE vertex + PAYS edge (tena
 AuditAction.X402_CAPTURED logged in compliance audit trail
 ```
 
-### 3.2 Missing Flow: Challenge → Payment → Access
+### 3.2 Challenge → Payment → Access
 
-The canonical x402 flow would be:
+The canonical x402 flow is:
 
 ```
 Client request → Server returns HTTP 402 with PAYMENT-REQUIRED header
@@ -190,12 +190,12 @@ Client request → Server returns HTTP 402 with PAYMENT-REQUIRED header
     → Server/facilitator verifies payment → Server returns 200 + X-PAYMENT-RESPONSE
 ```
 
-**This challenge-side flow is not implemented.** Aether does not:
-- Return HTTP 402 responses from any endpoint
-- Act as a facilitator that verifies payment proofs before granting access
-- Gate endpoint access behind payment verification middleware
+**This challenge-side flow is now implemented.** `X402ChallengeMiddleware` (`services/x402/challenge_middleware.py`):
+- Returns HTTP 402 with `PAYMENT-REQUIRED` header for requests to registered protected resources
+- Honors `X-Payment-Identifier` for idempotent payment reuse (SIWX entitlement check)
+- Wired via `register_challenge_middleware(app, protected_paths)` controlled by `commerce_enable_challenge_middleware` feature flag
 
-Aether's x402 support is **capture-side**: it observes and records x402 transactions that occurred elsewhere, builds an economic graph from them, and provides analytics.
+Aether's x402 support is now **full-stack**: challenge-side (returning HTTP 402 and gating access) plus capture-side (recording transactions, building economic graph, analytics).
 
 ---
 
@@ -208,6 +208,7 @@ Aether's x402 support is **capture-side**: it observes and records x402 transact
 | `Backend Architecture/aether-backend/services/x402/models.py` | PaymentTerms, PaymentProof, PaymentResponse, CapturedX402Transaction, X402Node, SpendingSummary |
 | `Backend Architecture/aether-backend/services/x402/commerce_models.py` | Facilitator, PaymentAuthorization, PaymentReceipt — commerce control plane types |
 | `Backend Architecture/aether-backend/services/x402/interceptor.py` | X402Interceptor — header parsing, capture, event publishing |
+| `Backend Architecture/aether-backend/services/x402/challenge_middleware.py` | X402ChallengeMiddleware — challenge-side HTTP 402 gating with idempotency and SIWX entitlement reuse |
 | `Backend Architecture/aether-backend/services/x402/economic_graph.py` | X402EconomicGraph — in-memory subgraph, Neptune snapshots, spending patterns |
 | `Backend Architecture/aether-backend/services/x402/facilitators.py` | FacilitatorRegistry — per-chain facilitator lookup and HTTP endpoint resolution |
 | `Backend Architecture/aether-backend/services/x402/verification.py` | VerificationEngine — facilitator-delegated verification (x402 wire format) + USDC/Base, USDC/Solana local fallback |
@@ -265,7 +266,7 @@ Aether's x402 support is **capture-side**: it observes and records x402 transact
 
 ## 5. Conclusion
 
-**Classification: Implemented (capture-side) / Partial (challenge-side)**
+**Classification: Implemented (full-stack: capture-side + challenge-side)**
 
 Aether has a **production-grade x402 capture and analytics subsystem** that:
 
@@ -293,8 +294,6 @@ Aether has a **production-grade x402 capture and analytics subsystem** that:
   `daily_cap_usd`, `monthly_cap_usd`, `per_transaction_cap_usd`. See
   `COMMERCE-CONTROL-PLANE.md §9` and `COMMERCE-OPERATOR-RUNBOOK.md §8`.
 
-The **one remaining gap** is:
-
-1. **No challenge-side middleware** — Aether does not return HTTP 402 responses or gate access behind payment verification. It is an observer/recorder, not a payment gateway. This is an architectural choice, not an oversight.
+**Challenge-side gap is now closed.** `X402ChallengeMiddleware` implements the missing HTTP 402 gating layer (`services/x402/challenge_middleware.py`). Deployment is controlled by `commerce_enable_challenge_middleware` setting.
 
 Direct on-chain ecrecover verification for arbitrary chains is also absent; verification is delegated to external facilitators for all chains except as a local fallback path for USDC/Base and USDC/Solana.

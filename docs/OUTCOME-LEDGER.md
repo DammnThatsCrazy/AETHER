@@ -19,7 +19,7 @@ related:
 canonical_owner: platform@aether
 estimated_read_minutes: 5
 toc_depth: 3
-last_synced_commit: 48fb9d4
+last_synced_commit: 70dcd8a
 ---
 # Outcome Ledger
 

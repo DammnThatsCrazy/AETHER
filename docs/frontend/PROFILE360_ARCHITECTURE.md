@@ -12,7 +12,7 @@ source_files:
 canonical_owner: frontend@aether
 estimated_read_minutes: 10
 toc_depth: 3
-last_synced_commit: 48fb9d4
+last_synced_commit: 70dcd8a
 ---
 # Aether Profile360 Frontend Architecture
 
@@ -129,7 +129,7 @@ Future backend-specific endpoints can map directly into the normalized Profile36
 
 Use `useWebSocket` for entity-scoped subscriptions:
 
-- `/v1/profile/{id}/stream` for profile deltas.
+- `/v1/realtime/ws?entity_id={id}` for profile deltas (real endpoint; `use-profile360.ts` connects here).
 - `/v1/profile/{id}/timeline/stream` for timeline append/prepend.
 - `/v1/profile/{id}/graph/stream` for graph node/edge mutations.
 - `/v1/wallet/{id}/balances/stream` for balance deltas.
