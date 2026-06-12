@@ -43,13 +43,13 @@ function formatTs(ts: string | null | undefined): string {
 export function DuneFeederPage() {
   const health = useQuery({
     key: 'dune-feeder-health',
-    fetcher: () => api.kyber.duneFeederHealth() as Promise<{ data: FeederHealth }>,
+    fetcher: () => api.admin.kyber.duneFeederHealth() as Promise<{ data: FeederHealth }>,
     staleTime: 30_000,
   });
 
   const gold = useQuery({
     key: 'dune-feeder-gold',
-    fetcher: () => api.kyber.duneFeederGold() as Promise<{ data: { records: GoldRecord[]; record_count: number } }>,
+    fetcher: () => api.admin.kyber.duneFeederGold() as Promise<{ data: { records: GoldRecord[]; record_count: number } }>,
     staleTime: 30_000,
   });
 
@@ -72,7 +72,7 @@ export function DuneFeederPage() {
         )}
       </div>
 
-      {health.loading && <LoadingState lines={4} />}
+      {health.isLoading && <LoadingState lines={4} />}
 
       {h && (
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
@@ -117,8 +117,8 @@ export function DuneFeederPage() {
 
       <div>
         <h2 className="text-lg font-semibold text-text-primary mb-3">Gold records</h2>
-        {gold.loading && <LoadingState lines={3} />}
-        {!gold.loading && goldRecords.length === 0 && (
+        {gold.isLoading && <LoadingState lines={3} />}
+        {!gold.isLoading && goldRecords.length === 0 && (
           <p className="text-sm text-text-muted">No Gold records yet. Ingest Bronze rows, promote to Silver, then materialize Gold via the admin API.</p>
         )}
         {goldRecords.length > 0 && (
