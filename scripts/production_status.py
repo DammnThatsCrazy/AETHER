@@ -158,11 +158,13 @@ AREAS: list[Area] = [
         "graph health / drift detection",
         4,
         "SDK drift detection (schema, stale heartbeat, replay storm, auth, consent) is "
-        "implemented with incident tracking. Operational intelligence overlay scoring "
-        "now returns deterministic layer-coverage scores (H2H/H2A/A2H/A2A) computed "
-        "from real graph data; placeholder scoring removed. Graph-level "
-        "contamination/identity-churn detection remains feature-flagged in the "
-        "data-quality module.",
+        "implemented with incident tracking. Graph health overlay scoring is now real: "
+        "graph_overlay() computes trust/risk/confidence scores from IntelligenceQualityService "
+        "(cluster_community_drift, merge_rate, split_rate, orphan_rate) and attaches "
+        "IntelligenceScore objects to every returned GraphNode. Overlay dimensions are "
+        "populated per overlay type (risk/trust/health/identity/attribution). "
+        "ClickHouse-backed CIS health engine wired for production; local mode uses "
+        "deterministic baseline + per-tenant jitter.",
         [
             "Backend Architecture/aether-backend/services/sdk_drift/routes.py",
             "Backend Architecture/aether-backend/services/data_quality/",
@@ -195,39 +197,39 @@ AREAS: list[Area] = [
     Area(
         "connectors (BYOK / source)",
         3,
-        "All 14 connector adapters have real credential-gated API call implementations "
-        "(gated by _is_live() in production mode). Framework covers vault-backed "
-        "secrets, sync-status tracking, webhook parse, normalization to canonical "
-        "envelope. Kyber connector health page now shows per-connector-type breakdown "
-        "with last_synced_at and error counts.",
-        ["Backend Architecture/aether-backend/services/integrations/connectors/",
-         "frontend/kyber/src/pages/connectors/"],
+        "14 production-shaped inbound connectors with real API calls credential-gated "
+        "behind vault secret flow (Shopify, Stripe, HubSpot, Salesforce, Klaviyo, "
+        "PostHog, GA4, Jira, Linear, Zendesk, Intercom — all real HTTP against live "
+        "APIs when secret provided). Sync health tracking (status, last_synced_at, "
+        "error_count, last_error_message) recorded per connector per tenant. Kyber "
+        "per-tenant health drill-down route added. Remaining gap: staging validation "
+        "with live credentials for high-value connectors.",
+        ["Backend Architecture/aether-backend/services/integrations/connectors/"],
     ),
     Area(
         "Slack / action notifications",
         4,
-        "Full notification_intelligence service: Slack outbound via Block Kit "
-        "(chat.postMessage, severity-templated messages, action buttons), per-tenant "
-        "channel mapping with vault-backed tokens, circuit breaker + retry, Kafka "
-        "consumer attached at startup, OAuth flow with PKCE state. Tenant frontend "
-        "settings page includes Slack Connect button and per-channel management. "
-        "Minor gaps: webhook/email channels not yet self-serve in the frontend.",
+        "Slack inbound (webhook parse + auth.test connection check) and outbound "
+        "(chat.postMessage + chat.update via Block Kit, circuit breaker, retries) are "
+        "fully real. Per-tenant Slack channel mapping by severity (slack_channel_map) "
+        "and opt-in controls (operator_review_required, quiet_hours, rate limits) are "
+        "implemented. Slack OAuth flow (connect + callback) is wired. Minor gap: "
+        "per-tenant channel mapping not validated against a live workspace in staging.",
         [
             "Backend Architecture/aether-backend/services/integrations/connectors/adapters.py",
             "Backend Architecture/aether-backend/services/notification_intelligence/",
-            "frontend/aether/src/pages/settings/notifications-section.tsx",
         ],
     ),
     Area(
         "Dune / data-lake feeders",
         3,
-        "Governed Bronze→Silver→Gold feeder pipeline shipped: freshness gate, per-row "
-        "provenance chain, quality scoring, operator-gated Silver promotion, Gold "
-        "materialization with cross-tenant isolation, and rollback with tenant scope "
-        "enforcement. Router mounted at /v1/admin/dune-feeder. Kyber health page at "
-        "/dune-feeder shows tier counts, rejection rate, and Gold records. "
-        "Remaining gap: no automated Kafka consumer pulling from Dune on a schedule — "
-        "operators must POST to /ingest manually or via a cron job.",
+        "DuneConnector (read-only, credential-gated, per-row provenance) added to "
+        "connector fleet. PromotionService governs Bronze→Silver with freshness gate "
+        "(max_age_hours), null-rate gate, required-field gate, and entity_id gate; "
+        "each rejected row gets per-check failure reasons. POST /v1/lake/promote "
+        "triggers promotion; GET /v1/admin/feeders exposes per-run health in Kyber. "
+        "Remaining gap: no staging validation with a real Dune API key; no scheduled "
+        "polling worker (pull is on-demand via /sync).",
         [
             "Backend Architecture/aether-backend/services/dune_feeder/service.py",
             "Backend Architecture/aether-backend/services/dune_feeder/routes.py",
@@ -334,9 +336,18 @@ BLOCKERS: list[Blocker] = [
     ),
     Blocker(
         "pre-production-blocker",
-        "No governed Dune feeder (provenance + freshness gates) into the lake",
+        "Connectors not staging-validated with live credentials; no E2E test "
+        "for vault → pull → event ingestion path against a real provider API",
+        "connectors (BYOK / source)",
+        "Run connector smoke against staging with real Shopify/Stripe/Slack credentials; "
+        "add E2E test asserting vault secret → pull → Bronze ingest",
+    ),
+    Blocker(
+        "pre-production-blocker",
+        "Dune feeder not staging-validated; no scheduled polling worker (pull is on-demand only)",
         "Dune / data-lake feeders",
-        "Add read-only feeder writing Bronze with per-row provenance; gate Silver promotion on quality checks",
+        "Run DuneConnector sync against staging with a real API key; add a scheduled "
+        "worker (APScheduler or Celery beat) to automate periodic pulls per tenant config",
     ),
     Blocker(
         "scale-blocker",

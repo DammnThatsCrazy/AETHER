@@ -559,3 +559,53 @@ class Permissions:
     NOTIFICATIONS_APPROVE        = "notifications:approve"
     NOTIFICATIONS_MANAGE         = "notifications:manage"
     NOTIFICATIONS_CHANNELS_WRITE = "notifications:channels:write"
+
+
+class KyberRole(str, Enum):
+    """Kyber operator console roles for agentic commerce."""
+    VIEWER   = "kyber:viewer"
+    OPERATOR = "kyber:operator"
+    APPROVER = "kyber:approver"
+    ADMIN    = "kyber:admin"
+
+
+# Permissions granted to each Kyber role (additive; higher roles include lower)
+KYBER_ROLE_PERMISSIONS: dict[KyberRole, list[str]] = {
+    KyberRole.VIEWER: [
+        Permissions.COMMERCE_READ,
+        Permissions.APPROVALS_READ,
+        Permissions.ENTITLEMENTS_READ,
+    ],
+    KyberRole.OPERATOR: [
+        Permissions.COMMERCE_READ,
+        Permissions.COMMERCE_VERIFY,
+        Permissions.COMMERCE_SETTLE,
+        Permissions.COMMERCE_REVIEW,
+        Permissions.APPROVALS_READ,
+        Permissions.ENTITLEMENTS_READ,
+    ],
+    KyberRole.APPROVER: [
+        Permissions.COMMERCE_READ,
+        Permissions.COMMERCE_APPROVE,
+        Permissions.COMMERCE_REVIEW,
+        Permissions.COMMERCE_POLICY,
+        Permissions.APPROVALS_READ,
+        Permissions.APPROVALS_WRITE,
+        Permissions.ENTITLEMENTS_READ,
+    ],
+    KyberRole.ADMIN: [
+        Permissions.COMMERCE_READ,
+        Permissions.COMMERCE_CHALLENGE,
+        Permissions.COMMERCE_VERIFY,
+        Permissions.COMMERCE_SETTLE,
+        Permissions.COMMERCE_APPROVE,
+        Permissions.COMMERCE_REVIEW,
+        Permissions.COMMERCE_POLICY,
+        Permissions.COMMERCE_ADMIN,
+        Permissions.APPROVALS_READ,
+        Permissions.APPROVALS_WRITE,
+        Permissions.ENTITLEMENTS_READ,
+        Permissions.ENTITLEMENTS_WRITE,
+        Permissions.RESOURCES_ADMIN,
+    ],
+}

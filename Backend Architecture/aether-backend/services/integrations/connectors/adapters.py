@@ -677,8 +677,106 @@ class IntercomConnector(BaseConnector):
         ]
 
 
+class DuneConnector(BaseConnector):
+    """Dune Analytics — read-only analytics provider.
+
+    Pulls query results from the Dune API (api.dune.com/api/v1). Results land
+    in Bronze via FeederService; no direct graph mutation. Each row carries
+    per-row provenance (query_id, execution_id, row_index) for end-to-end
+    traceability.
+    """
+    connector_type = "dune"  # type: ignore[assignment]
+    label = "Dune Analytics"
+    category = "product_analytics"  # type: ignore[assignment]
+    description = "Read-only on-chain analytics provider. Pulls query results into Bronze for governed promotion to Silver."
+    supports_webhook = False
+    supports_pull = True
+    requires_secret = True
+    premium = False
+    ingest_event_types = ("dune.query_result",)
+    docs_slug = "operations/connectors"
+
+    # Curated query IDs: operators configure which queries to pull per tenant.
+    # These are well-known public governance/market/onchain queries.
+    _DEFAULT_QUERIES: list[str] = []  # populated from connector config["query_ids"]
+
+    async def test_connection(self, config: ConnectorConfig, secret: Optional[str] = None) -> ConnectionTestResult:
+        base = await super().test_connection(config, secret)
+        if not base.ok or not _is_live(secret):
+            return base
+        # Dune API auth: check /api/v1/user endpoint
+        status, body = await _http_get(
+            "https://api.dune.com/api/v1/user",
+            {"X-Dune-API-Key": secret},
+        )
+        if status == 200 and body.get("username"):
+            return _ok(self.connector_type, f"Dune user: {body['username']}")
+        return _err(self.connector_type, body.get("error", f"HTTP {status}"))
+
+    async def pull(self, config: ConnectorConfig, since: Optional[str] = None, secret: Optional[str] = None) -> list[NormalizedEvent]:
+        if not _is_live(secret):
+            return []
+        query_ids: list[str] = config.config.get("query_ids", [])
+        if not query_ids:
+            return []
+        events: list[NormalizedEvent] = []
+        for query_id in query_ids[:10]:  # cap at 10 queries per sync
+            # Execute query and fetch latest results
+            exec_status, exec_body = await _http_post(
+                f"https://api.dune.com/api/v1/query/{query_id}/execute",
+                {},
+                {"X-Dune-API-Key": secret, "Content-Type": "application/json"},
+            )
+            if exec_status not in (200, 201):
+                continue
+            execution_id = exec_body.get("execution_id", "")
+            if not execution_id:
+                continue
+            # Fetch results (latest cached results, not waiting for full execution)
+            res_status, res_body = await _http_get(
+                f"https://api.dune.com/api/v1/execution/{execution_id}/results",
+                {"X-Dune-API-Key": secret},
+            )
+            if res_status != 200:
+                # Fall back to latest results directly
+                res_status, res_body = await _http_get(
+                    f"https://api.dune.com/api/v1/query/{query_id}/results",
+                    {"X-Dune-API-Key": secret},
+                )
+            if res_status != 200:
+                continue
+            rows = res_body.get("result", {}).get("rows", [])
+            for i, row in enumerate(rows[:1000]):  # cap at 1000 rows per query
+                events.append(NormalizedEvent(
+                    event_type="dune.query_result",
+                    source="dune",
+                    external_id=f"{query_id}:{execution_id}:{i}",
+                    occurred_at=res_body.get("execution_ended_at", now_iso()),
+                    properties={
+                        "query_id": query_id,
+                        "execution_id": execution_id,
+                        "row_index": i,
+                        "row": row,
+                    },
+                ))
+        return events
+
+
+async def _http_post(url: str, payload: dict, headers: dict) -> tuple[int, dict]:
+    try:
+        import httpx
+        async with httpx.AsyncClient(timeout=30) as client:
+            resp = await client.post(url, json=payload, headers=headers)
+            try:
+                return resp.status_code, resp.json()
+            except Exception:
+                return resp.status_code, {}
+    except Exception:
+        return 0, {}
+
+
 ALL_CONNECTORS: list[type[BaseConnector]] = [
     SlackConnector, WebhookConnector, ShopifyConnector, StripeConnector, HubSpotConnector,
     SalesforceConnector, KlaviyoConnector, SegmentConnector, PostHogConnector, GA4Connector,
-    JiraConnector, LinearConnector, ZendeskConnector, IntercomConnector,
+    JiraConnector, LinearConnector, ZendeskConnector, IntercomConnector, DuneConnector,
 ]
