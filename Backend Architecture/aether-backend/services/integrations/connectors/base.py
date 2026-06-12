@@ -16,7 +16,7 @@ from pydantic import BaseModel, Field
 
 ConnectorType = Literal[
     "slack", "webhook", "shopify", "stripe", "hubspot", "salesforce",
-    "klaviyo", "segment", "posthog", "ga4", "jira", "linear", "zendesk", "intercom",
+    "klaviyo", "segment", "posthog", "ga4", "jira", "linear", "zendesk", "intercom", "dune",
 ]
 
 ConnectorCategory = Literal[
@@ -45,6 +45,9 @@ class ConnectorConfig(BaseModel):
     secret_ref: Optional[str] = None  # vault reference, never the secret itself
     last_synced_at: Optional[str] = None
     sync_status: ConnectorSyncStatus = "never_synced"
+    error_count: int = 0
+    last_error_at: Optional[str] = None
+    last_error_message: Optional[str] = None
     created_at: str = Field(default_factory=now_iso)
     updated_at: str = Field(default_factory=now_iso)
 

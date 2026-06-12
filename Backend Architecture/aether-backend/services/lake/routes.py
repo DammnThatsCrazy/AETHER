@@ -196,6 +196,59 @@ async def check_quality(domain: str, request: Request):
     return APIResponse(data=result).to_dict()
 
 
+class PromoteRequest(BaseModel):
+    domain: str = Field(..., description="Data domain: market, onchain, social, identity, governance, tradfi")
+    source_tag: str = Field(..., description="source_tag of the Bronze batch to promote")
+    entity_type: str = Field(default="dune_row", description="Entity type for Silver records")
+    entity_id_field: str = Field(default="id", description="Row field to use as entity_id")
+    required_fields: list[str] = Field(default_factory=list, description="Fields that must be present and non-null")
+    max_age_hours: float = Field(default=24.0, description="Maximum row age in hours for freshness gate")
+    null_rate_threshold: float = Field(default=0.3, description="Maximum fraction of null fields allowed (0.0–1.0)")
+
+
+@router.post("/promote")
+async def promote_bronze_to_silver(body: PromoteRequest, request: Request):
+    """Promote Bronze rows to Silver after freshness and quality gates.
+
+    Only rows from source=dune (or any source with per-row provenance) are
+    evaluated. Rows that pass all gates are upserted to Silver; rejected rows
+    are summarised in the response with per-row failure reasons.
+    """
+    request.state.tenant.require_permission("write")
+    tenant_id = request.state.tenant.tenant_id
+
+    bronze_repo = _BRONZE_REPOS.get(body.domain)
+    silver_repo = _SILVER_REPOS.get(body.domain)
+    if not bronze_repo:
+        raise BadRequestError(f"Unknown domain: {body.domain}")
+    if not silver_repo:
+        raise BadRequestError(f"No Silver tier for domain: {body.domain}")
+
+    from services.integrations.dune_feeder.service import promotion_service, record_feeder_run
+    result = await promotion_service.promote_batch(
+        bronze_repo=bronze_repo,
+        silver_repo=silver_repo,
+        source_tag=body.source_tag,
+        tenant_id=tenant_id,
+        entity_type=body.entity_type,
+        entity_id_field=body.entity_id_field,
+        required_fields=body.required_fields,
+        max_age_hours=body.max_age_hours,
+        null_rate_threshold=body.null_rate_threshold,
+    )
+    await record_feeder_run(
+        tenant_id=tenant_id,
+        source="dune",
+        source_tag=body.source_tag,
+        rows_ingested=result["total_evaluated"],
+        rows_promoted=result["promoted_count"],
+        rows_rejected=result["rejected_count"],
+        status="ok",
+    )
+    metrics.increment("lake_promote_api", labels={"domain": body.domain})
+    return APIResponse(data=result).to_dict()
+
+
 @router.get("/status")
 async def lake_status(request: Request):
     """Get lake status across all domains and tiers."""
