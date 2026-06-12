@@ -442,3 +442,93 @@ async def websocket_event_stream(websocket: WebSocket):
             await websocket.send_json({"type": "event", "data": {"received": data}})
     except WebSocketDisconnect:
         logger.info("WebSocket client disconnected")
+
+
+# ── Commerce KPI Aggregators ──────────────────────────────────────────────────
+
+
+@router.get("/commerce/kpi")
+async def commerce_kpi(request: Request, period: str = "30d"):
+    """
+    Commerce KPI summary for a tenant: spend rate, approval latency,
+    settlement degradation, and entitlement reuse rate.
+    Consumes SettlementEventRepository and x402 CommerceStore.
+    """
+    request.state.tenant.require_permission("commerce:read")
+    tenant_id = request.state.tenant.tenant_id
+
+    from repositories.repos import SettlementEventRepository
+    from services.x402.commerce_store import get_commerce_store
+    from datetime import datetime, timedelta, timezone
+    from decimal import Decimal
+
+    now = datetime.now(timezone.utc)
+    cutoff: Optional[str] = None
+    if period != "all":
+        try:
+            days = int(period.rstrip("d"))
+            cutoff = (now - timedelta(days=days)).isoformat()
+        except ValueError:
+            pass
+
+    settlements_repo = SettlementEventRepository()
+    rows = await settlements_repo.find_many(filters={"tenant_id": tenant_id}, limit=10000)
+    if cutoff:
+        rows = [r for r in rows if r.get("occurred_at", "") >= cutoff]
+
+    total = len(rows)
+    settled = [r for r in rows if r.get("status") in {"settled", "paid", "success", "access_granted"}]
+    failed = [r for r in rows if r.get("status") in {"failed", "error"}]
+
+    # Spend rate: total settled volume / period days
+    period_days = int(period.rstrip("d")) if period != "all" else 30
+    total_volume = sum(float(Decimal(str(r.get("amount") or 0))) for r in settled)
+    spend_rate_per_day = round(total_volume / period_days, 6) if period_days else 0.0
+
+    # Settlement degradation: failed / total (0 if no data)
+    settlement_degradation = round(len(failed) / total, 4) if total else 0.0
+
+    # Approval latency: read from commerce store approvals
+    store = get_commerce_store()
+    approvals = await store.list_approvals(tenant_id)
+    if cutoff:
+        approvals = [a for a in approvals if getattr(a, "created_at", "") >= cutoff]
+    decided = [
+        a for a in approvals
+        if getattr(a, "decided_at", None) and getattr(a, "created_at", None)
+    ]
+    avg_approval_latency_seconds: Optional[float] = None
+    if decided:
+        from datetime import datetime as _dt
+        def _seconds(a) -> float:
+            try:
+                c = _dt.fromisoformat(a.created_at)
+                d = _dt.fromisoformat(a.decided_at)
+                return abs((d - c).total_seconds())
+            except Exception:
+                return 0.0
+        avg_approval_latency_seconds = round(
+            sum(_seconds(a) for a in decided) / len(decided), 2
+        )
+
+    # Reuse rate: entitlements reused / total entitlements
+    entitlements = await store.list_entitlements(tenant_id)
+    if cutoff:
+        entitlements = [e for e in entitlements if getattr(e, "granted_at", getattr(e, "created_at", "")) >= cutoff]
+    reused = [e for e in entitlements if getattr(e, "reuse_count", 0) > 0]
+    reuse_rate = round(len(reused) / len(entitlements), 4) if entitlements else 0.0
+
+    result = {
+        "tenant_id": tenant_id,
+        "period": period,
+        "settled_count": len(settled),
+        "failed_count": len(failed),
+        "total_volume_usd": round(total_volume, 6),
+        "spend_rate_per_day_usd": spend_rate_per_day,
+        "settlement_degradation_rate": settlement_degradation,
+        "avg_approval_latency_seconds": avg_approval_latency_seconds,
+        "entitlement_reuse_rate": reuse_rate,
+        "computed_at": now.isoformat(),
+    }
+    metrics.increment("analytics_commerce_kpi_computed")
+    return APIResponse(data=result).to_dict()
