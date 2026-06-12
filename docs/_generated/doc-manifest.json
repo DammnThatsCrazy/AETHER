@@ -1549,6 +1549,22 @@
       ]
     },
     {
+      "path": "docs/Kyber-OPERATOR-GUIDE.md",
+      "title": "Kyber Operator Guide",
+      "slug": "kyber/operator-guide",
+      "section": "kyber",
+      "visibility": "I",
+      "audience": [
+        "operator",
+        "dev-senior",
+        "architect"
+      ],
+      "status": "stable",
+      "since_version": "8.9.0",
+      "estimated_read_minutes": 20,
+      "canonical_owner": "kyber@aether"
+    },
+    {
       "path": "docs/LIVE-TELEMETRY-WIRING.md",
       "title": "Live Telemetry Wiring",
       "slug": "operations/live-telemetry-wiring",
@@ -2085,6 +2101,22 @@
       "since_version": "8.8.0",
       "estimated_read_minutes": 8,
       "toc_depth": 3,
+      "canonical_owner": "backend@aether"
+    },
+    {
+      "path": "docs/PROTECTED-RESOURCES.md",
+      "title": "Protected Resources — Registration Guide",
+      "slug": "commerce/protected-resources",
+      "section": "commerce",
+      "visibility": "I",
+      "audience": [
+        "dev-senior",
+        "architect",
+        "operator"
+      ],
+      "status": "stable",
+      "since_version": "8.9.0",
+      "estimated_read_minutes": 8,
       "canonical_owner": "backend@aether"
     },
     {
@@ -2853,6 +2885,21 @@
       "since_version": "8.8.0",
       "estimated_read_minutes": 4,
       "toc_depth": 3,
+      "canonical_owner": "backend@aether"
+    },
+    {
+      "path": "docs/SUPPORT-DEBUG-GUIDE.md",
+      "title": "Support & Debug Guide — Agentic Commerce Incidents",
+      "slug": "support/debug-guide",
+      "section": "support",
+      "visibility": "I",
+      "audience": [
+        "operator",
+        "dev-senior"
+      ],
+      "status": "stable",
+      "since_version": "8.9.0",
+      "estimated_read_minutes": 15,
       "canonical_owner": "backend@aether"
     },
     {

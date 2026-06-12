@@ -13,7 +13,7 @@ source_files:
 canonical_owner: frontend@aether
 estimated_read_minutes: 35
 toc_depth: 4
-last_synced_commit: 716f9b8
+last_synced_commit: aba4829
 ---
 
 # Aether Frontend Architecture & Designer Handoff
@@ -505,6 +505,31 @@ Type contracts for all new sub-resources are in `packages/shared/`. The frontend
 | `TimeWindowSelector` | 30d / 60d / 90d / Lifetime chip group | High (shared) |
 | `EvidenceDrawer` | Expandable signal evidence panel | Medium |
 | `DelegationChainDiagram` | Linear chain visualization for agent operator flow | Low |
+
+## Agentic Commerce Components (Kyber, v8.9.0)
+
+Commerce control plane components in `frontend/kyber/src/`:
+
+**Feature modules** (`src/features/`): `settlement`, `policies`, `facilitators`,
+`resources` (new, v8.9.0) alongside existing `commerce`, `approvals`, `entitlements`.
+
+**API adapters** (`src/lib/api/`): `commerce.ts` (consolidated), plus modular
+`approvals.ts`, `entitlements.ts`, `resources.ts`, `settlement.ts`, `policies.ts`,
+`facilitators.ts`.
+
+**Zod schemas** (`src/lib/schemas/`): `commerce.ts` (consolidated), plus modular
+domain re-exports.
+
+**Component suites:**
+| Directory | Components | Owner pages |
+|---|---|---|
+| `components/commerce/` | SpendTimeline, RevenueCard, TreasuryPanel, RailBreakdown, FeeEliminationGauge | Mission, Live |
+| `components/approvals/` | ApprovalQueue, ApprovalCard, DecisionForm, EvidencePanel, EscalationRouter, GraphImpactPreview | Review |
+| `components/entitlements/` | EntitlementList, EntitlementDetail, ReuseHistory, RevokeDialog | Entities |
+| `components/economics/` | ClusterEconomicsView, FacilitatorPerformance, SettlementStatusStrip | Live, Diagnostics |
+
+**Fixtures** (`src/fixtures/`): `commerce.ts`, `approvals.ts`, `entitlements.ts`,
+`resources.ts`, `settlement.ts` — all support mock/live parity via `isLocalMocked()`.
 
 ## Notification Intelligence Components (Kyber, v8.8.0)
 

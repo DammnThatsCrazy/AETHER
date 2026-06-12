@@ -144,6 +144,7 @@ The following authored docs are expected to stay aligned with code changes:
 - `KYBER-ECONOMIC-OBSERVABILITY.md`
 - `KYBER-REVENUE-INTELLIGENCE.md`
 - `KYBER-STRATEGIC-OBSERVABILITY.md`
+- `Kyber-OPERATOR-GUIDE.md`
 - `LIVE-TELEMETRY-WIRING.md`
 - `LOAD-TESTING.md`
 - `LOCAL-CLOUD-SYNC.md`
@@ -177,6 +178,7 @@ The following authored docs are expected to stay aligned with code changes:
 - `PRODUCTIZATION-CHECKLIST.md`
 - `PRODUCTIZATION.md`
 - `PROFILE-360-AGGREGATION.md`
+- `PROTECTED-RESOURCES.md`
 - `QUEUE-WORKER-HEALTH.md`
 - `RATE-LIMITS-AND-BURSTS.md`
 - `RECOMMENDATION-FAMILIES.md`
@@ -215,6 +217,7 @@ The following authored docs are expected to stay aligned with code changes:
 - `SUBSYSTEM-CACHE.md`
 - `SUBSYSTEM-DATABASE.md`
 - `SUBSYSTEM-EVENTS.md`
+- `SUPPORT-DEBUG-GUIDE.md`
 - `TENANT-DATA-CONTAMINATION.md`
 - `TENANT-ISOLATION-VERIFICATION.md`
 - `TENANT-STATUS.md`
