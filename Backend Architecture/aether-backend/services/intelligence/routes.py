@@ -1449,6 +1449,7 @@ def _combine_summaries(summaries: list[dict[str, Any]]) -> dict[str, Any]:
     keys = ["recommendations_generated", "recommendations_viewed", "decisions_recorded", "actions_logged", "outcomes_observed", "expected_value", "observed_value", "stale_loops", "incomplete_loops", "failed_loops"]
     combined = {key: round(sum(float(s.get(key, 0)) for s in summaries), 2) for key in keys}
     combined["outcome_capture_rate"] = round(combined["outcomes_observed"] / combined["recommendations_generated"], 4) if combined["recommendations_generated"] else 0.0
+    return combined
 
 
 # ── Commerce Lifecycle Trace ──────────────────────────────────────────────────
@@ -1521,4 +1522,3 @@ def _lifecycle_stage(requirement, authorization, receipt, settlement, entitlemen
     if requirement:
         return "challenged"
     return "unknown"
-    return combined
