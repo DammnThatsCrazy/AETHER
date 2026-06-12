@@ -1,9 +1,9 @@
 ---
 title: Protected Resources — Registration Guide
 slug: commerce/protected-resources
-section: commerce
+section: kyber
 visibility: I
-audience: [dev-senior, architect, operator]
+audience: [dev-senior, architect, ops]
 status: stable
 since_version: "8.9.0"
 canonical_owner: backend@aether

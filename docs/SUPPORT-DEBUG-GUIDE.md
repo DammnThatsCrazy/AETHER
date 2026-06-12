@@ -1,9 +1,9 @@
 ---
 title: Support & Debug Guide — Agentic Commerce Incidents
 slug: support/debug-guide
-section: support
+section: operations
 visibility: I
-audience: [operator, dev-senior]
+audience: [ops, dev-senior]
 status: stable
 since_version: "8.9.0"
 canonical_owner: backend@aether

@@ -1555,7 +1555,7 @@
       "section": "kyber",
       "visibility": "I",
       "audience": [
-        "operator",
+        "ops",
         "dev-senior",
         "architect"
       ],
@@ -2107,12 +2107,12 @@
       "path": "docs/PROTECTED-RESOURCES.md",
       "title": "Protected Resources — Registration Guide",
       "slug": "commerce/protected-resources",
-      "section": "commerce",
+      "section": "kyber",
       "visibility": "I",
       "audience": [
         "dev-senior",
         "architect",
-        "operator"
+        "ops"
       ],
       "status": "stable",
       "since_version": "8.9.0",
@@ -2891,10 +2891,10 @@
       "path": "docs/SUPPORT-DEBUG-GUIDE.md",
       "title": "Support & Debug Guide — Agentic Commerce Incidents",
       "slug": "support/debug-guide",
-      "section": "support",
+      "section": "operations",
       "visibility": "I",
       "audience": [
-        "operator",
+        "ops",
         "dev-senior"
       ],
       "status": "stable",

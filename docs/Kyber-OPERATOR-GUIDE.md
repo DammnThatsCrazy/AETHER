@@ -3,7 +3,7 @@ title: Kyber Operator Guide
 slug: kyber/operator-guide
 section: kyber
 visibility: I
-audience: [operator, dev-senior, architect]
+audience: [ops, dev-senior, architect]
 status: stable
 since_version: "8.9.0"
 canonical_owner: kyber@aether
