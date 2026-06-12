@@ -57,3 +57,23 @@ onJourneyResumed(callback)
 These APIs emit the canonical `journey_*` event family. Existing legacy `track` calls
 with journey lifecycle names remain accepted during migration, but new SDK behavior must
 prefer first-class `journey_*` event types so validators do not drop `journey_resumed`.
+
+## Kyber Commerce Domain Schemas (v8.9.0)
+
+The Kyber operator UI exposes modular Zod schema modules mirroring the x402 control
+plane wire format. All schemas live in `frontend/kyber/src/lib/schemas/` and
+re-export from the consolidated `commerce.ts` module for tree-shaking:
+
+| Module | Key exports |
+|---|---|
+| `schemas/approvals.ts` | `approvalRequestSchema`, `evidenceBundleSchema`, `ApprovalRequest`, `EvidenceBundle` |
+| `schemas/entitlements.ts` | `entitlementSchema`, `Entitlement`, `EntitlementStatus` |
+| `schemas/resources.ts` | `protectedResourceSchema`, `preflightResultSchema`, `ProtectedResource`, `PreflightResult` |
+| `schemas/settlement.ts` | `settlementSchema`, `Settlement`, `SettlementState` |
+| `schemas/policies.ts` | `policyDecisionSchema`, `PolicyDecision`, `PolicyOutcome` |
+| `schemas/facilitators.ts` | `facilitatorSchema`, `stablecoinAssetSchema`, `Facilitator`, `StablecoinAsset` |
+
+These schemas validate all responses from `/v1/x402/*`, `/v1/approvals/*`,
+`/v1/entitlements/*`, and `/v1/diagnostics/commerce/*` at the network boundary.
+Wire format mirrors backend Pydantic models in `services/x402/commerce_models.py`.
+Breaking changes to backend models require coordinated updates to both files.

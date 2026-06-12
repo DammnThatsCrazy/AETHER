@@ -14,7 +14,7 @@ toc_depth: 3
 last_synced_commit: 7b41c58
 
 ---
-# Aether Backend API v8.8.0 — Endpoint Specification
+# Aether Backend API v8.9.0 — Endpoint Specification
 
 ## Overview
 
