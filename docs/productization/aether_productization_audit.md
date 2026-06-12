@@ -74,6 +74,24 @@ What changed in this pass (2026-06-12, connector wave 1):
 - Added per-connector-type breakdown to Kyber connector health page
   (`last_synced_at`, `error_count`, status indicator per type).
 
+What changed in this pass (2026-06-12, Dune feeder wave 1):
+
+- Closed finding #9: governed Bronze→Silver→Gold feeder pipeline shipped.
+  `services/dune_feeder/service.py` rewritten as async, repository-backed
+  (no module-level dicts); `DuneBronzeRepository`, `DuneSilverRepository`,
+  `DuneGoldRepository` added to `repositories/repos.py`. Freshness gate
+  (batch-level timestamp staleness) and per-row quality gate enforced at
+  ingest. Operator-explicit Silver promotion (quality_score ≥ 0.8 required).
+  Gold materialization groups by `(source_tag, domain, query_id, tenant_scope)`
+  with cross-tenant isolation. Rollback enforces authenticated tenant scope so
+  operators cannot delete another tenant's rows. Router mounted at
+  `/v1/admin/dune-feeder` in `main.py`. Kyber health page at `/dune-feeder`
+  shows tier counts (Bronze/Silver/Gold), last ingest timestamp, rejection
+  rate, graph-isolation-enforced flag, and Gold records table with quality
+  scores and tenant scopes. Raised `Dune / data-lake feeders` score 2 → 3.
+- Remaining gap: no automated Kafka consumer pulling from Dune on a schedule —
+  operators must POST to `/v1/admin/dune-feeder/ingest` manually or via cron.
+
 ## 2. Classified Findings
 
 Classification legend: `release-blocker` | `pre-production-blocker` |
@@ -89,7 +107,7 @@ Classification legend: `release-blocker` | `pre-production-blocker` |
 | 6 | Production infrastructure not provisioned; production secrets not configured; ML artifacts not trained | release-blocker / pre-production-blocker | Open — external prerequisites per `PRODUCTION-READINESS.md` |
 | 7 | Agent Layer hosted mode requires durable storage (in-memory fallback blocked in hosted modes) | release-blocker (agent GA only) | Open — per `AGENT-LAYER-PRODUCTION.md` |
 | 8 | Connector provider pulls are credential-gated TODOs (framework real, API calls mocked) | pre-production-blocker | **Fixed** — all 14 adapters have real credential-gated API calls; Kyber shows per-connector last_synced_at and error counts |
-| 9 | Dune is a read-only provider, but no governed Bronze→Silver→Gold feeder with per-row provenance/freshness gates exists | pre-production-blocker | Open |
+| 9 | Dune is a read-only provider, but no governed Bronze→Silver→Gold feeder with per-row provenance/freshness gates exists | pre-production-blocker | **Fixed** — async repository-backed feeder: freshness gate, per-row provenance chain, quality scoring, operator-gated Silver promotion, Gold materialization with tenant-scope isolation, rollback with tenant-scope enforcement; router mounted at `/v1/admin/dune-feeder`; Kyber health page at `/dune-feeder` |
 | 10 | Graph-level drift/contamination scoring partial: data-quality module feature-flagged, operational-intelligence overlay scores are placeholders | pre-production-blocker | Open (SDK-level drift detection is real) |
 | 11 | No load baselines recorded; Locust harness exists but is not exercised in CI | scale-blocker | **Partially fixed** — locustfile extended with `/v1/batch` + `/sdk/identity/resolve` tasks and thresholds; `scripts/load_smoke.py` + `make load-smoke` added. Staging baselines not yet recorded. |
 | 12 | Neptune capacity/cost and identity-merge throughput unvalidated at scale | scale-blocker | Open |
@@ -123,7 +141,7 @@ Rubric: 0 absent · 1 stub/scaffold · 2 partial/pilot · 3 pre-production ·
 | customer frontend (tenant app) | 4 |
 | connectors (BYOK / source) | 3 |
 | Slack / action notifications | 4 |
-| Dune / data-lake feeders | 2 |
+| Dune / data-lake feeders | 3 |
 | smart contracts / proofs / rewards | 3 |
 | security / compliance | 3 |
 | CI / tests | 4 |
@@ -131,7 +149,7 @@ Rubric: 0 absent · 1 stub/scaffold · 2 partial/pilot · 3 pre-production ·
 | deployment / cloud readiness | 3 |
 | scale readiness | 3 |
 
-**Overall: ~3.5/5 — pre-production.** The 4-rated areas are genuinely
+**Overall: ~3.56/5 — pre-production.** The 4-rated areas are genuinely
 release-shaped; nothing scores 5 because nothing has carried production
 traffic at scale yet, and claiming otherwise would be a false readiness claim.
 
@@ -180,10 +198,12 @@ traffic at scale yet, and claiming otherwise would be a false readiness claim.
    signup → OTP → API key reveal → onboarding checklist → settings. A new
    tenant can sign up, get keys, and send a first event without operator SQL.
 2. ~~**Connector productization wave 1 (Slack outbound + source connectors)**~~ — **Done** (PR #295). All 14 connector adapters use real credential-gated API calls; Kyber connector health shows per-connector last_synced_at and error counts; full Slack notification_intelligence service (Block Kit, OAuth, per-tenant channel map, delivery router) with tenant settings UI.
-3. **Governed Dune feeder** — read-only feeder writing Bronze with per-row
-   provenance, freshness checks, and quality gates before Silver promotion;
-   no direct graph mutation. Accept: Dune rows traceable end-to-end with
-   provenance; Kyber shows feeder health.
+3. ~~**Governed Dune feeder**~~ — **Done** (current branch). Async repository-backed
+   Bronze→Silver→Gold pipeline: freshness + quality gates, per-row provenance,
+   operator-gated Silver promotion, Gold materialization with tenant-scope
+   isolation, rollback with tenant-scope enforcement. Router mounted;
+   Kyber health page at `/dune-feeder`. Remaining gap: no automated Kafka
+   consumer; operators POST to `/ingest` manually or via cron.
 4. **Graph health scoring completion** — replace placeholder
    operational-intelligence overlay scores with real metrics (cluster churn,
    merge/split rates, orphan nodes, edge growth); surface in Kyber. Accept:

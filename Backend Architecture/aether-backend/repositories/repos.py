@@ -1811,3 +1811,92 @@ class SignalRepository(BaseRepository):
         for r in rows:
             await self.delete(r["signal_id"])
         return len(rows)
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# DUNE FEEDER REPOSITORIES
+# ═══════════════════════════════════════════════════════════════════════════
+
+
+class DuneBronzeRepository(BaseRepository):
+    """Bronze-tier Dune Analytics rows with per-row provenance.
+
+    Table: dune_bronze_records
+    Records land here after passing freshness + quality gates.
+    Rows are never directly mutated by operator actions — Silver promotion
+    creates a copy; rollback deletes by source_tag + tenant_scope.
+    """
+
+    def __init__(self) -> None:
+        super().__init__("dune_bronze_records")
+
+    async def find_by_source_tag(
+        self, source_tag: str, tenant_scope: Optional[str] = None, limit: int = 10000
+    ) -> list[dict]:
+        filters: dict[str, Any] = {"source_tag": source_tag}
+        if tenant_scope is not None:
+            filters["tenant_scope"] = tenant_scope
+        return await self.find_many(filters=filters, limit=limit, sort_by="row_index", sort_order="asc")
+
+    async def delete_by_source_tag(self, source_tag: str, tenant_scope: Optional[str] = None) -> int:
+        rows = await self.find_by_source_tag(source_tag, tenant_scope=tenant_scope)
+        for r in rows:
+            await self.delete(r["record_id"])
+        return len(rows)
+
+
+class DuneSilverRepository(BaseRepository):
+    """Silver-tier Dune Analytics rows (operator-promoted from Bronze).
+
+    Table: dune_silver_records
+    Only rows with quality_score >= 0.8 and promotion_status='bronze'
+    are eligible. Silver rows are still isolated from the canonical graph.
+    """
+
+    def __init__(self) -> None:
+        super().__init__("dune_silver_records")
+
+    async def find_by_source_tag(
+        self, source_tag: str, tenant_scope: Optional[str] = None, limit: int = 10000
+    ) -> list[dict]:
+        filters: dict[str, Any] = {"source_tag": source_tag}
+        if tenant_scope is not None:
+            filters["tenant_scope"] = tenant_scope
+        return await self.find_many(filters=filters, limit=limit)
+
+    async def delete_by_source_tag(self, source_tag: str, tenant_scope: Optional[str] = None) -> int:
+        rows = await self.find_by_source_tag(source_tag, tenant_scope=tenant_scope)
+        for r in rows:
+            await self.delete(r["record_id"])
+        return len(rows)
+
+
+class DuneGoldRepository(BaseRepository):
+    """Gold-tier Dune Analytics aggregates (materialized from Silver).
+
+    Table: dune_gold_records
+    Gold records are domain-level aggregates keyed by
+    (source_tag, domain, query_id, tenant_scope). Still isolated from graph.
+    """
+
+    def __init__(self) -> None:
+        super().__init__("dune_gold_records")
+
+    async def find_filtered(
+        self,
+        source_tag: Optional[str] = None,
+        tenant_scope: Optional[str] = None,
+        limit: int = 10000,
+    ) -> list[dict]:
+        filters: dict[str, Any] = {}
+        if source_tag is not None:
+            filters["source_tag"] = source_tag
+        if tenant_scope is not None:
+            filters["tenant_scope"] = tenant_scope
+        return await self.find_many(filters=filters, limit=limit, sort_by="materialized_at", sort_order="desc")
+
+    async def delete_by_source_tag(self, source_tag: str, tenant_scope: Optional[str] = None) -> int:
+        rows = await self.find_filtered(source_tag=source_tag, tenant_scope=tenant_scope)
+        for r in rows:
+            await self.delete(r["gold_id"])
+        return len(rows)

@@ -16,25 +16,12 @@ Endpoints:
 
 from __future__ import annotations
 
-import os
 from typing import Optional
 
 from fastapi import APIRouter, Query, Request
 
-from shared.common.common import APIResponse, BadRequestError, NotFoundError, ServiceUnavailableError
+from shared.common.common import APIResponse, BadRequestError, NotFoundError
 from shared.logger.logger import get_logger, metrics
-
-_MEMORY_STORE_ENVS = frozenset({"local", "test"})
-
-
-def _require_memory_store_env() -> None:
-    """Raise 503 if running outside local/test — in-memory store is not durable."""
-    env = os.getenv("AETHER_ENV", "local")
-    if env not in _MEMORY_STORE_ENVS:
-        raise ServiceUnavailableError(
-            "Dune feeder in-memory store is only available in local/test environments. "
-            "Configure a persistent lake repository backend before enabling this endpoint in staging/production."
-        )
 
 from services.dune_feeder.models import (
     FeederGoldMaterializeRequest,
@@ -55,7 +42,6 @@ def _require_admin(request: Request) -> None:
 def _authenticated_tenant_scope(request: Request) -> Optional[str]:
     """Return the tenant_scope of the authenticated caller, or None for platform admins."""
     tenant = request.state.tenant
-    # kyber:operator (platform-level) may omit scope; tenant admins are scoped to their tenant
     if hasattr(tenant, "tenant_id") and tenant.tenant_id and not getattr(tenant, "is_platform_admin", False):
         return tenant.tenant_id
     return None
@@ -73,9 +59,8 @@ async def ingest_dune_result(body: FeederIngestRequest, request: Request):
     Graph state is NEVER mutated by this endpoint.
     """
     _require_admin(request)
-    _require_memory_store_env()
 
-    response = dune_feeder_service.ingest(body)
+    response = await dune_feeder_service.ingest(body)
 
     metrics.increment(
         "dune_feeder_api_ingest",
@@ -91,7 +76,7 @@ async def feeder_health(request: Request):
     """Return health and operational metrics for the Dune feeder service."""
     _require_admin(request)
 
-    health = dune_feeder_service.get_health()
+    health = await dune_feeder_service.get_health()
     return APIResponse(data=health.model_dump()).to_dict()
 
 
@@ -106,13 +91,12 @@ async def rollback_source_tag(body: FeederRollbackRequest, request: Request):
     tiers. Use audit/{source_tag} first to inspect records before rolling back.
     """
     _require_admin(request)
-    _require_memory_store_env()
 
     # Non-platform-admin callers are always scoped to their own tenant regardless
     # of what tenant_scope they supplied in the request body.
     auth_scope = _authenticated_tenant_scope(request)
     effective_scope = auth_scope if auth_scope is not None else body.tenant_scope
-    deleted = dune_feeder_service.rollback(body.source_tag, tenant_scope=effective_scope)
+    deleted = await dune_feeder_service.rollback(body.source_tag, tenant_scope=effective_scope)
 
     metrics.increment("dune_feeder_api_rollback", labels={"source_tag": body.source_tag})
     return APIResponse(data={
@@ -145,11 +129,9 @@ async def audit_source_tag(
     """
     _require_admin(request)
 
-    # Derive effective scope: explicit parameter takes precedence, then authenticated
-    # tenant scope (prevents cross-tenant reads when no explicit scope is given).
     effective_scope = tenant_scope or _authenticated_tenant_scope(request)
 
-    records = dune_feeder_service.audit(source_tag, tenant_scope=effective_scope)
+    records = await dune_feeder_service.audit(source_tag, tenant_scope=effective_scope)
     if not records:
         raise NotFoundError(f"source_tag '{source_tag}'")
 
@@ -175,12 +157,11 @@ async def promote_to_silver(source_tag: str, request: Request):
     Any graph candidate generation must go through a separate review queue.
     """
     _require_admin(request)
-    _require_memory_store_env()
 
     if not source_tag or not source_tag.strip():
         raise BadRequestError("source_tag must not be empty")
 
-    promoted = dune_feeder_service.promote_to_silver(source_tag)
+    promoted = await dune_feeder_service.promote_to_silver(source_tag)
 
     metrics.increment(
         "dune_feeder_api_promote",
@@ -207,12 +188,11 @@ async def materialize_gold(body: FeederGoldMaterializeRequest, request: Request)
     Gold is the final curated tier — still isolated from the canonical graph.
     """
     _require_admin(request)
-    _require_memory_store_env()
 
     if not body.source_tag or not body.source_tag.strip():
         raise BadRequestError("source_tag must not be empty")
 
-    created = dune_feeder_service.promote_to_gold(body.source_tag, tenant_scope=body.tenant_scope)
+    created = await dune_feeder_service.promote_to_gold(body.source_tag, tenant_scope=body.tenant_scope)
 
     metrics.increment(
         "dune_feeder_api_materialize_gold",
@@ -234,7 +214,7 @@ async def list_gold_records(
     _require_admin(request)
 
     effective_scope = tenant_scope or _authenticated_tenant_scope(request)
-    records = dune_feeder_service.get_gold_records(source_tag=source_tag, tenant_scope=effective_scope)
+    records = await dune_feeder_service.get_gold_records(source_tag=source_tag, tenant_scope=effective_scope)
     return APIResponse(data={
         "record_count": len(records),
         "records": records,

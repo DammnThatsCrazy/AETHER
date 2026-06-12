@@ -24,6 +24,7 @@ const NAV_ITEMS: NavItem[] = [
   { path: '/journey-health',  label: 'Journey Health',  glyph: '↔' },
   { path: '/intelligence-quality', label: 'Intel Quality', glyph: '◉' },
   { path: '/connectors', label: 'Connectors', glyph: '⇄' },
+  { path: '/dune-feeder', label: 'Dune Feeder', glyph: '⬡' },
   { path: '/revops',          label: 'RevOps',          glyph: '₿' },
   { path: '/sales-readiness', label: 'Sales Ready', glyph: '$' },
   { path: '/pricing-architecture', label: 'Pricing', glyph: '≋' },

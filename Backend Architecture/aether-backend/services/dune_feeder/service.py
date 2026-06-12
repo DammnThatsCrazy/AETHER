@@ -45,32 +45,6 @@ def _hash_row(row: dict) -> str:
     return hashlib.sha256(serialised.encode()).hexdigest()
 
 
-# ── In-memory stores (dev/test mode) ─────────────────────────────────────────
-# In production these would delegate to a lake repository.
-
-_BRONZE_STORE: dict[str, DuneBronzeRecord] = {}   # record_id -> record
-_SILVER_STORE: dict[str, DuneBronzeRecord] = {}   # record_id -> promoted copy
-_GOLD_STORE: dict[str, dict] = {}                 # gold_id -> materialized aggregate
-
-# Totals for health metrics
-_TOTAL_SUBMITTED: int = 0
-_TOTAL_REJECTED: int = 0
-_LAST_INGEST_AT: Optional[str] = None
-_LAST_INGEST_SOURCE_TAG: Optional[str] = None
-
-
-def _reset_stores() -> None:
-    """Reset all in-memory stores — used by tests."""
-    global _TOTAL_SUBMITTED, _TOTAL_REJECTED, _LAST_INGEST_AT, _LAST_INGEST_SOURCE_TAG
-    _BRONZE_STORE.clear()
-    _SILVER_STORE.clear()
-    _GOLD_STORE.clear()
-    _TOTAL_SUBMITTED = 0
-    _TOTAL_REJECTED = 0
-    _LAST_INGEST_AT = None
-    _LAST_INGEST_SOURCE_TAG = None
-
-
 # ── Service ───────────────────────────────────────────────────────────────────
 
 class DuneFeederService:
@@ -82,7 +56,21 @@ class DuneFeederService:
     - No Silver auto-promotion; operators must call promote_to_silver() explicitly.
     - Provenance is recorded per row at landing time.
     - Freshness and quality gates are enforced before any row touches storage.
+    - Storage is repository-backed (dune_bronze_records / dune_silver_records /
+      dune_gold_records tables) so records survive service restarts.
     """
+
+    def __init__(self) -> None:
+        from repositories.repos import DuneBronzeRepository, DuneSilverRepository, DuneGoldRepository
+        self._bronze = DuneBronzeRepository()
+        self._silver = DuneSilverRepository()
+        self._gold = DuneGoldRepository()
+        # Session-scoped counters for rejection-rate health metric (reset on restart;
+        # actual record counts come from repositories).
+        self._total_submitted: int = 0
+        self._total_rejected: int = 0
+        self._last_ingest_at: Optional[str] = None
+        self._last_ingest_source_tag: Optional[str] = None
 
     # ── Freshness gate ────────────────────────────────────────────────────────
 
@@ -109,13 +97,11 @@ class DuneFeederService:
             )
 
         now = datetime.now(timezone.utc)
-        # Make pull_dt timezone-aware if naive
         if pull_dt.tzinfo is None:
             pull_dt = pull_dt.replace(tzinfo=timezone.utc)
 
         age_seconds = (now - pull_dt).total_seconds()
 
-        # Reject clearly future-dated timestamps (allow up to 5 min clock skew)
         if age_seconds < -300:
             return FreshnessResult(
                 passed=False,
@@ -170,15 +156,11 @@ class DuneFeederService:
 
         effective_required = required_fields or (list(schema.keys()) if schema else [])
 
-        # Required field presence check
         for field_name in effective_required:
             if field_name not in row or row[field_name] is None:
                 missing_fields.append(field_name)
 
-        # Type check (best-effort)
         if schema:
-            # "number" accepts both int and float — integer JSON values are valid
-            # numeric values and would otherwise be rejected by isinstance(1, float).
             _TYPE_MAP: dict[str, type | tuple] = {
                 "str": str, "string": str,
                 "int": int, "integer": int,
@@ -221,24 +203,15 @@ class DuneFeederService:
 
     # ── Ingest ────────────────────────────────────────────────────────────────
 
-    def ingest(self, payload: FeederIngestRequest) -> FeederIngestResponse:
+    async def ingest(self, payload: FeederIngestRequest) -> FeederIngestResponse:
         """
         Accept a Dune query result, run freshness + quality gates, land in Bronze.
 
         Silver promotion is NOT automatic. Operators must call promote_to_silver().
         Graph state is NEVER touched here.
-
-        Args:
-            payload: FeederIngestRequest with DuneQueryResult + gate configuration.
-
-        Returns:
-            FeederIngestResponse with per-batch statistics.
         """
-        global _TOTAL_SUBMITTED, _TOTAL_REJECTED, _LAST_INGEST_AT, _LAST_INGEST_SOURCE_TAG
-
         qr = payload.query_result
 
-        # ── Freshness gate (batch-level) ──────────────────────────────────────
         freshness = self.check_freshness(qr.pulled_at, payload.max_age_seconds)
         if not freshness.passed:
             logger.warning(
@@ -263,10 +236,9 @@ class DuneFeederService:
         rows_rejected = 0
         rejected_reasons: list[str] = []
 
-        _TOTAL_SUBMITTED += len(qr.rows)
+        self._total_submitted += len(qr.rows)
 
         for idx, row in enumerate(qr.rows):
-            # ── Quality gate (per-row) ────────────────────────────────────────
             quality = self.check_quality(
                 row,
                 schema=payload.schema,
@@ -275,7 +247,7 @@ class DuneFeederService:
 
             if not quality.passed or quality.score < payload.quality_threshold:
                 rows_rejected += 1
-                _TOTAL_REJECTED += 1
+                self._total_rejected += 1
                 reason = quality.reason or f"Quality score {quality.score:.2f} below threshold {payload.quality_threshold}"
                 rejected_reasons.append(f"row[{idx}]: {reason}")
                 metrics.increment(
@@ -284,7 +256,6 @@ class DuneFeederService:
                 )
                 continue
 
-            # ── Build provenance chain ────────────────────────────────────────
             provenance = [
                 ProvenanceStep(
                     step="dune_pull",
@@ -336,15 +307,15 @@ class DuneFeederService:
                 provenance_chain=provenance,
             )
 
-            _BRONZE_STORE[record_id] = bronze_record
+            await self._bronze.insert(record_id, bronze_record.model_dump())
             rows_accepted += 1
             metrics.increment(
                 "dune_feeder_row_accepted",
                 labels={"domain": payload.domain, "query_id": qr.query_id},
             )
 
-        _LAST_INGEST_AT = now_iso
-        _LAST_INGEST_SOURCE_TAG = payload.source_tag
+        self._last_ingest_at = now_iso
+        self._last_ingest_source_tag = payload.source_tag
 
         logger.info(
             "Dune ingest complete",
@@ -377,104 +348,59 @@ class DuneFeederService:
 
     # ── Silver promotion ──────────────────────────────────────────────────────
 
-    def promote_to_silver(self, source_tag: str, tenant_scope: Optional[str] = None) -> int:
+    async def promote_to_silver(self, source_tag: str, tenant_scope: Optional[str] = None) -> int:
         """
         Promote all valid Bronze rows with matching source_tag to Silver.
 
         Only rows with promotion_status='bronze' and quality_score >= 0.8 are
-        eligible.  Rows marked 'rejected' stay rejected.
-
-        Args:
-            source_tag: Batch identifier to promote.
-            tenant_scope: When provided, only promote rows belonging to this tenant.
-
-        Returns:
-            Number of rows promoted.
+        eligible. Rows marked 'rejected' stay rejected.
         """
+        bronze_rows = await self._bronze.find_by_source_tag(source_tag, tenant_scope=tenant_scope)
         promoted = 0
-        for record_id, record in list(_BRONZE_STORE.items()):
-            if record.source_tag != source_tag:
+
+        for raw in bronze_rows:
+            if raw.get("promotion_status") != "bronze":
                 continue
-            if tenant_scope is not None and record.tenant_scope != tenant_scope:
-                continue
-            if record.promotion_status != "bronze":
-                continue
-            if record.quality_score < 0.8:
+            if (raw.get("quality_score") or 0.0) < 0.8:
                 continue
 
-            # Mutate status in-place and copy to Silver store
-            updated = record.model_copy(
-                update={
-                    "promotion_status": "silver",
-                    "provenance_chain": record.provenance_chain + [
-                        ProvenanceStep(
-                            step="silver_promotion",
-                            actor="dune_feeder_service",
-                            timestamp=_utc_now_iso(),
-                            notes=f"operator-approved promotion source_tag={source_tag}",
-                        )
-                    ],
-                }
-            )
-            _BRONZE_STORE[record_id] = updated
-            _SILVER_STORE[record_id] = updated
+            provenance = list(raw.get("provenance_chain") or [])
+            provenance.append(ProvenanceStep(
+                step="silver_promotion",
+                actor="dune_feeder_service",
+                timestamp=_utc_now_iso(),
+                notes=f"operator-approved promotion source_tag={source_tag}",
+            ).model_dump())
+
+            updated = {**raw, "promotion_status": "silver", "provenance_chain": provenance}
+            record_id = raw["record_id"]
+            await self._bronze.insert(record_id, updated)
+            await self._silver.insert(record_id, updated)
             promoted += 1
 
         logger.info(
             "Dune rows promoted to Silver",
             extra={"source_tag": source_tag, "promoted": promoted},
         )
-        metrics.increment(
-            "dune_feeder_promote",
-            labels={"source_tag": source_tag},
-        )
+        metrics.increment("dune_feeder_promote", labels={"source_tag": source_tag})
         return promoted
 
     # ── Rollback ──────────────────────────────────────────────────────────────
 
-    def rollback(self, source_tag: str, tenant_scope: Optional[str] = None) -> int:
-        """
-        Remove all Bronze and Silver records with matching source_tag.
+    async def rollback(self, source_tag: str, tenant_scope: Optional[str] = None) -> int:
+        """Remove all Bronze, Silver, and Gold records matching source_tag."""
+        bronze_deleted = await self._bronze.delete_by_source_tag(source_tag, tenant_scope=tenant_scope)
+        silver_deleted = await self._silver.delete_by_source_tag(source_tag, tenant_scope=tenant_scope)
+        gold_deleted = await self._gold.delete_by_source_tag(source_tag, tenant_scope=tenant_scope)
 
-        Args:
-            source_tag: Batch identifier to roll back.
-            tenant_scope: When provided, only delete records belonging to this tenant.
-                          Prevents cross-tenant tag collisions from deleting unowned rows.
-
-        Returns:
-            Total number of records deleted.
-        """
-        bronze_ids = [
-            rid for rid, r in _BRONZE_STORE.items()
-            if r.source_tag == source_tag
-            and (tenant_scope is None or r.tenant_scope == tenant_scope)
-        ]
-        silver_ids = [
-            rid for rid, r in _SILVER_STORE.items()
-            if r.source_tag == source_tag
-            and (tenant_scope is None or r.tenant_scope == tenant_scope)
-        ]
-        gold_ids = [
-            gid for gid, g in _GOLD_STORE.items()
-            if g.get("source_tag") == source_tag
-            and (tenant_scope is None or g.get("tenant_scope") == tenant_scope)
-        ]
-
-        for rid in bronze_ids:
-            del _BRONZE_STORE[rid]
-        for rid in silver_ids:
-            del _SILVER_STORE[rid]
-        for gid in gold_ids:
-            del _GOLD_STORE[gid]
-
-        total = len(bronze_ids) + len(silver_ids) + len(gold_ids)
+        total = bronze_deleted + silver_deleted + gold_deleted
         logger.info(
             "Dune rollback complete",
             extra={
                 "source_tag": source_tag,
-                "bronze_deleted": len(bronze_ids),
-                "silver_deleted": len(silver_ids),
-                "gold_deleted": len(gold_ids),
+                "bronze_deleted": bronze_deleted,
+                "silver_deleted": silver_deleted,
+                "gold_deleted": gold_deleted,
             },
         )
         metrics.increment("dune_feeder_rollback", labels={"source_tag": source_tag})
@@ -482,41 +408,23 @@ class DuneFeederService:
 
     # ── Audit ─────────────────────────────────────────────────────────────────
 
-    def audit(self, source_tag: str, tenant_scope: Optional[str] = None) -> list[dict]:
-        """
-        Return all Bronze records for a source_tag (audit trail).
-
-        Args:
-            source_tag: Batch identifier to audit.
-            tenant_scope: When provided, only return records for this tenant.
-
-        Returns:
-            List of record dicts (serialised DuneBronzeRecord).
-        """
-        records = [
-            r.model_dump() for r in _BRONZE_STORE.values()
-            if r.source_tag == source_tag
-            and (tenant_scope is None or r.tenant_scope == tenant_scope)
-        ]
-        records.sort(key=lambda r: r["row_index"])
-        return records
+    async def audit(self, source_tag: str, tenant_scope: Optional[str] = None) -> list[dict]:
+        """Return all Bronze records for a source_tag (audit trail)."""
+        return await self._bronze.find_by_source_tag(source_tag, tenant_scope=tenant_scope)
 
     # ── Health ────────────────────────────────────────────────────────────────
 
-    def get_health(self) -> FeederHealthStatus:
-        """
-        Return feeder health metrics.
+    async def get_health(self) -> FeederHealthStatus:
+        """Return feeder health metrics across all tiers."""
+        bronze_rows = await self._bronze.find_many(limit=10000)
+        silver_rows = await self._silver.find_many(limit=10000)
+        gold_rows = await self._gold.find_many(limit=10000)
 
-        Returns:
-            FeederHealthStatus with current store counts and rejection rate.
-        """
-        unique_tags = {r.source_tag for r in _BRONZE_STORE.values()}
-        total_bronze = len(_BRONZE_STORE)
-        total_silver = len(_SILVER_STORE)
+        unique_tags = {r.get("source_tag") for r in bronze_rows if r.get("source_tag")}
 
         rejection_rate = (
-            _TOTAL_REJECTED / _TOTAL_SUBMITTED
-            if _TOTAL_SUBMITTED > 0
+            self._total_rejected / self._total_submitted
+            if self._total_submitted > 0
             else 0.0
         )
 
@@ -526,58 +434,46 @@ class DuneFeederService:
 
         return FeederHealthStatus(
             status=overall,
-            total_bronze_records=total_bronze,
-            total_silver_records=total_silver,
-            total_gold_records=len(_GOLD_STORE),
+            total_bronze_records=len(bronze_rows),
+            total_silver_records=len(silver_rows),
+            total_gold_records=len(gold_rows),
             unique_source_tags=len(unique_tags),
             rejection_rate=rejection_rate,
-            last_ingest_at=_LAST_INGEST_AT,
-            last_ingest_source_tag=_LAST_INGEST_SOURCE_TAG,
+            last_ingest_at=self._last_ingest_at,
+            last_ingest_source_tag=self._last_ingest_source_tag,
             graph_isolation_enforced=True,
         )
 
     # ── Gold materialization ──────────────────────────────────────────────────
 
-    def promote_to_gold(self, source_tag: str, tenant_scope: Optional[str] = None) -> int:
-        """
-        Materialize Gold aggregates from Silver rows with matching source_tag.
-
-        Gold records are domain-level aggregates keyed by (source_tag, domain,
-        query_id, tenant_scope) — the tenant_scope is always part of the key so
-        rows from different tenants that share a tag are never merged.
-
-        Silver rows that have already contributed to a Gold record are stamped
-        and skipped on re-calls (idempotent).
-
-        Returns:
-            Number of new Gold records created.
-        """
+    async def promote_to_gold(self, source_tag: str, tenant_scope: Optional[str] = None) -> int:
+        """Materialize Gold aggregates from Silver rows with matching source_tag."""
         from collections import defaultdict
 
-        eligible: list[DuneBronzeRecord] = [
-            r for r in _SILVER_STORE.values()
-            if r.source_tag == source_tag
-            and r.promotion_status == "silver"
-            and (tenant_scope is None or r.tenant_scope == tenant_scope)
-            and not (r.provenance_chain and r.provenance_chain[-1].notes
-                     and r.provenance_chain[-1].notes.startswith("gold_materialized"))
+        silver_rows = await self._silver.find_by_source_tag(source_tag, tenant_scope=tenant_scope)
+        eligible = [
+            r for r in silver_rows
+            if r.get("promotion_status") == "silver"
+            and not any(
+                p.get("notes", "").startswith("gold_materialized")
+                for p in (r.get("provenance_chain") or [])
+            )
         ]
 
         if not eligible:
             return 0
 
-        # Key includes tenant_scope to prevent cross-tenant row merging (P1 fix)
-        groups: dict[tuple, list[DuneBronzeRecord]] = defaultdict(list)
+        groups: dict[tuple, list[dict]] = defaultdict(list)
         for rec in eligible:
-            groups[(rec.domain, rec.query_id, rec.tenant_scope)].append(rec)
+            groups[(rec.get("domain"), rec.get("query_id"), rec.get("tenant_scope"))].append(rec)
 
         now_iso = _utc_now_iso()
         created = 0
 
         for (domain, query_id, rec_tenant), rows in groups.items():
             gold_id = str(uuid.uuid4())
-            avg_quality = round(sum(r.quality_score for r in rows) / len(rows), 4)
-            sorted_rows = sorted(rows, key=lambda r: r.row_index)
+            avg_quality = round(sum(r.get("quality_score", 0.0) for r in rows) / len(rows), 4)
+            sorted_rows = sorted(rows, key=lambda r: r.get("row_index", 0))
 
             gold_record: dict = {
                 "gold_id": gold_id,
@@ -585,37 +481,33 @@ class DuneFeederService:
                 "source_tag": source_tag,
                 "domain": domain,
                 "query_id": query_id,
-                "query_name": rows[0].query_name,
-                "execution_id": rows[0].execution_id,
+                "query_name": rows[0].get("query_name"),
+                "execution_id": rows[0].get("execution_id"),
                 "tenant_scope": rec_tenant,
                 "materialized_at": now_iso,
                 "row_count": len(rows),
                 "avg_quality_score": avg_quality,
-                "data": [r.row_data for r in sorted_rows],
+                "data": [r.get("row_data") for r in sorted_rows],
                 "provenance": {
-                    "source_record_ids": [r.record_id for r in rows],
+                    "source_record_ids": [r["record_id"] for r in rows],
                     "materialization_step": "gold_materialization",
                     "actor": "dune_feeder_service",
                 },
             }
-            _GOLD_STORE[gold_id] = gold_record
+            await self._gold.insert(gold_id, gold_record)
             created += 1
 
             for rec in rows:
-                updated = rec.model_copy(
-                    update={
-                        "provenance_chain": rec.provenance_chain + [
-                            ProvenanceStep(
-                                step="gold_materialization",
-                                actor="dune_feeder_service",
-                                timestamp=now_iso,
-                                notes=f"gold_materialized gold_id={gold_id}",
-                            )
-                        ],
-                    }
-                )
-                _SILVER_STORE[rec.record_id] = updated
-                _BRONZE_STORE[rec.record_id] = updated
+                provenance = list(rec.get("provenance_chain") or [])
+                provenance.append(ProvenanceStep(
+                    step="gold_materialization",
+                    actor="dune_feeder_service",
+                    timestamp=now_iso,
+                    notes=f"gold_materialized gold_id={gold_id}",
+                ).model_dump())
+                updated = {**rec, "provenance_chain": provenance}
+                await self._silver.insert(rec["record_id"], updated)
+                await self._bronze.insert(rec["record_id"], updated)
 
         logger.info(
             "Dune rows materialized to Gold",
@@ -624,15 +516,11 @@ class DuneFeederService:
         metrics.increment("dune_feeder_promote_gold", labels={"source_tag": source_tag})
         return created
 
-    def get_gold_records(self, source_tag: Optional[str] = None, tenant_scope: Optional[str] = None) -> list[dict]:
+    async def get_gold_records(
+        self, source_tag: Optional[str] = None, tenant_scope: Optional[str] = None
+    ) -> list[dict]:
         """Return Gold records filtered by source_tag and/or tenant_scope."""
-        records = list(_GOLD_STORE.values())
-        if source_tag is not None:
-            records = [r for r in records if r.get("source_tag") == source_tag]
-        if tenant_scope is not None:
-            records = [r for r in records if r.get("tenant_scope") == tenant_scope]
-        records.sort(key=lambda r: r.get("materialized_at", ""), reverse=True)
-        return records
+        return await self._gold.find_filtered(source_tag=source_tag, tenant_scope=tenant_scope)
 
 
 # Module-level singleton (mirrors pattern in other services)

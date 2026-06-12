@@ -31,6 +31,7 @@ const SecurityPage = lazy(() => import('@kyber/pages/security').then(m => ({ def
 const ReliabilityPage = lazy(() => import('@kyber/pages/reliability').then(m => ({ default: m.ReliabilityPage })));
 const IntelligenceQualityPage = lazy(() => import('@kyber/pages/intelligence-quality').then(m => ({ default: m.IntelligenceQualityPage })));
 const ConnectorsPage = lazy(() => import('@kyber/pages/connectors').then(m => ({ default: m.ConnectorsPage })));
+const DuneFeederPage = lazy(() => import('@kyber/pages/dune-feeder').then(m => ({ default: m.DuneFeederPage })));
 const RevenueOperationsPage = lazy(() => import('@kyber/pages/revenue-operations').then(m => ({ default: m.RevenueOperationsPage })));
 const JourneyHealthPage = lazy(() => import('@kyber/pages/journey-health').then(m => ({ default: m.JourneyHealthPage })));
 
@@ -86,6 +87,7 @@ export function AppRouter() {
                 <Route path="/reliability/incidents/:incidentId" element={<PageSuspense><ReliabilityPage /></PageSuspense>} />
                 <Route path="/intelligence-quality" element={<PageSuspense><IntelligenceQualityPage /></PageSuspense>} />
                 <Route path="/connectors" element={<PageSuspense><ConnectorsPage /></PageSuspense>} />
+                <Route path="/dune-feeder" element={<PageSuspense><DuneFeederPage /></PageSuspense>} />
                 <Route path="/revops" element={<PageSuspense><RevenueOperationsPage /></PageSuspense>} />
                 <Route path="/pricing-architecture" element={<PageSuspense><PricingArchitecturePage /></PageSuspense>} />
                 <Route path="/gtm-materials" element={<PageSuspense><GTMMaterialsPage /></PageSuspense>} />

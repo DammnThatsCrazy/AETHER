@@ -220,14 +220,18 @@ AREAS: list[Area] = [
     ),
     Area(
         "Dune / data-lake feeders",
-        2,
-        "Dune is a read-only ANALYTICS_DATA provider (query execution, API-key auth) "
-        "and /v1/ingest/feed accepts external feeds, but there is no governed "
-        "Bronze->Silver->Gold feeder pipeline with per-row provenance and freshness "
-        "gates for Dune yet. Dune does not mutate canonical graph state.",
+        3,
+        "Governed Bronze→Silver→Gold feeder pipeline shipped: freshness gate, per-row "
+        "provenance chain, quality scoring, operator-gated Silver promotion, Gold "
+        "materialization with cross-tenant isolation, and rollback with tenant scope "
+        "enforcement. Router mounted at /v1/admin/dune-feeder. Kyber health page at "
+        "/dune-feeder shows tier counts, rejection rate, and Gold records. "
+        "Remaining gap: no automated Kafka consumer pulling from Dune on a schedule — "
+        "operators must POST to /ingest manually or via a cron job.",
         [
-            "Backend Architecture/aether-backend/shared/providers/categories.py",
-            "Backend Architecture/aether-backend/services/ingestion/routes.py",
+            "Backend Architecture/aether-backend/services/dune_feeder/service.py",
+            "Backend Architecture/aether-backend/services/dune_feeder/routes.py",
+            "frontend/kyber/src/pages/dune-feeder/dune-feeder-page.tsx",
         ],
     ),
     Area(
