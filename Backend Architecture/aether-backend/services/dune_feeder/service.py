@@ -315,12 +315,14 @@ class DuneFeederService:
                 labels={"domain": payload.domain, "query_id": qr.query_id},
             )
 
-        # Persist cumulative stats so health metrics survive restarts.
+        # Persist cumulative stats scoped to this ingest's tenant so health
+        # metrics survive restarts and don't leak cross-tenant activity.
         await self._stats.increment(
             submitted=len(qr.rows),
             rejected=rows_rejected,
             last_ingest_at=now_iso,
             last_ingest_source_tag=payload.source_tag,
+            tenant_scope=payload.tenant_scope,
         )
 
         logger.info(
@@ -433,8 +435,9 @@ class DuneFeederService:
         tag_rows = await self._bronze.find_many(filters=tier_filters, limit=10000)
         unique_tags = {r.get("source_tag") for r in tag_rows if r.get("source_tag")}
 
-        # Load persisted stats for restart-safe rejection rate and last-ingest fields.
-        stats = await self._stats.load()
+        # Load per-tenant stats so rejection_rate and last_ingest_* are scoped
+        # to the caller's tenant and do not expose another tenant's activity.
+        stats = await self._stats.load(tenant_scope=tenant_scope)
         total_submitted = stats.get("total_submitted", 0)
         total_rejected = stats.get("total_rejected", 0)
         rejection_rate = total_rejected / total_submitted if total_submitted > 0 else 0.0
@@ -478,10 +481,12 @@ class DuneFeederService:
         created = 0
 
         for (domain, query_id, rec_tenant), rows in groups.items():
-            # Deterministic Gold ID keyed on the grouping tuple: concurrent or
-            # retried materialize-gold calls for the same group both compute the
-            # same ID and BaseRepository.insert ON CONFLICT DO UPDATE is idempotent.
-            gold_id = f"gold:{source_tag}:{domain}:{query_id}:{rec_tenant or 'global'}"
+            # Deterministic Gold ID: hash the grouping tuple so caller-controlled
+            # strings containing ':' cannot produce collisions.
+            gold_key = json.dumps(
+                [source_tag, domain, query_id, rec_tenant or "global"], sort_keys=True
+            )
+            gold_id = "gold:" + hashlib.sha256(gold_key.encode()).hexdigest()
             avg_quality = round(sum(r.get("quality_score", 0.0) for r in rows) / len(rows), 4)
             sorted_rows = sorted(rows, key=lambda r: r.get("row_index", 0))
 

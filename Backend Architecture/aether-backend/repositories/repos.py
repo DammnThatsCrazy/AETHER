@@ -1925,20 +1925,23 @@ class DuneGoldRepository(BaseRepository):
 
 
 class DuneFeederStatsRepository(BaseRepository):
-    """Singleton stats record for the Dune feeder service.
+    """Per-tenant stats records for the Dune feeder service.
 
     Persists cumulative submitted/rejected counts and last-ingest metadata so
-    that health metrics survive service restarts.  All writes use the fixed key
-    STATS_KEY via ON CONFLICT DO UPDATE (idempotent upsert).
+    that health metrics survive service restarts.  Each tenant_scope gets its
+    own row (key = "feeder_stats_{scope}") so tenant admins only see their own
+    rejection rate and last-ingest metadata, not another tenant's activity.
     """
-
-    STATS_KEY = "feeder_stats_v1"
 
     def __init__(self) -> None:
         super().__init__("dune_feeder_stats")
 
-    async def load(self) -> dict:
-        record = await self.find_by_id(self.STATS_KEY)
+    @staticmethod
+    def _key(tenant_scope: Optional[str]) -> str:
+        return f"feeder_stats_{tenant_scope or 'global'}"
+
+    async def load(self, tenant_scope: Optional[str] = None) -> dict:
+        record = await self.find_by_id(self._key(tenant_scope))
         return record or {}
 
     async def increment(
@@ -1947,12 +1950,14 @@ class DuneFeederStatsRepository(BaseRepository):
         rejected: int,
         last_ingest_at: str,
         last_ingest_source_tag: str,
+        tenant_scope: Optional[str] = None,
     ) -> None:
+        key = self._key(tenant_scope)
         pool = await self._ensure_pool()
         if pool is None:
             # In-memory store: Python's async is cooperative, no true concurrency.
-            existing = await self.load()
-            await self.insert(self.STATS_KEY, {
+            existing = await self.load(tenant_scope)
+            await self.insert(key, {
                 "total_submitted": existing.get("total_submitted", 0) + submitted,
                 "total_rejected": existing.get("total_rejected", 0) + rejected,
                 "last_ingest_at": last_ingest_at,
@@ -1971,7 +1976,7 @@ class DuneFeederStatsRepository(BaseRepository):
                 'total_rejected',  $3::bigint,
                 'last_ingest_at', $4::text,
                 'last_ingest_source_tag', $5::text
-            ), '', NOW(), NOW())
+            ), $6, NOW(), NOW())
             ON CONFLICT (id) DO UPDATE SET
                 data = jsonb_set(jsonb_set(jsonb_set(jsonb_set(
                     {self.table_name}.data,
@@ -1983,9 +1988,10 @@ class DuneFeederStatsRepository(BaseRepository):
                 ), '{{last_ingest_source_tag}}', to_jsonb($5::text)),
                 updated_at = NOW()
             """,
-            self.STATS_KEY,
+            key,
             submitted,
             rejected,
             last_ingest_at,
             last_ingest_source_tag,
+            tenant_scope or "",
         )
