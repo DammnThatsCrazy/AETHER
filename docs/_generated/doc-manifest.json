@@ -3326,6 +3326,10 @@
       "canonical_owner": "platform@aether"
     },
     {
+      "path": "docs/reports/ML-PRODUCTIZATION-READINESS.md",
+      "title": "ML Productization Readiness Report"
+    },
+    {
       "path": "docs/source-of-truth/GRAPH_CONTRACT.md",
       "title": "Intelligence Graph Contract",
       "slug": "source-of-truth/graph-contract",
