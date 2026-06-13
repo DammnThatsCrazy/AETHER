@@ -11,7 +11,7 @@ source_files:
 canonical_owner: security@aether
 estimated_read_minutes: 12
 toc_depth: 3
-last_synced_commit: 70dcd8a
+last_synced_commit: 3d4ff13
 ---
 # x402 Protocol Support Audit — Aether Repository
 
@@ -116,11 +116,12 @@ This is not speculative or merely extensible infrastructure. The x402 support is
 
 ### 2.4 Can the graph represent facilitators/verifiers?
 
-**Partial.**
+**Implemented.**
 
 - `VertexType.INSTITUTION` exists with `InstitutionType` enum including `payment_processor`, `custodian`, `exchange`, `transfer_agent`
 - `oracle/verifier.py` performs off-chain signature verification (ecrecover)
-- However, no dedicated x402 **facilitator** vertex or edge exists. The x402 protocol concept of a facilitator (the intermediary that verifies payment and grants access) is not modeled as a first-class graph entity.
+- `shared/graph/economic_schema.py` — `EconomicGraphSchema` now declares a dedicated `Facilitator` vertex type with `ROUTES_VIA`, `ACCEPTS_ASSET`, and `PREFERS_NETWORK` edge types; `repositories/commerce_repos.py:FacilitatorsRepository` provides Postgres-backed upsert/list for facilitator records.
+- The x402 protocol facilitator concept is now a first-class graph entity with full schema, repository, and registry support (`services/x402/facilitators.py`).
 
 ### 2.5 Can the graph represent transactions/receipts/settlement states?
 

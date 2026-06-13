@@ -11,7 +11,7 @@ source_files:
 canonical_owner: commerce@aether
 estimated_read_minutes: 3
 toc_depth: 3
-last_synced_commit: 70dcd8a
+last_synced_commit: 3d4ff13
 ---
 # Commerce Operator Runbook
 
@@ -23,7 +23,7 @@ last_synced_commit: 70dcd8a
 1. Kyber Command → Commerce Subsystem → Approval Backlog.
 2. Filter queue by `status=assigned` or `status=pending`.
 3. If unassigned: `POST /v1/approvals/{id}/assign` with new approver.
-4. If assigned but idle: escalate with `POST /v1/approvals/{id}/decide action=escalate`.
+4. If assigned but idle: escalate with `POST /v1/approvals/{id}/escalate` (dedicated escalate endpoint; status → `escalated`, appends to escalation chain).
 5. Sweeper runs via `GET /v1/diagnostics/commerce/stuck-approvals` — marks expired items.
 
 ## 2. Failed settlement

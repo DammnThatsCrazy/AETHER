@@ -12,7 +12,7 @@ source_files:
 canonical_owner: identity@aether
 estimated_read_minutes: 12
 toc_depth: 3
-last_synced_commit: 70dcd8a
+last_synced_commit: 3d4ff13
 ---
 # Aether Identity Resolution v8.9.0 — Technical Guide
 
@@ -21,6 +21,8 @@ last_synced_commit: 70dcd8a
 Aether's Identity Resolution system unifies user profiles across devices, browsers, wallets, and sessions into a single **Identity Cluster**. It uses a hybrid approach: **deterministic signals** (exact identifier matches) auto-merge immediately, while **probabilistic signals** (fingerprint similarity, IP clustering, behavioral patterns) flag candidate merges for review.
 
 ## Architecture
+
+The production implementation lives in `services/identity/` — `resolver.py` orchestrates a 15-step pipeline via `IdentityResolutionService`, backed by 9 specialized repository classes (`repository.py`), HMAC-SHA256 PII hashing (`hashing.py`), merge/split policy engines (`merge_policy.py`, `split_policy.py`), a conflict manager (`conflicts.py`), an audit writer (`audit.py`), and a graph writer (`graph_writer.py`). Confidence scoring uses a 5-tier model (BLOCKED → NONE → LOW → MEDIUM → HIGH → DETERMINISTIC) in `confidence.py`.
 
 ```
 SDK Event (with fingerprint + identifiers)
@@ -152,7 +154,7 @@ The `DeviceFingerprintCollector` in `packages/web/src/core/fingerprint.ts` gener
 | Device memory | Low-Medium | `navigator.deviceMemory` |
 | Touch support | Low | `navigator.maxTouchPoints` |
 
-**Privacy**: Only the composite SHA-256 hash leaves the browser. Raw signals are never transmitted. Fingerprinting is skipped when GDPR mode is active and analytics consent is not granted. Cached in localStorage for 7 days.
+**Privacy**: Only the composite SHA-256 hash leaves the browser. Raw signals are never transmitted. On the backend, PII fields (email, phone, IP) are stored as HMAC-SHA256 hashes (`services/identity/hashing.py`) — raw values are never persisted in the graph or audit trail. Fingerprinting is skipped when GDPR mode is active and analytics consent is not granted. Cached in localStorage for 7 days.
 
 ### iOS SDK
 
@@ -191,22 +193,32 @@ Update via `PUT /v1/resolution/config`.
 
 ## API Endpoints
 
+Production routes are served under `/v1/identity/` by `services/identity/routes.py`. Legacy profile routes are backwards-compatible.
+
 | Endpoint | Method | Description |
 |---|---|---|
-| `/v1/resolution/cluster/{user_id}` | GET | Get the full identity cluster for a user |
-| `/v1/resolution/pending` | GET | List pending review decisions |
-| `/v1/resolution/pending/{id}/approve` | POST | Admin approves a merge |
-| `/v1/resolution/pending/{id}/reject` | POST | Admin rejects a merge |
-| `/v1/resolution/audit/{decision_id}` | GET | Get full audit trail for a decision |
-| `/v1/resolution/config` | GET | Get current resolution config |
-| `/v1/resolution/config` | PUT | Update resolution config |
-| `/v1/resolution/batch` | POST | Trigger batch probabilistic matching |
+| `/v1/identity/resolve` | POST | Resolve identity from event payload + signals (15-step pipeline via `IdentityResolutionService`) |
+| `/v1/identity/entities/{entity_id}` | GET | Get canonical entity |
+| `/v1/identity/entities/{entity_id}/aliases` | GET | Entity aliases (redacted PII) |
+| `/v1/identity/entities/{entity_id}/graph` | GET | Identity graph neighborhood |
+| `/v1/identity/entities/{entity_id}/audit` | GET | Audit / history for entity |
+| `/v1/identity/conflicts` | GET | Conflict / candidate queue |
+| `/v1/identity/merge` | POST | Operator merge (requires operator scope) |
+| `/v1/identity/split` | POST | Operator split / rollback |
+| `/v1/identity/recompute` | POST | Recompute identity from stored signals |
+| `/v1/identity/health` | GET | Resolver health |
+| `/v1/identity/profiles/{user_id}` | GET/PUT | Legacy profile read/write (backwards-compatible) |
+| `/v1/identity/profiles/{user_id}/graph` | GET | Legacy profile graph (backwards-compatible) |
+| `/v1/identity/siwx/bind` | POST | SIWX session binding |
+| `/v1/identity/siwx/status/{session_id}` | GET | SIWX session status |
+| `/v1/identity/siwx/{session_id}` | DELETE | Revoke SIWX session |
 
-### Example: Get Identity Cluster
+### Example: Resolve Identity
 
 ```bash
 curl -H "Authorization: Bearer YOUR_API_KEY" \
-  https://api.aether.io/v1/resolution/cluster/user-123
+  -X POST https://api.aether.io/v1/identity/resolve \
+  -d '{"entity_id": "user-123", "signals": {...}}'
 ```
 
 **Response:**
@@ -247,7 +259,7 @@ curl -H "Authorization: Bearer YOUR_API_KEY" \
 | **Cooldown** | Don't re-evaluate rejected pairs for 24 hours. |
 | **Fraud gate** | If either profile has fraud score > 40, route to manual review regardless of identity confidence. |
 | **Undo capability** | `RESOLVED_AS` edges store full signal snapshots. Merges can be reversed by restoring the secondary profile and reassigning graph edges. |
-| **Privacy** | All PII (email, phone, IP) stored as SHA-256 hashes only. Raw values never persisted in graph or audit trail. |
+| **Privacy** | All PII (email, phone, IP) stored as HMAC-SHA256 hashes only (`services/identity/hashing.py`). Raw values never persisted in graph or audit trail. |
 
 ## Audit Trail
 
