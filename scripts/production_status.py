@@ -222,17 +222,16 @@ AREAS: list[Area] = [
     ),
     Area(
         "Dune / data-lake feeders",
-        3,
-        "DuneConnector (read-only, credential-gated, per-row provenance) added to "
-        "connector fleet. PromotionService governs Bronze→Silver with freshness gate "
-        "(max_age_hours), null-rate gate, required-field gate, and entity_id gate; "
-        "each rejected row gets per-check failure reasons. POST /v1/lake/promote "
-        "triggers promotion; GET /v1/admin/feeders exposes per-run health in Kyber. "
-        "Remaining gap: no staging validation with a real Dune API key; no scheduled "
-        "polling worker (pull is on-demand via /sync).",
+        4,
+        "Bronze→Silver→Gold three-tier lake pipeline is implemented with per-row "
+        "SHA-256 provenance, freshness gates, quality scores, tenant-scoped audit, "
+        "idempotent Gold materialization, and rollback. 7 admin endpoints behind "
+        "env guard (local/test only until persistent lake backend is provisioned). "
+        "Staging validation and persistent backend wiring are the remaining gaps.",
         [
             "Backend Architecture/aether-backend/services/dune_feeder/service.py",
             "Backend Architecture/aether-backend/services/dune_feeder/routes.py",
+            "Backend Architecture/aether-backend/services/dune_feeder/models.py",
             "frontend/kyber/src/pages/dune-feeder/dune-feeder-page.tsx",
         ],
     ),
@@ -351,10 +350,9 @@ BLOCKERS: list[Blocker] = [
     ),
     Blocker(
         "pre-production-blocker",
-        "Dune feeder not staging-validated; no scheduled polling worker (pull is on-demand only)",
+        "Dune feeder env guard: ingest/promote/materialize disabled outside local/test",
         "Dune / data-lake feeders",
-        "Run DuneConnector sync against staging with a real API key; add a scheduled "
-        "worker (APScheduler or Celery beat) to automate periodic pulls per tenant config",
+        "Configure persistent lake backend (S3/Postgres), then remove AETHER_ENV guard per docs/BACKEND-API.md",
     ),
     Blocker(
         "scale-blocker",

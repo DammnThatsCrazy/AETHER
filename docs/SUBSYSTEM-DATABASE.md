@@ -12,7 +12,7 @@ source_files:
 canonical_owner: backend@aether
 estimated_read_minutes: 5
 toc_depth: 3
-last_synced_commit: 48fb9d4
+last_synced_commit: e8d95a8
 ---
 
 # PostgreSQL / Repository Subsystem
@@ -93,6 +93,7 @@ Tables are created automatically on first access. No migration tool is required 
 | `governance` | `gold_governance` | DAO governance records |
 | `tradfi` | `gold_tradfi` | TradFi raw data |
 | `sdk_events` | — | Bronze + Silver tiers for `POST /v1/batch` SDK event ingestion (no Gold; consumed by intelligence workers) |
+| `dune` | `DuneGoldRepository` | Bronze→Silver→Gold Dune API data with per-row SHA-256 provenance, quality scoring, and idempotent Gold materialization (`DuneBronzeRepository`, `DuneSilverRepository`, `DuneGoldRepository` in `repositories/repos.py`) |
 
 **Intelligence surface repos** (Gold only, consumed by `IntelligenceAggregator`):
 

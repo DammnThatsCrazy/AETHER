@@ -11,7 +11,7 @@ source_files:
 canonical_owner: commerce@aether
 estimated_read_minutes: 4
 toc_depth: 3
-last_synced_commit: 48fb9d4
+last_synced_commit: e8d95a8
 ---
 # Agentic Commerce — Approval Model
 
@@ -51,7 +51,8 @@ Configurable per tenant via `ApprovalService` SLA_SECONDS dict.
 | Assign | `approvals:write` | Sets `assigned_to` |
 | Approve | `commerce:approve` (canApprove) | Status → `approved`, emits `commerce.approval.approved` |
 | Reject | `commerce:approve` (canApprove) | Status → `rejected` |
-| Escalate | `commerce:approve` (canApprove) | Status → `escalated`, appends to escalation chain |
+| Escalate | `approvals:write` | `POST /v1/approvals/{id}/escalate` — status → `escalated`, appends to escalation chain |
+| Graph impact preview | `approvals:read` | `GET /v1/approvals/{id}/preview` — returns projected graph-edge delta before committing |
 | Revoke (post-approval) | `approvals:write` | Status → `revoked`, cancels downstream entitlement |
 | Replay (Lab) | `approvals:read` | Deterministic re-evaluation, no mutation |
 | View evidence | `approvals:read` | Returns approval + policy decision + requirement |
