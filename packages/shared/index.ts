@@ -12,6 +12,7 @@ export * from './identity';
 export * from './entities';
 export * from './commerce';
 export * from './agent';
+export * from './x402-lifecycle';
 export * from './events';
 export * from './capabilities';
 export * from './economic';

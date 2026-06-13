@@ -47,12 +47,47 @@ export type EventType =
   | 'wallet'
   | 'transaction'
   | 'contract_action'
-  // Agent (optional)
+  // Agent lifecycle (optional) — legacy aliases kept for backward compatibility
   | 'agent_task'
   | 'agent_decision'
   | 'a2h_interaction'
-  // x402 (optional)
-  | 'x402_payment';
+  // Agent lifecycle — granular events
+  | 'agent_registered'
+  | 'agent_updated'
+  | 'agent_authorized'
+  | 'agent_deauthorized'
+  | 'agent_capability_granted'
+  | 'agent_capability_revoked'
+  | 'agent_task_created'
+  | 'agent_task_decomposed'
+  | 'agent_task_started'
+  | 'agent_task_completed'
+  | 'agent_task_failed'
+  | 'agent_tool_called'
+  | 'agent_resource_requested'
+  | 'agent_delegated_task'
+  | 'agent_subagent_spawned'
+  | 'agent_policy_evaluated'
+  | 'agent_handoff'
+  | 'agent_escalated_to_human'
+  | 'agent_outcome_recorded'
+  // x402 (optional) — legacy alias kept for backward compatibility
+  | 'x402_payment'
+  // x402 lifecycle — granular events
+  | 'x402_resource_requested'
+  | 'x402_payment_required'
+  | 'x402_quote_received'
+  | 'x402_authorization_requested'
+  | 'x402_authorization_resolved'
+  | 'x402_payment_intent_created'
+  | 'x402_payment_submitted'
+  | 'x402_payment_settled'
+  | 'x402_payment_failed'
+  | 'x402_payment_timeout'
+  | 'x402_receipt_verified'
+  | 'x402_access_granted'
+  | 'x402_access_denied'
+  | 'x402_refund_or_reversal';
 
 export type EventFamily =
   | 'core'
@@ -79,8 +114,25 @@ export const EVENT_FAMILY: Record<EventType, EventFamily> = {
   entitlement_granted: 'commerce', entitlement_revoked: 'commerce',
   access_granted: 'commerce', access_denied: 'commerce',
   wallet: 'wallet', transaction: 'wallet', contract_action: 'wallet',
+  // agent legacy
   agent_task: 'agent', agent_decision: 'agent', a2h_interaction: 'agent',
+  // agent lifecycle
+  agent_registered: 'agent', agent_updated: 'agent', agent_authorized: 'agent',
+  agent_deauthorized: 'agent', agent_capability_granted: 'agent', agent_capability_revoked: 'agent',
+  agent_task_created: 'agent', agent_task_decomposed: 'agent', agent_task_started: 'agent',
+  agent_task_completed: 'agent', agent_task_failed: 'agent', agent_tool_called: 'agent',
+  agent_resource_requested: 'agent', agent_delegated_task: 'agent', agent_subagent_spawned: 'agent',
+  agent_policy_evaluated: 'agent', agent_handoff: 'agent', agent_escalated_to_human: 'agent',
+  agent_outcome_recorded: 'agent',
+  // x402 legacy
   x402_payment: 'x402',
+  // x402 lifecycle
+  x402_resource_requested: 'x402', x402_payment_required: 'x402', x402_quote_received: 'x402',
+  x402_authorization_requested: 'x402', x402_authorization_resolved: 'x402',
+  x402_payment_intent_created: 'x402', x402_payment_submitted: 'x402',
+  x402_payment_settled: 'x402', x402_payment_failed: 'x402', x402_payment_timeout: 'x402',
+  x402_receipt_verified: 'x402', x402_access_granted: 'x402', x402_access_denied: 'x402',
+  x402_refund_or_reversal: 'x402',
 };
 
 /**
@@ -101,8 +153,26 @@ export const EVENT_CONSENT_PURPOSE: Record<EventType, string> = {
   entitlement_granted: 'commerce', entitlement_revoked: 'commerce',
   access_granted: 'commerce', access_denied: 'commerce',
   wallet: 'web3', transaction: 'web3', contract_action: 'web3',
+  // agent legacy
   agent_task: 'agent', agent_decision: 'agent', a2h_interaction: 'agent',
+  // agent lifecycle
+  agent_registered: 'agent', agent_updated: 'agent', agent_authorized: 'agent',
+  agent_deauthorized: 'agent', agent_capability_granted: 'agent', agent_capability_revoked: 'agent',
+  agent_task_created: 'agent', agent_task_decomposed: 'agent', agent_task_started: 'agent',
+  agent_task_completed: 'agent', agent_task_failed: 'agent', agent_tool_called: 'agent',
+  agent_resource_requested: 'agent', agent_delegated_task: 'agent', agent_subagent_spawned: 'agent',
+  agent_policy_evaluated: 'agent', agent_handoff: 'agent', agent_escalated_to_human: 'agent',
+  agent_outcome_recorded: 'agent',
+  // x402 legacy
   x402_payment: 'commerce',
+  // x402 lifecycle
+  x402_resource_requested: 'commerce', x402_payment_required: 'commerce',
+  x402_quote_received: 'commerce', x402_authorization_requested: 'commerce',
+  x402_authorization_resolved: 'commerce', x402_payment_intent_created: 'commerce',
+  x402_payment_submitted: 'commerce', x402_payment_settled: 'commerce',
+  x402_payment_failed: 'commerce', x402_payment_timeout: 'commerce',
+  x402_receipt_verified: 'commerce', x402_access_granted: 'commerce',
+  x402_access_denied: 'commerce', x402_refund_or_reversal: 'commerce',
 };
 
 // ---------------------------------------------------------------------------
