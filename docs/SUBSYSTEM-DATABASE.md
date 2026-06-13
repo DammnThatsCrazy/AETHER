@@ -12,7 +12,7 @@ source_files:
 canonical_owner: backend@aether
 estimated_read_minutes: 5
 toc_depth: 3
-last_synced_commit: e8d95a8
+last_synced_commit: c318952
 ---
 
 # PostgreSQL / Repository Subsystem
@@ -76,6 +76,13 @@ Tables are created automatically on first access. No migration tool is required 
 | `economic_resources` | `EconomicResourceRepository` | Purchasable capabilities: inference, GPU compute, APIs, data, memory |
 | `facilitators` | `FacilitatorRepository` | x402 facilitators, trust brokers, and authorization rails |
 | `agent_economic_identities` | `AgentEconomicIdentityRepository` | Derived long-running economic identity per agent, keyed as `{tenant_id}:{agent_id}:economic_identity` |
+
+**Tenant isolation enforcement:** The following repository methods require an explicit `tenant_id` argument (no default) — callers must always pass the tenant from request context:
+- `AgentExecutionRepository.list_for_agent(agent_id, tenant_id)`
+- `PaymentIntentRepository.list_for_agent(agent_id, tenant_id)`
+- `SettlementEventRepository.list_for_agent(agent_id, tenant_id)`
+- `SettlementEventRepository.list_for_intent(intent_id, tenant_id)`
+- `DelegationRepository.active_for(grantee_entity_id, tenant_id)`
 
 ## Data Lake Repositories
 

@@ -845,11 +845,8 @@ class AgentExecutionRepository(BaseRepository):
             "ended_at": ended_at,
         })
 
-    async def list_for_agent(self, agent_id: str, tenant_id: str = "", limit: int = 50) -> list[dict]:
-        filters: dict = {"agent_id": agent_id}
-        if tenant_id:
-            filters["tenant_id"] = tenant_id
-        return await self.find_many(filters=filters, limit=limit)
+    async def list_for_agent(self, agent_id: str, tenant_id: str, limit: int = 50) -> list[dict]:
+        return await self.find_many(filters={"agent_id": agent_id, "tenant_id": tenant_id}, limit=limit)
 
     async def record_task_decomposition(
         self,
@@ -942,26 +939,22 @@ class DelegationRepository(BaseRepository):
         await self._invalidate_cache(record["grantee_entity_id"], record.get("tenant_id", ""))
         return updated
 
-    async def active_for(self, grantee_entity_id: str, tenant_id: str = "") -> list[dict]:
-        """Return every currently-active delegation for an entity.
+    async def active_for(self, grantee_entity_id: str, tenant_id: str) -> list[dict]:
+        """Return every currently-active delegation for an entity scoped to tenant.
 
         Cached for 60s; invalidated on grant/revoke. The caller iterates and
         applies scope checks; this repo does no policy interpretation.
         """
-        cache_key = (
-            f"delegations:active:{tenant_id}:{grantee_entity_id}"
-            if tenant_id
-            else f"delegations:active:{grantee_entity_id}"
-        )
+        cache_key = f"delegations:active:{tenant_id}:{grantee_entity_id}"
         if self._cache is not None:
             cached = await self._cache.get_json(cache_key)
             if cached is not None:
                 return cached
 
-        filters: dict = {"grantee_entity_id": grantee_entity_id}
-        if tenant_id:
-            filters["tenant_id"] = tenant_id
-        all_for_grantee = await self.find_many(filters=filters, limit=200)
+        all_for_grantee = await self.find_many(
+            filters={"grantee_entity_id": grantee_entity_id, "tenant_id": tenant_id},
+            limit=200,
+        )
         now_iso = utc_now().isoformat()
         active = [
             d for d in all_for_grantee
@@ -974,12 +967,9 @@ class DelegationRepository(BaseRepository):
             await self._cache.set_json(cache_key, active, TTL.SHORT)
         return active
 
-    async def _invalidate_cache(self, grantee_entity_id: str, tenant_id: str = "") -> None:
+    async def _invalidate_cache(self, grantee_entity_id: str, tenant_id: str) -> None:
         if self._cache is not None:
-            # Invalidate both legacy and tenant-scoped cache keys
-            await self._cache.delete(f"delegations:active:{grantee_entity_id}")
-            if tenant_id:
-                await self._cache.delete(f"delegations:active:{tenant_id}:{grantee_entity_id}")
+            await self._cache.delete(f"delegations:active:{tenant_id}:{grantee_entity_id}")
 
 
 class WalletRepository(BaseRepository):
@@ -1209,11 +1199,8 @@ class PaymentIntentRepository(BaseRepository):
             "metadata": metadata or {},
         })
 
-    async def list_for_agent(self, agent_id: str, tenant_id: str = "", limit: int = 100) -> list[dict]:
-        filters: dict = {"agent_id": agent_id}
-        if tenant_id:
-            filters["tenant_id"] = tenant_id
-        rows = await self.find_many(filters=filters, limit=limit)
+    async def list_for_agent(self, agent_id: str, tenant_id: str, limit: int = 100) -> list[dict]:
+        rows = await self.find_many(filters={"agent_id": agent_id, "tenant_id": tenant_id}, limit=limit)
         rows.sort(key=lambda r: r.get("occurred_at", ""), reverse=True)
         return rows[:limit]
 
@@ -1285,19 +1272,13 @@ class SettlementEventRepository(BaseRepository):
             "metadata": metadata or {},
         })
 
-    async def list_for_intent(self, intent_id: str, tenant_id: str = "", limit: int = 100) -> list[dict]:
-        filters: dict = {"intent_id": intent_id}
-        if tenant_id:
-            filters["tenant_id"] = tenant_id
-        rows = await self.find_many(filters=filters, limit=limit)
+    async def list_for_intent(self, intent_id: str, tenant_id: str, limit: int = 100) -> list[dict]:
+        rows = await self.find_many(filters={"intent_id": intent_id, "tenant_id": tenant_id}, limit=limit)
         rows.sort(key=lambda r: r.get("occurred_at", ""), reverse=True)
         return rows[:limit]
 
-    async def list_for_agent(self, agent_id: str, tenant_id: str = "", limit: int = 100) -> list[dict]:
-        filters: dict = {"agent_id": agent_id}
-        if tenant_id:
-            filters["tenant_id"] = tenant_id
-        rows = await self.find_many(filters=filters, limit=limit)
+    async def list_for_agent(self, agent_id: str, tenant_id: str, limit: int = 100) -> list[dict]:
+        rows = await self.find_many(filters={"agent_id": agent_id, "tenant_id": tenant_id}, limit=limit)
         rows.sort(key=lambda r: r.get("occurred_at", ""), reverse=True)
         return rows[:limit]
 

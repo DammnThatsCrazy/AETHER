@@ -67,8 +67,24 @@ def test_canonical_event_types_match_typescript():
         "entitlement_granted", "entitlement_revoked",
         "access_granted", "access_denied",
         "wallet", "transaction", "contract_action",
+        # Agent — legacy
         "agent_task", "agent_decision", "a2h_interaction",
+        # Agent — lifecycle (granular)
+        "agent_registered", "agent_updated", "agent_authorized", "agent_deauthorized",
+        "agent_capability_granted", "agent_capability_revoked",
+        "agent_task_created", "agent_task_decomposed", "agent_task_started",
+        "agent_task_completed", "agent_task_failed", "agent_tool_called",
+        "agent_resource_requested", "agent_delegated_task", "agent_subagent_spawned",
+        "agent_policy_evaluated", "agent_handoff", "agent_escalated_to_human",
+        "agent_outcome_recorded",
+        # x402 — legacy
         "x402_payment",
+        # x402 — lifecycle (granular)
+        "x402_resource_requested", "x402_payment_required", "x402_quote_received",
+        "x402_authorization_requested", "x402_authorization_resolved",
+        "x402_payment_intent_created", "x402_payment_submitted", "x402_payment_settled",
+        "x402_payment_failed", "x402_payment_timeout", "x402_receipt_verified",
+        "x402_access_granted", "x402_access_denied", "x402_refund_or_reversal",
     }
     with backend_path():
         m = importlib.import_module("services.ingestion.batch")
