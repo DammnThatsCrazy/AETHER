@@ -267,6 +267,28 @@ AREAS: list[Area] = [
         ],
     ),
     Area(
+        "agentic_x402_productization",
+        4,
+        "Full x402 lifecycle (14 events + legacy normalization) and agent lifecycle "
+        "(19 events + legacy normalization) implemented end-to-end: SDK emitters, "
+        "shared contracts, backend lifecycle mappers, tenant-scoped repositories, "
+        "graph mutations, AgentProfile360Composer, Kyber operator observability, "
+        "and comprehensive test suites. Tenant isolation enforced — all repository "
+        "reads require explicit tenant_id.",
+        [
+            "packages/shared/events.ts",
+            "packages/shared/agent.ts",
+            "packages/shared/x402-lifecycle.ts",
+            "packages/web/src/index.ts",
+            "Backend Architecture/aether-backend/services/x402/lifecycle_mapper.py",
+            "Backend Architecture/aether-backend/services/agent/lifecycle_mapper.py",
+            "Backend Architecture/aether-backend/services/profile/agent.py",
+            "Backend Architecture/aether-backend/repositories/repos.py",
+            "Backend Architecture/aether-backend/services/admin/routes.py",
+            "Backend Architecture/aether-backend/tests/agentic_x402/",
+        ],
+    ),
+    Area(
         "CI / tests",
         4,
         "8 workflows (consistency, health, SDK validation, e2e, deploy); 800 core + "
@@ -385,7 +407,27 @@ LIVE_CHECKS: list[LiveCheck] = [
     LiveCheck("Source-linked docs drift (strict)", ["python", "scripts/docs_drift.py", "--strict"]),
     LiveCheck("Contract / event / consent alignment", ["python", "scripts/validate_contracts.py"]),
     LiveCheck("SDK release alignment", ["python", "scripts/validate_sdk_release_alignment.py"]),
+    LiveCheck(
+        "Agentic x402 lifecycle consent map",
+        ["python", "-m", "pytest", "tests/unit/test_event_registry_agentic_x402.py", "-q", "--tb=short"],
+    ),
 ]
+
+
+def _check_agentic_x402_files() -> list[str]:
+    """Return list of missing required agentic x402 productization files."""
+    required = [
+        "packages/shared/x402-lifecycle.ts",
+        "packages/web/src/index.ts",
+        "Backend Architecture/aether-backend/services/x402/lifecycle_mapper.py",
+        "Backend Architecture/aether-backend/services/agent/lifecycle_mapper.py",
+        "Backend Architecture/aether-backend/services/profile/agent.py",
+        "Backend Architecture/aether-backend/tests/agentic_x402/test_tenant_isolation.py",
+        "Backend Architecture/aether-backend/tests/agentic_x402/test_x402_lifecycle_mapper.py",
+        "Backend Architecture/aether-backend/tests/agentic_x402/test_agent_lifecycle_mapper.py",
+    ]
+    missing = [p for p in required if not (ROOT / p).exists()]
+    return missing
 
 TEST_CHECKS: list[LiveCheck] = [
     LiveCheck("Python tests (core)", ["python", "-m", "pytest", "tests/", "-q", "--tb=short"]),
@@ -453,6 +495,17 @@ def main() -> None:
     if not args.with_tests:
         print("  [SKIP]  Python test suites (pass --with-tests to run)")
 
+    # -- agentic x402 file check --------------------------------------------
+    missing_agentic = _check_agentic_x402_files()
+    print("\nAGENTIC x402 PRODUCTIZATION FILES")
+    print("-" * 74)
+    if missing_agentic:
+        for p in missing_agentic:
+            print(f"  [MISSING]  {p}")
+        print("  -> agentic_x402_productization: BLOCKED (required files missing)")
+    else:
+        print(f"  [PASS]  all {len(missing_agentic) + 8} required agentic x402 files present")
+
     # -- guardrail artifacts -------------------------------------------------
     missing_artifacts = [p for p in REQUIRED_ARTIFACTS if not (ROOT / p).exists()]
     print("\nGUARDRAIL ARTIFACTS")
@@ -483,6 +536,8 @@ def main() -> None:
 
     failed = [c for c in check_results if not c["passed"]] + (
         [{"name": f"missing artifact: {p}"} for p in missing_artifacts]
+    ) + (
+        [{"name": f"missing agentic file: {p}"} for p in missing_agentic]
     )
 
     print("\n" + "=" * 74)

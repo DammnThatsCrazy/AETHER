@@ -63,10 +63,24 @@ CANONICAL_EVENT_TYPES: frozenset[str] = frozenset({
     "access_granted", "access_denied",
     # Wallet / on-chain
     "wallet", "transaction", "contract_action",
-    # Agent
+    # Agent — legacy
     "agent_task", "agent_decision", "a2h_interaction",
-    # x402
+    # Agent — lifecycle (granular)
+    "agent_registered", "agent_updated", "agent_authorized", "agent_deauthorized",
+    "agent_capability_granted", "agent_capability_revoked",
+    "agent_task_created", "agent_task_decomposed", "agent_task_started",
+    "agent_task_completed", "agent_task_failed", "agent_tool_called",
+    "agent_resource_requested", "agent_delegated_task", "agent_subagent_spawned",
+    "agent_policy_evaluated", "agent_handoff", "agent_escalated_to_human",
+    "agent_outcome_recorded",
+    # x402 — legacy
     "x402_payment",
+    # x402 — lifecycle (granular)
+    "x402_resource_requested", "x402_payment_required", "x402_quote_received",
+    "x402_authorization_requested", "x402_authorization_resolved",
+    "x402_payment_intent_created", "x402_payment_submitted", "x402_payment_settled",
+    "x402_payment_failed", "x402_payment_timeout", "x402_receipt_verified",
+    "x402_access_granted", "x402_access_denied", "x402_refund_or_reversal",
 })
 
 # Required consent purpose per event family (mirror of EVENT_CONSENT_PURPOSE)
@@ -87,7 +101,26 @@ EVENT_CONSENT_PURPOSE: dict[str, str] = {
     "access_denied": "commerce",
     "wallet": "web3", "transaction": "web3", "contract_action": "web3",
     "agent_task": "agent", "agent_decision": "agent", "a2h_interaction": "agent",
+    # Agent lifecycle
+    "agent_registered": "agent", "agent_updated": "agent",
+    "agent_authorized": "agent", "agent_deauthorized": "agent",
+    "agent_capability_granted": "agent", "agent_capability_revoked": "agent",
+    "agent_task_created": "agent", "agent_task_decomposed": "agent",
+    "agent_task_started": "agent", "agent_task_completed": "agent",
+    "agent_task_failed": "agent", "agent_tool_called": "agent",
+    "agent_resource_requested": "agent", "agent_delegated_task": "agent",
+    "agent_subagent_spawned": "agent", "agent_policy_evaluated": "agent",
+    "agent_handoff": "agent", "agent_escalated_to_human": "agent",
+    "agent_outcome_recorded": "agent",
+    # x402
     "x402_payment": "commerce",
+    "x402_resource_requested": "commerce", "x402_payment_required": "commerce",
+    "x402_quote_received": "commerce", "x402_authorization_requested": "commerce",
+    "x402_authorization_resolved": "commerce", "x402_payment_intent_created": "commerce",
+    "x402_payment_submitted": "commerce", "x402_payment_settled": "commerce",
+    "x402_payment_failed": "commerce", "x402_payment_timeout": "commerce",
+    "x402_receipt_verified": "commerce", "x402_access_granted": "commerce",
+    "x402_access_denied": "commerce", "x402_refund_or_reversal": "commerce",
 }
 
 # Backend-side sensitive field patterns — scrub even if SDK missed them.

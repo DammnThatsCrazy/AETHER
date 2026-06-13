@@ -303,7 +303,7 @@ async def list_executions(
     config = await _configs.find_by_id(agent_id)
     if config is None or config.get("tenant_id") != tenant.tenant_id:
         raise NotFoundError("Agent")
-    rows = await _executions.list_for_agent(agent_id, limit=min(limit, 500))
+    rows = await _executions.list_for_agent(agent_id, tenant.tenant_id, limit=min(limit, 500))
     return APIResponse(data={
         "agent_id": agent_id,
         "executions": rows,

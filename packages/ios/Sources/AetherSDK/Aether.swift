@@ -76,8 +76,22 @@ public enum AetherEventType: String, Codable, CaseIterable {
     case identify, consent
     case conversion, payment_initiated, payment_completed, payment_failed, approval_requested, approval_resolved, entitlement_granted, entitlement_revoked, access_granted, access_denied
     case wallet, transaction, contract_action
+    // Agent — legacy
     case agent_task, agent_decision, a2h_interaction
+    // Agent — lifecycle (granular)
+    case agent_registered, agent_updated, agent_authorized, agent_deauthorized
+    case agent_capability_granted, agent_capability_revoked
+    case agent_task_created, agent_task_decomposed, agent_task_started, agent_task_completed, agent_task_failed
+    case agent_tool_called, agent_resource_requested, agent_delegated_task, agent_subagent_spawned
+    case agent_policy_evaluated, agent_handoff, agent_escalated_to_human, agent_outcome_recorded
+    // x402 — legacy
     case x402_payment
+    // x402 — lifecycle (granular)
+    case x402_resource_requested, x402_payment_required, x402_quote_received
+    case x402_authorization_requested, x402_authorization_resolved
+    case x402_payment_intent_created, x402_payment_submitted, x402_payment_settled
+    case x402_payment_failed, x402_payment_timeout, x402_receipt_verified
+    case x402_access_granted, x402_access_denied, x402_refund_or_reversal
 }
 
 public struct AetherEvent: Codable {
@@ -234,9 +248,29 @@ public final class Aether: NSObject {
         .track: "analytics", .page: "analytics", .screen: "analytics", .heartbeat: "analytics", .error: "analytics", .performance: "analytics",
         .journey_started: "analytics", .journey_paused: "analytics", .journey_resumed: "analytics", .journey_continued: "analytics", .journey_completed: "analytics", .journey_abandoned: "analytics", .journey_checkpoint: "analytics", .identify: "analytics",
         .experiment: "marketing", .conversion: "marketing", .consent: "analytics",
-        .payment_initiated: "commerce", .payment_completed: "commerce", .payment_failed: "commerce", .approval_requested: "commerce", .approval_resolved: "commerce", .entitlement_granted: "commerce", .entitlement_revoked: "commerce", .access_granted: "commerce", .access_denied: "commerce", .x402_payment: "commerce",
+        .payment_initiated: "commerce", .payment_completed: "commerce", .payment_failed: "commerce", .approval_requested: "commerce", .approval_resolved: "commerce", .entitlement_granted: "commerce", .entitlement_revoked: "commerce", .access_granted: "commerce", .access_denied: "commerce",
+        // x402 — legacy + lifecycle
+        .x402_payment: "commerce",
+        .x402_resource_requested: "commerce", .x402_payment_required: "commerce",
+        .x402_quote_received: "commerce", .x402_authorization_requested: "commerce",
+        .x402_authorization_resolved: "commerce", .x402_payment_intent_created: "commerce",
+        .x402_payment_submitted: "commerce", .x402_payment_settled: "commerce",
+        .x402_payment_failed: "commerce", .x402_payment_timeout: "commerce",
+        .x402_receipt_verified: "commerce", .x402_access_granted: "commerce",
+        .x402_access_denied: "commerce", .x402_refund_or_reversal: "commerce",
         .wallet: "web3", .transaction: "web3", .contract_action: "web3",
-        .agent_task: "agent", .agent_decision: "agent", .a2h_interaction: "agent"
+        // Agent — legacy + lifecycle
+        .agent_task: "agent", .agent_decision: "agent", .a2h_interaction: "agent",
+        .agent_registered: "agent", .agent_updated: "agent",
+        .agent_authorized: "agent", .agent_deauthorized: "agent",
+        .agent_capability_granted: "agent", .agent_capability_revoked: "agent",
+        .agent_task_created: "agent", .agent_task_decomposed: "agent",
+        .agent_task_started: "agent", .agent_task_completed: "agent",
+        .agent_task_failed: "agent", .agent_tool_called: "agent",
+        .agent_resource_requested: "agent", .agent_delegated_task: "agent",
+        .agent_subagent_spawned: "agent", .agent_policy_evaluated: "agent",
+        .agent_handoff: "agent", .agent_escalated_to_human: "agent",
+        .agent_outcome_recorded: "agent"
     ]
 
     static let sensitiveKeys: Set<String> = [
