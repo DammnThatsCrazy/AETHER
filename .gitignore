@@ -93,6 +93,8 @@ tfplan
 *.pt
 *.pkl
 mlruns/
+mlflow.db
+ML%20Models/
 .claude/worktrees/
 # Claude Code session-specific tool permissions (environment-specific, not shared)
 .claude/settings.local.json

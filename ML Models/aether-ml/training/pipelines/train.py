@@ -18,7 +18,13 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-import mlflow
+try:
+    import mlflow
+    _MLFLOW_AVAILABLE = True
+except ImportError:
+    mlflow = None  # type: ignore[assignment]
+    _MLFLOW_AVAILABLE = False
+
 import numpy as np
 import pandas as pd
 from sklearn.model_selection import train_test_split
@@ -184,6 +190,7 @@ class TrainingPipeline:
         model_name: str,
         output_dir: str = "/tmp/aether-models",
         config: dict[str, Any] | None = None,
+        synthetic_data: bool | None = None,
     ) -> None:
         if model_name not in MODEL_REGISTRY:
             raise ValueError(
@@ -195,6 +202,8 @@ class TrainingPipeline:
         self.output_dir.mkdir(parents=True, exist_ok=True)
         self.config = config or {}
         self.tier, self.class_name = MODEL_REGISTRY[model_name]
+        # synthetic_data: None means auto-detect (True if no data_path)
+        self._synthetic_data_override = synthetic_data
 
     # ------------------------------------------------------------------
     # Public API
@@ -208,10 +217,11 @@ class TrainingPipeline:
         logger.info("=" * 60)
 
         # 1. Load or generate data
-        X, y = self._load_data()
+        X, y, is_synthetic = self._load_data_with_flag()
         logger.info(
             f"Data loaded: {X.shape[0]} samples, {X.shape[1]} features"
             + (f", target classes={int(y.nunique())}" if y is not None else ", unsupervised")
+            + (f" [SYNTHETIC]" if is_synthetic else " [REAL]")
         )
 
         # 2. Preprocess
@@ -258,9 +268,15 @@ class TrainingPipeline:
         timestamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
         artifact_path = self.output_dir / f"v1_{timestamp}"
         artifact_path.mkdir(parents=True, exist_ok=True)
-        self._save_artifacts(model, artifact_path, train_metrics, test_metrics)
+        self._save_artifacts(
+            model, artifact_path, train_metrics, test_metrics,
+            synthetic_data=is_synthetic,
+            training_run_id=mlflow_run_id or "",
+        )
 
         elapsed = time.time() - start
+
+        threshold_passed, _ = self._check_thresholds(test_metrics)
 
         result: dict[str, Any] = {
             "status": "success",
@@ -274,6 +290,10 @@ class TrainingPipeline:
             "val_samples": len(X_val),
             "test_samples": len(X_test),
             "elapsed_seconds": round(elapsed, 2),
+            "synthetic_data": is_synthetic,
+            "threshold_passed": threshold_passed,
+            "production_allowed": False,  # Synthetic artifacts are never production-allowed
+            "feature_schema_hash": self._get_feature_schema_hash(),
         }
 
         # Persist pipeline report alongside artifacts
@@ -292,6 +312,11 @@ class TrainingPipeline:
 
     def _load_data(self) -> tuple[pd.DataFrame, pd.Series | None]:
         """Load training data from S3/local path or fall back to synthetic."""
+        X, y, _ = self._load_data_with_flag()
+        return X, y
+
+    def _load_data_with_flag(self) -> tuple[pd.DataFrame, pd.Series | None, bool]:
+        """Load data and return (X, y, is_synthetic) flag."""
         data_path = self.config.get("data_path")
 
         if data_path and Path(data_path).exists():
@@ -302,10 +327,13 @@ class TrainingPipeline:
                 y = df.pop(target_col)
             else:
                 y = None
-            return df, y
+            # Respect explicit override, otherwise real data = not synthetic
+            is_synthetic = self._synthetic_data_override if self._synthetic_data_override is not None else False
+            return df, y, is_synthetic
 
         logger.info("No data path provided; generating synthetic data")
-        return self._generate_synthetic_data()
+        X, y = self._generate_synthetic_data()
+        return X, y, True
 
     def _generate_synthetic_data(self) -> tuple[pd.DataFrame, pd.Series | None]:
         """Generate synthetic training data for development and testing."""
@@ -569,33 +597,79 @@ class TrainingPipeline:
         train_metrics: dict[str, float],
         test_metrics: dict[str, float],
     ) -> str | None:
-        """Log parameters, metrics, and model artifact to MLflow."""
+        """Log parameters, metrics, and model artifact to MLflow (optional)."""
+        if not _MLFLOW_AVAILABLE:
+            logger.debug("mlflow not installed — skipping experiment tracking")
+            return None
         try:
             with mlflow.start_run(run_name=f"{self.model_name}_{int(time.time())}") as run:
                 mlflow.log_param("model_name", self.model_name)
                 mlflow.log_param("tier", self.tier)
                 mlflow.log_param("class_name", self.class_name)
 
-                # Log hyperparameters from config
                 for k, v in self.config.items():
                     if isinstance(v, (str, int, float, bool)):
                         mlflow.log_param(k, v)
 
-                # Log metrics
                 for k, v in {**train_metrics, **test_metrics}.items():
                     mlflow.log_metric(k, v)
 
-                # Log model
                 mlflow.sklearn.log_model(model, artifact_path="model")
-
                 return run.info.run_id
         except Exception as e:
-            logger.warning(f"MLflow logging failed (non-fatal): {e}")
+            logger.warning("MLflow logging failed (non-fatal): %s", e)
             return None
 
     # ------------------------------------------------------------------
     # Artifact persistence
     # ------------------------------------------------------------------
+
+    def _check_thresholds(self, test_metrics: dict[str, float]) -> tuple[bool, dict[str, float]]:
+        """Check test metrics against minimum thresholds from the registry."""
+        try:
+            from common.model_registry import get_model
+            entry = get_model(self.model_name)
+            thresholds = entry.minimum_metrics if entry else {}
+        except ImportError:
+            thresholds = {}
+
+        if not thresholds:
+            return True, {}
+
+        passed = True
+        results: dict[str, float] = {}
+        for metric, threshold in thresholds.items():
+            actual = test_metrics.get(metric)
+            if actual is None:
+                continue
+            # For mae/rmse lower is better; for others higher is better
+            if metric in ("test_mae", "test_rmse", "test_mape"):
+                ok = actual <= threshold
+            else:
+                ok = actual >= threshold
+            results[metric] = actual
+            if not ok:
+                passed = False
+                logger.warning(
+                    "Threshold NOT met: %s.%s = %.4f (threshold %.4f, direction=%s)",
+                    self.model_name, metric, actual, threshold,
+                    "≤" if metric in ("test_mae", "test_rmse", "test_mape") else "≥",
+                )
+            else:
+                logger.info(
+                    "Threshold met: %s.%s = %.4f ✓",
+                    self.model_name, metric, actual,
+                )
+
+        return passed, results
+
+    def _get_feature_schema_hash(self) -> str:
+        """Return the feature schema hash from the feature contract."""
+        try:
+            from common.feature_contracts import compute_schema_hash
+            return compute_schema_hash(self.model_name)
+        except (ImportError, KeyError):
+            return ""
 
     def _save_artifacts(
         self,
@@ -603,25 +677,76 @@ class TrainingPipeline:
         artifact_path: Path,
         train_metrics: dict[str, float],
         test_metrics: dict[str, float],
+        synthetic_data: bool = True,
+        training_run_id: str = "",
     ) -> None:
-        """Persist model and metadata to the output directory."""
+        """Persist model, canonical metadata, and artifact registry entry."""
         import joblib
 
-        joblib.dump(model, artifact_path / "model.joblib")
+        artifact_file = artifact_path / "model.joblib"
+        joblib.dump(model, artifact_file)
 
+        threshold_passed, _ = self._check_thresholds(test_metrics)
+        feature_schema_hash = self._get_feature_schema_hash()
+
+        # Full canonical metadata (required by artifact registry)
         metadata = {
+            "model_id": self.model_name,
             "model_name": self.model_name,
+            "artifact_version": artifact_path.name,
+            "promotion_state": "trained",
             "tier": self.tier,
             "class_name": self.class_name,
+            "artifact_format": "joblib",
+            "artifact_path": str(artifact_file),
+            "training_run_id": training_run_id or "",
+            "feature_schema_hash": feature_schema_hash,
             "train_metrics": train_metrics,
             "test_metrics": test_metrics,
+            "metrics": {**train_metrics, **test_metrics},
+            "thresholds": {},
+            "threshold_passed": threshold_passed,
+            "synthetic_data": synthetic_data,
+            "production_allowed": False,  # Never allow production for training output
             "saved_at": datetime.now(timezone.utc).isoformat(),
             "config": self.config,
         }
+
+        # Write metadata.json (also used by artifact_registry.ArtifactMetadata.load)
         (artifact_path / "metadata.json").write_text(
             json.dumps(metadata, indent=2, default=str)
         )
-        logger.info(f"Artifacts saved to {artifact_path}")
+
+        # Write artifact registry entry using artifact_registry if available
+        try:
+            from common.artifact_registry import save_artifact
+            save_artifact(
+                model_id=self.model_name,
+                artifact_path=artifact_file,
+                artifact_version=artifact_path.name,
+                promotion_state="trained",
+                artifact_format="joblib",
+                training_run_id=training_run_id or "",
+                feature_schema_hash=feature_schema_hash,
+                metrics={**train_metrics, **test_metrics},
+                thresholds={},
+                threshold_passed=threshold_passed,
+                synthetic_data=synthetic_data,
+            )
+        except Exception as exc:
+            logger.debug("artifact_registry.save_artifact skipped: %s", exc)
+
+        if synthetic_data:
+            logger.warning(
+                "Artifact saved with synthetic_data=True — NOT production-allowed: model=%s",
+                self.model_name,
+            )
+        else:
+            logger.info(
+                "Artifact saved: model=%s threshold_passed=%s",
+                self.model_name, threshold_passed,
+            )
+        logger.info("Artifacts saved to %s", artifact_path)
 
 
 # ---------------------------------------------------------------------------
@@ -678,15 +803,54 @@ def main() -> None:
     )
     parser.add_argument(
         "--data-path",
+        "--input-path",
         type=str,
         default=None,
-        help="Path to training data (Parquet). Falls back to synthetic if not provided.",
+        dest="data_path",
+        help="Path to training data (Parquet or CSV). Falls back to synthetic if not provided.",
+    )
+    parser.add_argument(
+        "--data",
+        "--data-source",
+        type=str,
+        default="synthetic",
+        dest="data_source",
+        choices=["synthetic", "local", "s3", "postgresql"],
+        help="Data source type (synthetic|local|s3|postgresql).",
+    )
+    parser.add_argument(
+        "--env",
+        type=str,
+        default=None,
+        help="Environment (local|staging|production). Overrides AETHER_ENV.",
+    )
+    parser.add_argument(
+        "--tenant-id",
+        type=str,
+        default=None,
+        help="Tenant ID for multi-tenant training.",
+    )
+    parser.add_argument(
+        "--tracking",
+        type=str,
+        default="mlflow",
+        choices=["mlflow", "none"],
+        help="Experiment tracking backend.",
     )
 
     args = parser.parse_args()
 
-    # Set MLflow experiment
-    mlflow.set_experiment(args.experiment)
+    if args.env:
+        import os as _os
+        _os.environ["AETHER_ENV"] = args.env
+
+    if args.tracking == "mlflow" and _MLFLOW_AVAILABLE:
+        try:
+            mlflow.set_experiment(args.experiment)
+        except Exception as e:
+            logger.warning("MLflow experiment setup failed (continuing): %s", e)
+    elif args.tracking == "mlflow" and not _MLFLOW_AVAILABLE:
+        logger.warning("mlflow not installed — experiment tracking disabled")
 
     if args.model == "all":
         train_all(output_dir=args.output_dir)
@@ -694,11 +858,16 @@ def main() -> None:
         config: dict[str, Any] = {}
         if args.data_path:
             config["data_path"] = args.data_path
+        if args.tenant_id:
+            config["tenant_id"] = args.tenant_id
+
+        is_synthetic = args.data_source == "synthetic" and not args.data_path
 
         pipeline = TrainingPipeline(
             model_name=args.model,
             output_dir=args.output_dir,
             config=config,
+            synthetic_data=is_synthetic,
         )
         result = pipeline.run()
         logger.info(f"Result: {json.dumps(result, indent=2, default=str)}")

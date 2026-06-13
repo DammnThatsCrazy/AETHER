@@ -169,6 +169,7 @@ from services.ingestion.batch import router as batch_router
 from services.identity.routes import router as identity_router
 from services.analytics.routes import router as analytics_router
 from services.ml_serving.routes import router as ml_router
+from services.ml_serving.kyber_ml_admin import router as kyber_ml_admin_router
 from services.campaign.routes import router as campaign_router
 from services.economic.routes import router as economic_router
 from services.consent.routes import router as consent_router
@@ -405,6 +406,7 @@ def create_app() -> FastAPI:
     app.include_router(identity_router)
     app.include_router(analytics_router)
     app.include_router(ml_router)
+    app.include_router(kyber_ml_admin_router)  # Kyber ML command center admin hooks
     app.include_router(campaign_router)
     app.include_router(economic_router)
     app.include_router(consent_router)
