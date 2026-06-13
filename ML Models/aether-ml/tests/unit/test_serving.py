@@ -345,5 +345,139 @@ class TestModelServer:
         assert MODEL_TYPES["anomaly_detection"] == "server"
 
 
+# =============================================================================
+# IDENTITY RESOLUTION ENDPOINT TESTS
+# =============================================================================
+
+
+class TestIdentityResolutionEndpoint:
+    """Tests for the /v1/predict/identity endpoint."""
+
+    VALID_FEATURES = {
+        "device_fingerprint_sim": 0.85,
+        "behavioral_sim": 0.72,
+        "temporal_overlap": 0.60,
+        "shared_ip_count": 3,
+        "session_sequence_score": 0.78,
+        "wallet_link_score": 0.5,
+        "geo_distance": 12.5,
+        "browser_match": 1.0,
+        "os_match": 1.0,
+    }
+
+    def test_identity_endpoint_returns_200(self, client: TestClient) -> None:
+        response = client.post(
+            "/v1/predict/identity",
+            json={"profile_pair_id": "profile_a:profile_b", "features": self.VALID_FEATURES},
+        )
+        assert response.status_code == 200
+
+    def test_identity_response_schema(self, client: TestClient) -> None:
+        response = client.post(
+            "/v1/predict/identity",
+            json={"profile_pair_id": "a:b", "features": self.VALID_FEATURES},
+        )
+        data = response.json()
+
+        assert "profile_pair_id" in data
+        assert data["profile_pair_id"] == "a:b"
+        assert "is_same_entity" in data
+        assert isinstance(data["is_same_entity"], bool)
+        assert "merge_probability" in data
+        assert 0.0 <= data["merge_probability"] <= 1.0
+        assert "confidence" in data
+        assert 0.0 <= data["confidence"] <= 1.0
+        assert "latency_ms" in data
+        assert data["latency_ms"] >= 0.0
+        assert "model_version" in data
+
+    def test_identity_without_optional_wallet_link(self, client: TestClient) -> None:
+        features = {k: v for k, v in self.VALID_FEATURES.items() if k != "wallet_link_score"}
+        response = client.post(
+            "/v1/predict/identity",
+            json={"profile_pair_id": "x:y", "features": features},
+        )
+        assert response.status_code == 200
+
+    def test_identity_invalid_request_missing_pair_id(self, client: TestClient) -> None:
+        response = client.post(
+            "/v1/predict/identity",
+            json={"features": self.VALID_FEATURES},
+        )
+        assert response.status_code == 422
+
+
+# =============================================================================
+# READINESS ENDPOINT TESTS
+# =============================================================================
+
+
+class TestReadinessEndpoint:
+    """Tests for the /ready endpoint."""
+
+    def test_ready_returns_200(self, client: TestClient) -> None:
+        response = client.get("/ready")
+        assert response.status_code == 200
+
+    def test_ready_response_schema(self, client: TestClient) -> None:
+        response = client.get("/ready")
+        data = response.json()
+
+        assert "ready" in data
+        assert data["ready"] is True
+        assert "models_loaded" in data
+        assert isinstance(data["models_loaded"], list)
+        assert "sla_violation_rate" in data
+        assert isinstance(data["sla_violation_rate"], float)
+        assert "freshness_summary" in data
+        assert isinstance(data["freshness_summary"], dict)
+
+    def test_ready_at_high_violation_rate_returns_503(self) -> None:
+        from unittest.mock import MagicMock, patch
+        from serving.src.api import app
+
+        mock_tracker = MagicMock()
+        mock_tracker.get_violation_rate.return_value = 0.15  # 15% — above 10% threshold
+        mock_tracker.get_summary.return_value = {"total_checks": 100, "total_violations": 15, "violation_rate": 0.15, "by_model": {}}
+
+        with patch("serving.src.api._freshness_tracker", mock_tracker):
+            test_client = TestClient(app, raise_server_exceptions=False)
+            response = test_client.get("/ready")
+            assert response.status_code == 503
+
+
+# =============================================================================
+# FRESHNESS MONITORING ENDPOINT TESTS
+# =============================================================================
+
+
+class TestFreshnessMonitoringEndpoint:
+    """Tests for the /v1/monitoring/freshness endpoint."""
+
+    def test_freshness_returns_200(self, client: TestClient) -> None:
+        response = client.get("/v1/monitoring/freshness")
+        assert response.status_code == 200
+
+    def test_freshness_response_has_required_keys(self, client: TestClient) -> None:
+        response = client.get("/v1/monitoring/freshness")
+        data = response.json()
+
+        assert "total_checks" in data
+        assert "total_violations" in data
+        assert "violation_rate" in data
+        assert isinstance(data["violation_rate"], float)
+
+    def test_freshness_disabled_when_tracker_none(self) -> None:
+        from unittest.mock import patch
+        from serving.src.api import app
+
+        with patch("serving.src.api._freshness_tracker", None):
+            test_client = TestClient(app)
+            response = test_client.get("/v1/monitoring/freshness")
+            assert response.status_code == 200
+            data = response.json()
+            assert data["enabled"] is False
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v", "--tb=short"])

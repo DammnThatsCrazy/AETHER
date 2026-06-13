@@ -215,6 +215,34 @@ class HealthResponse(BaseModel):
     uptime_seconds: float
 
 
+class IdentityResolutionRequest(BaseModel):
+    """Request schema for real-time identity resolution (single pair)."""
+
+    profile_pair_id: str
+    features: dict[str, Any]
+
+
+class IdentityResolutionResponse(BaseModel):
+    """Response schema for real-time identity resolution."""
+
+    profile_pair_id: str
+    is_same_entity: bool
+    merge_probability: float
+    confidence: float
+    latency_ms: float
+    model_version: str
+
+
+class ReadinessResponse(BaseModel):
+    """Readiness probe response — used by load balancers for traffic gating."""
+
+    ready: bool
+    reason: Optional[str] = None
+    models_loaded: list[str]
+    sla_violation_rate: float
+    freshness_summary: dict[str, Any]
+
+
 class ModelInfo(BaseModel):
     """Metadata about a loaded model."""
 
@@ -591,6 +619,16 @@ class ModelServer:
 server = ModelServer()
 
 # ---------------------------------------------------------------------------
+# Freshness SLA tracker — lazy import so serving starts if monitoring module
+# is unavailable (e.g., in stripped container images).
+# ---------------------------------------------------------------------------
+try:
+    from monitoring.monitor import DataFreshnessSLATracker as _DataFreshnessSLATracker
+    _freshness_tracker: "_DataFreshnessSLATracker | None" = _DataFreshnessSLATracker()
+except Exception:  # ImportError or any init failure
+    _freshness_tracker = None
+
+# ---------------------------------------------------------------------------
 # Shared router — importable by the consolidated aether-app backend (E2).
 # All predict/defense routes are registered here so they can be mounted at
 # any prefix. The standalone app below includes this router after setup.
@@ -805,6 +843,43 @@ async def health() -> HealthResponse:
         version="4.0.0",
         models_loaded=server.loaded_models(),
         uptime_seconds=round(time.time() - server.start_time, 1),
+    )
+
+
+@router.get("/ready", response_model=ReadinessResponse)
+async def ready() -> ReadinessResponse:
+    """Readiness probe — used by load balancers to gate traffic.
+
+    Returns 200 when the service is ready to handle requests. Returns 503 if
+    feature freshness SLA violations exceed 10% of recent checks, indicating
+    that the online feature store is stale. Unlike /health, this endpoint may
+    be slightly slower (it reads SLA counters) and is NOT used for liveness.
+    """
+    models = server.loaded_models()
+    violation_rate = 0.0
+    summary: dict[str, Any] = {}
+    if _freshness_tracker is not None:
+        violation_rate = _freshness_tracker.get_violation_rate()
+        summary = _freshness_tracker.get_summary()
+
+    _SLA_RATE_THRESHOLD = 0.10
+    if violation_rate >= _SLA_RATE_THRESHOLD:
+        raise HTTPException(
+            status_code=503,
+            detail=ReadinessResponse(
+                ready=False,
+                reason=f"Freshness SLA violation rate {violation_rate:.1%} exceeds threshold {_SLA_RATE_THRESHOLD:.0%}",
+                models_loaded=models,
+                sla_violation_rate=round(violation_rate, 4),
+                freshness_summary=summary,
+            ).model_dump(),
+        )
+
+    return ReadinessResponse(
+        ready=True,
+        models_loaded=models,
+        sla_violation_rate=round(violation_rate, 4),
+        freshness_summary=summary,
     )
 
 
@@ -1094,6 +1169,60 @@ async def predict_attribution(req: AttributionRequest, request: Request) -> Attr
     )
 
 
+@router.post("/v1/predict/identity", response_model=IdentityResolutionResponse)
+async def predict_identity(req: IdentityResolutionRequest, request: Request) -> IdentityResolutionResponse:
+    """Real-time identity resolution for a cross-device / cross-wallet profile pair.
+
+    Scores the probability that two profiles belong to the same entity using
+    device fingerprint similarity, behavioural similarity, temporal overlap,
+    and wallet linkage signals. This is a real-time single-pair endpoint —
+    bulk merging uses the offline BatchPredictor.
+
+    Requires eight features from the identity_resolution_v1 feature contract:
+    device_fingerprint_sim, behavioral_sim, temporal_overlap, shared_ip_count,
+    session_sequence_score, geo_distance, browser_match, os_match.
+    Optional: wallet_link_score (default 0.0).
+    """
+    t0 = time.perf_counter()
+
+    # Extraction defense pre-request check
+    defense = _get_defense_layer()
+    if defense is not None:
+        api_key = request.headers.get("X-API-Key", "anon")
+        pre = defense.pre_request(api_key, req.features)
+        if not pre.allowed:
+            raise HTTPException(status_code=429, detail="Request rate limited by extraction defense")
+        request.state.extraction_risk = pre.risk_score
+        request.state.extraction_disclosure = pre.disclosure
+
+    model = server.get_model("identity_resolution")
+
+    features = dict(req.features)
+    features.setdefault("wallet_link_score", 0.0)
+
+    df = pd.DataFrame([features])
+    raw = model.predict(df)
+    merge_probability = float(raw[0]) if hasattr(raw, "__len__") else float(raw)
+    merge_probability = max(0.0, min(1.0, merge_probability))
+
+    # Record SLA check for the identity feature group
+    if _freshness_tracker is not None:
+        _freshness_tracker.check("identity_resolution", "identity_features", None)
+
+    # Apply extraction defense perturbation
+    confidence = _apply_output_defense(request, merge_probability, features)
+
+    latency_ms = (time.perf_counter() - t0) * 1000
+    return IdentityResolutionResponse(
+        profile_pair_id=req.profile_pair_id,
+        is_same_entity=confidence > 0.5,
+        merge_probability=round(merge_probability, 4),
+        confidence=round(confidence, 4),
+        latency_ms=round(latency_ms, 2),
+        model_version=getattr(model, "version", "unknown"),
+    )
+
+
 # =============================================================================
 # BATCH PREDICTION
 # =============================================================================
@@ -1260,6 +1389,25 @@ async def defense_canary_triggers():
             for t in triggers[-50:]  # last 50
         ],
     }
+
+
+@router.get("/v1/monitoring/freshness")
+async def freshness_status() -> dict[str, Any]:
+    """Return feature freshness SLA health summary.
+
+    Reports per-model SLA violation counts, violation rates, and maximum
+    observed feature age. Intended for monitoring dashboards and alerting;
+    not used by inference paths.
+    """
+    if _freshness_tracker is None:
+        return {
+            "enabled": False,
+            "total_checks": 0,
+            "total_violations": 0,
+            "violation_rate": 0.0,
+            "by_model": {},
+        }
+    return {"enabled": True, **_freshness_tracker.get_summary()}
 
 
 # Mount the shared router on the standalone app so `uvicorn serving.src.api:app`
