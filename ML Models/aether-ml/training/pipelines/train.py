@@ -18,7 +18,13 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-import mlflow
+try:
+    import mlflow
+    _MLFLOW_AVAILABLE = True
+except ImportError:
+    mlflow = None  # type: ignore[assignment]
+    _MLFLOW_AVAILABLE = False
+
 import numpy as np
 import pandas as pd
 from sklearn.model_selection import train_test_split
@@ -591,28 +597,27 @@ class TrainingPipeline:
         train_metrics: dict[str, float],
         test_metrics: dict[str, float],
     ) -> str | None:
-        """Log parameters, metrics, and model artifact to MLflow."""
+        """Log parameters, metrics, and model artifact to MLflow (optional)."""
+        if not _MLFLOW_AVAILABLE:
+            logger.debug("mlflow not installed — skipping experiment tracking")
+            return None
         try:
             with mlflow.start_run(run_name=f"{self.model_name}_{int(time.time())}") as run:
                 mlflow.log_param("model_name", self.model_name)
                 mlflow.log_param("tier", self.tier)
                 mlflow.log_param("class_name", self.class_name)
 
-                # Log hyperparameters from config
                 for k, v in self.config.items():
                     if isinstance(v, (str, int, float, bool)):
                         mlflow.log_param(k, v)
 
-                # Log metrics
                 for k, v in {**train_metrics, **test_metrics}.items():
                     mlflow.log_metric(k, v)
 
-                # Log model
                 mlflow.sklearn.log_model(model, artifact_path="model")
-
                 return run.info.run_id
         except Exception as e:
-            logger.warning(f"MLflow logging failed (non-fatal): {e}")
+            logger.warning("MLflow logging failed (non-fatal): %s", e)
             return None
 
     # ------------------------------------------------------------------
@@ -839,11 +844,13 @@ def main() -> None:
         import os as _os
         _os.environ["AETHER_ENV"] = args.env
 
-    if args.tracking == "mlflow":
+    if args.tracking == "mlflow" and _MLFLOW_AVAILABLE:
         try:
             mlflow.set_experiment(args.experiment)
         except Exception as e:
             logger.warning("MLflow experiment setup failed (continuing): %s", e)
+    elif args.tracking == "mlflow" and not _MLFLOW_AVAILABLE:
+        logger.warning("mlflow not installed — experiment tracking disabled")
 
     if args.model == "all":
         train_all(output_dir=args.output_dir)

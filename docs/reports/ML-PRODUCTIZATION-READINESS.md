@@ -1,7 +1,11 @@
 ---
 title: ML Productization Readiness Report
-version: 1.0
-generated_at: 2026-06-13
+slug: ai/ml-productization-readiness
+section: ai
+visibility: I
+audience: [ai, dev-senior, architect]
+since_version: "8.9.0"
+canonical_owner: ml@aether
 source_files:
   - ML Models/aether-ml/common/model_registry.py
   - ML Models/aether-ml/common/feature_contracts.py
@@ -10,7 +14,7 @@ source_files:
   - ML Models/aether-ml/serving/src/api.py
   - Backend Architecture/aether-backend/services/ml_serving/routes.py
   - security/model_extraction_defense/defense_layer.py
-last_synced_commit: HEAD
+last_synced_commit: 37dc7d2
 ---
 
 # Aether ML Productization Readiness Report

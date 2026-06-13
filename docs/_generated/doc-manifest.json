@@ -3327,7 +3327,17 @@
     },
     {
       "path": "docs/reports/ML-PRODUCTIZATION-READINESS.md",
-      "title": "ML Productization Readiness Report"
+      "title": "ML Productization Readiness Report",
+      "slug": "ai/ml-productization-readiness",
+      "section": "ai",
+      "visibility": "I",
+      "audience": [
+        "ai",
+        "dev-senior",
+        "architect"
+      ],
+      "since_version": "8.9.0",
+      "canonical_owner": "ml@aether"
     },
     {
       "path": "docs/source-of-truth/GRAPH_CONTRACT.md",
