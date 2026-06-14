@@ -16,7 +16,7 @@ related:
 canonical_owner: platform@aether
 estimated_read_minutes: 5
 toc_depth: 3
-last_synced_commit: 70dcd8a
+last_synced_commit: b75870c
 ---
 # Kyber Strategic Observability
 
