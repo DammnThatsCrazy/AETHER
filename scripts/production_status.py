@@ -123,13 +123,18 @@ AREAS: list[Area] = [
     ),
     Area(
         "Profile 360",
-        4,
+        5,
         "Canonical profile composition from identity, analytics, consent, graph, and "
         "Gold-tier lake repositories; 15 intelligence sub-resources wired to real "
-        "queries with window + tenant filtering; credit data behind 'credit' consent.",
+        "queries with window + tenant filtering; credit data behind hard 'credit' "
+        "consent gate enforced at the API route level (HTTP 403 on denial); dedicated "
+        "unit test suite covering aggregator dimensions, quality scoring, tenant "
+        "isolation, pagination shape, and the consent gate.",
         [
             "Backend Architecture/aether-backend/services/profile/",
+            "Backend Architecture/aether-backend/services/profile/routes.py",
             "packages/shared/profile360-contract.ts",
+            "tests/unit/test_profile_360.py",
         ],
     ),
     Area(

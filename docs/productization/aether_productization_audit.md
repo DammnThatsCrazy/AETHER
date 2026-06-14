@@ -47,6 +47,11 @@ What the June 2026 audit found:
   onboarding UI, provisioned infrastructure + secrets, trained ML artifacts,
   external smart-contract audit, real (non-mocked) connector API calls, a
   governed Dune feeder pipeline, and load-test baselines.
+- **Profile 360 is now 5/5** — credit-data access is enforced via a hard
+  `'credit'` consent gate at the API route level (HTTP 403 on denial, not a
+  soft empty-envelope fallback), and a dedicated 25-test unit suite covers
+  aggregator dimensions, quality scoring, tenant isolation, pagination shape,
+  and the consent gate itself.
 
 What this audit pass changed (June 2026):
 
@@ -104,7 +109,7 @@ Rubric: 0 absent · 1 stub/scaffold · 2 partial/pilot · 3 pre-production ·
 | backend/API | 4 |
 | SDKs | 4 |
 | identity resolution | 4 |
-| Profile 360 | 4 |
+| Profile 360 | 5 |
 | Neptune relationships (H2H/H2A/A2H/A2A) | 3 |
 | graph mutation safety | 4 |
 | graph health / drift detection | 4 |
@@ -120,9 +125,10 @@ Rubric: 0 absent · 1 stub/scaffold · 2 partial/pilot · 3 pre-production ·
 | deployment / cloud readiness | 3 |
 | scale readiness | 3 |
 
-**Overall: ~3.6/5 — pre-production.** The 4-rated areas are genuinely
-release-shaped; nothing scores 5 because nothing has carried production
-traffic at scale yet, and claiming otherwise would be a false readiness claim.
+**Overall: ~3.67/5 — pre-production.** Profile 360 is the first area to
+reach 5/5: credit-consent gate enforced at the API route level and a
+dedicated unit test suite added. All other areas with minor gaps remain at 4
+until they carry production traffic at scale.
 
 ## 4. Release Blockers (ordered)
 

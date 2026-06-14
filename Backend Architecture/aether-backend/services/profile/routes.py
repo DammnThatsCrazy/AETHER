@@ -38,7 +38,7 @@ from __future__ import annotations
 from typing import Optional
 
 from dependencies.providers import get_cache, get_graph
-from fastapi import APIRouter, Depends, Query, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from repositories.lake import gold_identity, gold_market, gold_onchain, gold_social
 from repositories.repos import (
     AgentConfigRepository,
@@ -54,6 +54,7 @@ from shared.cache.cache import CacheClient
 from shared.common.common import APIResponse, BadRequestError, NotFoundError
 from shared.graph.graph import GraphClient
 from shared.logger.logger import get_logger, metrics
+from shared.privacy.consent_enforcement import ConsentDeniedError, require_consent
 
 from services.profile.aggregator import Profile360Aggregator
 from services.profile.composer import ProfileComposer
@@ -519,6 +520,16 @@ def _get_intel_agg() -> IntelligenceAggregator:
     return _intel_agg
 
 
+_credit_consent_repo: Optional[ConsentRepository] = None
+
+
+def _get_consent_repo() -> ConsentRepository:
+    global _credit_consent_repo
+    if _credit_consent_repo is None:
+        _credit_consent_repo = ConsentRepository()
+    return _credit_consent_repo
+
+
 @router.get("/{user_id}/summary")
 async def get_profile_summary(
     user_id: str,
@@ -917,10 +928,15 @@ async def get_web2(
     request: Request,
     window: str = Query(default="30d"),
     intel: IntelligenceAggregator = Depends(_get_intel_agg),
+    consent_repo: ConsentRepository = Depends(_get_consent_repo),
 ):
     """TradFi portfolio, bank accounts, credit signals, and income estimates (requires 'credit' consent)."""
     tenant = request.state.tenant
     tenant.require_permission("read")
+    try:
+        await require_consent(consent_repo, tenant.tenant_id, user_id, "credit")
+    except ConsentDeniedError:
+        raise HTTPException(status_code=403, detail="Credit consent required for this resource")
     _validate_window(window)
     return APIResponse(data=await intel.web2(user_id, tenant.tenant_id, window=window)).to_dict()
 
@@ -1366,10 +1382,15 @@ async def get_economic_web2(
     request: Request,
     window: str = Query(default="30d"),
     intel: IntelligenceAggregator = Depends(_get_intel_agg),
+    consent_repo: ConsentRepository = Depends(_get_consent_repo),
 ):
     """TradFi portfolio and Web2 financial signals (requires 'credit' consent)."""
     tenant = request.state.tenant
     tenant.require_permission("read")
+    try:
+        await require_consent(consent_repo, tenant.tenant_id, user_id, "credit")
+    except ConsentDeniedError:
+        raise HTTPException(status_code=403, detail="Credit consent required for this resource")
     _validate_window(window)
     return APIResponse(data=await intel.web2(user_id, tenant.tenant_id, window=window)).to_dict()
 
