@@ -479,5 +479,56 @@ class TestFreshnessMonitoringEndpoint:
             assert data["enabled"] is False
 
 
+class TestDriftMonitoringEndpoint:
+    """Tests for the /v1/monitoring/drift endpoint."""
+
+    def test_drift_returns_200(self, client: TestClient) -> None:
+        response = client.get("/v1/monitoring/drift")
+        assert response.status_code == 200
+
+    def test_drift_response_has_required_keys(self, client: TestClient) -> None:
+        response = client.get("/v1/monitoring/drift")
+        data = response.json()
+
+        assert "last_run" in data
+        assert "models" in data
+        assert "buffer_sizes" in data
+        assert isinstance(data["buffer_sizes"], dict)
+
+    def test_drift_buffer_sizes_covers_all_models(self, client: TestClient) -> None:
+        from serving.src.api import MODEL_NAMES
+
+        response = client.get("/v1/monitoring/drift")
+        data = response.json()
+
+        for model in MODEL_NAMES:
+            assert model in data["buffer_sizes"]
+            assert isinstance(data["buffer_sizes"][model], int)
+
+    def test_drift_buffer_sizes_start_at_zero(self, client: TestClient) -> None:
+        from unittest.mock import patch
+        from collections import deque
+        from serving.src.api import MODEL_NAMES, app
+
+        empty_buffers = {m: deque(maxlen=500) for m in MODEL_NAMES}
+        with patch("serving.src.api._prediction_buffers", empty_buffers):
+            test_client = TestClient(app)
+            response = test_client.get("/v1/monitoring/drift")
+            data = response.json()
+            for model in MODEL_NAMES:
+                assert data["buffer_sizes"][model] == 0
+
+    def test_drift_empty_last_run_when_no_check_yet(self, client: TestClient) -> None:
+        from unittest.mock import patch
+        from serving.src.api import app
+
+        with patch("serving.src.api._last_drift_results", {}):
+            test_client = TestClient(app)
+            response = test_client.get("/v1/monitoring/drift")
+            data = response.json()
+            assert data["last_run"] is None
+            assert data["models"] == {}
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v", "--tb=short"])
