@@ -146,6 +146,9 @@ object Aether : DefaultLifecycleObserver {
         "x402_payment_failed" to "commerce", "x402_payment_timeout" to "commerce",
         "x402_receipt_verified" to "commerce", "x402_access_granted" to "commerce",
         "x402_access_denied" to "commerce", "x402_refund_or_reversal" to "commerce",
+        // reward enablement (A6)
+        "reward_action_queued" to "commerce", "reward_proof_generated" to "commerce",
+        "reward_delivered" to "commerce", "reward_claim_submitted" to "commerce",
         "wallet" to "web3", "transaction" to "web3", "contract_action" to "web3",
         // Agent — legacy + lifecycle
         "agent_task" to "agent", "agent_decision" to "agent", "a2h_interaction" to "agent",

@@ -81,6 +81,9 @@ CANONICAL_EVENT_TYPES: frozenset[str] = frozenset({
     "x402_payment_intent_created", "x402_payment_submitted", "x402_payment_settled",
     "x402_payment_failed", "x402_payment_timeout", "x402_receipt_verified",
     "x402_access_granted", "x402_access_denied", "x402_refund_or_reversal",
+    # reward enablement (A6) — eligibility events emitted by Aether, not the tenant
+    "reward_action_queued", "reward_proof_generated",
+    "reward_delivered", "reward_claim_submitted",
 })
 
 # Required consent purpose per event family (mirror of EVENT_CONSENT_PURPOSE)
@@ -121,6 +124,9 @@ EVENT_CONSENT_PURPOSE: dict[str, str] = {
     "x402_payment_failed": "commerce", "x402_payment_timeout": "commerce",
     "x402_receipt_verified": "commerce", "x402_access_granted": "commerce",
     "x402_access_denied": "commerce", "x402_refund_or_reversal": "commerce",
+    # reward enablement (A6)
+    "reward_action_queued": "commerce", "reward_proof_generated": "commerce",
+    "reward_delivered": "commerce", "reward_claim_submitted": "commerce",
 }
 
 # Backend-side sensitive field patterns — scrub even if SDK missed them.

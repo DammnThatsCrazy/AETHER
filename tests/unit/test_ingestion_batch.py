@@ -85,6 +85,8 @@ def test_canonical_event_types_match_typescript():
         "x402_payment_intent_created", "x402_payment_submitted", "x402_payment_settled",
         "x402_payment_failed", "x402_payment_timeout", "x402_receipt_verified",
         "x402_access_granted", "x402_access_denied", "x402_refund_or_reversal",
+        # Reward enablement (A6)
+        "reward_action_queued", "reward_proof_generated", "reward_delivered", "reward_claim_submitted",
     }
     with backend_path():
         m = importlib.import_module("services.ingestion.batch")

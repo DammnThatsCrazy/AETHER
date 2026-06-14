@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useCallback } from 'react';
 import type {
   Entity,
   NeedsHelpCard,
@@ -41,6 +41,8 @@ import { Profile360SummaryCard } from './profile360-summary-card';
 import { Profile360DrillStack } from './profile360-drill-stack';
 import { Profile360Views, RealtimeEventIntelligenceFeed } from './profile360-surfaces';
 import { getAnalytics, getProfile360Summary, getRelationships } from './profile360-utils';
+import { GraphCanvas } from '@kyber/components/graph';
+import type { GraphNode, GraphOverlay } from '@kyber/types';
 
 // ── Recommendations panel ─────────────────────────────────────────────────────
 
@@ -204,6 +206,8 @@ export function Entity360View({
   const [noteModalOpen, setNoteModalOpen] = useState(false);
   const [newNoteContent, setNewNoteContent] = useState('');
   const [drillStack, setDrillStack] = useState<Profile360DrillItem[]>([]);
+  const [graphOverlay, setGraphOverlay] = useState<GraphOverlay>('none');
+  const [highlightedNodeIds, setHighlightedNodeIds] = useState<readonly string[]>([]);
 
   const connectedEntities = useMemo(() => {
     if (!neighborhood) return [];
@@ -216,6 +220,18 @@ export function Entity360View({
   const pushDrill = (item: Profile360DrillItem) => {
     setDrillStack((prev) => [...prev, item]);
   };
+
+  const onSelectGraphNode = useCallback((node: GraphNode | null) => {
+    if (!node) { setHighlightedNodeIds([]); return; }
+    setHighlightedNodeIds([node.id]);
+    pushDrill({
+      id: node.id,
+      kind: (node.type === 'external' ? 'human' : node.type) as Profile360DrillItem['kind'],
+      label: node.label,
+      entityId: node.id,
+      metadata: node.metadata ?? {},
+    });
+  }, []);
 
   return (
     <div className="space-y-4">
@@ -490,9 +506,31 @@ export function Entity360View({
                     </div>
                   </div>
 
-                  <div className="bg-neutral-900 border border-neutral-800 rounded p-4 text-center text-neutral-500 text-sm">
-                    Graph visualization placeholder -- open in Noesis for interactive view
+                  <div className="flex items-center gap-2 text-xs text-neutral-500 mb-2">
+                    <span>Overlay:</span>
+                    {(['none', 'trust', 'risk', 'anomaly'] as const).map((o) => (
+                      <button
+                        key={o}
+                        onClick={() => setGraphOverlay(o)}
+                        className={cn(
+                          'px-2 py-0.5 rounded border text-xs capitalize',
+                          graphOverlay === o
+                            ? 'border-accent text-accent'
+                            : 'border-neutral-700 text-neutral-400 hover:border-neutral-500',
+                        )}
+                      >
+                        {o}
+                      </button>
+                    ))}
                   </div>
+                  <GraphCanvas
+                    nodes={[...neighborhood.nodes]}
+                    edges={[...neighborhood.edges]}
+                    overlay={graphOverlay}
+                    highlightedNodeIds={highlightedNodeIds}
+                    onSelectNode={onSelectGraphNode}
+                    className="min-h-[400px] rounded border border-neutral-800"
+                  />
 
                   {connectedEntities.length > 0 && (
                     <div>

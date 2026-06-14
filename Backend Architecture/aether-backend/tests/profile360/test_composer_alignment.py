@@ -84,3 +84,50 @@ def test_profile360_surface_marks_kyber_internal_and_tenant_scoped():
     assert result["visibility"] == "internal_full"
     assert result["tenant_id"] == "tenant-a"
     assert result["alignment_audit"]["end_user_surface_requires_redaction"] is True
+
+
+def test_graph_nodes_include_profile_links():
+    """Graph nodes returned by _compose_graph include profile_id and profile_links."""
+    graph = GraphClient()
+    _run(graph.add_vertex(Vertex(VertexType.USER, "user-1", {"tenant_id": "tenant-a", "display_name": "Alice"})))
+    _run(graph.add_vertex(Vertex(VertexType.WALLET, "wallet-a", {"tenant_id": "tenant-a"})))
+    _run(graph.add_edge(Edge("OWNS_WALLET", "user-1", "wallet-a")))
+
+    result = _run(_composer(graph)._compose_graph("user-1", tenant_id="tenant-a"))
+
+    nodes = result["nodes"]
+    assert len(nodes) >= 2
+
+    for node in nodes:
+        assert "profile_id" in node, f"Node {node.get('id')} missing profile_id"
+        assert "profile_links" in node, f"Node {node.get('id')} missing profile_links"
+        assert node["profile_links"]["summary"].startswith("/v1/profile/")
+        assert node["profile_links"]["full"].startswith("/v1/profile360/")
+        assert "entity_type" in node
+        assert "display_label" in node
+
+
+def test_graph_root_node_fallback_includes_profile_links():
+    """Root node fallback (when vertex not found) still includes profile_links."""
+    graph = GraphClient()
+
+    result = _run(_composer(graph)._compose_graph("ghost-user", tenant_id="tenant-a"))
+
+    assert result["nodes"] == []
+    assert result["neighbor_count"] == 0
+
+
+def test_graph_nodes_profile_links_use_correct_entity_type():
+    """Graph node profile_links.full uses the actual vertex_type, not a hardcoded fallback."""
+    graph = GraphClient()
+    _run(graph.add_vertex(Vertex(VertexType.USER, "user-1", {"tenant_id": "tenant-a"})))
+    _run(graph.add_vertex(Vertex(VertexType.WALLET, "wallet-a", {"tenant_id": "tenant-a"})))
+    _run(graph.add_edge(Edge("OWNS_WALLET", "user-1", "wallet-a")))
+
+    result = _run(_composer(graph)._compose_graph("user-1", tenant_id="tenant-a"))
+
+    nodes_by_id = {n["id"]: n for n in result["nodes"]}
+    wallet_node = nodes_by_id.get("wallet-a")
+    assert wallet_node is not None
+    assert "/wallet-a" in wallet_node["profile_links"]["full"]
+    assert wallet_node["profile_links"]["summary"] == "/v1/profile/wallet-a/summary"

@@ -147,7 +147,8 @@ Enforced by `_enforce_load_policy()`. Fails closed on any policy violation.
 
 | Endpoint | Status | Notes |
 |----------|--------|-------|
-| GET /health | ✅ | Returns model load status |
+| GET /health | ✅ | Liveness — returns model load status (sub-ms) |
+| GET /ready | ✅ | Readiness — SLA violation rate gate (503 if > 10%) |
 | GET /models | ✅ | Returns all 9 model infos |
 | POST /v1/predict/intent | ✅ | Lazy-loads artifact or stub |
 | POST /v1/predict/bot | ✅ | Lazy-loads artifact or stub |
@@ -156,13 +157,15 @@ Enforced by `_enforce_load_policy()`. Fails closed on any policy violation.
 | POST /v1/predict/ltv | ✅ | Lazy-loads artifact or stub |
 | POST /v1/predict/journey | ✅ | Lazy-loads artifact or stub |
 | POST /v1/predict/attribution | ✅ | Lazy-loads artifact or stub |
+| POST /v1/predict/identity | ✅ | Real-time single-pair identity resolution |
 | POST /v1/predict/batch | ✅ | Privileged-only |
 | GET /v1/defense/status | ✅ | Defense status |
 | GET /v1/defense/metrics | ✅ | Defense metrics |
+| GET /v1/monitoring/freshness | ✅ | Feature freshness SLA summary |
 
 Stub policy: stubs load only when `AETHER_ENV` ∉ {`production`, `staging`}. Production and staging serve 503 when artifacts are missing.
 
-**Missing serving endpoint for identity_resolution**: The serving API exposes `/v1/predict/intent` etc. but not a dedicated `/v1/predict/identity` route. The `identity_resolution` model falls back to `/v1/predict/batch`. A dedicated route should be added in a future iteration.
+`DataFreshnessSLATracker` is instantiated at serving startup and records per-model SLA checks against freshness contracts. The `/ready` endpoint gates load-balancer traffic when the violation rate exceeds 10%.
 
 ---
 
@@ -214,7 +217,7 @@ All bugs fixed:
 
 Prometheus metrics and alerts exist in `monitoring/monitor.py` and `monitoring/alerts.py`. Integration with the serving API is via the `defense_metrics` endpoint.
 
-Remaining: dedicated per-model drift detection, per-model data freshness SLA tracking, and Kyber admin dashboard hooks are partially implemented (see Section 9 below).
+Drift detection is now fully wired: training saves a `baseline.joblib` sample (up to 1 000 rows) per model; serving maintains per-model prediction buffers (deque, max 500); a background task runs PSI/KS/JS divergence checks every 300 s via `MonitoringPipeline`; results are exposed at `GET /v1/monitoring/drift`. Per-model data freshness SLA tracking is live at `GET /v1/monitoring/freshness`. Kyber admin dashboard hooks are live at `/v1/admin/kyber/ml/`.
 
 ---
 
@@ -222,7 +225,7 @@ Remaining: dedicated per-model drift detection, per-model data freshness SLA tra
 
 Backend admin routes for ML operational state are defined in:
 - `Backend Architecture/aether-backend/services/ml_serving/routes.py` (production gateway)
-- Kyber admin hooks require a dedicated `/v1/admin/kyber/ml/` router (to be added)
+- `Backend Architecture/aether-backend/services/ml_serving/kyber_ml_admin.py` — 10 admin routes at `/v1/admin/kyber/ml/` ✅
 
 ---
 
@@ -235,25 +238,27 @@ Backend admin routes for ML operational state are defined in:
 | Artifact registry | None — full lifecycle implemented | — | ✅ |
 | Backend routes | All bugs fixed | — | ✅ |
 | Training pipeline | Synthetic flag, thresholds added | — | ✅ |
-| Serving `/ready` env-awareness | Exists but not fully SLA-gated | Medium | ⚠️ |
-| Identity resolution serving route | Falls back to batch (not dedicated) | Low | ⚠️ |
-| Kyber admin ML hooks | Not yet added as separate router | Medium | ⚠️ |
+| Serving `/ready` env-awareness | `/ready` endpoint + SLA gate added | Medium | ✅ |
+| Identity resolution serving route | `/v1/predict/identity` added | Low | ✅ |
+| Kyber admin ML hooks | `/v1/admin/kyber/ml/` router added | Medium | ✅ |
 | Real data training path | Requires external infrastructure | Infra | 🔧 |
 | MLflow tracking | Available, fails gracefully if unreachable | Infra | 🔧 |
 | S3 artifact store | Requires AWS credentials | Infra | 🔧 |
 | Redis feature store | Requires Redis instance | Infra | 🔧 |
-| Drift detection | Framework exists, per-model baselines needed | Medium | ⚠️ |
-| CI for ML registry drift | See Section 13 of main plan | Medium | ⚠️ |
+| Drift detection | Baselines saved at training; buffer + `/v1/monitoring/drift` endpoint live | Medium | ✅ |
+| CI for ML registry drift | `validate_ml_registry.py` gate added to CI | Medium | ✅ |
+| Freshness SLA monitoring | `DataFreshnessSLATracker` wired into serving | Medium | ✅ |
 
 ---
 
 ## Implementation Plan (Remaining)
 
-### Immediate (blocking staging)
-1. Add dedicated `/v1/predict/identity` serving route for identity_resolution
-2. Add Kyber admin ML hooks router at `/v1/admin/kyber/ml/`
-3. Add CI job for ML registry drift validation
-4. Add training smoke tests to CI
+### Immediate (blocking staging) — COMPLETE ✅
+1. ✅ Add dedicated `/v1/predict/identity` serving route for identity_resolution
+2. ✅ Add Kyber admin ML hooks router at `/v1/admin/kyber/ml/`
+3. ✅ Add CI gate for ML registry drift validation (`scripts/validate_ml_registry.py`)
+4. ✅ Add `/ready` readiness probe with freshness SLA gate
+5. ✅ Wire `DataFreshnessSLATracker` into serving at startup
 
 ### Pre-Staging
 1. Provision Redis, S3, MLflow tracking infrastructure
