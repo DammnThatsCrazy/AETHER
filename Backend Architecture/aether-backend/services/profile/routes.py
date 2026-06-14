@@ -395,15 +395,13 @@ async def get_delegations(
     received: list = []
     if role in ("grantor", "both"):
         granted = await repo.find_many(
-            filters={"grantor_entity_id": user_id}, limit=200,
+            filters={"grantor_entity_id": user_id, "tenant_id": tenant.tenant_id}, limit=200,
         )
-        granted = [r for r in granted if r.get("tenant_id") == tenant.tenant_id]
     if role in ("grantee", "both"):
         received = (
-            await repo.active_for(user_id) if active
-            else await repo.find_many(filters={"grantee_entity_id": user_id}, limit=200)
+            await repo.active_for(user_id, tenant.tenant_id) if active
+            else await repo.find_many(filters={"grantee_entity_id": user_id, "tenant_id": tenant.tenant_id}, limit=200)
         )
-        received = [r for r in received if r.get("tenant_id") == tenant.tenant_id]
     return APIResponse(data={
         "user_id": user_id,
         "granted": granted,

@@ -666,3 +666,115 @@ class ExtractionDefenseMonitor:
             })
 
         return alerts
+
+
+# =============================================================================
+# DATA FRESHNESS SLA TRACKING
+# =============================================================================
+
+
+@dataclass
+class FreshnessViolation:
+    """A single data freshness SLA breach."""
+
+    model_id: str
+    feature_group: str
+    sla_seconds: int
+    actual_age_seconds: float
+    entity_id: str | None = None
+    timestamp: datetime = field(default_factory=datetime.utcnow)
+
+
+class DataFreshnessSLATracker:
+    """Tracks feature freshness against per-model SLA contracts.
+
+    Each model's freshness_sla_seconds comes from its FeatureContract.
+    Violations are recorded and surfaced via get_summary() for dashboards.
+    """
+
+    def __init__(self) -> None:
+        self._violations: list[FreshnessViolation] = []
+        self._checks: dict[str, int] = {}
+        self._sla_map: dict[str, int] = {}
+        self._load_sla_from_contracts()
+
+    def _load_sla_from_contracts(self) -> None:
+        try:
+            from common.feature_contracts import _CONTRACTS
+            for model_id, contract in _CONTRACTS.items():
+                self._sla_map[model_id] = contract.freshness_sla_seconds
+        except ImportError:
+            logger.debug("Feature contracts not importable — freshness SLAs not loaded")
+
+    def check(
+        self,
+        model_id: str,
+        feature_group: str,
+        computed_at: datetime | None,
+        entity_id: str | None = None,
+    ) -> bool:
+        """Check if feature data is within SLA. Returns True if fresh."""
+        key = f"{model_id}:{feature_group}"
+        self._checks[key] = self._checks.get(key, 0) + 1
+
+        if computed_at is None:
+            return True  # No timestamp → cannot check
+
+        sla = self._sla_map.get(model_id, 3600)
+        now = datetime.utcnow()
+        age = (now - computed_at).total_seconds()
+
+        if age > sla:
+            violation = FreshnessViolation(
+                model_id=model_id,
+                feature_group=feature_group,
+                sla_seconds=sla,
+                actual_age_seconds=age,
+                entity_id=entity_id,
+            )
+            self._violations.append(violation)
+            logger.warning(
+                "Freshness SLA violation: model=%s group=%s age=%.0fs sla=%ds entity=%s",
+                model_id, feature_group, age, sla, entity_id,
+            )
+            return False
+        return True
+
+    def get_violation_rate(self, model_id: str | None = None) -> float:
+        """Return the fraction of checks that resulted in violations."""
+        if model_id:
+            violations = sum(1 for v in self._violations if v.model_id == model_id)
+            total = sum(v for k, v in self._checks.items() if k.startswith(f"{model_id}:"))
+        else:
+            violations = len(self._violations)
+            total = sum(self._checks.values())
+        return violations / max(total, 1)
+
+    def get_summary(self) -> dict[str, Any]:
+        """Return freshness health summary for monitoring dashboards."""
+        by_model: dict[str, dict[str, Any]] = {}
+        for v in self._violations[-500:]:
+            entry = by_model.setdefault(v.model_id, {
+                "violations": 0, "max_age_s": 0, "sla_s": v.sla_seconds,
+            })
+            entry["violations"] += 1
+            entry["max_age_s"] = max(entry["max_age_s"], v.actual_age_seconds)
+
+        return {
+            "total_checks": sum(self._checks.values()),
+            "total_violations": len(self._violations),
+            "violation_rate": round(self.get_violation_rate(), 4),
+            "by_model": {
+                model: {
+                    **data,
+                    "violation_rate": round(
+                        data["violations"] / max(self._checks.get(f"{model}:features", 1), 1), 4
+                    ),
+                }
+                for model, data in by_model.items()
+            },
+        }
+
+    def clear(self) -> None:
+        self._violations.clear()
+        self._checks.clear()

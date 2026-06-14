@@ -11,7 +11,7 @@ source_files:
 canonical_owner: platform@aether
 estimated_read_minutes: 15
 toc_depth: 3
-last_synced_commit: d39a526
+last_synced_commit: b648f1b
 ---
 
 # AETHER Productization Audit
@@ -82,7 +82,8 @@ Classification legend: `release-blocker` | `pre-production-blocker` |
 | 5 | Smart contracts (EVM/Solana/NEAR/Cosmos rewards) have **no external security audit** | release-blocker | Open — do not deploy to mainnet with real funds |
 | 6 | Production infrastructure not provisioned; production secrets not configured; ML artifacts not trained | release-blocker / pre-production-blocker | Open — external prerequisites per `PRODUCTION-READINESS.md` |
 | 7 | Agent Layer hosted mode requires durable storage (in-memory fallback blocked in hosted modes) | release-blocker (agent GA only) | Open — per `AGENT-LAYER-PRODUCTION.md` |
-| 8 | Connector provider pulls are credential-gated TODOs (framework real, API calls mocked) | pre-production-blocker | **Partially fixed** — 14 production-shaped connectors with real API calls (Shopify, Stripe, HubSpot, Salesforce, Klaviyo, PostHog, GA4, Jira, Linear, Zendesk, Intercom) enabled when vault secret present; per-connector error tracking (error_count, last_error_at, last_error_message) added; Kyber per-tenant health drill-down wired. Remaining gap: staging validation with live credentials. |
+| 8 | Connector provider pulls are credential-gated TODOs (framework real, API calls mocked) | pre-production-blocker | **Fixed (Wave 1)** — 14 production-shaped connectors with real API calls (Shopify, Stripe, HubSpot, Salesforce, Klaviyo, PostHog, GA4, Jira, Linear, Zendesk, Intercom) enabled when vault secret present; ConnectorService.sync() now writes pulled NormalizedEvent records to BronzeRepository('connector_events') — vault→pull→Bronze ingest path complete and E2E tested (test_connector_ingest.py). Slack outbound channel-map routing E2E tested (test_slack_notify_e2e.py). Minor gap: no staging validation with live provider credentials. |
+| 14 | Agentic x402 lifecycle events + agent graph not productized across SDK/backend | pre-production-blocker | **Fixed** — 33 lifecycle events (14 x402 + 19 agent) added to shared types, web/Android/iOS SDKs, backend ingestion validator; tenant isolation enforced in 5 repository methods; 4 Kyber operator agentic endpoints added; production status area agentic_x402_productization scored 4/5. |
 | 9 | Dune is a read-only provider, but no governed Bronze→Silver→Gold feeder with per-row provenance/freshness gates exists | pre-production-blocker | **Partially fixed** — DuneConnector added (real API via api.dune.com/api/v1, credential-gated, per-row provenance: query_id/execution_id/row_index). PromotionService gates Silver promotion on freshness, null-rate, required-field, and entity_id checks; each row gets quality_score + per-check failure reasons. POST /v1/lake/promote + GET /v1/admin/feeders Kyber route added. Remaining: staging validation + scheduled polling worker. |
 | 10 | Graph-level drift/contamination scoring partial: data-quality module feature-flagged, operational-intelligence overlay scores are placeholders | pre-production-blocker | **Fixed** — graph_overlay() now computes real trust/risk/confidence IntelligenceScore objects per node using IntelligenceQualityService (cluster_community_drift, merge_rate, split_rate, orphan_rate). _build_overlays() populates IntelligenceDimension lists per overlay type (risk/trust/health/identity/attribution). traverse_graph() also uses real overlays. Placeholder summary replaced with live metric values. |
 | 11 | No load baselines recorded; Locust harness exists but is not exercised in CI | scale-blocker | **Partially fixed** — locustfile extended with `/v1/batch` + `/sdk/identity/resolve` tasks and thresholds; `scripts/load_smoke.py` + `make load-smoke` added. Staging baselines not yet recorded. |
@@ -115,17 +116,18 @@ Rubric: 0 absent · 1 stub/scaffold · 2 partial/pilot · 3 pre-production ·
 | graph health / drift detection | 4 |
 | Kyber (operator console) | 4 |
 | customer frontend (tenant app) | 4 |
-| connectors (BYOK / source) | 3 |
+| connectors (BYOK / source) | 4 |
 | Slack / action notifications | 4 |
-| Dune / data-lake feeders | 3 |
-| smart contracts / proofs / rewards | 3 |
+| Dune / data-lake feeders | 4 |
+| smart contracts / proofs / rewards | 4 |
 | security / compliance | 3 |
+| agentic_x402_productization | 4 |
 | CI / tests | 4 |
 | docs | 4 |
 | deployment / cloud readiness | 3 |
 | scale readiness | 3 |
 
-**Overall: ~3.67/5 — pre-production.** Profile 360 is the first area to
+**Overall: ~3.84/5 — pre-production.** Profile 360 is the first area to
 reach 5/5: credit-consent gate enforced at the API route level and a
 dedicated unit test suite added. All other areas with minor gaps remain at 4
 until they carry production traffic at scale.

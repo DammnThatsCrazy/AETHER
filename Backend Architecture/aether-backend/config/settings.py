@@ -171,6 +171,11 @@ class IntelligenceGraphConfig:
     enable_commerce_control_plane: bool = _env_bool("COMMERCE_CONTROL_PLANE_ENABLED", True)
     commerce_approval_required_all: bool = _env_bool("COMMERCE_APPROVAL_REQUIRED_ALL", True)
     commerce_v2_protocol: bool = _env_bool("COMMERCE_V2_PROTOCOL", True)
+    commerce_default_facilitator: str = _env("COMMERCE_DEFAULT_FACILITATOR", "aether-local")
+    commerce_base_rpc: str = _env("COMMERCE_BASE_RPC", "https://mainnet.base.org")
+    commerce_solana_rpc: str = _env("COMMERCE_SOLANA_RPC", "https://api.mainnet-beta.solana.com")
+    commerce_enable_v2: bool = _env_bool("COMMERCE_ENABLE_V2", True)
+    commerce_feature_flag: str = _env("COMMERCE_FEATURE_FLAG", "ga")
 
 
 @dataclass(frozen=True)

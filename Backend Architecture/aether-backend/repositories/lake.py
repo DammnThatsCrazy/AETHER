@@ -368,3 +368,7 @@ gold_ad_spend = GoldRepository("ad_spend")
 gold_credit_signals = GoldRepository("credit_signals")
 gold_tradfi_portfolio = GoldRepository("tradfi_portfolio")
 gold_web3_daily_metrics = GoldRepository("web3_daily_metrics")
+
+# Connector events — Bronze-only; connector sync events land here before flowing
+# to the intelligence workers (no Silver/Gold tier; same consumer path as sdk_events).
+bronze_connectors = BronzeRepository("connector_events")

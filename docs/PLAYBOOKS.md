@@ -18,7 +18,7 @@ related:
 canonical_owner: platform@aether
 estimated_read_minutes: 5
 toc_depth: 3
-last_synced_commit: 48fb9d4
+last_synced_commit: 70dcd8a
 ---
 # Playbooks
 
@@ -48,3 +48,7 @@ Playbook definitions, run history, generated recommendations, linked decisions/a
 ## Customer success usage
 
 Playbook adoption and ROI now contribute to account health, expansion readiness, renewal risk, EBR summaries, and playbook-underused triggers.
+
+## Commerce lifecycle trace
+
+`GET /v1/intelligence/commerce/lifecycle/{challenge_id}` — full lifecycle trace for one payment challenge (requirement → policy_decision → authorization → receipt → settlement → entitlement → grant → fulfillment). Requires `x402:read`. Used by Kyber Noesis and compliance audit.

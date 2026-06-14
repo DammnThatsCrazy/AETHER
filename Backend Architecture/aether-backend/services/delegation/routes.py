@@ -184,14 +184,14 @@ async def list_delegations(
     tenant.require_permission("read")
     if grantee:
         rows = (
-            await repo.active_for(grantee) if active
-            else await repo.find_many(filters={"grantee_entity_id": grantee}, limit=limit)
+            await repo.active_for(grantee, tenant.tenant_id) if active
+            else await repo.find_many(filters={"grantee_entity_id": grantee, "tenant_id": tenant.tenant_id}, limit=limit)
         )
     elif grantor:
-        rows = await repo.find_many(filters={"grantor_entity_id": grantor}, limit=limit)
+        rows = await repo.find_many(filters={"grantor_entity_id": grantor, "tenant_id": tenant.tenant_id}, limit=limit)
     else:
         rows = await repo.find_many(filters={"tenant_id": tenant.tenant_id}, limit=limit)
-    rows = [r for r in rows if r.get("tenant_id") == tenant.tenant_id][:limit]
+    rows = rows[:limit]
     return APIResponse(data={"delegations": rows, "count": len(rows)}).to_dict()
 
 
