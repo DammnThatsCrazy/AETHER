@@ -151,21 +151,21 @@ class TestQualityGate:
 
 
 class TestBronzeLanding:
-    def test_ingest_records_provenance(self, feeder):
+    async def test_ingest_records_provenance(self, feeder):
         svc, models_mod = feeder
         rows = [{"address": "0xabc", "balance": 100.0}]
         req = _make_request(models_mod, rows)
-        resp = svc.ingest(req)
+        resp = await svc.ingest(req)
         assert resp.rows_submitted == 1
         assert resp.rows_accepted == 1
         assert resp.freshness_passed is True
 
-    def test_provenance_chain_populated(self, feeder):
+    async def test_provenance_chain_populated(self, feeder):
         svc, models_mod = feeder
         rows = [{"address": "0xabc", "balance": 100.0}]
         req = _make_request(models_mod, rows)
-        svc.ingest(req)
-        audit = svc.audit("test_batch_001")
+        await svc.ingest(req)
+        audit = await svc.audit("test_batch_001")
         assert len(audit) == 1
         record = audit[0]
         assert record["provider"] == "dune"
@@ -173,27 +173,27 @@ class TestBronzeLanding:
         assert record["source_tag"] == "test_batch_001"
         assert len(record["provenance_chain"]) >= 1
 
-    def test_row_hash_is_consistent(self, feeder):
+    async def test_row_hash_is_consistent(self, feeder):
         svc, models_mod = feeder
         rows = [{"address": "0xabc", "balance": 100.0}]
         req = _make_request(models_mod, rows)
-        svc.ingest(req)
-        audit = svc.audit("test_batch_001")
+        await svc.ingest(req)
+        audit = await svc.audit("test_batch_001")
         hash1 = audit[0]["row_hash"]
         assert len(hash1) == 64  # SHA-256 hex
 
-    def test_stale_ingest_raises_bad_request(self, feeder):
+    async def test_stale_ingest_raises_bad_request(self, feeder):
         """Freshness gate failure raises BadRequestError, preventing Bronze landing."""
         svc, models_mod = feeder
         rows = [{"address": "0xabc"}, {"address": "0xdef"}]
         req = _make_request(models_mod, rows, pulled_at=_stale_iso(7200), max_age_seconds=3600)
         with pytest.raises(Exception) as exc_info:
-            svc.ingest(req)
+            await svc.ingest(req)
         assert "Freshness gate" in str(exc_info.value)
         # No rows landed
-        assert svc.audit("test_batch_001") == []
+        assert await svc.audit("test_batch_001") == []
 
-    def test_quality_threshold_rejects_low_quality(self, feeder):
+    async def test_quality_threshold_rejects_low_quality(self, feeder):
         svc, models_mod = feeder
         rows = [{"balance": 100.0}]  # missing required 'address'
         req = _make_request(
@@ -202,10 +202,10 @@ class TestBronzeLanding:
             required_fields=["address", "balance"],
             quality_threshold=0.8,
         )
-        resp = svc.ingest(req)
+        resp = await svc.ingest(req)
         assert resp.rows_rejected >= 1
 
-    def test_quality_gate_passed_false_rejects_above_threshold(self, feeder):
+    async def test_quality_gate_passed_false_rejects_above_threshold(self, feeder):
         """A row that quality.passed=False must be rejected even when its numeric score
         exceeds the quality_threshold. E.g. 9/10 fields present → score=0.9 > 0.8
         but the row has a missing required field so passed=False."""
@@ -222,7 +222,7 @@ class TestBronzeLanding:
             required_fields=required,
             quality_threshold=0.8,
         )
-        resp = svc.ingest(req)
+        resp = await svc.ingest(req)
         assert resp.rows_rejected == 1
         assert resp.rows_accepted == 0
 
@@ -235,9 +235,9 @@ class TestGraphIsolation:
         )]
         assert graph_methods == [], f"Graph mutation methods found: {graph_methods}"
 
-    def test_graph_isolation_flag_in_health(self, feeder):
+    async def test_graph_isolation_flag_in_health(self, feeder):
         svc, _ = feeder
-        health = svc.get_health()
+        health = await svc.get_health()
         assert health.graph_isolation_enforced is True
 
     def test_service_does_not_import_graph_module(self):
@@ -251,22 +251,22 @@ class TestGraphIsolation:
 
 
 class TestRollback:
-    def test_rollback_removes_bronze_records(self, feeder):
+    async def test_rollback_removes_bronze_records(self, feeder):
         svc, models_mod = feeder
         rows = [{"address": "0xabc"}, {"address": "0xdef"}]
         req = _make_request(models_mod, rows)
-        svc.ingest(req)
-        assert len(svc.audit("test_batch_001")) == 2
-        deleted = svc.rollback("test_batch_001")
+        await svc.ingest(req)
+        assert len(await svc.audit("test_batch_001")) == 2
+        deleted = await svc.rollback("test_batch_001")
         assert deleted >= 2
-        assert len(svc.audit("test_batch_001")) == 0
+        assert len(await svc.audit("test_batch_001")) == 0
 
-    def test_rollback_unknown_tag_returns_zero(self, feeder):
+    async def test_rollback_unknown_tag_returns_zero(self, feeder):
         svc, _ = feeder
-        deleted = svc.rollback("nonexistent_tag_xyz")
+        deleted = await svc.rollback("nonexistent_tag_xyz")
         assert deleted == 0
 
-    def test_rollback_does_not_affect_other_tags(self, feeder):
+    async def test_rollback_does_not_affect_other_tags(self, feeder):
         svc, models_mod = feeder
         rows_a = [{"address": "0xabc"}]
         rows_b = [{"address": "0xdef"}]
@@ -282,47 +282,47 @@ class TestRollback:
             source_tag="test_batch_002",
             domain="onchain",
         )
-        svc.ingest(req_a)
-        svc.ingest(req_b)
-        svc.rollback("test_batch_001")
-        assert len(svc.audit("test_batch_002")) == 1
+        await svc.ingest(req_a)
+        await svc.ingest(req_b)
+        await svc.rollback("test_batch_001")
+        assert len(await svc.audit("test_batch_002")) == 1
 
 
 class TestSilverPromotion:
-    def test_promote_valid_bronze_rows(self, feeder):
+    async def test_promote_valid_bronze_rows(self, feeder):
         svc, models_mod = feeder
         rows = [{"address": "0xabc"}, {"address": "0xdef"}]
         req = _make_request(models_mod, rows)
-        svc.ingest(req)
-        promoted = svc.promote_to_silver("test_batch_001")
+        await svc.ingest(req)
+        promoted = await svc.promote_to_silver("test_batch_001")
         assert promoted >= 2
 
-    def test_promote_unknown_tag_returns_zero(self, feeder):
+    async def test_promote_unknown_tag_returns_zero(self, feeder):
         svc, _ = feeder
-        promoted = svc.promote_to_silver("nonexistent_xyz")
+        promoted = await svc.promote_to_silver("nonexistent_xyz")
         assert promoted == 0
 
 
 class TestHealth:
-    def test_health_ok_on_empty_store(self, feeder):
+    async def test_health_ok_on_empty_store(self, feeder):
         svc, _ = feeder
-        h = svc.get_health()
+        h = await svc.get_health()
         assert h.status == "ok"
         assert h.total_bronze_records == 0
         assert h.graph_isolation_enforced is True
 
-    def test_health_reflects_ingest(self, feeder):
+    async def test_health_reflects_ingest(self, feeder):
         svc, models_mod = feeder
         rows = [{"address": "0xabc"}, {"address": "0xdef"}]
         req = _make_request(models_mod, rows)
-        svc.ingest(req)
-        h = svc.get_health()
+        await svc.ingest(req)
+        h = await svc.get_health()
         assert h.total_bronze_records == 2
         assert h.unique_source_tags == 1
 
 
 class TestQualityGateNumberType:
-    def test_number_schema_accepts_integer_values(self, feeder):
+    async def test_number_schema_accepts_integer_values(self, feeder):
         """'number' type in schema must accept integer JSON values (Codex P2 fix)."""
         svc, models_mod = feeder
         rows = [{"count": 42, "volume": 1000}]
@@ -339,33 +339,33 @@ class TestQualityGateNumberType:
             schema={"count": "number", "volume": "number"},
             required_fields=["count", "volume"],
         )
-        resp = svc.ingest(req)
+        resp = await svc.ingest(req)
         assert resp.rows_accepted == 1
         assert resp.rows_rejected == 0
 
 
 class TestGoldMaterialization:
-    def test_materialize_gold_from_silver(self, feeder):
+    async def test_materialize_gold_from_silver(self, feeder):
         svc, models_mod = feeder
         rows = [{"address": "0xabc"}, {"address": "0xdef"}]
         req = _make_request(models_mod, rows)
-        svc.ingest(req)
-        svc.promote_to_silver("test_batch_001")
-        created = svc.promote_to_gold("test_batch_001")
+        await svc.ingest(req)
+        await svc.promote_to_silver("test_batch_001")
+        created = await svc.promote_to_gold("test_batch_001")
         assert created >= 1
 
-    def test_materialize_gold_idempotent(self, feeder):
+    async def test_materialize_gold_idempotent(self, feeder):
         svc, models_mod = feeder
         rows = [{"address": "0xabc"}]
         req = _make_request(models_mod, rows)
-        svc.ingest(req)
-        svc.promote_to_silver("test_batch_001")
-        first = svc.promote_to_gold("test_batch_001")
-        second = svc.promote_to_gold("test_batch_001")
+        await svc.ingest(req)
+        await svc.promote_to_silver("test_batch_001")
+        first = await svc.promote_to_gold("test_batch_001")
+        second = await svc.promote_to_gold("test_batch_001")
         assert first >= 1
         assert second == 0
 
-    def test_materialize_gold_cross_tenant_isolation(self, feeder):
+    async def test_materialize_gold_cross_tenant_isolation(self, feeder):
         """Gold grouping key must include tenant_scope (Codex P1 fix)."""
         svc, models_mod = feeder
         for tenant in ("tenant_a", "tenant_b"):
@@ -381,49 +381,49 @@ class TestGoldMaterialization:
                 domain="onchain",
                 tenant_scope=tenant,
             )
-            svc.ingest(req)
-            svc.promote_to_silver("shared_tag", tenant_scope=tenant)
-        created = svc.promote_to_gold("shared_tag")
+            await svc.ingest(req)
+            await svc.promote_to_silver("shared_tag", tenant_scope=tenant)
+        created = await svc.promote_to_gold("shared_tag")
         # Each tenant produces its own Gold record — no cross-tenant merging
         assert created == 2
-        records = svc.get_gold_records(source_tag="shared_tag")
+        records = await svc.get_gold_records(source_tag="shared_tag")
         tenant_scopes = {r["tenant_scope"] for r in records}
         assert "tenant_a" in tenant_scopes
         assert "tenant_b" in tenant_scopes
 
-    def test_materialize_gold_unknown_tag_returns_zero(self, feeder):
+    async def test_materialize_gold_unknown_tag_returns_zero(self, feeder):
         svc, _ = feeder
-        assert svc.promote_to_gold("nonexistent_xyz") == 0
+        assert await svc.promote_to_gold("nonexistent_xyz") == 0
 
-    def test_get_gold_records_filtered_by_source_tag(self, feeder):
+    async def test_get_gold_records_filtered_by_source_tag(self, feeder):
         svc, models_mod = feeder
         rows = [{"address": "0xabc"}]
         req = _make_request(models_mod, rows)
-        svc.ingest(req)
-        svc.promote_to_silver("test_batch_001")
-        svc.promote_to_gold("test_batch_001")
-        records = svc.get_gold_records(source_tag="test_batch_001")
+        await svc.ingest(req)
+        await svc.promote_to_silver("test_batch_001")
+        await svc.promote_to_gold("test_batch_001")
+        records = await svc.get_gold_records(source_tag="test_batch_001")
         assert len(records) >= 1
         assert records[0]["source_tag"] == "test_batch_001"
         assert records[0]["row_count"] >= 1
 
-    def test_rollback_removes_gold_records(self, feeder):
+    async def test_rollback_removes_gold_records(self, feeder):
         svc, models_mod = feeder
         rows = [{"address": "0xabc"}]
         req = _make_request(models_mod, rows)
-        svc.ingest(req)
-        svc.promote_to_silver("test_batch_001")
-        svc.promote_to_gold("test_batch_001")
-        assert len(svc.get_gold_records(source_tag="test_batch_001")) >= 1
-        svc.rollback("test_batch_001")
-        assert len(svc.get_gold_records(source_tag="test_batch_001")) == 0
+        await svc.ingest(req)
+        await svc.promote_to_silver("test_batch_001")
+        await svc.promote_to_gold("test_batch_001")
+        assert len(await svc.get_gold_records(source_tag="test_batch_001")) >= 1
+        await svc.rollback("test_batch_001")
+        assert len(await svc.get_gold_records(source_tag="test_batch_001")) == 0
 
-    def test_health_reflects_gold_count(self, feeder):
+    async def test_health_reflects_gold_count(self, feeder):
         svc, models_mod = feeder
         rows = [{"address": "0xabc"}]
         req = _make_request(models_mod, rows)
-        svc.ingest(req)
-        svc.promote_to_silver("test_batch_001")
-        svc.promote_to_gold("test_batch_001")
-        h = svc.get_health()
+        await svc.ingest(req)
+        await svc.promote_to_silver("test_batch_001")
+        await svc.promote_to_gold("test_batch_001")
+        h = await svc.get_health()
         assert h.total_gold_records >= 1

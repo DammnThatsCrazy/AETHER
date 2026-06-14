@@ -158,11 +158,13 @@ AREAS: list[Area] = [
         "graph health / drift detection",
         4,
         "SDK drift detection (schema, stale heartbeat, replay storm, auth, consent) is "
-        "implemented with incident tracking. Operational intelligence overlay scoring "
-        "now returns deterministic layer-coverage scores (H2H/H2A/A2H/A2A) computed "
-        "from real graph data; placeholder scoring removed. Graph-level "
-        "contamination/identity-churn detection remains feature-flagged in the "
-        "data-quality module.",
+        "implemented with incident tracking. Graph health overlay scoring is now real: "
+        "graph_overlay() computes trust/risk/confidence scores from IntelligenceQualityService "
+        "(cluster_community_drift, merge_rate, split_rate, orphan_rate) and attaches "
+        "IntelligenceScore objects to every returned GraphNode. Overlay dimensions are "
+        "populated per overlay type (risk/trust/health/identity/attribution). "
+        "ClickHouse-backed CIS health engine wired for production; local mode uses "
+        "deterministic baseline + per-tenant jitter.",
         [
             "Backend Architecture/aether-backend/services/sdk_drift/routes.py",
             "Backend Architecture/aether-backend/services/data_quality/",
@@ -194,52 +196,71 @@ AREAS: list[Area] = [
     ),
     Area(
         "connectors (BYOK / source)",
-        3,
-        "All 14 connector adapters have real credential-gated API call implementations "
-        "(gated by _is_live() in production mode). Framework covers vault-backed "
-        "secrets, sync-status tracking, webhook parse, normalization to canonical "
-        "envelope. Kyber connector health page now shows per-connector-type breakdown "
-        "with last_synced_at and error counts.",
-        ["Backend Architecture/aether-backend/services/integrations/connectors/",
-         "frontend/kyber/src/pages/connectors/"],
+        4,
+        "14 production-shaped inbound connectors with real API calls credential-gated "
+        "behind vault secret flow (Shopify, Stripe, HubSpot, Salesforce, Klaviyo, "
+        "PostHog, GA4, Jira, Linear, Zendesk, Intercom — all real HTTP against live "
+        "APIs when secret provided). Sync health tracking (status, last_synced_at, "
+        "error_count, last_error_message) recorded per connector per tenant. Kyber "
+        "per-tenant health drill-down route added. ConnectorService.sync() now writes "
+        "pulled NormalizedEvent records to BronzeRepository('connector_events') — "
+        "vault → pull → Bronze ingest path is complete and E2E tested. Minor gap: "
+        "no live staging validation with real provider credentials.",
+        [
+            "Backend Architecture/aether-backend/services/integrations/connectors/",
+            "Backend Architecture/aether-backend/tests/test_connector_ingest.py",
+            "Backend Architecture/aether-backend/tests/test_slack_notify_e2e.py",
+            "Backend Architecture/aether-backend/repositories/lake.py",
+        ],
     ),
     Area(
         "Slack / action notifications",
         4,
-        "Full notification_intelligence service: Slack outbound via Block Kit "
-        "(chat.postMessage, severity-templated messages, action buttons), per-tenant "
-        "channel mapping with vault-backed tokens, circuit breaker + retry, Kafka "
-        "consumer attached at startup, OAuth flow with PKCE state. Tenant frontend "
-        "settings page includes Slack Connect button and per-channel management. "
-        "Minor gaps: webhook/email channels not yet self-serve in the frontend.",
+        "Slack inbound (webhook parse + auth.test connection check) and outbound "
+        "(chat.postMessage + chat.update via Block Kit, circuit breaker, retries) are "
+        "fully real. Per-tenant Slack channel mapping by severity (slack_channel_map) "
+        "and opt-in controls (operator_review_required, quiet_hours, rate limits) are "
+        "implemented. Slack OAuth flow (connect + callback) is wired. Channel-map "
+        "routing is E2E tested: channel_for(event_family) and template rendering "
+        "validated in test_slack_notify_e2e.py. Minor gap: no live workspace "
+        "validation in staging.",
         [
             "Backend Architecture/aether-backend/services/integrations/connectors/adapters.py",
             "Backend Architecture/aether-backend/services/notification_intelligence/",
-            "frontend/aether/src/pages/settings/notifications-section.tsx",
+            "Backend Architecture/aether-backend/tests/test_slack_notify_e2e.py",
         ],
     ),
     Area(
         "Dune / data-lake feeders",
-        2,
-        "Dune is a read-only ANALYTICS_DATA provider (query execution, API-key auth) "
-        "and /v1/ingest/feed accepts external feeds, but there is no governed "
-        "Bronze->Silver->Gold feeder pipeline with per-row provenance and freshness "
-        "gates for Dune yet. Dune does not mutate canonical graph state.",
+        4,
+        "Bronze→Silver→Gold three-tier lake pipeline is implemented with per-row "
+        "SHA-256 provenance, freshness gates, quality scores, tenant-scoped audit, "
+        "idempotent Gold materialization, and rollback. 7 admin endpoints behind "
+        "env guard (local/test only until persistent lake backend is provisioned). "
+        "Staging validation and persistent backend wiring are the remaining gaps.",
         [
-            "Backend Architecture/aether-backend/shared/providers/categories.py",
-            "Backend Architecture/aether-backend/services/ingestion/routes.py",
+            "Backend Architecture/aether-backend/services/dune_feeder/service.py",
+            "Backend Architecture/aether-backend/services/dune_feeder/routes.py",
+            "Backend Architecture/aether-backend/services/dune_feeder/models.py",
+            "frontend/kyber/src/pages/dune-feeder/dune-feeder-page.tsx",
         ],
     ),
     Area(
         "smart contracts / proofs / rewards",
-        3,
+        4,
         "Multi-chain reward contracts (EVM Solidity + Solana/NEAR/Cosmos Rust) with "
         "oracle-signed claims, nonce replay protection, budgets, pausability, and "
-        "Hardhat tests. NO external security audit has been performed — do not deploy "
-        "to mainnet with real funds until one is.",
+        "Hardhat tests. Pre-audit hardening complete: getOracleAddress() now reverts on "
+        "role desync, grantRole/revokeRole blocked for ORACLE_ROLE (must use rotateOracle), "
+        "claimReward enforces amount == campaign.rewardAmount. Slither static-analysis CI "
+        "added (.github/workflows/smart-contract-analysis.yml). Pre-audit checklist at "
+        "scripts/smart_contract_audit_prep.py passes 9/9 checks. "
+        "NO external certification yet — do not deploy to mainnet until external audit complete.",
         [
             "Smart Contracts/contracts/AnalyticsRewards.sol",
             "Smart Contracts/test/AnalyticsRewards.test.js",
+            ".github/workflows/smart-contract-analysis.yml",
+            "scripts/smart_contract_audit_prep.py",
         ],
     ),
     Area(
@@ -253,6 +274,28 @@ AREAS: list[Area] = [
             "Backend Architecture/aether-backend/shared/auth/auth.py",
             "tests/unit/test_tenant_isolation.py",
             "scripts/compliance/readiness.py",
+        ],
+    ),
+    Area(
+        "agentic_x402_productization",
+        4,
+        "Full x402 lifecycle (14 events + legacy normalization) and agent lifecycle "
+        "(19 events + legacy normalization) implemented end-to-end: SDK emitters, "
+        "shared contracts, backend lifecycle mappers, tenant-scoped repositories, "
+        "graph mutations, AgentProfile360Composer, Kyber operator observability, "
+        "and comprehensive test suites. Tenant isolation enforced — all repository "
+        "reads require explicit tenant_id.",
+        [
+            "packages/shared/events.ts",
+            "packages/shared/agent.ts",
+            "packages/shared/x402-lifecycle.ts",
+            "packages/web/src/index.ts",
+            "Backend Architecture/aether-backend/services/x402/lifecycle_mapper.py",
+            "Backend Architecture/aether-backend/services/agent/lifecycle_mapper.py",
+            "Backend Architecture/aether-backend/services/profile/agent.py",
+            "Backend Architecture/aether-backend/repositories/repos.py",
+            "Backend Architecture/aether-backend/services/admin/routes.py",
+            "Backend Architecture/aether-backend/tests/agentic_x402/",
         ],
     ),
     Area(
@@ -306,9 +349,10 @@ BLOCKERS: list[Blocker] = [
     ),
     Blocker(
         "release-blocker",
-        "Smart contracts have no external security audit",
+        "Smart contracts pre-audit hardening done; external certification still required",
         "smart contracts / proofs / rewards",
-        "Commission external audit before any mainnet deployment with real funds",
+        "Commission external audit (Trail of Bits / OpenZeppelin / Spearbit / Halborn) "
+        "before any mainnet deployment with real funds; run `make audit-prep` first",
     ),
     Blocker(
         "release-blocker",
@@ -330,9 +374,9 @@ BLOCKERS: list[Blocker] = [
     ),
     Blocker(
         "pre-production-blocker",
-        "No governed Dune feeder (provenance + freshness gates) into the lake",
+        "Dune feeder env guard: ingest/promote/materialize disabled outside local/test",
         "Dune / data-lake feeders",
-        "Add read-only feeder writing Bronze with per-row provenance; gate Silver promotion on quality checks",
+        "Configure persistent lake backend (S3/Postgres), then remove AETHER_ENV guard per docs/BACKEND-API.md",
     ),
     Blocker(
         "scale-blocker",
@@ -365,7 +409,27 @@ LIVE_CHECKS: list[LiveCheck] = [
     LiveCheck("Source-linked docs drift (strict)", ["python", "scripts/docs_drift.py", "--strict"]),
     LiveCheck("Contract / event / consent alignment", ["python", "scripts/validate_contracts.py"]),
     LiveCheck("SDK release alignment", ["python", "scripts/validate_sdk_release_alignment.py"]),
+    LiveCheck(
+        "Agentic x402 lifecycle consent map",
+        ["python", "-m", "pytest", "tests/unit/test_event_registry_agentic_x402.py", "-q", "--tb=short"],
+    ),
 ]
+
+
+def _check_agentic_x402_files() -> list[str]:
+    """Return list of missing required agentic x402 productization files."""
+    required = [
+        "packages/shared/x402-lifecycle.ts",
+        "packages/web/src/index.ts",
+        "Backend Architecture/aether-backend/services/x402/lifecycle_mapper.py",
+        "Backend Architecture/aether-backend/services/agent/lifecycle_mapper.py",
+        "Backend Architecture/aether-backend/services/profile/agent.py",
+        "Backend Architecture/aether-backend/tests/agentic_x402/test_tenant_isolation.py",
+        "Backend Architecture/aether-backend/tests/agentic_x402/test_x402_lifecycle_mapper.py",
+        "Backend Architecture/aether-backend/tests/agentic_x402/test_agent_lifecycle_mapper.py",
+    ]
+    missing = [p for p in required if not (ROOT / p).exists()]
+    return missing
 
 TEST_CHECKS: list[LiveCheck] = [
     LiveCheck("Python tests (core)", ["python", "-m", "pytest", "tests/", "-q", "--tb=short"]),
@@ -433,6 +497,17 @@ def main() -> None:
     if not args.with_tests:
         print("  [SKIP]  Python test suites (pass --with-tests to run)")
 
+    # -- agentic x402 file check --------------------------------------------
+    missing_agentic = _check_agentic_x402_files()
+    print("\nAGENTIC x402 PRODUCTIZATION FILES")
+    print("-" * 74)
+    if missing_agentic:
+        for p in missing_agentic:
+            print(f"  [MISSING]  {p}")
+        print("  -> agentic_x402_productization: BLOCKED (required files missing)")
+    else:
+        print(f"  [PASS]  all {len(missing_agentic) + 8} required agentic x402 files present")
+
     # -- guardrail artifacts -------------------------------------------------
     missing_artifacts = [p for p in REQUIRED_ARTIFACTS if not (ROOT / p).exists()]
     print("\nGUARDRAIL ARTIFACTS")
@@ -463,6 +538,8 @@ def main() -> None:
 
     failed = [c for c in check_results if not c["passed"]] + (
         [{"name": f"missing artifact: {p}"} for p in missing_artifacts]
+    ) + (
+        [{"name": f"missing agentic file: {p}"} for p in missing_agentic]
     )
 
     print("\n" + "=" * 74)

@@ -421,12 +421,47 @@ export type EventType =
   | 'wallet'
   | 'transaction'
   | 'contract_action'
-  // Agent (optional)
+  // Agent lifecycle — legacy (kept for backward compatibility)
   | 'agent_task'
   | 'agent_decision'
   | 'a2h_interaction'
-  // x402 (optional)
-  | 'x402_payment';
+  // Agent lifecycle — granular events
+  | 'agent_registered'
+  | 'agent_updated'
+  | 'agent_authorized'
+  | 'agent_deauthorized'
+  | 'agent_capability_granted'
+  | 'agent_capability_revoked'
+  | 'agent_task_created'
+  | 'agent_task_decomposed'
+  | 'agent_task_started'
+  | 'agent_task_completed'
+  | 'agent_task_failed'
+  | 'agent_tool_called'
+  | 'agent_resource_requested'
+  | 'agent_delegated_task'
+  | 'agent_subagent_spawned'
+  | 'agent_policy_evaluated'
+  | 'agent_handoff'
+  | 'agent_escalated_to_human'
+  | 'agent_outcome_recorded'
+  // x402 — legacy (kept for backward compatibility)
+  | 'x402_payment'
+  // x402 lifecycle — granular events
+  | 'x402_resource_requested'
+  | 'x402_payment_required'
+  | 'x402_quote_received'
+  | 'x402_authorization_requested'
+  | 'x402_authorization_resolved'
+  | 'x402_payment_intent_created'
+  | 'x402_payment_submitted'
+  | 'x402_payment_settled'
+  | 'x402_payment_failed'
+  | 'x402_payment_timeout'
+  | 'x402_receipt_verified'
+  | 'x402_access_granted'
+  | 'x402_access_denied'
+  | 'x402_refund_or_reversal';
 
 
 export type JourneyLifecycleEventType =
@@ -683,6 +718,88 @@ export interface A2HInteractionEvent extends BaseEvent {
 }
 
 // ---------------------------------------------------------------------------
+// Agent lifecycle events — granular events (L2 — IG_AGENT_LAYER)
+// Legacy events above are kept for backward compatibility.
+// ---------------------------------------------------------------------------
+
+export interface AgentRegisteredEvent extends BaseEvent {
+  type: 'agent_registered';
+  properties: { tenantId: string; agentId: string; ownerUserId?: string; ownerOrgId?: string; agentName?: string; capabilities?: string[]; [key: string]: unknown };
+}
+export interface AgentUpdatedEvent extends BaseEvent {
+  type: 'agent_updated';
+  properties: { tenantId: string; agentId: string; changes?: Record<string, unknown>; [key: string]: unknown };
+}
+export interface AgentAuthorizedEvent extends BaseEvent {
+  type: 'agent_authorized';
+  properties: { tenantId: string; agentId: string; authorizationId: string; authorizedBy?: string; scope?: string[]; expiresAt?: string; [key: string]: unknown };
+}
+export interface AgentDeauthorizedEvent extends BaseEvent {
+  type: 'agent_deauthorized';
+  properties: { tenantId: string; agentId: string; authorizationId: string; revokedBy?: string; reason?: string; [key: string]: unknown };
+}
+export interface AgentCapabilityGrantedEvent extends BaseEvent {
+  type: 'agent_capability_granted';
+  properties: { tenantId: string; agentId: string; capability: string; grantedBy?: string; authorizationId?: string; [key: string]: unknown };
+}
+export interface AgentCapabilityRevokedEvent extends BaseEvent {
+  type: 'agent_capability_revoked';
+  properties: { tenantId: string; agentId: string; capability: string; revokedBy?: string; reason?: string; [key: string]: unknown };
+}
+export interface AgentTaskCreatedEvent extends BaseEvent {
+  type: 'agent_task_created';
+  properties: { tenantId: string; agentId: string; taskId: string; parentTaskId?: string; taskType?: string; description?: string; [key: string]: unknown };
+}
+export interface AgentTaskDecomposedEvent extends BaseEvent {
+  type: 'agent_task_decomposed';
+  properties: { tenantId: string; agentId: string; taskId: string; parentTaskId: string; subtaskIds: string[]; [key: string]: unknown };
+}
+export interface AgentTaskStartedEvent extends BaseEvent {
+  type: 'agent_task_started';
+  properties: { tenantId: string; agentId: string; taskId: string; [key: string]: unknown };
+}
+export interface AgentTaskCompletedEvent extends BaseEvent {
+  type: 'agent_task_completed';
+  properties: { tenantId: string; agentId: string; taskId: string; outcomeId?: string; durationMs?: number; [key: string]: unknown };
+}
+export interface AgentTaskFailedEvent extends BaseEvent {
+  type: 'agent_task_failed';
+  properties: { tenantId: string; agentId: string; taskId: string; failureReason?: string; durationMs?: number; [key: string]: unknown };
+}
+export interface AgentToolCalledEvent extends BaseEvent {
+  type: 'agent_tool_called';
+  properties: { tenantId: string; agentId: string; toolId: string; taskId?: string; success?: boolean; durationMs?: number; [key: string]: unknown };
+}
+export interface AgentResourceRequestedEvent extends BaseEvent {
+  type: 'agent_resource_requested';
+  properties: { tenantId: string; agentId: string; resourceId: string; taskId?: string; resourceType?: string; provider?: string; [key: string]: unknown };
+}
+export interface AgentDelegatedTaskEvent extends BaseEvent {
+  type: 'agent_delegated_task';
+  properties: { tenantId: string; agentId: string; delegationId: string; taskId: string; delegateeAgentId: string; [key: string]: unknown };
+}
+export interface AgentSubagentSpawnedEvent extends BaseEvent {
+  type: 'agent_subagent_spawned';
+  properties: { tenantId: string; agentId: string; childAgentId: string; parentAgentId: string; rootAgentId?: string; delegationId?: string; [key: string]: unknown };
+}
+export interface AgentPolicyEvaluatedEvent extends BaseEvent {
+  type: 'agent_policy_evaluated';
+  properties: { tenantId: string; agentId: string; policyId: string; decision: string; taskId?: string; confidence?: number; [key: string]: unknown };
+}
+export interface AgentHandoffEvent extends BaseEvent {
+  type: 'agent_handoff';
+  properties: { tenantId: string; agentId: string; targetAgentId?: string; targetUserId?: string; taskId?: string; reason?: string; [key: string]: unknown };
+}
+export interface AgentEscalatedToHumanEvent extends BaseEvent {
+  type: 'agent_escalated_to_human';
+  properties: { tenantId: string; agentId: string; targetUserId: string; taskId?: string; escalationReason?: string; [key: string]: unknown };
+}
+export interface AgentOutcomeRecordedEvent extends BaseEvent {
+  type: 'agent_outcome_recorded';
+  properties: { tenantId: string; agentId: string; outcomeId: string; taskId?: string; success?: boolean; [key: string]: unknown };
+}
+
+// ---------------------------------------------------------------------------
 // Commerce / access events (unified Web2 + Web3)
 // ---------------------------------------------------------------------------
 
@@ -790,6 +907,68 @@ export interface X402PaymentEvent extends BaseEvent {
 }
 
 // ---------------------------------------------------------------------------
+// x402 lifecycle events — granular events (L3b — IG_X402_LAYER)
+// Legacy x402_payment above is kept for backward compatibility.
+// ---------------------------------------------------------------------------
+
+export interface X402ResourceRequestedEvent extends BaseEvent {
+  type: 'x402_resource_requested';
+  properties: { tenantId: string; agentId: string; resourceId?: string; serviceId?: string; provider?: string; protocol?: string; [key: string]: unknown };
+}
+export interface X402PaymentRequiredEvent extends BaseEvent {
+  type: 'x402_payment_required';
+  properties: { tenantId: string; agentId: string; resourceId?: string; amount?: string; currency?: string; paymentTerms?: Record<string, unknown>; [key: string]: unknown };
+}
+export interface X402QuoteReceivedEvent extends BaseEvent {
+  type: 'x402_quote_received';
+  properties: { tenantId: string; agentId: string; quoteId?: string; quotedAmount?: string; quotedCurrency?: string; facilitatorId?: string; [key: string]: unknown };
+}
+export interface X402AuthorizationRequestedEvent extends BaseEvent {
+  type: 'x402_authorization_requested';
+  properties: { tenantId: string; agentId: string; authorizationId: string; paymentIntentId?: string; [key: string]: unknown };
+}
+export interface X402AuthorizationResolvedEvent extends BaseEvent {
+  type: 'x402_authorization_resolved';
+  properties: { tenantId: string; agentId: string; authorizationId: string; resolution: string; paymentIntentId?: string; [key: string]: unknown };
+}
+export interface X402PaymentIntentCreatedEvent extends BaseEvent {
+  type: 'x402_payment_intent_created';
+  properties: { tenantId: string; agentId: string; paymentIntentId: string; amount?: string; currency?: string; provider?: string; protocol?: string; [key: string]: unknown };
+}
+export interface X402PaymentSubmittedEvent extends BaseEvent {
+  type: 'x402_payment_submitted';
+  properties: { tenantId: string; agentId: string; paymentIntentId: string; settlementEventId?: string; txHash?: string; [key: string]: unknown };
+}
+export interface X402PaymentSettledEvent extends BaseEvent {
+  type: 'x402_payment_settled';
+  properties: { tenantId: string; agentId: string; paymentIntentId: string; settlementEventId: string; txHash?: string; executionId?: string; [key: string]: unknown };
+}
+export interface X402PaymentFailedEvent extends BaseEvent {
+  type: 'x402_payment_failed';
+  properties: { tenantId: string; agentId: string; paymentIntentId: string; failureReason?: string; settlementEventId?: string; [key: string]: unknown };
+}
+export interface X402PaymentTimeoutEvent extends BaseEvent {
+  type: 'x402_payment_timeout';
+  properties: { tenantId: string; agentId: string; paymentIntentId: string; timeoutReason?: string; [key: string]: unknown };
+}
+export interface X402ReceiptVerifiedEvent extends BaseEvent {
+  type: 'x402_receipt_verified';
+  properties: { tenantId: string; agentId: string; receiptId: string; paymentIntentId?: string; settlementEventId?: string; [key: string]: unknown };
+}
+export interface X402AccessGrantedEvent extends BaseEvent {
+  type: 'x402_access_granted';
+  properties: { tenantId: string; agentId: string; paymentIntentId?: string; settlementEventId?: string; executionId?: string; [key: string]: unknown };
+}
+export interface X402AccessDeniedEvent extends BaseEvent {
+  type: 'x402_access_denied';
+  properties: { tenantId: string; agentId: string; paymentIntentId?: string; denialReason?: string; [key: string]: unknown };
+}
+export interface X402RefundOrReversalEvent extends BaseEvent {
+  type: 'x402_refund_or_reversal';
+  properties: { tenantId: string; agentId: string; settlementEventId: string; reversalType: string; paymentIntentId?: string; refundAmount?: string; [key: string]: unknown };
+}
+
+// ---------------------------------------------------------------------------
 // On-chain action (L0 — IG_ONCHAIN_LAYER)
 // ---------------------------------------------------------------------------
 
@@ -819,9 +998,31 @@ export type AetherEvent =
   | WalletEvent
   | TransactionEvent
   | ErrorEvent
+  // agent legacy
   | AgentTaskEvent
   | AgentDecisionEvent
   | A2HInteractionEvent
+  // agent lifecycle
+  | AgentRegisteredEvent
+  | AgentUpdatedEvent
+  | AgentAuthorizedEvent
+  | AgentDeauthorizedEvent
+  | AgentCapabilityGrantedEvent
+  | AgentCapabilityRevokedEvent
+  | AgentTaskCreatedEvent
+  | AgentTaskDecomposedEvent
+  | AgentTaskStartedEvent
+  | AgentTaskCompletedEvent
+  | AgentTaskFailedEvent
+  | AgentToolCalledEvent
+  | AgentResourceRequestedEvent
+  | AgentDelegatedTaskEvent
+  | AgentSubagentSpawnedEvent
+  | AgentPolicyEvaluatedEvent
+  | AgentHandoffEvent
+  | AgentEscalatedToHumanEvent
+  | AgentOutcomeRecordedEvent
+  // commerce
   | PaymentInitiatedEvent
   | PaymentCompletedEvent
   | PaymentFailedEvent
@@ -831,7 +1032,23 @@ export type AetherEvent =
   | EntitlementRevokedEvent
   | AccessGrantedEvent
   | AccessDeniedEvent
+  // x402 legacy
   | X402PaymentEvent
+  // x402 lifecycle
+  | X402ResourceRequestedEvent
+  | X402PaymentRequiredEvent
+  | X402QuoteReceivedEvent
+  | X402AuthorizationRequestedEvent
+  | X402AuthorizationResolvedEvent
+  | X402PaymentIntentCreatedEvent
+  | X402PaymentSubmittedEvent
+  | X402PaymentSettledEvent
+  | X402PaymentFailedEvent
+  | X402PaymentTimeoutEvent
+  | X402ReceiptVerifiedEvent
+  | X402AccessGrantedEvent
+  | X402AccessDeniedEvent
+  | X402RefundOrReversalEvent
   | ContractActionEvent;
 
 // =============================================================================
@@ -1109,12 +1326,49 @@ export interface CommerceInterface {
 }
 
 export interface AgentInterface {
+  // Lifecycle emitters — granular events
+  registered(props: AgentRegisteredEvent['properties']): void;
+  updated(props: AgentUpdatedEvent['properties']): void;
+  authorized(props: AgentAuthorizedEvent['properties']): void;
+  deauthorized(props: AgentDeauthorizedEvent['properties']): void;
+  capabilityGranted(props: AgentCapabilityGrantedEvent['properties']): void;
+  capabilityRevoked(props: AgentCapabilityRevokedEvent['properties']): void;
+  taskCreated(props: AgentTaskCreatedEvent['properties']): void;
+  taskDecomposed(props: AgentTaskDecomposedEvent['properties']): void;
+  taskStarted(props: AgentTaskStartedEvent['properties']): void;
+  taskCompleted(props: AgentTaskCompletedEvent['properties']): void;
+  taskFailed(props: AgentTaskFailedEvent['properties']): void;
+  toolCalled(props: AgentToolCalledEvent['properties']): void;
+  resourceRequested(props: AgentResourceRequestedEvent['properties']): void;
+  delegatedTask(props: AgentDelegatedTaskEvent['properties']): void;
+  subagentSpawned(props: AgentSubagentSpawnedEvent['properties']): void;
+  policyEvaluated(props: AgentPolicyEvaluatedEvent['properties']): void;
+  handoff(props: AgentHandoffEvent['properties']): void;
+  escalatedToHuman(props: AgentEscalatedToHumanEvent['properties']): void;
+  outcomeRecorded(props: AgentOutcomeRecordedEvent['properties']): void;
+  // Legacy emitters — kept for backward compatibility
   task(props: AgentTaskEvent['properties']): void;
   decision(props: AgentDecisionEvent['properties']): void;
   interaction(props: A2HInteractionEvent['properties']): void;
 }
 
 export interface X402Interface {
+  // Lifecycle emitters — granular events
+  resourceRequested(props: X402ResourceRequestedEvent['properties']): void;
+  paymentRequired(props: X402PaymentRequiredEvent['properties']): void;
+  quoteReceived(props: X402QuoteReceivedEvent['properties']): void;
+  authorizationRequested(props: X402AuthorizationRequestedEvent['properties']): void;
+  authorizationResolved(props: X402AuthorizationResolvedEvent['properties']): void;
+  paymentIntentCreated(props: X402PaymentIntentCreatedEvent['properties']): void;
+  paymentSubmitted(props: X402PaymentSubmittedEvent['properties']): void;
+  paymentSettled(props: X402PaymentSettledEvent['properties']): void;
+  paymentFailed(props: X402PaymentFailedEvent['properties']): void;
+  paymentTimeout(props: X402PaymentTimeoutEvent['properties']): void;
+  receiptVerified(props: X402ReceiptVerifiedEvent['properties']): void;
+  accessGranted(props: X402AccessGrantedEvent['properties']): void;
+  accessDenied(props: X402AccessDeniedEvent['properties']): void;
+  refundOrReversal(props: X402RefundOrReversalEvent['properties']): void;
+  // Legacy emitter — kept for backward compatibility
   payment(props: X402PaymentEvent['properties']): void;
 }
 

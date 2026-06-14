@@ -136,9 +136,29 @@ object Aether : DefaultLifecycleObserver {
         "payment_failed" to "commerce", "approval_requested" to "commerce",
         "approval_resolved" to "commerce", "entitlement_granted" to "commerce",
         "entitlement_revoked" to "commerce", "access_granted" to "commerce",
-        "access_denied" to "commerce", "x402_payment" to "commerce",
+        "access_denied" to "commerce",
+        // x402 — legacy + lifecycle
+        "x402_payment" to "commerce",
+        "x402_resource_requested" to "commerce", "x402_payment_required" to "commerce",
+        "x402_quote_received" to "commerce", "x402_authorization_requested" to "commerce",
+        "x402_authorization_resolved" to "commerce", "x402_payment_intent_created" to "commerce",
+        "x402_payment_submitted" to "commerce", "x402_payment_settled" to "commerce",
+        "x402_payment_failed" to "commerce", "x402_payment_timeout" to "commerce",
+        "x402_receipt_verified" to "commerce", "x402_access_granted" to "commerce",
+        "x402_access_denied" to "commerce", "x402_refund_or_reversal" to "commerce",
         "wallet" to "web3", "transaction" to "web3", "contract_action" to "web3",
-        "agent_task" to "agent", "agent_decision" to "agent", "a2h_interaction" to "agent"
+        // Agent — legacy + lifecycle
+        "agent_task" to "agent", "agent_decision" to "agent", "a2h_interaction" to "agent",
+        "agent_registered" to "agent", "agent_updated" to "agent",
+        "agent_authorized" to "agent", "agent_deauthorized" to "agent",
+        "agent_capability_granted" to "agent", "agent_capability_revoked" to "agent",
+        "agent_task_created" to "agent", "agent_task_decomposed" to "agent",
+        "agent_task_started" to "agent", "agent_task_completed" to "agent",
+        "agent_task_failed" to "agent", "agent_tool_called" to "agent",
+        "agent_resource_requested" to "agent", "agent_delegated_task" to "agent",
+        "agent_subagent_spawned" to "agent", "agent_policy_evaluated" to "agent",
+        "agent_handoff" to "agent", "agent_escalated_to_human" to "agent",
+        "agent_outcome_recorded" to "agent"
     )
     private val CANONICAL_EVENT_TYPES = EVENT_CONSENT_PURPOSE.keys
     private val dateFormat = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", Locale.US).apply {

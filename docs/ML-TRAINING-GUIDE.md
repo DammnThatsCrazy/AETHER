@@ -68,15 +68,19 @@ python -m training.pipelines.train \
 ## Model Artifacts
 
 Training produces:
-- `.pkl` files (scikit-learn, XGBoost serialized models)
-- `metadata.json` (model version, training date, metrics)
-- Feature pipeline state (preprocessor configuration)
+- `model.joblib` — scikit-learn model serialized via joblib
+- `metadata.json` — version, promotion_state, synthetic_data, production_allowed, threshold_passed, checksum_sha256
+- `pipeline_report.json` — full training run summary with metrics
+- `feature_schema.json` — feature contract hash for drift detection
 
 ## Serving
 
-The ML serving API (`ML Models/aether-ml/serving/src/api.py`) loads model artifacts at startup:
-- If `.pkl` files exist → loads trained models
-- If no artifacts → loads in-process stub models (untrained, for development only)
+The ML serving API (`ML Models/aether-ml/serving/src/api.py`) loads model artifacts on first request (lazy loading):
+- If `model.joblib` artifact exists → loads trained model from disk
+- If no artifact and `AETHER_ENV=local` → loads in-process stub model (never production-allowed)
+- If no artifact and `AETHER_ENV=staging` or `production` → returns HTTP 503 (fail-closed)
+
+Stub models are gated by `AETHER_ENV`. Setting `AETHER_ENV=production` or `AETHER_ENV=staging` disables stubs entirely.
 
 ## ML Ingestion Readiness
 
@@ -89,9 +93,17 @@ The ML serving API (`ML Models/aether-ml/serving/src/api.py`) loads model artifa
 
 ## Feature Engineering
 
-The feature pipeline (`features/pipeline.py`) computes 5 feature types:
-- Session features (duration, page_views, click_count)
-- Behavioral features (scroll_depth, mouse_velocity)
-- Identity features (device_count, ip_count)
-- Journey features (step sequences, conversion paths)
-- Anomaly features (z-scores, deviation metrics)
+The feature pipeline (`features/pipeline.py`) computes 7 feature groups:
+
+| Feature Group | Key Features | Primary Consumers |
+|--------------|--------------|-------------------|
+| Session | `session_duration_s`, `page_count`, `click_count`, `scroll_depth`, `is_bounce` | `intent_prediction`, `bot_detection`, `session_scorer` |
+| Behavioral | `mouse_speed_mean`, `click_interval_mean`, `action_type_entropy`, `js_execution_time` | `bot_detection`, `session_scorer` |
+| Identity | `visit_frequency`, `conversion_rate`, `tenure_days`, `monetary_value`, `recency_days` | `churn_prediction`, `ltv_prediction`, `identity_resolution` |
+| Journey | `identity_id`, `event_type`, `page_category`, `channel`, `event_index` | `journey_prediction` |
+| Attribution | `touchpoint_index`, `channel`, `campaign_id`, `time_decay_weight`, `conversion_value` | `campaign_attribution` |
+| Anomaly | `requests_per_minute`, `error_rate`, `unique_ips`, `bot_ratio`, `p95_response_time` | `anomaly_detection` |
+| Web3 | `tx_count`, `unique_chains`, `wallet_age_days`, `tx_frequency`, `avg_gas_per_tx` | `identity_resolution`, `trust_score` |
+
+Feature contracts (schema, required fields, type validation) are defined in
+`common/feature_contracts.py` and enforced at serving time.
