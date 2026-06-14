@@ -8,7 +8,10 @@ raise BadRequestError on further transition attempts.
 from __future__ import annotations
 
 import uuid
-from typing import Optional
+from typing import TYPE_CHECKING, Optional
+
+if TYPE_CHECKING:
+    from .repository import SuggestionRepository
 
 from shared.common.common import BadRequestError, utc_now
 from shared.logger.logger import get_logger
@@ -157,7 +160,7 @@ def build_audit_event(
 
 
 async def apply_transition(
-    repo: "SuggestionRepository",  # type: ignore[name-defined]
+    repo: SuggestionRepository,
     suggestion_id: str,
     tenant_id: str,
     to_status: SuggestionStatus,

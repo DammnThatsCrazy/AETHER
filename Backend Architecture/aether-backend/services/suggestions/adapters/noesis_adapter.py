@@ -38,10 +38,10 @@ async def handle_suggestion_lookup(
     answer = f"Found {count} open suggestion{'s' if count != 1 else ''} for your tenant."
     if count > 0:
         top = rows[0]
-        answer += (
-            f" The highest-priority suggestion is: "{top.get('title', 'Untitled')}" "
-            f"(priority {top.get('priority', 'P3')}, class {top.get('suggestion_class', 'unknown')})."
-        )
+        title = top.get('title', 'Untitled')
+        priority = top.get('priority', 'P3')
+        cls = top.get('suggestion_class', 'unknown')
+        answer += f" Top: '{title}' (priority {priority}, class {cls})."
     return _build_noesis_response(answer, rows[:5])
 
 
