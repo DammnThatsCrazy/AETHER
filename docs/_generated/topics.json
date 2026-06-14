@@ -753,6 +753,67 @@
       ]
     },
     {
+      "name": "Suggestion / OODA Intelligence",
+      "topics": [
+        {
+          "member": "SUGGESTION_DETECTED",
+          "value": "aether.suggestions.detected"
+        },
+        {
+          "member": "SUGGESTION_ORIENTED",
+          "value": "aether.suggestions.oriented"
+        },
+        {
+          "member": "SUGGESTION_CREATED",
+          "value": "aether.suggestions.created"
+        },
+        {
+          "member": "SUGGESTION_REVIEW_REQUIRED",
+          "value": "aether.suggestions.review_required"
+        },
+        {
+          "member": "SUGGESTION_APPROVED",
+          "value": "aether.suggestions.approved"
+        },
+        {
+          "member": "SUGGESTION_REJECTED",
+          "value": "aether.suggestions.rejected"
+        },
+        {
+          "member": "SUGGESTION_SUPPRESSED",
+          "value": "aether.suggestions.suppressed"
+        },
+        {
+          "member": "SUGGESTION_EXECUTING",
+          "value": "aether.suggestions.executing"
+        },
+        {
+          "member": "SUGGESTION_EXECUTED",
+          "value": "aether.suggestions.executed"
+        },
+        {
+          "member": "SUGGESTION_DELIVERED",
+          "value": "aether.suggestions.delivered"
+        },
+        {
+          "member": "SUGGESTION_OUTCOME_RECORDED",
+          "value": "aether.suggestions.outcome_recorded"
+        },
+        {
+          "member": "SUGGESTION_CLOSED",
+          "value": "aether.suggestions.closed"
+        },
+        {
+          "member": "SUGGESTION_FAILED",
+          "value": "aether.suggestions.failed"
+        },
+        {
+          "member": "SUGGESTION_EXPIRED",
+          "value": "aether.suggestions.expired"
+        }
+      ]
+    },
+    {
       "name": "Dead letter",
       "topics": [
         {
@@ -1382,6 +1443,62 @@
     {
       "member": "ADMIN_API_KEY_CREATED",
       "value": "aether.admin.api_key.created"
+    },
+    {
+      "member": "SUGGESTION_DETECTED",
+      "value": "aether.suggestions.detected"
+    },
+    {
+      "member": "SUGGESTION_ORIENTED",
+      "value": "aether.suggestions.oriented"
+    },
+    {
+      "member": "SUGGESTION_CREATED",
+      "value": "aether.suggestions.created"
+    },
+    {
+      "member": "SUGGESTION_REVIEW_REQUIRED",
+      "value": "aether.suggestions.review_required"
+    },
+    {
+      "member": "SUGGESTION_APPROVED",
+      "value": "aether.suggestions.approved"
+    },
+    {
+      "member": "SUGGESTION_REJECTED",
+      "value": "aether.suggestions.rejected"
+    },
+    {
+      "member": "SUGGESTION_SUPPRESSED",
+      "value": "aether.suggestions.suppressed"
+    },
+    {
+      "member": "SUGGESTION_EXECUTING",
+      "value": "aether.suggestions.executing"
+    },
+    {
+      "member": "SUGGESTION_EXECUTED",
+      "value": "aether.suggestions.executed"
+    },
+    {
+      "member": "SUGGESTION_DELIVERED",
+      "value": "aether.suggestions.delivered"
+    },
+    {
+      "member": "SUGGESTION_OUTCOME_RECORDED",
+      "value": "aether.suggestions.outcome_recorded"
+    },
+    {
+      "member": "SUGGESTION_CLOSED",
+      "value": "aether.suggestions.closed"
+    },
+    {
+      "member": "SUGGESTION_FAILED",
+      "value": "aether.suggestions.failed"
+    },
+    {
+      "member": "SUGGESTION_EXPIRED",
+      "value": "aether.suggestions.expired"
     },
     {
       "member": "DEAD_LETTER",

@@ -34,3 +34,4 @@ export * from './solution-packages';
 export * from './gtm-pricing';
 export * from './customer-onboarding';
 export * from './security-governance';
+export * from './suggestions';
