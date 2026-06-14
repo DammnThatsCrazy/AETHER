@@ -11,7 +11,7 @@ source_files:
 canonical_owner: backend@aether
 estimated_read_minutes: 60
 toc_depth: 3
-last_synced_commit: 7b41c58
+last_synced_commit: 43ebbc5
 
 ---
 # Aether Backend API v8.9.0 — Endpoint Specification
@@ -794,6 +794,21 @@ Three service groups are available when Intelligence Graph feature flags are ena
 | GET | `/v1/x402/graph` | Economic graph snapshot |
 | GET | `/v1/x402/agent/{id}` | Agent x402 history |
 | POST | `/v1/x402/graph/snapshot` | Trigger graph snapshot rebuild |
+
+### Approvals Control Plane (`/v1/approvals`)
+
+Kyber operator review queue for the x402 commerce control plane. All endpoints require `approvals:read` (GET) or `approvals:write` / `commerce:approve` (POST).
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/v1/approvals` | List approval queue — filterable by `status`, `assigned_to` |
+| GET | `/v1/approvals/{id}` | Get single approval request with full audit trail |
+| POST | `/v1/approvals/{id}/assign` | Assign approval to a reviewer (`assignee_id`, `assigned_by`) |
+| POST | `/v1/approvals/{id}/decide` | Apply decision: `approve`, `reject`, or `escalate` with `reason` and optional `is_override` |
+| POST | `/v1/approvals/{id}/escalate` | Shorthand escalate — calls decide with `action=escalate` |
+| POST | `/v1/approvals/{id}/revoke` | Revoke a previously approved request (`revoked_by`, `reason`) |
+| GET | `/v1/approvals/{id}/evidence` | Evidence bundle: approval audit trail, policy decisions, graph impact |
+| GET | `/v1/approvals/{id}/preview` | Deterministic preview of graph mutations if approved (read-only, no side effects) |
 
 ### Agent Extensions (added to /v1/agent/)
 
