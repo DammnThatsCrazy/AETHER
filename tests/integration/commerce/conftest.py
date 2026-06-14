@@ -25,21 +25,39 @@ RECIPIENT_WALLET = "0xfeedfeedfeedfeedfeedfeedfeedfeedfeedfeed"
 RESOURCE_ID = "res-int-001"
 
 
-@pytest.fixture(autouse=True)
-def reset_all_stores():
+def _reset_all():
+    import services.x402.approvals as _approvals_mod
+    import services.x402.entitlements as _entitlements_mod
+    import services.x402.facilitators as _facilitators_mod
+    import services.x402.policies as _policies_mod
     import services.x402.resources as _res_mod
+    import services.x402.settlement as _settlement_mod
+    import services.x402.verification as _verification_mod
     from repositories.repos import reset_in_memory_stores
     from services.x402.commerce_store import reset_commerce_store
+    from services.x402.control_plane import reset_control_plane
     from services.x402.idempotency import reset_idempotency_store
+
     reset_in_memory_stores()
     reset_commerce_store()
     reset_idempotency_store()
+    reset_control_plane()
+    # Null out service singletons so they re-bind to the new store on next use.
     _res_mod._registry = None
+    _approvals_mod._service = None
+    _policies_mod._engine = None
+    _settlement_mod._tracker = None
+    _entitlements_mod._service = None
+    _facilitators_mod._facilitator_registry = None
+    _facilitators_mod._asset_registry = None
+    _verification_mod._engine = None
+
+
+@pytest.fixture(autouse=True)
+def reset_all_stores():
+    _reset_all()
     yield
-    reset_in_memory_stores()
-    reset_commerce_store()
-    reset_idempotency_store()
-    _res_mod._registry = None
+    _reset_all()
 
 
 @pytest_asyncio.fixture
