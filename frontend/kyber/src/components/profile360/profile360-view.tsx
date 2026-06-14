@@ -67,7 +67,7 @@ export function Profile360View({ type, id, onBack }: Profile360ViewProps) {
   const navigate = useNavigate();
   const [activeView, setActiveView] = useState<Profile360ViewId | 'social'>('identity');
   const [timeWindow, setTimeWindow] = useState<TimeWindow>('30d');
-  const { entity, sections, timeline, graph, highlightedNodeIds, isLoading, error, websocketStatus, actions } = useProfile360(type, id);
+  const { entity, sections, timeline, graph, highlightedNodeIds, isLoading, error, websocketStatus, actions } = useProfile360(type, id, timeWindow);
 
   const onDrill = useCallback((reference: Profile360Reference) => {
     actions.pushDrill(reference);
