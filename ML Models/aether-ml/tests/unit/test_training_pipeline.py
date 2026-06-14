@@ -211,3 +211,37 @@ class TestArtifactLoadability:
         # Must have all registry-required fields
         for field in REQUIRED_METADATA_FIELDS:
             assert field in meta, f"Missing: {field}"
+
+    def test_baseline_joblib_saved(self, tmp_path: Path):
+        import joblib
+        import pandas as pd
+
+        result = _train_model("intent_prediction", tmp_path)
+        artifact_path = Path(result["artifact_path"])
+        baseline_path = artifact_path / "baseline.joblib"
+
+        assert baseline_path.exists(), "baseline.joblib not found — drift baseline was not saved"
+        df = joblib.load(baseline_path)
+        assert isinstance(df, pd.DataFrame)
+        assert len(df) > 0
+
+    def test_baseline_meta_saved(self, tmp_path: Path):
+        result = _train_model("bot_detection", tmp_path)
+        artifact_path = Path(result["artifact_path"])
+        meta_path = artifact_path / "baseline_meta.json"
+
+        assert meta_path.exists(), "baseline_meta.json not found"
+        meta = json.loads(meta_path.read_text())
+        assert "model_id" in meta
+        assert "n_samples" in meta
+        assert "numeric_features" in meta
+        assert "categorical_features" in meta
+        assert "saved_at" in meta
+
+    def test_baseline_sample_size_capped_at_1000(self, tmp_path: Path):
+        import joblib
+
+        result = _train_model("session_scorer", tmp_path)
+        artifact_path = Path(result["artifact_path"])
+        df = joblib.load(artifact_path / "baseline.joblib")
+        assert len(df) <= 1000

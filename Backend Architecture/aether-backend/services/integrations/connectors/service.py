@@ -209,10 +209,26 @@ class ConnectorService:
             return SyncResult(connector_type=connector_type, status=status,  # type: ignore[arg-type]
                               events_ingested=0, detail=error_detail or "pull failed")
         import os
+        import uuid as _uuid
+        from repositories.lake import bronze_connectors
+        ingested = 0
+        for event in events:
+            try:
+                _, is_new = await bronze_connectors.ingest(
+                    source=connector_type,
+                    source_tag=f"connector:{connector_type}:{tenant_id}",
+                    provider_record_id=event.external_id or str(_uuid.uuid4()),
+                    payload={**event.model_dump(), "tenant_id": tenant_id},
+                    tenant_id=tenant_id,
+                )
+                if is_new:
+                    ingested += 1
+            except Exception as exc:  # pragma: no cover - best-effort, never break sync
+                logger.warning(f"connector bronze ingest failed tenant={tenant_id} type={connector_type}: {exc}")
         mode = os.getenv("AETHER_ENV", "local").lower()
         detail = f"live sync ({connector_type})" if mode != "local" else f"local mode — no external API call ({connector_type})"
         return SyncResult(connector_type=connector_type, status=status,  # type: ignore[arg-type]
-                          events_ingested=len(events), events=events,
+                          events_ingested=ingested, events=events,
                           detail=detail)
 
     async def ingest_webhook(self, connector_type: str, tenant_id: str, *, raw_body: bytes,

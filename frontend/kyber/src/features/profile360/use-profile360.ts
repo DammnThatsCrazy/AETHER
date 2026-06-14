@@ -497,7 +497,7 @@ function buildSections(entity: Entity, raw: Record<string, unknown>): Profile360
   };
 }
 
-async function fetchProfile360(type: Profile360EntityType, id: string): Promise<Profile360Payload> {
+async function fetchProfile360(type: Profile360EntityType, id: string, window = '30d'): Promise<Profile360Payload> {
   if (isLocalMocked()) {
     const mock = getMockEntity(id) ?? getMockEntity('cust-acme-001')!;
     const neighborhood = getMockEntityNeighborhood(mock.id);
@@ -524,7 +524,7 @@ async function fetchProfile360(type: Profile360EntityType, id: string): Promise<
     api.profile.devices(id).catch(() => ({})),
     api.profile.journeys(id).catch(() => ({})),
     api.profile.wallets(id).catch(() => ({})),
-    api.attribution.journey(id).catch(() => ({})),
+    api.profile.attribution(id, window).catch(() => api.attribution.journey(id)).catch(() => ({})),
     api.behavioral.signals(id).catch(() => ({ signals: [] })),
     api.profile.cluster(id).catch(() => ({})),
     api.profile.clusters(id).catch(() => ({ items: [] })),
@@ -581,7 +581,7 @@ async function fetchProfile360(type: Profile360EntityType, id: string): Promise<
   };
 }
 
-export function useProfile360(type: Profile360EntityType, id: string) {
+export function useProfile360(type: Profile360EntityType, id: string, window = '30d') {
   const payload = useProfile360Store((state) => state.payloads[id]);
   const timeline = useProfile360Store((state) => state.timelines[id]);
   const graph = useProfile360Store((state) => state.graphs[id]);
@@ -594,7 +594,7 @@ export function useProfile360(type: Profile360EntityType, id: string) {
     let cancelled = false;
     setIsLoading(!profile360Store.getState().payloads[id]);
     setError(null);
-    fetchProfile360(type, id)
+    fetchProfile360(type, id, window)
       .then((nextPayload) => {
         if (!cancelled) profile360Actions.upsertPayload(nextPayload);
       })
@@ -605,7 +605,7 @@ export function useProfile360(type: Profile360EntityType, id: string) {
         if (!cancelled) setIsLoading(false);
       });
     return () => { cancelled = true; };
-  }, [type, id]);
+  }, [type, id, window]);
 
   const ws = useWebSocket({
     path: id ? `/v1/realtime/ws?entity_id=${id}` : '',

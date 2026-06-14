@@ -217,7 +217,7 @@ All bugs fixed:
 
 Prometheus metrics and alerts exist in `monitoring/monitor.py` and `monitoring/alerts.py`. Integration with the serving API is via the `defense_metrics` endpoint.
 
-Remaining: dedicated per-model drift detection, per-model data freshness SLA tracking, and Kyber admin dashboard hooks are partially implemented (see Section 9 below).
+Drift detection is now fully wired: training saves a `baseline.joblib` sample (up to 1 000 rows) per model; serving maintains per-model prediction buffers (deque, max 500); a background task runs PSI/KS/JS divergence checks every 300 s via `MonitoringPipeline`; results are exposed at `GET /v1/monitoring/drift`. Per-model data freshness SLA tracking is live at `GET /v1/monitoring/freshness`. Kyber admin dashboard hooks are live at `/v1/admin/kyber/ml/`.
 
 ---
 
@@ -245,7 +245,7 @@ Backend admin routes for ML operational state are defined in:
 | MLflow tracking | Available, fails gracefully if unreachable | Infra | 🔧 |
 | S3 artifact store | Requires AWS credentials | Infra | 🔧 |
 | Redis feature store | Requires Redis instance | Infra | 🔧 |
-| Drift detection | Framework exists, per-model baselines needed | Medium | ⚠️ |
+| Drift detection | Baselines saved at training; buffer + `/v1/monitoring/drift` endpoint live | Medium | ✅ |
 | CI for ML registry drift | `validate_ml_registry.py` gate added to CI | Medium | ✅ |
 | Freshness SLA monitoring | `DataFreshnessSLATracker` wired into serving | Medium | ✅ |
 
