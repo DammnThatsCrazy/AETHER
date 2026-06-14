@@ -1089,26 +1089,52 @@ async def operator_agentic_overview(request: Request):
     behavior_profiles = await _op_behavior_profiles.find_many(limit=_LIMIT)
     intents = await _op_payment_intents.find_many(limit=_LIMIT)
     settlements = await _op_settlements.find_many(limit=_LIMIT)
+    delegations = await _op_delegations.find_many(limit=_LIMIT)
 
+    agent_ids = {a.get("agent_id") for a in agents if a.get("agent_id")}
     tenant_ids = {a.get("tenant_id") for a in agents if a.get("tenant_id")}
     settled_count = sum(1 for s in settlements if s.get("status") in {"settled", "paid", "success"})
     failed_count = sum(1 for s in settlements if s.get("status") in {"failed"})
     timeout_count = sum(1 for s in settlements if s.get("status") == "timeout")
+    abandoned_count = sum(1 for i in intents if i.get("abandoned_reason"))
     total = len(settlements)
+
+    # Subagent count: delegations where grantee is a known agent
+    subagent_count = sum(1 for d in delegations if d.get("grantee_entity_id") in agent_ids and not d.get("revoked_at"))
 
     # High-risk: agents whose behavior_profile risk_score > 0.7
     high_risk = sum(1 for bp in behavior_profiles if float((bp.get("risk_score") or 0)) > 0.7)
 
+    # Top protocols, providers, capabilities from intents
+    protocol_counts: Counter = Counter(i.get("protocol", "") for i in intents if i.get("protocol"))
+    provider_counts: Counter = Counter(i.get("provider", "") for i in intents if i.get("provider"))
+    capability_counts: Counter = Counter(i.get("capability_requested", "") for i in intents if i.get("capability_requested"))
+
+    # Recent failures (last 10)
+    recent_failures = sorted(
+        [s for s in settlements if s.get("status") in {"failed", "timeout"}],
+        key=lambda s: s.get("occurred_at", ""),
+        reverse=True,
+    )[:10]
+
     return APIResponse(data={
         "tenant_count": len(tenant_ids),
         "active_agent_count": len(agents),
+        "active_subagent_count": subagent_count,
         "x402_flow_count": len(intents),
         "payment_intent_count": len(intents),
         "settlement_event_count": total,
         "settlement_success_rate": round(settled_count / total, 4) if total else 0.0,
         "failed_settlement_count": failed_count,
         "timeout_count": timeout_count,
+        "abandoned_payment_count": abandoned_count,
+        "authorization_violation_count": 0,
+        "spend_limit_violation_count": 0,
         "high_risk_agent_count": high_risk,
+        "top_protocols": [{"id": k, "count": v} for k, v in protocol_counts.most_common(10)],
+        "top_providers": [{"id": k, "count": v} for k, v in provider_counts.most_common(10)],
+        "top_capabilities": [{"id": k, "count": v} for k, v in capability_counts.most_common(10)],
+        "recent_failures": recent_failures,
     }).to_dict()
 
 
@@ -1238,3 +1264,84 @@ async def operator_agentic_anomalies(request: Request):
             })
 
     return APIResponse(data={"anomalies": anomalies, "count": len(anomalies)}).to_dict()
+
+
+@router.get("/operator/agentic/agents/{agent_id}")
+async def operator_agentic_agent_detail(agent_id: str, request: Request):
+    """Single agent detail across all tenants."""
+    _require_kyber_operator(request)
+    config = await _op_agent_configs.find_by_id(agent_id)
+    if config is None:
+        raise NotFoundError("Agent")
+    behavior = await _op_behavior_profiles.find_by_id(agent_id)
+    intents = await _op_payment_intents.find_many(filters={"agent_id": agent_id}, limit=100)
+    settlements = await _op_settlements.find_many(filters={"agent_id": agent_id}, limit=100)
+    delegations_received = await _op_delegations.find_many(
+        filters={"grantee_entity_id": agent_id}, limit=100
+    )
+    return APIResponse(data={
+        "agent_id": agent_id,
+        "config": config,
+        "behavior_profile": behavior,
+        "payment_intent_count": len(intents),
+        "settlement_count": len(settlements),
+        "delegation_count": len(delegations_received),
+        "recent_intents": intents[:10],
+        "recent_settlements": settlements[:10],
+    }).to_dict()
+
+
+@router.get("/operator/agentic/authorization-violations")
+async def operator_agentic_authorization_violations(request: Request):
+    """Delegations or authorization events that exceeded their scope (rule-based)."""
+    _require_kyber_operator(request)
+    delegations = await _op_delegations.find_many(limit=_LIMIT)
+    # Flag delegations that were revoked (potential scope violation signal)
+    revoked = [d for d in delegations if d.get("revoked_at")]
+    return APIResponse(data={
+        "violations": revoked,
+        "count": len(revoked),
+        "note": "Shows revoked delegations as an authorization violation signal.",
+    }).to_dict()
+
+
+@router.get("/operator/agentic/spend-limits")
+async def operator_agentic_spend_limits(request: Request):
+    """Agents near or over estimated spend thresholds."""
+    _require_kyber_operator(request)
+    intents = await _op_payment_intents.find_many(limit=_LIMIT)
+    spend_by_agent: dict[str, float] = defaultdict(float)
+    for i in intents:
+        agent_id = i.get("agent_id", "")
+        try:
+            spend_by_agent[agent_id] += float(i.get("amount") or 0)
+        except (TypeError, ValueError):
+            pass
+    spend_values = list(spend_by_agent.values())
+    avg = sum(spend_values) / len(spend_values) if spend_values else 0.0
+    over_limit = [
+        {"agent_id": aid, "total_spend": spend, "ratio_vs_avg": round(spend / avg, 2) if avg else None}
+        for aid, spend in spend_by_agent.items()
+        if avg > 0 and spend > avg * 3
+    ]
+    return APIResponse(data={"over_limit": over_limit, "count": len(over_limit), "avg_spend": avg}).to_dict()
+
+
+@router.get("/operator/agentic/trust")
+async def operator_agentic_trust(request: Request):
+    """Trust score overview for agents across all tenants."""
+    _require_kyber_operator(request)
+    profiles = await _op_behavior_profiles.find_many(limit=_LIMIT)
+    rows = [
+        {
+            "agent_id": p.get("entity_id") or p.get("agent_id"),
+            "tenant_id": p.get("tenant_id"),
+            "trust_score": p.get("trust_score"),
+            "risk_score": p.get("risk_score"),
+            "anomaly_score": p.get("anomaly_score"),
+        }
+        for p in profiles
+        if p.get("entity_id") or p.get("agent_id")
+    ]
+    rows.sort(key=lambda r: float(r.get("risk_score") or 0), reverse=True)
+    return APIResponse(data={"trust_profiles": rows, "count": len(rows)}).to_dict()

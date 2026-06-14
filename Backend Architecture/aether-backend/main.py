@@ -107,14 +107,43 @@ Routes:
     POST /v1/attribution/touchpoints    Record touchpoint
     GET  /v1/attribution/journey/{id}   User journey
     GET  /v1/attribution/models         List attribution models
-    POST /v1/rewards/evaluate           Evaluate reward eligibility
-    POST /v1/rewards/campaigns          Create reward campaign
-    GET  /v1/rewards/campaigns          List reward campaigns
-    GET  /v1/rewards/campaigns/{id}     Get campaign details
-    GET  /v1/rewards/queue/stats        Reward queue stats
-    GET  /v1/rewards/user/{address}     User reward history
-    POST /v1/rewards/process            Process reward queue
-    GET  /v1/rewards/proof/{id}         Get reward proof
+    POST /v1/rewards/evaluate               Evaluate reward eligibility (A6)
+    POST /v1/rewards/evaluate/batch         Batch evaluate (max 50)
+    GET  /v1/rewards/decisions              List eligibility decisions
+    GET  /v1/rewards/decisions/{id}         Get decision
+    POST /v1/rewards/campaigns              Create reward campaign
+    GET  /v1/rewards/campaigns              List reward campaigns
+    GET  /v1/rewards/campaigns/{id}         Get campaign
+    PATCH /v1/rewards/campaigns/{id}        Update campaign
+    POST /v1/rewards/campaigns/{id}/pause   Pause campaign
+    POST /v1/rewards/campaigns/{id}/resume  Resume campaign
+    POST /v1/rewards/campaigns/{id}/archive Archive campaign
+    POST /v1/rewards/campaigns/{id}/rules   Add rule to campaign
+    GET  /v1/rewards/campaigns/{id}/rules   List rules in campaign
+    GET  /v1/rewards/rules/{id}             Get rule
+    PATCH /v1/rewards/rules/{id}            Update rule
+    POST /v1/rewards/rules/{id}/enable      Enable rule
+    POST /v1/rewards/rules/{id}/disable     Disable rule
+    GET  /v1/rewards/actions                List action payloads
+    GET  /v1/rewards/actions/{id}           Get action payload
+    POST /v1/rewards/actions/{id}/approve   Approve pending action
+    POST /v1/rewards/actions/{id}/reject    Reject pending action
+    POST /v1/rewards/actions/{id}/deliver   Deliver action payload
+    POST /v1/rewards/actions/{id}/cancel    Cancel action
+    GET  /v1/rewards/proofs                 List on-chain proofs
+    GET  /v1/rewards/proofs/{id}            Get proof
+    POST /v1/rewards/proofs/{id}/revoke     Revoke proof
+    POST /v1/rewards/proofs/verify          Verify proof
+    POST /v1/rewards/receipts               Record execution receipt
+    GET  /v1/rewards/receipts               List receipts
+    GET  /v1/rewards/receipts/{id}          Get receipt
+    POST /v1/rewards/rails                  Configure delivery rail
+    GET  /v1/rewards/rails                  List configured rails
+    GET  /v1/rewards/rails/{id}             Get rail config
+    PATCH /v1/rewards/rails/{id}            Update rail config
+    POST /v1/rewards/rails/{id}/verify      Verify rail config
+    POST /v1/rewards/rails/{id}/disable     Disable rail
+    GET  /v1/rewards/queue/stats            Legacy queue stats
     POST /v1/oracle/proof/generate      Generate proof (internal)
     POST /v1/oracle/proof/verify        Verify proof
     GET  /v1/oracle/signer              Oracle signer info
@@ -169,6 +198,7 @@ from services.ingestion.batch import router as batch_router
 from services.identity.routes import router as identity_router
 from services.analytics.routes import router as analytics_router
 from services.ml_serving.routes import router as ml_router
+from services.ml_serving.kyber_ml_admin import router as kyber_ml_admin_router
 from services.campaign.routes import router as campaign_router
 from services.economic.routes import router as economic_router
 from services.consent.routes import router as consent_router
@@ -419,6 +449,7 @@ def create_app() -> FastAPI:
     app.include_router(identity_router)
     app.include_router(analytics_router)
     app.include_router(ml_router)
+    app.include_router(kyber_ml_admin_router)  # Kyber ML command center admin hooks
     app.include_router(campaign_router)
     app.include_router(economic_router)
     app.include_router(consent_router)

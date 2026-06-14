@@ -13,7 +13,7 @@ source_files:
 canonical_owner: sdk@aether
 estimated_read_minutes: 12
 toc_depth: 3
-last_synced_commit: 48fb9d4
+last_synced_commit: 1dbc6a7
 ---
 
 # Aether Web SDK v8.9.0 — Integration Guide
@@ -305,18 +305,31 @@ The SDK automatically captures on init:
 
 Classification (organic, paid, social, email, direct, etc.) happens server-side via `POST /v1/track/traffic-source` using the `SourceClassifier` — the SDK ships raw signals only.
 
-## Rewards
+## Rewards (A6 — Attribution-Verified Eligibility)
+
+The SDK emits reward lifecycle events as part of the no-custody reward enablement system.
+Aether verifies eligibility and produces reward action payloads; tenants execute rewards
+through their own configured rails.
 
 ```typescript
-// Check if user is eligible for a reward
-const eligible = await aether.rewards.checkEligibility('user-123', 'reward-abc');
-
-// Get pre-built claim payload (for on-chain submission)
-const payload = await aether.rewards.getClaimPayload('user-123', 'reward-abc');
-
-// Submit claim after on-chain transaction
-await aether.rewards.submitClaim(txHash, 'reward-abc');
+// Emit reward eligibility events (emitted automatically by the backend via reward_action_queued)
+// The SDK carries reward context in EventContext:
+aether.track('conversion', {
+  properties: { channel: 'organic', value: 49.99 },
+  context: {
+    rewardCampaignId: 'camp_uuid',
+    rewardIdempotencyKey: 'evt_session_123_conversion',
+    rewardWalletAddress: '0xf39Fd...',
+    attributionResultId: 'attr_abc',
+  },
+});
 ```
+
+Reward lifecycle event types emitted by the platform:
+- `reward_action_queued` — eligibility decision produced, action payload queued
+- `reward_proof_generated` — on-chain claim proof generated for `onchain_claim` rail
+- `reward_delivered` — tenant delivery confirmed (webhook receipt, approval, etc.)
+- `reward_claim_submitted` — tenant submitted on-chain claim tx
 
 ## Configuration Reference
 
@@ -420,23 +433,58 @@ All of the above are handled by the Aether backend.
 
 ## Intelligence Graph Event Types
 
-v8.0 adds 5 new event types for the Intelligence Graph:
+The SDK ships granular lifecycle emitters for agent activity and x402 payment flows, plus legacy aliases kept for backward compatibility.
 
-| Event Type | Description | Required Consent |
+### Agent lifecycle events (`agent` consent)
+
+| Emitter | Event type | Description |
 |---|---|---|
-| `agent_task` | An AI agent begins or completes a task | `agent` |
-| `agent_decision` | An AI agent makes an autonomous decision | `agent` |
-| `payment` | A fiat or crypto payment is recorded | `commerce` |
-| `x402_payment` | An HTTP 402-based micropayment is captured | `commerce` |
-| `contract_action` | A smart-contract interaction is observed | `web3` |
+| `aether.agent.registered(props)` | `agent_registered` | Agent registered with the platform |
+| `aether.agent.updated(props)` | `agent_updated` | Agent config/capabilities updated |
+| `aether.agent.authorized(props)` | `agent_authorized` | Delegation granted to agent |
+| `aether.agent.deauthorized(props)` | `agent_deauthorized` | Delegation revoked |
+| `aether.agent.capabilityGranted(props)` | `agent_capability_granted` | Specific capability granted |
+| `aether.agent.capabilityRevoked(props)` | `agent_capability_revoked` | Specific capability revoked |
+| `aether.agent.taskCreated(props)` | `agent_task_created` | New task created for agent |
+| `aether.agent.taskDecomposed(props)` | `agent_task_decomposed` | Task split into subtasks |
+| `aether.agent.taskStarted(props)` | `agent_task_started` | Task execution began |
+| `aether.agent.taskCompleted(props)` | `agent_task_completed` | Task finished successfully |
+| `aether.agent.taskFailed(props)` | `agent_task_failed` | Task finished with error |
+| `aether.agent.toolCalled(props)` | `agent_tool_called` | Agent invoked an external tool |
+| `aether.agent.resourceRequested(props)` | `agent_resource_requested` | Agent requested a resource |
+| `aether.agent.delegatedTask(props)` | `agent_delegated_task` | Task delegated to another agent |
+| `aether.agent.subagentSpawned(props)` | `agent_subagent_spawned` | Child agent created |
+| `aether.agent.policyEvaluated(props)` | `agent_policy_evaluated` | Policy check executed |
+| `aether.agent.handoff(props)` | `agent_handoff` | Control handed to another agent/session |
+| `aether.agent.escalatedToHuman(props)` | `agent_escalated_to_human` | Agent escalated to human review |
+| `aether.agent.outcomeRecorded(props)` | `agent_outcome_recorded` | Final agent outcome captured |
 
-Two new consent purposes are available alongside the existing `analytics`, `marketing`, and `web3` purposes:
-- **`agent`** — governs tracking of AI-agent activity (`agent_task`, `agent_decision`)
-- **`commerce`** — governs tracking of payment events (`payment`, `x402_payment`)
+Legacy aliases (backward compatible): `aether.agent.task()` → `agent_task`, `aether.agent.decision()` → `agent_decision`, `aether.agent.interaction()` → `a2h_interaction`.
 
-The SDK routes events through a `CONSENT_MAP`:
-- `agent_task` / `agent_decision` → `'agent'`
-- `payment` / `x402_payment` → `'commerce'`
-- `contract_action` → `'web3'`
+### x402 payment lifecycle events (`commerce` consent)
 
-These events are only tracked when the corresponding consent purpose is granted. If the user has not consented to the mapped purpose, the event is silently dropped at flush time, consistent with all other consent-gated event types.
+| Emitter | Event type | Description |
+|---|---|---|
+| `aether.x402.resourceRequested(props)` | `x402_resource_requested` | Resource behind x402 paywall requested |
+| `aether.x402.paymentRequired(props)` | `x402_payment_required` | Server returned HTTP 402 |
+| `aether.x402.quoteReceived(props)` | `x402_quote_received` | Payment quote received from facilitator |
+| `aether.x402.authorizationRequested(props)` | `x402_authorization_requested` | Authorization from owner requested |
+| `aether.x402.authorizationResolved(props)` | `x402_authorization_resolved` | Authorization approved or denied |
+| `aether.x402.paymentIntentCreated(props)` | `x402_payment_intent_created` | Payment intent record created |
+| `aether.x402.paymentSubmitted(props)` | `x402_payment_submitted` | Payment submitted on-chain or via rail |
+| `aether.x402.paymentSettled(props)` | `x402_payment_settled` | Payment confirmed settled (terminal) |
+| `aether.x402.paymentFailed(props)` | `x402_payment_failed` | Payment failed (terminal) |
+| `aether.x402.paymentTimeout(props)` | `x402_payment_timeout` | Payment timed out (terminal) |
+| `aether.x402.receiptVerified(props)` | `x402_receipt_verified` | Receipt verified by service |
+| `aether.x402.accessGranted(props)` | `x402_access_granted` | Access to resource granted |
+| `aether.x402.accessDenied(props)` | `x402_access_denied` | Access to resource denied |
+| `aether.x402.refundOrReversal(props)` | `x402_refund_or_reversal` | Refund or on-chain reversal processed |
+
+Legacy alias: `aether.x402.payment()` → `x402_payment`.
+
+### Consent mapping
+
+All events are silently dropped at flush time if the required consent purpose is not granted:
+- Agent lifecycle events → `agent` consent required
+- x402 lifecycle events → `commerce` consent required
+- `contract_action` → `web3` consent required

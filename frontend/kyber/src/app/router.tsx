@@ -34,6 +34,8 @@ const ConnectorsPage = lazy(() => import('@kyber/pages/connectors').then(m => ({
 const DuneFeederPage = lazy(() => import('@kyber/pages/dune-feeder').then(m => ({ default: m.DuneFeederPage })));
 const RevenueOperationsPage = lazy(() => import('@kyber/pages/revenue-operations').then(m => ({ default: m.RevenueOperationsPage })));
 const JourneyHealthPage = lazy(() => import('@kyber/pages/journey-health').then(m => ({ default: m.JourneyHealthPage })));
+const RewardsHealthPage = lazy(() => import('@kyber/pages/rewards').then(m => ({ default: m.RewardsHealthPage })));
+const RewardsDrilldownPage = lazy(() => import('@kyber/pages/rewards').then(m => ({ default: m.RewardsDrilldownPage })));
 
 function PageSuspense({ children }: { readonly children: React.ReactNode }) {
   return (
@@ -95,6 +97,8 @@ export function AppRouter() {
                 <Route path="/roi-calculators" element={<PageSuspense><ROICalculatorsPage /></PageSuspense>} />
                 <Route path="/sales-readiness" element={<PageSuspense><SalesReadinessPage /></PageSuspense>} />
                 <Route path="/security" element={<PageSuspense><SecurityPage /></PageSuspense>} />
+                <Route path="/rewards" element={<PageSuspense><RewardsHealthPage /></PageSuspense>} />
+                <Route path="/rewards/:tenantId" element={<PageSuspense><RewardsDrilldownPage /></PageSuspense>} />
                 <Route path="*" element={<Navigate to="/mission" replace />} />
               </Routes>
             </AppShell>

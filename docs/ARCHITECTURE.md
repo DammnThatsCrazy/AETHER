@@ -13,7 +13,7 @@ source_files:
 canonical_owner: platform@aether
 estimated_read_minutes: 20
 toc_depth: 3
-last_synced_commit: 48fb9d4
+last_synced_commit: 1dbc6a7
 ---
 # Aether vNext — Architecture Guide
 
@@ -276,9 +276,14 @@ Resolution Consumer (real-time)
 | `/v1/chains/{id}` | GET | Chain metadata on demand |
 | `/v1/protocols/{addr}` | GET | Protocol identification |
 | `/v1/predict` | POST | ML inference (9 models: intent, bot, session, identity, journey, churn, LTV, anomaly, attribution) |
-| `/v1/rewards/{id}/eligibility` | GET | Reward eligibility check |
-| `/v1/rewards/{id}/payload` | GET | Pre-built claim transaction |
-| `/v1/rewards/{id}/claim` | POST | Submit on-chain claim |
+| `/v1/rewards/evaluate` | POST | Evaluate reward eligibility (A6 no-custody) |
+| `/v1/rewards/evaluate/batch` | POST | Batch eligibility evaluation (max 50) |
+| `/v1/rewards/campaigns` | POST/GET | Campaign management |
+| `/v1/rewards/campaigns/{id}/rules` | POST/GET | Rule management |
+| `/v1/rewards/decisions` | GET | Eligibility decision log |
+| `/v1/rewards/actions` | GET | Action payload queue |
+| `/v1/rewards/proofs` | GET | On-chain claim proofs |
+| `/v1/rewards/rails` | POST/GET | Tenant delivery rail config |
 | `/v1/classify-source` | POST | Traffic source classification |
 | `/v1/wallet-label/{addr}` | GET | Wallet risk + label |
 | `/v1/resolution/cluster/{user_id}` | GET | Identity cluster for a user |

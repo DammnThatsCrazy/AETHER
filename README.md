@@ -250,23 +250,38 @@ hs = transitionHandshake(hs, 'paid'); // pending → paid
 
 End-to-end examples (campaign spend → revenue, agent paying API, A2A transfer) live in [`docs/examples/economic/`](docs/examples/economic/).
 
-## ML Models (11)
+## ML Intelligence Outputs (11)
 
-| Model | Type | Status |
-|-------|------|--------|
-| Intent Prediction | LogisticRegression | Training pipeline ready |
-| Bot Detection | RandomForest | Training pipeline ready |
-| Session Scoring | LogisticRegression | Training pipeline ready |
-| Identity Resolution | Binary classification | Training pipeline ready |
-| Journey Prediction | Multi-class | Training pipeline ready |
-| Churn Prediction | XGBoost | Training pipeline ready |
-| LTV Prediction | XGBoost | Training pipeline ready |
-| Anomaly Detection | IsolationForest | Training pipeline ready |
-| Campaign Attribution | Multi-touch | Training pipeline ready |
-| Bytecode Risk | Rule-based | Active |
-| Trust Score | Composite (weighted ML outputs) | Active |
+Aether produces 11 intelligence outputs: **9 trainable ML models** and **2 deterministic/composite outputs** (no training required).
 
-Model artifacts require training run before serving. See `docs/ML-TRAINING-GUIDE.md`.
+### Trainable ML Models (9)
+
+| Model ID | Algorithm | Canonical Serving Endpoint |
+|----------|-----------|---------------------------|
+| `intent_prediction` | LogisticRegression | `/v1/predict/intent` |
+| `bot_detection` | RandomForest | `/v1/predict/bot` |
+| `session_scorer` | LogisticRegression | `/v1/predict/session-score` |
+| `identity_resolution` | GradientBoosting | `/v1/predict/identity` |
+| `journey_prediction` | Multi-class (LogisticRegression) | `/v1/predict/journey` |
+| `churn_prediction` | GradientBoosting | `/v1/predict/churn` |
+| `ltv_prediction` | GradientBoosting | `/v1/predict/ltv` |
+| `anomaly_detection` | IsolationForest | `/v1/predict/anomaly` |
+| `campaign_attribution` | Multi-touch (LogisticRegression) | `/v1/predict/attribution` |
+
+All 9 models are trained via `ML Models/aether-ml/training/pipelines/train.py`. Artifacts
+must be trained before serving. Stub models are available in `AETHER_ENV=local` only.
+
+### Deterministic / Composite Outputs (2)
+
+| Output | Type | Source |
+|--------|------|--------|
+| `bytecode_risk` | Rule-based (deterministic) | Smart contract bytecode analysis |
+| `trust_score` | Composite (weighted ML outputs) | Aggregates above ML model scores |
+
+These are always available regardless of artifact state. `trust_score` degrades gracefully
+when ML models are unavailable.
+
+See `docs/ML-TRAINING-GUIDE.md` for training instructions and `docs/MODEL-EXTRACTION-DEFENSE.md` for security controls.
 
 ## Quick Start
 
