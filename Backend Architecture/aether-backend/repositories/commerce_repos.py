@@ -404,3 +404,40 @@ class FacilitatorsRepository(BaseRepository):
         record["updated_at"] = utc_now().isoformat()
         await self.insert(facilitator_id, record)
         return record
+
+
+# ── Additional repositories (payment lifecycle objects) ───────────────────────
+
+class AssetsRepository(BaseRepository):
+    def __init__(self) -> None:
+        super().__init__("commerce_assets")
+
+
+class AuthorizationsRepository(BaseRepository):
+    def __init__(self) -> None:
+        super().__init__("commerce_authorizations")
+
+
+class ReceiptsRepository(BaseRepository):
+    def __init__(self) -> None:
+        super().__init__("commerce_receipts")
+
+
+class AccessGrantsRepository(BaseRepository):
+    def __init__(self) -> None:
+        super().__init__("commerce_grants")
+
+
+class FulfillmentsRepository(BaseRepository):
+    def __init__(self) -> None:
+        super().__init__("commerce_fulfillments")
+
+
+class TreasuriesRepository(BaseRepository):
+    def __init__(self) -> None:
+        super().__init__("commerce_treasuries")
+
+
+class BudgetPoliciesRepository(BaseRepository):
+    def __init__(self) -> None:
+        super().__init__("commerce_budget_policies")
