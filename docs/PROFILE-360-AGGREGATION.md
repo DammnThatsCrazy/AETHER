@@ -13,7 +13,7 @@ source_files:
 canonical_owner: backend@aether
 estimated_read_minutes: 8
 toc_depth: 3
-last_synced_commit: c318952
+last_synced_commit: b75870c
 ---
 
 # Profile 360 Aggregation Layer
@@ -205,8 +205,11 @@ When no Gold data exists for an entity they return an empty `items` list — nev
 | GET    | `/v1/profile/{id}/protocol-metrics`               | Protocol TVL, volume, fee revenue (DAO/DEX entity types)    |
 | GET    | `/v1/profile/{id}/governance-activity`            | Governance proposals + votes (DAO/Protocol entity types)    |
 
-The `/web2` endpoint enforces `credit` consent via `ConsentRepository` before serving any
-TradFi or credit data.  Entities without consent receive `{"items": [], "summary": {"consent_required": true}}`.
+The `/web2` and `/economic/web2` endpoints enforce `credit` consent via a **hard gate** at
+the route layer: `require_consent(consent_repo, tenant_id, user_id, "credit")` is called
+before any data is fetched.  Callers without an active `credit` consent grant receive
+**HTTP 403** (`"Credit consent required for this resource"`).  This is a deliberate
+fail-closed gate — not a soft empty-envelope fallback.
 
 Gold-tier data is populated by external ETL pipelines (Moralis, CoinGecko, DeFiLlama, Snapshot,
 Plaid).  Until an ETL pipeline has run for a given entity, these endpoints return an empty items
