@@ -11,7 +11,7 @@ source_files:
 canonical_owner: backend@aether
 estimated_read_minutes: 60
 toc_depth: 3
-last_synced_commit: 5a5015d
+last_synced_commit: 4017534
 
 ---
 # Aether Backend API v8.9.0 — Endpoint Specification
@@ -2185,6 +2185,24 @@ Operator command center for ML model registry, artifact management, feature cont
 | GET | `/v1/admin/kyber/ml/predictions/summary` | Prediction volume, latency, error rate, top model usage |
 | GET | `/v1/admin/kyber/ml/security` | ML extraction defense status — watermark state, canary alerts, adversarial risk |
 | GET | `/v1/admin/kyber/ml/readiness` | Production readiness gate — registry coverage, drift gates, security gates |
+
+---
+
+## Dune Feeder Admin — Scheduled Polling (v8.9.0)
+
+Manage automated Dune query polling schedules per tenant. All endpoints require `admin` permission.
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| POST | `/v1/admin/dune-feeder/schedule` | Create a new scheduled Dune query polling config |
+| GET | `/v1/admin/dune-feeder/schedule` | List all schedules for the tenant |
+| GET | `/v1/admin/dune-feeder/schedule/{schedule_id}` | Get a single schedule config |
+| DELETE | `/v1/admin/dune-feeder/schedule/{schedule_id}` | Delete a schedule |
+| POST | `/v1/admin/dune-feeder/schedule/{schedule_id}/run` | Trigger an immediate manual run of a schedule |
+
+**Required fields for create:** `query_id`, `query_name`, `source_tag`, `domain`, `cron_expression`
+
+**Domains:** `onchain`, `governance`, `market`, `social`, `identity`, `tradfi`
 
 ### Channel Management (End-User Self-Service)
 
