@@ -10,7 +10,8 @@
     "commerce",
     "wallet",
     "agent",
-    "x402"
+    "x402",
+    "reward"
   ],
   "consent_purposes": [
     "agent",
@@ -325,6 +326,30 @@
       "family": "agent",
       "consent_purpose": "agent",
       "section_comment": "Agent lifecycle \u2014 granular events"
+    },
+    {
+      "name": "reward_action_queued",
+      "family": "reward",
+      "consent_purpose": "commerce",
+      "section_comment": "Reward enablement (A6) \u2014 eligibility events emitted by Aether, not the tenant"
+    },
+    {
+      "name": "reward_proof_generated",
+      "family": "reward",
+      "consent_purpose": "commerce",
+      "section_comment": "Reward enablement (A6) \u2014 eligibility events emitted by Aether, not the tenant"
+    },
+    {
+      "name": "reward_delivered",
+      "family": "reward",
+      "consent_purpose": "commerce",
+      "section_comment": "Reward enablement (A6) \u2014 eligibility events emitted by Aether, not the tenant"
+    },
+    {
+      "name": "reward_claim_submitted",
+      "family": "reward",
+      "consent_purpose": "commerce",
+      "section_comment": "Reward enablement (A6) \u2014 eligibility events emitted by Aether, not the tenant"
     },
     {
       "name": "x402_payment",

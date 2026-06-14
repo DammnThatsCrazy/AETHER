@@ -13,7 +13,7 @@ source_files:
 canonical_owner: sdk@aether
 estimated_read_minutes: 12
 toc_depth: 3
-last_synced_commit: c318952
+last_synced_commit: 1dbc6a7
 ---
 
 # Aether Web SDK v8.9.0 — Integration Guide
@@ -305,18 +305,31 @@ The SDK automatically captures on init:
 
 Classification (organic, paid, social, email, direct, etc.) happens server-side via `POST /v1/track/traffic-source` using the `SourceClassifier` — the SDK ships raw signals only.
 
-## Rewards
+## Rewards (A6 — Attribution-Verified Eligibility)
+
+The SDK emits reward lifecycle events as part of the no-custody reward enablement system.
+Aether verifies eligibility and produces reward action payloads; tenants execute rewards
+through their own configured rails.
 
 ```typescript
-// Check if user is eligible for a reward
-const eligible = await aether.rewards.checkEligibility('user-123', 'reward-abc');
-
-// Get pre-built claim payload (for on-chain submission)
-const payload = await aether.rewards.getClaimPayload('user-123', 'reward-abc');
-
-// Submit claim after on-chain transaction
-await aether.rewards.submitClaim(txHash, 'reward-abc');
+// Emit reward eligibility events (emitted automatically by the backend via reward_action_queued)
+// The SDK carries reward context in EventContext:
+aether.track('conversion', {
+  properties: { channel: 'organic', value: 49.99 },
+  context: {
+    rewardCampaignId: 'camp_uuid',
+    rewardIdempotencyKey: 'evt_session_123_conversion',
+    rewardWalletAddress: '0xf39Fd...',
+    attributionResultId: 'attr_abc',
+  },
+});
 ```
+
+Reward lifecycle event types emitted by the platform:
+- `reward_action_queued` — eligibility decision produced, action payload queued
+- `reward_proof_generated` — on-chain claim proof generated for `onchain_claim` rail
+- `reward_delivered` — tenant delivery confirmed (webhook receipt, approval, etc.)
+- `reward_claim_submitted` — tenant submitted on-chain claim tx
 
 ## Configuration Reference
 

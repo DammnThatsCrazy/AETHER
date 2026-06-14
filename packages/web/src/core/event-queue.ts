@@ -82,6 +82,9 @@ const CONSENT_MAP: Record<string, string> = {
   x402_payment_failed: 'commerce', x402_payment_timeout: 'commerce',
   x402_receipt_verified: 'commerce', x402_access_granted: 'commerce',
   x402_access_denied: 'commerce', x402_refund_or_reversal: 'commerce',
+  // reward enablement (A6)
+  reward_action_queued: 'commerce', reward_proof_generated: 'commerce',
+  reward_delivered: 'commerce', reward_claim_submitted: 'commerce',
 };
 
 function scrubSensitiveFields(props: Record<string, unknown>): Record<string, unknown> {
