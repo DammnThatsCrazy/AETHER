@@ -71,6 +71,11 @@ export type EventType =
   | 'agent_handoff'
   | 'agent_escalated_to_human'
   | 'agent_outcome_recorded'
+  // Reward enablement (A6) — eligibility events emitted by Aether, not the tenant
+  | 'reward_action_queued'
+  | 'reward_proof_generated'
+  | 'reward_delivered'
+  | 'reward_claim_submitted'
   // x402 (optional) — legacy alias kept for backward compatibility
   | 'x402_payment'
   // x402 lifecycle — granular events
@@ -97,7 +102,8 @@ export type EventFamily =
   | 'commerce'
   | 'wallet'
   | 'agent'
-  | 'x402';
+  | 'x402'
+  | 'reward';
 
 /** Map from each event type to the family it belongs to. */
 export const EVENT_FAMILY: Record<EventType, EventFamily> = {
@@ -124,6 +130,11 @@ export const EVENT_FAMILY: Record<EventType, EventFamily> = {
   agent_resource_requested: 'agent', agent_delegated_task: 'agent', agent_subagent_spawned: 'agent',
   agent_policy_evaluated: 'agent', agent_handoff: 'agent', agent_escalated_to_human: 'agent',
   agent_outcome_recorded: 'agent',
+  // reward enablement (A6)
+  reward_action_queued: 'reward',
+  reward_proof_generated: 'reward',
+  reward_delivered: 'reward',
+  reward_claim_submitted: 'reward',
   // x402 legacy
   x402_payment: 'x402',
   // x402 lifecycle
@@ -173,6 +184,9 @@ export const EVENT_CONSENT_PURPOSE: Record<EventType, string> = {
   x402_payment_failed: 'commerce', x402_payment_timeout: 'commerce',
   x402_receipt_verified: 'commerce', x402_access_granted: 'commerce',
   x402_access_denied: 'commerce', x402_refund_or_reversal: 'commerce',
+  // reward enablement (A6)
+  reward_action_queued: 'commerce', reward_proof_generated: 'commerce',
+  reward_delivered: 'commerce', reward_claim_submitted: 'commerce',
 };
 
 // ---------------------------------------------------------------------------
@@ -377,6 +391,22 @@ export interface EventContext {
 
   /** Impressions seen but not necessarily clicked (exposure-aware attribution). */
   impressions?: ImpressionRecord[];
+
+  // -- A6: reward enablement -------------------------------------------------
+  /** Campaign this event is attributed to for reward eligibility evaluation. */
+  rewardCampaignId?: string;
+  /** Rule within the campaign matched for this event. */
+  rewardRuleId?: string;
+  /** Idempotency key for the reward eligibility decision. */
+  rewardIdempotencyKey?: string;
+  /** Wallet address of the reward recipient (EVM or other VM). */
+  rewardWalletAddress?: string;
+  /** Attribution result ID from the attribution service. */
+  attributionResultId?: string;
+  /** Fraud decision ID from the fraud service. */
+  fraudDecisionId?: string;
+  /** Consent snapshot ID at the time of event. */
+  consentSnapshotId?: string;
 }
 
 /** The canonical event envelope every SDK emits. */
