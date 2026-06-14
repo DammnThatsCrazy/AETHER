@@ -33,17 +33,32 @@ def _tenant_matches(properties: dict[str, Any], tenant_id: str) -> bool:
 
 def _vertex_to_node(vertex: Any) -> dict:
     properties = dict(getattr(vertex, "properties", {}) or {})
-    return {
-        "id": getattr(vertex, "vertex_id", properties.get("id", "")),
-        "type": getattr(vertex, "vertex_type", properties.get("type", "external")),
-        "label": properties.get("display_name")
+    vertex_id = getattr(vertex, "vertex_id", properties.get("id", ""))
+    vertex_type = getattr(vertex, "vertex_type", properties.get("type", "external"))
+    display_label = (
+        properties.get("display_name")
         or properties.get("name")
         or properties.get("label")
-        or getattr(vertex, "vertex_id", ""),
+        or vertex_id
+    )
+    return {
+        "id": vertex_id,
+        "type": vertex_type,
+        "label": display_label,
         "trustScore": properties.get("trust_score"),
         "riskScore": properties.get("risk_score"),
         "anomalyScore": properties.get("anomaly_score"),
         "metadata": properties,
+        # Profile 360 preview fields — used by the frontend to open a preview
+        # card or full profile view directly from a graph node selection.
+        "profile_id": vertex_id,
+        "entity_type": vertex_type,
+        "display_label": display_label,
+        "profile_links": {
+            "summary": f"/v1/profile/{vertex_id}/summary",
+            "full": f"/v1/profile360/{vertex_type}/{vertex_id}",
+            "drill": None,
+        },
     }
 
 
@@ -214,9 +229,17 @@ class ProfileComposer:
         limited = scoped_neighbors[:limit]
         root_node = _vertex_to_node(root) if root else {
             "id": user_id,
-            "type": "User",
+            "type": "human",
             "label": user_id,
             "metadata": {"tenant_id": tenant_id},
+            "profile_id": user_id,
+            "entity_type": "human",
+            "display_label": user_id,
+            "profile_links": {
+                "summary": f"/v1/profile/{user_id}/summary",
+                "full": f"/v1/profile360/human/{user_id}",
+                "drill": None,
+            },
         }
         nodes = [root_node, *[_vertex_to_node(v) for v in limited]]
         edges = [
