@@ -5,13 +5,19 @@ Admin-only API endpoints for the governed Dune feeder.
 All routes require admin or operator role.
 
 Endpoints:
-    POST /v1/admin/dune-feeder/ingest              Land a Dune query result in Bronze
-    GET  /v1/admin/dune-feeder/health              Feeder health status
-    POST /v1/admin/dune-feeder/rollback            Rollback by source_tag
-    GET  /v1/admin/dune-feeder/audit/{tag}         Audit trail for a source_tag (tenant-scoped)
-    POST /v1/admin/dune-feeder/promote/{tag}       Promote Bronze to Silver
-    POST /v1/admin/dune-feeder/materialize-gold    Materialize Gold from Silver
-    GET  /v1/admin/dune-feeder/gold                List Gold records
+    POST /v1/admin/dune-feeder/ingest                    Land a Dune query result in Bronze
+    GET  /v1/admin/dune-feeder/health                    Feeder health status
+    POST /v1/admin/dune-feeder/rollback                  Rollback by source_tag
+    GET  /v1/admin/dune-feeder/audit/{tag}               Audit trail for a source_tag (tenant-scoped)
+    POST /v1/admin/dune-feeder/promote/{tag}             Promote Bronze to Silver
+    POST /v1/admin/dune-feeder/materialize-gold          Materialize Gold from Silver
+    GET  /v1/admin/dune-feeder/gold                      List Gold records
+
+    POST /v1/admin/dune-feeder/schedule                  Register a scheduled Dune query poll
+    GET  /v1/admin/dune-feeder/schedule                  List scheduled query configs
+    GET  /v1/admin/dune-feeder/schedule/{schedule_id}    Get one schedule config + run status
+    DELETE /v1/admin/dune-feeder/schedule/{schedule_id}  Delete a schedule
+    POST /v1/admin/dune-feeder/schedule/{schedule_id}/run  Trigger an immediate poll run
 """
 
 from __future__ import annotations
@@ -27,6 +33,7 @@ from services.dune_feeder.models import (
     FeederGoldMaterializeRequest,
     FeederIngestRequest,
     FeederRollbackRequest,
+    ScheduleCreateRequest,
 )
 from services.dune_feeder.service import dune_feeder_service
 
@@ -247,3 +254,108 @@ async def list_gold_records(
         "record_count": len(records),
         "records": records,
     }).to_dict()
+
+
+# ── Scheduled polling ─────────────────────────────────────────────────────────
+
+@router.post("/schedule")
+async def create_schedule(body: ScheduleCreateRequest, request: Request):
+    """
+    Register a new scheduled Dune query poll.
+
+    The worker will call the Dune API at the configured interval and feed results
+    through the freshness + quality gates into Bronze. Silver/Gold promotion
+    remains an explicit operator action.
+
+    Minimum interval: 300 seconds (5 minutes).
+    """
+    _require_admin(request)
+    from services.dune_feeder.scheduler import schedule_store
+
+    auth_scope = _authenticated_tenant_scope(request)
+    config = await schedule_store.create(body, tenant_scope=auth_scope)
+
+    metrics.increment("dune_scheduler_api_create", labels={"query_id": body.query_id})
+    return APIResponse(data=config.model_dump()).to_dict()
+
+
+@router.get("/schedule")
+async def list_schedules(request: Request):
+    """
+    List all registered scheduled query configs.
+
+    Platform admins (kyber:operator) see all tenants' schedules.
+    Tenant admins see only their own.
+    """
+    _require_admin(request)
+    from services.dune_feeder.scheduler import schedule_store
+
+    auth_scope = _authenticated_tenant_scope(request)
+    configs = await schedule_store.list_all(tenant_scope=auth_scope)
+
+    return APIResponse(data={
+        "schedule_count": len(configs),
+        "schedules": [c.model_dump() for c in configs],
+    }).to_dict()
+
+
+@router.get("/schedule/{schedule_id}")
+async def get_schedule(schedule_id: str, request: Request):
+    """Get a single scheduled query config including last run status."""
+    _require_admin(request)
+    from services.dune_feeder.scheduler import schedule_store
+
+    config = await schedule_store.get(schedule_id)
+    if config is None:
+        raise NotFoundError(f"schedule '{schedule_id}'")
+
+    # Tenant admins cannot read another tenant's schedule.
+    auth_scope = _authenticated_tenant_scope(request)
+    if auth_scope is not None and config.tenant_scope != auth_scope:
+        raise NotFoundError(f"schedule '{schedule_id}'")
+
+    return APIResponse(data=config.model_dump()).to_dict()
+
+
+@router.delete("/schedule/{schedule_id}")
+async def delete_schedule(schedule_id: str, request: Request):
+    """Remove a scheduled query. The worker will stop polling this query on its next tick."""
+    _require_admin(request)
+    from services.dune_feeder.scheduler import schedule_store
+
+    config = await schedule_store.get(schedule_id)
+    if config is None:
+        raise NotFoundError(f"schedule '{schedule_id}'")
+
+    # Tenant admins cannot delete another tenant's schedule.
+    auth_scope = _authenticated_tenant_scope(request)
+    if auth_scope is not None and config.tenant_scope != auth_scope:
+        raise NotFoundError(f"schedule '{schedule_id}'")
+
+    await schedule_store.delete(schedule_id)
+    metrics.increment("dune_scheduler_api_delete", labels={"query_id": config.query_id})
+    return APIResponse(data={"schedule_id": schedule_id, "deleted": True}).to_dict()
+
+
+@router.post("/schedule/{schedule_id}/run")
+async def trigger_schedule_run(schedule_id: str, request: Request):
+    """
+    Trigger an immediate poll for a scheduled query, bypassing the interval check.
+
+    Useful for testing a new schedule or forcing a refresh after source data changes.
+    The worker's regular cadence is unaffected.
+    """
+    _require_admin(request)
+    from services.dune_feeder.scheduler import _worker, schedule_store
+
+    config = await schedule_store.get(schedule_id)
+    if config is None:
+        raise NotFoundError(f"schedule '{schedule_id}'")
+
+    auth_scope = _authenticated_tenant_scope(request)
+    if auth_scope is not None and config.tenant_scope != auth_scope:
+        raise NotFoundError(f"schedule '{schedule_id}'")
+
+    summary = await _worker._run_one(config)
+    metrics.increment("dune_scheduler_api_trigger", labels={"query_id": config.query_id})
+    return APIResponse(data=summary.model_dump()).to_dict()

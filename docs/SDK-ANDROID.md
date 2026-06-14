@@ -13,7 +13,7 @@ source_files:
 canonical_owner: sdk@aether
 estimated_read_minutes: 10
 toc_depth: 3
-last_synced_commit: c318952
+last_synced_commit: 1dbc6a7
 ---
 
 # Aether Android SDK v8.9.0 — Integration Guide
@@ -301,3 +301,16 @@ When `errorTracking` is enabled, the SDK installs a global `Thread.UncaughtExcep
 - **Device fingerprint** is generated on each init (deterministic — same result for same device)
 - **Event queue** is in-memory only (flushed on background/termination)
 - **Server config** cached in memory (refreshed on each app launch)
+
+## Reward Event Types (A6)
+
+Four reward lifecycle events are supported via `Aether.track()`:
+
+| Event type | When to emit |
+|---|---|
+| `reward_action_queued` | When a reward action has been queued for the user |
+| `reward_proof_generated` | When an on-chain claim proof is ready for wallet submission |
+| `reward_delivered` | When the tenant system confirms reward delivery |
+| `reward_claim_submitted` | When the user submits a claim (on-chain or off-chain) |
+
+Emit using `Aether.track()` with `campaignId`, `ruleId`, and `rewardIdempotencyKey` in properties. These events flow through `POST /v1/batch` and are processed by the reward eligibility pipeline on the backend. The SDK does not evaluate eligibility — that is handled server-side by the Aether reward policy engine.

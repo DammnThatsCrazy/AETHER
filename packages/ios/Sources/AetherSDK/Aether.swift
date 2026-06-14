@@ -92,6 +92,8 @@ public enum AetherEventType: String, Codable, CaseIterable {
     case x402_payment_intent_created, x402_payment_submitted, x402_payment_settled
     case x402_payment_failed, x402_payment_timeout, x402_receipt_verified
     case x402_access_granted, x402_access_denied, x402_refund_or_reversal
+    // reward enablement (A6)
+    case reward_action_queued, reward_proof_generated, reward_delivered, reward_claim_submitted
 }
 
 public struct AetherEvent: Codable {
@@ -258,6 +260,9 @@ public final class Aether: NSObject {
         .x402_payment_failed: "commerce", .x402_payment_timeout: "commerce",
         .x402_receipt_verified: "commerce", .x402_access_granted: "commerce",
         .x402_access_denied: "commerce", .x402_refund_or_reversal: "commerce",
+        // reward enablement (A6)
+        .reward_action_queued: "commerce", .reward_proof_generated: "commerce",
+        .reward_delivered: "commerce", .reward_claim_submitted: "commerce",
         .wallet: "web3", .transaction: "web3", .contract_action: "web3",
         // Agent — legacy + lifecycle
         .agent_task: "agent", .agent_decision: "agent", .a2h_interaction: "agent",

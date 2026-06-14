@@ -587,66 +587,265 @@ Returns risk assessment and label for a wallet address.
 
 ---
 
-## Rewards
+## Rewards (A6: Attribution-Verified Reward Enablement)
 
-### GET /v1/rewards/{rewardId}/eligibility
+Aether **verifies reward eligibility** and **produces reward action payloads**. Tenants execute rewards through their own configured rails. Aether does not hold, transfer, or distribute rewards. See `docs/source-of-truth/REWARD_NO_CUSTODY_MODEL.md`.
 
-Checks if a user is eligible for a specific reward.
+### POST /v1/rewards/evaluate
 
-**Query Parameters:** `userId` (required)
-
-**Response:**
-```json
-{
-  "eligible": true,
-  "rewardId": "reward-abc",
-  "reason": "completed_3_transactions",
-  "expiresAt": "2026-04-01T00:00:00Z",
-  "amount": "100",
-  "token": "Aether"
-}
-```
-
-### GET /v1/rewards/{rewardId}/payload
-
-Returns a pre-built transaction payload for on-chain claiming.
-
-**Query Parameters:** `userId` (required), `chainId` (required)
-
-**Response:**
-```json
-{
-  "to": "0xRewardContract...",
-  "data": "0x...",
-  "value": "0",
-  "chainId": 1,
-  "nonce": "abc123",
-  "signature": "0x...",
-  "expiry": 1743868800
-}
-```
-
-### POST /v1/rewards/{rewardId}/claim
-
-Submits an on-chain claim for verification.
+Evaluate a single event for reward eligibility. Returns an eligibility decision and, if eligible, a reward action payload for the tenant's configured rail.
 
 **Request:**
 ```json
 {
-  "txHash": "0xabc123...",
-  "chainId": 1,
-  "userId": "user-123"
+  "event_type": "conversion",
+  "tenant_id": "tenant_acme",
+  "user_id": "user_123",
+  "wallet_address": "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266",
+  "properties": { "channel": "organic", "value": 49.99 },
+  "attribution_result_id": "attr_abc",
+  "fraud_decision_id": "fraud_xyz",
+  "consent_snapshot_id": "cs_001",
+  "idempotency_key": "evt_session_123_conversion"
 }
 ```
 
 **Response:**
 ```json
 {
-  "status": "pending",
-  "claimId": "claim-xyz",
-  "estimatedConfirmation": "2026-03-05T12:05:00Z"
+  "data": {
+    "eligible": true,
+    "decision": "eligible",
+    "decision_reason": "All gates passed",
+    "execution_mode": "recommend_only",
+    "rail": "recommend_only",
+    "campaign_id": "camp_uuid",
+    "rule_id": "rule_uuid",
+    "decision_id": "dec_uuid",
+    "action_payload": {
+      "rail": "recommend_only",
+      "status": "ready",
+      "reward_amount": 25.0,
+      "reward_unit": "USD",
+      "campaign_id": "camp_uuid",
+      "rule_id": "rule_uuid",
+      "decision_id": "dec_uuid"
+    }
+  }
 }
 ```
+
+Decision values: `eligible` | `ineligible` | `needs_review` | `blocked_fraud` | `blocked_consent` | `blocked_identity` | `blocked_wallet_binding` | `blocked_cooldown` | `blocked_cap` | `blocked_budget` | `pending_approval`.
+
+### POST /v1/rewards/evaluate/batch
+
+Evaluate up to 50 events in a single request. Returns an array of decision results with count.
+
+**Request:** Array of evaluate request objects (max 50). Returns HTTP 422 if over limit.
+
+### GET /v1/rewards/decisions
+
+List eligibility decisions for the authenticated tenant. Supports `?decision=eligible&limit=50&offset=0` filters.
+
+### GET /v1/rewards/decisions/{id}
+
+Get a single eligibility decision by ID.
+
+### POST /v1/rewards/campaigns
+
+Create a reward campaign. Campaigns define the scope, attribution model, and budget policy for reward eligibility evaluation.
+
+**Request:**
+```json
+{
+  "name": "Q2 Conversion Campaign",
+  "description": "Reward verified conversions from organic channels",
+  "default_rail": "recommend_only",
+  "default_execution_mode": "recommend_only",
+  "attribution_model": "last_touch",
+  "budget_policy": { "observational_limit_usd": 10000 }
+}
+```
+
+### GET /v1/rewards/campaigns
+
+List campaigns for the authenticated tenant.
+
+### GET /v1/rewards/campaigns/{id}
+
+Get a single campaign.
+
+### PATCH /v1/rewards/campaigns/{id}
+
+Update campaign fields. Supports updating name, description, status, budget_policy, attribution_model.
+
+### POST /v1/rewards/campaigns/{id}/pause
+
+Pause a campaign. Paused campaigns produce `ineligible` decisions.
+
+### POST /v1/rewards/campaigns/{id}/resume
+
+Resume a paused campaign.
+
+### POST /v1/rewards/campaigns/{id}/archive
+
+Archive a campaign. Archived campaigns cannot be resumed.
+
+### POST /v1/rewards/campaigns/{id}/rules
+
+Add a reward rule to a campaign. Rules define eligibility criteria, reward metadata, and delivery rail.
+
+**Request:**
+```json
+{
+  "name": "Organic Conversion Reward",
+  "event_types": ["conversion"],
+  "min_attribution_weight": 0.3,
+  "max_fraud_score": 40.0,
+  "reward_amount": 25.0,
+  "reward_unit": "USD",
+  "execution_mode": "recommend_only",
+  "rail": "recommend_only",
+  "cooldown_seconds": 86400,
+  "max_per_user": 1,
+  "priority": 0
+}
+```
+
+### GET /v1/rewards/campaigns/{id}/rules
+
+List rules for a campaign.
+
+### GET /v1/rewards/rules/{id}
+
+Get a single rule.
+
+### PATCH /v1/rewards/rules/{id}
+
+Update a rule. Supports updating thresholds, reward amount, execution_mode, rail, cooldown.
+
+### POST /v1/rewards/rules/{id}/enable
+
+Enable a disabled rule.
+
+### POST /v1/rewards/rules/{id}/disable
+
+Disable an active rule without deleting it.
+
+### GET /v1/rewards/actions
+
+List reward action payloads. Supports `?status=pending_approval&limit=50` filters.
+
+### GET /v1/rewards/actions/{id}
+
+Get a single action payload.
+
+### POST /v1/rewards/actions/{id}/approve
+
+Approve a `pending_approval` action. Transitions status to `approved`. Used with the `manual_approval` rail.
+
+### POST /v1/rewards/actions/{id}/reject
+
+Reject a `pending_approval` action. Transitions status to `rejected`.
+
+### POST /v1/rewards/actions/{id}/deliver
+
+Trigger delivery of a ready action payload (for manual or webhook rails).
+
+### POST /v1/rewards/actions/{id}/cancel
+
+Cancel a pending or ready action.
+
+### GET /v1/rewards/proofs
+
+List on-chain claim proofs for the authenticated tenant.
+
+### GET /v1/rewards/proofs/{id}
+
+Get a single proof including signature, message_hash, nonce, expiry, and proof_format.
+
+### POST /v1/rewards/proofs/{id}/revoke
+
+Revoke a proof before it is used. Records revocation reason in audit log.
+
+### POST /v1/rewards/proofs/verify
+
+Verify a proof server-side. Checks signature, expiry, and chain_id. Does not mark as used.
+
+**Request:**
+```json
+{
+  "proof_id": "proof_uuid",
+  "user": "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266",
+  "signature": "0x...",
+  "message_hash": "0x...",
+  "chain_id": 1
+}
+```
+
+### POST /v1/rewards/receipts
+
+Record an execution receipt after a tenant has executed a reward. Aether stores the receipt for audit and attribution credit.
+
+**Request:**
+```json
+{
+  "decision_id": "dec_uuid",
+  "rail": "onchain_claim",
+  "execution_mode": "onchain_claim",
+  "external_execution_id": "tx_abc",
+  "tx_hash": "0x...",
+  "chain_id": 1,
+  "status": "confirmed",
+  "receipt_payload": {}
+}
+```
+
+### GET /v1/rewards/receipts
+
+List execution receipts for the authenticated tenant.
+
+### GET /v1/rewards/receipts/{id}
+
+Get a single execution receipt.
+
+### POST /v1/rewards/rails
+
+Configure a reward delivery rail for the authenticated tenant.
+
+**Request:**
+```json
+{
+  "rail": "tenant_webhook",
+  "enabled": true,
+  "config": { "timeout_ms": 5000 },
+  "webhook_url": "https://example.com/aether-reward",
+  "secret_ref": "vault://rewards/webhook-secret"
+}
+```
+
+Rails: `recommend_only` | `manual_approval` | `manual_export` | `tenant_webhook` | `onchain_claim`.
+Beta (config only, no delivery): `stripe_credit` | `loyalty_points` | `coupon` | `internal_credit` | `x402_credit`.
+
+### GET /v1/rewards/rails
+
+List configured rails for the authenticated tenant.
+
+### GET /v1/rewards/rails/{id}
+
+Get a single rail configuration.
+
+### PATCH /v1/rewards/rails/{id}
+
+Update a rail configuration.
+
+### POST /v1/rewards/rails/{id}/verify
+
+Trigger verification of a rail configuration (e.g., send a test webhook, verify contract address).
+
+### POST /v1/rewards/rails/{id}/disable
+
+Disable a rail without deleting its configuration.
 
 ---
 

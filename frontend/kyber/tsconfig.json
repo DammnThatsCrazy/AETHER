@@ -14,10 +14,8 @@
     "resolveJsonModule": true,
     "isolatedModules": true,
     "jsx": "react-jsx",
-    "ignoreDeprecations": "5.0",
-    "baseUrl": ".",
     "paths": {
-      "@kyber/*": ["src/*"]
+      "@kyber/*": ["./src/*"]
     },
     "types": ["vitest/globals"]
   },
