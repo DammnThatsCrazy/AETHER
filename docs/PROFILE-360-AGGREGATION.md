@@ -13,7 +13,7 @@ source_files:
 canonical_owner: backend@aether
 estimated_read_minutes: 8
 toc_depth: 3
-last_synced_commit: 48fb9d4
+last_synced_commit: b75870c
 ---
 
 # Profile 360 Aggregation Layer
@@ -116,6 +116,71 @@ is what is documented below.
 | GET    | `/v1/profile/{id}/campaigns`                               | Campaign attribution (derived from event stream)   |
 | GET    | `/v1/profile/resolve`                                      | Resolve any identifier to canonical id             |
 
+### Identity cluster and quality endpoints
+
+Added after v8.8.0 (`services/profile/routes.py`):
+
+| Method | Path                                                | Returns                                                   |
+|--------|-----------------------------------------------------|-----------------------------------------------------------|
+| GET    | `/v1/profile/{id}/cluster`                          | Primary identity cluster (confidence, membership)         |
+| GET    | `/v1/profile/{id}/clusters`                         | All cluster memberships for this entity                   |
+| GET    | `/v1/profile/{id}/identity-confidence`              | Confidence breakdown by identifier type                   |
+| GET    | `/v1/profile/{id}/merge-history`                    | Historical merge events (pagination supported)            |
+| GET    | `/v1/profile/{id}/split-history`                    | Historical split events (pagination supported)            |
+| GET    | `/v1/profile/{id}/attribution`                      | Multi-touch attribution; supports `?window=`              |
+| GET    | `/v1/profile/{id}/consent`                          | Consent state, allowed/blocked use cases, DSR state       |
+| GET    | `/v1/profile/{id}/activation-eligibility`           | Whether the entity may be activated for a given use case  |
+| GET    | `/v1/profile/{id}/quality`                          | Profile completeness, freshness, and confidence scores    |
+| GET    | `/v1/profile/{id}/data-freshness`                   | Per-dimension freshness timestamps                        |
+| GET    | `/v1/profile/{id}/recommendations`                  | Active intelligence recommendations                       |
+| GET    | `/v1/profile/{id}/outcomes`                         | Observed outcomes from executed recommendations           |
+| GET    | `/v1/profile/{id}/outcome-ledger`                   | Paginated outcome ledger with attribution                 |
+| GET    | `/v1/profile/{id}/agent-executions`                 | Agent executions owned or observed by this entity         |
+| GET    | `/v1/profile/{id}/actions`                          | Discrete profile actions (pagination supported)           |
+| GET    | `/v1/profile/{id}/events`                           | Profile-scoped events (alternative to timeline)           |
+
+### Economic intelligence endpoints
+
+All economic sub-routes accept `?window=30d|60d|90d|lifetime`:
+
+| Method | Path                                                | Returns                                                   |
+|--------|-----------------------------------------------------|-----------------------------------------------------------|
+| GET    | `/v1/profile/{id}/economic`                         | Unified economic breakdown (Web2 + Web3 + Agentic)        |
+| GET    | `/v1/profile/{id}/economic/web2`                    | TradFi economic breakdown                                 |
+| GET    | `/v1/profile/{id}/economic/web3`                    | On-chain economic breakdown                               |
+| GET    | `/v1/profile/{id}/economic/agentic`                 | Agentic economy breakdown (fees, x402 payments, rewards)  |
+| GET    | `/v1/profile/{id}/economic/campaigns`               | Campaign-level economic attribution                       |
+| GET    | `/v1/profile/{id}/economic/warnings`                | Economic risk flags for this entity                       |
+
+### Kyber Profile360 surface
+
+The full Kyber operator surface (`ProfileComposer.get_profile360_surface`) is available at:
+
+| Method | Path                                                | Returns                                                   |
+|--------|-----------------------------------------------------|-----------------------------------------------------------|
+| GET    | `/v1/profile360/{entity_type}/{entity_id}`          | Full kyber_internal surface — identity, system, financial, graph, timeline, analytics, debug |
+| GET    | `/v1/profile/{entity_id}/agent`                     | Full agent profile (agent-specific view)                  |
+| GET    | `/v1/profile/{entity_id}/agent/identity`            | Agent identity sub-section                                |
+| GET    | `/v1/profile/{entity_id}/agent/delegation`          | Agent delegation chain                                    |
+| GET    | `/v1/profile/{entity_id}/agent/subagents`           | Spawned sub-agents                                        |
+| GET    | `/v1/profile/{entity_id}/agent/tasks`               | Current and historical tasks                              |
+| GET    | `/v1/profile/{entity_id}/agent/tools`               | Tool inventory and usage stats                            |
+| GET    | `/v1/profile/{entity_id}/agent/resources`           | MCP resources accessed                                    |
+| GET    | `/v1/profile/{entity_id}/agent/x402`                | x402 payment activity                                     |
+| GET    | `/v1/profile/{entity_id}/agent/trust`               | Agent trust score breakdown                               |
+| GET    | `/v1/profile/{entity_id}/agent/outcomes`            | Agent execution outcomes                                  |
+| GET    | `/v1/profile/{entity_id}/agent/graph`               | Agent graph context                                       |
+
+The `kyber_internal` surface response carries `surface: "kyber_internal"` and
+`visibility: "internal_full"`, signalling that no redaction has been applied.
+End-user surfaces will require a separate redaction pass before exposure.
+Every response includes `alignment_audit.end_user_surface_requires_redaction: true` as a guard.
+
+Graph nodes returned by the Kyber surface include `profile_id`, `entity_type`,
+`display_label`, and `profile_links` (with `summary` and `full` URLs) so the
+frontend can open a Profile360 preview card directly from a graph node selection
+without an additional round-trip.
+
 ### Intelligence extension endpoints
 
 These endpoints are powered by `IntelligenceAggregator` (`services/profile/intelligence.py`)
@@ -140,8 +205,11 @@ When no Gold data exists for an entity they return an empty `items` list — nev
 | GET    | `/v1/profile/{id}/protocol-metrics`               | Protocol TVL, volume, fee revenue (DAO/DEX entity types)    |
 | GET    | `/v1/profile/{id}/governance-activity`            | Governance proposals + votes (DAO/Protocol entity types)    |
 
-The `/web2` endpoint enforces `credit` consent via `ConsentRepository` before serving any
-TradFi or credit data.  Entities without consent receive `{"items": [], "summary": {"consent_required": true}}`.
+The `/web2` and `/economic/web2` endpoints enforce `credit` consent via a **hard gate** at
+the route layer: `require_consent(consent_repo, tenant_id, user_id, "credit")` is called
+before any data is fetched.  Callers without an active `credit` consent grant receive
+**HTTP 403** (`"Credit consent required for this resource"`).  This is a deliberate
+fail-closed gate — not a soft empty-envelope fallback.
 
 Gold-tier data is populated by external ETL pipelines (Moralis, CoinGecko, DeFiLlama, Snapshot,
 Plaid).  Until an ETL pipeline has run for a given entity, these endpoints return an empty items

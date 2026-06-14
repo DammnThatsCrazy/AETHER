@@ -52,8 +52,9 @@ class DelegationEngine:
     per request via DI; or share a singleton bound to the registry's cache.
     """
 
-    def __init__(self, repo: DelegationRepository) -> None:
+    def __init__(self, repo: DelegationRepository, tenant_id: str = "") -> None:
         self._repo = repo
+        self._tenant_id = tenant_id
 
     @staticmethod
     def _resource_matches(pattern: str, resource: str) -> bool:
@@ -81,8 +82,10 @@ class DelegationEngine:
         action: str,
         resource: str,
         amount: Optional[str] = None,
+        tenant_id: Optional[str] = None,
     ) -> DelegationDecision:
-        active = await self._repo.active_for(grantee_entity_id)
+        effective_tenant = tenant_id or self._tenant_id
+        active = await self._repo.active_for(grantee_entity_id, effective_tenant)
         if not active:
             return DelegationDecision(allowed=False, reason="no_active_delegation")
 

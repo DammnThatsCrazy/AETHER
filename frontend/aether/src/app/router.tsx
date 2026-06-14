@@ -26,6 +26,10 @@ const SecurityPage = lazy(() => import('@aether-app/pages/security').then(m => (
 const SystemStatusPage = lazy(() => import('@aether-app/pages/system-status').then(m => ({ default: m.SystemStatusPage })));
 const DataQualityPage = lazy(() => import('@aether-app/pages/data-quality').then(m => ({ default: m.DataQualityPage })));
 const ConnectorsPage = lazy(() => import('@aether-app/pages/connectors').then(m => ({ default: m.ConnectorsPage })));
+const RewardDecisionsPage = lazy(() => import('@aether-app/pages/rewards').then(m => ({ default: m.RewardDecisionsPage })));
+const RewardApprovalQueuePage = lazy(() => import('@aether-app/pages/rewards').then(m => ({ default: m.RewardApprovalQueuePage })));
+const RewardRailSetupPage = lazy(() => import('@aether-app/pages/rewards').then(m => ({ default: m.RewardRailSetupPage })));
+const CampaignBuilderPage = lazy(() => import('@aether-app/pages/rewards').then(m => ({ default: m.CampaignBuilderPage })));
 
 function PageSuspense({ children }: { readonly children: React.ReactNode }) {
   return (
@@ -84,6 +88,11 @@ export function AppRouter() {
                 <Route path="/system-status" element={<PageSuspense><SystemStatusPage /></PageSuspense>} />
                 <Route path="/data-quality" element={<PageSuspense><DataQualityPage /></PageSuspense>} />
                 <Route path="/integrations" element={<PageSuspense><ConnectorsPage /></PageSuspense>} />
+                <Route path="/rewards" element={<PageSuspense><RewardDecisionsPage /></PageSuspense>} />
+                <Route path="/rewards/decisions" element={<PageSuspense><RewardDecisionsPage /></PageSuspense>} />
+                <Route path="/rewards/approval-queue" element={<PageSuspense><RewardApprovalQueuePage /></PageSuspense>} />
+                <Route path="/rewards/rails" element={<PageSuspense><RewardRailSetupPage /></PageSuspense>} />
+                <Route path="/rewards/campaigns/new" element={<PageSuspense><CampaignBuilderPage /></PageSuspense>} />
                 <Route path="*" element={<Navigate to="/settings" replace />} />
               </Routes>
             </AppShell>

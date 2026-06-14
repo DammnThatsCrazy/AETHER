@@ -562,6 +562,88 @@ export const MOCK_NOTES: EntityNote[] = [
 ];
 
 // ---------------------------------------------------------------------------
+// Profile360 edge-case fixtures
+// ---------------------------------------------------------------------------
+
+export const mockConsentRestrictedEntity: Entity = {
+  id: 'user-consent-revoked-001',
+  type: 'human',
+  name: 'Revoked User',
+  displayLabel: 'Revoked User',
+  createdAt: ago(60 * 24 * 30),
+  updatedAt: ago(60),
+  health: { status: 'unknown', lastChecked: ago(5) },
+  trustScore: 0.5,
+  riskScore: 0.2,
+  anomalyScore: 0.1,
+  needsHelp: false,
+  tags: [],
+  metadata: { consent_status: 'revoked', activation_eligibility: 'blocked', blocked_use_cases: ['targeting', 'enrichment'] },
+};
+
+export const mockStaleEntity: Entity = {
+  id: 'user-stale-001',
+  type: 'human',
+  name: 'Stale Profile',
+  displayLabel: 'Stale Profile',
+  createdAt: ago(60 * 24 * 180),
+  updatedAt: ago(60 * 24 * 60),
+  health: { status: 'degraded', lastChecked: ago(10) },
+  trustScore: 0.6,
+  riskScore: 0.3,
+  anomalyScore: 0.2,
+  needsHelp: false,
+  tags: [],
+  metadata: { stale_dimensions: ['wallets', 'sessions'], freshness_score: 0.2, readiness_status: 'partial' },
+};
+
+export const mockHighConfidenceEntity: Entity = {
+  id: 'user-high-conf-001',
+  type: 'human',
+  name: 'High Confidence User',
+  displayLabel: 'High Confidence User',
+  createdAt: ago(60 * 24 * 90),
+  updatedAt: ago(30),
+  health: { status: 'healthy', lastChecked: ago(1) },
+  trustScore: 0.95,
+  riskScore: 0.05,
+  anomalyScore: 0.02,
+  needsHelp: false,
+  tags: ['verified', 'premium'],
+  metadata: { confidence_score: 0.95, readiness_status: 'release_grade' },
+};
+
+export const mockAgentEntity: Entity = {
+  id: 'agent-kyber-001',
+  type: 'agent',
+  name: 'Kyber Automation Agent',
+  displayLabel: 'Kyber Automation Agent',
+  createdAt: ago(60 * 24 * 14),
+  updatedAt: ago(15),
+  health: { status: 'healthy', lastChecked: ago(1) },
+  trustScore: 0.88,
+  riskScore: 0.07,
+  anomalyScore: 0.04,
+  needsHelp: false,
+  tags: ['agentic', 'automation', 'kyber-owned'],
+  metadata: { agent_type: 'workflow', owner_id: 'cust-acme-001', execution_count: 4832 },
+};
+
+export const mockKyberInternalProfile = {
+  entity: mockHighConfidenceEntity,
+  tenant_id: 'tenant-a',
+  surface: 'kyber_internal' as const,
+  visibility: 'internal_full' as const,
+  sections: {
+    identity: [{ id: 'identity', title: 'Identity and consent', data: {} }],
+    debug: [{ id: 'alignment', title: 'Tenant and graph alignment audit', data: {} }],
+  },
+  timeline: [],
+  graph: { nodes: [], edges: [] },
+  alignment_audit: { kyber_internal_full_surface: true, end_user_surface_requires_redaction: true },
+};
+
+// ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
 

@@ -1441,6 +1441,12 @@ export const api = {
       // ── Connector health (aggregate-only) ─────────────────────────────────
       connectorsOverview: () =>
         restClient.get('/v1/admin/kyber/connectors/overview', wrap(unknownSchema)).then(r => r.data),
+
+      // ── Dune feeder health ────────────────────────────────────────────────
+      duneFeederHealth: () =>
+        restClient.get('/v1/admin/dune-feeder/health', wrap(unknownSchema)).then(r => r.data),
+      duneFeederGold: (sourceTag?: string) =>
+        restClient.get(`/v1/admin/dune-feeder/gold${sourceTag ? `?source_tag=${encodeURIComponent(sourceTag)}` : ''}`, wrap(unknownSchema)).then(r => r.data),
     },
   },
 

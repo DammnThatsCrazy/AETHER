@@ -13,7 +13,7 @@ source_files:
 canonical_owner: platform@aether
 estimated_read_minutes: 20
 toc_depth: 3
-last_synced_commit: 48fb9d4
+last_synced_commit: bfd94d6
 ---
 # Aether vNext — Architecture Guide
 
@@ -23,7 +23,7 @@ Aether is a **hybrid Python/FastAPI + Node/TypeScript** platform with four opera
 
 1. **SDK Plane** — Thin-client SDKs (Web, iOS, Android, React Native) collect raw events, fingerprints, wallet interactions, and session data. SDKs ship raw data to the backend.
 
-2. **Backend Plane** — Python/FastAPI with 60+ service routers handling ingestion, identity, analytics, ML inference, graph, rewards, lake management, profile intelligence, population omniview, expectation engine, behavioral continuity, RWA intelligence, Web3 coverage, cross-domain TradFi/Web2 intelligence, extraction defense mesh, privacy/policy control plane, **notification intelligence** (`/v1/notifications/intelligence/*` — event-driven multi-channel operator alerts + end-user Slack/Discord/Telegram/Webhook delivery), plus the customer-facing productization surface: **registration** (`POST /v1/tenants`), **auth** (`/v1/auth/*` — email+password+OTP signup, Auth0 SSO callback, API-key recovery), **caller profile** (`/v1/me/*` — paginated self-service API keys), **billing** (`/v1/billing/*` — Stripe Checkout + Billing Portal + invoices), **Stripe webhook** (`/v1/admin/billing/stripe/webhook`, signature-verified), **SDK utilities** (`/sdk/identity/resolve` — cross-device identity), and a monthly overage cron task + SLA expiry worker running in the app lifespan. Infrastructure: PostgreSQL (asyncpg), Redis (redis.asyncio), Neptune (gremlinpython), Kafka (aiokafka, 145 topics), S3, Prometheus.
+2. **Backend Plane** — Python/FastAPI with 60+ service routers handling ingestion, identity, analytics, ML inference, graph, rewards, lake management, profile intelligence, population omniview, expectation engine, behavioral continuity, RWA intelligence, Web3 coverage, cross-domain TradFi/Web2 intelligence, extraction defense mesh, privacy/policy control plane, **notification intelligence** (`/v1/notifications/intelligence/*` — event-driven multi-channel operator alerts + end-user Slack/Discord/Telegram/Webhook delivery), plus the customer-facing productization surface: **registration** (`POST /v1/tenants`), **auth** (`/v1/auth/*` — email+password+OTP signup, Auth0 SSO callback, API-key recovery), **caller profile** (`/v1/me/*` — paginated self-service API keys), **billing** (`/v1/billing/*` — Stripe Checkout + Billing Portal + invoices), **Stripe webhook** (`/v1/admin/billing/stripe/webhook`, signature-verified), **SDK utilities** (`/sdk/identity/resolve` — cross-device identity), and a monthly overage cron task + SLA expiry worker + Dune Analytics scheduled polling worker running in the app lifespan. Infrastructure: PostgreSQL (asyncpg), Redis (redis.asyncio), Neptune (gremlinpython), Kafka (aiokafka, 145 topics), S3, Prometheus.
 
 3. **Data Lake Plane** — Medallion architecture (Bronze/Silver/Gold) for raw data persistence, validation, feature materialization, and intelligence output generation. Lake data feeds ML training, graph mutations, and intelligence APIs.
 
@@ -276,9 +276,14 @@ Resolution Consumer (real-time)
 | `/v1/chains/{id}` | GET | Chain metadata on demand |
 | `/v1/protocols/{addr}` | GET | Protocol identification |
 | `/v1/predict` | POST | ML inference (9 models: intent, bot, session, identity, journey, churn, LTV, anomaly, attribution) |
-| `/v1/rewards/{id}/eligibility` | GET | Reward eligibility check |
-| `/v1/rewards/{id}/payload` | GET | Pre-built claim transaction |
-| `/v1/rewards/{id}/claim` | POST | Submit on-chain claim |
+| `/v1/rewards/evaluate` | POST | Evaluate reward eligibility (A6 no-custody) |
+| `/v1/rewards/evaluate/batch` | POST | Batch eligibility evaluation (max 50) |
+| `/v1/rewards/campaigns` | POST/GET | Campaign management |
+| `/v1/rewards/campaigns/{id}/rules` | POST/GET | Rule management |
+| `/v1/rewards/decisions` | GET | Eligibility decision log |
+| `/v1/rewards/actions` | GET | Action payload queue |
+| `/v1/rewards/proofs` | GET | On-chain claim proofs |
+| `/v1/rewards/rails` | POST/GET | Tenant delivery rail config |
 | `/v1/classify-source` | POST | Traffic source classification |
 | `/v1/wallet-label/{addr}` | GET | Wallet risk + label |
 | `/v1/resolution/cluster/{user_id}` | GET | Identity cluster for a user |
