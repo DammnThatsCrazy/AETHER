@@ -357,6 +357,15 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         app.state.provider_gateway = provider_gateway
         logger.info("Provider Gateway initialised")
 
+    # Dune Analytics — scheduled polling worker (asyncio loop, no external deps)
+    dune_poll_task = asyncio.create_task(asyncio.sleep(0))
+    try:
+        from services.dune_feeder.scheduler import start_dune_polling_worker
+        dune_poll_task = asyncio.create_task(start_dune_polling_worker())
+        logger.info("Dune polling worker started")
+    except Exception as e:  # pragma: no cover — defensive
+        logger.warning(f"Dune polling worker skipped: {e}")
+
     logger.info(
         f"Aether Backend started | env={settings.env.value} "
         f"| debug={settings.debug} | version={settings.api.version}"
@@ -369,6 +378,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     replay_worker_task.cancel()
     overage_cron_task.cancel()
     sla_worker_task.cancel()
+    dune_poll_task.cancel()
     try:
         await replay_worker_task
     except asyncio.CancelledError:
@@ -379,6 +389,10 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         pass
     try:
         await sla_worker_task
+    except asyncio.CancelledError:
+        pass
+    try:
+        await dune_poll_task
     except asyncio.CancelledError:
         pass
     if provider_gateway:
