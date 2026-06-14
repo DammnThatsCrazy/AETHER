@@ -11,7 +11,7 @@ source_files:
 canonical_owner: backend@aether
 estimated_read_minutes: 60
 toc_depth: 3
-last_synced_commit: 7b41c58
+last_synced_commit: "4017534"
 
 ---
 # Aether Backend API v8.9.0 — Endpoint Specification
@@ -994,6 +994,21 @@ Three service groups are available when Intelligence Graph feature flags are ena
 | GET | `/v1/x402/agent/{id}` | Agent x402 history |
 | POST | `/v1/x402/graph/snapshot` | Trigger graph snapshot rebuild |
 
+### Approvals Control Plane (`/v1/approvals`)
+
+Kyber operator review queue for the x402 commerce control plane. All endpoints require `approvals:read` (GET) or `approvals:write` / `commerce:approve` (POST).
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/v1/approvals` | List approval queue — filterable by `status`, `assigned_to` |
+| GET | `/v1/approvals/{id}` | Get single approval request with full audit trail |
+| POST | `/v1/approvals/{id}/assign` | Assign approval to a reviewer (`assignee_id`, `assigned_by`) |
+| POST | `/v1/approvals/{id}/decide` | Apply decision: `approve`, `reject`, or `escalate` with `reason` and optional `is_override` |
+| POST | `/v1/approvals/{id}/escalate` | Shorthand escalate — calls decide with `action=escalate` |
+| POST | `/v1/approvals/{id}/revoke` | Revoke a previously approved request (`revoked_by`, `reason`) |
+| GET | `/v1/approvals/{id}/evidence` | Evidence bundle: approval audit trail, policy decisions, graph impact |
+| GET | `/v1/approvals/{id}/preview` | Deterministic preview of graph mutations if approved (read-only, no side effects) |
+
 ### Agent Extensions (added to /v1/agent/)
 
 | Method | Endpoint | Description |
@@ -1072,6 +1087,7 @@ Feature flag: `PROVIDER_GATEWAY_ENABLED=false` (default). Zero impact until acti
 | POST | `/v1/lake/materialize` | Write Gold metric/feature/highlight |
 | GET | `/v1/lake/gold/{domain}/{entity_id}` | Query Gold metrics for an entity |
 | GET | `/v1/lake/quality/{domain}` | Run data quality checks on a domain's Bronze tier |
+| POST | `/v1/lake/promote` | Promote a source_tag's Silver records into Gold (`admin`) |
 | GET | `/v1/lake/status` | Record counts per domain per tier |
 
 **Domains:** `market`, `onchain`, `social`, `identity`, `governance`, `tradfi`
@@ -1104,6 +1120,30 @@ Feature flag: `PROVIDER_GATEWAY_ENABLED=false` (default). Zero impact until acti
 | GET | `/v1/analytics/commerce/kpi` | Commerce KPI summary: spend rate, approval latency, settlement degradation, entitlement reuse rate (`commerce:read`) |
 
 **Query Parameters:** `period` — `"7d"`, `"30d"`, `"90d"`, `"all"` (default: `"30d"`)
+
+---
+
+### Identity Service (v8.9.0)
+
+Core identity resolution and entity management endpoints.
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| POST | `/v1/identity/resolve` | Resolve cross-device/cross-wallet identity from a set of signals — returns canonical entity_id + confidence |
+| GET | `/v1/identity/entities/{entity_id}` | Get full entity record with all linked identifiers |
+| GET | `/v1/identity/entities/{entity_id}/aliases` | List all aliases (wallets, emails, devices, sessions) for an entity |
+| GET | `/v1/identity/entities/{entity_id}/graph` | Entity subgraph (neighbors, edges, relationship types) |
+| GET | `/v1/identity/entities/{entity_id}/audit` | Full audit trail for this entity — merges, splits, signal additions |
+| GET | `/v1/identity/conflicts` | List entities with unresolved identity conflicts (`admin`) |
+| POST | `/v1/identity/merge` | Merge two entities into a single canonical entity (`admin`) |
+| POST | `/v1/identity/split` | Split a merged entity back into its source components (`admin`) |
+| POST | `/v1/identity/recompute` | Trigger a full confidence recomputation for one or all entities (`admin`) |
+| GET | `/v1/identity/health` | Identity resolution subsystem health — queue depth, recompute lag, conflict count |
+| GET | `/v1/identity/profiles/{user_id}` | Get stored profile for a user/entity |
+| PUT | `/v1/identity/profiles/{user_id}` | Upsert profile record for a user/entity |
+| GET | `/v1/identity/profiles/{user_id}/graph` | Profile-scoped graph view (bounded to 50 neighbors) |
+
+**Permissions:** `read` for GET queries; `write` for resolve/profiles; `admin` for merge/split/recompute/conflicts.
 
 ---
 
@@ -2126,6 +2166,43 @@ Event-driven multi-channel operator notification pipeline. Ingests intelligence 
 |--------|------|-------------|
 | GET | `/v1/notifications/config` | Get tenant notification config |
 | PUT | `/v1/notifications/config` | Update config (Slack token stored via vault) |
+
+---
+
+## Kyber ML Admin (v8.9.0)
+
+Operator command center for ML model registry, artifact management, feature contracts, drift monitoring, and readiness gating. All endpoints require `admin` permission.
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/v1/admin/kyber/ml/overview` | ML subsystem health summary — registry status, drift alerts, prediction volume, security posture |
+| GET | `/v1/admin/kyber/ml/models` | List all registered ML models with version, status, and metadata |
+| GET | `/v1/admin/kyber/ml/models/{model_id}` | Full model record — feature contracts, artifact lineage, serving config |
+| GET | `/v1/admin/kyber/ml/artifacts` | List all training artifacts across all models |
+| GET | `/v1/admin/kyber/ml/artifacts/{model_id}` | Artifacts for a specific model |
+| GET | `/v1/admin/kyber/ml/features` | Feature contract registry — schema, validation rules, drift thresholds |
+| GET | `/v1/admin/kyber/ml/drift` | Drift report — PSI scores, feature-level alerts, trend window |
+| GET | `/v1/admin/kyber/ml/predictions/summary` | Prediction volume, latency, error rate, top model usage |
+| GET | `/v1/admin/kyber/ml/security` | ML extraction defense status — watermark state, canary alerts, adversarial risk |
+| GET | `/v1/admin/kyber/ml/readiness` | Production readiness gate — registry coverage, drift gates, security gates |
+
+---
+
+## Dune Feeder Admin — Scheduled Polling (v8.9.0)
+
+Manage automated Dune query polling schedules per tenant. All endpoints require `admin` permission.
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| POST | `/v1/admin/dune-feeder/schedule` | Create a new scheduled Dune query polling config |
+| GET | `/v1/admin/dune-feeder/schedule` | List all schedules for the tenant |
+| GET | `/v1/admin/dune-feeder/schedule/{schedule_id}` | Get a single schedule config |
+| DELETE | `/v1/admin/dune-feeder/schedule/{schedule_id}` | Delete a schedule |
+| POST | `/v1/admin/dune-feeder/schedule/{schedule_id}/run` | Trigger an immediate manual run of a schedule |
+
+**Required fields for create:** `query_id`, `query_name`, `source_tag`, `domain`, `cron_expression`
+
+**Domains:** `onchain`, `governance`, `market`, `social`, `identity`, `tradfi`
 
 ### Channel Management (End-User Self-Service)
 
