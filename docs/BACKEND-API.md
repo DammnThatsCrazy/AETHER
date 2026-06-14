@@ -11,7 +11,7 @@ source_files:
 canonical_owner: backend@aether
 estimated_read_minutes: 60
 toc_depth: 3
-last_synced_commit: 43ebbc5
+last_synced_commit: 5a5015d
 
 ---
 # Aether Backend API v8.9.0 — Endpoint Specification
@@ -888,6 +888,7 @@ Feature flag: `PROVIDER_GATEWAY_ENABLED=false` (default). Zero impact until acti
 | POST | `/v1/lake/materialize` | Write Gold metric/feature/highlight |
 | GET | `/v1/lake/gold/{domain}/{entity_id}` | Query Gold metrics for an entity |
 | GET | `/v1/lake/quality/{domain}` | Run data quality checks on a domain's Bronze tier |
+| POST | `/v1/lake/promote` | Promote a source_tag's Silver records into Gold (`admin`) |
 | GET | `/v1/lake/status` | Record counts per domain per tier |
 
 **Domains:** `market`, `onchain`, `social`, `identity`, `governance`, `tradfi`
@@ -920,6 +921,30 @@ Feature flag: `PROVIDER_GATEWAY_ENABLED=false` (default). Zero impact until acti
 | GET | `/v1/analytics/commerce/kpi` | Commerce KPI summary: spend rate, approval latency, settlement degradation, entitlement reuse rate (`commerce:read`) |
 
 **Query Parameters:** `period` — `"7d"`, `"30d"`, `"90d"`, `"all"` (default: `"30d"`)
+
+---
+
+### Identity Service (v8.9.0)
+
+Core identity resolution and entity management endpoints.
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| POST | `/v1/identity/resolve` | Resolve cross-device/cross-wallet identity from a set of signals — returns canonical entity_id + confidence |
+| GET | `/v1/identity/entities/{entity_id}` | Get full entity record with all linked identifiers |
+| GET | `/v1/identity/entities/{entity_id}/aliases` | List all aliases (wallets, emails, devices, sessions) for an entity |
+| GET | `/v1/identity/entities/{entity_id}/graph` | Entity subgraph (neighbors, edges, relationship types) |
+| GET | `/v1/identity/entities/{entity_id}/audit` | Full audit trail for this entity — merges, splits, signal additions |
+| GET | `/v1/identity/conflicts` | List entities with unresolved identity conflicts (`admin`) |
+| POST | `/v1/identity/merge` | Merge two entities into a single canonical entity (`admin`) |
+| POST | `/v1/identity/split` | Split a merged entity back into its source components (`admin`) |
+| POST | `/v1/identity/recompute` | Trigger a full confidence recomputation for one or all entities (`admin`) |
+| GET | `/v1/identity/health` | Identity resolution subsystem health — queue depth, recompute lag, conflict count |
+| GET | `/v1/identity/profiles/{user_id}` | Get stored profile for a user/entity |
+| PUT | `/v1/identity/profiles/{user_id}` | Upsert profile record for a user/entity |
+| GET | `/v1/identity/profiles/{user_id}/graph` | Profile-scoped graph view (bounded to 50 neighbors) |
+
+**Permissions:** `read` for GET queries; `write` for resolve/profiles; `admin` for merge/split/recompute/conflicts.
 
 ---
 
@@ -1942,6 +1967,25 @@ Event-driven multi-channel operator notification pipeline. Ingests intelligence 
 |--------|------|-------------|
 | GET | `/v1/notifications/config` | Get tenant notification config |
 | PUT | `/v1/notifications/config` | Update config (Slack token stored via vault) |
+
+---
+
+## Kyber ML Admin (v8.9.0)
+
+Operator command center for ML model registry, artifact management, feature contracts, drift monitoring, and readiness gating. All endpoints require `admin` permission.
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/v1/admin/kyber/ml/overview` | ML subsystem health summary — registry status, drift alerts, prediction volume, security posture |
+| GET | `/v1/admin/kyber/ml/models` | List all registered ML models with version, status, and metadata |
+| GET | `/v1/admin/kyber/ml/models/{model_id}` | Full model record — feature contracts, artifact lineage, serving config |
+| GET | `/v1/admin/kyber/ml/artifacts` | List all training artifacts across all models |
+| GET | `/v1/admin/kyber/ml/artifacts/{model_id}` | Artifacts for a specific model |
+| GET | `/v1/admin/kyber/ml/features` | Feature contract registry — schema, validation rules, drift thresholds |
+| GET | `/v1/admin/kyber/ml/drift` | Drift report — PSI scores, feature-level alerts, trend window |
+| GET | `/v1/admin/kyber/ml/predictions/summary` | Prediction volume, latency, error rate, top model usage |
+| GET | `/v1/admin/kyber/ml/security` | ML extraction defense status — watermark state, canary alerts, adversarial risk |
+| GET | `/v1/admin/kyber/ml/readiness` | Production readiness gate — registry coverage, drift gates, security gates |
 
 ### Channel Management (End-User Self-Service)
 
