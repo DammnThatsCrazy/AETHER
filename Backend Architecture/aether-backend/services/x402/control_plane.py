@@ -486,50 +486,50 @@ class X402ControlPlane:
             return trace
 
         # find policy decision for this challenge
-        for d in list(self._store.policy_decisions._data.get(tenant_id, {}).values()):
+        for d in await self._store.list_policy_decisions(tenant_id):
             if d.challenge_id == challenge_id:
                 trace.policy_decision = d
                 break
 
         # find approval for this challenge
-        for a in list(self._store.approvals._data.get(tenant_id, {}).values()):
+        for a in await self._store.list_approvals(tenant_id):
             if a.challenge_id == challenge_id:
                 trace.approval = a
                 break
 
         # find authorization for this challenge
-        for a in list(self._store.authorizations._data.get(tenant_id, {}).values()):
+        for a in await self._store.list_authorizations(tenant_id):
             if a.challenge_id == challenge_id:
                 trace.authorization = a
                 break
 
         # find receipt for this challenge
-        for r in list(self._store.receipts._data.get(tenant_id, {}).values()):
+        for r in await self._store.list_receipts(tenant_id):
             if r.challenge_id == challenge_id:
                 trace.receipt = r
                 break
 
         # find settlement
-        for s in list(self._store.settlements._data.get(tenant_id, {}).values()):
+        for s in await self._store.list_settlements(tenant_id):
             if s.challenge_id == challenge_id:
                 trace.settlement = s
                 break
 
         # find entitlement (by settlement_id)
         if trace.settlement:
-            for e in list(self._store.entitlements._data.get(tenant_id, {}).values()):
+            for e in await self._store.list_entitlements(tenant_id):
                 if e.settlement_id == trace.settlement.settlement_id:
                     trace.entitlement = e
                     break
 
         # find grant + fulfillment
         if trace.entitlement:
-            for g in list(self._store.grants._data.get(tenant_id, {}).values()):
+            for g in await self._store.list_grants(tenant_id):
                 if g.entitlement_id == trace.entitlement.entitlement_id:
                     trace.grant = g
                     break
         if trace.grant:
-            for f in list(self._store.fulfillments._data.get(tenant_id, {}).values()):
+            for f in await self._store.list_fulfillments(tenant_id):
                 if f.grant_id == trace.grant.grant_id:
                     trace.fulfillment = f
                     break

@@ -388,6 +388,17 @@ class NoesisService:
             candidates.append(("profile_lookup", 0.78))
         if any(k in low for k in ("find", "search", "show me", "take me", "list", "display", "look up")):
             candidates.append(("entity_search", 0.64))
+        if any(k in low for k in ("suggestion", "suggestions", "ooda", "recommended action", "recommendation", "orient", "review queue", "pending review", "approve", "reject", "suppress")):
+            if any(k in low for k in ("summary", "overview", "how many", "count", "total")):
+                candidates.append(("suggestion_summary", 0.85))
+            elif any(k in low for k in ("review queue", "pending review", "awaiting review", "needs review")):
+                candidates.append(("suggestion_review_queue", 0.88))
+            elif any(k in low for k in ("explain", "why", "what is", "detail", "describe")):
+                candidates.append(("suggestion_explain", 0.83))
+            elif any(k in low for k in ("outcome", "result", "impact", "measured", "feedback")):
+                candidates.append(("suggestion_outcome_lookup", 0.82))
+            else:
+                candidates.append(("suggestion_lookup", 0.80))
 
         if not candidates:
             # If conversation history provides a prior intent, carry it forward with low confidence
@@ -473,6 +484,14 @@ class NoesisService:
             return await self._campaign_reward_lookup(plan, scope)
         if plan.intent == "risk_cluster_lookup":
             return await self._risk_cluster_lookup(plan, scope)
+        if plan.intent in (
+            "suggestion_lookup",
+            "suggestion_summary",
+            "suggestion_review_queue",
+            "suggestion_explain",
+            "suggestion_outcome_lookup",
+        ):
+            return await self._suggestion_dispatch(plan, scope)
         return self._unsupported_response(body, [])
 
     def _tenant_filter(self, scope: Scope) -> Optional[dict[str, Any]]:
@@ -584,6 +603,49 @@ class NoesisService:
         rows = await self.entities.find_many(filters=self._tenant_filter(scope), limit=50)
         risky = sorted(rows, key=lambda r: float(r.get("risk_score") or r.get("metadata", {}).get("risk_score") or 0), reverse=True)[: plan.limit]
         return self._response(plan, f"Found {len(risky)} tenant-scoped entities sorted by available risk score.", risky, self._entity_actions(risky, scope))
+
+    async def _suggestion_dispatch(self, plan: QueryPlan, scope: Scope) -> NoesisResponse:
+        """Read-only delegation to suggestion Noesis handlers. Never mutates suggestion state."""
+        from services.suggestions.adapters.noesis_adapter import (
+            handle_suggestion_explain,
+            handle_suggestion_lookup,
+            handle_suggestion_outcome_lookup,
+            handle_suggestion_review_queue,
+            handle_suggestion_summary,
+        )
+        from services.suggestions.repository import SuggestionRepository
+
+        repo = SuggestionRepository()
+
+        class _FakeTenant:
+            tenant_id = scope.effective_tenant_id
+
+        tenant_proxy = _FakeTenant()
+
+        handler_map = {
+            "suggestion_lookup": handle_suggestion_lookup,
+            "suggestion_summary": handle_suggestion_summary,
+            "suggestion_review_queue": handle_suggestion_review_queue,
+            "suggestion_explain": handle_suggestion_explain,
+            "suggestion_outcome_lookup": handle_suggestion_outcome_lookup,
+        }
+        handler = handler_map.get(plan.intent)
+        if handler is None:
+            return self._ambiguous(plan, "Unknown suggestion intent.")
+
+        result = await handler(plan, repo, tenant_proxy)
+        return NoesisResponse(
+            answer=result.get("answer", ""),
+            mode="deterministic",
+            intent=plan.intent,
+            confidence=result.get("confidence", 0.95),
+            entities=result.get("entities", []),
+            results=result.get("results", []),
+            graph=NoesisGraph(**result.get("graph", {})),
+            actions=result.get("actions", []),
+            warnings=result.get("warnings", []),
+            query_debug={"plan": plan.model_dump(), "read_only": True, "suggestion_dispatch": True},
+        )
 
     def _response(self, plan: QueryPlan, answer: str, results: list[dict[str, Any]], actions: list[NoesisAction], graph: Optional[NoesisGraph] = None) -> NoesisResponse:
         entities = [self._redact(r) for r in results if isinstance(r, dict)]

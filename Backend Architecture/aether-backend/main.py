@@ -622,6 +622,23 @@ def create_app() -> FastAPI:
         app.include_router(commerce_diag_router)
         logger.info("Intelligence Graph: Agentic Commerce control plane (L3b+) mounted")
 
+    # ── Suggestion Intelligence (OODA) ────────────────────────────────────
+    sug = settings.suggestions
+    if sug.enabled:
+        from services.suggestions.routes import (
+            router as suggestions_router,
+            admin_router as suggestions_admin_router,
+            aether_router as suggestions_aether_router,
+        )
+        app.include_router(suggestions_router)
+        if sug.kyber_enabled:
+            app.include_router(suggestions_admin_router)
+        if sug.tenant_enabled:
+            app.include_router(suggestions_aether_router)
+        logger.info("Suggestion Intelligence: routes mounted (/v1/suggestions + /v1/admin/kyber/suggestions + /v1/aether/suggestions)")
+    else:
+        logger.info("Suggestion Intelligence: disabled (set AETHER_SUGGESTIONS_ENABLED=true to enable)")
+
     return app
 
 
