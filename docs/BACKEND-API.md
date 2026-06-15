@@ -11,7 +11,7 @@ source_files:
 canonical_owner: backend@aether
 estimated_read_minutes: 60
 toc_depth: 3
-last_synced_commit: 22c67e4
+last_synced_commit: 55d372c
 
 ---
 # Aether Backend API v8.9.0 — Endpoint Specification
@@ -2203,6 +2203,58 @@ Manage automated Dune query polling schedules per tenant. All endpoints require 
 **Required fields for create:** `query_id`, `query_name`, `source_tag`, `domain`, `cron_expression`
 
 **Domains:** `onchain`, `governance`, `market`, `social`, `identity`, `tradfi`
+
+---
+
+## Suggestion Intelligence (v8.10.0)
+
+Proactive AI-driven suggestions for operators and tenants — surfaces actionable insights from graph health, data quality, governance, profile 360, SDK health/drift, and notification patterns. Suggestions have a full lifecycle (created → approved/rejected/executed → outcome), RBAC-gated approve/suppress/execute actions, and a Kyber cross-tenant operator view.
+
+### Tenant Suggestion Routes (`/v1/suggestions`)
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/v1/suggestions` | List suggestions for the authenticated tenant (filter: `status`, `category`, `severity`) |
+| POST | `/v1/suggestions` | Create a suggestion (operator-only) |
+| POST | `/v1/suggestions/query` | Advanced query with dimension and category filters |
+| GET | `/v1/suggestions/summary` | Summary counts by status, category, and severity |
+| GET | `/v1/suggestions/review-queue` | Suggestions awaiting operator review (`pending` status, sorted by priority) |
+| GET | `/v1/suggestions/{suggestion_id}` | Get a single suggestion with full context |
+| GET | `/v1/suggestions/{suggestion_id}/audit` | Append-only audit log for a suggestion |
+| POST | `/v1/suggestions/{suggestion_id}/approve` | Approve a suggestion (requires `suggestions:approve`) |
+| POST | `/v1/suggestions/{suggestion_id}/reject` | Reject with reason |
+| POST | `/v1/suggestions/{suggestion_id}/suppress` | Suppress (mute) a suggestion type for this tenant |
+| POST | `/v1/suggestions/{suggestion_id}/execute` | Execute the suggested action directly |
+| POST | `/v1/suggestions/{suggestion_id}/deliver` | Deliver via notification channel |
+| POST | `/v1/suggestions/{suggestion_id}/outcome` | Record observed outcome after execution |
+
+### Kyber Admin Routes (`/v1/admin/kyber/suggestions`)
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/v1/admin/kyber/suggestions` | Cross-tenant suggestion list (filter: `tenant_id`, `status`, `category`) |
+| GET | `/v1/admin/kyber/suggestions/summary` | Platform-wide suggestion summary with top-active tenants |
+| GET | `/v1/admin/kyber/suggestions/review-queue` | Global review queue across all tenants |
+| GET | `/v1/admin/kyber/suggestions/quality` | Suggestion quality report — acceptance rates, suppression rates, outcome tracking |
+| GET | `/v1/admin/kyber/suggestions/outcomes` | Outcome ledger — suggestions with confirmed outcomes |
+
+### Tenant Feed Routes (`/v1/aether/suggestions`)
+
+Redacted tenant-safe feed — no internal scoring or suppression metadata exposed.
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/v1/aether/suggestions` | List suggestions visible to the tenant (redacted) |
+| GET | `/v1/aether/suggestions/{suggestion_id}` | Get a single suggestion (redacted) |
+| POST | `/v1/aether/suggestions/{suggestion_id}/feedback` | Submit tenant feedback on a suggestion |
+
+### Required Permissions
+
+- `suggestions:read` — list and view suggestions
+- `suggestions:approve` — approve, reject, suppress, execute
+- `suggestions:write` — create suggestions (operator-only)
+
+---
 
 ### Channel Management (End-User Self-Service)
 
