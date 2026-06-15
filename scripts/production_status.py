@@ -270,15 +270,17 @@ AREAS: list[Area] = [
     ),
     Area(
         "security / compliance",
-        3,
+        4,
         "API-key + JWT auth (RS256 in production), role + permission RBAC, column- and "
         "query-level tenant isolation with dedicated tests, consent + DSR with audit "
-        "export. Compliance posture is pre-positioning (14/16 controls) — no external "
-        "certification.",
+        "export. 14/18 controls implemented + VM-dep-audit and VM-secret-scan now CI-gated; "
+        "4 controls documented-only (IR, PR, PT, TM); no external certification.",
         [
             "Backend Architecture/aether-backend/shared/auth/auth.py",
             "tests/unit/test_tenant_isolation.py",
             "scripts/compliance/readiness.py",
+            "Backend Architecture/aether-backend/tests/security/",
+            "scripts/security/secret_scan.py",
         ],
     ),
     Area(
