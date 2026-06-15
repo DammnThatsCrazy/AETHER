@@ -158,14 +158,18 @@ Enforced by `_enforce_load_policy()`. Fails closed on any policy violation.
 | POST /v1/predict/journey | ✅ | Lazy-loads artifact or stub |
 | POST /v1/predict/attribution | ✅ | Lazy-loads artifact or stub |
 | POST /v1/predict/identity | ✅ | Real-time single-pair identity resolution |
+| POST /v1/predict/anomaly | ✅ | Single-record anomaly detection |
 | POST /v1/predict/batch | ✅ | Privileged-only |
 | GET /v1/defense/status | ✅ | Defense status |
 | GET /v1/defense/metrics | ✅ | Defense metrics |
 | GET /v1/monitoring/freshness | ✅ | Feature freshness SLA summary |
+| GET /v1/monitoring/extraction | ✅ | Extraction defense event summary |
 
 Stub policy: stubs load only when `AETHER_ENV` ∉ {`production`, `staging`}. Production and staging serve 503 when artifacts are missing.
 
 `DataFreshnessSLATracker` is instantiated at serving startup and records per-model SLA checks against freshness contracts. The `/ready` endpoint gates load-balancer traffic when the violation rate exceeds 10%.
+
+`ExtractionDefenseMonitor` is instantiated at serving startup and records every extraction defense decision (both allowed and blocked) through `extraction_defense_middleware`. Telemetry is available at `/v1/monitoring/extraction`.
 
 ---
 
@@ -320,7 +324,7 @@ Backend admin routes for ML operational state are defined in:
 | Serving (artifacts) | ✅ if trained | 🔧 | 🔧 |
 | Backend gateway | ✅ | ✅ | ✅ |
 | Extraction defense | ✅ | ✅ | ✅ |
-| Monitoring | ⚠️ basic | 🔧 | 🔧 |
+| Monitoring | ✅ | 🔧 | 🔧 |
 | Investor demo | ✅ (synthetic labeled) | N/A | N/A |
 
 > **Note**: "Investor demo" uses synthetic-trained artifacts explicitly labeled as such. These are never promoted to production and all responses include `synthetic_data: true`.
