@@ -11,7 +11,7 @@ source_files:
 canonical_owner: security@aether
 estimated_read_minutes: 12
 toc_depth: 3
-last_synced_commit: 3d4ff13
+last_synced_commit: 5a5015d
 ---
 # x402 Protocol Support Audit — Aether Repository
 
@@ -78,7 +78,7 @@ This is not speculative or merely extensible infrastructure. The x402 support is
 | **Facilitator / Institution** | Implemented | `services/x402/facilitators.py` — `FacilitatorRegistry` with per-chain facilitator lookup; `services/x402/verification.py` — `VerificationEngine` delegates to external facilitator via HTTP (x402 wire format) with local USDC fallback |
 | **Payment deduplication (idempotency)** | Implemented | `services/x402/idempotency.py` — async `_InMemoryIdempotencyStore` (local) + `_RedisIdempotencyStore` (staging/production, key: `aether:x402:idempotency:{tenant_id}:{payment_identifier}`); multi-instance safe |
 | **Settlement state machine** | Implemented | `services/x402/settlement.py` — multi-state lifecycle (pending → clearing → settled / failed); `SettlementEngine.start()` transitions `PaymentReceipt` through states |
-| **On-chain verification** | Partial | `services/x402/verification.py` — facilitator-delegated verification implemented for USDC/Base and USDC/Solana; direct on-chain ecrecover for arbitrary chains is not yet implemented |
+| **On-chain verification** | Implemented | `services/x402/verification.py` — facilitator-delegated verification (primary); direct on-chain RPC fallback via `_verify_evm()` (Base: `eth_getTransactionReceipt` + ERC-20 Transfer log) and `_verify_solana()` (Solana: `getTransaction` + SPL token transfer). Active when `AETHER_ENV != "local"`. Fail-closed on RPC error/timeout. |
 | **Entitlement / access gating** | Latent | Reward eligibility engine exists (`services/rewards/eligibility.py`) but x402 does not gate access — it is observational/capture-only |
 | **HTTP 402 response middleware** | Implemented | `services/x402/challenge_middleware.py` — `X402ChallengeMiddleware` intercepts requests to registered protected resources, returns HTTP 402 with `PAYMENT-REQUIRED` header, honors `X-Payment-Identifier` idempotency and active entitlements (SIWX reuse). Wired via `register_challenge_middleware()` controlled by `commerce_enable_challenge_middleware` setting. |
 
@@ -297,4 +297,4 @@ Aether has a **production-grade x402 capture and analytics subsystem** that:
 
 **Challenge-side gap is now closed.** `X402ChallengeMiddleware` implements the missing HTTP 402 gating layer (`services/x402/challenge_middleware.py`). Deployment is controlled by `commerce_enable_challenge_middleware` setting.
 
-Direct on-chain ecrecover verification for arbitrary chains is also absent; verification is delegated to external facilitators for all chains except as a local fallback path for USDC/Base and USDC/Solana.
+Direct on-chain RPC verification is now implemented for EVM (Base) and Solana chains via `_verify_evm()` and `_verify_solana()` in `verification.py`. These run as the fallback path when facilitator delegation is unavailable, active in all non-local environments. Arbitrary EVM-compatible chains beyond Base are not yet supported; adding a new chain requires a `_ASSET_CONTRACT` entry and an RPC URL setting.

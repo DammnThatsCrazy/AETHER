@@ -54,6 +54,24 @@ A running checklist of the productization surfaces and their readiness. See
 - [x] Kyber operator surfaces (reliability, intelligence quality, revops, security,
       implementation, packages, deployment readiness, GTM)
 
+## OODA Suggestion Intelligence
+
+- [x] Canonical `Suggestion` entity: 15 statuses, 8 OODA phases, full audit trail
+- [x] Lifecycle state machine with legal-transition enforcement and terminal-state guards
+- [x] Policy engine: approval gates for high-risk classes + risk_score ≥ 0.7 + irreversible actions
+- [x] Priority scorer: weighted composite formula, P0–P3 thresholds, class overrides
+- [x] Tenant isolation: every query, event, cache key, and channel scoped by `tenant_id`
+- [x] Secret redaction: `redact_for_tenant()` strips operator-only and sensitive fields
+- [x] Signal adapters: data quality, SDK health, SDK drift, graph, profile360, notification, recommendation, governance, reliability, Noesis (10 total)
+- [x] Outcome loop: `MEASURED → LEARNED → CLOSED` with learning feedback signals
+- [x] Kyber operator surfaces: OODA command center + review queue (`/intelligence/suggestions`, `/intelligence/suggestions/review`)
+- [x] Aether tenant surfaces: suggestion feed + feedback controls (`/suggestions`)
+- [x] Noesis read-only intents: lookup, summary, review queue, explain, outcome lookup
+- [x] Realtime channels: `suggestions.feed`, `suggestions.review`, `suggestions.outcomes`
+- [x] Feature flags: `AETHER_SUGGESTIONS_ENABLED`, `AETHER_SUGGESTIONS_EXECUTION_ENABLED` (default false)
+- [x] 13 backend unit test files covering lifecycle, scorer, policy, tenant isolation, adapters, outcome
+- [x] Backfill script: `scripts/backfill_suggestions.py` (`--dry-run`, `--tenant-id`, `--source`, `--limit`)
+
 ## Deployment & Local Dev
 
 - [x] Env-driven config, safe-by-default feature flags, documented local commands

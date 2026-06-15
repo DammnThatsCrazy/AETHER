@@ -12,7 +12,7 @@ source_files:
 canonical_owner: platform@aether
 estimated_read_minutes: 12
 toc_depth: 3
-last_synced_commit: 1dbc6a7
+last_synced_commit: 22c67e4
 ---
 # Operations Runbook v8.9.0
 
@@ -274,6 +274,8 @@ at the HTTP layer but verifies a Stripe-signed payload — failures should alert
 | Task | Module | Cadence |
 |---|---|---|
 | Monthly overage invoice cron | `services/billing/cron.run_monthly_overage_cron` | end-of-month billing cycle |
+| SLA expiry worker | `services/notification_intelligence.lifecycle.start_sla_worker` | continuous (event-driven) |
+| Dune polling worker | `services/dune_feeder.scheduler.start_dune_polling_worker` | 60 s tick; per-schedule cadence ≥ 300 s |
 
 These start during app `lifespan` startup and are cancelled on shutdown. Restart loops
 during deploys are normal; persistent failures should page billing oncall.

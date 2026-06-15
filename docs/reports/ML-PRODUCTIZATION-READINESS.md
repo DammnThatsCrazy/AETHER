@@ -158,14 +158,18 @@ Enforced by `_enforce_load_policy()`. Fails closed on any policy violation.
 | POST /v1/predict/journey | ✅ | Lazy-loads artifact or stub |
 | POST /v1/predict/attribution | ✅ | Lazy-loads artifact or stub |
 | POST /v1/predict/identity | ✅ | Real-time single-pair identity resolution |
+| POST /v1/predict/anomaly | ✅ | Single-record anomaly detection |
 | POST /v1/predict/batch | ✅ | Privileged-only |
 | GET /v1/defense/status | ✅ | Defense status |
 | GET /v1/defense/metrics | ✅ | Defense metrics |
 | GET /v1/monitoring/freshness | ✅ | Feature freshness SLA summary |
+| GET /v1/monitoring/extraction | ✅ | Extraction defense event summary |
 
 Stub policy: stubs load only when `AETHER_ENV` ∉ {`production`, `staging`}. Production and staging serve 503 when artifacts are missing.
 
 `DataFreshnessSLATracker` is instantiated at serving startup and records per-model SLA checks against freshness contracts. The `/ready` endpoint gates load-balancer traffic when the violation rate exceeds 10%.
+
+`ExtractionDefenseMonitor` is instantiated at serving startup and records every extraction defense decision (both allowed and blocked) through `extraction_defense_middleware`. Telemetry is available at `/v1/monitoring/extraction`.
 
 ---
 
@@ -217,7 +221,7 @@ All bugs fixed:
 
 Prometheus metrics and alerts exist in `monitoring/monitor.py` and `monitoring/alerts.py`. Integration with the serving API is via the `defense_metrics` endpoint.
 
-Remaining: dedicated per-model drift detection, per-model data freshness SLA tracking, and Kyber admin dashboard hooks are partially implemented (see Section 9 below).
+Drift detection is now fully wired: training saves a `baseline.joblib` sample (up to 1 000 rows) per model; serving maintains per-model prediction buffers (deque, max 500); a background task runs PSI/KS/JS divergence checks every 300 s via `MonitoringPipeline`; results are exposed at `GET /v1/monitoring/drift`. Per-model data freshness SLA tracking is live at `GET /v1/monitoring/freshness`. Kyber admin dashboard hooks are live at `/v1/admin/kyber/ml/`.
 
 ---
 
@@ -245,7 +249,7 @@ Backend admin routes for ML operational state are defined in:
 | MLflow tracking | Available, fails gracefully if unreachable | Infra | 🔧 |
 | S3 artifact store | Requires AWS credentials | Infra | 🔧 |
 | Redis feature store | Requires Redis instance | Infra | 🔧 |
-| Drift detection | Framework exists, per-model baselines needed | Medium | ⚠️ |
+| Drift detection | Baselines saved at training; buffer + `/v1/monitoring/drift` endpoint live | Medium | ✅ |
 | CI for ML registry drift | `validate_ml_registry.py` gate added to CI | Medium | ✅ |
 | Freshness SLA monitoring | `DataFreshnessSLATracker` wired into serving | Medium | ✅ |
 
@@ -320,7 +324,7 @@ Backend admin routes for ML operational state are defined in:
 | Serving (artifacts) | ✅ if trained | 🔧 | 🔧 |
 | Backend gateway | ✅ | ✅ | ✅ |
 | Extraction defense | ✅ | ✅ | ✅ |
-| Monitoring | ⚠️ basic | 🔧 | 🔧 |
+| Monitoring | ✅ | 🔧 | 🔧 |
 | Investor demo | ✅ (synthetic labeled) | N/A | N/A |
 
 > **Note**: "Investor demo" uses synthetic-trained artifacts explicitly labeled as such. These are never promoted to production and all responses include `synthetic_data: true`.

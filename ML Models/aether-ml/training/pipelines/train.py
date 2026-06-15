@@ -274,6 +274,9 @@ class TrainingPipeline:
             training_run_id=mlflow_run_id or "",
         )
 
+        # 7.5. Save drift detection baseline sample alongside model artifact
+        self._save_baseline(X_train, artifact_path)
+
         elapsed = time.time() - start
 
         threshold_passed, _ = self._check_thresholds(test_metrics)
@@ -747,6 +750,31 @@ class TrainingPipeline:
                 self.model_name, threshold_passed,
             )
         logger.info("Artifacts saved to %s", artifact_path)
+
+    def _save_baseline(self, X_train: "pd.DataFrame", artifact_path: Path) -> None:
+        """Save a random sample of training features as the drift detection baseline.
+
+        The baseline is used by the serving API to detect distribution shift
+        between training-time features and live production inputs.
+        """
+        import joblib
+
+        n_sample = min(1000, len(X_train))
+        baseline = X_train.sample(n=n_sample, random_state=42).reset_index(drop=True)
+        baseline_path = artifact_path / "baseline.joblib"
+        joblib.dump(baseline, baseline_path)
+
+        baseline_meta = {
+            "model_id": self.model_name,
+            "n_samples": n_sample,
+            "numeric_features": list(baseline.select_dtypes(include="number").columns),
+            "categorical_features": list(baseline.select_dtypes(exclude="number").columns),
+            "saved_at": datetime.now(timezone.utc).isoformat(),
+        }
+        (artifact_path / "baseline_meta.json").write_text(
+            json.dumps(baseline_meta, indent=2)
+        )
+        logger.info("Drift baseline saved: %d rows -> %s", n_sample, baseline_path)
 
 
 # ---------------------------------------------------------------------------

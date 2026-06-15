@@ -233,6 +233,22 @@ class IdentityResolutionResponse(BaseModel):
     model_version: str
 
 
+class AnomalyDetectionRequest(BaseModel):
+    """Request schema for real-time anomaly detection."""
+
+    record_id: str
+    features: dict[str, Any]
+
+
+class AnomalyDetectionResponse(BaseModel):
+    """Response schema for anomaly detection."""
+
+    record_id: str
+    is_anomaly: bool
+    anomaly_score: float
+    latency_ms: float
+
+
 class ReadinessResponse(BaseModel):
     """Readiness probe response — used by load balancers for traffic gating."""
 
@@ -515,6 +531,23 @@ class ModelServer:
             )
         return info
 
+    def load_baseline(self, model_id: str) -> "pd.DataFrame | None":
+        """Load the drift detection baseline sample for a model, if available.
+
+        Returns the reference DataFrame saved by the training pipeline, or None
+        if no baseline exists (model not yet trained, or trained before baseline
+        saving was added).
+        """
+        baseline_path = self.models_dir / model_id / "baseline.joblib"
+        if not baseline_path.exists():
+            return None
+        try:
+            import joblib as _jl
+            return _jl.load(baseline_path)
+        except Exception as exc:
+            logger.debug("Failed to load drift baseline for %s: %s", model_id, exc)
+            return None
+
     def predict(self, model_name: str, features: dict[str, Any]) -> Any:
         """Run single-instance inference through the named model.
 
@@ -628,6 +661,93 @@ try:
 except Exception:  # ImportError or any init failure
     _freshness_tracker = None
 
+try:
+    from monitoring.monitor import ExtractionDefenseMonitor as _ExtractionDefenseMonitor
+    _extraction_monitor: "_ExtractionDefenseMonitor | None" = _ExtractionDefenseMonitor()
+except Exception:
+    _extraction_monitor = None
+
+# ---------------------------------------------------------------------------
+# Per-model prediction input buffer — holds last 500 feature dicts per model
+# for drift detection. In-memory only; cleared on restart. Drift detection
+# skips models with fewer than 30 buffered rows.
+# ---------------------------------------------------------------------------
+from collections import deque as _deque
+_prediction_buffers: dict[str, "_deque[dict[str, Any]]"] = {
+    m: _deque(maxlen=500) for m in MODEL_NAMES
+}
+
+# Stores the output of the most recent drift detection run (updated by the
+# background task every 300s). Empty until the first run completes.
+_last_drift_results: dict[str, Any] = {}
+
+# ---------------------------------------------------------------------------
+# Drift detection helpers
+# ---------------------------------------------------------------------------
+
+def _run_drift_check() -> None:
+    """Compare per-model prediction buffers against training baselines.
+
+    Called by the background task every 300s. Skips models with fewer than
+    30 buffered predictions or no baseline on disk. Results are stored in
+    _last_drift_results for the /v1/monitoring/drift endpoint.
+    """
+    try:
+        from monitoring.monitor import MonitoringPipeline
+    except ImportError:
+        return
+
+    pipeline = MonitoringPipeline()
+    reference_data: dict[str, Any] = {}
+    current_data: dict[str, Any] = {}
+    model_metrics: dict[str, Any] = {}
+
+    for model_id in MODEL_NAMES:
+        buffer = list(_prediction_buffers[model_id])
+        if len(buffer) < 30:
+            continue
+        reference_df = server.load_baseline(model_id)
+        if reference_df is None or len(reference_df) < 30:
+            continue
+        current_df = pd.DataFrame(buffer)
+        numeric_features = list(reference_df.select_dtypes(include="number").columns)
+        common_cols = [c for c in numeric_features if c in current_df.columns]
+        if not common_cols:
+            continue
+        reference_data[model_id] = reference_df[common_cols]
+        current_data[model_id] = current_df[common_cols]
+        model_metrics[model_id] = {
+            "current": {},
+            "baseline": {},
+            "numeric_features": common_cols,
+            "categorical_features": [],
+        }
+
+    if not reference_data:
+        return
+
+    try:
+        results = pipeline.run(reference_data, current_data, model_metrics)
+        _last_drift_results.clear()
+        _last_drift_results.update(results)
+        _last_drift_results["_buffer_sizes"] = {
+            m: len(b) for m, b in _prediction_buffers.items()
+        }
+    except Exception as exc:
+        logger.warning("Drift pipeline run failed: %s", exc)
+
+
+async def _drift_check_periodic(interval: int = 300) -> None:
+    """Background coroutine that runs drift detection every `interval` seconds."""
+    import asyncio
+    while True:
+        await asyncio.sleep(interval)
+        try:
+            _run_drift_check()
+        except Exception as exc:
+            logger.warning("Drift check error: %s", exc)
+
+
 # ---------------------------------------------------------------------------
 # Shared router — importable by the consolidated aether-app backend (E2).
 # All predict/defense routes are registered here so they can be mounted at
@@ -673,8 +793,15 @@ async def lifespan(app: FastAPI):
         except ImportError:
             pass
 
+    # Start background drift detection task (runs every 300s; degrades gracefully)
+    import asyncio as _asyncio
+    _drift_task = _asyncio.create_task(_drift_check_periodic(interval=300))
+    logger.info("Drift detection background task started (interval=300s)")
+
     yield
 
+    _drift_task.cancel()
+    logger.info("Drift detection background task cancelled")
     if _cleanup_task is not None:
         _cleanup_task.cancel()
         logger.info("Extraction defense cleanup task cancelled")
@@ -756,6 +883,24 @@ async def extraction_defense_middleware(request: Request, call_next):
         model_name=model_name,
         batch_size=batch_size,
     )
+
+    if _extraction_monitor is not None:
+        _ra = pre_result.risk_assessment
+        _tier_band = {"normal": "green", "elevated": "yellow", "high": "orange", "critical": "red"}
+        _extraction_monitor.record_extraction_event(
+            risk_score=_ra.risk_score if _ra else 0.0,
+            band=_tier_band.get(_ra.tier, "unknown") if _ra else "unknown",
+            signals=[
+                {"name": "velocity", "value": _ra.velocity_signal},
+                {"name": "pattern", "value": _ra.pattern_signal},
+                {"name": "similarity", "value": _ra.similarity_signal},
+                {"name": "entropy", "value": _ra.entropy_signal},
+                {"name": "canary", "value": _ra.canary_signal},
+            ] if _ra else [],
+            policy_action="deny" if pre_result.blocked else "allow",
+            model_name=model_name,
+            is_batch=batch_size > 1,
+        )
 
     if pre_result.blocked:
         status = 429 if "rate limit" in pre_result.block_reason.lower() else 403
@@ -929,7 +1074,11 @@ async def predict_intent(req: IntentPredictionRequest, request: Request) -> Inte
     else:
         journey_stage = "awareness"
 
+    if _freshness_tracker is not None:
+        _freshness_tracker.check("intent_prediction", "behavioral_features", None)
+
     latency_ms = (time.perf_counter() - t0) * 1000
+    _prediction_buffers["intent_prediction"].append(dict(req.features))
     return IntentPredictionResponse(
         session_id=req.session_id,
         predicted_action=str(predicted_action),
@@ -957,7 +1106,11 @@ async def predict_bot(req: BotDetectionRequest, request: Request) -> BotDetectio
 
     confidence = _apply_output_defense(request, float(np.max(proba)), req.features)
 
+    if _freshness_tracker is not None:
+        _freshness_tracker.check("bot_detection", "behavioral_features", None)
+
     latency_ms = (time.perf_counter() - t0) * 1000
+    _prediction_buffers["bot_detection"].append(dict(req.features))
     return BotDetectionResponse(
         session_id=req.session_id,
         is_bot=bool(prediction),
@@ -995,7 +1148,11 @@ async def predict_session_score(req: SessionScoreRequest, request: Request) -> S
     else:
         intervention = "none"
 
+    if _freshness_tracker is not None:
+        _freshness_tracker.check("session_scorer", "session_features", None)
+
     latency_ms = (time.perf_counter() - t0) * 1000
+    _prediction_buffers["session_scorer"].append(dict(req.features))
     return SessionScoreResponse(
         session_id=req.session_id,
         engagement_score=engagement,
@@ -1041,7 +1198,11 @@ async def predict_churn(req: ChurnPredictionRequest, request: Request) -> ChurnP
         str(result["top_factor_3"].iloc[0]),
     ]
 
+    if _freshness_tracker is not None:
+        _freshness_tracker.check("churn_prediction", "behavioral_features", None)
+
     latency_ms = (time.perf_counter() - t0) * 1000
+    _prediction_buffers["churn_prediction"].append(dict(features))
     return ChurnPredictionResponse(
         identity_id=req.identity_id,
         churn_probability=round(churn_prob, 4),
@@ -1072,10 +1233,36 @@ async def predict_ltv(req: LTVPredictionRequest, request: Request) -> LTVPredict
 
     ltv = _apply_output_defense(request, float(prediction[0]), features)
 
+    if _freshness_tracker is not None:
+        _freshness_tracker.check("ltv_prediction", "behavioral_features", None)
+
     latency_ms = (time.perf_counter() - t0) * 1000
+    _prediction_buffers["ltv_prediction"].append(dict(features))
     return LTVPredictionResponse(
         identity_id=req.identity_id,
         predicted_ltv=round(ltv, 2),
+        latency_ms=round(latency_ms, 2),
+    )
+
+
+@router.post("/v1/predict/anomaly", response_model=AnomalyDetectionResponse)
+async def predict_anomaly(req: AnomalyDetectionRequest, request: Request) -> AnomalyDetectionResponse:
+    """Detect anomalies in a single record.
+
+    Returns an anomaly flag, anomaly score (0–1), and latency. Use
+    ``/v1/predict/batch`` with ``model_name=anomaly_detection`` for bulk
+    screening.
+    """
+    t0 = time.perf_counter()
+    model = server.get_model("anomaly_detection")
+    df = pd.DataFrame([req.features])
+    score = _apply_output_defense(request, float(model.predict(df)[0]), req.features)
+    _prediction_buffers["anomaly_detection"].append(dict(req.features))
+    latency_ms = (time.perf_counter() - t0) * 1000
+    return AnomalyDetectionResponse(
+        record_id=req.record_id,
+        is_anomaly=score > 0.5,
+        anomaly_score=round(score, 4),
         latency_ms=round(latency_ms, 2),
     )
 
@@ -1213,6 +1400,7 @@ async def predict_identity(req: IdentityResolutionRequest, request: Request) -> 
     confidence = _apply_output_defense(request, merge_probability, features)
 
     latency_ms = (time.perf_counter() - t0) * 1000
+    _prediction_buffers["identity_resolution"].append(dict(features))
     return IdentityResolutionResponse(
         profile_pair_id=req.profile_pair_id,
         is_same_entity=confidence > 0.5,
@@ -1408,6 +1596,34 @@ async def freshness_status() -> dict[str, Any]:
             "by_model": {},
         }
     return {"enabled": True, **_freshness_tracker.get_summary()}
+
+
+@router.get("/v1/monitoring/drift")
+async def drift_status() -> dict[str, Any]:
+    """Return latest per-model drift detection results.
+
+    Reports PSI/KS/JS divergence scores computed by the background drift
+    checker. Returns empty results when the baseline or prediction buffer
+    has insufficient data (< 30 rows). The background task runs every 300 s.
+    """
+    return {
+        "last_run": _last_drift_results.get("timestamp"),
+        "models": _last_drift_results.get("models", {}),
+        "buffer_sizes": {m: len(buf) for m, buf in _prediction_buffers.items()},
+    }
+
+
+@router.get("/v1/monitoring/extraction")
+async def extraction_monitor_status() -> dict[str, Any]:
+    """Return extraction defense monitoring summary.
+
+    Reports block rates, policy action distribution, band distribution, and
+    average risk scores. Returns ``{"enabled": false}`` when the extraction
+    defense monitor is unavailable.
+    """
+    if _extraction_monitor is None:
+        return {"enabled": False}
+    return {"enabled": True, **_extraction_monitor.get_summary()}
 
 
 # Mount the shared router on the standalone app so `uvicorn serving.src.api:app`

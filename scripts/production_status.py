@@ -123,13 +123,18 @@ AREAS: list[Area] = [
     ),
     Area(
         "Profile 360",
-        4,
+        5,
         "Canonical profile composition from identity, analytics, consent, graph, and "
         "Gold-tier lake repositories; 15 intelligence sub-resources wired to real "
-        "queries with window + tenant filtering; credit data behind 'credit' consent.",
+        "queries with window + tenant filtering; credit data behind hard 'credit' "
+        "consent gate enforced at the API route level (HTTP 403 on denial); dedicated "
+        "unit test suite covering aggregator dimensions, quality scoring, tenant "
+        "isolation, pagination shape, and the consent gate.",
         [
             "Backend Architecture/aether-backend/services/profile/",
+            "Backend Architecture/aether-backend/services/profile/routes.py",
             "packages/shared/profile360-contract.ts",
+            "tests/unit/test_profile_360.py",
         ],
     ),
     Area(
@@ -196,15 +201,22 @@ AREAS: list[Area] = [
     ),
     Area(
         "connectors (BYOK / source)",
-        3,
+        4,
         "14 production-shaped inbound connectors with real API calls credential-gated "
         "behind vault secret flow (Shopify, Stripe, HubSpot, Salesforce, Klaviyo, "
         "PostHog, GA4, Jira, Linear, Zendesk, Intercom — all real HTTP against live "
         "APIs when secret provided). Sync health tracking (status, last_synced_at, "
         "error_count, last_error_message) recorded per connector per tenant. Kyber "
-        "per-tenant health drill-down route added. Remaining gap: staging validation "
-        "with live credentials for high-value connectors.",
-        ["Backend Architecture/aether-backend/services/integrations/connectors/"],
+        "per-tenant health drill-down route added. ConnectorService.sync() now writes "
+        "pulled NormalizedEvent records to BronzeRepository('connector_events') — "
+        "vault → pull → Bronze ingest path is complete and E2E tested. Minor gap: "
+        "no live staging validation with real provider credentials.",
+        [
+            "Backend Architecture/aether-backend/services/integrations/connectors/",
+            "Backend Architecture/aether-backend/tests/test_connector_ingest.py",
+            "Backend Architecture/aether-backend/tests/test_slack_notify_e2e.py",
+            "Backend Architecture/aether-backend/repositories/lake.py",
+        ],
     ),
     Area(
         "Slack / action notifications",
@@ -213,11 +225,14 @@ AREAS: list[Area] = [
         "(chat.postMessage + chat.update via Block Kit, circuit breaker, retries) are "
         "fully real. Per-tenant Slack channel mapping by severity (slack_channel_map) "
         "and opt-in controls (operator_review_required, quiet_hours, rate limits) are "
-        "implemented. Slack OAuth flow (connect + callback) is wired. Minor gap: "
-        "per-tenant channel mapping not validated against a live workspace in staging.",
+        "implemented. Slack OAuth flow (connect + callback) is wired. Channel-map "
+        "routing is E2E tested: channel_for(event_family) and template rendering "
+        "validated in test_slack_notify_e2e.py. Minor gap: no live workspace "
+        "validation in staging.",
         [
             "Backend Architecture/aether-backend/services/integrations/connectors/adapters.py",
             "Backend Architecture/aether-backend/services/notification_intelligence/",
+            "Backend Architecture/aether-backend/tests/test_slack_notify_e2e.py",
         ],
     ),
     Area(
@@ -265,15 +280,17 @@ AREAS: list[Area] = [
     ),
     Area(
         "security / compliance",
-        3,
+        4,
         "API-key + JWT auth (RS256 in production), role + permission RBAC, column- and "
         "query-level tenant isolation with dedicated tests, consent + DSR with audit "
-        "export. Compliance posture is pre-positioning (14/16 controls) — no external "
-        "certification.",
+        "export. 14/18 controls implemented + VM-dep-audit and VM-secret-scan now CI-gated; "
+        "4 controls documented-only (IR, PR, PT, TM); no external certification.",
         [
             "Backend Architecture/aether-backend/shared/auth/auth.py",
             "tests/unit/test_tenant_isolation.py",
             "scripts/compliance/readiness.py",
+            "Backend Architecture/aether-backend/tests/security/",
+            "scripts/security/secret_scan.py",
         ],
     ),
     Area(
@@ -371,14 +388,6 @@ BLOCKERS: list[Blocker] = [
         "ML model artifacts not trained/published for serving",
         "deployment / cloud readiness",
         "Run training pipelines in ML Models/aether-ml and publish artifacts",
-    ),
-    Blocker(
-        "pre-production-blocker",
-        "Connectors not staging-validated with live credentials; no E2E test "
-        "for vault → pull → event ingestion path against a real provider API",
-        "connectors (BYOK / source)",
-        "Run connector smoke against staging with real Shopify/Stripe/Slack credentials; "
-        "add E2E test asserting vault secret → pull → Bronze ingest",
     ),
     Blocker(
         "pre-production-blocker",

@@ -479,5 +479,136 @@ class TestFreshnessMonitoringEndpoint:
             assert data["enabled"] is False
 
 
+class TestDriftMonitoringEndpoint:
+    """Tests for the /v1/monitoring/drift endpoint."""
+
+    def test_drift_returns_200(self, client: TestClient) -> None:
+        response = client.get("/v1/monitoring/drift")
+        assert response.status_code == 200
+
+    def test_drift_response_has_required_keys(self, client: TestClient) -> None:
+        response = client.get("/v1/monitoring/drift")
+        data = response.json()
+
+        assert "last_run" in data
+        assert "models" in data
+        assert "buffer_sizes" in data
+        assert isinstance(data["buffer_sizes"], dict)
+
+    def test_drift_buffer_sizes_covers_all_models(self, client: TestClient) -> None:
+        from serving.src.api import MODEL_NAMES
+
+        response = client.get("/v1/monitoring/drift")
+        data = response.json()
+
+        for model in MODEL_NAMES:
+            assert model in data["buffer_sizes"]
+            assert isinstance(data["buffer_sizes"][model], int)
+
+    def test_drift_buffer_sizes_start_at_zero(self, client: TestClient) -> None:
+        from unittest.mock import patch
+        from collections import deque
+        from serving.src.api import MODEL_NAMES, app
+
+        empty_buffers = {m: deque(maxlen=500) for m in MODEL_NAMES}
+        with patch("serving.src.api._prediction_buffers", empty_buffers):
+            test_client = TestClient(app)
+            response = test_client.get("/v1/monitoring/drift")
+            data = response.json()
+            for model in MODEL_NAMES:
+                assert data["buffer_sizes"][model] == 0
+
+    def test_drift_empty_last_run_when_no_check_yet(self, client: TestClient) -> None:
+        from unittest.mock import patch
+        from serving.src.api import app
+
+        with patch("serving.src.api._last_drift_results", {}):
+            test_client = TestClient(app)
+            response = test_client.get("/v1/monitoring/drift")
+            data = response.json()
+            assert data["last_run"] is None
+            assert data["models"] == {}
+
+
+class TestAnomalyDetectionEndpoint:
+    """Tests for POST /v1/predict/anomaly."""
+
+    def test_anomaly_returns_200(self, client: TestClient) -> None:
+        payload = {
+            "record_id": "rec-001",
+            "features": {
+                "feature_a": 1.0,
+                "feature_b": 0.5,
+                "feature_c": 2.3,
+            },
+        }
+        response = client.post("/v1/predict/anomaly", json=payload)
+        assert response.status_code in (200, 503)
+
+    def test_anomaly_response_schema(self, client: TestClient) -> None:
+        payload = {
+            "record_id": "rec-002",
+            "features": {"x": 0.1, "y": 0.9},
+        }
+        response = client.post("/v1/predict/anomaly", json=payload)
+        if response.status_code == 200:
+            data = response.json()
+            assert "record_id" in data
+            assert data["record_id"] == "rec-002"
+            assert "is_anomaly" in data
+            assert isinstance(data["is_anomaly"], bool)
+            assert "anomaly_score" in data
+            assert 0.0 <= data["anomaly_score"] <= 1.0
+            assert "latency_ms" in data
+            assert isinstance(data["latency_ms"], float)
+
+    def test_anomaly_buffer_populated(self, client: TestClient) -> None:
+        from serving.src.api import _prediction_buffers
+
+        before = len(_prediction_buffers["anomaly_detection"])
+        payload = {"record_id": "rec-003", "features": {"v": 0.5}}
+        response = client.post("/v1/predict/anomaly", json=payload)
+        if response.status_code == 200:
+            assert len(_prediction_buffers["anomaly_detection"]) == before + 1
+
+    def test_anomaly_missing_record_id_returns_422(self, client: TestClient) -> None:
+        response = client.post("/v1/predict/anomaly", json={"features": {"v": 1.0}})
+        assert response.status_code == 422
+
+
+class TestExtractionMonitorEndpoint:
+    """Tests for GET /v1/monitoring/extraction."""
+
+    def test_extraction_monitor_returns_200(self, client: TestClient) -> None:
+        response = client.get("/v1/monitoring/extraction")
+        assert response.status_code == 200
+
+    def test_extraction_monitor_enabled_when_available(self, client: TestClient) -> None:
+        from monitoring.monitor import ExtractionDefenseMonitor
+        from unittest.mock import patch
+
+        from serving.src.api import app
+
+        monitor = ExtractionDefenseMonitor()
+        with patch("serving.src.api._extraction_monitor", monitor):
+            test_client = TestClient(app)
+            response = test_client.get("/v1/monitoring/extraction")
+            assert response.status_code == 200
+            data = response.json()
+            assert data["enabled"] is True
+            assert "total_requests" in data
+            assert "block_rate_pct" in data
+
+    def test_extraction_monitor_disabled_when_none(self) -> None:
+        from unittest.mock import patch
+        from serving.src.api import app
+
+        with patch("serving.src.api._extraction_monitor", None):
+            test_client = TestClient(app)
+            response = test_client.get("/v1/monitoring/extraction")
+            assert response.status_code == 200
+            assert response.json() == {"enabled": False}
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v", "--tb=short"])

@@ -319,7 +319,21 @@ export type IntelligenceEventName =
   | 'investigation.updated'
   | 'governance.policy.evaluated'
   | 'web3.wallet.updated'
-  | 'agent.coordination.updated';
+  | 'agent.coordination.updated'
+  | 'suggestion.detected'
+  | 'suggestion.oriented'
+  | 'suggestion.created'
+  | 'suggestion.review_required'
+  | 'suggestion.approved'
+  | 'suggestion.rejected'
+  | 'suggestion.suppressed'
+  | 'suggestion.executing'
+  | 'suggestion.executed'
+  | 'suggestion.delivered'
+  | 'suggestion.outcome_recorded'
+  | 'suggestion.closed'
+  | 'suggestion.failed'
+  | 'suggestion.expired';
 
 export interface EventPipelineEnvelope<TPayload = Record<string, unknown>> {
   id: string;
@@ -380,7 +394,10 @@ export type RealtimeChannel =
   | 'investigation.workspace'
   | 'governance.audit'
   | 'agent.coordination'
-  | 'web3.wallets';
+  | 'web3.wallets'
+  | 'suggestions.feed'
+  | 'suggestions.review'
+  | 'suggestions.outcomes';
 
 // ---------------------------------------------------------------------------
 // Investigation and governance APIs

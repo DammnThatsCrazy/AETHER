@@ -3415,6 +3415,9 @@
       "estimated_read_minutes": 5,
       "toc_depth": 3,
       "canonical_owner": "platform@aether"
+    },
+    {
+      "path": "docs/source-of-truth/SUGGESTION_INTELLIGENCE.md"
     }
   ]
 }

@@ -357,6 +357,15 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         app.state.provider_gateway = provider_gateway
         logger.info("Provider Gateway initialised")
 
+    # Dune Analytics — scheduled polling worker (asyncio loop, no external deps)
+    dune_poll_task = asyncio.create_task(asyncio.sleep(0))
+    try:
+        from services.dune_feeder.scheduler import start_dune_polling_worker
+        dune_poll_task = asyncio.create_task(start_dune_polling_worker())
+        logger.info("Dune polling worker started")
+    except Exception as e:  # pragma: no cover — defensive
+        logger.warning(f"Dune polling worker skipped: {e}")
+
     logger.info(
         f"Aether Backend started | env={settings.env.value} "
         f"| debug={settings.debug} | version={settings.api.version}"
@@ -369,6 +378,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     replay_worker_task.cancel()
     overage_cron_task.cancel()
     sla_worker_task.cancel()
+    dune_poll_task.cancel()
     try:
         await replay_worker_task
     except asyncio.CancelledError:
@@ -379,6 +389,10 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         pass
     try:
         await sla_worker_task
+    except asyncio.CancelledError:
+        pass
+    try:
+        await dune_poll_task
     except asyncio.CancelledError:
         pass
     if provider_gateway:
@@ -607,6 +621,23 @@ def create_app() -> FastAPI:
         app.include_router(entitlements_router)
         app.include_router(commerce_diag_router)
         logger.info("Intelligence Graph: Agentic Commerce control plane (L3b+) mounted")
+
+    # ── Suggestion Intelligence (OODA) ────────────────────────────────────
+    sug = settings.suggestions
+    if sug.enabled:
+        from services.suggestions.routes import (
+            router as suggestions_router,
+            admin_router as suggestions_admin_router,
+            aether_router as suggestions_aether_router,
+        )
+        app.include_router(suggestions_router)
+        if sug.kyber_enabled:
+            app.include_router(suggestions_admin_router)
+        if sug.tenant_enabled:
+            app.include_router(suggestions_aether_router)
+        logger.info("Suggestion Intelligence: routes mounted (/v1/suggestions + /v1/admin/kyber/suggestions + /v1/aether/suggestions)")
+    else:
+        logger.info("Suggestion Intelligence: disabled (set AETHER_SUGGESTIONS_ENABLED=true to enable)")
 
     return app
 
