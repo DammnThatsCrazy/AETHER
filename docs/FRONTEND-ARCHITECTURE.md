@@ -13,7 +13,7 @@ source_files:
 canonical_owner: frontend@aether
 estimated_read_minutes: 35
 toc_depth: 4
-last_synced_commit: eb6ece8
+last_synced_commit: 22c67e4
 ---
 
 # Aether Frontend Architecture & Designer Handoff
@@ -38,6 +38,7 @@ There are two separate frontend applications. **Do not mix them up.**
 - **Geographic Intelligence** view — their users by location
 - **Social Intelligence** panels — their users' social platform presence
 - **Recommendation cards** — pending retargeting / campaign actions for the tenant to approve
+- **Suggestion feed** — OODA-driven prioritised recommendations with helpful/not helpful/dismiss feedback
 - Campaign management, attribution dashboards
 - API key management, plan management, usage metering
 
@@ -49,6 +50,8 @@ There are two separate frontend applications. **Do not mix them up.**
 - Command center — controller management
 - Diagnostics — circuit breakers, error tracking, dependency health
 - Review / approval workflows — human-in-the-loop agent approvals
+- **OODA Suggestion Command Center** — cross-tenant suggestion feed with evidence drawer, policy panel, and outcome tracker
+- **Suggestion review queue** — approve, reject, or suppress suggestions with reason capture
 - Lab — test fixtures and replay
 
 **Shared (`frontend/shared/` — npm package `@aether/ui`):**
