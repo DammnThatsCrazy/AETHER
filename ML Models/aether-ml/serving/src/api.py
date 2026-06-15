@@ -233,6 +233,22 @@ class IdentityResolutionResponse(BaseModel):
     model_version: str
 
 
+class AnomalyDetectionRequest(BaseModel):
+    """Request schema for real-time anomaly detection."""
+
+    record_id: str
+    features: dict[str, Any]
+
+
+class AnomalyDetectionResponse(BaseModel):
+    """Response schema for anomaly detection."""
+
+    record_id: str
+    is_anomaly: bool
+    anomaly_score: float
+    latency_ms: float
+
+
 class ReadinessResponse(BaseModel):
     """Readiness probe response — used by load balancers for traffic gating."""
 
@@ -645,6 +661,12 @@ try:
 except Exception:  # ImportError or any init failure
     _freshness_tracker = None
 
+try:
+    from monitoring.monitor import ExtractionDefenseMonitor as _ExtractionDefenseMonitor
+    _extraction_monitor: "_ExtractionDefenseMonitor | None" = _ExtractionDefenseMonitor()
+except Exception:
+    _extraction_monitor = None
+
 # ---------------------------------------------------------------------------
 # Per-model prediction input buffer — holds last 500 feature dicts per model
 # for drift detection. In-memory only; cleared on restart. Drift detection
@@ -862,6 +884,24 @@ async def extraction_defense_middleware(request: Request, call_next):
         batch_size=batch_size,
     )
 
+    if _extraction_monitor is not None:
+        _ra = pre_result.risk_assessment
+        _tier_band = {"normal": "green", "elevated": "yellow", "high": "orange", "critical": "red"}
+        _extraction_monitor.record_extraction_event(
+            risk_score=_ra.risk_score if _ra else 0.0,
+            band=_tier_band.get(_ra.tier, "unknown") if _ra else "unknown",
+            signals=[
+                {"name": "velocity", "value": _ra.velocity_signal},
+                {"name": "pattern", "value": _ra.pattern_signal},
+                {"name": "similarity", "value": _ra.similarity_signal},
+                {"name": "entropy", "value": _ra.entropy_signal},
+                {"name": "canary", "value": _ra.canary_signal},
+            ] if _ra else [],
+            policy_action="deny" if pre_result.blocked else "allow",
+            model_name=model_name,
+            is_batch=batch_size > 1,
+        )
+
     if pre_result.blocked:
         status = 429 if "rate limit" in pre_result.block_reason.lower() else 403
         headers = {}
@@ -1034,6 +1074,9 @@ async def predict_intent(req: IntentPredictionRequest, request: Request) -> Inte
     else:
         journey_stage = "awareness"
 
+    if _freshness_tracker is not None:
+        _freshness_tracker.check("intent_prediction", "behavioral_features", None)
+
     latency_ms = (time.perf_counter() - t0) * 1000
     _prediction_buffers["intent_prediction"].append(dict(req.features))
     return IntentPredictionResponse(
@@ -1062,6 +1105,9 @@ async def predict_bot(req: BotDetectionRequest, request: Request) -> BotDetectio
     proba = model.predict_proba(df)[0]
 
     confidence = _apply_output_defense(request, float(np.max(proba)), req.features)
+
+    if _freshness_tracker is not None:
+        _freshness_tracker.check("bot_detection", "behavioral_features", None)
 
     latency_ms = (time.perf_counter() - t0) * 1000
     _prediction_buffers["bot_detection"].append(dict(req.features))
@@ -1101,6 +1147,9 @@ async def predict_session_score(req: SessionScoreRequest, request: Request) -> S
         intervention = "upsell"
     else:
         intervention = "none"
+
+    if _freshness_tracker is not None:
+        _freshness_tracker.check("session_scorer", "session_features", None)
 
     latency_ms = (time.perf_counter() - t0) * 1000
     _prediction_buffers["session_scorer"].append(dict(req.features))
@@ -1149,6 +1198,9 @@ async def predict_churn(req: ChurnPredictionRequest, request: Request) -> ChurnP
         str(result["top_factor_3"].iloc[0]),
     ]
 
+    if _freshness_tracker is not None:
+        _freshness_tracker.check("churn_prediction", "behavioral_features", None)
+
     latency_ms = (time.perf_counter() - t0) * 1000
     _prediction_buffers["churn_prediction"].append(dict(features))
     return ChurnPredictionResponse(
@@ -1181,11 +1233,36 @@ async def predict_ltv(req: LTVPredictionRequest, request: Request) -> LTVPredict
 
     ltv = _apply_output_defense(request, float(prediction[0]), features)
 
+    if _freshness_tracker is not None:
+        _freshness_tracker.check("ltv_prediction", "behavioral_features", None)
+
     latency_ms = (time.perf_counter() - t0) * 1000
     _prediction_buffers["ltv_prediction"].append(dict(features))
     return LTVPredictionResponse(
         identity_id=req.identity_id,
         predicted_ltv=round(ltv, 2),
+        latency_ms=round(latency_ms, 2),
+    )
+
+
+@router.post("/v1/predict/anomaly", response_model=AnomalyDetectionResponse)
+async def predict_anomaly(req: AnomalyDetectionRequest, request: Request) -> AnomalyDetectionResponse:
+    """Detect anomalies in a single record.
+
+    Returns an anomaly flag, anomaly score (0–1), and latency. Use
+    ``/v1/predict/batch`` with ``model_name=anomaly_detection`` for bulk
+    screening.
+    """
+    t0 = time.perf_counter()
+    model = server.get_model("anomaly_detection")
+    df = pd.DataFrame([req.features])
+    score = _apply_output_defense(request, float(model.predict(df)[0]), req.features)
+    _prediction_buffers["anomaly_detection"].append(dict(req.features))
+    latency_ms = (time.perf_counter() - t0) * 1000
+    return AnomalyDetectionResponse(
+        record_id=req.record_id,
+        is_anomaly=score > 0.5,
+        anomaly_score=round(score, 4),
         latency_ms=round(latency_ms, 2),
     )
 
@@ -1534,6 +1611,19 @@ async def drift_status() -> dict[str, Any]:
         "models": _last_drift_results.get("models", {}),
         "buffer_sizes": {m: len(buf) for m, buf in _prediction_buffers.items()},
     }
+
+
+@router.get("/v1/monitoring/extraction")
+async def extraction_monitor_status() -> dict[str, Any]:
+    """Return extraction defense monitoring summary.
+
+    Reports block rates, policy action distribution, band distribution, and
+    average risk scores. Returns ``{"enabled": false}`` when the extraction
+    defense monitor is unavailable.
+    """
+    if _extraction_monitor is None:
+        return {"enabled": False}
+    return {"enabled": True, **_extraction_monitor.get_summary()}
 
 
 # Mount the shared router on the standalone app so `uvicorn serving.src.api:app`
