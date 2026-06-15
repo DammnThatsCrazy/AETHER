@@ -52,6 +52,12 @@ What the June 2026 audit found:
   soft empty-envelope fallback), and a dedicated 25-test unit suite covers
   aggregator dimensions, quality scoring, tenant isolation, pagination shape,
   and the consent gate itself.
+- **Security / compliance is now 4/5** — `VM-dependency-audit` and
+  `VM-secret-scan` are now CI-gated mandatory steps in the TypeScript job:
+  `npm run security:secrets` (fail-closed, exits 1 on any high-confidence
+  secret) and `npm run security:deps` (advisory — prints audit report, never
+  blocks).  14/18 controls are now implemented; the remaining 4 (IR, PR, PT, TM)
+  are documented-only and do not require code changes.
 
 What this audit pass changed (June 2026):
 
@@ -120,16 +126,16 @@ Rubric: 0 absent · 1 stub/scaffold · 2 partial/pilot · 3 pre-production ·
 | Slack / action notifications | 4 |
 | Dune / data-lake feeders | 4 |
 | smart contracts / proofs / rewards | 4 |
-| security / compliance | 3 |
+| security / compliance | 4 |
 | agentic_x402_productization | 4 |
 | CI / tests | 4 |
 | docs | 4 |
 | deployment / cloud readiness | 3 |
 | scale readiness | 3 |
 
-**Overall: ~3.84/5 — pre-production.** Profile 360 is the first area to
-reach 5/5: credit-consent gate enforced at the API route level and a
-dedicated unit test suite added. All other areas with minor gaps remain at 4
+**Overall: ~3.89/5 — pre-production.** Profile 360 is the first area to
+reach 5/5. Security / compliance advanced to 4/5 with VM dependency-audit
+and secret-scan controls CI-gated. All other areas with minor gaps remain at 4
 until they carry production traffic at scale.
 
 ## 4. Release Blockers (ordered)
