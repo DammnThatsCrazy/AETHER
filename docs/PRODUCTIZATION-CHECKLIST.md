@@ -77,6 +77,31 @@ A running checklist of the productization surfaces and their readiness. See
 - [x] Env-driven config, safe-by-default feature flags, documented local commands
 - [x] `.env.example` covers all new flags and placeholders
 
+## Reward Enablement (A6)
+
+- [x] Oracle signer key guarded — `ORACLE_SIGNER_KEY` blocks Hardhat/Anvil default in non-local
+      (`_require_env()` in `services/oracle/routes.py` and `services/rewards/routes.py`)
+- [x] Durable storage enforced — `REWARD_REQUIRE_DURABLE_STORE=true` causes startup failure
+      without PostgreSQL in non-local environments
+- [x] Tenant isolation — every reward table has `tenant_id`; all queries tenant-scoped;
+      cross-tenant access returns 403
+- [x] Idempotency — `(tenant_id, idempotency_key)` unique constraint in
+      `reward_eligibility_decisions`; duplicate events return the same decision
+- [x] No-custody language — no "Aether distributes", "Aether pays", or "Aether holds funds"
+      in any route response, doc, or UI surface
+- [x] Consent gating — reward decisions respect `requires_consent_purposes` from rule;
+      missing consent → `blocked_consent` decision
+- [x] Proof replay prevention — nonce `UNIQUE` constraint in `reward_proofs`;
+      used proofs cannot be re-submitted
+- [x] Audit log — all approve/reject/revoke/deliver actions appended to `reward_audit_log`
+      (append-only, no updates)
+- [x] Beta rail guard — beta rails (`stripe_credit`, `loyalty_points`, `coupon`,
+      `internal_credit`, `x402_credit`) raise `RailUnavailableError(reason="beta_unavailable")`
+- [x] Routes: `/v1/rewards/*` (37 endpoints across campaigns, rules, evaluate, decisions,
+      actions, proofs, receipts, rails); operator view: `/v1/admin/kyber/rewards/*`
+- [x] Frontend: Aether tenant (campaign-builder, decisions, approval-queue, rail-setup);
+      Kyber operator (rewards-health, rewards-drilldown)
+
 ## Partner ecosystem / marketplace / developer platform
 
 Partner ecosystem, marketplace, and developer-platform functionality are

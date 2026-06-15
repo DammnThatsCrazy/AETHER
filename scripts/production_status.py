@@ -253,19 +253,29 @@ AREAS: list[Area] = [
     Area(
         "smart contracts / proofs / rewards",
         4,
-        "Multi-chain reward contracts (EVM Solidity + Solana/NEAR/Cosmos Rust) with "
-        "oracle-signed claims, nonce replay protection, budgets, pausability, and "
-        "Hardhat tests. Pre-audit hardening complete: getOracleAddress() now reverts on "
-        "role desync, grantRole/revokeRole blocked for ORACLE_ROLE (must use rotateOracle), "
-        "claimReward enforces amount == campaign.rewardAmount. Slither static-analysis CI "
-        "added (.github/workflows/smart-contract-analysis.yml). Pre-audit checklist at "
-        "scripts/smart_contract_audit_prep.py passes 9/9 checks. "
+        "A6 reward enablement complete: 7-table PostgreSQL schema (campaigns, rules, "
+        "decisions, action_payloads, proofs, receipts, audit_log), 37-endpoint tenant API, "
+        "RewardPolicyEngine with 12-gate fail-fast evaluation (campaign, rule, consent, "
+        "identity, wallet-binding, fraud, attribution, cooldown, cap, budget, idempotency), "
+        "5 production rail adapters (recommend_only, manual_approval, manual_export, "
+        "tenant_webhook, onchain_claim) + 5 beta stubs, EIP-712 typed-data proof hardening, "
+        "oracle signer key blocked in non-local, no-custody model enforced in all routes, "
+        "1,500+ line test suite, 5 source-of-truth docs. "
+        "Smart contracts: multi-chain (EVM Solidity + Solana/NEAR/Cosmos Rust), oracle-signed "
+        "claims, nonce replay protection, budgets, pausability, Hardhat tests. Pre-audit "
+        "hardening complete (rotateOracle, amount enforcement, Slither CI). "
         "NO external certification yet — do not deploy to mainnet until external audit complete.",
         [
             "Smart Contracts/contracts/AnalyticsRewards.sol",
             "Smart Contracts/test/AnalyticsRewards.test.js",
             ".github/workflows/smart-contract-analysis.yml",
-            "scripts/smart_contract_audit_prep.py",
+            "Backend Architecture/aether-backend/services/rewards/policy_engine.py",
+            "Backend Architecture/aether-backend/services/rewards/rails.py",
+            "Backend Architecture/aether-backend/services/rewards/repositories.py",
+            "Backend Architecture/aether-backend/services/rewards/routes.py",
+            "Backend Architecture/aether-backend/alembic/versions/20260613_reward_enablement.py",
+            "docs/source-of-truth/REWARD_ENABLEMENT.md",
+            "docs/source-of-truth/REWARD_NO_CUSTODY_MODEL.md",
         ],
     ),
     Area(

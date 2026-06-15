@@ -95,6 +95,7 @@ Classification legend: `release-blocker` | `pre-production-blocker` |
 | 11 | No load baselines recorded; Locust harness exists but is not exercised in CI | scale-blocker | **Partially fixed** — locustfile extended with `/v1/batch` + `/sdk/identity/resolve` tasks and thresholds; `scripts/load_smoke.py` + `make load-smoke` added. Staging baselines not yet recorded. |
 | 12 | Neptune capacity/cost and identity-merge throughput unvalidated at scale | scale-blocker | Open |
 | 13 | Slack outbound notification channel-mapping/templates not productized (ingest connector + connection test are real) | nice-to-have | **Fixed** — per-tenant Slack channel mapping by severity (slack_channel_map), opt-in controls (operator_review_required, quiet_hours, rate limits), Slack OAuth, and real outbound (chat.postMessage + Block Kit + retries) all confirmed present in notification_intelligence. |
+| 14 | A6 reward enablement: reward backend was in-memory (no durability, no tenant_id, no idempotency, no fraud/consent gating, only EVM rail) | feature | **Fixed** — full durable backend shipped (7-table PostgreSQL schema, 37-endpoint API, policy engine with 12 evaluation gates, 5 rail adapters + 5 beta stubs, EIP-712 proof hardening, oracle key safety, no-custody model enforced, 1,500+ line test suite, 5 source-of-truth docs, 6 frontend pages). PR #313. |
 
 Findings that prior audits claimed and this audit **verified as resolved**:
 infrastructure stubs replaced with real Redis/Postgres/Neptune/Kafka clients;

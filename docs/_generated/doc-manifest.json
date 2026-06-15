@@ -3217,6 +3217,36 @@
       "canonical_owner": "platform@aether"
     },
     {
+      "path": "docs/examples/reward-demo-web2.md",
+      "title": "Reward Enablement Demo — Web2 Rails (recommend_only + tenant_webhook)",
+      "slug": "examples/reward-demo-web2",
+      "section": "examples",
+      "visibility": "P",
+      "audience": [
+        "dev-junior",
+        "dev-senior"
+      ],
+      "status": "stable",
+      "since_version": "8.10.0",
+      "estimated_read_minutes": 8,
+      "canonical_owner": "platform@aether"
+    },
+    {
+      "path": "docs/examples/reward-demo-web3.md",
+      "title": "Reward Enablement Demo — Web3 / On-Chain Claim (onchain_claim rail)",
+      "slug": "examples/reward-demo-web3",
+      "section": "examples",
+      "visibility": "P",
+      "audience": [
+        "dev-junior",
+        "dev-senior"
+      ],
+      "status": "stable",
+      "since_version": "8.10.0",
+      "estimated_read_minutes": 10,
+      "canonical_owner": "platform@aether"
+    },
+    {
       "path": "docs/frontend/PROFILE360_ARCHITECTURE.md",
       "title": "Profile360 Frontend Architecture",
       "slug": "architecture/profile360-frontend",

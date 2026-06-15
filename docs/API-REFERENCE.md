@@ -38,3 +38,58 @@ quality, …), the live schema in a given environment reflects the enabled flags
   `tests/unit/test_api_contracts.py`.
 
 See [Webhook Events](WEBHOOK-EVENTS.md) and [Event Schema Reference](EVENT-SCHEMA-REFERENCE.md).
+
+## Reward Enablement (A6)
+
+All reward routes are under `/v1/rewards/` and require `Authorization: Bearer <api_key>`.
+Full endpoint catalog: [Backend API — Rewards section](BACKEND-API.md#reward-enablement-a6).
+
+Key shapes:
+
+**Evaluate eligibility** (`POST /v1/rewards/evaluate`)
+```json
+{
+  "event_type": "conversion",
+  "tenant_id": "tenant_xyz",
+  "user_id": "user_123",
+  "wallet_address": "0xabc...",
+  "idempotency_key": "evt_abc_campaign_001",
+  "attribution_result_id": "attr_001",
+  "fraud_decision_id": "fraud_001",
+  "consent_snapshot_id": "cs_001",
+  "properties": { "amount": 49.99 }
+}
+```
+
+Response: `{ eligible, decision, execution_mode, rail, next_action, attribution, fraud, identity }`
+
+Decisions: `eligible` | `ineligible` | `needs_review` | `blocked_fraud` | `blocked_consent` |
+`blocked_identity` | `blocked_wallet_binding` | `blocked_cooldown` | `blocked_cap` | `blocked_budget`
+
+**Create campaign** (`POST /v1/rewards/campaigns`)
+```json
+{
+  "name": "Q2 Conversion Campaign",
+  "attribution_model": "last_touch",
+  "default_rail": "recommend_only",
+  "budget_policy": { "max_total_decisions": 10000 }
+}
+```
+
+**Configure rail** (`POST /v1/rewards/rails`)
+```json
+{
+  "rail": "tenant_webhook",
+  "enabled": true,
+  "webhook_url": "https://your-system.example.com/rewards",
+  "signing_secret_ref": "vault://rewards/webhook-secret"
+}
+```
+
+**Proof verification** (`POST /v1/rewards/proofs/verify`)
+```json
+{ "proof_id": "proof_uuid", "signature": "0x...", "nonce": "0x...", "wallet_address": "0x..." }
+```
+
+No-custody model: Aether verifies eligibility and generates signed proofs. Tenants execute
+rewards through their own configured rails (webhook, smart contract, manual export, etc.).
