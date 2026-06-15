@@ -23,6 +23,7 @@ const NAV_ITEMS: NavItem[] = [
   { path: '/reliability',     label: 'Reliability',     glyph: '◐' },
   { path: '/journey-health',  label: 'Journey Health',  glyph: '↔' },
   { path: '/intelligence-quality', label: 'Intel Quality', glyph: '◉' },
+  { path: '/intelligence/suggestions', label: 'Suggestions',   glyph: '◈' },
   { path: '/connectors', label: 'Connectors', glyph: '⇄' },
   { path: '/dune-feeder', label: 'Dune Feeder', glyph: '⬡' },
   { path: '/revops',          label: 'RevOps',          glyph: '₿' },
