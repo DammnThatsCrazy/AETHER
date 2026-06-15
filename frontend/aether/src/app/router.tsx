@@ -30,6 +30,7 @@ const RewardDecisionsPage = lazy(() => import('@aether-app/pages/rewards').then(
 const RewardApprovalQueuePage = lazy(() => import('@aether-app/pages/rewards').then(m => ({ default: m.RewardApprovalQueuePage })));
 const RewardRailSetupPage = lazy(() => import('@aether-app/pages/rewards').then(m => ({ default: m.RewardRailSetupPage })));
 const CampaignBuilderPage = lazy(() => import('@aether-app/pages/rewards').then(m => ({ default: m.CampaignBuilderPage })));
+const SuggestionsPage = lazy(() => import('@aether-app/pages/suggestions').then(m => ({ default: m.SuggestionsPage })));
 
 function PageSuspense({ children }: { readonly children: React.ReactNode }) {
   return (
@@ -93,6 +94,7 @@ export function AppRouter() {
                 <Route path="/rewards/approval-queue" element={<PageSuspense><RewardApprovalQueuePage /></PageSuspense>} />
                 <Route path="/rewards/rails" element={<PageSuspense><RewardRailSetupPage /></PageSuspense>} />
                 <Route path="/rewards/campaigns/new" element={<PageSuspense><CampaignBuilderPage /></PageSuspense>} />
+                <Route path="/suggestions" element={<PageSuspense><SuggestionsPage /></PageSuspense>} />
                 <Route path="*" element={<Navigate to="/settings" replace />} />
               </Routes>
             </AppShell>
