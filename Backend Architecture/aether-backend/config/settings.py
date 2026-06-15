@@ -495,6 +495,30 @@ class ConnectorsConfig:
 
 
 # ---------------------------------------------------------------------------
+# OODA Suggestion Intelligence
+# ---------------------------------------------------------------------------
+
+@dataclass(frozen=True)
+class SuggestionsConfig:
+    """Unified OODA Suggestion Intelligence layer. Master switch is OFF by
+    default. Execution is a separate hard gate (also OFF by default) so
+    suggestions can be created, reviewed, and delivered without enabling
+    automated execution. Noesis read-only suggestion queries are independent
+    of the main `enabled` flag but respect `noesis_enabled`."""
+    enabled: bool = _env_bool("AETHER_SUGGESTIONS_ENABLED", False)
+    auto_delivery_enabled: bool = _env_bool("AETHER_SUGGESTIONS_AUTODELIVERY_ENABLED", False)
+    execution_enabled: bool = _env_bool("AETHER_SUGGESTIONS_EXECUTION_ENABLED", False)
+    noesis_enabled: bool = _env_bool("AETHER_SUGGESTIONS_NOESIS_ENABLED", True)
+    recommendation_adapter_enabled: bool = _env_bool("AETHER_SUGGESTIONS_RECOMMENDATION_ADAPTER_ENABLED", True)
+    notification_adapter_enabled: bool = _env_bool("AETHER_SUGGESTIONS_NOTIFICATION_ADAPTER_ENABLED", True)
+    data_quality_adapter_enabled: bool = _env_bool("AETHER_SUGGESTIONS_DATA_QUALITY_ADAPTER_ENABLED", True)
+    sdk_health_adapter_enabled: bool = _env_bool("AETHER_SUGGESTIONS_SDK_HEALTH_ADAPTER_ENABLED", True)
+    graph_adapter_enabled: bool = _env_bool("AETHER_SUGGESTIONS_GRAPH_ADAPTER_ENABLED", True)
+    kyber_enabled: bool = _env_bool("KYBER_SUGGESTIONS_ENABLED", True)
+    tenant_enabled: bool = _env_bool("AETHER_TENANT_SUGGESTIONS_ENABLED", True)
+
+
+# ---------------------------------------------------------------------------
 # Master settings
 # ---------------------------------------------------------------------------
 
@@ -564,6 +588,9 @@ class Settings:
 
     # Inbound connector ingestion (master switch; per-tenant config gates each)
     connectors: ConnectorsConfig = field(default_factory=ConnectorsConfig)
+
+    # OODA Suggestion Intelligence (disabled by default; execution gated separately)
+    suggestions: SuggestionsConfig = field(default_factory=SuggestionsConfig)
 
     def __post_init__(self):
         _is_non_local = self.env != Environment.LOCAL
