@@ -11,6 +11,7 @@ from datetime import datetime, timezone
 
 from fastapi import APIRouter, HTTPException, Request, status
 from pydantic import BaseModel, Field
+from shared.graph.graph import Vertex, Edge
 from typing import Literal, Optional
 
 from repositories.agentic_observability_repos import (
@@ -63,6 +64,21 @@ def _check_no_execution(data: dict) -> None:
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail="execution_by_aether must be false. AETHER does not execute.",
         )
+
+
+async def _persist_mutations(mutations: list) -> None:
+    if not mutations:
+        return
+    try:
+        from dependencies.providers import get_graph
+        graph = get_graph()
+        for m in mutations:
+            if isinstance(m, Vertex):
+                await graph.add_vertex(m)
+            elif isinstance(m, Edge):
+                await graph.add_edge(m)
+    except Exception:
+        pass
 
 
 class InboxObsRequest(BaseModel):
@@ -139,6 +155,7 @@ async def observe_agent_inbox(req: InboxObsRequest, request: Request) -> CommObs
     repo = AgentInboxRepository()
     await repo.insert(obs_id, record.model_dump(mode="json"))
     mutations = build_inbox_mutations(tenant_id, obs_id, req.agent_id)
+    await _persist_mutations(mutations)
     return CommObsResponse(
         observation_id=obs_id, received_at=_utc_now(),
         graph_mutations_queued=len(mutations), tenant_id=tenant_id,
@@ -171,6 +188,7 @@ async def observe_agent_message(req: MessageObsRequest, request: Request) -> Com
     await repo.insert(record.message_obs_id, record.model_dump(mode="json"))
     # Use record.thread_obs_id so provider-normalized messages link correctly
     mutations = build_message_mutations(tenant_id, record.message_obs_id, record.thread_obs_id)
+    await _persist_mutations(mutations)
     return CommObsResponse(
         observation_id=record.message_obs_id, received_at=_utc_now(),
         graph_mutations_queued=len(mutations), tenant_id=tenant_id,
@@ -224,6 +242,7 @@ async def observe_agent_extraction(req: ExtractionObsRequest, request: Request) 
     repo = ExtractedEntityRepository()
     await repo.insert(obs_id, record.model_dump(mode="json"))
     mutations = build_extraction_mutations(tenant_id, obs_id, req.message_obs_id)
+    await _persist_mutations(mutations)
     return CommObsResponse(
         observation_id=obs_id, received_at=_utc_now(),
         graph_mutations_queued=len(mutations), tenant_id=tenant_id,

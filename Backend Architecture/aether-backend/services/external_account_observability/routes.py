@@ -11,6 +11,7 @@ from datetime import datetime, timezone
 from typing import Any, Literal, Optional
 
 from fastapi import APIRouter, HTTPException, Request, status
+from shared.graph.graph import Vertex, Edge
 from pydantic import BaseModel, Field
 
 from repositories.agentic_observability_repos import (
@@ -67,6 +68,21 @@ def _check_no_execution(data: dict) -> None:
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail="execution_by_aether must be false. AETHER does not execute.",
         )
+
+
+async def _persist_mutations(mutations: list) -> None:
+    if not mutations:
+        return
+    try:
+        from dependencies.providers import get_graph
+        graph = get_graph()
+        for m in mutations:
+            if isinstance(m, Vertex):
+                await graph.add_vertex(m)
+            elif isinstance(m, Edge):
+                await graph.add_edge(m)
+    except Exception:
+        pass
 
 
 class ExtAccountRequest(BaseModel):
@@ -151,6 +167,7 @@ async def observe_external_account(req: ExtAccountRequest, request: Request) -> 
     repo = ExternalAccountRepository()
     await repo.insert(obs_id, record.model_dump(mode="json"))
     mutations = build_account_mutations(tenant_id, obs_id, req.agent_id)
+    await _persist_mutations(mutations)
     return ExtAccountResponse(
         observation_id=obs_id, received_at=_utc_now(),
         graph_mutations_queued=len(mutations), tenant_id=tenant_id,
@@ -175,6 +192,7 @@ async def observe_brokerage_account(req: BrokerageRequest, request: Request) -> 
     repo = ExternalBrokerageRepository()
     await repo.insert(obs_id, record.model_dump(mode="json"))
     mutations = build_brokerage_mutations(tenant_id, obs_id, req.agent_id)
+    await _persist_mutations(mutations)
     return ExtAccountResponse(
         observation_id=obs_id, received_at=_utc_now(),
         graph_mutations_queued=len(mutations), tenant_id=tenant_id,
@@ -198,6 +216,7 @@ async def observe_portfolio_snapshot(req: PortfolioSnapshotRequest, request: Req
     repo = PortfolioSnapshotRepository()
     await repo.insert(obs_id, record.model_dump(mode="json"))
     mutations = build_portfolio_mutations(tenant_id, obs_id, req.brokerage_obs_id)
+    await _persist_mutations(mutations)
     return ExtAccountResponse(
         observation_id=obs_id, received_at=_utc_now(),
         graph_mutations_queued=len(mutations), tenant_id=tenant_id,
@@ -226,6 +245,7 @@ async def observe_trade_order(req: OrderObsRequest, request: Request) -> ExtAcco
     repo = TradeObservationRepository()
     await repo.insert(obs_id, record.model_dump(mode="json"))
     mutations = build_order_mutations(tenant_id, obs_id, req.brokerage_obs_id)
+    await _persist_mutations(mutations)
     return ExtAccountResponse(
         observation_id=obs_id, received_at=_utc_now(),
         graph_mutations_queued=len(mutations), tenant_id=tenant_id,

@@ -10,6 +10,7 @@ import uuid
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, HTTPException, Request, status
+from shared.graph.graph import Vertex, Edge
 
 from repositories.agentic_observability_repos import (
     X402InteractionRepository, X402ChallengeRepository,
@@ -68,6 +69,21 @@ def _check_no_execution(data: dict) -> None:
         )
 
 
+async def _persist_mutations(mutations: list) -> None:
+    if not mutations:
+        return
+    try:
+        from dependencies.providers import get_graph
+        graph = get_graph()
+        for m in mutations:
+            if isinstance(m, Vertex):
+                await graph.add_vertex(m)
+            elif isinstance(m, Edge):
+                await graph.add_edge(m)
+    except Exception:
+        pass
+
+
 @router.post("/v1/observability/x402/interactions", response_model=X402ObservationResponse, status_code=201)
 async def observe_x402_interaction(req: X402InteractionRequest, request: Request) -> X402ObservationResponse:
     """Observe an x402 protocol interaction."""
@@ -80,6 +96,7 @@ async def observe_x402_interaction(req: X402InteractionRequest, request: Request
     repo = X402InteractionRepository()
     await repo.insert(record.interaction_id, record.model_dump(mode="json"))
     mutations = build_interaction_mutations(tenant_id, record.interaction_id, req.agent_id, req.resource_url)
+    await _persist_mutations(mutations)
     return X402ObservationResponse(
         observation_id=record.interaction_id,
         received_at=_utc_now(),
@@ -101,6 +118,7 @@ async def observe_x402_challenge(req: X402ChallengeRequest, request: Request) ->
     repo = X402ChallengeRepository()
     await repo.insert(obs_id, record)
     mutations = build_challenge_mutations(tenant_id, obs_id, req.interaction_id)
+    await _persist_mutations(mutations)
     return X402ObservationResponse(
         observation_id=obs_id,
         received_at=record["received_at"],
@@ -176,6 +194,7 @@ async def observe_x402_settlement(req: X402SettlementRequest, request: Request) 
     repo = X402SettlementObsRepository()
     await repo.insert(record.settlement_obs_id, record.model_dump(mode="json"))
     mutations = build_settlement_mutations(tenant_id, record.settlement_obs_id, req.interaction_id)
+    await _persist_mutations(mutations)
     return X402ObservationResponse(
         observation_id=record.settlement_obs_id,
         received_at=_utc_now(),
@@ -197,6 +216,7 @@ async def observe_x402_resource_access(req: X402ResourceAccessRequest, request: 
     repo = X402ResourceAccessRepository()
     await repo.insert(obs_id, record)
     mutations = build_resource_access_mutations(tenant_id, obs_id, req.interaction_id, req.access_granted)
+    await _persist_mutations(mutations)
     return X402ObservationResponse(
         observation_id=obs_id, received_at=record["received_at"],
         graph_mutations_queued=len(mutations), tenant_id=tenant_id,

@@ -28,6 +28,7 @@ from services.agentic_observability.schemas import (
     AgentEventRequest, AgentAccountRequest, AgentToolRequest,
     AgentMCPRequest, AgentRiskSignalRequest, ObservationResponse,
 )
+from shared.graph.graph import Vertex, Edge
 
 router = APIRouter()
 
@@ -36,6 +37,22 @@ _SCHEMA_VERSION = "1.0"
 
 def _utc_now() -> str:
     return datetime.now(timezone.utc).isoformat()
+
+
+async def _persist_mutations(mutations: list) -> None:
+    """Submit graph Vertex/Edge mutations to the graph backend. Best-effort."""
+    if not mutations:
+        return
+    try:
+        from dependencies.providers import get_graph
+        graph = get_graph()
+        for m in mutations:
+            if isinstance(m, Vertex):
+                await graph.add_vertex(m)
+            elif isinstance(m, Edge):
+                await graph.add_edge(m)
+    except Exception:
+        pass  # graph unavailable — observation still recorded; mutations deferred
 
 
 def _tenant_id(request: Request) -> str:
@@ -90,6 +107,7 @@ async def observe_agent_event(req: AgentEventRequest, request: Request) -> Obser
     await repo.insert(record.observation_id, record.model_dump(mode="json"))
 
     mutations = build_mutations(record)
+    await _persist_mutations(mutations)
     received_at = _utc_now()
     return ObservationResponse(
         observation_id=record.observation_id,
@@ -114,6 +132,7 @@ async def observe_agent_account(req: AgentAccountRequest, request: Request) -> O
     await repo.insert(obs_id, record)
 
     mutations = build_account_mutations(tenant_id, req.agent_id, req.external_account_id)
+    await _persist_mutations(mutations)
     return ObservationResponse(
         observation_id=obs_id,
         received_at=record["received_at"],
