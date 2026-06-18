@@ -10,7 +10,7 @@ import uuid
 from datetime import datetime, timezone
 from typing import Any, Literal, Optional
 
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter, HTTPException, Request, status
 from pydantic import BaseModel, Field
 
 from repositories.agentic_observability_repos import (
@@ -38,6 +38,27 @@ def _utc_now() -> str:
 
 def _new_id() -> str:
     return str(uuid.uuid4())
+
+
+def _tenant_id(request: Request) -> str:
+    tenant = getattr(request.state, "tenant", None)
+    if not tenant:
+        raise HTTPException(status_code=401, detail="Missing tenant context")
+    return tenant.tenant_id
+
+
+def _require_perm(request: Request, perm: str) -> None:
+    tenant = getattr(request.state, "tenant", None)
+    if not tenant:
+        raise HTTPException(status_code=401, detail="Missing tenant context")
+    if hasattr(tenant, "require_permission"):
+        try:
+            tenant.require_permission(perm)
+            return
+        except Exception as e:
+            raise HTTPException(status_code=403, detail=str(e))
+    if hasattr(tenant, "has_permission") and not tenant.has_permission(perm):
+        raise HTTPException(status_code=403, detail=f"Permission denied: {perm}")
 
 
 def _check_no_execution(data: dict) -> None:
@@ -112,8 +133,10 @@ class ExtAccountResponse(BaseModel):
 
 
 @router.post("/v1/observability/external-accounts", response_model=ExtAccountResponse, status_code=201)
-async def observe_external_account(req: ExtAccountRequest) -> ExtAccountResponse:
+async def observe_external_account(req: ExtAccountRequest, request: Request) -> ExtAccountResponse:
     """Observe an external agentic account linkage."""
+    _require_perm(request, "write")
+    tenant_id = _tenant_id(request)
     _check_no_execution(req.model_dump())
     obs_id = _new_id()
     record = ExternalAgenticAccountObservedRecord(
@@ -123,20 +146,22 @@ async def observe_external_account(req: ExtAccountRequest) -> ExtAccountResponse
         external_account_id=req.external_account_id,
         account_type=req.account_type,
         permissions_observed=req.permissions_observed,
-        tenant_id=req.tenant_id,
+        tenant_id=tenant_id,
     )
     repo = ExternalAccountRepository()
     await repo.insert(obs_id, record.model_dump(mode="json"))
-    mutations = build_account_mutations(req.tenant_id, obs_id, req.agent_id)
+    mutations = build_account_mutations(tenant_id, obs_id, req.agent_id)
     return ExtAccountResponse(
         observation_id=obs_id, received_at=_utc_now(),
-        graph_mutations_queued=len(mutations), tenant_id=req.tenant_id,
+        graph_mutations_queued=len(mutations), tenant_id=tenant_id,
     )
 
 
 @router.post("/v1/observability/external-accounts/brokerage", response_model=ExtAccountResponse, status_code=201)
-async def observe_brokerage_account(req: BrokerageRequest) -> ExtAccountResponse:
+async def observe_brokerage_account(req: BrokerageRequest, request: Request) -> ExtAccountResponse:
     """Observe an external brokerage account."""
+    _require_perm(request, "write")
+    tenant_id = _tenant_id(request)
     _check_no_execution(req.model_dump())
     obs_id = _new_id()
     record = ExternalBrokerageAccountObservedRecord(
@@ -145,41 +170,45 @@ async def observe_brokerage_account(req: BrokerageRequest) -> ExtAccountResponse
         provider=req.provider,
         external_account_id=req.external_account_id,
         account_type=req.account_type,
-        tenant_id=req.tenant_id,
+        tenant_id=tenant_id,
     )
     repo = ExternalBrokerageRepository()
     await repo.insert(obs_id, record.model_dump(mode="json"))
-    mutations = build_brokerage_mutations(req.tenant_id, obs_id, req.agent_id)
+    mutations = build_brokerage_mutations(tenant_id, obs_id, req.agent_id)
     return ExtAccountResponse(
         observation_id=obs_id, received_at=_utc_now(),
-        graph_mutations_queued=len(mutations), tenant_id=req.tenant_id,
+        graph_mutations_queued=len(mutations), tenant_id=tenant_id,
     )
 
 
 @router.post("/v1/observability/external-accounts/portfolio-snapshots", response_model=ExtAccountResponse, status_code=201)
-async def observe_portfolio_snapshot(req: PortfolioSnapshotRequest) -> ExtAccountResponse:
+async def observe_portfolio_snapshot(req: PortfolioSnapshotRequest, request: Request) -> ExtAccountResponse:
     """Observe a portfolio snapshot from an external brokerage."""
+    _require_perm(request, "write")
+    tenant_id = _tenant_id(request)
     obs_id = _new_id()
     record = PortfolioSnapshotObservedRecord(
         portfolio_obs_id=obs_id,
         brokerage_obs_id=req.brokerage_obs_id,
         total_value=req.total_value,
         positions=req.positions,
-        tenant_id=req.tenant_id,
+        tenant_id=tenant_id,
         snapshot_at=req.observed_at or _utc_now(),
     )
     repo = PortfolioSnapshotRepository()
     await repo.insert(obs_id, record.model_dump(mode="json"))
-    mutations = build_portfolio_mutations(req.tenant_id, obs_id, req.brokerage_obs_id)
+    mutations = build_portfolio_mutations(tenant_id, obs_id, req.brokerage_obs_id)
     return ExtAccountResponse(
         observation_id=obs_id, received_at=_utc_now(),
-        graph_mutations_queued=len(mutations), tenant_id=req.tenant_id,
+        graph_mutations_queued=len(mutations), tenant_id=tenant_id,
     )
 
 
 @router.post("/v1/observability/external-accounts/order-observations", response_model=ExtAccountResponse, status_code=201)
-async def observe_trade_order(req: OrderObsRequest) -> ExtAccountResponse:
+async def observe_trade_order(req: OrderObsRequest, request: Request) -> ExtAccountResponse:
     """Observe a trade order (executed externally, not by AETHER)."""
+    _require_perm(request, "write")
+    tenant_id = _tenant_id(request)
     _check_no_execution(req.model_dump())
     obs_id = _new_id()
     record = TradeOrderObservedRecord(
@@ -187,24 +216,27 @@ async def observe_trade_order(req: OrderObsRequest) -> ExtAccountResponse:
         external_order_id=req.external_order_id,
         status=req.status,
         symbol=req.symbol,
+        side=req.side,
         quantity=req.quantity,
         executed_externally=True,
         execution_by_aether=False,
-        tenant_id=req.tenant_id,
+        tenant_id=tenant_id,
         observed_at=req.observed_at or _utc_now(),
     )
     repo = TradeObservationRepository()
     await repo.insert(obs_id, record.model_dump(mode="json"))
-    mutations = build_order_mutations(req.tenant_id, obs_id, req.brokerage_obs_id)
+    mutations = build_order_mutations(tenant_id, obs_id, req.brokerage_obs_id)
     return ExtAccountResponse(
         observation_id=obs_id, received_at=_utc_now(),
-        graph_mutations_queued=len(mutations), tenant_id=req.tenant_id,
+        graph_mutations_queued=len(mutations), tenant_id=tenant_id,
     )
 
 
 @router.post("/v1/observability/external-accounts/budget-observations", response_model=ExtAccountResponse, status_code=201)
-async def observe_agent_budget(req: BudgetObsRequest) -> ExtAccountResponse:
+async def observe_agent_budget(req: BudgetObsRequest, request: Request) -> ExtAccountResponse:
     """Observe an agent budget state from an external platform."""
+    _require_perm(request, "write")
+    tenant_id = _tenant_id(request)
     obs_id = _new_id()
     record = AgentBudgetObservedRecord(
         budget_obs_id=obs_id,
@@ -213,18 +245,19 @@ async def observe_agent_budget(req: BudgetObsRequest) -> ExtAccountResponse:
         used_budget=req.used_budget,
         available_budget=req.available_budget,
         currency=req.currency,
-        tenant_id=req.tenant_id,
+        tenant_id=tenant_id,
         observed_at=req.observed_at or _utc_now(),
     )
     repo = AgentBudgetRepository()
     await repo.insert(obs_id, record.model_dump(mode="json"))
     return ExtAccountResponse(
         observation_id=obs_id, received_at=_utc_now(),
-        graph_mutations_queued=0, tenant_id=req.tenant_id,
+        graph_mutations_queued=0, tenant_id=tenant_id,
     )
 
 
 @router.get("/v1/admin/kyber/agentic-observability/external-accounts")
-async def kyber_external_accounts() -> dict:
+async def kyber_external_accounts(request: Request) -> dict:
     """Kyber operator: external account observability overview."""
+    _require_perm(request, "admin")
     return {"status": "ok", "external_accounts": []}

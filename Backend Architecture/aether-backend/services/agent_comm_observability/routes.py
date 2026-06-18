@@ -9,7 +9,7 @@ from __future__ import annotations
 import uuid
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter, HTTPException, Request, status
 from pydantic import BaseModel, Field
 from typing import Literal, Optional
 
@@ -36,6 +36,35 @@ def _new_id() -> str:
     return str(uuid.uuid4())
 
 
+def _tenant_id(request: Request) -> str:
+    tenant = getattr(request.state, "tenant", None)
+    if not tenant:
+        raise HTTPException(status_code=401, detail="Missing tenant context")
+    return tenant.tenant_id
+
+
+def _require_perm(request: Request, perm: str) -> None:
+    tenant = getattr(request.state, "tenant", None)
+    if not tenant:
+        raise HTTPException(status_code=401, detail="Missing tenant context")
+    if hasattr(tenant, "require_permission"):
+        try:
+            tenant.require_permission(perm)
+            return
+        except Exception as e:
+            raise HTTPException(status_code=403, detail=str(e))
+    if hasattr(tenant, "has_permission") and not tenant.has_permission(perm):
+        raise HTTPException(status_code=403, detail=f"Permission denied: {perm}")
+
+
+def _check_no_execution(data: dict) -> None:
+    if data.get("execution_by_aether") is True:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="execution_by_aether must be false. AETHER does not execute.",
+        )
+
+
 class InboxObsRequest(BaseModel):
     schema_version: str = "1.0"
     tenant_id: str
@@ -44,6 +73,7 @@ class InboxObsRequest(BaseModel):
     email_address: Optional[str] = None
     custom_domain: Optional[str] = None
     observed_at: Optional[str] = None
+    execution_by_aether: Literal[False] = False
 
 
 class MessageObsRequest(BaseModel):
@@ -58,6 +88,7 @@ class MessageObsRequest(BaseModel):
     has_attachments: bool = False
     raw_provider_payload: Optional[dict] = None
     observed_at: Optional[str] = None
+    execution_by_aether: Literal[False] = False
 
 
 class AttachmentObsRequest(BaseModel):
@@ -68,6 +99,7 @@ class AttachmentObsRequest(BaseModel):
     mime_type: Optional[str] = None
     size_bytes: Optional[int] = None
     observed_at: Optional[str] = None
+    execution_by_aether: Literal[False] = False
 
 
 class ExtractionObsRequest(BaseModel):
@@ -78,6 +110,7 @@ class ExtractionObsRequest(BaseModel):
     entity_type: str = "other"
     confidence: Optional[float] = None
     observed_at: Optional[str] = None
+    execution_by_aether: Literal[False] = False
 
 
 class CommObsResponse(BaseModel):
@@ -88,8 +121,11 @@ class CommObsResponse(BaseModel):
 
 
 @router.post("/v1/observability/agent-comm/inboxes", response_model=CommObsResponse, status_code=201)
-async def observe_agent_inbox(req: InboxObsRequest) -> CommObsResponse:
+async def observe_agent_inbox(req: InboxObsRequest, request: Request) -> CommObsResponse:
     """Observe an agent inbox from an external communication provider."""
+    _require_perm(request, "write")
+    tenant_id = _tenant_id(request)
+    _check_no_execution(req.model_dump())
     obs_id = _new_id()
     record = AgentInboxObservedRecord(
         inbox_obs_id=obs_id,
@@ -97,23 +133,26 @@ async def observe_agent_inbox(req: InboxObsRequest) -> CommObsResponse:
         provider=req.provider,
         email_address=req.email_address,
         custom_domain=req.custom_domain,
-        tenant_id=req.tenant_id,
+        tenant_id=tenant_id,
         observed_at=req.observed_at or _utc_now(),
     )
     repo = AgentInboxRepository()
     await repo.insert(obs_id, record.model_dump(mode="json"))
-    mutations = build_inbox_mutations(req.tenant_id, obs_id, req.agent_id)
+    mutations = build_inbox_mutations(tenant_id, obs_id, req.agent_id)
     return CommObsResponse(
         observation_id=obs_id, received_at=_utc_now(),
-        graph_mutations_queued=len(mutations), tenant_id=req.tenant_id,
+        graph_mutations_queued=len(mutations), tenant_id=tenant_id,
     )
 
 
 @router.post("/v1/observability/agent-comm/messages", response_model=CommObsResponse, status_code=201)
-async def observe_agent_message(req: MessageObsRequest) -> CommObsResponse:
+async def observe_agent_message(req: MessageObsRequest, request: Request) -> CommObsResponse:
     """Observe an agent message (inbound or outbound, as observed by AETHER)."""
+    _require_perm(request, "write")
+    tenant_id = _tenant_id(request)
+    _check_no_execution(req.model_dump())
     if req.raw_provider_payload:
-        record = normalize_agentmail_message(req.raw_provider_payload, req.tenant_id)
+        record = normalize_agentmail_message(req.raw_provider_payload, tenant_id)
     else:
         obs_id = _new_id()
         record = AgentMessageObservedRecord(
@@ -125,21 +164,25 @@ async def observe_agent_message(req: MessageObsRequest) -> CommObsResponse:
             to_addresses=req.to_addresses,
             subject=req.subject,
             has_attachments=req.has_attachments,
-            tenant_id=req.tenant_id,
+            tenant_id=tenant_id,
             observed_at=req.observed_at or _utc_now(),
         )
     repo = AgentMessageRepository()
     await repo.insert(record.message_obs_id, record.model_dump(mode="json"))
-    mutations = build_message_mutations(req.tenant_id, record.message_obs_id, req.thread_obs_id)
+    # Use record.thread_obs_id so provider-normalized messages link correctly
+    mutations = build_message_mutations(tenant_id, record.message_obs_id, record.thread_obs_id)
     return CommObsResponse(
         observation_id=record.message_obs_id, received_at=_utc_now(),
-        graph_mutations_queued=len(mutations), tenant_id=req.tenant_id,
+        graph_mutations_queued=len(mutations), tenant_id=tenant_id,
     )
 
 
 @router.post("/v1/observability/agent-comm/attachments", response_model=CommObsResponse, status_code=201)
-async def observe_agent_attachment(req: AttachmentObsRequest) -> CommObsResponse:
+async def observe_agent_attachment(req: AttachmentObsRequest, request: Request) -> CommObsResponse:
     """Observe an agent message attachment."""
+    _require_perm(request, "write")
+    tenant_id = _tenant_id(request)
+    _check_no_execution(req.model_dump())
     obs_id = _new_id()
     record = AgentAttachmentObservedRecord(
         attachment_obs_id=obs_id,
@@ -147,20 +190,23 @@ async def observe_agent_attachment(req: AttachmentObsRequest) -> CommObsResponse
         filename=req.filename,
         mime_type=req.mime_type,
         size_bytes=req.size_bytes,
-        tenant_id=req.tenant_id,
+        tenant_id=tenant_id,
         observed_at=req.observed_at or _utc_now(),
     )
     repo = AgentAttachmentRepository()
     await repo.insert(obs_id, record.model_dump(mode="json"))
     return CommObsResponse(
         observation_id=obs_id, received_at=_utc_now(),
-        graph_mutations_queued=0, tenant_id=req.tenant_id,
+        graph_mutations_queued=0, tenant_id=tenant_id,
     )
 
 
 @router.post("/v1/observability/agent-comm/extractions", response_model=CommObsResponse, status_code=201)
-async def observe_agent_extraction(req: ExtractionObsRequest) -> CommObsResponse:
+async def observe_agent_extraction(req: ExtractionObsRequest, request: Request) -> CommObsResponse:
     """Observe an entity extracted from an agent message or attachment."""
+    _require_perm(request, "write")
+    tenant_id = _tenant_id(request)
+    _check_no_execution(req.model_dump())
     obs_id = _new_id()
     try:
         etype = ExtractedEntityType(req.entity_type)
@@ -172,19 +218,20 @@ async def observe_agent_extraction(req: ExtractionObsRequest) -> CommObsResponse
         attachment_obs_id=req.attachment_obs_id,
         entity_type=etype,
         confidence=req.confidence,
-        tenant_id=req.tenant_id,
+        tenant_id=tenant_id,
         observed_at=req.observed_at or _utc_now(),
     )
     repo = ExtractedEntityRepository()
     await repo.insert(obs_id, record.model_dump(mode="json"))
-    mutations = build_extraction_mutations(req.tenant_id, obs_id, req.message_obs_id)
+    mutations = build_extraction_mutations(tenant_id, obs_id, req.message_obs_id)
     return CommObsResponse(
         observation_id=obs_id, received_at=_utc_now(),
-        graph_mutations_queued=len(mutations), tenant_id=req.tenant_id,
+        graph_mutations_queued=len(mutations), tenant_id=tenant_id,
     )
 
 
 @router.get("/v1/admin/kyber/agentic-observability/inboxes")
-async def kyber_inboxes_overview() -> dict:
+async def kyber_inboxes_overview(request: Request) -> dict:
     """Kyber operator: agent inbox observability overview."""
+    _require_perm(request, "admin")
     return {"status": "ok", "inboxes": []}

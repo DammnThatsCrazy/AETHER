@@ -55,6 +55,7 @@ class TradeOrderObservedRecord(BaseModel):
     external_order_id: Optional[str] = None
     status: str = "pending"
     symbol: str
+    side: str = "buy"
     quantity: float
     filled_qty: Optional[float] = None
     avg_price: Optional[float] = None

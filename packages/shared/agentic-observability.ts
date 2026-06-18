@@ -73,6 +73,7 @@ export type AgenticEconomicRail =
  */
 export type AgenticObservationEvent = {
   event_id: string;
+  event_name: AgenticObservabilityEventType;
   tenant_id: string;
   observed_at: string;
   received_at: string;

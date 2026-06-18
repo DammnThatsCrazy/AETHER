@@ -1,11 +1,12 @@
 """Normalizes provider-specific payloads into AgenticObservationRecord."""
 from __future__ import annotations
 
+from datetime import datetime, timezone
 from typing import Any
 from services.agentic_observability.models import (
     AgenticObservationRecord, ObservationSource, ObservationActor,
     ObservationObject, ObservationAction, ObservationProvenance,
-    ObservationEconomics, ActorType, ActionStatus, ObservationProvider,
+    ObservationEconomics, ObservationRisk, ActorType, ActionStatus, ObservationProvider,
 )
 
 
@@ -46,7 +47,7 @@ def normalize(raw: dict, provider: str, tenant_id: str, event_name: str) -> Agen
     )
 
     economics = None
-    if "economics" in raw:
+    if "economics" in raw and raw["economics"]:
         econ = raw["economics"]
         if econ.get("is_execution_by_aether") is True:
             raise ValueError("execution_by_aether must be False")
@@ -66,15 +67,27 @@ def normalize(raw: dict, provider: str, tenant_id: str, event_name: str) -> Agen
         schema_version="1.0",
     )
 
+    caller_risk = raw.get("risk")
+    risk: Any = None
+    if caller_risk and isinstance(caller_risk, dict):
+        risk = ObservationRisk(
+            risk_level=caller_risk.get("risk_level"),
+            reason_codes=caller_risk.get("reason_codes", []),
+            policy_flags=caller_risk.get("policy_flags", []),
+            requires_review=caller_risk.get("requires_review", False),
+        )
+
+    _now = datetime.now(timezone.utc).isoformat()
     return AgenticObservationRecord(
         event_name=event_name,
         tenant_id=tenant_id,
-        observed_at=raw.get("observed_at") or raw.get("timestamp"),
+        observed_at=raw.get("observed_at") or raw.get("timestamp") or _now,
         source=source,
         actor=actor,
         object=obj,
         action=action,
         economics=economics,
+        risk=risk,
         provenance=provenance,
     )
 
