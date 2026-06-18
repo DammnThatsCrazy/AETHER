@@ -113,6 +113,7 @@ class PortfolioSnapshotRequest(BaseModel):
     total_value: Optional[float] = None
     positions: list[dict[str, Any]] = Field(default_factory=list)
     observed_at: Optional[str] = None
+    execution_by_aether: Literal[False] = False
 
 
 class OrderObsRequest(BaseModel):
@@ -139,6 +140,7 @@ class BudgetObsRequest(BaseModel):
     available_budget: Optional[float] = None
     currency: str = "USD"
     observed_at: Optional[str] = None
+    execution_by_aether: Literal[False] = False
 
 
 class ExtAccountResponse(BaseModel):
@@ -204,6 +206,7 @@ async def observe_portfolio_snapshot(req: PortfolioSnapshotRequest, request: Req
     """Observe a portfolio snapshot from an external brokerage."""
     _require_perm(request, "write")
     tenant_id = _tenant_id(request)
+    _check_no_execution(req.model_dump())
     obs_id = _new_id()
     record = PortfolioSnapshotObservedRecord(
         portfolio_obs_id=obs_id,
@@ -257,6 +260,7 @@ async def observe_agent_budget(req: BudgetObsRequest, request: Request) -> ExtAc
     """Observe an agent budget state from an external platform."""
     _require_perm(request, "write")
     tenant_id = _tenant_id(request)
+    _check_no_execution(req.model_dump())
     obs_id = _new_id()
     record = AgentBudgetObservedRecord(
         budget_obs_id=obs_id,

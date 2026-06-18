@@ -4,9 +4,10 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from typing import Any
 from services.agentic_observability.models import (
-    AgenticObservationRecord, ObservationSource, ObservationActor,
+    AgenticObservationRecord, ObservationSource, ObservationActor, AgentRef,
     ObservationObject, ObservationAction, ObservationProvenance,
-    ObservationEconomics, ObservationRisk, ActorType, ActionStatus, ObservationProvider,
+    ObservationEconomics, ObservationRisk, ActorType, ActionStatus,
+    AutonomyLevel, ObservationProvider,
 )
 
 
@@ -17,19 +18,38 @@ def normalize(raw: dict, provider: str, tenant_id: str, event_name: str) -> Agen
     """Normalize a provider-specific payload into a canonical AgenticObservationRecord."""
     raw_hash = AgenticObservationRecord.hash_payload(raw)
 
+    # source: read nested source dict first, fall back to top-level keys
+    source_data = raw.get("source") or {}
     source = ObservationSource(
-        provider=_to_provider(provider),
-        provider_event_id=raw.get("event_id") or raw.get("id"),
-        integration_id=raw.get("integration_id"),
-        webhook_id=raw.get("webhook_id"),
+        provider=_to_provider(source_data.get("provider") or provider),
+        provider_event_id=source_data.get("provider_event_id") or raw.get("event_id") or raw.get("id"),
+        integration_id=source_data.get("integration_id") or raw.get("integration_id"),
+        webhook_id=source_data.get("webhook_id") or raw.get("webhook_id"),
     )
 
-    actor_data = raw.get("actor", {})
+    actor_data = raw.get("actor") or {}
     actor = ObservationActor(
         actor_type=ActorType(actor_data.get("actor_type", "agent")),
         actor_id=actor_data.get("actor_id") or raw.get("agent_id"),
         external_actor_id=actor_data.get("external_actor_id"),
     )
+
+    # agent metadata: carry model/framework/autonomy_level into stored record
+    agent: Any = None
+    agent_data = raw.get("agent") or {}
+    if agent_data:
+        autonomy_raw = agent_data.get("autonomy_level")
+        try:
+            autonomy = AutonomyLevel(autonomy_raw) if autonomy_raw else None
+        except ValueError:
+            autonomy = None
+        agent = AgentRef(
+            agent_id=agent_data.get("agent_id"),
+            external_agent_id=agent_data.get("external_agent_id"),
+            model=agent_data.get("model"),
+            framework=agent_data.get("framework"),
+            autonomy_level=autonomy,
+        )
 
     obj_data = raw.get("object", {})
     obj = ObservationObject(
@@ -84,6 +104,7 @@ def normalize(raw: dict, provider: str, tenant_id: str, event_name: str) -> Agen
         observed_at=raw.get("observed_at") or raw.get("timestamp") or _now,
         source=source,
         actor=actor,
+        agent=agent,
         object=obj,
         action=action,
         economics=economics,

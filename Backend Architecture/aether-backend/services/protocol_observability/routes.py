@@ -110,6 +110,7 @@ async def observe_x402_challenge(req: X402ChallengeRequest, request: Request) ->
     """Observe an x402 HTTP 402 challenge."""
     _require_perm(request, "write")
     tenant_id = _tenant_id(request)
+    _check_no_execution(req.model_dump())
     obs_id = _new_id()
     record = req.model_dump(mode="json")
     record["challenge_obs_id"] = obs_id
@@ -132,6 +133,7 @@ async def observe_x402_requirement(req: X402RequirementRequest, request: Request
     """Observe an x402 payment requirement."""
     _require_perm(request, "write")
     tenant_id = _tenant_id(request)
+    _check_no_execution(req.model_dump())
     obs_id = _new_id()
     record = req.model_dump(mode="json")
     record["requirement_obs_id"] = obs_id

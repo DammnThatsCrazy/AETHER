@@ -25,6 +25,7 @@ class X402ChallengeRequest(BaseModel):
     network: Optional[str] = None
     recipient: Optional[str] = None
     observed_at: Optional[str] = None
+    execution_by_aether: Literal[False] = False
 
 
 class X402RequirementRequest(BaseModel):
@@ -36,6 +37,7 @@ class X402RequirementRequest(BaseModel):
     pay_to: Optional[str] = None
     accepted_schemes: list[str] = Field(default_factory=list)
     observed_at: Optional[str] = None
+    execution_by_aether: Literal[False] = False
 
 
 class X402SignatureRequest(BaseModel):

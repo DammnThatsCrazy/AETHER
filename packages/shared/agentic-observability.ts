@@ -263,6 +263,7 @@ export type TradeOrderObserved = {
   external_order_id?: string;
   status: 'pending' | 'filled' | 'partial' | 'rejected' | 'cancelled';
   symbol: string;
+  side: 'buy' | 'sell';
   quantity: number;
   filled_qty?: number;
   avg_price?: number;

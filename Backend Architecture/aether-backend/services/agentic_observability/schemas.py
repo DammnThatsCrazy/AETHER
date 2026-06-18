@@ -23,6 +23,7 @@ class AgentEventRequest(BaseModel):
     economics: Optional[ObservationEconomics] = None
     risk: Optional[ObservationRisk] = None
     raw_payload: Optional[dict] = None
+    execution_by_aether: Literal[False] = False
 
 
 class AgentAccountRequest(BaseModel):

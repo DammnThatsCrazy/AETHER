@@ -460,7 +460,16 @@ async def _process_single_event(
             reason=f"unknown_event_type:{sdk_event.type}",
         )
 
-    # 2. Sensitive field scrubbing on properties (backend defense)
+    # 2a. Observe-only invariant: reject any event claiming AETHER executed
+    if sdk_event.properties and sdk_event.properties.get("execution_by_aether") is True:
+        metrics.increment("ingestion_validation_failed_total", labels={"reason": "execution_by_aether"})
+        return EventResult(
+            id=sdk_event.id,
+            status="rejected",
+            reason="execution_by_aether_must_be_false",
+        )
+
+    # 2b. Sensitive field scrubbing on properties (backend defense)
     if sdk_event.properties:
         scrubbed, had_sensitive = _scrub_sensitive_fields(sdk_event.properties)
         if had_sensitive:
@@ -548,7 +557,59 @@ def _get_event_family(event_type: str) -> str:
         "access_granted": "commerce", "access_denied": "commerce",
         "wallet": "wallet", "transaction": "wallet", "contract_action": "wallet",
         "agent_task": "agent", "agent_decision": "agent", "a2h_interaction": "agent",
+        # agent lifecycle granular
+        "agent_registered": "agent", "agent_updated": "agent",
+        "agent_authorized": "agent", "agent_deauthorized": "agent",
+        "agent_capability_granted": "agent", "agent_capability_revoked": "agent",
+        "agent_task_created": "agent", "agent_task_decomposed": "agent",
+        "agent_task_started": "agent", "agent_task_completed": "agent",
+        "agent_task_failed": "agent", "agent_tool_called": "agent",
+        "agent_resource_requested": "agent", "agent_delegated_task": "agent",
+        "agent_subagent_spawned": "agent", "agent_policy_evaluated": "agent",
+        "agent_handoff": "agent", "agent_escalated_to_human": "agent",
+        "agent_outcome_recorded": "agent",
+        # agentic observability — account/MCP/tool
+        "agentic_account_observed": "agent", "agentic_account_connected_observed": "agent",
+        "agentic_account_disconnected_observed": "agent", "agent_budget_observed": "agent",
+        "agent_budget_changed_observed": "agent", "agent_permission_observed": "agent",
+        "agent_mcp_connection_observed": "agent", "agent_tool_observed": "agent",
+        "agent_tool_invocation_observed": "agent", "agent_activity_observed": "agent",
+        "agent_risk_signal_observed": "agent", "agent_notification_observed": "agent",
+        # agentic observability — Robinhood-style trading observation
+        "agent_strategy_observed": "agent", "agent_trade_intent_observed": "agent",
+        "agent_trade_order_observed": "agent", "agent_trade_fill_observed": "agent",
+        "agent_trade_rejection_observed": "agent", "agent_position_observed": "agent",
+        "agent_portfolio_snapshot_observed": "agent", "agent_performance_snapshot_observed": "agent",
+        "agent_disconnect_observed": "agent",
+        # agentic observability — AgentMail-style communication observation
+        "agent_inbox_observed": "agent", "agent_email_address_observed": "agent",
+        "agent_thread_observed": "agent", "agent_message_received_observed": "agent",
+        "agent_message_sent_observed": "agent", "agent_reply_observed": "agent",
+        "agent_attachment_observed": "agent", "agent_attachment_parsed_observed": "agent",
+        "agent_otp_detected_observed": "agent", "agent_invoice_detected_observed": "agent",
+        "agent_receipt_detected_observed": "agent", "agent_calendar_intent_observed": "agent",
+        "agent_support_route_observed": "agent", "agent_semantic_search_observed": "agent",
+        "agent_data_extraction_observed": "agent",
+        # x402 legacy
         "x402_payment": "x402",
+        # x402 lifecycle granular
+        "x402_payment_initiated": "x402", "x402_payment_authorized": "x402",
+        "x402_authorization_requested": "x402", "x402_authorization_resolved": "x402",
+        "x402_payment_intent_created": "x402", "x402_payment_submitted": "x402",
+        "x402_payment_settled": "x402", "x402_payment_failed": "x402",
+        "x402_payment_timeout": "x402", "x402_receipt_verified": "x402",
+        "x402_access_granted": "x402", "x402_access_denied": "x402",
+        "x402_refund_or_reversal": "x402",
+        # x402 protocol observation
+        "x402_resource_request_observed": "x402", "x402_challenge_observed": "x402",
+        "x402_payment_requirement_observed": "x402", "x402_signature_observed": "x402",
+        "x402_verification_observed": "x402", "x402_settlement_observed": "x402",
+        "x402_resource_access_observed": "x402", "x402_resource_access_denied_observed": "x402",
+        "x402_failure_observed": "x402", "x402_replay_risk_observed": "x402",
+        "x402_provider_observed": "x402",
+        # reward
+        "reward_action_queued": "reward", "reward_proof_generated": "reward",
+        "reward_delivered": "reward", "reward_claim_submitted": "reward",
     }
     return _FAMILY_MAP.get(event_type, "core")
 

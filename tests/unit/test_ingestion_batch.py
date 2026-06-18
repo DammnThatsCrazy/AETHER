@@ -292,7 +292,7 @@ def test_all_canonical_types_have_family():
         m = importlib.import_module("services.ingestion.batch")
         for event_type in m.CANONICAL_EVENT_TYPES:
             family = m._get_event_family(event_type)
-            assert family in {"core", "journey", "identity", "consent", "commerce", "wallet", "agent", "x402"}, (
+            assert family in {"core", "journey", "identity", "consent", "commerce", "wallet", "agent", "x402", "reward"}, (
                 f"Event type {event_type!r} has unexpected family {family!r}"
             )
 
