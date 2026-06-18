@@ -163,7 +163,36 @@ object Aether : DefaultLifecycleObserver {
         "agent_resource_requested" to "agent", "agent_delegated_task" to "agent",
         "agent_subagent_spawned" to "agent", "agent_policy_evaluated" to "agent",
         "agent_handoff" to "agent", "agent_escalated_to_human" to "agent",
-        "agent_outcome_recorded" to "agent"
+        "agent_outcome_recorded" to "agent",
+        // Agentic observability — account / MCP / tool
+        "agentic_account_observed" to "agent", "agentic_account_connected_observed" to "agent",
+        "agentic_account_disconnected_observed" to "agent", "agent_budget_observed" to "agent",
+        "agent_budget_changed_observed" to "agent", "agent_permission_observed" to "agent",
+        "agent_mcp_connection_observed" to "agent", "agent_tool_observed" to "agent",
+        "agent_tool_invocation_observed" to "agent", "agent_activity_observed" to "agent",
+        "agent_risk_signal_observed" to "agent", "agent_notification_observed" to "agent",
+        // Agentic observability — Robinhood-style trading observation
+        "agent_strategy_observed" to "agent", "agent_trade_intent_observed" to "agent",
+        "agent_trade_order_observed" to "agent", "agent_trade_fill_observed" to "agent",
+        "agent_trade_rejection_observed" to "agent", "agent_position_observed" to "agent",
+        "agent_portfolio_snapshot_observed" to "agent", "agent_performance_snapshot_observed" to "agent",
+        "agent_disconnect_observed" to "agent",
+        // Agentic observability — AgentMail-style communication observation
+        "agent_inbox_observed" to "agent", "agent_email_address_observed" to "agent",
+        "agent_thread_observed" to "agent", "agent_message_received_observed" to "agent",
+        "agent_message_sent_observed" to "agent", "agent_reply_observed" to "agent",
+        "agent_attachment_observed" to "agent", "agent_attachment_parsed_observed" to "agent",
+        "agent_otp_detected_observed" to "agent", "agent_invoice_detected_observed" to "agent",
+        "agent_receipt_detected_observed" to "agent", "agent_calendar_intent_observed" to "agent",
+        "agent_support_route_observed" to "agent", "agent_semantic_search_observed" to "agent",
+        "agent_data_extraction_observed" to "agent",
+        // x402 protocol observation family
+        "x402_resource_request_observed" to "agent", "x402_challenge_observed" to "agent",
+        "x402_payment_requirement_observed" to "agent", "x402_signature_observed" to "agent",
+        "x402_verification_observed" to "agent", "x402_settlement_observed" to "agent",
+        "x402_resource_access_observed" to "agent", "x402_resource_access_denied_observed" to "agent",
+        "x402_failure_observed" to "agent", "x402_replay_risk_observed" to "agent",
+        "x402_provider_observed" to "agent"
     )
     private val CANONICAL_EVENT_TYPES = EVENT_CONSENT_PURPOSE.keys
     private val dateFormat = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", Locale.US).apply {

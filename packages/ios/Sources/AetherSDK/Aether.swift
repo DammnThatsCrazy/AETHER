@@ -94,6 +94,27 @@ public enum AetherEventType: String, Codable, CaseIterable {
     case x402_access_granted, x402_access_denied, x402_refund_or_reversal
     // reward enablement (A6)
     case reward_action_queued, reward_proof_generated, reward_delivered, reward_claim_submitted
+    // Agentic observability — account / MCP / tool
+    case agentic_account_observed, agentic_account_connected_observed, agentic_account_disconnected_observed
+    case agent_budget_observed, agent_budget_changed_observed, agent_permission_observed
+    case agent_mcp_connection_observed, agent_tool_observed, agent_tool_invocation_observed
+    case agent_activity_observed, agent_risk_signal_observed, agent_notification_observed
+    // Agentic observability — Robinhood-style trading observation
+    case agent_strategy_observed, agent_trade_intent_observed, agent_trade_order_observed
+    case agent_trade_fill_observed, agent_trade_rejection_observed, agent_position_observed
+    case agent_portfolio_snapshot_observed, agent_performance_snapshot_observed, agent_disconnect_observed
+    // Agentic observability — AgentMail-style communication observation
+    case agent_inbox_observed, agent_email_address_observed, agent_thread_observed
+    case agent_message_received_observed, agent_message_sent_observed, agent_reply_observed
+    case agent_attachment_observed, agent_attachment_parsed_observed
+    case agent_otp_detected_observed, agent_invoice_detected_observed, agent_receipt_detected_observed
+    case agent_calendar_intent_observed, agent_support_route_observed
+    case agent_semantic_search_observed, agent_data_extraction_observed
+    // x402 protocol observation family (from external observer perspective)
+    case x402_resource_request_observed, x402_challenge_observed, x402_payment_requirement_observed
+    case x402_signature_observed, x402_verification_observed, x402_settlement_observed
+    case x402_resource_access_observed, x402_resource_access_denied_observed
+    case x402_failure_observed, x402_replay_risk_observed, x402_provider_observed
 }
 
 public struct AetherEvent: Codable {

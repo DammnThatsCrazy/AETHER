@@ -2280,3 +2280,101 @@ Redacted tenant-safe feed — no internal scoring or suppression metadata expose
 - `notifications:approve` — operator approve/suppress/escalate
 - `notifications:manage` — config management
 - `notifications:channels:write` — channel registration/removal
+
+---
+
+## Agentic Observability Layer
+
+> **Invariant: AETHER observes. AETHER does not execute.**
+>
+> All routes in this section receive inbound observation payloads and record them for
+> graph-tracking and intelligence. They never originate, sign, execute, settle, or
+> facilitate payments, trades, emails, or other actions. Any payload where
+> `execution_by_aether = true` is rejected with **HTTP 422**.
+>
+> All observation responses return:
+> ```json
+> { "observation_id": "<uuid>", "received_at": "<ISO8601>", "graph_mutations_queued": <int>, "tenant_id": "<str>" }
+> ```
+
+### Agentic Account / MCP / Tool Observability
+
+| Method | Path | Description |
+|--------|------|-------------|
+| POST | `/v1/observability/agent/events` | Observe a generic agent activity event (MCP tool call, activity record, risk signal) |
+| POST | `/v1/observability/agent/accounts` | Observe an external agentic account linkage |
+| POST | `/v1/observability/agent/tools` | Observe an agent tool invocation |
+| POST | `/v1/observability/agent/mcp` | Observe an MCP server connection |
+| POST | `/v1/observability/agent/risk-signals` | Record an agent risk signal |
+
+**Request fields (agent events):** `tenant_id`, `event_name`, `source.provider`, `actor.actor_type`, `object.object_type`, `action.name`, `action.status`, `provenance.raw_event_hash`, `provenance.normalized_by`, `provenance.schema_version`. Optional: `agent`, `economics` (`is_execution_by_aether` always false).
+
+**Event names (agentic family):** `agentic_account_observed`, `agentic_account_connected_observed`, `agentic_account_disconnected_observed`, `agent_budget_observed`, `agent_budget_changed_observed`, `agent_permission_observed`, `agent_mcp_connection_observed`, `agent_tool_observed`, `agent_tool_invocation_observed`, `agent_activity_observed`, `agent_risk_signal_observed`, `agent_notification_observed`
+
+### x402 Protocol Observability
+
+All x402 endpoints observe external x402 protocol interactions. AETHER never signs, submits, or settles x402 payments.
+
+| Method | Path | Description |
+|--------|------|-------------|
+| POST | `/v1/observability/x402/interactions` | Observe an x402 interaction (resource request → challenge lifecycle) |
+| POST | `/v1/observability/x402/challenges` | Observe an x402 HTTP 402 challenge received by an external agent |
+| POST | `/v1/observability/x402/requirements` | Observe an x402 payment requirement record |
+| POST | `/v1/observability/x402/signatures` | Observe an externally-signed x402 payment (`signed_by_external=true`, `execution_by_aether=false`) |
+| POST | `/v1/observability/x402/verifications` | Observe an x402 payment verification result |
+| POST | `/v1/observability/x402/settlements` | Observe an externally-executed x402 settlement (`settlement_by_external=true`, `execution_by_aether=false`) |
+| POST | `/v1/observability/x402/resource-access` | Observe an x402 resource access outcome (granted/denied) |
+
+**Event names (x402 observability family):** `x402_resource_request_observed`, `x402_challenge_observed`, `x402_payment_requirement_observed`, `x402_signature_observed`, `x402_verification_observed`, `x402_settlement_observed`, `x402_resource_access_observed`, `x402_resource_access_denied_observed`, `x402_failure_observed`, `x402_replay_risk_observed`, `x402_provider_observed`
+
+### Agent Communication Observability
+
+Observe agent inboxes, messages, attachments, and extracted entities. AETHER never sends or replies to messages.
+
+| Method | Path | Description |
+|--------|------|-------------|
+| POST | `/v1/observability/agent-comm/inboxes` | Observe an agent inbox from an external communication provider |
+| POST | `/v1/observability/agent-comm/messages` | Observe an inbound or outbound agent message |
+| POST | `/v1/observability/agent-comm/attachments` | Observe a message attachment |
+| POST | `/v1/observability/agent-comm/extractions` | Observe an extracted entity (OTP, invoice, receipt, calendar intent, support case) |
+
+**Entity types for extractions:** `otp`, `invoice`, `receipt`, `calendar_intent`, `support_case`, `payment_reference`, `amount`, `other`
+
+**Event names (agent-comm family):** `agent_inbox_observed`, `agent_email_address_observed`, `agent_thread_observed`, `agent_message_received_observed`, `agent_message_sent_observed`, `agent_reply_observed`, `agent_attachment_observed`, `agent_attachment_parsed_observed`, `agent_otp_detected_observed`, `agent_invoice_detected_observed`, `agent_receipt_detected_observed`, `agent_calendar_intent_observed`, `agent_support_route_observed`, `agent_semantic_search_observed`, `agent_data_extraction_observed`
+
+### External Account Observability (Robinhood-style)
+
+Observe external brokerage accounts, trade intents, order fills, portfolio snapshots, and budgets. AETHER never places, modifies, or cancels orders.
+
+| Method | Path | Description |
+|--------|------|-------------|
+| POST | `/v1/observability/external-accounts` | Observe an external agentic account linkage |
+| POST | `/v1/observability/external-accounts/brokerage` | Observe an external brokerage account |
+| POST | `/v1/observability/external-accounts/portfolio-snapshots` | Observe a portfolio snapshot |
+| POST | `/v1/observability/external-accounts/order-observations` | Observe a trade order (executed externally, `execution_by_aether=false`) |
+| POST | `/v1/observability/external-accounts/budget-observations` | Observe an agent budget state |
+
+**Event names (Robinhood-style family):** `agent_strategy_observed`, `agent_trade_intent_observed`, `agent_trade_order_observed`, `agent_trade_fill_observed`, `agent_trade_rejection_observed`, `agent_position_observed`, `agent_portfolio_snapshot_observed`, `agent_performance_snapshot_observed`, `agent_disconnect_observed`
+
+### Kyber Admin — Agentic Observability
+
+Operator-only read routes. Require `admin` permission.
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/v1/admin/kyber/agentic-observability/overview` | Agentic observability overview across all tenants |
+| GET | `/v1/admin/kyber/agentic-observability/agents/{agent_id}` | Single agent observability view |
+| GET | `/v1/admin/kyber/agentic-observability/risk` | Risk signals overview |
+| GET | `/v1/admin/kyber/agentic-observability/x402` | x402 protocol observability overview |
+| GET | `/v1/admin/kyber/agentic-observability/replay` | x402 replay risk signals |
+| GET | `/v1/admin/kyber/agentic-observability/inboxes` | Agent inbox observability overview |
+| GET | `/v1/admin/kyber/agentic-observability/external-accounts` | External account observability overview |
+
+### No-Execution Invariant
+
+Every observability route enforces `execution_by_aether = false`. Violations return HTTP 422:
+```json
+{ "detail": "execution_by_aether must be false. AETHER does not execute." }
+```
+
+Fields enforced at both the Pydantic model layer (`Literal[False]`) and the route layer (`_check_no_execution()`).

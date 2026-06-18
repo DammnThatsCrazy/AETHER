@@ -407,3 +407,29 @@ To add a new dimension:
 
 That's it — no graph schema change, no event schema change, no
 repository change unless the underlying read pattern is new.
+
+---
+
+## Agentic Observability Dimensions (v8.9.0+)
+
+The Agentic Observability Layer writes to `obs_*` repositories that Profile 360
+can surface as additional read dimensions on `agent` entity types. These are
+**observation-only** — all data was recorded by the observability ingestion layer,
+never executed by AETHER.
+
+Planned future drill-down endpoints for agent profiles:
+
+| Endpoint | Description | Source Repository |
+|----------|-------------|-------------------|
+| `GET /v1/profile/{id}/agent/mcp-connections` | MCP server connections observed for this agent | `obs_agent_mcp_connections` |
+| `GET /v1/profile/{id}/agent/activities` | Observed activity timeline | `obs_agent_activities` |
+| `GET /v1/profile/{id}/agent/risk-signals` | Risk signals produced from observations | `obs_agent_risk_signals` |
+| `GET /v1/profile/{id}/agent/inboxes` | Observed agent inboxes | `obs_agent_inboxes` |
+| `GET /v1/profile/{id}/agent/x402-interactions` | Observed x402 protocol interactions | `obs_x402_interactions` |
+| `GET /v1/profile/{id}/agent/trade-observations` | Observed trade intents and orders | `obs_trade_observations` |
+| `GET /v1/profile/{id}/agent/portfolio-snapshots` | Observed portfolio state | `obs_portfolio_snapshots` |
+
+**Clarification on "agent executions" dimension:** The existing
+`GET /v1/profile/{id}/agent-executions` endpoint reads `AgentExecutionRepository`,
+which stores externally-observed agent task outcomes. AETHER records these
+observations but does not originate, authorize, or execute any of the tasks itself.
