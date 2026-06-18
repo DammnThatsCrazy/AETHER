@@ -58,6 +58,50 @@ const { nativeMethods, platformRef } = vi.hoisted(() => ({
     })),
     grantConsent:               vi.fn(),
     revokeConsent:              vi.fn(),
+    // Agent lifecycle new methods
+    agentRegistered:            vi.fn(),
+    agentUpdated:               vi.fn(),
+    agentAuthorized:            vi.fn(),
+    agentDeauthorized:          vi.fn(),
+    agentCapabilityGranted:     vi.fn(),
+    agentCapabilityRevoked:     vi.fn(),
+    agentTaskCreated:           vi.fn(),
+    agentTaskDecomposed:        vi.fn(),
+    agentTaskStarted:           vi.fn(),
+    agentTaskCompleted:         vi.fn(),
+    agentTaskFailed:            vi.fn(),
+    agentToolCalled:            vi.fn(),
+    agentResourceRequested:     vi.fn(),
+    agentDelegatedTask:         vi.fn(),
+    agentSubagentSpawned:       vi.fn(),
+    agentPolicyEvaluated:       vi.fn(),
+    agentHandoff:               vi.fn(),
+    agentEscalatedToHuman:      vi.fn(),
+    agentOutcomeRecorded:       vi.fn(),
+    // x402 new methods
+    x402ResourceRequested:      vi.fn(),
+    x402PaymentRequired:        vi.fn(),
+    x402QuoteReceived:          vi.fn(),
+    x402AuthorizationRequested: vi.fn(),
+    x402AuthorizationResolved:  vi.fn(),
+    x402PaymentIntentCreated:   vi.fn(),
+    x402PaymentSubmitted:       vi.fn(),
+    x402PaymentSettled:         vi.fn(),
+    x402PaymentFailed:          vi.fn(),
+    x402PaymentTimeout:         vi.fn(),
+    x402ReceiptVerified:        vi.fn(),
+    x402AccessGranted:          vi.fn(),
+    x402AccessDenied:           vi.fn(),
+    x402RefundOrReversal:       vi.fn(),
+    // Rewards
+    rewardActionQueued:         vi.fn(),
+    rewardProofGenerated:       vi.fn(),
+    rewardDelivered:            vi.fn(),
+    rewardClaimSubmitted:       vi.fn(),
+    // Ecommerce additions
+    trackRemoveFromCart:        vi.fn(),
+    trackApplyCoupon:           vi.fn(),
+    trackBeginCheckout:         vi.fn(),
   },
   platformRef: { OS: 'ios' as string },
 }));
@@ -395,5 +439,97 @@ describe('Aether RN bridge — agent API', () => {
   it('agent.a2hInteraction delegates interactionId and actorId', () => {
     Aether.agent.a2hInteraction('i1', 'agent_1');
     expect(nativeMethods.a2hInteraction).toHaveBeenCalledWith('i1', 'agent_1', {});
+  });
+});
+
+describe('Aether RN bridge — granular agent lifecycle', () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  it('agent.registered delegates agentId', () => {
+    Aether.agent.registered('agent-1', { model: 'gpt-4' });
+    expect(nativeMethods.agentRegistered).toHaveBeenCalledWith('agent-1', { model: 'gpt-4' });
+  });
+  it('agent.taskCreated delegates taskId and actorId', () => {
+    Aether.agent.taskCreated('task-1', 'actor-1');
+    expect(nativeMethods.agentTaskCreated).toHaveBeenCalledWith('task-1', 'actor-1', {});
+  });
+  it('agent.taskCompleted delegates taskId', () => {
+    Aether.agent.taskCompleted('task-1');
+    expect(nativeMethods.agentTaskCompleted).toHaveBeenCalledWith('task-1', {});
+  });
+  it('agent.taskFailed delegates taskId and reason', () => {
+    Aether.agent.taskFailed('task-1', 'timeout');
+    expect(nativeMethods.agentTaskFailed).toHaveBeenCalledWith('task-1', 'timeout', {});
+  });
+  it('agent.escalatedToHuman delegates taskId', () => {
+    Aether.agent.escalatedToHuman('task-1', 'requires approval');
+    expect(nativeMethods.agentEscalatedToHuman).toHaveBeenCalledWith('task-1', 'requires approval', {});
+  });
+  it('agent.outcomeRecorded delegates taskId and outcome', () => {
+    Aether.agent.outcomeRecorded('task-1', 'success');
+    expect(nativeMethods.agentOutcomeRecorded).toHaveBeenCalledWith('task-1', 'success', {});
+  });
+});
+
+describe('Aether RN bridge — granular x402 lifecycle', () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  it('x402.resourceRequested delegates resourceId', () => {
+    Aether.x402.resourceRequested('res-1');
+    expect(nativeMethods.x402ResourceRequested).toHaveBeenCalledWith('res-1', {});
+  });
+  it('x402.paymentRequired delegates resourceId amount currency', () => {
+    Aether.x402.paymentRequired('res-1', 1.5, 'USDC');
+    expect(nativeMethods.x402PaymentRequired).toHaveBeenCalledWith('res-1', 1.5, 'USDC', {});
+  });
+  it('x402.paymentSettled delegates paymentId', () => {
+    Aether.x402.paymentSettled('pay-1');
+    expect(nativeMethods.x402PaymentSettled).toHaveBeenCalledWith('pay-1', {});
+  });
+  it('x402.accessGranted delegates resourceId', () => {
+    Aether.x402.accessGranted('res-1');
+    expect(nativeMethods.x402AccessGranted).toHaveBeenCalledWith('res-1', {});
+  });
+  it('x402.refundOrReversal delegates paymentId', () => {
+    Aether.x402.refundOrReversal('pay-1');
+    expect(nativeMethods.x402RefundOrReversal).toHaveBeenCalledWith('pay-1', {});
+  });
+});
+
+describe('Aether RN bridge — rewards', () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  it('rewards.actionQueued delegates campaignId and ruleId', () => {
+    Aether.rewards.actionQueued('camp-1', 'rule-1');
+    expect(nativeMethods.rewardActionQueued).toHaveBeenCalledWith('camp-1', 'rule-1', {});
+  });
+  it('rewards.proofGenerated delegates campaignId and proofId', () => {
+    Aether.rewards.proofGenerated('camp-1', 'proof-1');
+    expect(nativeMethods.rewardProofGenerated).toHaveBeenCalledWith('camp-1', 'proof-1', {});
+  });
+  it('rewards.delivered delegates campaignId and rewardId', () => {
+    Aether.rewards.delivered('camp-1', 'reward-1');
+    expect(nativeMethods.rewardDelivered).toHaveBeenCalledWith('camp-1', 'reward-1', {});
+  });
+  it('rewards.claimSubmitted delegates campaignId and claimId', () => {
+    Aether.rewards.claimSubmitted('camp-1', 'claim-1');
+    expect(nativeMethods.rewardClaimSubmitted).toHaveBeenCalledWith('camp-1', 'claim-1', {});
+  });
+});
+
+describe('Aether RN bridge — commerce additions', () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  it('commerce.removeFromCart delegates productId and quantity', () => {
+    Aether.commerce.removeFromCart('prod-1', 2);
+    expect(nativeMethods.trackRemoveFromCart).toHaveBeenCalledWith('prod-1', 2, {});
+  });
+  it('commerce.applyCoupon delegates couponCode', () => {
+    Aether.commerce.applyCoupon('SAVE20');
+    expect(nativeMethods.trackApplyCoupon).toHaveBeenCalledWith('SAVE20', {});
+  });
+  it('commerce.beginCheckout delegates cartValue and currency', () => {
+    Aether.commerce.beginCheckout(99.99, 'USD');
+    expect(nativeMethods.trackBeginCheckout).toHaveBeenCalledWith(99.99, 'USD', {});
   });
 });

@@ -233,6 +233,54 @@ class AetherNativeModule(private val reactContext: ReactApplicationContext) :
     @ReactMethod fun a2hInteraction(interactionId: String, actorId: String, properties: ReadableMap) { Aether.a2hInteraction(interactionId, actorId, properties.toHashMap().mapValues { it.value }) }
     @ReactMethod fun x402Payment(paymentId: String, amount: String, currency: String, network: String, properties: ReadableMap) { Aether.x402Payment(paymentId, amount, currency, network, properties.toHashMap().mapValues { it.value }) }
 
+    // Granular agent lifecycle
+    @ReactMethod fun agentRegistered(agentId: String, properties: ReadableMap) { Aether.agentRegistered(agentId, properties.toHashMap().mapValues { it.value }) }
+    @ReactMethod fun agentUpdated(agentId: String, properties: ReadableMap) { Aether.agentUpdated(agentId, properties.toHashMap().mapValues { it.value }) }
+    @ReactMethod fun agentAuthorized(agentId: String, delegationId: String, properties: ReadableMap) { Aether.agentAuthorized(agentId, delegationId.ifEmpty { null }, properties.toHashMap().mapValues { it.value }) }
+    @ReactMethod fun agentDeauthorized(agentId: String, properties: ReadableMap) { Aether.agentDeauthorized(agentId, properties.toHashMap().mapValues { it.value }) }
+    @ReactMethod fun agentCapabilityGranted(agentId: String, capability: String, properties: ReadableMap) { Aether.agentCapabilityGranted(agentId, capability, properties.toHashMap().mapValues { it.value }) }
+    @ReactMethod fun agentCapabilityRevoked(agentId: String, capability: String, properties: ReadableMap) { Aether.agentCapabilityRevoked(agentId, capability, properties.toHashMap().mapValues { it.value }) }
+    @ReactMethod fun agentTaskCreated(taskId: String, actorId: String, properties: ReadableMap) { Aether.agentTaskCreated(taskId, actorId, properties.toHashMap().mapValues { it.value }) }
+    @ReactMethod fun agentTaskDecomposed(taskId: String, properties: ReadableMap) { Aether.agentTaskDecomposed(taskId, properties.toHashMap().mapValues { it.value }) }
+    @ReactMethod fun agentTaskStarted(taskId: String, properties: ReadableMap) { Aether.agentTaskStarted(taskId, properties.toHashMap().mapValues { it.value }) }
+    @ReactMethod fun agentTaskCompleted(taskId: String, properties: ReadableMap) { Aether.agentTaskCompleted(taskId, properties.toHashMap().mapValues { it.value }) }
+    @ReactMethod fun agentTaskFailed(taskId: String, reason: String, properties: ReadableMap) { Aether.agentTaskFailed(taskId, reason.ifEmpty { null }, properties.toHashMap().mapValues { it.value }) }
+    @ReactMethod fun agentToolCalled(taskId: String, tool: String, properties: ReadableMap) { Aether.agentToolCalled(taskId, tool, properties.toHashMap().mapValues { it.value }) }
+    @ReactMethod fun agentResourceRequested(resourceId: String, properties: ReadableMap) { Aether.agentResourceRequested(resourceId, properties.toHashMap().mapValues { it.value }) }
+    @ReactMethod fun agentDelegatedTask(taskId: String, toAgentId: String, properties: ReadableMap) { Aether.agentDelegatedTask(taskId, toAgentId, properties.toHashMap().mapValues { it.value }) }
+    @ReactMethod fun agentSubagentSpawned(parentId: String, childId: String, properties: ReadableMap) { Aether.agentSubagentSpawned(parentId, childId, properties.toHashMap().mapValues { it.value }) }
+    @ReactMethod fun agentPolicyEvaluated(policyId: String, outcome: String, properties: ReadableMap) { Aether.agentPolicyEvaluated(policyId, outcome, properties.toHashMap().mapValues { it.value }) }
+    @ReactMethod fun agentHandoff(fromId: String, toId: String, properties: ReadableMap) { Aether.agentHandoff(fromId, toId, properties.toHashMap().mapValues { it.value }) }
+    @ReactMethod fun agentEscalatedToHuman(taskId: String, reason: String, properties: ReadableMap) { Aether.agentEscalatedToHuman(taskId, reason.ifEmpty { null }, properties.toHashMap().mapValues { it.value }) }
+    @ReactMethod fun agentOutcomeRecorded(taskId: String, outcome: String, properties: ReadableMap) { Aether.agentOutcomeRecorded(taskId, outcome, properties.toHashMap().mapValues { it.value }) }
+
+    // Granular x402 lifecycle
+    @ReactMethod fun x402ResourceRequested(resourceId: String, properties: ReadableMap) { Aether.x402ResourceRequested(resourceId, properties.toHashMap().mapValues { it.value }) }
+    @ReactMethod fun x402PaymentRequired(resourceId: String, amount: Double, currency: String, properties: ReadableMap) { Aether.x402PaymentRequired(resourceId, amount, currency, properties.toHashMap().mapValues { it.value }) }
+    @ReactMethod fun x402QuoteReceived(quoteId: String, properties: ReadableMap) { Aether.x402QuoteReceived(quoteId, properties.toHashMap().mapValues { it.value }) }
+    @ReactMethod fun x402AuthorizationRequested(paymentId: String, properties: ReadableMap) { Aether.x402AuthorizationRequested(paymentId, properties.toHashMap().mapValues { it.value }) }
+    @ReactMethod fun x402AuthorizationResolved(paymentId: String, authorized: Boolean, properties: ReadableMap) { Aether.x402AuthorizationResolved(paymentId, authorized, properties.toHashMap().mapValues { it.value }) }
+    @ReactMethod fun x402PaymentIntentCreated(intentId: String, properties: ReadableMap) { Aether.x402PaymentIntentCreated(intentId, properties.toHashMap().mapValues { it.value }) }
+    @ReactMethod fun x402PaymentSubmitted(paymentId: String, properties: ReadableMap) { Aether.x402PaymentSubmitted(paymentId, properties.toHashMap().mapValues { it.value }) }
+    @ReactMethod fun x402PaymentSettled(paymentId: String, properties: ReadableMap) { Aether.x402PaymentSettled(paymentId, properties.toHashMap().mapValues { it.value }) }
+    @ReactMethod fun x402PaymentFailed(paymentId: String, reason: String, properties: ReadableMap) { Aether.x402PaymentFailed(paymentId, reason.ifEmpty { null }, properties.toHashMap().mapValues { it.value }) }
+    @ReactMethod fun x402PaymentTimeout(paymentId: String, properties: ReadableMap) { Aether.x402PaymentTimeout(paymentId, properties.toHashMap().mapValues { it.value }) }
+    @ReactMethod fun x402ReceiptVerified(receiptId: String, properties: ReadableMap) { Aether.x402ReceiptVerified(receiptId, properties.toHashMap().mapValues { it.value }) }
+    @ReactMethod fun x402AccessGranted(resourceId: String, properties: ReadableMap) { Aether.x402AccessGranted(resourceId, properties.toHashMap().mapValues { it.value }) }
+    @ReactMethod fun x402AccessDenied(resourceId: String, reason: String, properties: ReadableMap) { Aether.x402AccessDenied(resourceId, reason.ifEmpty { null }, properties.toHashMap().mapValues { it.value }) }
+    @ReactMethod fun x402RefundOrReversal(paymentId: String, properties: ReadableMap) { Aether.x402RefundOrReversal(paymentId, properties.toHashMap().mapValues { it.value }) }
+
+    // Rewards
+    @ReactMethod fun rewardActionQueued(campaignId: String, ruleId: String, properties: ReadableMap) { Aether.rewardActionQueued(campaignId, ruleId, properties.toHashMap().mapValues { it.value }) }
+    @ReactMethod fun rewardProofGenerated(campaignId: String, proofId: String, properties: ReadableMap) { Aether.rewardProofGenerated(campaignId, proofId, properties.toHashMap().mapValues { it.value }) }
+    @ReactMethod fun rewardDelivered(campaignId: String, rewardId: String, properties: ReadableMap) { Aether.rewardDelivered(campaignId, rewardId, properties.toHashMap().mapValues { it.value }) }
+    @ReactMethod fun rewardClaimSubmitted(campaignId: String, claimId: String, properties: ReadableMap) { Aether.rewardClaimSubmitted(campaignId, claimId, properties.toHashMap().mapValues { it.value }) }
+
+    // Ecommerce additions
+    @ReactMethod fun trackRemoveFromCart(productId: String, quantity: Int, properties: ReadableMap) { Aether.trackRemoveFromCart(productId, quantity, properties.toHashMap().mapValues { it.value }) }
+    @ReactMethod fun trackApplyCoupon(couponCode: String, properties: ReadableMap) { Aether.trackApplyCoupon(couponCode, properties.toHashMap().mapValues { it.value }) }
+    @ReactMethod fun trackBeginCheckout(cartValue: Double, currency: String, properties: ReadableMap) { Aether.trackBeginCheckout(cartValue, currency, properties.toHashMap().mapValues { it.value }) }
+
     @ReactMethod
     fun getFingerprint(promise: Promise) {
         promise.resolve(Aether.getFingerprintId())

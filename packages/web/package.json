@@ -20,6 +20,12 @@
     },
     "./lifecycle-payloads": {
       "types": "./dist/types/lifecycle-payloads.d.ts"
+    },
+    "./react": {
+      "types": "./dist/react.d.ts",
+      "import": "./dist/react.js",
+      "require": "./dist/react.js",
+      "default": "./dist/react.js"
     }
   },
   "files": [
@@ -36,5 +42,11 @@
   "license": "UNLICENSED",
   "dependencies": {
     "@aether/shared": "^8.9.0"
+  },
+  "peerDependencies": {
+    "react": ">=18.0.0"
+  },
+  "peerDependenciesMeta": {
+    "react": { "optional": true }
   }
 }

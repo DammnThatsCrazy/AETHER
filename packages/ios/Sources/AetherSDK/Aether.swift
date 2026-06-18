@@ -237,6 +237,7 @@ public final class Aether: NSObject {
     private var consentState: [String] = []
     private var fingerprintId: String = ""
     private var campaignInfo: EventContext.CampaignInfo?
+    private var healthAgent: AetherHealthAgent?
     private let networkMonitor = NWPathMonitor()
     private var currentNetworkType: String = "unknown"
 
@@ -338,6 +339,32 @@ public final class Aether: NSObject {
 
         isInitialized = true
         log("Aether iOS SDK initialized (v8.9.0)")
+
+        loadPersistedQueue()
+
+        // Health agent: fleet heartbeat + manifest fetch
+        let hAgent = AetherHealthAgent(
+            endpoint: config.endpoint,
+            apiKey: config.apiKey,
+            platform: "ios",
+            appVersion: Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? ""
+        )
+        hAgent.getDynamicState = { [weak self] in
+            guard let self = self else { return (0, false, false, false) }
+            return (
+                queueDepth: self.eventQueue.count,
+                authValid: self.config?.apiKey.isEmpty == false,
+                consentValid: self.consentState.contains("analytics"),
+                walletConnected: self.walletAddress != nil
+            )
+        }
+        healthAgent = hAgent
+        // In GDPR mode, defer health agent until analytics consent granted
+        if config.privacy.gdprMode {
+            if consentState.contains("analytics") { hAgent.start() }
+        } else {
+            hAgent.start()
+        }
 
         fetchConfig()
         emitSessionStart()
@@ -476,6 +503,50 @@ public final class Aether: NSObject {
         serialQueue.async { [weak self] in
             self?.sendBatch()
         }
+    }
+
+    // MARK: - Durable Queue Persistence
+
+    private var persistedQueueURL: URL? {
+        FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first?
+            .appendingPathComponent("com.aether.sdk", isDirectory: true)
+            .appendingPathComponent("event_queue.json")
+    }
+
+    private func persistQueue() {
+        serialQueue.async { [weak self] in
+            guard let self = self, !self.eventQueue.isEmpty else { return }
+            let maxPersist = 1000
+            let toSave = Array(self.eventQueue.suffix(maxPersist))
+            guard let url = self.persistedQueueURL else { return }
+            do {
+                let dir = url.deletingLastPathComponent()
+                try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+                let data = try JSONEncoder().encode(toSave)
+                try data.write(to: url, options: .atomic)
+            } catch {
+                self.log("Failed to persist queue: \(error)")
+            }
+        }
+    }
+
+    private func loadPersistedQueue() {
+        guard let url = persistedQueueURL,
+              FileManager.default.fileExists(atPath: url.path),
+              let data = try? Data(contentsOf: url),
+              let events = try? JSONDecoder().decode([AetherEvent].self, from: data) else { return }
+        serialQueue.async { [weak self] in
+            guard let self = self else { return }
+            let capacity = max(0, Aether.maxQueueSize - self.eventQueue.count)
+            let toRestore = Array(events.prefix(capacity))
+            self.eventQueue.insert(contentsOf: toRestore, at: 0)
+            self.log("Restored \(toRestore.count) events from persistent queue")
+        }
+        try? FileManager.default.removeItem(at: url)
+    }
+
+    private func clearPersistedQueue() {
+        if let url = persistedQueueURL { try? FileManager.default.removeItem(at: url) }
     }
 
     // MARK: - Deep Link Attribution
@@ -710,6 +781,58 @@ public final class Aether: NSObject {
     public func agentDecision(decisionId: String, actorId: String, properties: [String: AnyCodable] = [:]) { var props = properties; props["decisionId"] = AnyCodable(decisionId); props["actorId"] = AnyCodable(actorId); enqueueEvent(type: .agent_decision, properties: props) }
     public func a2hInteraction(interactionId: String, actorId: String, properties: [String: AnyCodable] = [:]) { var props = properties; props["interactionId"] = AnyCodable(interactionId); props["actorId"] = AnyCodable(actorId); enqueueEvent(type: .a2h_interaction, properties: props) }
     public func x402Payment(paymentId: String, amount: String, currency: String, network: String, properties: [String: AnyCodable] = [:]) { var props = properties; props["paymentId"] = AnyCodable(paymentId); props["amount"] = AnyCodable(amount); props["currency"] = AnyCodable(currency); props["network"] = AnyCodable(network); enqueueEvent(type: .x402_payment, properties: props) }
+
+    // MARK: - Agent Lifecycle (Granular)
+
+    public func agentRegistered(agentId: String, properties: [String: AnyCodable] = [:]) { var p = properties; p["agentId"] = AnyCodable(agentId); enqueueEvent(type: .agent_registered, properties: p) }
+    public func agentUpdated(agentId: String, properties: [String: AnyCodable] = [:]) { var p = properties; p["agentId"] = AnyCodable(agentId); enqueueEvent(type: .agent_updated, properties: p) }
+    public func agentAuthorized(agentId: String, delegationId: String? = nil, properties: [String: AnyCodable] = [:]) { var p = properties; p["agentId"] = AnyCodable(agentId); if let d = delegationId { p["delegationId"] = AnyCodable(d) }; enqueueEvent(type: .agent_authorized, properties: p) }
+    public func agentDeauthorized(agentId: String, properties: [String: AnyCodable] = [:]) { var p = properties; p["agentId"] = AnyCodable(agentId); enqueueEvent(type: .agent_deauthorized, properties: p) }
+    public func agentCapabilityGranted(agentId: String, capability: String, properties: [String: AnyCodable] = [:]) { var p = properties; p["agentId"] = AnyCodable(agentId); p["capability"] = AnyCodable(capability); enqueueEvent(type: .agent_capability_granted, properties: p) }
+    public func agentCapabilityRevoked(agentId: String, capability: String, properties: [String: AnyCodable] = [:]) { var p = properties; p["agentId"] = AnyCodable(agentId); p["capability"] = AnyCodable(capability); enqueueEvent(type: .agent_capability_revoked, properties: p) }
+    public func agentTaskCreated(taskId: String, actorId: String, properties: [String: AnyCodable] = [:]) { var p = properties; p["taskId"] = AnyCodable(taskId); p["actorId"] = AnyCodable(actorId); enqueueEvent(type: .agent_task_created, properties: p) }
+    public func agentTaskDecomposed(taskId: String, properties: [String: AnyCodable] = [:]) { var p = properties; p["taskId"] = AnyCodable(taskId); enqueueEvent(type: .agent_task_decomposed, properties: p) }
+    public func agentTaskStarted(taskId: String, properties: [String: AnyCodable] = [:]) { var p = properties; p["taskId"] = AnyCodable(taskId); enqueueEvent(type: .agent_task_started, properties: p) }
+    public func agentTaskCompleted(taskId: String, properties: [String: AnyCodable] = [:]) { var p = properties; p["taskId"] = AnyCodable(taskId); enqueueEvent(type: .agent_task_completed, properties: p) }
+    public func agentTaskFailed(taskId: String, reason: String? = nil, properties: [String: AnyCodable] = [:]) { var p = properties; p["taskId"] = AnyCodable(taskId); if let r = reason { p["reason"] = AnyCodable(r) }; enqueueEvent(type: .agent_task_failed, properties: p) }
+    public func agentToolCalled(taskId: String, tool: String, properties: [String: AnyCodable] = [:]) { var p = properties; p["taskId"] = AnyCodable(taskId); p["tool"] = AnyCodable(tool); enqueueEvent(type: .agent_tool_called, properties: p) }
+    public func agentResourceRequested(resourceId: String, properties: [String: AnyCodable] = [:]) { var p = properties; p["resourceId"] = AnyCodable(resourceId); enqueueEvent(type: .agent_resource_requested, properties: p) }
+    public func agentDelegatedTask(taskId: String, toAgentId: String, properties: [String: AnyCodable] = [:]) { var p = properties; p["taskId"] = AnyCodable(taskId); p["toAgentId"] = AnyCodable(toAgentId); enqueueEvent(type: .agent_delegated_task, properties: p) }
+    public func agentSubagentSpawned(parentId: String, childId: String, properties: [String: AnyCodable] = [:]) { var p = properties; p["parentId"] = AnyCodable(parentId); p["childId"] = AnyCodable(childId); enqueueEvent(type: .agent_subagent_spawned, properties: p) }
+    public func agentPolicyEvaluated(policyId: String, outcome: String, properties: [String: AnyCodable] = [:]) { var p = properties; p["policyId"] = AnyCodable(policyId); p["outcome"] = AnyCodable(outcome); enqueueEvent(type: .agent_policy_evaluated, properties: p) }
+    public func agentHandoff(fromId: String, toId: String, properties: [String: AnyCodable] = [:]) { var p = properties; p["fromId"] = AnyCodable(fromId); p["toId"] = AnyCodable(toId); enqueueEvent(type: .agent_handoff, properties: p) }
+    public func agentEscalatedToHuman(taskId: String, reason: String? = nil, properties: [String: AnyCodable] = [:]) { var p = properties; p["taskId"] = AnyCodable(taskId); if let r = reason { p["reason"] = AnyCodable(r) }; enqueueEvent(type: .agent_escalated_to_human, properties: p) }
+    public func agentOutcomeRecorded(taskId: String, outcome: String, properties: [String: AnyCodable] = [:]) { var p = properties; p["taskId"] = AnyCodable(taskId); p["outcome"] = AnyCodable(outcome); enqueueEvent(type: .agent_outcome_recorded, properties: p) }
+
+    // MARK: - x402 Lifecycle (Granular)
+
+    public func x402ResourceRequested(resourceId: String, properties: [String: AnyCodable] = [:]) { var p = properties; p["resourceId"] = AnyCodable(resourceId); enqueueEvent(type: .x402_resource_requested, properties: p) }
+    public func x402PaymentRequired(resourceId: String, amount: Double, currency: String, properties: [String: AnyCodable] = [:]) { var p = properties; p["resourceId"] = AnyCodable(resourceId); p["amount"] = AnyCodable(amount); p["currency"] = AnyCodable(currency); enqueueEvent(type: .x402_payment_required, properties: p) }
+    public func x402QuoteReceived(quoteId: String, properties: [String: AnyCodable] = [:]) { var p = properties; p["quoteId"] = AnyCodable(quoteId); enqueueEvent(type: .x402_quote_received, properties: p) }
+    public func x402AuthorizationRequested(paymentId: String, properties: [String: AnyCodable] = [:]) { var p = properties; p["paymentId"] = AnyCodable(paymentId); enqueueEvent(type: .x402_authorization_requested, properties: p) }
+    public func x402AuthorizationResolved(paymentId: String, authorized: Bool, properties: [String: AnyCodable] = [:]) { var p = properties; p["paymentId"] = AnyCodable(paymentId); p["authorized"] = AnyCodable(authorized); enqueueEvent(type: .x402_authorization_resolved, properties: p) }
+    public func x402PaymentIntentCreated(intentId: String, properties: [String: AnyCodable] = [:]) { var p = properties; p["intentId"] = AnyCodable(intentId); enqueueEvent(type: .x402_payment_intent_created, properties: p) }
+    public func x402PaymentSubmitted(paymentId: String, properties: [String: AnyCodable] = [:]) { var p = properties; p["paymentId"] = AnyCodable(paymentId); enqueueEvent(type: .x402_payment_submitted, properties: p) }
+    public func x402PaymentSettled(paymentId: String, properties: [String: AnyCodable] = [:]) { var p = properties; p["paymentId"] = AnyCodable(paymentId); enqueueEvent(type: .x402_payment_settled, properties: p) }
+    public func x402PaymentFailed(paymentId: String, reason: String? = nil, properties: [String: AnyCodable] = [:]) { var p = properties; p["paymentId"] = AnyCodable(paymentId); if let r = reason { p["reason"] = AnyCodable(r) }; enqueueEvent(type: .x402_payment_failed, properties: p) }
+    public func x402PaymentTimeout(paymentId: String, properties: [String: AnyCodable] = [:]) { var p = properties; p["paymentId"] = AnyCodable(paymentId); enqueueEvent(type: .x402_payment_timeout, properties: p) }
+    public func x402ReceiptVerified(receiptId: String, properties: [String: AnyCodable] = [:]) { var p = properties; p["receiptId"] = AnyCodable(receiptId); enqueueEvent(type: .x402_receipt_verified, properties: p) }
+    public func x402AccessGranted(resourceId: String, properties: [String: AnyCodable] = [:]) { var p = properties; p["resourceId"] = AnyCodable(resourceId); enqueueEvent(type: .x402_access_granted, properties: p) }
+    public func x402AccessDenied(resourceId: String, reason: String? = nil, properties: [String: AnyCodable] = [:]) { var p = properties; p["resourceId"] = AnyCodable(resourceId); if let r = reason { p["reason"] = AnyCodable(r) }; enqueueEvent(type: .x402_access_denied, properties: p) }
+    public func x402RefundOrReversal(paymentId: String, properties: [String: AnyCodable] = [:]) { var p = properties; p["paymentId"] = AnyCodable(paymentId); enqueueEvent(type: .x402_refund_or_reversal, properties: p) }
+
+    // MARK: - Rewards (Thin Observation Emitters)
+
+    public func rewardActionQueued(campaignId: String, ruleId: String, properties: [String: AnyCodable] = [:]) { var p = properties; p["campaignId"] = AnyCodable(campaignId); p["ruleId"] = AnyCodable(ruleId); enqueueEvent(type: .reward_action_queued, properties: p) }
+    public func rewardProofGenerated(campaignId: String, proofId: String, properties: [String: AnyCodable] = [:]) { var p = properties; p["campaignId"] = AnyCodable(campaignId); p["proofId"] = AnyCodable(proofId); enqueueEvent(type: .reward_proof_generated, properties: p) }
+    public func rewardDelivered(campaignId: String, rewardId: String, properties: [String: AnyCodable] = [:]) { var p = properties; p["campaignId"] = AnyCodable(campaignId); p["rewardId"] = AnyCodable(rewardId); enqueueEvent(type: .reward_delivered, properties: p) }
+    public func rewardClaimSubmitted(campaignId: String, claimId: String, properties: [String: AnyCodable] = [:]) { var p = properties; p["campaignId"] = AnyCodable(campaignId); p["claimId"] = AnyCodable(claimId); enqueueEvent(type: .reward_claim_submitted, properties: p) }
+
+    // MARK: - Ecommerce Additions
+
+    public func trackRemoveFromCart(_ item: [String: AnyCodable]) { enqueueEvent(type: .track, properties: ["event": AnyCodable("product_removed"), "item": AnyCodable(item)]) }
+    public func trackApplyCoupon(_ couponCode: String, properties: [String: AnyCodable] = [:]) { var p = properties; p["event"] = AnyCodable("coupon_applied"); p["couponCode"] = AnyCodable(couponCode); enqueueEvent(type: .track, properties: p) }
+    public func trackBeginCheckout(cartValue: Double, currency: String = "USD", properties: [String: AnyCodable] = [:]) { var p = properties; p["event"] = AnyCodable("checkout_started"); p["cartValue"] = AnyCodable(cartValue); p["currency"] = AnyCodable(currency); enqueueEvent(type: .conversion, properties: p) }
 
     // MARK: - Feature Flags (from server config)
 
@@ -968,9 +1091,11 @@ public final class Aether: NSObject {
     private func setupLifecycleObservers() {
         #if canImport(UIKit)
         NotificationCenter.default.addObserver(forName: UIApplication.didEnterBackgroundNotification, object: nil, queue: .main) { [weak self] _ in
+            self?.persistQueue()
             self?.flush()
         }
         NotificationCenter.default.addObserver(forName: UIApplication.willTerminateNotification, object: nil, queue: .main) { [weak self] _ in
+            self?.persistQueue()
             self?.flush()
         }
         NotificationCenter.default.addObserver(forName: UIApplication.willEnterForegroundNotification, object: nil, queue: .main) { [weak self] _ in
@@ -1024,6 +1149,17 @@ public final class Aether: NSObject {
         ]
         if let uid = uid { body["user_id"] = uid }
         if let em = email, !em.isEmpty { body["email_hash"] = sha256(em.trimmingCharacters(in: .whitespaces)) }
+        // fingerprint_signals: individual components for backend confidence scoring
+        #if canImport(UIKit)
+        body["fingerprint_signals"] = [
+            "idfv": UIDevice.current.identifierForVendor?.uuidString ?? "",
+            "model": UIDevice.current.model,
+            "os_version": UIDevice.current.systemVersion,
+            "locale": Locale.current.identifier,
+            "timezone": TimeZone.current.identifier,
+            "processor_count": ProcessInfo.processInfo.processorCount,
+        ] as [String: Any]
+        #endif
         request.httpBody = try? JSONSerialization.data(withJSONObject: body)
 
         URLSession.shared.dataTask(with: request) { [weak self] data, response, _ in
@@ -1119,7 +1255,7 @@ extension Aether: MXMetricManagerSubscriber {
                 props["diskWritesMB"] = AnyCodable(disk.cumulativeLogicalWrites.converted(to: .megabytes).value)
             }
 
-            enqueueEvent(type: .track, properties: props)
+            enqueueEvent(type: .performance, properties: props)
         }
     }
 
@@ -1136,7 +1272,7 @@ extension Aether: MXMetricManagerSubscriber {
                 props["hangCount"]          = AnyCodable(hangs.count)
                 props["hangDurationMs"]     = AnyCodable(hangs.first?.hangDuration.converted(to: .milliseconds).value ?? 0)
             }
-            enqueueEvent(type: .track, properties: props)
+            enqueueEvent(type: .performance, properties: props)
         }
     }
 }

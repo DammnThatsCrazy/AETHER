@@ -3370,6 +3370,21 @@
       "canonical_owner": "ml@aether"
     },
     {
+      "path": "docs/reports/SDK_PRODUCTION_READINESS_AUDIT.md",
+      "title": "SDK Production Readiness Audit",
+      "slug": "sdk/production-readiness-audit",
+      "section": "sdk",
+      "visibility": "I",
+      "audience": [
+        "sdk",
+        "dev-senior",
+        "architect",
+        "release-eng"
+      ],
+      "since_version": "8.9.0",
+      "canonical_owner": "sdk@aether"
+    },
+    {
       "path": "docs/source-of-truth/GRAPH_CONTRACT.md",
       "title": "Intelligence Graph Contract",
       "slug": "source-of-truth/graph-contract",

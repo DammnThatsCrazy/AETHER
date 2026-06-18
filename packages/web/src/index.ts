@@ -130,6 +130,36 @@ class AetherSDK implements AetherSDKInterface {
     this.sessionManager?.recordEvent();
   }
 
+  /**
+   * Emit a canonical 'error' event (gated on analytics consent).
+   * Automatically extracts message, name, and stack from an Error instance.
+   *
+   * @param message  Human-readable error description
+   * @param error    Optional Error instance (stack/name auto-captured)
+   * @param properties  Additional key/value context to attach
+   */
+  error(message: string, error?: Error | unknown, properties?: Record<string, unknown>): void {
+    const errorProps: Record<string, unknown> = {
+      message,
+      ...properties,
+    };
+
+    if (error instanceof Error) {
+      errorProps['name'] = error.name;
+      errorProps['stack'] = error.stack;
+      // Preserve a clean message if not already overridden by caller
+      if (!errorProps['message']) {
+        errorProps['message'] = error.message;
+      }
+    } else if (error !== undefined && error !== null) {
+      // Non-Error throwable (string, object, etc.)
+      errorProps['thrown'] = String(error);
+    }
+
+    this.enqueueEvent('error', errorProps);
+    this.sessionManager?.recordEvent();
+  }
+
   pageView(page?: string, properties?: Record<string, unknown>): void {
     if (typeof window === 'undefined') return;
     const pageCtx = getPageContext();
