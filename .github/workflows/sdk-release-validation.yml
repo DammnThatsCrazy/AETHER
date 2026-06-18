@@ -11,6 +11,8 @@ on:
       - 'packages/android/**'
       - 'docs/SDK*.md'
       - 'docs/source-of-truth/**'
+      - 'docs/reports/**'
+      - 'CHANGELOG.md'
       - 'scripts/validate_sdk_release_alignment.py'
       - '.github/workflows/sdk-release-validation.yml'
   pull_request:
@@ -22,6 +24,8 @@ on:
       - 'packages/android/**'
       - 'docs/SDK*.md'
       - 'docs/source-of-truth/**'
+      - 'docs/reports/**'
+      - 'CHANGELOG.md'
       - 'scripts/validate_sdk_release_alignment.py'
       - '.github/workflows/sdk-release-validation.yml'
   workflow_dispatch:
@@ -43,7 +47,7 @@ jobs:
       - name: Web tests with coverage threshold
         run: npm run test --workspace=packages/web -- --coverage --coverage.thresholds.lines=65 --coverage.thresholds.branches=65 --coverage.thresholds.functions=55 --coverage.thresholds.statements=65
       - name: React Native tests with coverage threshold
-        run: npm run test --workspace=packages/react-native -- --coverage --coverage.thresholds.lines=75 --coverage.thresholds.branches=73 --coverage.thresholds.functions=35 --coverage.thresholds.statements=75
+        run: npm run test --workspace=packages/react-native -- --coverage --coverage.thresholds.lines=75 --coverage.thresholds.branches=73 --coverage.thresholds.functions=55 --coverage.thresholds.statements=75
       - name: Build publish artifacts
         run: |
           npm run build --workspace=packages/shared
@@ -52,6 +56,15 @@ jobs:
           npm pack --workspace=packages/shared --dry-run
           npm pack --workspace=packages/web --dry-run
           npm pack --workspace=packages/react-native --dry-run
+      - name: Secret pattern scan
+        run: |
+          if grep -rE '(-----BEGIN (RSA|EC|PRIVATE)|PRIVATE_KEY\s*=\s*["\x27][A-Za-z0-9+/]{20})' packages/; then
+            echo "ERROR: Possible secret detected in packages/" && exit 1
+          fi
+      - name: CHANGELOG entry check
+        run: grep -q 'SDK Productionization' CHANGELOG.md || (echo "ERROR: CHANGELOG missing SDK Productionization entry" && exit 1)
+      - name: Audit doc existence check
+        run: test -f docs/reports/SDK_PRODUCTION_READINESS_AUDIT.md || (echo "ERROR: Audit doc missing" && exit 1)
 
   android:
     runs-on: ubuntu-latest

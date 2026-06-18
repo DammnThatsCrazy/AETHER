@@ -136,7 +136,9 @@
       "Bash(python scripts/docs_drift.py --help)",
       "Bash(python scripts/docs_drift.py --update)",
       "Bash(pip install *)",
-      "mcp__ebba02ce-3bf2-4a39-b2ae-55c716d54dd1__use_figma"
+      "mcp__ebba02ce-3bf2-4a39-b2ae-55c716d54dd1__use_figma",
+      "Bash(python scripts/check_circular_deps.py packages/web/src packages/react-native/src frontend/kyber/src)",
+      "Bash(python scripts/validate_sdk_release_alignment.py)"
     ]
   }
 }

@@ -13,7 +13,7 @@ source_files:
 canonical_owner: sdk@aether
 estimated_read_minutes: 12
 toc_depth: 3
-last_synced_commit: 1dbc6a7
+last_synced_commit: 0060fb9
 ---
 
 # Aether Web SDK v8.9.0 — Integration Guide
@@ -65,6 +65,9 @@ aether.pageView('/pricing', { referrer: '/home' });
 
 // Conversion
 aether.conversion('signup_completed', 0, { plan: 'pro' });
+
+// Error event (new in 8.9.0 — extracts message, name, stack from Error instances)
+aether.error('Payment failed', new Error('Network timeout'), { paymentId: 'pay_1' });
 ```
 
 ### Identity
@@ -488,3 +491,35 @@ All events are silently dropped at flush time if the required consent purpose is
 - Agent lifecycle events → `agent` consent required
 - x402 lifecycle events → `commerce` consent required
 - `contract_action` → `web3` consent required
+
+## React Browser Wrapper (`@aether/web/react`)
+
+Install: `npm install @aether/web react`
+
+```tsx
+import { AetherProvider, useAether, useConsentState, useIdentity, useScreenOrPageTracking, useJourneyResumed } from '@aether/web/react';
+
+function App() {
+  return (
+    <AetherProvider config={{ apiKey: 'YOUR_KEY' }}>
+      <MyComponent />
+    </AetherProvider>
+  );
+}
+
+function MyComponent() {
+  const aether = useAether();          // SDK singleton
+  const consent = useConsentState();   // live consent state
+  const identity = useIdentity();      // live identity
+
+  // Auto-track page view on mount / name change
+  useScreenOrPageTracking('Home');
+
+  // Register journey resumed callback
+  useJourneyResumed((resolved) => console.log('Resumed:', resolved.userId));
+
+  return <button onClick={() => aether.track('cta_click')}>Click</button>;
+}
+```
+
+The provider is SSR-safe: `AetherProvider` is a no-op when `typeof window === 'undefined'`.
