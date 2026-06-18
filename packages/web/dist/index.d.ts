@@ -122,3 +122,4 @@ export { AetherSDK };
 export type { AetherConfig, AetherSDKInterface, ResolvedIdentity, JourneyPayload, CurrentJourney, JourneyStatus, JourneyLifecycleEventType } from './types';
 export { SDKHealthAgent } from './health';
 export type { SDKHealthAgentConfig, SDKHeartbeatPayload, SDKManifest, ManifestUpdateCallback } from './health';
+export type { AetherProviderProps, ResolvedIdentity as ReactResolvedIdentity } from './react';
