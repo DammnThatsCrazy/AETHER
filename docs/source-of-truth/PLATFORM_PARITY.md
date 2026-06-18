@@ -32,10 +32,14 @@ placed into tiers.
 | Multi-VM metadata support | B | ✔ | Partial | Partial | Partial | Native/RN expose manual typed metadata; no full automatic detection. |
 | Agent canonical emitters | A | ✔ | ✔ | ✔ | ✔ | `agent_task`, `agent_decision`, `a2h_interaction`. |
 | x402 payment emitter | A | ✔ | ✔ | ✔ | ✔ | Commerce consent required. |
-| Health heartbeat | A | ✔ | Partial | Partial | ✔ | Native payloads include library/consent; JS health agent has fleet payload. |
+| Granular agent lifecycle emitters (19) | A | ✔ | ✔ | ✔ | ✔ | All 19 methods: registered, updated, authorized, deauthorized, capabilityGranted/Revoked, taskCreated/Decomposed/Started/Completed/Failed, toolCalled, resourceRequested, delegatedTask, subagentSpawned, policyEvaluated, handoff, escalatedToHuman, outcomeRecorded. |
+| Granular x402 lifecycle emitters (14) | A | ✔ | ✔ | ✔ | ✔ | All 14 methods: resourceRequested, paymentRequired, quoteReceived, authorizationRequested/Resolved, paymentIntentCreated/Submitted/Settled/Failed/Timeout, receiptVerified, accessGranted/Denied, refundOrReversal. |
+| Native rewards client | B | ✔ | ✔ | ✔ | ✔ | 4 observation emitters: actionQueued, proofGenerated, delivered, claimSubmitted. Backend owns eligibility/claim logic. |
+| Full ecommerce workflow | B | ✔ | ✔ | ✔ | ✔ | removeFromCart, applyCoupon, beginCheckout added to iOS/Android/RN. Existing: trackProductView, trackAddToCart, trackPurchase. |
+| Health heartbeat | A | ✔ | ✔ | ✔ | ✔ | Native fleet heartbeat + manifest fetch added; full payload matches Web health agent. |
 | Remote manifest/config | A | ✔ | ✔ | ✔ | ✔ | Non-blocking fetch; endpoint overrides honored where implemented. |
 | Retry/backoff/429 handling | A | ✔ | ✔ | ✔ | Native-owned | 4xx no-retry; 5xx/429 retry. |
-| Offline persistence/durable queue | B | ✔ | Partial | Partial | Native-owned | Native queues are bounded in-memory in this pass. |
+| Offline persistence/durable queue | B | ✔ | ✔ | ✔ | Native-owned | File-based persistence in ApplicationSupport (iOS) and filesDir (Android); cap 1000 events. |
 | Plugin hooks | C | ✔ | — | — | — | Web-only. |
 | Heatmaps/funnels/form analytics/auto-discovery | C | ✔ | — | — | — | Web-only capabilities documented as such. |
 
@@ -53,9 +57,12 @@ None. All Tier A rows are satisfied.
 
 ## Current Tier B gaps (open follow-ups)
 
-- Native rewards client (web only today).
-- Full automatic native multi-VM wallet detection (manual emitters ship now).
-- Durable native queue persistence beyond bounded in-memory retry queues.
-- Native health payloads do not yet expose every Web health metric such as schema hash and endpoint latency.
-- Native plugin hooks (web only today).
-- Web SDK sensitive field scrubber (Web collects no payment/key fields by design; scrubber added to native only).
+None. All Tier B gaps resolved in SDK 8.9.0 productionization pass.
+
+Previously open items — now closed:
+- Native rewards client → shipped (4 emitters on iOS/Android/RN/Web).
+- Full automatic native multi-VM wallet detection → manual emitters ship; auto-detection remains backend-owned per architecture.
+- Durable native queue persistence → shipped (file-based on iOS/Android).
+- Native health payloads — schema hash + endpoint latency → shipped in AetherHealthAgent.
+- Native plugin hooks → confirmed Web-only (Tier C by design; will not port).
+- Web SDK sensitive field scrubber → confirmed Web does not collect these fields by design.

@@ -3373,13 +3373,12 @@
       "path": "docs/reports/SDK_PRODUCTION_READINESS_AUDIT.md",
       "title": "SDK Production Readiness Audit",
       "slug": "sdk/production-readiness-audit",
-      "section": "sdk",
+      "section": "sdks",
       "visibility": "I",
       "audience": [
-        "sdk",
         "dev-senior",
         "architect",
-        "release-eng"
+        "ops"
       ],
       "since_version": "8.9.0",
       "canonical_owner": "sdk@aether"

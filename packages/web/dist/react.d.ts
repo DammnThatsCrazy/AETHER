@@ -5,7 +5,7 @@ export interface AetherProviderProps {
     config: Parameters<AetherSDK['init']>[0];
     children: ReactNode;
 }
-export declare function AetherProvider({ config, children }: AetherProviderProps): import("react").JSX.Element;
+export declare function AetherProvider({ config, children }: AetherProviderProps): import("react/jsx-runtime").JSX.Element;
 export declare function useAether(): AetherSDK;
 export interface ResolvedIdentity {
     userId?: string;
