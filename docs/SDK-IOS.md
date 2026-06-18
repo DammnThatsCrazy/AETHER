@@ -13,7 +13,7 @@ source_files:
 canonical_owner: sdk@aether
 estimated_read_minutes: 10
 toc_depth: 3
-last_synced_commit: e711d05
+last_synced_commit: 531f423
 ---
 
 # Aether iOS SDK v8.9.0 — Integration Guide
@@ -342,3 +342,49 @@ Four reward lifecycle events are supported via `Aether.shared.track()`:
 | `reward_claim_submitted` | When the user submits a claim (on-chain or off-chain) |
 
 Emit using `Aether.shared.track()` with `campaignId`, `ruleId`, and `rewardIdempotencyKey` in properties. These events flow through `POST /v1/batch` and are processed by the reward eligibility pipeline on the backend. The SDK does not evaluate eligibility — that is handled server-side by the Aether reward policy engine.
+
+## Agentic Observability Event Types
+
+47 new event types support passive observation of external agentic activity. All are registered in the SDK's `eventConsentPurpose` map and flow through `POST /v1/batch` like any other event.
+
+**Consent purpose:** `"agent"` for all agentic observation events; `"commerce"` for x402 protocol observation events.
+
+**Agentic account / MCP / tool (12 types):**
+
+```swift
+// Emit via Aether.shared.track("agentic_account_observed", properties: [...])
+// agentic_account_observed, agentic_account_connected_observed, agentic_account_disconnected_observed
+// agent_budget_observed, agent_budget_changed_observed, agent_permission_observed
+// agent_mcp_connection_observed, agent_tool_observed, agent_tool_invocation_observed
+// agent_activity_observed, agent_risk_signal_observed, agent_notification_observed
+```
+
+**Robinhood-style trading observation (9 types):**
+
+```swift
+// agent_strategy_observed, agent_trade_intent_observed, agent_trade_order_observed
+// agent_trade_fill_observed, agent_trade_rejection_observed, agent_position_observed
+// agent_portfolio_snapshot_observed, agent_performance_snapshot_observed, agent_disconnect_observed
+```
+
+**AgentMail-style communication observation (15 types):**
+
+```swift
+// agent_inbox_observed, agent_email_address_observed, agent_thread_observed
+// agent_message_received_observed, agent_message_sent_observed, agent_reply_observed
+// agent_attachment_observed, agent_attachment_parsed_observed
+// agent_otp_detected_observed, agent_invoice_detected_observed, agent_receipt_detected_observed
+// agent_calendar_intent_observed, agent_support_route_observed
+// agent_semantic_search_observed, agent_data_extraction_observed
+```
+
+**x402 protocol observation (11 types, consent purpose: `"commerce"`):**
+
+```swift
+// x402_resource_request_observed, x402_challenge_observed, x402_payment_requirement_observed
+// x402_signature_observed, x402_verification_observed, x402_settlement_observed
+// x402_resource_access_observed, x402_resource_access_denied_observed
+// x402_failure_observed, x402_replay_risk_observed, x402_provider_observed
+```
+
+> **INVARIANT:** All observation payloads must include `execution_by_aether: false`. AETHER observes external agentic activity — it never originates, signs, executes, or settles on behalf of the caller.
