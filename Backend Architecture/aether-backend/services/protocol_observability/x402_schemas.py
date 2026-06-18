@@ -57,6 +57,7 @@ class X402VerificationRequest(BaseModel):
     verification_result: Optional[str] = None
     verified_by: Optional[str] = None
     observed_at: Optional[str] = None
+    execution_by_aether: Literal[False] = False
 
 
 class X402SettlementRequest(BaseModel):
@@ -77,6 +78,7 @@ class X402ResourceAccessRequest(BaseModel):
     access_denied_reason: Optional[str] = None
     resource_url: Optional[str] = None
     observed_at: Optional[str] = None
+    execution_by_aether: Literal[False] = False
 
 
 class X402ObservationResponse(BaseModel):

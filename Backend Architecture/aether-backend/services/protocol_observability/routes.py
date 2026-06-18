@@ -20,7 +20,9 @@ from repositories.agentic_observability_repos import (
 )
 from services.protocol_observability.x402_graph_mutations import (
     build_interaction_mutations, build_challenge_mutations,
-    build_settlement_mutations, build_resource_access_mutations,
+    build_requirement_mutations, build_signature_mutations,
+    build_verification_mutations, build_settlement_mutations,
+    build_resource_access_mutations,
 )
 from services.protocol_observability.x402_normalizer import normalize_x402_interaction, normalize_x402_settlement
 from services.protocol_observability.x402_schemas import (
@@ -141,9 +143,11 @@ async def observe_x402_requirement(req: X402RequirementRequest, request: Request
     record["received_at"] = _utc_now()
     repo = X402RequirementRepository()
     await repo.insert(obs_id, record)
+    mutations = build_requirement_mutations(tenant_id, obs_id, req.challenge_obs_id)
+    await _persist_mutations(mutations)
     return X402ObservationResponse(
         observation_id=obs_id, received_at=record["received_at"],
-        graph_mutations_queued=1, tenant_id=tenant_id,
+        graph_mutations_queued=len(mutations), tenant_id=tenant_id,
     )
 
 
@@ -160,9 +164,11 @@ async def observe_x402_signature(req: X402SignatureRequest, request: Request) ->
     record["received_at"] = _utc_now()
     repo = X402SignatureRepository()
     await repo.insert(obs_id, record)
+    mutations = build_signature_mutations(tenant_id, obs_id, req.interaction_id)
+    await _persist_mutations(mutations)
     return X402ObservationResponse(
         observation_id=obs_id, received_at=record["received_at"],
-        graph_mutations_queued=1, tenant_id=tenant_id,
+        graph_mutations_queued=len(mutations), tenant_id=tenant_id,
     )
 
 
@@ -171,6 +177,7 @@ async def observe_x402_verification(req: X402VerificationRequest, request: Reque
     """Observe an x402 verification result."""
     _require_perm(request, "write")
     tenant_id = _tenant_id(request)
+    _check_no_execution(req.model_dump())
     obs_id = _new_id()
     record = req.model_dump(mode="json")
     record["verification_obs_id"] = obs_id
@@ -178,9 +185,11 @@ async def observe_x402_verification(req: X402VerificationRequest, request: Reque
     record["received_at"] = _utc_now()
     repo = X402VerificationRepository()
     await repo.insert(obs_id, record)
+    mutations = build_verification_mutations(tenant_id, obs_id, req.interaction_id)
+    await _persist_mutations(mutations)
     return X402ObservationResponse(
         observation_id=obs_id, received_at=record["received_at"],
-        graph_mutations_queued=1, tenant_id=tenant_id,
+        graph_mutations_queued=len(mutations), tenant_id=tenant_id,
     )
 
 
@@ -210,6 +219,7 @@ async def observe_x402_resource_access(req: X402ResourceAccessRequest, request: 
     """Observe an x402 resource access outcome."""
     _require_perm(request, "write")
     tenant_id = _tenant_id(request)
+    _check_no_execution(req.model_dump())
     obs_id = _new_id()
     record = req.model_dump(mode="json")
     record["access_obs_id"] = obs_id

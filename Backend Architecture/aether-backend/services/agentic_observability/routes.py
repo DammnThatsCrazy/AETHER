@@ -100,7 +100,23 @@ async def observe_agent_event(req: AgentEventRequest, request: Request) -> Obser
     raw = req.model_dump()
     record = normalize(raw, req.source.provider.value, tenant_id, req.event_name)
     computed_risk = evaluate_risk(record)
-    if computed_risk.risk_level and computed_risk.risk_level.value != "low":
+    existing = record.risk
+    if existing and computed_risk.risk_level:
+        _SEVERITY = {"low": 0, "medium": 1, "high": 2, "critical": 3}
+        ex_sev = _SEVERITY.get(existing.risk_level.value if existing.risk_level else "low", 0)
+        co_sev = _SEVERITY.get(computed_risk.risk_level.value, 0)
+        merged_level = computed_risk.risk_level if co_sev >= ex_sev else existing.risk_level
+        merged_codes = list(dict.fromkeys((existing.reason_codes or []) + (computed_risk.reason_codes or [])))
+        merged_flags = list(dict.fromkeys((existing.policy_flags or []) + (computed_risk.policy_flags or [])))
+        merged_review = bool(existing.requires_review) or bool(computed_risk.requires_review)
+        from services.agentic_observability.models import ObservationRisk
+        record.risk = ObservationRisk(
+            risk_level=merged_level,
+            reason_codes=merged_codes,
+            policy_flags=merged_flags,
+            requires_review=merged_review,
+        )
+    elif computed_risk.risk_level and computed_risk.risk_level.value != "low":
         record.risk = computed_risk
 
     repo = AgentActivityRepository()
@@ -189,16 +205,19 @@ async def observe_risk_signal(req: AgentRiskSignalRequest, request: Request) -> 
     _require_perm(request, "write")
     tenant_id = _tenant_id(request)
     _check_no_execution(req)
-    obs_id = str(uuid.uuid4())
-    record = req.model_dump(mode="json")
-    record["observation_id"] = obs_id
-    record["tenant_id"] = tenant_id
-    record["received_at"] = _utc_now()
+    signal = AgentRiskSignalRecord(
+        agent_id=req.agent_id,
+        risk_level=req.risk_level,
+        reason_codes=req.reason_codes,
+        policy_flags=req.policy_flags,
+        tenant_id=tenant_id,
+    )
     repo = AgentRiskSignalRepository()
-    await repo.insert(obs_id, record)
+    await repo.insert(signal.signal_id, signal.model_dump(mode="json"))
+    received_at = _utc_now()
     return ObservationResponse(
-        observation_id=obs_id,
-        received_at=record["received_at"],
+        observation_id=signal.signal_id,
+        received_at=received_at,
         graph_mutations_queued=0,
         tenant_id=tenant_id,
     )

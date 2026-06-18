@@ -6,7 +6,7 @@ from pydantic import BaseModel, Field
 from services.agentic_observability.models import (
     ObservationSource, ObservationActor, AgentRef,
     ObservationObject, ObservationAction, ObservationEconomics,
-    ObservationRisk,
+    ObservationRisk, RiskLevel,
 )
 
 
@@ -63,7 +63,7 @@ class AgentRiskSignalRequest(BaseModel):
     schema_version: str = "1.0"
     tenant_id: str
     agent_id: Optional[str] = None
-    risk_level: str
+    risk_level: RiskLevel
     reason_codes: list[str] = Field(default_factory=list)
     policy_flags: list[str] = Field(default_factory=list)
     execution_by_aether: Literal[False] = False
