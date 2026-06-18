@@ -708,6 +708,10 @@ public final class Aether: NSObject {
             "action": AnyCodable("grant"),
             "categories": AnyCodable(categories)
         ])
+        // Start health agent when analytics consent is granted in GDPR mode (post-init opt-in flow)
+        if config?.privacy.gdprMode == true && categories.contains("analytics") {
+            healthAgent?.start()
+        }
     }
 
     public func revokeConsent(categories: [String]) {
@@ -944,6 +948,9 @@ public final class Aether: NSObject {
                 }
             } else if statusCode >= 400 {
                 self.log("Batch rejected (client error \(statusCode)) — not retrying")
+            } else {
+                // 2xx success — remove persisted snapshot so next launch does not re-deliver
+                self.clearPersistedQueue()
             }
         }.resume()
     }
@@ -1149,17 +1156,21 @@ public final class Aether: NSObject {
         ]
         if let uid = uid { body["user_id"] = uid }
         if let em = email, !em.isEmpty { body["email_hash"] = sha256(em.trimmingCharacters(in: .whitespaces)) }
-        // fingerprint_signals: individual components for backend confidence scoring
-        #if canImport(UIKit)
-        body["fingerprint_signals"] = [
-            "idfv": UIDevice.current.identifierForVendor?.uuidString ?? "",
-            "model": UIDevice.current.model,
-            "os_version": UIDevice.current.systemVersion,
-            "locale": Locale.current.identifier,
-            "timezone": TimeZone.current.identifier,
-            "processor_count": ProcessInfo.processInfo.processorCount,
-        ] as [String: Any]
-        #endif
+        // fingerprint_signals: individual components for backend confidence scoring.
+        // Omitted in GDPR mode until analytics consent is granted to avoid pre-consent disclosure.
+        let gdprActive = config?.privacy.gdprMode ?? false
+        if !gdprActive || consentState.contains("analytics") {
+            #if canImport(UIKit)
+            body["fingerprint_signals"] = [
+                "idfv": UIDevice.current.identifierForVendor?.uuidString ?? "",
+                "model": UIDevice.current.model,
+                "os_version": UIDevice.current.systemVersion,
+                "locale": Locale.current.identifier,
+                "timezone": TimeZone.current.identifier,
+                "processor_count": ProcessInfo.processInfo.processorCount,
+            ] as [String: Any]
+            #endif
+        }
         request.httpBody = try? JSONSerialization.data(withJSONObject: body)
 
         URLSession.shared.dataTask(with: request) { [weak self] data, response, _ in

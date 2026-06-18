@@ -167,12 +167,15 @@ class AetherHealthAgent(
                 val manifestVersion = json.optString("manifest_version", "0")
                 val previousVersion = configVersion
                 configVersion = manifestVersion
+                val featuresJson = json.optJSONObject("features")
+                val features = mutableMapOf<String, Boolean>()
+                featuresJson?.keys()?.forEach { key -> features[key] = featuresJson.optBoolean(key, false) }
                 val manifest = SDKManifest(
                     manifest_version = manifestVersion,
                     min_sdk_version = json.optString("min_sdk_version", "0"),
                     schema_version = json.optString("schema_version", "0"),
                     rollout_percentage = json.optInt("rollout_percentage", 100),
-                    features = emptyMap(),
+                    features = features,
                     published_at = json.optString("published_at", ""),
                     signature = json.optString("signature", "")
                 )

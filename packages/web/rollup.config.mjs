@@ -57,7 +57,7 @@ export default [
   // React browser wrapper — @aether/web/react
   {
     input: 'src/react.tsx',
-    external: ['react', 'react/jsx-runtime', './index'],
+    external: ['react', 'react/jsx-runtime', '@aether/web'],
     output: [
       {
         file: 'dist/react.js',

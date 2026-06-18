@@ -34,7 +34,7 @@ placed into tiers.
 | x402 payment emitter | A | ✔ | ✔ | ✔ | ✔ | Commerce consent required. |
 | Granular agent lifecycle emitters (19) | A | ✔ | ✔ | ✔ | ✔ | All 19 methods: registered, updated, authorized, deauthorized, capabilityGranted/Revoked, taskCreated/Decomposed/Started/Completed/Failed, toolCalled, resourceRequested, delegatedTask, subagentSpawned, policyEvaluated, handoff, escalatedToHuman, outcomeRecorded. |
 | Granular x402 lifecycle emitters (14) | A | ✔ | ✔ | ✔ | ✔ | All 14 methods: resourceRequested, paymentRequired, quoteReceived, authorizationRequested/Resolved, paymentIntentCreated/Submitted/Settled/Failed/Timeout, receiptVerified, accessGranted/Denied, refundOrReversal. |
-| Native rewards client | B | ✔ | ✔ | ✔ | ✔ | 4 observation emitters: actionQueued, proofGenerated, delivered, claimSubmitted. Backend owns eligibility/claim logic. |
+| Native rewards client | B | — | ✔ | ✔ | ✔ | 4 native observation emitters (iOS/Android/RN): actionQueued, proofGenerated, delivered, claimSubmitted. Web SDK exposes `rewards.checkEligibility`, `getClaimPayload`, `submitClaim` — different surface; no equivalent native emitters on Web. |
 | Full ecommerce workflow | B | ✔ | ✔ | ✔ | ✔ | removeFromCart, applyCoupon, beginCheckout added to iOS/Android/RN. Existing: trackProductView, trackAddToCart, trackPurchase. |
 | Health heartbeat | A | ✔ | ✔ | ✔ | ✔ | Native fleet heartbeat + manifest fetch added; full payload matches Web health agent. |
 | Remote manifest/config | A | ✔ | ✔ | ✔ | ✔ | Non-blocking fetch; endpoint overrides honored where implemented. |

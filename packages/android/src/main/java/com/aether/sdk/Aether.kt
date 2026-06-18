@@ -570,6 +570,10 @@ object Aether : DefaultLifecycleObserver {
         consentState = consentState.distinct().toMutableList()
         prefs?.edit()?.putStringSet("consentState", consentState.toSet())?.apply()
         enqueueEvent("consent", mapOf("action" to "grant", "categories" to categories))
+        // Start health agent when analytics consent is granted in GDPR mode (post-init opt-in flow)
+        if (config?.privacy?.gdprMode == true && "analytics" in categories) {
+            healthAgent?.start()
+        }
     }
 
     fun revokeConsent(categories: List<String>) {
@@ -816,38 +820,56 @@ object Aether : DefaultLifecycleObserver {
                 put("sentAt", dateFormat.format(Date()))
             }
 
+            val sendStart = System.currentTimeMillis()
             connection.outputStream.use { it.write(payload.toString().toByteArray()) }
             val responseCode = connection.responseCode
+            val latencyMs = (System.currentTimeMillis() - sendStart).toDouble()
             connection.disconnect()
 
             when {
+                responseCode in 200..299 -> {
+                    healthAgent?.recordBatchAttempt(true, latencyMs)
+                    clearPersistedQueue()
+                }
                 responseCode == 429 -> {
                     val retryAfterSec = connection.getHeaderField("Retry-After")?.toLongOrNull() ?: 5L
                     if (retryCount < maxRetries) {
+                        healthAgent?.recordRetry()
                         delay(retryAfterSec * 1000)
                         sendBatchWithRetry(batch, cfg, retryCount + 1)
                     } else {
+                        healthAgent?.recordBatchAttempt(false, latencyMs)
+                        healthAgent?.recordDroppedEvents(batch.size)
                         log("Batch dropped after $maxRetries retries (rate limited)")
                     }
                 }
                 responseCode >= 500 -> {
                     if (retryCount < maxRetries) {
+                        healthAgent?.recordRetry()
                         val backoff = minOf(1000L * (1L shl retryCount), 30000L)
                         delay(backoff)
                         sendBatchWithRetry(batch, cfg, retryCount + 1)
                     } else {
+                        healthAgent?.recordBatchAttempt(false, latencyMs)
+                        healthAgent?.recordDroppedEvents(batch.size)
                         log("Batch dropped after $maxRetries retries (server error $responseCode)")
                     }
                 }
-                responseCode >= 400 -> log("Batch rejected (client error $responseCode) — not retrying")
+                responseCode >= 400 -> {
+                    healthAgent?.recordBatchAttempt(false, latencyMs)
+                    log("Batch rejected (client error $responseCode) — not retrying")
+                }
             }
         } catch (e: Exception) {
             log("Batch send failed: ${e.message}")
             if (retryCount < maxRetries) {
+                healthAgent?.recordRetry()
                 val backoff = minOf(1000L * (1L shl retryCount), 30000L)
                 delay(backoff)
                 sendBatchWithRetry(batch, cfg, retryCount + 1)
             } else {
+                healthAgent?.recordBatchAttempt(false, 0.0)
+                healthAgent?.recordDroppedEvents(batch.size)
                 // Permanent failure — re-enqueue for next flush cycle
                 batch.forEach { eventQueue.add(it) }
             }
@@ -994,14 +1016,17 @@ object Aether : DefaultLifecycleObserver {
                 put("platform", "android")
                 if (userId != null) put("user_id", userId)
                 if (!email.isNullOrBlank()) put("email_hash", sha256(email))
-                put("fingerprint_signals", org.json.JSONObject().apply {
-                    put("android_id", android.provider.Settings.Secure.getString(context?.contentResolver, android.provider.Settings.Secure.ANDROID_ID) ?: "")
-                    put("model", android.os.Build.MODEL)
-                    put("manufacturer", android.os.Build.MANUFACTURER)
-                    put("os_version", android.os.Build.VERSION.RELEASE)
-                    put("locale", java.util.Locale.getDefault().toString())
-                    put("timezone", java.util.TimeZone.getDefault().id)
-                })
+                // fingerprint_signals omitted in GDPR mode until analytics consent is granted
+                if (config?.privacy?.gdprMode != true || "analytics" in consentState) {
+                    put("fingerprint_signals", org.json.JSONObject().apply {
+                        put("android_id", android.provider.Settings.Secure.getString(context?.contentResolver, android.provider.Settings.Secure.ANDROID_ID) ?: "")
+                        put("model", android.os.Build.MODEL)
+                        put("manufacturer", android.os.Build.MANUFACTURER)
+                        put("os_version", android.os.Build.VERSION.RELEASE)
+                        put("locale", java.util.Locale.getDefault().toString())
+                        put("timezone", java.util.TimeZone.getDefault().id)
+                    })
+                }
             }
 
             connection.outputStream.use { it.write(body.toString().toByteArray()) }

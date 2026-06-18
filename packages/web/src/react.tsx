@@ -1,29 +1,30 @@
 // packages/web/src/react.tsx
 import { createContext, useContext, useEffect, useState, type ReactNode } from 'react';
-import type { AetherSDK } from './index';
+import type { AetherSDKInterface } from '@aether/web';
 import type { ConsentState } from '@aether/shared/consent';
 
-// The singleton is imported lazily so SSR bundles don't instantiate it
-let _instance: AetherSDK | null = null;
+// The singleton is imported lazily so SSR bundles don't instantiate it.
+// '@aether/web' is marked external so this import resolves correctly from dist/react.js.
+let _instance: AetherSDKInterface | null = null;
 
 interface AetherContextValue {
-  sdk: AetherSDK;
+  sdk: AetherSDKInterface;
 }
 
 const AetherContext = createContext<AetherContextValue | null>(null);
 
 export interface AetherProviderProps {
-  config: Parameters<AetherSDK['init']>[0];
+  config: Parameters<AetherSDKInterface['init']>[0];
   children: ReactNode;
 }
 
 export function AetherProvider({ config, children }: AetherProviderProps) {
-  const [sdk, setSdk] = useState<AetherSDK | null>(null);
+  const [sdk, setSdk] = useState<AetherSDKInterface | null>(null);
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
-    // Dynamic import keeps SSR bundles clean
-    import('./index').then(({ default: aether }) => {
+    // Import via package name so the resolved path is dist/aether.esm.js, not dist/index.js.
+    import('@aether/web').then(({ default: aether }) => {
       _instance = aether;
       aether.init(config);
       setSdk(aether);
@@ -34,7 +35,9 @@ export function AetherProvider({ config, children }: AetherProviderProps) {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  if (!sdk) return <>{children}</>;
+  // Do not render children until the SDK is ready — hooks that call useAether() would throw
+  // if rendered with a null context, producing a confusing error before the async import resolves.
+  if (!sdk) return null;
 
   return (
     <AetherContext.Provider value={{ sdk }}>
@@ -43,7 +46,7 @@ export function AetherProvider({ config, children }: AetherProviderProps) {
   );
 }
 
-export function useAether(): AetherSDK {
+export function useAether(): AetherSDKInterface {
   const ctx = useContext(AetherContext);
   if (!ctx) {
     throw new Error('[Aether] useAether() must be used inside <AetherProvider>');
