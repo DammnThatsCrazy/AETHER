@@ -14,7 +14,7 @@ source_files:
 canonical_owner: sdk@aether
 estimated_read_minutes: 9
 toc_depth: 3
-last_synced_commit: 1dbc6a7
+last_synced_commit: 346dbf3
 ---
 
 # Aether React Native SDK v8.9.0 — Integration Guide
@@ -351,15 +351,97 @@ React Components / Hooks
 - **Before**: 1,064 LOC across 6 files
 - **After**: 497 LOC across 5 files (53% reduction)
 
-## Reward Event Types (A6)
+## Agent Lifecycle Emitters (22 methods)
 
-Four reward lifecycle events are supported via `Aether.track()`:
+```typescript
+// Legacy (kept for backward compatibility)
+Aether.agent.task(taskId, actorId, properties?);
+Aether.agent.decision(decisionId, actorId, properties?);
+Aether.agent.a2hInteraction(interactionId, actorId, properties?);
 
-| Event type | When to emit |
-|---|---|
-| `reward_action_queued` | When a reward action has been queued for the user |
-| `reward_proof_generated` | When an on-chain claim proof is ready for wallet submission |
-| `reward_delivered` | When the tenant system confirms reward delivery |
-| `reward_claim_submitted` | When the user submits a claim (on-chain or off-chain) |
+// Granular agent lifecycle (19 new methods)
+Aether.agent.registered(agentId, properties?);
+Aether.agent.updated(agentId, properties?);
+Aether.agent.authorized(agentId, delegationId?, properties?);
+Aether.agent.deauthorized(agentId, properties?);
+Aether.agent.capabilityGranted(agentId, capability, properties?);
+Aether.agent.capabilityRevoked(agentId, capability, properties?);
+Aether.agent.taskCreated(taskId, actorId, properties?);
+Aether.agent.taskDecomposed(taskId, properties?);
+Aether.agent.taskStarted(taskId, properties?);
+Aether.agent.taskCompleted(taskId, properties?);
+Aether.agent.taskFailed(taskId, reason?, properties?);
+Aether.agent.toolCalled(taskId, tool, properties?);
+Aether.agent.resourceRequested(resourceId, properties?);
+Aether.agent.delegatedTask(taskId, toAgentId, properties?);
+Aether.agent.subagentSpawned(parentId, childId, properties?);
+Aether.agent.policyEvaluated(policyId, outcome, properties?);
+Aether.agent.handoff(fromId, toId, properties?);
+Aether.agent.escalatedToHuman(taskId, reason?, properties?);
+Aether.agent.outcomeRecorded(taskId, outcome, properties?);
+```
+
+## x402 Lifecycle Emitters (15 methods)
+
+```typescript
+// Legacy (kept for backward compatibility)
+Aether.x402.payment(paymentId, amount, currency, network, properties?);
+
+// Granular x402 lifecycle (14 new methods)
+Aether.x402.resourceRequested(resourceId, properties?);
+Aether.x402.paymentRequired(resourceId, amount, currency, properties?);
+Aether.x402.quoteReceived(quoteId, properties?);
+Aether.x402.authorizationRequested(paymentId, properties?);
+Aether.x402.authorizationResolved(paymentId, authorized, properties?);
+Aether.x402.paymentIntentCreated(intentId, properties?);
+Aether.x402.paymentSubmitted(paymentId, properties?);
+Aether.x402.paymentSettled(paymentId, properties?);
+Aether.x402.paymentFailed(paymentId, reason?, properties?);
+Aether.x402.paymentTimeout(paymentId, properties?);
+Aether.x402.receiptVerified(receiptId, properties?);
+Aether.x402.accessGranted(resourceId, properties?);
+Aether.x402.accessDenied(resourceId, reason?, properties?);
+Aether.x402.refundOrReversal(paymentId, properties?);
+```
+
+## Rewards Emitters
+
+Thin observation only — backend owns eligibility and delivery logic.
+
+```typescript
+Aether.rewards.actionQueued(campaignId, ruleId, properties?);
+Aether.rewards.proofGenerated(campaignId, proofId, properties?);
+Aether.rewards.delivered(campaignId, rewardId, properties?);
+Aether.rewards.claimSubmitted(campaignId, claimId, properties?);
+```
+
+## Ecommerce (Full Workflow)
+
+```typescript
+// Product view
+Aether.ecommerce.trackProductView({
+  id: 'sku-001', name: 'Widget Pro', price: 29.99
+});
+
+// Add to cart
+Aether.ecommerce.trackAddToCart({
+  productId: 'sku-001', quantity: 2, price: 29.99
+});
+
+// Remove from cart (new in 8.9.0)
+Aether.commerce.removeFromCart('sku-001', 1);
+
+// Apply coupon (new in 8.9.0)
+Aether.commerce.applyCoupon('SAVE20');
+
+// Begin checkout (new in 8.9.0)
+Aether.commerce.beginCheckout(59.99, 'USD');
+
+// Purchase
+Aether.ecommerce.trackPurchase({
+  orderId: 'order-456', total: 29.99, currency: 'USD',
+  items: [{ productId: 'sku-001', quantity: 1, price: 29.99 }]
+});
+```
 
 Emit using `Aether.track()` with `campaignId`, `ruleId`, and `rewardIdempotencyKey` in properties. These events flow through `POST /v1/batch` and are processed by the reward eligibility pipeline on the backend. The SDK does not evaluate eligibility — that is handled server-side by the Aether reward policy engine.

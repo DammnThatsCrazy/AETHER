@@ -13,7 +13,7 @@ source_files:
 canonical_owner: platform@aether
 estimated_read_minutes: 20
 toc_depth: 3
-last_synced_commit: 22c67e4
+last_synced_commit: 346dbf3
 ---
 # Aether vNext — Architecture Guide
 
@@ -83,18 +83,19 @@ The SDK also collects raw user interactions, device fingerprints, wallet events,
 ### Module Architecture (Web SDK)
 
 ```
-AetherSDK (index.ts) — v8.7.0
+AetherSDK (index.ts) — v8.9.0
 │
 ├── Core (always loaded)
 │   ├── EventQueue .............. Batch + offline queue (POST /v1/events)
 │   ├── SessionManager ......... Session lifecycle + heartbeat
 │   ├── IdentityManager ........ Multi-wallet identity + traits
 │   ├── ConsentModule .......... GDPR/CCPA consent gates
-│   └── DeviceFingerprintCollector  SHA-256 from 17 browser signals
+│   ├── DeviceFingerprintCollector  SHA-256 from 17 browser signals
+│   └── SDKHealthAgent ......... Fleet heartbeat (60 s) + manifest fetch (5 min)
 │
 ├── Web2 Analytics (thin event emitters)
 │   ├── AutoDiscovery .......... Click listener (raw {selector, x, y})
-│   ├── Ecommerce .............. 5 methods: view, cart, checkout, purchase
+│   ├── Ecommerce .............. 8 methods: view, cart, removeFromCart, applyCoupon, beginCheckout, checkout, purchase, ...
 │   ├── FeatureFlags ........... Cache-only (fetch from /v1/config)
 │   ├── FormAnalytics .......... focus/blur/change events
 │   ├── Funnels ................ Event tagger from server config
@@ -109,9 +110,25 @@ AetherSDK (index.ts) — v8.7.0
 │   └── TrafficSource .......... Raw UTM/referrer/click ID/referrerDomain shipper
 │                                 + sessionStorage persistence for SPA navigation
 │
-└── Rewards (thin API client)
-    └── RewardClient ........... eligibility + claim via backend API
+├── Agent Lifecycle (22 emitters)
+│   └── aether.agent.* ......... registered, updated, authorized, deauthorized,
+│                                 capabilityGranted/Revoked, taskCreated/Decomposed/
+│                                 Started/Completed/Failed, toolCalled, resourceRequested,
+│                                 delegatedTask, subagentSpawned, policyEvaluated,
+│                                 handoff, escalatedToHuman, outcomeRecorded
+│
+├── x402 Lifecycle (15 emitters)
+│   └── aether.x402.* .......... resourceRequested, paymentRequired, quoteReceived,
+│                                 authorizationRequested/Resolved, paymentIntentCreated,
+│                                 paymentSubmitted/Settled/Failed/Timeout, receiptVerified,
+│                                 accessGranted/Denied, refundOrReversal
+│
+└── Rewards (thin observation + claim API)
+    ├── RewardClient ........... eligibility + claim via backend API
+    └── aether.rewards.* ....... actionQueued, proofGenerated, delivered, claimSubmitted
 ```
+
+React wrapper (`@aether/web/react`): `AetherProvider`, `useAether`, `useIdentity`, `useConsentState`, `useScreenOrPageTracking`, `useJourneyResumed` — SSR-safe (no-op when `typeof window === 'undefined'`).
 
 ### Device Fingerprinting
 

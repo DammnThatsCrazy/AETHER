@@ -63,11 +63,7 @@ export function useIdentity(): ResolvedIdentity | null {
 
   useEffect(() => {
     const current = sdk.getIdentity?.();
-    if (current) setIdentity(current);
-    const unsub = sdk.on?.('identify', (event: { properties?: ResolvedIdentity }) => {
-      setIdentity(event.properties ?? null);
-    });
-    return () => unsub?.();
+    if (current) setIdentity(current as ResolvedIdentity);
   }, [sdk]);
 
   return identity;
