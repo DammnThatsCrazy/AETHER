@@ -13,7 +13,7 @@ source_files:
 canonical_owner: backend@aether
 estimated_read_minutes: 8
 toc_depth: 3
-last_synced_commit: b75870c
+last_synced_commit: ac3a548
 ---
 
 # Profile 360 Aggregation Layer
@@ -261,6 +261,7 @@ schema changes do not propagate to the client.
 returns a single `snapshot` object with:
 
 - `entity` — the normalized canonical entity record
+- `canonical_entity_id` — stable backend-assigned UUID from `services/identity/resolver.py`; falls back to `entity_id` if the identity system has not yet resolved this entity
 - `counts` — pre-computed counts for every Profile 360 dimension
 - `financials` — inflow / outflow / net totals
 - `behavior` — latest behavior signals
