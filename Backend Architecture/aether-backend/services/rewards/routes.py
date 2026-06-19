@@ -894,6 +894,14 @@ async def _evaluate_event_core(request: Request, body: EvaluateRequest) -> dict:
                 pass
         _campaign = decision.campaign or {}
         _contract_address = _campaign.get("contract_address") or os.getenv("EVM_CONTRACT_ADDRESS", "")
+        if not _contract_address:
+            raise HTTPException(
+                status_code=422,
+                detail=(
+                    "onchain_claim rail requires a contract_address. Set it on the campaign "
+                    "or configure EVM_CONTRACT_ADDRESS."
+                ),
+            )
         _chain_id = int(_campaign.get("chain_id") or os.getenv("EVM_CHAIN_ID", "1"))
         _registry_entry = await repos["contracts"].find_for_proof(
             tenant_id, _chain_id, _contract_address, decision.campaign_id or ""
@@ -1563,10 +1571,12 @@ async def get_contract(request: Request, registry_id: str):
 async def verify_contract(request: Request, registry_id: str):
     """Mark a registered contract as verified, enabling proof generation for it.
 
-    Validates that the registered oracle_signer_address matches the address derived
-    from ORACLE_SIGNER_KEY so the tenant contract won't reject proofs at claim time.
+    Requires rewards:admin (Aether operator) permission — tenants cannot self-verify.
+    Operators must confirm the tenant controls the contract_address before verifying.
+    This prevents a tenant from registering an arbitrary contract address, setting
+    Aether's public oracle signer, and obtaining proofs for a contract they don't own.
     """
-    _require_permission(request, "rewards:write")
+    _require_permission(request, "rewards:admin")
     tenant_id = _get_tenant_id(request)
     repos = await _get_repos()
     record = await repos["contracts"].get(registry_id, tenant_id)

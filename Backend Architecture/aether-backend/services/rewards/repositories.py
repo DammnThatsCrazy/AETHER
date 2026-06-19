@@ -451,18 +451,25 @@ class ContractRegistryRepository(BaseRepository):
         if pool is None:
             self._store[record_id] = record
             return record
-        # Columnar INSERT — matches the migration schema exactly.
-        import json as _json
         allowed = data.get("allowed_campaign_ids") or []
-        await pool.execute(
+        # RETURNING * ensures we get the actual persisted row (original id on conflict,
+        # not the freshly-generated id that was never inserted).
+        # Full upsert so retries also update name/signer/allowed_campaigns.
+        row = await pool.fetchrow(
             """INSERT INTO tenant_contract_registry
                (id, tenant_id, chain_id, contract_address, contract_name, abi_ref,
                 verification_status, allowed_campaign_ids, oracle_signer_address,
                 created_at, updated_at)
                VALUES ($1,$2,$3,$4,$5,$6,'pending',$7,$8,NOW(),NOW())
                ON CONFLICT (tenant_id, chain_id, contract_address)
-               DO UPDATE SET updated_at=NOW()""",
-            record_id, tenant_id,
+               DO UPDATE SET
+                   contract_name=EXCLUDED.contract_name,
+                   oracle_signer_address=EXCLUDED.oracle_signer_address,
+                   allowed_campaign_ids=EXCLUDED.allowed_campaign_ids,
+                   abi_ref=EXCLUDED.abi_ref,
+                   updated_at=NOW()
+               RETURNING *""",
+            uuid.UUID(record_id), tenant_id,  # uuid.UUID so asyncpg maps to uuid column
             int(data.get("chain_id", 1)),
             data.get("contract_address", ""),
             data.get("contract_name", ""),
@@ -470,7 +477,7 @@ class ContractRegistryRepository(BaseRepository):
             allowed,
             data.get("oracle_signer_address", ""),
         )
-        return record
+        return self._row_to_dict(row)
 
     async def get(self, registry_id: str, tenant_id: str) -> dict:
         pool = await self._ensure_pool()
@@ -482,7 +489,7 @@ class ContractRegistryRepository(BaseRepository):
                 raise ForbiddenError("ContractRegistry")
             return record
         row = await pool.fetchrow(
-            "SELECT * FROM tenant_contract_registry WHERE id=$1", registry_id
+            "SELECT * FROM tenant_contract_registry WHERE id=$1", uuid.UUID(registry_id)
         )
         if row is None:
             raise NotFoundError("ContractRegistry")
@@ -542,7 +549,7 @@ class ContractRegistryRepository(BaseRepository):
             return record
         await pool.execute(
             "UPDATE tenant_contract_registry SET verification_status='verified', updated_at=NOW() WHERE id=$1",
-            registry_id,
+            uuid.UUID(registry_id),
         )
         record["verification_status"] = "verified"
         return record
