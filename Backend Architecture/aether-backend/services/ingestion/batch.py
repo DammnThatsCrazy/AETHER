@@ -217,6 +217,7 @@ class EventContext(BaseModel):
     timezone: Optional[str] = None
     userAgent: Optional[str] = None
     ip: Optional[str] = None
+    consent: Optional[dict[str, Any]] = None
 
 
 class BaseEvent(BaseModel):
@@ -360,12 +361,28 @@ async def ingest_batch(
     # Run after Bronze durability is confirmed. Resolution errors never fail
     # ingestion — events are already durable and recoverable via recompute.
     if accepted_raw:
-        import asyncio
+        import asyncio as _asyncio
         resolver = get_identity_resolver()
         for normalized in accepted_raw:
-            asyncio.ensure_future(
+            task = _asyncio.create_task(
                 _resolve_identity_safe(resolver, normalized, tenant.tenant_id)
             )
+
+            def _log_task_exc(
+                t: "_asyncio.Task",
+                _tid: str = tenant.tenant_id,
+                _eid: str = normalized.get("event_id", ""),
+            ) -> None:
+                if t.cancelled():
+                    return
+                exc = t.exception()
+                if exc:
+                    logger.error(
+                        "Identity resolution task failed event=%s tenant=%s: %s",
+                        _eid, _tid, exc,
+                    )
+
+            task.add_done_callback(_log_task_exc)
 
     # ── Atomic idempotency claim AFTER Bronze write, BEFORE bus publish ───
     # Build a lookup from event_id → index in results so we can update in-place.
@@ -467,6 +484,24 @@ async def _process_single_event(
             status="rejected",
             reason=f"unknown_event_type:{sdk_event.type}",
         )
+
+    # 1b. Consent gate — only block when consent is explicitly denied for the required purpose
+    if sdk_event.type != "consent":
+        required_purpose = EVENT_CONSENT_PURPOSE.get(sdk_event.type)
+        if required_purpose:
+            consent_obj = None
+            if sdk_event.context:
+                consent_obj = getattr(sdk_event.context, "consent", None)
+                if consent_obj is None and getattr(sdk_event.context, "model_extra", None):
+                    consent_obj = sdk_event.context.model_extra.get("consent")
+            if consent_obj is not None and isinstance(consent_obj, dict):
+                if consent_obj.get(required_purpose) is False:
+                    metrics.increment("ingestion_consent_blocked_total", labels={"purpose": required_purpose})
+                    return EventResult(
+                        id=sdk_event.id,
+                        status="rejected",
+                        reason=f"consent_denied:{required_purpose}",
+                    )
 
     # 2a. Observe-only invariant: reject any event claiming AETHER executed
     if sdk_event.properties and sdk_event.properties.get("execution_by_aether") is True:

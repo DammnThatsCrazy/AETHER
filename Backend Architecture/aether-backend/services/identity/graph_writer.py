@@ -14,6 +14,7 @@ from __future__ import annotations
 
 from typing import Any, Optional
 
+from shared.graph.graph import Edge
 from shared.logger.logger import get_logger
 
 from .models import (
@@ -234,6 +235,29 @@ class IdentityGraphWriter:
                 source_event_ids=source_event_ids,
                 consent_snapshot=consent_snapshot,
             )
+            # Mirror to Neptune graph when client is available (production path).
+            # Failure is non-fatal: repo-backed edge is the source of truth.
+            if edge and self._graph is not None:
+                try:
+                    graph_edge = Edge(
+                        edge_type=edge_type.value,
+                        from_vertex_id=source_entity_id,
+                        to_vertex_id=target_entity_id,
+                        properties={
+                            "tenant_id": tenant_id,
+                            "edge_id": edge["id"],
+                            "confidence": str(confidence),
+                            "confidence_tier": confidence_tier.value,
+                            "reason_codes": ",".join(reason_codes or []),
+                            "source_event_ids": ",".join(source_event_ids or []),
+                        },
+                    )
+                    await self._graph.add_edge(graph_edge)
+                except Exception as graph_exc:
+                    logger.warning(
+                        "Neptune mirror write failed (non-fatal): %s→%s: %s",
+                        source_entity_id, target_entity_id, graph_exc,
+                    )
             return edge
         except Exception as exc:
             logger.error(

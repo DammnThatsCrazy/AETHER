@@ -176,6 +176,30 @@ class IdentityResolutionService:
                     context={"source": sig.source},
                 )
 
+        # ── 4b. Check suppression rules ───────────────────────────────────
+        suppressed_types: list[IdentitySignalType] = []
+        filtered_signals: list[tuple[IdentitySignalType, str, str]] = []
+        for (sig_type, sig_hash, display) in hashed_signals:
+            is_suppressed = await self._repo.check_suppression(
+                tenant_id, sig_type.value, sig_hash
+            )
+            if is_suppressed:
+                suppressed_types.append(sig_type)
+                self._metrics.record_blocked("suppression")
+            else:
+                filtered_signals.append((sig_type, sig_hash, display))
+        if suppressed_types:
+            logger.info(
+                "Suppressed signals for tenant=%s: %s",
+                tenant_id, [t.value for t in suppressed_types],
+            )
+        hashed_signals = filtered_signals
+        # Also remove suppressed types from raw_signals so downstream alias/edge
+        # writes don't re-create suppressed identifiers in the graph.
+        if suppressed_types:
+            suppressed_type_set = {t for t in suppressed_types}
+            raw_signals = [sig for sig in raw_signals if sig.type not in suppressed_type_set]
+
         # ── 5. Find existing aliases/entities for this tenant ─────────────
         existing_entity_ids: list[str] = []
         matching_types: list[IdentitySignalType] = []
@@ -486,6 +510,71 @@ class IdentityResolutionService:
             "reason_codes": split_policy.reason_codes,
         }
 
+    async def suppress_identifier(
+        self,
+        tenant_id: str,
+        identifier_type: str,
+        identifier_hash: str,
+        reason: str,
+        actor_id: str,
+        subject_id: Optional[str] = None,
+        expires_at: Optional[str] = None,
+    ) -> dict:
+        """Suppress a specific identifier hash — it can no longer link identities."""
+        rule = await self._repo.create_suppression_rule(
+            tenant_id=tenant_id,
+            identifier_hash=identifier_hash,
+            identifier_type=identifier_type,
+            reason=reason,
+            created_by=actor_id,
+            subject_id=subject_id,
+            expires_at=expires_at,
+        )
+        # Revoke any active aliases using this identifier
+        aliases = await self._repo.find_aliases_by_signal(
+            tenant_id, identifier_type, identifier_hash
+        )
+        revoked_alias_ids: list[str] = []
+        for alias in aliases:
+            if not alias.get("revoked_at"):
+                await self._repo.revoke_alias(alias["id"])
+                revoked_alias_ids.append(alias["id"])
+
+        await self._audit.record_resolution(
+            tenant_id=tenant_id,
+            decision=MergeDecision.BLOCKED,
+            canonical_entity_id=subject_id or "",
+            candidate_entity_ids=[],
+            confidence=1.0,
+            confidence_tier=ConfidenceTier.DETERMINISTIC,
+            reason_codes=["suppression_applied", reason],
+            source_event_ids=[],
+            policy_result="suppressed",
+            consent_snapshot=None,
+        )
+        self._metrics.record_blocked("suppression")
+        return {
+            "suppression_id": rule["id"],
+            "tenant_id": tenant_id,
+            "identifier_type": identifier_type,
+            "reason": reason,
+            "revoked_alias_ids": revoked_alias_ids,
+            "created_at": rule.get("created_at", ""),
+            "expires_at": expires_at,
+        }
+
+    async def unsuppress_identifier(
+        self,
+        tenant_id: str,
+        suppression_id: str,
+        actor_id: str,
+    ) -> dict:
+        """Revoke a suppression rule."""
+        result = await self._repo.revoke_suppression_rule(tenant_id, suppression_id)
+        if result is None:
+            return {"error": "not_found", "suppression_id": suppression_id}
+        return {"revoked": True, "suppression_id": suppression_id, "revoked_by": actor_id}
+
     async def recompute(
         self,
         tenant_id: str,
@@ -494,18 +583,104 @@ class IdentityResolutionService:
         reason: str = "recompute",
     ) -> dict:
         """
-        Recompute identity resolution for an entity or event set.
+        Recompute identity resolution by replaying signal observations.
         Idempotent — will not create duplicate aliases or edges.
         """
-        # In a full implementation this would replay events through the resolver.
-        # Here we return a stub response acknowledging the request.
+        if entity_id:
+            observations = await self._repo.get_observations_for_entity(
+                tenant_id, entity_id, limit=500
+            )
+        elif event_ids:
+            observations = await self._repo.get_observations_for_events(
+                tenant_id, event_ids, limit=500
+            )
+        else:
+            return {
+                "status": "error",
+                "tenant_id": tenant_id,
+                "entity_id": entity_id,
+                "event_ids": event_ids or [],
+                "reason": reason,
+                "note": "Either entity_id or event_ids is required",
+                "events_replayed": 0,
+                "decisions": [],
+                "errors": 0,
+            }
+
+        if not observations:
+            return {
+                "status": "complete",
+                "tenant_id": tenant_id,
+                "entity_id": entity_id,
+                "event_ids": event_ids or [],
+                "reason": reason,
+                "events_replayed": 0,
+                "decisions": [],
+                "errors": 0,
+            }
+
+        # Group observations by source_event_id and replay each unique event
+        seen_events: set[str] = set()
+        decisions: list[dict] = []
+        errors = 0
+
+        for obs in observations:
+            src_evt_id = obs.get("source_event_id", "")
+            if not src_evt_id or src_evt_id in seen_events:
+                continue
+            seen_events.add(src_evt_id)
+
+            sig_type = obs.get("signal_type", "")
+            synthetic_event: dict = {
+                "event_id": src_evt_id,
+                "tenant_id": tenant_id,
+                "context": {"consent": obs.get("consent_snapshot")},
+                "properties": {},
+                "source": "recompute",
+            }
+            # Map stored signal_type to the event field the resolver reads.
+            # signal_value_hash is already hashed — pass directly so extract_signals
+            # can pick it up from the synthetic event's properties or top-level fields.
+            sig_hash = obs.get("signal_value_hash", "")
+            if sig_type == "user_id":
+                synthetic_event["user_id"] = sig_hash
+            elif sig_type == "anonymous_id":
+                synthetic_event["anonymous_id"] = sig_hash
+            elif sig_type == "session_id":
+                synthetic_event["session_id"] = sig_hash
+            elif sig_type in ("email_hash", "email"):
+                synthetic_event.setdefault("properties", {})["email_hash"] = sig_hash
+            elif sig_type in ("phone_hash", "phone"):
+                synthetic_event.setdefault("properties", {})["phone_hash"] = sig_hash
+            elif sig_type in ("wallet_address", "wallet"):
+                synthetic_event.setdefault("properties", {})["walletAddress"] = sig_hash
+            elif sig_type in ("external_id", "customer_id"):
+                synthetic_event.setdefault("properties", {})["externalId"] = sig_hash
+            elif sig_type in ("device_id", "install_id", "browser_id"):
+                synthetic_event.setdefault("properties", {})["deviceId"] = sig_hash
+            else:
+                synthetic_event.setdefault("properties", {})[sig_type] = sig_hash
+
+            try:
+                decision = await self._resolve_event_inner(synthetic_event, tenant_id)
+                decisions.append({
+                    "event_id": src_evt_id,
+                    "decision": decision.decision.value,
+                    "canonical_entity_id": decision.canonical_entity_id,
+                })
+            except Exception as exc:
+                logger.warning("Recompute replay failed for event %s: %s", src_evt_id, exc)
+                errors += 1
+
         return {
-            "status": "queued",
+            "status": "complete",
             "tenant_id": tenant_id,
             "entity_id": entity_id,
             "event_ids": event_ids or [],
             "reason": reason,
-            "note": "Recompute queued for background processing",
+            "events_replayed": len(seen_events),
+            "decisions": decisions,
+            "errors": errors,
         }
 
     # ── Internal helpers ──────────────────────────────────────────────────

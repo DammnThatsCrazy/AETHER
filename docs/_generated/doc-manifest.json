@@ -3428,6 +3428,21 @@
       "canonical_owner": "graph@aether"
     },
     {
+      "path": "docs/source-of-truth/IDENTITY_RESOLUTION.md",
+      "title": "Identity Resolution",
+      "slug": "source-of-truth/identity-resolution",
+      "section": "source-of-truth",
+      "visibility": "internal",
+      "audience": [
+        "architect",
+        "dev-senior",
+        "ai"
+      ],
+      "status": "stable",
+      "since_version": "9.0.0",
+      "canonical_owner": "identity@aether"
+    },
+    {
       "path": "docs/source-of-truth/REPO_CONSISTENCY_OWNERSHIP.md",
       "title": "Repo Consistency Ownership",
       "slug": "source-of-truth/repo-consistency-ownership",

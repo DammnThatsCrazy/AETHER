@@ -134,3 +134,60 @@ and `rail: 'x402'` for agentic purchases, from the same codepath.
 | `PaidResourceObserved` | A paid resource observed in an x402 interaction |
 | `ResourceProviderObserved` | A resource provider observed |
 | `ProtocolProviderObserved` | A protocol/facilitator provider observed |
+
+## Canonical Identity Resolution
+
+Each entity in the graph carries a `canonical_entity_id` — a stable,
+backend-assigned UUID that survives merges and is the authoritative identity
+key across all Aether services. See
+[`IDENTITY_RESOLUTION.md`](./IDENTITY_RESOLUTION.md) for the full resolution
+contract.
+
+### `canonical_entity_id` field
+
+| Property | Detail |
+|----------|--------|
+| Type | UUID v4 (string) |
+| Owner | `services/identity/resolver.py` — never set by SDK |
+| Scope | Tenant-scoped; two tenants never share a `canonical_entity_id` |
+| Stability | Stable under merge (surviving entity keeps its ID) |
+| Recoverability | Operator split creates a new ID for the separated fragment |
+
+### `IdentitySubject` record
+
+Every entity whose identity has been resolved has an `identity_subjects` row:
+
+| Field | Type | Meaning |
+|-------|------|---------|
+| `id` | UUID | Row identifier |
+| `tenant_id` | UUID | Owning tenant |
+| `canonical_entity_id` | UUID | The stable identity key |
+| `entity_type` | `EntityType` enum | `human`, `anonymous_visitor`, `device`, `session`, `wallet`, `agent`, `organization`, `account`, `campaign`, `journey`, `commerce_customer`, `payment_customer` |
+| `status` | `SubjectStatus` enum | `active`, `merged`, `split` |
+| `created_at` | ISO8601 | When entity was first resolved |
+| `updated_at` | ISO8601 | Last resolution update |
+| `first_seen_at` | ISO8601 | Earliest observed signal timestamp |
+| `last_seen_at` | ISO8601 | Most recent observed signal timestamp |
+| `metadata` | JSON object | Freeform resolver metadata |
+
+### `identity_aliases` table
+
+Each alias that maps a raw signal to a `canonical_entity_id`:
+
+| Field | Meaning |
+|-------|---------|
+| `canonical_entity_id` | The entity this alias belongs to |
+| `alias_type` | `IdentitySignalType` (e.g. `email_hash`, `wallet_address`) |
+| `alias_value_hash` | SHA-256 hash of the raw signal value |
+| `alias_display_value_redacted` | Partial display value (PII-safe) |
+| `confidence` | Float 0.0–1.0 |
+| `confidence_tier` | `blocked`, `weak`, `probable`, `strong`, `deterministic` |
+| `revoked_at` | Set when alias is revoked; suppresses future use |
+
+### `SubjectStatus` values
+
+| Status | Meaning |
+|--------|---------|
+| `active` | Entity is the canonical record; all reads resolve here |
+| `merged` | Entity was absorbed into another; `canonical_entity_id` redirects to survivor |
+| `split` | Entity was separated by operator action; new ID assigned to fragment |

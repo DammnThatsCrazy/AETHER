@@ -11,7 +11,7 @@ source_files:
 canonical_owner: backend@aether
 estimated_read_minutes: 60
 toc_depth: 3
-last_synced_commit: f9482d3
+last_synced_commit: d5b2b67
 
 ---
 # Aether Backend API v8.9.0 — Endpoint Specification
@@ -1172,7 +1172,10 @@ Core identity resolution and entity management endpoints.
 | POST | `/v1/identity/merge` | Merge two entities into a single canonical entity (`admin`) |
 | POST | `/v1/identity/split` | Split a merged entity back into its source components (`admin`) |
 | POST | `/v1/identity/recompute` | Trigger a full confidence recomputation for one or all entities (`admin`) |
-| GET | `/v1/identity/health` | Identity resolution subsystem health — queue depth, recompute lag, conflict count |
+| GET | `/v1/identity/health` | Identity resolution subsystem health — DB ping, total entities, open conflicts, queue depth |
+| POST | `/v1/identity/suppress` | Suppress an identifier hash — revokes matching aliases and blocks future resolution (`write`) |
+| DELETE | `/v1/identity/suppress/{suppression_id}` | Revoke an active suppression rule (`write`) |
+| GET | `/v1/identity/suppressions` | List active suppression rules for the authenticated tenant (`read`) |
 | GET | `/v1/identity/profiles/{user_id}` | Get stored profile for a user/entity |
 | PUT | `/v1/identity/profiles/{user_id}` | Upsert profile record for a user/entity |
 | GET | `/v1/identity/profiles/{user_id}/graph` | Profile-scoped graph view (bounded to 50 neighbors) |

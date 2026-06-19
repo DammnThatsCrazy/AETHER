@@ -58,6 +58,9 @@ from .schemas import (
     IdentityResolveResponse,
     IdentitySplitRequest,
     IdentitySplitResponse,
+    IdentitySuppressRequest,
+    IdentitySuppressResponse,
+    IdentityUnsuppressResponse,
 )
 
 logger = get_logger("aether.service.identity")
@@ -375,21 +378,82 @@ async def recompute_identity(
     return APIResponse(data=IdentityRecomputeResponse(**result).model_dump()).to_dict()
 
 
+@router.post("/suppress", response_model=IdentitySuppressResponse)
+async def suppress_identifier(body: IdentitySuppressRequest, request: Request) -> dict:
+    """
+    Create a suppression rule blocking an identifier hash from being used in identity linking.
+    Requires write permission.
+    """
+    tenant = request.state.tenant
+    tenant.require_permission("write")
+
+    resolver = _get_resolver()
+    result = await resolver.suppress_identifier(
+        tenant_id=tenant.tenant_id,
+        identifier_type=body.identifier_type,
+        identifier_hash=body.identifier_hash,
+        reason=body.reason,
+        subject_id=body.subject_id,
+        actor_id=getattr(tenant, "user_id", "operator") or "operator",
+        expires_at=body.expires_at,
+    )
+    return APIResponse(data=IdentitySuppressResponse(**result).model_dump()).to_dict()
+
+
+@router.delete("/suppress/{suppression_id}", response_model=IdentityUnsuppressResponse)
+async def unsuppress_identifier(suppression_id: str, request: Request) -> dict:
+    """Revoke a suppression rule. Requires write permission."""
+    tenant = request.state.tenant
+    tenant.require_permission("write")
+
+    resolver = _get_resolver()
+    result = await resolver.unsuppress_identifier(
+        tenant_id=tenant.tenant_id,
+        suppression_id=suppression_id,
+        actor_id=getattr(tenant, "user_id", "operator") or "operator",
+    )
+    return APIResponse(data=IdentityUnsuppressResponse(**result).model_dump()).to_dict()
+
+
+@router.get("/suppressions")
+async def list_suppressions(
+    request: Request,
+    limit: int = Query(50, ge=1, le=200),
+) -> dict:
+    """List active suppression rules for this tenant."""
+    tenant = request.state.tenant
+    repo = _get_resolution_repo()
+    rules = await repo.get_suppressions(tenant.tenant_id, limit=limit)
+    return APIResponse(data={"suppressions": rules, "total": len(rules)}).to_dict()
+
+
 @router.get("/health", response_model=IdentityHealthResponse)
 async def identity_health(request: Request) -> dict:
     """Identity resolver health check — returns operational metrics."""
     tenant = request.state.tenant
     repo = _get_resolution_repo()
-    health_data = await repo.get_identity_health(tenant.tenant_id)
+
+    db_alive = await repo.ping()
+    health_data: dict = {}
+    if db_alive:
+        try:
+            health_data = await repo.get_identity_health(tenant.tenant_id)
+        except Exception:
+            db_alive = False
+
+    status = "healthy" if db_alive else "degraded"
     return APIResponse(data=IdentityHealthResponse(
-        status="healthy",
-        resolver_enabled=True,
+        status=status,
+        resolver_enabled=db_alive,
         total_entities=health_data.get("total_subjects", 0),
         total_aliases=health_data.get("total_aliases", 0),
         total_clusters=health_data.get("total_clusters", 0),
         open_conflicts=health_data.get("open_conflicts", 0),
         recent_merges=health_data.get("recent_merges", 0),
         recent_splits=health_data.get("recent_splits", 0),
+        blocked_consent=health_data.get("blocked_consent", 0),
+        blocked_cross_tenant=health_data.get("blocked_cross_tenant", 0),
+        blocked_fingerprint_only=health_data.get("blocked_fingerprint_only", 0),
         tenant_id=tenant.tenant_id,
     ).model_dump()).to_dict()
 
