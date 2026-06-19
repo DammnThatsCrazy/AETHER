@@ -726,7 +726,7 @@ class IdentityResolutionService:
             "entity_id": entity_id,
             "event_ids": event_ids or [],
             "reason": reason,
-            "events_replayed": len(seen_events),
+            "events_replayed": len(events_map),
             "decisions": decisions,
             "errors": errors,
         }
