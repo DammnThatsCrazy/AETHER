@@ -11,7 +11,7 @@ source_files:
 canonical_owner: backend@aether
 estimated_read_minutes: 60
 toc_depth: 3
-last_synced_commit: 93450c9
+last_synced_commit: 04e7372
 
 ---
 # Aether Backend API v8.9.0 — Endpoint Specification
@@ -851,14 +851,16 @@ Disable a rail without deleting its configuration.
 
 Register a smart contract for `onchain_claim` proof generation. A verified registry entry is required before any onchain proof can be issued in non-local environments.
 
+`oracle_signer_address` is **required** — set it to the Ethereum address derived from `ORACLE_SIGNER_KEY` (`Account.from_key(key).address`). The `/verify` endpoint rejects registrations where this field does not match the live oracle signer.
+
 **Request:**
 ```json
 {
   "chain_id": 1,
   "contract_address": "0xYourContract",
   "contract_name": "AetherRewardEnabler",
-  "vm_type": "evm",
   "oracle_signer_address": "0xOracleAddress",
+  "vm_type": "evm",
   "allowed_campaign_ids": ["camp_abc"]
 }
 ```
@@ -873,7 +875,7 @@ Get a single registered contract by ID.
 
 ### POST /v1/rewards/contracts/{id}/verify
 
-Mark a registered contract as verified, enabling proof generation for it. After calling this endpoint the contract satisfies the registry gate in `POST /v1/rewards/evaluate` for `onchain_claim` rails.
+Mark a registered contract as verified, enabling proof generation for it. Validates that `oracle_signer_address` matches the current Aether oracle signer (derived from `ORACLE_SIGNER_KEY`) — returns 422 if they diverge. After successful verification the contract satisfies the registry gate in `POST /v1/rewards/evaluate` for `onchain_claim` rails.
 
 ---
 
