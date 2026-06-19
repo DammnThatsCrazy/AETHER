@@ -600,6 +600,37 @@ def create_app() -> FastAPI:
     app.include_router(dune_feeder_router)
     logger.info("Dune feeder: admin routes mounted (/v1/admin/dune-feeder)")
 
+    # ── Provider Source Catalog (Kyber admin, feature-flagged) ─────────
+    pc = settings.provider_corpus
+    if pc.kyber_provider_source_catalog_enabled:
+        from services.provider_catalog.routes import (
+            providers_router as kyber_providers_router,
+            dune_router as kyber_dune_router,
+            lake_router as kyber_lake_router,
+            features_router as kyber_features_router,
+            intelligence_router as kyber_intelligence_router,
+        )
+        app.include_router(kyber_providers_router)
+        app.include_router(kyber_dune_router)
+        app.include_router(kyber_lake_router)
+        app.include_router(kyber_features_router)
+        app.include_router(kyber_intelligence_router)
+        logger.info("Provider Source Catalog: Kyber admin routes mounted (/v1/admin/kyber/providers + /dune + /lake + /features + /intelligence)")
+    else:
+        logger.info("Provider Source Catalog: disabled (set KYBER_PROVIDER_SOURCE_CATALOG_ENABLED=true to enable)")
+
+    # ── Data Rights Ledger (feature-flagged) ───────────────────────────
+    if pc.connector_data_rights_enabled:
+        from services.integrations.data_rights.routes import (
+            router as data_rights_router,
+            admin_router as data_rights_admin_router,
+        )
+        app.include_router(data_rights_router)
+        app.include_router(data_rights_admin_router)
+        logger.info("Data Rights Ledger: routes mounted (/v1/integrations/data-rights + /v1/admin/kyber/data-rights)")
+    else:
+        logger.info("Data Rights Ledger: disabled (set AETHER_CONNECTOR_DATA_RIGHTS_ENABLED=true to enable)")
+
     # ── Inbound connector ingestion (feature-flagged, master switch) ────
     if settings.connectors.enabled:
         from services.integrations.connectors import (

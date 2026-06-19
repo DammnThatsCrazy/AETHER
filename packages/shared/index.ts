@@ -36,3 +36,4 @@ export * from './gtm-pricing';
 export * from './customer-onboarding';
 export * from './security-governance';
 export * from './suggestions';
+export * from './connector-taxonomy';

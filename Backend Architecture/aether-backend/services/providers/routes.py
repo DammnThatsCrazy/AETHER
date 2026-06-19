@@ -16,7 +16,10 @@ Routes:
 
 from __future__ import annotations
 
+from typing import Optional
+
 from fastapi import APIRouter, Request
+from pydantic import BaseModel
 
 from services.providers.models import (
     ProviderKeyCreate,
@@ -25,6 +28,11 @@ from services.providers.models import (
 )
 from shared.decorators import api_response
 from shared.logger.logger import get_logger, metrics
+
+
+class ProviderKeyRotate(BaseModel):
+    new_api_key: str
+    endpoint: Optional[str] = None
 
 logger = get_logger("aether.service.providers")
 
@@ -104,6 +112,76 @@ async def delete_key(provider: str, request: Request):
     })
     logger.info(f"BYOK key deleted: tenant={tenant_id} provider={provider}")
     return {"status": "deleted", "provider_name": provider}
+
+
+@router.post("/keys/{provider}/rotate")
+@api_response
+async def rotate_key(provider: str, body: ProviderKeyRotate, request: Request):
+    """Rotate a BYOK key — replace the encrypted key without losing audit trail.
+
+    Note: BYOK rotation does NOT affect lake/graph/training data rights.
+    Data rights grants are separate from credential control.
+    """
+    request.state.tenant.require_permission("admin")
+    tenant_id = request.state.tenant.tenant_id
+    gateway = _get_gateway(request)
+
+    rotated = await gateway.key_vault.rotate_key(
+        tenant_id=tenant_id,
+        provider_name=provider,
+        new_api_key=body.new_api_key,
+        endpoint=body.endpoint,
+    )
+    if not rotated:
+        return {"status": "not_found", "provider_name": provider}
+
+    metrics.increment("provider_key_rotated", labels={
+        "tenant_id": tenant_id, "provider": provider,
+    })
+    logger.info(f"BYOK key rotated: tenant={tenant_id} provider={provider}")
+    return {
+        "status": "rotated",
+        "provider_name": provider,
+        "updated_at": rotated.updated_at,
+    }
+
+
+@router.post("/keys/{provider}/revoke")
+@api_response
+async def revoke_key(provider: str, request: Request):
+    """Revoke a BYOK key — disable it without deleting the audit record.
+
+    The key is retained for audit. Use DELETE /keys/{provider} to fully purge.
+    Note: BYOK revocation does NOT affect data rights grants — revoke those separately.
+    """
+    request.state.tenant.require_permission("admin")
+    tenant_id = request.state.tenant.tenant_id
+    gateway = _get_gateway(request)
+
+    revoked = await gateway.key_vault.revoke_key(tenant_id, provider)
+    if not revoked:
+        return {"status": "not_found", "provider_name": provider}
+
+    metrics.increment("provider_key_revoked", labels={
+        "tenant_id": tenant_id, "provider": provider,
+    })
+    logger.info(f"BYOK key revoked: tenant={tenant_id} provider={provider}")
+    return {"status": "revoked", "provider_name": provider}
+
+
+@router.post("/keys/{provider}/verify")
+@api_response
+async def verify_key(provider: str, request: Request):
+    """Verify a BYOK key is stored and active — without exposing the key value.
+
+    Returns safe metadata only: exists, active, created_at, updated_at.
+    Does NOT test liveness against the external provider — use /test for that.
+    """
+    request.state.tenant.require_permission("admin")
+    tenant_id = request.state.tenant.tenant_id
+    gateway = _get_gateway(request)
+
+    return await gateway.key_vault.verify_key(tenant_id, provider)
 
 
 # ══════════════════════════════════════════════════════════════════════

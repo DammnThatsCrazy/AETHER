@@ -3398,6 +3398,141 @@
       "canonical_owner": "sdk@aether"
     },
     {
+      "path": "docs/source-of-truth/API_ANTI_DISTILLATION.md",
+      "title": "API Anti-Distillation Controls",
+      "slug": "security/api-anti-distillation",
+      "section": "security",
+      "visibility": "I",
+      "audience": [
+        "architect",
+        "dev-senior",
+        "ops"
+      ],
+      "status": "draft",
+      "estimated_read_minutes": 6,
+      "canonical_owner": "security@aether"
+    },
+    {
+      "path": "docs/source-of-truth/BYOK_PROVIDER_GATEWAY.md",
+      "title": "BYOK Provider Gateway",
+      "slug": "architecture/byok-provider-gateway",
+      "section": "architecture",
+      "visibility": "I",
+      "audience": [
+        "architect",
+        "dev-senior",
+        "ops"
+      ],
+      "status": "draft",
+      "estimated_read_minutes": 5,
+      "canonical_owner": "platform@aether"
+    },
+    {
+      "path": "docs/source-of-truth/CONNECTOR_LAKE_POLICY.md",
+      "title": "Connector Lake Policy",
+      "slug": "architecture/connector-lake-policy",
+      "section": "architecture",
+      "visibility": "I",
+      "audience": [
+        "architect",
+        "dev-senior",
+        "ops"
+      ],
+      "status": "draft",
+      "estimated_read_minutes": 5,
+      "canonical_owner": "platform@aether"
+    },
+    {
+      "path": "docs/source-of-truth/CONNECTOR_TAXONOMY.md",
+      "title": "Connector Taxonomy",
+      "slug": "architecture/connector-taxonomy",
+      "section": "architecture",
+      "visibility": "I",
+      "audience": [
+        "architect",
+        "dev-senior",
+        "ops"
+      ],
+      "status": "draft",
+      "estimated_read_minutes": 6,
+      "canonical_owner": "platform@aether"
+    },
+    {
+      "path": "docs/source-of-truth/DATA_RIGHTS_LEDGER.md",
+      "title": "Data Rights Ledger",
+      "slug": "architecture/data-rights-ledger",
+      "section": "architecture",
+      "visibility": "I",
+      "audience": [
+        "architect",
+        "dev-senior",
+        "ops"
+      ],
+      "status": "draft",
+      "estimated_read_minutes": 7,
+      "canonical_owner": "compliance@aether"
+    },
+    {
+      "path": "docs/source-of-truth/DUNE_ACCESS_MODES.md",
+      "title": "Dune Access Modes",
+      "slug": "architecture/dune-access-modes",
+      "section": "architecture",
+      "visibility": "I",
+      "audience": [
+        "architect",
+        "dev-senior",
+        "ops"
+      ],
+      "status": "draft",
+      "estimated_read_minutes": 6,
+      "canonical_owner": "data@aether"
+    },
+    {
+      "path": "docs/source-of-truth/DUNE_CHAIN_EXTRACTION_PLAN.md",
+      "title": "Dune Chain Extraction Plan",
+      "slug": "architecture/dune-chain-extraction-plan",
+      "section": "architecture",
+      "visibility": "I",
+      "audience": [
+        "architect",
+        "dev-senior",
+        "ops"
+      ],
+      "status": "draft",
+      "estimated_read_minutes": 6,
+      "canonical_owner": "data@aether"
+    },
+    {
+      "path": "docs/source-of-truth/DUNE_DATA_LAKE_STRATEGY.md",
+      "title": "Dune Data Lake Strategy",
+      "slug": "architecture/dune-data-lake-strategy",
+      "section": "architecture",
+      "visibility": "I",
+      "audience": [
+        "architect",
+        "dev-senior",
+        "ops"
+      ],
+      "status": "draft",
+      "estimated_read_minutes": 5,
+      "canonical_owner": "data@aether"
+    },
+    {
+      "path": "docs/source-of-truth/ENRICHMENT_LINEAGE.md",
+      "title": "Enrichment Lineage",
+      "slug": "architecture/enrichment-lineage",
+      "section": "architecture",
+      "visibility": "I",
+      "audience": [
+        "architect",
+        "dev-senior",
+        "ops"
+      ],
+      "status": "draft",
+      "estimated_read_minutes": 5,
+      "canonical_owner": "platform@aether"
+    },
+    {
       "path": "docs/source-of-truth/GRAPH_CONTRACT.md",
       "title": "Intelligence Graph Contract",
       "slug": "source-of-truth/graph-contract",
@@ -3428,6 +3563,21 @@
       "canonical_owner": "graph@aether"
     },
     {
+      "path": "docs/source-of-truth/GRAPH_OF_GRAPHS_DATA_USE.md",
+      "title": "Graph of Graphs Data Use",
+      "slug": "architecture/graph-of-graphs-data-use",
+      "section": "architecture",
+      "visibility": "I",
+      "audience": [
+        "architect",
+        "dev-senior",
+        "ops"
+      ],
+      "status": "draft",
+      "estimated_read_minutes": 5,
+      "canonical_owner": "platform@aether"
+    },
+    {
       "path": "docs/source-of-truth/IDENTITY_RESOLUTION.md",
       "title": "Identity Resolution",
       "slug": "source-of-truth/identity-resolution",
@@ -3441,6 +3591,21 @@
       "status": "stable",
       "since_version": "9.0.0",
       "canonical_owner": "identity@aether"
+    },
+    {
+      "path": "docs/source-of-truth/OLYMPUS_PROVIDER_SOURCE_CATALOG.md",
+      "title": "Olympus Provider Source Catalog",
+      "slug": "architecture/olympus-provider-source-catalog",
+      "section": "architecture",
+      "visibility": "I",
+      "audience": [
+        "architect",
+        "dev-senior",
+        "ops"
+      ],
+      "status": "draft",
+      "estimated_read_minutes": 8,
+      "canonical_owner": "data@aether"
     },
     {
       "path": "docs/source-of-truth/REPO_CONSISTENCY_OWNERSHIP.md",
@@ -3460,7 +3625,37 @@
       "canonical_owner": "platform@aether"
     },
     {
+      "path": "docs/source-of-truth/SOURCE_TO_MODEL_MATRIX.md",
+      "title": "Source to Model Matrix",
+      "slug": "architecture/source-to-model-matrix",
+      "section": "architecture",
+      "visibility": "I",
+      "audience": [
+        "architect",
+        "dev-senior",
+        "ops"
+      ],
+      "status": "draft",
+      "estimated_read_minutes": 6,
+      "canonical_owner": "ml@aether"
+    },
+    {
       "path": "docs/source-of-truth/SUGGESTION_INTELLIGENCE.md"
+    },
+    {
+      "path": "docs/source-of-truth/UNIQUE_SIGNAL_FEATURES.md",
+      "title": "Unique Signal Features",
+      "slug": "architecture/unique-signal-features",
+      "section": "architecture",
+      "visibility": "I",
+      "audience": [
+        "architect",
+        "dev-senior",
+        "ops"
+      ],
+      "status": "draft",
+      "estimated_read_minutes": 7,
+      "canonical_owner": "ml@aether"
     }
   ]
 }
