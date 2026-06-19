@@ -136,10 +136,24 @@ class DataRightsService:
         now = _utc_now()
         audit_id = _audit_event_id()
 
-        # Olympus provider override: baseline is allowed, training is not
+        # Olympus provider override: baseline is allowed, training requires compliance review
         olympus_baseline = body.olympus_baseline_allowed
         if body.connector_class == "olympus_provider":
             olympus_baseline = True
+
+        # Model training requires compliance review for Olympus providers — cannot be
+        # set directly via API request body; must go through the compliance review flow.
+        model_training = body.model_training_allowed
+        if body.connector_class == "olympus_provider":
+            model_training = False
+
+        # BYOK credentials confer credential control only, NOT data ownership or lake/
+        # graph rights. Callers must obtain a separate grant via the consent flow.
+        tenant_lake = body.tenant_lake_allowed
+        tenant_graph = body.tenant_graph_allowed
+        if body.connector_class == "byok_gateway":
+            tenant_lake = False
+            tenant_graph = False
 
         grant = DataRightsGrant(
             data_rights_grant_id=grant_id,
@@ -152,12 +166,12 @@ class DataRightsService:
             data_category=body.data_category,
             data_sensitivity=body.data_sensitivity,
             raw_data_owner=body.raw_data_owner,
-            tenant_lake_allowed=body.tenant_lake_allowed,
-            tenant_graph_allowed=body.tenant_graph_allowed,
+            tenant_lake_allowed=tenant_lake,
+            tenant_graph_allowed=tenant_graph,
             tenant_insights_allowed=body.tenant_insights_allowed,
             olympus_baseline_allowed=olympus_baseline,
             cross_tenant_aggregate_allowed=body.cross_tenant_aggregate_allowed,
-            model_training_allowed=body.model_training_allowed,
+            model_training_allowed=model_training,
             commercial_reuse_allowed=body.commercial_reuse_allowed,
             legal_basis=body.legal_basis,
             consent_basis=body.consent_basis,
@@ -173,7 +187,7 @@ class DataRightsService:
         logger.info(
             f"DataRightsGrant created: grant_id={grant_id} "
             f"tenant={body.tenant_id} connector={body.connector_id} "
-            f"olympus_baseline={olympus_baseline} model_training={body.model_training_allowed} "
+            f"olympus_baseline={olympus_baseline} model_training={model_training} "
             f"audit_event={audit_id}"
         )
 

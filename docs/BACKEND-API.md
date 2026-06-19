@@ -2490,6 +2490,8 @@ Feature-flagged (`KYBER_PROVIDER_SOURCE_CATALOG_ENABLED`). Operator permission r
 
 Feature-flagged (`KYBER_ANTI_DISTILLATION_ENABLED`). Operator permission required.
 
+Anti-distillation enforcement on intelligence query endpoints is activated by `AETHER_ANTI_DISTILLATION_ENABLED=true`. When enabled, wallet risk and profile endpoints run pattern detection (rapid diverse-query, honeypot wallet, sequential enumeration) on every request and emit audit events on suspicious activity. Honeypot wallet queries return `403 Forbidden`. Score precision is binned by plan tier (`P1_HOBBYIST=0.1`, `P2_PROFESSIONAL=0.05`, `P3_GROWTH=0.01`, `P4_PROTOCOL=0.001`).
+
 | Method | Path | Description |
 |--------|------|-------------|
 | GET | `/v1/admin/kyber/intelligence/anti-distillation` | Suspicious query patterns, alerts, honeypot queries, and score-binning stats |

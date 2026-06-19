@@ -95,7 +95,7 @@ async def list_provider_catalog(
     if category:
         catalog = [p for p in catalog if p.provider_category == category]
     if enabled_only:
-        catalog = get_enabled_providers()
+        catalog = [p for p in catalog if p.implementation_status != ImplementationStatus.DISABLED_COMPLIANCE_REVIEW]
 
     items = [p.model_dump() for p in catalog]
     return APIResponse(data={

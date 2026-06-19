@@ -60,7 +60,9 @@ def _compute_provenance_status(
         return ProvenanceStatus.MISSING_LICENSE
     if terms_status in ("unknown", "missing", "pending_review"):
         return ProvenanceStatus.MISSING_TERMS_REVIEW
-    if license_status == "valid" and terms_status in ("approved", "public_api", "open_license"):
+    _CLEAR_LICENSE_STATUSES = {"valid", "public_api", "open_license", "enterprise_contract"}
+    _CLEAR_TERMS_STATUSES = {"approved", "public_api", "open_license", "enterprise_contract", "valid"}
+    if license_status in _CLEAR_LICENSE_STATUSES and terms_status in _CLEAR_TERMS_STATUSES:
         return ProvenanceStatus.VALID
     return ProvenanceStatus.UNVERIFIED
 
