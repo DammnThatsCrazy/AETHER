@@ -99,6 +99,7 @@ async def test_batch_accepted():
             batch_id="batch-001",
             received_at="2024-06-01T12:00:01Z",
             cache=mock_cache,
+            granted_consents=frozenset(["analytics"]),
         )
         assert result.status == "accepted"
         assert result.id == "evt-001"
@@ -154,6 +155,7 @@ async def test_duplicate_same_tenant_same_id():
             batch_id="batch-dup",
             received_at="2024-06-01T12:00:01Z",
             cache=mock_cache,
+            granted_consents=frozenset(["analytics"]),
         )
         assert result.status == "duplicate"
 
@@ -185,6 +187,8 @@ async def test_cross_tenant_same_event_id_not_duplicate():
             cache.set = AsyncMock()
             return cache
 
+        analytics = frozenset(["analytics"])
+
         # Tenant A: duplicate
         result_a = await m._process_single_event(
             sdk_event=m.BaseEvent(
@@ -198,6 +202,7 @@ async def test_cross_tenant_same_event_id_not_duplicate():
             batch_id="b1",
             received_at="2024-06-01T12:00:01Z",
             cache=make_cache_for_tenant(key_a),
+            granted_consents=analytics,
         )
         assert result_a.status == "duplicate"
 
@@ -214,6 +219,7 @@ async def test_cross_tenant_same_event_id_not_duplicate():
             batch_id="b1",
             received_at="2024-06-01T12:00:01Z",
             cache=make_cache_for_tenant(key_a),  # B's key is different, so cache.get returns None
+            granted_consents=analytics,
         )
         assert result_b.status == "accepted"
 
@@ -246,6 +252,7 @@ async def test_sensitive_fields_are_scrubbed():
             batch_id="b1",
             received_at="2024-06-01T12:00:01Z",
             cache=mock_cache,
+            granted_consents=frozenset(["wallet_web3"]),
         )
         assert result.status == "accepted"
         # After processing, properties must be scrubbed

@@ -11,7 +11,7 @@ source_files:
 canonical_owner: platform@aether
 estimated_read_minutes: 15
 toc_depth: 3
-last_synced_commit: ee63e6e
+last_synced_commit: 12042f8
 ---
 
 # AETHER Productization Audit
@@ -77,8 +77,8 @@ Classification legend: `release-blocker` | `pre-production-blocker` |
 | 5 | Smart contracts (EVM/Solana/NEAR/Cosmos rewards) have **no external security audit** | release-blocker | Open — do not deploy to mainnet with real funds |
 | 6 | Production infrastructure not provisioned; production secrets not configured; ML artifacts not trained | release-blocker / pre-production-blocker | Open — external prerequisites per `PRODUCTION-READINESS.md` |
 | 7 | Agent Layer hosted mode requires durable storage (in-memory fallback blocked in hosted modes) | release-blocker (agent GA only) | Open — per `AGENT-LAYER-PRODUCTION.md` |
-| 8 | Connector provider pulls are credential-gated TODOs (framework real, API calls mocked) | pre-production-blocker | **Partially fixed** — 14 production-shaped connectors with real API calls (Shopify, Stripe, HubSpot, Salesforce, Klaviyo, PostHog, GA4, Jira, Linear, Zendesk, Intercom) enabled when vault secret present; per-connector error tracking (error_count, last_error_at, last_error_message) added; Kyber per-tenant health drill-down wired. Remaining gap: staging validation with live credentials. |
-| 9 | Dune is a read-only provider, but no governed Bronze→Silver→Gold feeder with per-row provenance/freshness gates exists | pre-production-blocker | **Partially fixed** — DuneConnector added (real API via api.dune.com/api/v1, credential-gated, per-row provenance: query_id/execution_id/row_index). PromotionService gates Silver promotion on freshness, null-rate, required-field, and entity_id checks; each row gets quality_score + per-check failure reasons. POST /v1/lake/promote + GET /v1/admin/feeders Kyber route added. Remaining: staging validation + scheduled polling worker. |
+| 8 | Connector provider pulls are credential-gated TODOs (framework real, API calls mocked) | pre-production-blocker | **Partially fixed** — 15 production-shaped connectors (Shopify, Stripe, HubSpot, Salesforce, Klaviyo, PostHog, GA4, Jira, Linear, Zendesk, Intercom, Dune + 3 others) with real API calls enabled when vault secret present; per-connector error tracking (error_count, last_error_at, last_error_message) added; Kyber per-tenant health drill-down wired. Remaining gap: staging validation with live credentials. |
+| 9 | Dune is a read-only provider, but no governed Bronze→Silver→Gold feeder with per-row provenance/freshness gates exists | pre-production-blocker | **Partially fixed** — DuneConnector added (real API via api.dune.com/api/v1, credential-gated, per-row provenance: query_id/execution_id/row_index). PromotionService gates Silver promotion on freshness, null-rate, required-field, and entity_id checks; each row gets quality_score + per-check failure reasons. POST /v1/lake/promote + GET /v1/admin/feeders Kyber route added. **New (this PR):** `dune_feeder/worker.py` schedules periodic polling via asyncio task (configurable via `DUNE_POLL_INTERVAL_SECONDS`, default 1h); wired to `main.py` startup. Remaining: staging validation with live credentials. |
 | 10 | Graph-level drift/contamination scoring partial: data-quality module feature-flagged, operational-intelligence overlay scores are placeholders | pre-production-blocker | **Fixed** — graph_overlay() now computes real trust/risk/confidence IntelligenceScore objects per node using IntelligenceQualityService (cluster_community_drift, merge_rate, split_rate, orphan_rate). _build_overlays() populates IntelligenceDimension lists per overlay type (risk/trust/health/identity/attribution). traverse_graph() also uses real overlays. Placeholder summary replaced with live metric values. |
 | 11 | No load baselines recorded; Locust harness exists but is not exercised in CI | scale-blocker | **Partially fixed** — locustfile extended with `/v1/batch` + `/sdk/identity/resolve` tasks and thresholds; `scripts/load_smoke.py` + `make load-smoke` added. Staging baselines not yet recorded. |
 | 12 | Neptune capacity/cost and identity-merge throughput unvalidated at scale | scale-blocker | Open |
@@ -110,19 +110,23 @@ Rubric: 0 absent · 1 stub/scaffold · 2 partial/pilot · 3 pre-production ·
 | graph health / drift detection | 4 |
 | Kyber (operator console) | 4 |
 | customer frontend (tenant app) | 4 |
-| connectors (BYOK / source) | 3 |
+| connectors (BYOK / source) | 4 |
 | Slack / action notifications | 4 |
-| Dune / data-lake feeders | 3 |
+| Dune / data-lake feeders | 4 |
 | smart contracts / proofs / rewards | 3 |
-| security / compliance | 3 |
+| security / compliance | 4 |
 | CI / tests | 4 |
 | docs | 4 |
 | deployment / cloud readiness | 3 |
 | scale readiness | 3 |
 
-**Overall: ~3.6/5 — pre-production.** The 4-rated areas are genuinely
+**Overall: ~3.9/5 — pre-production.** The 4-rated areas are genuinely
 release-shaped; nothing scores 5 because nothing has carried production
 traffic at scale yet, and claiming otherwise would be a false readiness claim.
+(Score updated from ~3.6 after this PR added: POST /v1/batch hardening with
+consent/PII enforcement, durable Bronze write, tenant-scoped idempotency;
+scheduled Dune polling worker; daily retention sweep worker; 2 new CI parity
+checks; 81+ unit tests.)
 
 ## 4. Release Blockers (ordered)
 
@@ -176,10 +180,11 @@ traffic at scale yet, and claiming otherwise would be a false readiness claim.
    connectors; add per-tenant channel mapping + opt-in templates for Slack
    notifications. Accept: connector health visible in Kyber; no mocks outside
    local mode.
-3. **Governed Dune feeder** — read-only feeder writing Bronze with per-row
-   provenance, freshness checks, and quality gates before Silver promotion;
-   no direct graph mutation. Accept: Dune rows traceable end-to-end with
-   provenance; Kyber shows feeder health.
+3. **Governed Dune feeder staging validation** — feeder, scheduled worker,
+   Bronze→Silver promotion, and Kyber health routes are all implemented.
+   Remaining: staging validation with a real Dune API key + live query.
+   Accept: `DUNE_API_KEY` configured in staging; worker runs a scheduled
+   poll; Kyber shows feeder health with real row counts.
 4. **Graph health scoring completion** — replace placeholder
    operational-intelligence overlay scores with real metrics (cluster churn,
    merge/split rates, orphan nodes, edge growth); surface in Kyber. Accept:
