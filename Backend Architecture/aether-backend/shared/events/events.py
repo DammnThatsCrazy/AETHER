@@ -275,6 +275,22 @@ class Topic(str, Enum):
     # Admin audit
     ADMIN_API_KEY_CREATED = "aether.admin.api_key.created"
 
+    # Suggestion / OODA Intelligence
+    SUGGESTION_DETECTED        = "aether.suggestions.detected"
+    SUGGESTION_ORIENTED        = "aether.suggestions.oriented"
+    SUGGESTION_CREATED         = "aether.suggestions.created"
+    SUGGESTION_REVIEW_REQUIRED = "aether.suggestions.review_required"
+    SUGGESTION_APPROVED        = "aether.suggestions.approved"
+    SUGGESTION_REJECTED        = "aether.suggestions.rejected"
+    SUGGESTION_SUPPRESSED      = "aether.suggestions.suppressed"
+    SUGGESTION_EXECUTING       = "aether.suggestions.executing"
+    SUGGESTION_EXECUTED        = "aether.suggestions.executed"
+    SUGGESTION_DELIVERED       = "aether.suggestions.delivered"
+    SUGGESTION_OUTCOME_RECORDED = "aether.suggestions.outcome_recorded"
+    SUGGESTION_CLOSED          = "aether.suggestions.closed"
+    SUGGESTION_FAILED          = "aether.suggestions.failed"
+    SUGGESTION_EXPIRED         = "aether.suggestions.expired"
+
     # Dead letter
     DEAD_LETTER = "aether.dlq"
 

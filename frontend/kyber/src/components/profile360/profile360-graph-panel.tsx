@@ -1,7 +1,8 @@
 import { useMemo, useState } from 'react';
 import { Badge, Button, Card, CardContent, CardHeader, CardTitle, Input, Select } from '@aether/ui';
 import { GraphCanvas } from '@kyber/components/graph';
-import type { GraphEdge, GraphNode, GraphOverlay, Profile360Graph, Profile360Reference } from '@kyber/types';
+import type { Entity, GraphEdge, GraphNode, GraphOverlay, Profile360Graph, Profile360Reference, Profile360Summary } from '@kyber/types';
+import { Profile360SummaryCard } from '@kyber/components/entities/profile360-summary-card';
 
 interface Profile360GraphPanelProps {
   readonly graph: Profile360Graph;
@@ -27,6 +28,43 @@ const typeOptions = [
   { value: 'transaction', label: 'Transaction' },
   { value: 'organization', label: 'Organization' },
 ];
+
+function nodeToEntity(node: GraphNode): Entity {
+  const meta = node.metadata ?? {};
+  const now = new Date().toISOString();
+  return {
+    id: node.id,
+    type: (node.type === 'external' ? 'human' : node.type) as Entity['type'],
+    name: node.label,
+    displayLabel: String(meta.display_label ?? node.label),
+    createdAt: String(meta.created_at ?? now),
+    updatedAt: String(meta.updated_at ?? now),
+    health: { status: 'unknown', lastChecked: now },
+    trustScore: node.trustScore ?? 0,
+    riskScore: node.riskScore ?? 0,
+    anomalyScore: node.anomalyScore ?? 0,
+    needsHelp: false,
+    tags: [],
+    metadata: meta,
+  };
+}
+
+function nodeToSummary(node: GraphNode): Profile360Summary {
+  const meta = node.metadata ?? {};
+  return {
+    trust: node.trustScore ?? 0,
+    risk: node.riskScore ?? 0,
+    walletCount: Number(meta.wallet_count ?? 0),
+    agentCount: Number(meta.agent_count ?? 0),
+    primaryMetrics: [
+      { label: 'Risk', value: (node.riskScore ?? 0).toFixed(2), tone: (node.riskScore ?? 0) > 0.6 ? 'bad' : 'default' },
+      { label: 'Anomaly', value: (node.anomalyScore ?? 0).toFixed(2), tone: (node.anomalyScore ?? 0) > 0.5 ? 'warn' : 'default' },
+    ],
+    secondaryMetrics: [],
+    lastSeen: String(meta.updated_at ?? meta.last_seen ?? ''),
+    status: String(meta.status ?? 'unknown'),
+  };
+}
 
 const CHUNK_THRESHOLD = 150;
 const CHUNK_SIZE = 150;
@@ -128,8 +166,20 @@ export function Profile360GraphPanel({ graph, highlightedNodeIds, onHighlight, o
           </div>
           {selectedNode && (
             <div className="space-y-2">
-              <div className="flex items-center gap-2"><Badge>{selectedNode.type}</Badge><span className="font-medium text-text-primary">{selectedNode.label}</span></div>
-              <pre className="max-h-64 overflow-auto rounded bg-surface-raised p-2 text-[10px] text-text-secondary">{JSON.stringify(selectedNode.metadata, null, 2)}</pre>
+              <Profile360SummaryCard
+                entity={nodeToEntity(selectedNode)}
+                summary={nodeToSummary(selectedNode)}
+              />
+              {Boolean(selectedNode.metadata?.profile_links) && (
+                <div className="flex gap-1">
+                  <a
+                    href={String((selectedNode.metadata.profile_links as Record<string, unknown>).full ?? '#')}
+                    className="flex-1 text-center text-xs px-2 py-1 rounded border border-border-subtle text-text-secondary hover:text-text-primary hover:border-border-default"
+                  >
+                    Open full profile →
+                  </a>
+                </div>
+              )}
               <Button size="sm" className="w-full" onClick={() => onDrill({ id: selectedNode.id, type: selectedNode.type === 'external' ? 'human' : selectedNode.type, label: selectedNode.label, metadata: selectedNode.metadata })}>Drill into node</Button>
             </div>
           )}

@@ -845,11 +845,8 @@ class AgentExecutionRepository(BaseRepository):
             "ended_at": ended_at,
         })
 
-    async def list_for_agent(self, agent_id: str, tenant_id: str = "", limit: int = 50) -> list[dict]:
-        filters: dict = {"agent_id": agent_id}
-        if tenant_id:
-            filters["tenant_id"] = tenant_id
-        return await self.find_many(filters=filters, limit=limit)
+    async def list_for_agent(self, agent_id: str, tenant_id: str, limit: int = 50) -> list[dict]:
+        return await self.find_many(filters={"agent_id": agent_id, "tenant_id": tenant_id}, limit=limit)
 
     async def record_task_decomposition(
         self,
@@ -942,26 +939,22 @@ class DelegationRepository(BaseRepository):
         await self._invalidate_cache(record["grantee_entity_id"], record.get("tenant_id", ""))
         return updated
 
-    async def active_for(self, grantee_entity_id: str, tenant_id: str = "") -> list[dict]:
-        """Return every currently-active delegation for an entity.
+    async def active_for(self, grantee_entity_id: str, tenant_id: str) -> list[dict]:
+        """Return every currently-active delegation for an entity scoped to tenant.
 
         Cached for 60s; invalidated on grant/revoke. The caller iterates and
         applies scope checks; this repo does no policy interpretation.
         """
-        cache_key = (
-            f"delegations:active:{tenant_id}:{grantee_entity_id}"
-            if tenant_id
-            else f"delegations:active:{grantee_entity_id}"
-        )
+        cache_key = f"delegations:active:{tenant_id}:{grantee_entity_id}"
         if self._cache is not None:
             cached = await self._cache.get_json(cache_key)
             if cached is not None:
                 return cached
 
-        filters: dict = {"grantee_entity_id": grantee_entity_id}
-        if tenant_id:
-            filters["tenant_id"] = tenant_id
-        all_for_grantee = await self.find_many(filters=filters, limit=200)
+        all_for_grantee = await self.find_many(
+            filters={"grantee_entity_id": grantee_entity_id, "tenant_id": tenant_id},
+            limit=200,
+        )
         now_iso = utc_now().isoformat()
         active = [
             d for d in all_for_grantee
@@ -974,12 +967,9 @@ class DelegationRepository(BaseRepository):
             await self._cache.set_json(cache_key, active, TTL.SHORT)
         return active
 
-    async def _invalidate_cache(self, grantee_entity_id: str, tenant_id: str = "") -> None:
+    async def _invalidate_cache(self, grantee_entity_id: str, tenant_id: str) -> None:
         if self._cache is not None:
-            # Invalidate both legacy and tenant-scoped cache keys
-            await self._cache.delete(f"delegations:active:{grantee_entity_id}")
-            if tenant_id:
-                await self._cache.delete(f"delegations:active:{tenant_id}:{grantee_entity_id}")
+            await self._cache.delete(f"delegations:active:{tenant_id}:{grantee_entity_id}")
 
 
 class WalletRepository(BaseRepository):
@@ -1209,11 +1199,8 @@ class PaymentIntentRepository(BaseRepository):
             "metadata": metadata or {},
         })
 
-    async def list_for_agent(self, agent_id: str, tenant_id: str = "", limit: int = 100) -> list[dict]:
-        filters: dict = {"agent_id": agent_id}
-        if tenant_id:
-            filters["tenant_id"] = tenant_id
-        rows = await self.find_many(filters=filters, limit=limit)
+    async def list_for_agent(self, agent_id: str, tenant_id: str, limit: int = 100) -> list[dict]:
+        rows = await self.find_many(filters={"agent_id": agent_id, "tenant_id": tenant_id}, limit=limit)
         rows.sort(key=lambda r: r.get("occurred_at", ""), reverse=True)
         return rows[:limit]
 
@@ -1285,19 +1272,13 @@ class SettlementEventRepository(BaseRepository):
             "metadata": metadata or {},
         })
 
-    async def list_for_intent(self, intent_id: str, tenant_id: str = "", limit: int = 100) -> list[dict]:
-        filters: dict = {"intent_id": intent_id}
-        if tenant_id:
-            filters["tenant_id"] = tenant_id
-        rows = await self.find_many(filters=filters, limit=limit)
+    async def list_for_intent(self, intent_id: str, tenant_id: str, limit: int = 100) -> list[dict]:
+        rows = await self.find_many(filters={"intent_id": intent_id, "tenant_id": tenant_id}, limit=limit)
         rows.sort(key=lambda r: r.get("occurred_at", ""), reverse=True)
         return rows[:limit]
 
-    async def list_for_agent(self, agent_id: str, tenant_id: str = "", limit: int = 100) -> list[dict]:
-        filters: dict = {"agent_id": agent_id}
-        if tenant_id:
-            filters["tenant_id"] = tenant_id
-        rows = await self.find_many(filters=filters, limit=limit)
+    async def list_for_agent(self, agent_id: str, tenant_id: str, limit: int = 100) -> list[dict]:
+        rows = await self.find_many(filters={"agent_id": agent_id, "tenant_id": tenant_id}, limit=limit)
         rows.sort(key=lambda r: r.get("occurred_at", ""), reverse=True)
         return rows[:limit]
 
@@ -1811,3 +1792,210 @@ class SignalRepository(BaseRepository):
         for r in rows:
             await self.delete(r["signal_id"])
         return len(rows)
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# DUNE FEEDER REPOSITORIES
+# ═══════════════════════════════════════════════════════════════════════════
+
+
+class DuneBronzeRepository(BaseRepository):
+    """Bronze-tier Dune Analytics rows with per-row provenance.
+
+    Table: dune_bronze_records
+    Records land here after passing freshness + quality gates.
+    Rows are never directly mutated by operator actions — Silver promotion
+    creates a copy; rollback deletes by source_tag + tenant_scope.
+    """
+
+    def __init__(self) -> None:
+        super().__init__("dune_bronze_records")
+
+    async def find_by_source_tag(
+        self, source_tag: str, tenant_scope: Optional[str] = None, limit: int = 10000
+    ) -> list[dict]:
+        filters: dict[str, Any] = {"source_tag": source_tag}
+        if tenant_scope is not None:
+            filters["tenant_scope"] = tenant_scope
+        return await self.find_many(filters=filters, limit=limit, sort_by="row_index", sort_order="asc")
+
+    async def delete_by_source_tag(self, source_tag: str, tenant_scope: Optional[str] = None) -> int:
+        # Page through in batches so we never miss rows beyond the 10,000-row cap.
+        deleted = 0
+        while True:
+            rows = await self.find_by_source_tag(source_tag, tenant_scope=tenant_scope, limit=500)
+            if not rows:
+                break
+            for r in rows:
+                await self.delete(r["record_id"])
+            deleted += len(rows)
+            if len(rows) < 500:
+                break
+        return deleted
+
+
+class DuneSilverRepository(BaseRepository):
+    """Silver-tier Dune Analytics rows (operator-promoted from Bronze).
+
+    Table: dune_silver_records
+    Only rows with quality_score >= 0.8 and promotion_status='bronze'
+    are eligible. Silver rows are still isolated from the canonical graph.
+    """
+
+    def __init__(self) -> None:
+        super().__init__("dune_silver_records")
+
+    async def find_by_source_tag(
+        self, source_tag: str, tenant_scope: Optional[str] = None, limit: int = 10000
+    ) -> list[dict]:
+        filters: dict[str, Any] = {"source_tag": source_tag}
+        if tenant_scope is not None:
+            filters["tenant_scope"] = tenant_scope
+        return await self.find_many(filters=filters, limit=limit)
+
+    async def delete_by_source_tag(self, source_tag: str, tenant_scope: Optional[str] = None) -> int:
+        deleted = 0
+        while True:
+            rows = await self.find_by_source_tag(source_tag, tenant_scope=tenant_scope, limit=500)
+            if not rows:
+                break
+            for r in rows:
+                await self.delete(r["record_id"])
+            deleted += len(rows)
+            if len(rows) < 500:
+                break
+        return deleted
+
+
+class DuneGoldRepository(BaseRepository):
+    """Gold-tier Dune Analytics aggregates (materialized from Silver).
+
+    Table: dune_gold_records
+    Gold records are domain-level aggregates keyed by
+    (source_tag, domain, query_id, tenant_scope). Still isolated from graph.
+    """
+
+    def __init__(self) -> None:
+        super().__init__("dune_gold_records")
+
+    async def find_filtered(
+        self,
+        source_tag: Optional[str] = None,
+        tenant_scope: Optional[str] = None,
+        limit: int = 10000,
+    ) -> list[dict]:
+        filters: dict[str, Any] = {}
+        if source_tag is not None:
+            filters["source_tag"] = source_tag
+        if tenant_scope is not None:
+            filters["tenant_scope"] = tenant_scope
+        return await self.find_many(filters=filters, limit=limit, sort_by="materialized_at", sort_order="desc")
+
+    async def delete_by_source_tag(self, source_tag: str, tenant_scope: Optional[str] = None) -> int:
+        deleted = 0
+        while True:
+            rows = await self.find_filtered(source_tag=source_tag, tenant_scope=tenant_scope, limit=500)
+            if not rows:
+                break
+            for r in rows:
+                await self.delete(r["gold_id"])
+            deleted += len(rows)
+            if len(rows) < 500:
+                break
+        return deleted
+
+
+class DuneFeederStatsRepository(BaseRepository):
+    """Per-tenant stats records for the Dune feeder service.
+
+    Persists cumulative submitted/rejected counts and last-ingest metadata so
+    that health metrics survive service restarts.  Each tenant_scope gets its
+    own row (key = "feeder_stats_{scope}") so tenant admins only see their own
+    rejection rate and last-ingest metadata, not another tenant's activity.
+    """
+
+    def __init__(self) -> None:
+        super().__init__("dune_feeder_stats")
+
+    @staticmethod
+    def _key(tenant_scope: Optional[str]) -> str:
+        return f"feeder_stats_{tenant_scope or 'global'}"
+
+    async def load(self, tenant_scope: Optional[str] = None) -> dict:
+        record = await self.find_by_id(self._key(tenant_scope))
+        return record or {}
+
+    async def increment(
+        self,
+        submitted: int,
+        rejected: int,
+        last_ingest_at: str,
+        last_ingest_source_tag: str,
+        tenant_scope: Optional[str] = None,
+    ) -> None:
+        key = self._key(tenant_scope)
+        pool = await self._ensure_pool()
+        if pool is None:
+            # In-memory store: Python's async is cooperative, no true concurrency.
+            existing = await self.load(tenant_scope)
+            await self.insert(key, {
+                "total_submitted": existing.get("total_submitted", 0) + submitted,
+                "total_rejected": existing.get("total_rejected", 0) + rejected,
+                "last_ingest_at": last_ingest_at,
+                "last_ingest_source_tag": last_ingest_source_tag,
+            })
+            return
+
+        # Atomic PostgreSQL increment: a single statement avoids the
+        # read-modify-write race under concurrent ingest requests.
+        await self._ensure_table()
+        await pool.execute(
+            f"""
+            INSERT INTO {self.table_name} (id, data, tenant_id, created_at, updated_at)
+            VALUES ($1, jsonb_build_object(
+                'total_submitted', $2::bigint,
+                'total_rejected',  $3::bigint,
+                'last_ingest_at', $4::text,
+                'last_ingest_source_tag', $5::text
+            ), $6, NOW(), NOW())
+            ON CONFLICT (id) DO UPDATE SET
+                data = jsonb_set(jsonb_set(jsonb_set(jsonb_set(
+                    {self.table_name}.data,
+                    '{{total_submitted}}',
+                    to_jsonb(COALESCE(({self.table_name}.data->>'total_submitted')::bigint, 0) + $2)
+                ), '{{total_rejected}}',
+                    to_jsonb(COALESCE(({self.table_name}.data->>'total_rejected')::bigint, 0) + $3)
+                ), '{{last_ingest_at}}', to_jsonb($4::text)
+                ), '{{last_ingest_source_tag}}', to_jsonb($5::text)),
+                updated_at = NOW()
+            """,
+            key,
+            submitted,
+            rejected,
+            last_ingest_at,
+            last_ingest_source_tag,
+            tenant_scope or "",
+        )
+
+    async def load_aggregate(self) -> dict:
+        """Aggregate stats across all tenant scopes (for platform-level health).
+
+        When the platform caller supplies no tenant_scope we must sum across every
+        per-tenant stats row — feeder_stats_global is empty after tenant-scoped
+        ingests, so reading only that row would always yield zeroes.
+        """
+        all_rows = await self.find_many(limit=10_000)
+        stat_rows = [r for r in all_rows if str(r.get("id", "")).startswith("feeder_stats_")]
+        total_submitted = sum(r.get("total_submitted", 0) for r in stat_rows)
+        total_rejected = sum(r.get("total_rejected", 0) for r in stat_rows)
+        dated = sorted(
+            [r for r in stat_rows if r.get("last_ingest_at")],
+            key=lambda r: r.get("last_ingest_at", ""),
+            reverse=True,
+        )
+        return {
+            "total_submitted": total_submitted,
+            "total_rejected": total_rejected,
+            "last_ingest_at": dated[0].get("last_ingest_at") if dated else None,
+            "last_ingest_source_tag": dated[0].get("last_ingest_source_tag") if dated else None,
+        }

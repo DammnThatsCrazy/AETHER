@@ -234,11 +234,134 @@ class VerificationEngine:
     async def _verify_locally(
         self, authorization: PaymentAuthorization, tx_hash: str
     ) -> tuple[bool, Optional[str]]:
-        """Local RPC verification. Production: calls Base/Solana RPC."""
-        # Deterministic local check: format + amount presence.
-        if authorization.amount_usd <= 0:
-            return False, "amount must be positive"
-        return True, None
+        """Dispatch to RPC verification in production; stub in local dev."""
+        import os
+        if os.getenv("AETHER_ENV", "local").lower() == "local":
+            if authorization.amount_usd <= 0:
+                return False, "amount must be positive"
+            return True, None
+
+        if authorization.chain.startswith("eip155:"):
+            return await self._verify_evm(authorization, tx_hash)
+        if authorization.chain.startswith("solana:"):
+            return await self._verify_solana(authorization, tx_hash)
+        return False, f"unsupported chain for local verification: {authorization.chain}"
+
+    async def _verify_evm(
+        self, authorization: PaymentAuthorization, tx_hash: str
+    ) -> tuple[bool, Optional[str]]:
+        """Verify an ERC-20 USDC Transfer on Base (or other EVM chain) via JSON-RPC."""
+        from config.settings import settings
+        rpc_url = settings.intelligence_graph.commerce_base_rpc
+
+        contract = _ASSET_CONTRACT.get((authorization.asset_symbol, authorization.chain))
+        if not contract:
+            return False, f"no contract for {authorization.asset_symbol}/{authorization.chain}"
+
+        decimals = _ASSET_DECIMALS.get(authorization.asset_symbol, 6)
+        expected_min = int(
+            (Decimal(str(authorization.amount_usd)) * Decimal(10 ** decimals))
+            .to_integral_value(rounding=ROUND_CEILING)
+        )
+
+        try:
+            async with httpx.AsyncClient(timeout=8.0) as client:
+                resp = await client.post(rpc_url, json={
+                    "jsonrpc": "2.0", "id": 1,
+                    "method": "eth_getTransactionReceipt",
+                    "params": [tx_hash],
+                })
+            resp.raise_for_status()
+            data = resp.json()
+        except httpx.TimeoutException:
+            return False, "EVM RPC timeout"
+        except Exception as exc:
+            return False, f"EVM RPC error: {exc}"
+
+        result = data.get("result")
+        if result is None:
+            return False, "transaction not found or not yet mined"
+        if result.get("status") != "0x1":
+            return False, "transaction reverted on-chain"
+
+        # keccak256("Transfer(address,address,uint256)")
+        TRANSFER_TOPIC = "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef"
+        recipient_padded = "0x" + authorization.recipient.lower().lstrip("0x").zfill(64)
+
+        for log in result.get("logs", []):
+            topics = log.get("topics", [])
+            if (
+                log.get("address", "").lower() == contract.lower()
+                and len(topics) >= 3
+                and topics[0].lower() == TRANSFER_TOPIC
+                and topics[2].lower() == recipient_padded
+            ):
+                raw_amount = int(log.get("data", "0x0"), 16)
+                if raw_amount >= expected_min:
+                    return True, None
+                return False, f"transfer amount {raw_amount} below required {expected_min}"
+
+        return False, "no matching USDC Transfer log found"
+
+    async def _verify_solana(
+        self, authorization: PaymentAuthorization, tx_hash: str
+    ) -> tuple[bool, Optional[str]]:
+        """Verify an SPL USDC transfer on Solana via JSON-RPC."""
+        from config.settings import settings
+        rpc_url = settings.intelligence_graph.commerce_solana_rpc
+
+        mint = _ASSET_CONTRACT.get((authorization.asset_symbol, authorization.chain))
+        decimals = _ASSET_DECIMALS.get(authorization.asset_symbol, 6)
+        expected_min = int(
+            (Decimal(str(authorization.amount_usd)) * Decimal(10 ** decimals))
+            .to_integral_value(rounding=ROUND_CEILING)
+        )
+
+        try:
+            async with httpx.AsyncClient(timeout=10.0) as client:
+                resp = await client.post(rpc_url, json={
+                    "jsonrpc": "2.0", "id": 1,
+                    "method": "getTransaction",
+                    "params": [tx_hash, {"encoding": "jsonParsed", "maxSupportedTransactionVersion": 0}],
+                })
+            resp.raise_for_status()
+            data = resp.json()
+        except httpx.TimeoutException:
+            return False, "Solana RPC timeout"
+        except Exception as exc:
+            return False, f"Solana RPC error: {exc}"
+
+        result = data.get("result")
+        if result is None:
+            return False, "transaction not found"
+        if result.get("meta", {}).get("err") is not None:
+            return False, "transaction failed on-chain"
+
+        instructions = (
+            result.get("transaction", {}).get("message", {}).get("instructions", [])
+        )
+        inner: list = []
+        for group in result.get("meta", {}).get("innerInstructions", []):
+            inner.extend(group.get("instructions", []))
+
+        for ix in instructions + inner:
+            if ix.get("program") != "spl-token":
+                continue
+            parsed = ix.get("parsed", {})
+            ix_type = parsed.get("type", "")
+            info = parsed.get("info", {})
+            if ix_type not in ("transfer", "transferChecked"):
+                continue
+            if mint and info.get("mint") and info["mint"] != mint:
+                continue
+            if info.get("destination") != authorization.recipient:
+                continue
+            raw = info.get("amount") or info.get("tokenAmount", {}).get("amount", "0")
+            if int(raw) >= expected_min:
+                return True, None
+            return False, f"transfer amount {raw} below required {expected_min}"
+
+        return False, "no matching SPL token transfer found"
 
     async def _emit(self, topic: Topic, tenant_id: str, payload: dict) -> None:
         try:

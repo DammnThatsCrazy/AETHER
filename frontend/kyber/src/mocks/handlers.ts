@@ -282,6 +282,25 @@ export const handlers = [
   http.get(`${API}/v1/cis/retrieval`, () => ok({ items: [], count: 0 })),
   http.get(`${API}/v1/cis/reasoning`, () => ok({ chains: [], count: 0 })),
 
+  // Dune feeder
+  http.get(`${API}/v1/admin/dune-feeder/health`, () => ok({
+    status: 'ok',
+    total_bronze_records: 0,
+    total_silver_records: 0,
+    total_gold_records: 0,
+    unique_source_tags: 0,
+    rejection_rate: 0,
+    last_ingest_at: null,
+    last_ingest_source_tag: null,
+    graph_isolation_enforced: true,
+  })),
+  http.get(`${API}/v1/admin/dune-feeder/gold`, () => ok({ records: [], record_count: 0 })),
+  http.post(`${API}/v1/admin/dune-feeder/ingest`, () => ok({ rows_submitted: 0, rows_accepted: 0, rows_rejected: 0, source_tag: '' })),
+  http.post(`${API}/v1/admin/dune-feeder/rollback`, () => ok({ source_tag: '', records_deleted: 0 })),
+  http.post(`${API}/v1/admin/dune-feeder/promote/:source_tag`, ({ params }) => ok({ source_tag: params.source_tag, rows_promoted: 0 })),
+  http.post(`${API}/v1/admin/dune-feeder/materialize-gold`, () => ok({ source_tag: '', gold_records_created: 0 })),
+  http.get(`${API}/v1/admin/dune-feeder/audit/:source_tag`, ({ params }) => ok({ source_tag: params.source_tag, tenant_scope: null, record_count: 0, records: [] })),
+
   // Investigations
   http.get(`${API}/v1/investigations`, () => ok({ investigations: MOCK_CASES, cases: MOCK_CASES, count: MOCK_CASES.length })),
   http.post(`${API}/v1/investigations`, async ({ request }) => {

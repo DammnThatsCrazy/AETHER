@@ -16,7 +16,7 @@ related:
   - ai/kyber-strategic-observability
   - ai/playbooks
   - ai/recommendation-families
-last_synced_commit: 48fb9d4
+last_synced_commit: c318952
 ---
 
 # Kyber Revenue Intelligence
@@ -60,6 +60,27 @@ GET /v1/admin/kyber/revenue-opportunities?window=90d
 ```
 
 The response returns an internal opportunity feed. Tenant-level account health is allowed for Olympus operators; cross-tenant opportunity rows use aggregate product signals and operational diagnostics rather than raw tenant evidence.
+
+## Agentic operator endpoints
+
+Kyber operators can inspect per-tenant agentic activity and economic health via:
+
+| Endpoint | Description |
+|---|---|
+| `GET /operator/agentic/overview` | Cross-tenant aggregate: active agents, active delegations, total spend, subagent count, abandoned payment count, top protocols/providers/capabilities, recent failures |
+| `GET /operator/agentic/agents/{agent_id}` | Single agent detail: config, behavior profile, intent and settlement counts, recent executions |
+| `GET /operator/agentic/authorization-violations` | Delegations that exceeded their granted scope (revoked entries as proxy signal) |
+| `GET /operator/agentic/spend-limits` | Agents where total spend exceeds 3× the per-tenant average — potential budget overruns |
+| `GET /operator/agentic/trust` | Agent behavior profiles ranked by risk_score for trust triage |
+| `GET /operator/agentic/x402/flows` | Recent x402 payment lifecycle flows across tenants |
+| `GET /operator/agentic/x402/failures` | Recent payment failures for remediation |
+| `GET /operator/agentic/x402/timeouts` | Payment timeout events |
+| `GET /operator/agentic/settlements` | Recent settlement events |
+| `GET /operator/agentic/delegations` | Active delegation grants |
+| `GET /operator/agentic/subagents` | Registered subagent relationships |
+| `GET /operator/agentic/anomalies` | Behavioral anomaly signals |
+
+All endpoints require Kyber operator authentication and are cross-tenant read-only.
 
 ## Governance
 

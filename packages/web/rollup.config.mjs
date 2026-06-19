@@ -54,4 +54,18 @@ export default [
     ],
     plugins: sharedPlugins(),
   },
+  // React browser wrapper — @aether/web/react
+  {
+    input: 'src/react.tsx',
+    external: ['react', 'react/jsx-runtime', '@aether/web'],
+    output: [
+      {
+        file: 'dist/react.js',
+        format: 'esm',
+        sourcemap: true,
+        banner: `/* @aether/web/react v${SDK_VERSION} */`,
+      },
+    ],
+    plugins: sharedPlugins(),
+  },
 ];

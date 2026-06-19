@@ -1441,6 +1441,32 @@ export const api = {
       // ── Connector health (aggregate-only) ─────────────────────────────────
       connectorsOverview: () =>
         restClient.get('/v1/admin/kyber/connectors/overview', wrap(unknownSchema)).then(r => r.data),
+
+      // ── Dune feeder health ────────────────────────────────────────────────
+      duneFeederHealth: () =>
+        restClient.get('/v1/admin/dune-feeder/health', wrap(unknownSchema)).then(r => r.data),
+      duneFeederGold: (sourceTag?: string) =>
+        restClient.get(`/v1/admin/dune-feeder/gold${sourceTag ? `?source_tag=${encodeURIComponent(sourceTag)}` : ''}`, wrap(unknownSchema)).then(r => r.data),
+
+      // ── OODA Suggestion Intelligence (operator view) ───────────────────
+      suggestionsList: (params?: { tenant_id?: string; status?: string; priority?: string; limit?: number; offset?: number }) =>
+        restClient.get(`/v1/admin/kyber/suggestions${buildQS({ ...params })}`, wrap(unknownSchema)).then(r => r.data),
+      suggestionsSummary: (tenantId?: string) =>
+        restClient.get(`/v1/admin/kyber/suggestions/summary${buildQS({ tenant_id: tenantId })}`, wrap(unknownSchema)).then(r => r.data),
+      suggestionsReviewQueue: (limit = 50) =>
+        restClient.get(`/v1/admin/kyber/suggestions/review-queue${buildQS({ limit })}`, wrap(unknownSchema)).then(r => r.data),
+      suggestionsQuality: () =>
+        restClient.get('/v1/admin/kyber/suggestions/quality', wrap(unknownSchema)).then(r => r.data),
+      suggestionsOutcomes: (tenantId?: string) =>
+        restClient.get(`/v1/admin/kyber/suggestions/outcomes${buildQS({ tenant_id: tenantId })}`, wrap(unknownSchema)).then(r => r.data),
+      suggestion: (suggestionId: string) =>
+        restClient.get(`/v1/admin/kyber/suggestions/${suggestionId}`, wrap(unknownSchema)).then(r => r.data),
+      approveSuggestion: (suggestionId: string, body: { notes?: string } = {}) =>
+        restClient.post(`/v1/suggestions/${suggestionId}/approve`, wrap(unknownSchema), body).then(r => r.data),
+      rejectSuggestion: (suggestionId: string, body: { reason: string; notes?: string }) =>
+        restClient.post(`/v1/suggestions/${suggestionId}/reject`, wrap(unknownSchema), body).then(r => r.data),
+      suppressSuggestion: (suggestionId: string, body: { reason: string; suppress_duration_hours?: number }) =>
+        restClient.post(`/v1/suggestions/${suggestionId}/suppress`, wrap(unknownSchema), body).then(r => r.data),
     },
   },
 

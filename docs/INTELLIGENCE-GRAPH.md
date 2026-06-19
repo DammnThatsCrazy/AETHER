@@ -12,7 +12,7 @@ source_files:
 canonical_owner: graph@aether
 estimated_read_minutes: 15
 toc_depth: 3
-last_synced_commit: 48fb9d4
+last_synced_commit: e8d95a8
 ---
 # Unified On-Chain Intelligence Graph v8.9.0
 
@@ -117,6 +117,8 @@ Captures orchestration, hiring, payments, and protocol composition between auton
 - **Protocol composition:** Agents consuming other agents' exposed services via x402 micropayments
 
 ## Graph Schema
+
+`shared/graph/economic_schema.py` — `EconomicGraphSchema` declares all economic vertex and edge types (PAYMENT_REQUIREMENT, PAYMENT_AUTHORIZATION, SETTLEMENT, ENTITLEMENT, GRANTS_ACCESS_TO, etc.) used by L3b+. `shared/graph/graph_contract.py` — `GraphContract` is the authoritative Python schema registry; it mirrors the TypeScript `graph-contract.ts` and is the single source for vertex/edge type enumerations used by mutation services and tests.
 
 ### Node Types (6 new)
 

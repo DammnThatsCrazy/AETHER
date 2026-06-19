@@ -10,6 +10,20 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ### SDK Productization Alignment
 
+#### Added — SDK productization pass
+
+- iOS health agent (`AetherHealthAgent.swift`): fleet heartbeat with signed payload including `queue_depth`, `endpoint_latency_ms`, `schema_hash`, and `ingestion_success_rate`.
+- Android health agent (`AetherHealthAgent.kt`): same fleet heartbeat capabilities as iOS.
+- iOS/Android durable offline queue: file-based event persistence survives app crash (max 1000 events per platform).
+- Granular agent lifecycle emitters (19 methods) on iOS, Android, and React Native bridge: `registered`, `updated`, `authorized`, `deauthorized`, `capabilityGranted`, `capabilityRevoked`, `taskCreated`, `taskDecomposed`, `taskStarted`, `taskCompleted`, `taskFailed`, `toolCalled`, `resourceRequested`, `delegatedTask`, `subagentSpawned`, `policyEvaluated`, `handoff`, `escalatedToHuman`, `outcomeRecorded`.
+- Granular x402 lifecycle emitters (14 methods) on iOS, Android, and React Native bridge: `resourceRequested`, `paymentRequired`, `quoteReceived`, `authorizationRequested`, `authorizationResolved`, `paymentIntentCreated`, `paymentSubmitted`, `paymentSettled`, `paymentFailed`, `paymentTimeout`, `receiptVerified`, `accessGranted`, `accessDenied`, `refundOrReversal`.
+- Native rewards client: 4 thin observation emitters (`rewardActionQueued`, `rewardProofGenerated`, `rewardDelivered`, `rewardClaimSubmitted`) on iOS, Android, and React Native bridge.
+- Full ecommerce workflow additions: `trackRemoveFromCart`, `trackApplyCoupon`, `trackBeginCheckout` on iOS, Android, and React Native bridge.
+- React browser wrapper (`packages/web/src/react.tsx`): `AetherProvider`, `useAether`, `useIdentity`, `useConsentState`, `useScreenOrPageTracking`, `useJourneyResumed`, SSR-safe.
+- Public `error()` API on Web SDK: accepts `(message, error?, properties?)`, auto-captures `name`/`stack` from `Error` instances, emits canonical `error` event type (analytics consent gate).
+- Comprehensive test suites: `packages/shared/events-registry.test.ts`, `packages/shared/consent-model.test.ts`, `packages/shared/ingestion-envelope.test.ts`, `packages/web/test/error-emitter.test.ts`, `packages/web/test/consent-gating.test.ts`, `packages/web/test/journey-lifecycle.test.ts`.
+- `docs/reports/SDK_PRODUCTION_READINESS_AUDIT.md`: full 4-platform audit with Tier A/B/C verification evidence.
+
 #### Fixed — Release blockers for SDK 8.9.0
 
 - Synchronized SDK package versions, runtime constants, native metadata, generated docs, and release tooling around the 8.9.0 release line.
@@ -18,6 +32,15 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 - Replaced Android raw `session_start` emission with canonical `track` + `properties.event = "session_start"`.
 - Expanded React Native, iOS, and Android SDK surfaces for commerce/access, wallet contract actions, agent events, x402 payments, capability flags, and release validation coverage.
 - Added release drift validation, SDK release validation CI, npm/CocoaPods/Maven dry-run artifact checks, and an SDK release readiness report.
+- iOS/Android MetricKit payloads now emit canonical `performance` event type instead of `track`.
+- iOS/Android identity resolve POST body now includes `fingerprint_signals` breakdown (`canvas_hash`, `webgl_renderer`, `timezone`, `language`).
+- Platform parity matrix updated: health heartbeat, durable queue, agent/x402 emitters now ✔ on iOS/Android.
+
+#### Changed — Platform parity
+
+- Health heartbeat status updated from `Partial` to `✔` on iOS and Android after fleet heartbeat agent implementation.
+- Durable offline queue status updated from `Partial` to `✔` on iOS and Android after file-based persistence implementation.
+- Agent lifecycle emitters and x402 lifecycle emitters promoted from best-effort to full coverage on iOS, Android, and React Native.
 
 
 ### Hosted Agent Control Plane

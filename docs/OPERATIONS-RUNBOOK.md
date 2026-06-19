@@ -12,7 +12,7 @@ source_files:
 canonical_owner: platform@aether
 estimated_read_minutes: 12
 toc_depth: 3
-last_synced_commit: 48fb9d4
+last_synced_commit: e711d05
 ---
 # Operations Runbook v8.9.0
 
@@ -274,6 +274,8 @@ at the HTTP layer but verifies a Stripe-signed payload — failures should alert
 | Task | Module | Cadence |
 |---|---|---|
 | Monthly overage invoice cron | `services/billing/cron.run_monthly_overage_cron` | end-of-month billing cycle |
+| SLA expiry worker | `services/notification_intelligence.lifecycle.start_sla_worker` | continuous (event-driven) |
+| Dune polling worker | `services/dune_feeder.scheduler.start_dune_polling_worker` | 60 s tick; per-schedule cadence ≥ 300 s |
 
 These start during app `lifespan` startup and are cancelled on shutdown. Restart loops
 during deploys are normal; persistent failures should page billing oncall.
@@ -366,6 +368,34 @@ Services **unaffected** (Neptune is not in the hot path):
 ### Post-Recovery Verification
 
 Circuit breaker transitions to `"closed"` automatically after the first successful Gremlin request. Confirm via `GET /v1/diagnostics/circuit-breakers`.
+
+---
+
+## Reward Enablement (A6) Operations
+
+### Oracle Signer Key Safety
+
+The reward proof signer uses `ORACLE_SIGNER_KEY`. In non-local environments, the default Hardhat/Anvil test key (`ac0974bec...`) is **blocked at startup** — the process raises `RuntimeError` before accepting traffic.
+
+| Env | Behavior |
+|-----|----------|
+| `AETHER_ENV=local` | Default test key allowed (development only) |
+| `AETHER_ENV=staging/production` | `ORACLE_SIGNER_KEY` must be set via secret manager; test key rejected |
+
+If the backend fails to start with `ORACLE_SIGNER_KEY not set` or `Default Hardhat/Anvil test key detected`, set the key via the configured secret manager ref in `REWARD_SIGNER_KEY_REF`.
+
+### Reward Delivery Monitoring
+
+| Alert | Action |
+|-------|--------|
+| Webhook delivery failures | Check `reward_action_payloads` rows where `status='failed'`; review `last_delivery_error`; re-trigger via `POST /v1/rewards/actions/{id}/deliver` |
+| Dead-letter queue depth | Kafka DLT `aether.rewards.delivery.dlq` — inspect failed payloads; fix rail config → re-enqueue |
+| Proof generation failures | `ORACLE_SIGNER_KEY` misconfigured or contract not in tenant registry; check `reward_proofs` status |
+| Fraud block rate spike | Legitimate `blocked_fraud` — review fraud thresholds; check `reward_eligibility_decisions` where `decision='blocked_fraud'` |
+
+### Durable Storage Guard
+
+`REWARD_REQUIRE_DURABLE_STORE=true` causes startup failure in non-local environments if database is unreachable. All reward state (campaigns, rules, decisions, proofs, payloads, audit log) requires PostgreSQL — there is no in-memory fallback in production.
 
 ---
 

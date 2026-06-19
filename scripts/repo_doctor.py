@@ -376,6 +376,17 @@ def main(argv: Sequence[str] | None = None) -> None:
         else:
             skip("Python tests (ML)", f"{ml_tests_dir} not found", results)
 
+        # ML registry consistency — CI gate
+        ml_registry_script = ROOT / "scripts" / "validate_ml_registry.py"
+        if ml_registry_script.exists():
+            run(
+                ["python", str(ml_registry_script)],
+                name="ML registry consistency",
+                results=results,
+                stop_on_failure=stop,
+                remediation="fix common/model_registry.py, common/feature_contracts.py, or training/configs/model_configs.py",
+            )
+
     _print_summary(results)
     failed = [r for r in results if not r.passed and not r.skipped]
     sys.exit(1 if failed else 0)

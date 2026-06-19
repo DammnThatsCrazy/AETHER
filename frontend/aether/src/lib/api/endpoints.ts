@@ -392,6 +392,47 @@ export const api = {
 
     queueStats: () =>
       restClient.get('/v1/rewards/queue/stats', wrap(unknownSchema)).then(r => r.data),
+
+    // Decisions (eligibility verification results)
+    listDecisions: (params?: { decision?: string; campaign_id?: string; limit?: number }) =>
+      restClient.get(`/v1/rewards/decisions${buildQS({ ...params })}`, wrap(unknownSchema)).then(r => r.data),
+
+    getDecision: (decisionId: string) =>
+      restClient.get(`/v1/rewards/decisions/${decisionId}`, wrap(unknownSchema)).then(r => r.data),
+
+    // Actions (reward action payloads ready for tenant execution)
+    listActions: (params?: { status?: string; rail?: string; limit?: number }) =>
+      restClient.get(`/v1/rewards/actions${buildQS({ ...params })}`, wrap(unknownSchema)).then(r => r.data),
+
+    approveAction: (actionId: string) =>
+      restClient.post(`/v1/rewards/actions/${actionId}/approve`, wrap(unknownSchema), {}).then(r => r.data),
+
+    rejectAction: (actionId: string, reason: string) =>
+      restClient.post(`/v1/rewards/actions/${actionId}/reject`, wrap(unknownSchema), { reason }).then(r => r.data),
+
+    // Rails (delivery rail configuration)
+    listRails: () =>
+      restClient.get('/v1/rewards/rails', wrap(unknownSchema)).then(r => r.data),
+
+    getRail: (railId: string) =>
+      restClient.get(`/v1/rewards/rails/${railId}`, wrap(unknownSchema)).then(r => r.data),
+
+    configureRail: (railId: string, config: Record<string, unknown>) =>
+      restClient.put(`/v1/rewards/rails/${railId}`, wrap(unknownSchema), config).then(r => r.data),
+
+    verifyRail: (railId: string) =>
+      restClient.post(`/v1/rewards/rails/${railId}/verify`, wrap(unknownSchema), {}).then(r => r.data),
+
+    // Reward campaigns (eligibility rule sets)
+    createCampaign: (campaign: Record<string, unknown>) =>
+      restClient.post('/v1/rewards/campaigns', wrap(unknownSchema), campaign).then(r => r.data),
+
+    createCampaignRule: (campaignId: string, rule: Record<string, unknown>) =>
+      restClient.post(`/v1/rewards/campaigns/${campaignId}/rules`, wrap(unknownSchema), rule).then(r => r.data),
+
+    // Proofs (on-chain claim proofs)
+    listProofs: (params?: { status?: string; limit?: number }) =>
+      restClient.get(`/v1/rewards/proofs${buildQS({ ...params })}`, wrap(unknownSchema)).then(r => r.data),
   },
 
   // ── Attribution "Where" ───────────────────────────────────────────────────

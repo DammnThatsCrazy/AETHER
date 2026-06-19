@@ -130,6 +130,36 @@ class AetherSDK implements AetherSDKInterface {
     this.sessionManager?.recordEvent();
   }
 
+  /**
+   * Emit a canonical 'error' event (gated on analytics consent).
+   * Automatically extracts message, name, and stack from an Error instance.
+   *
+   * @param message  Human-readable error description
+   * @param error    Optional Error instance (stack/name auto-captured)
+   * @param properties  Additional key/value context to attach
+   */
+  error(message: string, error?: Error | unknown, properties?: Record<string, unknown>): void {
+    const errorProps: Record<string, unknown> = {
+      message,
+      ...properties,
+    };
+
+    if (error instanceof Error) {
+      errorProps['name'] = error.name;
+      errorProps['stack'] = error.stack;
+      // Preserve a clean message if not already overridden by caller
+      if (!errorProps['message']) {
+        errorProps['message'] = error.message;
+      }
+    } else if (error !== undefined && error !== null) {
+      // Non-Error throwable (string, object, etc.)
+      errorProps['thrown'] = String(error);
+    }
+
+    this.enqueueEvent('error', errorProps);
+    this.sessionManager?.recordEvent();
+  }
+
   pageView(page?: string, properties?: Record<string, unknown>): void {
     if (typeof window === 'undefined') return;
     const pageCtx = getPageContext();
@@ -447,12 +477,49 @@ class AetherSDK implements AetherSDKInterface {
   };
 
   agent: AgentInterface = {
+    // Lifecycle emitters — granular events
+    registered: (props) => this.enqueueEvent('agent_registered', props as Record<string, unknown>),
+    updated: (props) => this.enqueueEvent('agent_updated', props as Record<string, unknown>),
+    authorized: (props) => this.enqueueEvent('agent_authorized', props as Record<string, unknown>),
+    deauthorized: (props) => this.enqueueEvent('agent_deauthorized', props as Record<string, unknown>),
+    capabilityGranted: (props) => this.enqueueEvent('agent_capability_granted', props as Record<string, unknown>),
+    capabilityRevoked: (props) => this.enqueueEvent('agent_capability_revoked', props as Record<string, unknown>),
+    taskCreated: (props) => this.enqueueEvent('agent_task_created', props as Record<string, unknown>),
+    taskDecomposed: (props) => this.enqueueEvent('agent_task_decomposed', props as Record<string, unknown>),
+    taskStarted: (props) => this.enqueueEvent('agent_task_started', props as Record<string, unknown>),
+    taskCompleted: (props) => this.enqueueEvent('agent_task_completed', props as Record<string, unknown>),
+    taskFailed: (props) => this.enqueueEvent('agent_task_failed', props as Record<string, unknown>),
+    toolCalled: (props) => this.enqueueEvent('agent_tool_called', props as Record<string, unknown>),
+    resourceRequested: (props) => this.enqueueEvent('agent_resource_requested', props as Record<string, unknown>),
+    delegatedTask: (props) => this.enqueueEvent('agent_delegated_task', props as Record<string, unknown>),
+    subagentSpawned: (props) => this.enqueueEvent('agent_subagent_spawned', props as Record<string, unknown>),
+    policyEvaluated: (props) => this.enqueueEvent('agent_policy_evaluated', props as Record<string, unknown>),
+    handoff: (props) => this.enqueueEvent('agent_handoff', props as Record<string, unknown>),
+    escalatedToHuman: (props) => this.enqueueEvent('agent_escalated_to_human', props as Record<string, unknown>),
+    outcomeRecorded: (props) => this.enqueueEvent('agent_outcome_recorded', props as Record<string, unknown>),
+    // Legacy emitters — kept for backward compatibility
     task: (props) => this.enqueueEvent('agent_task', props as Record<string, unknown>),
     decision: (props) => this.enqueueEvent('agent_decision', props as Record<string, unknown>),
     interaction: (props) => this.enqueueEvent('a2h_interaction', props as Record<string, unknown>),
   };
 
   x402: X402Interface = {
+    // Lifecycle emitters — granular events
+    resourceRequested: (props) => this.enqueueEvent('x402_resource_requested', props as Record<string, unknown>),
+    paymentRequired: (props) => this.enqueueEvent('x402_payment_required', props as Record<string, unknown>),
+    quoteReceived: (props) => this.enqueueEvent('x402_quote_received', props as Record<string, unknown>),
+    authorizationRequested: (props) => this.enqueueEvent('x402_authorization_requested', props as Record<string, unknown>),
+    authorizationResolved: (props) => this.enqueueEvent('x402_authorization_resolved', props as Record<string, unknown>),
+    paymentIntentCreated: (props) => this.enqueueEvent('x402_payment_intent_created', props as Record<string, unknown>),
+    paymentSubmitted: (props) => this.enqueueEvent('x402_payment_submitted', props as Record<string, unknown>),
+    paymentSettled: (props) => this.enqueueEvent('x402_payment_settled', props as Record<string, unknown>),
+    paymentFailed: (props) => this.enqueueEvent('x402_payment_failed', props as Record<string, unknown>),
+    paymentTimeout: (props) => this.enqueueEvent('x402_payment_timeout', props as Record<string, unknown>),
+    receiptVerified: (props) => this.enqueueEvent('x402_receipt_verified', props as Record<string, unknown>),
+    accessGranted: (props) => this.enqueueEvent('x402_access_granted', props as Record<string, unknown>),
+    accessDenied: (props) => this.enqueueEvent('x402_access_denied', props as Record<string, unknown>),
+    refundOrReversal: (props) => this.enqueueEvent('x402_refund_or_reversal', props as Record<string, unknown>),
+    // Legacy emitter — kept for backward compatibility
     payment: (props) => this.enqueueEvent('x402_payment', props as Record<string, unknown>),
   };
 

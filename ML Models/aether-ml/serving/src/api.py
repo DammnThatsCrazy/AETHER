@@ -215,6 +215,50 @@ class HealthResponse(BaseModel):
     uptime_seconds: float
 
 
+class IdentityResolutionRequest(BaseModel):
+    """Request schema for real-time identity resolution (single pair)."""
+
+    profile_pair_id: str
+    features: dict[str, Any]
+
+
+class IdentityResolutionResponse(BaseModel):
+    """Response schema for real-time identity resolution."""
+
+    profile_pair_id: str
+    is_same_entity: bool
+    merge_probability: float
+    confidence: float
+    latency_ms: float
+    model_version: str
+
+
+class AnomalyDetectionRequest(BaseModel):
+    """Request schema for real-time anomaly detection."""
+
+    record_id: str
+    features: dict[str, Any]
+
+
+class AnomalyDetectionResponse(BaseModel):
+    """Response schema for anomaly detection."""
+
+    record_id: str
+    is_anomaly: bool
+    anomaly_score: float
+    latency_ms: float
+
+
+class ReadinessResponse(BaseModel):
+    """Readiness probe response — used by load balancers for traffic gating."""
+
+    ready: bool
+    reason: Optional[str] = None
+    models_loaded: list[str]
+    sla_violation_rate: float
+    freshness_summary: dict[str, Any]
+
+
 class ModelInfo(BaseModel):
     """Metadata about a loaded model."""
 
@@ -487,6 +531,23 @@ class ModelServer:
             )
         return info
 
+    def load_baseline(self, model_id: str) -> "pd.DataFrame | None":
+        """Load the drift detection baseline sample for a model, if available.
+
+        Returns the reference DataFrame saved by the training pipeline, or None
+        if no baseline exists (model not yet trained, or trained before baseline
+        saving was added).
+        """
+        baseline_path = self.models_dir / model_id / "baseline.joblib"
+        if not baseline_path.exists():
+            return None
+        try:
+            import joblib as _jl
+            return _jl.load(baseline_path)
+        except Exception as exc:
+            logger.debug("Failed to load drift baseline for %s: %s", model_id, exc)
+            return None
+
     def predict(self, model_name: str, features: dict[str, Any]) -> Any:
         """Run single-instance inference through the named model.
 
@@ -591,6 +652,103 @@ class ModelServer:
 server = ModelServer()
 
 # ---------------------------------------------------------------------------
+# Freshness SLA tracker — lazy import so serving starts if monitoring module
+# is unavailable (e.g., in stripped container images).
+# ---------------------------------------------------------------------------
+try:
+    from monitoring.monitor import DataFreshnessSLATracker as _DataFreshnessSLATracker
+    _freshness_tracker: "_DataFreshnessSLATracker | None" = _DataFreshnessSLATracker()
+except Exception:  # ImportError or any init failure
+    _freshness_tracker = None
+
+try:
+    from monitoring.monitor import ExtractionDefenseMonitor as _ExtractionDefenseMonitor
+    _extraction_monitor: "_ExtractionDefenseMonitor | None" = _ExtractionDefenseMonitor()
+except Exception:
+    _extraction_monitor = None
+
+# ---------------------------------------------------------------------------
+# Per-model prediction input buffer — holds last 500 feature dicts per model
+# for drift detection. In-memory only; cleared on restart. Drift detection
+# skips models with fewer than 30 buffered rows.
+# ---------------------------------------------------------------------------
+from collections import deque as _deque
+_prediction_buffers: dict[str, "_deque[dict[str, Any]]"] = {
+    m: _deque(maxlen=500) for m in MODEL_NAMES
+}
+
+# Stores the output of the most recent drift detection run (updated by the
+# background task every 300s). Empty until the first run completes.
+_last_drift_results: dict[str, Any] = {}
+
+# ---------------------------------------------------------------------------
+# Drift detection helpers
+# ---------------------------------------------------------------------------
+
+def _run_drift_check() -> None:
+    """Compare per-model prediction buffers against training baselines.
+
+    Called by the background task every 300s. Skips models with fewer than
+    30 buffered predictions or no baseline on disk. Results are stored in
+    _last_drift_results for the /v1/monitoring/drift endpoint.
+    """
+    try:
+        from monitoring.monitor import MonitoringPipeline
+    except ImportError:
+        return
+
+    pipeline = MonitoringPipeline()
+    reference_data: dict[str, Any] = {}
+    current_data: dict[str, Any] = {}
+    model_metrics: dict[str, Any] = {}
+
+    for model_id in MODEL_NAMES:
+        buffer = list(_prediction_buffers[model_id])
+        if len(buffer) < 30:
+            continue
+        reference_df = server.load_baseline(model_id)
+        if reference_df is None or len(reference_df) < 30:
+            continue
+        current_df = pd.DataFrame(buffer)
+        numeric_features = list(reference_df.select_dtypes(include="number").columns)
+        common_cols = [c for c in numeric_features if c in current_df.columns]
+        if not common_cols:
+            continue
+        reference_data[model_id] = reference_df[common_cols]
+        current_data[model_id] = current_df[common_cols]
+        model_metrics[model_id] = {
+            "current": {},
+            "baseline": {},
+            "numeric_features": common_cols,
+            "categorical_features": [],
+        }
+
+    if not reference_data:
+        return
+
+    try:
+        results = pipeline.run(reference_data, current_data, model_metrics)
+        _last_drift_results.clear()
+        _last_drift_results.update(results)
+        _last_drift_results["_buffer_sizes"] = {
+            m: len(b) for m, b in _prediction_buffers.items()
+        }
+    except Exception as exc:
+        logger.warning("Drift pipeline run failed: %s", exc)
+
+
+async def _drift_check_periodic(interval: int = 300) -> None:
+    """Background coroutine that runs drift detection every `interval` seconds."""
+    import asyncio
+    while True:
+        await asyncio.sleep(interval)
+        try:
+            _run_drift_check()
+        except Exception as exc:
+            logger.warning("Drift check error: %s", exc)
+
+
+# ---------------------------------------------------------------------------
 # Shared router — importable by the consolidated aether-app backend (E2).
 # All predict/defense routes are registered here so they can be mounted at
 # any prefix. The standalone app below includes this router after setup.
@@ -635,8 +793,15 @@ async def lifespan(app: FastAPI):
         except ImportError:
             pass
 
+    # Start background drift detection task (runs every 300s; degrades gracefully)
+    import asyncio as _asyncio
+    _drift_task = _asyncio.create_task(_drift_check_periodic(interval=300))
+    logger.info("Drift detection background task started (interval=300s)")
+
     yield
 
+    _drift_task.cancel()
+    logger.info("Drift detection background task cancelled")
     if _cleanup_task is not None:
         _cleanup_task.cancel()
         logger.info("Extraction defense cleanup task cancelled")
@@ -718,6 +883,24 @@ async def extraction_defense_middleware(request: Request, call_next):
         model_name=model_name,
         batch_size=batch_size,
     )
+
+    if _extraction_monitor is not None:
+        _ra = pre_result.risk_assessment
+        _tier_band = {"normal": "green", "elevated": "yellow", "high": "orange", "critical": "red"}
+        _extraction_monitor.record_extraction_event(
+            risk_score=_ra.risk_score if _ra else 0.0,
+            band=_tier_band.get(_ra.tier, "unknown") if _ra else "unknown",
+            signals=[
+                {"name": "velocity", "value": _ra.velocity_signal},
+                {"name": "pattern", "value": _ra.pattern_signal},
+                {"name": "similarity", "value": _ra.similarity_signal},
+                {"name": "entropy", "value": _ra.entropy_signal},
+                {"name": "canary", "value": _ra.canary_signal},
+            ] if _ra else [],
+            policy_action="deny" if pre_result.blocked else "allow",
+            model_name=model_name,
+            is_batch=batch_size > 1,
+        )
 
     if pre_result.blocked:
         status = 429 if "rate limit" in pre_result.block_reason.lower() else 403
@@ -808,6 +991,43 @@ async def health() -> HealthResponse:
     )
 
 
+@router.get("/ready", response_model=ReadinessResponse)
+async def ready() -> ReadinessResponse:
+    """Readiness probe — used by load balancers to gate traffic.
+
+    Returns 200 when the service is ready to handle requests. Returns 503 if
+    feature freshness SLA violations exceed 10% of recent checks, indicating
+    that the online feature store is stale. Unlike /health, this endpoint may
+    be slightly slower (it reads SLA counters) and is NOT used for liveness.
+    """
+    models = server.loaded_models()
+    violation_rate = 0.0
+    summary: dict[str, Any] = {}
+    if _freshness_tracker is not None:
+        violation_rate = _freshness_tracker.get_violation_rate()
+        summary = _freshness_tracker.get_summary()
+
+    _SLA_RATE_THRESHOLD = 0.10
+    if violation_rate >= _SLA_RATE_THRESHOLD:
+        raise HTTPException(
+            status_code=503,
+            detail=ReadinessResponse(
+                ready=False,
+                reason=f"Freshness SLA violation rate {violation_rate:.1%} exceeds threshold {_SLA_RATE_THRESHOLD:.0%}",
+                models_loaded=models,
+                sla_violation_rate=round(violation_rate, 4),
+                freshness_summary=summary,
+            ).model_dump(),
+        )
+
+    return ReadinessResponse(
+        ready=True,
+        models_loaded=models,
+        sla_violation_rate=round(violation_rate, 4),
+        freshness_summary=summary,
+    )
+
+
 @router.get("/models")
 async def list_models() -> dict[str, list[dict[str, Any]]]:
     """Return metadata for every known model including load status."""
@@ -854,7 +1074,11 @@ async def predict_intent(req: IntentPredictionRequest, request: Request) -> Inte
     else:
         journey_stage = "awareness"
 
+    if _freshness_tracker is not None:
+        _freshness_tracker.check("intent_prediction", "behavioral_features", None)
+
     latency_ms = (time.perf_counter() - t0) * 1000
+    _prediction_buffers["intent_prediction"].append(dict(req.features))
     return IntentPredictionResponse(
         session_id=req.session_id,
         predicted_action=str(predicted_action),
@@ -882,7 +1106,11 @@ async def predict_bot(req: BotDetectionRequest, request: Request) -> BotDetectio
 
     confidence = _apply_output_defense(request, float(np.max(proba)), req.features)
 
+    if _freshness_tracker is not None:
+        _freshness_tracker.check("bot_detection", "behavioral_features", None)
+
     latency_ms = (time.perf_counter() - t0) * 1000
+    _prediction_buffers["bot_detection"].append(dict(req.features))
     return BotDetectionResponse(
         session_id=req.session_id,
         is_bot=bool(prediction),
@@ -920,7 +1148,11 @@ async def predict_session_score(req: SessionScoreRequest, request: Request) -> S
     else:
         intervention = "none"
 
+    if _freshness_tracker is not None:
+        _freshness_tracker.check("session_scorer", "session_features", None)
+
     latency_ms = (time.perf_counter() - t0) * 1000
+    _prediction_buffers["session_scorer"].append(dict(req.features))
     return SessionScoreResponse(
         session_id=req.session_id,
         engagement_score=engagement,
@@ -966,7 +1198,11 @@ async def predict_churn(req: ChurnPredictionRequest, request: Request) -> ChurnP
         str(result["top_factor_3"].iloc[0]),
     ]
 
+    if _freshness_tracker is not None:
+        _freshness_tracker.check("churn_prediction", "behavioral_features", None)
+
     latency_ms = (time.perf_counter() - t0) * 1000
+    _prediction_buffers["churn_prediction"].append(dict(features))
     return ChurnPredictionResponse(
         identity_id=req.identity_id,
         churn_probability=round(churn_prob, 4),
@@ -997,10 +1233,36 @@ async def predict_ltv(req: LTVPredictionRequest, request: Request) -> LTVPredict
 
     ltv = _apply_output_defense(request, float(prediction[0]), features)
 
+    if _freshness_tracker is not None:
+        _freshness_tracker.check("ltv_prediction", "behavioral_features", None)
+
     latency_ms = (time.perf_counter() - t0) * 1000
+    _prediction_buffers["ltv_prediction"].append(dict(features))
     return LTVPredictionResponse(
         identity_id=req.identity_id,
         predicted_ltv=round(ltv, 2),
+        latency_ms=round(latency_ms, 2),
+    )
+
+
+@router.post("/v1/predict/anomaly", response_model=AnomalyDetectionResponse)
+async def predict_anomaly(req: AnomalyDetectionRequest, request: Request) -> AnomalyDetectionResponse:
+    """Detect anomalies in a single record.
+
+    Returns an anomaly flag, anomaly score (0–1), and latency. Use
+    ``/v1/predict/batch`` with ``model_name=anomaly_detection`` for bulk
+    screening.
+    """
+    t0 = time.perf_counter()
+    model = server.get_model("anomaly_detection")
+    df = pd.DataFrame([req.features])
+    score = _apply_output_defense(request, float(model.predict(df)[0]), req.features)
+    _prediction_buffers["anomaly_detection"].append(dict(req.features))
+    latency_ms = (time.perf_counter() - t0) * 1000
+    return AnomalyDetectionResponse(
+        record_id=req.record_id,
+        is_anomaly=score > 0.5,
+        anomaly_score=round(score, 4),
         latency_ms=round(latency_ms, 2),
     )
 
@@ -1091,6 +1353,61 @@ async def predict_attribution(req: AttributionRequest, request: Request) -> Attr
         attribution=attr_records,
         method=req.method,
         latency_ms=round(latency_ms, 2),
+    )
+
+
+@router.post("/v1/predict/identity", response_model=IdentityResolutionResponse)
+async def predict_identity(req: IdentityResolutionRequest, request: Request) -> IdentityResolutionResponse:
+    """Real-time identity resolution for a cross-device / cross-wallet profile pair.
+
+    Scores the probability that two profiles belong to the same entity using
+    device fingerprint similarity, behavioural similarity, temporal overlap,
+    and wallet linkage signals. This is a real-time single-pair endpoint —
+    bulk merging uses the offline BatchPredictor.
+
+    Requires eight features from the identity_resolution_v1 feature contract:
+    device_fingerprint_sim, behavioral_sim, temporal_overlap, shared_ip_count,
+    session_sequence_score, geo_distance, browser_match, os_match.
+    Optional: wallet_link_score (default 0.0).
+    """
+    t0 = time.perf_counter()
+
+    # Extraction defense pre-request check
+    defense = _get_defense_layer()
+    if defense is not None:
+        api_key = request.headers.get("X-API-Key", "anon")
+        pre = defense.pre_request(api_key, req.features)
+        if not pre.allowed:
+            raise HTTPException(status_code=429, detail="Request rate limited by extraction defense")
+        request.state.extraction_risk = pre.risk_score
+        request.state.extraction_disclosure = pre.disclosure
+
+    model = server.get_model("identity_resolution")
+
+    features = dict(req.features)
+    features.setdefault("wallet_link_score", 0.0)
+
+    df = pd.DataFrame([features])
+    raw = model.predict(df)
+    merge_probability = float(raw[0]) if hasattr(raw, "__len__") else float(raw)
+    merge_probability = max(0.0, min(1.0, merge_probability))
+
+    # Record SLA check for the identity feature group
+    if _freshness_tracker is not None:
+        _freshness_tracker.check("identity_resolution", "identity_features", None)
+
+    # Apply extraction defense perturbation
+    confidence = _apply_output_defense(request, merge_probability, features)
+
+    latency_ms = (time.perf_counter() - t0) * 1000
+    _prediction_buffers["identity_resolution"].append(dict(features))
+    return IdentityResolutionResponse(
+        profile_pair_id=req.profile_pair_id,
+        is_same_entity=confidence > 0.5,
+        merge_probability=round(merge_probability, 4),
+        confidence=round(confidence, 4),
+        latency_ms=round(latency_ms, 2),
+        model_version=getattr(model, "version", "unknown"),
     )
 
 
@@ -1260,6 +1577,53 @@ async def defense_canary_triggers():
             for t in triggers[-50:]  # last 50
         ],
     }
+
+
+@router.get("/v1/monitoring/freshness")
+async def freshness_status() -> dict[str, Any]:
+    """Return feature freshness SLA health summary.
+
+    Reports per-model SLA violation counts, violation rates, and maximum
+    observed feature age. Intended for monitoring dashboards and alerting;
+    not used by inference paths.
+    """
+    if _freshness_tracker is None:
+        return {
+            "enabled": False,
+            "total_checks": 0,
+            "total_violations": 0,
+            "violation_rate": 0.0,
+            "by_model": {},
+        }
+    return {"enabled": True, **_freshness_tracker.get_summary()}
+
+
+@router.get("/v1/monitoring/drift")
+async def drift_status() -> dict[str, Any]:
+    """Return latest per-model drift detection results.
+
+    Reports PSI/KS/JS divergence scores computed by the background drift
+    checker. Returns empty results when the baseline or prediction buffer
+    has insufficient data (< 30 rows). The background task runs every 300 s.
+    """
+    return {
+        "last_run": _last_drift_results.get("timestamp"),
+        "models": _last_drift_results.get("models", {}),
+        "buffer_sizes": {m: len(buf) for m, buf in _prediction_buffers.items()},
+    }
+
+
+@router.get("/v1/monitoring/extraction")
+async def extraction_monitor_status() -> dict[str, Any]:
+    """Return extraction defense monitoring summary.
+
+    Reports block rates, policy action distribution, band distribution, and
+    average risk scores. Returns ``{"enabled": false}`` when the extraction
+    defense monitor is unavailable.
+    """
+    if _extraction_monitor is None:
+        return {"enabled": False}
+    return {"enabled": True, **_extraction_monitor.get_summary()}
 
 
 # Mount the shared router on the standalone app so `uvicorn serving.src.api:app`

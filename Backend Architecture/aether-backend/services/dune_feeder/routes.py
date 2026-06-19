@@ -5,41 +5,35 @@ Admin-only API endpoints for the governed Dune feeder.
 All routes require admin or operator role.
 
 Endpoints:
-    POST /v1/admin/dune-feeder/ingest              Land a Dune query result in Bronze
-    GET  /v1/admin/dune-feeder/health              Feeder health status
-    POST /v1/admin/dune-feeder/rollback            Rollback by source_tag
-    GET  /v1/admin/dune-feeder/audit/{tag}         Audit trail for a source_tag (tenant-scoped)
-    POST /v1/admin/dune-feeder/promote/{tag}       Promote Bronze to Silver
-    POST /v1/admin/dune-feeder/materialize-gold    Materialize Gold from Silver
-    GET  /v1/admin/dune-feeder/gold                List Gold records
+    POST /v1/admin/dune-feeder/ingest                    Land a Dune query result in Bronze
+    GET  /v1/admin/dune-feeder/health                    Feeder health status
+    POST /v1/admin/dune-feeder/rollback                  Rollback by source_tag
+    GET  /v1/admin/dune-feeder/audit/{tag}               Audit trail for a source_tag (tenant-scoped)
+    POST /v1/admin/dune-feeder/promote/{tag}             Promote Bronze to Silver
+    POST /v1/admin/dune-feeder/materialize-gold          Materialize Gold from Silver
+    GET  /v1/admin/dune-feeder/gold                      List Gold records
+
+    POST /v1/admin/dune-feeder/schedule                  Register a scheduled Dune query poll
+    GET  /v1/admin/dune-feeder/schedule                  List scheduled query configs
+    GET  /v1/admin/dune-feeder/schedule/{schedule_id}    Get one schedule config + run status
+    DELETE /v1/admin/dune-feeder/schedule/{schedule_id}  Delete a schedule
+    POST /v1/admin/dune-feeder/schedule/{schedule_id}/run  Trigger an immediate poll run
 """
 
 from __future__ import annotations
 
-import os
 from typing import Optional
 
 from fastapi import APIRouter, Query, Request
 
-from shared.common.common import APIResponse, BadRequestError, NotFoundError, ServiceUnavailableError
+from shared.common.common import APIResponse, BadRequestError, NotFoundError
 from shared.logger.logger import get_logger, metrics
-
-_MEMORY_STORE_ENVS = frozenset({"local", "test"})
-
-
-def _require_memory_store_env() -> None:
-    """Raise 503 if running outside local/test — in-memory store is not durable."""
-    env = os.getenv("AETHER_ENV", "local")
-    if env not in _MEMORY_STORE_ENVS:
-        raise ServiceUnavailableError(
-            "Dune feeder in-memory store is only available in local/test environments. "
-            "Configure a persistent lake repository backend before enabling this endpoint in staging/production."
-        )
 
 from services.dune_feeder.models import (
     FeederGoldMaterializeRequest,
     FeederIngestRequest,
     FeederRollbackRequest,
+    ScheduleCreateRequest,
 )
 from services.dune_feeder.service import dune_feeder_service
 
@@ -53,10 +47,19 @@ def _require_admin(request: Request) -> None:
 
 
 def _authenticated_tenant_scope(request: Request) -> Optional[str]:
-    """Return the tenant_scope of the authenticated caller, or None for platform admins."""
+    """Return the tenant_scope of the authenticated caller, or None for platform admins.
+
+    TenantContext has no is_platform_admin field.  Platform-level access is
+    indicated by Role.ADMIN (which makes has_permission() always return True)
+    or by the kyber:operator permission explicitly granted to Kyber operators.
+    """
     tenant = request.state.tenant
-    # kyber:operator (platform-level) may omit scope; tenant admins are scoped to their tenant
-    if hasattr(tenant, "tenant_id") and tenant.tenant_id and not getattr(tenant, "is_platform_admin", False):
+    # Use raw permissions check — has_permission() returns True for Role.ADMIN
+    # on every permission string, which would incorrectly grant platform scope
+    # to ordinary tenant admins.
+    if "kyber:operator" in getattr(tenant, "permissions", []):
+        return None
+    if hasattr(tenant, "tenant_id") and tenant.tenant_id:
         return tenant.tenant_id
     return None
 
@@ -73,9 +76,13 @@ async def ingest_dune_result(body: FeederIngestRequest, request: Request):
     Graph state is NEVER mutated by this endpoint.
     """
     _require_admin(request)
-    _require_memory_store_env()
 
-    response = dune_feeder_service.ingest(body)
+    # Non-platform-admin callers cannot ingest under a foreign tenant's scope.
+    auth_scope = _authenticated_tenant_scope(request)
+    if auth_scope is not None:
+        body = body.model_copy(update={"tenant_scope": auth_scope})
+
+    response = await dune_feeder_service.ingest(body)
 
     metrics.increment(
         "dune_feeder_api_ingest",
@@ -91,7 +98,9 @@ async def feeder_health(request: Request):
     """Return health and operational metrics for the Dune feeder service."""
     _require_admin(request)
 
-    health = dune_feeder_service.get_health()
+    # Non-platform-admin callers see only their own tenant's tier counts.
+    auth_scope = _authenticated_tenant_scope(request)
+    health = await dune_feeder_service.get_health(tenant_scope=auth_scope)
     return APIResponse(data=health.model_dump()).to_dict()
 
 
@@ -106,13 +115,12 @@ async def rollback_source_tag(body: FeederRollbackRequest, request: Request):
     tiers. Use audit/{source_tag} first to inspect records before rolling back.
     """
     _require_admin(request)
-    _require_memory_store_env()
 
     # Non-platform-admin callers are always scoped to their own tenant regardless
     # of what tenant_scope they supplied in the request body.
     auth_scope = _authenticated_tenant_scope(request)
     effective_scope = auth_scope if auth_scope is not None else body.tenant_scope
-    deleted = dune_feeder_service.rollback(body.source_tag, tenant_scope=effective_scope)
+    deleted = await dune_feeder_service.rollback(body.source_tag, tenant_scope=effective_scope)
 
     metrics.increment("dune_feeder_api_rollback", labels={"source_tag": body.source_tag})
     return APIResponse(data={
@@ -145,11 +153,12 @@ async def audit_source_tag(
     """
     _require_admin(request)
 
-    # Derive effective scope: explicit parameter takes precedence, then authenticated
-    # tenant scope (prevents cross-tenant reads when no explicit scope is given).
-    effective_scope = tenant_scope or _authenticated_tenant_scope(request)
+    # Non-platform-admin callers cannot read another tenant's Bronze rows by
+    # passing ?tenant_scope=<other-tenant>; their scope always wins.
+    auth_scope = _authenticated_tenant_scope(request)
+    effective_scope = auth_scope if auth_scope is not None else tenant_scope
 
-    records = dune_feeder_service.audit(source_tag, tenant_scope=effective_scope)
+    records = await dune_feeder_service.audit(source_tag, tenant_scope=effective_scope)
     if not records:
         raise NotFoundError(f"source_tag '{source_tag}'")
 
@@ -175,12 +184,13 @@ async def promote_to_silver(source_tag: str, request: Request):
     Any graph candidate generation must go through a separate review queue.
     """
     _require_admin(request)
-    _require_memory_store_env()
 
     if not source_tag or not source_tag.strip():
         raise BadRequestError("source_tag must not be empty")
 
-    promoted = dune_feeder_service.promote_to_silver(source_tag)
+    # Restrict promotion to the caller's own tenant; platform admins promote all scopes.
+    auth_scope = _authenticated_tenant_scope(request)
+    promoted = await dune_feeder_service.promote_to_silver(source_tag, tenant_scope=auth_scope)
 
     metrics.increment(
         "dune_feeder_api_promote",
@@ -207,12 +217,14 @@ async def materialize_gold(body: FeederGoldMaterializeRequest, request: Request)
     Gold is the final curated tier — still isolated from the canonical graph.
     """
     _require_admin(request)
-    _require_memory_store_env()
 
     if not body.source_tag or not body.source_tag.strip():
         raise BadRequestError("source_tag must not be empty")
 
-    created = dune_feeder_service.promote_to_gold(body.source_tag, tenant_scope=body.tenant_scope)
+    # Non-platform-admin callers cannot materialize another tenant's Silver rows.
+    auth_scope = _authenticated_tenant_scope(request)
+    effective_scope = auth_scope if auth_scope is not None else body.tenant_scope
+    created = await dune_feeder_service.promote_to_gold(body.source_tag, tenant_scope=effective_scope)
 
     metrics.increment(
         "dune_feeder_api_materialize_gold",
@@ -233,9 +245,117 @@ async def list_gold_records(
     """List Gold materialized records, optionally filtered by source_tag and tenant_scope."""
     _require_admin(request)
 
-    effective_scope = tenant_scope or _authenticated_tenant_scope(request)
-    records = dune_feeder_service.get_gold_records(source_tag=source_tag, tenant_scope=effective_scope)
+    # Non-platform-admin callers cannot read another tenant's Gold records via
+    # the query parameter; their authenticated scope always wins.
+    auth_scope = _authenticated_tenant_scope(request)
+    effective_scope = auth_scope if auth_scope is not None else tenant_scope
+    records = await dune_feeder_service.get_gold_records(source_tag=source_tag, tenant_scope=effective_scope)
     return APIResponse(data={
         "record_count": len(records),
         "records": records,
     }).to_dict()
+
+
+# ── Scheduled polling ─────────────────────────────────────────────────────────
+
+@router.post("/schedule")
+async def create_schedule(body: ScheduleCreateRequest, request: Request):
+    """
+    Register a new scheduled Dune query poll.
+
+    The worker will call the Dune API at the configured interval and feed results
+    through the freshness + quality gates into Bronze. Silver/Gold promotion
+    remains an explicit operator action.
+
+    Minimum interval: 300 seconds (5 minutes).
+    """
+    _require_admin(request)
+    from services.dune_feeder.scheduler import schedule_store
+
+    auth_scope = _authenticated_tenant_scope(request)
+    config = await schedule_store.create(body, tenant_scope=auth_scope)
+
+    metrics.increment("dune_scheduler_api_create", labels={"query_id": body.query_id})
+    return APIResponse(data=config.model_dump()).to_dict()
+
+
+@router.get("/schedule")
+async def list_schedules(request: Request):
+    """
+    List all registered scheduled query configs.
+
+    Platform admins (kyber:operator) see all tenants' schedules.
+    Tenant admins see only their own.
+    """
+    _require_admin(request)
+    from services.dune_feeder.scheduler import schedule_store
+
+    auth_scope = _authenticated_tenant_scope(request)
+    configs = await schedule_store.list_all(tenant_scope=auth_scope)
+
+    return APIResponse(data={
+        "schedule_count": len(configs),
+        "schedules": [c.model_dump() for c in configs],
+    }).to_dict()
+
+
+@router.get("/schedule/{schedule_id}")
+async def get_schedule(schedule_id: str, request: Request):
+    """Get a single scheduled query config including last run status."""
+    _require_admin(request)
+    from services.dune_feeder.scheduler import schedule_store
+
+    config = await schedule_store.get(schedule_id)
+    if config is None:
+        raise NotFoundError(f"schedule '{schedule_id}'")
+
+    # Tenant admins cannot read another tenant's schedule.
+    auth_scope = _authenticated_tenant_scope(request)
+    if auth_scope is not None and config.tenant_scope != auth_scope:
+        raise NotFoundError(f"schedule '{schedule_id}'")
+
+    return APIResponse(data=config.model_dump()).to_dict()
+
+
+@router.delete("/schedule/{schedule_id}")
+async def delete_schedule(schedule_id: str, request: Request):
+    """Remove a scheduled query. The worker will stop polling this query on its next tick."""
+    _require_admin(request)
+    from services.dune_feeder.scheduler import schedule_store
+
+    config = await schedule_store.get(schedule_id)
+    if config is None:
+        raise NotFoundError(f"schedule '{schedule_id}'")
+
+    # Tenant admins cannot delete another tenant's schedule.
+    auth_scope = _authenticated_tenant_scope(request)
+    if auth_scope is not None and config.tenant_scope != auth_scope:
+        raise NotFoundError(f"schedule '{schedule_id}'")
+
+    await schedule_store.delete(schedule_id)
+    metrics.increment("dune_scheduler_api_delete", labels={"query_id": config.query_id})
+    return APIResponse(data={"schedule_id": schedule_id, "deleted": True}).to_dict()
+
+
+@router.post("/schedule/{schedule_id}/run")
+async def trigger_schedule_run(schedule_id: str, request: Request):
+    """
+    Trigger an immediate poll for a scheduled query, bypassing the interval check.
+
+    Useful for testing a new schedule or forcing a refresh after source data changes.
+    The worker's regular cadence is unaffected.
+    """
+    _require_admin(request)
+    from services.dune_feeder.scheduler import _worker, schedule_store
+
+    config = await schedule_store.get(schedule_id)
+    if config is None:
+        raise NotFoundError(f"schedule '{schedule_id}'")
+
+    auth_scope = _authenticated_tenant_scope(request)
+    if auth_scope is not None and config.tenant_scope != auth_scope:
+        raise NotFoundError(f"schedule '{schedule_id}'")
+
+    summary = await _worker._run_one(config)
+    metrics.increment("dune_scheduler_api_trigger", labels={"query_id": config.query_id})
+    return APIResponse(data=summary.model_dump()).to_dict()

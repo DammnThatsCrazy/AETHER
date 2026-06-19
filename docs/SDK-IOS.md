@@ -13,7 +13,7 @@ source_files:
 canonical_owner: sdk@aether
 estimated_read_minutes: 10
 toc_depth: 3
-last_synced_commit: 48fb9d4
+last_synced_commit: 531f423
 ---
 
 # Aether iOS SDK v8.9.0 — Integration Guide
@@ -281,5 +281,110 @@ All event operations are dispatched to a private serial queue (`DispatchQueue(la
 
 - **Anonymous ID** and **User ID** are persisted in `UserDefaults` under `com.aether.sdk` suite
 - **Device fingerprint** is generated on each init (deterministic — same result for same device)
-- **Event queue** is in-memory only (flushed on background/termination)
+- **Event queue** is persisted to `Application Support/aether_queue.json` (file-based, capped at 1000 events; flushed on foreground)
 - **Server config** cached in memory (refreshed on each app launch)
+
+## Health Agent
+
+The health agent starts automatically after `initialize()`. It:
+- POSTs a signed heartbeat to `/v1/sdk/health` every 60 seconds
+- Fetches the remote manifest from `/v1/config` every 5 minutes
+- Both are fire-and-forget; gated on analytics consent in GDPR mode
+
+## Granular Agent Lifecycle Emitters
+
+```swift
+Aether.shared.agentRegistered(agentId:, properties:)
+Aether.shared.agentTaskCreated(taskId:, actorId:, properties:)
+Aether.shared.agentTaskCompleted(taskId:, properties:)
+Aether.shared.agentTaskFailed(taskId:, reason:, properties:)
+Aether.shared.agentEscalatedToHuman(taskId:, reason:, properties:)
+Aether.shared.agentOutcomeRecorded(taskId:, outcome:, properties:)
+// ... 13 more — see AetherHealthAgent for full list
+```
+
+## x402 Lifecycle Emitters
+
+```swift
+Aether.shared.x402ResourceRequested(resourceId:, properties:)
+Aether.shared.x402PaymentRequired(resourceId:, amount:, currency:, properties:)
+Aether.shared.x402PaymentSettled(paymentId:, properties:)
+Aether.shared.x402AccessGranted(resourceId:, properties:)
+// ... 10 more
+```
+
+## Rewards Emitters
+
+```swift
+Aether.shared.rewardActionQueued(campaignId:, ruleId:, properties:)
+Aether.shared.rewardProofGenerated(campaignId:, proofId:, properties:)
+Aether.shared.rewardDelivered(campaignId:, rewardId:, properties:)
+Aether.shared.rewardClaimSubmitted(campaignId:, claimId:, properties:)
+```
+
+## Ecommerce Additions (8.9.0)
+
+```swift
+Aether.shared.trackRemoveFromCart(productId:, quantity:, properties:)
+Aether.shared.trackApplyCoupon(couponCode:, properties:)
+Aether.shared.trackBeginCheckout(cartValue:, currency:, properties:)
+```
+
+## Reward Event Types (A6)
+
+Four reward lifecycle events are supported via `Aether.shared.track()`:
+
+| Event type | When to emit |
+|---|---|
+| `reward_action_queued` | When a reward action has been queued for the user |
+| `reward_proof_generated` | When an on-chain claim proof is ready for wallet submission |
+| `reward_delivered` | When the tenant system confirms reward delivery |
+| `reward_claim_submitted` | When the user submits a claim (on-chain or off-chain) |
+
+Emit using `Aether.shared.track()` with `campaignId`, `ruleId`, and `rewardIdempotencyKey` in properties. These events flow through `POST /v1/batch` and are processed by the reward eligibility pipeline on the backend. The SDK does not evaluate eligibility — that is handled server-side by the Aether reward policy engine.
+
+## Agentic Observability Event Types
+
+47 new event types support passive observation of external agentic activity. All are registered in the SDK's `eventConsentPurpose` map and flow through `POST /v1/batch` like any other event.
+
+**Consent purpose:** `"agent"` for all agentic observation events; `"commerce"` for x402 protocol observation events.
+
+**Agentic account / MCP / tool (12 types):**
+
+```swift
+// Emit via Aether.shared.track("agentic_account_observed", properties: [...])
+// agentic_account_observed, agentic_account_connected_observed, agentic_account_disconnected_observed
+// agent_budget_observed, agent_budget_changed_observed, agent_permission_observed
+// agent_mcp_connection_observed, agent_tool_observed, agent_tool_invocation_observed
+// agent_activity_observed, agent_risk_signal_observed, agent_notification_observed
+```
+
+**Robinhood-style trading observation (9 types):**
+
+```swift
+// agent_strategy_observed, agent_trade_intent_observed, agent_trade_order_observed
+// agent_trade_fill_observed, agent_trade_rejection_observed, agent_position_observed
+// agent_portfolio_snapshot_observed, agent_performance_snapshot_observed, agent_disconnect_observed
+```
+
+**AgentMail-style communication observation (15 types):**
+
+```swift
+// agent_inbox_observed, agent_email_address_observed, agent_thread_observed
+// agent_message_received_observed, agent_message_sent_observed, agent_reply_observed
+// agent_attachment_observed, agent_attachment_parsed_observed
+// agent_otp_detected_observed, agent_invoice_detected_observed, agent_receipt_detected_observed
+// agent_calendar_intent_observed, agent_support_route_observed
+// agent_semantic_search_observed, agent_data_extraction_observed
+```
+
+**x402 protocol observation (11 types, consent purpose: `"commerce"`):**
+
+```swift
+// x402_resource_request_observed, x402_challenge_observed, x402_payment_requirement_observed
+// x402_signature_observed, x402_verification_observed, x402_settlement_observed
+// x402_resource_access_observed, x402_resource_access_denied_observed
+// x402_failure_observed, x402_replay_risk_observed, x402_provider_observed
+```
+
+> **INVARIANT:** All observation payloads must include `execution_by_aether: false`. AETHER observes external agentic activity — it never originates, signs, executes, or settles on behalf of the caller.

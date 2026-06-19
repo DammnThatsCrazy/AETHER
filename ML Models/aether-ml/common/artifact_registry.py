@@ -1,0 +1,484 @@
+"""
+Aether ML — Artifact Registry
+
+Manages model artifact lifecycle: save, load, validate, promote, disable,
+rollback, and environment-specific loading policy.
+
+Promotion states:
+    local      — artifact exists only on developer machine
+    trained    — training completed, not yet reviewed
+    candidate  — reviewed, ready for staging validation
+    staged     — validated in staging, ready for production promotion
+    promoted   — active in production
+    disabled   — permanently disabled, must not load
+
+Loading rules (enforced):
+    local/dev  — may load local/trained/candidate artifacts
+    staging    — may load staged/candidate artifacts (synthetic_data MUST be False)
+    production — may load promoted artifacts with production_allowed=True
+                 and synthetic_data=False ONLY. Fails closed on any violation.
+"""
+
+from __future__ import annotations
+
+import hashlib
+import json
+import logging
+import os
+from dataclasses import asdict, dataclass, field
+from datetime import datetime, timezone
+from pathlib import Path
+from typing import Any, Optional
+
+logger = logging.getLogger("aether.ml.artifact_registry")
+
+PROMOTION_STATE_ORDER = ["local", "trained", "candidate", "staged", "promoted"]
+
+
+# ---------------------------------------------------------------------------
+# Artifact metadata schema
+# ---------------------------------------------------------------------------
+
+
+@dataclass
+class ArtifactMetadata:
+    """Immutable provenance record written alongside every saved artifact."""
+
+    model_id: str
+    artifact_version: str
+    promotion_state: str  # PromotionState values
+    artifact_format: str
+    artifact_path: str
+    checksum_sha256: str
+    created_at: str
+    created_by: str
+    training_run_id: str
+    feature_schema_hash: str
+    metrics: dict[str, float] = field(default_factory=dict)
+    thresholds: dict[str, float] = field(default_factory=dict)
+    threshold_passed: bool = False
+    synthetic_data: bool = True
+    production_allowed: bool = False
+    disabled: bool = False
+    rollback_from: Optional[str] = None
+    notes: str = ""
+
+    def to_dict(self) -> dict[str, Any]:
+        return asdict(self)
+
+    @classmethod
+    def from_dict(cls, d: dict[str, Any]) -> ArtifactMetadata:
+        return cls(**{k: v for k, v in d.items() if k in cls.__dataclass_fields__})
+
+    def save(self, path: Path) -> None:
+        path.write_text(json.dumps(self.to_dict(), indent=2, default=str))
+
+    @classmethod
+    def load(cls, path: Path) -> ArtifactMetadata:
+        d = json.loads(path.read_text())
+        return cls.from_dict(d)
+
+
+# ---------------------------------------------------------------------------
+# Errors
+# ---------------------------------------------------------------------------
+
+
+class ArtifactError(RuntimeError):
+    """Base class for artifact registry errors."""
+
+
+class ArtifactNotFound(ArtifactError):
+    """Raised when no artifact can be located."""
+
+
+class ArtifactChecksumMismatch(ArtifactError):
+    """Raised when the stored checksum does not match the actual file."""
+
+
+class ArtifactPromotionError(ArtifactError):
+    """Raised when a promotion policy is violated."""
+
+
+class ArtifactLoadingPolicyError(ArtifactError):
+    """Raised when the environment policy forbids loading an artifact."""
+
+
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
+
+
+def _sha256_file(path: Path) -> str:
+    h = hashlib.sha256()
+    with open(path, "rb") as f:
+        for chunk in iter(lambda: f.read(65536), b""):
+            h.update(chunk)
+    return h.hexdigest()
+
+
+def _current_env() -> str:
+    return os.getenv("AETHER_ENV", "local").lower()
+
+
+def _timestamp() -> str:
+    return datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
+
+
+# ---------------------------------------------------------------------------
+# Registry API
+# ---------------------------------------------------------------------------
+
+
+def save_artifact(
+    model_id: str,
+    artifact_path: Path,
+    *,
+    artifact_version: str,
+    promotion_state: str = "trained",
+    artifact_format: str = "joblib",
+    training_run_id: str = "",
+    feature_schema_hash: str = "",
+    metrics: dict[str, float] | None = None,
+    thresholds: dict[str, float] | None = None,
+    threshold_passed: bool = False,
+    synthetic_data: bool = True,
+    notes: str = "",
+    created_by: str = "training-pipeline",
+) -> ArtifactMetadata:
+    """
+    Write artifact metadata alongside an already-saved artifact file.
+
+    Args:
+        model_id: Canonical model ID.
+        artifact_path: Path to the artifact file (e.g. model.joblib).
+        artifact_version: Version string (e.g. "v1_20240601_120000").
+        promotion_state: Initial promotion state.
+        ...
+
+    Returns:
+        ArtifactMetadata written to {artifact_path.parent}/metadata.json.
+    """
+    if not artifact_path.exists():
+        raise ArtifactNotFound(f"Artifact file not found: {artifact_path}")
+
+    checksum = _sha256_file(artifact_path)
+    production_allowed = (
+        not synthetic_data
+        and threshold_passed
+        and promotion_state == "promoted"
+    )
+
+    metadata = ArtifactMetadata(
+        model_id=model_id,
+        artifact_version=artifact_version,
+        promotion_state=promotion_state,
+        artifact_format=artifact_format,
+        artifact_path=str(artifact_path),
+        checksum_sha256=checksum,
+        created_at=datetime.now(timezone.utc).isoformat(),
+        created_by=created_by,
+        training_run_id=training_run_id,
+        feature_schema_hash=feature_schema_hash,
+        metrics=metrics or {},
+        thresholds=thresholds or {},
+        threshold_passed=threshold_passed,
+        synthetic_data=synthetic_data,
+        production_allowed=production_allowed,
+        notes=notes,
+    )
+
+    meta_path = artifact_path.parent / "metadata.json"
+    metadata.save(meta_path)
+    logger.info(
+        "Artifact metadata saved: model=%s version=%s state=%s synthetic=%s",
+        model_id, artifact_version, promotion_state, synthetic_data,
+    )
+    return metadata
+
+
+def load_artifact(
+    artifact_dir: Path,
+    env: str | None = None,
+) -> tuple[Path, ArtifactMetadata]:
+    """
+    Load and validate an artifact from a directory.
+
+    Args:
+        artifact_dir: Directory containing the artifact and metadata.json.
+        env: Environment override. Defaults to AETHER_ENV.
+
+    Returns:
+        (artifact_path, metadata)
+
+    Raises:
+        ArtifactNotFound: If artifact or metadata is missing.
+        ArtifactChecksumMismatch: If checksum does not match.
+        ArtifactLoadingPolicyError: If environment policy forbids loading.
+    """
+    env = (env or _current_env()).lower()
+
+    meta_path = artifact_dir / "metadata.json"
+    if not meta_path.exists():
+        raise ArtifactNotFound(
+            f"Artifact metadata not found at {meta_path}. "
+            "All model artifacts must include a metadata.json."
+        )
+
+    metadata = ArtifactMetadata.load(meta_path)
+    _enforce_load_policy(metadata, env)
+
+    artifact_path = Path(metadata.artifact_path)
+    if not artifact_path.exists():
+        # Try relative to artifact_dir
+        artifact_path = artifact_dir / Path(metadata.artifact_path).name
+        if not artifact_path.exists():
+            raise ArtifactNotFound(
+                f"Artifact file not found: {metadata.artifact_path} "
+                f"(also tried {artifact_path})"
+            )
+
+    actual_checksum = _sha256_file(artifact_path)
+    if actual_checksum != metadata.checksum_sha256:
+        raise ArtifactChecksumMismatch(
+            f"Checksum mismatch for {artifact_path}: "
+            f"expected {metadata.checksum_sha256}, got {actual_checksum}"
+        )
+
+    logger.info(
+        "Artifact loaded: model=%s version=%s state=%s env=%s",
+        metadata.model_id, metadata.artifact_version,
+        metadata.promotion_state, env,
+    )
+    return artifact_path, metadata
+
+
+def validate_artifact(artifact_dir: Path, env: str | None = None) -> ArtifactMetadata:
+    """Validate artifact without loading the model object. Returns metadata."""
+    _, metadata = load_artifact(artifact_dir, env=env)
+    return metadata
+
+
+def list_artifacts(model_root: Path, model_id: str) -> list[ArtifactMetadata]:
+    """List all artifact versions for a model, sorted newest-first."""
+    model_dir = model_root / model_id
+    if not model_dir.exists():
+        return []
+
+    artifacts: list[ArtifactMetadata] = []
+    for version_dir in sorted(model_dir.iterdir(), reverse=True):
+        meta_path = version_dir / "metadata.json"
+        if meta_path.exists():
+            try:
+                artifacts.append(ArtifactMetadata.load(meta_path))
+            except Exception as exc:
+                logger.warning("Skipping corrupt metadata at %s: %s", meta_path, exc)
+
+    return artifacts
+
+
+def promote_artifact(
+    artifact_dir: Path,
+    new_state: str,
+    promoted_by: str = "system",
+) -> ArtifactMetadata:
+    """
+    Promote an artifact to a new state.
+
+    Rules:
+    - Cannot promote disabled artifacts.
+    - Cannot promote synthetic_data=True artifacts to production.
+    - States must advance (no downgrade except via rollback).
+    """
+    meta_path = artifact_dir / "metadata.json"
+    if not meta_path.exists():
+        raise ArtifactNotFound(f"No metadata at {artifact_dir}")
+
+    metadata = ArtifactMetadata.load(meta_path)
+
+    if metadata.disabled:
+        raise ArtifactPromotionError(
+            f"Cannot promote disabled artifact: {metadata.artifact_version}"
+        )
+
+    if new_state == "promoted" and metadata.synthetic_data:
+        raise ArtifactPromotionError(
+            f"Cannot promote synthetic artifact to production: {metadata.model_id} "
+            f"version={metadata.artifact_version}. "
+            "Only real-data trained artifacts may be promoted."
+        )
+
+    if new_state == "promoted" and not metadata.threshold_passed:
+        raise ArtifactPromotionError(
+            f"Cannot promote artifact that did not pass metric thresholds: "
+            f"{metadata.model_id} version={metadata.artifact_version}"
+        )
+
+    current_idx = PROMOTION_STATE_ORDER.index(metadata.promotion_state) if metadata.promotion_state in PROMOTION_STATE_ORDER else -1
+    new_idx = PROMOTION_STATE_ORDER.index(new_state) if new_state in PROMOTION_STATE_ORDER else -1
+
+    if new_idx < current_idx:
+        raise ArtifactPromotionError(
+            f"Cannot downgrade promotion state from '{metadata.promotion_state}' to '{new_state}'. "
+            "Use rollback_artifact() to roll back."
+        )
+
+    metadata.promotion_state = new_state
+    if new_state == "promoted":
+        metadata.production_allowed = True
+    metadata.notes += f" | Promoted to {new_state} by {promoted_by} at {datetime.now(timezone.utc).isoformat()}"
+    metadata.save(meta_path)
+
+    logger.info(
+        "Artifact promoted: model=%s version=%s -> %s",
+        metadata.model_id, metadata.artifact_version, new_state,
+    )
+    return metadata
+
+
+def disable_artifact(artifact_dir: Path, reason: str = "") -> ArtifactMetadata:
+    """Mark an artifact as disabled. Disabled artifacts never load."""
+    meta_path = artifact_dir / "metadata.json"
+    if not meta_path.exists():
+        raise ArtifactNotFound(f"No metadata at {artifact_dir}")
+
+    metadata = ArtifactMetadata.load(meta_path)
+    metadata.disabled = True
+    metadata.promotion_state = "disabled"
+    metadata.production_allowed = False
+    metadata.notes += f" | DISABLED: {reason} at {datetime.now(timezone.utc).isoformat()}"
+    metadata.save(meta_path)
+
+    logger.warning(
+        "Artifact DISABLED: model=%s version=%s reason=%s",
+        metadata.model_id, metadata.artifact_version, reason,
+    )
+    return metadata
+
+
+def rollback_artifact(
+    model_root: Path,
+    model_id: str,
+    env: str | None = None,
+) -> Optional[ArtifactMetadata]:
+    """
+    Find and return the previous valid promoted artifact for rollback.
+
+    Returns the metadata of the previous promoted artifact, or None if
+    no previous version exists.
+    """
+    artifacts = list_artifacts(model_root, model_id)
+
+    valid = [
+        m for m in artifacts
+        if m.promotion_state == "promoted"
+        and not m.disabled
+        and m.production_allowed
+    ]
+
+    if len(valid) < 2:
+        logger.warning(
+            "No previous promoted artifact for rollback: model=%s", model_id
+        )
+        return None
+
+    # artifacts is newest-first; skip the current (index 0), return the next
+    return valid[1]
+
+
+def resolve_active_artifact(
+    model_root: Path,
+    model_id: str,
+    env: str | None = None,
+) -> Optional[Path]:
+    """
+    Return the artifact directory of the active artifact for this model/env.
+
+    Returns None if no suitable artifact is found (caller must handle fail-closed).
+    """
+    env = (env or _current_env()).lower()
+    artifacts = list_artifacts(model_root, model_id)
+
+    allowed_states = _allowed_states_for_env(env)
+
+    for meta in artifacts:
+        if meta.disabled:
+            continue
+        if meta.promotion_state not in allowed_states:
+            continue
+        if env in ("production", "prod"):
+            if not meta.production_allowed or meta.synthetic_data:
+                continue
+        elif env in ("staging", "stage"):
+            if meta.synthetic_data:
+                continue
+
+        artifact_file = Path(meta.artifact_path)
+        if not artifact_file.exists():
+            artifact_dir = model_root / model_id / _version_dir_from_path(meta.artifact_path)
+            artifact_file = artifact_dir / Path(meta.artifact_path).name
+
+        if artifact_file.exists():
+            return artifact_file.parent
+
+    return None
+
+
+# ---------------------------------------------------------------------------
+# Internal helpers
+# ---------------------------------------------------------------------------
+
+
+def _enforce_load_policy(metadata: ArtifactMetadata, env: str) -> None:
+    """Raise ArtifactLoadingPolicyError if loading is forbidden in this env."""
+    if metadata.disabled:
+        raise ArtifactLoadingPolicyError(
+            f"Artifact is disabled: model={metadata.model_id} "
+            f"version={metadata.artifact_version}"
+        )
+
+    allowed = _allowed_states_for_env(env)
+    if metadata.promotion_state not in allowed:
+        raise ArtifactLoadingPolicyError(
+            f"Artifact state '{metadata.promotion_state}' is not allowed in env='{env}'. "
+            f"Allowed states: {allowed}"
+        )
+
+    if env in ("production", "prod"):
+        if not metadata.production_allowed:
+            raise ArtifactLoadingPolicyError(
+                f"Artifact is not production_allowed: model={metadata.model_id} "
+                f"version={metadata.artifact_version}. "
+                "Only promoted, real-data, threshold-passing artifacts are production-allowed."
+            )
+        if metadata.synthetic_data:
+            raise ArtifactLoadingPolicyError(
+                f"Synthetic artifact cannot be loaded in production: "
+                f"model={metadata.model_id} version={metadata.artifact_version}"
+            )
+
+    if env in ("staging", "stage"):
+        if metadata.synthetic_data:
+            raise ArtifactLoadingPolicyError(
+                f"Synthetic artifact cannot be loaded in staging: "
+                f"model={metadata.model_id} version={metadata.artifact_version}. "
+                "Staging requires real sampled data."
+            )
+
+
+def _allowed_states_for_env(env: str) -> set[str]:
+    if env in ("production", "prod"):
+        return {"promoted"}
+    if env in ("staging", "stage"):
+        return {"staged", "candidate", "promoted"}
+    # local / development / test — allow everything non-disabled
+    return {"local", "trained", "candidate", "staged", "promoted"}
+
+
+def _version_dir_from_path(artifact_path: str) -> str:
+    """Extract version directory name from artifact path (best-effort)."""
+    parts = Path(artifact_path).parts
+    for i, part in enumerate(parts):
+        if part.startswith("v1_") or part.startswith("v2_"):
+            return part
+    return parts[-2] if len(parts) >= 2 else ""

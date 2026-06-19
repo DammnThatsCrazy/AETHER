@@ -13,7 +13,7 @@ source_files:
 canonical_owner: commerce@aether
 estimated_read_minutes: 8
 toc_depth: 3
-last_synced_commit: 48fb9d4
+last_synced_commit: e8d95a8
 ---
 # Aether Agentic Commerce — Control Plane
 
@@ -144,6 +144,8 @@ All commerce events published under `aether.commerce.*` topic namespace on the e
 | `/v1/x402/policies/budget/{subject_id}` | GET | Get one subject's active policy |
 | `/v1/approvals` | GET | Approval queue |
 | `/v1/approvals/{id}/decide` | POST | Operator approve/reject/escalate |
+| `/v1/approvals/{id}/escalate` | POST | Escalate to next reviewer tier (`approvals:write`) |
+| `/v1/approvals/{id}/preview` | GET | Graph-edge delta preview before committing (`approvals:read`) |
 | `/v1/approvals/{id}/revoke` | POST | Revoke prior approval |
 | `/v1/approvals/{id}/evidence` | GET | Evidence bundle |
 | `/v1/approvals/{id}/replay` | POST | Deterministic replay (Lab) |
