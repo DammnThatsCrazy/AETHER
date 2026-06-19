@@ -157,13 +157,13 @@ class IdentityRecomputeResponse(BaseModel):
 # ── Suppression ───────────────────────────────────────────────────────────────
 
 _VALID_SIGNAL_TYPES: frozenset[str] = frozenset({
+    # Exact IdentitySignalType.value strings — must stay in sync with models.py
     "user_id", "anonymous_id", "session_id",
     "email_hash", "phone_hash",
-    "wallet_address", "wallet",
-    "external_id", "customer_id",
-    "device_id", "install_id", "browser_id",
-    "fingerprint_id", "ip_hash",
-    "oauth_subject", "siwx_session",
+    "wallet_address", "wallet_signature_verified",
+    "external_id", "commerce_customer_id", "payment_customer_id", "account_id",
+    "device_fingerprint", "installation_id", "mobile_install_id", "browser_id",
+    "agent_id", "org_id", "campaign_id", "journey_id",
 })
 
 

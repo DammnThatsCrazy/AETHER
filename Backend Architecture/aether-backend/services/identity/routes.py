@@ -422,6 +422,7 @@ async def list_suppressions(
 ) -> dict:
     """List active suppression rules for this tenant."""
     tenant = request.state.tenant
+    tenant.require_permission("read")
     repo = _get_resolution_repo()
     rules = await repo.get_suppressions(tenant.tenant_id, limit=limit)
     return APIResponse(data={"suppressions": rules, "total": len(rules)}).to_dict()
