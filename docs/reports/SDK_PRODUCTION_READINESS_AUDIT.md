@@ -14,7 +14,7 @@ source_files:
   - packages/web/src/core/event-queue.ts
   - packages/web/src/health/sdk-health-agent.ts
   - docs/source-of-truth/PLATFORM_PARITY.md
-last_synced_commit: 710cf49
+last_synced_commit: e711d05
 ---
 
 # Aether SDK Production Readiness Audit

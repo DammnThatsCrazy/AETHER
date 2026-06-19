@@ -639,6 +639,17 @@ def create_app() -> FastAPI:
     else:
         logger.info("Suggestion Intelligence: disabled (set AETHER_SUGGESTIONS_ENABLED=true to enable)")
 
+    # Agentic Observability Layer — observation-only; AETHER never executes.
+    from services.agentic_observability.routes import router as agentic_obs_router
+    from services.protocol_observability.routes import router as protocol_obs_router
+    from services.agent_comm_observability.routes import router as comm_obs_router
+    from services.external_account_observability.routes import router as ext_account_obs_router
+    app.include_router(agentic_obs_router, tags=["Agentic Observability"])
+    app.include_router(protocol_obs_router, tags=["Protocol Observability"])
+    app.include_router(comm_obs_router, tags=["Agent Comm Observability"])
+    app.include_router(ext_account_obs_router, tags=["External Account Observability"])
+    logger.info("Agentic Observability Layer mounted (30 observation routes + 7 Kyber routes)")
+
     return app
 
 

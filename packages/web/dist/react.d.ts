@@ -1,12 +1,12 @@
 import { type ReactNode } from 'react';
-import type { AetherSDK } from './index';
+import type { AetherSDKInterface } from '@aether/web';
 import type { ConsentState } from '@aether/shared/consent';
 export interface AetherProviderProps {
-    config: Parameters<AetherSDK['init']>[0];
+    config: Parameters<AetherSDKInterface['init']>[0];
     children: ReactNode;
 }
-export declare function AetherProvider({ config, children }: AetherProviderProps): import("react/jsx-runtime").JSX.Element;
-export declare function useAether(): AetherSDK;
+export declare function AetherProvider({ config, children }: AetherProviderProps): import("react/jsx-runtime").JSX.Element | null;
+export declare function useAether(): AetherSDKInterface;
 export interface ResolvedIdentity {
     userId?: string;
     anonymousId?: string;

@@ -170,3 +170,80 @@ also emitted through its canonical event family.
 Legacy `track` events remain accepted when `properties.event` is one of the journey
 lifecycle names above. Ingestion normalizes those records for internal journey stitching
 without breaking existing `track`, `page`, or `screen` behavior.
+
+## Agentic account / MCP observation (family: `agentic_observability`) — purpose: `agent`
+
+| Type | Observed from | Notes |
+|---|---|---|
+| `agentic_account_observed` | External provider webhook | New external agentic account observed |
+| `agentic_account_connected_observed` | External provider webhook | Account connected to agent |
+| `agentic_account_disconnected_observed` | External provider webhook | Account disconnected |
+| `agent_budget_observed` | External provider webhook | Agent budget state observed |
+| `agent_budget_changed_observed` | External provider webhook | Agent budget changed |
+| `agent_permission_observed` | External provider webhook | Agent permissions observed |
+| `agent_mcp_connection_observed` | MCP server / webhook | MCP connection observed |
+| `agent_tool_observed` | MCP server | Tool available on MCP server observed |
+| `agent_tool_invocation_observed` | MCP server | Tool invocation observed |
+| `agent_activity_observed` | External provider | General agent activity observed |
+| `agent_risk_signal_observed` | AETHER risk engine | Risk signal produced from observed activity |
+| `agent_notification_observed` | External provider webhook | Agent notification observed |
+
+## Robinhood-style trading observation (family: `agentic_observability`) — purpose: `agent`
+
+| Type | Observed from | Notes |
+|---|---|---|
+| `agent_strategy_observed` | External brokerage webhook | Trading strategy observed |
+| `agent_trade_intent_observed` | External brokerage webhook | Trade intent observed (not executed by AETHER) |
+| `agent_trade_order_observed` | External brokerage webhook | Trade order observed (executed externally) |
+| `agent_trade_fill_observed` | External brokerage webhook | Trade fill observed (executed externally) |
+| `agent_trade_rejection_observed` | External brokerage webhook | Trade rejection observed |
+| `agent_position_observed` | External brokerage webhook | Position snapshot observed |
+| `agent_portfolio_snapshot_observed` | External brokerage webhook | Portfolio snapshot observed |
+| `agent_performance_snapshot_observed` | External brokerage webhook | Performance metrics observed |
+| `agent_disconnect_observed` | External brokerage webhook | External account disconnect observed |
+
+## AgentMail-style communication observation (family: `agentic_observability`) — purpose: `agent`
+
+| Type | Observed from | Notes |
+|---|---|---|
+| `agent_inbox_observed` | AgentMail-style webhook | Agent inbox state observed |
+| `agent_email_address_observed` | AgentMail-style webhook | Agent email address observed |
+| `agent_thread_observed` | AgentMail-style webhook | Message thread observed |
+| `agent_message_received_observed` | AgentMail-style webhook | Inbound message observed |
+| `agent_message_sent_observed` | AgentMail-style webhook | Outbound message observed (sent externally) |
+| `agent_reply_observed` | AgentMail-style webhook | Reply observed |
+| `agent_attachment_observed` | AgentMail-style webhook | Attachment observed |
+| `agent_attachment_parsed_observed` | AETHER parser | Attachment parsing result observed |
+| `agent_otp_detected_observed` | AETHER extractor | OTP detected in message |
+| `agent_invoice_detected_observed` | AETHER extractor | Invoice detected in message |
+| `agent_receipt_detected_observed` | AETHER extractor | Receipt detected in message |
+| `agent_calendar_intent_observed` | AETHER extractor | Calendar intent detected |
+| `agent_support_route_observed` | AETHER classifier | Support routing decision observed |
+| `agent_semantic_search_observed` | AgentMail-style webhook | Semantic search performed on inbox |
+| `agent_data_extraction_observed` | AgentMail-style webhook | Data extraction performed on message |
+
+## x402 protocol observation (family: `x402_observability`) — purpose: `agent`
+
+These events are observed FROM THE OUTSIDE — AETHER records what it sees in an x402 flow, not what it does.
+
+| Type | Observed from | Notes |
+|---|---|---|
+| `x402_resource_request_observed` | Agent/client activity | Agent requested a paid resource |
+| `x402_challenge_observed` | HTTP 402 response | 402 challenge received by agent |
+| `x402_payment_requirement_observed` | PAYMENT-REQUIRED header | Payment requirement metadata observed |
+| `x402_signature_observed` | X-PAYMENT header | Payment signature submitted by external party |
+| `x402_verification_observed` | Facilitator response | Verification result observed |
+| `x402_settlement_observed` | External settlement event | Settlement observed (executed externally, not by AETHER) |
+| `x402_resource_access_observed` | Server response | Resource access outcome observed |
+| `x402_resource_access_denied_observed` | Server response | Access denied outcome observed |
+| `x402_failure_observed` | Any stage | Protocol failure observed |
+| `x402_replay_risk_observed` | AETHER risk engine | Replay attack risk detected |
+| `x402_provider_observed` | Protocol metadata | x402 provider observed |
+
+### Deprecated x402 event names (imply AETHER executes — use observation equivalents)
+
+| Deprecated | Replace with |
+|---|---|
+| `x402_payment_submitted` | `x402_signature_observed` (the external party submitted, not AETHER) |
+| `x402_payment_settled` | `x402_settlement_observed` |
+| `x402_payment_created` | `x402_payment_requirement_observed` |

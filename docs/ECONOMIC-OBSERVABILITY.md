@@ -165,7 +165,7 @@ const state = aggregateEconomicState([adSpend, revenue], { units: 7 });
 // → { total_spend: 100, total_revenue: 350, unit_cost: 14.285714... }
 ```
 
-### 5. H2A authorized spend → A2A execution
+### 5. H2A authorized spend → A2A execution (observed externally)
 
 ```ts
 import { validateAuthorization, validateEconomicPayload } from '@aether/shared';

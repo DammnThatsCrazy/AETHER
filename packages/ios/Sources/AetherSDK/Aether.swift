@@ -94,6 +94,27 @@ public enum AetherEventType: String, Codable, CaseIterable {
     case x402_access_granted, x402_access_denied, x402_refund_or_reversal
     // reward enablement (A6)
     case reward_action_queued, reward_proof_generated, reward_delivered, reward_claim_submitted
+    // Agentic observability — account / MCP / tool
+    case agentic_account_observed, agentic_account_connected_observed, agentic_account_disconnected_observed
+    case agent_budget_observed, agent_budget_changed_observed, agent_permission_observed
+    case agent_mcp_connection_observed, agent_tool_observed, agent_tool_invocation_observed
+    case agent_activity_observed, agent_risk_signal_observed, agent_notification_observed
+    // Agentic observability — Robinhood-style trading observation
+    case agent_strategy_observed, agent_trade_intent_observed, agent_trade_order_observed
+    case agent_trade_fill_observed, agent_trade_rejection_observed, agent_position_observed
+    case agent_portfolio_snapshot_observed, agent_performance_snapshot_observed, agent_disconnect_observed
+    // Agentic observability — AgentMail-style communication observation
+    case agent_inbox_observed, agent_email_address_observed, agent_thread_observed
+    case agent_message_received_observed, agent_message_sent_observed, agent_reply_observed
+    case agent_attachment_observed, agent_attachment_parsed_observed
+    case agent_otp_detected_observed, agent_invoice_detected_observed, agent_receipt_detected_observed
+    case agent_calendar_intent_observed, agent_support_route_observed
+    case agent_semantic_search_observed, agent_data_extraction_observed
+    // x402 protocol observation family (from external observer perspective)
+    case x402_resource_request_observed, x402_challenge_observed, x402_payment_requirement_observed
+    case x402_signature_observed, x402_verification_observed, x402_settlement_observed
+    case x402_resource_access_observed, x402_resource_access_denied_observed
+    case x402_failure_observed, x402_replay_risk_observed, x402_provider_observed
 }
 
 public struct AetherEvent: Codable {
@@ -276,7 +297,28 @@ public final class Aether: NSObject {
         .agent_resource_requested: "agent", .agent_delegated_task: "agent",
         .agent_subagent_spawned: "agent", .agent_policy_evaluated: "agent",
         .agent_handoff: "agent", .agent_escalated_to_human: "agent",
-        .agent_outcome_recorded: "agent"
+        .agent_outcome_recorded: "agent",
+        // Agentic observability — account / MCP / tool
+        .agentic_account_observed: "agent", .agentic_account_connected_observed: "agent", .agentic_account_disconnected_observed: "agent",
+        .agent_budget_observed: "agent", .agent_budget_changed_observed: "agent", .agent_permission_observed: "agent",
+        .agent_mcp_connection_observed: "agent", .agent_tool_observed: "agent", .agent_tool_invocation_observed: "agent",
+        .agent_activity_observed: "agent", .agent_risk_signal_observed: "agent", .agent_notification_observed: "agent",
+        // Agentic observability — Robinhood-style trading observation
+        .agent_strategy_observed: "agent", .agent_trade_intent_observed: "agent", .agent_trade_order_observed: "agent",
+        .agent_trade_fill_observed: "agent", .agent_trade_rejection_observed: "agent", .agent_position_observed: "agent",
+        .agent_portfolio_snapshot_observed: "agent", .agent_performance_snapshot_observed: "agent", .agent_disconnect_observed: "agent",
+        // Agentic observability — AgentMail-style communication observation
+        .agent_inbox_observed: "agent", .agent_email_address_observed: "agent", .agent_thread_observed: "agent",
+        .agent_message_received_observed: "agent", .agent_message_sent_observed: "agent", .agent_reply_observed: "agent",
+        .agent_attachment_observed: "agent", .agent_attachment_parsed_observed: "agent",
+        .agent_otp_detected_observed: "agent", .agent_invoice_detected_observed: "agent", .agent_receipt_detected_observed: "agent",
+        .agent_calendar_intent_observed: "agent", .agent_support_route_observed: "agent",
+        .agent_semantic_search_observed: "agent", .agent_data_extraction_observed: "agent",
+        // x402 protocol observation family
+        .x402_resource_request_observed: "commerce", .x402_challenge_observed: "commerce", .x402_payment_requirement_observed: "commerce",
+        .x402_signature_observed: "commerce", .x402_verification_observed: "commerce", .x402_settlement_observed: "commerce",
+        .x402_resource_access_observed: "commerce", .x402_resource_access_denied_observed: "commerce",
+        .x402_failure_observed: "commerce", .x402_replay_risk_observed: "commerce", .x402_provider_observed: "commerce"
     ]
 
     static let sensitiveKeys: Set<String> = [
