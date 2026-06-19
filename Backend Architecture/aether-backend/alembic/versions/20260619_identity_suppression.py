@@ -10,7 +10,7 @@ from __future__ import annotations
 from alembic import op
 
 revision = "20260619_identity_suppression"
-down_revision = "20260612_identity_resolution_tables"
+down_revision = "20260613_reward_enablement"
 branch_labels = None
 depends_on = None
 

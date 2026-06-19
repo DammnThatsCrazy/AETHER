@@ -138,43 +138,65 @@ class IdentityResolutionService:
         event_id = event.get("event_id", "")
         consent_snapshot = _extract_consent(event)
 
-        # ── 1. Extract signals ────────────────────────────────────────────
-        raw_signals = extract_signals(event, tenant_id)
-        if not raw_signals:
-            return IdentityResolutionDecision(
-                tenant_id=tenant_id,
-                canonical_entity_id="",
-                decision=MergeDecision.NOOP,
-                confidence=0.0,
-                confidence_tier=ConfidenceTier.WEAK,
-                reason_codes=["no_signals"],
-            )
-
-        # ── 2 & 3. Normalize + hash sensitive values ──────────────────────
-        hashed_signals: list[tuple[IdentitySignalType, str, str]] = []
-        # (type, hash, display_redacted)
-        for sig in raw_signals:
-            h, display = _hash_signal(sig.type, sig.value, tenant_id)
-            if h:
-                hashed_signals.append((sig.type, h, display))
-                self._metrics.record_signal_observation(sig.type.value)
-
-        # ── 4. Persist signal observations ────────────────────────────────
-        for sig in raw_signals:
-            h, display = _hash_signal(sig.type, sig.value, tenant_id)
-            if h:
-                await self._repo.create_signal_observation(
+        # Recompute path: caller provides pre-hashed signals to bypass
+        # extract/normalize/hash/persist steps (observations already in DB).
+        _pre_hashed = event.get("_pre_hashed_signals")
+        if _pre_hashed is not None:
+            raw_signals: list = []
+            hashed_signals: list[tuple[IdentitySignalType, str, str]] = []
+            for item in _pre_hashed:
+                try:
+                    sig_type = IdentitySignalType(item["type"])
+                    hashed_signals.append((sig_type, item["hash"], item.get("display", "")))
+                except (ValueError, KeyError):
+                    continue
+            if not hashed_signals:
+                return IdentityResolutionDecision(
                     tenant_id=tenant_id,
-                    source_event_id=event_id,
-                    source_platform=sig.source_platform,
-                    source_sdk=sig.source_sdk,
-                    signal_type=sig.type,
-                    signal_value_hash=h,
-                    raw_value_redacted=display,
-                    observed_at=sig.observed_at,
-                    consent_snapshot=sig.consent_snapshot,
-                    context={"source": sig.source},
+                    canonical_entity_id="",
+                    decision=MergeDecision.NOOP,
+                    confidence=0.0,
+                    confidence_tier=ConfidenceTier.WEAK,
+                    reason_codes=["no_signals"],
                 )
+        else:
+            # ── 1. Extract signals ────────────────────────────────────────────
+            raw_signals = extract_signals(event, tenant_id)
+            if not raw_signals:
+                return IdentityResolutionDecision(
+                    tenant_id=tenant_id,
+                    canonical_entity_id="",
+                    decision=MergeDecision.NOOP,
+                    confidence=0.0,
+                    confidence_tier=ConfidenceTier.WEAK,
+                    reason_codes=["no_signals"],
+                )
+
+            # ── 2 & 3. Normalize + hash sensitive values ──────────────────────
+            hashed_signals = []
+            # (type, hash, display_redacted)
+            for sig in raw_signals:
+                h, display = _hash_signal(sig.type, sig.value, tenant_id)
+                if h:
+                    hashed_signals.append((sig.type, h, display))
+                    self._metrics.record_signal_observation(sig.type.value)
+
+            # ── 4. Persist signal observations ────────────────────────────────
+            for sig in raw_signals:
+                h, display = _hash_signal(sig.type, sig.value, tenant_id)
+                if h:
+                    await self._repo.create_signal_observation(
+                        tenant_id=tenant_id,
+                        source_event_id=event_id,
+                        source_platform=sig.source_platform,
+                        source_sdk=sig.source_sdk,
+                        signal_type=sig.type,
+                        signal_value_hash=h,
+                        raw_value_redacted=display,
+                        observed_at=sig.observed_at,
+                        consent_snapshot=sig.consent_snapshot,
+                        context={"source": sig.source},
+                    )
 
         # ── 4b. Check suppression rules ───────────────────────────────────
         suppressed_types: list[IdentitySignalType] = []
@@ -193,12 +215,20 @@ class IdentityResolutionService:
                 "Suppressed signals for tenant=%s: %s",
                 tenant_id, [t.value for t in suppressed_types],
             )
+        # Build exact (type, hash) pairs that were suppressed, then filter raw_signals
+        # using those pairs only — not the entire type — so unsuppressed signals of the
+        # same type (e.g., a second wallet address) are not incorrectly removed.
+        filtered_hash_set = {(t, h) for (t, h, _) in filtered_signals}
+        suppressed_pairs: set[tuple[IdentitySignalType, str]] = {
+            (t, h) for (t, h, _) in hashed_signals if (t, h) not in filtered_hash_set
+        }
         hashed_signals = filtered_signals
-        # Also remove suppressed types from raw_signals so downstream alias/edge
-        # writes don't re-create suppressed identifiers in the graph.
-        if suppressed_types:
-            suppressed_type_set = {t for t in suppressed_types}
-            raw_signals = [sig for sig in raw_signals if sig.type not in suppressed_type_set]
+        if suppressed_pairs:
+            raw_signals = [
+                sig for sig in raw_signals
+                if (sig.type, _hash_signal(sig.type, sig.value, tenant_id)[0])
+                not in suppressed_pairs
+            ]
 
         # ── 5. Find existing aliases/entities for this tenant ─────────────
         existing_entity_ids: list[str] = []
@@ -236,9 +266,14 @@ class IdentityResolutionService:
         canonical_entity_id: str
         is_new = False
 
+        _signal_types_for_type_infer = (
+            [sig.type for sig in raw_signals]
+            if raw_signals
+            else [t for (t, _, _) in hashed_signals]
+        )
         if policy_result.decision == MergeDecision.CREATE or not existing_entity_ids:
             canonical_entity_id = str(uuid.uuid4())
-            entity_type = _infer_entity_type(raw_signals)
+            entity_type = _infer_entity_type_from_types(_signal_types_for_type_infer)
             await self._repo.create_subject(
                 tenant_id=tenant_id,
                 canonical_entity_id=canonical_entity_id,
@@ -254,7 +289,7 @@ class IdentityResolutionService:
             canonical_entity_id = existing_entity_ids[0] if existing_entity_ids else str(uuid.uuid4())
             if not existing_entity_ids:
                 is_new = True
-                entity_type = _infer_entity_type(raw_signals)
+                entity_type = _infer_entity_type_from_types(_signal_types_for_type_infer)
                 await self._repo.create_subject(
                     tenant_id=tenant_id,
                     canonical_entity_id=canonical_entity_id,
@@ -264,24 +299,44 @@ class IdentityResolutionService:
         # ── 9. Link aliases ───────────────────────────────────────────────
         linked_aliases: list[str] = []
         if policy_result.decision not in (MergeDecision.BLOCKED, MergeDecision.REJECT):
-            for sig in raw_signals:
-                h, display = _hash_signal(sig.type, sig.value, tenant_id)
-                if not h or sig.type in _ATTRIBUTION_ONLY:
-                    continue
-                alias = await self._repo.upsert_alias(
-                    tenant_id=tenant_id,
-                    canonical_entity_id=canonical_entity_id,
-                    alias_type=sig.type,
-                    alias_value_hash=h,
-                    alias_display_value_redacted=display,
-                    source=sig.source,
-                    source_event_id=event_id,
-                    source_platform=sig.source_platform,
-                    confidence=policy_result.confidence,
-                    confidence_tier=policy_result.confidence_tier,
-                    consent_snapshot=consent_snapshot,
-                )
-                linked_aliases.append(alias["id"])
+            if raw_signals:
+                for sig in raw_signals:
+                    h, display = _hash_signal(sig.type, sig.value, tenant_id)
+                    if not h or sig.type in _ATTRIBUTION_ONLY:
+                        continue
+                    alias = await self._repo.upsert_alias(
+                        tenant_id=tenant_id,
+                        canonical_entity_id=canonical_entity_id,
+                        alias_type=sig.type,
+                        alias_value_hash=h,
+                        alias_display_value_redacted=display,
+                        source=sig.source,
+                        source_event_id=event_id,
+                        source_platform=sig.source_platform,
+                        confidence=policy_result.confidence,
+                        confidence_tier=policy_result.confidence_tier,
+                        consent_snapshot=consent_snapshot,
+                    )
+                    linked_aliases.append(alias["id"])
+            else:
+                # Pre-hashed path: use hashed_signals directly (observations already persisted)
+                for (sig_type, sig_hash, display) in hashed_signals:
+                    if sig_type in _ATTRIBUTION_ONLY:
+                        continue
+                    alias = await self._repo.upsert_alias(
+                        tenant_id=tenant_id,
+                        canonical_entity_id=canonical_entity_id,
+                        alias_type=sig_type,
+                        alias_value_hash=sig_hash,
+                        alias_display_value_redacted=display,
+                        source="recompute",
+                        source_event_id=event_id,
+                        source_platform=None,
+                        confidence=policy_result.confidence,
+                        confidence_tier=policy_result.confidence_tier,
+                        consent_snapshot=consent_snapshot,
+                    )
+                    linked_aliases.append(alias["id"])
 
         # ── 10. Merge entities if approved ───────────────────────────────
         merge_event_id: Optional[str] = None
@@ -619,47 +674,40 @@ class IdentityResolutionService:
                 "errors": 0,
             }
 
-        # Group observations by source_event_id and replay each unique event
-        seen_events: set[str] = set()
+        # Group all observations by source_event_id so all signals from one event
+        # are replayed together. Using _pre_hashed_signals bypasses re-hashing of
+        # already-stored hashes.
+        events_map: dict[str, list] = {}
+        for obs in observations:
+            src_evt_id = obs.get("source_event_id", "")
+            if src_evt_id:
+                events_map.setdefault(src_evt_id, []).append(obs)
+
         decisions: list[dict] = []
         errors = 0
 
-        for obs in observations:
-            src_evt_id = obs.get("source_event_id", "")
-            if not src_evt_id or src_evt_id in seen_events:
+        for src_evt_id, event_obs in events_map.items():
+            pre_hashed: list[dict] = []
+            consent_snapshot_val = event_obs[0].get("consent_snapshot") if event_obs else None
+            for obs in event_obs:
+                sig_type_str = obs.get("signal_type", "")
+                sig_hash = obs.get("signal_value_hash", "")
+                if sig_type_str and sig_hash:
+                    pre_hashed.append({
+                        "type": sig_type_str,
+                        "hash": sig_hash,
+                        "display": obs.get("raw_value_redacted", ""),
+                    })
+            if not pre_hashed:
                 continue
-            seen_events.add(src_evt_id)
 
-            sig_type = obs.get("signal_type", "")
             synthetic_event: dict = {
                 "event_id": src_evt_id,
                 "tenant_id": tenant_id,
-                "context": {"consent": obs.get("consent_snapshot")},
-                "properties": {},
+                "context": {"consent": consent_snapshot_val},
+                "_pre_hashed_signals": pre_hashed,
                 "source": "recompute",
             }
-            # Map stored signal_type to the event field the resolver reads.
-            # signal_value_hash is already hashed — pass directly so extract_signals
-            # can pick it up from the synthetic event's properties or top-level fields.
-            sig_hash = obs.get("signal_value_hash", "")
-            if sig_type == "user_id":
-                synthetic_event["user_id"] = sig_hash
-            elif sig_type == "anonymous_id":
-                synthetic_event["anonymous_id"] = sig_hash
-            elif sig_type == "session_id":
-                synthetic_event["session_id"] = sig_hash
-            elif sig_type in ("email_hash", "email"):
-                synthetic_event.setdefault("properties", {})["email_hash"] = sig_hash
-            elif sig_type in ("phone_hash", "phone"):
-                synthetic_event.setdefault("properties", {})["phone_hash"] = sig_hash
-            elif sig_type in ("wallet_address", "wallet"):
-                synthetic_event.setdefault("properties", {})["walletAddress"] = sig_hash
-            elif sig_type in ("external_id", "customer_id"):
-                synthetic_event.setdefault("properties", {})["externalId"] = sig_hash
-            elif sig_type in ("device_id", "install_id", "browser_id"):
-                synthetic_event.setdefault("properties", {})["deviceId"] = sig_hash
-            else:
-                synthetic_event.setdefault("properties", {})[sig_type] = sig_hash
 
             try:
                 decision = await self._resolve_event_inner(synthetic_event, tenant_id)
@@ -784,14 +832,18 @@ def _has_strong_signal(types: list[IdentitySignalType]) -> bool:
 
 
 def _infer_entity_type(signals: list) -> EntityType:
-    for sig in signals:
-        if sig.type == IdentitySignalType.USER_ID:
+    return _infer_entity_type_from_types([sig.type for sig in signals])
+
+
+def _infer_entity_type_from_types(signal_types: list[IdentitySignalType]) -> EntityType:
+    for st in signal_types:
+        if st == IdentitySignalType.USER_ID:
             return EntityType.HUMAN
-        if sig.type == IdentitySignalType.AGENT_ID:
+        if st == IdentitySignalType.AGENT_ID:
             return EntityType.AGENT
-        if sig.type == IdentitySignalType.ORG_ID:
+        if st == IdentitySignalType.ORG_ID:
             return EntityType.ORGANIZATION
-        if sig.type == IdentitySignalType.WALLET_ADDRESS:
+        if st == IdentitySignalType.WALLET_ADDRESS:
             return EntityType.WALLET
     return EntityType.ANONYMOUS_VISITOR
 

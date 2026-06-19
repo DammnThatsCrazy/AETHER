@@ -75,7 +75,10 @@ def check_mutating_endpoints_require_write(source: str) -> None:
         start = match.start()
         next_def = re.search(r"\n(?:async def|def|class) ", source[start + 1:])
         block = source[start: start + 1 + (next_def.start() if next_def else len(source) - start)]
-        if "require_permission" not in block:
+        if (
+            "require_permission('write')" not in block
+            and 'require_permission("write")' not in block
+        ):
             fail(
                 f"identity route handler {fn_name!r} does not call "
                 "tenant.require_permission('write'). Mutating endpoints must "
