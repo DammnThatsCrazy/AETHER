@@ -12,7 +12,7 @@ source_files:
 canonical_owner: backend@aether
 estimated_read_minutes: 5
 toc_depth: 3
-last_synced_commit: fc805ae
+last_synced_commit: 111fddf
 ---
 
 # PostgreSQL / Repository Subsystem
@@ -120,9 +120,11 @@ Tables are created automatically on first access. No migration tool is required 
 | `gold_tradfi_portfolio` | Plaid | `/web2` (credit consent required) |
 | `gold_web3_daily_metrics` | DeFiLlama | `/protocol-metrics` |
 
-`BronzeRepository.ingest()` returns `(record, is_new: bool)` — callers use the boolean to distinguish new inserts from duplicates without a separate read. `SilverRepository.upsert_record()` includes `tenant_id` in the `record_id` hash (`SHA256(tenant_id:entity_type:entity_id:source)[:24]`) to prevent cross-tenant data collisions.
+`BronzeRepository.ingest()` returns `(record, is_new: bool)` — callers use the boolean to distinguish new inserts from duplicates without a separate read. Bronze records carry a provenance envelope: `provenance_status`, `license_status`, `terms_status`, `commercial_use_status`, `model_training_status`, `quarantine_status`, and `raw_payload_hash` (SHA-256 of raw payload). Records with `license_status="missing"` or `provenance_status` not equal to `VALID` are automatically set to `quarantine_status="quarantined"`.
 
-Gold records use `GoldRepository.materialize(metric_name, entity_id, value, dimensions)`.
+`SilverRepository.upsert_record()` includes `tenant_id` in the `record_id` hash (`SHA256(tenant_id:entity_type:entity_id:source)[:24]`) to prevent cross-tenant data collisions. `SilverRepository.check_promotion_eligibility(bronze_record)` enforces the promotion gate: quarantined Bronze records cannot be promoted to Silver (returns `(False, reason)` with the blocking reason).
+
+Gold records use `GoldRepository.materialize(metric_name, entity_id, value, dimensions)` with optional `lineage_id`, `source_manifest_ids`, and `model_training_eligible` parameters that attach enrichment lineage to Gold artifacts.
 The `IntelligenceAggregator` queries via `get_metrics(entity_id)` and applies
 `?window=30d|60d|90d|lifetime` filtering on the `materialized_at` timestamp.
 
