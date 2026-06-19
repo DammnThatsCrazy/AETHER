@@ -448,7 +448,7 @@ class ContractRegistryRepository(BaseRepository):
             raise ForbiddenError("ContractRegistry")
         return record
 
-    async def find_for_proof(self, tenant_id: str, chain_id: int, contract_address: str, campaign_id: str) -> Optional[dict]:
+    async def find_for_proof(self, tenant_id: str, chain_id: int, contract_address: str, campaign_id: str = "") -> Optional[dict]:
         """Return a verified registry entry for proof generation, or None."""
         results = await self.find_many(
             filters={"tenant_id": tenant_id, "verification_status": "verified"},

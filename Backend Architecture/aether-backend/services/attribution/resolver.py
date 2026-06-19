@@ -68,10 +68,13 @@ class AttributionConfig:
 
 class JourneyStore:
     """
-    In-memory touchpoint store keyed by user ID.
+    In-memory touchpoint store keyed by (tenant_id, user_id).
+
+    Tenant isolation is enforced at the key level — touchpoints from
+    Tenant A are never visible to Tenant B even for the same user_id.
 
     Production replacement: DynamoDB, ClickHouse, or a dedicated
-    time-series store.
+    time-series store with tenant_id as a partition key.
     """
 
     def __init__(self) -> None:
@@ -80,26 +83,29 @@ class JourneyStore:
                 "JourneyStore is disabled outside local mode. Configure a persistent attribution "
                 "store or set AETHER_ALLOW_INMEMORY_JOURNEY_STORE=1 for an explicit override."
             )
-        self._store: dict[str, list[dict[str, Any]]] = defaultdict(list)
+        self._store: dict[tuple[str, str], list[dict[str, Any]]] = defaultdict(list)
 
-    def add(self, user_id: str, touchpoint: dict[str, Any]) -> None:
-        """Append a raw touchpoint dict for a user."""
-        self._store[user_id].append(touchpoint)
+    def _key(self, tenant_id: str, user_id: str) -> tuple[str, str]:
+        return (tenant_id, user_id)
 
-    def get(self, user_id: str) -> list[dict[str, Any]]:
-        """Return all stored touchpoints for a user (oldest first)."""
-        return list(self._store.get(user_id, []))
+    def add(self, tenant_id: str, user_id: str, touchpoint: dict[str, Any]) -> None:
+        """Append a raw touchpoint dict for a (tenant, user) pair."""
+        self._store[self._key(tenant_id, user_id)].append(touchpoint)
 
-    def clear(self, user_id: str) -> int:
-        """Remove all touchpoints for a user.  Returns count removed."""
-        count = len(self._store.pop(user_id, []))
+    def get(self, tenant_id: str, user_id: str) -> list[dict[str, Any]]:
+        """Return all stored touchpoints for a (tenant, user) pair (oldest first)."""
+        return list(self._store.get(self._key(tenant_id, user_id), []))
+
+    def clear(self, tenant_id: str, user_id: str) -> int:
+        """Remove all touchpoints for a (tenant, user) pair. Returns count removed."""
+        count = len(self._store.pop(self._key(tenant_id, user_id), []))
         return count
 
-    def count(self, user_id: str) -> int:
-        return len(self._store.get(user_id, []))
+    def count(self, tenant_id: str, user_id: str) -> int:
+        return len(self._store.get(self._key(tenant_id, user_id), []))
 
-    def all_user_ids(self) -> list[str]:
-        return list(self._store.keys())
+    def all_user_ids(self, tenant_id: str) -> list[str]:
+        return [uid for (tid, uid) in self._store if tid == tenant_id]
 
 
 # ========================================================================

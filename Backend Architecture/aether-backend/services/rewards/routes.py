@@ -909,6 +909,26 @@ async def _evaluate_event_core(request: Request, body: EvaluateRequest) -> dict:
             except Exception:
                 pass
 
+            # Contract registry gate: onchain_claim proofs are only issued for
+            # contracts the tenant has registered and verified. Skip in local/test.
+            if decision.rail == "onchain_claim" and not is_local:
+                _campaign = decision.campaign or {}
+                _contract_address = _campaign.get("contract_address") or os.getenv(
+                    "EVM_CONTRACT_ADDRESS", ""
+                )
+                _chain_id = int(_campaign.get("chain_id") or os.getenv("EVM_CHAIN_ID", "1"))
+                _registry_entry = await repos["contracts"].find_for_proof(
+                    tenant_id, _chain_id, _contract_address, decision.campaign_id or ""
+                )
+                if _registry_entry is None:
+                    raise HTTPException(
+                        status_code=403,
+                        detail=(
+                            "Contract not in verified registry for this tenant. "
+                            "Register and verify via POST /v1/rewards/contracts before generating proofs."
+                        ),
+                    )
+
             idempotency_key = body.idempotency_key or str(uuid.uuid4())
             payload = await adapter.build_action_payload(
                 decision=decision,
