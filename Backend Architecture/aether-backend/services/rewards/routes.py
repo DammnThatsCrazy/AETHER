@@ -191,7 +191,7 @@ class CampaignCreate(BaseModel):
     # Legacy fields (local mode, kept for backward compat)
     rules: Optional[list[dict]] = None
     total_budget_wei: Optional[int] = None
-    chain_id: int = 1
+    chain_id: Optional[int] = None  # None → fall back to EVM_CHAIN_ID at evaluation time
     contract_address: Optional[str] = None
     vm_type: str = "evm"
     program_id: Optional[str] = None
@@ -599,7 +599,9 @@ async def create_campaign(request: Request, body: CampaignCreate):
         "budget_policy": body.budget_policy,
         "external_campaign_ref": body.external_campaign_ref,
         "contract_address": body.contract_address,
-        "chain_id": body.chain_id,
+        # Omit chain_id when not supplied so the registry gate and adapter fall back
+        # to EVM_CHAIN_ID at evaluation time rather than hardcoding mainnet (1).
+        **( {"chain_id": body.chain_id} if body.chain_id is not None else {} ),
         "vm_type": body.vm_type,
         "program_id": body.program_id,
         "created_at": _utc_now(),

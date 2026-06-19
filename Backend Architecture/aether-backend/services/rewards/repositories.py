@@ -467,6 +467,7 @@ class ContractRegistryRepository(BaseRepository):
                    oracle_signer_address=EXCLUDED.oracle_signer_address,
                    allowed_campaign_ids=EXCLUDED.allowed_campaign_ids,
                    abi_ref=EXCLUDED.abi_ref,
+                   verification_status='pending',
                    updated_at=NOW()
                RETURNING *""",
             uuid.UUID(record_id), tenant_id,  # uuid.UUID so asyncpg maps to uuid column
