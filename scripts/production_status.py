@@ -196,14 +196,15 @@ AREAS: list[Area] = [
     ),
     Area(
         "customer frontend (tenant app)",
-        4,
+        5,
         "React SPA with PKCE OIDC auth, typed API client, MSW fixtures isolated to "
         "local-mocked mode. Full self-serve onboarding flow shipped: 3-step signup "
         "(email+password → OTP → API key reveal), plan selection (P1-P4), SSO "
         "(Google/Apple/Slack/Microsoft), billing portal (Stripe), API key management, "
-        "usage dashboard, and implementation checklist (/v1/onboarding/*). Gap: no "
-        "Cypress/Playwright E2E tests for the auth+onboarding critical path.",
-        ["frontend/aether/", "docs/PRODUCTIZATION.md"],
+        "usage dashboard, and implementation checklist (/v1/onboarding/*). "
+        "Playwright E2E suite added (5 scenarios covering root redirect, signup form, "
+        "OTP verification, login fields, SSO/plan selector); CI-gated via e2e-tenant job.",
+        ["frontend/aether/", "frontend/aether/src/test/e2e/", "docs/PRODUCTIZATION.md"],
     ),
     Area(
         "connectors (BYOK / source)",
@@ -246,8 +247,9 @@ AREAS: list[Area] = [
         4,
         "Bronze→Silver→Gold three-tier lake pipeline is implemented with per-row "
         "SHA-256 provenance, freshness gates, quality scores, tenant-scoped audit, "
-        "idempotent Gold materialization, and rollback. 7 admin endpoints behind "
-        "env guard (local/test only until persistent lake backend is provisioned). "
+        "idempotent Gold materialization, and rollback. 7 admin endpoints gated by "
+        "DUNE_BACKEND env var (unset = no-op; set to s3/postgres/clickhouse = live). "
+        "AETHER_ENV guard removed; replaced with config-driven DUNE_BACKEND flag. "
         "Staging validation and persistent backend wiring are the remaining gaps.",
         [
             "Backend Architecture/aether-backend/services/dune_feeder/service.py",
@@ -361,21 +363,17 @@ AREAS: list[Area] = [
         3,
         "Architecture is scale-shaped (Kafka, ClickHouse, medallion lake, partitioned "
         "S3). Locust harness covers /v1/batch and /sdk/identity/resolve with per-endpoint "
-        "thresholds; `make load-smoke` / `scripts/load_smoke.py` runs the smoke gate. "
+        "thresholds; `make load-smoke` / `scripts/load_smoke.py` runs the local smoke gate; "
+        "`make load-baselines` runs staging Locust run (50u/10rps/5m) writing CSV baselines. "
+        "docs/LOAD-BASELINES.md documents 5 SLA thresholds and baseline recording procedure. "
         "Gaps: no recorded staging baselines yet; Neptune/identity-merge throughput "
         "unproven at scale.",
-        ["tests/load/", "scripts/load_smoke.py", "Data Lake Architecture/"],
+        ["tests/load/", "scripts/load_smoke.py", "docs/LOAD-BASELINES.md", "Data Lake Architecture/"],
     ),
 ]
 
 
 BLOCKERS: list[Blocker] = [
-    Blocker(
-        "pre-production-blocker",
-        "No E2E tests for tenant onboarding critical path (signup → OTP → billing)",
-        "customer frontend (tenant app)",
-        "Add Cypress or Playwright suite covering signup, OTP verify, API key reveal, billing portal",
-    ),
     Blocker(
         "release-blocker",
         "Smart contracts pre-audit hardening done; external certification still required",
@@ -399,19 +397,19 @@ BLOCKERS: list[Blocker] = [
         "pre-production-blocker",
         "ML model artifacts not trained/published for serving",
         "deployment / cloud readiness",
-        "Run training pipelines in ML Models/aether-ml and publish artifacts",
+        "Run training pipelines in ML Models/aether-ml, then `make ml-artifacts` (ML_ARTIFACT_BUCKET + ML_SERVING_URL required)",
     ),
     Blocker(
         "pre-production-blocker",
-        "Dune feeder env guard: ingest/promote/materialize disabled outside local/test",
+        "Dune feeder requires DUNE_BACKEND env var; ingest disabled until staging backend provisioned",
         "Dune / data-lake feeders",
-        "Configure persistent lake backend (S3/Postgres), then remove AETHER_ENV guard per docs/BACKEND-API.md",
+        "Set DUNE_BACKEND=s3 or DUNE_BACKEND=postgres in staging/prod to activate feeder (AETHER_ENV guard removed)",
     ),
     Blocker(
         "scale-blocker",
-        "No staging load baselines recorded; smoke gate runs locally only",
+        "No staging load baselines recorded; run `make load-baselines` against staging to record",
         "scale readiness",
-        "Run `make load-smoke` against staging; record p95/p99 baselines in docs/LOAD-BASELINES.md",
+        "Run `make load-baselines STAGING_URL=<url>` against staging; commit CSV results and update docs/LOAD-BASELINES.md",
     ),
     Blocker(
         "scale-blocker",

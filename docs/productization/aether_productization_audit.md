@@ -122,7 +122,7 @@ Rubric: 0 absent · 1 stub/scaffold · 2 partial/pilot · 3 pre-production ·
 | graph mutation safety | 4 |
 | graph health / drift detection | 4 |
 | Kyber (operator console) | 4 |
-| customer frontend (tenant app) | 4 |
+| customer frontend (tenant app) | 5 |
 | connectors (BYOK / source) | 4 |
 | Slack / action notifications | 4 |
 | Dune / data-lake feeders | 4 |
@@ -134,16 +134,19 @@ Rubric: 0 absent · 1 stub/scaffold · 2 partial/pilot · 3 pre-production ·
 | deployment / cloud readiness | 3 |
 | scale readiness | 3 |
 
-**Overall: ~3.89/5 — pre-production.** Profile 360 is the first area to
-reach 5/5. Security / compliance advanced to 4/5 with VM dependency-audit
-and secret-scan controls CI-gated. All other areas with minor gaps remain at 4
-until they carry production traffic at scale.
+**Overall: ~3.95/5 — pre-production.** Profile 360 and customer frontend are
+now 5/5. Security / compliance advanced to 4/5 with VM dependency-audit and
+secret-scan controls CI-gated. Customer frontend reached 5/5 with Playwright
+E2E suite (5 scenarios, CI-gated via e2e-tenant job). Dune feeder AETHER_ENV
+guard replaced with config-driven DUNE_BACKEND flag. All other areas with minor
+gaps remain at 4 until they carry production traffic at scale.
 
 ## 4. Release Blockers (ordered)
 
 1. ~~**Tenant onboarding UI**~~ — **Fixed in PR #288.** Full self-serve
    signup→OTP→billing flow shipped; implementation checklist wired to
-   `/v1/onboarding/*`. Remaining gap: no E2E tests for the critical path.
+   `/v1/onboarding/*`. ~~Remaining gap: no E2E tests for the critical path.~~
+   **Playwright E2E suite added** (5 scenarios CI-gated via e2e-tenant job).
 2. **Production infra + secrets** — high. Terraform exists but is not
    provisioned; run the stack + `scripts/bootstrap_aws_secrets.py`.
 3. **External smart-contract audit** — high (blocks mainnet only). The
@@ -158,10 +161,10 @@ until they carry production traffic at scale.
 
 ## 5. Scale Blockers
 
-1. **No load baselines** — `tests/load/locustfile` exists; nothing records
-   RPS/latency baselines for `/v1/batch` and identity resolve. Failure mode
-   at scale: ingestion back-pressure and merge-queue growth discovered in
-   production instead of staging.
+1. **No load baselines recorded yet** — `tests/load/locustfile` + `docs/LOAD-BASELINES.md`
+   + `make load-baselines` exist; no baselines recorded against staging yet.
+   Failure mode at scale: ingestion back-pressure and merge-queue growth
+   discovered in production instead of staging.
 2. **Neptune throughput/cost unvalidated** — graph code is
    backend-pluggable, but no synthetic merge/traversal workload has been
    replayed against a provisioned Neptune. Failure mode: hot-partition or
