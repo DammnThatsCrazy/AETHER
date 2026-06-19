@@ -94,10 +94,11 @@ async def _run_shopify_pipeline(monkeypatch):
 
         # Step 2 — mock the adapter pull and Bronze ingest
         fake_event = NormalizedEvent(
-            external_id="order-001",
+            source="shopify",
             event_type="order_created",
+            external_id="order-001",
             occurred_at="2025-01-01T00:00:00Z",
-            payload={"total": 150.0},
+            properties={"total": 150.0},
         )
 
         async def fake_pull(config, *, since=None, secret=None):
@@ -151,10 +152,11 @@ async def _run_stripe_pipeline(monkeypatch):
         )
 
         fake_event = NormalizedEvent(
-            external_id="ch-001",
+            source="stripe",
             event_type="charge_succeeded",
+            external_id="ch-001",
             occurred_at="2025-01-01T00:00:00Z",
-            payload={"amount": 5000},
+            properties={"amount": 5000},
         )
 
         ingest_calls = []
@@ -207,10 +209,11 @@ async def _run_slack_pipeline(monkeypatch):
         )
 
         fake_event = NormalizedEvent(
-            external_id="msg-001",
+            source="slack",
             event_type="message_posted",
+            external_id="msg-001",
             occurred_at="2025-01-01T00:00:00Z",
-            payload={"channel": "#general"},
+            properties={"channel": "#general"},
         )
 
         ingest_calls = []
