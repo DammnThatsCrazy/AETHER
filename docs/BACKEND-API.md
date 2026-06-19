@@ -2241,6 +2241,13 @@ Manage automated Dune query polling schedules per tenant. All endpoints require 
 
 **Domains:** `onchain`, `governance`, `market`, `social`, `identity`, `tradfi`
 
+**Required env var:**
+
+| Env var | Description | Values |
+|---------|-------------|--------|
+| `DUNE_BACKEND` | Activates the Dune polling scheduler. When unset or empty the worker runs in no-op mode (logs intent, no external API calls). Set in staging/prod. | `s3` \| `postgres` \| `clickhouse` |
+| `DUNE_API_KEY` | Dune Analytics API key. Required for live pulls. | string |
+
 ---
 
 ## Suggestion Intelligence (v8.10.0)

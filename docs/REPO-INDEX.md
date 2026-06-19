@@ -146,6 +146,7 @@ The following authored docs are expected to stay aligned with code changes:
 - `KYBER-STRATEGIC-OBSERVABILITY.md`
 - `Kyber-OPERATOR-GUIDE.md`
 - `LIVE-TELEMETRY-WIRING.md`
+- `LOAD-BASELINES.md`
 - `LOAD-TESTING.md`
 - `LOCAL-CLOUD-SYNC.md`
 - `LOCAL-DEVELOPMENT.md`

@@ -44,7 +44,8 @@ def _utc_now_iso() -> str:
 
 
 def _is_live() -> bool:
-    return os.getenv("AETHER_ENV", "local").lower() != "local"
+    backend = os.getenv("DUNE_BACKEND", "").lower()
+    return backend in ("s3", "postgres", "clickhouse")
 
 
 # ── Schedule store ────────────────────────────────────────────────────────────

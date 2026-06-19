@@ -1584,6 +1584,23 @@
       ]
     },
     {
+      "path": "docs/LOAD-BASELINES.md",
+      "title": "Load Baselines",
+      "slug": "load-baselines",
+      "section": "operations",
+      "visibility": "I",
+      "audience": [
+        "ops",
+        "dev-senior",
+        "architect"
+      ],
+      "status": "stable",
+      "since_version": "8.9.0",
+      "estimated_read_minutes": 3,
+      "toc_depth": 2,
+      "canonical_owner": "platform@aether"
+    },
+    {
       "path": "docs/LOAD-TESTING.md",
       "title": "Load Testing",
       "slug": "operations/load-testing",

@@ -233,6 +233,15 @@ release-gate: ## Full release gate: repo consistency (CI mode) + strict producti
 	python scripts/repo_doctor.py --ci
 	python scripts/production_status.py --strict
 
+load-baselines: ## Record staging load baselines via Locust (requires STAGING_URL and running backend)
+	mkdir -p tests/load/results
+	locust -f tests/load/locustfile.py --headless -u 50 -r 10 \
+	  --run-time 5m --host $(STAGING_URL) \
+	  --csv tests/load/results/baseline
+
+ml-artifacts: ## Publish staged ML model artifacts to S3 and mark promoted (requires ML_ARTIFACT_BUCKET + ML_SERVING_URL)
+	python scripts/publish_ml_artifacts.py
+
 load-smoke: ## Load smoke gate: 20 users, 30s against localhost:8000 (exits 2 if backend unreachable)
 	python scripts/load_smoke.py
 
