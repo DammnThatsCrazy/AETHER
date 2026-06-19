@@ -247,6 +247,11 @@ jobs:
       - name: Install Node dependencies
         run: npm ci --ignore-scripts
 
+      - name: Build workspace packages
+        run: |
+          npm run build --workspace=packages/shared
+          npm run build --workspace=packages/web
+
       - name: Install Playwright browsers
         run: npx playwright install --with-deps chromium
 
