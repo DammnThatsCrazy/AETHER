@@ -170,3 +170,54 @@ class FeederGoldMaterializeRequest(BaseModel):
         None,
         description="Restrict materialization to records ingested under this tenant scope.",
     )
+
+
+# ─── Scheduled polling ────────────────────────────────────────────────────────
+
+class ScheduledQueryConfig(BaseModel):
+    """Per-tenant configuration for automated Dune query polling."""
+    schedule_id: str = Field(..., description="UUID assigned at creation")
+    tenant_scope: Optional[str] = Field(None, description="Tenant this schedule belongs to; None = platform-wide")
+    query_id: str = Field(..., description="Dune query ID (numeric string)")
+    query_name: str = Field(..., description="Human-readable label for this schedule")
+    source_tag: str = Field(..., description="Batch identifier used when ingesting into Bronze")
+    domain: str = Field(..., description="Data domain: onchain | governance | market | social | identity | tradfi")
+    interval_seconds: int = Field(..., ge=300, description="Polling cadence in seconds (minimum 300 / 5 min)")
+    max_age_seconds: int = Field(default=3600, description="Freshness gate threshold passed to ingest()")
+    quality_threshold: float = Field(default=0.8, ge=0.0, le=1.0, description="Minimum row quality for Bronze landing")
+    schema: Optional[dict[str, str]] = Field(None, description="Optional {field: type} for quality gate")
+    required_fields: Optional[list[str]] = Field(None, description="Required field names for quality gate")
+    api_key_ref: Optional[str] = Field(None, description="Vault reference for a tenant-specific Dune API key")
+    enabled: bool = Field(default=True, description="When false, scheduler skips this config without deleting it")
+    created_at: str = Field(..., description="ISO-8601 creation timestamp")
+    last_run_at: Optional[str] = Field(None, description="ISO-8601 timestamp of the most recent poll attempt")
+    last_run_status: Optional[str] = Field(None, description="ok | error | skipped")
+    last_run_detail: Optional[str] = Field(None, description="Short human-readable detail from the last run")
+
+
+class ScheduleCreateRequest(BaseModel):
+    """Admin API request body for registering a new scheduled Dune query."""
+    query_id: str = Field(..., description="Dune query ID")
+    query_name: str = Field(..., description="Human-readable label")
+    source_tag: str = Field(..., description="Batch identifier for Bronze ingestion")
+    domain: str = Field(..., description="Data domain")
+    interval_seconds: int = Field(..., ge=300, description="Polling cadence (minimum 300 s)")
+    max_age_seconds: int = Field(default=3600)
+    quality_threshold: float = Field(default=0.8, ge=0.0, le=1.0)
+    schema: Optional[dict[str, str]] = None
+    required_fields: Optional[list[str]] = None
+    api_key_ref: Optional[str] = Field(None, description="Vault reference for a Dune API key")
+    enabled: bool = True
+
+
+class ScheduleRunSummary(BaseModel):
+    """Summary of a single scheduled-poll execution returned in API responses."""
+    schedule_id: str
+    query_id: str
+    source_tag: str
+    ran_at: str
+    status: str
+    rows_submitted: int = 0
+    rows_accepted: int = 0
+    rows_rejected: int = 0
+    detail: Optional[str] = None

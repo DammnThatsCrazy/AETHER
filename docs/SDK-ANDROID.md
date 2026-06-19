@@ -13,7 +13,7 @@ source_files:
 canonical_owner: sdk@aether
 estimated_read_minutes: 10
 toc_depth: 3
-last_synced_commit: 48fb9d4
+last_synced_commit: e711d05
 ---
 
 # Aether Android SDK v8.9.0 — Integration Guide
@@ -299,5 +299,64 @@ When `errorTracking` is enabled, the SDK installs a global `Thread.UncaughtExcep
 
 - **Anonymous ID** and **User ID** persisted in `SharedPreferences` under `com.aether.sdk`
 - **Device fingerprint** is generated on each init (deterministic — same result for same device)
-- **Event queue** is in-memory only (flushed on background/termination)
+- **Event queue** is persisted to `filesDir/aether_queue.json` (file-based, capped at 1000 events; flushed on foreground)
 - **Server config** cached in memory (refreshed on each app launch)
+
+## Health Agent
+
+The health agent starts automatically after `initialize()`. It:
+- POSTs a signed heartbeat to `/v1/sdk/health` every 60 seconds
+- Fetches the remote manifest from `/v1/config` every 5 minutes
+- Both are fire-and-forget; gated on analytics consent in GDPR mode
+
+## Granular Agent Lifecycle Emitters
+
+```kotlin
+Aether.agentRegistered(agentId, properties)
+Aether.agentTaskCreated(taskId, actorId, properties)
+Aether.agentTaskCompleted(taskId, properties)
+Aether.agentTaskFailed(taskId, reason, properties)
+Aether.agentEscalatedToHuman(taskId, reason, properties)
+Aether.agentOutcomeRecorded(taskId, outcome, properties)
+// ... 13 more — see AetherHealthAgent for full list
+```
+
+## x402 Lifecycle Emitters
+
+```kotlin
+Aether.x402ResourceRequested(resourceId, properties)
+Aether.x402PaymentRequired(resourceId, amount, currency, properties)
+Aether.x402PaymentSettled(paymentId, properties)
+Aether.x402AccessGranted(resourceId, properties)
+// ... 10 more
+```
+
+## Rewards Emitters
+
+```kotlin
+Aether.rewardActionQueued(campaignId, ruleId, properties)
+Aether.rewardProofGenerated(campaignId, proofId, properties)
+Aether.rewardDelivered(campaignId, rewardId, properties)
+Aether.rewardClaimSubmitted(campaignId, claimId, properties)
+```
+
+## Ecommerce Additions (8.9.0)
+
+```kotlin
+Aether.trackRemoveFromCart(productId, quantity, properties)
+Aether.trackApplyCoupon(couponCode, properties)
+Aether.trackBeginCheckout(cartValue, currency, properties)
+```
+
+## Reward Event Types (A6)
+
+Four reward lifecycle events are supported via `Aether.track()`:
+
+| Event type | When to emit |
+|---|---|
+| `reward_action_queued` | When a reward action has been queued for the user |
+| `reward_proof_generated` | When an on-chain claim proof is ready for wallet submission |
+| `reward_delivered` | When the tenant system confirms reward delivery |
+| `reward_claim_submitted` | When the user submits a claim (on-chain or off-chain) |
+
+Emit using `Aether.track()` with `campaignId`, `ruleId`, and `rewardIdempotencyKey` in properties. These events flow through `POST /v1/batch` and are processed by the reward eligibility pipeline on the backend. The SDK does not evaluate eligibility — that is handled server-side by the Aether reward policy engine.

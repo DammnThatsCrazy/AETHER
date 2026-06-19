@@ -15,7 +15,7 @@ source_files:
 canonical_owner: platform@aether
 estimated_read_minutes: 12
 toc_depth: 3
-last_synced_commit: 48fb9d4
+last_synced_commit: e8d95a8
 ---
 
 # CI/CD Pipeline — Stages, Gates & SDK Release
@@ -214,6 +214,10 @@ blocker list as a JSON build artifact. It requires no secrets and no
 external services. The same routine runs locally via
 `make production-status` (advisory) and `make release-gate`
 (repo consistency in CI mode + strict production status).
+
+## Smart contract static analysis
+
+`.github/workflows/smart-contract-analysis.yml` runs Slither static analysis on every push and PR that touches `Smart Contracts/`. Requires Slither to be installed (CI installs it via pip). Results are uploaded as an artifact. The pre-audit checklist at `scripts/smart_contract_audit_prep.py` runs 9 checks (oracle role, reward enforcement, nonce protection, etc.) and must pass 9/9 before external audit.
 
 ## Adding a new CI stage
 

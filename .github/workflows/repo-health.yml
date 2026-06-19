@@ -227,6 +227,12 @@ jobs:
       - name: Circular dependency check (madge)
         run: npm run deps:circular
 
+      - name: Secret scanning
+        run: npm run security:secrets
+
+      - name: Dependency audit
+        run: npm run security:deps
+
   validate:
     # Aggregate gate: required-status check for branch protection rules.
     # Passes only when all dependent jobs pass (or skip via path filter).

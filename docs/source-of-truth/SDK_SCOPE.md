@@ -62,3 +62,19 @@ SDKs must not make identity truth decisions. Fingerprints are collected only whe
 allowed by consent and are support signals, not sole proof. Cross-device linking is
 always tenant-scoped and requires valid consent plus stronger identity evidence when the
 link is sensitive.
+
+## Observation-Only Constraint
+
+AETHER observes. AETHER does not execute.
+
+The SDK never signs, sends, settles, or trades on behalf of the caller.
+`execution_by_aether` must always be `false` in all observation payloads.
+
+Any future capability that would have AETHER originate payments, send messages,
+execute trades, custody funds, or sign transactions on behalf of tenants requires:
+- Explicit product scope definition
+- Legal review
+- Compliance review
+- Feature flag gating
+
+Until that gate is cleared, no code path in AETHER may set `execution_by_aether = true`.

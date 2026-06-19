@@ -56,6 +56,20 @@ The following subsystems are implemented, tested, and CI-verified:
 - ✅ PNL calculator service
 - ✅ Retarget recommendation engine (score → recommendation → review → execute)
 
+### OODA Suggestion Intelligence
+- ✅ Canonical `Suggestion` entity with 15 lifecycle statuses across 8 OODA phases (observe → orient → suggest → review → act → measure → learn → closed)
+- ✅ Policy-governed lifecycle engine: approval gates for SECURITY / GOVERNANCE / IDENTITY / GRAPH_HEALTH / RELIABILITY classes and risk_score ≥ 0.7
+- ✅ Priority scoring formula: weighted composite of impact (0.30), confidence (0.20), urgency (0.20), evidence quality (0.15), tenant value (0.15) minus reversibility-adjusted risk
+- ✅ Tenant isolation enforced on every query, cache key, event, audit entry, and realtime channel
+- ✅ 10 signal adapters: data quality, SDK health/drift, graph, profile360, notifications, recommendations, governance, reliability, Noesis
+- ✅ Audit trail: every lifecycle transition appends an immutable `SuggestionAuditEvent`
+- ✅ Outcome loop: MEASURED → LEARNED → CLOSED with feedback signals back to scoring
+- ✅ Kyber OODA Command Center: cross-tenant feed, evidence drawer, policy panel, review queue (approve / reject / suppress)
+- ✅ Aether tenant feed: title / summary / what / why / impact + helpful / not helpful / dismiss feedback
+- ✅ Noesis read-only integration: `suggestion_lookup`, `suggestion_summary`, `suggestion_review_queue`, `suggestion_explain`, `suggestion_outcome_lookup` intents
+- ✅ Realtime channels: `suggestions.feed`, `suggestions.review`, `suggestions.outcomes`
+- ✅ Feature-flagged (`AETHER_SUGGESTIONS_ENABLED=false`); execution disabled by default (`AETHER_SUGGESTIONS_EXECUTION_ENABLED=false`)
+
 ### Security + Compliance
 - ✅ Consent enforcement: 8 consent purposes (analytics, marketing, web3, agent, commerce, personalization, credit, location)
 - ✅ PII masking: 3 analyst role tiers (readonly, standard, compliance) with field-level masking rules

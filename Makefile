@@ -16,7 +16,7 @@
         dev dev-streaming dev-analytics dev-notebooks dev-full dev-down \
         docker-up docker-down docker-logs \
         smoke byok-reencrypt \
-        clean validate-docs validate-frontmatter extract-docs docs-drift docs-stamp docs bump-version \
+        clean validate-docs validate-frontmatter validate-ml-registry extract-docs docs-drift docs-stamp docs bump-version \
         repo-doctor repo-doctor-fix docs-check ci-check docs-fix \
         production-status release-gate help
 
@@ -51,6 +51,9 @@ test-security: ## Run extraction defense tests only
 
 test-ml: ## Run ML model tests only
 	python -m pytest "$(ML_DIR)/tests/" -v
+
+validate-ml-registry: ## Validate ML model registry consistency (CI gate)
+	python scripts/validate_ml_registry.py
 
 test-coverage: ## Run tests with coverage report (all subsystems)
 	python -m pytest tests/ \
