@@ -242,6 +242,10 @@ class BaseEvent(BaseModel):
 class BatchRequest(BaseModel):
     batch: list[BaseEvent] = Field(..., min_length=1, max_length=500)
     sentAt: str = Field(..., description="ISO8601 batch send timestamp")
+    consents: list[str] = Field(
+        default_factory=list,
+        description="Consent scopes granted by the user for this batch (e.g. analytics, commerce, web3, agent)",
+    )
     context: Optional[dict[str, Any]] = None
 
     @field_validator("sentAt")
@@ -298,6 +302,8 @@ async def ingest_batch(
 
     metrics.increment("ingestion_batch_received_total", labels={"tenant_id": tenant.tenant_id})
 
+    granted_consents: frozenset[str] = frozenset(body.consents)
+
     for sdk_event in body.batch:
         result = await _process_single_event(
             sdk_event=sdk_event,
@@ -305,6 +311,7 @@ async def ingest_batch(
             batch_id=batch_id,
             received_at=received_at,
             cache=registry.cache,
+            granted_consents=granted_consents,
         )
         results.append(result)
         if result.status == "accepted":
@@ -448,6 +455,7 @@ async def _process_single_event(
     batch_id: str,
     received_at: str,
     cache: CacheClient,
+    granted_consents: frozenset[str] = frozenset(),
 ) -> EventResult:
     """Validate, check idempotency, and return per-event status."""
 
@@ -481,7 +489,17 @@ async def _process_single_event(
             # Mutate in-place so downstream uses scrubbed payload
             sdk_event.properties = scrubbed
 
-    # 3. Tenant-scoped idempotency check
+    # 3. Consent check (before Bronze write)
+    required_consent = EVENT_CONSENT_PURPOSE.get(sdk_event.type)
+    if required_consent and required_consent not in granted_consents:
+        metrics.increment("ingestion_validation_failed_total", labels={"reason": "consent_missing"})
+        return EventResult(
+            id=sdk_event.id,
+            status="rejected",
+            reason=f"consent_required:{required_consent}",
+        )
+
+    # 4. Tenant-scoped idempotency check
     idempotency_key = _make_idempotency_key(tenant_id, sdk_event.id, SCHEMA_VERSION)
     cache_key = f"aether:idempotency:{idempotency_key}"
 

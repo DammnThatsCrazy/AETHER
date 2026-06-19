@@ -217,6 +217,12 @@ bump-version: ## Bump version across all files (usage: make bump-version V=8.4.0
 # Production status & release gate
 # ---------------------------------------------------------------------------
 
+validate-schema-parity: ## Check TypeScript EventType registry matches Python CANONICAL_EVENT_TYPES
+	python scripts/validate_event_schema_parity.py
+
+validate-meter-names: ## Check metrics.increment() names in ingestion/connector paths are canonical
+	python scripts/validate_meter_names.py
+
 production-status: ## Readiness scorecard + blockers + live consistency checks (advisory)
 	python scripts/production_status.py
 

@@ -349,6 +349,22 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     else:
         sla_worker_task = asyncio.create_task(asyncio.sleep(0))
 
+    # Dune polling worker — periodic Bronze ingest + Bronze→Silver promotion.
+    dune_poll_task = asyncio.create_task(asyncio.sleep(0))  # placeholder
+    try:
+        from services.integrations.dune_feeder.worker import dune_poll_loop
+        dune_poll_task = asyncio.create_task(dune_poll_loop())
+    except Exception as e:  # pragma: no cover — defensive
+        logger.warning(f"Dune poll worker failed to start: {e}")
+
+    # Retention sweep worker — daily expiry enforcement per tenant policy.
+    retention_sweep_task = asyncio.create_task(asyncio.sleep(0))  # placeholder
+    try:
+        from services.security.retention_worker import retention_sweep_loop
+        retention_sweep_task = asyncio.create_task(retention_sweep_loop())
+    except Exception as e:  # pragma: no cover — defensive
+        logger.warning(f"Retention sweep worker failed to start: {e}")
+
     # Provider Gateway (feature-flagged)
     from dependencies.providers import _init_provider_gateway
     provider_gateway = _init_provider_gateway()
