@@ -368,6 +368,16 @@ class ReceiptCreate(BaseModel):
 
 # ── Rails ──────────────────────────────────────────────────────────────────
 
+class ContractRegistryCreate(BaseModel):
+    chain_id: int
+    contract_address: str
+    contract_name: str
+    vm_type: str = "evm"
+    oracle_signer_address: Optional[str] = None
+    allowed_campaign_ids: list[str] = Field(default_factory=list)
+    abi_ref: Optional[str] = None
+
+
 class RailConfigCreate(BaseModel):
     rail: str
     enabled: bool = False
@@ -862,6 +872,25 @@ async def _evaluate_event_core(request: Request, body: EvaluateRequest) -> dict:
         decision_repo=repos["decisions"],
     )
 
+    # ── Contract registry pre-check (before persisting decision) ─────────
+    # Gate onchain_claim before create_once so an unregistered contract does not
+    # consume cooldown/per-user/total-use caps by leaving an eligible=True row.
+    if decision.eligible and decision.rail == "onchain_claim" and not is_local:
+        _campaign = decision.campaign or {}
+        _contract_address = _campaign.get("contract_address") or os.getenv("EVM_CONTRACT_ADDRESS", "")
+        _chain_id = int(_campaign.get("chain_id") or os.getenv("EVM_CHAIN_ID", "1"))
+        _registry_entry = await repos["contracts"].find_for_proof(
+            tenant_id, _chain_id, _contract_address, decision.campaign_id or ""
+        )
+        if _registry_entry is None:
+            raise HTTPException(
+                status_code=403,
+                detail=(
+                    "Contract not in verified registry for this tenant. "
+                    "Register and verify via POST /v1/rewards/contracts before generating proofs."
+                ),
+            )
+
     # ── Persist decision ─────────────────────────────────────────────────
     decision_record: Optional[dict] = None
     try:
@@ -909,26 +938,6 @@ async def _evaluate_event_core(request: Request, body: EvaluateRequest) -> dict:
             except Exception:
                 pass
 
-            # Contract registry gate: onchain_claim proofs are only issued for
-            # contracts the tenant has registered and verified. Skip in local/test.
-            if decision.rail == "onchain_claim" and not is_local:
-                _campaign = decision.campaign or {}
-                _contract_address = _campaign.get("contract_address") or os.getenv(
-                    "EVM_CONTRACT_ADDRESS", ""
-                )
-                _chain_id = int(_campaign.get("chain_id") or os.getenv("EVM_CHAIN_ID", "1"))
-                _registry_entry = await repos["contracts"].find_for_proof(
-                    tenant_id, _chain_id, _contract_address, decision.campaign_id or ""
-                )
-                if _registry_entry is None:
-                    raise HTTPException(
-                        status_code=403,
-                        detail=(
-                            "Contract not in verified registry for this tenant. "
-                            "Register and verify via POST /v1/rewards/contracts before generating proofs."
-                        ),
-                    )
-
             idempotency_key = body.idempotency_key or str(uuid.uuid4())
             payload = await adapter.build_action_payload(
                 decision=decision,
@@ -967,6 +976,8 @@ async def _evaluate_event_core(request: Request, body: EvaluateRequest) -> dict:
 
         except RailUnavailableError as exc:
             logger.warning(f"Rail {exc.rail} unavailable: {exc.reason}")
+        except HTTPException:
+            raise
         except Exception as exc:
             logger.error(f"Action payload creation failed: {exc}", exc_info=True)
 
@@ -1484,6 +1495,63 @@ async def disable_rail(request: Request, rail_id: str):
     updated = await repos["rail_configs"].update(rail_id, {"enabled": False, "updated_at": _utc_now()})
     await _audit(repos, tenant_id, "rail.disabled", "rail_config", rail_id,
                  before_state=before, after_state=updated)
+    return updated
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# CONTRACT REGISTRY ROUTES
+# Tenants register and verify smart contracts before generating onchain_claim
+# proofs. Required in non-local environments by the registry gate in /evaluate.
+# ═══════════════════════════════════════════════════════════════════════════
+
+@router.post("/contracts", response_model=None)
+@api_response
+async def register_contract(request: Request, body: ContractRegistryCreate):
+    """Register a smart contract for onchain_claim proof generation."""
+    _require_permission(request, "rewards:write")
+    tenant_id = _get_tenant_id(request)
+    repos = await _get_repos()
+    record = await repos["contracts"].register(tenant_id, {
+        **body.model_dump(),
+        "verification_status": "pending",
+        "created_at": _utc_now(),
+        "updated_at": _utc_now(),
+    })
+    await _audit(repos, tenant_id, "contract.registered", "contract_registry", record.get("id"),
+                 after_state=record)
+    return record
+
+
+@router.get("/contracts", response_model=None)
+@api_response
+async def list_contracts(request: Request):
+    """List all registered contracts for the authenticated tenant."""
+    _require_permission(request, "rewards:read")
+    tenant_id = _get_tenant_id(request)
+    repos = await _get_repos()
+    return await repos["contracts"].list(tenant_id)
+
+
+@router.get("/contracts/{registry_id}", response_model=None)
+@api_response
+async def get_contract(request: Request, registry_id: str):
+    """Get a single registered contract by ID."""
+    _require_permission(request, "rewards:read")
+    tenant_id = _get_tenant_id(request)
+    repos = await _get_repos()
+    return await repos["contracts"].get(registry_id, tenant_id)
+
+
+@router.post("/contracts/{registry_id}/verify", response_model=None)
+@api_response
+async def verify_contract(request: Request, registry_id: str):
+    """Mark a registered contract as verified, enabling proof generation for it."""
+    _require_permission(request, "rewards:write")
+    tenant_id = _get_tenant_id(request)
+    repos = await _get_repos()
+    updated = await repos["contracts"].verify(registry_id, tenant_id)
+    await _audit(repos, tenant_id, "contract.verified", "contract_registry", registry_id,
+                 after_state=updated)
     return updated
 
 

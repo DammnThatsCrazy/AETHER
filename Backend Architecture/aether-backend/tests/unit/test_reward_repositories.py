@@ -325,7 +325,7 @@ def test_contract_registry_register_and_retrieve():
         })
         # Must verify before find_for_proof returns the entry
         await repo.verify(entry["id"], TENANT_A)
-        fetched = await repo.find_for_proof(TENANT_A, chain_id=1, contract_address="0xdeadbeef")
+        fetched = await repo.find_for_proof(TENANT_A, chain_id=1, contract_address="0xdeadbeef", campaign_id="camp_001")
         return entry, fetched
 
     entry, fetched = _run(run())
