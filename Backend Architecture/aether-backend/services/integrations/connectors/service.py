@@ -179,6 +179,21 @@ class ConnectorService:
             tenant_id=tenant_id, connector_type=connector_type)  # type: ignore[arg-type]
         if not config.enabled:
             return SyncResult(connector_type=connector_type, status="disabled", detail="connector disabled")  # type: ignore[arg-type]
+
+        # ACTION_NOTIFIER connectors must never write to the lake.
+        # Sync is blocked — use the action delivery path instead.
+        from services.integrations.connectors.base import ConnectorClass, LakeWritePolicy
+        descriptor = connector.descriptor()
+        if (
+            descriptor.connector_class == ConnectorClass.ACTION_NOTIFIER
+            or descriptor.lake_write_policy == LakeWritePolicy.NEVER
+        ):
+            raise ValueError(
+                f"Connector {connector_type} is an ACTION_NOTIFIER with "
+                f"lake_write_policy=NEVER. Lake sync not permitted. "
+                "Use the action delivery endpoint instead."
+            )
+
         secret = await self._resolve_secret(config)
         try:
             events = await connector.pull(config, since=since, secret=secret)
