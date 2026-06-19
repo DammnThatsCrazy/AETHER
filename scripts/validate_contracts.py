@@ -203,6 +203,30 @@ def check_no_api_key_in_query_params(events: dict) -> list[str]:
     return errors
 
 
+def run_identity_security_checks() -> list[str]:
+    """Delegate to validate_identity_security and collect its errors inline."""
+    import importlib.util
+
+    validator_path = Path(__file__).resolve().parent / "validate_identity_security.py"
+    if not validator_path.exists():
+        return [
+            "validate_identity_security.py not found in scripts/. "
+            "Create it to enable identity security contract checks."
+        ]
+
+    spec = importlib.util.spec_from_file_location("validate_identity_security", validator_path)
+    if spec is None or spec.loader is None:
+        return ["Could not load validate_identity_security.py."]
+
+    module = importlib.util.module_from_spec(spec)
+    try:
+        spec.loader.exec_module(module)  # type: ignore[union-attr]
+    except SystemExit:
+        pass
+
+    return list(getattr(module, "ERRORS", []))
+
+
 def main() -> int:
     events = _load("events.json")
     consent = _load("consent.json")
@@ -229,8 +253,9 @@ def main() -> int:
     errors += check_python_backend_event_types(events)
     errors += check_sdk_endpoint_not_ingest_events(events)
     errors += check_no_api_key_in_query_params(events)
+    errors += run_identity_security_checks()
 
-    checks_run = 6
+    checks_run = 7
     if errors:
         print(f"contract validator: {checks_run} checks, {len(errors)} inconsistencies.")
         print()

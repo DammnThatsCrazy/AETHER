@@ -229,6 +229,9 @@ class Profile360Aggregator:
         if settlement_repo is None:
             from repositories.repos import SettlementEventRepository
             settlement_repo = SettlementEventRepository()
+        if identity_repo is None:
+            from services.identity.repository import IdentityResolutionRepository
+            identity_repo = IdentityResolutionRepository()
 
         self._entities = entity_repo
         self._clusters = cluster_repo
@@ -894,8 +897,9 @@ class Profile360Aggregator:
                                    filters={"entity_id": entity_id}, limit=50),
             self._scoped_find_many(self._agent_execs, tenant_id=tenant_id,
                                    filters={"agent_id": entity_id}, limit=100),
+            _safe("summary.identity", self._identity.get_subject_by_canonical_entity_id(tenant_id, entity_id)),
         )
-        entity, agents, wallets, transfers, deleg_out, deleg_in, behavior, chains, execs = results
+        entity, agents, wallets, transfers, deleg_out, deleg_in, behavior, chains, execs, identity_subject = results
         # Tenant guard on the entity row too — find_by_id is not tenant-scoped,
         # so a foreign-tenant entity with this id would otherwise leak its
         # display_name / metadata into the summary response.
@@ -932,8 +936,11 @@ class Profile360Aggregator:
         active_deleg_out = [d for d in deleg_out if _is_active(d)]
 
         bx = behavior if isinstance(behavior, dict) and behavior.get("tenant_id") in (None, "", tenant_id) else None
+        id_subject = identity_subject if isinstance(identity_subject, dict) else None
+        canonical_entity_id = (id_subject or {}).get("canonical_entity_id") or entity_id
         snapshot = {
             "entity": _normalize_entity(entity, entity_id, tenant_id),
+            "canonical_entity_id": canonical_entity_id,
             "counts": {
                 "agents": len(agents),
                 "wallets": len(wallets),
@@ -985,7 +992,7 @@ class Profile360Aggregator:
                 "sources": [
                     "entities", "agent_configs", "entity_wallets", "transfers",
                     "delegations", "behavior_profiles", "journey_chains",
-                    "agent_executions",
+                    "agent_executions", "identity_subjects",
                 ],
             },
         }

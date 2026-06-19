@@ -82,6 +82,11 @@ class _IdentityAuditStore(BaseRepository):
         super().__init__("identity_resolution_audit")
 
 
+class _IdentitySuppressionStore(BaseRepository):
+    def __init__(self) -> None:
+        super().__init__("identity_suppression_rules")
+
+
 # ── Main repository facade ────────────────────────────────────────────────────
 
 class IdentityResolutionRepository:
@@ -97,6 +102,7 @@ class IdentityResolutionRepository:
         self._splits = _IdentitySplitEventStore()
         self._conflicts = _IdentityConflictStore()
         self._audit = _IdentityAuditStore()
+        self._suppressions = _IdentitySuppressionStore()
 
     # ── Subjects ──────────────────────────────────────────────────────────
 
@@ -595,6 +601,121 @@ class IdentityResolutionRepository:
     ) -> list[dict]:
         """Convenience alias for get_entity_audit."""
         return await self.get_entity_audit(tenant_id, canonical_entity_id, limit)
+
+    # ── Signal observation lookups ────────────────────────────────────────
+
+    async def get_observations_for_entity(
+        self, tenant_id: str, canonical_entity_id: str, limit: int = 500
+    ) -> list[dict]:
+        return await self._observations.find_many(
+            filters={"tenant_id": tenant_id, "canonical_entity_id": canonical_entity_id},
+            limit=limit,
+        )
+
+    async def get_observations_for_events(
+        self, tenant_id: str, event_ids: list[str], limit: int = 500
+    ) -> list[dict]:
+        results: list[dict] = []
+        seen: set[str] = set()
+        for evt_id in event_ids[:50]:
+            rows = await self._observations.find_many(
+                filters={"tenant_id": tenant_id, "source_event_id": evt_id},
+                limit=20,
+            )
+            for r in rows:
+                rid = r.get("id", "")
+                if rid not in seen:
+                    seen.add(rid)
+                    results.append(r)
+        return results[:limit]
+
+    # ── Suppression rules ─────────────────────────────────────────────────
+
+    async def create_suppression_rule(
+        self,
+        tenant_id: str,
+        identifier_hash: str,
+        identifier_type: str,
+        reason: str,
+        created_by: str,
+        subject_id: Optional[str] = None,
+        rule_type: str = "suppress",
+        expires_at: Optional[str] = None,
+    ) -> dict:
+        existing = await self._suppressions.find_many(
+            filters={
+                "tenant_id": tenant_id,
+                "identifier_type": identifier_type,
+                "identifier_hash": identifier_hash,
+            },
+            limit=5,
+        )
+        active = [r for r in existing if not r.get("revoked_at")]
+        if active:
+            return active[0]
+        rule_id = str(uuid.uuid4())
+        return await self._suppressions.insert(rule_id, {
+            "id": rule_id,
+            "tenant_id": tenant_id,
+            "identifier_hash": identifier_hash,
+            "identifier_type": identifier_type,
+            "subject_id": subject_id,
+            "rule_type": rule_type,
+            "reason": reason,
+            "created_by": created_by,
+            "created_at": utc_now().isoformat(),
+            "expires_at": expires_at,
+            "revoked_at": None,
+        })
+
+    async def check_suppression(
+        self,
+        tenant_id: str,
+        identifier_type: str,
+        identifier_hash: str,
+    ) -> bool:
+        """Return True if this identifier hash is suppressed for the tenant."""
+        rules = await self._suppressions.find_many(
+            filters={
+                "tenant_id": tenant_id,
+                "identifier_type": identifier_type,
+                "identifier_hash": identifier_hash,
+            },
+            limit=5,
+        )
+        now = utc_now().isoformat()
+        for r in rules:
+            if r.get("revoked_at"):
+                continue
+            expires = r.get("expires_at")
+            if expires and expires < now:
+                continue
+            return True
+        return False
+
+    async def revoke_suppression_rule(
+        self, tenant_id: str, suppression_id: str
+    ) -> Optional[dict]:
+        row = await self._suppressions.find_by_id(suppression_id)
+        if row is None or row.get("tenant_id") != tenant_id:
+            return None
+        row["revoked_at"] = utc_now().isoformat()
+        return await self._suppressions.update(suppression_id, row)
+
+    async def get_suppressions(
+        self, tenant_id: str, limit: int = 50
+    ) -> list[dict]:
+        return await self._suppressions.find_many(
+            filters={"tenant_id": tenant_id}, limit=limit
+        )
+
+    async def ping(self) -> bool:
+        """Health check — verify the repo layer is responsive."""
+        try:
+            await self._subjects.count({"tenant_id": "__ping__"})
+            return True
+        except Exception:
+            return False
 
     # ── Health / metrics helpers ──────────────────────────────────────────
 

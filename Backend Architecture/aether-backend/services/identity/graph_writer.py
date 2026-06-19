@@ -234,6 +234,28 @@ class IdentityGraphWriter:
                 source_event_ids=source_event_ids,
                 consent_snapshot=consent_snapshot,
             )
+            # Mirror to Neptune graph when client is available (production path).
+            # Failure is non-fatal: repo-backed edge is the source of truth.
+            if edge and self._graph is not None:
+                try:
+                    await self._graph.write_edge(
+                        tenant_id=tenant_id,
+                        edge_id=edge["id"],
+                        source_id=source_entity_id,
+                        target_id=target_entity_id,
+                        edge_type=edge_type.value,
+                        properties={
+                            "confidence": confidence,
+                            "confidence_tier": confidence_tier.value,
+                            "reason_codes": reason_codes,
+                            "source_event_ids": source_event_ids,
+                        },
+                    )
+                except Exception as graph_exc:
+                    logger.warning(
+                        "Neptune mirror write failed (non-fatal): %s→%s: %s",
+                        source_entity_id, target_entity_id, graph_exc,
+                    )
             return edge
         except Exception as exc:
             logger.error(

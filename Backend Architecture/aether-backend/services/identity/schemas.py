@@ -148,7 +148,37 @@ class IdentityRecomputeResponse(BaseModel):
     entity_id: Optional[str] = None
     event_ids: list[str] = Field(default_factory=list)
     reason: str
+    events_replayed: int = 0
+    decisions: list[dict] = Field(default_factory=list)
+    errors: int = 0
     note: Optional[str] = None
+
+
+# ── Suppression ───────────────────────────────────────────────────────────────
+
+class IdentitySuppressRequest(BaseModel):
+    identifier_type: str = Field(..., min_length=1)
+    identifier_hash: str = Field(..., min_length=1)
+    reason: str = Field(..., min_length=1)
+    subject_id: Optional[str] = None
+    expires_at: Optional[str] = None
+
+
+class IdentitySuppressResponse(BaseModel):
+    suppression_id: str
+    tenant_id: str
+    identifier_type: str
+    reason: str
+    revoked_alias_ids: list[str] = Field(default_factory=list)
+    created_at: str = ""
+    expires_at: Optional[str] = None
+
+
+class IdentityUnsuppressResponse(BaseModel):
+    revoked: bool = False
+    suppression_id: str
+    revoked_by: str = ""
+    error: Optional[str] = None
 
 
 # ── Health ────────────────────────────────────────────────────────────────────
