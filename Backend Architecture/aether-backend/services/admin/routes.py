@@ -1202,6 +1202,125 @@ async def operator_agentic_subagents(request: Request):
     return APIResponse(data={"subagent_relationships": subagent_links, "count": len(subagent_links)}).to_dict()
 
 
+@router.get("/kyber/identity-health")
+async def kyber_identity_health(request: Request):
+    """Per-tenant identity quality metrics across all tenants (operator view)."""
+    _require_kyber_operator(request)
+    from services.identity.repository import IdentityResolutionRepository
+    identity_repo = IdentityResolutionRepository()
+    tenants = await _repo.find_many(limit=10000)
+    results = []
+    for t in tenants:
+        tid = t.get("id") or t.get("tenant_id")
+        if not tid:
+            continue
+        try:
+            health = await identity_repo.get_identity_health(tid)
+            results.append({
+                "tenant_id": tid,
+                "tenant_name": t.get("name", ""),
+                "total_entities": health.get("total_subjects", 0),
+                "total_aliases": health.get("total_aliases", 0),
+                "open_conflicts": health.get("open_conflicts", 0),
+                "recent_merges": health.get("recent_merges", 0),
+                "recent_splits": health.get("recent_splits", 0),
+            })
+        except Exception as exc:
+            logger.warning("kyber_identity_health failed for tenant=%s: %s", tid, exc)
+    return APIResponse(data={"tenants": results, "count": len(results)}).to_dict()
+
+
+@router.get("/kyber/resolution-queue")
+async def kyber_resolution_queue(
+    request: Request,
+    limit: int = 200,
+    status: Optional[str] = None,
+):
+    """Paginated global conflict/candidate queue across all tenants."""
+    _require_kyber_operator(request)
+    from services.identity.repository import IdentityResolutionRepository
+    identity_repo = IdentityResolutionRepository()
+    tenants = await _repo.find_many(limit=10000)
+    all_conflicts: list[dict] = []
+    for t in tenants:
+        tid = t.get("id") or t.get("tenant_id")
+        if not tid:
+            continue
+        try:
+            conflicts = await identity_repo.get_conflicts(tid, status=status, limit=100)
+            for c in conflicts:
+                c["_tenant_id"] = tid
+                c["_tenant_name"] = t.get("name", "")
+            all_conflicts.extend(conflicts)
+        except Exception as exc:
+            logger.warning("kyber_resolution_queue failed for tenant=%s: %s", tid, exc)
+    all_conflicts = all_conflicts[:limit]
+    return APIResponse(data={"conflicts": all_conflicts, "total": len(all_conflicts)}).to_dict()
+
+
+@router.get("/kyber/merge-split-audit")
+async def kyber_merge_split_audit(
+    request: Request,
+    limit: int = 200,
+):
+    """Cross-tenant merge/split ledger (most recent first)."""
+    _require_kyber_operator(request)
+    from services.identity.repository import IdentityResolutionRepository
+    identity_repo = IdentityResolutionRepository()
+    tenants = await _repo.find_many(limit=10000)
+    audit_records: list[dict] = []
+    for t in tenants:
+        tid = t.get("id") or t.get("tenant_id")
+        if not tid:
+            continue
+        try:
+            merges = await identity_repo.get_recent_merges(tid, limit=50)
+            splits = await identity_repo.get_recent_splits(tid, limit=50)
+            for r in merges:
+                r["_record_type"] = "merge"
+                r["_tenant_id"] = tid
+            for r in splits:
+                r["_record_type"] = "split"
+                r["_tenant_id"] = tid
+            audit_records.extend(merges)
+            audit_records.extend(splits)
+        except Exception as exc:
+            logger.warning("kyber_merge_split_audit failed for tenant=%s: %s", tid, exc)
+    audit_records.sort(key=lambda r: r.get("created_at", ""), reverse=True)
+    audit_records = audit_records[:limit]
+    return APIResponse(data={"records": audit_records, "total": len(audit_records)}).to_dict()
+
+
+@router.get("/kyber/resolution-health")
+async def kyber_resolution_health(request: Request):
+    """Per-tenant resolver throughput and error rate metrics."""
+    _require_kyber_operator(request)
+    from services.identity.repository import IdentityResolutionRepository
+    identity_repo = IdentityResolutionRepository()
+    tenants = await _repo.find_many(limit=10000)
+    results = []
+    for t in tenants:
+        tid = t.get("id") or t.get("tenant_id")
+        if not tid:
+            continue
+        try:
+            db_alive = await identity_repo.ping()
+            health = await identity_repo.get_identity_health(tid)
+            results.append({
+                "tenant_id": tid,
+                "tenant_name": t.get("name", ""),
+                "db_alive": db_alive,
+                "open_conflicts": health.get("open_conflicts", 0),
+                "recent_merges": health.get("recent_merges", 0),
+                "recent_splits": health.get("recent_splits", 0),
+                "total_entities": health.get("total_subjects", 0),
+            })
+        except Exception as exc:
+            logger.warning("kyber_resolution_health failed for tenant=%s: %s", tid, exc)
+            results.append({"tenant_id": tid, "error": str(exc)})
+    return APIResponse(data={"tenants": results, "count": len(results)}).to_dict()
+
+
 @router.get("/operator/agentic/anomalies")
 async def operator_agentic_anomalies(request: Request):
     """Rule-based anomaly flags across all tenants."""

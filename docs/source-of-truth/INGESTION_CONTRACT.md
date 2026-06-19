@@ -136,3 +136,71 @@ Backend stitching is transparent and conservative: `userId`, wallet, and email-h
 matches are strong signals; `anonymousId` is medium/high within the same install;
 fingerprint, campaign/referrer, timestamp proximity, and behavior are support signals.
 Fingerprint alone must never promote a sensitive identity link to high confidence.
+
+## Post-ingestion identity resolution
+
+After an event batch is written to Bronze (`bronze_sdk_events`) and published to
+Kafka, `services/identity/resolver.py` processes each event asynchronously to
+assign or update `canonical_entity_id`. This step is **not** part of the
+synchronous `POST /v1/batch` response — ingestion and resolution are decoupled.
+
+### Resolution pipeline
+
+```
+POST /v1/batch
+  │
+  ├─ validate → idempotency check → write Bronze → publish Kafka
+  │                                                       │
+  │   (synchronous; response returned here)              │
+  │                                                       ▼
+  │                                          identity resolver consumes
+  │                                          aether.sdk.events.validated
+  │                                                       │
+  │                                          extract signals from event
+  │                                                       │
+  │                                          score signals → MergeDecision
+  │                                                       │
+  │                                          ┌────────────┴───────────────┐
+  │                                          │                            │
+  │                                       create /                  candidate →
+  │                                       link /                    conflict queue
+  │                                       merge
+  │                                          │
+  │                                   stamp canonical_entity_id
+  │                                   on identity_subjects row
+  └──────────────────────────────────────────┘
+```
+
+### What the ingestion layer stamps vs. what the resolver stamps
+
+| Field | Stamped by ingestion | Stamped by resolver |
+|-------|---------------------|--------------------:|
+| `event_id` | Yes (from client) | — |
+| `tenant_id` | Yes (from API key) | — |
+| `received_at` | Yes | — |
+| `batch_id` | Yes | — |
+| `anonymous_id` | Yes (from event) | — |
+| `user_id` | Yes (from event, if present) | — |
+| `canonical_entity_id` | **Never** | Yes, after resolution |
+| `confidence_tier` | — | Yes, on `identity_aliases` row |
+| `merge_decision` | — | Yes, in audit log |
+
+### `canonical_entity_id` contract for downstream consumers
+
+- **Silver/Gold lake tiers**: `canonical_entity_id` is joined from
+  `identity_subjects` during Silver promotion. Events that arrive before
+  resolution is complete carry a null `canonical_entity_id` in Silver and are
+  backfilled on the next recompute cycle.
+- **Analytics queries**: always filter by `canonical_entity_id`, not
+  `user_id` or `anonymous_id`, to get a deduplicated view of entity behavior.
+- **Profile360 / graph services**: read `canonical_entity_id` from
+  `identity_subjects` as the graph vertex key.
+- **SDK**: never reads or emits `canonical_entity_id`. See
+  [`SDK_SCOPE.md`](./SDK_SCOPE.md) for the full SDK boundary.
+
+### Recompute
+
+If resolution policy changes (e.g., a new signal type added, confidence
+threshold updated), `POST /v1/identity/recompute` replays Bronze events for
+an entity and re-stamps `canonical_entity_id` and `identity_aliases`. This is
+an operator action; it does not re-invoke `POST /v1/batch`.

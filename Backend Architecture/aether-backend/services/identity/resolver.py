@@ -138,43 +138,97 @@ class IdentityResolutionService:
         event_id = event.get("event_id", "")
         consent_snapshot = _extract_consent(event)
 
-        # ── 1. Extract signals ────────────────────────────────────────────
-        raw_signals = extract_signals(event, tenant_id)
-        if not raw_signals:
-            return IdentityResolutionDecision(
-                tenant_id=tenant_id,
-                canonical_entity_id="",
-                decision=MergeDecision.NOOP,
-                confidence=0.0,
-                confidence_tier=ConfidenceTier.WEAK,
-                reason_codes=["no_signals"],
-            )
-
-        # ── 2 & 3. Normalize + hash sensitive values ──────────────────────
-        hashed_signals: list[tuple[IdentitySignalType, str, str]] = []
-        # (type, hash, display_redacted)
-        for sig in raw_signals:
-            h, display = _hash_signal(sig.type, sig.value, tenant_id)
-            if h:
-                hashed_signals.append((sig.type, h, display))
-                self._metrics.record_signal_observation(sig.type.value)
-
-        # ── 4. Persist signal observations ────────────────────────────────
-        for sig in raw_signals:
-            h, display = _hash_signal(sig.type, sig.value, tenant_id)
-            if h:
-                await self._repo.create_signal_observation(
+        # Recompute path: caller provides pre-hashed signals to bypass
+        # extract/normalize/hash/persist steps (observations already in DB).
+        _pre_hashed = event.get("_pre_hashed_signals")
+        if _pre_hashed is not None:
+            raw_signals: list = []
+            hashed_signals: list[tuple[IdentitySignalType, str, str]] = []
+            for item in _pre_hashed:
+                try:
+                    sig_type = IdentitySignalType(item["type"])
+                    hashed_signals.append((sig_type, item["hash"], item.get("display", "")))
+                except (ValueError, KeyError):
+                    continue
+            if not hashed_signals:
+                return IdentityResolutionDecision(
                     tenant_id=tenant_id,
-                    source_event_id=event_id,
-                    source_platform=sig.source_platform,
-                    source_sdk=sig.source_sdk,
-                    signal_type=sig.type,
-                    signal_value_hash=h,
-                    raw_value_redacted=display,
-                    observed_at=sig.observed_at,
-                    consent_snapshot=sig.consent_snapshot,
-                    context={"source": sig.source},
+                    canonical_entity_id="",
+                    decision=MergeDecision.NOOP,
+                    confidence=0.0,
+                    confidence_tier=ConfidenceTier.WEAK,
+                    reason_codes=["no_signals"],
                 )
+        else:
+            # ── 1. Extract signals ────────────────────────────────────────────
+            raw_signals = extract_signals(event, tenant_id)
+            if not raw_signals:
+                return IdentityResolutionDecision(
+                    tenant_id=tenant_id,
+                    canonical_entity_id="",
+                    decision=MergeDecision.NOOP,
+                    confidence=0.0,
+                    confidence_tier=ConfidenceTier.WEAK,
+                    reason_codes=["no_signals"],
+                )
+
+            # ── 2 & 3. Normalize + hash sensitive values ──────────────────────
+            hashed_signals = []
+            # (type, hash, display_redacted)
+            for sig in raw_signals:
+                h, display = _hash_signal(sig.type, sig.value, tenant_id)
+                if h:
+                    hashed_signals.append((sig.type, h, display))
+                    self._metrics.record_signal_observation(sig.type.value)
+
+            # ── 4. Persist signal observations ────────────────────────────────
+            for sig in raw_signals:
+                h, display = _hash_signal(sig.type, sig.value, tenant_id)
+                if h:
+                    await self._repo.create_signal_observation(
+                        tenant_id=tenant_id,
+                        source_event_id=event_id,
+                        source_platform=sig.source_platform,
+                        source_sdk=sig.source_sdk,
+                        signal_type=sig.type,
+                        signal_value_hash=h,
+                        raw_value_redacted=display,
+                        observed_at=sig.observed_at,
+                        consent_snapshot=sig.consent_snapshot,
+                        context={"source": sig.source},
+                    )
+
+        # ── 4b. Check suppression rules ───────────────────────────────────
+        suppressed_types: list[IdentitySignalType] = []
+        filtered_signals: list[tuple[IdentitySignalType, str, str]] = []
+        for (sig_type, sig_hash, display) in hashed_signals:
+            is_suppressed = await self._repo.check_suppression(
+                tenant_id, sig_type.value, sig_hash
+            )
+            if is_suppressed:
+                suppressed_types.append(sig_type)
+                self._metrics.record_blocked("suppression")
+            else:
+                filtered_signals.append((sig_type, sig_hash, display))
+        if suppressed_types:
+            logger.info(
+                "Suppressed signals for tenant=%s: %s",
+                tenant_id, [t.value for t in suppressed_types],
+            )
+        # Build exact (type, hash) pairs that were suppressed, then filter raw_signals
+        # using those pairs only — not the entire type — so unsuppressed signals of the
+        # same type (e.g., a second wallet address) are not incorrectly removed.
+        filtered_hash_set = {(t, h) for (t, h, _) in filtered_signals}
+        suppressed_pairs: set[tuple[IdentitySignalType, str]] = {
+            (t, h) for (t, h, _) in hashed_signals if (t, h) not in filtered_hash_set
+        }
+        hashed_signals = filtered_signals
+        if suppressed_pairs:
+            raw_signals = [
+                sig for sig in raw_signals
+                if (sig.type, _hash_signal(sig.type, sig.value, tenant_id)[0])
+                not in suppressed_pairs
+            ]
 
         # ── 5. Find existing aliases/entities for this tenant ─────────────
         existing_entity_ids: list[str] = []
@@ -212,9 +266,14 @@ class IdentityResolutionService:
         canonical_entity_id: str
         is_new = False
 
+        _signal_types_for_type_infer = (
+            [sig.type for sig in raw_signals]
+            if raw_signals
+            else [t for (t, _, _) in hashed_signals]
+        )
         if policy_result.decision == MergeDecision.CREATE or not existing_entity_ids:
             canonical_entity_id = str(uuid.uuid4())
-            entity_type = _infer_entity_type(raw_signals)
+            entity_type = _infer_entity_type_from_types(_signal_types_for_type_infer)
             await self._repo.create_subject(
                 tenant_id=tenant_id,
                 canonical_entity_id=canonical_entity_id,
@@ -230,7 +289,7 @@ class IdentityResolutionService:
             canonical_entity_id = existing_entity_ids[0] if existing_entity_ids else str(uuid.uuid4())
             if not existing_entity_ids:
                 is_new = True
-                entity_type = _infer_entity_type(raw_signals)
+                entity_type = _infer_entity_type_from_types(_signal_types_for_type_infer)
                 await self._repo.create_subject(
                     tenant_id=tenant_id,
                     canonical_entity_id=canonical_entity_id,
@@ -240,24 +299,44 @@ class IdentityResolutionService:
         # ── 9. Link aliases ───────────────────────────────────────────────
         linked_aliases: list[str] = []
         if policy_result.decision not in (MergeDecision.BLOCKED, MergeDecision.REJECT):
-            for sig in raw_signals:
-                h, display = _hash_signal(sig.type, sig.value, tenant_id)
-                if not h or sig.type in _ATTRIBUTION_ONLY:
-                    continue
-                alias = await self._repo.upsert_alias(
-                    tenant_id=tenant_id,
-                    canonical_entity_id=canonical_entity_id,
-                    alias_type=sig.type,
-                    alias_value_hash=h,
-                    alias_display_value_redacted=display,
-                    source=sig.source,
-                    source_event_id=event_id,
-                    source_platform=sig.source_platform,
-                    confidence=policy_result.confidence,
-                    confidence_tier=policy_result.confidence_tier,
-                    consent_snapshot=consent_snapshot,
-                )
-                linked_aliases.append(alias["id"])
+            if raw_signals:
+                for sig in raw_signals:
+                    h, display = _hash_signal(sig.type, sig.value, tenant_id)
+                    if not h or sig.type in _ATTRIBUTION_ONLY:
+                        continue
+                    alias = await self._repo.upsert_alias(
+                        tenant_id=tenant_id,
+                        canonical_entity_id=canonical_entity_id,
+                        alias_type=sig.type,
+                        alias_value_hash=h,
+                        alias_display_value_redacted=display,
+                        source=sig.source,
+                        source_event_id=event_id,
+                        source_platform=sig.source_platform,
+                        confidence=policy_result.confidence,
+                        confidence_tier=policy_result.confidence_tier,
+                        consent_snapshot=consent_snapshot,
+                    )
+                    linked_aliases.append(alias["id"])
+            else:
+                # Pre-hashed path: use hashed_signals directly (observations already persisted)
+                for (sig_type, sig_hash, display) in hashed_signals:
+                    if sig_type in _ATTRIBUTION_ONLY:
+                        continue
+                    alias = await self._repo.upsert_alias(
+                        tenant_id=tenant_id,
+                        canonical_entity_id=canonical_entity_id,
+                        alias_type=sig_type,
+                        alias_value_hash=sig_hash,
+                        alias_display_value_redacted=display,
+                        source="recompute",
+                        source_event_id=event_id,
+                        source_platform=None,
+                        confidence=policy_result.confidence,
+                        confidence_tier=policy_result.confidence_tier,
+                        consent_snapshot=consent_snapshot,
+                    )
+                    linked_aliases.append(alias["id"])
 
         # ── 10. Merge entities if approved ───────────────────────────────
         merge_event_id: Optional[str] = None
@@ -486,6 +565,71 @@ class IdentityResolutionService:
             "reason_codes": split_policy.reason_codes,
         }
 
+    async def suppress_identifier(
+        self,
+        tenant_id: str,
+        identifier_type: str,
+        identifier_hash: str,
+        reason: str,
+        actor_id: str,
+        subject_id: Optional[str] = None,
+        expires_at: Optional[str] = None,
+    ) -> dict:
+        """Suppress a specific identifier hash — it can no longer link identities."""
+        rule = await self._repo.create_suppression_rule(
+            tenant_id=tenant_id,
+            identifier_hash=identifier_hash,
+            identifier_type=identifier_type,
+            reason=reason,
+            created_by=actor_id,
+            subject_id=subject_id,
+            expires_at=expires_at,
+        )
+        # Revoke any active aliases using this identifier
+        aliases = await self._repo.find_aliases_by_signal(
+            tenant_id, identifier_type, identifier_hash
+        )
+        revoked_alias_ids: list[str] = []
+        for alias in aliases:
+            if not alias.get("revoked_at"):
+                await self._repo.revoke_alias(alias["id"])
+                revoked_alias_ids.append(alias["id"])
+
+        await self._audit.record_resolution(
+            tenant_id=tenant_id,
+            decision=MergeDecision.BLOCKED,
+            canonical_entity_id=subject_id or "",
+            candidate_entity_ids=[],
+            confidence=1.0,
+            confidence_tier=ConfidenceTier.DETERMINISTIC,
+            reason_codes=["suppression_applied", reason],
+            source_event_ids=[],
+            policy_result="suppressed",
+            consent_snapshot=None,
+        )
+        self._metrics.record_blocked("suppression")
+        return {
+            "suppression_id": rule["id"],
+            "tenant_id": tenant_id,
+            "identifier_type": identifier_type,
+            "reason": reason,
+            "revoked_alias_ids": revoked_alias_ids,
+            "created_at": rule.get("created_at", ""),
+            "expires_at": expires_at,
+        }
+
+    async def unsuppress_identifier(
+        self,
+        tenant_id: str,
+        suppression_id: str,
+        actor_id: str,
+    ) -> dict:
+        """Revoke a suppression rule."""
+        result = await self._repo.revoke_suppression_rule(tenant_id, suppression_id)
+        if result is None:
+            return {"error": "not_found", "suppression_id": suppression_id}
+        return {"revoked": True, "suppression_id": suppression_id, "revoked_by": actor_id}
+
     async def recompute(
         self,
         tenant_id: str,
@@ -494,18 +638,97 @@ class IdentityResolutionService:
         reason: str = "recompute",
     ) -> dict:
         """
-        Recompute identity resolution for an entity or event set.
+        Recompute identity resolution by replaying signal observations.
         Idempotent — will not create duplicate aliases or edges.
         """
-        # In a full implementation this would replay events through the resolver.
-        # Here we return a stub response acknowledging the request.
+        if entity_id:
+            observations = await self._repo.get_observations_for_entity(
+                tenant_id, entity_id, limit=500
+            )
+        elif event_ids:
+            observations = await self._repo.get_observations_for_events(
+                tenant_id, event_ids, limit=500
+            )
+        else:
+            return {
+                "status": "error",
+                "tenant_id": tenant_id,
+                "entity_id": entity_id,
+                "event_ids": event_ids or [],
+                "reason": reason,
+                "note": "Either entity_id or event_ids is required",
+                "events_replayed": 0,
+                "decisions": [],
+                "errors": 0,
+            }
+
+        if not observations:
+            return {
+                "status": "complete",
+                "tenant_id": tenant_id,
+                "entity_id": entity_id,
+                "event_ids": event_ids or [],
+                "reason": reason,
+                "events_replayed": 0,
+                "decisions": [],
+                "errors": 0,
+            }
+
+        # Group all observations by source_event_id so all signals from one event
+        # are replayed together. Using _pre_hashed_signals bypasses re-hashing of
+        # already-stored hashes.
+        events_map: dict[str, list] = {}
+        for obs in observations:
+            src_evt_id = obs.get("source_event_id", "")
+            if src_evt_id:
+                events_map.setdefault(src_evt_id, []).append(obs)
+
+        decisions: list[dict] = []
+        errors = 0
+
+        for src_evt_id, event_obs in events_map.items():
+            pre_hashed: list[dict] = []
+            consent_snapshot_val = event_obs[0].get("consent_snapshot") if event_obs else None
+            for obs in event_obs:
+                sig_type_str = obs.get("signal_type", "")
+                sig_hash = obs.get("signal_value_hash", "")
+                if sig_type_str and sig_hash:
+                    pre_hashed.append({
+                        "type": sig_type_str,
+                        "hash": sig_hash,
+                        "display": obs.get("raw_value_redacted", ""),
+                    })
+            if not pre_hashed:
+                continue
+
+            synthetic_event: dict = {
+                "event_id": src_evt_id,
+                "tenant_id": tenant_id,
+                "context": {"consent": consent_snapshot_val},
+                "_pre_hashed_signals": pre_hashed,
+                "source": "recompute",
+            }
+
+            try:
+                decision = await self._resolve_event_inner(synthetic_event, tenant_id)
+                decisions.append({
+                    "event_id": src_evt_id,
+                    "decision": decision.decision.value,
+                    "canonical_entity_id": decision.canonical_entity_id,
+                })
+            except Exception as exc:
+                logger.warning("Recompute replay failed for event %s: %s", src_evt_id, exc)
+                errors += 1
+
         return {
-            "status": "queued",
+            "status": "complete",
             "tenant_id": tenant_id,
             "entity_id": entity_id,
             "event_ids": event_ids or [],
             "reason": reason,
-            "note": "Recompute queued for background processing",
+            "events_replayed": len(events_map),
+            "decisions": decisions,
+            "errors": errors,
         }
 
     # ── Internal helpers ──────────────────────────────────────────────────
@@ -609,14 +832,18 @@ def _has_strong_signal(types: list[IdentitySignalType]) -> bool:
 
 
 def _infer_entity_type(signals: list) -> EntityType:
-    for sig in signals:
-        if sig.type == IdentitySignalType.USER_ID:
+    return _infer_entity_type_from_types([sig.type for sig in signals])
+
+
+def _infer_entity_type_from_types(signal_types: list[IdentitySignalType]) -> EntityType:
+    for st in signal_types:
+        if st == IdentitySignalType.USER_ID:
             return EntityType.HUMAN
-        if sig.type == IdentitySignalType.AGENT_ID:
+        if st == IdentitySignalType.AGENT_ID:
             return EntityType.AGENT
-        if sig.type == IdentitySignalType.ORG_ID:
+        if st == IdentitySignalType.ORG_ID:
             return EntityType.ORGANIZATION
-        if sig.type == IdentitySignalType.WALLET_ADDRESS:
+        if st == IdentitySignalType.WALLET_ADDRESS:
             return EntityType.WALLET
     return EntityType.ANONYMOUS_VISITOR
 

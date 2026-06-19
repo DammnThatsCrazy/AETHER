@@ -318,13 +318,14 @@ def test_contract_registry_register_and_retrieve():
             "chain_id": 1,
             "contract_address": "0xdeadbeef",
             "contract_name": "AetherRewardEnabler",
-            "verification_status": "pending",
             "allowed_campaign_ids": ["camp_001"],
             "oracle_signer_address": "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266",
             "created_at": _now(),
             "updated_at": _now(),
         })
-        fetched = await repo.find_for_proof(TENANT_A, chain_id=1, contract_address="0xdeadbeef")
+        # Must verify before find_for_proof returns the entry
+        await repo.verify(entry["id"], TENANT_A)
+        fetched = await repo.find_for_proof(TENANT_A, chain_id=1, contract_address="0xdeadbeef", campaign_id="camp_001")
         return entry, fetched
 
     entry, fetched = _run(run())

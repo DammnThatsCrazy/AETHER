@@ -3563,34 +3563,19 @@
       "canonical_owner": "graph@aether"
     },
     {
-      "path": "docs/source-of-truth/GRAPH_OF_GRAPHS_DATA_USE.md",
-      "title": "Graph of Graphs Data Use",
-      "slug": "architecture/graph-of-graphs-data-use",
-      "section": "architecture",
-      "visibility": "I",
+      "path": "docs/source-of-truth/IDENTITY_RESOLUTION.md",
+      "title": "Identity Resolution",
+      "slug": "source-of-truth/identity-resolution",
+      "section": "source-of-truth",
+      "visibility": "internal",
       "audience": [
         "architect",
         "dev-senior",
-        "ops"
+        "ai"
       ],
-      "status": "draft",
-      "estimated_read_minutes": 5,
-      "canonical_owner": "platform@aether"
-    },
-    {
-      "path": "docs/source-of-truth/OLYMPUS_PROVIDER_SOURCE_CATALOG.md",
-      "title": "Olympus Provider Source Catalog",
-      "slug": "architecture/olympus-provider-source-catalog",
-      "section": "architecture",
-      "visibility": "I",
-      "audience": [
-        "architect",
-        "dev-senior",
-        "ops"
-      ],
-      "status": "draft",
-      "estimated_read_minutes": 8,
-      "canonical_owner": "data@aether"
+      "status": "stable",
+      "since_version": "9.0.0",
+      "canonical_owner": "identity@aether"
     },
     {
       "path": "docs/source-of-truth/REPO_CONSISTENCY_OWNERSHIP.md",

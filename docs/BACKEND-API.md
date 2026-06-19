@@ -11,7 +11,7 @@ source_files:
 canonical_owner: backend@aether
 estimated_read_minutes: 60
 toc_depth: 3
-last_synced_commit: 55d372c
+last_synced_commit: 7d2672c
 
 ---
 # Aether Backend API v8.9.0 — Endpoint Specification
@@ -655,6 +655,8 @@ Get a single eligibility decision by ID.
 
 Create a reward campaign. Campaigns define the scope, attribution model, and budget policy for reward eligibility evaluation.
 
+For `onchain_claim` campaigns, supply `contract_address` and `chain_id` explicitly. If `chain_id` is omitted the campaign record stores no chain preference and the registry gate falls back to `EVM_CHAIN_ID` at evaluation time — do not rely on Pydantic's default of 1 for non-mainnet deployments.
+
 **Request:**
 ```json
 {
@@ -846,6 +848,38 @@ Trigger verification of a rail configuration (e.g., send a test webhook, verify 
 ### POST /v1/rewards/rails/{id}/disable
 
 Disable a rail without deleting its configuration.
+
+### POST /v1/rewards/contracts
+
+Register a smart contract for `onchain_claim` proof generation. A verified registry entry is required before any onchain proof can be issued in non-local environments.
+
+Re-registering an existing `(tenant_id, chain_id, contract_address)` updates `oracle_signer_address`, `allowed_campaign_ids`, and `contract_name` and resets `verification_status` to `pending` — a new operator verification is required before proof generation resumes.
+
+`oracle_signer_address` is **required** — set it to the Ethereum address derived from `ORACLE_SIGNER_KEY` (`Account.from_key(key).address`). The `/verify` endpoint rejects registrations where this field does not match the live oracle signer.
+
+**Request:**
+```json
+{
+  "chain_id": 1,
+  "contract_address": "0xYourContract",
+  "contract_name": "AetherRewardEnabler",
+  "oracle_signer_address": "0xOracleAddress",
+  "vm_type": "evm",
+  "allowed_campaign_ids": ["camp_abc"]
+}
+```
+
+### GET /v1/rewards/contracts
+
+List all registered contracts for the authenticated tenant.
+
+### GET /v1/rewards/contracts/{id}
+
+Get a single registered contract by ID.
+
+### POST /v1/rewards/contracts/{id}/verify
+
+**Requires `rewards:admin` (Aether operator only).** Tenants cannot self-verify — an operator must confirm contract ownership before approving. Validates that `oracle_signer_address` matches the current Aether oracle signer (derived from `ORACLE_SIGNER_KEY`) — returns 422 if they diverge. After successful verification the contract satisfies the registry gate in `POST /v1/rewards/evaluate` for `onchain_claim` rails.
 
 ---
 
@@ -1138,7 +1172,10 @@ Core identity resolution and entity management endpoints.
 | POST | `/v1/identity/merge` | Merge two entities into a single canonical entity (`admin`) |
 | POST | `/v1/identity/split` | Split a merged entity back into its source components (`admin`) |
 | POST | `/v1/identity/recompute` | Trigger a full confidence recomputation for one or all entities (`admin`) |
-| GET | `/v1/identity/health` | Identity resolution subsystem health — queue depth, recompute lag, conflict count |
+| GET | `/v1/identity/health` | Identity resolution subsystem health — DB ping, total entities, open conflicts, queue depth |
+| POST | `/v1/identity/suppress` | Suppress an identifier hash — revokes matching aliases and blocks future resolution (`write`) |
+| DELETE | `/v1/identity/suppress/{suppression_id}` | Revoke an active suppression rule (`write`) |
+| GET | `/v1/identity/suppressions` | List active suppression rules for the authenticated tenant (`read`) |
 | GET | `/v1/identity/profiles/{user_id}` | Get stored profile for a user/entity |
 | PUT | `/v1/identity/profiles/{user_id}` | Upsert profile record for a user/entity |
 | GET | `/v1/identity/profiles/{user_id}/graph` | Profile-scoped graph view (bounded to 50 neighbors) |

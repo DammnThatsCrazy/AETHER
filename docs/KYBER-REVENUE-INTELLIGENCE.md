@@ -16,7 +16,7 @@ related:
   - ai/kyber-strategic-observability
   - ai/playbooks
   - ai/recommendation-families
-last_synced_commit: c318952
+last_synced_commit: d5b2b67
 ---
 
 # Kyber Revenue Intelligence
@@ -81,6 +81,19 @@ Kyber operators can inspect per-tenant agentic activity and economic health via:
 | `GET /operator/agentic/anomalies` | Behavioral anomaly signals |
 
 All endpoints require Kyber operator authentication and are cross-tenant read-only.
+
+## Identity health operator endpoints
+
+Kyber operators can audit identity resolution quality across all tenants:
+
+| Endpoint | Description |
+|---|---|
+| `GET /v1/admin/kyber/identity-health` | Per-tenant identity quality metrics (total entities, aliases, conflict rate) |
+| `GET /v1/admin/kyber/resolution-queue` | Paginated global conflict queue across all tenants |
+| `GET /v1/admin/kyber/merge-split-audit` | Cross-tenant merge/split ledger (date-range filtered) |
+| `GET /v1/admin/kyber/resolution-health` | Per-tenant resolver throughput, error rate, queue depth |
+
+All four require `kyber:identity:read` permission. Results are read-only — no identity writes go through Kyber endpoints.
 
 ## Governance
 
