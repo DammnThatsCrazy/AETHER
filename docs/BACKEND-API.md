@@ -11,7 +11,7 @@ source_files:
 canonical_owner: backend@aether
 estimated_read_minutes: 60
 toc_depth: 3
-last_synced_commit: 723a57a
+last_synced_commit: f9482d3
 
 ---
 # Aether Backend API v8.9.0 — Endpoint Specification
@@ -655,6 +655,8 @@ Get a single eligibility decision by ID.
 
 Create a reward campaign. Campaigns define the scope, attribution model, and budget policy for reward eligibility evaluation.
 
+For `onchain_claim` campaigns, supply `contract_address` and `chain_id` explicitly. If `chain_id` is omitted the campaign record stores no chain preference and the registry gate falls back to `EVM_CHAIN_ID` at evaluation time — do not rely on Pydantic's default of 1 for non-mainnet deployments.
+
 **Request:**
 ```json
 {
@@ -850,6 +852,8 @@ Disable a rail without deleting its configuration.
 ### POST /v1/rewards/contracts
 
 Register a smart contract for `onchain_claim` proof generation. A verified registry entry is required before any onchain proof can be issued in non-local environments.
+
+Re-registering an existing `(tenant_id, chain_id, contract_address)` updates `oracle_signer_address`, `allowed_campaign_ids`, and `contract_name` and resets `verification_status` to `pending` — a new operator verification is required before proof generation resumes.
 
 `oracle_signer_address` is **required** — set it to the Ethereum address derived from `ORACLE_SIGNER_KEY` (`Account.from_key(key).address`). The `/verify` endpoint rejects registrations where this field does not match the live oracle signer.
 
