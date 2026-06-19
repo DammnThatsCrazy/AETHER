@@ -190,5 +190,132 @@ class DataRetentionService:
             return await self._requests.list_all(limit=limit)
         return await self._requests.list_for_tenant(tenant_id, limit=limit)
 
+    # ── Scheduled sweep ───────────────────────────────────────────────────────
+
+    async def sweep(self, *, dry_run: bool = False) -> dict:
+        """Age out expired records across all tenants per their retention policies.
+
+        For each enabled policy, compute a cutoff timestamp and apply the
+        configured delete_behavior to records older than that cutoff:
+          - anonymize          → null PII-bearing fields, set anonymized_at
+          - hard_delete        → remove record entirely (blocked for preserve resources)
+          - preserve_audit_stub → replace content fields with a stub, keep metadata
+
+        Returns a summary dict: {swept, skipped, errors, dry_run}.
+        """
+        from datetime import timedelta
+        from shared.logger.logger import metrics
+
+        all_policies = await self.list_policies(tenant_id=None)
+        swept = 0
+        skipped = 0
+        errors = 0
+
+        for policy in all_policies:
+            if not policy.get("enabled", True):
+                skipped += 1
+                continue
+
+            resource_type = policy.get("resource_type", "")
+            delete_behavior = policy.get("delete_behavior", "anonymize")
+            retention_days = policy.get("retention_days", 730)
+            tenant_id = policy.get("tenant_id")
+
+            cutoff = (utc_now() - timedelta(days=retention_days)).isoformat()
+
+            if delete_behavior == "hard_delete" and resource_type in _PRESERVE_RESOURCES:
+                skipped += 1
+                continue
+
+            try:
+                if not dry_run:
+                    await self._apply_sweep(
+                        tenant_id=tenant_id,
+                        resource_type=resource_type,
+                        delete_behavior=delete_behavior,
+                        cutoff=cutoff,
+                    )
+
+                swept += 1
+                await audit_ledger.record(
+                    actor_id="system",
+                    actor_type="system",
+                    event_type="data_retention.sweep_applied",
+                    resource_type=resource_type,
+                    action="sweep",
+                    outcome="allowed",
+                    tenant_id=tenant_id,
+                    metadata={
+                        "delete_behavior": delete_behavior,
+                        "retention_days": retention_days,
+                        "cutoff": cutoff,
+                        "dry_run": dry_run,
+                    },
+                )
+            except Exception as e:
+                errors += 1
+                logger.error(
+                    f"Retention sweep error for tenant={tenant_id} "
+                    f"resource={resource_type}: {e}"
+                )
+
+        metrics.increment("retention_sweep_swept", value=swept)
+        if errors:
+            metrics.increment("retention_sweep_errors", value=errors)
+
+        return {"swept": swept, "skipped": skipped, "errors": errors, "dry_run": dry_run}
+
+    async def _apply_sweep(
+        self,
+        *,
+        tenant_id: Optional[str],
+        resource_type: str,
+        delete_behavior: str,
+        cutoff: str,
+    ) -> int:
+        """Apply retention action to data_request records older than cutoff.
+
+        The sweep operates on tracked data requests for the given resource type
+        and tenant.  Actual raw event records live in their own medallion-tier
+        repos; a full cross-repo sweep is expected to be wired per resource
+        type as those repos accumulate.  This implementation covers the
+        governance layer (requests + policies).
+        """
+        filters: dict = {"resource_type": resource_type}
+        if tenant_id:
+            filters["tenant_id"] = tenant_id
+
+        candidates = await self._requests.find_many(filters=filters, limit=5000)
+        applied = 0
+        for row in candidates:
+            created_at = row.get("created_at", "")
+            if created_at and created_at >= cutoff:
+                continue  # not expired yet
+
+            record_id = row.get("data_request_id") or row.get("id", "")
+            if not record_id:
+                continue
+
+            if delete_behavior == "hard_delete":
+                await self._requests.delete(record_id)
+            elif delete_behavior == "anonymize":
+                row["requested_by"] = "ANONYMIZED"
+                row["result_summary"] = "anonymized by retention sweep"
+                row["anonymized_at"] = utc_now().isoformat()
+                await self._requests.update(record_id, row)
+            elif delete_behavior == "preserve_audit_stub":
+                stub = {
+                    "data_request_id": record_id,
+                    "tenant_id": row.get("tenant_id"),
+                    "resource_type": resource_type,
+                    "status": row.get("status"),
+                    "stub": True,
+                    "stubbed_at": utc_now().isoformat(),
+                }
+                await self._requests.update(record_id, stub)
+
+            applied += 1
+        return applied
+
 
 data_retention_service = DataRetentionService()

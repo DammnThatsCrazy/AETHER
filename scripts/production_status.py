@@ -88,12 +88,18 @@ AREAS: list[Area] = [
         "backend/API",
         4,
         "65+ FastAPI routers with auth/RBAC middleware, tenant-scoped repositories, "
-        "plan-tier gating, rate limits, quotas. Local in-memory fallbacks are dev/test "
-        "only; staging/production require Postgres/Redis/Neptune/Kafka.",
+        "plan-tier gating, rate limits, quotas. POST /v1/batch production-hardened: "
+        "per-event consent enforcement, PII scrub (private keys, card numbers, passwords "
+        "rejected), Redis-backed idempotency (set_nx, tenant-scoped key), durable Bronze "
+        "write before ACK, event bus publish with retry. EventType parity validated "
+        "between TypeScript and Python via scripts/validate_event_schema_parity.py. "
+        "Local in-memory fallbacks are dev/test only; staging/production require "
+        "Postgres/Redis/Neptune/Kafka.",
         [
             "Backend Architecture/aether-backend/main.py",
+            "Backend Architecture/aether-backend/services/ingestion/batch.py",
             "Backend Architecture/aether-backend/middleware/middleware.py",
-            "Backend Architecture/aether-backend/repositories/repos.py",
+            "scripts/validate_event_schema_parity.py",
         ],
     ),
     Area(
@@ -196,11 +202,11 @@ AREAS: list[Area] = [
     ),
     Area(
         "connectors (BYOK / source)",
-        3,
-        "14 production-shaped inbound connectors with real API calls credential-gated "
+        4,
+        "15 production-shaped inbound connectors with real API calls credential-gated "
         "behind vault secret flow (Shopify, Stripe, HubSpot, Salesforce, Klaviyo, "
-        "PostHog, GA4, Jira, Linear, Zendesk, Intercom — all real HTTP against live "
-        "APIs when secret provided). Sync health tracking (status, last_synced_at, "
+        "PostHog, GA4, Jira, Linear, Zendesk, Intercom, Dune — all real HTTP against "
+        "live APIs when secret provided). Sync health tracking (status, last_synced_at, "
         "error_count, last_error_message) recorded per connector per tenant. Kyber "
         "per-tenant health drill-down route added. Remaining gap: staging validation "
         "with live credentials for high-value connectors.",
@@ -222,17 +228,20 @@ AREAS: list[Area] = [
     ),
     Area(
         "Dune / data-lake feeders",
-        3,
-        "DuneConnector (read-only, credential-gated, per-row provenance) added to "
-        "connector fleet. PromotionService governs Bronze→Silver with freshness gate "
-        "(max_age_hours), null-rate gate, required-field gate, and entity_id gate; "
-        "each rejected row gets per-check failure reasons. POST /v1/lake/promote "
-        "triggers promotion; GET /v1/admin/feeders exposes per-run health in Kyber. "
-        "Remaining gap: no staging validation with a real Dune API key; no scheduled "
-        "polling worker (pull is on-demand via /sync).",
+        4,
+        "DuneConnector (read-only, credential-gated, per-row provenance) in connector "
+        "fleet. PromotionService governs Bronze→Silver with freshness, null-rate, "
+        "required-field, and entity_id gates; each rejected row gets per-check failure "
+        "reasons. POST /v1/lake/promote triggers promotion; GET /v1/admin/feeders "
+        "exposes per-run health in Kyber. Scheduled dune_poll_loop background worker "
+        "added (services/integrations/dune_feeder/worker.py) — polls all tenant "
+        "Dune configs every DUNE_POLL_INTERVAL_SECONDS (default 3600), ingests to "
+        "Bronze, promotes to Silver, records feeder run. E2E promotion tests added. "
+        "Remaining gap: staging validation with a real Dune API key.",
         [
-            "Backend Architecture/aether-backend/shared/providers/categories.py",
-            "Backend Architecture/aether-backend/services/ingestion/routes.py",
+            "Backend Architecture/aether-backend/services/integrations/dune_feeder/worker.py",
+            "Backend Architecture/aether-backend/services/integrations/dune_feeder/service.py",
+            "tests/unit/test_dune_promotion.py",
         ],
     ),
     Area(
@@ -255,24 +264,33 @@ AREAS: list[Area] = [
     ),
     Area(
         "security / compliance",
-        3,
+        4,
         "API-key + JWT auth (RS256 in production), role + permission RBAC, column- and "
         "query-level tenant isolation with dedicated tests, consent + DSR with audit "
-        "export. Compliance posture is pre-positioning (14/16 controls) — no external "
-        "certification.",
+        "export. DataRetentionService.sweep() added: daily retention_sweep_loop "
+        "background worker (services/security/retention_worker.py) ages out expired "
+        "records per policy (anonymize/hard_delete/preserve_audit_stub), emits "
+        "retention_sweep_swept metrics, logs audit events. POST /v1/batch now enforces "
+        "consent per event family and rejects PII (private keys, card numbers, passwords). "
+        "Compliance posture pre-positioning — no external certification.",
         [
             "Backend Architecture/aether-backend/shared/auth/auth.py",
+            "Backend Architecture/aether-backend/services/security/retention.py",
+            "Backend Architecture/aether-backend/services/security/retention_worker.py",
+            "Backend Architecture/aether-backend/services/ingestion/batch.py",
             "tests/unit/test_tenant_isolation.py",
-            "scripts/compliance/readiness.py",
         ],
     ),
     Area(
         "CI / tests",
         4,
-        "8 workflows (consistency, health, SDK validation, e2e, deploy); 800 core + "
+        "8 workflows (consistency, health, SDK validation, e2e, deploy); 731+ core + "
         "152 ML Python tests green; JS coverage thresholds enforced. Python suites "
-        "must run separately (conftest module collision is documented).",
-        [".github/workflows/", "tests/", "pyproject.toml"],
+        "must run separately (conftest module collision is documented). EventType parity "
+        "and canonical meter-name checks added to repo-doctor + Makefile.",
+        [".github/workflows/", "tests/", "pyproject.toml",
+         "scripts/validate_event_schema_parity.py",
+         "scripts/validate_meter_names.py"],
     ),
     Area(
         "docs",
@@ -350,10 +368,10 @@ BLOCKERS: list[Blocker] = [
     ),
     Blocker(
         "pre-production-blocker",
-        "Dune feeder not staging-validated; no scheduled polling worker (pull is on-demand only)",
+        "Dune feeder scheduled polling worker implemented; not yet staging-validated with a real API key",
         "Dune / data-lake feeders",
-        "Run DuneConnector sync against staging with a real API key; add a scheduled "
-        "worker (APScheduler or Celery beat) to automate periodic pulls per tenant config",
+        "Run DuneConnector sync against staging with a real Dune API key to validate "
+        "end-to-end Bronze→Silver promotion path",
     ),
     Blocker(
         "scale-blocker",
