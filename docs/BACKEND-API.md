@@ -11,7 +11,7 @@ source_files:
 canonical_owner: backend@aether
 estimated_read_minutes: 60
 toc_depth: 3
-last_synced_commit: a66954a
+last_synced_commit: 93450c9
 
 ---
 # Aether Backend API v8.9.0 — Endpoint Specification
@@ -846,6 +846,34 @@ Trigger verification of a rail configuration (e.g., send a test webhook, verify 
 ### POST /v1/rewards/rails/{id}/disable
 
 Disable a rail without deleting its configuration.
+
+### POST /v1/rewards/contracts
+
+Register a smart contract for `onchain_claim` proof generation. A verified registry entry is required before any onchain proof can be issued in non-local environments.
+
+**Request:**
+```json
+{
+  "chain_id": 1,
+  "contract_address": "0xYourContract",
+  "contract_name": "AetherRewardEnabler",
+  "vm_type": "evm",
+  "oracle_signer_address": "0xOracleAddress",
+  "allowed_campaign_ids": ["camp_abc"]
+}
+```
+
+### GET /v1/rewards/contracts
+
+List all registered contracts for the authenticated tenant.
+
+### GET /v1/rewards/contracts/{id}
+
+Get a single registered contract by ID.
+
+### POST /v1/rewards/contracts/{id}/verify
+
+Mark a registered contract as verified, enabling proof generation for it. After calling this endpoint the contract satisfies the registry gate in `POST /v1/rewards/evaluate` for `onchain_claim` rails.
 
 ---
 
