@@ -55,11 +55,17 @@ async def smoke_connector(connector_type: str, secret: str) -> None:
         secret_configured=True,
     )
 
+    if not getattr(connector, "supports_pull", False):
+        print(f"  [{connector_type}] SKIP — supports_pull=False (outbound-only; credential validity cannot be tested via pull)")
+        return
+
     print(f"  [{connector_type}] pulling...", end=" ", flush=True)
     try:
         events = await connector.pull(config, secret=secret)
         if not isinstance(events, list):
             raise ValueError(f"pull returned {type(events).__name__}, expected list")
+        # 0 events is valid if staging store has no recent data; what matters
+        # is that the connector made a real HTTP call without raising.
         print(f"OK — {len(events)} event(s)")
     except Exception as exc:
         print(f"FAIL — {exc}", file=sys.stderr)

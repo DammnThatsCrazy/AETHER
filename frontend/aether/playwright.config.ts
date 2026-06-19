@@ -21,5 +21,11 @@ export default defineConfig({
     command: 'npm run dev',
     port: 5175,
     reuseExistingServer: !process.env.CI,
+    env: {
+      // Disable local-mocked auth so unauthenticated routes redirect to /login
+      // rather than auto-logging in the mock user. Required for E2E tests to
+      // reach /signup and /login pages.
+      VITE_AETHER_ENV: 'staging',
+    },
   },
 });

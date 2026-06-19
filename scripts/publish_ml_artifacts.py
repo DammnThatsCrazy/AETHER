@@ -1,10 +1,9 @@
 #!/usr/bin/env python3
 """Publish staged ML model artifacts to S3 and mark them as promoted.
 
-Reads artifact metadata from aether-ml's ArtifactRegistry, uploads each
-artifact with promotion_state='staged' to $ML_ARTIFACT_BUCKET via boto3,
-marks them promoted in the registry, then runs a health-check against
-$ML_SERVING_URL/v1/health.
+Scans the artifact directory for models with promotion_state='staged', uploads
+each artifact file to $ML_ARTIFACT_BUCKET via boto3, promotes it in the
+registry metadata, then runs a health-check against $ML_SERVING_URL/v1/health.
 
 Exit 0 on success, 1 with error detail on failure.
 
@@ -14,6 +13,7 @@ Required env vars:
 
 Optional:
   ML_ARTIFACT_DIR      — override the default artifact output directory
+                         (default: ML Models/aether-ml/artifacts)
 """
 from __future__ import annotations
 
@@ -67,41 +67,51 @@ def main() -> None:
     artifact_dir = Path(os.getenv("ML_ARTIFACT_DIR", str(ML_ROOT / "artifacts")))
 
     try:
-        from common.artifact_registry import ArtifactRegistry, ArtifactMetadata
+        from common.artifact_registry import list_artifacts, promote_artifact, ArtifactMetadata
     except ImportError as exc:
-        print(f"ERROR: cannot import ArtifactRegistry — {exc}", file=sys.stderr)
+        print(f"ERROR: cannot import artifact_registry — {exc}", file=sys.stderr)
         sys.exit(1)
 
-    registry = ArtifactRegistry(artifact_dir=artifact_dir)
+    if not artifact_dir.exists():
+        print(f"Artifact directory not found: {artifact_dir} — nothing to publish.")
+        _health_check(serving_url)
+        return
 
-    try:
-        artifacts: list[ArtifactMetadata] = registry.list_artifacts()
-    except Exception as exc:
-        print(f"ERROR: failed to load artifact registry — {exc}", file=sys.stderr)
-        sys.exit(1)
+    # Collect all staged artifacts across all model directories
+    staged: list[tuple[str, ArtifactMetadata]] = []
+    for model_dir in sorted(artifact_dir.iterdir()):
+        if not model_dir.is_dir():
+            continue
+        model_id = model_dir.name
+        for meta in list_artifacts(artifact_dir, model_id):
+            if meta.promotion_state == "staged":
+                staged.append((model_id, meta))
 
-    staged = [a for a in artifacts if getattr(a, "promotion_state", None) == "staged"]
     if not staged:
         print("No artifacts in 'staged' state — nothing to publish.")
         _health_check(serving_url)
         return
 
     print(f"Publishing {len(staged)} staged artifact(s) to s3://{bucket}")
-    for artifact in staged:
-        artifact_path = artifact_dir / artifact.model_id / artifact.artifact_version
-        if not artifact_path.exists():
-            # Try as a direct file path
-            artifact_path = artifact_dir / f"{artifact.model_id}-{artifact.artifact_version}.{artifact.artifact_format}"
-        if not artifact_path.exists():
-            print(f"  WARN: artifact path not found for {artifact.model_id}@{artifact.artifact_version}, skipping")
+    for model_id, artifact in staged:
+        # artifact_path in metadata is the absolute path to the model file
+        artifact_file = Path(artifact.artifact_path)
+        if not artifact_file.exists():
+            # Fallback: look relative to the version directory
+            version_dir = artifact_dir / model_id / artifact.artifact_version
+            artifact_file = version_dir / Path(artifact.artifact_path).name
+        if not artifact_file.exists():
+            print(f"  WARN: artifact file not found for {model_id}@{artifact.artifact_version}, skipping")
             continue
 
-        s3_key = f"models/{artifact.model_id}/{artifact.artifact_version}/{artifact_path.name}"
-        _s3_upload(bucket, s3_key, artifact_path)
+        s3_key = f"models/{model_id}/{artifact.artifact_version}/{artifact_file.name}"
+        _s3_upload(bucket, s3_key, artifact_file)
 
+        # promote_artifact takes the version directory (where metadata.json lives)
+        version_dir = artifact_file.parent
         try:
-            registry.mark_promoted(artifact.model_id, artifact.artifact_version)
-            print(f"  marked {artifact.model_id}@{artifact.artifact_version} as promoted")
+            promote_artifact(version_dir, "promoted", promoted_by="publish_ml_artifacts")
+            print(f"  marked {model_id}@{artifact.artifact_version} as promoted")
         except Exception as exc:
             print(f"  WARN: failed to mark promoted — {exc}")
 
