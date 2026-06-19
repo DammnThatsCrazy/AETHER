@@ -1274,8 +1274,8 @@ async def kyber_merge_split_audit(
         if not tid:
             continue
         try:
-            merges = await identity_repo.get_merge_history(tid, entity_id=None, limit=50)
-            splits = await identity_repo.get_split_history(tid, entity_id=None, limit=50)
+            merges = await identity_repo.get_recent_merges(tid, limit=50)
+            splits = await identity_repo.get_recent_splits(tid, limit=50)
             for r in merges:
                 r["_record_type"] = "merge"
                 r["_tenant_id"] = tid

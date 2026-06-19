@@ -194,6 +194,11 @@ class IdentityResolutionService:
                 tenant_id, [t.value for t in suppressed_types],
             )
         hashed_signals = filtered_signals
+        # Also remove suppressed types from raw_signals so downstream alias/edge
+        # writes don't re-create suppressed identifiers in the graph.
+        if suppressed_types:
+            suppressed_type_set = {t for t in suppressed_types}
+            raw_signals = [sig for sig in raw_signals if sig.type not in suppressed_type_set]
 
         # ── 5. Find existing aliases/entities for this tenant ─────────────
         existing_entity_ids: list[str] = []
@@ -633,13 +638,28 @@ class IdentityResolutionService:
                 "properties": {},
                 "source": "recompute",
             }
-            # Map signal type to the event field the resolver reads
+            # Map stored signal_type to the event field the resolver reads.
+            # signal_value_hash is already hashed — pass directly so extract_signals
+            # can pick it up from the synthetic event's properties or top-level fields.
+            sig_hash = obs.get("signal_value_hash", "")
             if sig_type == "user_id":
-                synthetic_event["user_id"] = obs.get("signal_value_hash", "")
+                synthetic_event["user_id"] = sig_hash
             elif sig_type == "anonymous_id":
-                synthetic_event["anonymous_id"] = obs.get("signal_value_hash", "")
+                synthetic_event["anonymous_id"] = sig_hash
             elif sig_type == "session_id":
-                synthetic_event["session_id"] = obs.get("signal_value_hash", "")
+                synthetic_event["session_id"] = sig_hash
+            elif sig_type in ("email_hash", "email"):
+                synthetic_event.setdefault("properties", {})["email_hash"] = sig_hash
+            elif sig_type in ("phone_hash", "phone"):
+                synthetic_event.setdefault("properties", {})["phone_hash"] = sig_hash
+            elif sig_type in ("wallet_address", "wallet"):
+                synthetic_event.setdefault("properties", {})["walletAddress"] = sig_hash
+            elif sig_type in ("external_id", "customer_id"):
+                synthetic_event.setdefault("properties", {})["externalId"] = sig_hash
+            elif sig_type in ("device_id", "install_id", "browser_id"):
+                synthetic_event.setdefault("properties", {})["deviceId"] = sig_hash
+            else:
+                synthetic_event.setdefault("properties", {})[sig_type] = sig_hash
 
             try:
                 decision = await self._resolve_event_inner(synthetic_event, tenant_id)

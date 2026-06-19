@@ -107,7 +107,7 @@ def _make_health_repo(tenant_id: str = "tenant-identity-1") -> AsyncMock:
 
 
 def _make_suppress_body(
-    identifier_type: str = "email",
+    identifier_type: str = "email_hash",
     identifier_hash: str = "abc123hash",
     reason: str = "test suppression",
     subject_id: str | None = None,
@@ -130,7 +130,7 @@ def _make_suppress_resolver(tenant_id: str = "tenant-identity-1") -> AsyncMock:
         return_value={
             "suppression_id": "sup-test-1",
             "tenant_id": tenant_id,
-            "identifier_type": "email",
+            "identifier_type": "email_hash",
             "reason": "test suppression",
             "revoked_alias_ids": [],
             "created_at": "2026-06-19T00:00:00+00:00",

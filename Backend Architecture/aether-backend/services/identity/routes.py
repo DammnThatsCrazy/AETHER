@@ -394,7 +394,7 @@ async def suppress_identifier(body: IdentitySuppressRequest, request: Request) -
         identifier_hash=body.identifier_hash,
         reason=body.reason,
         subject_id=body.subject_id,
-        created_by=getattr(tenant, "user_id", "operator") or "operator",
+        actor_id=getattr(tenant, "user_id", "operator") or "operator",
         expires_at=body.expires_at,
     )
     return APIResponse(data=IdentitySuppressResponse(**result).model_dump()).to_dict()
@@ -410,7 +410,7 @@ async def unsuppress_identifier(suppression_id: str, request: Request) -> dict:
     result = await resolver.unsuppress_identifier(
         tenant_id=tenant.tenant_id,
         suppression_id=suppression_id,
-        revoked_by=getattr(tenant, "user_id", "operator") or "operator",
+        actor_id=getattr(tenant, "user_id", "operator") or "operator",
     )
     return APIResponse(data=IdentityUnsuppressResponse(**result).model_dump()).to_dict()
 
@@ -434,7 +434,12 @@ async def identity_health(request: Request) -> dict:
     repo = _get_resolution_repo()
 
     db_alive = await repo.ping()
-    health_data = await repo.get_identity_health(tenant.tenant_id)
+    health_data: dict = {}
+    if db_alive:
+        try:
+            health_data = await repo.get_identity_health(tenant.tenant_id)
+        except Exception:
+            db_alive = False
 
     status = "healthy" if db_alive else "degraded"
     return APIResponse(data=IdentityHealthResponse(

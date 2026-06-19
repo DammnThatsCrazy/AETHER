@@ -507,6 +507,18 @@ class IdentityResolutionRepository:
             limit=limit,
         )
 
+    async def get_recent_merges(self, tenant_id: str, limit: int = 50) -> list[dict]:
+        """All merge events for a tenant (no entity filter) — used for operator audit."""
+        rows = await self._merges.find_many(filters={"tenant_id": tenant_id}, limit=limit)
+        rows.sort(key=lambda r: r.get("created_at", ""), reverse=True)
+        return rows[:limit]
+
+    async def get_recent_splits(self, tenant_id: str, limit: int = 50) -> list[dict]:
+        """All split events for a tenant (no entity filter) — used for operator audit."""
+        rows = await self._splits.find_many(filters={"tenant_id": tenant_id}, limit=limit)
+        rows.sort(key=lambda r: r.get("created_at", ""), reverse=True)
+        return rows[:limit]
+
     # ── Conflicts ─────────────────────────────────────────────────────────
 
     async def create_conflict(
@@ -650,7 +662,12 @@ class IdentityResolutionRepository:
             },
             limit=5,
         )
-        active = [r for r in existing if not r.get("revoked_at")]
+        now = utc_now().isoformat()
+        active = [
+            r for r in existing
+            if not r.get("revoked_at")
+            and (not r.get("expires_at") or r.get("expires_at", "") > now)
+        ]
         if active:
             return active[0]
         rule_id = str(uuid.uuid4())
@@ -705,9 +722,16 @@ class IdentityResolutionRepository:
     async def get_suppressions(
         self, tenant_id: str, limit: int = 50
     ) -> list[dict]:
-        return await self._suppressions.find_many(
-            filters={"tenant_id": tenant_id}, limit=limit
+        all_rules = await self._suppressions.find_many(
+            filters={"tenant_id": tenant_id}, limit=limit * 2
         )
+        now = utc_now().isoformat()
+        active = [
+            r for r in all_rules
+            if not r.get("revoked_at")
+            and (not r.get("expires_at") or r.get("expires_at", "") > now)
+        ]
+        return active[:limit]
 
     async def ping(self) -> bool:
         """Health check — verify the repo layer is responsive."""

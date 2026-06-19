@@ -33,7 +33,7 @@ def upgrade() -> None:
         created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
         expires_at TIMESTAMPTZ,
         revoked_at TIMESTAMPTZ,
-        payload JSONB NOT NULL DEFAULT '{}'::jsonb
+        data JSONB NOT NULL DEFAULT '{}'::jsonb
     )
     """)
     op.execute(

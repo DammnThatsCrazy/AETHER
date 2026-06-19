@@ -217,6 +217,7 @@ class EventContext(BaseModel):
     timezone: Optional[str] = None
     userAgent: Optional[str] = None
     ip: Optional[str] = None
+    consent: Optional[dict[str, Any]] = None
 
 
 class BaseEvent(BaseModel):

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any, Literal, Optional
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 
 # ── Resolve ───────────────────────────────────────────────────────────────────
@@ -156,12 +156,32 @@ class IdentityRecomputeResponse(BaseModel):
 
 # ── Suppression ───────────────────────────────────────────────────────────────
 
+_VALID_SIGNAL_TYPES: frozenset[str] = frozenset({
+    "user_id", "anonymous_id", "session_id",
+    "email_hash", "phone_hash",
+    "wallet_address", "wallet",
+    "external_id", "customer_id",
+    "device_id", "install_id", "browser_id",
+    "fingerprint_id", "ip_hash",
+    "oauth_subject", "siwx_session",
+})
+
+
 class IdentitySuppressRequest(BaseModel):
     identifier_type: str = Field(..., min_length=1)
     identifier_hash: str = Field(..., min_length=1)
     reason: str = Field(..., min_length=1)
     subject_id: Optional[str] = None
     expires_at: Optional[str] = None
+
+    @field_validator("identifier_type")
+    @classmethod
+    def validate_identifier_type(cls, v: str) -> str:
+        if v not in _VALID_SIGNAL_TYPES:
+            raise ValueError(
+                f"identifier_type must be one of: {', '.join(sorted(_VALID_SIGNAL_TYPES))}"
+            )
+        return v
 
 
 class IdentitySuppressResponse(BaseModel):

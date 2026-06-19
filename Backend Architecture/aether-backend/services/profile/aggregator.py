@@ -144,6 +144,10 @@ def _envelope(
     }
 
 
+async def _async_none():
+    return None
+
+
 async def _safe(label: str, coro):
     """Run a coroutine and return [] on error, logging the failure.
 
@@ -897,7 +901,11 @@ class Profile360Aggregator:
                                    filters={"entity_id": entity_id}, limit=50),
             self._scoped_find_many(self._agent_execs, tenant_id=tenant_id,
                                    filters={"agent_id": entity_id}, limit=100),
-            _safe("summary.identity", self._identity.get_subject_by_canonical_entity_id(tenant_id, entity_id)),
+            _safe("summary.identity", (
+                self._identity.get_subject_by_canonical_entity_id(tenant_id, entity_id)
+                if self._identity is not None and hasattr(self._identity, "get_subject_by_canonical_entity_id")
+                else _async_none()
+            )),
         )
         entity, agents, wallets, transfers, deleg_out, deleg_in, behavior, chains, execs, identity_subject = results
         # Tenant guard on the entity row too — find_by_id is not tenant-scoped,

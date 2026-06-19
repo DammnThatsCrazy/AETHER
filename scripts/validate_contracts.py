@@ -224,6 +224,15 @@ def run_identity_security_checks() -> list[str]:
     except SystemExit:
         pass
 
+    # exec_module loads the module but main() is guarded by __name__ == "__main__".
+    # Call the check functions explicitly to populate module.ERRORS.
+    source = module._load_source()  # type: ignore[attr-defined]
+    if source is not None:
+        module.check_suppress_endpoint_exists(source)  # type: ignore[attr-defined]
+        module.check_mutating_endpoints_require_write(source)  # type: ignore[attr-defined]
+        module.check_no_raw_hash_in_alias_response(source)  # type: ignore[attr-defined]
+        module.check_tenant_scoping(source)  # type: ignore[attr-defined]
+
     return list(getattr(module, "ERRORS", []))
 
 

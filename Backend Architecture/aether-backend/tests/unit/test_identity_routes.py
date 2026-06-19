@@ -99,7 +99,7 @@ def _make_repo() -> AsyncMock:
 def _make_suppress_body():
     from services.identity.schemas import IdentitySuppressRequest
     return IdentitySuppressRequest(
-        identifier_type="email",
+        identifier_type="email_hash",
         identifier_hash="abc123",
         reason="user_request",
     )
@@ -110,7 +110,7 @@ def _make_resolver() -> AsyncMock:
     resolver.suppress_identifier = AsyncMock(return_value={
         "suppression_id": "sup-1",
         "tenant_id": "tenant-test-1",
-        "identifier_type": "email",
+        "identifier_type": "email_hash",
         "reason": "user_request",
         "revoked_alias_ids": [],
         "created_at": "2026-06-19T00:00:00Z",
@@ -198,7 +198,7 @@ async def test_suppress_identifier_returns_suppression_id(monkeypatch):
 
     assert "data" in response
     assert response["data"]["suppression_id"] == "sup-1"
-    assert response["data"]["identifier_type"] == "email"
+    assert response["data"]["identifier_type"] == "email_hash"
 
 
 @pytest.mark.asyncio
