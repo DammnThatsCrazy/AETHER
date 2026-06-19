@@ -252,7 +252,7 @@ async def test_sensitive_fields_are_scrubbed():
             batch_id="b1",
             received_at="2024-06-01T12:00:01Z",
             cache=mock_cache,
-            granted_consents=frozenset(["wallet_web3"]),
+            granted_consents=frozenset(["web3"]),
         )
         assert result.status == "accepted"
         # After processing, properties must be scrubbed

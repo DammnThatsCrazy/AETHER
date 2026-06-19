@@ -489,6 +489,16 @@ async def _process_single_event(
             # Mutate in-place so downstream uses scrubbed payload
             sdk_event.properties = scrubbed
 
+    # 3. Consent check (before Bronze write)
+    required_consent = EVENT_CONSENT_PURPOSE.get(sdk_event.type)
+    if required_consent and required_consent not in granted_consents:
+        metrics.increment("ingestion_validation_failed_total", labels={"reason": "consent_missing"})
+        return EventResult(
+            id=sdk_event.id,
+            status="rejected",
+            reason=f"consent_required:{required_consent}",
+        )
+
     # 4. Tenant-scoped idempotency check
     idempotency_key = _make_idempotency_key(tenant_id, sdk_event.id, SCHEMA_VERSION)
     cache_key = f"aether:idempotency:{idempotency_key}"

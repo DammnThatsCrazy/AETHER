@@ -31,6 +31,7 @@ CANONICAL_NAMES: frozenset[str] = frozenset({
     "ingestion_event_rejected_total",
     "ingestion_validation_failed_total",
     "ingestion_sensitive_scrub_total",
+    "identity_resolve_error_total",
     "ingestion_bronze_write_failed_total",
     "ingestion_publish_failed_total",
     # Feeds / Dune
