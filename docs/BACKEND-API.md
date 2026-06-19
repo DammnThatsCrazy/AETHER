@@ -11,7 +11,7 @@ source_files:
 canonical_owner: backend@aether
 estimated_read_minutes: 60
 toc_depth: 3
-last_synced_commit: 7d2672c
+last_synced_commit: 3bb10b6
 
 ---
 # Aether Backend API v8.9.0 — Endpoint Specification
@@ -2415,3 +2415,88 @@ Every observability route enforces `execution_by_aether = false`. Violations ret
 ```
 
 Fields enforced at both the Pydantic model layer (`Literal[False]`) and the route layer (`_check_no_execution()`).
+
+---
+
+## Provider Corpus + Data Lake Routes
+
+### Tenant — Data Rights (`/v1/integrations/data-rights/*`)
+
+Feature-flagged (`AETHER_CONNECTOR_DATA_RIGHTS_ENABLED`). Tenant API key required.
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/v1/integrations/data-rights` | List data rights grants for caller's tenant |
+| POST | `/v1/integrations/data-rights/grants` | Create a new data rights grant |
+| GET | `/v1/integrations/data-rights/grants/{grant_id}` | Get one grant |
+| POST | `/v1/integrations/data-rights/grants/{grant_id}/revoke` | Revoke a grant (immediate denial) |
+| POST | `/v1/integrations/data-rights/policy-check` | Run a named policy check against a grant |
+
+All policy checks are fail-closed: absent an explicit grant, all use (Olympus baseline, model training, cross-tenant aggregate) is denied.
+
+### Tenant — BYOK Key Rotate / Revoke / Verify (`/v1/providers/keys/*`)
+
+Feature-flagged (`AETHER_CONNECTOR_BYOK_ENABLED`). Tenant API key required.
+
+| Method | Path | Description |
+|--------|------|-------------|
+| POST | `/v1/providers/keys/{provider}/rotate` | Re-encrypt credential with a new API key |
+| POST | `/v1/providers/keys/{provider}/revoke` | Disable credential (retains audit record) |
+| POST | `/v1/providers/keys/{provider}/verify` | Return safe key metadata without exposing the raw key |
+
+Responses include `masked_identifier` only (`****{hash_suffix}`). Raw keys are never returned. BYOK credential does not confer lake ingestion rights, Olympus baseline use, model training, or aggregate use — those require a separate `DataRightsGrant`.
+
+### Kyber Admin — Provider Source Catalog (`/v1/admin/kyber/providers/*`)
+
+Feature-flagged (`KYBER_PROVIDER_SOURCE_CATALOG_ENABLED`). Operator permission required.
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/v1/admin/kyber/providers/catalog` | All 30+ Olympus provider entries |
+| GET | `/v1/admin/kyber/providers/overview` | Summary stats by phase and implementation status |
+| GET | `/v1/admin/kyber/providers/{provider_id}` | Single provider detail |
+| GET | `/v1/admin/kyber/providers/{provider_id}/cost` | Cost profile |
+| GET | `/v1/admin/kyber/providers/{provider_id}/rate-limits` | Rate limit profile |
+| GET | `/v1/admin/kyber/providers/{provider_id}/provenance` | Provenance status |
+| GET | `/v1/admin/kyber/providers/{provider_id}/lake-manifest` | Source manifest |
+| POST | `/v1/admin/kyber/providers/{provider_id}/sync` | Trigger sync (credential-gated) |
+| POST | `/v1/admin/kyber/providers/{provider_id}/validate-policy` | Validate against policy gates |
+
+### Kyber Admin — Dune Data Lake (`/v1/admin/kyber/dune/*`)
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/v1/admin/kyber/dune/access-modes` | Three Dune access modes (API, Datashare, Sim) with implementation status |
+| GET | `/v1/admin/kyber/dune/chains` | P0/P1/P2 chain extraction plans |
+| GET | `/v1/admin/kyber/dune/extraction-products` | 10 extraction product specs |
+
+### Kyber Admin — Lake Observability (`/v1/admin/kyber/lake/*`)
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/v1/admin/kyber/lake/source-manifests` | All source manifests |
+| GET | `/v1/admin/kyber/lake/capacity` | Estimated vs actual capacity by lake layer |
+| GET | `/v1/admin/kyber/lake/coverage` | Source coverage by layer |
+| GET | `/v1/admin/kyber/lake/quarantine` | Quarantined Bronze records summary |
+
+### Kyber Admin — Feature Intelligence (`/v1/admin/kyber/features/*`)
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/v1/admin/kyber/features/source-model-matrix` | Provider → ML model mapping |
+| GET | `/v1/admin/kyber/features/unique-signal-backlog` | 5 unique cross-source signal feature status |
+
+### Kyber Admin — Anti-Distillation (`/v1/admin/kyber/intelligence/*`)
+
+Feature-flagged (`KYBER_ANTI_DISTILLATION_ENABLED`). Operator permission required.
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/v1/admin/kyber/intelligence/anti-distillation` | Suspicious query patterns, alerts, honeypot queries, and score-binning stats |
+
+### Kyber Admin — Data Rights (`/v1/admin/kyber/data-rights/*`)
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/v1/admin/kyber/data-rights` | All data rights grants (operator-scoped view) |
+| POST | `/v1/admin/kyber/data-rights/grants/{grant_id}/revoke` | Operator-initiated revocation |
