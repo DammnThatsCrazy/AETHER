@@ -372,8 +372,10 @@ class ContractRegistryCreate(BaseModel):
     chain_id: int
     contract_address: str
     contract_name: str
+    # oracle_signer_address is required — must match Aether's oracle signer address.
+    # Derive with: Account.from_key(ORACLE_SIGNER_KEY).address
+    oracle_signer_address: str
     vm_type: str = "evm"
-    oracle_signer_address: Optional[str] = None
     allowed_campaign_ids: list[str] = Field(default_factory=list)
     abi_ref: Optional[str] = None
 
@@ -596,6 +598,10 @@ async def create_campaign(request: Request, body: CampaignCreate):
         "consent_policy_id": body.consent_policy_id,
         "budget_policy": body.budget_policy,
         "external_campaign_ref": body.external_campaign_ref,
+        "contract_address": body.contract_address,
+        "chain_id": body.chain_id,
+        "vm_type": body.vm_type,
+        "program_id": body.program_id,
         "created_at": _utc_now(),
         "updated_at": _utc_now(),
     }
@@ -876,6 +882,16 @@ async def _evaluate_event_core(request: Request, body: EvaluateRequest) -> dict:
     # Gate onchain_claim before create_once so an unregistered contract does not
     # consume cooldown/per-user/total-use caps by leaving an eligible=True row.
     if decision.eligible and decision.rail == "onchain_claim" and not is_local:
+        # For idempotent retries, _decision_from_record reconstructs the decision
+        # with campaign_id but no campaign dict. Hydrate so the registry check
+        # uses the campaign's contract_address instead of falling back to the
+        # global EVM_CONTRACT_ADDRESS env var.
+        if not decision.campaign and decision.campaign_id:
+            try:
+                _hydrated = await repos["campaigns"].get(decision.campaign_id, tenant_id)
+                decision.campaign = _hydrated
+            except Exception:
+                pass
         _campaign = decision.campaign or {}
         _contract_address = _campaign.get("contract_address") or os.getenv("EVM_CONTRACT_ADDRESS", "")
         _chain_id = int(_campaign.get("chain_id") or os.getenv("EVM_CHAIN_ID", "1"))
@@ -1545,10 +1561,42 @@ async def get_contract(request: Request, registry_id: str):
 @router.post("/contracts/{registry_id}/verify", response_model=None)
 @api_response
 async def verify_contract(request: Request, registry_id: str):
-    """Mark a registered contract as verified, enabling proof generation for it."""
+    """Mark a registered contract as verified, enabling proof generation for it.
+
+    Validates that the registered oracle_signer_address matches the address derived
+    from ORACLE_SIGNER_KEY so the tenant contract won't reject proofs at claim time.
+    """
     _require_permission(request, "rewards:write")
     tenant_id = _get_tenant_id(request)
     repos = await _get_repos()
+    record = await repos["contracts"].get(registry_id, tenant_id)
+
+    registered_signer = record.get("oracle_signer_address", "")
+    if not registered_signer:
+        raise HTTPException(
+            status_code=422,
+            detail="oracle_signer_address is required before verification. "
+                   "Re-register with oracle_signer_address set to Aether's oracle address.",
+        )
+
+    # Compare against the live oracle signer when eth_account is available.
+    _oracle_key = os.getenv("ORACLE_SIGNER_KEY", "")
+    if _oracle_key:
+        try:
+            from eth_account import Account as _Account  # noqa: PLC0415
+            _expected = _Account.from_key(_oracle_key).address.lower()
+            if registered_signer.lower() != _expected:
+                raise HTTPException(
+                    status_code=422,
+                    detail=(
+                        f"oracle_signer_address {registered_signer!r} does not match "
+                        "Aether's current oracle signer. Update the registry entry and "
+                        "re-verify, or rotate the oracle key and update the tenant contract."
+                    ),
+                )
+        except ImportError:
+            pass  # eth_account not available in this env; skip address comparison
+
     updated = await repos["contracts"].verify(registry_id, tenant_id)
     await _audit(repos, tenant_id, "contract.verified", "contract_registry", registry_id,
                  after_state=updated)

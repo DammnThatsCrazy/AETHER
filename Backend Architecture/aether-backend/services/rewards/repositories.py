@@ -13,7 +13,7 @@ from __future__ import annotations
 
 import os
 import uuid
-from typing import Optional
+from typing import Any, Optional
 
 from repositories.repos import BaseRepository
 from shared.common.common import ForbiddenError, NotFoundError, utc_now
@@ -430,40 +430,119 @@ class RewardRailConfigRepository(BaseRepository):
 # ═══════════════════════════════════════════════════════════════════════════
 
 class ContractRegistryRepository(BaseRepository):
-    """Tenant-owned smart contract registry for proof generation gating."""
+    """Tenant-owned smart contract registry for proof generation gating.
+
+    tenant_contract_registry uses a columnar schema (not JSONB data column), so
+    all Postgres paths are implemented directly here rather than via BaseRepository's
+    JSONB insert/find_many helpers.
+    """
 
     def __init__(self) -> None:
         super().__init__("tenant_contract_registry")
 
+    def _row_to_dict(self, row: Any) -> dict:
+        """Convert an asyncpg Record to a plain dict."""
+        return dict(row)
+
     async def register(self, tenant_id: str, data: dict) -> dict:
         record_id = _new_id()
         record = {**data, "id": record_id, "tenant_id": tenant_id, "verification_status": "pending"}
-        return await self.insert(record_id, record)
+        pool = await self._ensure_pool()
+        if pool is None:
+            self._store[record_id] = record
+            return record
+        # Columnar INSERT — matches the migration schema exactly.
+        import json as _json
+        allowed = data.get("allowed_campaign_ids") or []
+        await pool.execute(
+            """INSERT INTO tenant_contract_registry
+               (id, tenant_id, chain_id, contract_address, contract_name, abi_ref,
+                verification_status, allowed_campaign_ids, oracle_signer_address,
+                created_at, updated_at)
+               VALUES ($1,$2,$3,$4,$5,$6,'pending',$7,$8,NOW(),NOW())
+               ON CONFLICT (tenant_id, chain_id, contract_address)
+               DO UPDATE SET updated_at=NOW()""",
+            record_id, tenant_id,
+            int(data.get("chain_id", 1)),
+            data.get("contract_address", ""),
+            data.get("contract_name", ""),
+            data.get("abi_ref"),
+            allowed,
+            data.get("oracle_signer_address", ""),
+        )
+        return record
 
     async def get(self, registry_id: str, tenant_id: str) -> dict:
-        record = await self.find_by_id(registry_id)
-        if record is None:
+        pool = await self._ensure_pool()
+        if pool is None:
+            record = self._store.get(registry_id)
+            if record is None:
+                raise NotFoundError("ContractRegistry")
+            if record.get("tenant_id") != tenant_id:
+                raise ForbiddenError("ContractRegistry")
+            return record
+        row = await pool.fetchrow(
+            "SELECT * FROM tenant_contract_registry WHERE id=$1", registry_id
+        )
+        if row is None:
             raise NotFoundError("ContractRegistry")
+        record = self._row_to_dict(row)
         if record.get("tenant_id") != tenant_id:
             raise ForbiddenError("ContractRegistry")
         return record
 
     async def find_for_proof(self, tenant_id: str, chain_id: int, contract_address: str, campaign_id: str = "") -> Optional[dict]:
-        """Return a verified registry entry for proof generation, or None."""
-        results = await self.find_many(
-            filters={"tenant_id": tenant_id, "verification_status": "verified"},
-            limit=100,
+        """Return a verified registry entry for proof generation, or None.
+
+        Queries by (tenant_id, chain_id, contract_address) directly — no Python-side
+        pagination over a capped result set.
+        """
+        pool = await self._ensure_pool()
+        if pool is None:
+            for r in self._store.values():
+                if (r.get("tenant_id") == tenant_id
+                        and r.get("verification_status") == "verified"
+                        and r.get("chain_id") == chain_id
+                        and r.get("contract_address", "").lower() == contract_address.lower()):
+                    allowed = r.get("allowed_campaign_ids", [])
+                    if not allowed or campaign_id in allowed:
+                        return r
+            return None
+        row = await pool.fetchrow(
+            """SELECT * FROM tenant_contract_registry
+               WHERE tenant_id=$1 AND chain_id=$2
+                 AND LOWER(contract_address)=LOWER($3)
+                 AND verification_status='verified'""",
+            tenant_id, chain_id, contract_address,
         )
-        for r in results:
-            if r.get("chain_id") == chain_id and r.get("contract_address", "").lower() == contract_address.lower():
-                allowed = r.get("allowed_campaign_ids", [])
-                if not allowed or campaign_id in allowed:
-                    return r
-        return None
+        if row is None:
+            return None
+        record = self._row_to_dict(row)
+        allowed = record.get("allowed_campaign_ids") or []
+        if allowed and campaign_id not in allowed:
+            return None
+        return record
 
     async def list(self, tenant_id: str) -> list[dict]:
-        return await self.find_many(filters={"tenant_id": tenant_id}, limit=50)
+        pool = await self._ensure_pool()
+        if pool is None:
+            return [r for r in self._store.values() if r.get("tenant_id") == tenant_id]
+        rows = await pool.fetch(
+            "SELECT * FROM tenant_contract_registry WHERE tenant_id=$1 ORDER BY created_at DESC",
+            tenant_id,
+        )
+        return [self._row_to_dict(r) for r in rows]
 
     async def verify(self, registry_id: str, tenant_id: str) -> dict:
-        await self.get(registry_id, tenant_id)
-        return await self.update(registry_id, {"verification_status": "verified"})
+        record = await self.get(registry_id, tenant_id)
+        pool = await self._ensure_pool()
+        if pool is None:
+            record["verification_status"] = "verified"
+            self._store[registry_id] = record
+            return record
+        await pool.execute(
+            "UPDATE tenant_contract_registry SET verification_status='verified', updated_at=NOW() WHERE id=$1",
+            registry_id,
+        )
+        record["verification_status"] = "verified"
+        return record
