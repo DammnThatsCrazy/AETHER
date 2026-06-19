@@ -11,7 +11,7 @@ source_files:
 canonical_owner: backend@aether
 estimated_read_minutes: 60
 toc_depth: 3
-last_synced_commit: 04e7372
+last_synced_commit: 723a57a
 
 ---
 # Aether Backend API v8.9.0 — Endpoint Specification
@@ -875,7 +875,7 @@ Get a single registered contract by ID.
 
 ### POST /v1/rewards/contracts/{id}/verify
 
-Mark a registered contract as verified, enabling proof generation for it. Validates that `oracle_signer_address` matches the current Aether oracle signer (derived from `ORACLE_SIGNER_KEY`) — returns 422 if they diverge. After successful verification the contract satisfies the registry gate in `POST /v1/rewards/evaluate` for `onchain_claim` rails.
+**Requires `rewards:admin` (Aether operator only).** Tenants cannot self-verify — an operator must confirm contract ownership before approving. Validates that `oracle_signer_address` matches the current Aether oracle signer (derived from `ORACLE_SIGNER_KEY`) — returns 422 if they diverge. After successful verification the contract satisfies the registry gate in `POST /v1/rewards/evaluate` for `onchain_claim` rails.
 
 ---
 
