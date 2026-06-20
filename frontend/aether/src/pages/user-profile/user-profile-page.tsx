@@ -1012,9 +1012,9 @@ function DeFiTab({ userId, window }: { userId: string; window: string }) {
 
       <Section title="PNL" loading={pl} error={pe}>
         <div className="grid grid-cols-3 gap-3">
-          <Stat label="Realized PNL" value={fmt(pnlSummary.realized_pnl_usd)} />
-          <Stat label="Unrealized PNL" value={fmt(pnlSummary.unrealized_pnl_usd)} />
-          <Stat label="TVL delta" value={fmt(pnlSummary.tvl_delta_usd)} />
+          <Stat label="Realized PNL" value={fmt(pnlSummary.total_realized_pnl)} />
+          <Stat label="Unrealized PNL" value={fmt(pnlSummary.total_unrealized_pnl)} />
+          <Stat label="TVL delta" value={fmt((asList(asRecord(pnl).items ?? pnl) as SimpleRow[])[0]?.tvl_delta)} />
         </div>
       </Section>
 
@@ -1046,7 +1046,8 @@ function FunnelTab({ userId, window }: { userId: string; window: string }) {
   const { data: economics, isLoading: el, error: ee } = useUserJourneyEconomics(userId, window);
   const { data: devices, isLoading: dl, error: de } = useUserDevicePerformance(userId, window);
 
-  const stages = asList(asRecord(funnel).items ?? funnel) as SimpleRow[];
+  const funnelEnv = asRecord(funnel);
+  const stages = (asList(funnelEnv.items ?? funnel) as SimpleRow[]).filter(s => Number(s.count ?? 0) > 0);
   const ttcList = asList(asRecord(ttc).items ?? ttc) as SimpleRow[];
   const econList = asList(asRecord(economics).items ?? economics) as SimpleRow[];
   const deviceList = asList(asRecord(devices).items ?? devices) as SimpleRow[];
@@ -1058,7 +1059,7 @@ function FunnelTab({ userId, window }: { userId: string; window: string }) {
           ? <EmptyState title="No funnel data" />
           : <div className="space-y-2">
               {stages.map((s, i) => {
-                const pct = Number(s.conversion_rate ?? 1) * 100;
+                const pct = Number(s.conversion_rate ?? 0) * 100;
                 return (
                   <div key={i} className="flex items-center gap-3">
                     <span className="text-xs text-text-secondary w-24 shrink-0">{fmt(s.stage)}</span>
@@ -1080,13 +1081,14 @@ function FunnelTab({ userId, window }: { userId: string; window: string }) {
         {ttcList.length === 0
           ? <EmptyState title="No conversion time data" />
           : <DataTable<SimpleRow>
-              keyExtractor={r => fmt(r.stage) || String(Math.random())}
+              keyExtractor={r => `${fmt(r.from_stage)}-${fmt(r.to_stage)}` || String(Math.random())}
               data={ttcList}
               emptyMessage="No data"
               columns={[
-                { key: 'stage', header: 'Stage', render: r => fmt(r.stage) },
-                { key: 'median', header: 'Median', render: r => fmt(r.median_duration) },
-                { key: 'p90', header: 'P90', render: r => fmt(r.p90_duration) },
+                { key: 'from_stage', header: 'From', render: r => fmt(r.from_stage) },
+                { key: 'to_stage', header: 'To', render: r => fmt(r.to_stage) },
+                { key: 'median_seconds', header: 'Median (s)', render: r => fmt(r.median_seconds) },
+                { key: 'p90_seconds', header: 'P90 (s)', render: r => fmt(r.p90_seconds) },
               ]}
             />
         }
@@ -1096,11 +1098,11 @@ function FunnelTab({ userId, window }: { userId: string; window: string }) {
         {econList.length === 0
           ? <EmptyState title="No journey economics data" />
           : <DataTable<SimpleRow>
-              keyExtractor={r => fmt(r.journey) || String(Math.random())}
+              keyExtractor={r => fmt(r.journey_id) || String(Math.random())}
               data={econList}
               emptyMessage="No data"
               columns={[
-                { key: 'journey', header: 'Journey', render: r => fmt(r.journey) },
+                { key: 'journey_id', header: 'Journey', render: r => fmt(r.journey_id) },
                 { key: 'roas', header: 'ROAS', render: r => fmt(r.roas) },
                 { key: 'cpa', header: 'CPA', render: r => fmt(r.cpa) },
                 { key: 'ltv', header: 'LTV', render: r => fmt(r.ltv) },
@@ -1114,13 +1116,13 @@ function FunnelTab({ userId, window }: { userId: string; window: string }) {
         {deviceList.length === 0
           ? <EmptyState title="No device performance data" />
           : <DataTable<SimpleRow>
-              keyExtractor={r => fmt(r.device_type ?? r.device) || String(Math.random())}
+              keyExtractor={r => fmt(r.device_type) || String(Math.random())}
               data={deviceList}
               emptyMessage="No data"
               columns={[
-                { key: 'device', header: 'Device', render: r => fmt(r.device_type ?? r.device) },
+                { key: 'device_type', header: 'Device', render: r => fmt(r.device_type) },
                 { key: 'conversion_rate', header: 'Conv. Rate', render: r => fmt(r.conversion_rate) },
-                { key: 'avg_value', header: 'Avg Value', render: r => fmt(r.avg_value) },
+                { key: 'avg_conversion_value', header: 'Avg Value', render: r => fmt(r.avg_conversion_value) },
               ]}
             />
         }
@@ -1144,14 +1146,14 @@ function ProtocolsTab({ userId, window }: { userId: string; window: string }) {
         {protocolList.length === 0
           ? <EmptyState title="No protocol data" />
           : <DataTable<SimpleRow>
-              keyExtractor={r => fmt(r.protocol) || String(Math.random())}
+              keyExtractor={r => fmt(r.date) || String(Math.random())}
               data={protocolList}
               emptyMessage="No data"
               columns={[
-                { key: 'protocol', header: 'Protocol', render: r => fmt(r.protocol) },
-                { key: 'tvl', header: 'TVL', render: r => fmt(r.tvl) },
-                { key: 'volume', header: 'Volume', render: r => fmt(r.volume) },
-                { key: 'fees', header: 'Fees', render: r => fmt(r.fees) },
+                { key: 'date', header: 'Date', render: r => fmt(r.date) },
+                { key: 'tvl_usd', header: 'TVL', render: r => fmt(r.tvl_usd) },
+                { key: 'volume_usd', header: 'Volume', render: r => fmt(r.volume_usd) },
+                { key: 'fee_revenue_usd', header: 'Fees', render: r => fmt(r.fee_revenue_usd) },
               ]}
             />
         }
@@ -1161,13 +1163,14 @@ function ProtocolsTab({ userId, window }: { userId: string; window: string }) {
         {govList.length === 0
           ? <EmptyState title="No governance data" />
           : <DataTable<SimpleRow>
-              keyExtractor={r => fmt(r.proposal ?? r.title) || String(Math.random())}
+              keyExtractor={r => fmt(r.proposal_id) || String(Math.random())}
               data={govList}
               emptyMessage="No data"
               columns={[
-                { key: 'proposal', header: 'Proposal', render: r => fmt(r.proposal ?? r.title) },
-                { key: 'votes', header: 'Votes', render: r => fmt(r.votes) },
-                { key: 'participation_rate', header: 'Participation', render: r => fmt(r.participation_rate) },
+                { key: 'proposal_id', header: 'Proposal', render: r => fmt(r.proposal_id) },
+                { key: 'protocol', header: 'Protocol', render: r => fmt(r.protocol) },
+                { key: 'vote', header: 'Vote', render: r => fmt(r.vote) },
+                { key: 'voting_power', header: 'Voting Power', render: r => fmt(r.voting_power) },
               ]}
             />
         }
