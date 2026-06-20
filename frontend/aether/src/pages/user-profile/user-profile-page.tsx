@@ -14,6 +14,10 @@ import {
   useUserIdentifiers, useUserIntelligence, useUserBehavioral,
   useUserWhyExplain, useUserAttributionJourney, useUserGraph, useUserCluster,
   useUserSocialIntelligence, useUserRecommendations,
+  useUserTier, useUserAssetComposition, useUserPnl, useUserTradingProfile,
+  useUserFunnel, useUserTimeToConvert, useUserJourneyEconomics, useUserDevicePerformance,
+  useUserProtocolMetrics, useUserGovernanceActivity,
+  useUserQuality, useUserDataFreshness, useUserWeb2Profile,
 } from '@aether-app/features/users/use-user-profile';
 import { api } from '@aether-app/lib/api/endpoints';
 import { OutcomeLedgerPanel } from '@aether-app/components/outcome-ledger-panel';
@@ -962,6 +966,296 @@ function RecommendationCards({ userId }: { userId: string }) {
   );
 }
 
+// ── DeFi tab ───────────────────────────────────────────────────────────────────
+
+type SimpleRow = Record<string, unknown>;
+
+function DeFiTab({ userId, window }: { userId: string; window: string }) {
+  const { data: tier, isLoading: tl, error: te } = useUserTier(userId, window);
+  const { data: assets, isLoading: al, error: ae } = useUserAssetComposition(userId, window);
+  const { data: pnl, isLoading: pl, error: pe } = useUserPnl(userId, window);
+  const { data: trading, isLoading: ql, error: qe } = useUserTradingProfile(userId, window);
+
+  const t = asRecord(tier);
+  const p = asRecord(pnl);
+  const assetList = asList(asRecord(assets).items ?? assets) as SimpleRow[];
+  const tradingList = asList(asRecord(trading).pairs ?? trading) as SimpleRow[];
+
+  return (
+    <div className="space-y-6">
+      <Section title="DeFi tier" loading={tl} error={te}>
+        <div className="flex items-center gap-4">
+          {t.tier
+            ? <Badge variant="warning" size="sm">{fmt(t.tier)}</Badge>
+            : <EmptyState title="No tier data" />}
+          {t.percentile !== undefined && (
+            <span className="text-xs text-text-secondary">Top {Math.round((1 - Number(t.percentile)) * 100)}%</span>
+          )}
+        </div>
+      </Section>
+
+      <Section title="Asset composition" loading={al} error={ae}>
+        {assetList.length === 0
+          ? <EmptyState title="No asset data" />
+          : <DataTable<SimpleRow>
+              keyExtractor={r => fmt(r.category) || String(Math.random())}
+              data={assetList}
+              emptyMessage="No assets"
+              columns={[
+                { key: 'category', header: 'Category', render: r => fmt(r.category) },
+                { key: 'usd_value', header: 'USD Value', render: r => fmt(r.usd_value) },
+                { key: 'share_pct', header: '% Share', render: r => fmt(r.share_pct) },
+              ]}
+            />
+        }
+      </Section>
+
+      <Section title="PNL" loading={pl} error={pe}>
+        <div className="grid grid-cols-3 gap-3">
+          <Stat label="Realized PNL" value={fmt(p.realized_pnl)} />
+          <Stat label="Unrealized PNL" value={fmt(p.unrealized_pnl)} />
+          <Stat label="TVL delta" value={fmt(p.tvl_delta)} />
+        </div>
+      </Section>
+
+      <Section title="Trading profile" loading={ql} error={qe}>
+        {tradingList.length === 0
+          ? <EmptyState title="No trading data" />
+          : <DataTable<SimpleRow>
+              keyExtractor={r => fmt(r.pair) || String(Math.random())}
+              data={tradingList}
+              emptyMessage="No trading data"
+              columns={[
+                { key: 'pair', header: 'Pair', render: r => fmt(r.pair) },
+                { key: 'protocol', header: 'Protocol', render: r => fmt(r.protocol) },
+                { key: 'avg_gas', header: 'Avg Gas', render: r => fmt(r.avg_gas) },
+                { key: 'slippage', header: 'Slippage', render: r => fmt(r.slippage) },
+              ]}
+            />
+        }
+      </Section>
+    </div>
+  );
+}
+
+// ── Funnel tab ─────────────────────────────────────────────────────────────────
+
+function FunnelTab({ userId, window }: { userId: string; window: string }) {
+  const { data: funnel, isLoading: fl, error: fe } = useUserFunnel(userId, window);
+  const { data: ttc, isLoading: tl, error: te } = useUserTimeToConvert(userId, window);
+  const { data: economics, isLoading: el, error: ee } = useUserJourneyEconomics(userId, window);
+  const { data: devices, isLoading: dl, error: de } = useUserDevicePerformance(userId, window);
+
+  const stages = asList(asRecord(funnel).stages ?? funnel) as SimpleRow[];
+  const ttcList = asList(asRecord(ttc).stages ?? ttc) as SimpleRow[];
+  const econList = asList(asRecord(economics).journeys ?? economics) as SimpleRow[];
+  const deviceList = asList(asRecord(devices).devices ?? devices) as SimpleRow[];
+
+  return (
+    <div className="space-y-6">
+      <Section title="Conversion funnel" loading={fl} error={fe}>
+        {stages.length === 0
+          ? <EmptyState title="No funnel data" />
+          : <div className="space-y-2">
+              {stages.map((s, i) => {
+                const pct = Number(s.conversion_rate ?? 1) * 100;
+                return (
+                  <div key={i} className="flex items-center gap-3">
+                    <span className="text-xs text-text-secondary w-24 shrink-0">{fmt(s.stage)}</span>
+                    <div className="flex-1 bg-surface-raised rounded-full h-2">
+                      <div className="bg-accent h-2 rounded-full" style={{ width: `${pct}%` }} />
+                    </div>
+                    <span className="text-xs text-text-secondary w-12 text-right">{Math.round(pct)}%</span>
+                    {s.drop_off_pct !== undefined && (
+                      <span className="text-xs text-danger w-16 text-right">-{fmt(s.drop_off_pct)}%</span>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+        }
+      </Section>
+
+      <Section title="Time to convert" loading={tl} error={te}>
+        {ttcList.length === 0
+          ? <EmptyState title="No conversion time data" />
+          : <DataTable<SimpleRow>
+              keyExtractor={r => fmt(r.stage) || String(Math.random())}
+              data={ttcList}
+              emptyMessage="No data"
+              columns={[
+                { key: 'stage', header: 'Stage', render: r => fmt(r.stage) },
+                { key: 'median', header: 'Median', render: r => fmt(r.median_duration) },
+                { key: 'p90', header: 'P90', render: r => fmt(r.p90_duration) },
+              ]}
+            />
+        }
+      </Section>
+
+      <Section title="Journey economics" loading={el} error={ee}>
+        {econList.length === 0
+          ? <EmptyState title="No journey economics data" />
+          : <DataTable<SimpleRow>
+              keyExtractor={r => fmt(r.journey) || String(Math.random())}
+              data={econList}
+              emptyMessage="No data"
+              columns={[
+                { key: 'journey', header: 'Journey', render: r => fmt(r.journey) },
+                { key: 'roas', header: 'ROAS', render: r => fmt(r.roas) },
+                { key: 'cpa', header: 'CPA', render: r => fmt(r.cpa) },
+                { key: 'ltv', header: 'LTV', render: r => fmt(r.ltv) },
+                { key: 'retarget_score', header: 'Retarget', render: r => fmt(r.retarget_score) },
+              ]}
+            />
+        }
+      </Section>
+
+      <Section title="Device performance" loading={dl} error={de}>
+        {deviceList.length === 0
+          ? <EmptyState title="No device performance data" />
+          : <DataTable<SimpleRow>
+              keyExtractor={r => fmt(r.device_type ?? r.device) || String(Math.random())}
+              data={deviceList}
+              emptyMessage="No data"
+              columns={[
+                { key: 'device', header: 'Device', render: r => fmt(r.device_type ?? r.device) },
+                { key: 'conversion_rate', header: 'Conv. Rate', render: r => fmt(r.conversion_rate) },
+                { key: 'avg_value', header: 'Avg Value', render: r => fmt(r.avg_value) },
+              ]}
+            />
+        }
+      </Section>
+    </div>
+  );
+}
+
+// ── Protocols tab ──────────────────────────────────────────────────────────────
+
+function ProtocolsTab({ userId, window }: { userId: string; window: string }) {
+  const { data: protocols, isLoading: pl, error: pe } = useUserProtocolMetrics(userId, window);
+  const { data: governance, isLoading: gl, error: ge } = useUserGovernanceActivity(userId, window);
+
+  const protocolList = asList(asRecord(protocols).protocols ?? protocols) as SimpleRow[];
+  const govList = asList(asRecord(governance).proposals ?? governance) as SimpleRow[];
+
+  return (
+    <div className="space-y-6">
+      <Section title="Protocol metrics" loading={pl} error={pe}>
+        {protocolList.length === 0
+          ? <EmptyState title="No protocol data" />
+          : <DataTable<SimpleRow>
+              keyExtractor={r => fmt(r.protocol) || String(Math.random())}
+              data={protocolList}
+              emptyMessage="No data"
+              columns={[
+                { key: 'protocol', header: 'Protocol', render: r => fmt(r.protocol) },
+                { key: 'tvl', header: 'TVL', render: r => fmt(r.tvl) },
+                { key: 'volume', header: 'Volume', render: r => fmt(r.volume) },
+                { key: 'fees', header: 'Fees', render: r => fmt(r.fees) },
+              ]}
+            />
+        }
+      </Section>
+
+      <Section title="Governance activity" loading={gl} error={ge}>
+        {govList.length === 0
+          ? <EmptyState title="No governance data" />
+          : <DataTable<SimpleRow>
+              keyExtractor={r => fmt(r.proposal ?? r.title) || String(Math.random())}
+              data={govList}
+              emptyMessage="No data"
+              columns={[
+                { key: 'proposal', header: 'Proposal', render: r => fmt(r.proposal ?? r.title) },
+                { key: 'votes', header: 'Votes', render: r => fmt(r.votes) },
+                { key: 'participation_rate', header: 'Participation', render: r => fmt(r.participation_rate) },
+              ]}
+            />
+        }
+      </Section>
+    </div>
+  );
+}
+
+// ── Insights tab ───────────────────────────────────────────────────────────────
+
+function InsightsTab({ userId }: { userId: string }) {
+  const { data: quality, isLoading: ql, error: qe } = useUserQuality(userId);
+  const { data: freshness, isLoading: fl, error: fe } = useUserDataFreshness(userId);
+  const { data: web2, isLoading: wl, error: we } = useUserWeb2Profile(userId);
+
+  const q = asRecord(quality);
+  const dimensions = asList(asRecord(freshness).dimensions ?? freshness) as SimpleRow[];
+  const w = asRecord(web2);
+  const qualityDimensions = asList(asRecord(quality).dimensions ?? []) as SimpleRow[];
+
+  const isConsentDenied = we && (String(we).includes('403') || String(we).includes('consent'));
+
+  return (
+    <div className="space-y-6">
+      <Section title="Data quality" loading={ql} error={qe}>
+        <div className="flex items-center gap-4 mb-3">
+          {q.completeness !== undefined && (
+            <Badge variant={Number(q.completeness) >= 0.7 ? 'success' : Number(q.completeness) >= 0.4 ? 'warning' : 'danger'}>
+              Completeness {fmtScore(q.completeness)}%
+            </Badge>
+          )}
+          {!!q.readiness_status && (
+            <Badge variant={q.readiness_status === 'ready' ? 'success' : 'warning'}>
+              {fmt(q.readiness_status)}
+            </Badge>
+          )}
+        </div>
+        {qualityDimensions.length > 0 && (
+          <DataTable<SimpleRow>
+            keyExtractor={r => fmt(r.name ?? r.dimension) || String(Math.random())}
+            data={qualityDimensions}
+            emptyMessage="No dimensions"
+            columns={[
+              { key: 'dimension', header: 'Dimension', render: r => fmt(r.name ?? r.dimension) },
+              { key: 'score', header: 'Score', render: r => fmt(r.score) },
+            ]}
+          />
+        )}
+      </Section>
+
+      <Section title="Data freshness" loading={fl} error={fe}>
+        {dimensions.length === 0
+          ? <EmptyState title="No freshness data" />
+          : <DataTable<SimpleRow>
+              keyExtractor={r => fmt(r.dimension ?? r.name) || String(Math.random())}
+              data={dimensions}
+              emptyMessage="No data"
+              columns={[
+                { key: 'dimension', header: 'Dimension', render: r => fmt(r.dimension ?? r.name) },
+                { key: 'last_updated', header: 'Last Updated', render: r => r.last_updated ? relTime(r.last_updated as string) : '—' },
+                { key: 'stale', header: 'Stale?', render: r => r.is_stale ? <Badge variant="danger" size="sm">Stale</Badge> : <Badge variant="success" size="sm">Fresh</Badge> },
+              ]}
+            />
+        }
+      </Section>
+
+      <Section title="Web2 credit intelligence" loading={wl}>
+        {isConsentDenied ? (
+          <Card>
+            <CardContent className="py-6 text-center space-y-2">
+              <p className="text-sm font-medium text-text-primary">Credit consent required</p>
+              <p className="text-xs text-text-secondary">Contact your administrator to grant access to credit intelligence data.</p>
+            </CardContent>
+          </Card>
+        ) : we ? (
+          <p className="text-xs text-danger">{String(we)}</p>
+        ) : (
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+            {Object.entries(w).filter(([k]) => !k.startsWith('_')).map(([k, v]) => (
+              <Stat key={k} label={k.replace(/_/g, ' ')} value={fmt(v)} />
+            ))}
+          </div>
+        )}
+      </Section>
+    </div>
+  );
+}
+
 export function UserProfilePage() {
   const { id: userId = '' } = useParams<{ id: string }>();
   const navigate = useNavigate();
@@ -1024,6 +1318,10 @@ export function UserProfilePage() {
           <TabsTrigger value="attribution">Attribution</TabsTrigger>
           <TabsTrigger value="relationships">Graph</TabsTrigger>
           <TabsTrigger value="outcomes">Outcomes</TabsTrigger>
+          <TabsTrigger value="defi">DeFi</TabsTrigger>
+          <TabsTrigger value="funnel">Funnel</TabsTrigger>
+          <TabsTrigger value="protocols">Protocols</TabsTrigger>
+          <TabsTrigger value="insights">Insights</TabsTrigger>
         </TabsList>
 
         <TabsContent value="overview"><OverviewTab userId={userId} /></TabsContent>
@@ -1039,6 +1337,10 @@ export function UserProfilePage() {
         <TabsContent value="attribution"><AttributionTab userId={userId} /></TabsContent>
         <TabsContent value="relationships"><RelationshipsTab userId={userId} /></TabsContent>
         <TabsContent value="outcomes"><OutcomeLedgerPanel entityId={userId} /></TabsContent>
+        <TabsContent value="defi"><DeFiTab userId={userId} window={window} /></TabsContent>
+        <TabsContent value="funnel"><FunnelTab userId={userId} window={window} /></TabsContent>
+        <TabsContent value="protocols"><ProtocolsTab userId={userId} window={window} /></TabsContent>
+        <TabsContent value="insights"><InsightsTab userId={userId} /></TabsContent>
       </Tabs>
     </div>
   );
