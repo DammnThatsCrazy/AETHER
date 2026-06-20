@@ -215,3 +215,63 @@ export function useUserRecommendations(userId: string) {
     enabled: !!userId,
   });
 }
+
+export function useUserTier(userId: string, window = '30d') {
+  return useQuery({ key: key(userId, `tier:${window}`), fetcher: () => api.profile.tier(userId, window), staleTime: STALE, enabled: !!userId });
+}
+
+export function useUserAssetComposition(userId: string, window = '30d') {
+  return useQuery({ key: key(userId, `asset-composition:${window}`), fetcher: () => api.profile.assetComposition(userId, window), staleTime: STALE, enabled: !!userId });
+}
+
+export function useUserPnl(userId: string, window = '30d') {
+  return useQuery({ key: key(userId, `pnl:${window}`), fetcher: () => api.profile.pnl(userId, window), staleTime: STALE, enabled: !!userId });
+}
+
+export function useUserTradingProfile(userId: string, window = '30d') {
+  return useQuery({ key: key(userId, `trading-profile:${window}`), fetcher: () => api.profile.tradingProfile(userId, window), staleTime: STALE, enabled: !!userId });
+}
+
+export function useUserLocationHistory(userId: string, window = '30d') {
+  return useQuery({ key: key(userId, `location-history:${window}`), fetcher: () => api.profile.locationHistory(userId, window), staleTime: STALE, enabled: !!userId });
+}
+
+export function useUserTemporalHeatmap(userId: string, window = '90d') {
+  return useQuery({ key: key(userId, `temporal-heatmap:${window}`), fetcher: () => api.profile.temporalHeatmap(userId, window), staleTime: STALE, enabled: !!userId });
+}
+
+export function useUserJourneyEconomics(userId: string, window = '30d') {
+  return useQuery({ key: key(userId, `journey-economics:${window}`), fetcher: () => api.profile.journeyEconomics(userId, window), staleTime: STALE, enabled: !!userId });
+}
+
+export function useUserDevicePerformance(userId: string, window = '30d') {
+  return useQuery({ key: key(userId, `device-performance:${window}`), fetcher: () => api.profile.devicePerformance(userId, window), staleTime: STALE, enabled: !!userId });
+}
+
+export function useUserFunnel(userId: string, window = '30d') {
+  return useQuery({ key: key(userId, `funnel:${window}`), fetcher: () => api.profile.funnel(userId, window), staleTime: STALE, enabled: !!userId });
+}
+
+export function useUserTimeToConvert(userId: string, window = '30d') {
+  return useQuery({ key: key(userId, `time-to-convert:${window}`), fetcher: () => api.profile.timeToConvert(userId, window), staleTime: STALE, enabled: !!userId });
+}
+
+export function useUserWeb2Profile(userId: string, window = '30d') {
+  return useQuery({ key: key(userId, `web2:${window}`), fetcher: () => api.profile.web2Profile(userId, window), staleTime: STALE, enabled: !!userId });
+}
+
+export function useUserProtocolMetrics(userId: string, window = '30d') {
+  return useQuery({ key: key(userId, `protocol-metrics:${window}`), fetcher: () => api.profile.protocolMetrics(userId, window), staleTime: STALE, enabled: !!userId });
+}
+
+export function useUserGovernanceActivity(userId: string, window = '30d') {
+  return useQuery({ key: key(userId, `governance-activity:${window}`), fetcher: () => api.profile.governanceActivity(userId, window), staleTime: STALE, enabled: !!userId });
+}
+
+export function useUserQuality(userId: string) {
+  return useQuery({ key: key(userId, 'quality'), fetcher: () => api.profile.quality(userId), staleTime: STALE, enabled: !!userId });
+}
+
+export function useUserDataFreshness(userId: string) {
+  return useQuery({ key: key(userId, 'data-freshness'), fetcher: () => api.profile.dataFreshness(userId), staleTime: STALE, enabled: !!userId });
+}

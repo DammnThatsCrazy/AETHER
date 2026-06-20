@@ -203,6 +203,37 @@ export const api = {
 
     resolve: (params: { wallet?: string; email?: string; device?: string; session?: string; social?: string; customer?: string }) =>
       restClient.get(`/v1/profile/resolve${buildQS(params)}`, wrap(z.object({ resolved_user_id: z.string() }))).then(r => r.data),
+
+    tier: (userId: string, window = '30d') =>
+      restClient.get(`/v1/profile/${userId}/tier${buildQS({ window })}`, wrap(unknownSchema)).then(r => r.data),
+    assetComposition: (userId: string, window = '30d') =>
+      restClient.get(`/v1/profile/${userId}/asset-composition${buildQS({ window })}`, wrap(unknownSchema)).then(r => r.data),
+    pnl: (userId: string, window = '30d') =>
+      restClient.get(`/v1/profile/${userId}/pnl${buildQS({ window })}`, wrap(unknownSchema)).then(r => r.data),
+    tradingProfile: (userId: string, window = '30d') =>
+      restClient.get(`/v1/profile/${userId}/trading-profile${buildQS({ window })}`, wrap(unknownSchema)).then(r => r.data),
+    locationHistory: (userId: string, window = '30d') =>
+      restClient.get(`/v1/profile/${userId}/location-history${buildQS({ window })}`, wrap(unknownSchema)).then(r => r.data),
+    temporalHeatmap: (userId: string, window = '90d') =>
+      restClient.get(`/v1/profile/${userId}/temporal-heatmap${buildQS({ window })}`, wrap(unknownSchema)).then(r => r.data),
+    journeyEconomics: (userId: string, window = '30d') =>
+      restClient.get(`/v1/profile/${userId}/journey-economics${buildQS({ window })}`, wrap(unknownSchema)).then(r => r.data),
+    devicePerformance: (userId: string, window = '30d') =>
+      restClient.get(`/v1/profile/${userId}/device-performance${buildQS({ window })}`, wrap(unknownSchema)).then(r => r.data),
+    funnel: (userId: string, window = '30d') =>
+      restClient.get(`/v1/profile/${userId}/funnel${buildQS({ window })}`, wrap(unknownSchema)).then(r => r.data),
+    timeToConvert: (userId: string, window = '30d') =>
+      restClient.get(`/v1/profile/${userId}/time-to-convert${buildQS({ window })}`, wrap(unknownSchema)).then(r => r.data),
+    web2Profile: (userId: string, window = '30d') =>
+      restClient.get(`/v1/profile/${userId}/web2${buildQS({ window })}`, wrap(unknownSchema)).then(r => r.data),
+    protocolMetrics: (userId: string, window = '30d') =>
+      restClient.get(`/v1/profile/${userId}/protocol-metrics${buildQS({ window })}`, wrap(unknownSchema)).then(r => r.data),
+    governanceActivity: (userId: string, window = '30d') =>
+      restClient.get(`/v1/profile/${userId}/governance-activity${buildQS({ window })}`, wrap(unknownSchema)).then(r => r.data),
+    quality: (userId: string) =>
+      restClient.get(`/v1/profile/${userId}/quality`, wrap(unknownSchema)).then(r => r.data),
+    dataFreshness: (userId: string) =>
+      restClient.get(`/v1/profile/${userId}/data-freshness`, wrap(unknownSchema)).then(r => r.data),
   },
 
   // ── Profile360 normalized surfaces ─────────────────────────────────────────
