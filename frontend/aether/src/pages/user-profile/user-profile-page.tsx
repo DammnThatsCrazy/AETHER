@@ -976,20 +976,20 @@ function DeFiTab({ userId, window }: { userId: string; window: string }) {
   const { data: pnl, isLoading: pl, error: pe } = useUserPnl(userId, window);
   const { data: trading, isLoading: ql, error: qe } = useUserTradingProfile(userId, window);
 
-  const t = asRecord(tier);
-  const p = asRecord(pnl);
+  const tierSummary = asRecord(asRecord(tier).summary ?? tier);
+  const pnlSummary = asRecord(asRecord(pnl).summary ?? pnl);
   const assetList = asList(asRecord(assets).items ?? assets) as SimpleRow[];
-  const tradingList = asList(asRecord(trading).pairs ?? trading) as SimpleRow[];
+  const tradingList = asList(asRecord(trading).items ?? trading) as SimpleRow[];
 
   return (
     <div className="space-y-6">
       <Section title="DeFi tier" loading={tl} error={te}>
         <div className="flex items-center gap-4">
-          {t.tier
-            ? <Badge variant="warning" size="sm">{fmt(t.tier)}</Badge>
+          {tierSummary.tier
+            ? <Badge variant="warning" size="sm">{fmt(tierSummary.tier)}</Badge>
             : <EmptyState title="No tier data" />}
-          {t.percentile !== undefined && (
-            <span className="text-xs text-text-secondary">Top {Math.round((1 - Number(t.percentile)) * 100)}%</span>
+          {tierSummary.percentile !== undefined && (
+            <span className="text-xs text-text-secondary">Top {Math.round((1 - Number(tierSummary.percentile)) * 100)}%</span>
           )}
         </div>
       </Section>
@@ -1003,8 +1003,8 @@ function DeFiTab({ userId, window }: { userId: string; window: string }) {
               emptyMessage="No assets"
               columns={[
                 { key: 'category', header: 'Category', render: r => fmt(r.category) },
-                { key: 'usd_value', header: 'USD Value', render: r => fmt(r.usd_value) },
-                { key: 'share_pct', header: '% Share', render: r => fmt(r.share_pct) },
+                { key: 'value_usd', header: 'USD Value', render: r => fmt(r.value_usd) },
+                { key: 'percentage', header: '% Share', render: r => r.percentage != null ? `${Math.round(Number(r.percentage) * 100)}%` : '—' },
               ]}
             />
         }
@@ -1012,9 +1012,9 @@ function DeFiTab({ userId, window }: { userId: string; window: string }) {
 
       <Section title="PNL" loading={pl} error={pe}>
         <div className="grid grid-cols-3 gap-3">
-          <Stat label="Realized PNL" value={fmt(p.realized_pnl)} />
-          <Stat label="Unrealized PNL" value={fmt(p.unrealized_pnl)} />
-          <Stat label="TVL delta" value={fmt(p.tvl_delta)} />
+          <Stat label="Realized PNL" value={fmt(pnlSummary.realized_pnl_usd ?? pnlSummary.total_realized_pnl)} />
+          <Stat label="Unrealized PNL" value={fmt(pnlSummary.unrealized_pnl_usd ?? pnlSummary.total_unrealized_pnl)} />
+          <Stat label="TVL delta" value={fmt(pnlSummary.tvl_delta_usd ?? (asList(asRecord(pnl).items ?? pnl) as SimpleRow[])[0]?.tvl_delta)} />
         </div>
       </Section>
 
@@ -1022,14 +1022,45 @@ function DeFiTab({ userId, window }: { userId: string; window: string }) {
         {tradingList.length === 0
           ? <EmptyState title="No trading data" />
           : <DataTable<SimpleRow>
-              keyExtractor={r => fmt(r.pair) || String(Math.random())}
+              keyExtractor={r => `trading-${fmt(r.avg_slippage)}-${fmt(r.trade_count)}`}
               data={tradingList}
               emptyMessage="No trading data"
               columns={[
-                { key: 'pair', header: 'Pair', render: r => fmt(r.pair) },
-                { key: 'protocol', header: 'Protocol', render: r => fmt(r.protocol) },
-                { key: 'avg_gas', header: 'Avg Gas', render: r => fmt(r.avg_gas) },
-                { key: 'slippage', header: 'Slippage', render: r => fmt(r.slippage) },
+                { key: 'favorite_pairs', header: 'Pairs', render: r => {
+                  const v = r.favorite_pairs;
+                  if (Array.isArray(v)) {
+                    return v.map((p: unknown) => {
+                      if (p && typeof p === 'object') return (p as Record<string, unknown>).pair as string ?? '?';
+                      return String(p);
+                    }).filter(Boolean).join(', ') || '—';
+                  }
+                  return fmt(v);
+                }},
+                { key: 'protocol_loyalty', header: 'Protocol Loyalty', render: r => {
+                  const v = r.protocol_loyalty;
+                  if (Array.isArray(v)) {
+                    return v.map((p: unknown) => {
+                      if (p && typeof p === 'object') {
+                        const { protocol_name, volume_pct } = p as Record<string, unknown>;
+                        return `${protocol_name} ${Math.round(Number(volume_pct) * 100)}%`;
+                      }
+                      return String(p);
+                    }).join(', ') || '—';
+                  }
+                  if (v && typeof v === 'object') {
+                    const top = Object.entries(v as Record<string, unknown>).sort(([,a],[,b]) => Number(b) - Number(a)).slice(0,3);
+                    return top.map(([k, pct]) => `${k} ${Math.round(Number(pct)*100)}%`).join(', ') || '—';
+                  }
+                  return fmt(v);
+                }},
+                { key: 'gas_strategy', header: 'Gas Strategy', render: r => {
+                  const v = r.gas_strategy;
+                  if (v && typeof v === 'object' && !Array.isArray(v)) {
+                    return Object.entries(v as Record<string, unknown>).map(([k, val]) => `${k}: ${fmt(val)}`).join(', ') || '—';
+                  }
+                  return fmt(v);
+                }},
+                { key: 'avg_slippage', header: 'Slippage', render: r => fmt(r.avg_slippage) },
               ]}
             />
         }
@@ -1046,10 +1077,11 @@ function FunnelTab({ userId, window }: { userId: string; window: string }) {
   const { data: economics, isLoading: el, error: ee } = useUserJourneyEconomics(userId, window);
   const { data: devices, isLoading: dl, error: de } = useUserDevicePerformance(userId, window);
 
-  const stages = asList(asRecord(funnel).stages ?? funnel) as SimpleRow[];
-  const ttcList = asList(asRecord(ttc).stages ?? ttc) as SimpleRow[];
-  const econList = asList(asRecord(economics).journeys ?? economics) as SimpleRow[];
-  const deviceList = asList(asRecord(devices).devices ?? devices) as SimpleRow[];
+  const funnelEnv = asRecord(funnel);
+  const stages = (asList(funnelEnv.items ?? funnel) as SimpleRow[]).filter(s => Number(s.count ?? 0) > 0);
+  const ttcList = asList(asRecord(ttc).items ?? ttc) as SimpleRow[];
+  const econList = asList(asRecord(economics).items ?? economics) as SimpleRow[];
+  const deviceList = asList(asRecord(devices).items ?? devices) as SimpleRow[];
 
   return (
     <div className="space-y-6">
@@ -1058,7 +1090,7 @@ function FunnelTab({ userId, window }: { userId: string; window: string }) {
           ? <EmptyState title="No funnel data" />
           : <div className="space-y-2">
               {stages.map((s, i) => {
-                const pct = Number(s.conversion_rate ?? 1) * 100;
+                const pct = s.conversion_rate == null ? (i === 0 ? 100 : 0) : Number(s.conversion_rate) * 100;
                 return (
                   <div key={i} className="flex items-center gap-3">
                     <span className="text-xs text-text-secondary w-24 shrink-0">{fmt(s.stage)}</span>
@@ -1080,13 +1112,14 @@ function FunnelTab({ userId, window }: { userId: string; window: string }) {
         {ttcList.length === 0
           ? <EmptyState title="No conversion time data" />
           : <DataTable<SimpleRow>
-              keyExtractor={r => fmt(r.stage) || String(Math.random())}
+              keyExtractor={r => `${fmt(r.from_stage)}-${fmt(r.to_stage)}` || String(Math.random())}
               data={ttcList}
               emptyMessage="No data"
               columns={[
-                { key: 'stage', header: 'Stage', render: r => fmt(r.stage) },
-                { key: 'median', header: 'Median', render: r => fmt(r.median_duration) },
-                { key: 'p90', header: 'P90', render: r => fmt(r.p90_duration) },
+                { key: 'from_stage', header: 'From', render: r => fmt(r.from_stage) },
+                { key: 'to_stage', header: 'To', render: r => fmt(r.to_stage) },
+                { key: 'median_seconds', header: 'Median (s)', render: r => fmt(r.median_seconds) },
+                { key: 'p90_seconds', header: 'P90 (s)', render: r => fmt(r.p90_seconds) },
               ]}
             />
         }
@@ -1096,11 +1129,11 @@ function FunnelTab({ userId, window }: { userId: string; window: string }) {
         {econList.length === 0
           ? <EmptyState title="No journey economics data" />
           : <DataTable<SimpleRow>
-              keyExtractor={r => fmt(r.journey) || String(Math.random())}
+              keyExtractor={r => fmt(r.journey_id) || String(Math.random())}
               data={econList}
               emptyMessage="No data"
               columns={[
-                { key: 'journey', header: 'Journey', render: r => fmt(r.journey) },
+                { key: 'journey_id', header: 'Journey', render: r => fmt(r.journey_id) },
                 { key: 'roas', header: 'ROAS', render: r => fmt(r.roas) },
                 { key: 'cpa', header: 'CPA', render: r => fmt(r.cpa) },
                 { key: 'ltv', header: 'LTV', render: r => fmt(r.ltv) },
@@ -1114,13 +1147,13 @@ function FunnelTab({ userId, window }: { userId: string; window: string }) {
         {deviceList.length === 0
           ? <EmptyState title="No device performance data" />
           : <DataTable<SimpleRow>
-              keyExtractor={r => fmt(r.device_type ?? r.device) || String(Math.random())}
+              keyExtractor={r => fmt(r.device_type) || String(Math.random())}
               data={deviceList}
               emptyMessage="No data"
               columns={[
-                { key: 'device', header: 'Device', render: r => fmt(r.device_type ?? r.device) },
+                { key: 'device_type', header: 'Device', render: r => fmt(r.device_type) },
                 { key: 'conversion_rate', header: 'Conv. Rate', render: r => fmt(r.conversion_rate) },
-                { key: 'avg_value', header: 'Avg Value', render: r => fmt(r.avg_value) },
+                { key: 'avg_conversion_value', header: 'Avg Value', render: r => fmt(r.avg_conversion_value) },
               ]}
             />
         }
@@ -1135,8 +1168,8 @@ function ProtocolsTab({ userId, window }: { userId: string; window: string }) {
   const { data: protocols, isLoading: pl, error: pe } = useUserProtocolMetrics(userId, window);
   const { data: governance, isLoading: gl, error: ge } = useUserGovernanceActivity(userId, window);
 
-  const protocolList = asList(asRecord(protocols).protocols ?? protocols) as SimpleRow[];
-  const govList = asList(asRecord(governance).proposals ?? governance) as SimpleRow[];
+  const protocolList = asList(asRecord(protocols).items ?? protocols) as SimpleRow[];
+  const govList = asList(asRecord(governance).items ?? governance) as SimpleRow[];
 
   return (
     <div className="space-y-6">
@@ -1144,14 +1177,14 @@ function ProtocolsTab({ userId, window }: { userId: string; window: string }) {
         {protocolList.length === 0
           ? <EmptyState title="No protocol data" />
           : <DataTable<SimpleRow>
-              keyExtractor={r => fmt(r.protocol) || String(Math.random())}
+              keyExtractor={r => fmt(r.date) || String(Math.random())}
               data={protocolList}
               emptyMessage="No data"
               columns={[
-                { key: 'protocol', header: 'Protocol', render: r => fmt(r.protocol) },
-                { key: 'tvl', header: 'TVL', render: r => fmt(r.tvl) },
-                { key: 'volume', header: 'Volume', render: r => fmt(r.volume) },
-                { key: 'fees', header: 'Fees', render: r => fmt(r.fees) },
+                { key: 'date', header: 'Date', render: r => fmt(r.date) },
+                { key: 'tvl_usd', header: 'TVL', render: r => fmt(r.tvl_usd) },
+                { key: 'volume_usd', header: 'Volume', render: r => fmt(r.volume_usd) },
+                { key: 'fee_revenue_usd', header: 'Fees', render: r => fmt(r.fee_revenue_usd) },
               ]}
             />
         }
@@ -1161,13 +1194,14 @@ function ProtocolsTab({ userId, window }: { userId: string; window: string }) {
         {govList.length === 0
           ? <EmptyState title="No governance data" />
           : <DataTable<SimpleRow>
-              keyExtractor={r => fmt(r.proposal ?? r.title) || String(Math.random())}
+              keyExtractor={r => fmt(r.proposal_id) || String(Math.random())}
               data={govList}
               emptyMessage="No data"
               columns={[
-                { key: 'proposal', header: 'Proposal', render: r => fmt(r.proposal ?? r.title) },
-                { key: 'votes', header: 'Votes', render: r => fmt(r.votes) },
-                { key: 'participation_rate', header: 'Participation', render: r => fmt(r.participation_rate) },
+                { key: 'proposal_id', header: 'Proposal', render: r => fmt(r.proposal_id) },
+                { key: 'protocol', header: 'Protocol', render: r => fmt(r.protocol) },
+                { key: 'vote', header: 'Vote', render: r => fmt(r.vote) },
+                { key: 'voting_power', header: 'Voting Power', render: r => fmt(r.voting_power) },
               ]}
             />
         }
@@ -1178,17 +1212,18 @@ function ProtocolsTab({ userId, window }: { userId: string; window: string }) {
 
 // ── Insights tab ───────────────────────────────────────────────────────────────
 
-function InsightsTab({ userId }: { userId: string }) {
+function InsightsTab({ userId, window }: { userId: string; window: string }) {
   const { data: quality, isLoading: ql, error: qe } = useUserQuality(userId);
   const { data: freshness, isLoading: fl, error: fe } = useUserDataFreshness(userId);
-  const { data: web2, isLoading: wl, error: we } = useUserWeb2Profile(userId);
+  const { data: web2, isLoading: wl, error: we } = useUserWeb2Profile(userId, window);
 
   const q = asRecord(quality);
   const dimensions = asList(asRecord(freshness).dimensions ?? freshness) as SimpleRow[];
   const w = asRecord(web2);
   const qualityDimensions = asList(asRecord(quality).dimensions ?? []) as SimpleRow[];
 
-  const isConsentDenied = we && (String(we).includes('403') || String(we).includes('consent'));
+  const isConsentDenied = (we && (String(we).includes('403') || String(we).toLowerCase().includes('forbidden') || String(we).toLowerCase().includes('consent')))
+    || (!we && !!asRecord(asRecord(web2).summary).consent_required);
 
   return (
     <div className="space-y-6">
@@ -1228,7 +1263,7 @@ function InsightsTab({ userId }: { userId: string }) {
               columns={[
                 { key: 'dimension', header: 'Dimension', render: r => fmt(r.dimension ?? r.name) },
                 { key: 'last_updated', header: 'Last Updated', render: r => r.last_updated ? relTime(r.last_updated as string) : '—' },
-                { key: 'stale', header: 'Stale?', render: r => r.is_stale ? <Badge variant="danger" size="sm">Stale</Badge> : <Badge variant="success" size="sm">Fresh</Badge> },
+                { key: 'stale', header: 'Stale?', render: r => r.stale ? <Badge variant="danger" size="sm">Stale</Badge> : <Badge variant="success" size="sm">Fresh</Badge> },
               ]}
             />
         }
@@ -1246,8 +1281,10 @@ function InsightsTab({ userId }: { userId: string }) {
           <p className="text-xs text-danger">{String(we)}</p>
         ) : (
           <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-            {Object.entries(w).filter(([k]) => !k.startsWith('_')).map(([k, v]) => (
-              <Stat key={k} label={k.replace(/_/g, ' ')} value={fmt(v)} />
+            {(asList(w.items ?? []) as SimpleRow[]).map((item, i) => (
+              Object.entries(item).filter(([k]) => !k.startsWith('_')).map(([k, v]) => (
+                <Stat key={`${i}-${k}`} label={k.replace(/_/g, ' ')} value={fmt(v)} />
+              ))
             ))}
           </div>
         )}
@@ -1340,7 +1377,7 @@ export function UserProfilePage() {
         <TabsContent value="defi"><DeFiTab userId={userId} window={window} /></TabsContent>
         <TabsContent value="funnel"><FunnelTab userId={userId} window={window} /></TabsContent>
         <TabsContent value="protocols"><ProtocolsTab userId={userId} window={window} /></TabsContent>
-        <TabsContent value="insights"><InsightsTab userId={userId} /></TabsContent>
+        <TabsContent value="insights"><InsightsTab userId={userId} window={window} /></TabsContent>
       </Tabs>
     </div>
   );
