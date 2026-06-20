@@ -31,6 +31,13 @@ jobs:
           filters: |
             ml:
               - 'ML Models/**'
+              - 'Backend Architecture/aether-backend/services/ml_serving/**'
+              - 'security/model_extraction_defense/**'
+              - 'scripts/validate_ml_registry.py'
+              - 'deploy/**'
+              - 'AWS Deployment/**'
+              - 'frontend/kyber/src/features/ml/**'
+              - 'frontend/kyber/src/pages/ml/**'
 
   pr-size:
     # Warn (non-blocking) when a PR exceeds 600 meaningful lines changed.
