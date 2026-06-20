@@ -1012,9 +1012,9 @@ function DeFiTab({ userId, window }: { userId: string; window: string }) {
 
       <Section title="PNL" loading={pl} error={pe}>
         <div className="grid grid-cols-3 gap-3">
-          <Stat label="Realized PNL" value={fmt(pnlSummary.total_realized_pnl)} />
-          <Stat label="Unrealized PNL" value={fmt(pnlSummary.total_unrealized_pnl)} />
-          <Stat label="TVL delta" value={fmt((asList(asRecord(pnl).items ?? pnl) as SimpleRow[])[0]?.tvl_delta)} />
+          <Stat label="Realized PNL" value={fmt(pnlSummary.realized_pnl_usd ?? pnlSummary.total_realized_pnl)} />
+          <Stat label="Unrealized PNL" value={fmt(pnlSummary.unrealized_pnl_usd ?? pnlSummary.total_unrealized_pnl)} />
+          <Stat label="TVL delta" value={fmt(pnlSummary.tvl_delta_usd ?? (asList(asRecord(pnl).items ?? pnl) as SimpleRow[])[0]?.tvl_delta)} />
         </div>
       </Section>
 
@@ -1222,7 +1222,8 @@ function InsightsTab({ userId, window }: { userId: string; window: string }) {
   const w = asRecord(web2);
   const qualityDimensions = asList(asRecord(quality).dimensions ?? []) as SimpleRow[];
 
-  const isConsentDenied = we && (String(we).includes('403') || String(we).toLowerCase().includes('forbidden') || String(we).toLowerCase().includes('consent'));
+  const isConsentDenied = (we && (String(we).includes('403') || String(we).toLowerCase().includes('forbidden') || String(we).toLowerCase().includes('consent')))
+    || (!we && !!asRecord(asRecord(web2).summary).consent_required);
 
   return (
     <div className="space-y-6">
