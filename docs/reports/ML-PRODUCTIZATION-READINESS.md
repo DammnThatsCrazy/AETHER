@@ -14,7 +14,7 @@ source_files:
   - ML Models/aether-ml/serving/src/api.py
   - Backend Architecture/aether-backend/services/ml_serving/routes.py
   - security/model_extraction_defense/defense_layer.py
-last_synced_commit: ec76641
+last_synced_commit: b522d9a
 ---
 
 # Aether ML Productization Readiness Report
@@ -226,7 +226,11 @@ All bugs fixed:
 
 Prometheus metrics and alerts exist in `monitoring/monitor.py` and `monitoring/alerts.py`. Integration with the serving API is via the `defense_metrics` endpoint.
 
-Drift detection is now fully wired: training saves a `baseline.joblib` sample (up to 1 000 rows) per model; serving maintains per-model prediction buffers (deque, max 500); a background task runs PSI/KS/JS divergence checks every 300 s via `MonitoringPipeline`; results are exposed at `GET /v1/monitoring/drift`. Per-model data freshness SLA tracking is live at `GET /v1/monitoring/freshness`. Kyber admin dashboard hooks are live at `/v1/admin/kyber/ml/`.
+Drift detection is now fully wired: training saves a `baseline.joblib` sample (up to 1 000 rows) per model; serving maintains per-model prediction buffers (deque, max 500); a background task (`_drift_check_periodic`, 300 s interval, started in lifespan) runs PSI/KS/JS divergence checks via `MonitoringPipeline`; results are exposed at `GET /v1/monitoring/drift`. Per-model data freshness SLA tracking is live at `GET /v1/monitoring/freshness`. Kyber admin dashboard hooks are live at `/v1/admin/kyber/ml/`.
+
+**Durable monitoring state (G19):** `ExtractionDefenseMonitor` and `DataFreshnessSLATracker` both support Redis write-through via `set_redis()`. When `REDIS_URL` is set, the serving lifespan wires a Redis client (db=3, isolated from rate-limiter db=2 and cache db=0) and restores in-memory state from Redis on startup. This makes monitoring state durable across restarts and consistent across replicas. Fails open in all environments — monitoring loss is not a production blocker.
+
+**Prometheus ML alerts:** `deploy/observability/prometheus/alert_rules.yml` now includes an `aether_ml_health` group with 8 ML-specific rules: `MLModelNotLoaded` (critical), `MLPredictionErrorRate`, `MLPredictionLatencyHigh`, `MLFreshnessViolationRate`, `MLDriftDetected`, `MLArtifactSignatureFailure` (critical), `MLExtractionAttackSustained`, `MLModelRolledBack` (info).
 
 ---
 
@@ -234,9 +238,10 @@ Drift detection is now fully wired: training saves a `baseline.joblib` sample (u
 
 Backend admin routes for ML operational state are defined in:
 - `Backend Architecture/aether-backend/services/ml_serving/routes.py` (production gateway)
-- `Backend Architecture/aether-backend/services/ml_serving/kyber_ml_admin.py` — 10 admin routes at `/v1/admin/kyber/ml/` ✅
+- `Backend Architecture/aether-backend/services/ml_serving/kyber_ml_admin.py` — 14 admin routes at `/v1/admin/kyber/ml/` ✅
+  - Includes 4 new routes: `/alerts`, `/audit`, `/models/{id}/rollback-eligibility`, `/models/{id}/training-history`
 
-**Kyber ML frontend page**: `frontend/kyber/src/pages/ml/ml-admin-page.tsx` — `/ml` route registered in Kyber router. Displays fleet overview health card (fleet_status, models_loaded/total, extraction defense toggle, readiness badge) and model fleet table via `useMLModels()` + `useMLOverview()` hooks ✅
+**Kyber ML frontend page**: `frontend/kyber/src/pages/ml/ml-admin-page.tsx` — `/ml` route registered in Kyber router. Displays fleet overview health card (fleet_status, models_loaded/total, extraction defense toggle, readiness badge) and model fleet table via `useMLModels()` + `useMLOverview()` hooks. Frontend API callers for all 14 admin routes are in `frontend/kyber/src/lib/api/endpoints.ts` under `api.ml.*` ✅
 
 ---
 
@@ -295,7 +300,10 @@ Backend admin routes for ML operational state are defined in:
 | Versioned cache keys in backend | G25 — `CacheKey.prediction()` accepts `artifact_version`; `_model_version_cache` wired in routes | High | ✅ Implemented; activates when serving API returns `artifact_version` field |
 | Dockerfile non-root user | G24 — `USER aether` (uid 1001) added to all 4 stages | Medium | ✅ Implemented |
 | Kyber ML operations page | `/ml` route + `MLAdminPage` + `useMLOverview()` hook | Medium | ✅ Implemented |
-| Background drift monitoring loop | G27 — on-demand only | Medium | 🔧 |
+| Durable monitoring state | G19 — `ExtractionDefenseMonitor` + `DataFreshnessSLATracker` Redis write-through; wired in lifespan | High | ✅ Implemented |
+| ML Prometheus alert rules | 8 ML-specific alerts in `aether_ml_health` group | Medium | ✅ Implemented |
+| Kyber ML admin alerts/audit/rollback endpoints | 4 new admin routes added | Medium | ✅ Implemented |
+| Background drift monitoring loop | G27 — `_drift_check_periodic` asyncio task, 300 s interval, started in lifespan | Medium | ✅ Implemented |
 | ML CI path-based triggers | G26 — no dedicated ML CI job | High | 🔧 |
 
 ---

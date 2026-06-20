@@ -11,7 +11,7 @@ source_files:
 canonical_owner: backend@aether
 estimated_read_minutes: 60
 toc_depth: 3
-last_synced_commit: ec76641
+last_synced_commit: b522d9a
 
 ---
 # Aether Backend API v8.9.0 — Endpoint Specification
@@ -2246,6 +2246,10 @@ Operator command center for ML model registry, artifact management, feature cont
 | GET | `/v1/admin/kyber/ml/predictions/summary` | Prediction volume, latency, error rate, top model usage |
 | GET | `/v1/admin/kyber/ml/security` | ML extraction defense status — watermark state, canary alerts, adversarial risk |
 | GET | `/v1/admin/kyber/ml/readiness` | Production readiness gate — registry coverage, drift gates, security gates |
+| GET | `/v1/admin/kyber/ml/alerts` | Active ML alert conditions derived from live monitoring state (block rate, freshness, model load) |
+| GET | `/v1/admin/kyber/ml/audit` | Promotion and rollback audit trail; reads `promotion_audit.jsonl`, falls back to artifact metadata |
+| GET | `/v1/admin/kyber/ml/models/{model_id}/rollback-eligibility` | Check whether a model can be rolled back and to which prior artifact version |
+| GET | `/v1/admin/kyber/ml/models/{model_id}/training-history` | Training run history derived from artifact metadata |
 
 ---
 

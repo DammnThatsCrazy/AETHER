@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import logging
 from dataclasses import dataclass, field
 from datetime import datetime
@@ -562,6 +563,26 @@ class ExtractionDefenseMonitor:
         self._batch_requests: list[dict[str, Any]] = []
         self._blocked_count: int = 0
         self._total_count: int = 0
+        self._redis: Any = None
+
+    def set_redis(self, client: Any) -> None:
+        """Wire a Redis client for durable event storage. Call from app startup."""
+        self._redis = client
+        self._load_from_redis()
+
+    def _load_from_redis(self) -> None:
+        """Restore in-memory state from Redis on startup."""
+        try:
+            raw = self._redis.lrange("aether:monitor:extraction:events", -5000, -1)
+            self._signal_history = [json.loads(r) for r in raw]
+            actions_raw = self._redis.hgetall("aether:monitor:extraction:actions")
+            self._policy_actions = {k: int(v) for k, v in actions_raw.items()}
+            blocked = self._redis.get("aether:monitor:extraction:blocked")
+            total = self._redis.get("aether:monitor:extraction:total")
+            self._blocked_count = int(blocked) if blocked else 0
+            self._total_count = int(total) if total else 0
+        except Exception as exc:
+            logger.warning("ExtractionDefenseMonitor: failed to load from Redis: %s", exc)
 
     def record_extraction_event(
         self,
@@ -594,6 +615,18 @@ class ExtractionDefenseMonitor:
                 "policy_action": policy_action,
                 "timestamp": datetime.utcnow().isoformat(),
             })
+
+        if self._redis is not None:
+            try:
+                event_json = json.dumps(self._signal_history[-1])
+                self._redis.rpush("aether:monitor:extraction:events", event_json)
+                self._redis.ltrim("aether:monitor:extraction:events", -10000, -1)
+                self._redis.hincrby("aether:monitor:extraction:actions", policy_action, 1)
+                self._redis.incr("aether:monitor:extraction:total")
+                if policy_action in ("deny", "restrict"):
+                    self._redis.incr("aether:monitor:extraction:blocked")
+            except Exception:
+                pass
 
         # Trim history
         if len(self._signal_history) > 10000:
@@ -696,7 +729,31 @@ class DataFreshnessSLATracker:
         self._violations: list[FreshnessViolation] = []
         self._checks: dict[str, int] = {}
         self._sla_map: dict[str, int] = {}
+        self._redis: Any = None
         self._load_sla_from_contracts()
+
+    def set_redis(self, client: Any) -> None:
+        """Wire a Redis client for durable violation storage. Call from app startup."""
+        self._redis = client
+        self._load_violations_from_redis()
+
+    def _load_violations_from_redis(self) -> None:
+        """Restore violations and check counts from Redis on startup."""
+        try:
+            raw = self._redis.lrange("aether:monitor:freshness:violations", -500, -1)
+            for r in raw:
+                d = json.loads(r)
+                self._violations.append(FreshnessViolation(
+                    model_id=d.get("model_id", ""),
+                    feature_group=d.get("feature_group", ""),
+                    sla_seconds=int(d.get("sla_seconds", 0)),
+                    actual_age_seconds=float(d.get("actual_age_seconds", 0.0)),
+                    entity_id=d.get("entity_id"),
+                ))
+            checks_raw = self._redis.hgetall("aether:monitor:freshness:checks")
+            self._checks = {k: int(v) for k, v in checks_raw.items()}
+        except Exception as exc:
+            logger.warning("DataFreshnessSLATracker: failed to load from Redis: %s", exc)
 
     def _load_sla_from_contracts(self) -> None:
         try:
@@ -716,6 +773,11 @@ class DataFreshnessSLATracker:
         """Check if feature data is within SLA. Returns True if fresh."""
         key = f"{model_id}:{feature_group}"
         self._checks[key] = self._checks.get(key, 0) + 1
+        if self._redis is not None:
+            try:
+                self._redis.hincrby("aether:monitor:freshness:checks", key, 1)
+            except Exception:
+                pass
 
         if computed_at is None:
             return True  # No timestamp → cannot check
@@ -733,6 +795,19 @@ class DataFreshnessSLATracker:
                 entity_id=entity_id,
             )
             self._violations.append(violation)
+            if self._redis is not None:
+                try:
+                    self._redis.rpush("aether:monitor:freshness:violations", json.dumps({
+                        "model_id": model_id,
+                        "feature_group": feature_group,
+                        "sla_seconds": sla,
+                        "actual_age_seconds": age,
+                        "entity_id": entity_id,
+                        "timestamp": violation.timestamp.isoformat(),
+                    }))
+                    self._redis.ltrim("aether:monitor:freshness:violations", -1000, -1)
+                except Exception:
+                    pass
             logger.warning(
                 "Freshness SLA violation: model=%s group=%s age=%.0fs sla=%ds entity=%s",
                 model_id, feature_group, age, sla, entity_id,

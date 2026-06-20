@@ -857,6 +857,18 @@ export const api = {
 
     overview: () =>
       restClient.get('/v1/admin/kyber/ml/overview', wrap(unknownSchema)).then(r => r.data),
+
+    alerts: () =>
+      restClient.get('/v1/admin/kyber/ml/alerts', wrap(unknownSchema)).then(r => r.data),
+
+    audit: (modelId?: string) =>
+      restClient.get(`/v1/admin/kyber/ml/audit${modelId ? `?model_id=${encodeURIComponent(modelId)}` : ''}`, wrap(unknownSchema)).then(r => r.data),
+
+    rollbackEligibility: (modelId: string) =>
+      restClient.get(`/v1/admin/kyber/ml/models/${encodeURIComponent(modelId)}/rollback-eligibility`, wrap(unknownSchema)).then(r => r.data),
+
+    trainingHistory: (modelId: string) =>
+      restClient.get(`/v1/admin/kyber/ml/models/${encodeURIComponent(modelId)}/training-history`, wrap(unknownSchema)).then(r => r.data),
   },
 
   // ── Fraud ──────────────────────────────────────────────────────────────────
