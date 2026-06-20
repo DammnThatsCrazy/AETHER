@@ -20,7 +20,7 @@ source_files:
 canonical_owner: platform@aether
 estimated_read_minutes: 8
 toc_depth: 3
-last_synced_commit: 77a72ab
+last_synced_commit: 6d78307
 ---
 
 # Documentation Pipeline
