@@ -19,7 +19,7 @@ from typing import Any, Optional
 
 import numpy as np
 import pandas as pd
-from fastapi import APIRouter, FastAPI, HTTPException, Request
+from fastapi import APIRouter, Depends, FastAPI, Header, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
@@ -749,11 +749,28 @@ async def _drift_check_periodic(interval: int = 300) -> None:
 
 
 # ---------------------------------------------------------------------------
+# Service token auth — checked on every route when ML_SERVICE_TOKEN is set.
+# No-op when the env var is absent (local dev). Fail-closed in staging/prod.
+# ---------------------------------------------------------------------------
+
+
+def _require_service_token(x_service_token: str = Header(default="")) -> None:
+    expected = os.environ.get("ML_SERVICE_TOKEN", "")
+    if expected and not _hmac_compare(x_service_token, expected):
+        raise HTTPException(status_code=401, detail="Invalid or missing service token")
+
+
+def _hmac_compare(a: str, b: str) -> bool:
+    import hmac
+    return hmac.compare_digest(a.encode(), b.encode())
+
+
+# ---------------------------------------------------------------------------
 # Shared router — importable by the consolidated aether-app backend (E2).
 # All predict/defense routes are registered here so they can be mounted at
 # any prefix. The standalone app below includes this router after setup.
 # ---------------------------------------------------------------------------
-router = APIRouter()
+router = APIRouter(dependencies=[Depends(_require_service_token)])
 
 
 @asynccontextmanager
@@ -1258,6 +1275,8 @@ async def predict_anomaly(req: AnomalyDetectionRequest, request: Request) -> Ano
     df = pd.DataFrame([req.features])
     score = _apply_output_defense(request, float(model.predict(df)[0]), req.features)
     _prediction_buffers["anomaly_detection"].append(dict(req.features))
+    if _freshness_tracker is not None:
+        _freshness_tracker.check("anomaly_detection", "record_features", None)
     latency_ms = (time.perf_counter() - t0) * 1000
     return AnomalyDetectionResponse(
         record_id=req.record_id,
@@ -1289,6 +1308,8 @@ async def predict_journey(req: JourneyPredictionRequest, request: Request) -> Jo
     )
 
     results = model.predict_journey(df, n_steps=req.n_steps)
+    if _freshness_tracker is not None:
+        _freshness_tracker.check("journey_prediction", "journey_features", None)
 
     latency_ms = (time.perf_counter() - t0) * 1000
 
@@ -1332,6 +1353,8 @@ async def predict_attribution(req: AttributionRequest, request: Request) -> Attr
     journeys = pd.DataFrame(req.touchpoints)
     journeys["conversion_id"] = req.conversion_id
 
+    if _freshness_tracker is not None:
+        _freshness_tracker.check("campaign_attribution", "attribution_features", None)
     attribution = model.attribute(journeys, method=req.method)
     attr_records = attribution.to_dict(orient="records")
 
