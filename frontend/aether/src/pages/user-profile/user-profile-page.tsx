@@ -1022,13 +1022,29 @@ function DeFiTab({ userId, window }: { userId: string; window: string }) {
         {tradingList.length === 0
           ? <EmptyState title="No trading data" />
           : <DataTable<SimpleRow>
-              keyExtractor={r => fmt(r.pair) || String(Math.random())}
+              keyExtractor={r => `trading-${fmt(r.avg_slippage)}-${fmt(r.trade_count)}`}
               data={tradingList}
               emptyMessage="No trading data"
               columns={[
-                { key: 'favorite_pairs', header: 'Pair', render: r => fmt(r.favorite_pairs) },
-                { key: 'protocol_loyalty', header: 'Protocol', render: r => fmt(r.protocol_loyalty) },
-                { key: 'gas_strategy', header: 'Gas Strategy', render: r => fmt(r.gas_strategy) },
+                { key: 'favorite_pairs', header: 'Pairs', render: r => {
+                  const v = r.favorite_pairs;
+                  return Array.isArray(v) ? v.join(', ') || '—' : fmt(v);
+                }},
+                { key: 'protocol_loyalty', header: 'Protocol Loyalty', render: r => {
+                  const v = r.protocol_loyalty;
+                  if (v && typeof v === 'object' && !Array.isArray(v)) {
+                    const top = Object.entries(v as Record<string, unknown>).sort(([,a],[,b]) => Number(b) - Number(a)).slice(0,3);
+                    return top.map(([k, pct]) => `${k} ${Math.round(Number(pct)*100)}%`).join(', ') || '—';
+                  }
+                  return fmt(v);
+                }},
+                { key: 'gas_strategy', header: 'Gas Strategy', render: r => {
+                  const v = r.gas_strategy;
+                  if (v && typeof v === 'object' && !Array.isArray(v)) {
+                    return Object.entries(v as Record<string, unknown>).map(([k, val]) => `${k}: ${fmt(val)}`).join(', ') || '—';
+                  }
+                  return fmt(v);
+                }},
                 { key: 'avg_slippage', header: 'Slippage', render: r => fmt(r.avg_slippage) },
               ]}
             />
@@ -1059,7 +1075,7 @@ function FunnelTab({ userId, window }: { userId: string; window: string }) {
           ? <EmptyState title="No funnel data" />
           : <div className="space-y-2">
               {stages.map((s, i) => {
-                const pct = Number(s.conversion_rate ?? 0) * 100;
+                const pct = s.conversion_rate == null ? (i === 0 ? 100 : 0) : Number(s.conversion_rate) * 100;
                 return (
                   <div key={i} className="flex items-center gap-3">
                     <span className="text-xs text-text-secondary w-24 shrink-0">{fmt(s.stage)}</span>
