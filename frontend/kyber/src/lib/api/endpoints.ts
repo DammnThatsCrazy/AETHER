@@ -854,6 +854,9 @@ export const api = {
 
     features: (entityId: string) =>
       restClient.get(`/v1/ml/features/${entityId}`, wrap(unknownSchema)).then(r => r.data),
+
+    overview: () =>
+      restClient.get('/v1/admin/kyber/ml/overview', wrap(unknownSchema)).then(r => r.data),
   },
 
   // ── Fraud ──────────────────────────────────────────────────────────────────

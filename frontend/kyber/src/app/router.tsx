@@ -38,6 +38,7 @@ const RewardsHealthPage = lazy(() => import('@kyber/pages/rewards').then(m => ({
 const RewardsDrilldownPage = lazy(() => import('@kyber/pages/rewards').then(m => ({ default: m.RewardsDrilldownPage })));
 const SuggestionsPage = lazy(() => import('@kyber/pages/suggestions').then(m => ({ default: m.SuggestionsPage })));
 const ReviewQueuePage = lazy(() => import('@kyber/pages/suggestions').then(m => ({ default: m.ReviewQueuePage })));
+const MLAdminPage = lazy(() => import('@kyber/pages/ml').then(m => ({ default: m.MLAdminPage })));
 
 function PageSuspense({ children }: { readonly children: React.ReactNode }) {
   return (
@@ -103,6 +104,7 @@ export function AppRouter() {
                 <Route path="/rewards/:tenantId" element={<PageSuspense><RewardsDrilldownPage /></PageSuspense>} />
                 <Route path="/intelligence/suggestions" element={<PageSuspense><SuggestionsPage /></PageSuspense>} />
                 <Route path="/intelligence/suggestions/review" element={<PageSuspense><ReviewQueuePage /></PageSuspense>} />
+                <Route path="/ml" element={<PageSuspense><MLAdminPage /></PageSuspense>} />
                 <Route path="*" element={<Navigate to="/mission" replace />} />
               </Routes>
             </AppShell>

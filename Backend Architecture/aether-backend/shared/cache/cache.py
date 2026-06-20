@@ -70,7 +70,10 @@ class CacheKey:
         return f"aether:session:{session_id}"
 
     @staticmethod
-    def prediction(model_name: str, entity_id: str) -> str:
+    def prediction(model_name: str, entity_id: str,
+                   artifact_version: str = "", contract_hash: str = "") -> str:
+        if artifact_version or contract_hash:
+            return f"aether:ml:prediction:{model_name}:{entity_id}:{artifact_version}:{contract_hash}"
         return f"aether:ml:prediction:{model_name}:{entity_id}"
 
     @staticmethod

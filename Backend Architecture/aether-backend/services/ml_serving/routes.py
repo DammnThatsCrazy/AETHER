@@ -43,6 +43,13 @@ router = APIRouter(prefix="/v1/ml", tags=["ML Serving"])
 
 _defense_layer = None
 
+# Per-process model version cache: maps canonical_id → artifact_version string.
+# Populated lazily from ml_result when the serving API includes "artifact_version".
+# Starts empty; both lookup and set use the same version, so keys are always consistent.
+# When the ML serving API is updated to return artifact_version, promotions will
+# automatically produce versioned keys that differ from pre-promotion cached keys.
+_model_version_cache: dict[str, str] = {}
+
 
 def _get_defense_layer():
     """Get the extraction defense layer. Returns None if disabled/unavailable."""
@@ -333,9 +340,10 @@ async def predict(
         else:
             request.state.extraction_risk = 0.0
 
-    # 2. Cache lookup (use canonical ID in cache key)
+    # 2. Cache lookup (versioned by artifact so promotions eventually invalidate via new key)
     if body.use_cache:
-        cache_key = CacheKey.prediction(canonical_id, body.entity_id)
+        _ver = _model_version_cache.get(canonical_id, "")
+        cache_key = CacheKey.prediction(canonical_id, body.entity_id, artifact_version=_ver)
         cached = await cache.get_json(cache_key)
         if cached:
             metrics.increment("ml_cache_hit", labels={"model": canonical_id})
@@ -399,8 +407,11 @@ async def predict(
                     "Update your client to use the canonical model_id."
                 )
 
-            # 5. Cache successful prediction
-            cache_key = CacheKey.prediction(canonical_id, body.entity_id)
+            # 5. Cache successful prediction (versioned key matches lookup key above)
+            _ver = ml_result.get("artifact_version", _model_version_cache.get(canonical_id, "")) if isinstance(ml_result, dict) else _model_version_cache.get(canonical_id, "")
+            if _ver:
+                _model_version_cache[canonical_id] = _ver
+            cache_key = CacheKey.prediction(canonical_id, body.entity_id, artifact_version=_ver)
             await cache.set_json(cache_key, prediction, TTL.PREDICTION)
 
             # 6. Publish event only after successful prediction

@@ -40,7 +40,12 @@ COPY . .
 
 ENV AETHER_ENV=training
 
-RUN mkdir -p /opt/ml/model /opt/ml/input /opt/ml/output
+RUN mkdir -p /opt/ml/model /opt/ml/input /opt/ml/output && \
+    addgroup --system --gid 1001 aether && \
+    adduser --system --uid 1001 --ingroup aether --no-create-home aether && \
+    chown -R aether:aether /opt/ml
+
+USER aether
 
 ENTRYPOINT ["python", "-m", "training.pipelines.train"]
 
@@ -65,7 +70,12 @@ COPY export/ export/
 
 ENV AETHER_ENV=serving
 
-RUN mkdir -p /opt/ml/models
+RUN mkdir -p /opt/ml/models && \
+    addgroup --system --gid 1001 aether && \
+    adduser --system --uid 1001 --ingroup aether --no-create-home aether && \
+    chown -R aether:aether /opt/ml
+
+USER aether
 
 EXPOSE 8000
 
@@ -86,6 +96,11 @@ COPY features/ features/
 
 ENV AETHER_ENV=features
 
+RUN addgroup --system --gid 1001 aether && \
+    adduser --system --uid 1001 --ingroup aether --no-create-home aether
+
+USER aether
+
 ENTRYPOINT ["python", "-m", "features.pipeline"]
 
 # ---------------------------------------------------------------------------
@@ -99,5 +114,10 @@ COPY common/ common/
 COPY monitoring/ monitoring/
 
 ENV AETHER_ENV=monitoring
+
+RUN addgroup --system --gid 1001 aether && \
+    adduser --system --uid 1001 --ingroup aether --no-create-home aether
+
+USER aether
 
 ENTRYPOINT ["python", "-m", "monitoring.monitor"]

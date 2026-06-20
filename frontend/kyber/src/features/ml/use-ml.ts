@@ -33,3 +33,11 @@ export function useMLPredictBatch() {
       api.ml.predictBatch(modelName, entities),
   });
 }
+
+export function useMLOverview() {
+  return useQuery({
+    key: 'ml:overview',
+    fetcher: () => api.ml.overview(),
+    staleTime: STALE,
+  });
+}

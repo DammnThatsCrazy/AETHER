@@ -14,7 +14,7 @@ source_files:
   - ML Models/aether-ml/serving/src/api.py
   - Backend Architecture/aether-backend/services/ml_serving/routes.py
   - security/model_extraction_defense/defense_layer.py
-last_synced_commit: 7ef7368
+last_synced_commit: ec76641
 ---
 
 # Aether ML Productization Readiness Report
@@ -206,7 +206,8 @@ All bugs fixed:
 | `pre_request()` enforcement (backend) | ✅ Fixed |
 | `post_response()` using `.output` (not `.modified_output`) | ✅ Fixed |
 | Serving middleware pre-request | ✅ Existing |
-| Rate limiting (multi-axis) | ✅ Existing |
+| Rate limiting (multi-axis, in-memory) | ✅ Existing |
+| Rate limiting (Redis-backed, multi-replica) | ✅ G23 — `RedisRateLimiter` dispatched when `REDIS_URL` set; fails closed in staging/prod |
 | Pattern detection | ✅ Existing |
 | Risk scoring | ✅ Existing |
 | Canary detection | ✅ Existing |
@@ -215,7 +216,7 @@ All bugs fixed:
 | Batch non-privileged denial | ✅ Backend + Serving |
 | Metrics/telemetry | ✅ Existing |
 
-**Note**: The extraction defense mesh (Layers A–G documented in `docs/MODEL-EXTRACTION-DEFENSE.md`) is partially implemented. The rate limiter, pattern detector, risk scorer, canary detector, output perturbation, and watermark are real. The mesh identity fabric (Layer A) and distributed Redis budgets (Layer B) require real Redis to function. In local/dev mode these degrade gracefully.
+**Note**: The extraction defense mesh (Layers A–G documented in `docs/MODEL-EXTRACTION-DEFENSE.md`) is partially implemented. The rate limiter (both in-memory and Redis-backed), pattern detector, risk scorer, canary detector, output perturbation, and watermark are real. Redis-backed `RedisRateLimiter` activates when `REDIS_URL` is set; in local/dev without Redis, falls back to in-memory gracefully.
 
 ---
 
@@ -234,6 +235,8 @@ Drift detection is now fully wired: training saves a `baseline.joblib` sample (u
 Backend admin routes for ML operational state are defined in:
 - `Backend Architecture/aether-backend/services/ml_serving/routes.py` (production gateway)
 - `Backend Architecture/aether-backend/services/ml_serving/kyber_ml_admin.py` — 10 admin routes at `/v1/admin/kyber/ml/` ✅
+
+**Kyber ML frontend page**: `frontend/kyber/src/pages/ml/ml-admin-page.tsx` — `/ml` route registered in Kyber router. Displays fleet overview health card (fleet_status, models_loaded/total, extraction defense toggle, readiness badge) and model fleet table via `useMLModels()` + `useMLOverview()` hooks ✅
 
 ---
 
@@ -288,9 +291,10 @@ Backend admin routes for ML operational state are defined in:
 | Service token auth (serving) | Phase 5 — `X-Service-Token` header | Medium | ✅ Implemented; `ML_SERVICE_TOKEN` env var; no-op when absent |
 | MLflow tracking | Available, fails gracefully if unreachable | Infra | 🔧 |
 | S3 artifact store | G11.6 — S3ArtifactStore class for artifact persistence | Infra | 🔧 Requires AWS credentials |
-| Redis feature store / extraction budgets | Requires Redis instance | Infra | 🔧 |
-| Versioned cache keys in backend | G25 — cache key missing artifact_version + contract_hash | High | 🔧 |
-| Dockerfile non-root user | G24 — no USER directive | Medium | 🔧 |
+| Redis instance for distributed budgets | Requires Redis instance; code dispatches to it when `REDIS_URL` set | Infra | 🔧 |
+| Versioned cache keys in backend | G25 — `CacheKey.prediction()` accepts `artifact_version`; `_model_version_cache` wired in routes | High | ✅ Implemented; activates when serving API returns `artifact_version` field |
+| Dockerfile non-root user | G24 — `USER aether` (uid 1001) added to all 4 stages | Medium | ✅ Implemented |
+| Kyber ML operations page | `/ml` route + `MLAdminPage` + `useMLOverview()` hook | Medium | ✅ Implemented |
 | Background drift monitoring loop | G27 — on-demand only | Medium | 🔧 |
 | ML CI path-based triggers | G26 — no dedicated ML CI job | High | 🔧 |
 
