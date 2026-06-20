@@ -14,10 +14,11 @@ Unlike the existing token-bucket limiter, this module:
 from __future__ import annotations
 
 import logging
+import os
 import time
 from dataclasses import dataclass
 from threading import Lock
-from typing import Optional
+from typing import Any, Optional
 
 from .config import RateLimiterConfig
 
@@ -239,3 +240,106 @@ class QueryRateLimiter:
                     del store[k]
                     removed += 1
         return removed
+
+
+class RedisRateLimiter:
+    """
+    Redis-backed sliding-window rate limiter for multi-replica deployments.
+
+    Uses a sorted-set per (axis, identifier, window) key where each member is
+    a unique timestamp token and the score is the epoch-ms timestamp.
+    Expired tokens are pruned on each check with ZREMRANGEBYSCORE.
+
+    Drop-in replacement for QueryRateLimiter: same check() / get_query_velocity()
+    / cleanup_expired() interface, same RateLimitCheck return type.
+    """
+
+    _WINDOWS = (
+        ("minute", 60),
+        ("hour", 3600),
+        ("day", 86400),
+    )
+
+    def __init__(self, redis_client: Any, config: Optional[RateLimiterConfig] = None):
+        self._redis = redis_client
+        self.config = config or RateLimiterConfig()
+
+    def _rkey(self, axis: str, identifier: str, window: str) -> str:
+        return f"aether:rl:{axis}:{identifier}:{window}"
+
+    def _count_window(self, axis: str, identifier: str, window_name: str, window_secs: int) -> int:
+        now_ms = time.time() * 1000
+        cutoff_ms = now_ms - window_secs * 1000
+        key = self._rkey(axis, identifier, window_name)
+        pipe = self._redis.pipeline(transaction=False)
+        pipe.zremrangebyscore(key, "-inf", cutoff_ms)
+        pipe.zcard(key)
+        results = pipe.execute()
+        return int(results[1])
+
+    def _record(self, axis: str, identifier: str, cost: int) -> None:
+        now_ms = time.time() * 1000
+        token_base = os.urandom(4).hex()
+        for window_name, window_secs in self._WINDOWS:
+            key = self._rkey(axis, identifier, window_name)
+            pipe = self._redis.pipeline(transaction=False)
+            for i in range(cost):
+                pipe.zadd(key, {f"{now_ms:.3f}:{token_base}:{i}": now_ms})
+            pipe.expire(key, window_secs + 60)
+            pipe.execute()
+
+    def check(self, api_key: str, ip_address: str, cost: int = 1) -> RateLimitCheck:
+        """Check rate limits for both API key and IP axes. Returns allowed=True if both pass."""
+        axes = [
+            ("key", api_key, (
+                self.config.key_max_per_minute,
+                self.config.key_max_per_hour,
+                self.config.key_max_per_day,
+            ), "api_key"),
+            ("ip", ip_address, (
+                self.config.ip_max_per_minute,
+                self.config.ip_max_per_hour,
+                self.config.ip_max_per_day,
+            ), "ip"),
+        ]
+        for axis, identifier, limits, source_name in axes:
+            for (window_name, window_secs), max_count in zip(self._WINDOWS, limits):
+                current = self._count_window(axis, identifier, window_name, window_secs)
+                if current + cost > max_count:
+                    logger.warning(
+                        "Redis rate limit exceeded for %s (window=%s axis=%s)",
+                        identifier[:8] + "...",
+                        window_name,
+                        axis,
+                    )
+                    return RateLimitCheck(
+                        allowed=False,
+                        source=source_name,
+                        limit=max_count,
+                        remaining=0,
+                        window=window_name,
+                        retry_after_seconds=window_secs // 10,
+                    )
+
+        # All windows and axes passed — record the cost
+        for axis, identifier, _, _ in axes:
+            self._record(axis, identifier, cost)
+
+        return RateLimitCheck(
+            allowed=True,
+            source="ok",
+            limit=self.config.key_max_per_minute,
+            remaining=max(0, self.config.key_max_per_minute - self._count_window("key", api_key, "minute", 60)),
+            window="minute",
+        )
+
+    def get_query_velocity(self, api_key: str) -> dict[str, int]:
+        """Return current query counts per window for a given API key."""
+        return {
+            window_name: self._count_window("key", api_key, window_name, window_secs)
+            for window_name, window_secs in self._WINDOWS
+        }
+
+    def cleanup_expired(self) -> int:
+        """No-op — Redis keys expire automatically via TTL set in _record()."""
+        return 0

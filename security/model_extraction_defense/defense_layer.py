@@ -23,6 +23,7 @@ Usage:
 from __future__ import annotations
 
 import logging
+import os
 import threading
 from dataclasses import dataclass
 from typing import Any, Optional
@@ -34,7 +35,7 @@ from .config import ExtractionDefenseConfig
 from .metrics import DefenseMetrics
 from .output_perturbation import OutputPerturbationLayer
 from .pattern_detector import PatternAnalysis, QueryPatternDetector
-from .rate_limiter import QueryRateLimiter, RateLimitCheck
+from .rate_limiter import QueryRateLimiter, RateLimitCheck, RedisRateLimiter
 from .risk_scorer import ExtractionRiskScorer, RiskAssessment
 from .watermark import ModelWatermark
 
@@ -73,8 +74,29 @@ class ExtractionDefenseLayer:
     def __init__(self, config: Optional[ExtractionDefenseConfig] = None):
         self.config = config or ExtractionDefenseConfig()
 
-        # Initialize components
-        self.rate_limiter = QueryRateLimiter(self.config.rate_limiter)
+        # Initialize rate limiter — Redis-backed in multi-replica deployments
+        redis_url = os.getenv("REDIS_URL")
+        if redis_url:
+            try:
+                import redis as _redis
+                _redis_db = int(os.getenv("EXTRACTION_REDIS_DB", "2"))
+                _rc = _redis.from_url(redis_url, db=_redis_db, decode_responses=True)
+                _rc.ping()
+                self.rate_limiter: QueryRateLimiter | RedisRateLimiter = RedisRateLimiter(_rc, self.config.rate_limiter)
+                logger.info("Extraction defense: Redis-backed rate limiter (db=%d)", _redis_db)
+            except Exception as _e:
+                _env = os.getenv("AETHER_ENV", "local")
+                if _env in ("staging", "stage", "production", "prod"):
+                    raise RuntimeError(
+                        f"REDIS_URL is set but Redis is unreachable in {_env} environment. "
+                        "Refusing to start with in-memory rate limiter (cross-replica budgets would be incorrect)."
+                    ) from _e
+                logger.warning(
+                    "Redis unavailable — falling back to in-memory rate limiter: %s", _e
+                )
+                self.rate_limiter = QueryRateLimiter(self.config.rate_limiter)
+        else:
+            self.rate_limiter = QueryRateLimiter(self.config.rate_limiter)
         self.pattern_detector = QueryPatternDetector(self.config.pattern_detector)
         self.perturbation = OutputPerturbationLayer(self.config.output_perturbation)
         self.watermark = ModelWatermark(self.config.watermark)
