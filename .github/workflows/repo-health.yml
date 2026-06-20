@@ -196,8 +196,14 @@ jobs:
           pip install uv
           uv pip install --system -e ".[dev,security,backend,agent,ml]"
 
-      - name: Run ML model tests
-        run: python -m pytest "$ML_DIR/tests/" --tb=short
+      - name: ML registry + contract validation
+        run: make ml-validate
+
+      - name: ML tests (unit + integration + training smoke)
+        run: python -m pytest "$ML_DIR/tests/" -v --tb=short
+
+      - name: ML docs consistency check
+        run: make ml-docs-check
 
   typescript:
     runs-on: ubuntu-latest
