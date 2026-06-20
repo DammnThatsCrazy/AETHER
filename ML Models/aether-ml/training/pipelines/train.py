@@ -11,8 +11,10 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import io
 import json
 import logging
+import os
 import time
 from datetime import datetime, timezone
 from pathlib import Path
@@ -320,7 +322,14 @@ class TrainingPipeline:
 
     def _load_data_with_flag(self) -> tuple[pd.DataFrame, pd.Series | None, bool]:
         """Load data and return (X, y, is_synthetic) flag."""
+        data_source = self.config.get("data_source", "synthetic")
         data_path = self.config.get("data_path")
+
+        if data_source == "s3":
+            return self._load_from_s3()
+
+        if data_source == "postgresql":
+            return self._load_from_postgresql()
 
         if data_path and Path(data_path).exists():
             logger.info(f"Loading data from {data_path}")
@@ -337,6 +346,80 @@ class TrainingPipeline:
         logger.info("No data path provided; generating synthetic data")
         X, y = self._generate_synthetic_data()
         return X, y, True
+
+    def _load_from_s3(self) -> tuple[pd.DataFrame, pd.Series | None, bool]:
+        """Load training data from S3 (Parquet). Fails closed if credentials absent."""
+        try:
+            import boto3
+        except ImportError as exc:
+            raise RuntimeError(
+                "boto3 is required for S3 data loading: pip install boto3"
+            ) from exc
+
+        bucket = self.config.get("s3_bucket") or os.environ.get("TRAINING_S3_BUCKET")
+        key = self.config.get("s3_key") or os.environ.get("TRAINING_S3_KEY")
+        if not bucket or not key:
+            raise ValueError(
+                "S3 data source requires s3_bucket and s3_key "
+                "(via config or TRAINING_S3_BUCKET / TRAINING_S3_KEY env vars)"
+            )
+
+        logger.info("Loading training data from s3://%s/%s", bucket, key)
+        s3 = boto3.client("s3")
+        try:
+            obj = s3.get_object(Bucket=bucket, Key=key)
+        except Exception as exc:
+            raise RuntimeError(
+                f"Failed to fetch s3://{bucket}/{key}: {exc}. "
+                "Check credentials and bucket permissions."
+            ) from exc
+
+        df = pd.read_parquet(io.BytesIO(obj["Body"].read()))
+        target_col = self.config.get("target_column", "target")
+        y = df.pop(target_col) if target_col in df.columns else None
+        is_synthetic = self._synthetic_data_override if self._synthetic_data_override is not None else False
+        logger.info("S3 load complete: %d rows, %d features", len(df), len(df.columns))
+        return df, y, is_synthetic
+
+    def _load_from_postgresql(self) -> tuple[pd.DataFrame, pd.Series | None, bool]:
+        """Load training data from PostgreSQL. Fails closed if DATABASE_URL absent."""
+        try:
+            import psycopg2
+        except ImportError as exc:
+            raise RuntimeError(
+                "psycopg2 is required for PostgreSQL data loading: pip install psycopg2-binary"
+            ) from exc
+
+        database_url = os.environ.get("DATABASE_URL")
+        if not database_url:
+            raise RuntimeError(
+                "PostgreSQL data source requires DATABASE_URL environment variable"
+            )
+
+        sql_query = self.config.get("sql_query")
+        if not sql_query:
+            raise ValueError(
+                "PostgreSQL data source requires sql_query in config"
+            )
+
+        logger.info("Loading training data from PostgreSQL for model=%s", self.model_name)
+        try:
+            conn = psycopg2.connect(database_url)
+        except Exception as exc:
+            raise RuntimeError(
+                f"Failed to connect to PostgreSQL: {exc}. Check DATABASE_URL."
+            ) from exc
+
+        try:
+            df = pd.read_sql(sql_query, conn, params={"model_id": self.model_name})
+        finally:
+            conn.close()
+
+        target_col = self.config.get("target_column", "target")
+        y = df.pop(target_col) if target_col in df.columns else None
+        is_synthetic = self._synthetic_data_override if self._synthetic_data_override is not None else False
+        logger.info("PostgreSQL load complete: %d rows, %d features", len(df), len(df.columns))
+        return df, y, is_synthetic
 
     def _generate_synthetic_data(self) -> tuple[pd.DataFrame, pd.Series | None]:
         """Generate synthetic training data for development and testing."""
@@ -988,12 +1071,32 @@ def main() -> None:
         choices=["mlflow", "none"],
         help="Experiment tracking backend.",
     )
+    parser.add_argument(
+        "--s3-bucket",
+        type=str,
+        default=None,
+        dest="s3_bucket",
+        help="S3 bucket name (used when --data=s3).",
+    )
+    parser.add_argument(
+        "--s3-key",
+        type=str,
+        default=None,
+        dest="s3_key",
+        help="S3 object key for training data (used when --data=s3).",
+    )
+    parser.add_argument(
+        "--sql-query",
+        type=str,
+        default=None,
+        dest="sql_query",
+        help="SQL SELECT query for training data (used when --data=postgresql).",
+    )
 
     args = parser.parse_args()
 
     if args.env:
-        import os as _os
-        _os.environ["AETHER_ENV"] = args.env
+        os.environ["AETHER_ENV"] = args.env
 
     if args.tracking == "mlflow" and _MLFLOW_AVAILABLE:
         try:
@@ -1011,6 +1114,14 @@ def main() -> None:
             config["data_path"] = args.data_path
         if args.tenant_id:
             config["tenant_id"] = args.tenant_id
+        if args.data_source and args.data_source != "synthetic":
+            config["data_source"] = args.data_source
+        if args.s3_bucket:
+            config["s3_bucket"] = args.s3_bucket
+        if args.s3_key:
+            config["s3_key"] = args.s3_key
+        if args.sql_query:
+            config["sql_query"] = args.sql_query
 
         is_synthetic = args.data_source == "synthetic" and not args.data_path
 

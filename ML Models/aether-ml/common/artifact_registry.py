@@ -22,6 +22,7 @@ Loading rules (enforced):
 from __future__ import annotations
 
 import hashlib
+import hmac as _hmac
 import json
 import logging
 import os
@@ -62,6 +63,7 @@ class ArtifactMetadata:
     disabled: bool = False
     rollback_from: Optional[str] = None
     notes: str = ""
+    hmac_signature: Optional[str] = None
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -71,7 +73,9 @@ class ArtifactMetadata:
         return cls(**{k: v for k, v in d.items() if k in cls.__dataclass_fields__})
 
     def save(self, path: Path) -> None:
-        path.write_text(json.dumps(self.to_dict(), indent=2, default=str))
+        tmp = path.with_suffix(".tmp")
+        tmp.write_text(json.dumps(self.to_dict(), indent=2, default=str))
+        os.replace(tmp, path)
 
     @classmethod
     def load(cls, path: Path) -> ArtifactMetadata:
@@ -163,6 +167,19 @@ def save_artifact(
         raise ArtifactNotFound(f"Artifact file not found: {artifact_path}")
 
     checksum = _sha256_file(artifact_path)
+    signing_key = os.getenv("ARTIFACT_SIGNING_KEY", "")
+    env = _current_env()
+    if signing_key:
+        hmac_sig: Optional[str] = _hmac.new(
+            signing_key.encode(), msg=checksum.encode(), digestmod=hashlib.sha256
+        ).hexdigest()
+    elif env in ("staging", "stage", "production", "prod"):
+        raise ArtifactError(
+            "ARTIFACT_SIGNING_KEY must be set in staging/production environments"
+        )
+    else:
+        hmac_sig = None
+
     production_allowed = (
         not synthetic_data
         and threshold_passed
@@ -186,6 +203,7 @@ def save_artifact(
         synthetic_data=synthetic_data,
         production_allowed=production_allowed,
         notes=notes,
+        hmac_signature=hmac_sig,
     )
 
     meta_path = artifact_path.parent / "metadata.json"
@@ -243,6 +261,22 @@ def load_artifact(
         raise ArtifactChecksumMismatch(
             f"Checksum mismatch for {artifact_path}: "
             f"expected {metadata.checksum_sha256}, got {actual_checksum}"
+        )
+
+    signing_key = os.getenv("ARTIFACT_SIGNING_KEY", "")
+    if signing_key and metadata.hmac_signature:
+        expected_sig = _hmac.new(
+            signing_key.encode(),
+            msg=metadata.checksum_sha256.encode(),
+            digestmod=hashlib.sha256,
+        ).hexdigest()
+        if not _hmac.compare_digest(expected_sig, metadata.hmac_signature):
+            raise ArtifactChecksumMismatch(
+                f"HMAC signature mismatch for {artifact_path}: artifact may have been tampered"
+            )
+    elif env in ("staging", "stage", "production", "prod") and not signing_key:
+        raise ArtifactLoadingPolicyError(
+            "ARTIFACT_SIGNING_KEY must be set in staging/production environments"
         )
 
     logger.info(
@@ -323,15 +357,27 @@ def promote_artifact(
             "Use rollback_artifact() to roll back."
         )
 
+    from_state = metadata.promotion_state
     metadata.promotion_state = new_state
     if new_state == "promoted":
         metadata.production_allowed = True
-    metadata.notes += f" | Promoted to {new_state} by {promoted_by} at {datetime.now(timezone.utc).isoformat()}"
     metadata.save(meta_path)
 
+    _append_promotion_audit(
+        artifact_dir.parent,
+        {
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "action": "promote",
+            "from_state": from_state,
+            "to_state": new_state,
+            "artifact_version": metadata.artifact_version,
+            "actor": promoted_by,
+            "metrics": metadata.metrics,
+        },
+    )
     logger.info(
-        "Artifact promoted: model=%s version=%s -> %s",
-        metadata.model_id, metadata.artifact_version, new_state,
+        "Artifact promoted: model=%s version=%s %s -> %s",
+        metadata.model_id, metadata.artifact_version, from_state, new_state,
     )
     return metadata
 
@@ -362,10 +408,14 @@ def rollback_artifact(
     env: str | None = None,
 ) -> Optional[ArtifactMetadata]:
     """
-    Find and return the previous valid promoted artifact for rollback.
+    Roll back to the previous promoted artifact.
 
-    Returns the metadata of the previous promoted artifact, or None if
-    no previous version exists.
+    Writes ``active_artifact.json`` in the model directory so that
+    ``resolve_active_artifact`` picks the rollback target on the next load.
+    Appends a rollback record to ``promotion_audit.jsonl``.
+
+    Returns the metadata of the rollback target, or None if there is no
+    previous promoted version to roll back to.
     """
     artifacts = list_artifacts(model_root, model_id)
 
@@ -382,8 +432,43 @@ def rollback_artifact(
         )
         return None
 
-    # artifacts is newest-first; skip the current (index 0), return the next
-    return valid[1]
+    # artifacts is newest-first; valid[0] = current, valid[1] = rollback target
+    current = valid[0]
+    target = valid[1]
+    model_dir = model_root / model_id
+
+    # Atomically write the active pointer so resolve_active_artifact uses it
+    active_ptr = model_dir / "active_artifact.json"
+    tmp_ptr = active_ptr.with_suffix(".tmp")
+    tmp_ptr.write_text(
+        json.dumps(
+            {
+                "version": target.artifact_version,
+                "rollback_from": current.artifact_version,
+                "rolled_back_at": datetime.now(timezone.utc).isoformat(),
+            },
+            default=str,
+        )
+    )
+    os.replace(tmp_ptr, active_ptr)
+
+    _append_promotion_audit(
+        model_dir,
+        {
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "action": "rollback",
+            "from_state": current.artifact_version,
+            "to_state": target.artifact_version,
+            "artifact_version": target.artifact_version,
+            "actor": "system",
+            "metrics": target.metrics,
+        },
+    )
+    logger.info(
+        "Artifact rolled back: model=%s %s -> %s",
+        model_id, current.artifact_version, target.artifact_version,
+    )
+    return target
 
 
 def resolve_active_artifact(
@@ -397,6 +482,28 @@ def resolve_active_artifact(
     Returns None if no suitable artifact is found (caller must handle fail-closed).
     """
     env = (env or _current_env()).lower()
+    model_dir = model_root / model_id
+
+    # If a rollback pointer is present, honour it before scanning all versions
+    active_ptr = model_dir / "active_artifact.json"
+    if active_ptr.exists():
+        try:
+            ptr = json.loads(active_ptr.read_text())
+            pinned_version = ptr.get("version")
+            if pinned_version:
+                for version_dir in model_dir.iterdir():
+                    if version_dir.name == pinned_version:
+                        meta_path = version_dir / "metadata.json"
+                        if meta_path.exists():
+                            meta = ArtifactMetadata.load(meta_path)
+                            artifact_file = Path(meta.artifact_path)
+                            if not artifact_file.exists():
+                                artifact_file = version_dir / Path(meta.artifact_path).name
+                            if artifact_file.exists():
+                                return artifact_file.parent
+        except Exception as exc:
+            logger.warning("Failed to read active_artifact.json for %s: %s", model_id, exc)
+
     artifacts = list_artifacts(model_root, model_id)
 
     allowed_states = _allowed_states_for_env(env)
@@ -473,6 +580,13 @@ def _allowed_states_for_env(env: str) -> set[str]:
         return {"staged", "candidate", "promoted"}
     # local / development / test — allow everything non-disabled
     return {"local", "trained", "candidate", "staged", "promoted"}
+
+
+def _append_promotion_audit(model_dir: Path, record: dict[str, Any]) -> None:
+    """Append a single JSON line to the model's promotion audit log."""
+    audit_path = model_dir / "promotion_audit.jsonl"
+    with open(audit_path, "a") as f:
+        f.write(json.dumps(record, default=str) + "\n")
 
 
 def _version_dir_from_path(artifact_path: str) -> str:
