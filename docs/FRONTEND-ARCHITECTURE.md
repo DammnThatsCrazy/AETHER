@@ -13,7 +13,7 @@ source_files:
 canonical_owner: frontend@aether
 estimated_read_minutes: 35
 toc_depth: 4
-last_synced_commit: 2dc27a2
+last_synced_commit: ec76641
 ---
 
 # Aether Frontend Architecture & Designer Handoff
@@ -52,6 +52,7 @@ There are two separate frontend applications. **Do not mix them up.**
 - Review / approval workflows — human-in-the-loop agent approvals
 - **OODA Suggestion Command Center** — cross-tenant suggestion feed with evidence drawer, policy panel, and outcome tracker
 - **Suggestion review queue** — approve, reject, or suppress suggestions with reason capture
+- **ML Operations** — model fleet health, artifact status, and extraction defense monitoring
 - Lab — test fixtures and replay
 
 **Shared (`frontend/shared/` — npm package `@aether/ui`):**
