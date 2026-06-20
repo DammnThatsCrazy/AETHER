@@ -976,20 +976,20 @@ function DeFiTab({ userId, window }: { userId: string; window: string }) {
   const { data: pnl, isLoading: pl, error: pe } = useUserPnl(userId, window);
   const { data: trading, isLoading: ql, error: qe } = useUserTradingProfile(userId, window);
 
-  const t = asRecord(tier);
-  const p = asRecord(pnl);
+  const tierSummary = asRecord(asRecord(tier).summary ?? tier);
+  const pnlSummary = asRecord(asRecord(pnl).summary ?? pnl);
   const assetList = asList(asRecord(assets).items ?? assets) as SimpleRow[];
-  const tradingList = asList(asRecord(trading).pairs ?? trading) as SimpleRow[];
+  const tradingList = asList(asRecord(trading).items ?? trading) as SimpleRow[];
 
   return (
     <div className="space-y-6">
       <Section title="DeFi tier" loading={tl} error={te}>
         <div className="flex items-center gap-4">
-          {t.tier
-            ? <Badge variant="warning" size="sm">{fmt(t.tier)}</Badge>
+          {tierSummary.tier
+            ? <Badge variant="warning" size="sm">{fmt(tierSummary.tier)}</Badge>
             : <EmptyState title="No tier data" />}
-          {t.percentile !== undefined && (
-            <span className="text-xs text-text-secondary">Top {Math.round((1 - Number(t.percentile)) * 100)}%</span>
+          {tierSummary.percentile !== undefined && (
+            <span className="text-xs text-text-secondary">Top {Math.round((1 - Number(tierSummary.percentile)) * 100)}%</span>
           )}
         </div>
       </Section>
@@ -1003,8 +1003,8 @@ function DeFiTab({ userId, window }: { userId: string; window: string }) {
               emptyMessage="No assets"
               columns={[
                 { key: 'category', header: 'Category', render: r => fmt(r.category) },
-                { key: 'usd_value', header: 'USD Value', render: r => fmt(r.usd_value) },
-                { key: 'share_pct', header: '% Share', render: r => fmt(r.share_pct) },
+                { key: 'value_usd', header: 'USD Value', render: r => fmt(r.value_usd) },
+                { key: 'percentage', header: '% Share', render: r => fmt(r.percentage) },
               ]}
             />
         }
@@ -1012,9 +1012,9 @@ function DeFiTab({ userId, window }: { userId: string; window: string }) {
 
       <Section title="PNL" loading={pl} error={pe}>
         <div className="grid grid-cols-3 gap-3">
-          <Stat label="Realized PNL" value={fmt(p.realized_pnl)} />
-          <Stat label="Unrealized PNL" value={fmt(p.unrealized_pnl)} />
-          <Stat label="TVL delta" value={fmt(p.tvl_delta)} />
+          <Stat label="Realized PNL" value={fmt(pnlSummary.realized_pnl_usd)} />
+          <Stat label="Unrealized PNL" value={fmt(pnlSummary.unrealized_pnl_usd)} />
+          <Stat label="TVL delta" value={fmt(pnlSummary.tvl_delta_usd)} />
         </div>
       </Section>
 
@@ -1026,10 +1026,10 @@ function DeFiTab({ userId, window }: { userId: string; window: string }) {
               data={tradingList}
               emptyMessage="No trading data"
               columns={[
-                { key: 'pair', header: 'Pair', render: r => fmt(r.pair) },
-                { key: 'protocol', header: 'Protocol', render: r => fmt(r.protocol) },
-                { key: 'avg_gas', header: 'Avg Gas', render: r => fmt(r.avg_gas) },
-                { key: 'slippage', header: 'Slippage', render: r => fmt(r.slippage) },
+                { key: 'favorite_pairs', header: 'Pair', render: r => fmt(r.favorite_pairs) },
+                { key: 'protocol_loyalty', header: 'Protocol', render: r => fmt(r.protocol_loyalty) },
+                { key: 'gas_strategy', header: 'Gas Strategy', render: r => fmt(r.gas_strategy) },
+                { key: 'avg_slippage', header: 'Slippage', render: r => fmt(r.avg_slippage) },
               ]}
             />
         }
@@ -1046,10 +1046,10 @@ function FunnelTab({ userId, window }: { userId: string; window: string }) {
   const { data: economics, isLoading: el, error: ee } = useUserJourneyEconomics(userId, window);
   const { data: devices, isLoading: dl, error: de } = useUserDevicePerformance(userId, window);
 
-  const stages = asList(asRecord(funnel).stages ?? funnel) as SimpleRow[];
-  const ttcList = asList(asRecord(ttc).stages ?? ttc) as SimpleRow[];
-  const econList = asList(asRecord(economics).journeys ?? economics) as SimpleRow[];
-  const deviceList = asList(asRecord(devices).devices ?? devices) as SimpleRow[];
+  const stages = asList(asRecord(funnel).items ?? funnel) as SimpleRow[];
+  const ttcList = asList(asRecord(ttc).items ?? ttc) as SimpleRow[];
+  const econList = asList(asRecord(economics).items ?? economics) as SimpleRow[];
+  const deviceList = asList(asRecord(devices).items ?? devices) as SimpleRow[];
 
   return (
     <div className="space-y-6">
@@ -1135,8 +1135,8 @@ function ProtocolsTab({ userId, window }: { userId: string; window: string }) {
   const { data: protocols, isLoading: pl, error: pe } = useUserProtocolMetrics(userId, window);
   const { data: governance, isLoading: gl, error: ge } = useUserGovernanceActivity(userId, window);
 
-  const protocolList = asList(asRecord(protocols).protocols ?? protocols) as SimpleRow[];
-  const govList = asList(asRecord(governance).proposals ?? governance) as SimpleRow[];
+  const protocolList = asList(asRecord(protocols).items ?? protocols) as SimpleRow[];
+  const govList = asList(asRecord(governance).items ?? governance) as SimpleRow[];
 
   return (
     <div className="space-y-6">
@@ -1178,17 +1178,17 @@ function ProtocolsTab({ userId, window }: { userId: string; window: string }) {
 
 // ── Insights tab ───────────────────────────────────────────────────────────────
 
-function InsightsTab({ userId }: { userId: string }) {
+function InsightsTab({ userId, window }: { userId: string; window: string }) {
   const { data: quality, isLoading: ql, error: qe } = useUserQuality(userId);
   const { data: freshness, isLoading: fl, error: fe } = useUserDataFreshness(userId);
-  const { data: web2, isLoading: wl, error: we } = useUserWeb2Profile(userId);
+  const { data: web2, isLoading: wl, error: we } = useUserWeb2Profile(userId, window);
 
   const q = asRecord(quality);
   const dimensions = asList(asRecord(freshness).dimensions ?? freshness) as SimpleRow[];
   const w = asRecord(web2);
   const qualityDimensions = asList(asRecord(quality).dimensions ?? []) as SimpleRow[];
 
-  const isConsentDenied = we && (String(we).includes('403') || String(we).includes('consent'));
+  const isConsentDenied = we && (String(we).includes('403') || String(we).toLowerCase().includes('forbidden') || String(we).toLowerCase().includes('consent'));
 
   return (
     <div className="space-y-6">
@@ -1228,7 +1228,7 @@ function InsightsTab({ userId }: { userId: string }) {
               columns={[
                 { key: 'dimension', header: 'Dimension', render: r => fmt(r.dimension ?? r.name) },
                 { key: 'last_updated', header: 'Last Updated', render: r => r.last_updated ? relTime(r.last_updated as string) : '—' },
-                { key: 'stale', header: 'Stale?', render: r => r.is_stale ? <Badge variant="danger" size="sm">Stale</Badge> : <Badge variant="success" size="sm">Fresh</Badge> },
+                { key: 'stale', header: 'Stale?', render: r => r.stale ? <Badge variant="danger" size="sm">Stale</Badge> : <Badge variant="success" size="sm">Fresh</Badge> },
               ]}
             />
         }
@@ -1246,8 +1246,10 @@ function InsightsTab({ userId }: { userId: string }) {
           <p className="text-xs text-danger">{String(we)}</p>
         ) : (
           <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-            {Object.entries(w).filter(([k]) => !k.startsWith('_')).map(([k, v]) => (
-              <Stat key={k} label={k.replace(/_/g, ' ')} value={fmt(v)} />
+            {(asList(w.items ?? []) as SimpleRow[]).map((item, i) => (
+              Object.entries(item).filter(([k]) => !k.startsWith('_')).map(([k, v]) => (
+                <Stat key={`${i}-${k}`} label={k.replace(/_/g, ' ')} value={fmt(v)} />
+              ))
             ))}
           </div>
         )}
@@ -1340,7 +1342,7 @@ export function UserProfilePage() {
         <TabsContent value="defi"><DeFiTab userId={userId} window={window} /></TabsContent>
         <TabsContent value="funnel"><FunnelTab userId={userId} window={window} /></TabsContent>
         <TabsContent value="protocols"><ProtocolsTab userId={userId} window={window} /></TabsContent>
-        <TabsContent value="insights"><InsightsTab userId={userId} /></TabsContent>
+        <TabsContent value="insights"><InsightsTab userId={userId} window={window} /></TabsContent>
       </Tabs>
     </div>
   );
