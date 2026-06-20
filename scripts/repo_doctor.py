@@ -217,6 +217,14 @@ def main(argv: Sequence[str] | None = None) -> None:
         remediation="fix the generator failure, then rerun make repo-doctor-fix",
     )
 
+    run(
+        ["python", "scripts/generate_ml_manifest.py"],
+        name="Regenerate ML implementation manifest (docs/_generated/ml-implementation-manifest.json)",
+        results=results,
+        stop_on_failure=stop,
+        remediation="fix common/model_registry.py or common/feature_contracts.py, then rerun make repo-doctor-fix",
+    )
+
     if args.ci or args.check:
         _check_clean(
             ["docs/_generated"],

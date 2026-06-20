@@ -28,15 +28,9 @@ except ImportError:
 import numpy as np
 import pandas as pd
 from sklearn.model_selection import train_test_split
-
-# Model imports (deferred to avoid circular dependencies during development)
-# from edge.models import IntentPredictionModel, BotDetectionModel, SessionScorerModel
-# from server.models import (
-#     IdentityResolutionModel, ChurnPredictionModel, LTVPredictionModel,
-#     AnomalyDetectionModel,
-# )
-# from server.journey_prediction import JourneyPredictionModel
-# from server.campaign_attribution import CampaignAttributionModel
+from sklearn.pipeline import Pipeline
+from sklearn.preprocessing import StandardScaler
+from sklearn.impute import SimpleImputer
 
 logger = logging.getLogger("aether.ml.training")
 logging.basicConfig(
@@ -45,21 +39,21 @@ logging.basicConfig(
 )
 
 # ---------------------------------------------------------------------------
-# Model Registry — maps model name to (tier, class_name)
+# Canonical registry — single source of truth for model identity.
+# Do not add a duplicate hardcoded MODEL_REGISTRY here.
 # ---------------------------------------------------------------------------
+try:
+    from common.model_registry import list_trainable_models as _list_trainable_models, get_model as _get_model_entry
+    _CANONICAL_MODELS: dict[str, Any] = {m.model_id: m for m in _list_trainable_models()}
+except Exception as _reg_err:  # registry unavailable during isolated test runs
+    logger.warning("Canonical model registry unavailable: %s — using fallback", _reg_err)
+    _CANONICAL_MODELS = {}
 
+# Derive flat name→tier map for backwards-compat references and CLI help text.
+# Tier is taken from the canonical registry; falls back to "server" if registry failed.
 MODEL_REGISTRY: dict[str, tuple[str, str]] = {
-    # Edge models (<100ms inference)
-    "intent_prediction": ("edge", "IntentPredictionModel"),
-    "bot_detection": ("edge", "BotDetectionModel"),
-    "session_scorer": ("edge", "SessionScorerModel"),
-    # Server models (SageMaker / ECS)
-    "identity_resolution": ("server", "IdentityResolutionModel"),
-    "journey_prediction": ("server", "JourneyPredictionModel"),
-    "churn_prediction": ("server", "ChurnPredictionModel"),
-    "ltv_prediction": ("server", "LTVPredictionModel"),
-    "anomaly_detection": ("server", "AnomalyDetectionModel"),
-    "campaign_attribution": ("server", "CampaignAttributionModel"),
+    mid: (entry.tier.value, entry.algorithm)
+    for mid, entry in _CANONICAL_MODELS.items()
 }
 
 # Per-model synthetic data configuration
@@ -201,7 +195,11 @@ class TrainingPipeline:
         self.output_dir = Path(output_dir) / model_name
         self.output_dir.mkdir(parents=True, exist_ok=True)
         self.config = config or {}
-        self.tier, self.class_name = MODEL_REGISTRY[model_name]
+        # Pull tier and algorithm from canonical registry entry when available.
+        _entry = _CANONICAL_MODELS.get(model_name)
+        self.tier = _entry.tier.value if _entry else MODEL_REGISTRY[model_name][0]
+        self.class_name = _entry.algorithm if _entry else MODEL_REGISTRY[model_name][1]
+        self._registry_entry = _entry
         # synthetic_data: None means auto-detect (True if no data_path)
         self._synthetic_data_override = synthetic_data
 
@@ -272,6 +270,8 @@ class TrainingPipeline:
             model, artifact_path, train_metrics, test_metrics,
             synthetic_data=is_synthetic,
             training_run_id=mlflow_run_id or "",
+            X_train=X_train,
+            y_train=y_train,
         )
 
         # 7.5. Save drift detection baseline sample alongside model artifact
@@ -380,28 +380,49 @@ class TrainingPipeline:
     # ------------------------------------------------------------------
 
     def _preprocess(self, X: pd.DataFrame) -> pd.DataFrame:
-        """Basic preprocessing: handle NaN, clip outliers, scale."""
-        # Fill NaN with column median
-        X = X.fillna(X.median(numeric_only=True))
+        """Build and fit the preprocessing pipeline, then transform X.
 
-        # Clip outliers at 1st and 99th percentile for numeric columns
-        numeric_cols = X.select_dtypes(include=[np.number]).columns
+        The fitted pipeline is stored on ``self._preprocessing_pipeline`` so it can
+        be persisted alongside the model artifact — ensuring training and serving use
+        identical preprocessing without manual reconstruction.
+        """
+        from sklearn.compose import ColumnTransformer
+
+        numeric_cols = list(X.select_dtypes(include=[np.number]).columns)
+
+        # Clip outliers before fitting the scaler (fit on clipped training data)
+        X_clipped = X.copy()
+        self._clip_bounds: dict[str, tuple[float, float]] = {}
         for col in numeric_cols:
-            q_low = X[col].quantile(0.01)
-            q_high = X[col].quantile(0.99)
-            X[col] = X[col].clip(lower=q_low, upper=q_high)
+            q_low = float(X[col].quantile(0.01))
+            q_high = float(X[col].quantile(0.99))
+            X_clipped[col] = X[col].clip(lower=q_low, upper=q_high)
+            self._clip_bounds[col] = (q_low, q_high)
 
-        return X
+        num_pipeline = Pipeline([
+            ("imputer", SimpleImputer(strategy="median")),
+            ("scaler", StandardScaler()),
+        ])
+
+        self._preprocessing_pipeline = ColumnTransformer(
+            transformers=[("num", num_pipeline, numeric_cols)],
+            remainder="drop",
+            verbose_feature_names_out=False,
+        )
+
+        X_transformed = self._preprocessing_pipeline.fit_transform(X_clipped)
+        return pd.DataFrame(X_transformed, columns=numeric_cols, index=X.index)
 
     # ------------------------------------------------------------------
     # Model instantiation
     # ------------------------------------------------------------------
 
     def _get_model_instance(self) -> Any:
-        """Instantiate the correct model class based on model_name.
+        """Instantiate the estimator declared by the canonical registry.
 
-        During development with synthetic data, falls back to a lightweight
-        scikit-learn estimator so the pipeline can run end-to-end.
+        Estimator choices are derived from the registry's ``algorithm`` field so
+        training and registry stay in sync.  XGBoost is used for churn/LTV per the
+        registry; GradientBoosting is used for models whose registry entry says so.
         """
         from sklearn.ensemble import (
             GradientBoostingClassifier,
@@ -411,11 +432,17 @@ class TrainingPipeline:
         )
         from sklearn.linear_model import LogisticRegression
 
-        spec = _SYNTHETIC_SPECS[self.model_name]
-        task = spec["task"]
+        # Try XGBoost (listed in optional [ml] extras)
+        try:
+            from xgboost import XGBClassifier, XGBRegressor
+            _xgb_available = True
+        except ImportError:
+            _xgb_available = False
+            XGBClassifier = GradientBoostingClassifier  # type: ignore[assignment,misc]
+            XGBRegressor = GradientBoostingRegressor  # type: ignore[assignment,misc]
 
-        # Map model names to reasonable stand-in estimators
-        fallback_map: dict[str, Any] = {
+        # Estimator per canonical registry algorithm name
+        estimator_map: dict[str, Any] = {
             "intent_prediction": LogisticRegression(
                 C=1.0, max_iter=1000, solver="lbfgs",
             ),
@@ -432,21 +459,36 @@ class TrainingPipeline:
             "journey_prediction": GradientBoostingClassifier(
                 n_estimators=200, max_depth=6, learning_rate=0.05, random_state=42,
             ),
-            "churn_prediction": GradientBoostingClassifier(
-                n_estimators=200, max_depth=6, learning_rate=0.05, random_state=42,
+            # Churn/LTV use XGBoost per registry; fall back to GBM if not installed
+            "churn_prediction": (
+                XGBClassifier(
+                    n_estimators=200, max_depth=6, learning_rate=0.05,
+                    random_state=42, eval_metric="logloss", use_label_encoder=False,
+                ) if _xgb_available else GradientBoostingClassifier(
+                    n_estimators=200, max_depth=6, learning_rate=0.05, random_state=42,
+                )
             ),
-            "ltv_prediction": GradientBoostingRegressor(
-                n_estimators=300, max_depth=6, learning_rate=0.05, random_state=42,
+            "ltv_prediction": (
+                XGBRegressor(
+                    n_estimators=300, max_depth=6, learning_rate=0.05,
+                    random_state=42, eval_metric="rmse",
+                ) if _xgb_available else GradientBoostingRegressor(
+                    n_estimators=300, max_depth=6, learning_rate=0.05, random_state=42,
+                )
             ),
             "anomaly_detection": IsolationForest(
                 n_estimators=200, contamination=0.05, random_state=42,
             ),
+            # campaign_attribution uses a GBM trained on touchpoint features;
+            # Shapley credit allocation is applied post-prediction at serve time.
             "campaign_attribution": GradientBoostingClassifier(
                 n_estimators=100, max_depth=5, learning_rate=0.1, random_state=42,
             ),
         }
 
-        model = fallback_map.get(self.model_name)
+        spec = _SYNTHETIC_SPECS[self.model_name]
+        task = spec["task"]
+        model = estimator_map.get(self.model_name)
         if model is None:
             if task == "classification":
                 model = GradientBoostingClassifier(random_state=42)
@@ -674,6 +716,50 @@ class TrainingPipeline:
         except (ImportError, KeyError):
             return ""
 
+    def _save_dataset_manifest(
+        self,
+        X: "pd.DataFrame",
+        y: "pd.Series | None",
+        artifact_path: Path,
+        is_synthetic: bool,
+        data_source: str = "synthetic",
+    ) -> None:
+        """Produce dataset_manifest.json alongside the artifact."""
+        import hashlib
+        import subprocess
+
+        try:
+            git_sha = subprocess.check_output(
+                ["git", "rev-parse", "--short", "HEAD"], stderr=subprocess.DEVNULL
+            ).decode().strip()
+        except Exception:
+            git_sha = "unknown"
+
+        manifest = {
+            "dataset_id": f"{self.model_name}_{datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S')}",
+            "source": data_source,
+            "synthetic_data": is_synthetic,
+            "row_count": int(len(X)),
+            "feature_count": int(X.shape[1]),
+            "feature_names": list(X.columns),
+            "target_distribution": (
+                y.value_counts(normalize=True).to_dict() if y is not None and hasattr(y, "value_counts") else {}
+            ),
+            "missing_rate": float(X.isnull().mean().mean()),
+            "created_at": datetime.now(timezone.utc).isoformat(),
+            "git_sha": git_sha,
+            "model_id": self.model_name,
+            "feature_schema_hash": self._get_feature_schema_hash(),
+            "consent_policy": "synthetic" if is_synthetic else "tenant_scoped",
+        }
+
+        manifest_path = artifact_path / "dataset_manifest.json"
+        manifest_content = json.dumps(manifest, indent=2, default=str)
+        manifest_path.write_text(manifest_content)
+        manifest["checksum"] = hashlib.sha256(manifest_content.encode()).hexdigest()
+        manifest_path.write_text(json.dumps(manifest, indent=2, default=str))
+        logger.info("Dataset manifest saved: %s rows -> %s", len(X), manifest_path)
+
     def _save_artifacts(
         self,
         model: Any,
@@ -682,12 +768,35 @@ class TrainingPipeline:
         test_metrics: dict[str, float],
         synthetic_data: bool = True,
         training_run_id: str = "",
+        X_train: "pd.DataFrame | None" = None,
+        y_train: "pd.Series | None" = None,
     ) -> None:
-        """Persist model, canonical metadata, and artifact registry entry."""
+        """Persist model, preprocessing pipeline, canonical metadata, and artifact registry entry."""
         import joblib
 
         artifact_file = artifact_path / "model.joblib"
         joblib.dump(model, artifact_file)
+
+        # Persist fitted preprocessing pipeline so serving uses identical transforms.
+        preprocessing_pipeline = getattr(self, "_preprocessing_pipeline", None)
+        if preprocessing_pipeline is not None:
+            preprocessing_path = artifact_path / "preprocessing.joblib"
+            joblib.dump(preprocessing_pipeline, preprocessing_path)
+            # Also persist clip bounds for documentation
+            clip_bounds = getattr(self, "_clip_bounds", {})
+            if clip_bounds:
+                (artifact_path / "preprocessing_meta.json").write_text(
+                    json.dumps({
+                        "clip_bounds": clip_bounds,
+                        "feature_order": list(clip_bounds.keys()),
+                        "scaler": "StandardScaler",
+                        "imputer_strategy": "median",
+                    }, indent=2)
+                )
+
+        # Dataset manifest (if raw data available)
+        if X_train is not None:
+            self._save_dataset_manifest(X_train, y_train, artifact_path, synthetic_data)
 
         threshold_passed, _ = self._check_thresholds(test_metrics)
         feature_schema_hash = self._get_feature_schema_hash()
@@ -783,10 +892,17 @@ class TrainingPipeline:
 
 
 def train_all(output_dir: str = "/tmp/aether-models") -> dict[str, dict[str, Any]]:
-    """Train all 9 models sequentially and return aggregated results."""
+    """Train all registered trainable models and return aggregated results.
+
+    Iterates the canonical model registry (``list_trainable_models()``) rather than
+    a hardcoded list.  Exits nonzero (raises SystemExit) when any model fails.
+    """
     results: dict[str, dict[str, Any]] = {}
 
-    for model_name in MODEL_REGISTRY:
+    # Use canonical registry; fall back to MODULE-level MODEL_REGISTRY if import failed.
+    model_names = list(_CANONICAL_MODELS.keys()) if _CANONICAL_MODELS else list(MODEL_REGISTRY.keys())
+
+    for model_name in model_names:
         try:
             pipeline = TrainingPipeline(model_name=model_name, output_dir=output_dir)
             results[model_name] = pipeline.run()
@@ -799,8 +915,15 @@ def train_all(output_dir: str = "/tmp/aether-models") -> dict[str, dict[str, Any
     failed = sum(1 for r in results.values() if r.get("status") == "error")
     logger.info(
         f"\nTRAINING SUMMARY: {succeeded} succeeded, {failed} failed "
-        f"out of {len(MODEL_REGISTRY)} models"
+        f"out of {len(model_names)} models"
     )
+
+    if failed:
+        raise SystemExit(
+            f"Training completed with {failed} failure(s). "
+            "See logs above for details."
+        )
+
     return results
 
 

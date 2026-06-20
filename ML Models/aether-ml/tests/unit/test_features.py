@@ -103,8 +103,11 @@ class TestFeaturePipeline:
 
         assert not result.empty
         assert "session_id" in result.columns
-        # Should have biometric features
-        expected_cols = {"mouse_speed_mean", "click_interval_mean", "action_type_entropy"}
+        # Should have canonical contract-named biometric features
+        expected_cols = {
+            "mouse_velocity_mean", "avg_time_between_actions", "interaction_diversity",
+            "has_natural_pauses", "has_perfect_timing", "action_rate",
+        }
         assert expected_cols.issubset(set(result.columns))
 
     def test_identity_features(self, raw_events: pd.DataFrame) -> None:
@@ -493,7 +496,7 @@ class TestFeatureEngineer:
         assert "session_id" in result.columns
         assert "avg_time_between_actions" in result.columns
         assert "mouse_velocity_mean" in result.columns
-        assert "action_type_entropy" in result.columns
+        assert "interaction_diversity" in result.columns
 
     def test_compute_identity_features(self) -> None:
         from common.src.base import FeatureEngineer

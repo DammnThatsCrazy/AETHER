@@ -111,12 +111,61 @@ def check_feature_contracts() -> list[str]:
         errors.append(f"Cannot import feature_contracts: {e}")
         return errors
 
-    for entry in list_trainable_models():
+    trainable = list(list_trainable_models())
+    for entry in trainable:
         if entry.model_id not in _CONTRACTS:
             errors.append(f"No feature contract for trainable model '{entry.model_id}'")
 
+    # Check for duplicate contract IDs
+    seen_contract_ids: dict[str, str] = {}
+    for cid, contract in _CONTRACTS.items():
+        if cid in seen_contract_ids:
+            errors.append(f"Duplicate contract ID '{cid}'")
+        seen_contract_ids[cid] = cid
+
     if not errors:
-        ok(f"All {len(list(list_trainable_models()))} trainable models have feature contracts")
+        ok(f"All {len(trainable)} trainable models have feature contracts, no duplicates")
+    return errors
+
+
+def check_serving_endpoints() -> list[str]:
+    """Verify each registry serving endpoint exists in the FastAPI route table."""
+    errors: list[str] = []
+    serving_api_path = ML_ROOT / "serving" / "src" / "api.py"
+    if not serving_api_path.exists():
+        errors.append(f"Serving API not found: {serving_api_path}")
+        return errors
+
+    content = serving_api_path.read_text()
+    sys.path.insert(0, str(ML_ROOT))
+    try:
+        from common.model_registry import list_trainable_models, get_model
+    except ImportError as e:
+        errors.append(f"Cannot import model_registry for endpoint check: {e}")
+        return errors
+
+    # Verify anomaly_detection uses dedicated endpoint, not batch
+    anomaly = get_model("anomaly_detection")
+    if anomaly and "/v1/predict/batch" in anomaly.serving_endpoint:
+        errors.append(
+            "anomaly_detection.serving_endpoint must be '/v1/predict/anomaly', "
+            f"not '{anomaly.serving_endpoint}'"
+        )
+
+    # Verify each serving endpoint appears in the API file as a route decorator
+    for entry in list_trainable_models():
+        ep = entry.serving_endpoint
+        if not ep:
+            continue
+        # Check for @router.post("/v1/predict/...") or @app.post(...)
+        if f'"{ep}"' not in content and f"'{ep}'" not in content:
+            errors.append(
+                f"Serving endpoint '{ep}' for '{entry.model_id}' not found "
+                f"as a route in serving/src/api.py"
+            )
+
+    if not errors:
+        ok("All trainable-model serving endpoints exist in serving/src/api.py")
     return errors
 
 
@@ -198,6 +247,9 @@ def main() -> int:
 
     print("\n--- Training Configs ---")
     all_errors.extend(check_training_configs())
+
+    print("\n--- Serving Endpoints ---")
+    all_errors.extend(check_serving_endpoints())
 
     print("\n--- Backend Routes ---")
     all_errors.extend(check_backend_routes())

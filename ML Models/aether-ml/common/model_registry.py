@@ -380,7 +380,7 @@ _REGISTRY: dict[str, ModelEntry] = {
         feature_contract_id="anomaly_detection_v1",
         target_column="",
         training_entrypoint="training.pipelines.train",
-        serving_endpoint="/v1/predict/batch",
+        serving_endpoint="/v1/predict/anomaly",
         minimum_metrics={"test_anomaly_rate": 0.1},
         promotion_requirements=[
             "real_data_only",
@@ -396,7 +396,9 @@ _REGISTRY: dict[str, ModelEntry] = {
         display_name="Campaign Attribution",
         category="marketing_analytics",
         task_type="attribution",
-        algorithm="ShapleyValues",
+        # Uses GradientBoostingClassifier trained on touchpoint features;
+        # Shapley credit values are derived post-prediction at serve time.
+        algorithm="GradientBoostingClassifier",
         implementation_type=ImplementationType.TRAINABLE_ML,
         tier=ModelTier.SERVER,
         sensitivity_tier=SensitivityTier.HIGH,

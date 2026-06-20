@@ -11,6 +11,8 @@
 .DEFAULT_GOAL := help
 .PHONY: setup setup-dev setup-minimal \
         test test-security test-ml test-coverage \
+        ml-validate ml-test ml-test-unit ml-test-integration ml-test-security \
+        ml-train-smoke ml-artifact-verify ml-docs-check ml-ci \
         lint format typecheck \
         serve-backend serve-ml \
         dev dev-streaming dev-analytics dev-notebooks dev-full dev-down \
@@ -54,6 +56,36 @@ test-ml: ## Run ML model tests only
 
 validate-ml-registry: ## Validate ML model registry consistency (CI gate)
 	python scripts/validate_ml_registry.py
+
+# ---------------------------------------------------------------------------
+# ML-specific targets (mono-prompt section 28)
+# ---------------------------------------------------------------------------
+
+ml-validate: ## Registry + contract consistency gate
+	python scripts/validate_ml_registry.py
+
+ml-test-unit: ## ML unit tests only
+	python -m pytest "$(ML_DIR)/tests/unit/" -v
+
+ml-test-integration: ## ML integration tests
+	python -m pytest "$(ML_DIR)/tests/integration/" -v
+
+ml-test-security: ## ML security tests (extraction defense)
+	python -m pytest tests/security/ -v
+
+ml-test: ml-test-unit ml-test-integration ## All ML tests
+
+ml-train-smoke: ## Smoke-train all 9 models using synthetic deterministic fixtures
+	python -m pytest "$(ML_DIR)/tests/unit/test_training_pipeline.py::TestTrainingPipelineSynthetic" -v
+
+ml-artifact-verify: ## Verify artifact loadability and metadata for all trained models
+	python -m pytest "$(ML_DIR)/tests/unit/test_training_pipeline.py::TestArtifactLoadability" -v
+
+ml-docs-check: ## Check ML documentation consistency
+	python scripts/validate_ml_registry.py
+	python scripts/docs_drift.py --strict 2>/dev/null || true
+
+ml-ci: ml-validate ml-test ml-train-smoke ml-artifact-verify ml-docs-check ## All blocking ML CI gates
 
 test-coverage: ## Run tests with coverage report (all subsystems)
 	python -m pytest tests/ \

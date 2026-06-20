@@ -557,21 +557,25 @@ class FeatureEngineer:
             dy = g["mouse_y"].diff().dropna()
             displacement = np.sqrt(dx**2 + dy**2)
 
-            # Action type entropy
-            probs = g["event_type"].value_counts(normalize=True).values
-            action_entropy = float(-np.sum(probs * np.log2(probs + 1e-12)))
+            # Interaction diversity: action_type entropy normalised to [0,1]
+            counts = g["event_type"].value_counts()
+            n_unique = max(int(counts.index.nunique()), 1)
+            probs = counts / counts.sum()
+            raw_entropy = float(-np.sum(probs.values * np.log2(probs.values + 1e-12)))
+            max_entropy = np.log2(n_unique) if n_unique > 1 else 1.0
+            interaction_diversity = raw_entropy / max_entropy if max_entropy > 0 else 0.0
 
             return pd.Series(
                 {
                     "avg_time_between_actions": time_diffs.mean() if len(time_diffs) else 0.0,
-                    "timing_variance": time_diffs.var() if len(time_diffs) > 1 else 0.0,
+                    "time_variance": time_diffs.var() if len(time_diffs) > 1 else 0.0,
                     "mouse_velocity_mean": displacement.mean() if len(displacement) else 0.0,
                     "mouse_velocity_std": displacement.std() if len(displacement) > 1 else 0.0,
                     "mouse_entropy": float(displacement.std() / (displacement.mean() + 1e-12))
                     if len(displacement) > 1
                     else 0.0,
-                    "action_type_entropy": action_entropy,
-                    "unique_action_types": g["event_type"].nunique(),
+                    "interaction_diversity": interaction_diversity,
+                    "unique_action_types": n_unique,
                     "has_keyboard_input": int((g["event_type"] == "keypress").any()),
                     "has_scroll": int((g["event_type"] == "scroll").any()),
                 }
