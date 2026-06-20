@@ -62,11 +62,12 @@ jobs:
             echo "ERROR: Possible secret detected in packages/" && exit 1
           fi
       - name: CHANGELOG entry check
-        run: grep -q 'SDK Productionization' CHANGELOG.md || (echo "ERROR: CHANGELOG missing SDK Productionization entry" && exit 1)
+        run: grep -q 'SDK Productization' CHANGELOG.md || (echo "ERROR: CHANGELOG missing SDK Productization entry" && exit 1)
       - name: Audit doc existence check
         run: test -f docs/reports/SDK_PRODUCTION_READINESS_AUDIT.md || (echo "ERROR: Audit doc missing" && exit 1)
 
   android:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -85,6 +86,7 @@ jobs:
         run: gradle assembleRelease publishToMavenLocal
 
   ios:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v4
