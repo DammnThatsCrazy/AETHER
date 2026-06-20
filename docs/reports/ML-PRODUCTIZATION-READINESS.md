@@ -14,7 +14,7 @@ source_files:
   - ML Models/aether-ml/serving/src/api.py
   - Backend Architecture/aether-backend/services/ml_serving/routes.py
   - security/model_extraction_defense/defense_layer.py
-last_synced_commit: 37dc7d2
+last_synced_commit: 7a86125
 ---
 
 # Aether ML Productization Readiness Report
@@ -113,16 +113,20 @@ python -m training.pipelines.train --model <model_id> --data synthetic
 python -m training.pipelines.train --model all --data synthetic
 ```
 
+Training derives the model list from the canonical registry (`list_trainable_models()`); there is no separate hardcoded `MODEL_REGISTRY` dict in `train.py`. Churn/LTV use `XGBClassifier`/`XGBRegressor` when xgboost is available (GBM fallback). `campaign_attribution` uses `GradientBoostingClassifier`.
+
 Training now produces:
 - `model.joblib` — serialized scikit-learn estimator
+- `preprocessing.joblib` — fitted `ColumnTransformer` (imputer + scaler) matching training input, required by serving to avoid training-serving skew
 - `metadata.json` — full canonical metadata including:
   - `synthetic_data: true` for synthetic training runs
   - `production_allowed: false` for all synthetic artifacts
   - `threshold_passed` — whether minimum metrics were met
   - `feature_schema_hash` — tied to feature contract version
   - `promotion_state: "trained"` — must be promoted before production use
+- `dataset_manifest.json` — source, row count, entity count, schema hash, synthetic flag, git SHA, and timestamp for every training run
 
-**Threshold gates implemented** (see `_check_thresholds()`). Synthetic artifacts are explicitly marked `production_allowed=false`.
+**Threshold gates implemented** (see `_check_thresholds()`). Synthetic artifacts are explicitly marked `production_allowed=false`. `train_all()` exits non-zero if any model fails threshold gates.
 
 ---
 
@@ -235,6 +239,8 @@ Backend admin routes for ML operational state are defined in:
 
 ## Gap Table (Post-Fix)
 
+### Original gaps (all fixed)
+
 | Area | Gap | Severity | Status |
 |------|-----|----------|--------|
 | Model registry | None — canonical registry created | — | ✅ |
@@ -245,13 +251,44 @@ Backend admin routes for ML operational state are defined in:
 | Serving `/ready` env-awareness | `/ready` endpoint + SLA gate added | Medium | ✅ |
 | Identity resolution serving route | `/v1/predict/identity` added | Low | ✅ |
 | Kyber admin ML hooks | `/v1/admin/kyber/ml/` router added | Medium | ✅ |
-| Real data training path | Requires external infrastructure | Infra | 🔧 |
-| MLflow tracking | Available, fails gracefully if unreachable | Infra | 🔧 |
-| S3 artifact store | Requires AWS credentials | Infra | 🔧 |
-| Redis feature store | Requires Redis instance | Infra | 🔧 |
 | Drift detection | Baselines saved at training; buffer + `/v1/monitoring/drift` endpoint live | Medium | ✅ |
 | CI for ML registry drift | `validate_ml_registry.py` gate added to CI | Medium | ✅ |
 | Freshness SLA monitoring | `DataFreshnessSLATracker` wired into serving | Medium | ✅ |
+
+### Phase 1–2 gaps (all fixed)
+
+| # | Area | Gap | Severity | Status |
+|---|------|-----|----------|--------|
+| G1 | Training | Hardcoded `MODEL_REGISTRY` dict in `train.py` — no registry import | Critical | ✅ |
+| G2 | Training | Churn/LTV registry says XGBoost; training used GradientBoosting | High | ✅ XGBClassifier/XGBRegressor (GBM fallback) |
+| G3 | Training | `campaign_attribution` registry said ShapleyValues; training used GBM | High | ✅ Registry aligned to GradientBoostingClassifier |
+| G4 | Features | Pipeline output `click_interval_mean/std`; contract expected `avg_time_between_actions/time_variance` | High | ✅ Pipeline rewritten to canonical names; aliases added to contract |
+| G5 | Features | Pipeline output `action_type_entropy`, `js_execution_time` not in bot_detection contract | High | ✅ Canonical names in pipeline (`interaction_diversity`, `action_rate`); aliases in contract |
+| G6 | Serving | `_extraction_monitor` never called in middleware | High | ✅ Wired in `extraction_defense_middleware` |
+| G7 | Serving | No `GET /v1/predict/anomaly` endpoint | High | ✅ Added |
+| G8 | Serving | Freshness SLA missing from 5 endpoints | Medium | ✅ All 6 model endpoints now call `_freshness_tracker.check()` |
+| G9 | Serving | No `GET /v1/monitoring/extraction` endpoint | Medium | ✅ Added |
+| G10 | Contracts | Schema hash covered only name/dtype/required | Medium | ✅ Extended to default, nullable, min_value, max_value, allowed_values, aliases, freshness_sla |
+| G11 | Contracts | String dtype not validated in `validate_features()` | Medium | ✅ Added `elif spec.dtype == "str"` branch |
+| G15 | Training | Preprocessing pipeline not persisted with artifact | High | ✅ `preprocessing.joblib` saved alongside `model.joblib` |
+| G18 | Training | No dataset manifest produced by training | High | ✅ `dataset_manifest.json` produced every run |
+| G20 | CI/Make | No ML-specific Makefile targets | Medium | ✅ `ml-validate`, `ml-test-*`, `ml-train-smoke`, `ml-artifact-verify`, `ml-ci` added |
+| G21 | Validation | Registry validator used string checks, not runtime inspection | Medium | ✅ Runtime FastAPI route inspection; endpoint presence verified in `api.py` |
+| G22 | Docs | No `ml-implementation-manifest.json` | Medium | ✅ `scripts/generate_ml_manifest.py` + `docs/_generated/ml-implementation-manifest.json` |
+
+### Remaining gaps (infra / post-code)
+
+| Area | Gap | Severity | Status |
+|------|-----|----------|--------|
+| Real data training path | Requires external infrastructure | Infra | 🔧 |
+| MLflow tracking | Available, fails gracefully if unreachable | Infra | 🔧 |
+| S3 artifact store | Requires AWS credentials | Infra | 🔧 |
+| Redis feature store / extraction budgets | Requires Redis instance | Infra | 🔧 |
+| Digital artifact signing (HMAC) | G14 — not yet implemented | Medium | 🔧 |
+| Versioned cache keys in backend | G25 — cache key missing artifact_version + contract_hash | High | 🔧 |
+| Dockerfile non-root user | G24 — no USER directive | Medium | 🔧 |
+| Background drift monitoring loop | G27 — on-demand only | Medium | 🔧 |
+| ML CI path-based triggers | G26 — no dedicated ML CI job | High | 🔧 |
 
 ---
 
