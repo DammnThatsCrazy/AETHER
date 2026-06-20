@@ -109,16 +109,29 @@ class FeatureContract:
         self._schema_hash = self._compute_schema_hash()
 
     def _compute_schema_hash(self) -> str:
+        # Hash covers all behaviorally significant contract fields so that
+        # any change that would cause training-serving skew rotates the hash.
         schema_repr = {
             "contract_id": self.contract_id,
             "schema_version": self.schema_version,
+            "freshness_sla_seconds": self.freshness_sla_seconds,
             "features": sorted([
-                {"name": f.name, "dtype": f.dtype, "required": f.required}
+                {
+                    "name": f.name,
+                    "dtype": f.dtype,
+                    "required": f.required,
+                    "default": f.default,
+                    "nullable": f.nullable,
+                    "min_value": f.min_value,
+                    "max_value": f.max_value,
+                    "allowed_values": sorted(f.allowed_values) if f.allowed_values else None,
+                    "aliases": sorted(f.aliases) if f.aliases else [],
+                }
                 for f in self.features
             ], key=lambda x: x["name"]),
         }
         return hashlib.sha256(
-            json.dumps(schema_repr, sort_keys=True).encode()
+            json.dumps(schema_repr, sort_keys=True, default=str).encode()
         ).hexdigest()[:16]
 
     @property
@@ -178,20 +191,28 @@ _register(FeatureContract(
     source_feature_groups=["behavioral_features"],
     freshness_sla_seconds=30,
     features=[
-        FeatureSpec("avg_time_between_actions", "float", min_value=0.0),
-        FeatureSpec("time_variance", "float", min_value=0.0),
+        # Aliases bridge pipeline output names → canonical contract names
+        FeatureSpec("avg_time_between_actions", "float", min_value=0.0,
+                    aliases=["click_interval_mean"]),
+        FeatureSpec("time_variance", "float", min_value=0.0,
+                    aliases=["click_interval_std"]),
         FeatureSpec("click_to_scroll_ratio", "float", min_value=0.0),
-        FeatureSpec("mouse_velocity_mean", "float"),
-        FeatureSpec("mouse_velocity_std", "float"),
+        FeatureSpec("mouse_velocity_mean", "float",
+                    aliases=["mouse_speed_mean"]),
+        FeatureSpec("mouse_velocity_std", "float",
+                    aliases=["mouse_speed_std"]),
         FeatureSpec("mouse_entropy", "float", min_value=0.0),
-        FeatureSpec("navigation_entropy", "float", min_value=0.0),
-        FeatureSpec("interaction_diversity", "float", min_value=0.0, max_value=1.0),
+        FeatureSpec("navigation_entropy", "float", min_value=0.0,
+                    aliases=["scroll_pattern_entropy"]),
+        FeatureSpec("interaction_diversity", "float", min_value=0.0, max_value=1.0,
+                    aliases=["action_type_entropy"]),
         FeatureSpec("has_natural_pauses", "float", min_value=0.0, max_value=1.0),
         FeatureSpec("has_erratic_movement", "float", min_value=0.0, max_value=1.0),
         FeatureSpec("has_perfect_timing", "float", min_value=0.0, max_value=1.0),
         FeatureSpec("keypress_count", "int", min_value=0),
         FeatureSpec("unique_action_types", "int", min_value=0),
-        FeatureSpec("action_rate", "float", min_value=0.0),
+        FeatureSpec("action_rate", "float", min_value=0.0,
+                    aliases=["js_execution_time"]),
     ],
 ))
 
@@ -461,6 +482,9 @@ def validate_features(
         elif spec.dtype == "bool":
             if not isinstance(value, (bool, np.bool_)):
                 type_errors.append(f"{spec.name}: expected bool, got {type(value).__name__}")
+        elif spec.dtype == "str":
+            if not isinstance(value, str):
+                type_errors.append(f"{spec.name}: expected str, got {type(value).__name__}")
 
     if missing or type_errors:
         parts = []

@@ -242,10 +242,13 @@ class FeaturePipeline:
 
         def _session_biometrics(group: pd.DataFrame) -> pd.Series:
             time_diffs = group["timestamp"].diff().dt.total_seconds().dropna()
+            n_events = len(group)
+            session_duration = float(time_diffs.sum()) if len(time_diffs) > 0 else 0.0
 
-            # Mouse trajectory speed
-            mouse_speed_mean = 0.0
-            mouse_speed_std = 0.0
+            # Mouse trajectory speed + entropy
+            mouse_velocity_mean = 0.0
+            mouse_velocity_std = 0.0
+            mouse_entropy = 0.0
             if {"mouse_x", "mouse_y"}.issubset(group.columns):
                 dx = group["mouse_x"].diff().dropna()
                 dy = group["mouse_y"].diff().dropna()
@@ -253,55 +256,95 @@ class FeaturePipeline:
                 displacement = np.sqrt(dx.values ** 2 + dy.values[: len(dx)] ** 2)
                 speed = displacement / (dt.values[: len(displacement)] + 1e-9)
                 if len(speed) > 0:
-                    mouse_speed_mean = float(np.nanmean(speed))
-                    mouse_speed_std = float(np.nanstd(speed)) if len(speed) > 1 else 0.0
+                    mouse_velocity_mean = float(np.nanmean(speed))
+                    mouse_velocity_std = float(np.nanstd(speed)) if len(speed) > 1 else 0.0
+                    # Mouse direction entropy (discretise into 8 bins)
+                    angles = np.degrees(np.arctan2(dy.values[: len(dx)], dx.values)) % 360
+                    hist, _ = np.histogram(angles, bins=8, range=(0, 360))
+                    hist = hist / (hist.sum() + 1e-12)
+                    mouse_entropy = float(-np.sum(hist * np.log2(hist + 1e-12)))
 
-            # Click intervals
-            click_events = group[group.get("type", pd.Series(dtype=str)) == "click"]
+            # Click intervals → avg_time_between_actions, time_variance
+            event_col = "type" if "type" in group.columns else None
+            click_events = (
+                group[group[event_col] == "click"] if event_col else group.iloc[:0]
+            )
             click_intervals = click_events["timestamp"].diff().dt.total_seconds().dropna()
-            click_interval_mean = float(click_intervals.mean()) if len(click_intervals) > 0 else 0.0
-            click_interval_std = float(click_intervals.std()) if len(click_intervals) > 1 else 0.0
+            avg_time_between_actions = (
+                float(click_intervals.mean()) if len(click_intervals) > 0 else 0.0
+            )
+            time_variance = (
+                float(click_intervals.std()) if len(click_intervals) > 1 else 0.0
+            )
 
-            # Scroll pattern entropy
-            scroll_entropy = 0.0
-            if "scroll_depth" in group.columns:
-                scroll_vals = group["scroll_depth"].dropna()
-                if len(scroll_vals) > 1:
-                    diffs = scroll_vals.diff().dropna().abs()
-                    if diffs.sum() > 0:
-                        probs = diffs / diffs.sum()
-                        scroll_entropy = float(-np.sum(probs * np.log2(probs + 1e-12)))
+            # Click-to-scroll ratio
+            scroll_events = (
+                group[group[event_col] == "scroll"] if event_col else group.iloc[:0]
+            )
+            n_clicks = len(click_events)
+            n_scrolls = len(scroll_events)
+            click_to_scroll_ratio = (
+                n_clicks / (n_clicks + n_scrolls) if (n_clicks + n_scrolls) > 0 else 0.5
+            )
 
-            # Keystroke timing variance
-            keystroke_var = 0.0
-            if "type" in group.columns:
-                keypress_events = group[group["type"] == "keypress"]
-                if len(keypress_events) > 2:
-                    key_intervals = keypress_events["timestamp"].diff().dt.total_seconds().dropna()
-                    keystroke_var = float(key_intervals.var()) if len(key_intervals) > 1 else 0.0
+            # Navigation entropy (page_category distribution)
+            navigation_entropy = 0.0
+            if "page_category" in group.columns:
+                probs = group["page_category"].value_counts(normalize=True).values
+                navigation_entropy = float(-np.sum(probs * np.log2(probs + 1e-12)))
 
-            # Action type entropy
-            action_entropy = 0.0
-            if "type" in group.columns:
-                probs = group["type"].value_counts(normalize=True).values
-                action_entropy = float(-np.sum(probs * np.log2(probs + 1e-12)))
+            # Interaction diversity (action_type_entropy normalised to [0,1])
+            interaction_diversity = 0.0
+            n_unique_actions = 1
+            if event_col:
+                counts = group[event_col].value_counts()
+                n_unique_actions = max(int(counts.index.nunique()), 1)
+                probs = counts / counts.sum()
+                raw_entropy = float(-np.sum(probs.values * np.log2(probs.values + 1e-12)))
+                max_entropy = np.log2(n_unique_actions) if n_unique_actions > 1 else 1.0
+                interaction_diversity = raw_entropy / max_entropy if max_entropy > 0 else 0.0
 
-            # JS execution time (average if available)
-            js_exec_time = 0.0
-            if "js_execution_time" in group.columns:
-                vals = group["js_execution_time"].dropna()
-                js_exec_time = float(vals.mean()) if len(vals) > 0 else 0.0
+            # Natural pauses: any inter-event gap > 2 s (typical human deliberation)
+            has_natural_pauses = 1.0 if (time_diffs > 2.0).any() else 0.0
+
+            # Erratic movement: mouse speed std > 3× mean (jitter pattern)
+            has_erratic_movement = (
+                1.0 if mouse_velocity_std > 3.0 * mouse_velocity_mean else 0.0
+            )
+
+            # Perfect timing: very low click interval variance — bot indicator
+            has_perfect_timing = (
+                1.0 if (len(click_intervals) > 2 and time_variance < 0.02) else 0.0
+            )
+
+            # Keypress count
+            keypress_events = (
+                group[group[event_col] == "keypress"] if event_col else group.iloc[:0]
+            )
+            keypress_count = int(len(keypress_events))
+
+            # Action rate (events per second)
+            action_rate = (
+                n_events / max(session_duration, 1.0)
+            )
 
             return pd.Series(
                 {
-                    "mouse_speed_mean": mouse_speed_mean,
-                    "mouse_speed_std": mouse_speed_std,
-                    "click_interval_mean": click_interval_mean,
-                    "click_interval_std": click_interval_std,
-                    "scroll_pattern_entropy": scroll_entropy,
-                    "keystroke_timing_variance": keystroke_var,
-                    "action_type_entropy": action_entropy,
-                    "js_execution_time": js_exec_time,
+                    # Canonical contract names (aliases maintained in feature_contracts.py)
+                    "avg_time_between_actions": avg_time_between_actions,
+                    "time_variance": time_variance,
+                    "click_to_scroll_ratio": click_to_scroll_ratio,
+                    "mouse_velocity_mean": mouse_velocity_mean,
+                    "mouse_velocity_std": mouse_velocity_std,
+                    "mouse_entropy": mouse_entropy,
+                    "navigation_entropy": navigation_entropy,
+                    "interaction_diversity": interaction_diversity,
+                    "has_natural_pauses": has_natural_pauses,
+                    "has_erratic_movement": has_erratic_movement,
+                    "has_perfect_timing": has_perfect_timing,
+                    "keypress_count": keypress_count,
+                    "unique_action_types": n_unique_actions,
+                    "action_rate": action_rate,
                 }
             )
 
