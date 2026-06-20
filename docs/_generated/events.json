@@ -10,7 +10,8 @@
     "commerce",
     "wallet",
     "agent",
-    "x402"
+    "x402",
+    "reward"
   ],
   "consent_purposes": [
     "agent",
@@ -327,6 +328,30 @@
       "section_comment": "Agent lifecycle \u2014 granular events"
     },
     {
+      "name": "reward_action_queued",
+      "family": "reward",
+      "consent_purpose": "commerce",
+      "section_comment": "Reward enablement (A6) \u2014 eligibility events emitted by Aether, not the tenant"
+    },
+    {
+      "name": "reward_proof_generated",
+      "family": "reward",
+      "consent_purpose": "commerce",
+      "section_comment": "Reward enablement (A6) \u2014 eligibility events emitted by Aether, not the tenant"
+    },
+    {
+      "name": "reward_delivered",
+      "family": "reward",
+      "consent_purpose": "commerce",
+      "section_comment": "Reward enablement (A6) \u2014 eligibility events emitted by Aether, not the tenant"
+    },
+    {
+      "name": "reward_claim_submitted",
+      "family": "reward",
+      "consent_purpose": "commerce",
+      "section_comment": "Reward enablement (A6) \u2014 eligibility events emitted by Aether, not the tenant"
+    },
+    {
       "name": "x402_payment",
       "family": "x402",
       "consent_purpose": "commerce",
@@ -415,6 +440,288 @@
       "family": "x402",
       "consent_purpose": "commerce",
       "section_comment": "x402 lifecycle \u2014 granular events"
+    },
+    {
+      "name": "agentic_account_observed",
+      "family": "agent",
+      "consent_purpose": "agent",
+      "section_comment": "Agentic observability family \u2014 account / MCP / tool"
+    },
+    {
+      "name": "agentic_account_connected_observed",
+      "family": "agent",
+      "consent_purpose": "agent",
+      "section_comment": "Agentic observability family \u2014 account / MCP / tool"
+    },
+    {
+      "name": "agentic_account_disconnected_observed",
+      "family": "agent",
+      "consent_purpose": "agent",
+      "section_comment": "Agentic observability family \u2014 account / MCP / tool"
+    },
+    {
+      "name": "agent_budget_observed",
+      "family": "agent",
+      "consent_purpose": "agent",
+      "section_comment": "Agentic observability family \u2014 account / MCP / tool"
+    },
+    {
+      "name": "agent_budget_changed_observed",
+      "family": "agent",
+      "consent_purpose": "agent",
+      "section_comment": "Agentic observability family \u2014 account / MCP / tool"
+    },
+    {
+      "name": "agent_permission_observed",
+      "family": "agent",
+      "consent_purpose": "agent",
+      "section_comment": "Agentic observability family \u2014 account / MCP / tool"
+    },
+    {
+      "name": "agent_mcp_connection_observed",
+      "family": "agent",
+      "consent_purpose": "agent",
+      "section_comment": "Agentic observability family \u2014 account / MCP / tool"
+    },
+    {
+      "name": "agent_tool_observed",
+      "family": "agent",
+      "consent_purpose": "agent",
+      "section_comment": "Agentic observability family \u2014 account / MCP / tool"
+    },
+    {
+      "name": "agent_tool_invocation_observed",
+      "family": "agent",
+      "consent_purpose": "agent",
+      "section_comment": "Agentic observability family \u2014 account / MCP / tool"
+    },
+    {
+      "name": "agent_activity_observed",
+      "family": "agent",
+      "consent_purpose": "agent",
+      "section_comment": "Agentic observability family \u2014 account / MCP / tool"
+    },
+    {
+      "name": "agent_risk_signal_observed",
+      "family": "agent",
+      "consent_purpose": "agent",
+      "section_comment": "Agentic observability family \u2014 account / MCP / tool"
+    },
+    {
+      "name": "agent_notification_observed",
+      "family": "agent",
+      "consent_purpose": "agent",
+      "section_comment": "Agentic observability family \u2014 account / MCP / tool"
+    },
+    {
+      "name": "agent_strategy_observed",
+      "family": "agent",
+      "consent_purpose": "agent",
+      "section_comment": "Agentic observability family \u2014 Robinhood-style trading observation"
+    },
+    {
+      "name": "agent_trade_intent_observed",
+      "family": "agent",
+      "consent_purpose": "agent",
+      "section_comment": "Agentic observability family \u2014 Robinhood-style trading observation"
+    },
+    {
+      "name": "agent_trade_order_observed",
+      "family": "agent",
+      "consent_purpose": "agent",
+      "section_comment": "Agentic observability family \u2014 Robinhood-style trading observation"
+    },
+    {
+      "name": "agent_trade_fill_observed",
+      "family": "agent",
+      "consent_purpose": "agent",
+      "section_comment": "Agentic observability family \u2014 Robinhood-style trading observation"
+    },
+    {
+      "name": "agent_trade_rejection_observed",
+      "family": "agent",
+      "consent_purpose": "agent",
+      "section_comment": "Agentic observability family \u2014 Robinhood-style trading observation"
+    },
+    {
+      "name": "agent_position_observed",
+      "family": "agent",
+      "consent_purpose": "agent",
+      "section_comment": "Agentic observability family \u2014 Robinhood-style trading observation"
+    },
+    {
+      "name": "agent_portfolio_snapshot_observed",
+      "family": "agent",
+      "consent_purpose": "agent",
+      "section_comment": "Agentic observability family \u2014 Robinhood-style trading observation"
+    },
+    {
+      "name": "agent_performance_snapshot_observed",
+      "family": "agent",
+      "consent_purpose": "agent",
+      "section_comment": "Agentic observability family \u2014 Robinhood-style trading observation"
+    },
+    {
+      "name": "agent_disconnect_observed",
+      "family": "agent",
+      "consent_purpose": "agent",
+      "section_comment": "Agentic observability family \u2014 Robinhood-style trading observation"
+    },
+    {
+      "name": "agent_inbox_observed",
+      "family": "agent",
+      "consent_purpose": "agent",
+      "section_comment": "Agentic observability family \u2014 AgentMail-style communication observation"
+    },
+    {
+      "name": "agent_email_address_observed",
+      "family": "agent",
+      "consent_purpose": "agent",
+      "section_comment": "Agentic observability family \u2014 AgentMail-style communication observation"
+    },
+    {
+      "name": "agent_thread_observed",
+      "family": "agent",
+      "consent_purpose": "agent",
+      "section_comment": "Agentic observability family \u2014 AgentMail-style communication observation"
+    },
+    {
+      "name": "agent_message_received_observed",
+      "family": "agent",
+      "consent_purpose": "agent",
+      "section_comment": "Agentic observability family \u2014 AgentMail-style communication observation"
+    },
+    {
+      "name": "agent_message_sent_observed",
+      "family": "agent",
+      "consent_purpose": "agent",
+      "section_comment": "Agentic observability family \u2014 AgentMail-style communication observation"
+    },
+    {
+      "name": "agent_reply_observed",
+      "family": "agent",
+      "consent_purpose": "agent",
+      "section_comment": "Agentic observability family \u2014 AgentMail-style communication observation"
+    },
+    {
+      "name": "agent_attachment_observed",
+      "family": "agent",
+      "consent_purpose": "agent",
+      "section_comment": "Agentic observability family \u2014 AgentMail-style communication observation"
+    },
+    {
+      "name": "agent_attachment_parsed_observed",
+      "family": "agent",
+      "consent_purpose": "agent",
+      "section_comment": "Agentic observability family \u2014 AgentMail-style communication observation"
+    },
+    {
+      "name": "agent_otp_detected_observed",
+      "family": "agent",
+      "consent_purpose": "agent",
+      "section_comment": "Agentic observability family \u2014 AgentMail-style communication observation"
+    },
+    {
+      "name": "agent_invoice_detected_observed",
+      "family": "agent",
+      "consent_purpose": "agent",
+      "section_comment": "Agentic observability family \u2014 AgentMail-style communication observation"
+    },
+    {
+      "name": "agent_receipt_detected_observed",
+      "family": "agent",
+      "consent_purpose": "agent",
+      "section_comment": "Agentic observability family \u2014 AgentMail-style communication observation"
+    },
+    {
+      "name": "agent_calendar_intent_observed",
+      "family": "agent",
+      "consent_purpose": "agent",
+      "section_comment": "Agentic observability family \u2014 AgentMail-style communication observation"
+    },
+    {
+      "name": "agent_support_route_observed",
+      "family": "agent",
+      "consent_purpose": "agent",
+      "section_comment": "Agentic observability family \u2014 AgentMail-style communication observation"
+    },
+    {
+      "name": "agent_semantic_search_observed",
+      "family": "agent",
+      "consent_purpose": "agent",
+      "section_comment": "Agentic observability family \u2014 AgentMail-style communication observation"
+    },
+    {
+      "name": "agent_data_extraction_observed",
+      "family": "agent",
+      "consent_purpose": "agent",
+      "section_comment": "Agentic observability family \u2014 AgentMail-style communication observation"
+    },
+    {
+      "name": "x402_resource_request_observed",
+      "family": "x402",
+      "consent_purpose": "agent",
+      "section_comment": "x402 protocol observation family (from external observer perspective)"
+    },
+    {
+      "name": "x402_challenge_observed",
+      "family": "x402",
+      "consent_purpose": "agent",
+      "section_comment": "x402 protocol observation family (from external observer perspective)"
+    },
+    {
+      "name": "x402_payment_requirement_observed",
+      "family": "x402",
+      "consent_purpose": "agent",
+      "section_comment": "x402 protocol observation family (from external observer perspective)"
+    },
+    {
+      "name": "x402_signature_observed",
+      "family": "x402",
+      "consent_purpose": "agent",
+      "section_comment": "x402 protocol observation family (from external observer perspective)"
+    },
+    {
+      "name": "x402_verification_observed",
+      "family": "x402",
+      "consent_purpose": "agent",
+      "section_comment": "x402 protocol observation family (from external observer perspective)"
+    },
+    {
+      "name": "x402_settlement_observed",
+      "family": "x402",
+      "consent_purpose": "agent",
+      "section_comment": "x402 protocol observation family (from external observer perspective)"
+    },
+    {
+      "name": "x402_resource_access_observed",
+      "family": "x402",
+      "consent_purpose": "agent",
+      "section_comment": "x402 protocol observation family (from external observer perspective)"
+    },
+    {
+      "name": "x402_resource_access_denied_observed",
+      "family": "x402",
+      "consent_purpose": "agent",
+      "section_comment": "x402 protocol observation family (from external observer perspective)"
+    },
+    {
+      "name": "x402_failure_observed",
+      "family": "x402",
+      "consent_purpose": "agent",
+      "section_comment": "x402 protocol observation family (from external observer perspective)"
+    },
+    {
+      "name": "x402_replay_risk_observed",
+      "family": "x402",
+      "consent_purpose": "agent",
+      "section_comment": "x402 protocol observation family (from external observer perspective)"
+    },
+    {
+      "name": "x402_provider_observed",
+      "family": "x402",
+      "consent_purpose": "agent",
+      "section_comment": "x402 protocol observation family (from external observer perspective)"
     }
   ]
 }

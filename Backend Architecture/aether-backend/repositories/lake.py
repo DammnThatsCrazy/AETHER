@@ -9,12 +9,19 @@ Silver: Validated, deduplicated, entity-normalized records
 Gold: Business metrics, ML features, intelligence highlights
 
 All tiers use the same BaseRepository pattern (asyncpg in prod, in-memory local).
+
+Provenance policy:
+- Every Bronze record carries provenance_status, license_status, and quarantine_status.
+- Records without a valid license are automatically quarantined.
+- Quarantined records are blocked from Silver promotion.
+- Gold records carry a lineage_id linking back to their Bronze source manifests.
 """
 
 from __future__ import annotations
 
 import hashlib
 import uuid
+from enum import Enum
 from typing import Any, Optional
 
 from repositories.repos import BaseRepository
@@ -22,6 +29,51 @@ from shared.common.common import utc_now
 from shared.logger.logger import get_logger, metrics
 
 logger = get_logger("aether.lake")
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# PROVENANCE ENUMS
+# ═══════════════════════════════════════════════════════════════════════════
+
+class ProvenanceStatus(str, Enum):
+    VALID = "valid"
+    MISSING_LICENSE = "missing_license"
+    MISSING_TERMS_REVIEW = "missing_terms_review"
+    MISSING_COMMERCIAL_USE_REVIEW = "missing_commercial_use_review"
+    MISSING_MODEL_TRAINING_REVIEW = "missing_model_training_review"
+    MISSING_SOURCE_ID = "missing_source_id"
+    UNVERIFIED = "unverified"
+    QUARANTINED = "quarantined"
+    REVOKED = "revoked"
+    DISABLED = "disabled"
+
+
+def _compute_provenance_status(
+    license_status: str,
+    terms_status: str,
+    provider_record_id: str,
+) -> ProvenanceStatus:
+    """Derive provenance status. Fail-conservative — any gap → quarantine."""
+    if not provider_record_id:
+        return ProvenanceStatus.MISSING_SOURCE_ID
+    if license_status in ("unknown", "missing", "pending_review"):
+        return ProvenanceStatus.MISSING_LICENSE
+    if terms_status in ("unknown", "missing", "pending_review"):
+        return ProvenanceStatus.MISSING_TERMS_REVIEW
+    _CLEAR_LICENSE_STATUSES = {"valid", "public_api", "open_license", "enterprise_contract"}
+    _CLEAR_TERMS_STATUSES = {"approved", "public_api", "open_license", "enterprise_contract", "valid"}
+    if license_status in _CLEAR_LICENSE_STATUSES and terms_status in _CLEAR_TERMS_STATUSES:
+        return ProvenanceStatus.VALID
+    return ProvenanceStatus.UNVERIFIED
+
+
+def _compute_quarantine_status(provenance_status: ProvenanceStatus, license_status: str) -> str:
+    """Quarantine if provenance is not VALID or license is missing/unknown."""
+    if provenance_status != ProvenanceStatus.VALID:
+        return "quarantined"
+    if license_status in ("unknown", "missing", "pending_review"):
+        return "quarantined"
+    return "not_quarantined"
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -37,14 +89,35 @@ def make_raw_record(
     entity_id: Optional[str] = None,
     entity_type: Optional[str] = None,
     tenant_id: str = "",
+    # Provenance fields
+    provenance_status: str = ProvenanceStatus.UNVERIFIED.value,
+    license_status: str = "unknown",
+    terms_status: str = "unknown",
+    commercial_use_status: str = "unknown",
+    model_training_status: str = "unknown",
+    olympus_owned_source: bool = False,
+    source_manifest_id: Optional[str] = None,
+    sensitivity_classification: str = "unclassified",
 ) -> dict:
-    """Create a canonical raw record with required audit fields."""
+    """Create a canonical raw record with required audit fields and provenance envelope."""
     now = utc_now().isoformat()
     # tenant_id is included so two tenants with the same provider_record_id
     # are never considered duplicates.
     idempotency_key = hashlib.sha256(
         f"{tenant_id}:{source}:{provider_record_id}:{schema_version}".encode()
     ).hexdigest()[:32]
+
+    raw_payload_hash = hashlib.sha256(
+        str(payload).encode()
+    ).hexdigest()
+
+    # Derive provenance from provided statuses
+    prov_status = ProvenanceStatus(provenance_status) if provenance_status in ProvenanceStatus._value2member_map_ else ProvenanceStatus.UNVERIFIED
+    if prov_status == ProvenanceStatus.UNVERIFIED:
+        prov_status = _compute_provenance_status(license_status, terms_status, provider_record_id)
+
+    quarantine_status = _compute_quarantine_status(prov_status, license_status)
+
     return {
         "id": str(uuid.uuid4()),
         "source": source,
@@ -59,6 +132,17 @@ def make_raw_record(
         "ingested_at": now,
         "created_at": now,
         "updated_at": now,
+        # Provenance envelope
+        "provenance_status": prov_status.value,
+        "license_status": license_status,
+        "terms_status": terms_status,
+        "commercial_use_status": commercial_use_status,
+        "model_training_status": model_training_status,
+        "olympus_owned_source": olympus_owned_source,
+        "source_manifest_id": source_manifest_id or "",
+        "raw_payload_hash": raw_payload_hash,
+        "sensitivity_classification": sensitivity_classification,
+        "quarantine_status": quarantine_status,
     }
 
 
@@ -87,8 +171,21 @@ class BronzeRepository(BaseRepository):
         entity_id: Optional[str] = None,
         entity_type: Optional[str] = None,
         tenant_id: str = "",
+        # Provenance fields
+        provenance_status: str = ProvenanceStatus.UNVERIFIED.value,
+        license_status: str = "unknown",
+        terms_status: str = "unknown",
+        commercial_use_status: str = "unknown",
+        model_training_status: str = "unknown",
+        olympus_owned_source: bool = False,
+        source_manifest_id: Optional[str] = None,
+        sensitivity_classification: str = "unclassified",
     ) -> tuple[dict, bool]:
         """Ingest a raw record. Idempotent — skips duplicates.
+
+        Provenance is computed from license_status and terms_status.
+        Records with missing license are automatically quarantined and
+        blocked from Silver promotion.
 
         Returns (record, is_new) where is_new is True for fresh inserts and
         False when the record already existed (duplicate).
@@ -102,7 +199,23 @@ class BronzeRepository(BaseRepository):
             entity_id=entity_id,
             entity_type=entity_type,
             tenant_id=tenant_id,
+            provenance_status=provenance_status,
+            license_status=license_status,
+            terms_status=terms_status,
+            commercial_use_status=commercial_use_status,
+            model_training_status=model_training_status,
+            olympus_owned_source=olympus_owned_source,
+            source_manifest_id=source_manifest_id,
+            sensitivity_classification=sensitivity_classification,
         )
+
+        if record.get("quarantine_status") == "quarantined":
+            metrics.increment("lake_bronze_quarantined", labels={"source": source})
+            logger.warning(
+                f"Bronze record quarantined: source={source} "
+                f"provenance={record.get('provenance_status')} "
+                f"license={license_status}"
+            )
 
         # Idempotency check — always scoped by tenant_id to prevent cross-tenant collision
         existing = await self.find_many(
@@ -171,6 +284,27 @@ class SilverRepository(BaseRepository):
         super().__init__(f"silver_{domain}")
         self._domain = domain
 
+    @staticmethod
+    def check_promotion_eligibility(bronze_record: dict) -> tuple[bool, str]:
+        """Check if a Bronze record is eligible for Silver promotion.
+
+        Blocks promotion if:
+        - quarantine_status == "quarantined"
+        - provenance_status not in {valid}
+
+        Returns (eligible, reason).
+        """
+        quarantine = bronze_record.get("quarantine_status", "quarantined")
+        if quarantine == "quarantined":
+            prov = bronze_record.get("provenance_status", "unverified")
+            return False, f"quarantined_bronze_blocked_silver_promotion provenance={prov}"
+
+        prov_status = bronze_record.get("provenance_status", "unverified")
+        if prov_status != ProvenanceStatus.VALID.value:
+            return False, f"provenance_not_valid provenance={prov_status}"
+
+        return True, "eligible"
+
     async def upsert_record(
         self,
         entity_id: str,
@@ -180,8 +314,19 @@ class SilverRepository(BaseRepository):
         normalized: dict,
         bronze_id: str = "",
         tenant_id: str = "",
+        bronze_record: Optional[dict] = None,
     ) -> dict:
-        """Upsert a normalized record. Merges with existing entity data."""
+        """Upsert a normalized record. Merges with existing entity data.
+
+        Silver promotion is blocked if the originating Bronze record is quarantined
+        or has invalid provenance. Pass bronze_record to enforce this gate.
+        """
+        if bronze_record is not None:
+            eligible, reason = self.check_promotion_eligibility(bronze_record)
+            if not eligible:
+                metrics.increment("lake_silver_promotion_blocked", labels={"source": source})
+                raise ValueError(f"Silver promotion blocked: {reason}")
+
         record_id = hashlib.sha256(f"{tenant_id}:{entity_type}:{entity_id}:{source}".encode()).hexdigest()[:24]
 
         existing = await self.find_by_id(record_id)
@@ -249,8 +394,15 @@ class GoldRepository(BaseRepository):
         dimensions: Optional[dict] = None,
         source_tag: str = "",
         tenant_id: str = "",
+        lineage_id: Optional[str] = None,
+        source_manifest_ids: Optional[list] = None,
+        model_training_eligible: bool = False,
     ) -> dict:
-        """Materialize a metric/feature/highlight into Gold."""
+        """Materialize a metric/feature/highlight into Gold.
+
+        lineage_id links this Gold record back to its Bronze source manifests
+        and data rights grants for audit, revocation, and compliance.
+        """
         record_id = hashlib.sha256(
             f"{metric_name}:{entity_id}:{entity_type}".encode()
         ).hexdigest()[:24]
@@ -264,6 +416,9 @@ class GoldRepository(BaseRepository):
             "source_tag": source_tag,
             "tenant_id": tenant_id,
             "materialized_at": utc_now().isoformat(),
+            "lineage_id": lineage_id or "",
+            "source_manifest_ids": source_manifest_ids or [],
+            "model_training_eligible": model_training_eligible,
         }
 
         existing = await self.find_by_id(record_id)
@@ -368,3 +523,7 @@ gold_ad_spend = GoldRepository("ad_spend")
 gold_credit_signals = GoldRepository("credit_signals")
 gold_tradfi_portfolio = GoldRepository("tradfi_portfolio")
 gold_web3_daily_metrics = GoldRepository("web3_daily_metrics")
+
+# Connector events — Bronze-only; connector sync events land here before flowing
+# to the intelligence workers (no Silver/Gold tier; same consumer path as sdk_events).
+bronze_connectors = BronzeRepository("connector_events")

@@ -81,6 +81,38 @@ CANONICAL_EVENT_TYPES: frozenset[str] = frozenset({
     "x402_payment_intent_created", "x402_payment_submitted", "x402_payment_settled",
     "x402_payment_failed", "x402_payment_timeout", "x402_receipt_verified",
     "x402_access_granted", "x402_access_denied", "x402_refund_or_reversal",
+    # reward enablement (A6) — eligibility events emitted by Aether, not the tenant
+    "reward_action_queued", "reward_proof_generated",
+    "reward_delivered", "reward_claim_submitted",
+    # Agentic observability — account / MCP / tool
+    "agentic_account_observed", "agentic_account_connected_observed",
+    "agentic_account_disconnected_observed", "agent_budget_observed",
+    "agent_budget_changed_observed", "agent_permission_observed",
+    "agent_mcp_connection_observed", "agent_tool_observed",
+    "agent_tool_invocation_observed", "agent_activity_observed",
+    "agent_risk_signal_observed", "agent_notification_observed",
+    # Agentic observability — Robinhood-style trading observation
+    "agent_strategy_observed", "agent_trade_intent_observed",
+    "agent_trade_order_observed", "agent_trade_fill_observed",
+    "agent_trade_rejection_observed", "agent_position_observed",
+    "agent_portfolio_snapshot_observed", "agent_performance_snapshot_observed",
+    "agent_disconnect_observed",
+    # Agentic observability — AgentMail-style communication observation
+    "agent_inbox_observed", "agent_email_address_observed",
+    "agent_thread_observed", "agent_message_received_observed",
+    "agent_message_sent_observed", "agent_reply_observed",
+    "agent_attachment_observed", "agent_attachment_parsed_observed",
+    "agent_otp_detected_observed", "agent_invoice_detected_observed",
+    "agent_receipt_detected_observed", "agent_calendar_intent_observed",
+    "agent_support_route_observed", "agent_semantic_search_observed",
+    "agent_data_extraction_observed",
+    # x402 protocol observation family (from external observer perspective)
+    "x402_resource_request_observed", "x402_challenge_observed",
+    "x402_payment_requirement_observed", "x402_signature_observed",
+    "x402_verification_observed", "x402_settlement_observed",
+    "x402_resource_access_observed", "x402_resource_access_denied_observed",
+    "x402_failure_observed", "x402_replay_risk_observed",
+    "x402_provider_observed",
 })
 
 # Required consent purpose per event family (mirror of EVENT_CONSENT_PURPOSE)
@@ -121,6 +153,38 @@ EVENT_CONSENT_PURPOSE: dict[str, str] = {
     "x402_payment_failed": "commerce", "x402_payment_timeout": "commerce",
     "x402_receipt_verified": "commerce", "x402_access_granted": "commerce",
     "x402_access_denied": "commerce", "x402_refund_or_reversal": "commerce",
+    # reward enablement (A6)
+    "reward_action_queued": "commerce", "reward_proof_generated": "commerce",
+    "reward_delivered": "commerce", "reward_claim_submitted": "commerce",
+    # Agentic observability — account / MCP / tool
+    "agentic_account_observed": "agent", "agentic_account_connected_observed": "agent",
+    "agentic_account_disconnected_observed": "agent", "agent_budget_observed": "agent",
+    "agent_budget_changed_observed": "agent", "agent_permission_observed": "agent",
+    "agent_mcp_connection_observed": "agent", "agent_tool_observed": "agent",
+    "agent_tool_invocation_observed": "agent", "agent_activity_observed": "agent",
+    "agent_risk_signal_observed": "agent", "agent_notification_observed": "agent",
+    # Agentic observability — Robinhood-style trading observation
+    "agent_strategy_observed": "agent", "agent_trade_intent_observed": "agent",
+    "agent_trade_order_observed": "agent", "agent_trade_fill_observed": "agent",
+    "agent_trade_rejection_observed": "agent", "agent_position_observed": "agent",
+    "agent_portfolio_snapshot_observed": "agent", "agent_performance_snapshot_observed": "agent",
+    "agent_disconnect_observed": "agent",
+    # Agentic observability — AgentMail-style communication observation
+    "agent_inbox_observed": "agent", "agent_email_address_observed": "agent",
+    "agent_thread_observed": "agent", "agent_message_received_observed": "agent",
+    "agent_message_sent_observed": "agent", "agent_reply_observed": "agent",
+    "agent_attachment_observed": "agent", "agent_attachment_parsed_observed": "agent",
+    "agent_otp_detected_observed": "agent", "agent_invoice_detected_observed": "agent",
+    "agent_receipt_detected_observed": "agent", "agent_calendar_intent_observed": "agent",
+    "agent_support_route_observed": "agent", "agent_semantic_search_observed": "agent",
+    "agent_data_extraction_observed": "agent",
+    # x402 protocol observation family
+    "x402_resource_request_observed": "agent", "x402_challenge_observed": "agent",
+    "x402_payment_requirement_observed": "agent", "x402_signature_observed": "agent",
+    "x402_verification_observed": "agent", "x402_settlement_observed": "agent",
+    "x402_resource_access_observed": "agent", "x402_resource_access_denied_observed": "agent",
+    "x402_failure_observed": "agent", "x402_replay_risk_observed": "agent",
+    "x402_provider_observed": "agent",
 }
 
 # Backend-side sensitive field patterns — scrub even if SDK missed them.
@@ -153,6 +217,7 @@ class EventContext(BaseModel):
     timezone: Optional[str] = None
     userAgent: Optional[str] = None
     ip: Optional[str] = None
+    consent: Optional[dict[str, Any]] = None
 
 
 class BaseEvent(BaseModel):
@@ -178,6 +243,10 @@ class BaseEvent(BaseModel):
 class BatchRequest(BaseModel):
     batch: list[BaseEvent] = Field(..., min_length=1, max_length=500)
     sentAt: str = Field(..., description="ISO8601 batch send timestamp")
+    consents: list[str] = Field(
+        default_factory=list,
+        description="Consent scopes granted by the user for this batch (e.g. analytics, commerce, web3, agent)",
+    )
     context: Optional[dict[str, Any]] = None
 
     @field_validator("sentAt")
@@ -234,6 +303,8 @@ async def ingest_batch(
 
     metrics.increment("ingestion_batch_received_total", labels={"tenant_id": tenant.tenant_id})
 
+    granted_consents: frozenset[str] = frozenset(body.consents)
+
     for sdk_event in body.batch:
         result = await _process_single_event(
             sdk_event=sdk_event,
@@ -241,6 +312,7 @@ async def ingest_batch(
             batch_id=batch_id,
             received_at=received_at,
             cache=registry.cache,
+            granted_consents=granted_consents,
         )
         results.append(result)
         if result.status == "accepted":
@@ -289,12 +361,28 @@ async def ingest_batch(
     # Run after Bronze durability is confirmed. Resolution errors never fail
     # ingestion — events are already durable and recoverable via recompute.
     if accepted_raw:
-        import asyncio
+        import asyncio as _asyncio
         resolver = get_identity_resolver()
         for normalized in accepted_raw:
-            asyncio.ensure_future(
+            task = _asyncio.create_task(
                 _resolve_identity_safe(resolver, normalized, tenant.tenant_id)
             )
+
+            def _log_task_exc(
+                t: "_asyncio.Task",
+                _tid: str = tenant.tenant_id,
+                _eid: str = normalized.get("event_id", ""),
+            ) -> None:
+                if t.cancelled():
+                    return
+                exc = t.exception()
+                if exc:
+                    logger.error(
+                        "Identity resolution task failed event=%s tenant=%s: %s",
+                        _eid, _tid, exc,
+                    )
+
+            task.add_done_callback(_log_task_exc)
 
     # ── Atomic idempotency claim AFTER Bronze write, BEFORE bus publish ───
     # Build a lookup from event_id → index in results so we can update in-place.
@@ -384,6 +472,7 @@ async def _process_single_event(
     batch_id: str,
     received_at: str,
     cache: CacheClient,
+    granted_consents: frozenset[str] = frozenset(),
 ) -> EventResult:
     """Validate, check idempotency, and return per-event status."""
 
@@ -396,7 +485,34 @@ async def _process_single_event(
             reason=f"unknown_event_type:{sdk_event.type}",
         )
 
-    # 2. Sensitive field scrubbing on properties (backend defense)
+    # 1b. Consent gate — only block when consent is explicitly denied for the required purpose
+    if sdk_event.type != "consent":
+        required_purpose = EVENT_CONSENT_PURPOSE.get(sdk_event.type)
+        if required_purpose:
+            consent_obj = None
+            if sdk_event.context:
+                consent_obj = getattr(sdk_event.context, "consent", None)
+                if consent_obj is None and getattr(sdk_event.context, "model_extra", None):
+                    consent_obj = sdk_event.context.model_extra.get("consent")
+            if consent_obj is not None and isinstance(consent_obj, dict):
+                if consent_obj.get(required_purpose) is False:
+                    metrics.increment("ingestion_consent_blocked_total", labels={"purpose": required_purpose})
+                    return EventResult(
+                        id=sdk_event.id,
+                        status="rejected",
+                        reason=f"consent_denied:{required_purpose}",
+                    )
+
+    # 2a. Observe-only invariant: reject any event claiming AETHER executed
+    if sdk_event.properties and sdk_event.properties.get("execution_by_aether") is True:
+        metrics.increment("ingestion_validation_failed_total", labels={"reason": "execution_by_aether"})
+        return EventResult(
+            id=sdk_event.id,
+            status="rejected",
+            reason="execution_by_aether_must_be_false",
+        )
+
+    # 2b. Sensitive field scrubbing on properties (backend defense)
     if sdk_event.properties:
         scrubbed, had_sensitive = _scrub_sensitive_fields(sdk_event.properties)
         if had_sensitive:
@@ -408,7 +524,17 @@ async def _process_single_event(
             # Mutate in-place so downstream uses scrubbed payload
             sdk_event.properties = scrubbed
 
-    # 3. Tenant-scoped idempotency check
+    # 3. Consent check (before Bronze write)
+    required_consent = EVENT_CONSENT_PURPOSE.get(sdk_event.type)
+    if required_consent and required_consent not in granted_consents:
+        metrics.increment("ingestion_validation_failed_total", labels={"reason": "consent_missing"})
+        return EventResult(
+            id=sdk_event.id,
+            status="rejected",
+            reason=f"consent_required:{required_consent}",
+        )
+
+    # 4. Tenant-scoped idempotency check
     idempotency_key = _make_idempotency_key(tenant_id, sdk_event.id, SCHEMA_VERSION)
     cache_key = f"aether:idempotency:{idempotency_key}"
 
@@ -484,7 +610,59 @@ def _get_event_family(event_type: str) -> str:
         "access_granted": "commerce", "access_denied": "commerce",
         "wallet": "wallet", "transaction": "wallet", "contract_action": "wallet",
         "agent_task": "agent", "agent_decision": "agent", "a2h_interaction": "agent",
+        # agent lifecycle granular
+        "agent_registered": "agent", "agent_updated": "agent",
+        "agent_authorized": "agent", "agent_deauthorized": "agent",
+        "agent_capability_granted": "agent", "agent_capability_revoked": "agent",
+        "agent_task_created": "agent", "agent_task_decomposed": "agent",
+        "agent_task_started": "agent", "agent_task_completed": "agent",
+        "agent_task_failed": "agent", "agent_tool_called": "agent",
+        "agent_resource_requested": "agent", "agent_delegated_task": "agent",
+        "agent_subagent_spawned": "agent", "agent_policy_evaluated": "agent",
+        "agent_handoff": "agent", "agent_escalated_to_human": "agent",
+        "agent_outcome_recorded": "agent",
+        # agentic observability — account/MCP/tool
+        "agentic_account_observed": "agent", "agentic_account_connected_observed": "agent",
+        "agentic_account_disconnected_observed": "agent", "agent_budget_observed": "agent",
+        "agent_budget_changed_observed": "agent", "agent_permission_observed": "agent",
+        "agent_mcp_connection_observed": "agent", "agent_tool_observed": "agent",
+        "agent_tool_invocation_observed": "agent", "agent_activity_observed": "agent",
+        "agent_risk_signal_observed": "agent", "agent_notification_observed": "agent",
+        # agentic observability — Robinhood-style trading observation
+        "agent_strategy_observed": "agent", "agent_trade_intent_observed": "agent",
+        "agent_trade_order_observed": "agent", "agent_trade_fill_observed": "agent",
+        "agent_trade_rejection_observed": "agent", "agent_position_observed": "agent",
+        "agent_portfolio_snapshot_observed": "agent", "agent_performance_snapshot_observed": "agent",
+        "agent_disconnect_observed": "agent",
+        # agentic observability — AgentMail-style communication observation
+        "agent_inbox_observed": "agent", "agent_email_address_observed": "agent",
+        "agent_thread_observed": "agent", "agent_message_received_observed": "agent",
+        "agent_message_sent_observed": "agent", "agent_reply_observed": "agent",
+        "agent_attachment_observed": "agent", "agent_attachment_parsed_observed": "agent",
+        "agent_otp_detected_observed": "agent", "agent_invoice_detected_observed": "agent",
+        "agent_receipt_detected_observed": "agent", "agent_calendar_intent_observed": "agent",
+        "agent_support_route_observed": "agent", "agent_semantic_search_observed": "agent",
+        "agent_data_extraction_observed": "agent",
+        # x402 legacy
         "x402_payment": "x402",
+        # x402 lifecycle granular
+        "x402_payment_initiated": "x402", "x402_payment_authorized": "x402",
+        "x402_authorization_requested": "x402", "x402_authorization_resolved": "x402",
+        "x402_payment_intent_created": "x402", "x402_payment_submitted": "x402",
+        "x402_payment_settled": "x402", "x402_payment_failed": "x402",
+        "x402_payment_timeout": "x402", "x402_receipt_verified": "x402",
+        "x402_access_granted": "x402", "x402_access_denied": "x402",
+        "x402_refund_or_reversal": "x402",
+        # x402 protocol observation
+        "x402_resource_request_observed": "x402", "x402_challenge_observed": "x402",
+        "x402_payment_requirement_observed": "x402", "x402_signature_observed": "x402",
+        "x402_verification_observed": "x402", "x402_settlement_observed": "x402",
+        "x402_resource_access_observed": "x402", "x402_resource_access_denied_observed": "x402",
+        "x402_failure_observed": "x402", "x402_replay_risk_observed": "x402",
+        "x402_provider_observed": "x402",
+        # reward
+        "reward_action_queued": "reward", "reward_proof_generated": "reward",
+        "reward_delivered": "reward", "reward_claim_submitted": "reward",
     }
     return _FAMILY_MAP.get(event_type, "core")
 

@@ -102,6 +102,34 @@ logger = get_logger("aether.service.intelligence")
 router = APIRouter(prefix="/v1/intelligence", tags=["Intelligence"])
 kyber_admin_router = APIRouter(prefix="/v1/admin/kyber", tags=["Admin — Kyber Strategic Observability"])
 
+# Anti-distillation: imported lazily at use site to avoid circular init
+_anti_distillation_service = None
+
+
+def _get_anti_distillation():
+    global _anti_distillation_service
+    if _anti_distillation_service is None and settings.provider_corpus.anti_distillation_enabled:
+        from services.security.anti_distillation import anti_distillation_service
+        _anti_distillation_service = anti_distillation_service
+    return _anti_distillation_service
+
+
+def _check_anti_distillation(request: Request, entity_id: str, endpoint: str):
+    """Run anti-distillation check when the feature flag is on. Raises on honeypot."""
+    svc = _get_anti_distillation()
+    if svc is None:
+        return
+    tenant_id = getattr(getattr(request.state, "tenant", None), "tenant_id", "unknown")
+    result = svc.check_query_pattern(tenant_id, endpoint, {"entity_id": entity_id, "address": entity_id})
+    if result.is_suspicious and result.pattern_type == "honeypot_wallet_query":
+        from shared.common.common import ForbiddenError
+        raise ForbiddenError("Access denied")
+    if result.is_suspicious:
+        logger.warning(
+            f"Anti-distillation: suspicious pattern tenant={tenant_id} endpoint={endpoint}",
+            extra={"entity_id": entity_id, "pattern": result.pattern_type},
+        )
+
 
 @router.get("/wallet/{address}/risk")
 async def wallet_risk_score(address: str, request: Request):
@@ -110,6 +138,7 @@ async def wallet_risk_score(address: str, request: Request):
     Returns composite risk from fraud, identity, and behavioral components.
     """
     request.state.tenant.require_permission("read")
+    _check_anti_distillation(request, address, "wallet_risk_score")
 
     registry = get_registry()
     scorer = TrustScoreComposite()
@@ -225,6 +254,7 @@ async def wallet_profile(address: str, request: Request):
     Full wallet intelligence profile combining risk, features, graph, and identity.
     """
     request.state.tenant.require_permission("read")
+    _check_anti_distillation(request, address, "wallet_profile")
 
     registry = get_registry()
 

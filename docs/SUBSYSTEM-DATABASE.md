@@ -12,7 +12,7 @@ source_files:
 canonical_owner: backend@aether
 estimated_read_minutes: 5
 toc_depth: 3
-last_synced_commit: c318952
+last_synced_commit: a80ab95
 ---
 
 # PostgreSQL / Repository Subsystem
@@ -100,6 +100,7 @@ Tables are created automatically on first access. No migration tool is required 
 | `governance` | `gold_governance` | DAO governance records |
 | `tradfi` | `gold_tradfi` | TradFi raw data |
 | `sdk_events` | — | Bronze + Silver tiers for `POST /v1/batch` SDK event ingestion (no Gold; consumed by intelligence workers) |
+| `connector_events` | — | Bronze-only tier for `ConnectorService.sync()` pulled events (`bronze_connectors` in `repositories/lake.py`); no Silver/Gold — same consumer path as `sdk_events` |
 | `dune` | `DuneGoldRepository` | Bronze→Silver→Gold Dune API data with per-row SHA-256 provenance, quality scoring, and idempotent Gold materialization (`DuneBronzeRepository`, `DuneSilverRepository`, `DuneGoldRepository` in `repositories/repos.py`) |
 
 **Intelligence surface repos** (Gold only, consumed by `IntelligenceAggregator`):
@@ -119,9 +120,11 @@ Tables are created automatically on first access. No migration tool is required 
 | `gold_tradfi_portfolio` | Plaid | `/web2` (credit consent required) |
 | `gold_web3_daily_metrics` | DeFiLlama | `/protocol-metrics` |
 
-`BronzeRepository.ingest()` returns `(record, is_new: bool)` — callers use the boolean to distinguish new inserts from duplicates without a separate read. `SilverRepository.upsert_record()` includes `tenant_id` in the `record_id` hash (`SHA256(tenant_id:entity_type:entity_id:source)[:24]`) to prevent cross-tenant data collisions.
+`BronzeRepository.ingest()` returns `(record, is_new: bool)` — callers use the boolean to distinguish new inserts from duplicates without a separate read. Bronze records carry a provenance envelope: `provenance_status`, `license_status`, `terms_status`, `commercial_use_status`, `model_training_status`, `quarantine_status`, and `raw_payload_hash` (SHA-256 of raw payload). Records with `license_status="missing"` or `provenance_status` not equal to `VALID` are automatically set to `quarantine_status="quarantined"`. Cleared license statuses (`valid`, `public_api`, `open_license`, `enterprise_contract`) combined with cleared terms statuses (`approved`, `public_api`, `open_license`, `enterprise_contract`, `valid`) yield `provenance_status=VALID` and bypass quarantine.
 
-Gold records use `GoldRepository.materialize(metric_name, entity_id, value, dimensions)`.
+`SilverRepository.upsert_record()` includes `tenant_id` in the `record_id` hash (`SHA256(tenant_id:entity_type:entity_id:source)[:24]`) to prevent cross-tenant data collisions. `SilverRepository.check_promotion_eligibility(bronze_record)` enforces the promotion gate: quarantined Bronze records cannot be promoted to Silver (returns `(False, reason)` with the blocking reason).
+
+Gold records use `GoldRepository.materialize(metric_name, entity_id, value, dimensions)` with optional `lineage_id`, `source_manifest_ids`, and `model_training_eligible` parameters that attach enrichment lineage to Gold artifacts.
 The `IntelligenceAggregator` queries via `get_metrics(entity_id)` and applies
 `?window=30d|60d|90d|lifetime` filtering on the `materialized_at` timestamp.
 

@@ -227,11 +227,44 @@ jobs:
       - name: Circular dependency check (madge)
         run: npm run deps:circular
 
+      - name: Secret scanning
+        run: npm run security:secrets
+
+      - name: Dependency audit
+        run: npm run security:deps
+
+  e2e-tenant:
+    needs: typescript
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install Node dependencies
+        run: npm ci --ignore-scripts
+
+      - name: Build workspace packages
+        run: |
+          npm run build --workspace=packages/shared
+          npm run build --workspace=packages/web
+
+      - name: Install Playwright browsers
+        run: npx playwright install --with-deps chromium
+
+      - name: Run tenant onboarding E2E tests
+        run: cd frontend/aether && npm run e2e
+        env:
+          CI: true
+
   validate:
     # Aggregate gate: required-status check for branch protection rules.
     # Passes only when all dependent jobs pass (or skip via path filter).
     # pr-size is advisory only — it runs independently and never blocks this gate.
-    needs: [lint-docs, python-tests, ml-tests, typescript]
+    needs: [lint-docs, python-tests, ml-tests, typescript, e2e-tenant]
     if: always()
     runs-on: ubuntu-latest
     env:
@@ -239,6 +272,7 @@ jobs:
       PYTHON_TESTS_RESULT: ${{ needs.python-tests.result }}
       TYPESCRIPT_RESULT:   ${{ needs.typescript.result }}
       ML_TESTS_RESULT:     ${{ needs.ml-tests.result }}
+      E2E_TENANT_RESULT:   ${{ needs.e2e-tenant.result }}
     steps:
       - name: Check job results
         run: |
@@ -249,7 +283,8 @@ jobs:
             "$LINT_DOCS_RESULT" \
             "$PYTHON_TESTS_RESULT" \
             "$TYPESCRIPT_RESULT" \
-            "$ML_TESTS_RESULT"; do
+            "$ML_TESTS_RESULT" \
+            "$E2E_TENANT_RESULT"; do
             if [ "$result" = "cancelled" ]; then
               echo "Jobs cancelled — superseded by a newer run. Skipping."; exit 0
             fi
@@ -266,5 +301,8 @@ jobs:
           # ml-tests is allowed to skip via path filter
           if [ "$ML_TESTS_RESULT" != "success" ] && [ "$ML_TESTS_RESULT" != "skipped" ]; then
             echo "ml-tests failed: $ML_TESTS_RESULT"; exit 1
+          fi
+          if [ "$E2E_TENANT_RESULT" != "success" ]; then
+            echo "e2e-tenant failed: $E2E_TENANT_RESULT"; exit 1
           fi
           echo "All required jobs passed."

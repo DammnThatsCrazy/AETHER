@@ -13,7 +13,8 @@ export * from './entities';
 export * from './commerce';
 export * from './agent';
 export * from './x402-lifecycle';
-export * from './events';
+export * from './events'; // includes reward enablement event types (A6)
+export * from './agentic-observability'; // agentic observability contracts
 export * from './capabilities';
 export * from './economic';
 export * from './economic-metrics';
@@ -34,3 +35,5 @@ export * from './solution-packages';
 export * from './gtm-pricing';
 export * from './customer-onboarding';
 export * from './security-governance';
+export * from './suggestions';
+export * from './connector-taxonomy';

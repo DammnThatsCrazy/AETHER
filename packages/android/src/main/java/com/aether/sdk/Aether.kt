@@ -100,6 +100,8 @@ object Aether : DefaultLifecycleObserver {
     private const val MAX_QUEUE_SIZE = 500
     private const val SESSION_TIMEOUT_MS = 30 * 60 * 1000L // 30 min
 
+    private var healthAgent: AetherHealthAgent? = null
+
     private var sessionId: String = UUID.randomUUID().toString()
     private var anonymousId: String = ""
     private var userId: String? = null
@@ -146,6 +148,9 @@ object Aether : DefaultLifecycleObserver {
         "x402_payment_failed" to "commerce", "x402_payment_timeout" to "commerce",
         "x402_receipt_verified" to "commerce", "x402_access_granted" to "commerce",
         "x402_access_denied" to "commerce", "x402_refund_or_reversal" to "commerce",
+        // reward enablement (A6)
+        "reward_action_queued" to "commerce", "reward_proof_generated" to "commerce",
+        "reward_delivered" to "commerce", "reward_claim_submitted" to "commerce",
         "wallet" to "web3", "transaction" to "web3", "contract_action" to "web3",
         // Agent — legacy + lifecycle
         "agent_task" to "agent", "agent_decision" to "agent", "a2h_interaction" to "agent",
@@ -158,7 +163,36 @@ object Aether : DefaultLifecycleObserver {
         "agent_resource_requested" to "agent", "agent_delegated_task" to "agent",
         "agent_subagent_spawned" to "agent", "agent_policy_evaluated" to "agent",
         "agent_handoff" to "agent", "agent_escalated_to_human" to "agent",
-        "agent_outcome_recorded" to "agent"
+        "agent_outcome_recorded" to "agent",
+        // Agentic observability — account / MCP / tool
+        "agentic_account_observed" to "agent", "agentic_account_connected_observed" to "agent",
+        "agentic_account_disconnected_observed" to "agent", "agent_budget_observed" to "agent",
+        "agent_budget_changed_observed" to "agent", "agent_permission_observed" to "agent",
+        "agent_mcp_connection_observed" to "agent", "agent_tool_observed" to "agent",
+        "agent_tool_invocation_observed" to "agent", "agent_activity_observed" to "agent",
+        "agent_risk_signal_observed" to "agent", "agent_notification_observed" to "agent",
+        // Agentic observability — Robinhood-style trading observation
+        "agent_strategy_observed" to "agent", "agent_trade_intent_observed" to "agent",
+        "agent_trade_order_observed" to "agent", "agent_trade_fill_observed" to "agent",
+        "agent_trade_rejection_observed" to "agent", "agent_position_observed" to "agent",
+        "agent_portfolio_snapshot_observed" to "agent", "agent_performance_snapshot_observed" to "agent",
+        "agent_disconnect_observed" to "agent",
+        // Agentic observability — AgentMail-style communication observation
+        "agent_inbox_observed" to "agent", "agent_email_address_observed" to "agent",
+        "agent_thread_observed" to "agent", "agent_message_received_observed" to "agent",
+        "agent_message_sent_observed" to "agent", "agent_reply_observed" to "agent",
+        "agent_attachment_observed" to "agent", "agent_attachment_parsed_observed" to "agent",
+        "agent_otp_detected_observed" to "agent", "agent_invoice_detected_observed" to "agent",
+        "agent_receipt_detected_observed" to "agent", "agent_calendar_intent_observed" to "agent",
+        "agent_support_route_observed" to "agent", "agent_semantic_search_observed" to "agent",
+        "agent_data_extraction_observed" to "agent",
+        // x402 protocol observation family
+        "x402_resource_request_observed" to "agent", "x402_challenge_observed" to "agent",
+        "x402_payment_requirement_observed" to "agent", "x402_signature_observed" to "agent",
+        "x402_verification_observed" to "agent", "x402_settlement_observed" to "agent",
+        "x402_resource_access_observed" to "agent", "x402_resource_access_denied_observed" to "agent",
+        "x402_failure_observed" to "agent", "x402_replay_risk_observed" to "agent",
+        "x402_provider_observed" to "agent"
     )
     private val CANONICAL_EVENT_TYPES = EVENT_CONSENT_PURPOSE.keys
     private val dateFormat = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", Locale.US).apply {
@@ -204,6 +238,30 @@ object Aether : DefaultLifecycleObserver {
 
         isInitialized = true
         log("Aether Android SDK initialized (v$VERSION)")
+
+        loadPersistedQueue()
+
+        // Health agent: fleet heartbeat + manifest fetch
+        val hAgent = AetherHealthAgent(
+            endpoint = config.endpoint,
+            apiKey = config.apiKey,
+            platform = "android",
+            appVersion = try { application.packageManager.getPackageInfo(application.packageName, 0).versionName ?: "" } catch (_: Exception) { "" },
+            prefs = prefs
+        )
+        hAgent.getDynamicState = {
+            Triple(
+                eventQueue.size,
+                "analytics" in consentState,
+                walletAddress != null
+            )
+        }
+        healthAgent = hAgent
+        if (config.privacy.gdprMode) {
+            if ("analytics" in consentState) hAgent.start()
+        } else {
+            hAgent.start()
+        }
 
         fetchConfig()
         emitSessionStart(application.applicationContext)
@@ -343,6 +401,42 @@ object Aether : DefaultLifecycleObserver {
     fun flush() {
         scope.launch { sendBatch() }
     }
+
+    // =========================================================================
+    // DURABLE QUEUE PERSISTENCE
+    // =========================================================================
+
+    private fun queueFile() = context?.filesDir?.resolve("aether_event_queue.json")
+
+    private fun persistQueue() {
+        try {
+            val file = queueFile() ?: return
+            val items = eventQueue.toList()
+            if (items.isEmpty()) { file.delete(); return }
+            val toSave = items.takeLast(1000)
+            val array = org.json.JSONArray(toSave.map { it.toString() })
+            file.writeText(array.toString())
+        } catch (_: Exception) {}
+    }
+
+    private fun loadPersistedQueue() {
+        try {
+            val file = queueFile() ?: return
+            if (!file.exists()) return
+            val text = file.readText()
+            file.delete()
+            val array = org.json.JSONArray(text)
+            val capacity = maxOf(0, MAX_QUEUE_SIZE - eventQueue.size)
+            val count = minOf(array.length(), capacity)
+            for (i in 0 until count) {
+                try {
+                    eventQueue.add(JSONObject(array.getString(i)))
+                } catch (_: Exception) {}
+            }
+        } catch (_: Exception) {}
+    }
+
+    private fun clearPersistedQueue() { queueFile()?.delete() }
 
     fun handleDeepLink(url: String) {
         try {
@@ -505,6 +599,10 @@ object Aether : DefaultLifecycleObserver {
         consentState = consentState.distinct().toMutableList()
         prefs?.edit()?.putStringSet("consentState", consentState.toSet())?.apply()
         enqueueEvent("consent", mapOf("action" to "grant", "categories" to categories))
+        // Start health agent when analytics consent is granted in GDPR mode (post-init opt-in flow)
+        if (config?.privacy?.gdprMode == true && "analytics" in categories) {
+            healthAgent?.start()
+        }
     }
 
     fun revokeConsent(categories: List<String>) {
@@ -588,6 +686,54 @@ object Aether : DefaultLifecycleObserver {
         enqueueEvent("x402_payment", properties + mapOf("paymentId" to paymentId, "amount" to amount, "currency" to currency, "network" to network))
     }
 
+    // Agent Lifecycle (Granular)
+    fun agentRegistered(agentId: String, properties: Map<String, Any?> = emptyMap()) = enqueueEvent("agent_registered", properties + mapOf("agentId" to agentId))
+    fun agentUpdated(agentId: String, properties: Map<String, Any?> = emptyMap()) = enqueueEvent("agent_updated", properties + mapOf("agentId" to agentId))
+    fun agentAuthorized(agentId: String, delegationId: String? = null, properties: Map<String, Any?> = emptyMap()) = enqueueEvent("agent_authorized", properties + mapOf("agentId" to agentId, "delegationId" to delegationId))
+    fun agentDeauthorized(agentId: String, properties: Map<String, Any?> = emptyMap()) = enqueueEvent("agent_deauthorized", properties + mapOf("agentId" to agentId))
+    fun agentCapabilityGranted(agentId: String, capability: String, properties: Map<String, Any?> = emptyMap()) = enqueueEvent("agent_capability_granted", properties + mapOf("agentId" to agentId, "capability" to capability))
+    fun agentCapabilityRevoked(agentId: String, capability: String, properties: Map<String, Any?> = emptyMap()) = enqueueEvent("agent_capability_revoked", properties + mapOf("agentId" to agentId, "capability" to capability))
+    fun agentTaskCreated(taskId: String, actorId: String, properties: Map<String, Any?> = emptyMap()) = enqueueEvent("agent_task_created", properties + mapOf("taskId" to taskId, "actorId" to actorId))
+    fun agentTaskDecomposed(taskId: String, properties: Map<String, Any?> = emptyMap()) = enqueueEvent("agent_task_decomposed", properties + mapOf("taskId" to taskId))
+    fun agentTaskStarted(taskId: String, properties: Map<String, Any?> = emptyMap()) = enqueueEvent("agent_task_started", properties + mapOf("taskId" to taskId))
+    fun agentTaskCompleted(taskId: String, properties: Map<String, Any?> = emptyMap()) = enqueueEvent("agent_task_completed", properties + mapOf("taskId" to taskId))
+    fun agentTaskFailed(taskId: String, reason: String? = null, properties: Map<String, Any?> = emptyMap()) = enqueueEvent("agent_task_failed", properties + mapOf("taskId" to taskId, "reason" to reason))
+    fun agentToolCalled(taskId: String, tool: String, properties: Map<String, Any?> = emptyMap()) = enqueueEvent("agent_tool_called", properties + mapOf("taskId" to taskId, "tool" to tool))
+    fun agentResourceRequested(resourceId: String, properties: Map<String, Any?> = emptyMap()) = enqueueEvent("agent_resource_requested", properties + mapOf("resourceId" to resourceId))
+    fun agentDelegatedTask(taskId: String, toAgentId: String, properties: Map<String, Any?> = emptyMap()) = enqueueEvent("agent_delegated_task", properties + mapOf("taskId" to taskId, "toAgentId" to toAgentId))
+    fun agentSubagentSpawned(parentId: String, childId: String, properties: Map<String, Any?> = emptyMap()) = enqueueEvent("agent_subagent_spawned", properties + mapOf("parentId" to parentId, "childId" to childId))
+    fun agentPolicyEvaluated(policyId: String, outcome: String, properties: Map<String, Any?> = emptyMap()) = enqueueEvent("agent_policy_evaluated", properties + mapOf("policyId" to policyId, "outcome" to outcome))
+    fun agentHandoff(fromId: String, toId: String, properties: Map<String, Any?> = emptyMap()) = enqueueEvent("agent_handoff", properties + mapOf("fromId" to fromId, "toId" to toId))
+    fun agentEscalatedToHuman(taskId: String, reason: String? = null, properties: Map<String, Any?> = emptyMap()) = enqueueEvent("agent_escalated_to_human", properties + mapOf("taskId" to taskId, "reason" to reason))
+    fun agentOutcomeRecorded(taskId: String, outcome: String, properties: Map<String, Any?> = emptyMap()) = enqueueEvent("agent_outcome_recorded", properties + mapOf("taskId" to taskId, "outcome" to outcome))
+
+    // x402 Lifecycle (Granular)
+    fun x402ResourceRequested(resourceId: String, properties: Map<String, Any?> = emptyMap()) = enqueueEvent("x402_resource_requested", properties + mapOf("resourceId" to resourceId))
+    fun x402PaymentRequired(resourceId: String, amount: Double, currency: String, properties: Map<String, Any?> = emptyMap()) = enqueueEvent("x402_payment_required", properties + mapOf("resourceId" to resourceId, "amount" to amount, "currency" to currency))
+    fun x402QuoteReceived(quoteId: String, properties: Map<String, Any?> = emptyMap()) = enqueueEvent("x402_quote_received", properties + mapOf("quoteId" to quoteId))
+    fun x402AuthorizationRequested(paymentId: String, properties: Map<String, Any?> = emptyMap()) = enqueueEvent("x402_authorization_requested", properties + mapOf("paymentId" to paymentId))
+    fun x402AuthorizationResolved(paymentId: String, authorized: Boolean, properties: Map<String, Any?> = emptyMap()) = enqueueEvent("x402_authorization_resolved", properties + mapOf("paymentId" to paymentId, "authorized" to authorized))
+    fun x402PaymentIntentCreated(intentId: String, properties: Map<String, Any?> = emptyMap()) = enqueueEvent("x402_payment_intent_created", properties + mapOf("intentId" to intentId))
+    fun x402PaymentSubmitted(paymentId: String, properties: Map<String, Any?> = emptyMap()) = enqueueEvent("x402_payment_submitted", properties + mapOf("paymentId" to paymentId))
+    fun x402PaymentSettled(paymentId: String, properties: Map<String, Any?> = emptyMap()) = enqueueEvent("x402_payment_settled", properties + mapOf("paymentId" to paymentId))
+    fun x402PaymentFailed(paymentId: String, reason: String? = null, properties: Map<String, Any?> = emptyMap()) = enqueueEvent("x402_payment_failed", properties + mapOf("paymentId" to paymentId, "reason" to reason))
+    fun x402PaymentTimeout(paymentId: String, properties: Map<String, Any?> = emptyMap()) = enqueueEvent("x402_payment_timeout", properties + mapOf("paymentId" to paymentId))
+    fun x402ReceiptVerified(receiptId: String, properties: Map<String, Any?> = emptyMap()) = enqueueEvent("x402_receipt_verified", properties + mapOf("receiptId" to receiptId))
+    fun x402AccessGranted(resourceId: String, properties: Map<String, Any?> = emptyMap()) = enqueueEvent("x402_access_granted", properties + mapOf("resourceId" to resourceId))
+    fun x402AccessDenied(resourceId: String, reason: String? = null, properties: Map<String, Any?> = emptyMap()) = enqueueEvent("x402_access_denied", properties + mapOf("resourceId" to resourceId, "reason" to reason))
+    fun x402RefundOrReversal(paymentId: String, properties: Map<String, Any?> = emptyMap()) = enqueueEvent("x402_refund_or_reversal", properties + mapOf("paymentId" to paymentId))
+
+    // Rewards (Thin Observation Emitters)
+    fun rewardActionQueued(campaignId: String, ruleId: String, properties: Map<String, Any?> = emptyMap()) = enqueueEvent("reward_action_queued", properties + mapOf("campaignId" to campaignId, "ruleId" to ruleId))
+    fun rewardProofGenerated(campaignId: String, proofId: String, properties: Map<String, Any?> = emptyMap()) = enqueueEvent("reward_proof_generated", properties + mapOf("campaignId" to campaignId, "proofId" to proofId))
+    fun rewardDelivered(campaignId: String, rewardId: String, properties: Map<String, Any?> = emptyMap()) = enqueueEvent("reward_delivered", properties + mapOf("campaignId" to campaignId, "rewardId" to rewardId))
+    fun rewardClaimSubmitted(campaignId: String, claimId: String, properties: Map<String, Any?> = emptyMap()) = enqueueEvent("reward_claim_submitted", properties + mapOf("campaignId" to campaignId, "claimId" to claimId))
+
+    // Ecommerce Additions
+    fun trackRemoveFromCart(item: Map<String, Any?>) = enqueueEvent("track", item + mapOf("event" to "product_removed"))
+    fun trackApplyCoupon(couponCode: String, properties: Map<String, Any?> = emptyMap()) = enqueueEvent("track", properties + mapOf("event" to "coupon_applied", "couponCode" to couponCode))
+    fun trackBeginCheckout(cartValue: Double, currency: String = "USD", properties: Map<String, Any?> = emptyMap()) = enqueueEvent("conversion", properties + mapOf("event" to "checkout_started", "cartValue" to cartValue, "currency" to currency))
+
     // =========================================================================
     // FEATURE FLAGS
     // =========================================================================
@@ -620,6 +766,7 @@ object Aether : DefaultLifecycleObserver {
     }
 
     override fun onStop(owner: LifecycleOwner) {
+        persistQueue()
         val now = SystemClock.elapsedRealtime()
         lastActivityMs = now
         val sessionDurationMs = if (foregroundStartMs > 0) now - foregroundStartMs else 0L
@@ -702,38 +849,56 @@ object Aether : DefaultLifecycleObserver {
                 put("sentAt", dateFormat.format(Date()))
             }
 
+            val sendStart = System.currentTimeMillis()
             connection.outputStream.use { it.write(payload.toString().toByteArray()) }
             val responseCode = connection.responseCode
+            val latencyMs = (System.currentTimeMillis() - sendStart).toDouble()
             connection.disconnect()
 
             when {
+                responseCode in 200..299 -> {
+                    healthAgent?.recordBatchAttempt(true, latencyMs)
+                    clearPersistedQueue()
+                }
                 responseCode == 429 -> {
                     val retryAfterSec = connection.getHeaderField("Retry-After")?.toLongOrNull() ?: 5L
                     if (retryCount < maxRetries) {
+                        healthAgent?.recordRetry()
                         delay(retryAfterSec * 1000)
                         sendBatchWithRetry(batch, cfg, retryCount + 1)
                     } else {
+                        healthAgent?.recordBatchAttempt(false, latencyMs)
+                        healthAgent?.recordDroppedEvents(batch.size)
                         log("Batch dropped after $maxRetries retries (rate limited)")
                     }
                 }
                 responseCode >= 500 -> {
                     if (retryCount < maxRetries) {
+                        healthAgent?.recordRetry()
                         val backoff = minOf(1000L * (1L shl retryCount), 30000L)
                         delay(backoff)
                         sendBatchWithRetry(batch, cfg, retryCount + 1)
                     } else {
+                        healthAgent?.recordBatchAttempt(false, latencyMs)
+                        healthAgent?.recordDroppedEvents(batch.size)
                         log("Batch dropped after $maxRetries retries (server error $responseCode)")
                     }
                 }
-                responseCode >= 400 -> log("Batch rejected (client error $responseCode) — not retrying")
+                responseCode >= 400 -> {
+                    healthAgent?.recordBatchAttempt(false, latencyMs)
+                    log("Batch rejected (client error $responseCode) — not retrying")
+                }
             }
         } catch (e: Exception) {
             log("Batch send failed: ${e.message}")
             if (retryCount < maxRetries) {
+                healthAgent?.recordRetry()
                 val backoff = minOf(1000L * (1L shl retryCount), 30000L)
                 delay(backoff)
                 sendBatchWithRetry(batch, cfg, retryCount + 1)
             } else {
+                healthAgent?.recordBatchAttempt(false, 0.0)
+                healthAgent?.recordDroppedEvents(batch.size)
                 // Permanent failure — re-enqueue for next flush cycle
                 batch.forEach { eventQueue.add(it) }
             }
@@ -880,6 +1045,17 @@ object Aether : DefaultLifecycleObserver {
                 put("platform", "android")
                 if (userId != null) put("user_id", userId)
                 if (!email.isNullOrBlank()) put("email_hash", sha256(email))
+                // fingerprint_signals omitted in GDPR mode until analytics consent is granted
+                if (config?.privacy?.gdprMode != true || "analytics" in consentState) {
+                    put("fingerprint_signals", org.json.JSONObject().apply {
+                        put("android_id", android.provider.Settings.Secure.getString(context?.contentResolver, android.provider.Settings.Secure.ANDROID_ID) ?: "")
+                        put("model", android.os.Build.MODEL)
+                        put("manufacturer", android.os.Build.MANUFACTURER)
+                        put("os_version", android.os.Build.VERSION.RELEASE)
+                        put("locale", java.util.Locale.getDefault().toString())
+                        put("timezone", java.util.TimeZone.getDefault().id)
+                    })
+                }
             }
 
             connection.outputStream.use { it.write(body.toString().toByteArray()) }

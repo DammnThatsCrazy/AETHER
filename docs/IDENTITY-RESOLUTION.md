@@ -12,7 +12,7 @@ source_files:
 canonical_owner: identity@aether
 estimated_read_minutes: 12
 toc_depth: 3
-last_synced_commit: c318952
+last_synced_commit: 7d2672c
 ---
 # Aether Identity Resolution v8.9.0 — Technical Guide
 
@@ -206,7 +206,10 @@ Production routes are served under `/v1/identity/` by `services/identity/routes.
 | `/v1/identity/merge` | POST | Operator merge (requires operator scope) |
 | `/v1/identity/split` | POST | Operator split / rollback |
 | `/v1/identity/recompute` | POST | Recompute identity from stored signals |
-| `/v1/identity/health` | GET | Resolver health |
+| `/v1/identity/health` | GET | Resolver health (DB ping, total entities, open conflicts, queue depth) |
+| `/v1/identity/suppress` | POST | Suppress an identifier hash — revokes matching aliases + blocks future resolution (`write` permission) |
+| `/v1/identity/suppress/{suppression_id}` | DELETE | Revoke a suppression rule (`write` permission) |
+| `/v1/identity/suppressions` | GET | List active suppression rules for tenant |
 | `/v1/identity/profiles/{user_id}` | GET/PUT | Legacy profile read/write (backwards-compatible) |
 | `/v1/identity/profiles/{user_id}/graph` | GET | Legacy profile graph (backwards-compatible) |
 | `/v1/identity/siwx/bind` | POST | SIWX session binding |

@@ -107,14 +107,43 @@ Routes:
     POST /v1/attribution/touchpoints    Record touchpoint
     GET  /v1/attribution/journey/{id}   User journey
     GET  /v1/attribution/models         List attribution models
-    POST /v1/rewards/evaluate           Evaluate reward eligibility
-    POST /v1/rewards/campaigns          Create reward campaign
-    GET  /v1/rewards/campaigns          List reward campaigns
-    GET  /v1/rewards/campaigns/{id}     Get campaign details
-    GET  /v1/rewards/queue/stats        Reward queue stats
-    GET  /v1/rewards/user/{address}     User reward history
-    POST /v1/rewards/process            Process reward queue
-    GET  /v1/rewards/proof/{id}         Get reward proof
+    POST /v1/rewards/evaluate               Evaluate reward eligibility (A6)
+    POST /v1/rewards/evaluate/batch         Batch evaluate (max 50)
+    GET  /v1/rewards/decisions              List eligibility decisions
+    GET  /v1/rewards/decisions/{id}         Get decision
+    POST /v1/rewards/campaigns              Create reward campaign
+    GET  /v1/rewards/campaigns              List reward campaigns
+    GET  /v1/rewards/campaigns/{id}         Get campaign
+    PATCH /v1/rewards/campaigns/{id}        Update campaign
+    POST /v1/rewards/campaigns/{id}/pause   Pause campaign
+    POST /v1/rewards/campaigns/{id}/resume  Resume campaign
+    POST /v1/rewards/campaigns/{id}/archive Archive campaign
+    POST /v1/rewards/campaigns/{id}/rules   Add rule to campaign
+    GET  /v1/rewards/campaigns/{id}/rules   List rules in campaign
+    GET  /v1/rewards/rules/{id}             Get rule
+    PATCH /v1/rewards/rules/{id}            Update rule
+    POST /v1/rewards/rules/{id}/enable      Enable rule
+    POST /v1/rewards/rules/{id}/disable     Disable rule
+    GET  /v1/rewards/actions                List action payloads
+    GET  /v1/rewards/actions/{id}           Get action payload
+    POST /v1/rewards/actions/{id}/approve   Approve pending action
+    POST /v1/rewards/actions/{id}/reject    Reject pending action
+    POST /v1/rewards/actions/{id}/deliver   Deliver action payload
+    POST /v1/rewards/actions/{id}/cancel    Cancel action
+    GET  /v1/rewards/proofs                 List on-chain proofs
+    GET  /v1/rewards/proofs/{id}            Get proof
+    POST /v1/rewards/proofs/{id}/revoke     Revoke proof
+    POST /v1/rewards/proofs/verify          Verify proof
+    POST /v1/rewards/receipts               Record execution receipt
+    GET  /v1/rewards/receipts               List receipts
+    GET  /v1/rewards/receipts/{id}          Get receipt
+    POST /v1/rewards/rails                  Configure delivery rail
+    GET  /v1/rewards/rails                  List configured rails
+    GET  /v1/rewards/rails/{id}             Get rail config
+    PATCH /v1/rewards/rails/{id}            Update rail config
+    POST /v1/rewards/rails/{id}/verify      Verify rail config
+    POST /v1/rewards/rails/{id}/disable     Disable rail
+    GET  /v1/rewards/queue/stats            Legacy queue stats
     POST /v1/oracle/proof/generate      Generate proof (internal)
     POST /v1/oracle/proof/verify        Verify proof
     GET  /v1/oracle/signer              Oracle signer info
@@ -320,6 +349,22 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     else:
         sla_worker_task = asyncio.create_task(asyncio.sleep(0))
 
+    # Dune polling worker — periodic Bronze ingest + Bronze→Silver promotion.
+    dune_poll_task = asyncio.create_task(asyncio.sleep(0))  # placeholder
+    try:
+        from services.integrations.dune_feeder.worker import dune_poll_loop
+        dune_poll_task = asyncio.create_task(dune_poll_loop())
+    except Exception as e:  # pragma: no cover — defensive
+        logger.warning(f"Dune poll worker failed to start: {e}")
+
+    # Retention sweep worker — daily expiry enforcement per tenant policy.
+    retention_sweep_task = asyncio.create_task(asyncio.sleep(0))  # placeholder
+    try:
+        from services.security.retention_worker import retention_sweep_loop
+        retention_sweep_task = asyncio.create_task(retention_sweep_loop())
+    except Exception as e:  # pragma: no cover — defensive
+        logger.warning(f"Retention sweep worker failed to start: {e}")
+
     # Provider Gateway (feature-flagged)
     from dependencies.providers import _init_provider_gateway
     provider_gateway = _init_provider_gateway()
@@ -327,6 +372,15 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         await provider_gateway.startup()
         app.state.provider_gateway = provider_gateway
         logger.info("Provider Gateway initialised")
+
+    # Dune Analytics — scheduled polling worker (asyncio loop, no external deps)
+    dune_poll_task = asyncio.create_task(asyncio.sleep(0))
+    try:
+        from services.dune_feeder.scheduler import start_dune_polling_worker
+        dune_poll_task = asyncio.create_task(start_dune_polling_worker())
+        logger.info("Dune polling worker started")
+    except Exception as e:  # pragma: no cover — defensive
+        logger.warning(f"Dune polling worker skipped: {e}")
 
     logger.info(
         f"Aether Backend started | env={settings.env.value} "
@@ -340,6 +394,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     replay_worker_task.cancel()
     overage_cron_task.cancel()
     sla_worker_task.cancel()
+    dune_poll_task.cancel()
     try:
         await replay_worker_task
     except asyncio.CancelledError:
@@ -350,6 +405,10 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         pass
     try:
         await sla_worker_task
+    except asyncio.CancelledError:
+        pass
+    try:
+        await dune_poll_task
     except asyncio.CancelledError:
         pass
     if provider_gateway:
@@ -541,6 +600,37 @@ def create_app() -> FastAPI:
     app.include_router(dune_feeder_router)
     logger.info("Dune feeder: admin routes mounted (/v1/admin/dune-feeder)")
 
+    # ── Provider Source Catalog (Kyber admin, feature-flagged) ─────────
+    pc = settings.provider_corpus
+    if pc.kyber_provider_source_catalog_enabled:
+        from services.provider_catalog.routes import (
+            providers_router as kyber_providers_router,
+            dune_router as kyber_dune_router,
+            lake_router as kyber_lake_router,
+            features_router as kyber_features_router,
+            intelligence_router as kyber_intelligence_router,
+        )
+        app.include_router(kyber_providers_router)
+        app.include_router(kyber_dune_router)
+        app.include_router(kyber_lake_router)
+        app.include_router(kyber_features_router)
+        app.include_router(kyber_intelligence_router)
+        logger.info("Provider Source Catalog: Kyber admin routes mounted (/v1/admin/kyber/providers + /dune + /lake + /features + /intelligence)")
+    else:
+        logger.info("Provider Source Catalog: disabled (set KYBER_PROVIDER_SOURCE_CATALOG_ENABLED=true to enable)")
+
+    # ── Data Rights Ledger (feature-flagged) ───────────────────────────
+    if pc.connector_data_rights_enabled:
+        from services.integrations.data_rights.routes import (
+            router as data_rights_router,
+            admin_router as data_rights_admin_router,
+        )
+        app.include_router(data_rights_router)
+        app.include_router(data_rights_admin_router)
+        logger.info("Data Rights Ledger: routes mounted (/v1/integrations/data-rights + /v1/admin/kyber/data-rights)")
+    else:
+        logger.info("Data Rights Ledger: disabled (set AETHER_CONNECTOR_DATA_RIGHTS_ENABLED=true to enable)")
+
     # ── Inbound connector ingestion (feature-flagged, master switch) ────
     if settings.connectors.enabled:
         from services.integrations.connectors import (
@@ -578,6 +668,34 @@ def create_app() -> FastAPI:
         app.include_router(entitlements_router)
         app.include_router(commerce_diag_router)
         logger.info("Intelligence Graph: Agentic Commerce control plane (L3b+) mounted")
+
+    # ── Suggestion Intelligence (OODA) ────────────────────────────────────
+    sug = settings.suggestions
+    if sug.enabled:
+        from services.suggestions.routes import (
+            router as suggestions_router,
+            admin_router as suggestions_admin_router,
+            aether_router as suggestions_aether_router,
+        )
+        app.include_router(suggestions_router)
+        if sug.kyber_enabled:
+            app.include_router(suggestions_admin_router)
+        if sug.tenant_enabled:
+            app.include_router(suggestions_aether_router)
+        logger.info("Suggestion Intelligence: routes mounted (/v1/suggestions + /v1/admin/kyber/suggestions + /v1/aether/suggestions)")
+    else:
+        logger.info("Suggestion Intelligence: disabled (set AETHER_SUGGESTIONS_ENABLED=true to enable)")
+
+    # Agentic Observability Layer — observation-only; AETHER never executes.
+    from services.agentic_observability.routes import router as agentic_obs_router
+    from services.protocol_observability.routes import router as protocol_obs_router
+    from services.agent_comm_observability.routes import router as comm_obs_router
+    from services.external_account_observability.routes import router as ext_account_obs_router
+    app.include_router(agentic_obs_router, tags=["Agentic Observability"])
+    app.include_router(protocol_obs_router, tags=["Protocol Observability"])
+    app.include_router(comm_obs_router, tags=["Agent Comm Observability"])
+    app.include_router(ext_account_obs_router, tags=["External Account Observability"])
+    logger.info("Agentic Observability Layer mounted (30 observation routes + 7 Kyber routes)")
 
     return app
 

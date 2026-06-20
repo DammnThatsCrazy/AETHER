@@ -207,3 +207,83 @@ class BYOKKeyVault:
             record.updated_at = _utc_now()
             return True
         return False
+
+    async def rotate_key(
+        self,
+        tenant_id: str,
+        provider_name: str,
+        new_api_key: str,
+        endpoint: Optional[str] = None,
+    ) -> Optional[StoredKey]:
+        """Rotate a BYOK key — re-encrypts under the new key value.
+
+        The new key replaces the existing encrypted_key. The original key
+        is NOT recoverable after rotation. Increments updated_at.
+        Note: BYOK rotation does NOT change any lake/graph/training rights.
+        Those require a separate DataRightsGrant update.
+        """
+        vk = self._vault_key(tenant_id, provider_name)
+        record = self._store.get(vk)
+        if not record:
+            return None
+
+        record.encrypted_key = self._encrypt(new_api_key)
+        record.updated_at = _utc_now()
+        if endpoint is not None:
+            record.endpoint = endpoint
+
+        logger.info(f"BYOK key rotated: tenant={tenant_id} provider={provider_name}")
+        return record
+
+    async def revoke_key(self, tenant_id: str, provider_name: str) -> bool:
+        """Revoke (disable) a BYOK key without deleting the record.
+
+        The key is retained for audit purposes but will not be returned by get_key().
+        Use delete_key() to fully purge.
+        """
+        vk = self._vault_key(tenant_id, provider_name)
+        record = self._store.get(vk)
+        if not record:
+            return False
+
+        record.enabled = False
+        record.updated_at = _utc_now()
+        logger.info(f"BYOK key revoked: tenant={tenant_id} provider={provider_name}")
+        return True
+
+    async def verify_key(self, tenant_id: str, provider_name: str) -> dict:
+        """Verify the BYOK key is stored and active without exposing the key.
+
+        Returns safe metadata only — never the actual key value.
+        Liveness testing (calling the provider) is a separate operation.
+        """
+        vk = self._vault_key(tenant_id, provider_name)
+        record = self._store.get(vk)
+
+        if not record:
+            return {"exists": False, "active": False, "provider_name": provider_name}
+
+        return {
+            "exists": True,
+            "active": record.enabled,
+            "provider_name": record.provider_name,
+            "category": record.category,
+            "has_endpoint_override": bool(record.endpoint),
+            "created_at": record.created_at,
+            "updated_at": record.updated_at,
+        }
+
+    def masked_identifier(self, tenant_id: str, provider_name: str) -> str:
+        """Return a masked representation of the key for display (never the raw key).
+
+        Format: "****<last4>" where last4 comes from a stable hash of the encrypted key.
+        This avoids exposing any key bytes while still being stable across calls.
+        """
+        vk = self._vault_key(tenant_id, provider_name)
+        record = self._store.get(vk)
+        if not record:
+            return "****"
+
+        import hashlib as _hashlib
+        suffix = _hashlib.sha256(record.encrypted_key.encode()).hexdigest()[-4:]
+        return f"****{suffix}"

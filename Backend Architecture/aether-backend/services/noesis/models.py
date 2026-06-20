@@ -23,6 +23,12 @@ SUPPORTED_INTENTS: frozenset[str] = frozenset({
     "health_lookup",
     "campaign_reward_lookup",
     "risk_cluster_lookup",
+    # Suggestion Intelligence (read-only — Noesis may not mutate suggestions)
+    "suggestion_lookup",
+    "suggestion_summary",
+    "suggestion_review_queue",
+    "suggestion_explain",
+    "suggestion_outcome_lookup",
 })
 
 SUPPORTED_ENTITY_TYPES: frozenset[str] = frozenset({
@@ -124,6 +130,11 @@ class QueryPlan(BaseModel):
         "health_lookup",
         "campaign_reward_lookup",
         "risk_cluster_lookup",
+        "suggestion_lookup",
+        "suggestion_summary",
+        "suggestion_review_queue",
+        "suggestion_explain",
+        "suggestion_outcome_lookup",
         "unsupported",
     ]
     target: Optional[str] = None

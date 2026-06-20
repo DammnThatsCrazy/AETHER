@@ -13,7 +13,7 @@ source_files:
 canonical_owner: frontend@aether
 estimated_read_minutes: 35
 toc_depth: 4
-last_synced_commit: f2e391b
+last_synced_commit: 2dc27a2
 ---
 
 # Aether Frontend Architecture & Designer Handoff
@@ -38,6 +38,7 @@ There are two separate frontend applications. **Do not mix them up.**
 - **Geographic Intelligence** view — their users by location
 - **Social Intelligence** panels — their users' social platform presence
 - **Recommendation cards** — pending retargeting / campaign actions for the tenant to approve
+- **Suggestion feed** — OODA-driven prioritised recommendations with helpful/not helpful/dismiss feedback
 - Campaign management, attribution dashboards
 - API key management, plan management, usage metering
 
@@ -49,6 +50,8 @@ There are two separate frontend applications. **Do not mix them up.**
 - Command center — controller management
 - Diagnostics — circuit breakers, error tracking, dependency health
 - Review / approval workflows — human-in-the-loop agent approvals
+- **OODA Suggestion Command Center** — cross-tenant suggestion feed with evidence drawer, policy panel, and outcome tracker
+- **Suggestion review queue** — approve, reject, or suppress suggestions with reason capture
 - Lab — test fixtures and replay
 
 **Shared (`frontend/shared/` — npm package `@aether/ui`):**
@@ -530,6 +533,32 @@ domain re-exports.
 
 **Fixtures** (`src/fixtures/`): `commerce.ts`, `approvals.ts`, `entitlements.ts`,
 `resources.ts`, `settlement.ts` — all support mock/live parity via `isLocalMocked()`.
+
+## Reward Enablement Components (A6, v8.10.0)
+
+Attribution-verified reward eligibility UI. Aether never holds or distributes rewards; these pages surface eligibility decisions and action payloads for tenant systems to execute.
+
+### Aether (tenant) pages — `frontend/aether/src/pages/rewards/`
+
+| Page | Route | Purpose |
+|---|---|---|
+| `campaign-builder-page.tsx` | `/rewards/campaigns/new` | 5-step wizard: basics → attribution model → rules → rail config → review |
+| `decisions-page.tsx` | `/rewards/decisions` | Table of eligible/ineligible/blocked decisions with attribution + fraud summary |
+| `approval-queue-page.tsx` | `/rewards/approvals` | Approve/reject pending manual-approval actions with attribution evidence |
+| `rail-setup-page.tsx` | `/rewards/rails` | Rail configuration wizard with test-connection; supports recommend_only, manual_approval, manual_export, tenant_webhook, onchain_claim |
+
+**No-custody copy rules enforced in UI**: "Verify eligibility" (not "send reward"), "Generate proof for tenant contract" (not "Aether pays"), "Tenant executes reward" (not "Aether distributes").
+
+### Kyber (operator) pages — `frontend/kyber/src/pages/rewards/`
+
+| Page | Route | Purpose |
+|---|---|---|
+| `rewards-health-page.tsx` | `/rewards/health` | System-wide stats: active campaigns, eligible decisions (24h/7d), blocked fraud/consent, pending approvals, webhook delivery failures |
+| `rewards-drilldown-page.tsx` | `/rewards/drilldown` | Per-tenant drilldown: campaigns, decisions, proofs, payloads, audit log |
+
+**API hooks**: `useRewardsHealthStats()` → `GET /v1/admin/kyber/rewards/health`, tenant-scoped data via `useRewardsCampaigns()` / `useRewardDecisions()`.
+
+---
 
 ## Notification Intelligence Components (Kyber, v8.8.0)
 

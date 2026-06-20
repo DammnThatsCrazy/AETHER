@@ -11,7 +11,7 @@ source_files:
 canonical_owner: backend@aether
 estimated_read_minutes: 60
 toc_depth: 3
-last_synced_commit: 7b41c58
+last_synced_commit: 3bb10b6
 
 ---
 # Aether Backend API v8.9.0 — Endpoint Specification
@@ -587,66 +587,299 @@ Returns risk assessment and label for a wallet address.
 
 ---
 
-## Rewards
+## Rewards (A6: Attribution-Verified Reward Enablement)
 
-### GET /v1/rewards/{rewardId}/eligibility
+Aether **verifies reward eligibility** and **produces reward action payloads**. Tenants execute rewards through their own configured rails. Aether does not hold, transfer, or distribute rewards. See `docs/source-of-truth/REWARD_NO_CUSTODY_MODEL.md`.
 
-Checks if a user is eligible for a specific reward.
+### POST /v1/rewards/evaluate
 
-**Query Parameters:** `userId` (required)
-
-**Response:**
-```json
-{
-  "eligible": true,
-  "rewardId": "reward-abc",
-  "reason": "completed_3_transactions",
-  "expiresAt": "2026-04-01T00:00:00Z",
-  "amount": "100",
-  "token": "Aether"
-}
-```
-
-### GET /v1/rewards/{rewardId}/payload
-
-Returns a pre-built transaction payload for on-chain claiming.
-
-**Query Parameters:** `userId` (required), `chainId` (required)
-
-**Response:**
-```json
-{
-  "to": "0xRewardContract...",
-  "data": "0x...",
-  "value": "0",
-  "chainId": 1,
-  "nonce": "abc123",
-  "signature": "0x...",
-  "expiry": 1743868800
-}
-```
-
-### POST /v1/rewards/{rewardId}/claim
-
-Submits an on-chain claim for verification.
+Evaluate a single event for reward eligibility. Returns an eligibility decision and, if eligible, a reward action payload for the tenant's configured rail.
 
 **Request:**
 ```json
 {
-  "txHash": "0xabc123...",
-  "chainId": 1,
-  "userId": "user-123"
+  "event_type": "conversion",
+  "tenant_id": "tenant_acme",
+  "user_id": "user_123",
+  "wallet_address": "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266",
+  "properties": { "channel": "organic", "value": 49.99 },
+  "attribution_result_id": "attr_abc",
+  "fraud_decision_id": "fraud_xyz",
+  "consent_snapshot_id": "cs_001",
+  "idempotency_key": "evt_session_123_conversion"
 }
 ```
 
 **Response:**
 ```json
 {
-  "status": "pending",
-  "claimId": "claim-xyz",
-  "estimatedConfirmation": "2026-03-05T12:05:00Z"
+  "data": {
+    "eligible": true,
+    "decision": "eligible",
+    "decision_reason": "All gates passed",
+    "execution_mode": "recommend_only",
+    "rail": "recommend_only",
+    "campaign_id": "camp_uuid",
+    "rule_id": "rule_uuid",
+    "decision_id": "dec_uuid",
+    "action_payload": {
+      "rail": "recommend_only",
+      "status": "ready",
+      "reward_amount": 25.0,
+      "reward_unit": "USD",
+      "campaign_id": "camp_uuid",
+      "rule_id": "rule_uuid",
+      "decision_id": "dec_uuid"
+    }
+  }
 }
 ```
+
+Decision values: `eligible` | `ineligible` | `needs_review` | `blocked_fraud` | `blocked_consent` | `blocked_identity` | `blocked_wallet_binding` | `blocked_cooldown` | `blocked_cap` | `blocked_budget` | `pending_approval`.
+
+### POST /v1/rewards/evaluate/batch
+
+Evaluate up to 50 events in a single request. Returns an array of decision results with count.
+
+**Request:** Array of evaluate request objects (max 50). Returns HTTP 422 if over limit.
+
+### GET /v1/rewards/decisions
+
+List eligibility decisions for the authenticated tenant. Supports `?decision=eligible&limit=50&offset=0` filters.
+
+### GET /v1/rewards/decisions/{id}
+
+Get a single eligibility decision by ID.
+
+### POST /v1/rewards/campaigns
+
+Create a reward campaign. Campaigns define the scope, attribution model, and budget policy for reward eligibility evaluation.
+
+For `onchain_claim` campaigns, supply `contract_address` and `chain_id` explicitly. If `chain_id` is omitted the campaign record stores no chain preference and the registry gate falls back to `EVM_CHAIN_ID` at evaluation time — do not rely on Pydantic's default of 1 for non-mainnet deployments.
+
+**Request:**
+```json
+{
+  "name": "Q2 Conversion Campaign",
+  "description": "Reward verified conversions from organic channels",
+  "default_rail": "recommend_only",
+  "default_execution_mode": "recommend_only",
+  "attribution_model": "last_touch",
+  "budget_policy": { "observational_limit_usd": 10000 }
+}
+```
+
+### GET /v1/rewards/campaigns
+
+List campaigns for the authenticated tenant.
+
+### GET /v1/rewards/campaigns/{id}
+
+Get a single campaign.
+
+### PATCH /v1/rewards/campaigns/{id}
+
+Update campaign fields. Supports updating name, description, status, budget_policy, attribution_model.
+
+### POST /v1/rewards/campaigns/{id}/pause
+
+Pause a campaign. Paused campaigns produce `ineligible` decisions.
+
+### POST /v1/rewards/campaigns/{id}/resume
+
+Resume a paused campaign.
+
+### POST /v1/rewards/campaigns/{id}/archive
+
+Archive a campaign. Archived campaigns cannot be resumed.
+
+### POST /v1/rewards/campaigns/{id}/rules
+
+Add a reward rule to a campaign. Rules define eligibility criteria, reward metadata, and delivery rail.
+
+**Request:**
+```json
+{
+  "name": "Organic Conversion Reward",
+  "event_types": ["conversion"],
+  "min_attribution_weight": 0.3,
+  "max_fraud_score": 40.0,
+  "reward_amount": 25.0,
+  "reward_unit": "USD",
+  "execution_mode": "recommend_only",
+  "rail": "recommend_only",
+  "cooldown_seconds": 86400,
+  "max_per_user": 1,
+  "priority": 0
+}
+```
+
+### GET /v1/rewards/campaigns/{id}/rules
+
+List rules for a campaign.
+
+### GET /v1/rewards/rules/{id}
+
+Get a single rule.
+
+### PATCH /v1/rewards/rules/{id}
+
+Update a rule. Supports updating thresholds, reward amount, execution_mode, rail, cooldown.
+
+### POST /v1/rewards/rules/{id}/enable
+
+Enable a disabled rule.
+
+### POST /v1/rewards/rules/{id}/disable
+
+Disable an active rule without deleting it.
+
+### GET /v1/rewards/actions
+
+List reward action payloads. Supports `?status=pending_approval&limit=50` filters.
+
+### GET /v1/rewards/actions/{id}
+
+Get a single action payload.
+
+### POST /v1/rewards/actions/{id}/approve
+
+Approve a `pending_approval` action. Transitions status to `approved`. Used with the `manual_approval` rail.
+
+### POST /v1/rewards/actions/{id}/reject
+
+Reject a `pending_approval` action. Transitions status to `rejected`.
+
+### POST /v1/rewards/actions/{id}/deliver
+
+Trigger delivery of a ready action payload (for manual or webhook rails).
+
+### POST /v1/rewards/actions/{id}/cancel
+
+Cancel a pending or ready action.
+
+### GET /v1/rewards/proofs
+
+List on-chain claim proofs for the authenticated tenant.
+
+### GET /v1/rewards/proofs/{id}
+
+Get a single proof including signature, message_hash, nonce, expiry, and proof_format.
+
+### POST /v1/rewards/proofs/{id}/revoke
+
+Revoke a proof before it is used. Records revocation reason in audit log.
+
+### POST /v1/rewards/proofs/verify
+
+Verify a proof server-side. Checks signature, expiry, and chain_id. Does not mark as used.
+
+**Request:**
+```json
+{
+  "proof_id": "proof_uuid",
+  "user": "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266",
+  "signature": "0x...",
+  "message_hash": "0x...",
+  "chain_id": 1
+}
+```
+
+### POST /v1/rewards/receipts
+
+Record an execution receipt after a tenant has executed a reward. Aether stores the receipt for audit and attribution credit.
+
+**Request:**
+```json
+{
+  "decision_id": "dec_uuid",
+  "rail": "onchain_claim",
+  "execution_mode": "onchain_claim",
+  "external_execution_id": "tx_abc",
+  "tx_hash": "0x...",
+  "chain_id": 1,
+  "status": "confirmed",
+  "receipt_payload": {}
+}
+```
+
+### GET /v1/rewards/receipts
+
+List execution receipts for the authenticated tenant.
+
+### GET /v1/rewards/receipts/{id}
+
+Get a single execution receipt.
+
+### POST /v1/rewards/rails
+
+Configure a reward delivery rail for the authenticated tenant.
+
+**Request:**
+```json
+{
+  "rail": "tenant_webhook",
+  "enabled": true,
+  "config": { "timeout_ms": 5000 },
+  "webhook_url": "https://example.com/aether-reward",
+  "secret_ref": "vault://rewards/webhook-secret"
+}
+```
+
+Rails: `recommend_only` | `manual_approval` | `manual_export` | `tenant_webhook` | `onchain_claim`.
+Beta (config only, no delivery): `stripe_credit` | `loyalty_points` | `coupon` | `internal_credit` | `x402_credit`.
+
+### GET /v1/rewards/rails
+
+List configured rails for the authenticated tenant.
+
+### GET /v1/rewards/rails/{id}
+
+Get a single rail configuration.
+
+### PATCH /v1/rewards/rails/{id}
+
+Update a rail configuration.
+
+### POST /v1/rewards/rails/{id}/verify
+
+Trigger verification of a rail configuration (e.g., send a test webhook, verify contract address).
+
+### POST /v1/rewards/rails/{id}/disable
+
+Disable a rail without deleting its configuration.
+
+### POST /v1/rewards/contracts
+
+Register a smart contract for `onchain_claim` proof generation. A verified registry entry is required before any onchain proof can be issued in non-local environments.
+
+Re-registering an existing `(tenant_id, chain_id, contract_address)` updates `oracle_signer_address`, `allowed_campaign_ids`, and `contract_name` and resets `verification_status` to `pending` — a new operator verification is required before proof generation resumes.
+
+`oracle_signer_address` is **required** — set it to the Ethereum address derived from `ORACLE_SIGNER_KEY` (`Account.from_key(key).address`). The `/verify` endpoint rejects registrations where this field does not match the live oracle signer.
+
+**Request:**
+```json
+{
+  "chain_id": 1,
+  "contract_address": "0xYourContract",
+  "contract_name": "AetherRewardEnabler",
+  "oracle_signer_address": "0xOracleAddress",
+  "vm_type": "evm",
+  "allowed_campaign_ids": ["camp_abc"]
+}
+```
+
+### GET /v1/rewards/contracts
+
+List all registered contracts for the authenticated tenant.
+
+### GET /v1/rewards/contracts/{id}
+
+Get a single registered contract by ID.
+
+### POST /v1/rewards/contracts/{id}/verify
+
+**Requires `rewards:admin` (Aether operator only).** Tenants cannot self-verify — an operator must confirm contract ownership before approving. Validates that `oracle_signer_address` matches the current Aether oracle signer (derived from `ORACLE_SIGNER_KEY`) — returns 422 if they diverge. After successful verification the contract satisfies the registry gate in `POST /v1/rewards/evaluate` for `onchain_claim` rails.
 
 ---
 
@@ -795,6 +1028,21 @@ Three service groups are available when Intelligence Graph feature flags are ena
 | GET | `/v1/x402/agent/{id}` | Agent x402 history |
 | POST | `/v1/x402/graph/snapshot` | Trigger graph snapshot rebuild |
 
+### Approvals Control Plane (`/v1/approvals`)
+
+Kyber operator review queue for the x402 commerce control plane. All endpoints require `approvals:read` (GET) or `approvals:write` / `commerce:approve` (POST).
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/v1/approvals` | List approval queue — filterable by `status`, `assigned_to` |
+| GET | `/v1/approvals/{id}` | Get single approval request with full audit trail |
+| POST | `/v1/approvals/{id}/assign` | Assign approval to a reviewer (`assignee_id`, `assigned_by`) |
+| POST | `/v1/approvals/{id}/decide` | Apply decision: `approve`, `reject`, or `escalate` with `reason` and optional `is_override` |
+| POST | `/v1/approvals/{id}/escalate` | Shorthand escalate — calls decide with `action=escalate` |
+| POST | `/v1/approvals/{id}/revoke` | Revoke a previously approved request (`revoked_by`, `reason`) |
+| GET | `/v1/approvals/{id}/evidence` | Evidence bundle: approval audit trail, policy decisions, graph impact |
+| GET | `/v1/approvals/{id}/preview` | Deterministic preview of graph mutations if approved (read-only, no side effects) |
+
 ### Agent Extensions (added to /v1/agent/)
 
 | Method | Endpoint | Description |
@@ -873,6 +1121,7 @@ Feature flag: `PROVIDER_GATEWAY_ENABLED=false` (default). Zero impact until acti
 | POST | `/v1/lake/materialize` | Write Gold metric/feature/highlight |
 | GET | `/v1/lake/gold/{domain}/{entity_id}` | Query Gold metrics for an entity |
 | GET | `/v1/lake/quality/{domain}` | Run data quality checks on a domain's Bronze tier |
+| POST | `/v1/lake/promote` | Promote a source_tag's Silver records into Gold (`admin`) |
 | GET | `/v1/lake/status` | Record counts per domain per tier |
 
 **Domains:** `market`, `onchain`, `social`, `identity`, `governance`, `tradfi`
@@ -905,6 +1154,33 @@ Feature flag: `PROVIDER_GATEWAY_ENABLED=false` (default). Zero impact until acti
 | GET | `/v1/analytics/commerce/kpi` | Commerce KPI summary: spend rate, approval latency, settlement degradation, entitlement reuse rate (`commerce:read`) |
 
 **Query Parameters:** `period` — `"7d"`, `"30d"`, `"90d"`, `"all"` (default: `"30d"`)
+
+---
+
+### Identity Service (v8.9.0)
+
+Core identity resolution and entity management endpoints.
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| POST | `/v1/identity/resolve` | Resolve cross-device/cross-wallet identity from a set of signals — returns canonical entity_id + confidence |
+| GET | `/v1/identity/entities/{entity_id}` | Get full entity record with all linked identifiers |
+| GET | `/v1/identity/entities/{entity_id}/aliases` | List all aliases (wallets, emails, devices, sessions) for an entity |
+| GET | `/v1/identity/entities/{entity_id}/graph` | Entity subgraph (neighbors, edges, relationship types) |
+| GET | `/v1/identity/entities/{entity_id}/audit` | Full audit trail for this entity — merges, splits, signal additions |
+| GET | `/v1/identity/conflicts` | List entities with unresolved identity conflicts (`admin`) |
+| POST | `/v1/identity/merge` | Merge two entities into a single canonical entity (`admin`) |
+| POST | `/v1/identity/split` | Split a merged entity back into its source components (`admin`) |
+| POST | `/v1/identity/recompute` | Trigger a full confidence recomputation for one or all entities (`admin`) |
+| GET | `/v1/identity/health` | Identity resolution subsystem health — DB ping, total entities, open conflicts, queue depth |
+| POST | `/v1/identity/suppress` | Suppress an identifier hash — revokes matching aliases and blocks future resolution (`write`) |
+| DELETE | `/v1/identity/suppress/{suppression_id}` | Revoke an active suppression rule (`write`) |
+| GET | `/v1/identity/suppressions` | List active suppression rules for the authenticated tenant (`read`) |
+| GET | `/v1/identity/profiles/{user_id}` | Get stored profile for a user/entity |
+| PUT | `/v1/identity/profiles/{user_id}` | Upsert profile record for a user/entity |
+| GET | `/v1/identity/profiles/{user_id}/graph` | Profile-scoped graph view (bounded to 50 neighbors) |
+
+**Permissions:** `read` for GET queries; `write` for resolve/profiles; `admin` for merge/split/recompute/conflicts.
 
 ---
 
@@ -1928,6 +2204,102 @@ Event-driven multi-channel operator notification pipeline. Ingests intelligence 
 | GET | `/v1/notifications/config` | Get tenant notification config |
 | PUT | `/v1/notifications/config` | Update config (Slack token stored via vault) |
 
+---
+
+## Kyber ML Admin (v8.9.0)
+
+Operator command center for ML model registry, artifact management, feature contracts, drift monitoring, and readiness gating. All endpoints require `admin` permission.
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/v1/admin/kyber/ml/overview` | ML subsystem health summary — registry status, drift alerts, prediction volume, security posture |
+| GET | `/v1/admin/kyber/ml/models` | List all registered ML models with version, status, and metadata |
+| GET | `/v1/admin/kyber/ml/models/{model_id}` | Full model record — feature contracts, artifact lineage, serving config |
+| GET | `/v1/admin/kyber/ml/artifacts` | List all training artifacts across all models |
+| GET | `/v1/admin/kyber/ml/artifacts/{model_id}` | Artifacts for a specific model |
+| GET | `/v1/admin/kyber/ml/features` | Feature contract registry — schema, validation rules, drift thresholds |
+| GET | `/v1/admin/kyber/ml/drift` | Drift report — PSI scores, feature-level alerts, trend window |
+| GET | `/v1/admin/kyber/ml/predictions/summary` | Prediction volume, latency, error rate, top model usage |
+| GET | `/v1/admin/kyber/ml/security` | ML extraction defense status — watermark state, canary alerts, adversarial risk |
+| GET | `/v1/admin/kyber/ml/readiness` | Production readiness gate — registry coverage, drift gates, security gates |
+
+---
+
+## Dune Feeder Admin — Scheduled Polling (v8.9.0)
+
+Manage automated Dune query polling schedules per tenant. All endpoints require `admin` permission.
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| POST | `/v1/admin/dune-feeder/schedule` | Create a new scheduled Dune query polling config |
+| GET | `/v1/admin/dune-feeder/schedule` | List all schedules for the tenant |
+| GET | `/v1/admin/dune-feeder/schedule/{schedule_id}` | Get a single schedule config |
+| DELETE | `/v1/admin/dune-feeder/schedule/{schedule_id}` | Delete a schedule |
+| POST | `/v1/admin/dune-feeder/schedule/{schedule_id}/run` | Trigger an immediate manual run of a schedule |
+
+**Required fields for create:** `query_id`, `query_name`, `source_tag`, `domain`, `cron_expression`
+
+**Domains:** `onchain`, `governance`, `market`, `social`, `identity`, `tradfi`
+
+**Required env var:**
+
+| Env var | Description | Values |
+|---------|-------------|--------|
+| `DUNE_BACKEND` | Activates the Dune polling scheduler. When unset or empty the worker runs in no-op mode (logs intent, no external API calls). Set in staging/prod. | `s3` \| `postgres` \| `clickhouse` |
+| `DUNE_API_KEY` | Dune Analytics API key. Required for live pulls. | string |
+
+---
+
+## Suggestion Intelligence (v8.10.0)
+
+Proactive AI-driven suggestions for operators and tenants — surfaces actionable insights from graph health, data quality, governance, profile 360, SDK health/drift, and notification patterns. Suggestions have a full lifecycle (created → approved/rejected/executed → outcome), RBAC-gated approve/suppress/execute actions, and a Kyber cross-tenant operator view.
+
+### Tenant Suggestion Routes (`/v1/suggestions`)
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/v1/suggestions` | List suggestions for the authenticated tenant (filter: `status`, `category`, `severity`) |
+| POST | `/v1/suggestions` | Create a suggestion (operator-only) |
+| POST | `/v1/suggestions/query` | Advanced query with dimension and category filters |
+| GET | `/v1/suggestions/summary` | Summary counts by status, category, and severity |
+| GET | `/v1/suggestions/review-queue` | Suggestions awaiting operator review (`pending` status, sorted by priority) |
+| GET | `/v1/suggestions/{suggestion_id}` | Get a single suggestion with full context |
+| GET | `/v1/suggestions/{suggestion_id}/audit` | Append-only audit log for a suggestion |
+| POST | `/v1/suggestions/{suggestion_id}/approve` | Approve a suggestion (requires `suggestions:approve`) |
+| POST | `/v1/suggestions/{suggestion_id}/reject` | Reject with reason |
+| POST | `/v1/suggestions/{suggestion_id}/suppress` | Suppress (mute) a suggestion type for this tenant |
+| POST | `/v1/suggestions/{suggestion_id}/execute` | Execute the suggested action directly |
+| POST | `/v1/suggestions/{suggestion_id}/deliver` | Deliver via notification channel |
+| POST | `/v1/suggestions/{suggestion_id}/outcome` | Record observed outcome after execution |
+
+### Kyber Admin Routes (`/v1/admin/kyber/suggestions`)
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/v1/admin/kyber/suggestions` | Cross-tenant suggestion list (filter: `tenant_id`, `status`, `category`) |
+| GET | `/v1/admin/kyber/suggestions/summary` | Platform-wide suggestion summary with top-active tenants |
+| GET | `/v1/admin/kyber/suggestions/review-queue` | Global review queue across all tenants |
+| GET | `/v1/admin/kyber/suggestions/quality` | Suggestion quality report — acceptance rates, suppression rates, outcome tracking |
+| GET | `/v1/admin/kyber/suggestions/outcomes` | Outcome ledger — suggestions with confirmed outcomes |
+
+### Tenant Feed Routes (`/v1/aether/suggestions`)
+
+Redacted tenant-safe feed — no internal scoring or suppression metadata exposed.
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/v1/aether/suggestions` | List suggestions visible to the tenant (redacted) |
+| GET | `/v1/aether/suggestions/{suggestion_id}` | Get a single suggestion (redacted) |
+| POST | `/v1/aether/suggestions/{suggestion_id}/feedback` | Submit tenant feedback on a suggestion |
+
+### Required Permissions
+
+- `suggestions:read` — list and view suggestions
+- `suggestions:approve` — approve, reject, suppress, execute
+- `suggestions:write` — create suggestions (operator-only)
+
+---
+
 ### Channel Management (End-User Self-Service)
 
 | Method | Path | Description |
@@ -1952,3 +2324,188 @@ Event-driven multi-channel operator notification pipeline. Ingests intelligence 
 - `notifications:approve` — operator approve/suppress/escalate
 - `notifications:manage` — config management
 - `notifications:channels:write` — channel registration/removal
+
+---
+
+## Agentic Observability Layer
+
+> **Invariant: AETHER observes. AETHER does not execute.**
+>
+> All routes in this section receive inbound observation payloads and record them for
+> graph-tracking and intelligence. They never originate, sign, execute, settle, or
+> facilitate payments, trades, emails, or other actions. Any payload where
+> `execution_by_aether = true` is rejected with **HTTP 422**.
+>
+> All observation responses return:
+> ```json
+> { "observation_id": "<uuid>", "received_at": "<ISO8601>", "graph_mutations_queued": <int>, "tenant_id": "<str>" }
+> ```
+
+### Agentic Account / MCP / Tool Observability
+
+| Method | Path | Description |
+|--------|------|-------------|
+| POST | `/v1/observability/agent/events` | Observe a generic agent activity event (MCP tool call, activity record, risk signal) |
+| POST | `/v1/observability/agent/accounts` | Observe an external agentic account linkage |
+| POST | `/v1/observability/agent/tools` | Observe an agent tool invocation |
+| POST | `/v1/observability/agent/mcp` | Observe an MCP server connection |
+| POST | `/v1/observability/agent/risk-signals` | Record an agent risk signal |
+
+**Request fields (agent events):** `tenant_id`, `event_name`, `source.provider`, `actor.actor_type`, `object.object_type`, `action.name`, `action.status`, `provenance.raw_event_hash`, `provenance.normalized_by`, `provenance.schema_version`. Optional: `agent`, `economics` (`is_execution_by_aether` always false).
+
+**Event names (agentic family):** `agentic_account_observed`, `agentic_account_connected_observed`, `agentic_account_disconnected_observed`, `agent_budget_observed`, `agent_budget_changed_observed`, `agent_permission_observed`, `agent_mcp_connection_observed`, `agent_tool_observed`, `agent_tool_invocation_observed`, `agent_activity_observed`, `agent_risk_signal_observed`, `agent_notification_observed`
+
+### x402 Protocol Observability
+
+All x402 endpoints observe external x402 protocol interactions. AETHER never signs, submits, or settles x402 payments.
+
+| Method | Path | Description |
+|--------|------|-------------|
+| POST | `/v1/observability/x402/interactions` | Observe an x402 interaction (resource request → challenge lifecycle) |
+| POST | `/v1/observability/x402/challenges` | Observe an x402 HTTP 402 challenge received by an external agent |
+| POST | `/v1/observability/x402/requirements` | Observe an x402 payment requirement record |
+| POST | `/v1/observability/x402/signatures` | Observe an externally-signed x402 payment (`signed_by_external=true`, `execution_by_aether=false`) |
+| POST | `/v1/observability/x402/verifications` | Observe an x402 payment verification result |
+| POST | `/v1/observability/x402/settlements` | Observe an externally-executed x402 settlement (`settlement_by_external=true`, `execution_by_aether=false`) |
+| POST | `/v1/observability/x402/resource-access` | Observe an x402 resource access outcome (granted/denied) |
+
+**Event names (x402 observability family):** `x402_resource_request_observed`, `x402_challenge_observed`, `x402_payment_requirement_observed`, `x402_signature_observed`, `x402_verification_observed`, `x402_settlement_observed`, `x402_resource_access_observed`, `x402_resource_access_denied_observed`, `x402_failure_observed`, `x402_replay_risk_observed`, `x402_provider_observed`
+
+### Agent Communication Observability
+
+Observe agent inboxes, messages, attachments, and extracted entities. AETHER never sends or replies to messages.
+
+| Method | Path | Description |
+|--------|------|-------------|
+| POST | `/v1/observability/agent-comm/inboxes` | Observe an agent inbox from an external communication provider |
+| POST | `/v1/observability/agent-comm/messages` | Observe an inbound or outbound agent message |
+| POST | `/v1/observability/agent-comm/attachments` | Observe a message attachment |
+| POST | `/v1/observability/agent-comm/extractions` | Observe an extracted entity (OTP, invoice, receipt, calendar intent, support case) |
+
+**Entity types for extractions:** `otp`, `invoice`, `receipt`, `calendar_intent`, `support_case`, `payment_reference`, `amount`, `other`
+
+**Event names (agent-comm family):** `agent_inbox_observed`, `agent_email_address_observed`, `agent_thread_observed`, `agent_message_received_observed`, `agent_message_sent_observed`, `agent_reply_observed`, `agent_attachment_observed`, `agent_attachment_parsed_observed`, `agent_otp_detected_observed`, `agent_invoice_detected_observed`, `agent_receipt_detected_observed`, `agent_calendar_intent_observed`, `agent_support_route_observed`, `agent_semantic_search_observed`, `agent_data_extraction_observed`
+
+### External Account Observability (Robinhood-style)
+
+Observe external brokerage accounts, trade intents, order fills, portfolio snapshots, and budgets. AETHER never places, modifies, or cancels orders.
+
+| Method | Path | Description |
+|--------|------|-------------|
+| POST | `/v1/observability/external-accounts` | Observe an external agentic account linkage |
+| POST | `/v1/observability/external-accounts/brokerage` | Observe an external brokerage account |
+| POST | `/v1/observability/external-accounts/portfolio-snapshots` | Observe a portfolio snapshot |
+| POST | `/v1/observability/external-accounts/order-observations` | Observe a trade order (executed externally, `execution_by_aether=false`) |
+| POST | `/v1/observability/external-accounts/budget-observations` | Observe an agent budget state |
+
+**Event names (Robinhood-style family):** `agent_strategy_observed`, `agent_trade_intent_observed`, `agent_trade_order_observed`, `agent_trade_fill_observed`, `agent_trade_rejection_observed`, `agent_position_observed`, `agent_portfolio_snapshot_observed`, `agent_performance_snapshot_observed`, `agent_disconnect_observed`
+
+### Kyber Admin — Agentic Observability
+
+Operator-only read routes. Require `admin` permission.
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/v1/admin/kyber/agentic-observability/overview` | Agentic observability overview across all tenants |
+| GET | `/v1/admin/kyber/agentic-observability/agents/{agent_id}` | Single agent observability view |
+| GET | `/v1/admin/kyber/agentic-observability/risk` | Risk signals overview |
+| GET | `/v1/admin/kyber/agentic-observability/x402` | x402 protocol observability overview |
+| GET | `/v1/admin/kyber/agentic-observability/replay` | x402 replay risk signals |
+| GET | `/v1/admin/kyber/agentic-observability/inboxes` | Agent inbox observability overview |
+| GET | `/v1/admin/kyber/agentic-observability/external-accounts` | External account observability overview |
+
+### No-Execution Invariant
+
+Every observability route enforces `execution_by_aether = false`. Violations return HTTP 422:
+```json
+{ "detail": "execution_by_aether must be false. AETHER does not execute." }
+```
+
+Fields enforced at both the Pydantic model layer (`Literal[False]`) and the route layer (`_check_no_execution()`).
+
+---
+
+## Provider Corpus + Data Lake Routes
+
+### Tenant — Data Rights (`/v1/integrations/data-rights/*`)
+
+Feature-flagged (`AETHER_CONNECTOR_DATA_RIGHTS_ENABLED`). Tenant API key required.
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/v1/integrations/data-rights` | List data rights grants for caller's tenant |
+| POST | `/v1/integrations/data-rights/grants` | Create a new data rights grant |
+| GET | `/v1/integrations/data-rights/grants/{grant_id}` | Get one grant |
+| POST | `/v1/integrations/data-rights/grants/{grant_id}/revoke` | Revoke a grant (immediate denial) |
+| POST | `/v1/integrations/data-rights/policy-check` | Run a named policy check against a grant |
+
+All policy checks are fail-closed: absent an explicit grant, all use (Olympus baseline, model training, cross-tenant aggregate) is denied.
+
+### Tenant — BYOK Key Rotate / Revoke / Verify (`/v1/providers/keys/*`)
+
+Feature-flagged (`AETHER_CONNECTOR_BYOK_ENABLED`). Tenant API key required.
+
+| Method | Path | Description |
+|--------|------|-------------|
+| POST | `/v1/providers/keys/{provider}/rotate` | Re-encrypt credential with a new API key |
+| POST | `/v1/providers/keys/{provider}/revoke` | Disable credential (retains audit record) |
+| POST | `/v1/providers/keys/{provider}/verify` | Return safe key metadata without exposing the raw key |
+
+Responses include `masked_identifier` only (`****{hash_suffix}`). Raw keys are never returned. BYOK credential does not confer lake ingestion rights, Olympus baseline use, model training, or aggregate use — those require a separate `DataRightsGrant`.
+
+### Kyber Admin — Provider Source Catalog (`/v1/admin/kyber/providers/*`)
+
+Feature-flagged (`KYBER_PROVIDER_SOURCE_CATALOG_ENABLED`). Operator permission required.
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/v1/admin/kyber/providers/catalog` | All 30+ Olympus provider entries |
+| GET | `/v1/admin/kyber/providers/overview` | Summary stats by phase and implementation status |
+| GET | `/v1/admin/kyber/providers/{provider_id}` | Single provider detail |
+| GET | `/v1/admin/kyber/providers/{provider_id}/cost` | Cost profile |
+| GET | `/v1/admin/kyber/providers/{provider_id}/rate-limits` | Rate limit profile |
+| GET | `/v1/admin/kyber/providers/{provider_id}/provenance` | Provenance status |
+| GET | `/v1/admin/kyber/providers/{provider_id}/lake-manifest` | Source manifest |
+| POST | `/v1/admin/kyber/providers/{provider_id}/sync` | Trigger sync (credential-gated) |
+| POST | `/v1/admin/kyber/providers/{provider_id}/validate-policy` | Validate against policy gates |
+
+### Kyber Admin — Dune Data Lake (`/v1/admin/kyber/dune/*`)
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/v1/admin/kyber/dune/access-modes` | Three Dune access modes (API, Datashare, Sim) with implementation status |
+| GET | `/v1/admin/kyber/dune/chains` | P0/P1/P2 chain extraction plans |
+| GET | `/v1/admin/kyber/dune/extraction-products` | 10 extraction product specs |
+
+### Kyber Admin — Lake Observability (`/v1/admin/kyber/lake/*`)
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/v1/admin/kyber/lake/source-manifests` | All source manifests |
+| GET | `/v1/admin/kyber/lake/capacity` | Estimated vs actual capacity by lake layer |
+| GET | `/v1/admin/kyber/lake/coverage` | Source coverage by layer |
+| GET | `/v1/admin/kyber/lake/quarantine` | Quarantined Bronze records summary |
+
+### Kyber Admin — Feature Intelligence (`/v1/admin/kyber/features/*`)
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/v1/admin/kyber/features/source-model-matrix` | Provider → ML model mapping |
+| GET | `/v1/admin/kyber/features/unique-signal-backlog` | 5 unique cross-source signal feature status |
+
+### Kyber Admin — Anti-Distillation (`/v1/admin/kyber/intelligence/*`)
+
+Feature-flagged (`KYBER_ANTI_DISTILLATION_ENABLED`). Operator permission required.
+
+Anti-distillation enforcement on intelligence query endpoints is activated by `AETHER_ANTI_DISTILLATION_ENABLED=true`. When enabled, wallet risk and profile endpoints run pattern detection (rapid diverse-query, honeypot wallet, sequential enumeration) on every request and emit audit events on suspicious activity. Honeypot wallet queries return `403 Forbidden`. Score precision is binned by plan tier (`P1_HOBBYIST=0.1`, `P2_PROFESSIONAL=0.05`, `P3_GROWTH=0.01`, `P4_PROTOCOL=0.001`).
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/v1/admin/kyber/intelligence/anti-distillation` | Suspicious query patterns, alerts, honeypot queries, and score-binning stats |
+
+### Kyber Admin — Data Rights (`/v1/admin/kyber/data-rights/*`)
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/v1/admin/kyber/data-rights` | All data rights grants (operator-scoped view) |
+| POST | `/v1/admin/kyber/data-rights/grants/{grant_id}/revoke` | Operator-initiated revocation |

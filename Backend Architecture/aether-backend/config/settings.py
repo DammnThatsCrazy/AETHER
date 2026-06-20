@@ -495,6 +495,74 @@ class ConnectorsConfig:
 
 
 # ---------------------------------------------------------------------------
+# Provider Corpus & Data Lake (Olympus-owned sources + Dune)
+# ---------------------------------------------------------------------------
+
+@dataclass(frozen=True)
+class ProviderCorpusConfig:
+    """Olympus-owned provider corpus and data lake feature flags.
+
+    All flags default False (fail-closed). Safety policy gates (data rights
+    fail-closed checks, provenance quarantine) are NOT behind these flags —
+    they are always active regardless of flag state.
+    """
+    # Connector taxonomy
+    connector_data_rights_enabled: bool = _env_bool("AETHER_CONNECTOR_DATA_RIGHTS_ENABLED", False)
+    connector_byok_enabled: bool = _env_bool("AETHER_CONNECTOR_BYOK_ENABLED", True)
+    connector_actions_enabled: bool = _env_bool("AETHER_CONNECTOR_ACTIONS_ENABLED", False)
+    connector_olympus_providers_enabled: bool = _env_bool("AETHER_CONNECTOR_OLYMPUS_PROVIDERS_ENABLED", False)
+
+    # Provider source catalog
+    provider_source_catalog_enabled: bool = _env_bool("AETHER_PROVIDER_SOURCE_CATALOG_ENABLED", False)
+    kyber_provider_source_catalog_enabled: bool = _env_bool("KYBER_PROVIDER_SOURCE_CATALOG_ENABLED", False)
+    provider_sync_enabled: bool = _env_bool("AETHER_PROVIDER_SYNC_ENABLED", False)
+
+    # Dune access modes
+    dune_datashare_enabled: bool = _env_bool("AETHER_DUNE_DATASHARE_ENABLED", False)
+    dune_api_enabled: bool = _env_bool("AETHER_DUNE_API_ENABLED", False)
+    dune_sim_enabled: bool = _env_bool("AETHER_DUNE_SIM_ENABLED", False)
+
+    # Cost and rate-limit tracking
+    provider_cost_profiles_enabled: bool = _env_bool("AETHER_PROVIDER_COST_PROFILES_ENABLED", False)
+    provider_rate_limit_profiles_enabled: bool = _env_bool("AETHER_PROVIDER_RATE_LIMIT_PROFILES_ENABLED", False)
+
+    # Lake provenance and lineage
+    enrichment_lineage_enabled: bool = _env_bool("AETHER_ENRICHMENT_LINEAGE_ENABLED", False)
+    graph_of_graphs_policy_enabled: bool = _env_bool("AETHER_GRAPH_OF_GRAPHS_POLICY_ENABLED", False)
+
+    # Unique signal features
+    unique_signal_features_enabled: bool = _env_bool("AETHER_UNIQUE_SIGNAL_FEATURES_ENABLED", False)
+
+    # Anti-distillation controls
+    anti_distillation_enabled: bool = _env_bool("AETHER_ANTI_DISTILLATION_ENABLED", False)
+    kyber_anti_distillation_enabled: bool = _env_bool("KYBER_ANTI_DISTILLATION_ENABLED", False)
+
+
+# ---------------------------------------------------------------------------
+# OODA Suggestion Intelligence
+# ---------------------------------------------------------------------------
+
+@dataclass(frozen=True)
+class SuggestionsConfig:
+    """Unified OODA Suggestion Intelligence layer. Master switch is OFF by
+    default. Execution is a separate hard gate (also OFF by default) so
+    suggestions can be created, reviewed, and delivered without enabling
+    automated execution. Noesis read-only suggestion queries are independent
+    of the main `enabled` flag but respect `noesis_enabled`."""
+    enabled: bool = _env_bool("AETHER_SUGGESTIONS_ENABLED", False)
+    auto_delivery_enabled: bool = _env_bool("AETHER_SUGGESTIONS_AUTODELIVERY_ENABLED", False)
+    execution_enabled: bool = _env_bool("AETHER_SUGGESTIONS_EXECUTION_ENABLED", False)
+    noesis_enabled: bool = _env_bool("AETHER_SUGGESTIONS_NOESIS_ENABLED", True)
+    recommendation_adapter_enabled: bool = _env_bool("AETHER_SUGGESTIONS_RECOMMENDATION_ADAPTER_ENABLED", True)
+    notification_adapter_enabled: bool = _env_bool("AETHER_SUGGESTIONS_NOTIFICATION_ADAPTER_ENABLED", True)
+    data_quality_adapter_enabled: bool = _env_bool("AETHER_SUGGESTIONS_DATA_QUALITY_ADAPTER_ENABLED", True)
+    sdk_health_adapter_enabled: bool = _env_bool("AETHER_SUGGESTIONS_SDK_HEALTH_ADAPTER_ENABLED", True)
+    graph_adapter_enabled: bool = _env_bool("AETHER_SUGGESTIONS_GRAPH_ADAPTER_ENABLED", True)
+    kyber_enabled: bool = _env_bool("KYBER_SUGGESTIONS_ENABLED", True)
+    tenant_enabled: bool = _env_bool("AETHER_TENANT_SUGGESTIONS_ENABLED", True)
+
+
+# ---------------------------------------------------------------------------
 # Master settings
 # ---------------------------------------------------------------------------
 
@@ -564,6 +632,12 @@ class Settings:
 
     # Inbound connector ingestion (master switch; per-tenant config gates each)
     connectors: ConnectorsConfig = field(default_factory=ConnectorsConfig)
+
+    # Olympus-owned provider corpus, Dune ingestion, data lake provenance, anti-distillation
+    provider_corpus: ProviderCorpusConfig = field(default_factory=ProviderCorpusConfig)
+
+    # OODA Suggestion Intelligence (disabled by default; execution gated separately)
+    suggestions: SuggestionsConfig = field(default_factory=SuggestionsConfig)
 
     def __post_init__(self):
         _is_non_local = self.env != Environment.LOCAL

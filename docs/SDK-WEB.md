@@ -13,7 +13,7 @@ source_files:
 canonical_owner: sdk@aether
 estimated_read_minutes: 12
 toc_depth: 3
-last_synced_commit: c318952
+last_synced_commit: e711d05
 ---
 
 # Aether Web SDK v8.9.0 — Integration Guide
@@ -65,6 +65,9 @@ aether.pageView('/pricing', { referrer: '/home' });
 
 // Conversion
 aether.conversion('signup_completed', 0, { plan: 'pro' });
+
+// Error event (new in 8.9.0 — extracts message, name, stack from Error instances)
+aether.error('Payment failed', new Error('Network timeout'), { paymentId: 'pay_1' });
 ```
 
 ### Identity
@@ -305,18 +308,31 @@ The SDK automatically captures on init:
 
 Classification (organic, paid, social, email, direct, etc.) happens server-side via `POST /v1/track/traffic-source` using the `SourceClassifier` — the SDK ships raw signals only.
 
-## Rewards
+## Rewards (A6 — Attribution-Verified Eligibility)
+
+The SDK emits reward lifecycle events as part of the no-custody reward enablement system.
+Aether verifies eligibility and produces reward action payloads; tenants execute rewards
+through their own configured rails.
 
 ```typescript
-// Check if user is eligible for a reward
-const eligible = await aether.rewards.checkEligibility('user-123', 'reward-abc');
-
-// Get pre-built claim payload (for on-chain submission)
-const payload = await aether.rewards.getClaimPayload('user-123', 'reward-abc');
-
-// Submit claim after on-chain transaction
-await aether.rewards.submitClaim(txHash, 'reward-abc');
+// Emit reward eligibility events (emitted automatically by the backend via reward_action_queued)
+// The SDK carries reward context in EventContext:
+aether.track('conversion', {
+  properties: { channel: 'organic', value: 49.99 },
+  context: {
+    rewardCampaignId: 'camp_uuid',
+    rewardIdempotencyKey: 'evt_session_123_conversion',
+    rewardWalletAddress: '0xf39Fd...',
+    attributionResultId: 'attr_abc',
+  },
+});
 ```
+
+Reward lifecycle event types emitted by the platform:
+- `reward_action_queued` — eligibility decision produced, action payload queued
+- `reward_proof_generated` — on-chain claim proof generated for `onchain_claim` rail
+- `reward_delivered` — tenant delivery confirmed (webhook receipt, approval, etc.)
+- `reward_claim_submitted` — tenant submitted on-chain claim tx
 
 ## Configuration Reference
 
@@ -475,3 +491,35 @@ All events are silently dropped at flush time if the required consent purpose is
 - Agent lifecycle events → `agent` consent required
 - x402 lifecycle events → `commerce` consent required
 - `contract_action` → `web3` consent required
+
+## React Browser Wrapper (`@aether/web/react`)
+
+Install: `npm install @aether/web react`
+
+```tsx
+import { AetherProvider, useAether, useConsentState, useIdentity, useScreenOrPageTracking, useJourneyResumed } from '@aether/web/react';
+
+function App() {
+  return (
+    <AetherProvider config={{ apiKey: 'YOUR_KEY' }}>
+      <MyComponent />
+    </AetherProvider>
+  );
+}
+
+function MyComponent() {
+  const aether = useAether();          // SDK singleton
+  const consent = useConsentState();   // live consent state
+  const identity = useIdentity();      // live identity
+
+  // Auto-track page view on mount / name change
+  useScreenOrPageTracking('Home');
+
+  // Register journey resumed callback
+  useJourneyResumed((resolved) => console.log('Resumed:', resolved.userId));
+
+  return <button onClick={() => aether.track('cta_click')}>Click</button>;
+}
+```
+
+The provider is SSR-safe: `AetherProvider` is a no-op when `typeof window === 'undefined'`.

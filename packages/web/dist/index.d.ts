@@ -39,6 +39,15 @@ declare class AetherSDK implements AetherSDKInterface {
     private walletChangeListeners;
     init(config: AetherConfig): void;
     track(event: string, properties?: Record<string, unknown>): void;
+    /**
+     * Emit a canonical 'error' event (gated on analytics consent).
+     * Automatically extracts message, name, and stack from an Error instance.
+     *
+     * @param message  Human-readable error description
+     * @param error    Optional Error instance (stack/name auto-captured)
+     * @param properties  Additional key/value context to attach
+     */
+    error(message: string, error?: Error | unknown, properties?: Record<string, unknown>): void;
     pageView(page?: string, properties?: Record<string, unknown>): void;
     conversion(event: string, value?: number, properties?: Record<string, unknown>): void;
     startJourney(nameOrType: string, properties?: JourneyPayload): CurrentJourney | null;

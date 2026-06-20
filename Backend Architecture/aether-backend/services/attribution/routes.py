@@ -17,7 +17,9 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from typing import Any, Optional
 
-from fastapi import APIRouter, HTTPException
+import os
+
+from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel, Field
 
 from services.attribution.resolver import (
@@ -40,6 +42,16 @@ router = APIRouter(prefix="/v1/attribution", tags=["attribution"])
 _config = AttributionConfig()
 _resolver = AttributionResolver(_config)
 _journey_store = JourneyStore()
+
+
+def _get_tenant_id(request: Request, body_tenant_id: str | None = None) -> str:
+    """Extract tenant_id from auth middleware; fall back to body/env in local mode."""
+    if hasattr(request.state, "tenant") and request.state.tenant:
+        return request.state.tenant.tenant_id
+    env = os.getenv("AETHER_ENV", "local").lower()
+    if env in ("local", "test"):
+        return body_tenant_id or os.getenv("DEFAULT_TENANT_ID", "tenant_local_dev")
+    raise HTTPException(status_code=401, detail="Authentication required")
 
 
 # ========================================================================
@@ -105,17 +117,19 @@ class ResolveResponse(BaseModel):
 
 @router.post("/resolve", response_model=None)
 @api_response
-async def resolve_attribution(body: ResolveRequest):
+async def resolve_attribution(request: Request, body: ResolveRequest):
     """
     Resolve attribution for a user event.
 
     If ``touchpoints`` are provided inline they are used directly;
     otherwise the server looks up stored journey data for the user.
     """
+    tenant_id = _get_tenant_id(request)
+
     if body.touchpoints is not None:
         raw_touchpoints = body.touchpoints
     else:
-        raw_touchpoints = _journey_store.get(body.user_id)
+        raw_touchpoints = _journey_store.get(tenant_id, body.user_id)
 
     if not raw_touchpoints:
         raise HTTPException(
@@ -137,8 +151,9 @@ async def resolve_attribution(body: ResolveRequest):
 
 @router.post("/touchpoints", response_model=None)
 @api_response
-async def record_touchpoint(body: TouchpointRequest):
+async def record_touchpoint(request: Request, body: TouchpointRequest):
     """Record a touchpoint in a user's journey."""
+    tenant_id = _get_tenant_id(request)
     ts = body.timestamp or datetime.now(timezone.utc).isoformat()
 
     raw: dict[str, Any] = {
@@ -149,26 +164,27 @@ async def record_touchpoint(body: TouchpointRequest):
         "timestamp": ts,
         "properties": body.properties,
     }
-    _journey_store.add(body.user_id, raw)
+    _journey_store.add(tenant_id, body.user_id, raw)
 
     logger.info(
-        "Touchpoint recorded: user=%s channel=%s source=%s",
-        body.user_id, body.channel, body.source,
+        "Touchpoint recorded: tenant=%s user=%s channel=%s source=%s",
+        tenant_id, body.user_id, body.channel, body.source,
     )
     metrics.increment("attribution_touchpoints_recorded")
 
     return {
         "user_id": body.user_id,
-        "touchpoint_count": _journey_store.count(body.user_id),
+        "touchpoint_count": _journey_store.count(tenant_id, body.user_id),
         "recorded": True,
     }
 
 
 @router.get("/journey/{user_id}", response_model=None)
 @api_response
-async def get_journey(user_id: str):
+async def get_journey(request: Request, user_id: str):
     """Return all stored touchpoints for a user journey."""
-    touchpoints = _journey_store.get(user_id)
+    tenant_id = _get_tenant_id(request)
+    touchpoints = _journey_store.get(tenant_id, user_id)
     return {
         "user_id": user_id,
         "touchpoint_count": len(touchpoints),
@@ -178,9 +194,10 @@ async def get_journey(user_id: str):
 
 @router.delete("/journey/{user_id}", response_model=None)
 @api_response
-async def clear_journey(user_id: str):
+async def clear_journey(request: Request, user_id: str):
     """Clear all stored touchpoints for a user."""
-    removed = _journey_store.clear(user_id)
+    tenant_id = _get_tenant_id(request)
+    removed = _journey_store.clear(tenant_id, user_id)
     return {
         "user_id": user_id,
         "removed": removed,

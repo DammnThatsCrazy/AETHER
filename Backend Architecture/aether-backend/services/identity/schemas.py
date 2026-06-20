@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any, Literal, Optional
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 
 # ── Resolve ───────────────────────────────────────────────────────────────────
@@ -148,7 +148,57 @@ class IdentityRecomputeResponse(BaseModel):
     entity_id: Optional[str] = None
     event_ids: list[str] = Field(default_factory=list)
     reason: str
+    events_replayed: int = 0
+    decisions: list[dict] = Field(default_factory=list)
+    errors: int = 0
     note: Optional[str] = None
+
+
+# ── Suppression ───────────────────────────────────────────────────────────────
+
+_VALID_SIGNAL_TYPES: frozenset[str] = frozenset({
+    # Exact IdentitySignalType.value strings — must stay in sync with models.py
+    "user_id", "anonymous_id", "session_id",
+    "email_hash", "phone_hash",
+    "wallet_address", "wallet_signature_verified",
+    "external_id", "commerce_customer_id", "payment_customer_id", "account_id",
+    "device_fingerprint", "installation_id", "mobile_install_id", "browser_id",
+    "agent_id", "org_id", "campaign_id", "journey_id",
+})
+
+
+class IdentitySuppressRequest(BaseModel):
+    identifier_type: str = Field(..., min_length=1)
+    identifier_hash: str = Field(..., min_length=1)
+    reason: str = Field(..., min_length=1)
+    subject_id: Optional[str] = None
+    expires_at: Optional[str] = None
+
+    @field_validator("identifier_type")
+    @classmethod
+    def validate_identifier_type(cls, v: str) -> str:
+        if v not in _VALID_SIGNAL_TYPES:
+            raise ValueError(
+                f"identifier_type must be one of: {', '.join(sorted(_VALID_SIGNAL_TYPES))}"
+            )
+        return v
+
+
+class IdentitySuppressResponse(BaseModel):
+    suppression_id: str
+    tenant_id: str
+    identifier_type: str
+    reason: str
+    revoked_alias_ids: list[str] = Field(default_factory=list)
+    created_at: str = ""
+    expires_at: Optional[str] = None
+
+
+class IdentityUnsuppressResponse(BaseModel):
+    revoked: bool = False
+    suppression_id: str
+    revoked_by: str = ""
+    error: Optional[str] = None
 
 
 # ── Health ────────────────────────────────────────────────────────────────────

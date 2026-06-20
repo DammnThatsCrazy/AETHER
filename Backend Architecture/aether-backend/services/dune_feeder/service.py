@@ -316,7 +316,17 @@ class DuneFeederService:
             if existing is not None:
                 rows_accepted += 1
                 continue
-            await self._bronze.insert(record_id, bronze_record.model_dump())
+            # Dune is an Olympus-owned provider with public API access.
+            # Rows that pass freshness + quality gates get valid provenance so the
+            # lake Silver promotion gate (SilverRepository.check_promotion_eligibility)
+            # can approve them.
+            stored = {
+                **bronze_record.model_dump(),
+                "provenance_status": "valid",
+                "quarantine_status": "not_quarantined",
+                "license_status": "public_api",
+            }
+            await self._bronze.insert(record_id, stored)
             rows_accepted += 1
             metrics.increment(
                 "dune_feeder_row_accepted",
@@ -374,10 +384,20 @@ class DuneFeederService:
         bronze_rows = await self._bronze.find_by_source_tag(source_tag, tenant_scope=tenant_scope)
         promoted = 0
 
+        from repositories.lake import SilverRepository as _SilverRepo
         for raw in bronze_rows:
             if raw.get("promotion_status") != "bronze":
                 continue
             if (raw.get("quality_score") or 0.0) < 0.8:
+                continue
+
+            # Enforce provenance gate — quarantined Bronze rows must not reach Silver.
+            eligible, reason = _SilverRepo.check_promotion_eligibility(raw)
+            if not eligible:
+                logger.warning(
+                    "Dune Silver promotion blocked by provenance gate",
+                    extra={"record_id": raw.get("record_id"), "reason": reason},
+                )
                 continue
 
             provenance = list(raw.get("provenance_chain") or [])

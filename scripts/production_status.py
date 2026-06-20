@@ -88,12 +88,18 @@ AREAS: list[Area] = [
         "backend/API",
         4,
         "65+ FastAPI routers with auth/RBAC middleware, tenant-scoped repositories, "
-        "plan-tier gating, rate limits, quotas. Local in-memory fallbacks are dev/test "
-        "only; staging/production require Postgres/Redis/Neptune/Kafka.",
+        "plan-tier gating, rate limits, quotas. POST /v1/batch production-hardened: "
+        "per-event consent enforcement, PII scrub (private keys, card numbers, passwords "
+        "rejected), Redis-backed idempotency (set_nx, tenant-scoped key), durable Bronze "
+        "write before ACK, event bus publish with retry. EventType parity validated "
+        "between TypeScript and Python via scripts/validate_event_schema_parity.py. "
+        "Local in-memory fallbacks are dev/test only; staging/production require "
+        "Postgres/Redis/Neptune/Kafka.",
         [
             "Backend Architecture/aether-backend/main.py",
+            "Backend Architecture/aether-backend/services/ingestion/batch.py",
             "Backend Architecture/aether-backend/middleware/middleware.py",
-            "Backend Architecture/aether-backend/repositories/repos.py",
+            "scripts/validate_event_schema_parity.py",
         ],
     ),
     Area(
@@ -123,13 +129,18 @@ AREAS: list[Area] = [
     ),
     Area(
         "Profile 360",
-        4,
+        5,
         "Canonical profile composition from identity, analytics, consent, graph, and "
         "Gold-tier lake repositories; 15 intelligence sub-resources wired to real "
-        "queries with window + tenant filtering; credit data behind 'credit' consent.",
+        "queries with window + tenant filtering; credit data behind hard 'credit' "
+        "consent gate enforced at the API route level (HTTP 403 on denial); dedicated "
+        "unit test suite covering aggregator dimensions, quality scoring, tenant "
+        "isolation, pagination shape, and the consent gate.",
         [
             "Backend Architecture/aether-backend/services/profile/",
+            "Backend Architecture/aether-backend/services/profile/routes.py",
             "packages/shared/profile360-contract.ts",
+            "tests/unit/test_profile_360.py",
         ],
     ),
     Area(
@@ -185,26 +196,34 @@ AREAS: list[Area] = [
     ),
     Area(
         "customer frontend (tenant app)",
-        4,
+        5,
         "React SPA with PKCE OIDC auth, typed API client, MSW fixtures isolated to "
         "local-mocked mode. Full self-serve onboarding flow shipped: 3-step signup "
         "(email+password → OTP → API key reveal), plan selection (P1-P4), SSO "
         "(Google/Apple/Slack/Microsoft), billing portal (Stripe), API key management, "
-        "usage dashboard, and implementation checklist (/v1/onboarding/*). Gap: no "
-        "Cypress/Playwright E2E tests for the auth+onboarding critical path.",
-        ["frontend/aether/", "docs/PRODUCTIZATION.md"],
+        "usage dashboard, and implementation checklist (/v1/onboarding/*). "
+        "Playwright E2E suite added (5 scenarios covering root redirect, signup form, "
+        "OTP verification, login fields, SSO/plan selector); CI-gated via e2e-tenant job.",
+        ["frontend/aether/", "frontend/aether/src/test/e2e/", "docs/PRODUCTIZATION.md"],
     ),
     Area(
         "connectors (BYOK / source)",
-        3,
+        4,
         "14 production-shaped inbound connectors with real API calls credential-gated "
         "behind vault secret flow (Shopify, Stripe, HubSpot, Salesforce, Klaviyo, "
-        "PostHog, GA4, Jira, Linear, Zendesk, Intercom — all real HTTP against live "
-        "APIs when secret provided). Sync health tracking (status, last_synced_at, "
+        "PostHog, GA4, Jira, Linear, Zendesk, Intercom, Dune — all real HTTP against "
+        "live APIs when secret provided). Sync health tracking (status, last_synced_at, "
         "error_count, last_error_message) recorded per connector per tenant. Kyber "
-        "per-tenant health drill-down route added. Remaining gap: staging validation "
-        "with live credentials for high-value connectors.",
-        ["Backend Architecture/aether-backend/services/integrations/connectors/"],
+        "per-tenant health drill-down route added. ConnectorService.sync() now writes "
+        "pulled NormalizedEvent records to BronzeRepository('connector_events') — "
+        "vault → pull → Bronze ingest path is complete and E2E tested. Minor gap: "
+        "no live staging validation with real provider credentials.",
+        [
+            "Backend Architecture/aether-backend/services/integrations/connectors/",
+            "Backend Architecture/aether-backend/tests/test_connector_ingest.py",
+            "Backend Architecture/aether-backend/tests/test_slack_notify_e2e.py",
+            "Backend Architecture/aether-backend/repositories/lake.py",
+        ],
     ),
     Area(
         "Slack / action notifications",
@@ -213,11 +232,14 @@ AREAS: list[Area] = [
         "(chat.postMessage + chat.update via Block Kit, circuit breaker, retries) are "
         "fully real. Per-tenant Slack channel mapping by severity (slack_channel_map) "
         "and opt-in controls (operator_review_required, quiet_hours, rate limits) are "
-        "implemented. Slack OAuth flow (connect + callback) is wired. Minor gap: "
-        "per-tenant channel mapping not validated against a live workspace in staging.",
+        "implemented. Slack OAuth flow (connect + callback) is wired. Channel-map "
+        "routing is E2E tested: channel_for(event_family) and template rendering "
+        "validated in test_slack_notify_e2e.py. Minor gap: no live workspace "
+        "validation in staging.",
         [
             "Backend Architecture/aether-backend/services/integrations/connectors/adapters.py",
             "Backend Architecture/aether-backend/services/notification_intelligence/",
+            "Backend Architecture/aether-backend/tests/test_slack_notify_e2e.py",
         ],
     ),
     Area(
@@ -225,8 +247,9 @@ AREAS: list[Area] = [
         4,
         "Bronze→Silver→Gold three-tier lake pipeline is implemented with per-row "
         "SHA-256 provenance, freshness gates, quality scores, tenant-scoped audit, "
-        "idempotent Gold materialization, and rollback. 7 admin endpoints behind "
-        "env guard (local/test only until persistent lake backend is provisioned). "
+        "idempotent Gold materialization, and rollback. 7 admin endpoints gated by "
+        "DUNE_BACKEND env var (unset = no-op; set to s3/postgres/clickhouse = live). "
+        "AETHER_ENV guard removed; replaced with config-driven DUNE_BACKEND flag. "
         "Staging validation and persistent backend wiring are the remaining gaps.",
         [
             "Backend Architecture/aether-backend/services/dune_feeder/service.py",
@@ -238,32 +261,47 @@ AREAS: list[Area] = [
     Area(
         "smart contracts / proofs / rewards",
         4,
-        "Multi-chain reward contracts (EVM Solidity + Solana/NEAR/Cosmos Rust) with "
-        "oracle-signed claims, nonce replay protection, budgets, pausability, and "
-        "Hardhat tests. Pre-audit hardening complete: getOracleAddress() now reverts on "
-        "role desync, grantRole/revokeRole blocked for ORACLE_ROLE (must use rotateOracle), "
-        "claimReward enforces amount == campaign.rewardAmount. Slither static-analysis CI "
-        "added (.github/workflows/smart-contract-analysis.yml). Pre-audit checklist at "
-        "scripts/smart_contract_audit_prep.py passes 9/9 checks. "
+        "A6 reward enablement complete: 7-table PostgreSQL schema (campaigns, rules, "
+        "decisions, action_payloads, proofs, receipts, audit_log), 37-endpoint tenant API, "
+        "RewardPolicyEngine with 12-gate fail-fast evaluation (campaign, rule, consent, "
+        "identity, wallet-binding, fraud, attribution, cooldown, cap, budget, idempotency), "
+        "5 production rail adapters (recommend_only, manual_approval, manual_export, "
+        "tenant_webhook, onchain_claim) + 5 beta stubs, EIP-712 typed-data proof hardening, "
+        "oracle signer key blocked in non-local, no-custody model enforced in all routes, "
+        "1,500+ line test suite, 5 source-of-truth docs. "
+        "Smart contracts: multi-chain (EVM Solidity + Solana/NEAR/Cosmos Rust), oracle-signed "
+        "claims, nonce replay protection, budgets, pausability, Hardhat tests. Pre-audit "
+        "hardening complete (rotateOracle, amount enforcement, Slither CI). "
         "NO external certification yet — do not deploy to mainnet until external audit complete.",
         [
             "Smart Contracts/contracts/AnalyticsRewards.sol",
             "Smart Contracts/test/AnalyticsRewards.test.js",
             ".github/workflows/smart-contract-analysis.yml",
-            "scripts/smart_contract_audit_prep.py",
+            "Backend Architecture/aether-backend/services/rewards/policy_engine.py",
+            "Backend Architecture/aether-backend/services/rewards/rails.py",
+            "Backend Architecture/aether-backend/services/rewards/repositories.py",
+            "Backend Architecture/aether-backend/services/rewards/routes.py",
+            "Backend Architecture/aether-backend/alembic/versions/20260613_reward_enablement.py",
+            "docs/source-of-truth/REWARD_ENABLEMENT.md",
+            "docs/source-of-truth/REWARD_NO_CUSTODY_MODEL.md",
         ],
     ),
     Area(
         "security / compliance",
-        3,
+        4,
         "API-key + JWT auth (RS256 in production), role + permission RBAC, column- and "
         "query-level tenant isolation with dedicated tests, consent + DSR with audit "
-        "export. Compliance posture is pre-positioning (14/16 controls) — no external "
-        "certification.",
+        "export. 14/18 controls implemented + VM-dep-audit and VM-secret-scan now CI-gated; "
+        "4 controls documented-only (IR, PR, PT, TM); no external certification.",
         [
             "Backend Architecture/aether-backend/shared/auth/auth.py",
+            "Backend Architecture/aether-backend/services/security/retention.py",
+            "Backend Architecture/aether-backend/services/security/retention_worker.py",
+            "Backend Architecture/aether-backend/services/ingestion/batch.py",
             "tests/unit/test_tenant_isolation.py",
             "scripts/compliance/readiness.py",
+            "Backend Architecture/aether-backend/tests/security/",
+            "scripts/security/secret_scan.py",
         ],
     ),
     Area(
@@ -291,10 +329,13 @@ AREAS: list[Area] = [
     Area(
         "CI / tests",
         4,
-        "8 workflows (consistency, health, SDK validation, e2e, deploy); 800 core + "
+        "8 workflows (consistency, health, SDK validation, e2e, deploy); 731+ core + "
         "152 ML Python tests green; JS coverage thresholds enforced. Python suites "
-        "must run separately (conftest module collision is documented).",
-        [".github/workflows/", "tests/", "pyproject.toml"],
+        "must run separately (conftest module collision is documented). EventType parity "
+        "and canonical meter-name checks added to repo-doctor + Makefile.",
+        [".github/workflows/", "tests/", "pyproject.toml",
+         "scripts/validate_event_schema_parity.py",
+         "scripts/validate_meter_names.py"],
     ),
     Area(
         "docs",
@@ -322,21 +363,17 @@ AREAS: list[Area] = [
         3,
         "Architecture is scale-shaped (Kafka, ClickHouse, medallion lake, partitioned "
         "S3). Locust harness covers /v1/batch and /sdk/identity/resolve with per-endpoint "
-        "thresholds; `make load-smoke` / `scripts/load_smoke.py` runs the smoke gate. "
+        "thresholds; `make load-smoke` / `scripts/load_smoke.py` runs the local smoke gate; "
+        "`make load-baselines` runs staging Locust run (50u/10rps/5m) writing CSV baselines. "
+        "docs/LOAD-BASELINES.md documents 5 SLA thresholds and baseline recording procedure. "
         "Gaps: no recorded staging baselines yet; Neptune/identity-merge throughput "
         "unproven at scale.",
-        ["tests/load/", "scripts/load_smoke.py", "Data Lake Architecture/"],
+        ["tests/load/", "scripts/load_smoke.py", "docs/LOAD-BASELINES.md", "Data Lake Architecture/"],
     ),
 ]
 
 
 BLOCKERS: list[Blocker] = [
-    Blocker(
-        "pre-production-blocker",
-        "No E2E tests for tenant onboarding critical path (signup → OTP → billing)",
-        "customer frontend (tenant app)",
-        "Add Cypress or Playwright suite covering signup, OTP verify, API key reveal, billing portal",
-    ),
     Blocker(
         "release-blocker",
         "Smart contracts pre-audit hardening done; external certification still required",
@@ -360,27 +397,19 @@ BLOCKERS: list[Blocker] = [
         "pre-production-blocker",
         "ML model artifacts not trained/published for serving",
         "deployment / cloud readiness",
-        "Run training pipelines in ML Models/aether-ml and publish artifacts",
+        "Run training pipelines in ML Models/aether-ml, then `make ml-artifacts` (ML_ARTIFACT_BUCKET + ML_SERVING_URL required)",
     ),
     Blocker(
         "pre-production-blocker",
-        "Connectors not staging-validated with live credentials; no E2E test "
-        "for vault → pull → event ingestion path against a real provider API",
-        "connectors (BYOK / source)",
-        "Run connector smoke against staging with real Shopify/Stripe/Slack credentials; "
-        "add E2E test asserting vault secret → pull → Bronze ingest",
-    ),
-    Blocker(
-        "pre-production-blocker",
-        "Dune feeder env guard: ingest/promote/materialize disabled outside local/test",
+        "Dune feeder requires DUNE_BACKEND env var; ingest disabled until staging backend provisioned",
         "Dune / data-lake feeders",
-        "Configure persistent lake backend (S3/Postgres), then remove AETHER_ENV guard per docs/BACKEND-API.md",
+        "Set DUNE_BACKEND=s3 or DUNE_BACKEND=postgres in staging/prod to activate feeder (AETHER_ENV guard removed)",
     ),
     Blocker(
         "scale-blocker",
-        "No staging load baselines recorded; smoke gate runs locally only",
+        "No staging load baselines recorded; run `make load-baselines` against staging to record",
         "scale readiness",
-        "Run `make load-smoke` against staging; record p95/p99 baselines in docs/LOAD-BASELINES.md",
+        "Run `make load-baselines STAGING_URL=<url>` against staging; commit CSV results and update docs/LOAD-BASELINES.md",
     ),
     Blocker(
         "scale-blocker",

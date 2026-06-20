@@ -306,6 +306,20 @@ def main(argv: Sequence[str] | None = None) -> None:
         stop_on_failure=stop,
         remediation="export public declaration types from package barrels and fix package.json exports",
     )
+    run(
+        ["python", "scripts/validate_event_schema_parity.py"],
+        name="EventType parity (TypeScript ↔ Python CANONICAL_EVENT_TYPES)",
+        results=results,
+        stop_on_failure=stop,
+        remediation="sync CANONICAL_EVENT_TYPES in services/ingestion/batch.py with EventType union in packages/shared/events.ts",
+    )
+    run(
+        ["python", "scripts/validate_meter_names.py"],
+        name="Canonical meter names (ingestion/connector paths)",
+        results=results,
+        stop_on_failure=stop,
+        remediation="rename non-canonical metrics.increment() names or add them to CANONICAL_NAMES in scripts/validate_meter_names.py",
+    )
 
     if not args.docs_only:
         if (ROOT / "package-lock.json").exists():

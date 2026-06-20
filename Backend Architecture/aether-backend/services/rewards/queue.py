@@ -17,6 +17,7 @@ durable queue (SQS, Redis Streams, Kafka) and a persistent store
 from __future__ import annotations
 
 import asyncio
+import os
 import uuid
 from collections import deque
 from dataclasses import dataclass, field
@@ -26,6 +27,14 @@ from typing import Optional
 from services.oracle.signer import OracleSigner, RewardProof
 from shared.common.common import NotFoundError, utc_now
 from shared.logger.logger import get_logger, metrics
+
+_env = os.getenv("AETHER_ENV", "local").lower()
+if _env not in ("local", "test") and os.getenv("REWARD_REQUIRE_DURABLE_STORE", "false").lower() == "true":
+    raise RuntimeError(
+        "RewardQueue in-memory implementation is not allowed when "
+        "REWARD_REQUIRE_DURABLE_STORE=true in a non-local environment. "
+        "Configure a durable queue (Kafka/SQS/Redis Streams) before enabling."
+    )
 
 logger = get_logger("aether.service.rewards.queue")
 

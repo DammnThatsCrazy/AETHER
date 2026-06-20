@@ -222,6 +222,54 @@ class AetherNativeModule: RCTEventEmitter {
     @objc func a2hInteraction(_ interactionId: String, actorId: String, properties: NSDictionary) { Aether.shared.a2hInteraction(interactionId: interactionId, actorId: actorId, properties: (properties as? [String: Any])?.mapValues { AnyCodable($0) } ?? [:]) }
     @objc func x402Payment(_ paymentId: String, amount: String, currency: String, network: String, properties: NSDictionary) { Aether.shared.x402Payment(paymentId: paymentId, amount: amount, currency: currency, network: network, properties: (properties as? [String: Any])?.mapValues { AnyCodable($0) } ?? [:]) }
 
+    // MARK: - Granular Agent Lifecycle
+    @objc func agentRegistered(_ agentId: String, properties: NSDictionary) { Aether.shared.agentRegistered(agentId: agentId, properties: (properties as? [String: Any])?.mapValues { AnyCodable($0) } ?? [:]) }
+    @objc func agentUpdated(_ agentId: String, properties: NSDictionary) { Aether.shared.agentUpdated(agentId: agentId, properties: (properties as? [String: Any])?.mapValues { AnyCodable($0) } ?? [:]) }
+    @objc func agentAuthorized(_ agentId: String, delegationId: String, properties: NSDictionary) { Aether.shared.agentAuthorized(agentId: agentId, delegationId: delegationId.isEmpty ? nil : delegationId, properties: (properties as? [String: Any])?.mapValues { AnyCodable($0) } ?? [:]) }
+    @objc func agentDeauthorized(_ agentId: String, properties: NSDictionary) { Aether.shared.agentDeauthorized(agentId: agentId, properties: (properties as? [String: Any])?.mapValues { AnyCodable($0) } ?? [:]) }
+    @objc func agentCapabilityGranted(_ agentId: String, capability: String, properties: NSDictionary) { Aether.shared.agentCapabilityGranted(agentId: agentId, capability: capability, properties: (properties as? [String: Any])?.mapValues { AnyCodable($0) } ?? [:]) }
+    @objc func agentCapabilityRevoked(_ agentId: String, capability: String, properties: NSDictionary) { Aether.shared.agentCapabilityRevoked(agentId: agentId, capability: capability, properties: (properties as? [String: Any])?.mapValues { AnyCodable($0) } ?? [:]) }
+    @objc func agentTaskCreated(_ taskId: String, actorId: String, properties: NSDictionary) { Aether.shared.agentTaskCreated(taskId: taskId, actorId: actorId, properties: (properties as? [String: Any])?.mapValues { AnyCodable($0) } ?? [:]) }
+    @objc func agentTaskDecomposed(_ taskId: String, properties: NSDictionary) { Aether.shared.agentTaskDecomposed(taskId: taskId, properties: (properties as? [String: Any])?.mapValues { AnyCodable($0) } ?? [:]) }
+    @objc func agentTaskStarted(_ taskId: String, properties: NSDictionary) { Aether.shared.agentTaskStarted(taskId: taskId, properties: (properties as? [String: Any])?.mapValues { AnyCodable($0) } ?? [:]) }
+    @objc func agentTaskCompleted(_ taskId: String, properties: NSDictionary) { Aether.shared.agentTaskCompleted(taskId: taskId, properties: (properties as? [String: Any])?.mapValues { AnyCodable($0) } ?? [:]) }
+    @objc func agentTaskFailed(_ taskId: String, reason: String, properties: NSDictionary) { Aether.shared.agentTaskFailed(taskId: taskId, reason: reason.isEmpty ? nil : reason, properties: (properties as? [String: Any])?.mapValues { AnyCodable($0) } ?? [:]) }
+    @objc func agentToolCalled(_ taskId: String, tool: String, properties: NSDictionary) { Aether.shared.agentToolCalled(taskId: taskId, tool: tool, properties: (properties as? [String: Any])?.mapValues { AnyCodable($0) } ?? [:]) }
+    @objc func agentResourceRequested(_ resourceId: String, properties: NSDictionary) { Aether.shared.agentResourceRequested(resourceId: resourceId, properties: (properties as? [String: Any])?.mapValues { AnyCodable($0) } ?? [:]) }
+    @objc func agentDelegatedTask(_ taskId: String, toAgentId: String, properties: NSDictionary) { Aether.shared.agentDelegatedTask(taskId: taskId, toAgentId: toAgentId, properties: (properties as? [String: Any])?.mapValues { AnyCodable($0) } ?? [:]) }
+    @objc func agentSubagentSpawned(_ parentId: String, childId: String, properties: NSDictionary) { Aether.shared.agentSubagentSpawned(parentId: parentId, childId: childId, properties: (properties as? [String: Any])?.mapValues { AnyCodable($0) } ?? [:]) }
+    @objc func agentPolicyEvaluated(_ policyId: String, outcome: String, properties: NSDictionary) { Aether.shared.agentPolicyEvaluated(policyId: policyId, outcome: outcome, properties: (properties as? [String: Any])?.mapValues { AnyCodable($0) } ?? [:]) }
+    @objc func agentHandoff(_ fromId: String, toId: String, properties: NSDictionary) { Aether.shared.agentHandoff(fromId: fromId, toId: toId, properties: (properties as? [String: Any])?.mapValues { AnyCodable($0) } ?? [:]) }
+    @objc func agentEscalatedToHuman(_ taskId: String, reason: String, properties: NSDictionary) { Aether.shared.agentEscalatedToHuman(taskId: taskId, reason: reason.isEmpty ? nil : reason, properties: (properties as? [String: Any])?.mapValues { AnyCodable($0) } ?? [:]) }
+    @objc func agentOutcomeRecorded(_ taskId: String, outcome: String, properties: NSDictionary) { Aether.shared.agentOutcomeRecorded(taskId: taskId, outcome: outcome, properties: (properties as? [String: Any])?.mapValues { AnyCodable($0) } ?? [:]) }
+
+    // MARK: - Granular x402 Lifecycle
+    @objc func x402ResourceRequested(_ resourceId: String, properties: NSDictionary) { Aether.shared.x402ResourceRequested(resourceId: resourceId, properties: (properties as? [String: Any])?.mapValues { AnyCodable($0) } ?? [:]) }
+    @objc func x402PaymentRequired(_ resourceId: String, amount: Double, currency: String, properties: NSDictionary) { Aether.shared.x402PaymentRequired(resourceId: resourceId, amount: amount, currency: currency, properties: (properties as? [String: Any])?.mapValues { AnyCodable($0) } ?? [:]) }
+    @objc func x402QuoteReceived(_ quoteId: String, properties: NSDictionary) { Aether.shared.x402QuoteReceived(quoteId: quoteId, properties: (properties as? [String: Any])?.mapValues { AnyCodable($0) } ?? [:]) }
+    @objc func x402AuthorizationRequested(_ paymentId: String, properties: NSDictionary) { Aether.shared.x402AuthorizationRequested(paymentId: paymentId, properties: (properties as? [String: Any])?.mapValues { AnyCodable($0) } ?? [:]) }
+    @objc func x402AuthorizationResolved(_ paymentId: String, authorized: Bool, properties: NSDictionary) { Aether.shared.x402AuthorizationResolved(paymentId: paymentId, authorized: authorized, properties: (properties as? [String: Any])?.mapValues { AnyCodable($0) } ?? [:]) }
+    @objc func x402PaymentIntentCreated(_ intentId: String, properties: NSDictionary) { Aether.shared.x402PaymentIntentCreated(intentId: intentId, properties: (properties as? [String: Any])?.mapValues { AnyCodable($0) } ?? [:]) }
+    @objc func x402PaymentSubmitted(_ paymentId: String, properties: NSDictionary) { Aether.shared.x402PaymentSubmitted(paymentId: paymentId, properties: (properties as? [String: Any])?.mapValues { AnyCodable($0) } ?? [:]) }
+    @objc func x402PaymentSettled(_ paymentId: String, properties: NSDictionary) { Aether.shared.x402PaymentSettled(paymentId: paymentId, properties: (properties as? [String: Any])?.mapValues { AnyCodable($0) } ?? [:]) }
+    @objc func x402PaymentFailed(_ paymentId: String, reason: String, properties: NSDictionary) { Aether.shared.x402PaymentFailed(paymentId: paymentId, reason: reason.isEmpty ? nil : reason, properties: (properties as? [String: Any])?.mapValues { AnyCodable($0) } ?? [:]) }
+    @objc func x402PaymentTimeout(_ paymentId: String, properties: NSDictionary) { Aether.shared.x402PaymentTimeout(paymentId: paymentId, properties: (properties as? [String: Any])?.mapValues { AnyCodable($0) } ?? [:]) }
+    @objc func x402ReceiptVerified(_ receiptId: String, properties: NSDictionary) { Aether.shared.x402ReceiptVerified(receiptId: receiptId, properties: (properties as? [String: Any])?.mapValues { AnyCodable($0) } ?? [:]) }
+    @objc func x402AccessGranted(_ resourceId: String, properties: NSDictionary) { Aether.shared.x402AccessGranted(resourceId: resourceId, properties: (properties as? [String: Any])?.mapValues { AnyCodable($0) } ?? [:]) }
+    @objc func x402AccessDenied(_ resourceId: String, reason: String, properties: NSDictionary) { Aether.shared.x402AccessDenied(resourceId: resourceId, reason: reason.isEmpty ? nil : reason, properties: (properties as? [String: Any])?.mapValues { AnyCodable($0) } ?? [:]) }
+    @objc func x402RefundOrReversal(_ paymentId: String, properties: NSDictionary) { Aether.shared.x402RefundOrReversal(paymentId: paymentId, properties: (properties as? [String: Any])?.mapValues { AnyCodable($0) } ?? [:]) }
+
+    // MARK: - Rewards
+    @objc func rewardActionQueued(_ campaignId: String, ruleId: String, properties: NSDictionary) { Aether.shared.rewardActionQueued(campaignId: campaignId, ruleId: ruleId, properties: (properties as? [String: Any])?.mapValues { AnyCodable($0) } ?? [:]) }
+    @objc func rewardProofGenerated(_ campaignId: String, proofId: String, properties: NSDictionary) { Aether.shared.rewardProofGenerated(campaignId: campaignId, proofId: proofId, properties: (properties as? [String: Any])?.mapValues { AnyCodable($0) } ?? [:]) }
+    @objc func rewardDelivered(_ campaignId: String, rewardId: String, properties: NSDictionary) { Aether.shared.rewardDelivered(campaignId: campaignId, rewardId: rewardId, properties: (properties as? [String: Any])?.mapValues { AnyCodable($0) } ?? [:]) }
+    @objc func rewardClaimSubmitted(_ campaignId: String, claimId: String, properties: NSDictionary) { Aether.shared.rewardClaimSubmitted(campaignId: campaignId, claimId: claimId, properties: (properties as? [String: Any])?.mapValues { AnyCodable($0) } ?? [:]) }
+
+    // MARK: - Ecommerce additions
+    @objc func trackRemoveFromCart(_ productId: String, quantity: Int, properties: NSDictionary) { Aether.shared.trackRemoveFromCart(productId: productId, quantity: quantity, properties: (properties as? [String: Any])?.mapValues { AnyCodable($0) } ?? [:]) }
+    @objc func trackApplyCoupon(_ couponCode: String, properties: NSDictionary) { Aether.shared.trackApplyCoupon(couponCode: couponCode, properties: (properties as? [String: Any])?.mapValues { AnyCodable($0) } ?? [:]) }
+    @objc func trackBeginCheckout(_ cartValue: Double, currency: String, properties: NSDictionary) { Aether.shared.trackBeginCheckout(cartValue: cartValue, currency: currency, properties: (properties as? [String: Any])?.mapValues { AnyCodable($0) } ?? [:]) }
+
     @objc
     func getFingerprint(_ resolve: @escaping RCTPromiseResolveBlock, rejecter reject: RCTPromiseRejectBlock) {
         resolve(Aether.shared.getFingerprintId())

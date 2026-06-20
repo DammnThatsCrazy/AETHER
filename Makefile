@@ -249,6 +249,12 @@ bump-version: ## Bump version across all files (usage: make bump-version V=8.4.0
 # Production status & release gate
 # ---------------------------------------------------------------------------
 
+validate-schema-parity: ## Check TypeScript EventType registry matches Python CANONICAL_EVENT_TYPES
+	python scripts/validate_event_schema_parity.py
+
+validate-meter-names: ## Check metrics.increment() names in ingestion/connector paths are canonical
+	python scripts/validate_meter_names.py
+
 production-status: ## Readiness scorecard + blockers + live consistency checks (advisory)
 	python scripts/production_status.py
 
@@ -258,6 +264,15 @@ audit-prep: ## Smart contract pre-audit checklist (exit 1 if blockers found with
 release-gate: ## Full release gate: repo consistency (CI mode) + strict production status
 	python scripts/repo_doctor.py --ci
 	python scripts/production_status.py --strict
+
+load-baselines: ## Record staging load baselines via Locust (requires STAGING_URL and running backend)
+	mkdir -p tests/load/results
+	locust -f tests/load/locustfile.py --headless -u 50 -r 10 \
+	  --run-time 5m --host $(STAGING_URL) \
+	  --csv tests/load/results/baseline
+
+ml-artifacts: ## Publish staged ML model artifacts to S3 and mark promoted (requires ML_ARTIFACT_BUCKET + ML_SERVING_URL)
+	python scripts/publish_ml_artifacts.py
 
 load-smoke: ## Load smoke gate: 20 users, 30s against localhost:8000 (exits 2 if backend unreachable)
 	python scripts/load_smoke.py

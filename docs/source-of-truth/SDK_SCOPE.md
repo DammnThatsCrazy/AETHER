@@ -62,3 +62,49 @@ SDKs must not make identity truth decisions. Fingerprints are collected only whe
 allowed by consent and are support signals, not sole proof. Cross-device linking is
 always tenant-scoped and requires valid consent plus stronger identity evidence when the
 link is sensitive.
+
+## Observation-Only Constraint
+
+AETHER observes. AETHER does not execute.
+
+The SDK never signs, sends, settles, or trades on behalf of the caller.
+`execution_by_aether` must always be `false` in all observation payloads.
+
+Any future capability that would have AETHER originate payments, send messages,
+execute trades, custody funds, or sign transactions on behalf of tenants requires:
+- Explicit product scope definition
+- Legal review
+- Compliance review
+- Feature flag gating
+
+Until that gate is cleared, no code path in AETHER may set `execution_by_aether = true`.
+
+## Identity resolution boundary
+
+The table below defines exactly what the SDK does vs. what the backend must do
+after ingestion. This is a hard contract — the SDK side is exhaustive; anything
+not listed is backend responsibility.
+
+| Concern | SDK responsibility | Backend responsibility |
+|---------|-------------------|----------------------|
+| Anonymous identity | Generate and persist `anonymous_id` (UUID per install/browser) | — |
+| User hydration | Emit `userId` field on events after host app login | Resolve `userId` → `canonical_entity_id` |
+| Wallet signals | Emit `walletAddress` field; emit `wallet_signature_verified` when host app provides proof | Verify proof, map wallet → `canonical_entity_id` |
+| Device fingerprint | Collect and emit fingerprint (consent-gated) | Use as weak support signal only; never promote to sole proof |
+| `canonical_entity_id` | **Never set, never emit, never read** | Assign after Bronze ingestion via `services/identity/resolver.py` |
+| Cross-device linking | Emit all available signals per event | Resolve cross-device links tenant-scoped, consent-gated |
+| Conflict resolution | — | Enqueue candidates; expose operator review via `/v1/identity/conflicts` |
+| Merge / split | — | Operator-initiated via `/v1/identity/merge` and `/v1/identity/split` |
+| Consent enforcement | Gate signal collection and emission by local consent state | Gate resolution decisions by consent snapshot stamped on event |
+| Alias revocation | — | Mark alias `revoked_at`; suppress from future resolution |
+
+### What `canonical_entity_id` is and is not (SDK perspective)
+
+- `canonical_entity_id` is a **backend-only construct**. It does not appear in
+  any SDK public API, event schema, or client-side storage.
+- SDK events carry raw signals (`userId`, `anonymousId`, `walletAddress`, etc.)
+  as first-class fields. The backend maps these to `canonical_entity_id` after
+  ingestion.
+- If a host app needs to display or reference a canonical identity, it must
+  read `canonical_entity_id` from the backend API (`GET /v1/identity/entities/{id}`)
+  using server-side credentials, not from the SDK.
