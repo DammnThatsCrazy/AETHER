@@ -52,6 +52,7 @@ The following authored docs are expected to stay aligned with code changes:
 - `SDK-RELEASE-CHECKLIST.md`
 - `SDK-RELEASE-READINESS-REPORT.md`
 - `SDK-WEB.md`
+- `SDK-WEB2-QUICKSTART.md`
 
 ### Specialized
 - `ACCESS-CONTROL-REVIEW.md`
@@ -88,6 +89,7 @@ The following authored docs are expected to stay aligned with code changes:
 - `CUSTOMER-SUCCESS-AUTOMATION.md`
 - `CUSTOMER-SUCCESS-TRIGGERS.md`
 - `DATA-DURABILITY.md`
+- `DATA-FRESHNESS-SLA.md`
 - `DATA-INGESTION-PATHS.md`
 - `DATA-INGESTION.md`
 - `DATA-MIGRATIONS.md`

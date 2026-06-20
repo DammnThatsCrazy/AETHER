@@ -607,6 +607,24 @@
       "canonical_owner": "platform@aether"
     },
     {
+      "path": "docs/DATA-FRESHNESS-SLA.md",
+      "title": "Data Freshness SLA",
+      "slug": "operations/data-freshness-sla",
+      "section": "operations",
+      "visibility": "P",
+      "audience": [
+        "exec",
+        "architect",
+        "ops",
+        "buyer"
+      ],
+      "status": "stable",
+      "since_version": "8.9.0",
+      "estimated_read_minutes": 4,
+      "toc_depth": 2,
+      "canonical_owner": "platform@aether"
+    },
+    {
       "path": "docs/DATA-INGESTION-PATHS.md",
       "title": "Data Ingestion Paths",
       "slug": "operations/data-ingestion-paths",
@@ -2486,6 +2504,23 @@
       "status": "stable",
       "since_version": "8.9.0",
       "estimated_read_minutes": 12,
+      "toc_depth": 3,
+      "canonical_owner": "sdk@aether"
+    },
+    {
+      "path": "docs/SDK-WEB2-QUICKSTART.md",
+      "title": "Aether SDK — Web2 Quickstart",
+      "slug": "sdk-web2-quickstart",
+      "section": "sdks",
+      "visibility": "P",
+      "audience": [
+        "dev-junior",
+        "dev-senior",
+        "buyer"
+      ],
+      "status": "stable",
+      "since_version": "8.9.0",
+      "estimated_read_minutes": 8,
       "toc_depth": 3,
       "canonical_owner": "sdk@aether"
     },

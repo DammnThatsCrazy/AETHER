@@ -204,7 +204,71 @@ class SmokeRunner:
             return True, "HTTP 200 (version field optional)"
         self.check("GET /v1/health returns version", run)
 
-    def run_all(self) -> bool:
+    def check_web2_ingestion(self) -> None:
+        """Verify Web2-only events (no wallet/chain fields) are accepted without error."""
+        def run() -> tuple[bool, str]:
+            web2_events = [
+                {
+                    "event_type": "page_view",
+                    "timestamp": int(time.time() * 1000),
+                    "properties": {"path": "/products/widget-pro", "referrer": "/home"},
+                },
+                {
+                    "event_type": "checkout_started",
+                    "timestamp": int(time.time() * 1000),
+                    "properties": {"cart_value": 149.99, "currency": "USD", "item_count": 3},
+                },
+                {
+                    "event_type": "signup",
+                    "timestamp": int(time.time() * 1000),
+                    "properties": {"method": "email", "plan": "pro"},
+                },
+            ]
+            status, body = self._post("/v1/sdk/events", {"events": web2_events})
+            if status in (200, 201, 202, 204):
+                return True, f"HTTP {status} — {len(web2_events)} Web2 events accepted"
+            if status in (401, 403):
+                return False, f"HTTP {status} — check API key"
+            # 400 would indicate the backend rejected Web2-only events (a regression)
+            if status == 400:
+                try:
+                    detail = json.loads(body).get("detail") or json.loads(body).get("message", "")
+                    return False, f"HTTP 400 — Web2 events rejected: {detail}"
+                except (json.JSONDecodeError, AttributeError):
+                    return False, f"HTTP 400 — Web2 events rejected"
+            return False, f"HTTP {status}"
+        self.check("POST /v1/sdk/events (Web2-only path — no wallet/chain fields)", run)
+
+    def check_capabilities_endpoint(self) -> None:
+        """Verify the capabilities discovery endpoint is available and returns expected fields."""
+        def run() -> tuple[bool, str]:
+            status, body = self._get("/v1/capabilities")
+            if status in (401, 403):
+                return False, f"HTTP {status} — check API key"
+            if status == 404:
+                return False, "HTTP 404 — /v1/capabilities not mounted (check AETHER_CAPABILITIES_ENABLED)"
+            if status != 200:
+                return False, f"HTTP {status}"
+            try:
+                data = json.loads(body)
+                payload = data.get("data") or data
+                has_sub_resources = "profile_sub_resources" in payload
+                has_providers = "providers" in payload
+                has_consent = "consent_purposes_granted" in payload
+                if has_sub_resources and has_providers and has_consent:
+                    sr_count = len(payload["profile_sub_resources"])
+                    return True, f"OK — {sr_count} sub-resources available"
+                missing = [k for k, v in {
+                    "profile_sub_resources": has_sub_resources,
+                    "providers": has_providers,
+                    "consent_purposes_granted": has_consent,
+                }.items() if not v]
+                return False, f"Missing fields: {missing}"
+            except (json.JSONDecodeError, AttributeError) as exc:
+                return False, f"Invalid JSON: {exc}"
+        self.check("GET /v1/capabilities (capability discovery)", run)
+
+    def run_all(self, *, web2: bool = False) -> bool:
         print(f"\nSmoke test → {self.base_url}")
         print("─" * 55)
         self.check_public_health()
@@ -214,6 +278,9 @@ class SmokeRunner:
         self.check_graphql_introspection_blocked()
         self.check_sdk_ingestion()
         self.check_version_header()
+        if web2:
+            self.check_web2_ingestion()
+            self.check_capabilities_endpoint()
         print("─" * 55)
 
         passed = sum(1 for r in self.results if r.passed)
@@ -239,6 +306,11 @@ def main() -> None:
     parser.add_argument("--api-key", default="", help="X-API-Key value for authenticated endpoints")
     parser.add_argument("--timeout", type=int, default=TIMEOUT, help="Per-request timeout in seconds")
     parser.add_argument("--verbose", "-v", action="store_true", help="Print response details")
+    parser.add_argument(
+        "--web2",
+        action="store_true",
+        help="Include Web2-specific checks: Web2-only event ingestion and /v1/capabilities endpoint",
+    )
     args = parser.parse_args()
 
     runner = SmokeRunner(
@@ -247,7 +319,7 @@ def main() -> None:
         timeout=args.timeout,
         verbose=args.verbose,
     )
-    ok = runner.run_all()
+    ok = runner.run_all(web2=args.web2)
     sys.exit(0 if ok else 1)
 
 

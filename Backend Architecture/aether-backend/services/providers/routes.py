@@ -221,11 +221,34 @@ async def get_usage_summary(request: Request):
 @router.get("/health")
 @api_response
 async def provider_health(request: Request):
-    """Health status for all providers with circuit breaker states."""
+    """Health status for all providers with circuit breaker states and freshness labels."""
+    from datetime import datetime, timezone
+
+    def _staleness(last_sync: str | None) -> str:
+        if not last_sync:
+            return "stale"
+        try:
+            last = datetime.fromisoformat(last_sync.replace("Z", "+00:00"))
+            age = (datetime.now(timezone.utc) - last).total_seconds() / 60
+            return "live" if age < 5 else "recent" if age < 30 else "stale"
+        except (ValueError, TypeError):
+            return "stale"
+
     request.state.tenant.require_permission("admin")
     gateway = _get_gateway(request)
+    raw = await gateway.router.health()
 
-    return await gateway.router.health()
+    # Enrich each provider entry with freshness metadata
+    entries = raw if isinstance(raw, list) else raw.get("providers", raw.get("data", {}).get("providers", []))
+    if isinstance(entries, list):
+        for entry in entries:
+            if isinstance(entry, dict):
+                last_sync = entry.get("last_sync") or entry.get("last_successful_sync")
+                entry.setdefault("last_successful_sync", last_sync)
+                entry.setdefault("error_count", 0)
+                entry["staleness_label"] = _staleness(last_sync)
+        return entries
+    return raw
 
 
 @router.get("/categories")
