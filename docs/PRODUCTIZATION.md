@@ -87,109 +87,61 @@ The following subsystems are implemented, tested, and CI-verified:
 
 ## What's Blocking First Paying Customer
 
-### 🔴 Blocker 1 — Tenant Onboarding UI
+The following items remain open. Items previously listed as blockers that are
+now complete are documented in the "What's Production-Ready" section above.
 
-**What's missing:** There is no UI for a new customer to create a tenant, configure their SDK, and get API keys. The only current path is direct PostgreSQL + API calls, which requires engineering support.
+### ✅ Previously Blocking — Now Resolved
 
-**Required:**
-- `/signup` flow: org name, industry sector, contact info → create tenant record
-- API key generation and display (one-time reveal)
-- SDK snippet generator: show a 5-line JS/Python SDK installation with the tenant's key pre-filled
-- Provider key configuration UI: allow non-engineer analysts to add BYOK provider credentials via a form (maps to existing `/v1/providers/keys` endpoint)
-
-**Estimated effort:** 2–3 weeks (frontend + 2–3 backend endpoints)
-
----
-
-### 🔴 Blocker 2 — SDK Installation Guide for Web2-First Companies
-
-**What's missing:** All existing SDK documentation assumes the operator is tracking on-chain events or Web3 wallets. There is no guide for a Web2 e-commerce company or SaaS business to integrate Aether with zero blockchain context.
-
-**Required:**
-- `docs/SDK-WEB2-QUICKSTART.md` — Step-by-step guide for a Web2 operator: install SDK, instrument checkout events, configure Plaid for financial data, configure Meta Ads for attribution, view first entity in Profile360 within 24 hours
-- Web2 event taxonomy documentation: what events to track (page_view, checkout, signup, session_start) vs. Web3 events (swap, stake, vote)
-- Smoke test for Web2-only tenant path (current `smoke_test.py` assumes on-chain events)
-
-**Estimated effort:** 3–5 days
+| Item | Status | Notes |
+|---|---|---|
+| Tenant Onboarding UI | ✅ Shipped | 3-step signup (org, OTP, API key reveal), SSO, plan selection; onboarding health dashboard |
+| Graph Visualization Frontend | ✅ Shipped | Cytoscape.js force-directed canvas with inspector, clustering, trust/risk overlays |
+| API Key Management UI | ✅ Shipped | Full CRUD in Settings — create, reveal (one-time), revoke; platform tagging; permission scopes |
+| Synthetic Demo Data | ✅ Shipped | `tests/load/generate_synthetic.py` — deterministic NDJSON across 5 scenarios |
 
 ---
 
-### 🔴 Blocker 3 — Graph Visualization Frontend
+### 🔴 Blocker 1 — E2E Tests for Onboarding Critical Path
 
-**What's missing:** The Kyber app has Profile360 components (entity cards, timeline, identity tabs) but no graph canvas. An operator cannot see the intelligence graph — they can only look up individual entities by ID.
+**What's missing:** No Playwright/Cypress suite covering the signup → OTP → API key reveal → billing portal flow. Without automated coverage this critical path cannot be verified on every deploy.
 
-**Required:**
-- Force-directed graph canvas (Cytoscape.js or Sigma.js) with node shapes/colors per entity class
-- 1-hop and 2-hop neighborhood expansion from any node
-- Profile360 panel slide-in on node click
-- Four view modes: Relationship Map, Attribution Web, Journey Flow, Geographic Intelligence
-- See `docs/FRONTEND-ARCHITECTURE.md` for full specification
+**Required:** `frontend/aether/src/test/e2e/onboarding-critical-path.spec.ts` — signup, OTP verify, API key reveal, SDK snippet rendered, billing redirect. Edge cases: invalid email, expired OTP, plan change.
 
-**Estimated effort:** 4–6 weeks (graph canvas is the highest-effort frontend item)
+**Estimated effort:** 1–2 weeks
 
 ---
 
-### 🟡 High Priority 4 — API Key Management UI
+### 🟡 High Priority 2 — Webhook Configuration UI
 
-**What's missing:** Analysts need to configure provider keys (Plaid, credit bureaus, ad platforms) without engineering intervention. The backend BYOK vault exists; there's no UI over it.
+**What's missing:** The backend webhook routes exist (`/v1/notifications/webhooks`) but there is no tenant-facing UI for creating and managing outbound webhook endpoints.
 
-**Required:** Simple key management page: list configured providers, show last-tested status, add/rotate/revoke keys via form.
+**Required:** Settings section showing configured webhooks, add/edit/delete form, test-ping button, recent delivery log with status and latency.
 
 **Estimated effort:** 1 week
 
 ---
 
-### 🟡 High Priority 5 — Webhook Configuration UI
+### 🟡 High Priority 3 — Stripe Billing Wire-Up
 
-**What's missing:** Customers need to configure event ingestion endpoints (where their application sends events to Aether). Currently requires direct API configuration.
+**What's missing:** `services/billing/providers/stripe_provider.py` contains a readiness stub — methods raise `ProviderDisabledError` instead of calling the Stripe API. Revenue cannot be collected programmatically.
 
-**Required:** Webhook management page: create endpoint, show endpoint URL, view recent deliveries and errors, configure retry policy.
-
-**Estimated effort:** 1 week
-
----
-
-### 🟡 High Priority 6 — Data Freshness SLA Documentation + Alerting
-
-**What's missing:** No documented SLA for how fresh Profile360 data is. Operators have no visibility when gold tables are lagging or when a provider adapter is failing silently.
-
-**Required:**
-- SLA document: gold tables refreshed every 15 minutes (Provider adapters: nightly sync, on-demand trigger available)
-- Internal alerting: alert when any gold table compute job lags > 30 minutes
-- Surface provider health status in API key management UI (last successful sync, error count)
-- `/v1/providers/health` endpoint (backend exists; surface it in the UI)
-
-**Estimated effort:** 3–5 days
-
----
-
-### 🟠 Medium Priority 7 — Demo Tenant with Synthetic Data
-
-**What's missing:** No safe way to show a prospect what Aether looks like with real data. Production tenants are isolated; a demo requires a pre-populated sandbox tenant.
-
-**Required:** Synthetic entity generator that creates 500–1,000 realistic (non-PII) entities with relationships, journey histories, social profiles, and behavioral signals. Runnable against the demo tenant via a seed script.
-
-**Estimated effort:** 1 week
-
----
-
-### 🟠 Medium Priority 8 — `/v1/capabilities` Endpoint
-
-**What's missing:** Operators cannot programmatically discover which Profile360 sub-resources are available for their tenant (depends on which providers they've configured). This makes SDK integration opaque.
-
-**Required:** `GET /v1/capabilities` → returns which profile sub-resources are available, which providers are configured and healthy, and which consent purposes have been granted by the tenant.
-
-**Estimated effort:** 2–3 days
-
----
-
-### 🟠 Medium Priority 9 — Billing Integration
-
-**What's missing:** No usage-based billing. Revenue cannot be collected.
-
-**Required:** Stripe metered billing integration: track API calls per tenant per day, generate monthly invoice based on usage tier, surface usage dashboard in tenant admin UI.
+**Required:** Wire `sync_tenant`, `create_usage_record`, and `export_invoices` to real Stripe API calls. Config keys (`STRIPE_SECRET_KEY`, `STRIPE_PRODUCT_MAPPING_JSON`) already in `.env.example`.
 
 **Estimated effort:** 2–3 weeks
+
+---
+
+### 🟠 Medium Priority 4 — Infrastructure / External
+
+| Item | Action |
+|---|---|
+| Production AWS infra | Run `scripts/bootstrap_aws_secrets.py` + Terraform |
+| External smart contract audit | Commission Trail of Bits / OpenZeppelin before mainnet with real funds |
+| ML model artifacts | Run training pipelines in `ML Models/aether-ml` and publish |
+| Dune feeder persistent backend | Configure S3/Postgres; remove `AETHER_ENV` guard |
+| Load baselines | `make load-smoke` against staging → `docs/LOAD-BASELINES.md` |
+| Neptune capacity | Provision staging Neptune; replay synthetic merge workload |
+| Agent Layer durable storage | Enable Redis per `docs/AGENT-LAYER-PRODUCTION.md` |
 
 ---
 
@@ -199,28 +151,25 @@ The following subsystems are implemented, tested, and CI-verified:
 
 ### What they would get on Day 1
 
-1. Install Aether SDK in their Shopify store (5 lines of JS)
+1. Install Aether SDK in their Shopify store — see [SDK Web2 Quickstart](SDK-WEB2-QUICKSTART.md)
 2. Connect Plaid to pull bank account signals (optional, higher consent tier)
-3. Connect Meta Ads and Google Ads via BYOK provider keys
-4. Start seeing entities in Profile360 within 24 hours of first events
+3. Connect Meta Ads and Google Ads via BYOK provider keys (Settings → Provider Keys)
+4. Start seeing entities in Profile360 within 15 minutes of first events
 5. Social tab (if they've linked social accounts for their customers) — Twitter, Instagram, YouTube via BYOK
 6. Journey Economics: ROAS per campaign, funnel drop-off analysis
 7. Intelligence tab: churn risk signals, LTV predictions, behavioral patterns
 
 ### What they would NOT get on Day 1 (honest scope)
 
-- Graph visualization (blocked until frontend is built)
 - On-chain intelligence (no wallets to link)
 - Credit bureau signals (requires `credit` consent from their end-users)
-- Real-time streaming (15-minute gold table refresh is the current SLA)
+- Real-time streaming (15-minute gold table refresh is the SLA — see [Data Freshness SLA](DATA-FRESHNESS-SLA.md))
 
-### 5 Actions Before First Customer Signs
+### 3 Actions Before First Customer Signs
 
-1. **Build tenant onboarding UI** (Blocker 1) — without this, every customer requires engineering support to onboard
-2. **Write Web2 SDK quickstart** (Blocker 2) — without this, the first engineer at the customer will be confused within 10 minutes
-3. **Fix smoke_test.py for Web2-only path** — run the smoke test against a Web2-only tenant to confirm no hidden dependencies on on-chain events
-4. **Add `/v1/tenant/onboard` endpoint** — creates tenant, generates API key, returns SDK snippet in one call
-5. **Document data freshness SLA** — customers will ask "how fresh is this data?" on day 1; have a written answer
+1. **Add E2E tests** (Blocker 1) — without CI coverage of the onboarding critical path, regressions will reach customers
+2. **Commission smart contract audit** — required before mainnet deployment with real funds
+3. **Provision production infrastructure** — AWS/Terraform must be live before accepting production traffic
 
 ---
 

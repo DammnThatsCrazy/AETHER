@@ -1088,7 +1088,7 @@ All general diagnostics endpoints require `admin` permission. Commerce diagnosti
 | DELETE | `/v1/providers/keys/{provider}` | Remove a BYOK key for a provider |
 | GET | `/v1/providers/usage` | Provider usage statistics with optional category/provider filters |
 | GET | `/v1/providers/usage/summary` | Tenant-wide usage summary across all providers |
-| GET | `/v1/providers/health` | All providers with health status and circuit breaker states |
+| GET | `/v1/providers/health` | All providers with health status, circuit breaker states, last_successful_sync, error_count, and staleness_label (live/recent/stale) |
 | GET | `/v1/providers/categories` | List all provider categories and supported provider names |
 | POST | `/v1/providers/test` | Test a provider call (verifies BYOK key works) |
 
@@ -1097,6 +1097,30 @@ All general diagnostics endpoints require `admin` permission. Commerce diagnosti
 - Usage endpoints (`GET /usage`, `GET /usage/summary`) require `billing` permission
 - Health and categories endpoints require `admin` permission
 - Test endpoint requires `admin` permission
+
+---
+
+### Capability Discovery Service
+
+```
+GET /v1/capabilities
+```
+
+Returns which Profile360 sub-resources, provider integrations, consent purposes,
+and feature flags are active for the calling tenant. Designed for SDK integration-time
+discovery — callers can determine available capabilities without trial-and-error.
+
+| Field | Description |
+|---|---|
+| `profile_sub_resources` | List of available Profile360 sub-resource names (e.g. `social`, `financial`, `attribution`) |
+| `providers` | Configured providers with `status`, `last_successful_sync`, `error_count`, `staleness_label`, `circuit_breaker` |
+| `consent_purposes_granted` | Consent purposes the tenant has enabled |
+| `consent_purposes_all` | Full list of supported consent purposes |
+| `feature_flags` | Active flag values: `suggestions_enabled`, `connectors_enabled`, `data_quality_enabled`, etc. |
+| `evaluated_at` | ISO-8601 timestamp of the capability snapshot |
+
+**Permissions:** `read` (any authenticated tenant call)
+**No feature flag required** — always available once auth passes.
 
 **Provider Categories:**
 - `blockchain_rpc` — QuickNode, Alchemy, Infura, Custom RPC
