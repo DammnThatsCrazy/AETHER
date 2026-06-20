@@ -14,7 +14,7 @@ source_files:
   - ML Models/aether-ml/serving/src/api.py
   - Backend Architecture/aether-backend/services/ml_serving/routes.py
   - security/model_extraction_defense/defense_layer.py
-last_synced_commit: 7a86125
+last_synced_commit: 7ef7368
 ---
 
 # Aether ML Productization Readiness Report
@@ -266,7 +266,7 @@ Backend admin routes for ML operational state are defined in:
 | G5 | Features | Pipeline output `action_type_entropy`, `js_execution_time` not in bot_detection contract | High | ✅ Canonical names in pipeline (`interaction_diversity`, `action_rate`); aliases in contract |
 | G6 | Serving | `_extraction_monitor` never called in middleware | High | ✅ Wired in `extraction_defense_middleware` |
 | G7 | Serving | No `GET /v1/predict/anomaly` endpoint | High | ✅ Added |
-| G8 | Serving | Freshness SLA missing from 5 endpoints | Medium | ✅ All 6 model endpoints now call `_freshness_tracker.check()` |
+| G8 | Serving | Freshness SLA missing from 5 endpoints | Medium | ✅ All 9 prediction endpoints call `_freshness_tracker.check()` (anomaly, journey, attribution added in Phase 3-5) |
 | G9 | Serving | No `GET /v1/monitoring/extraction` endpoint | Medium | ✅ Added |
 | G10 | Contracts | Schema hash covered only name/dtype/required | Medium | ✅ Extended to default, nullable, min_value, max_value, allowed_values, aliases, freshness_sla |
 | G11 | Contracts | String dtype not validated in `validate_features()` | Medium | ✅ Added `elif spec.dtype == "str"` branch |
@@ -280,11 +280,15 @@ Backend admin routes for ML operational state are defined in:
 
 | Area | Gap | Severity | Status |
 |------|-----|----------|--------|
-| Real data training path | Requires external infrastructure | Infra | 🔧 |
+| Real data training path (S3/PostgreSQL data loaders) | G13 — S3 + PostgreSQL loaders | Medium | ✅ Implemented (`_load_from_s3`, `_load_from_postgresql`); requires cloud credentials |
+| Digital artifact signing (HMAC-SHA256) | G14 — `ARTIFACT_SIGNING_KEY` sign/verify | Medium | ✅ Implemented; fails closed in staging/production when key absent |
+| Atomic artifact metadata save | Phase 4 — write-then-rename | Medium | ✅ Implemented (`.tmp` + `os.replace()`) |
+| Promotion audit log | Phase 4 — append-only JSONL per model | Medium | ✅ Implemented (`promotion_audit.jsonl`) |
+| Complete rollback with active pointer | Phase 4 — `active_artifact.json` pointer | Medium | ✅ Implemented; `resolve_active_artifact` honours pointer |
+| Service token auth (serving) | Phase 5 — `X-Service-Token` header | Medium | ✅ Implemented; `ML_SERVICE_TOKEN` env var; no-op when absent |
 | MLflow tracking | Available, fails gracefully if unreachable | Infra | 🔧 |
-| S3 artifact store | Requires AWS credentials | Infra | 🔧 |
+| S3 artifact store | G11.6 — S3ArtifactStore class for artifact persistence | Infra | 🔧 Requires AWS credentials |
 | Redis feature store / extraction budgets | Requires Redis instance | Infra | 🔧 |
-| Digital artifact signing (HMAC) | G14 — not yet implemented | Medium | 🔧 |
 | Versioned cache keys in backend | G25 — cache key missing artifact_version + contract_hash | High | 🔧 |
 | Dockerfile non-root user | G24 — no USER directive | Medium | 🔧 |
 | Background drift monitoring loop | G27 — on-demand only | Medium | 🔧 |
