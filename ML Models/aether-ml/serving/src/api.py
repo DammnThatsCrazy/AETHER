@@ -815,6 +815,33 @@ async def lifespan(app: FastAPI):
     _drift_task = _asyncio.create_task(_drift_check_periodic(interval=300))
     logger.info("Drift detection background task started (interval=300s)")
 
+    # Wire Redis to monitoring instances for durable state across replicas/restarts.
+    # Uses MONITOR_REDIS_DB (default 3) to isolate from rate-limiter (db=2) and
+    # application cache (db=0). Fails open in all environments — monitoring loss
+    # is not a production blocker.
+    _monitor_redis_url = os.getenv("REDIS_URL")
+    if _monitor_redis_url and (_freshness_tracker is not None or _extraction_monitor is not None):
+        try:
+            import redis as _redis_lib
+            _monitor_rc = _redis_lib.from_url(
+                _monitor_redis_url,
+                db=int(os.getenv("MONITOR_REDIS_DB", "3")),
+                decode_responses=True,
+            )
+            _monitor_rc.ping()
+            if _freshness_tracker is not None:
+                _freshness_tracker.set_redis(_monitor_rc)
+            if _extraction_monitor is not None:
+                _extraction_monitor.set_redis(_monitor_rc)
+            logger.info(
+                "Monitoring state backed by Redis (db=%s)",
+                os.getenv("MONITOR_REDIS_DB", "3"),
+            )
+        except Exception as _monitor_exc:
+            logger.warning(
+                "Redis unavailable for monitoring state — in-memory only: %s", _monitor_exc
+            )
+
     yield
 
     _drift_task.cancel()

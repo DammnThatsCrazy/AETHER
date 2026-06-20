@@ -19,9 +19,11 @@ Routes:
 
 from __future__ import annotations
 
+import json
 import os
 import time
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Any, Optional
 
 import httpx
@@ -563,6 +565,251 @@ async def kyber_ml_readiness(request: Request):
             for d in details
         ],
         "docs": "docs/reports/ML-PRODUCTIZATION-READINESS.md",
+    }).to_dict()
+
+
+@router.get("/alerts")
+async def kyber_ml_alerts(request: Request):
+    """Active ML alert conditions derived from live monitoring state."""
+    _require_kyber_operator(request)
+
+    client = _get_client()
+    alerts: list[dict[str, Any]] = []
+
+    # Extraction defense: block rate and risk anomalies
+    try:
+        resp = await client.get("/v1/monitoring/extraction")
+        if resp.status_code == 200:
+            data = resp.json()
+            summary = data.get("summary", {})
+            block_rate = summary.get("block_rate_pct", 0)
+            avg_risk = summary.get("avg_risk_score", 0)
+            if block_rate > 30:
+                alerts.append({
+                    "name": "MLExtractionHighBlockRate",
+                    "severity": "warning",
+                    "value": block_rate,
+                    "message": f"Extraction defense block rate {block_rate:.1f}% exceeds 30%",
+                    "source": "extraction_defense",
+                })
+            if avg_risk > 40:
+                alerts.append({
+                    "name": "MLExtractionElevatedRisk",
+                    "severity": "info",
+                    "value": avg_risk,
+                    "message": f"Average extraction risk score {avg_risk:.1f} (threshold: 40)",
+                    "source": "extraction_defense",
+                })
+            for anomaly in data.get("anomalies", []):
+                alerts.append({
+                    "name": f"MLExtraction_{anomaly.get('type', 'unknown')}",
+                    "severity": "warning",
+                    "value": anomaly.get("value"),
+                    "message": anomaly.get("message", ""),
+                    "source": "extraction_defense",
+                })
+    except httpx.RequestError:
+        pass
+
+    # Freshness: violation rate
+    try:
+        resp = await client.get("/v1/monitoring/freshness")
+        if resp.status_code == 200:
+            freshness = resp.json()
+            violation_rate = freshness.get("violation_rate", 0)
+            if violation_rate > 0.05:
+                alerts.append({
+                    "name": "MLFreshnessViolationRate",
+                    "severity": "warning",
+                    "value": round(violation_rate * 100, 1),
+                    "message": (
+                        f"Freshness SLA violation rate {violation_rate:.1%} exceeds 5%"
+                    ),
+                    "source": "freshness_tracker",
+                })
+    except httpx.RequestError:
+        pass
+
+    # Model fleet: required models not loaded
+    live_data = await _get_serving_status()
+    registry_models = _get_registry_models()
+    live_by_name = {m.get("name", ""): m for m in (live_data.get("models") or [])}
+    for reg in registry_models:
+        if not reg.get("artifact_required"):
+            continue
+        mid = reg.get("model_id", "")
+        live = live_by_name.get(mid, {})
+        if live.get("status", "unknown") not in ("loaded", "active"):
+            alerts.append({
+                "name": "MLModelNotLoaded",
+                "severity": "critical",
+                "value": mid,
+                "message": f"Required model '{mid}' is not loaded (status: {live.get('status', 'unknown')})",
+                "source": "model_fleet",
+            })
+
+    return APIResponse(data={
+        "alerts": alerts,
+        "count": len(alerts),
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+    }).to_dict()
+
+
+@router.get("/models/{model_id}/rollback-eligibility")
+async def kyber_rollback_eligibility(model_id: str, request: Request):
+    """Check whether a model can be rolled back and to which artifact version."""
+    _require_kyber_operator(request)
+
+    try:
+        from common.model_registry import resolve_model_id
+        canonical = resolve_model_id(model_id)
+        if not canonical:
+            from shared.common.common import BadRequestError
+            raise BadRequestError(f"Unknown model: '{model_id}'")
+    except ImportError:
+        canonical = model_id
+
+    artifact_root = Path(os.getenv("AETHER_MODEL_ARTIFACT_DIR", "/opt/ml/models"))
+    try:
+        from common.artifact_registry import list_artifacts
+        artifacts = list_artifacts(artifact_root, canonical)
+    except Exception as exc:
+        return APIResponse(data={
+            "model_id": canonical,
+            "can_rollback": False,
+            "reason": f"Artifact registry unavailable: {exc}",
+        }).to_dict()
+
+    promoted = [
+        a for a in artifacts
+        if getattr(a, "promotion_state", "") in ("promoted", "active", "production")
+    ]
+    current = promoted[0] if promoted else None
+    target = promoted[1] if len(promoted) > 1 else None
+
+    live_data = await _get_serving_status()
+    live_by_name = {m.get("name", ""): m for m in (live_data.get("models") or [])}
+    live_status = live_by_name.get(canonical, {}).get("status", "unknown")
+
+    return APIResponse(data={
+        "model_id": canonical,
+        "can_rollback": target is not None,
+        "reason": None if target else "No prior promoted artifact available",
+        "current_version": getattr(current, "artifact_version", None),
+        "current_promotion_state": getattr(current, "promotion_state", None),
+        "rollback_target_version": getattr(target, "artifact_version", None),
+        "rollback_target_metrics": getattr(target, "metrics", {}),
+        "rollback_target_production_allowed": getattr(target, "production_allowed", False),
+        "live_status": live_status,
+        "total_promoted_artifacts": len(promoted),
+    }).to_dict()
+
+
+@router.get("/audit")
+async def kyber_ml_audit(
+    request: Request,
+    model_id: Optional[str] = None,
+    limit: int = 50,
+):
+    """Promotion and rollback audit trail for all models (or a single model)."""
+    _require_kyber_operator(request)
+
+    artifact_root = Path(os.getenv("AETHER_MODEL_ARTIFACT_DIR", "/opt/ml/models"))
+    registry_models = _get_registry_models()
+
+    target_models = [model_id] if model_id else [
+        r.get("model_id", "") for r in registry_models if r.get("artifact_required")
+    ]
+
+    entries: list[dict[str, Any]] = []
+    for mid in target_models:
+        audit_path = artifact_root / mid / "promotion_audit.jsonl"
+        if audit_path.exists():
+            try:
+                with open(audit_path) as fh:
+                    for line in fh:
+                        line = line.strip()
+                        if line:
+                            try:
+                                entries.append(json.loads(line))
+                            except json.JSONDecodeError:
+                                pass
+            except OSError:
+                pass
+        else:
+            # Fallback: synthesize audit entries from artifact state metadata
+            try:
+                from common.artifact_registry import list_artifacts
+                for art in list_artifacts(artifact_root, mid):
+                    state = getattr(art, "promotion_state", "")
+                    if state in ("promoted", "active", "production", "deprecated"):
+                        entries.append({
+                            "timestamp": getattr(art, "created_at", None),
+                            "action": "promote" if state != "deprecated" else "deprecate",
+                            "model_id": mid,
+                            "artifact_version": getattr(art, "artifact_version", None),
+                            "promotion_state": state,
+                            "synthetic": getattr(art, "synthetic_data", None),
+                            "production_allowed": getattr(art, "production_allowed", None),
+                            "actor": "system",
+                            "source": "artifact_metadata_fallback",
+                        })
+            except Exception:
+                pass
+
+    entries.sort(key=lambda x: x.get("timestamp") or "", reverse=True)
+
+    return APIResponse(data={
+        "audit_entries": entries[:limit],
+        "total": len(entries),
+        "model_filter": model_id,
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+    }).to_dict()
+
+
+@router.get("/models/{model_id}/training-history")
+async def kyber_training_history(model_id: str, request: Request):
+    """Training run history for a model, derived from artifact metadata."""
+    _require_kyber_operator(request)
+
+    try:
+        from common.model_registry import resolve_model_id
+        canonical = resolve_model_id(model_id)
+        if not canonical:
+            from shared.common.common import BadRequestError
+            raise BadRequestError(f"Unknown model: '{model_id}'")
+    except ImportError:
+        canonical = model_id
+
+    artifact_root = Path(os.getenv("AETHER_MODEL_ARTIFACT_DIR", "/opt/ml/models"))
+    try:
+        from common.artifact_registry import list_artifacts
+        artifacts = list_artifacts(artifact_root, canonical)
+    except Exception as exc:
+        return APIResponse(data={
+            "model_id": canonical,
+            "training_runs": [],
+            "count": 0,
+            "error": str(exc),
+        }).to_dict()
+
+    runs = [
+        {
+            "artifact_version": getattr(a, "artifact_version", None),
+            "created_at": getattr(a, "created_at", None),
+            "promotion_state": getattr(a, "promotion_state", None),
+            "synthetic_data": getattr(a, "synthetic_data", None),
+            "production_allowed": getattr(a, "production_allowed", None),
+            "metrics": getattr(a, "metrics", {}),
+            "checksum": getattr(a, "checksum", None),
+        }
+        for a in artifacts
+    ]
+
+    return APIResponse(data={
+        "model_id": canonical,
+        "training_runs": runs,
+        "count": len(runs),
     }).to_dict()
 
 

@@ -234,3 +234,89 @@ groups:
         annotations:
           summary: "SDK payload anomaly rate elevated for tenant {{ $labels.tenant_id }}"
           description: "Multiple SDK instances reporting high event drop rates — possible systematic ingestion failure."
+
+  # ============================================================
+  # ML Model Health Alerts
+  # ============================================================
+  - name: aether_ml_health
+    rules:
+      - alert: MLModelNotLoaded
+        expr: aether_ml_model_loaded{required="true"} == 0
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Required ML model {{ $labels.model_id }} is not loaded"
+          description: "{{ $labels.model_id }} has been missing for 2+ minutes. Prediction requests will fail or fall back to heuristics."
+
+      - alert: MLPredictionErrorRate
+        expr: >
+          rate(aether_ml_prediction_errors_total[5m])
+          / rate(aether_ml_predictions_total[5m]) > 0.05
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "ML model {{ $labels.model_id }} error rate >5%"
+          description: "Error rate is {{ $value | humanizePercentage }} for {{ $labels.model_id }} over the last 5 minutes."
+
+      - alert: MLPredictionLatencyHigh
+        expr: >
+          histogram_quantile(0.95,
+            rate(aether_ml_prediction_duration_seconds_bucket[5m])
+          ) > 0.5
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "ML model {{ $labels.model_id }} p95 latency >500ms"
+          description: "p95 prediction latency is {{ $value }}s for {{ $labels.model_id }}."
+
+      - alert: MLFreshnessViolationRate
+        expr: >
+          rate(aether_ml_freshness_violations_total[10m])
+          / rate(aether_ml_freshness_checks_total[10m]) > 0.05
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "ML freshness SLA violation rate >5% for {{ $labels.model_id }}"
+          description: "{{ $value | humanizePercentage }} of freshness checks are failing SLA for {{ $labels.model_id }}."
+
+      - alert: MLDriftDetected
+        expr: aether_ml_psi_score > 0.2
+        for: 15m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Significant feature drift on ML model {{ $labels.model_id }}"
+          description: "PSI score {{ $value }} for {{ $labels.model_id }} exceeds 0.2 (significant drift threshold). Retraining recommended."
+
+      - alert: MLArtifactSignatureFailure
+        expr: rate(aether_ml_artifact_signature_failures_total[5m]) > 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "ML artifact HMAC signature failure for {{ $labels.model_id }}"
+          description: "Artifact integrity check failed for {{ $labels.model_id }}. Model may be tampered — serving blocked."
+
+      - alert: MLExtractionAttackSustained
+        expr: >
+          rate(extraction_defense_blocked[5m])
+          / rate(aether_ml_predictions_total[5m]) > 0.3
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Sustained ML extraction attack — {{ $value | humanizePercentage }} block rate"
+          description: "Extraction defense has blocked >30% of ML prediction requests for 5+ minutes. Possible coordinated extraction attempt."
+
+      - alert: MLModelRolledBack
+        expr: increase(aether_ml_rollbacks_total[5m]) > 0
+        for: 0m
+        labels:
+          severity: info
+        annotations:
+          summary: "ML model {{ $labels.model_id }} was rolled back"
+          description: "A rollback was triggered for {{ $labels.model_id }}. Review promotion audit log for details."
