@@ -1004,7 +1004,7 @@ function DeFiTab({ userId, window }: { userId: string; window: string }) {
               columns={[
                 { key: 'category', header: 'Category', render: r => fmt(r.category) },
                 { key: 'value_usd', header: 'USD Value', render: r => fmt(r.value_usd) },
-                { key: 'percentage', header: '% Share', render: r => fmt(r.percentage) },
+                { key: 'percentage', header: '% Share', render: r => r.percentage != null ? `${Math.round(Number(r.percentage) * 100)}%` : '—' },
               ]}
             />
         }
@@ -1028,11 +1028,26 @@ function DeFiTab({ userId, window }: { userId: string; window: string }) {
               columns={[
                 { key: 'favorite_pairs', header: 'Pairs', render: r => {
                   const v = r.favorite_pairs;
-                  return Array.isArray(v) ? v.join(', ') || '—' : fmt(v);
+                  if (Array.isArray(v)) {
+                    return v.map((p: unknown) => {
+                      if (p && typeof p === 'object') return (p as Record<string, unknown>).pair as string ?? '?';
+                      return String(p);
+                    }).filter(Boolean).join(', ') || '—';
+                  }
+                  return fmt(v);
                 }},
                 { key: 'protocol_loyalty', header: 'Protocol Loyalty', render: r => {
                   const v = r.protocol_loyalty;
-                  if (v && typeof v === 'object' && !Array.isArray(v)) {
+                  if (Array.isArray(v)) {
+                    return v.map((p: unknown) => {
+                      if (p && typeof p === 'object') {
+                        const { protocol_name, volume_pct } = p as Record<string, unknown>;
+                        return `${protocol_name} ${Math.round(Number(volume_pct) * 100)}%`;
+                      }
+                      return String(p);
+                    }).join(', ') || '—';
+                  }
+                  if (v && typeof v === 'object') {
                     const top = Object.entries(v as Record<string, unknown>).sort(([,a],[,b]) => Number(b) - Number(a)).slice(0,3);
                     return top.map(([k, pct]) => `${k} ${Math.round(Number(pct)*100)}%`).join(', ') || '—';
                   }
