@@ -11,8 +11,8 @@ Or via repo-doctor-fix which calls this automatically.
 from __future__ import annotations
 
 import json
+import subprocess
 import sys
-from datetime import datetime, timezone
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).parent.parent
@@ -20,6 +20,19 @@ ML_ROOT = REPO_ROOT / "ML Models" / "aether-ml"
 OUTPUT_PATH = REPO_ROOT / "docs" / "_generated" / "ml-implementation-manifest.json"
 
 sys.path.insert(0, str(ML_ROOT))
+
+
+def _source_commit() -> str:
+    """Return the HEAD commit SHA so the manifest is stable across reruns on the same commit."""
+    try:
+        result = subprocess.run(
+            ["git", "log", "-1", "--format=%H"],
+            capture_output=True, text=True, check=True,
+            cwd=str(REPO_ROOT),
+        )
+        return result.stdout.strip() or "unknown"
+    except Exception:
+        return "unknown"
 
 
 def _safe(val: object) -> object:
@@ -83,7 +96,7 @@ def build_manifest() -> dict:
 
     return {
         "_generated": True,
-        "_generated_at": datetime.now(timezone.utc).isoformat(),
+        "_source_commit": _source_commit(),
         "_source": "common/model_registry.py + common/feature_contracts.py",
         "total_models": len(models),
         "trainable_count": len(trainable_ids),

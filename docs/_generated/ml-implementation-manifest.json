@@ -1,6 +1,6 @@
 {
   "_generated": true,
-  "_generated_at": "2026-06-20T04:23:12.036498+00:00",
+  "_source_commit": "a5e01f23d5670ec3e832d4fd34c390ff99748d50",
   "_source": "common/model_registry.py + common/feature_contracts.py",
   "total_models": 11,
   "trainable_count": 9,
