@@ -11,7 +11,6 @@ Or via repo-doctor-fix which calls this automatically.
 from __future__ import annotations
 
 import json
-import subprocess
 import sys
 from pathlib import Path
 
@@ -22,15 +21,17 @@ OUTPUT_PATH = REPO_ROOT / "docs" / "_generated" / "ml-implementation-manifest.js
 sys.path.insert(0, str(ML_ROOT))
 
 
-def _source_commit() -> str:
-    """Return the HEAD commit SHA so the manifest is stable across reruns on the same commit."""
+def _platform_version() -> str:
+    """Read version from pyproject.toml — stable for same codebase, matches other generated files."""
     try:
-        result = subprocess.run(
-            ["git", "log", "-1", "--format=%H"],
-            capture_output=True, text=True, check=True,
-            cwd=str(REPO_ROOT),
-        )
-        return result.stdout.strip() or "unknown"
+        if sys.version_info >= (3, 11):
+            import tomllib
+            with open(REPO_ROOT / "pyproject.toml", "rb") as f:
+                return tomllib.load(f)["project"]["version"]
+        else:
+            import tomli
+            with open(REPO_ROOT / "pyproject.toml", "rb") as f:
+                return tomli.load(f)["project"]["version"]
     except Exception:
         return "unknown"
 
@@ -96,8 +97,8 @@ def build_manifest() -> dict:
 
     return {
         "_generated": True,
-        "_source_commit": _source_commit(),
-        "_source": "common/model_registry.py + common/feature_contracts.py",
+        "version": _platform_version(),
+        "generated_from": "common/model_registry.py + common/feature_contracts.py",
         "total_models": len(models),
         "trainable_count": len(trainable_ids),
         "models": models,
