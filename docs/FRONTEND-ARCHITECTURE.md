@@ -13,7 +13,7 @@ source_files:
 canonical_owner: frontend@aether
 estimated_read_minutes: 35
 toc_depth: 4
-last_synced_commit: b522d9a
+last_synced_commit: e0bcffe
 ---
 
 # Aether Frontend Architecture & Designer Handoff
@@ -41,6 +41,7 @@ There are two separate frontend applications. **Do not mix them up.**
 - **Suggestion feed** — OODA-driven prioritised recommendations with helpful/not helpful/dismiss feedback
 - Campaign management, attribution dashboards
 - API key management, plan management, usage metering
+- Webhook endpoint management — add/test/delete outbound delivery endpoints
 
 **Kyber (internal operator console) contains:**
 - Mission dashboard — real-time system health across all tenants

@@ -27,6 +27,7 @@ import { queryCache } from '@aether/ui';
 import { OutcomeLedgerPanel } from '@aether-app/components/outcome-ledger-panel';
 import { SdkFleetSection } from './sdk-fleet-section';
 import { NotificationsSection } from './notifications-section';
+import { WebhooksSection } from './webhooks-section';
 
 function formatRelative(iso: string | null): string {
   if (!iso) return 'never';
@@ -390,6 +391,12 @@ export function SettingsPage() {
 
       <div className="max-w-3xl">
         <NotificationsSection />
+      </div>
+
+      <TerminalSeparator />
+
+      <div className="max-w-3xl">
+        <WebhooksSection />
       </div>
     </div>
   );

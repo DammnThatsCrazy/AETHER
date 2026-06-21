@@ -2340,6 +2340,17 @@ Redacted tenant-safe feed — no internal scoring or suppression metadata expose
 | GET | `/v1/notifications/channels/slack/connect` | Initiate Slack OAuth (returns redirect URL) |
 | GET | `/v1/notifications/channels/slack/callback` | Slack OAuth callback |
 
+### Webhook Endpoint Configuration
+
+Tenant-managed outbound webhook delivery endpoints. Aether signs each delivery with an HMAC-SHA256 signature in the `X-Aether-Signature` header.
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/v1/notifications/webhooks` | List all registered webhook endpoints for the tenant |
+| POST | `/v1/notifications/webhooks` | Register a new endpoint (`url`, `events`, optional `secret`) |
+| DELETE | `/v1/notifications/webhooks/{webhook_id}` | Remove a webhook endpoint |
+| POST | `/v1/notifications/webhooks/{webhook_id}/test` | Ping the endpoint to verify reachability; returns `success`, `status_code`, and `latency_ms` |
+
 ### Interactive Callbacks
 
 | Method | Path | Description |

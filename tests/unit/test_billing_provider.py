@@ -117,10 +117,24 @@ async def test_stripe_provider_active_when_enabled(stripe_billing):
     assert provider.invoice_export_mode() == "provider_export"
 
 
-async def test_stripe_mutations_raise_until_wired(stripe_billing):
+async def test_stripe_create_customer_delegates_to_sdk(stripe_billing, monkeypatch):
+    """create_customer is now wired: it delegates to stripe.Customer.create when configured."""
+    import sys
+    from unittest.mock import MagicMock
+
+    mock_stripe = MagicMock()
+    mock_stripe.Customer.create.return_value = MagicMock(id="cus_test123")
+    monkeypatch.setitem(sys.modules, "stripe", mock_stripe)
+
     provider = stripe_billing.providers.get_billing_provider()
-    with pytest.raises(stripe_billing.base.ProviderDisabledError):
-        await provider.create_customer(tenant_id="t1")
+    result = await provider.create_customer(tenant_id="t1", email="user@example.com")
+
+    mock_stripe.Customer.create.assert_called_once()
+    kwargs = mock_stripe.Customer.create.call_args[1]
+    assert kwargs["metadata"]["tenant_id"] == "t1"
+    assert kwargs["email"] == "user@example.com"
+    assert result["customer_id"] == "cus_test123"
+    assert result["provider"] == "stripe"
 
 
 async def test_stripe_disabled_provider_does_not_process_webhooks(billing):
