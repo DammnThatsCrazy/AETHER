@@ -13,7 +13,7 @@ source_files:
 canonical_owner: platform@aether
 estimated_read_minutes: 20
 toc_depth: 3
-last_synced_commit: a80ab95
+last_synced_commit: c198b6b
 ---
 # Aether vNext — Architecture Guide
 
@@ -23,7 +23,7 @@ Aether is a **hybrid Python/FastAPI + Node/TypeScript** platform with four opera
 
 1. **SDK Plane** — Thin-client SDKs (Web, iOS, Android, React Native) collect raw events, fingerprints, wallet interactions, and session data. SDKs ship raw data to the backend.
 
-2. **Backend Plane** — Python/FastAPI with 65+ service routers handling ingestion, identity, analytics, ML inference, graph, rewards, lake management, profile intelligence, population omniview, expectation engine, behavioral continuity, RWA intelligence, Web3 coverage, cross-domain TradFi/Web2 intelligence, extraction defense mesh, privacy/policy control plane, **notification intelligence** (`/v1/notifications/intelligence/*` — event-driven multi-channel operator alerts + end-user Slack/Discord/Telegram/Webhook delivery), **suggestion intelligence** (`/v1/suggestions/*` — governed OODA lifecycle engine that observes signals from all intelligence services, orients them into ranked suggestions, and routes them through tenant-scoped review, approval, execution, and outcome measurement), **agentic observability** (`/v1/observability/*` — passive, observe-only recording of external agentic activity across MCP connections, Robinhood-style brokerage accounts, AgentMail-style inboxes, and x402 protocol interactions; AETHER observes but never executes), **capability discovery** (`/v1/capabilities` — tenant-scoped endpoint returning available Profile360 sub-resources, provider health and freshness, granted consent purposes, and active feature flags), plus the customer-facing productization surface: **registration** (`POST /v1/tenants`), **auth** (`/v1/auth/*` — email+password+OTP signup, Auth0 SSO callback, API-key recovery), **caller profile** (`/v1/me/*` — paginated self-service API keys), **billing** (`/v1/billing/*` — Stripe Checkout + Billing Portal + invoices), **Stripe webhook** (`/v1/admin/billing/stripe/webhook`, signature-verified), **SDK utilities** (`/sdk/identity/resolve` — cross-device identity), and a monthly overage cron task + SLA expiry worker + Dune Analytics scheduled polling worker running in the app lifespan. Infrastructure: PostgreSQL (asyncpg), Redis (redis.asyncio), Neptune (gremlinpython), Kafka (aiokafka, 145 topics), S3, Prometheus.
+2. **Backend Plane** — Python/FastAPI with 60+ service routers handling ingestion, identity, analytics, ML inference, graph, rewards, lake management, profile intelligence, population omniview, expectation engine, behavioral continuity, RWA intelligence, Web3 coverage, cross-domain TradFi/Web2 intelligence, extraction defense mesh, privacy/policy control plane, **notification intelligence** (`/v1/notifications/intelligence/*` — event-driven multi-channel operator alerts + end-user Slack/Discord/Telegram/Webhook delivery), plus the customer-facing productization surface: **registration** (`POST /v1/tenants`), **auth** (`/v1/auth/*` — email+password+OTP signup, Auth0 SSO callback, API-key recovery), **caller profile** (`/v1/me/*` — paginated self-service API keys), **billing** (`/v1/billing/*` — Stripe Checkout + Billing Portal + invoices), **Stripe webhook** (`/v1/admin/billing/stripe/webhook`, signature-verified), **SDK utilities** (`/sdk/identity/resolve` — cross-device identity), and a monthly overage cron task + SLA expiry worker + Dune Analytics scheduled polling worker running in the app lifespan. Infrastructure: PostgreSQL (asyncpg), Redis (redis.asyncio), Neptune (gremlinpython), Kafka (aiokafka, 145 topics), S3, Prometheus.
 
 3. **Data Lake Plane** — Medallion architecture (Bronze/Silver/Gold) for raw data persistence, validation, feature materialization, and intelligence output generation. Lake data feeds ML training, graph mutations, and intelligence APIs.
 
@@ -83,19 +83,18 @@ The SDK also collects raw user interactions, device fingerprints, wallet events,
 ### Module Architecture (Web SDK)
 
 ```
-AetherSDK (index.ts) — v8.9.0
+AetherSDK (index.ts) — v8.7.0
 │
 ├── Core (always loaded)
 │   ├── EventQueue .............. Batch + offline queue (POST /v1/events)
 │   ├── SessionManager ......... Session lifecycle + heartbeat
 │   ├── IdentityManager ........ Multi-wallet identity + traits
 │   ├── ConsentModule .......... GDPR/CCPA consent gates
-│   ├── DeviceFingerprintCollector  SHA-256 from 17 browser signals
-│   └── SDKHealthAgent ......... Fleet heartbeat (60 s) + manifest fetch (5 min)
+│   └── DeviceFingerprintCollector  SHA-256 from 17 browser signals
 │
 ├── Web2 Analytics (thin event emitters)
 │   ├── AutoDiscovery .......... Click listener (raw {selector, x, y})
-│   ├── Ecommerce .............. 8 methods: view, cart, removeFromCart, applyCoupon, beginCheckout, checkout, purchase, ...
+│   ├── Ecommerce .............. 5 methods: view, cart, checkout, purchase
 │   ├── FeatureFlags ........... Cache-only (fetch from /v1/config)
 │   ├── FormAnalytics .......... focus/blur/change events
 │   ├── Funnels ................ Event tagger from server config
@@ -110,25 +109,9 @@ AetherSDK (index.ts) — v8.9.0
 │   └── TrafficSource .......... Raw UTM/referrer/click ID/referrerDomain shipper
 │                                 + sessionStorage persistence for SPA navigation
 │
-├── Agent Lifecycle (22 emitters)
-│   └── aether.agent.* ......... registered, updated, authorized, deauthorized,
-│                                 capabilityGranted/Revoked, taskCreated/Decomposed/
-│                                 Started/Completed/Failed, toolCalled, resourceRequested,
-│                                 delegatedTask, subagentSpawned, policyEvaluated,
-│                                 handoff, escalatedToHuman, outcomeRecorded
-│
-├── x402 Lifecycle (15 emitters)
-│   └── aether.x402.* .......... resourceRequested, paymentRequired, quoteReceived,
-│                                 authorizationRequested/Resolved, paymentIntentCreated,
-│                                 paymentSubmitted/Settled/Failed/Timeout, receiptVerified,
-│                                 accessGranted/Denied, refundOrReversal
-│
-└── Rewards (thin observation + claim API)
-    ├── RewardClient ........... eligibility + claim via backend API
-    └── aether.rewards.* ....... actionQueued, proofGenerated, delivered, claimSubmitted
+└── Rewards (thin API client)
+    └── RewardClient ........... eligibility + claim via backend API
 ```
-
-React wrapper (`@aether/web/react`): `AetherProvider`, `useAether`, `useIdentity`, `useConsentState`, `useScreenOrPageTracking`, `useJourneyResumed` — SSR-safe (no-op when `typeof window === 'undefined'`).
 
 ### Device Fingerprinting
 
@@ -454,7 +437,7 @@ Campaign Attribution is extended to attribute downstream conversions back throug
 
 ### Layer 2b — A2H (Agent-to-Human)
 
-Tracks agent-initiated interactions back to human users — the reverse direction of H2A. New edge types:
+Tracks agent-initiated interactions back to human users — the reverse direction of H2A. Edge types:
 
 | Edge | Direction | Purpose |
 |---|---|---|
@@ -462,6 +445,16 @@ Tracks agent-initiated interactions back to human users — the reverse directio
 | `RECOMMENDS` | Agent → User | Agent-initiated suggestion or recommendation |
 | `DELIVERS_TO` | Agent → User | Task result delivery back to user |
 | `ESCALATES_TO` | Agent → User | Human-in-the-loop escalation for decisions |
+| `HAS_RECOMMENDATION` | Agent → User | Durable recommendation record |
+| `SUPPORTED_BY` | Agent → User | Agent provides supporting evidence to human |
+| `SELECTED_BY` | Agent → User | Human selected agent output |
+| `ACTED_FOR` | Agent → User | Agent acted on behalf of human |
+| `HAS_RETARGET_RECOMMENDATION` | Agent → User | Retargeting recommendation delivery |
+| `APPROVED_BY` | Agent → User | Human approval of agent action |
+| `REJECTED_BY` | Agent → User | Human rejection of agent action |
+| `REQUESTS_APPROVAL_FROM` | Agent → User | Agent requests human approval |
+| `ESCALATES_PAYMENT_TO` | Agent → User | Payment escalated to human for review |
+| `ESCALATED_TO_HUMAN` | Agent → User | Generic agent-to-human escalation |
 
 ### Layer 3 — A2A (Agent-to-Agent)
 

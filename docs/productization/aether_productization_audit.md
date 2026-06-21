@@ -11,7 +11,7 @@ source_files:
 canonical_owner: platform@aether
 estimated_read_minutes: 15
 toc_depth: 3
-last_synced_commit: 2ee8798
+last_synced_commit: c198b6b
 ---
 
 # AETHER Productization Audit
@@ -118,7 +118,7 @@ Rubric: 0 absent · 1 stub/scaffold · 2 partial/pilot · 3 pre-production ·
 | SDKs | 4 |
 | identity resolution | 4 |
 | Profile 360 | 5 |
-| Neptune relationships (H2H/H2A/A2H/A2A) | 3 |
+| Neptune relationships (H2H/H2A/A2H/A2A) | 4 |
 | graph mutation safety | 4 |
 | graph health / drift detection | 4 |
 | Kyber (operator console) | 4 |
