@@ -33,7 +33,7 @@ export function CaseAttachmentPanel({ networkId, tenantId, traceId }: CaseAttach
   const [caseId, setCaseId] = useState('');
 
   const { data: cases, isLoading, refetch } = useQuery({
-    key: ['investigations:list', tenantId],
+    key: `investigations:list:${tenantId}`,
     fetcher: () => api.investigations.list(tenantId, { status: 'open', limit: 20 }),
     staleTime: 30_000,
   });
@@ -61,42 +61,42 @@ export function CaseAttachmentPanel({ networkId, tenantId, traceId }: CaseAttach
 
   async function handleCreate() {
     if (!title.trim()) {
-      toast({ title: 'Title required', variant: 'destructive' });
+      toast.error('Title required');
       return;
     }
-    try {
-      await createCase.mutateAsync(title.trim());
-      toast({ title: 'Case created', variant: 'default' });
+    await createCase.mutate(title.trim());
+    if (createCase.error) {
+      toast.error('Failed to create case');
+    } else {
+      toast.success('Case created');
       setMode('idle');
       setTitle('');
       refetch();
-    } catch {
-      toast({ title: 'Failed to create case', variant: 'destructive' });
     }
   }
 
   async function handleAttach() {
     if (!caseId.trim()) {
-      toast({ title: 'Select a case', variant: 'destructive' });
+      toast.error('Select a case');
       return;
     }
-    try {
-      await attachNetwork.mutateAsync(caseId.trim());
-      toast({ title: 'Network attached to case', variant: 'default' });
+    await attachNetwork.mutate(caseId.trim());
+    if (attachNetwork.error) {
+      toast.error('Attachment failed');
+    } else {
+      toast.success('Network attached to case');
       setMode('idle');
       setCaseId('');
-    } catch {
-      toast({ title: 'Attachment failed', variant: 'destructive' });
     }
   }
 
   return (
     <div className="flex flex-col gap-3">
       <div className="flex gap-2">
-        <Button variant="outline" size="sm" onClick={() => setMode('create')}>
+        <Button variant="secondary" size="sm" onClick={() => setMode('create')}>
           Create Case
         </Button>
-        <Button variant="outline" size="sm" onClick={() => setMode('attach')}>
+        <Button variant="secondary" size="sm" onClick={() => setMode('attach')}>
           Attach to Existing
         </Button>
       </div>
@@ -112,8 +112,8 @@ export function CaseAttachmentPanel({ networkId, tenantId, traceId }: CaseAttach
                 onChange={e => setTitle(e.target.value)}
                 placeholder="Case title"
               />
-              <Button size="sm" onClick={handleCreate} disabled={createCase.isPending}>
-                {createCase.isPending ? '…' : 'Create'}
+              <Button size="sm" onClick={handleCreate} disabled={createCase.isLoading}>
+                {createCase.isLoading ? '…' : 'Create'}
               </Button>
               <Button size="sm" variant="ghost" onClick={() => setMode('idle')}>Cancel</Button>
             </div>
@@ -138,8 +138,8 @@ export function CaseAttachmentPanel({ networkId, tenantId, traceId }: CaseAttach
                   </option>
                 ))}
               </select>
-              <Button size="sm" onClick={handleAttach} disabled={attachNetwork.isPending}>
-                {attachNetwork.isPending ? '…' : 'Attach'}
+              <Button size="sm" onClick={handleAttach} disabled={attachNetwork.isLoading}>
+                {attachNetwork.isLoading ? '…' : 'Attach'}
               </Button>
               <Button size="sm" variant="ghost" onClick={() => setMode('idle')}>Cancel</Button>
             </div>

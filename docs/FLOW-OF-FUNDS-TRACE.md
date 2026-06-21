@@ -1,15 +1,15 @@
 ---
 title: Flow of Funds Trace
 slug: flow-of-funds-trace
-section: features
+section: concepts
 visibility: I
-audience: [analyst, dev-senior, operator]
+audience: [security, dev-senior, ops]
 status: stable
 since_version: "9.0.0"
 source_files:
   - Backend Architecture/aether-backend/services/flow_trace/
   - Backend Architecture/aether-backend/repositories/repos.py
-last_synced_commit: HEAD
+last_synced_commit: bf87315
 ---
 
 # Flow of Funds Trace

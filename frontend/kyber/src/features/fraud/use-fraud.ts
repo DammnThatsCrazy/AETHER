@@ -40,7 +40,7 @@ export function useUpdateFraudConfig() {
 
 export function useFraudNetworks(params?: { status?: string; limit?: number }) {
   return useQuery({
-    key: ['fraud-networks', JSON.stringify(params)],
+    key: `fraud-networks:${JSON.stringify(params)}`,
     fetcher: () => api.fraudNetworks.list(params),
     staleTime: STALE,
   });
@@ -48,7 +48,7 @@ export function useFraudNetworks(params?: { status?: string; limit?: number }) {
 
 export function useFraudNetworkDetail(networkId: string) {
   return useQuery({
-    key: ['fraud-network', networkId],
+    key: `fraud-network:${networkId}`,
     fetcher: () => api.fraudNetworks.get(networkId),
     staleTime: STALE,
     enabled: Boolean(networkId),
@@ -57,7 +57,7 @@ export function useFraudNetworkDetail(networkId: string) {
 
 export function useFraudNetworkGraph(networkId: string) {
   return useQuery({
-    key: ['fraud-network-graph', networkId],
+    key: `fraud-network-graph:${networkId}`,
     fetcher: () => api.fraudNetworks.graph(networkId),
     staleTime: STALE,
     enabled: Boolean(networkId),
@@ -66,7 +66,7 @@ export function useFraudNetworkGraph(networkId: string) {
 
 export function useFraudNetworkMembers(networkId: string) {
   return useQuery({
-    key: ['fraud-network-members', networkId],
+    key: `fraud-network-members:${networkId}`,
     fetcher: () => api.fraudNetworks.members(networkId),
     staleTime: STALE,
     enabled: Boolean(networkId),
@@ -75,7 +75,7 @@ export function useFraudNetworkMembers(networkId: string) {
 
 export function useFraudNetworkEvidence(networkId: string) {
   return useQuery({
-    key: ['fraud-network-evidence', networkId],
+    key: `fraud-network-evidence:${networkId}`,
     fetcher: () => api.fraudNetworks.evidence(networkId),
     staleTime: STALE,
     enabled: Boolean(networkId),
@@ -95,7 +95,7 @@ export function useBuildFraudNetwork() {
 
 export function useFlowTraces(params?: { limit?: number }) {
   return useQuery({
-    key: ['flow-traces', JSON.stringify(params)],
+    key: `flow-traces:${JSON.stringify(params)}`,
     fetcher: () => api.flowTrace.list(params),
     staleTime: STALE,
   });
@@ -103,7 +103,7 @@ export function useFlowTraces(params?: { limit?: number }) {
 
 export function useFlowTraceDetail(traceId: string) {
   return useQuery({
-    key: ['flow-trace', traceId],
+    key: `flow-trace:${traceId}`,
     fetcher: () => api.flowTrace.get(traceId),
     staleTime: STALE,
     enabled: Boolean(traceId),
@@ -112,7 +112,7 @@ export function useFlowTraceDetail(traceId: string) {
 
 export function useFlowTracePaths(traceId: string) {
   return useQuery({
-    key: ['flow-trace-paths', traceId],
+    key: `flow-trace-paths:${traceId}`,
     fetcher: () => api.flowTrace.paths(traceId),
     staleTime: STALE,
     enabled: Boolean(traceId),

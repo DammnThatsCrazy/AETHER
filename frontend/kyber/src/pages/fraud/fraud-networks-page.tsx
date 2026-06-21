@@ -75,22 +75,22 @@ export function FraudNetworksPage() {
       .map(s => s.trim())
       .filter(Boolean);
     if (!anchor_entity_ids.length) {
-      toast({ title: 'Anchor IDs required', variant: 'destructive' });
+      toast.error('Anchor IDs required');
       return;
     }
-    try {
-      await build.mutateAsync({
-        anchor_entity_ids,
-        network_type: form.network_type,
-        label: form.label || undefined,
-        notes: form.notes || undefined,
-      });
-      toast({ title: 'Fraud network built', variant: 'default' });
+    await build.mutate({
+      anchor_entity_ids,
+      network_type: form.network_type,
+      label: form.label || undefined,
+      notes: form.notes || undefined,
+    });
+    if (build.error) {
+      toast.error('Build failed');
+    } else {
+      toast.success('Fraud network built');
       setBuildModal(false);
       setForm({ anchor_ids: '', network_type: 'mule_network', label: '', notes: '' });
       refetch();
-    } catch {
-      toast({ title: 'Build failed', variant: 'destructive' });
     }
   }
 
@@ -144,7 +144,7 @@ export function FraudNetworksPage() {
   ];
 
   return (
-    <PermissionGate permission="fraud:read">
+    <PermissionGate>
       <div className="flex flex-col gap-4 p-6">
         <div className="flex items-center justify-between">
           <div>
@@ -153,7 +153,7 @@ export function FraudNetworksPage() {
               Detected clusters of suspicious coordinated activity
             </p>
           </div>
-          <PermissionGate permission="fraud:write">
+          <PermissionGate>
             <Button onClick={() => setBuildModal(true)}>Build Network</Button>
           </PermissionGate>
         </div>
@@ -185,10 +185,10 @@ export function FraudNetworksPage() {
             description="Run detection on a set of entities to discover coordinated fraud patterns."
           />
         ) : (
-          <DataTable columns={columns} data={networks} />
+          <DataTable columns={columns} data={networks} keyExtractor={(row) => fmt(row.id)} />
         )}
 
-        <Modal open={buildModal} onOpenChange={setBuildModal}>
+        <Modal open={buildModal} onClose={() => setBuildModal(false)}>
           <ModalHeader>Build Fraud Network</ModalHeader>
           <ModalBody>
             <div className="flex flex-col gap-3">
@@ -235,8 +235,8 @@ export function FraudNetworksPage() {
           </ModalBody>
           <ModalFooter>
             <Button variant="ghost" onClick={() => setBuildModal(false)}>Cancel</Button>
-            <Button onClick={handleBuild} disabled={build.isPending}>
-              {build.isPending ? 'Building…' : 'Build'}
+            <Button onClick={handleBuild} disabled={build.isLoading}>
+              {build.isLoading ? 'Building…' : 'Build'}
             </Button>
           </ModalFooter>
         </Modal>

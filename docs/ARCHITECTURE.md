@@ -521,4 +521,18 @@ The agent layer owns: ingest orchestration, discovery, enrichment, verification,
 
 The agent layer does NOT own: raw storage backends (PostgreSQL/Redis/S3/Neptune/Kafka), end-user graph surfaces, tenant-facing UX, provider adapters, lake CRUD, auth/tenancy.
 
+---
+
+## Fraud Intelligence Services
+
+Three additive service modules mount conditionally via `main.py` behind feature flags:
+
+| Service | Feature Flag | Router Prefix |
+|---------|-------------|---------------|
+| `services/fraud_networks` | `FEATURE_FRAUD_NETWORKS` | `/v1/fraud/networks` |
+| `services/flow_trace` | `FEATURE_FLOW_TRACE` | `/v1/flow-trace` |
+| `services/risk_overlay` | `FEATURE_RISK_OVERLAYS` | `/v1/risk-overlay` |
+
+These services are fully additive — they add no startup overhead when their flags are disabled. They share the graph client, event producer, and investigation repository with existing services. The `FraudIntelligenceConfig` dataclass in `config/settings.py` owns all five flags and tuning parameters (`alert_risk_threshold`, `max_network_depth`, `max_flow_trace_hops`).
+
 See `docs/AGENT-CONTROLLER.md` for the full specification and `Agent Layer/README.md` for implementation details.

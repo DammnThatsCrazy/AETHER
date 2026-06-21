@@ -42,28 +42,28 @@ export function FlowTracePage() {
 
   async function handleCreate() {
     if (!form.anchor_entity_id.trim()) {
-      toast({ title: 'Anchor entity ID is required', variant: 'destructive' });
+      toast.error('Anchor entity ID is required');
       return;
     }
-    try {
-      await createTrace.mutateAsync({
-        anchor_entity_id: form.anchor_entity_id.trim(),
-        direction: form.direction,
-        max_hops: form.max_hops,
-        min_amount_usd: form.min_amount_usd > 0 ? form.min_amount_usd : undefined,
-      });
-      toast({ title: 'Trace created', variant: 'default' });
+    await createTrace.mutate({
+      anchor_entity_id: form.anchor_entity_id.trim(),
+      direction: form.direction,
+      max_hops: form.max_hops,
+      min_amount_usd: form.min_amount_usd > 0 ? form.min_amount_usd : undefined,
+    });
+    if (createTrace.error) {
+      toast.error('Trace failed');
+    } else {
+      toast.success('Trace created');
       setForm({ anchor_entity_id: '', direction: 'downstream', max_hops: 5, min_amount_usd: 0 });
       refetch();
-    } catch {
-      toast({ title: 'Trace failed', variant: 'destructive' });
     }
   }
 
   const trace = asRec(traceDetail);
 
   return (
-    <PermissionGate permission="fraud:read">
+    <PermissionGate>
       <div className="flex flex-col gap-4 p-6">
         <div>
           <h1 className="text-xl font-semibold text-text-primary">Flow of Funds Trace</h1>
@@ -118,9 +118,9 @@ export function FlowTracePage() {
                   onChange={e => setForm(f => ({ ...f, min_amount_usd: Number(e.target.value) }))}
                 />
               </div>
-              <PermissionGate permission="fraud:write">
-                <Button onClick={handleCreate} disabled={createTrace.isPending}>
-                  {createTrace.isPending ? 'Tracing…' : 'Trace'}
+              <PermissionGate>
+                <Button onClick={handleCreate} disabled={createTrace.isLoading}>
+                  {createTrace.isLoading ? 'Tracing…' : 'Trace'}
                 </Button>
               </PermissionGate>
             </div>

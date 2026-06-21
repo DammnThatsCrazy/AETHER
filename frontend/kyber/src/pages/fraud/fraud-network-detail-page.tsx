@@ -1,10 +1,11 @@
 import { useState } from 'react';
 import { useParams } from 'react-router-dom';
 import {
-  Badge, Button, Card, CardContent, CardHeader, CardTitle,
+  Badge, Card, CardContent,
   DataTable, EmptyState, LoadingState, Tabs, TabsContent, TabsList, TabsTrigger,
 } from '@aether/ui';
 import { PermissionGate } from '@kyber/features/permissions';
+import type { GraphNode, GraphEdge } from '@kyber/types';
 import {
   useFraudNetworkDetail,
   useFraudNetworkGraph,
@@ -53,6 +54,7 @@ export function FraudNetworkDetailPage() {
   const { networkId = '' } = useParams<{ networkId: string }>();
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
   const [selectedEdgeId, setSelectedEdgeId] = useState<string | null>(null);
+  const [overlay] = useState<'trust' | 'risk' | 'anomaly' | 'none'>('none');
 
   const { data: network, isLoading } = useFraudNetworkDetail(networkId);
   const { data: graphData } = useFraudNetworkGraph(networkId);
@@ -71,13 +73,11 @@ export function FraudNetworkDetailPage() {
     <EmptyState title="Network not found" description={`No network with id ${networkId}`} />
   );
 
-  const cytoscapeElements = [
-    ...((graphPayload.nodes as unknown[]) ?? []).map((n: unknown) => ({ data: asRec(n) })),
-    ...((graphPayload.edges as unknown[]) ?? []).map((e: unknown) => ({ data: asRec(e) })),
-  ];
+  const graphNodes = ((graphPayload.nodes as unknown[]) ?? []) as unknown as GraphNode[];
+  const graphEdges = ((graphPayload.edges as unknown[]) ?? []) as unknown as GraphEdge[];
 
   return (
-    <PermissionGate permission="fraud:read">
+    <PermissionGate>
       <div className="flex flex-col gap-4 p-6">
         <div className="flex items-center justify-between">
           <div>
@@ -106,9 +106,11 @@ export function FraudNetworkDetailPage() {
             <Card>
               <CardContent className="p-0 h-[520px]">
                 <GraphCanvas
-                  elements={cytoscapeElements}
-                  onSelectNode={(id) => { setSelectedNodeId(id); setSelectedEdgeId(null); }}
-                  onSelectEdge={(id) => { setSelectedEdgeId(id); setSelectedNodeId(null); }}
+                  nodes={graphNodes}
+                  edges={graphEdges}
+                  overlay={overlay}
+                  onSelectNode={(node) => { setSelectedNodeId(node?.id ?? null); setSelectedEdgeId(null); }}
+                  onSelectEdge={(edge) => { setSelectedEdgeId(edge?.id ?? null); setSelectedNodeId(null); }}
                 />
               </CardContent>
             </Card>
@@ -118,7 +120,7 @@ export function FraudNetworkDetailPage() {
             {members.length === 0 ? (
               <EmptyState title="No members" description="No member data available." />
             ) : (
-              <DataTable columns={memberColumns} data={members} />
+              <DataTable columns={memberColumns} data={members} keyExtractor={(row) => fmt(row.entity_id ?? row.id)} />
             )}
           </TabsContent>
 

@@ -1118,12 +1118,12 @@
       "path": "docs/FLOW-OF-FUNDS-TRACE.md",
       "title": "Flow of Funds Trace",
       "slug": "flow-of-funds-trace",
-      "section": "features",
+      "section": "concepts",
       "visibility": "I",
       "audience": [
-        "analyst",
+        "security",
         "dev-senior",
-        "operator"
+        "ops"
       ],
       "status": "stable",
       "since_version": "9.0.0"
@@ -1132,13 +1132,13 @@
       "path": "docs/FRAUD-NETWORK-INTELLIGENCE.md",
       "title": "Fraud Network Intelligence",
       "slug": "fraud-network-intelligence",
-      "section": "features",
+      "section": "concepts",
       "visibility": "I",
       "audience": [
-        "analyst",
+        "security",
         "architect",
         "dev-senior",
-        "operator"
+        "ops"
       ],
       "status": "stable",
       "since_version": "9.0.0"
@@ -1560,11 +1560,11 @@
       "path": "docs/KYBER-FRAUD-INVESTIGATIONS.md",
       "title": "Kyber Fraud Investigations Workspace",
       "slug": "kyber-fraud-investigations",
-      "section": "operator-guides",
+      "section": "kyber",
       "visibility": "I",
       "audience": [
-        "operator",
-        "analyst"
+        "ops",
+        "security"
       ],
       "status": "stable",
       "since_version": "9.0.0"

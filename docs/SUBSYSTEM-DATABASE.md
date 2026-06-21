@@ -12,7 +12,7 @@ source_files:
 canonical_owner: backend@aether
 estimated_read_minutes: 5
 toc_depth: 3
-last_synced_commit: a80ab95
+last_synced_commit: bf87315
 ---
 
 # PostgreSQL / Repository Subsystem
@@ -152,4 +152,19 @@ Database health is probed via `SELECT 1` in `ResourceRegistry.health_check()`. E
 - `DATABASE_URL` not set in production → `RuntimeError` at startup
 - `asyncpg` not installed in production → `RuntimeError` at startup
 - PostgreSQL unreachable in local → falls back to in-memory dicts
+
+## Fraud Intelligence Repositories
+
+Six repositories were added to `repositories/repos.py` for the fraud intelligence subsystem. All follow `BaseRepository` and use the same in-memory / DynamoDB / Postgres dispatch:
+
+| Repository | Store Key | Primary Use |
+|-----------|-----------|------------|
+| `FraudNetworkRepository` | `fraud_networks` | Fraud network records indexed by `id` + `tenant_id` |
+| `FraudNetworkMemberRepository` | `fraud_network_members` | Per-network member records with `entity_id`, `role`, `risk_score` |
+| `FraudNetworkEdgeRepository` | `fraud_network_edges` | Transfer edges projected into fraud network graph |
+| `FlowTraceRepository` | `flow_traces` | Flow trace execution records |
+| `FlowTracePathRepository` | `flow_trace_paths` | Individual BFS paths discovered per trace |
+| `RiskOverlaySnapshotRepository` | `risk_overlay_snapshots` | Cytoscape-ready overlay snapshots for graph rendering |
+
+All stores are tenant-scoped: every `list_by_tenant` / `list_by_network` / `list_by_trace` query includes `tenant_id` in the filter. Cross-tenant queries at the repository level are not possible — `find_many(filters={"tenant_id": ...})` enforces isolation before any result is returned.
 - Query timeout → `asyncpg.exceptions.QueryCanceledError` after 30s

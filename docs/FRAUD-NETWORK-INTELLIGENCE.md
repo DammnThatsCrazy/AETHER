@@ -1,15 +1,15 @@
 ---
 title: Fraud Network Intelligence
 slug: fraud-network-intelligence
-section: features
+section: concepts
 visibility: I
-audience: [analyst, architect, dev-senior, operator]
+audience: [security, architect, dev-senior, ops]
 status: stable
 since_version: "9.0.0"
 source_files:
   - Backend Architecture/aether-backend/services/fraud_networks/
   - Backend Architecture/aether-backend/repositories/repos.py
-last_synced_commit: HEAD
+last_synced_commit: bf87315
 ---
 
 # Fraud Network Intelligence

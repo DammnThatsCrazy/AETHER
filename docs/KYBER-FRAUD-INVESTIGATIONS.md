@@ -1,15 +1,15 @@
 ---
 title: Kyber Fraud Investigations Workspace
 slug: kyber-fraud-investigations
-section: operator-guides
+section: kyber
 visibility: I
-audience: [operator, analyst]
+audience: [ops, security]
 status: stable
 since_version: "9.0.0"
 source_files:
   - frontend/kyber/src/pages/fraud/
   - frontend/kyber/src/components/fraud/
-last_synced_commit: HEAD
+last_synced_commit: bf87315
 ---
 
 # Kyber Fraud Investigations Workspace

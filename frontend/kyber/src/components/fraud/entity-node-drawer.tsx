@@ -30,7 +30,7 @@ export function EntityNodeDrawer({ entityId, networkId, onClose }: EntityNodeDra
   const navigate = useNavigate();
 
   const { data: profile, isLoading } = useQuery({
-    key: ['entity-profile', entityId],
+    key: `entity-profile:${entityId}`,
     fetcher: () => api.entityIntelligence.profile({ tenantId: '', entity: { kind: 'entity', id: entityId } }),
     staleTime: 30_000,
     enabled: Boolean(entityId),
@@ -94,7 +94,7 @@ export function EntityNodeDrawer({ entityId, networkId, onClose }: EntityNodeDra
 
       <div className="border-t border-border-default px-4 py-3 flex flex-col gap-2">
         <Button
-          variant="outline"
+          variant="secondary"
           size="sm"
           className="w-full"
           onClick={() => navigate(`/profile360/entity/${entityId}`)}
@@ -102,7 +102,7 @@ export function EntityNodeDrawer({ entityId, networkId, onClose }: EntityNodeDra
           Open Profile 360
         </Button>
         <Button
-          variant="outline"
+          variant="secondary"
           size="sm"
           className="w-full"
           onClick={() => navigate(`/fraud-networks/flow-trace?anchor=${entityId}&direction=upstream`)}
@@ -110,7 +110,7 @@ export function EntityNodeDrawer({ entityId, networkId, onClose }: EntityNodeDra
           Trace Upstream
         </Button>
         <Button
-          variant="outline"
+          variant="secondary"
           size="sm"
           className="w-full"
           onClick={() => navigate(`/fraud-networks/flow-trace?anchor=${entityId}&direction=downstream`)}
