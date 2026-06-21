@@ -304,7 +304,7 @@ Backend admin routes for ML operational state are defined in:
 | ML Prometheus alert rules | 8 ML-specific alerts in `aether_ml_health` group | Medium | ✅ Implemented |
 | Kyber ML admin alerts/audit/rollback endpoints | 4 new admin routes added | Medium | ✅ Implemented |
 | Background drift monitoring loop | G27 — `_drift_check_periodic` asyncio task, 300 s interval, started in lifespan | Medium | ✅ Implemented |
-| ML CI path-based triggers | G26 — no dedicated ML CI job | High | 🔧 |
+| ML CI path-based triggers | G26 — path filter + `ml-validate`/`ml-tests`/`ml-docs-check` steps in `repo-health.yml`; `ml-container-build` Makefile target | High | ✅ Implemented |
 
 ---
 
