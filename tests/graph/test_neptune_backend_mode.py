@@ -47,7 +47,7 @@ def test_local_env_uses_in_memory_backend() -> None:
             await client.connect()
             assert client.mode == "in-memory", f"Expected in-memory, got {client.mode!r}"
 
-        asyncio.get_event_loop().run_until_complete(run())
+        asyncio.run(run())
 
 
 def test_non_local_without_neptune_raises_runtime_error() -> None:
@@ -67,7 +67,7 @@ def test_non_local_without_neptune_raises_runtime_error() -> None:
                 assert "NEPTUNE_ENDPOINT" in str(e)
 
         try:
-            asyncio.get_event_loop().run_until_complete(run())
+            asyncio.run(run())
         finally:
             os.environ["AETHER_ENV"] = "local"
 
@@ -85,7 +85,7 @@ def test_graph_client_mode_is_in_memory_after_local_connect() -> None:
             await client.connect()
             return client.mode
 
-        mode = asyncio.get_event_loop().run_until_complete(run())
+        mode = asyncio.run(run())
         assert mode == "in-memory"
 
 
@@ -102,7 +102,7 @@ def test_graph_health_check_returns_true_for_in_memory() -> None:
             await client.connect()
             return await client.health_check()
 
-        healthy = asyncio.get_event_loop().run_until_complete(run())
+        healthy = asyncio.run(run())
         assert healthy is True
 
 

@@ -37,7 +37,7 @@ def backend_path():
 
 
 def _run(coro):
-    return asyncio.get_event_loop().run_until_complete(coro)
+    return asyncio.run(coro)
 
 
 def test_traversal_result_has_a2a_cycles_detected_field() -> None:
