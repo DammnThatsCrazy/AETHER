@@ -3233,11 +3233,11 @@
       "path": "docs/api/FLOW-TRACE.md",
       "title": "Flow Trace API Reference",
       "slug": "api/flow-trace",
-      "section": "api-reference",
+      "section": "api",
       "visibility": "I",
       "audience": [
         "dev-senior",
-        "analyst",
+        "security",
         "architect"
       ],
       "status": "stable",
@@ -3247,11 +3247,11 @@
       "path": "docs/api/FRAUD-NETWORKS.md",
       "title": "Fraud Networks API Reference",
       "slug": "api/fraud-networks",
-      "section": "api-reference",
+      "section": "api",
       "visibility": "I",
       "audience": [
         "dev-senior",
-        "analyst",
+        "security",
         "architect"
       ],
       "status": "stable",
