@@ -41,6 +41,7 @@ There are two separate frontend applications. **Do not mix them up.**
 - **Suggestion feed** — OODA-driven prioritised recommendations with helpful/not helpful/dismiss feedback
 - Campaign management, attribution dashboards
 - API key management, plan management, usage metering
+- Webhook endpoint management — add/test/delete outbound delivery endpoints
 
 **Kyber (internal operator console) contains:**
 - Mission dashboard — real-time system health across all tenants
