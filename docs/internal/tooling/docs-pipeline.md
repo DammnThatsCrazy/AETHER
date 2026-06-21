@@ -20,7 +20,7 @@ source_files:
 canonical_owner: platform@aether
 estimated_read_minutes: 8
 toc_depth: 3
-last_synced_commit: 6d78307
+last_synced_commit: c198b6b
 ---
 
 # Documentation Pipeline
@@ -58,7 +58,7 @@ This page is `I`.
 |--------|-----|
 | `scripts/validate_docs.py` | Version-drift check across package manifests, changelogs, doc headers. |
 | `scripts/validate_frontmatter.py` | Validates every `docs/**/*.{md,mdx}` against `docs_schema.json`. Fails on invalid **or** missing frontmatter. |
-| `scripts/validate_contracts.py` | Cross-checks the generated artifacts: every event's consent purpose + family must exist in the canonical contracts. Catches cross-file drift the per-file generators can't. Also delegates to `scripts/validate_identity_security.py` for identity route security control validation (suppress endpoint, write-permission enforcement, alias redaction, tenant scoping). |
+| `scripts/validate_contracts.py` | Cross-checks the generated artifacts: every event's consent purpose + family must exist in the canonical contracts. Catches cross-file drift the per-file generators can't. |
 | `scripts/docs_drift.py` | For each page with `source_files:`, verifies the paths exist (fatal if not) and — when `last_synced_commit:` is set — flags staleness. `--update` **selectively** re-stamps only docs whose source files have actually changed since `last_synced_commit` (clean docs are skipped to avoid mass `last_synced_commit` conflicts on every rebase). False-positive prevention: `doc_reviewed_after_sources()` suppresses stale warnings when a doc and its source files were both updated in the same commit range, ensuring that PRs which update source + doc together don't generate spurious CI failures. The sync-managed pages (`REPO-INDEX.md`, `AUTOMATION.md`) are excluded from drift checks and stamping; their freshness is enforced by repo-doctor's diff-after-sync check instead. |
 | `scripts/sync_docs.py` | Regenerates `docs/REPO-INDEX.md` and `docs/AUTOMATION.md` from the live tree. |
 | `scripts/docs_extract/run_all.py` | Runs every generator (see below). |
@@ -105,6 +105,12 @@ make docs-fix             # regenerate and sync docs only
 # Production readiness (scorecard + blockers + live consistency checks)
 make production-status    # advisory readiness report (scripts/production_status.py)
 make release-gate         # ci-check + strict production status
+
+# Graph integrity and release gate
+make graph-test           # run all tests/graph/ suites
+make graph-replay         # synthetic H2H/H2A/A2H/A2A replay workload
+make graph-release-check  # machine-readable release gate (all EdgeTypes mapped, fail-closed, required props)
+make graph-docs-check     # docs drift check scoped to graph source files
 ```
 
 The `repo-doctor` family delegates to `scripts/repo_doctor.py`, which

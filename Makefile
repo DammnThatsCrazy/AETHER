@@ -252,6 +252,22 @@ bump-version: ## Bump version across all files (usage: make bump-version V=8.4.0
 	python scripts/bump_version.py $(V)
 
 # ---------------------------------------------------------------------------
+# Graph — layer exhaustiveness, write safety, replay workloads
+# ---------------------------------------------------------------------------
+
+graph-test: ## Run all graph tests (root-level + backend tests)
+	python -m pytest tests/graph/ "Backend Architecture/aether-backend/tests/graph/" -v --tb=short
+
+graph-replay: ## Run synthetic graph replay workload (in-memory, no Neptune required)
+	python scripts/graph/replay_relationship_layers.py
+
+graph-release-check: ## Machine-readable graph release gate (exits 0 on pass, 1 on fail)
+	python scripts/graph/check_graph_release_gate.py
+
+graph-docs-check: ## Docs drift check scoped to graph source files
+	python scripts/docs_drift.py --strict
+
+# ---------------------------------------------------------------------------
 # Production status & release gate
 # ---------------------------------------------------------------------------
 

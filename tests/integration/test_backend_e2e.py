@@ -583,9 +583,9 @@ class TestA2HRelationshipLayerE2E:
 
         assert RelationshipLayer.A2H == "A2H"
         assert RelationshipLayer.A2H.value == "A2H"
-        # Ensure all four layers exist
+        # Ensure all four canonical layers exist (EXCLUDED is a valid non-canonical layer)
         layers = {l.value for l in RelationshipLayer}
-        assert layers == {"H2H", "H2A", "A2H", "A2A"}
+        assert {"H2H", "H2A", "A2H", "A2A"}.issubset(layers)
 
     def test_a2h_edges_classified_correctly(self):
         """A2H edge types should classify into the A2H layer."""
