@@ -309,6 +309,50 @@ _EDGE_LAYER_MAP: dict[str, RelationshipLayer] = {
     EdgeType.CUSTOMER_OF: RelationshipLayer.H2H,
     EdgeType.INVESTOR_IN: RelationshipLayer.H2H,
     EdgeType.CONTRACTOR_FOR: RelationshipLayer.H2H,
+
+    # ── H2A — human/org delegation to agent (agentic observability wave) ──
+    EdgeType.HUMAN_DELEGATED_TO_AGENT: RelationshipLayer.H2A,
+    EdgeType.ORG_DELEGATED_TO_AGENT: RelationshipLayer.H2A,
+
+    # ── A2H — agent signals/notifications delivered to humans ─────────────
+    EdgeType.AGENT_PRODUCED_RISK_SIGNAL: RelationshipLayer.A2H,
+    EdgeType.EXTERNAL_ACCOUNT_EMITTED_NOTIFICATION: RelationshipLayer.A2H,
+    EdgeType.INTERACTION_FLAGGED_REPLAY_RISK: RelationshipLayer.A2H,
+
+    # ── A2A — agentic observability: MCP, inbox, x402, external accounts ──
+    EdgeType.AGENT_ACTED_ON_BEHALF_OF: RelationshipLayer.A2A,
+    EdgeType.AGENT_CONNECTED_VIA_MCP: RelationshipLayer.A2A,
+    EdgeType.AGENT_GENERATED_TRADE_INTENT: RelationshipLayer.A2A,
+    EdgeType.AGENT_HAS_INBOX: RelationshipLayer.A2A,
+    EdgeType.AGENT_LINKED_TO_EXTERNAL_ACCOUNT: RelationshipLayer.A2A,
+    EdgeType.AGENT_REQUESTED_RESOURCE_OBS: RelationshipLayer.A2A,
+    EdgeType.AGENT_TRIGGERED_ACTIVITY: RelationshipLayer.A2A,
+    EdgeType.AGENT_USED_TOOL_OBS: RelationshipLayer.A2A,
+    EdgeType.CHALLENGE_HAS_PAYMENT_REQUIREMENT: RelationshipLayer.A2A,
+    EdgeType.EXTERNAL_ACCOUNT_DISCONNECTED: RelationshipLayer.A2A,
+    EdgeType.EXTERNAL_ACCOUNT_EMITTED_ACTIVITY: RelationshipLayer.A2A,
+    EdgeType.EXTERNAL_ACCOUNT_HAS_BUDGET_OBSERVED: RelationshipLayer.A2A,
+    EdgeType.EXTERNAL_ACCOUNT_HAS_PERMISSION_OBSERVED: RelationshipLayer.A2A,
+    EdgeType.EXTERNAL_ACCOUNT_OBSERVED_FILL: RelationshipLayer.A2A,
+    EdgeType.EXTERNAL_ACCOUNT_OBSERVED_ORDER: RelationshipLayer.A2A,
+    EdgeType.EXTERNAL_ACCOUNT_OBSERVED_PORTFOLIO: RelationshipLayer.A2A,
+    EdgeType.EXTERNAL_ACCOUNT_OBSERVED_POSITION: RelationshipLayer.A2A,
+    EdgeType.EXTERNAL_ACCOUNT_OBSERVED_REJECTION: RelationshipLayer.A2A,
+    EdgeType.INBOX_CONTAINS_THREAD: RelationshipLayer.A2A,
+    EdgeType.INBOX_HAS_EMAIL_ADDRESS: RelationshipLayer.A2A,
+    EdgeType.INTERACTION_HAS_RESOURCE_ACCESS_OUTCOME: RelationshipLayer.A2A,
+    EdgeType.INTERACTION_HAS_SETTLEMENT_OBSERVED: RelationshipLayer.A2A,
+    EdgeType.INTERACTION_HAS_SIGNATURE_OBSERVED: RelationshipLayer.A2A,
+    EdgeType.INTERACTION_HAS_VERIFICATION_OBSERVED: RelationshipLayer.A2A,
+    EdgeType.MESSAGE_EXTRACTED_ENTITY: RelationshipLayer.A2A,
+    EdgeType.MESSAGE_HAS_ATTACHMENT: RelationshipLayer.A2A,
+    EdgeType.MESSAGE_REFERENCES_INVOICE: RelationshipLayer.A2A,
+    EdgeType.MESSAGE_REFERENCES_SUPPORT_CASE: RelationshipLayer.A2A,
+    EdgeType.PROTOCOL_OBSERVED_FROM_PROVIDER: RelationshipLayer.A2A,
+    EdgeType.RESOURCE_PROVIDED_BY: RelationshipLayer.A2A,
+    EdgeType.RESOURCE_RETURNED_X402_CHALLENGE: RelationshipLayer.A2A,
+    EdgeType.STRATEGY_PRODUCED_INTENT: RelationshipLayer.A2A,
+    EdgeType.THREAD_CONTAINS_MESSAGE: RelationshipLayer.A2A,
 }
 
 
