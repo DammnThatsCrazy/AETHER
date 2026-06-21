@@ -3422,6 +3422,41 @@
       "canonical_owner": "platform@aether"
     },
     {
+      "path": "docs/reports/ML-FULL-PRODUCTIONIZATION-REPORT.md",
+      "title": "ML Full Productionization Report",
+      "slug": "ai/ml-full-productionization-report",
+      "section": "ai",
+      "visibility": "I",
+      "audience": [
+        "ai",
+        "dev-senior",
+        "architect",
+        "ops"
+      ],
+      "status": "stable",
+      "since_version": "8.9.0",
+      "estimated_read_minutes": 12,
+      "toc_depth": 3,
+      "canonical_owner": "ml@aether"
+    },
+    {
+      "path": "docs/reports/ML-MODEL-READINESS-MATRIX.md",
+      "title": "ML Model Readiness Matrix",
+      "slug": "ai/ml-model-readiness-matrix",
+      "section": "ai",
+      "visibility": "I",
+      "audience": [
+        "ai",
+        "dev-senior",
+        "architect"
+      ],
+      "status": "stable",
+      "since_version": "8.9.0",
+      "estimated_read_minutes": 6,
+      "toc_depth": 2,
+      "canonical_owner": "ml@aether"
+    },
+    {
       "path": "docs/reports/ML-PRODUCTIZATION-READINESS.md",
       "title": "ML Productization Readiness Report",
       "slug": "ai/ml-productization-readiness",
@@ -3433,6 +3468,24 @@
         "architect"
       ],
       "since_version": "8.9.0",
+      "canonical_owner": "ml@aether"
+    },
+    {
+      "path": "docs/reports/ML-SECURITY-THREAT-MODEL.md",
+      "title": "ML Security Threat Model",
+      "slug": "ai/ml-security-threat-model",
+      "section": "ai",
+      "visibility": "I",
+      "audience": [
+        "ai",
+        "dev-senior",
+        "architect",
+        "security"
+      ],
+      "status": "stable",
+      "since_version": "8.9.0",
+      "estimated_read_minutes": 8,
+      "toc_depth": 3,
       "canonical_owner": "ml@aether"
     },
     {
@@ -3448,6 +3501,23 @@
       ],
       "since_version": "8.9.0",
       "canonical_owner": "sdk@aether"
+    },
+    {
+      "path": "docs/runbooks/ML-INCIDENT-RUNBOOK.md",
+      "title": "ML Incident Runbook",
+      "slug": "ai/ml-incident-runbook",
+      "section": "ai",
+      "visibility": "I",
+      "audience": [
+        "ai",
+        "dev-senior",
+        "ops"
+      ],
+      "status": "stable",
+      "since_version": "8.9.0",
+      "estimated_read_minutes": 10,
+      "toc_depth": 3,
+      "canonical_owner": "ml@aether"
     },
     {
       "path": "docs/source-of-truth/API_ANTI_DISTILLATION.md",

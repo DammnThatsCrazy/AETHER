@@ -12,7 +12,7 @@
 .PHONY: setup setup-dev setup-minimal \
         test test-security test-ml test-coverage \
         ml-validate ml-test ml-test-unit ml-test-integration ml-test-security \
-        ml-train-smoke ml-artifact-verify ml-docs-check ml-ci \
+        ml-train-smoke ml-artifact-verify ml-docs-check ml-container-build ml-ci \
         lint format typecheck \
         serve-backend serve-ml \
         dev dev-streaming dev-analytics dev-notebooks dev-full dev-down \
@@ -85,7 +85,13 @@ ml-docs-check: ## Check ML documentation consistency
 	python scripts/validate_ml_registry.py
 	python scripts/docs_drift.py --strict 2>/dev/null || true
 
-ml-ci: ml-validate ml-test ml-train-smoke ml-artifact-verify ml-docs-check ## All blocking ML CI gates
+ml-container-build: ## Build all ML Docker stages (requires Docker daemon)
+	docker build --target serving    -t aether-ml-serving:dev    "$(ML_DIR)"
+	docker build --target training   -t aether-ml-training:dev   "$(ML_DIR)"
+	docker build --target features   -t aether-ml-features:dev   "$(ML_DIR)"
+	docker build --target monitoring -t aether-ml-monitoring:dev "$(ML_DIR)"
+
+ml-ci: ml-validate ml-test ml-train-smoke ml-artifact-verify ml-docs-check ## All blocking ML CI gates (excludes ml-container-build — run separately when Docker is available)
 
 test-coverage: ## Run tests with coverage report (all subsystems)
 	python -m pytest tests/ \

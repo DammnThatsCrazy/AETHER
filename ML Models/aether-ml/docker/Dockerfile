@@ -77,10 +77,10 @@ RUN mkdir -p /opt/ml/models && \
 
 USER aether
 
-EXPOSE 8000
+EXPOSE 8080
 
 HEALTHCHECK --interval=30s --timeout=5s --retries=3 \
-    CMD curl -f http://localhost:8000/health || exit 1
+    CMD curl -f http://localhost:8080/health || exit 1
 
 ENTRYPOINT ["python", "-m", "serving.src.api"]
 
