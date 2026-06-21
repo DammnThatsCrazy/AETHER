@@ -59,3 +59,43 @@ test('E: signup page shows plan selector and SSO options', async ({ page }) => {
   const googleBtn = page.getByRole('button', { name: /Google/i });
   await expect(googleBtn).toBeVisible();
 });
+
+// Scenario F: signup submit button disabled when required fields are empty
+test('F: signup submit is disabled until all required fields are filled', async ({ page }) => {
+  await page.goto('/signup');
+
+  const submitBtn = page.getByRole('button', { name: /Continue/i });
+  await expect(submitBtn).toBeDisabled();
+
+  // Fill only email — still disabled (name + password missing)
+  await page.fill('#signup-email', 'partial@example.com');
+  await expect(submitBtn).toBeDisabled();
+});
+
+// Scenario G: login with invalid credentials stays on login page
+test('G: login with wrong credentials stays on the login page', async ({ page }) => {
+  await page.goto('/login');
+
+  await page.fill('#login-email', 'nobody@example.com');
+  await page.fill('#login-password', 'wrongpassword');
+  await page.getByRole('button', { name: /Sign in/i }).click();
+
+  // Must not navigate to the authenticated app shell
+  await expect(page).not.toHaveURL(/\/(dashboard|settings|graph|suggestions)/);
+  await expect(page).toHaveURL(/login/, { timeout: 8_000 });
+});
+
+// Scenario H: OTP screen shows resend option
+test('H: OTP screen shows resend code option', async ({ page }) => {
+  await page.goto('/signup');
+
+  await page.fill('#signup-name', 'Test User');
+  await page.fill('#signup-email', `e2e+${Date.now()}@example.com`);
+  await page.fill('#signup-password', 'testpass123');
+  await page.click('button[type="submit"]');
+
+  await expect(page.getByText('Check your email')).toBeVisible({ timeout: 10_000 });
+
+  // Resend option is present (either countdown text or button)
+  await expect(page.getByText(/resend/i)).toBeVisible();
+});

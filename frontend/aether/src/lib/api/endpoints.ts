@@ -885,6 +885,14 @@ export const api = {
     alerts: (tenantId: string, limit = 50) =>
       restClient.get(`/v1/notifications/alerts${buildQS({ tenant_id: tenantId, limit })}`, wrap(unknownSchema)).then(r => r.data),
 
+    /** Delete a webhook config. */
+    deleteWebhook: (webhookId: string) =>
+      restClient.delete(`/v1/notifications/webhooks/${webhookId}`, wrap(unknownSchema)).then(r => r.data),
+
+    /** Send a test ping to a webhook endpoint. */
+    testWebhook: (webhookId: string) =>
+      restClient.post(`/v1/notifications/webhooks/${webhookId}/test`, wrap(unknownSchema), {}).then(r => r.data),
+
     /** Create a new alert rule. */
     createAlert: (body: Record<string, unknown>) =>
       restClient.post('/v1/notifications/alerts', wrap(unknownSchema), body).then(r => r.data),

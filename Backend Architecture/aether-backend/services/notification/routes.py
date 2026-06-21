@@ -66,6 +66,36 @@ async def delete_webhook(webhook_id: str, request: Request):
     return APIResponse(data={"deleted": True}).to_dict()
 
 
+@router.post("/webhooks/{webhook_id}/test")
+async def test_webhook(webhook_id: str, request: Request):
+    import httpx
+    import time
+    request.state.tenant.require_permission("read")
+    webhook = await _webhook_repo.find_by_id(webhook_id)
+    if not webhook:
+        raise NotFoundError("Webhook")
+    if webhook.get("tenant_id") != request.state.tenant.tenant_id:
+        raise ForbiddenError("Webhook belongs to a different tenant")
+    url = webhook.get("url", "")
+    start = time.monotonic()
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            resp = await client.post(
+                url,
+                json={"event": "test", "source": "aether"},
+                headers={"X-Aether-Event": "test"},
+            )
+        latency_ms = int((time.monotonic() - start) * 1000)
+        return APIResponse(data={
+            "success": resp.status_code < 400,
+            "status_code": resp.status_code,
+            "latency_ms": latency_ms,
+        }).to_dict()
+    except httpx.RequestError as exc:
+        latency_ms = int((time.monotonic() - start) * 1000)
+        return APIResponse(data={"success": False, "error": str(exc), "latency_ms": latency_ms}).to_dict()
+
+
 @router.post("/alerts")
 async def create_alert(body: AlertRule, request: Request):
     request.state.tenant.require_permission("write")
