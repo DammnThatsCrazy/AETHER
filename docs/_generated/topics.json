@@ -814,6 +814,43 @@
       ]
     },
     {
+      "name": "Fraud Network Intelligence",
+      "topics": [
+        {
+          "member": "FRAUD_NETWORK_CREATED",
+          "value": "aether.fraud.network.created"
+        },
+        {
+          "member": "FRAUD_NETWORK_UPDATED",
+          "value": "aether.fraud.network.updated"
+        },
+        {
+          "member": "FRAUD_NETWORK_REFRESHED",
+          "value": "aether.fraud.network.refreshed"
+        },
+        {
+          "member": "FRAUD_NETWORK_ESCALATED",
+          "value": "aether.fraud.network.escalated"
+        },
+        {
+          "member": "FRAUD_NETWORK_SUPPRESSED",
+          "value": "aether.fraud.network.suppressed"
+        },
+        {
+          "member": "FLOW_TRACE_CREATED",
+          "value": "aether.flow.trace.created"
+        },
+        {
+          "member": "FLOW_TRACE_COMPLETED",
+          "value": "aether.flow.trace.completed"
+        },
+        {
+          "member": "RISK_OVERLAY_GENERATED",
+          "value": "aether.risk.overlay.generated"
+        }
+      ]
+    },
+    {
       "name": "Dead letter",
       "topics": [
         {
@@ -1499,6 +1536,38 @@
     {
       "member": "SUGGESTION_EXPIRED",
       "value": "aether.suggestions.expired"
+    },
+    {
+      "member": "FRAUD_NETWORK_CREATED",
+      "value": "aether.fraud.network.created"
+    },
+    {
+      "member": "FRAUD_NETWORK_UPDATED",
+      "value": "aether.fraud.network.updated"
+    },
+    {
+      "member": "FRAUD_NETWORK_REFRESHED",
+      "value": "aether.fraud.network.refreshed"
+    },
+    {
+      "member": "FRAUD_NETWORK_ESCALATED",
+      "value": "aether.fraud.network.escalated"
+    },
+    {
+      "member": "FRAUD_NETWORK_SUPPRESSED",
+      "value": "aether.fraud.network.suppressed"
+    },
+    {
+      "member": "FLOW_TRACE_CREATED",
+      "value": "aether.flow.trace.created"
+    },
+    {
+      "member": "FLOW_TRACE_COMPLETED",
+      "value": "aether.flow.trace.completed"
+    },
+    {
+      "member": "RISK_OVERLAY_GENERATED",
+      "value": "aether.risk.overlay.generated"
     },
     {
       "member": "DEAD_LETTER",

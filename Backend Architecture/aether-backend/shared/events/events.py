@@ -291,6 +291,16 @@ class Topic(str, Enum):
     SUGGESTION_FAILED          = "aether.suggestions.failed"
     SUGGESTION_EXPIRED         = "aether.suggestions.expired"
 
+    # Fraud Network Intelligence
+    FRAUD_NETWORK_CREATED    = "aether.fraud.network.created"
+    FRAUD_NETWORK_UPDATED    = "aether.fraud.network.updated"
+    FRAUD_NETWORK_REFRESHED  = "aether.fraud.network.refreshed"
+    FRAUD_NETWORK_ESCALATED  = "aether.fraud.network.escalated"
+    FRAUD_NETWORK_SUPPRESSED = "aether.fraud.network.suppressed"
+    FLOW_TRACE_CREATED       = "aether.flow.trace.created"
+    FLOW_TRACE_COMPLETED     = "aether.flow.trace.completed"
+    RISK_OVERLAY_GENERATED   = "aether.risk.overlay.generated"
+
     # Dead letter
     DEAD_LETTER = "aether.dlq"
 

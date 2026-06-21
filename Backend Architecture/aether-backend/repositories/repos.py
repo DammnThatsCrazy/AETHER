@@ -1999,3 +1999,92 @@ class DuneFeederStatsRepository(BaseRepository):
             "last_ingest_at": dated[0].get("last_ingest_at") if dated else None,
             "last_ingest_source_tag": dated[0].get("last_ingest_source_tag") if dated else None,
         }
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# FRAUD NETWORK INTELLIGENCE REPOSITORIES
+# ═══════════════════════════════════════════════════════════════════════════
+
+class FraudNetworkRepository(BaseRepository):
+    def __init__(self) -> None:
+        super().__init__("fraud_networks")
+
+    async def create(self, network: dict) -> dict:
+        return await self.insert(network["id"], network)
+
+    async def get(self, network_id: str) -> dict | None:
+        return await self.find_by_id(network_id)
+
+    async def list_by_tenant(self, tenant_id: str, status: str | None = None, limit: int = 50) -> list[dict]:
+        filters: dict = {"tenant_id": tenant_id}
+        if status:
+            filters["status"] = status
+        return await self.find_many(filters=filters, limit=limit)
+
+    async def update_status(self, network_id: str, status: str, **extra: Any) -> dict:
+        fields = {"status": status, **extra}
+        return await self.update(network_id, fields)
+
+
+class FraudNetworkMemberRepository(BaseRepository):
+    def __init__(self) -> None:
+        super().__init__("fraud_network_members")
+
+    async def create(self, member: dict) -> dict:
+        return await self.insert(member["id"], member)
+
+    async def list_by_network(self, network_id: str) -> list[dict]:
+        return await self.find_many(filters={"network_id": network_id}, limit=500)
+
+    async def list_by_entity(self, entity_id: str, tenant_id: str) -> list[dict]:
+        return await self.find_many(filters={"entity_id": entity_id, "tenant_id": tenant_id}, limit=200)
+
+
+class FraudNetworkEdgeRepository(BaseRepository):
+    def __init__(self) -> None:
+        super().__init__("fraud_network_edges")
+
+    async def create(self, edge: dict) -> dict:
+        return await self.insert(edge["id"], edge)
+
+    async def list_by_network(self, network_id: str) -> list[dict]:
+        return await self.find_many(filters={"network_id": network_id}, limit=2000)
+
+
+class FlowTraceRepository(BaseRepository):
+    def __init__(self) -> None:
+        super().__init__("flow_traces")
+
+    async def create(self, trace: dict) -> dict:
+        return await self.insert(trace["id"], trace)
+
+    async def get(self, trace_id: str) -> dict | None:
+        return await self.find_by_id(trace_id)
+
+    async def list_by_tenant(self, tenant_id: str, limit: int = 50) -> list[dict]:
+        return await self.find_many(filters={"tenant_id": tenant_id}, limit=limit)
+
+
+class FlowTracePathRepository(BaseRepository):
+    def __init__(self) -> None:
+        super().__init__("flow_trace_paths")
+
+    async def create(self, path: dict) -> dict:
+        return await self.insert(path["id"], path)
+
+    async def list_by_trace(self, trace_id: str) -> list[dict]:
+        return await self.find_many(filters={"trace_id": trace_id}, limit=1000)
+
+
+class RiskOverlaySnapshotRepository(BaseRepository):
+    def __init__(self) -> None:
+        super().__init__("risk_overlay_snapshots")
+
+    async def create(self, snapshot: dict) -> dict:
+        return await self.insert(snapshot["id"], snapshot)
+
+    async def get(self, overlay_id: str) -> dict | None:
+        return await self.find_by_id(overlay_id)
+
+    async def list_by_tenant(self, tenant_id: str, limit: int = 20) -> list[dict]:
+        return await self.find_many(filters={"tenant_id": tenant_id}, limit=limit)

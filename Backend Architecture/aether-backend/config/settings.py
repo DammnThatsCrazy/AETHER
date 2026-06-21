@@ -563,6 +563,22 @@ class SuggestionsConfig:
 
 
 # ---------------------------------------------------------------------------
+# Fraud Network Intelligence
+# ---------------------------------------------------------------------------
+
+@dataclass(frozen=True)
+class FraudIntelligenceConfig:
+    fraud_networks_enabled: bool = _env_bool("FEATURE_FRAUD_NETWORKS", False)
+    flow_trace_enabled: bool = _env_bool("FEATURE_FLOW_TRACE", False)
+    risk_overlays_enabled: bool = _env_bool("FEATURE_RISK_OVERLAYS", False)
+    kyber_fraud_workspace_enabled: bool = _env_bool("FEATURE_KYBER_FRAUD_WORKSPACE", False)
+    tenant_fraud_intelligence_enabled: bool = _env_bool("FEATURE_TENANT_FRAUD_INTELLIGENCE", False)
+    alert_risk_threshold: float = float(_env("FRAUD_ALERT_RISK_THRESHOLD", "70.0"))
+    max_network_depth: int = _env_int("FRAUD_NETWORK_MAX_DEPTH", 4)
+    max_flow_trace_hops: int = _env_int("FLOW_TRACE_MAX_HOPS", 10)
+
+
+# ---------------------------------------------------------------------------
 # Master settings
 # ---------------------------------------------------------------------------
 
@@ -638,6 +654,9 @@ class Settings:
 
     # OODA Suggestion Intelligence (disabled by default; execution gated separately)
     suggestions: SuggestionsConfig = field(default_factory=SuggestionsConfig)
+
+    # Fraud Network Intelligence + Flow-of-Funds (disabled by default)
+    fraud_intelligence: FraudIntelligenceConfig = field(default_factory=FraudIntelligenceConfig)
 
     def __post_init__(self):
         _is_non_local = self.env != Environment.LOCAL

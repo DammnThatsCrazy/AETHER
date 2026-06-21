@@ -233,6 +233,11 @@ class VertexType:
     RESOURCE_PROVIDER_OBSERVED = "ResourceProviderObserved"
     PROTOCOL_PROVIDER_OBSERVED = "ProtocolProviderObserved"
 
+    # ── Fraud Network Intelligence ─────────────────────────────────────────
+    FRAUD_NETWORK = "FraudNetwork"
+    FLOW_TRACE    = "FlowTrace"
+    RISK_OVERLAY  = "RiskOverlay"
+
 
 class EdgeType:
     HAS_SESSION = "HAS_SESSION"
@@ -551,6 +556,24 @@ class EdgeType:
     RESOURCE_PROVIDED_BY = "RESOURCE_PROVIDED_BY"
     PROTOCOL_OBSERVED_FROM_PROVIDER = "PROTOCOL_OBSERVED_FROM_PROVIDER"
     INTERACTION_FLAGGED_REPLAY_RISK = "INTERACTION_FLAGGED_REPLAY_RISK"
+
+    # ── Fraud Network Intelligence ─────────────────────────────────────────
+    MEMBER_OF_FRAUD_NETWORK  = "MEMBER_OF_FRAUD_NETWORK"   # Entity → FraudNetwork
+    HAS_RISK_ROLE            = "HAS_RISK_ROLE"             # Entity → FraudNetwork (with role property)
+    SCORED_AS_RISKY          = "SCORED_AS_RISKY"           # Entity/Edge → RiskOverlay
+    SUPPORTED_BY_EVIDENCE    = "SUPPORTED_BY_EVIDENCE"     # FraudNetwork/FlowTrace → EvidenceRef node
+    PART_OF_FLOW_TRACE       = "PART_OF_FLOW_TRACE"        # Entity → FlowTrace
+    FLOW_PATH_NEXT           = "FLOW_PATH_NEXT"            # FlowTraceNode → FlowTraceNode (path hop)
+    HAS_SOURCE               = "HAS_SOURCE"                # FlowTrace → source Entity/Wallet
+    HAS_SINK                 = "HAS_SINK"                  # FlowTrace → sink Entity/Wallet
+    HAS_CONTROLLER           = "HAS_CONTROLLER"            # FraudNetwork → controller Entity
+    USES_MULE                = "USES_MULE"                 # FraudNetwork → mule Entity
+    LINKED_BY_DEVICE         = "LINKED_BY_DEVICE"          # Entity → Entity (shared device signal)
+    LINKED_BY_IP             = "LINKED_BY_IP"              # Entity → Entity (shared IP signal)
+    LINKED_BY_WALLET         = "LINKED_BY_WALLET"          # Entity → Entity (shared wallet signal)
+    LINKED_BY_AGENT          = "LINKED_BY_AGENT"           # Agent → Agent (shared agent infrastructure)
+    LINKED_BY_DELEGATION     = "LINKED_BY_DELEGATION"      # Human → Agent (delegation abuse signal)
+    ATTACHED_TO_CASE         = "ATTACHED_TO_CASE"          # FraudNetwork/FlowTrace → InvestigationCase
 
 
 # ═══════════════════════════════════════════════════════════════════════════

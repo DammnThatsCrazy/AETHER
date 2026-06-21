@@ -17,6 +17,10 @@ export const ROUTES = {
   CIS_FORENSICS: '/cis/forensics/:nodeId',
   CIS_RETRIEVAL: '/cis/retrieval',
   CIS_DRIFT: '/cis/drift',
+  FRAUD_NETWORKS: '/fraud-networks',
+  FRAUD_NETWORK_DETAIL: '/fraud-networks/:networkId',
+  FLOW_TRACE: '/fraud-networks/flow-trace',
+  FLOW_TRACE_DETAIL: '/fraud-networks/flow-trace/:traceId',
 } as const;
 
 export function entityDetailPath(type: string, id: string): string {
@@ -33,4 +37,12 @@ export function profile360Path(type: string, id: string): string {
 
 export function cisForensicsPath(nodeId: string): string {
   return `/cis/forensics/${nodeId}`;
+}
+
+export function fraudNetworkDetailPath(networkId: string): string {
+  return `/fraud-networks/${networkId}`;
+}
+
+export function flowTraceDetailPath(traceId: string): string {
+  return `/fraud-networks/flow-trace/${traceId}`;
 }

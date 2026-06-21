@@ -688,6 +688,29 @@ def create_app() -> FastAPI:
     else:
         logger.info("Suggestion Intelligence: disabled (set AETHER_SUGGESTIONS_ENABLED=true to enable)")
 
+    # ── Fraud Network Intelligence + Flow-of-Funds (feature-flagged) ────
+    fi = settings.fraud_intelligence
+    if fi.fraud_networks_enabled:
+        from services.fraud_networks.routes import router as fraud_networks_router
+        app.include_router(fraud_networks_router)
+        logger.info("Fraud Network Intelligence: routes mounted (/v1/fraud/networks)")
+    else:
+        logger.info("Fraud Network Intelligence: disabled (set FEATURE_FRAUD_NETWORKS=true to enable)")
+
+    if fi.flow_trace_enabled:
+        from services.flow_trace.routes import router as flow_trace_router
+        app.include_router(flow_trace_router)
+        logger.info("Flow-of-Funds Trace: routes mounted (/v1/flow-trace)")
+    else:
+        logger.info("Flow-of-Funds Trace: disabled (set FEATURE_FLOW_TRACE=true to enable)")
+
+    if fi.risk_overlays_enabled:
+        from services.risk_overlay.routes import router as risk_overlay_router
+        app.include_router(risk_overlay_router)
+        logger.info("Risk Overlays: routes mounted (/v1/risk-overlays)")
+    else:
+        logger.info("Risk Overlays: disabled (set FEATURE_RISK_OVERLAYS=true to enable)")
+
     # Agentic Observability Layer — observation-only; AETHER never executes.
     from services.agentic_observability.routes import router as agentic_obs_router
     from services.protocol_observability.routes import router as protocol_obs_router

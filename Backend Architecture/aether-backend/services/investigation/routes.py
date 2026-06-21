@@ -31,7 +31,11 @@ from services.operational_intelligence.models import (
     EventPipelineEnvelope,
     TenantScopedRequest,
 )
-from repositories.repos import InvestigationRepository
+from repositories.repos import (
+    FlowTraceRepository,
+    FraudNetworkRepository,
+    InvestigationRepository,
+)
 
 logger = get_logger("aether.service.investigation")
 
@@ -46,6 +50,8 @@ _VALID_TRANSITIONS: dict[str, frozenset[str]] = {
 }
 
 _repo = InvestigationRepository()
+_fraud_network_repo = FraudNetworkRepository()
+_flow_trace_repo = FlowTraceRepository()
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
@@ -214,6 +220,284 @@ async def add_evidence(
         payload={"case_id": case_id, "update": "evidence_added", "count": len(body.evidence)},
     ))
     return InvestigationCase(**updated)
+
+
+# ── Fraud intelligence integration request models ─────────────────────────────
+
+class AttachFraudNetworkRequest(TenantScopedRequest):
+    network_id: str
+
+
+class AttachFlowTraceRequest(TenantScopedRequest):
+    trace_id: str
+
+
+class SetGraphStateRequest(TenantScopedRequest):
+    overlay_snapshot_id: str
+
+
+@router.post("/{case_id}/fraud-network", response_model=InvestigationCase)
+async def attach_fraud_network(
+    case_id: str,
+    body: AttachFraudNetworkRequest,
+    request: Request,
+    producer: EventProducer = Depends(get_producer),
+) -> InvestigationCase:
+    """Attach a fraud network to an investigation case, adding its evidence refs."""
+    _require(request, body.tenantId, "write")
+    row = await _get_case(case_id, body.tenantId)
+
+    network = await _fraud_network_repo.get(body.network_id)
+    if network is None or network.get("tenant_id") != body.tenantId:
+        raise NotFoundError(f"FraudNetwork {body.network_id!r} not found")
+
+    network_evidence = network.get("evidence_refs", [])
+    existing_evidence = row.get("evidence") or []
+    new_evidence = existing_evidence + network_evidence
+
+    # Deduplicate by id
+    seen_ids: set[str] = set()
+    deduped: list[dict] = []
+    for e in new_evidence:
+        eid = e.get("id")
+        if eid and eid not in seen_ids:
+            seen_ids.add(eid)
+            deduped.append(e)
+
+    # Store network_id in graphStateId if not already set
+    update_fields: dict = {"evidence": deduped, "updatedAt": _utc_now()}
+    if not row.get("graphStateId"):
+        update_fields["graphStateId"] = body.network_id
+
+    updated = await _repo.update(case_id, update_fields)
+    logger.info("investigation_fraud_network_attached", extra={"case_id": case_id, "network_id": body.network_id})
+    metrics.increment("investigation_fraud_network_attached")
+    await producer.publish(Event(
+        topic=Topic.INVESTIGATION_CASE_UPDATED,
+        tenant_id=body.tenantId,
+        payload={"case_id": case_id, "update": "fraud_network_attached", "network_id": body.network_id},
+    ))
+    return InvestigationCase(**updated)
+
+
+@router.post("/{case_id}/flow-trace", response_model=InvestigationCase)
+async def attach_flow_trace(
+    case_id: str,
+    body: AttachFlowTraceRequest,
+    request: Request,
+    producer: EventProducer = Depends(get_producer),
+) -> InvestigationCase:
+    """Attach a flow trace to an investigation case, adding a transaction evidence ref."""
+    _require(request, body.tenantId, "write")
+    row = await _get_case(case_id, body.tenantId)
+
+    trace = await _flow_trace_repo.get(body.trace_id)
+    if trace is None or trace.get("tenant_id") != body.tenantId:
+        raise NotFoundError(f"FlowTrace {body.trace_id!r} not found")
+
+    trace_evidence_ref = EvidenceRef(
+        id=str(uuid.uuid4()),
+        type="transaction",
+        source="aether.flow_trace",
+        observedAt=trace.get("completed_at") or trace.get("created_at", ""),
+        confidence=min(trace.get("risk_score", 0.0) / 100.0, 1.0),
+        uri=f"aether://flow-trace/{body.trace_id}",
+    )
+    existing_evidence = row.get("evidence") or []
+    new_evidence = existing_evidence + [trace_evidence_ref.model_dump()]
+    updated = await _repo.update(case_id, {"evidence": new_evidence, "updatedAt": _utc_now()})
+    logger.info("investigation_flow_trace_attached", extra={"case_id": case_id, "trace_id": body.trace_id})
+    metrics.increment("investigation_flow_trace_attached")
+    await producer.publish(Event(
+        topic=Topic.INVESTIGATION_CASE_UPDATED,
+        tenant_id=body.tenantId,
+        payload={"case_id": case_id, "update": "flow_trace_attached", "trace_id": body.trace_id},
+    ))
+    return InvestigationCase(**updated)
+
+
+@router.post("/{case_id}/graph-state", response_model=InvestigationCase)
+async def set_graph_state(
+    case_id: str,
+    body: SetGraphStateRequest,
+    request: Request,
+    producer: EventProducer = Depends(get_producer),
+) -> InvestigationCase:
+    """Store a risk overlay snapshot ID as the case's current graph state."""
+    _require(request, body.tenantId, "write")
+    await _get_case(case_id, body.tenantId)
+    updated = await _repo.update(case_id, {
+        "graphStateId": body.overlay_snapshot_id,
+        "updatedAt": _utc_now(),
+    })
+    await producer.publish(Event(
+        topic=Topic.INVESTIGATION_CASE_UPDATED,
+        tenant_id=body.tenantId,
+        payload={"case_id": case_id, "update": "graph_state_set", "overlay_id": body.overlay_snapshot_id},
+    ))
+    return InvestigationCase(**updated)
+
+
+@router.get("/{case_id}/fraud-summary", response_model=None)
+async def get_fraud_summary(
+    case_id: str,
+    request: Request,
+    tenantId: str = Query(...),
+) -> dict:
+    """Aggregate fraud networks + flow traces linked to this investigation case."""
+    _require(request, tenantId, "read")
+    row = await _get_case(case_id, tenantId)
+
+    # Look up the linked fraud network via graphStateId
+    network_data: dict | None = None
+    graph_state_id = row.get("graphStateId")
+    if graph_state_id:
+        network = await _fraud_network_repo.get(graph_state_id)
+        if network and network.get("tenant_id") == tenantId:
+            network_data = {
+                "id": network["id"],
+                "network_type": network.get("network_type"),
+                "risk_score": network.get("risk_score"),
+                "confidence_score": network.get("confidence_score"),
+                "member_count": network.get("member_count"),
+                "status": network.get("status"),
+            }
+
+    # Identify flow traces referenced in evidence
+    trace_ids: list[str] = []
+    for ev in row.get("evidence", []):
+        uri = ev.get("uri", "")
+        if uri.startswith("aether://flow-trace/"):
+            tid = uri.split("/")[-1]
+            if tid:
+                trace_ids.append(tid)
+
+    trace_summaries: list[dict] = []
+    for tid in trace_ids[:10]:
+        trace = await _flow_trace_repo.get(tid)
+        if trace and trace.get("tenant_id") == tenantId:
+            trace_summaries.append({
+                "id": trace["id"],
+                "anchor_entity_id": trace.get("anchor_entity_id"),
+                "risk_score": trace.get("risk_score"),
+                "path_count": trace.get("path_count"),
+                "cycle_detected": trace.get("cycle_detected"),
+                "status": trace.get("status"),
+            })
+
+    combined_risk = max(
+        (network_data or {}).get("risk_score") or 0.0,
+        *[t.get("risk_score", 0.0) for t in trace_summaries],
+        0.0,
+    )
+
+    return {
+        "case_id": case_id,
+        "fraud_network": network_data,
+        "flow_traces": trace_summaries,
+        "combined_risk_score": combined_risk,
+        "evidence_count": len(row.get("evidence", [])),
+        "subject_count": len(row.get("subjects", [])),
+    }
+
+
+@router.get("/{case_id}/report", response_model=None)
+async def get_report(
+    case_id: str,
+    request: Request,
+    tenantId: str = Query(...),
+) -> dict:
+    """Full structured investigation report: case, subjects, networks, traces, evidence, timeline."""
+    _require(request, tenantId, "read")
+    row = await _get_case(case_id, tenantId)
+
+    network_data: dict | None = None
+    graph_state_id = row.get("graphStateId")
+    if graph_state_id:
+        network = await _fraud_network_repo.get(graph_state_id)
+        if network and network.get("tenant_id") == tenantId:
+            network_data = network
+
+    trace_ids = [
+        ev.get("uri", "").split("/")[-1]
+        for ev in row.get("evidence", [])
+        if ev.get("uri", "").startswith("aether://flow-trace/")
+    ]
+    traces: list[dict] = []
+    for tid in trace_ids[:10]:
+        trace = await _flow_trace_repo.get(tid)
+        if trace and trace.get("tenant_id") == tenantId:
+            traces.append(trace)
+
+    timeline = [
+        {"event": "case_opened", "at": row.get("createdAt"), "actor": row.get("createdBy")},
+    ]
+    if row.get("status") != "open":
+        timeline.append({
+            "event": f"status_changed_to_{row['status']}",
+            "at": row.get("updatedAt"),
+        })
+    for annotation in (row.get("annotations") or []):
+        timeline.append({
+            "event": "annotation_added",
+            "at": annotation.get("createdAt"),
+            "actor": annotation.get("authorId"),
+            "body": annotation.get("body"),
+        })
+
+    return {
+        "report_id": str(uuid.uuid4()),
+        "case": InvestigationCase(**row).model_dump(),
+        "subjects": row.get("subjects", []),
+        "fraud_network": network_data,
+        "flow_traces": traces,
+        "evidence": row.get("evidence", []),
+        "annotations": row.get("annotations", []),
+        "timeline": sorted(timeline, key=lambda x: x.get("at") or ""),
+        "generated_at": _utc_now(),
+    }
+
+
+@router.post("/{case_id}/export", response_model=None)
+async def export_case(
+    case_id: str,
+    request: Request,
+    tenantId: str = Query(...),
+) -> dict:
+    """Return a complete JSON bundle of the investigation case for export."""
+    _require(request, tenantId, "read")
+    row = await _get_case(case_id, tenantId)
+
+    network_data: dict | None = None
+    graph_state_id = row.get("graphStateId")
+    if graph_state_id:
+        network = await _fraud_network_repo.get(graph_state_id)
+        if network and network.get("tenant_id") == tenantId:
+            network_data = network
+
+    trace_ids = [
+        ev.get("uri", "").split("/")[-1]
+        for ev in row.get("evidence", [])
+        if ev.get("uri", "").startswith("aether://flow-trace/")
+    ]
+    traces: list[dict] = []
+    for tid in trace_ids[:10]:
+        trace = await _flow_trace_repo.get(tid)
+        if trace and trace.get("tenant_id") == tenantId:
+            traces.append(trace)
+
+    return {
+        "export_id": str(uuid.uuid4()),
+        "exported_at": _utc_now(),
+        "schema_version": "1.0",
+        "tenant_id": tenantId,
+        "case": InvestigationCase(**row).model_dump(),
+        "fraud_network": network_data,
+        "flow_traces": traces,
+        "evidence": row.get("evidence", []),
+        "annotations": row.get("annotations", []),
+        "subjects": row.get("subjects", []),
+    }
 
 
 @router.post("/{case_id}/annotations", response_model=InvestigationCase)
