@@ -972,6 +972,13 @@ class GraphClient:
     async def add_edge(self, edge: Edge) -> None:
         if self._backend is None:
             await self.connect()
+        # Pre-write validation: enforces required properties when writing to Neptune.
+        # In local/in-memory mode the validator logs violations but does not raise.
+        from shared.graph.write_validator import GraphWriteValidationError, GraphWriteValidator
+        _env = "production" if self._mode == "neptune" else "local"
+        result = GraphWriteValidator().validate(edge, env=_env)
+        if not result.passed and self._mode == "neptune":
+            raise GraphWriteValidationError(result.violations)
         await self._backend.add_edge(edge)  # type: ignore[union-attr]
 
     async def get_vertex(self, vertex_id: str) -> Optional[Vertex]:

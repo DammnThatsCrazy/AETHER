@@ -21,6 +21,8 @@ from shared.graph.relationship_layers import (
 from shared.graph.graph import EdgeType, VertexType
 
 # ── Canonical layer set ───────────────────────────────────────────────────────
+# EXCLUDED is a non-canonical classification for edges intentionally outside
+# the four operational layers. It is not counted in LAYER_COUNT.
 
 CANONICAL_LAYERS: frozenset[RelationshipLayer] = frozenset({
     RelationshipLayer.H2H,
@@ -60,13 +62,13 @@ def validate_contract() -> list[str]:
     """Return a list of contract violations. Empty list means contract is valid."""
     violations: list[str] = []
 
-    # 1. All four layers must exist
-    for layer in RelationshipLayer:
+    # 1. All four canonical layers must exist (EXCLUDED is intentionally non-canonical)
+    for layer in CANONICAL_LAYERS:
         if layer not in CANONICAL_LAYERS:
             violations.append(f"Missing canonical layer: {layer}")
 
-    # 2. Every layer must have at least one edge
-    for layer in RelationshipLayer:
+    # 2. Every canonical layer must have at least one edge
+    for layer in CANONICAL_LAYERS:
         if not EDGES_BY_LAYER.get(layer):
             violations.append(f"Layer {layer} has no registered edge types")
 
@@ -77,13 +79,22 @@ def validate_contract() -> list[str]:
     if not EDGES_BY_LAYER.get(RelationshipLayer.A2H):
         violations.append("A2H layer has no registered edge types")
 
-    # 4. Every edge in _EDGE_LAYER_MAP must map to a known layer
+    # 4. Every edge in _EDGE_LAYER_MAP must map to a canonical or EXCLUDED layer
     for edge_type, layer in _EDGE_LAYER_MAP.items():
-        if layer not in CANONICAL_LAYERS:
+        if layer not in CANONICAL_LAYERS and layer is not RelationshipLayer.EXCLUDED:
             violations.append(f"Edge {edge_type} maps to unknown layer: {layer}")
 
-    # 5. Every layer must have vertex types
-    for layer in RelationshipLayer:
+    # 5a. Every EdgeType class attribute must be mapped (exhaustiveness check)
+    all_edge_type_values = {
+        v for k, v in vars(EdgeType).items()
+        if not k.startswith("_") and isinstance(v, str)
+    }
+    unmapped = all_edge_type_values - set(_EDGE_LAYER_MAP.keys())
+    for et in sorted(unmapped):
+        violations.append(f"EdgeType {et!r} is not mapped in _EDGE_LAYER_MAP")
+
+    # 5. Every canonical layer must have vertex types (EXCLUDED is non-canonical)
+    for layer in CANONICAL_LAYERS:
         if not VERTEX_TYPES_BY_LAYER.get(layer):
             violations.append(f"Layer {layer} has no registered vertex types")
 

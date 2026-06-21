@@ -3655,6 +3655,10 @@
       "canonical_owner": "platform@aether"
     },
     {
+      "path": "docs/source-of-truth/GRAPH_ALIGNMENT.md",
+      "canonical_owner": "graph@aether"
+    },
+    {
       "path": "docs/source-of-truth/GRAPH_CONTRACT.md",
       "title": "Intelligence Graph Contract",
       "slug": "source-of-truth/graph-contract",

@@ -145,13 +145,23 @@ AREAS: list[Area] = [
     ),
     Area(
         "Neptune relationships (H2H/H2A/A2H/A2A)",
-        3,
-        "All four relationship layers are typed edges in the graph schema (DELEGATES, "
-        "NOTIFIES, COMPOSED_WITH, MEMBER_OF_CLUSTER, ...) with direction, provenance, "
-        "and tenant scoping; Neptune backend implemented via gremlinpython with an "
-        "in-memory dev/test fallback. Production Neptune is not yet provisioned or "
-        "load-validated, so this stays pre-production.",
-        ["Backend Architecture/aether-backend/shared/graph/graph.py"],
+        4,
+        "All EdgeType values exhaustively mapped to H2H/H2A/A2H/A2A (or EXCLUDED) — "
+        "unknown edges fail closed in staging/production (UnknownEdgeTypeError). "
+        "GraphWriteValidator enforces 8 required properties (tenant_id, idempotency_key, "
+        "actor_kind, actor_id, schema_version, provenance, valid_from, confidence) at "
+        "every write boundary; H2A/A2H edges additionally require consent_purpose. "
+        "Traversal depth/result limits added to get_layer_subgraph and get_cross_layer_paths. "
+        "A2A cycle detection added to BFS. Synthetic replay workload and rebuild validation "
+        "scripts added. Release gate enforces all invariants (make graph-release-check). "
+        "Gap: staging Neptune not yet provisioned; load baseline not recorded.",
+        [
+            "Backend Architecture/aether-backend/shared/graph/graph.py",
+            "Backend Architecture/aether-backend/shared/graph/relationship_layers.py",
+            "Backend Architecture/aether-backend/shared/graph/write_validator.py",
+            "Backend Architecture/aether-backend/shared/graph/edge_properties.py",
+            "scripts/graph/check_graph_release_gate.py",
+        ],
     ),
     Area(
         "graph mutation safety",

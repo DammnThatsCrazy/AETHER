@@ -79,6 +79,14 @@ export const EDGE_LAYER_MAP: Record<string, RelationshipLayer> = {
   HAS_RECOMMENDATION: 'A2H',
   SUPPORTED_BY: 'A2H',
   SELECTED_BY: 'A2H',
+  // A2H — additional delivery/approval/escalation edges
+  ACTED_FOR: 'A2H',
+  HAS_RETARGET_RECOMMENDATION: 'A2H',
+  APPROVED_BY: 'A2H',
+  REJECTED_BY: 'A2H',
+  REQUESTS_APPROVAL_FROM: 'A2H',
+  ESCALATES_PAYMENT_TO: 'A2H',
+  ESCALATED_TO_HUMAN: 'A2H',
 
   // A2A edges
   PAYS: 'A2A',

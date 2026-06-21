@@ -1,3 +1,14 @@
+---
+source_files:
+  - Backend Architecture/aether-backend/shared/graph/graph.py
+  - Backend Architecture/aether-backend/shared/graph/relationship_layers.py
+  - Backend Architecture/aether-backend/shared/graph/write_validator.py
+  - Backend Architecture/aether-backend/shared/graph/edge_properties.py
+  - Backend Architecture/aether-backend/services/lake/graph_mutations.py
+canonical_owner: graph@aether
+last_synced_commit: 401f9bd
+---
+
 # Graph Alignment
 
 Which SDK events feed which Intelligence Graph layer. Vertex/edge definitions
@@ -68,6 +79,30 @@ All fields are **optional** and additive — no migration is required.
 | `EconomicState`          | Derived state — never persisted; computed via `aggregateEconomicState` |
 
 See [`docs/ECONOMIC-OBSERVABILITY.md`](../ECONOMIC-OBSERVABILITY.md).
+
+## Required edge properties
+
+Every edge written to the graph (local or Neptune) must carry the following
+properties in `edge.properties`. Enforced by `GraphWriteValidator` (logged in
+local/test, raised in Neptune mode). Helper: `build_edge_properties()` in
+`shared/graph/edge_properties.py`.
+
+| Property | Type | Description |
+|---|---|---|
+| `tenant_id` | string | Owning tenant identifier |
+| `idempotency_key` | string | SHA-256 of `tenant:type:from:to[:source_event]` — use `make_edge_idempotency_key()` |
+| `actor_kind` | `human` \| `agent` \| `system` | Who originated this write |
+| `actor_id` | string | Identity of the actor (user ID, agent ID, or system name) |
+| `schema_version` | string | Currently `"1"` |
+| `provenance` | string | Source system or service (e.g., `"lake_graph_mutations"`) |
+| `valid_from` | ISO-8601 | Timestamp from which this edge is valid |
+| `confidence` | float 0–1 (as string) | Write certainty; use `"1.0"` for deterministic writes |
+
+H2A and A2H edges additionally require:
+
+| Property | Type | Description |
+|---|---|---|
+| `consent_purpose` | string | Purpose string from the tenant consent record |
 
 ## Activation flags
 
