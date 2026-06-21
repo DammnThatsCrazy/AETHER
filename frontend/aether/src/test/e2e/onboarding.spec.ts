@@ -64,7 +64,7 @@ test('E: signup page shows plan selector and SSO options', async ({ page }) => {
 test('F: signup submit is disabled until all required fields are filled', async ({ page }) => {
   await page.goto('/signup');
 
-  const submitBtn = page.getByRole('button', { name: /Continue/i });
+  const submitBtn = page.getByRole('button', { name: /Continue →/i });
   await expect(submitBtn).toBeDisabled();
 
   // Fill only email — still disabled (name + password missing)
