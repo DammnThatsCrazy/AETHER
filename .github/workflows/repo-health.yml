@@ -35,6 +35,7 @@ jobs:
               - 'Backend Architecture/aether-backend/services/ml_serving/**'
               - 'security/model_extraction_defense/**'
               - 'scripts/validate_ml_registry.py'
+              - 'scripts/generate_ml_manifest.py'
               - 'deploy/**'
               - 'AWS Deployment/**'
               - 'frontend/kyber/src/features/ml/**'
