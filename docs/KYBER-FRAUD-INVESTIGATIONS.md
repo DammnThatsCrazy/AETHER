@@ -9,7 +9,7 @@ since_version: "9.0.0"
 source_files:
   - frontend/kyber/src/pages/fraud/
   - frontend/kyber/src/components/fraud/
-last_synced_commit: bf87315
+last_synced_commit: 7bb7611
 ---
 
 # Kyber Fraud Investigations Workspace
