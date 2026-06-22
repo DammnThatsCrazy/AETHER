@@ -1,4 +1,4 @@
-import type { ConsentState, ConsentConfig, ConsentBannerConfig, ConsentCallback } from '../types';
+import type { ConsentState, ConsentConfig, ConsentPurpose, ConsentBannerConfig, ConsentCallback } from '../types';
 export declare class ConsentModule {
     private state;
     private config;
@@ -8,14 +8,17 @@ export declare class ConsentModule {
     /** Get current consent state */
     getState(): ConsentState;
     /** Check if a specific purpose is consented */
-    hasConsent(purpose: string): boolean;
+    hasConsent(purpose: ConsentPurpose): boolean;
     /** Check if user has explicitly accepted or rejected (banner was acted on) */
     hasRecordedConsent(): boolean;
     /** Grant consent for specified purposes */
-    grant(purposes: string[]): void;
-    /** Revoke consent for specified purposes */
-    revoke(purposes: string[]): void;
-    /** Grant all purposes */
+    grant(purposes: ConsentPurpose[]): void;
+    /** Revoke consent for specified purposes. Revoking personalization deletes cached fingerprint. */
+    revoke(purposes: ConsentPurpose[]): void;
+    /**
+     * Grant all purposes that do NOT require explicit opt-in (credit and location are excluded).
+     * To grant credit or location, call grant(['credit']) or grant(['location']) explicitly.
+     */
     grantAll(): void;
     /** Revoke all purposes */
     revokeAll(): void;
@@ -30,4 +33,5 @@ export declare class ConsentModule {
     private loadConsent;
     private persist;
     private notify;
+    private clearFingerprintCache;
 }

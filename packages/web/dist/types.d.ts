@@ -1236,14 +1236,20 @@ export interface BitcoinTransactionOptions extends TransactionOptions {
 export interface ConsentState {
     analytics: boolean;
     marketing: boolean;
+    personalization: boolean;
     web3: boolean;
     agent: boolean;
     commerce: boolean;
+    /** Always requires explicit opt-in — never granted by accept-all. */
+    credit: boolean;
+    /** Always requires explicit opt-in — never granted by accept-all. */
+    location: boolean;
     updatedAt: string;
     policyVersion: string;
 }
+export type ConsentPurpose = 'analytics' | 'marketing' | 'personalization' | 'web3' | 'agent' | 'commerce' | 'credit' | 'location';
 export interface ConsentConfig {
-    purposes: ('analytics' | 'marketing' | 'web3' | 'agent' | 'commerce')[];
+    purposes: ConsentPurpose[];
     policyUrl: string;
     policyVersion: string;
     bannerConfig?: ConsentBannerConfig;

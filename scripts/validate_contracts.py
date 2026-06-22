@@ -93,19 +93,25 @@ def check_python_backend_event_types(events: dict) -> list[str]:
 
     Reads the source file directly to avoid requiring all backend runtime
     dependencies to be installed in the docs/CI validation environment.
+
+    The frozenset literal may live in generated_registry.py (preferred, generated
+    from the JSON registry) or inline in batch.py (legacy). Both locations are
+    accepted; batch.py must exist and must not define a conflicting literal.
     """
-    import ast
     import re
     from pathlib import Path as _Path
 
     errors: list[str] = []
     ts_names = {ev["name"] for ev in events.get("events", [])}
 
-    batch_path = (
+    backend_ingestion = (
         _Path(__file__).resolve().parent.parent
         / "Backend Architecture" / "aether-backend"
-        / "services" / "ingestion" / "batch.py"
+        / "services" / "ingestion"
     )
+    batch_path = backend_ingestion / "batch.py"
+    registry_path = backend_ingestion / "generated_registry.py"
+
     if not batch_path.exists():
         errors.append(
             "services/ingestion/batch.py not found — "
@@ -113,10 +119,11 @@ def check_python_backend_event_types(events: dict) -> list[str]:
         )
         return errors
 
-    source = batch_path.read_text(encoding="utf-8")
+    # Prefer generated_registry.py if it exists (generated from JSON registry)
+    search_path = registry_path if registry_path.exists() else batch_path
+    source = search_path.read_text(encoding="utf-8")
 
     # Extract the frozenset literal assigned to CANONICAL_EVENT_TYPES
-    # Pattern: CANONICAL_EVENT_TYPES: frozenset[str] = frozenset({...})
     match = re.search(
         r"CANONICAL_EVENT_TYPES[^=]*=\s*frozenset\(\{([^}]+)\}\)",
         source,
@@ -124,7 +131,8 @@ def check_python_backend_event_types(events: dict) -> list[str]:
     )
     if not match:
         errors.append(
-            "Could not parse CANONICAL_EVENT_TYPES from services/ingestion/batch.py. "
+            "Could not parse CANONICAL_EVENT_TYPES from "
+            f"services/ingestion/{search_path.name}. "
             "Ensure it is a frozenset literal."
         )
         return errors
@@ -140,12 +148,12 @@ def check_python_backend_event_types(events: dict) -> list[str]:
     if only_ts:
         errors.append(
             f"Event type(s) in generated registry but NOT in Python CANONICAL_EVENT_TYPES: "
-            f"{sorted(only_ts)}. Update services/ingestion/batch.py."
+            f"{sorted(only_ts)}. Update services/ingestion/{search_path.name}."
         )
     if only_py:
         errors.append(
             f"Event type(s) in Python CANONICAL_EVENT_TYPES but NOT in generated registry: "
-            f"{sorted(only_py)}. Update packages/shared/events.ts or batch.py."
+            f"{sorted(only_py)}. Update packages/shared/events.ts or {search_path.name}."
         )
 
     return errors

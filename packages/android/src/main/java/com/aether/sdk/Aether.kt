@@ -187,12 +187,85 @@ object Aether : DefaultLifecycleObserver {
         "agent_support_route_observed" to "agent", "agent_semantic_search_observed" to "agent",
         "agent_data_extraction_observed" to "agent",
         // x402 protocol observation family
-        "x402_resource_request_observed" to "agent", "x402_challenge_observed" to "agent",
-        "x402_payment_requirement_observed" to "agent", "x402_signature_observed" to "agent",
-        "x402_verification_observed" to "agent", "x402_settlement_observed" to "agent",
-        "x402_resource_access_observed" to "agent", "x402_resource_access_denied_observed" to "agent",
-        "x402_failure_observed" to "agent", "x402_replay_risk_observed" to "agent",
-        "x402_provider_observed" to "agent"
+        "x402_resource_request_observed" to "commerce", "x402_challenge_observed" to "commerce",
+        "x402_payment_requirement_observed" to "commerce", "x402_signature_observed" to "commerce",
+        "x402_verification_observed" to "commerce", "x402_settlement_observed" to "commerce",
+        "x402_resource_access_observed" to "commerce", "x402_resource_access_denied_observed" to "commerce",
+        "x402_failure_observed" to "commerce", "x402_replay_risk_observed" to "commerce",
+        "x402_provider_observed" to "commerce",
+        // Exposure family
+        "content_impression" to "analytics", "recommendation_exposed" to "analytics",
+        "offer_exposed" to "analytics", "feature_exposed" to "analytics",
+        "search_result_exposed" to "analytics", "ad_exposed" to "marketing",
+        "notification_presented" to "analytics", "decision_observed" to "analytics",
+        // Outcome family
+        "outcome_observed" to "analytics", "goal_achieved" to "analytics", "goal_failed" to "analytics",
+        "recommendation_accepted" to "analytics", "recommendation_rejected" to "analytics",
+        "feedback_submitted" to "analytics", "retention_observed" to "analytics",
+        "churn_observed" to "analytics", "human_override_observed" to "analytics",
+        // B2B family
+        "organization_observed" to "analytics", "workspace_created" to "analytics", "workspace_updated" to "analytics",
+        "member_invited" to "analytics", "member_joined" to "analytics", "member_removed" to "analytics",
+        "role_changed" to "analytics", "seat_assigned" to "analytics", "seat_released" to "analytics",
+        "integration_connected" to "analytics", "integration_disconnected" to "analytics",
+        "service_account_created" to "analytics", "service_account_revoked" to "analytics",
+        "api_key_created" to "analytics", "api_key_revoked" to "analytics",
+        "project_created" to "analytics", "project_archived" to "analytics",
+        "workflow_started" to "analytics", "workflow_completed" to "analytics", "workflow_failed" to "analytics",
+        // Ecommerce extended family
+        "cart_item_added" to "commerce", "cart_item_removed" to "commerce",
+        "cart_updated" to "commerce", "checkout_step_completed" to "commerce",
+        "order_completed" to "commerce", "order_cancelled" to "commerce",
+        "order_refunded" to "commerce", "chargeback_observed" to "commerce",
+        "subscription_started" to "commerce", "trial_started" to "commerce", "trial_converted" to "commerce",
+        "subscription_renewed" to "commerce", "subscription_upgrade_observed" to "commerce",
+        "subscription_downgrade_observed" to "commerce", "subscription_cancelled" to "commerce",
+        "invoice_issued" to "commerce", "invoice_paid" to "commerce", "invoice_failed" to "commerce",
+        "dunning_started" to "commerce", "dunning_resolved" to "commerce",
+        // Friction family
+        "dead_click_observed" to "analytics", "rage_click_observed" to "analytics",
+        "scroll_depth_observed" to "analytics", "form_started" to "analytics",
+        "form_field_interaction" to "analytics", "form_validation_failed" to "analytics",
+        "form_submitted" to "analytics", "form_abandoned" to "analytics",
+        "search_reformulated" to "analytics", "retry_observed" to "analytics",
+        "journey_stalled" to "analytics", "backtrack_observed" to "analytics",
+        // Server observation family
+        "api_request_observed" to "analytics", "webhook_delivery_observed" to "analytics",
+        "connector_sync_started" to "analytics", "connector_sync_completed" to "analytics",
+        "connector_sync_failed" to "analytics", "job_started" to "analytics",
+        "job_completed" to "analytics", "job_failed" to "analytics",
+        "rate_limit_observed" to "analytics", "dependency_failure_observed" to "analytics",
+        "export_completed" to "analytics",
+        // Identity lifecycle family
+        "signup_started" to "analytics", "signup_completed" to "analytics",
+        "login_succeeded" to "analytics", "login_failed" to "analytics",
+        "logout_observed" to "analytics", "sso_observed" to "analytics",
+        "mfa_challenge_observed" to "analytics", "identity_verified" to "analytics",
+        "alias_link_requested" to "analytics", "alias_link_confirmed" to "analytics",
+        "alias_revoked" to "analytics", "account_recovery_started" to "analytics",
+        "account_recovery_completed" to "analytics", "device_registered" to "analytics",
+        "device_revoked" to "analytics",
+        // Agent evaluation family
+        "agent_evaluation_observed" to "agent", "agent_cost_observed" to "agent",
+        "agent_grounding_observed" to "agent", "agent_guardrail_observed" to "agent",
+        "agent_human_override_observed" to "agent",
+        // Web3 lifecycle extensions
+        "transaction_pending_observed" to "web3", "transaction_confirmed_observed" to "web3",
+        "transaction_reverted_observed" to "web3", "transaction_reorged_observed" to "web3",
+        "token_approval_observed" to "web3", "allowance_changed_observed" to "web3",
+        "bridge_transfer_observed" to "web3", "settlement_finality_observed" to "web3",
+        // Comms family
+        "notification_delivered" to "analytics", "notification_clicked" to "analytics",
+        "email_delivered" to "marketing", "email_opened" to "marketing",
+        "email_clicked" to "marketing", "email_bounced" to "marketing",
+        "message_replied_observed" to "analytics", "unsubscribe_observed" to "marketing",
+        "support_case_created" to "analytics", "support_case_resolved" to "analytics",
+        "support_case_escalated" to "analytics", "support_sla_breached" to "analytics",
+        // Credit family (explicit opt-in)
+        "credit_signal_observed" to "credit", "credit_account_observed" to "credit",
+        "credit_decision_observed" to "credit",
+        // Location family (explicit opt-in)
+        "location_observed" to "location", "geofence_transition_observed" to "location"
     )
     private val CANONICAL_EVENT_TYPES = EVENT_CONSENT_PURPOSE.keys
     private val dateFormat = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", Locale.US).apply {
@@ -592,7 +665,10 @@ object Aether : DefaultLifecycleObserver {
     // =========================================================================
 
     val canonicalConsentPurposes: List<String> =
-        listOf("analytics", "marketing", "web3", "agent", "commerce")
+        listOf("analytics", "marketing", "personalization", "web3", "agent", "commerce", "credit", "location")
+
+    /** Purposes that always require explicit opt-in and are never granted by grantAll(). */
+    val explicitOptInPurposes: List<String> = listOf("credit", "location")
 
     fun grantConsent(categories: List<String>) {
         consentState.addAll(categories)
@@ -603,6 +679,15 @@ object Aether : DefaultLifecycleObserver {
         if (config?.privacy?.gdprMode == true && "analytics" in categories) {
             healthAgent?.start()
         }
+    }
+
+    /**
+     * Grant all non-explicit-opt-in purposes (excludes credit and location).
+     * Call grantConsent(listOf("credit")) or grantConsent(listOf("location")) explicitly
+     * to grant those purposes after displaying required consent UI.
+     */
+    fun grantAll() {
+        grantConsent(canonicalConsentPurposes.filter { it !in explicitOptInPurposes })
     }
 
     fun revokeConsent(categories: List<String>) {

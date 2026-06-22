@@ -13,7 +13,7 @@ source_files:
 canonical_owner: sdk@aether
 estimated_read_minutes: 12
 toc_depth: 3
-last_synced_commit: e711d05
+last_synced_commit: b8b0072
 ---
 
 # Aether Web SDK v8.9.0 — Integration Guide
@@ -126,21 +126,35 @@ React Native and the Web SDK can share types.
 The SDK automatically generates a SHA-256 device fingerprint on initialization from 17 browser signals (canvas rendering, WebGL, audio context, fonts, screen, timezone, language, platform, hardware). The fingerprint is included in every event's `context.fingerprint.id`.
 
 - Only the composite hash is sent to the backend — raw signals never leave the browser
-- Fingerprinting is skipped when GDPR mode is active and analytics consent is not granted
+- Fingerprinting requires `personalization` consent. Revoking `personalization` deletes the cached fingerprint.
 - Cached in localStorage with a 7-day TTL
 
 ### Consent Management (GDPR/CCPA)
 
+Eight canonical purposes: `analytics`, `marketing`, `personalization`, `web3`, `agent`, `commerce`,
+`credit`, `location`. `credit` and `location` **always require explicit opt-in** — `grantAll()` never
+grants them. Present them as separate choices in your consent UI.
+
+`personalization` gates device fingerprinting: revoking it automatically deletes the cached fingerprint.
+
 ```typescript
-// Grant consent for specific categories
+// Grant consent for specific purposes
 aether.consent.grant(['analytics', 'marketing', 'web3']);
 
-// Revoke consent
+// Grant all non-sensitive purposes (excludes credit and location)
+aether.consent.grantAll();
+
+// Grant credit after showing separate opt-in UI
+aether.consent.grant(['credit']);
+
+// Revoke consent (revoking personalization also deletes cached fingerprint)
 aether.consent.revoke(['marketing']);
 
-// Check consent state
+// Check consent state (all 8 boolean fields)
 const state = aether.consent.getState();
-// { analytics: true, marketing: false, web3: true, updatedAt: '...', policyVersion: '...' }
+// { analytics: true, marketing: false, personalization: false, web3: true,
+//   agent: false, commerce: false, credit: false, location: false,
+//   updatedAt: '...', policyVersion: '...' }
 
 // Show consent banner (auto-shown in gdprMode if no prior consent)
 aether.consent.showBanner({ position: 'bottom', theme: 'dark' });

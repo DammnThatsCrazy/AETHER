@@ -115,6 +115,60 @@ public enum AetherEventType: String, Codable, CaseIterable {
     case x402_signature_observed, x402_verification_observed, x402_settlement_observed
     case x402_resource_access_observed, x402_resource_access_denied_observed
     case x402_failure_observed, x402_replay_risk_observed, x402_provider_observed
+    // Exposure family
+    case content_impression, recommendation_exposed, offer_exposed, feature_exposed
+    case search_result_exposed, ad_exposed, notification_presented, decision_observed
+    // Outcome family
+    case outcome_observed, goal_achieved, goal_failed
+    case recommendation_accepted, recommendation_rejected, feedback_submitted
+    case retention_observed, churn_observed, human_override_observed
+    // B2B family
+    case organization_observed, workspace_created, workspace_updated
+    case member_invited, member_joined, member_removed, role_changed
+    case seat_assigned, seat_released, integration_connected, integration_disconnected
+    case service_account_created, service_account_revoked
+    case api_key_created, api_key_revoked
+    case project_created, project_archived
+    case workflow_started, workflow_completed, workflow_failed
+    // Ecommerce extended family
+    case product_viewed, cart_item_added, cart_item_removed, cart_updated, coupon_applied
+    case checkout_started, checkout_step_completed, order_completed, order_cancelled, order_refunded
+    case chargeback_observed
+    case subscription_started, trial_started, trial_converted, subscription_renewed
+    case subscription_upgrade_observed, subscription_downgrade_observed, subscription_cancelled
+    case invoice_issued, invoice_paid, invoice_failed, dunning_started, dunning_resolved
+    // Friction family
+    case dead_click_observed, rage_click_observed, scroll_depth_observed
+    case form_started, form_field_interaction, form_validation_failed, form_submitted, form_abandoned
+    case search_reformulated, retry_observed, journey_stalled, backtrack_observed
+    // Server observation family
+    case api_request_observed, webhook_delivery_observed
+    case connector_sync_started, connector_sync_completed, connector_sync_failed
+    case job_started, job_completed, job_failed
+    case rate_limit_observed, dependency_failure_observed, export_completed
+    // Identity lifecycle family
+    case signup_started, signup_completed, login_succeeded, login_failed, logout_observed
+    case sso_observed, mfa_challenge_observed, identity_verified
+    case alias_link_requested, alias_link_confirmed, alias_revoked
+    case account_recovery_started, account_recovery_completed
+    case device_registered, device_revoked
+    // Agent evaluation family
+    case agent_evaluation_observed, agent_cost_observed
+    case agent_grounding_observed, agent_guardrail_observed, agent_human_override_observed
+    // Web3 lifecycle extensions
+    case transaction_pending_observed, transaction_confirmed_observed
+    case transaction_reverted_observed, transaction_reorged_observed
+    case token_approval_observed, allowance_changed_observed
+    case bridge_transfer_observed, settlement_finality_observed
+    // Comms family
+    case notification_delivered, notification_opened, notification_clicked
+    case email_delivered, email_opened, email_clicked, email_bounced
+    case message_replied_observed, unsubscribe_observed
+    case support_case_created, support_case_resolved, support_case_escalated, support_sla_breached
+    // Credit family (explicit opt-in)
+    case credit_signal_observed, credit_account_observed, credit_decision_observed
+    // Location family (explicit opt-in)
+    case location_observed, geofence_transition_observed
 }
 
 public struct AetherEvent: Codable {
@@ -318,7 +372,82 @@ public final class Aether: NSObject {
         .x402_resource_request_observed: "commerce", .x402_challenge_observed: "commerce", .x402_payment_requirement_observed: "commerce",
         .x402_signature_observed: "commerce", .x402_verification_observed: "commerce", .x402_settlement_observed: "commerce",
         .x402_resource_access_observed: "commerce", .x402_resource_access_denied_observed: "commerce",
-        .x402_failure_observed: "commerce", .x402_replay_risk_observed: "commerce", .x402_provider_observed: "commerce"
+        .x402_failure_observed: "commerce", .x402_replay_risk_observed: "commerce", .x402_provider_observed: "commerce",
+        // Exposure family
+        .content_impression: "analytics", .recommendation_exposed: "analytics",
+        .offer_exposed: "analytics", .feature_exposed: "analytics",
+        .search_result_exposed: "analytics", .ad_exposed: "marketing",
+        .notification_presented: "analytics", .decision_observed: "analytics",
+        // Outcome family
+        .outcome_observed: "analytics", .goal_achieved: "analytics", .goal_failed: "analytics",
+        .recommendation_accepted: "analytics", .recommendation_rejected: "analytics",
+        .feedback_submitted: "analytics", .retention_observed: "analytics",
+        .churn_observed: "analytics", .human_override_observed: "analytics",
+        // B2B family
+        .organization_observed: "analytics", .workspace_created: "analytics", .workspace_updated: "analytics",
+        .member_invited: "analytics", .member_joined: "analytics", .member_removed: "analytics",
+        .role_changed: "analytics", .seat_assigned: "analytics", .seat_released: "analytics",
+        .integration_connected: "analytics", .integration_disconnected: "analytics",
+        .service_account_created: "analytics", .service_account_revoked: "analytics",
+        .api_key_created: "analytics", .api_key_revoked: "analytics",
+        .project_created: "analytics", .project_archived: "analytics",
+        .workflow_started: "analytics", .workflow_completed: "analytics", .workflow_failed: "analytics",
+        // Ecommerce extended family
+        .product_viewed: "commerce", .cart_item_added: "commerce", .cart_item_removed: "commerce",
+        .cart_updated: "commerce", .coupon_applied: "commerce",
+        .checkout_started: "commerce", .checkout_step_completed: "commerce",
+        .order_completed: "commerce", .order_cancelled: "commerce", .order_refunded: "commerce",
+        .chargeback_observed: "commerce",
+        .subscription_started: "commerce", .trial_started: "commerce", .trial_converted: "commerce",
+        .subscription_renewed: "commerce", .subscription_upgrade_observed: "commerce",
+        .subscription_downgrade_observed: "commerce", .subscription_cancelled: "commerce",
+        .invoice_issued: "commerce", .invoice_paid: "commerce", .invoice_failed: "commerce",
+        .dunning_started: "commerce", .dunning_resolved: "commerce",
+        // Friction family
+        .dead_click_observed: "analytics", .rage_click_observed: "analytics",
+        .scroll_depth_observed: "analytics", .form_started: "analytics",
+        .form_field_interaction: "analytics", .form_validation_failed: "analytics",
+        .form_submitted: "analytics", .form_abandoned: "analytics",
+        .search_reformulated: "analytics", .retry_observed: "analytics",
+        .journey_stalled: "analytics", .backtrack_observed: "analytics",
+        // Server observation family
+        .api_request_observed: "analytics", .webhook_delivery_observed: "analytics",
+        .connector_sync_started: "analytics", .connector_sync_completed: "analytics",
+        .connector_sync_failed: "analytics", .job_started: "analytics",
+        .job_completed: "analytics", .job_failed: "analytics",
+        .rate_limit_observed: "analytics", .dependency_failure_observed: "analytics",
+        .export_completed: "analytics",
+        // Identity lifecycle family
+        .signup_started: "analytics", .signup_completed: "analytics",
+        .login_succeeded: "analytics", .login_failed: "analytics",
+        .logout_observed: "analytics", .sso_observed: "analytics",
+        .mfa_challenge_observed: "analytics", .identity_verified: "analytics",
+        .alias_link_requested: "analytics", .alias_link_confirmed: "analytics",
+        .alias_revoked: "analytics", .account_recovery_started: "analytics",
+        .account_recovery_completed: "analytics", .device_registered: "analytics",
+        .device_revoked: "analytics",
+        // Agent evaluation family
+        .agent_evaluation_observed: "agent", .agent_cost_observed: "agent",
+        .agent_grounding_observed: "agent", .agent_guardrail_observed: "agent",
+        .agent_human_override_observed: "agent",
+        // Web3 lifecycle extensions
+        .transaction_pending_observed: "web3", .transaction_confirmed_observed: "web3",
+        .transaction_reverted_observed: "web3", .transaction_reorged_observed: "web3",
+        .token_approval_observed: "web3", .allowance_changed_observed: "web3",
+        .bridge_transfer_observed: "web3", .settlement_finality_observed: "web3",
+        // Comms family
+        .notification_delivered: "analytics", .notification_opened: "analytics",
+        .notification_clicked: "analytics",
+        .email_delivered: "marketing", .email_opened: "marketing",
+        .email_clicked: "marketing", .email_bounced: "marketing",
+        .message_replied_observed: "analytics", .unsubscribe_observed: "marketing",
+        .support_case_created: "analytics", .support_case_resolved: "analytics",
+        .support_case_escalated: "analytics", .support_sla_breached: "analytics",
+        // Credit family (explicit opt-in)
+        .credit_signal_observed: "credit", .credit_account_observed: "credit",
+        .credit_decision_observed: "credit",
+        // Location family (explicit opt-in)
+        .location_observed: "location", .geofence_transition_observed: "location"
     ]
 
     static let sensitiveKeys: Set<String> = [
@@ -741,7 +870,10 @@ public final class Aether: NSObject {
     // Callers SHOULD only pass these strings. Backend validator ignores others.
 
     public static let canonicalConsentPurposes: [String] =
-        ["analytics", "marketing", "web3", "agent", "commerce"]
+        ["analytics", "marketing", "personalization", "web3", "agent", "commerce", "credit", "location"]
+
+    /// Purposes that always require explicit opt-in and are never granted by grantAll().
+    public static let explicitOptInPurposes: [String] = ["credit", "location"]
 
     public func grantConsent(categories: [String]) {
         consentState = Array(Set(consentState + categories))
@@ -754,6 +886,16 @@ public final class Aether: NSObject {
         if config?.privacy.gdprMode == true && categories.contains("analytics") {
             healthAgent?.start()
         }
+    }
+
+    /// Grant all non-explicit-opt-in purposes (excludes credit and location).
+    /// Call grantConsent(["credit"]) or grantConsent(["location"]) explicitly after
+    /// displaying the required separate opt-in UI for those purposes.
+    public func grantAll() {
+        let grantable = AetherSDK.canonicalConsentPurposes.filter {
+            !AetherSDK.explicitOptInPurposes.contains($0)
+        }
+        grantConsent(categories: grantable)
     }
 
     public func revokeConsent(categories: [String]) {

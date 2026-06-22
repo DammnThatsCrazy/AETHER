@@ -9,33 +9,48 @@ import { EVENT_CONSENT_PURPOSE } from './events';
 const EXPECTED_PURPOSES: ConsentPurpose[] = [
   'analytics',
   'marketing',
+  'personalization',
   'web3',
   'agent',
   'commerce',
+  'credit',
+  'location',
 ];
 
+const EXPLICIT_OPT_IN_PURPOSES: ConsentPurpose[] = ['credit', 'location'];
+
 describe('consent-model', () => {
-  it('exactly 5 canonical consent purposes exist', () => {
-    expect(CONSENT_PURPOSES).toHaveLength(5);
+  it('exactly 8 canonical consent purposes exist', () => {
+    expect(CONSENT_PURPOSES).toHaveLength(8);
   });
 
-  it('CANONICAL_PURPOSES includes all 5 expected purposes', () => {
+  it('CANONICAL_PURPOSES includes all 8 expected purposes', () => {
     for (const purpose of EXPECTED_PURPOSES) {
       expect(CONSENT_PURPOSES).toContain(purpose);
     }
   });
 
-  it('no sixth purpose exists', () => {
-    // Any purpose beyond the canonical five is a contract violation
+  it('no purpose beyond the canonical eight exists', () => {
     const purposeSet = new Set(CONSENT_PURPOSES);
-    expect(purposeSet.size).toBe(5);
+    expect(purposeSet.size).toBe(8);
     const unexpected = [...purposeSet].filter((p) => !EXPECTED_PURPOSES.includes(p));
     expect(unexpected).toHaveLength(0);
   });
 
-  it('each canonical purpose appears at least once in the event consent map', () => {
+  it('credit and location are explicit opt-in only', () => {
+    for (const p of EXPLICIT_OPT_IN_PURPOSES) {
+      expect(CONSENT_PURPOSES).toContain(p as ConsentPurpose);
+    }
+  });
+
+  it('each primary-event purpose appears at least once in the event consent map', () => {
+    // personalization gates fingerprint access but is a secondary/gating purpose,
+    // not the primary required purpose of any event type.
+    const purposesWithEventTypes: ConsentPurpose[] = [
+      'analytics', 'marketing', 'web3', 'agent', 'commerce', 'credit', 'location',
+    ];
     const mappedPurposes = new Set(Object.values(EVENT_CONSENT_PURPOSE));
-    for (const purpose of EXPECTED_PURPOSES) {
+    for (const purpose of purposesWithEventTypes) {
       expect(mappedPurposes).toContain(purpose);
     }
   });

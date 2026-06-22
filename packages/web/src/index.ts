@@ -13,7 +13,7 @@ import type {
   AetherConfig, AetherSDKInterface, AetherPlugin,
   IdentityData, Identity, WalletInfo, TransactionOptions,
   VMType, ConsentCallback, ConnectedWallet, ResolvedIdentity,
-  ConsentState, ConsentBannerConfig, WalletInterface, ConsentInterface,
+  ConsentState, ConsentPurpose, ConsentBannerConfig, WalletInterface, ConsentInterface,
   CommerceInterface, AgentInterface, X402Interface,
   CurrentJourney, JourneyLifecycleEventType, JourneyPayload,
 } from './types';
@@ -528,15 +528,18 @@ class AetherSDK implements AetherSDKInterface {
       return this.consentModule?.getState() ?? {
         analytics: false,
         marketing: false,
+        personalization: false,
         web3: false,
         agent: false,
         commerce: false,
+        credit: false,
+        location: false,
         updatedAt: '',
         policyVersion: '',
       };
     },
-    grant: (purposes: string[]) => { this.consentModule?.grant(purposes); },
-    revoke: (purposes: string[]) => { this.consentModule?.revoke(purposes); },
+    grant: (purposes: ConsentPurpose[]) => { this.consentModule?.grant(purposes); },
+    revoke: (purposes: ConsentPurpose[]) => { this.consentModule?.revoke(purposes); },
     showBanner: (config?: ConsentBannerConfig) => { this.consentModule?.showBanner(config); },
     hideBanner: () => { this.consentModule?.hideBanner(); },
     onUpdate: (callback: ConsentCallback): (() => void) => {

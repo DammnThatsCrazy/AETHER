@@ -1,8 +1,44 @@
 # Event Registry
 
-Every `EventType` the SDK is permitted to emit. Defined in
-`packages/shared/events.ts`. Emitting anything outside this list will be
-dropped by the backend validator.
+**Canonical source of truth:** `packages/shared/contracts/event-registry.json`  
+**Generated artifacts:** `packages/shared/events.ts` (TypeScript) and
+`Backend Architecture/aether-backend/services/ingestion/generated_registry.py` (Python).  
+**Regenerate with:** `python scripts/generate_contracts.py`  
+**Full reference table:** `docs/_generated/event-registry-table.md` (248 types)
+
+Every `EventType` the SDK is permitted to emit must appear in the JSON registry.
+Emitting anything outside this list will be dropped by the backend validator.
+
+## Event families (v8.10.0)
+
+| Family | Purpose | Count | Description |
+|---|---|---|---|
+| `core` | analytics | 7 | track, page, screen, heartbeat, error, performance, experiment |
+| `identity` | analytics | 1 | identify |
+| `consent` | — (always allowed) | 1 | consent |
+| `journey` | analytics | 7 | journey_started, journey_paused, journey_resumed, journey_continued, journey_completed, journey_abandoned, journey_checkpoint |
+| `commerce` | commerce | 11 | payment_*, approval_*, entitlement_*, access_* |
+| `wallet` | web3 | 3 | wallet, transaction, contract_action |
+| `x402` | commerce | 14 | x402_* (corrected from agent; x402 is a payment protocol) |
+| `reward` | commerce | 5 | reward_* |
+| `agent` | agent | 18 | agent_task, agent_decision, a2h_interaction, agent_registered, etc. |
+| `agentic` | agent | 17 | agentic_session, agent_cost, agent_inbox, etc. |
+| `exposure` | analytics + personalization | 8 | content_impression, recommendation_exposed, offer_exposed, etc. |
+| `outcome` | analytics | 9 | outcome_observed, goal_achieved, recommendation_accepted, etc. |
+| `b2b` | analytics + commerce | 21 | organization_observed, workspace_*, member_*, etc. |
+| `ecommerce` | commerce | 24 | product_viewed, cart_*, checkout_*, order_*, subscription_*, invoice_*, etc. |
+| `friction` | analytics | 12 | dead_click_observed, rage_click_observed, form_*, scroll_depth_observed, etc. |
+| `server` | analytics | 11 | api_request_observed, webhook_delivery_observed, job_*, connector_sync_*, etc. |
+| `identity_lc` | analytics | 15 | signup_started, login_succeeded, logout_observed, mfa_*, device_*, etc. |
+| `web3_lc` | web3 | 8 | transaction_pending_observed, transaction_confirmed_observed, token_approval_observed, etc. |
+| `comms` | analytics + marketing | 15 | notification_delivered, email_*, message_*, support_case_*, etc. |
+| `credit` | credit (explicit opt-in) | 3 | credit_signal_observed, credit_account_observed, credit_decision_observed |
+| `location` | location (explicit opt-in) | 2 | location_observed, geofence_transition_observed |
+
+For the complete list of all 248 event types with their required purposes, privacy class,
+retention class, and Silver/Graph projections, see `docs/_generated/event-registry-table.md`.
+
+---
 
 ## Core analytics (family: `core`) — purpose: `analytics`
 
