@@ -402,13 +402,28 @@ def _build_resolver_touchpoints(raw: list[dict[str, Any]]) -> list[Touchpoint]:
     result = []
     for tp in raw:
         ts = _parse_ts(tp.get("occurred_at")) or datetime.now(timezone.utc)
+        # Carry fields needed by ActorWeightedModel and ExposureAwareModel
+        props: dict[str, Any] = {
+            "touchpoint_id": tp.get("touchpoint_id"),
+        }
+        if tp.get("agent_id"):
+            props["actor_type"] = "agent"
+            props["agent_id"] = tp["agent_id"]
+        elif tp.get("profile_id") or tp.get("anonymous_id"):
+            props["actor_type"] = "human"
+        if tp.get("is_view_through"):
+            props["is_impression"] = True
+        if tp.get("dwell_ms") is not None:
+            props["viewable_dwell_ms"] = tp["dwell_ms"]
+        if tp.get("wallet_id"):
+            props["wallet_id"] = tp["wallet_id"]
         result.append(Touchpoint(
             channel=tp.get("channel", "unknown"),
             source=tp.get("source", "unknown"),
             campaign=tp.get("campaign_id", ""),
             timestamp=ts,
             event_type=tp.get("touchpoint_type", "page_view"),
-            properties={"touchpoint_id": tp.get("touchpoint_id")},
+            properties=props,
         ))
     return result
 
