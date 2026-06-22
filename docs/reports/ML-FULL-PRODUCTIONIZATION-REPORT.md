@@ -18,7 +18,7 @@ source_files:
   - AWS Deployment/aether-aws/terraform/modules/s3/main.tf
 estimated_read_minutes: 12
 toc_depth: 3
-last_synced_commit: 605cc1c
+last_synced_commit: d93bdd0
 ---
 
 # Aether ML Full Productionization Report

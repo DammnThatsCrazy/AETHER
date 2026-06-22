@@ -32,6 +32,8 @@ const NAV_ITEMS: NavItem[] = [
   { path: '/gtm-materials', label: 'GTM Materials', glyph: '▥' },
   { path: '/buyer-personas', label: 'Personas', glyph: '◌' },
   { path: '/roi-calculators', label: 'ROI Calcs', glyph: '%' },
+  { path: '/fraud-networks',  label: 'Fraud Networks',  glyph: '⬡' },
+  { path: '/fraud-networks/flow-trace', label: 'Flow Trace', glyph: '→' },
   { path: '/security',        label: 'Security',        glyph: '⛨' },
   { path: '/diagnostics',     label: 'Diagnostics',     glyph: '⚙' },
   { path: '/lab',             label: 'Lab',             glyph: '⚗' },

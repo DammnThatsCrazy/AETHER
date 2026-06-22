@@ -8,6 +8,7 @@ on:
 
 permissions:
   contents: read
+  pull-requests: read
 
 concurrency:
   group: repo-health-${{ github.head_ref || github.ref_name }}

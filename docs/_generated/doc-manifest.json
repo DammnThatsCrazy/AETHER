@@ -1115,6 +1115,35 @@
       "canonical_owner": "platform@aether"
     },
     {
+      "path": "docs/FLOW-OF-FUNDS-TRACE.md",
+      "title": "Flow of Funds Trace",
+      "slug": "flow-of-funds-trace",
+      "section": "concepts",
+      "visibility": "I",
+      "audience": [
+        "security",
+        "dev-senior",
+        "ops"
+      ],
+      "status": "stable",
+      "since_version": "9.0.0"
+    },
+    {
+      "path": "docs/FRAUD-NETWORK-INTELLIGENCE.md",
+      "title": "Fraud Network Intelligence",
+      "slug": "fraud-network-intelligence",
+      "section": "concepts",
+      "visibility": "I",
+      "audience": [
+        "security",
+        "architect",
+        "dev-senior",
+        "ops"
+      ],
+      "status": "stable",
+      "since_version": "9.0.0"
+    },
+    {
       "path": "docs/FRONTEND-ARCHITECTURE.md",
       "title": "Aether Frontend Architecture & Designer Handoff",
       "slug": "architecture/frontend",
@@ -1526,6 +1555,19 @@
       ],
       "status": "stable",
       "since_version": "8.9.0"
+    },
+    {
+      "path": "docs/KYBER-FRAUD-INVESTIGATIONS.md",
+      "title": "Kyber Fraud Investigations Workspace",
+      "slug": "kyber-fraud-investigations",
+      "section": "kyber",
+      "visibility": "I",
+      "audience": [
+        "ops",
+        "security"
+      ],
+      "status": "stable",
+      "since_version": "9.0.0"
     },
     {
       "path": "docs/KYBER-REVENUE-INTELLIGENCE.md",
@@ -3188,6 +3230,34 @@
       ]
     },
     {
+      "path": "docs/api/FLOW-TRACE.md",
+      "title": "Flow Trace API Reference",
+      "slug": "api/flow-trace",
+      "section": "api",
+      "visibility": "I",
+      "audience": [
+        "dev-senior",
+        "security",
+        "architect"
+      ],
+      "status": "stable",
+      "since_version": "9.0.0"
+    },
+    {
+      "path": "docs/api/FRAUD-NETWORKS.md",
+      "title": "Fraud Networks API Reference",
+      "slug": "api/fraud-networks",
+      "section": "api",
+      "visibility": "I",
+      "audience": [
+        "dev-senior",
+        "security",
+        "architect"
+      ],
+      "status": "stable",
+      "since_version": "9.0.0"
+    },
+    {
       "path": "docs/architecture/BACKEND_INTELLIGENCE_ARCHITECTURE.md",
       "title": "Aether Backend Intelligence Architecture Blueprint",
       "slug": "architecture/backend-intelligence",
@@ -3201,6 +3271,19 @@
       "estimated_read_minutes": 30,
       "toc_depth": 4,
       "canonical_owner": "platform@aether"
+    },
+    {
+      "path": "docs/architecture/FRAUD-NETWORK-ARCHITECTURE.md",
+      "title": "Fraud Network Architecture",
+      "slug": "architecture/fraud-network-architecture",
+      "section": "architecture",
+      "visibility": "I",
+      "audience": [
+        "architect",
+        "dev-senior"
+      ],
+      "status": "stable",
+      "since_version": "9.0.0"
     },
     {
       "path": "docs/audits/AGENTIC_OBSERVABILITY_AUDIT.md",

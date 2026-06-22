@@ -11,7 +11,7 @@ source_files:
 canonical_owner: backend@aether
 estimated_read_minutes: 60
 toc_depth: 3
-last_synced_commit: b522d9a
+last_synced_commit: bf87315
 
 ---
 # Aether Backend API v8.9.0 — Endpoint Specification
@@ -2547,4 +2547,47 @@ Anti-distillation enforcement on intelligence query endpoints is activated by `A
 | Method | Path | Description |
 |--------|------|-------------|
 | GET | `/v1/admin/kyber/data-rights` | All data rights grants (operator-scoped view) |
+
+---
+
+## Fraud Intelligence APIs
+
+These endpoints are gated by feature flags (`FEATURE_FRAUD_NETWORKS`, `FEATURE_FLOW_TRACE`, `FEATURE_RISK_OVERLAYS`). Disabled flags return 404.
+
+### Fraud Networks (`/v1/fraud/networks/*`)
+
+| Method | Path | Permission | Description |
+|--------|------|-----------|-------------|
+| POST | `/v1/fraud/networks/build` | `fraud:write` | Build a fraud network from anchor entities |
+| GET | `/v1/fraud/networks` | `fraud:read` | List networks for tenant (filter by status) |
+| GET | `/v1/fraud/networks/{network_id}` | `fraud:read` | Get network detail |
+| GET | `/v1/fraud/networks/{network_id}/graph` | `fraud:read` | Cytoscape-ready graph payload |
+| GET | `/v1/fraud/networks/{network_id}/members` | `fraud:read` | Member list with roles and risk scores |
+| GET | `/v1/fraud/networks/{network_id}/evidence` | `fraud:read` | Evidence references |
+| POST | `/v1/fraud/networks/{network_id}/refresh` | `fraud:write` | Re-run detection pipeline |
+| POST | `/v1/fraud/networks/{network_id}/open-investigation` | `fraud:write` | Create investigation case and link network |
+| POST | `/v1/fraud/networks/{network_id}/annotate` | `fraud:write` | Add annotation |
+| POST | `/v1/fraud/networks/{network_id}/suppress` | `fraud:write` | Suppress network |
+| POST | `/v1/fraud/networks/{network_id}/escalate` | `fraud:write` | Escalate network |
+
+### Flow Trace (`/v1/flow-trace/*`)
+
+| Method | Path | Permission | Description |
+|--------|------|-----------|-------------|
+| POST | `/v1/flow-trace/trace` | `fraud:write` | Execute BFS traversal from anchor entity |
+| GET | `/v1/flow-trace` | `fraud:read` | List traces for tenant |
+| GET | `/v1/flow-trace/{trace_id}` | `fraud:read` | Get trace detail |
+| GET | `/v1/flow-trace/{trace_id}/paths` | `fraud:read` | All discovered paths with pattern tags |
+| GET | `/v1/flow-trace/{trace_id}/sources` | `fraud:read` | Source nodes |
+| GET | `/v1/flow-trace/{trace_id}/sinks` | `fraud:read` | Sink nodes |
+| GET | `/v1/flow-trace/{trace_id}/cycles` | `fraud:read` | Detected cycle nodes |
+
+### Risk Overlay (`/v1/risk-overlay/*`)
+
+| Method | Path | Permission | Description |
+|--------|------|-----------|-------------|
+| POST | `/v1/risk-overlay/fraud` | `fraud:write` | Build risk overlay from fraud network |
+| POST | `/v1/risk-overlay/flow` | `fraud:write` | Build risk overlay from flow trace |
+| GET | `/v1/risk-overlay` | `fraud:read` | List overlay snapshots |
+| GET | `/v1/risk-overlay/{overlay_id}` | `fraud:read` | Get overlay snapshot |
 | POST | `/v1/admin/kyber/data-rights/grants/{grant_id}/revoke` | Operator-initiated revocation |

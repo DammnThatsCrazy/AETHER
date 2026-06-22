@@ -105,6 +105,24 @@ export const EDGE_LAYER_MAP: Record<string, RelationshipLayer> = {
   EXECUTED_AS: 'A2A',
   PRODUCED: 'A2A',
   UPDATES_CONFIDENCE_FOR: 'A2A',
+
+  // Fraud Network Intelligence edges
+  MEMBER_OF_FRAUD_NETWORK: 'H2H',
+  HAS_RISK_ROLE: 'H2H',
+  SCORED_AS_RISKY: 'H2H',
+  SUPPORTED_BY_EVIDENCE: 'H2H',
+  PART_OF_FLOW_TRACE: 'H2H',
+  FLOW_PATH_NEXT: 'H2H',
+  HAS_SOURCE: 'H2H',
+  HAS_SINK: 'H2H',
+  HAS_CONTROLLER: 'H2H',
+  USES_MULE: 'H2H',
+  LINKED_BY_DEVICE: 'H2H',
+  LINKED_BY_IP: 'H2H',
+  LINKED_BY_WALLET: 'H2H',
+  LINKED_BY_AGENT: 'A2A',
+  LINKED_BY_DELEGATION: 'H2A',
+  ATTACHED_TO_CASE: 'H2H',
 };
 
 /** Classify an edge type string into its relationship layer. */

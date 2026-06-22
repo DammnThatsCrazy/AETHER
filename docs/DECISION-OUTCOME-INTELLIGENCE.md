@@ -29,7 +29,7 @@ related:
 canonical_owner: platform@aether
 estimated_read_minutes: 6
 toc_depth: 3
-last_synced_commit: a80ab95
+last_synced_commit: bf87315
 ---
 # Decision & Outcome Intelligence
 
@@ -130,3 +130,20 @@ Feature flags continue to default disabled. Existing recommendation APIs remain 
 ## Enterprise packaging and audit exports
 
 Decision records now feed tenant-scoped audit exports and Kyber solution package readiness. Exports preserve actor, approval, selected/rejected action, reason/comment, and timestamp evidence without exposing cross-tenant data. See `docs/AUDIT-EXPORTS.md` and `docs/SOLUTION-PACKAGES.md`.
+
+## Fraud Intelligence Configuration
+
+`FraudIntelligenceConfig` was added to `config/settings.py` alongside the existing intelligence config dataclasses. It follows the same `_env_bool` / `_env_float` / `_env_int` pattern:
+
+| Flag | Default | Purpose |
+|------|---------|---------|
+| `FEATURE_FRAUD_NETWORKS` | `False` | Enable fraud network clustering service |
+| `FEATURE_FLOW_TRACE` | `False` | Enable flow-of-funds BFS traversal |
+| `FEATURE_RISK_OVERLAYS` | `False` | Enable Cytoscape risk overlay generation |
+| `FEATURE_KYBER_FRAUD_WORKSPACE` | `False` | Enable Kyber fraud workspace pages |
+| `FEATURE_TENANT_FRAUD_INTELLIGENCE` | `False` | Enable tenant-facing fraud intelligence |
+| `FRAUD_ALERT_RISK_THRESHOLD` | `70.0` | Minimum cluster risk score for auto-alert |
+| `FRAUD_NETWORK_MAX_DEPTH` | `4` | Maximum graph traversal depth for clustering |
+| `FLOW_TRACE_MAX_HOPS` | `10` | Maximum BFS hops for flow-of-funds trace |
+
+These flags are independent of the decision/outcome intelligence flags and have no effect on recommendation or playbook behavior.

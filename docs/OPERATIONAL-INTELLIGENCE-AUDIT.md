@@ -16,7 +16,7 @@ source_files:
   - frontend/kyber/src/features/investigation/use-investigations.ts
   - frontend/kyber/src/features/governance/use-governance.ts
   - frontend/kyber/src/features/graph/use-graph-intelligence.ts
-last_synced_commit: 2983cc1
+last_synced_commit: bf87315
 ---
 
 # Operational Intelligence — Stub vs. Production Audit
@@ -265,4 +265,18 @@ aether-replay-worker:
 | API response envelope consistency | P1 | Phase 2 — deferred |
 | Cursor-based realtime resumption | P2 | Phase 3 — deferred |
 | Kafka topic pre-provisioning script | P0 (infra) | Pre-staging action required |
+| Fraud network repositories added to repos.py | P1 | **Done** (PR #344) |
+| Flow trace repositories added to repos.py | P1 | **Done** (PR #344) |
+| Fraud network event topics added to events.py | P1 | **Done** (PR #344) |
+| Investigation fraud-summary and report endpoints | P1 | **Done** (PR #344) |
+
+### PR #344 Additions
+
+PR #344 added the following operational artifacts that affect this audit scope:
+
+**New Repositories** (`repositories/repos.py`): `FraudNetworkRepository`, `FraudNetworkMemberRepository`, `FraudNetworkEdgeRepository`, `FlowTraceRepository`, `FlowTracePathRepository`, `RiskOverlaySnapshotRepository` — all following the same `BaseRepository` ABC with in-memory/DynamoDB/Postgres backends.
+
+**New Event Topics** (`shared/events/events.py`): `FRAUD_NETWORK_CREATED`, `FRAUD_NETWORK_UPDATED`, `FRAUD_NETWORK_REFRESHED`, `FRAUD_NETWORK_ESCALATED`, `FRAUD_NETWORK_SUPPRESSED`, `FLOW_TRACE_CREATED`, `FLOW_TRACE_COMPLETED`, `RISK_OVERLAY_GENERATED`.
+
+**New Investigation Endpoints** (`services/investigation/routes.py`): Six new endpoints for attaching fraud networks and flow traces to investigation cases, retrieving fraud summaries, generating investigation reports, and exporting case bundles — all tenant-scoped, permission-gated, and using the existing state machine.
 | PostgreSQL DDL migrations | P0 (infra) | Pre-staging action required |

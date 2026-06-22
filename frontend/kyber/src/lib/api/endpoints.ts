@@ -889,6 +889,85 @@ export const api = {
       restClient.get('/v1/fraud/stats', wrap(unknownSchema)).then(r => r.data),
   },
 
+  // ── Fraud Networks ─────────────────────────────────────────────────────────
+  fraudNetworks: {
+    build: (body: {
+      anchor_entity_ids: string[];
+      network_type: string;
+      label?: string;
+      notes?: string;
+    }) =>
+      restClient.post('/v1/fraud/networks/build', wrap(unknownSchema), body).then(r => r.data),
+
+    list: (params?: { status?: string; limit?: number }) =>
+      restClient.get(`/v1/fraud/networks${buildQS({ ...params })}`, wrap(unknownSchema)).then(r => r.data),
+
+    get: (networkId: string) =>
+      restClient.get(`/v1/fraud/networks/${networkId}`, wrap(unknownSchema)).then(r => r.data),
+
+    graph: (networkId: string) =>
+      restClient.get(`/v1/fraud/networks/${networkId}/graph`, wrap(unknownSchema)).then(r => r.data),
+
+    members: (networkId: string) =>
+      restClient.get(`/v1/fraud/networks/${networkId}/members`, wrap(unknownSchema)).then(r => r.data),
+
+    evidence: (networkId: string) =>
+      restClient.get(`/v1/fraud/networks/${networkId}/evidence`, wrap(unknownSchema)).then(r => r.data),
+
+    timeline: (networkId: string) =>
+      restClient.get(`/v1/fraud/networks/${networkId}/timeline`, wrap(unknownSchema)).then(r => r.data),
+
+    refresh: (networkId: string) =>
+      restClient.post(`/v1/fraud/networks/${networkId}/refresh`, wrap(unknownSchema), {}).then(r => r.data),
+
+    openInvestigation: (networkId: string, body: { title?: string; notes?: string }) =>
+      restClient.post(`/v1/fraud/networks/${networkId}/open-investigation`, wrap(unknownSchema), body).then(r => r.data),
+
+    annotate: (networkId: string, body: { body: string; author_id: string }) =>
+      restClient.post(`/v1/fraud/networks/${networkId}/annotate`, wrap(unknownSchema), body).then(r => r.data),
+
+    suppress: (networkId: string, body: { reason: string }) =>
+      restClient.post(`/v1/fraud/networks/${networkId}/suppress`, wrap(unknownSchema), body).then(r => r.data),
+
+    escalate: (networkId: string) =>
+      restClient.post(`/v1/fraud/networks/${networkId}/escalate`, wrap(unknownSchema), {}).then(r => r.data),
+  },
+
+  // ── Flow Trace ─────────────────────────────────────────────────────────────
+  flowTrace: {
+    create: (body: {
+      anchor_entity_id: string;
+      direction: 'upstream' | 'downstream' | 'both';
+      max_hops?: number;
+      min_amount_usd?: number;
+    }) =>
+      restClient.post('/v1/flow-trace/trace', wrap(unknownSchema), body).then(r => r.data),
+
+    list: (params?: { limit?: number }) =>
+      restClient.get(`/v1/flow-trace${buildQS({ ...params })}`, wrap(unknownSchema)).then(r => r.data),
+
+    get: (traceId: string) =>
+      restClient.get(`/v1/flow-trace/${traceId}`, wrap(unknownSchema)).then(r => r.data),
+
+    paths: (traceId: string) =>
+      restClient.get(`/v1/flow-trace/${traceId}/paths`, wrap(unknownSchema)).then(r => r.data),
+
+    sources: (traceId: string) =>
+      restClient.get(`/v1/flow-trace/${traceId}/sources`, wrap(unknownSchema)).then(r => r.data),
+
+    sinks: (traceId: string) =>
+      restClient.get(`/v1/flow-trace/${traceId}/sinks`, wrap(unknownSchema)).then(r => r.data),
+
+    cycles: (traceId: string) =>
+      restClient.get(`/v1/flow-trace/${traceId}/cycles`, wrap(unknownSchema)).then(r => r.data),
+
+    timeline: (traceId: string) =>
+      restClient.get(`/v1/flow-trace/${traceId}/timeline`, wrap(unknownSchema)).then(r => r.data),
+
+    attach: (traceId: string, body: { case_id: string; notes?: string }) =>
+      restClient.post(`/v1/flow-trace/${traceId}/attach`, wrap(unknownSchema), body).then(r => r.data),
+  },
+
   // ── Traffic ────────────────────────────────────────────────────────────────
   traffic: {
     reportSource: (source: { session_id: string; source: string; timestamp: string; [k: string]: unknown }) =>

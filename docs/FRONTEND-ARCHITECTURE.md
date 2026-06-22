@@ -13,7 +13,7 @@ source_files:
 canonical_owner: frontend@aether
 estimated_read_minutes: 35
 toc_depth: 4
-last_synced_commit: e0bcffe
+last_synced_commit: 466484a
 ---
 
 # Aether Frontend Architecture & Designer Handoff
@@ -601,4 +601,33 @@ Operator-facing and end-user notification components in `apps/kyber/src/features
 /geo/state/{state_id}               — state/region level
 /geo/metro/{metro_id}               — metro/district level
 /geo/city/{city_id}                 — city level
+
+/fraud-networks                      — fraud network list
+/fraud-networks/:networkId           — network detail (graph, members, evidence, case)
+/fraud-networks/flow-trace           — flow-of-funds trace builder
+/fraud-networks/flow-trace/:traceId  — trace detail with paths
 ```
+
+---
+
+## Kyber Fraud Workspace
+
+The fraud workspace lives under `/fraud-networks` in Kyber and consists of:
+
+| Page | Component | Description |
+|------|-----------|-------------|
+| `FraudNetworksPage` | `pages/fraud/fraud-networks-page.tsx` | List of fraud networks with status/risk filter and build modal |
+| `FraudNetworkDetailPage` | `pages/fraud/fraud-network-detail-page.tsx` | Network detail: graph canvas, members table, evidence tray, case panel |
+| `FlowTracePage` | `pages/fraud/flow-trace-page.tsx` | Trace builder + recent traces list + trace result with paths |
+
+Supporting components:
+
+| Component | File | Purpose |
+|-----------|------|---------|
+| `EntityNodeDrawer` | `components/fraud/entity-node-drawer.tsx` | Slide-out showing entity identity, risk score, and action buttons |
+| `EdgeDrawer` | `components/fraud/edge-drawer.tsx` | Slide-out showing transfer details and evidence for a graph edge |
+| `FraudEvidenceTray` | `components/fraud/fraud-evidence-tray.tsx` | Expandable evidence list with type badges |
+| `CaseAttachmentPanel` | `components/fraud/case-attachment-panel.tsx` | Create investigation case or attach network to existing case |
+| `FlowTracePaths` | `components/fraud/flow-trace-paths.tsx` | Path list with pattern tags, hop count, and risk score bar |
+
+All components use `useQuery` / `useMutation` from `@aether/ui`, the `api.fraudNetworks` and `api.flowTrace` domain objects from `endpoints.ts`, and the hooks in `features/fraud/use-fraud.ts`.

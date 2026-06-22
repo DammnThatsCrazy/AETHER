@@ -353,6 +353,24 @@ _EDGE_LAYER_MAP: dict[str, RelationshipLayer] = {
     EdgeType.RESOURCE_RETURNED_X402_CHALLENGE: RelationshipLayer.A2A,
     EdgeType.STRATEGY_PRODUCED_INTENT: RelationshipLayer.A2A,
     EdgeType.THREAD_CONTAINS_MESSAGE: RelationshipLayer.A2A,
+
+    # ── Fraud Network Intelligence ─────────────────────────────────────────
+    EdgeType.MEMBER_OF_FRAUD_NETWORK: RelationshipLayer.H2H,
+    EdgeType.HAS_RISK_ROLE: RelationshipLayer.H2H,
+    EdgeType.SCORED_AS_RISKY: RelationshipLayer.H2H,
+    EdgeType.SUPPORTED_BY_EVIDENCE: RelationshipLayer.H2H,
+    EdgeType.PART_OF_FLOW_TRACE: RelationshipLayer.H2H,
+    EdgeType.FLOW_PATH_NEXT: RelationshipLayer.H2H,
+    EdgeType.HAS_SOURCE: RelationshipLayer.H2H,
+    EdgeType.HAS_SINK: RelationshipLayer.H2H,
+    EdgeType.HAS_CONTROLLER: RelationshipLayer.H2H,
+    EdgeType.USES_MULE: RelationshipLayer.H2H,
+    EdgeType.LINKED_BY_DEVICE: RelationshipLayer.H2H,
+    EdgeType.LINKED_BY_IP: RelationshipLayer.H2H,
+    EdgeType.LINKED_BY_WALLET: RelationshipLayer.H2H,
+    EdgeType.LINKED_BY_AGENT: RelationshipLayer.A2A,
+    EdgeType.LINKED_BY_DELEGATION: RelationshipLayer.H2A,
+    EdgeType.ATTACHED_TO_CASE: RelationshipLayer.H2H,
 }
 
 

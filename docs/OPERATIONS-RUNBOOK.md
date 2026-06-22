@@ -12,7 +12,7 @@ source_files:
 canonical_owner: platform@aether
 estimated_read_minutes: 12
 toc_depth: 3
-last_synced_commit: b1f810a
+last_synced_commit: bf87315
 ---
 # Operations Runbook v8.9.0
 
@@ -430,3 +430,27 @@ stripe events resend <evt_xxxxxxxx> --webhook-endpoint=<we_xxxxxxxx>
 ### Escalation
 
 If an event type is consistently failing after 3 Stripe retry cycles (Stripe retries over 72 hours with exponential backoff), investigate the specific handler (`_handle_<event_type>` in `services/admin/webhook_routes.py`) and consider adding the event to a dead-letter queue for manual reprocessing.
+
+---
+
+## Fraud Intelligence Services
+
+Three services mount conditionally in `main.py` based on feature flags:
+
+```
+FEATURE_FRAUD_NETWORKS=true    → mounts services/fraud_networks router at /v1/fraud/networks
+FEATURE_FLOW_TRACE=true        → mounts services/flow_trace router at /v1/flow-trace
+FEATURE_RISK_OVERLAYS=true     → mounts services/risk_overlay router at /v1/risk-overlay
+```
+
+### Enabling
+
+Set the flags in your environment and restart the service. No migrations are required — repositories auto-create their stores at startup.
+
+### Health
+
+When enabled, check network build latency via Prometheus counter `fraud_network_built_total` and `flow_trace_created_total`. Elevated latency on `POST /v1/fraud/networks/build` usually indicates graph client saturation — check `GET /v1/health` for the `graph` component.
+
+### Disabling
+
+Set the flag to `false` and restart. Existing stored artifacts are preserved in their respective stores and become accessible again if the flag is re-enabled. No data is deleted on disable.
