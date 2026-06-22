@@ -101,6 +101,31 @@
       ]
     },
     {
+      "name": "Measurement (canonical measurement domain events)",
+      "topics": [
+        {
+          "member": "TOUCHPOINT_PROJECTED",
+          "value": "aether.measurement.touchpoint.projected"
+        },
+        {
+          "member": "CONVERSION_CONFIRMED",
+          "value": "aether.measurement.conversion.confirmed"
+        },
+        {
+          "member": "JOURNEY_REBUILT",
+          "value": "aether.measurement.journey.rebuilt"
+        },
+        {
+          "member": "ATTRIBUTION_RUN_COMPLETE",
+          "value": "aether.measurement.attribution.run.complete"
+        },
+        {
+          "member": "SPEND_RECORD_UPSERTED",
+          "value": "aether.measurement.spend.upserted"
+        }
+      ]
+    },
+    {
       "name": "Consent",
       "topics": [
         {
@@ -928,6 +953,26 @@
     {
       "member": "TOUCHPOINT_RECORDED",
       "value": "aether.campaign.touchpoint.recorded"
+    },
+    {
+      "member": "TOUCHPOINT_PROJECTED",
+      "value": "aether.measurement.touchpoint.projected"
+    },
+    {
+      "member": "CONVERSION_CONFIRMED",
+      "value": "aether.measurement.conversion.confirmed"
+    },
+    {
+      "member": "JOURNEY_REBUILT",
+      "value": "aether.measurement.journey.rebuilt"
+    },
+    {
+      "member": "ATTRIBUTION_RUN_COMPLETE",
+      "value": "aether.measurement.attribution.run.complete"
+    },
+    {
+      "member": "SPEND_RECORD_UPSERTED",
+      "value": "aether.measurement.spend.upserted"
     },
     {
       "member": "CONSENT_UPDATED",

@@ -10,6 +10,8 @@ from .identity_evidence_projector import IdentityEvidenceProjector
 from .agent_execution_projector import AgentExecutionProjector
 from .web3_transaction_projector import Web3TransactionProjector
 from .x402_flow_projector import X402FlowProjector
+from .touchpoint_projector import TouchpointProjector
+from .conversion_projector import ConversionProjector
 
 __all__ = [
     "BaseProjector",
@@ -24,4 +26,6 @@ __all__ = [
     "AgentExecutionProjector",
     "Web3TransactionProjector",
     "X402FlowProjector",
+    "TouchpointProjector",
+    "ConversionProjector",
 ]

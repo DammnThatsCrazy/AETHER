@@ -94,6 +94,13 @@ class Topic(str, Enum):
     CAMPAIGN_DELETED = "aether.campaign.deleted"
     TOUCHPOINT_RECORDED = "aether.campaign.touchpoint.recorded"
 
+    # Measurement (canonical measurement domain events)
+    TOUCHPOINT_PROJECTED = "aether.measurement.touchpoint.projected"
+    CONVERSION_CONFIRMED = "aether.measurement.conversion.confirmed"
+    JOURNEY_REBUILT = "aether.measurement.journey.rebuilt"
+    ATTRIBUTION_RUN_COMPLETE = "aether.measurement.attribution.run.complete"
+    SPEND_RECORD_UPSERTED = "aether.measurement.spend.upserted"
+
     # Consent
     CONSENT_UPDATED = "aether.consent.updated"
     DATA_SUBJECT_REQUEST = "aether.consent.dsr"

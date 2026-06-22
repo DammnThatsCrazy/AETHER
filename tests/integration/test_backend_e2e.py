@@ -101,100 +101,78 @@ class FakeCache:
 
 
 class TestCampaignAttributionE2E:
-    """Full flow: create campaign → record touchpoints → compute attribution."""
+    """Campaign attribution — uses canonical AttributionResolver (per-conversion)."""
 
     @pytest.fixture(autouse=True)
     def setup(self):
         """Reset campaign state between tests."""
-        # sys.path configured at module level
         from services.campaign import routes
-        # Clear durable store internal state
-        if hasattr(routes._touchpoint_store, '_data'):
-            routes._touchpoint_store._data.clear()
-            routes._touchpoint_store._lists.clear()
+        # _touchpoint_store removed; touchpoints now persisted via TouchpointRepository
         routes._repo._store.clear()
         yield
 
     @pytest.mark.asyncio
     async def test_full_attribution_flow(self):
-        from services.campaign.routes import (
-            _compute_attribution,
-            _repo,
-            _touchpoint_store,
-        )
+        """Credit weights from AttributionResolver sum to 1.0 and attribute the full revenue."""
+        from services.attribution.resolver import AttributionConfig, AttributionResolver
 
-        tenant = FakeTenant()
-        request = FakeRequest(tenant)
-
-        # Step 1: Create campaign
-        campaign_id = str(uuid.uuid4())
-        await _repo.insert(campaign_id, {
-            "tenant_id": tenant.tenant_id,
-            "name": "Summer Sale",
-            "channel": "email",
-            "status": "active",
-        })
-
-        # Step 2: Record touchpoints via DurableStore
+        resolver = AttributionResolver(AttributionConfig())
+        now = datetime.now(timezone.utc).isoformat()
         touchpoints = [
-            {"channel": "email", "event_type": "open", "is_conversion": False, "revenue_usd": 0},
-            {"channel": "email", "event_type": "click", "is_conversion": False, "revenue_usd": 0},
-            {"channel": "direct", "event_type": "purchase", "is_conversion": True, "revenue_usd": 99.99},
+            {"channel": "email", "source": "newsletter", "timestamp": now, "event_type": "click"},
+            {"channel": "direct", "source": "direct", "timestamp": now, "event_type": "click"},
         ]
-        for tp_data in touchpoints:
-            tp = {
-                "touchpoint_id": str(uuid.uuid4()),
-                "campaign_id": campaign_id,
-                "tenant_id": tenant.tenant_id,
-                "timestamp": datetime.now(timezone.utc).isoformat(),
-                **tp_data,
-            }
-            await _touchpoint_store.append_list(campaign_id, tp)
-
-        # Step 3: Compute attribution
-        stored = await _touchpoint_store.get_list(campaign_id)
-        conversions = [tp for tp in stored if tp.get("is_conversion")]
-        result = _compute_attribution(list(stored), conversions, "multi_touch")
-
-        non_conv = [tp for tp in result if not tp.get("is_conversion")]
-        assert len(non_conv) == 2
-        assert non_conv[0]["attribution_weight"] == 0.5  # 2 touchpoints → 50/50
-        total_attributed = sum(tp.get("attributed_revenue", 0) for tp in non_conv)
-        assert abs(total_attributed - 99.99) < 0.02
+        result = await resolver.resolve(
+            user_id="user-001",
+            event={"event_type": "purchase", "revenue": 99.99},
+            touchpoints=touchpoints,
+            model_name="linear",
+        )
+        total_weight = sum(c.weight for c in result.credits)
+        assert abs(total_weight - 1.0) < 0.001
+        attributed_revenue = sum(c.weight * 99.99 for c in result.credits)
+        assert abs(attributed_revenue - 99.99) < 0.02
 
     @pytest.mark.asyncio
     async def test_attribution_models_consistent(self):
-        """All models should attribute the same total revenue."""
-        from services.campaign.routes import _compute_attribution
+        """All models produce credit weights summing to 1.0 for the same touchpoints."""
+        from services.attribution.resolver import AttributionConfig, AttributionResolver
 
+        resolver = AttributionResolver(AttributionConfig())
+        now = datetime.now(timezone.utc).isoformat()
         touchpoints = [
-            {"event_type": "view", "is_conversion": False, "revenue_usd": 0},
-            {"event_type": "click", "is_conversion": False, "revenue_usd": 0},
-            {"event_type": "engage", "is_conversion": False, "revenue_usd": 0},
-            {"event_type": "purchase", "is_conversion": True, "revenue_usd": 200.0},
+            {"channel": ch, "source": ch, "timestamp": now, "event_type": "click"}
+            for ch in ["email", "social", "direct"]
         ]
-        conversions = [tp for tp in touchpoints if tp.get("is_conversion")]
 
-        for model in ["first_touch", "last_touch", "linear", "time_decay", "multi_touch"]:
-            result = _compute_attribution(
-                [dict(tp) for tp in touchpoints],
-                conversions,
-                model,
+        for model in ["first_touch", "last_touch", "linear", "time_decay", "position_based"]:
+            result = await resolver.resolve(
+                user_id="user-001",
+                event={"event_type": "purchase"},
+                touchpoints=touchpoints,
+                model_name=model,
             )
-            non_conv = [tp for tp in result if not tp.get("is_conversion")]
-            total = sum(tp.get("attributed_revenue", 0) for tp in non_conv)
-            assert abs(total - 200.0) < 0.05, f"{model}: total={total}"
+            total_weight = sum(c.weight for c in result.credits)
+            assert abs(total_weight - 1.0) < 0.001, f"{model}: total_weight={total_weight}"
+            attributed_revenue = sum(c.weight * 200.0 for c in result.credits)
+            assert abs(attributed_revenue - 200.0) < 0.05, f"{model}: revenue={attributed_revenue}"
 
     @pytest.mark.asyncio
     async def test_empty_touchpoints_graceful(self):
-        """Attribution with no touchpoints should return empty list."""
-        from services.campaign.routes import _compute_attribution
-        result = _compute_attribution([], [], "multi_touch")
-        assert result == []
+        """Resolver with no touchpoints returns empty credits (min_touchpoints not met)."""
+        from services.attribution.resolver import AttributionConfig, AttributionResolver
+
+        resolver = AttributionResolver(AttributionConfig())
+        result = await resolver.resolve(
+            user_id="user-001",
+            event={"event_type": "purchase"},
+            touchpoints=[],
+        )
+        assert result.credits == []
 
     @pytest.mark.asyncio
     async def test_tenant_isolation_on_attribution(self):
-        """Wrong tenant should get NotFoundError."""
+        """Campaign belongs to tenant-A, not tenant-B."""
         from services.campaign.routes import _repo
 
         campaign_id = str(uuid.uuid4())

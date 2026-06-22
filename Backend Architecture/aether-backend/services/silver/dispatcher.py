@@ -26,6 +26,8 @@ from .projectors import (
     AgentExecutionProjector,
     Web3TransactionProjector,
     X402FlowProjector,
+    TouchpointProjector,
+    ConversionProjector,
 )
 from .projectors.silver_graph_projector import SilverGraphProjector
 
@@ -42,6 +44,8 @@ _ALL_PROJECTORS = [
     AgentExecutionProjector(),
     Web3TransactionProjector(),
     X402FlowProjector(),
+    TouchpointProjector(),
+    ConversionProjector(),
 ]
 
 # Build a fast lookup: event_type → projector

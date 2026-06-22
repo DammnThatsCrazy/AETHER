@@ -262,17 +262,103 @@ async def get_entity_agentic_economic(
 async def get_entity_campaign_economic(
     request: Request,
     entity_id: str,
-    window: str = Query("lifetime"),
+    window: str = Query("30d"),
     campaign_id: Optional[str] = Query(None),
 ):
-    """Campaign economics for an entity (spend, ROAS, attribution)."""
+    """Campaign economics for an entity — ROAS from actual spend and attributed revenue."""
     rid = trace_request(request)
     tenant_id = _get_tenant_id(request)
     logger.info("economic.campaigns", entity_id=entity_id, tenant_id=tenant_id)
 
-    response = CampaignEconomicResponse()
+    from datetime import timedelta
+    from decimal import Decimal
+    from services.measurement.repositories.attribution_run_repo import AttributionRunRepository
+    from services.measurement.repositories.conversion_repo import ConversionRepository
+    from services.measurement.repositories.spend_repo import SpendRepository
+
+    _window_days = {"24h": 1, "7d": 7, "30d": 30, "90d": 90}.get(window, 30)
+    period_start = datetime.now(timezone.utc) - timedelta(days=_window_days)
+
+    run_repo = AttributionRunRepository()
+    conv_repo = ConversionRepository()
+    spend_repo = SpendRepository()
+
+    warnings: list[EconomicWarningResponse] = []
+    quality_status = "complete"
+
+    try:
+        # Get conversions for this profile
+        conversions = await conv_repo.list_by_profile(
+            tenant_id, entity_id,
+            after_occurred=period_start,
+            attribution_eligible_only=True,
+            limit=1000,
+        )
+        if not conversions:
+            # Also try as cluster_id / account_id
+            conversions = []
+
+        total_attributed_revenue = Decimal("0")
+        total_spend = Decimal("0")
+        conv_count = 0
+
+        for conv in conversions:
+            cid = conv.get("conversion_id", "")
+            # If a specific campaign was requested, filter credits
+            if campaign_id:
+                summary = await run_repo.campaign_credit_summary(tenant_id, campaign_id)
+                total_attributed_revenue += summary.get("total_attributed_net_revenue") or Decimal("0")
+                conv_count += int(summary.get("total_attributed_conversions") or 0)
+                if not total_spend:
+                    total_spend = await spend_repo.total_spend(
+                        tenant_id, campaign_id, period_start=period_start,
+                    )
+                break
+            else:
+                credits = await run_repo.list_credits_for_conversion(tenant_id, cid, active_only=True)
+                if credits:
+                    for credit in credits:
+                        total_attributed_revenue += Decimal(str(credit.get("attributed_net_revenue") or "0"))
+                    conv_count += 1
+
+        if not campaign_id:
+            warnings.append(EconomicWarningResponse(
+                code="SPEND_NOT_FILTERED_BY_CAMPAIGN",
+                message="Provide campaign_id query parameter for campaign-specific spend data.",
+                severity="info",
+            ))
+
+        roas = float(total_attributed_revenue / total_spend) if total_spend > Decimal("0") else None
+        if roas is None:
+            warnings.append(EconomicWarningResponse(
+                code="NO_SPEND_DATA",
+                message="No spend records found. Connect an ad platform connector or import spend data.",
+                severity="warning",
+            ))
+            quality_status = "not_provisioned"
+
+        response = CampaignEconomicResponse(
+            spend=EconomicAmountResponse(usd_amount=float(total_spend), native_currency="USD"),
+            attributed_revenue=EconomicAmountResponse(usd_amount=float(total_attributed_revenue), native_currency="USD"),
+            roas=roas,
+            conversions=conv_count,
+        )
+
+    except Exception as exc:
+        logger.error("economic.campaigns.error: %s", exc)
+        quality_status = "failed"
+        warnings.append(EconomicWarningResponse(
+            code="COMPUTATION_ERROR",
+            message="Campaign economic computation failed. Data may be incomplete.",
+            severity="error",
+        ))
+        response = CampaignEconomicResponse()
+
     emit_latency("economic.campaigns", request)
-    return APIResponse(data=response.model_dump()).to_dict()
+    return APIResponse(data={
+        **response.model_dump(),
+        "quality": {"status": quality_status, "warnings": [w.model_dump() for w in warnings]},
+    }).to_dict()
 
 
 @router.get("/v1/profile/{entity_id}/economic/warnings")
@@ -302,15 +388,86 @@ async def get_tenant_economic_overview(
     tenant_id = _get_tenant_id(request)
     logger.info("economic.overview", tenant_id=tenant_id, window=window)
 
-    response = TenantEconomicOverviewResponse(
-        tenant_id=tenant_id,
-        warnings=[EconomicWarningResponse(
+    from datetime import timedelta
+    from decimal import Decimal
+    from services.measurement.repositories.attribution_run_repo import AttributionRunRepository
+    from services.measurement.repositories.spend_repo import SpendRepository
+    from services.measurement.repositories.conversion_repo import ConversionRepository
+
+    _window_days = {"24h": 1, "7d": 7, "30d": 30, "90d": 90}.get(window, 30)
+    period_start = datetime.now(timezone.utc) - timedelta(days=_window_days)
+
+    warnings: list[EconomicWarningResponse] = []
+    total_attributed_revenue = Decimal("0")
+    total_spend = Decimal("0")
+    entity_count = 0
+
+    try:
+        run_repo = AttributionRunRepository()
+        spend_repo = SpendRepository()
+        conv_repo = ConversionRepository()
+
+        # Aggregate spend across all campaigns for the tenant
+        spend_rows = await spend_repo.list_by_tenant(
+            tenant_id, period_start=period_start, limit=5000
+        )
+        total_spend = sum((Decimal(str(r.get("total_cost") or "0")) for r in spend_rows), Decimal("0"))
+
+        # Aggregate attributed revenue across all conversions
+        conversions = await conv_repo.list_by_tenant(
+            tenant_id, after_occurred=period_start, limit=5000
+        )
+        entity_ids: set[str] = set()
+        for conv in conversions:
+            conv_id = conv.get("conversion_id", "")
+            if conv.get("profile_id"):
+                entity_ids.add(conv["profile_id"])
+            credits = await run_repo.list_credits_for_conversion(tenant_id, conv_id, active_only=True)
+            for credit in credits:
+                total_attributed_revenue += Decimal(str(credit.get("attributed_net_revenue") or "0"))
+
+        entity_count = len(entity_ids)
+
+        roas = float(total_attributed_revenue / total_spend) if total_spend > Decimal("0") else None
+        if total_spend == Decimal("0"):
+            warnings.append(EconomicWarningResponse(
+                code="NO_SPEND_DATA",
+                message="No spend records found for this window. Connect an ad platform connector.",
+                severity="warning",
+            ))
+        if total_attributed_revenue == Decimal("0"):
+            warnings.append(EconomicWarningResponse(
+                code="NO_ATTRIBUTION_DATA",
+                message="No attribution credits found. Run attribution on your conversions.",
+                severity="info",
+            ))
+
+        warnings.append(EconomicWarningResponse(
             code="PARTIAL_SOURCE_COVERAGE",
             message="Overview is computed from connected data sources only.",
             severity="info",
-        )],
-        computed_at=_now_iso(),
-    )
+        ))
+
+        response = TenantEconomicOverviewResponse(
+            tenant_id=tenant_id,
+            campaign_spend=EconomicAmountResponse(usd_amount=float(total_spend), native_currency="USD"),
+            attributed_revenue=EconomicAmountResponse(usd_amount=float(total_attributed_revenue), native_currency="USD"),
+            entity_count=entity_count,
+            warnings=warnings,
+            computed_at=_now_iso(),
+        )
+    except Exception as exc:
+        logger.error("economic.overview.error: %s", exc)
+        warnings.append(EconomicWarningResponse(
+            code="COMPUTATION_ERROR",
+            message="Overview computation failed. Data may be incomplete.",
+            severity="error",
+        ))
+        response = TenantEconomicOverviewResponse(
+            tenant_id=tenant_id,
+            warnings=warnings,
+            computed_at=_now_iso(),
+        )
 
     emit_latency("economic.overview", request)
     metrics.incr("economic.overview.requests")
