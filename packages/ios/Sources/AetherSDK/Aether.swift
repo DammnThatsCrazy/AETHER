@@ -509,7 +509,7 @@ public final class Aether: NSObject {
         #endif
 
         isInitialized = true
-        log("Aether iOS SDK initialized (v8.9.0)")
+        log("Aether iOS SDK initialized (v8.10.0)")
 
         loadPersistedQueue()
 
@@ -1163,7 +1163,7 @@ public final class Aether: NSObject {
         #endif
 
         return EventContext(
-            library: .init(name: "aether-ios", version: "8.9.0"),
+            library: .init(name: "aether-ios", version: "8.10.0"),
             device: .init(
                 osName: osName,
                 osVersion: osVersion,
