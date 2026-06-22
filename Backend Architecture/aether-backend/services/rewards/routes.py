@@ -69,6 +69,7 @@ from services.rewards.repositories import (
     RewardReceiptRepository,
     RewardRuleRepository,
 )
+from services.measurement.repositories.attribution_run_repo import AttributionRunRepository
 from shared.decorators import api_response
 from shared.logger.logger import get_logger, metrics
 
@@ -530,7 +531,42 @@ async def _compute_fraud_score(properties: dict) -> float:
     return min(score, 100.0)
 
 
-async def _compute_attribution_weight(channel: Optional[str], properties: dict) -> float:
+async def _compute_attribution_weight(
+    channel: Optional[str],
+    properties: dict,
+    tenant_id: Optional[str] = None,
+    profile_id: Optional[str] = None,
+) -> float:
+    """Return attribution weight from canonical credits when available.
+
+    Priority:
+    1. Canonical attribution_credits for the given conversion_id + profile
+    2. Explicit attribution_weight_override in properties
+    3. Channel-based heuristic fallback
+    """
+    conversion_id = properties.get("conversion_id")
+    if conversion_id and tenant_id and profile_id:
+        try:
+            run_repo = AttributionRunRepository()
+            credits = await run_repo.list_credits_for_conversion(
+                tenant_id, conversion_id, active_only=True
+            )
+            if credits:
+                # Sum credit weights for this profile_id across all credits
+                profile_weight = sum(
+                    float(c.get("credit_weight", 0))
+                    for c in credits
+                    if c.get("profile_id") == profile_id or c.get("campaign_id") == properties.get("campaign_id")
+                )
+                if profile_weight > 0:
+                    return min(profile_weight, 1.0)
+                # Any positive credit means the entity is in the attribution path
+                total_weight = sum(float(c.get("credit_weight", 0)) for c in credits)
+                if total_weight > 0:
+                    return min(total_weight, 1.0)
+        except Exception:
+            pass  # fall through to heuristic
+
     base_weights: dict[str, float] = {
         "organic": 0.9, "social": 0.7, "referral": 0.8,
         "paid_search": 0.6, "email": 0.5, "direct": 1.0,
@@ -836,7 +872,10 @@ async def _evaluate_event_core(request: Request, body: EvaluateRequest) -> dict:
     fraud_input = _build_fraud_input(body.fraud_decision_id, fraud_score, fraud_decision)
 
     # ── Attribution weight ───────────────────────────────────────────────
-    attribution_weight = await _compute_attribution_weight(body.channel, body.properties)
+    attribution_weight = await _compute_attribution_weight(
+        body.channel, body.properties,
+        tenant_id=tenant_id, profile_id=body.user_id,
+    )
     attribution_input = _build_attribution_input(
         body.attribution_result_id, body.channel, attribution_weight
     )

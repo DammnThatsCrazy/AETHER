@@ -1,6 +1,8 @@
 """
 Aether Service — Campaign
-Campaign management, attribution calculation, and reporting.
+Campaign management and reporting. Attribution is delegated to the canonical
+measurement engine (services/measurement). This service owns campaign metadata
+and touchpoint recording only.
 """
 
 from __future__ import annotations
@@ -19,7 +21,6 @@ from shared.common.common import (
 from shared.events.events import Event, EventProducer, Topic
 from shared.logger.logger import get_logger, metrics
 from shared.observability import trace_request, emit_latency
-from shared.store import get_store
 from dependencies.providers import get_producer
 from repositories.repos import CampaignRepository
 
@@ -27,10 +28,6 @@ logger = get_logger("aether.service.campaign")
 router = APIRouter(prefix="/v1/campaigns", tags=["Campaigns"])
 
 _repo = CampaignRepository()
-
-VALID_ATTRIBUTION_MODELS = {
-    "multi_touch", "first_touch", "last_touch", "linear", "time_decay",
-}
 
 
 # ── Request Models ───────────────────────────────────────────────────
@@ -53,7 +50,7 @@ class CampaignUpdate(BaseModel):
 
 
 class TouchpointCreate(BaseModel):
-    """Validated touchpoint input — replaces raw request.json()."""
+    """Validated touchpoint input."""
     channel: Optional[str] = None
     source: str = ""
     user_id: str = ""
@@ -63,12 +60,6 @@ class TouchpointCreate(BaseModel):
     revenue_usd: float = Field(default=0.0, ge=0.0)
     timestamp: Optional[str] = None
     properties: dict[str, Any] = Field(default_factory=dict)
-
-
-# ── Durable Touchpoint Store ──────────────────────────────────────────
-# Uses Redis when available, falls back to in-memory for single-instance.
-
-_touchpoint_store = get_store("campaign_touchpoints")
 
 
 # ── CRUD Routes ──────────────────────────────────────────────────────
@@ -136,6 +127,12 @@ async def update_campaign(
 ):
     tenant = request.state.tenant
     tenant.require_permission("campaign:manage")
+
+    # Verify ownership before mutation
+    existing = await _repo.find_by_id(campaign_id)
+    if existing is None or existing.get("tenant_id") != tenant.tenant_id:
+        raise NotFoundError("Campaign")
+
     campaign = await _repo.update(campaign_id, body.model_dump(exclude_none=True))
     await producer.publish(Event(
         topic=Topic.CAMPAIGN_UPDATED,
@@ -155,6 +152,12 @@ async def delete_campaign(
 ):
     tenant = request.state.tenant
     tenant.require_permission("campaign:manage")
+
+    # Verify ownership before mutation
+    existing = await _repo.find_by_id(campaign_id)
+    if existing is None or existing.get("tenant_id") != tenant.tenant_id:
+        raise NotFoundError("Campaign")
+
     await _repo.delete(campaign_id)
     await producer.publish(Event(
         topic=Topic.CAMPAIGN_DELETED,
@@ -166,58 +169,62 @@ async def delete_campaign(
     return APIResponse(data={"deleted": True}).to_dict()
 
 
-# ── Attribution ──────────────────────────────────────────────────────
+# ── Attribution (read-only — delegated to measurement engine) ────────
 
 @router.get("/{campaign_id}/attribution")
 async def get_attribution(
     campaign_id: str,
     request: Request,
-    model: str = Query(default="multi_touch"),
+    model: str = Query(default="last_touch"),
     start_date: Optional[str] = None,
     end_date: Optional[str] = None,
 ):
-    """Compute attribution results for a campaign."""
+    """Return attribution credits for a campaign from the canonical measurement engine.
+
+    Credits are pre-computed per conversion by the attribution engine and stored
+    in attribution_credits. This endpoint aggregates persisted credits by campaign.
+    The measurement engine owns all attribution calculation — this route is read-only.
+    """
     tenant = request.state.tenant
-
-    if model not in VALID_ATTRIBUTION_MODELS:
-        raise BadRequestError(
-            f"Invalid attribution model: {model}. "
-            f"Valid: {sorted(VALID_ATTRIBUTION_MODELS)}"
-        )
-
-    ctx = trace_request(request, service="campaign")
     campaign = await _repo.find_by_id(campaign_id)
     if campaign is None or campaign.get("tenant_id") != tenant.tenant_id:
         raise NotFoundError("Campaign")
 
-    touchpoints = await _touchpoint_store.get_list(campaign_id)
+    ctx = trace_request(request, service="campaign")
 
-    if start_date or end_date:
-        touchpoints = [
-            tp for tp in touchpoints
-            if (not start_date or tp.get("timestamp", "") >= start_date)
-            and (not end_date or tp.get("timestamp", "") <= end_date)
-        ]
+    try:
+        from services.measurement.repositories.attribution_run_repo import AttributionRunRepository
+        run_repo = AttributionRunRepository()
+        summary = await run_repo.campaign_credit_summary(
+            tenant_id=tenant.tenant_id,
+            campaign_id=campaign_id,
+            model_type=model,
+            start_date=start_date,
+            end_date=end_date,
+        )
+    except Exception as exc:
+        logger.warning(
+            "Attribution credits unavailable for campaign=%s: %s — returning empty summary",
+            campaign_id, exc,
+        )
+        summary = {
+            "conversions": 0,
+            "attributed_gross_revenue": 0.0,
+            "attributed_net_revenue": 0.0,
+            "total_credit_weight": 0.0,
+            "touchpoint_count": 0,
+            "quality": {"status": "not_provisioned", "message": str(exc)},
+        }
 
-    conversions = [tp for tp in touchpoints if tp.get("is_conversion")]
-    total_revenue = sum(tp.get("revenue_usd", 0.0) for tp in conversions)
-    attributed = _compute_attribution(touchpoints, conversions, model)
-
-    metrics.increment("campaign_attribution_computed", labels={"model": model})
     emit_latency("campaign_attribution", ctx.elapsed_ms(), labels={"model": model})
-    logger.info(
-        "Attribution computed: campaign=%s model=%s conversions=%d",
-        campaign_id, model, len(conversions),
-    )
+    metrics.increment("campaign_attribution_computed", labels={"model": model})
 
     return APIResponse(data={
         "campaign_id": campaign_id,
         "campaign_name": campaign.get("name", ""),
         "model": model,
-        "conversions": len(conversions),
-        "revenue_attributed_usd": round(total_revenue, 2),
-        "touchpoints": attributed,
         "period": {"start": start_date, "end": end_date},
+        **summary,
     }).to_dict()
 
 
@@ -228,15 +235,21 @@ async def record_touchpoint(
     request: Request,
     producer: EventProducer = Depends(get_producer),
 ):
-    """Record a campaign touchpoint (page view, click, conversion)."""
+    """Record a campaign touchpoint via the canonical measurement pipeline.
+
+    Touchpoints are written to silver_campaign_touchpoint_facts for durable
+    storage and downstream attribution. The old Redis/in-memory store is no
+    longer used.
+    """
     tenant = request.state.tenant
 
     campaign = await _repo.find_by_id(campaign_id)
     if campaign is None or campaign.get("tenant_id") != tenant.tenant_id:
         raise NotFoundError("Campaign")
 
+    touchpoint_id = str(uuid.uuid4())
     touchpoint = {
-        "touchpoint_id": str(uuid.uuid4()),
+        "touchpoint_id": touchpoint_id,
         "campaign_id": campaign_id,
         "tenant_id": tenant.tenant_id,
         "channel": body.channel or campaign.get("channel", "unknown"),
@@ -246,11 +259,23 @@ async def record_touchpoint(
         "event_type": body.event_type,
         "is_conversion": body.is_conversion,
         "revenue_usd": body.revenue_usd,
-        "timestamp": body.timestamp or datetime.now(timezone.utc).isoformat(),
+        "occurred_at": body.timestamp or datetime.now(timezone.utc).isoformat(),
         "properties": body.properties,
     }
 
-    await _touchpoint_store.append_list(campaign_id, touchpoint)
+    # Write to canonical touchpoint store
+    try:
+        from services.measurement.repositories.touchpoint_repo import TouchpointRepository
+        tp_repo = TouchpointRepository()
+        await tp_repo.upsert_from_campaign_touchpoint(
+            tenant_id=tenant.tenant_id,
+            campaign_id=campaign_id,
+            touchpoint_id=touchpoint_id,
+            data=touchpoint,
+        )
+    except Exception as exc:
+        # Log but do not fail the request — event bus handles the canonical write
+        logger.warning("Canonical touchpoint write deferred: %s", exc)
 
     await producer.publish(Event(
         topic=Topic.TOUCHPOINT_RECORDED,
@@ -261,68 +286,3 @@ async def record_touchpoint(
 
     metrics.increment("campaign_touchpoints_recorded")
     return APIResponse(data=touchpoint).to_dict()
-
-
-# ── Attribution Engine ───────────────────────────────────────────────
-
-def _compute_attribution(
-    touchpoints: list[dict],
-    conversions: list[dict],
-    model: str,
-) -> list[dict]:
-    """Apply attribution model to distribute conversion credit."""
-    if not touchpoints:
-        return []
-
-    non_conversion = [tp for tp in touchpoints if not tp.get("is_conversion")]
-    if not non_conversion:
-        return touchpoints
-
-    total_revenue = sum(c.get("revenue_usd", 0.0) for c in conversions)
-    n = len(non_conversion)
-
-    for tp in non_conversion:
-        tp["attributed_revenue"] = 0.0
-        tp["attribution_weight"] = 0.0
-
-    if model == "first_touch":
-        non_conversion[0]["attribution_weight"] = 1.0
-        non_conversion[0]["attributed_revenue"] = total_revenue
-
-    elif model == "last_touch":
-        non_conversion[-1]["attribution_weight"] = 1.0
-        non_conversion[-1]["attributed_revenue"] = total_revenue
-
-    elif model == "linear":
-        weight = 1.0 / n
-        for tp in non_conversion:
-            tp["attribution_weight"] = round(weight, 4)
-            tp["attributed_revenue"] = round(total_revenue * weight, 2)
-
-    elif model == "time_decay":
-        weights = [2 ** i for i in range(n)]
-        total_weight = sum(weights)
-        for i, tp in enumerate(non_conversion):
-            w = weights[i] / total_weight
-            tp["attribution_weight"] = round(w, 4)
-            tp["attributed_revenue"] = round(total_revenue * w, 2)
-
-    else:  # multi_touch: position-based 40/20/40
-        if n == 1:
-            non_conversion[0]["attribution_weight"] = 1.0
-            non_conversion[0]["attributed_revenue"] = total_revenue
-        elif n == 2:
-            for tp in non_conversion:
-                tp["attribution_weight"] = 0.5
-                tp["attributed_revenue"] = round(total_revenue * 0.5, 2)
-        else:
-            middle_weight = 0.2 / (n - 2)
-            non_conversion[0]["attribution_weight"] = 0.4
-            non_conversion[0]["attributed_revenue"] = round(total_revenue * 0.4, 2)
-            non_conversion[-1]["attribution_weight"] = 0.4
-            non_conversion[-1]["attributed_revenue"] = round(total_revenue * 0.4, 2)
-            for tp in non_conversion[1:-1]:
-                tp["attribution_weight"] = round(middle_weight, 4)
-                tp["attributed_revenue"] = round(total_revenue * middle_weight, 2)
-
-    return touchpoints

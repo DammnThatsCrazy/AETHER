@@ -159,6 +159,18 @@ Routes:
     POST /v1/diagnostics/errors/{fp}/resolve   Resolve error
     POST /v1/diagnostics/errors/{fp}/suppress  Suppress error
     GET  /v1/diagnostics/circuit-breakers      Circuit breaker states
+    GET  /v1/conversions                       List canonical conversions
+    GET  /v1/conversions/{id}/attribution      Conversion attribution run + credits
+    GET  /v1/journeys/{id}                     Active journey version
+    GET  /v1/attribution/runs                  List attribution runs
+    POST /v1/attribution/runs                  Trigger attribution run
+    POST /v1/attribution/backfills             Schedule attribution backfill
+    GET  /v1/spend                             List spend records
+    POST /v1/spend/imports                     Manual spend import
+    GET  /v1/measurement/overview              Measurement quality overview
+    GET  /v1/measurement/health                Connector health statuses
+    GET  /v1/kyber/measurement/overview        Operator measurement overview
+    POST /v1/kyber/measurement/tenants/{id}/recompute-all  Recompute all conversions
     POST /v1/providers/keys                    Store BYOK key
     GET  /v1/providers/keys                    List BYOK keys (masked)
     DELETE /v1/providers/keys/{provider}       Delete BYOK key
@@ -273,6 +285,14 @@ from services.data_quality import (
     admin_router as data_quality_admin_router,
     tenant_router as data_quality_tenant_router,
 )
+
+# Canonical Measurement (conversions, journeys, attribution, spend, quality, ops)
+from services.measurement.routes.conversions import router as measurement_conversions_router
+from services.measurement.routes.journeys import router as measurement_journeys_router
+from services.measurement.routes.attribution import router as measurement_attribution_router
+from services.measurement.routes.spend import router as measurement_spend_router
+from services.measurement.routes.quality import router as measurement_quality_router
+from services.measurement.routes.kyber import router as measurement_kyber_router
 
 # ML predict routes — imported from the ML serving package when available.
 # When ML_SERVING_INLINE=true (E2 consolidated image) the predict routes are
@@ -539,6 +559,16 @@ def create_app() -> FastAPI:
     app.include_router(sdk_router)          # SDK utilities: cross-device identity resolution
     app.include_router(journeys_router)     # Cross-device journey continuity APIs
     app.include_router(journey_health_router) # Kyber journey health diagnostics
+
+    # ── Canonical Measurement domain ──────────────────────────────────────
+    # Per-conversion attribution, durable journeys, spend ledger, ROAS, quality
+    app.include_router(measurement_conversions_router)  # GET/POST /v1/conversions
+    app.include_router(measurement_journeys_router)     # GET/POST /v1/journeys
+    app.include_router(measurement_attribution_router)  # GET/POST /v1/attribution/runs|backfills
+    app.include_router(measurement_spend_router)        # GET/POST /v1/spend
+    app.include_router(measurement_quality_router)      # GET /v1/measurement/*
+    app.include_router(measurement_kyber_router)        # GET/POST /v1/kyber/measurement/*
+    logger.info("Canonical Measurement: 6 routers mounted")
     app.include_router(sdk_health_router)   # SDK health monitoring: heartbeats + fleet status
     app.include_router(sdk_drift_router)    # SDK drift detection: schema, stale, replay storm
     app.include_router(sdk_config_router)   # SDK remote config: signed manifests + rollouts
