@@ -13,7 +13,7 @@ source_files:
 canonical_owner: sdk@aether
 estimated_read_minutes: 10
 toc_depth: 3
-last_synced_commit: b8b0072
+last_synced_commit: 7d38405
 ---
 
 # Aether iOS SDK v8.10.0 — Integration Guide
