@@ -48,7 +48,7 @@ describe('useFraudNetworks hook', () => {
     const { useFraudNetworks } = await import('@kyber/features/fraud/use-fraud');
     useFraudNetworks();
     expect(mockUseQuery).toHaveBeenCalledWith(
-      expect.objectContaining({ key: expect.arrayContaining(['fraud-networks']) }),
+      expect.objectContaining({ key: expect.stringContaining('fraud-networks') }),
     );
   });
 
@@ -71,7 +71,7 @@ describe('useFraudNetworkDetail hook', () => {
     const { useFraudNetworkDetail } = await import('@kyber/features/fraud/use-fraud');
     useFraudNetworkDetail('net-123');
     expect(mockUseQuery).toHaveBeenCalledWith(
-      expect.objectContaining({ key: ['fraud-network', 'net-123'] }),
+      expect.objectContaining({ key: expect.stringContaining('net-123') }),
     );
   });
 

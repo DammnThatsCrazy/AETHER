@@ -81,8 +81,8 @@ export function FraudNetworksPage() {
     await build.mutate({
       anchor_entity_ids,
       network_type: form.network_type,
-      label: form.label || undefined,
-      notes: form.notes || undefined,
+      ...(form.label ? { label: form.label } : {}),
+      ...(form.notes ? { notes: form.notes } : {}),
     });
     if (build.error) {
       toast.error('Build failed');

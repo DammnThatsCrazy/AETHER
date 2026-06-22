@@ -49,7 +49,7 @@ export function FlowTracePage() {
       anchor_entity_id: form.anchor_entity_id.trim(),
       direction: form.direction,
       max_hops: form.max_hops,
-      min_amount_usd: form.min_amount_usd > 0 ? form.min_amount_usd : undefined,
+      ...(form.min_amount_usd > 0 ? { min_amount_usd: form.min_amount_usd } : {}),
     });
     if (createTrace.error) {
       toast.error('Trace failed');
@@ -132,7 +132,7 @@ export function FlowTracePage() {
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
                 Trace Result
-                {trace.cycle_detected && (
+                {!!trace.cycle_detected && (
                   <Badge variant="danger">Cycle Detected</Badge>
                 )}
               </CardTitle>
@@ -185,7 +185,7 @@ export function FlowTracePage() {
                     <span className="font-mono text-text-secondary">{fmt(t.anchor_entity_id)}</span>
                     <div className="flex gap-2">
                       <Badge variant="default">{fmt(t.direction)}</Badge>
-                      {t.cycle_detected && <Badge variant="danger">Cycle</Badge>}
+                      {!!t.cycle_detected && <Badge variant="danger">Cycle</Badge>}
                     </div>
                   </div>
                 ))}
