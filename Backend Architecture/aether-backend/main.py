@@ -347,6 +347,14 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     except Exception as e:  # pragma: no cover — defensive
         logger.warning(f"Profile 360 worker wiring skipped: {e}")
 
+    # Measurement — identity change → journey rebuild → attribution recompute
+    try:
+        from services.measurement.identity_consumer import MeasurementIdentityConsumer
+        _measurement_identity_consumer = MeasurementIdentityConsumer(producer=registry.producer)
+        _measurement_identity_consumer.register(registry.consumer)
+    except Exception as e:  # pragma: no cover — defensive
+        logger.warning(f"Measurement identity consumer wiring skipped: {e}")
+
     # Notification Intelligence — attach Kafka consumers and SLA expiry worker.
     _sla_worker_fn = None
     try:
