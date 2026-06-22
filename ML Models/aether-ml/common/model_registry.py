@@ -195,7 +195,7 @@ _REGISTRY: dict[str, ModelEntry] = {
 
     "session_scorer": ModelEntry(
         model_id="session_scorer",
-        display_name="Session Scorer",
+        display_name="Session Engagement Scorer",
         category="behavioral_analytics",
         task_type="regression",
         algorithm="GradientBoostingRegressor",

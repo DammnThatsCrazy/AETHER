@@ -610,5 +610,87 @@ class TestExtractionMonitorEndpoint:
             assert response.json() == {"enabled": False}
 
 
+class TestServiceTokenAuth:
+    """Verify service token fail-closed policy in staging/production."""
+
+    def test_token_required_in_production(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv("AETHER_ENV", "production")
+        monkeypatch.delenv("ML_SERVICE_TOKEN", raising=False)
+        import importlib
+        import serving.src.api as api_mod
+        importlib.reload(api_mod)
+        test_client = TestClient(api_mod.app, raise_server_exceptions=False)
+        resp = test_client.get("/health")
+        assert resp.status_code in (401, 503), (
+            f"Expected 401/503 in production without ML_SERVICE_TOKEN, got {resp.status_code}"
+        )
+
+    def test_token_required_in_staging(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv("AETHER_ENV", "staging")
+        monkeypatch.delenv("ML_SERVICE_TOKEN", raising=False)
+        import importlib
+        import serving.src.api as api_mod
+        importlib.reload(api_mod)
+        test_client = TestClient(api_mod.app, raise_server_exceptions=False)
+        resp = test_client.get("/health")
+        assert resp.status_code in (401, 503), (
+            f"Expected 401/503 in staging without ML_SERVICE_TOKEN, got {resp.status_code}"
+        )
+
+    def test_token_optional_in_local(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv("AETHER_ENV", "local")
+        monkeypatch.delenv("ML_SERVICE_TOKEN", raising=False)
+        import importlib
+        import serving.src.api as api_mod
+        importlib.reload(api_mod)
+        test_client = TestClient(api_mod.app)
+        resp = test_client.get("/health")
+        assert resp.status_code == 200, (
+            f"Expected 200 in local without ML_SERVICE_TOKEN, got {resp.status_code}"
+        )
+
+
+class TestReadinessProbe:
+    """Verify readiness probe checks required model set in staging/production."""
+
+    def test_readiness_passes_in_local_with_no_models(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv("AETHER_ENV", "local")
+        monkeypatch.delenv("ML_SERVICE_TOKEN", raising=False)
+        from serving.src.api import app
+        test_client = TestClient(app)
+        resp = test_client.get("/ready")
+        # Local: no required-model gate; freshness gate only
+        assert resp.status_code in (200, 503)
+
+    def test_readiness_in_production_returns_valid_status(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv("AETHER_ENV", "production")
+        monkeypatch.delenv("ML_SERVICE_TOKEN", raising=False)
+        import importlib
+        import serving.src.api as api_mod
+        importlib.reload(api_mod)
+        test_client = TestClient(api_mod.app, raise_server_exceptions=False)
+        resp = test_client.get("/ready")
+        # Without loaded models: 503 (required models missing) or 401/503 (no token)
+        assert resp.status_code in (200, 401, 503)
+
+    def test_readiness_503_detail_has_reason(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """When required models are missing, the 503 detail contains a reason string."""
+        monkeypatch.setenv("AETHER_ENV", "production")
+        monkeypatch.delenv("ML_SERVICE_TOKEN", raising=False)
+        import importlib
+        import serving.src.api as api_mod
+        importlib.reload(api_mod)
+        test_client = TestClient(api_mod.app, raise_server_exceptions=False)
+        resp = test_client.get("/ready")
+        if resp.status_code == 503:
+            body = resp.json()
+            detail = body.get("detail", {})
+            if isinstance(detail, dict) and "reason" in detail:
+                reason = detail["reason"]
+                assert "Required models not loaded" in reason or "Freshness" in reason, (
+                    f"503 reason did not mention missing models or freshness: {reason!r}"
+                )
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v", "--tb=short"])

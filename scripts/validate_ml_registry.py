@@ -232,6 +232,94 @@ def check_backend_routes() -> list[str]:
     return errors
 
 
+def check_no_authored_model_lists() -> list[str]:
+    """Serving API must not define MODEL_NAMES or MODEL_TYPES as authored literal constants."""
+    import ast
+    errors: list[str] = []
+    serving_api = ML_ROOT / "serving" / "src" / "api.py"
+    if not serving_api.exists():
+        errors.append(f"Serving API file not found: {serving_api}")
+        return errors
+
+    try:
+        tree = ast.parse(serving_api.read_text())
+    except SyntaxError as e:
+        errors.append(f"SyntaxError parsing serving/src/api.py: {e}")
+        return errors
+
+    # Only check top-level assignments — except-block fallbacks are intentional.
+    for node in tree.body:
+        if not isinstance(node, ast.Assign):
+            continue
+        for target in node.targets:
+            if not isinstance(target, ast.Name):
+                continue
+            if target.id in ("MODEL_NAMES", "MODEL_TYPES") and isinstance(
+                node.value, (ast.List, ast.Dict)
+            ):
+                errors.append(
+                    f"serving/src/api.py:{node.lineno} — '{target.id}' is an authored literal. "
+                    "It must be derived from common.model_registry."
+                )
+
+    if not errors:
+        ok("No authored MODEL_NAMES/MODEL_TYPES literals in serving/src/api.py")
+    return errors
+
+
+def check_model_type_enum() -> list[str]:
+    """ModelType enum in common/src/base.py must contain all 11 registry models."""
+    errors: list[str] = []
+    base_path = ML_ROOT / "common" / "src"
+    sys.path.insert(0, str(base_path))
+    try:
+        import importlib
+        base_mod = importlib.import_module("base")
+        ModelType = getattr(base_mod, "ModelType", None)
+        if ModelType is None:
+            errors.append("ModelType not found in common/src/base.py")
+            return errors
+        from common.model_registry import list_models
+        enum_values = {e.value for e in ModelType}
+        registry_ids = {m.model_id for m in list_models()}
+        missing = registry_ids - enum_values
+        if missing:
+            errors.append(
+                f"ModelType enum missing entries: {sorted(missing)}. "
+                "Add to ML Models/aether-ml/common/src/base.py."
+            )
+        else:
+            ok(f"ModelType enum covers all {len(registry_ids)} registry models")
+    except ImportError as e:
+        errors.append(f"Cannot import ModelType or model_registry: {e}")
+    return errors
+
+
+def check_no_privilege_header() -> list[str]:
+    """Backend routes must not accept X-Batch-Privilege header as proof of privilege."""
+    errors: list[str] = []
+    routes_path = (
+        REPO_ROOT / "Backend Architecture" / "aether-backend"
+        / "services" / "ml_serving" / "routes.py"
+    )
+    if not routes_path.exists():
+        return errors  # already checked above
+
+    content = routes_path.read_text()
+    stripped = re.sub(r'#.*$', '', content, flags=re.MULTILINE)
+    stripped = re.sub(r'""".*?"""', '', stripped, flags=re.DOTALL)
+    stripped = re.sub(r"'''.*?'''", '', stripped, flags=re.DOTALL)
+
+    if "X-Batch-Privilege" in stripped:
+        errors.append(
+            "Backend routes check X-Batch-Privilege header for privilege. "
+            "Remove this check — privilege must come from RBAC only."
+        )
+    else:
+        ok("No X-Batch-Privilege header check in backend routes")
+    return errors
+
+
 def main() -> int:
     print("=" * 60)
     print("ML Registry Consistency Validation")
@@ -254,6 +342,15 @@ def main() -> int:
     print("\n--- Backend Routes ---")
     all_errors.extend(check_backend_routes())
 
+    print("\n--- Authored Duplicate Lists ---")
+    all_errors.extend(check_no_authored_model_lists())
+
+    print("\n--- ModelType Enum ---")
+    all_errors.extend(check_model_type_enum())
+
+    print("\n--- Security: Privilege Header ---")
+    all_errors.extend(check_no_privilege_header())
+
     print("\n" + "=" * 60)
     if all_errors:
         print(f"FAILED — {len(all_errors)} error(s):")
@@ -261,7 +358,7 @@ def main() -> int:
             print(f"  • {e}", file=sys.stderr)
         return 1
 
-    print(f"PASSED — all ML registry checks passed")
+    print("PASSED — all ML registry checks passed")
     return 0
 
 

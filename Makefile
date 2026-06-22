@@ -13,6 +13,7 @@
         test test-security test-ml test-coverage \
         ml-validate ml-test ml-test-unit ml-test-integration ml-test-security \
         ml-train-smoke ml-artifact-verify ml-docs-check ml-container-build ml-ci \
+        generate-ml-manifest ml-container-smoke ml-staging-smoke ml-load-test \
         lint format typecheck \
         serve-backend serve-ml \
         dev dev-streaming dev-analytics dev-notebooks dev-full dev-down \
@@ -81,15 +82,38 @@ ml-train-smoke: ## Smoke-train all 9 models using synthetic deterministic fixtur
 ml-artifact-verify: ## Verify artifact loadability and metadata for all trained models
 	python -m pytest "$(ML_DIR)/tests/unit/test_training_pipeline.py::TestArtifactLoadability" -v
 
-ml-docs-check: ## Check ML documentation consistency
+ml-docs-check: ## Check ML documentation consistency (blocking — all checks must pass)
 	python scripts/validate_ml_registry.py
-	python scripts/docs_drift.py --strict 2>/dev/null || true
+	python scripts/docs_drift.py --strict
+	python scripts/generate_ml_manifest.py --check
+
+generate-ml-manifest: ## Generate docs/_generated/ml-implementation-manifest.json from registry
+	python scripts/generate_ml_manifest.py
 
 ml-container-build: ## Build all ML Docker stages (requires Docker daemon)
 	docker build --target serving    -t aether-ml-serving:dev    "$(ML_DIR)"
 	docker build --target training   -t aether-ml-training:dev   "$(ML_DIR)"
 	docker build --target features   -t aether-ml-features:dev   "$(ML_DIR)"
 	docker build --target monitoring -t aether-ml-monitoring:dev "$(ML_DIR)"
+
+ml-container-smoke: ## Health/ready/predict smoke against built serving container (requires Docker)
+	@echo "Building serving image for smoke test..."
+	docker build --target serving -t aether-ml-serving:smoke "$(ML_DIR)" -q
+	docker run --rm -d --name aether-ml-smoke -p 8765:8000 -e AETHER_ENV=local aether-ml-serving:smoke
+	sleep 4
+	curl -sf http://localhost:8765/health | python -m json.tool | grep '"status"'
+	-curl -sf http://localhost:8765/ready
+	docker stop aether-ml-smoke
+	@echo "Container smoke test complete."
+
+ml-staging-smoke: ## Staging-like integration run (AETHER_ENV=staging, no stubs, expects local services)
+	AETHER_ENV=staging \
+	python -m pytest "$(ML_DIR)/tests/integration/" -v -m "not requires_cloud" --tb=short
+
+ml-load-test: ## Basic latency load test for ML serving edge models (requires locust)
+	@which locust > /dev/null 2>&1 || (echo "Install locust: pip install locust" && exit 1)
+	locust -f "$(ML_DIR)/tests/load/locustfile.py" \
+	    --headless -u 10 -r 2 --run-time 30s --host http://localhost:8000
 
 ml-ci: ml-validate ml-test ml-train-smoke ml-artifact-verify ml-docs-check ## All blocking ML CI gates (excludes ml-container-build — run separately when Docker is available)
 

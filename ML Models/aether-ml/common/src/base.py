@@ -70,6 +70,8 @@ class ModelType(str, Enum):
     LTV_PREDICTION = "ltv_prediction"
     ANOMALY_DETECTION = "anomaly_detection"
     CAMPAIGN_ATTRIBUTION = "campaign_attribution"
+    BYTECODE_RISK = "bytecode_risk"
+    TRUST_SCORE = "trust_score"
 
 
 # ---------------------------------------------------------------------------

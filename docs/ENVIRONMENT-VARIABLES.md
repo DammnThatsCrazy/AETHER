@@ -85,3 +85,14 @@ when the `onchain_claim` rail is enabled.
 | `EVM_SIGNER_KEY_REF` | string | — | Key vault reference for EVM signer key |
 | `EVM_CONTRACT_REGISTRY_REQUIRED` | bool | `false` | Require contract registry entry per chain for EVM proofs |
 | `ORACLE_SIGNER_KEY` | string | Hardhat key (local only) | Raw EVM private key. **Never set in production.** Use `REWARD_SIGNER_KEY_REF` instead. |
+
+## ML Serving Variables
+
+These variables configure the ML serving layer. In `local` mode all are optional.
+In `staging`/`production`, `ML_SERVICE_TOKEN` is **required** — the API returns 503 on
+every request if it is absent.
+
+| Variable | Type | Default | Description |
+|---|---|---|---|
+| `ML_SERVICE_TOKEN` | string | — | HMAC token for ML serving API service authentication. Required in `staging`/`production` — API returns 503 if absent. In `local`/`dev`, only validated if explicitly set. Generate with `openssl rand -hex 32`. |
+| `AETHER_ENV` | string | `local` | Runtime environment: `local`, `staging`, or `production`. Governs fail-closed policies for ML serving (token enforcement, required-model readiness gate, synthetic/prod data handling). |
