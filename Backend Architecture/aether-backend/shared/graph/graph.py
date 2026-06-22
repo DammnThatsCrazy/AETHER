@@ -575,6 +575,11 @@ class EdgeType:
     LINKED_BY_DELEGATION     = "LINKED_BY_DELEGATION"      # Human → Agent (delegation abuse signal)
     ATTACHED_TO_CASE         = "ATTACHED_TO_CASE"          # FraudNetwork/FlowTrace → InvestigationCase
 
+    # ── Silver-sourced commerce & outcome edges ──────────────────────────
+    PURCHASED                = "PURCHASED"                 # User/Entity → Product/Order (from silver_revenue_facts)
+    ACHIEVED_OUTCOME         = "ACHIEVED_OUTCOME"          # User/Entity → Goal (from silver_outcome_facts)
+    CONTACTED                = "CONTACTED"                 # Agent/System → User (from silver_comms_facts)
+
 
 # ═══════════════════════════════════════════════════════════════════════════
 # SAFE VALUE ESCAPING

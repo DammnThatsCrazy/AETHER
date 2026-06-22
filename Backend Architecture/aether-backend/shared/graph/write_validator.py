@@ -144,6 +144,12 @@ class GraphWriteValidator:
             except Exception:
                 pass  # classification errors are caught separately
 
+        # 7. Silver-sourced mutations must carry a non-empty source_event_id
+        if props.get("provenance_class") == "silver" and not props.get("source_event_id"):
+            violations.append(
+                "Silver-sourced edges (provenance_class='silver') require a non-empty source_event_id"
+            )
+
         if violations:
             if _is_lenient_env(env):
                 logger.warning(

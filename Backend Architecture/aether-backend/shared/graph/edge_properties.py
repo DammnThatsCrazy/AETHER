@@ -42,6 +42,10 @@ OPTIONAL_EDGE_PROPERTIES: frozenset[str] = frozenset({
 # Consent-bearing layers require consent_purpose.
 CONSENT_REQUIRED_LAYERS: frozenset[str] = frozenset({"H2A", "A2H"})
 
+# Silver-sourced mutations must include source_event_id for traceability.
+# provenance_class="silver" triggers this enforcement in write_validator.
+SILVER_SOURCED_REQUIRED: frozenset[str] = frozenset({*REQUIRED_EDGE_PROPERTIES, "source_event_id"})
+
 VALID_ACTOR_KINDS: frozenset[str] = frozenset({"human", "agent", "system"})
 
 SCHEMA_VERSION = "1"
@@ -82,10 +86,15 @@ def build_edge_properties(
     correlation_id: str = "",
     scope_hash: str = "",
     consent_purpose: str = "",
+    provenance_class: str = "direct",
     schema_version: str = SCHEMA_VERSION,
     **extra: object,
 ) -> dict:
-    """Return a property dict with all required and any extra properties set."""
+    """Return a property dict with all required and any extra properties set.
+
+    provenance_class="silver" marks mutations originating from the Silver
+    projector layer; write_validator enforces source_event_id for these.
+    """
     props: dict = {
         "tenant_id": tenant_id,
         "idempotency_key": make_edge_idempotency_key(
@@ -97,6 +106,7 @@ def build_edge_properties(
         "provenance": provenance,
         "valid_from": valid_from,
         "confidence": str(confidence),
+        "provenance_class": provenance_class,
     }
     if source_event_id:
         props["source_event_id"] = source_event_id

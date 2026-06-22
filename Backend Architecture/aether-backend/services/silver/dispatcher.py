@@ -4,12 +4,13 @@ Usage::
 
     from services.silver.dispatcher import SilverDispatcher
     dispatcher = SilverDispatcher()
-    results = dispatcher.project(event_dict)
+    results = await dispatcher.project(event_dict)
     # results: list[ProjectionResult], each with .table and .rows
 """
 
 from __future__ import annotations
 
+import asyncio
 from typing import Any
 
 from shared.logger.logger import get_logger
@@ -26,6 +27,7 @@ from .projectors import (
     Web3TransactionProjector,
     X402FlowProjector,
 )
+from .projectors.silver_graph_projector import SilverGraphProjector
 
 logger = get_logger("silver.dispatcher")
 
@@ -48,11 +50,30 @@ for _p in _ALL_PROJECTORS:
     for _t in _p.handles:
         _TYPE_MAP[_t] = _p
 
+_graph_projector = SilverGraphProjector()
+
 
 class SilverDispatcher:
-    """Projects a single Bronze event into Silver fact rows."""
+    """Projects a single Bronze event into Silver fact rows, then emits graph mutations."""
 
-    def project(self, event: dict[str, Any]) -> list[ProjectionResult]:
+    async def project(self, event: dict[str, Any]) -> list[ProjectionResult]:
+        event_type = event.get("type", "")
+        projector = _TYPE_MAP.get(event_type)
+        if projector is None:
+            return []
+        try:
+            result = projector.project(event)  # type: ignore[union-attr]
+            if result and not result.skipped:
+                # Fire-and-forget graph mutations; never block or fail Silver writes
+                asyncio.create_task(_graph_projector.maybe_emit(result, event))
+                return [result]
+            return []
+        except Exception as exc:
+            logger.error("silver_projection_error", event_type=event_type, error=str(exc))
+            return []
+
+    def project_sync(self, event: dict[str, Any]) -> list[ProjectionResult]:
+        """Synchronous fallback for non-async callers (skips graph emission)."""
         event_type = event.get("type", "")
         projector = _TYPE_MAP.get(event_type)
         if projector is None:

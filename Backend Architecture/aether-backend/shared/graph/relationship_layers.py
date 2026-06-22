@@ -371,6 +371,10 @@ _EDGE_LAYER_MAP: dict[str, RelationshipLayer] = {
     EdgeType.LINKED_BY_AGENT: RelationshipLayer.A2A,
     EdgeType.LINKED_BY_DELEGATION: RelationshipLayer.H2A,
     EdgeType.ATTACHED_TO_CASE: RelationshipLayer.H2H,
+    # ── Silver-sourced commerce & outcome edges ──────────────────────────
+    EdgeType.PURCHASED:        RelationshipLayer.H2A,  # User → Product/Order
+    EdgeType.ACHIEVED_OUTCOME: RelationshipLayer.H2H,  # User → Goal
+    EdgeType.CONTACTED:        RelationshipLayer.A2H,  # Agent/System → User
 }
 
 

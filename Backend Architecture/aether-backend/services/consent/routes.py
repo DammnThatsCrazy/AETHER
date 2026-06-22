@@ -5,8 +5,10 @@ GDPR consent records, data subject requests (DSR), and audit logs.
 
 from __future__ import annotations
 
+import json
+import pathlib
 import uuid
-from typing import Optional
+from typing import Literal, Optional
 
 from fastapi import APIRouter, Depends, Request
 from pydantic import BaseModel, Field
@@ -23,12 +25,27 @@ router = APIRouter(prefix="/v1/consent", tags=["Consent"])
 _repo = ConsentRepository()
 DSR_TYPES = ["access", "rectification", "erasure", "portability", "restriction", "objection"]
 
+_REGISTRY_PATH = pathlib.Path(__file__).resolve().parents[4] / "packages" / "shared" / "contracts" / "consent-registry.json"
+
+def _load_registry() -> dict:
+    try:
+        return json.loads(_REGISTRY_PATH.read_text())
+    except Exception:
+        return {}
+
+_CONSENT_REGISTRY: dict = _load_registry()
+
 
 class ConsentRecord(BaseModel):
     user_id: str
     purposes: list[str] = Field(..., description="e.g. analytics, marketing, personalization")
     granted: bool = True
     source: str = Field(default="sdk", description="How consent was collected")
+    snapshot_id: Optional[str] = Field(default=None, description="Opaque snapshot ID for this consent state")
+    mode: Optional[Literal["opt_in", "opt_out", "jurisdiction_managed"]] = Field(default=None)
+    jurisdiction: Optional[str] = Field(default=None, description="e.g. GDPR, CCPA, LGPD")
+    gpc_observed: Optional[bool] = Field(default=None, description="Global Privacy Control signal")
+    dnt_observed: Optional[bool] = Field(default=None, description="Do Not Track signal")
 
 
 class DataSubjectRequest(BaseModel):
@@ -42,15 +59,27 @@ async def record_consent(
     body: ConsentRecord,
     request: Request,
     producer: EventProducer = Depends(get_producer),
+    gdprMode: Optional[bool] = None,
 ):
     """Record a user's consent preferences."""
     tenant = request.state.tenant
+
+    # gdprMode backward-compat: map to mode field
+    effective_mode = body.mode
+    if gdprMode is not None and effective_mode is None:
+        effective_mode = "opt_in" if gdprMode else "opt_out"
+
     record = await _repo.insert(str(uuid.uuid4()), {
         "tenant_id": tenant.tenant_id,
         "user_id": body.user_id,
         "purposes": body.purposes,
         "granted": body.granted,
         "source": body.source,
+        "snapshot_id": body.snapshot_id,
+        "mode": effective_mode,
+        "jurisdiction": body.jurisdiction,
+        "gpc_observed": body.gpc_observed,
+        "dnt_observed": body.dnt_observed,
         "recorded_at": utc_now().isoformat(),
     })
 
@@ -117,3 +146,23 @@ async def list_dsrs(request: Request, status: Optional[str] = None):
         filters["status"] = status
     dsrs = await _repo.find_many(filters=filters)
     return APIResponse(data=dsrs).to_dict()
+
+
+@router.get("/retention-manifest")
+async def retention_manifest(request: Request):
+    """Return per-purpose retention windows, DSR scopes, and opt-in requirements from the consent registry."""
+    request.state.tenant  # validates auth
+    purposes = _CONSENT_REGISTRY.get("purposes", [])
+    manifest = [
+        {
+            "key": p.get("key"),
+            "label": p.get("label"),
+            "retentionDays": p.get("retentionDays"),
+            "dsrDeleteScope": p.get("dsrDeleteScope", []),
+            "dsrDeleteNote": p.get("dsrDeleteNote"),
+            "explicitOptInRequired": p.get("explicitOptInRequired", False),
+            "revocationBehavior": p.get("revocationBehavior"),
+        }
+        for p in purposes
+    ]
+    return APIResponse(data={"purposes": manifest, "schema_version": _CONSENT_REGISTRY.get("schemaVersion")}).to_dict()

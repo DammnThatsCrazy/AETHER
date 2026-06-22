@@ -18,6 +18,8 @@ Deletion strategies:
 from __future__ import annotations
 
 import hashlib
+import json
+import pathlib
 import uuid
 from typing import Any, Optional
 
@@ -32,6 +34,26 @@ from shared.privacy.classification import (
 from shared.logger.logger import get_logger
 
 logger = get_logger("aether.privacy.retention")
+
+_REGISTRY_PATH = pathlib.Path(__file__).resolve().parents[4] / "packages" / "shared" / "contracts" / "consent-registry.json"
+
+def _load_purpose_retention() -> dict[str, dict]:
+    try:
+        data = json.loads(_REGISTRY_PATH.read_text())
+        return {p["key"]: p for p in data.get("purposes", [])}
+    except Exception:
+        return {}
+
+_PURPOSE_RETENTION: dict[str, dict] = _load_purpose_retention()
+
+# Silver table names that map from registry dsrDeleteScope tokens
+_DSR_SCOPE_TO_SILVER_TABLE: dict[str, str] = {
+    "credit_facts": "silver_credit_facts",
+    "location_facts": "silver_location_facts",
+    "recommendation_facts": "silver_exposure_facts",
+    "agent_facts": "silver_agent_execution_facts",
+    "wallet_facts": "silver_web3_transaction_facts",
+}
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -130,7 +152,7 @@ class DeletionPlan:
             "status": "pending",
         })
 
-    def build_standard_plan(self) -> None:
+    def build_standard_plan(self, purposes: Optional[list[str]] = None) -> None:
         """Build a standard deletion plan covering all Aether data stores."""
         # Profile/Identity records — pseudonymize
         self.add_step("postgresql", "identity_profiles", DeletionBehavior.PSEUDONYMIZE,
@@ -191,6 +213,25 @@ class DeletionPlan:
         self.add_step("postgresql", "device_sessions", DeletionBehavior.HARD_DELETE,
                        DataClassification.CONFIDENTIAL, "Delete device fingerprint sessions for entity",
                        entity_field="anonymous_id")
+
+        # Silver fact tables — scoped by consent purpose from registry
+        self._add_silver_steps(purposes or list(_PURPOSE_RETENTION.keys()))
+
+    def _add_silver_steps(self, purposes: list[str]) -> None:
+        """Add Silver fact table deletion steps driven by the consent registry's dsrDeleteScope."""
+        seen: set[str] = set()
+        for purpose_key in purposes:
+            meta = _PURPOSE_RETENTION.get(purpose_key, {})
+            for scope_token in meta.get("dsrDeleteScope", []):
+                silver_table = _DSR_SCOPE_TO_SILVER_TABLE.get(scope_token)
+                if silver_table and silver_table not in seen:
+                    seen.add(silver_table)
+                    self.add_step(
+                        "postgresql", silver_table, DeletionBehavior.HARD_DELETE,
+                        DataClassification.CONFIDENTIAL,
+                        f"Delete Silver facts for purpose={purpose_key} scope={scope_token}",
+                        entity_field="entity_id",
+                    )
 
     async def execute(self, store_adapters: Optional[dict] = None) -> dict:
         """

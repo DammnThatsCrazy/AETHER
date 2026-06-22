@@ -123,6 +123,10 @@ export const EDGE_LAYER_MAP: Record<string, RelationshipLayer> = {
   LINKED_BY_AGENT: 'A2A',
   LINKED_BY_DELEGATION: 'H2A',
   ATTACHED_TO_CASE: 'H2H',
+  // Silver-sourced commerce & outcome edges
+  PURCHASED: 'H2A',
+  ACHIEVED_OUTCOME: 'H2H',
+  CONTACTED: 'A2H',
 };
 
 /** Classify an edge type string into its relationship layer. */
