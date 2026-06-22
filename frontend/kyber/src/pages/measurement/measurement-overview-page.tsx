@@ -47,12 +47,14 @@ export function MeasurementOverviewPage() {
       title="Measurement Overview"
       subtitle="Spend, attributed revenue, ROAS, and data quality across all connected sources."
       actions={
-        <label className="sr-only" htmlFor="overview-period-select">Time period</label>
-        <select id="overview-period-select" aria-label="Time period" value={window} onChange={e => setWindow(e.target.value)} className="text-sm bg-surface-secondary border border-border rounded px-2 py-1">
-          <option value="7d">7 days</option>
-          <option value="30d">30 days</option>
-          <option value="90d">90 days</option>
-        </select>
+        <>
+          <label className="sr-only" htmlFor="overview-period-select">Time period</label>
+          <select id="overview-period-select" aria-label="Time period" value={window} onChange={e => setWindow(e.target.value)} className="text-sm bg-surface-secondary border border-border rounded px-2 py-1">
+            <option value="7d">7 days</option>
+            <option value="30d">30 days</option>
+            <option value="90d">90 days</option>
+          </select>
+        </>
       }
     >
       <section aria-label="Performance metrics" className="grid gap-4 md:grid-cols-4">
