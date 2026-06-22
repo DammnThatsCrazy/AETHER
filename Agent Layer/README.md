@@ -1,4 +1,4 @@
-# Aether Agent Layer v8.9.0
+# Aether Agent Layer v8.10.0
 
 Multi-controller internal autonomy architecture for the Aether platform.
 

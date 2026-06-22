@@ -50,8 +50,8 @@ describe('events-registry', () => {
     expect(SDK_INGESTION_PATH).toBe('/v1/batch');
   });
 
-  it('SDK_VERSION is 8.9.0', () => {
-    expect(SDK_VERSION).toBe('8.9.0');
+  it('SDK_VERSION is 8.10.0', () => {
+    expect(SDK_VERSION).toBe('8.10.0');
   });
 
   // ---------------------------------------------------------------------------

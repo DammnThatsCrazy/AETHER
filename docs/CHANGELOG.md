@@ -108,6 +108,23 @@ last_synced_commit: 48fb9d4
 
 ---
 
+## v8.10.0 — Capture-to-Intelligence Foundation Phase 2 (2026-06-22)
+
+### Added
+
+- **Canonical JSON registries** — `event-registry.json` and `consent-registry.json` as machine-readable source of truth; `generate_contracts.py` generates TS/Python artifacts with `--check` CI gate.
+- **Eight-purpose consent model** — `personalization`, `credit` (explicit opt-in), `location` (explicit opt-in) added to five existing purposes across all SDKs and backend.
+- **100+ new event types** across 11 new families: exposure, outcome, b2b, ecommerce, friction, server, identity_lc, web3_lc, comms, credit, location.
+- **Silver fact tables** — 12 Alembic-managed fact tables with 10 projectors covering exposure, revenue, friction, agent execution, web3, and more.
+- **Evidence-backed graph projections** — `SilverGraphProjector` emits graph edges only from Silver projector output; `source_event_id` required for all Silver-sourced mutations.
+- **Gold intelligence endpoints** — 6 tenant-scoped aggregation endpoints under `/v1/intelligence/` (account-health, revenue, experience, exposure, agent, integration).
+- **Profile360 Silver types** — `SilverFactsEnvelope` wire format and 7 dimension type aliases in `profile360-contract.ts`.
+- **Aether + Kyber UI features** — account-health, revenue-intelligence, experience-friction, data-quality (Aether); data-pipeline, consent-governance (Kyber).
+- **Governance extensions** — `ConsentRecord` with snapshot/mode/jurisdiction/GPC fields; retention-manifest endpoint; Silver DSR scoping.
+- **CI enforcement** — consent-registry-parity gate, `test:contracts`/`test:privacy`/`test:ingestion-roundtrip` Makefile targets.
+
+---
+
 ## v8.9.0 — Entity-Agnostic Profile360: Social, Financial, Business, Graph, Agentic Intelligence (2026-05-28)
 
 ### Added
