@@ -408,27 +408,16 @@ class TestBackendRegistryAlignment:
 
     def test_serving_model_names_match_canonical_registry(self):
         """Serving API MODEL_NAMES must match canonical trainable models."""
-        import pathlib
-        api_file = pathlib.Path("ML Models/aether-ml/serving/src/api.py")
-        if not api_file.exists():
-            pytest.skip("Serving API not found at expected path")
-
         from common.model_registry import list_trainable_models
         canonical_trainable = {m.model_id for m in list_trainable_models()}
 
-        # Read MODEL_NAMES from serving API
-        content = api_file.read_text()
-        import re
-        # Find MODEL_NAMES list
-        match = re.search(r'MODEL_NAMES.*?=.*?\[(.*?)\]', content, re.DOTALL)
-        if not match:
-            pytest.skip("Could not parse MODEL_NAMES from serving API")
-        names_str = match.group(1)
-        serving_names = set(re.findall(r'"([^"]+)"', names_str))
+        # Import MODEL_NAMES directly — registry-derived, not a static list.
+        from serving.src.api import MODEL_NAMES
+        serving_names = set(MODEL_NAMES)
 
         assert serving_names == canonical_trainable, (
-            f"Serving MODEL_NAMES {serving_names} != "
-            f"canonical trainable {canonical_trainable}"
+            f"Serving MODEL_NAMES {sorted(serving_names)} != "
+            f"canonical trainable {sorted(canonical_trainable)}"
         )
 
     def test_training_registry_matches_canonical(self):
@@ -630,3 +619,68 @@ class TestArtifactRegistry:
 
         with pytest.raises(ArtifactPromotionError, match="threshold"):
             promote_artifact(model_dir, "promoted")
+
+
+class TestServingModelListsDerivedFromRegistry:
+    """MODEL_NAMES and MODEL_TYPES in serving/src/api.py must match the registry."""
+
+    def test_serving_model_names_match_registry(self):
+        from common.model_registry import list_trainable_models
+        from serving.src.api import MODEL_NAMES
+        registry_ids = {m.model_id for m in list_trainable_models()}
+        serving_ids = set(MODEL_NAMES)
+        assert serving_ids == registry_ids, (
+            f"Serving MODEL_NAMES {sorted(serving_ids)} != "
+            f"registry trainable models {sorted(registry_ids)}"
+        )
+
+    def test_serving_model_types_match_registry(self):
+        from common.model_registry import list_trainable_models
+        from serving.src.api import MODEL_TYPES
+        for entry in list_trainable_models():
+            assert entry.model_id in MODEL_TYPES, (
+                f"{entry.model_id} missing from serving MODEL_TYPES"
+            )
+            assert MODEL_TYPES[entry.model_id] == entry.tier.value, (
+                f"Tier mismatch for {entry.model_id}: "
+                f"serving={MODEL_TYPES[entry.model_id]}, registry={entry.tier.value}"
+            )
+
+    def test_no_authored_model_names_list_in_serving(self):
+        """Serving API must not define MODEL_NAMES as a literal list constant."""
+        import ast
+        from pathlib import Path
+        src = (
+            Path(__file__).parent.parent.parent
+            / "serving" / "src" / "api.py"
+        )
+        if not src.exists():
+            pytest.skip("serving/src/api.py not found")
+        tree = ast.parse(src.read_text())
+        # Only check top-level assignments — except-block fallbacks are intentional.
+        for node in tree.body:
+            if isinstance(node, ast.Assign) and isinstance(node.value, ast.List):
+                for target in node.targets:
+                    if isinstance(target, ast.Name) and target.id == "MODEL_NAMES":
+                        pytest.fail(
+                            "MODEL_NAMES is a literal list in serving/src/api.py. "
+                            "It must be derived from common.model_registry."
+                        )
+
+
+class TestModelTypeEnumCompleteness:
+    """ModelType enum in common/src/base.py must cover all 11 registry models."""
+
+    def test_model_type_enum_covers_all_registry_models(self):
+        import sys
+        from pathlib import Path
+        sys.path.insert(0, str(Path(__file__).parent.parent.parent / "common" / "src"))
+        from base import ModelType
+        from common.model_registry import list_models
+        enum_values = {e.value for e in ModelType}
+        registry_ids = {m.model_id for m in list_models()}
+        missing = registry_ids - enum_values
+        assert not missing, (
+            f"ModelType enum is missing entries for: {sorted(missing)}. "
+            "Add them to common/src/base.py."
+        )

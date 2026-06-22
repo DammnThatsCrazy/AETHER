@@ -365,31 +365,34 @@ class _StubAnomalyModel:
 # MODEL SERVER
 # =============================================================================
 
-# Canonical model names used throughout the serving layer.
-MODEL_NAMES: list[str] = [
-    "intent_prediction",
-    "bot_detection",
-    "session_scorer",
-    "churn_prediction",
-    "ltv_prediction",
-    "journey_prediction",
-    "campaign_attribution",
-    "anomaly_detection",
-    "identity_resolution",
-]
-
-# Classification of each model as edge (real-time, sub-10ms) or server (batch-capable).
-MODEL_TYPES: dict[str, str] = {
-    "intent_prediction": "edge",
-    "bot_detection": "edge",
-    "session_scorer": "edge",
-    "churn_prediction": "server",
-    "ltv_prediction": "server",
-    "journey_prediction": "server",
-    "campaign_attribution": "server",
-    "anomaly_detection": "server",
-    "identity_resolution": "server",
-}
+# Derived from the canonical registry — do NOT add model names here manually.
+# To register a new model, add it to common/model_registry.py.
+try:
+    from common.model_registry import list_trainable_models as _list_trainable
+    _TRAINABLE_ENTRIES = list(_list_trainable())
+    MODEL_NAMES: list[str] = [m.model_id for m in _TRAINABLE_ENTRIES]
+    MODEL_TYPES: dict[str, str] = {m.model_id: m.tier.value for m in _TRAINABLE_ENTRIES}
+    del _list_trainable, _TRAINABLE_ENTRIES
+except ImportError:
+    # Fallback used only during isolated unit tests where common/ is not on sys.path.
+    # Staging and production must never reach this branch.
+    import os as _os
+    if _os.getenv("AETHER_ENV", "local").lower() in ("staging", "production"):
+        raise RuntimeError(
+            "Cannot import common.model_registry. "
+            "The serving package requires aether-ml[serving] to be installed."
+        )
+    MODEL_NAMES = [
+        "intent_prediction", "bot_detection", "session_scorer",
+        "churn_prediction", "ltv_prediction", "journey_prediction",
+        "campaign_attribution", "anomaly_detection", "identity_resolution",
+    ]
+    MODEL_TYPES = {
+        "intent_prediction": "edge", "bot_detection": "edge", "session_scorer": "edge",
+        "churn_prediction": "server", "ltv_prediction": "server",
+        "journey_prediction": "server", "campaign_attribution": "server",
+        "anomaly_detection": "server", "identity_resolution": "server",
+    }
 
 
 class ModelServer:
@@ -671,6 +674,10 @@ except Exception:
 # Per-model prediction input buffer — holds last 500 feature dicts per model
 # for drift detection. In-memory only; cleared on restart. Drift detection
 # skips models with fewer than 30 buffered rows.
+# Local/dev: in-memory deques only.
+# Staging/production: Redis-backed freshness tracking wired via _freshness_tracker
+# during lifespan startup (~line 835). These deques remain as a fast local buffer
+# for the background drift-computation task.
 # ---------------------------------------------------------------------------
 from collections import deque as _deque
 _prediction_buffers: dict[str, "_deque[dict[str, Any]]"] = {
@@ -755,8 +762,18 @@ async def _drift_check_periodic(interval: int = 300) -> None:
 
 
 def _require_service_token(x_service_token: str = Header(default="")) -> None:
+    env = os.getenv("AETHER_ENV", "local").lower()
     expected = os.environ.get("ML_SERVICE_TOKEN", "")
-    if expected and not _hmac_compare(x_service_token, expected):
+    if env in ("staging", "production"):
+        if not expected:
+            raise HTTPException(
+                status_code=503,
+                detail="ML_SERVICE_TOKEN is required in staging/production but is not configured.",
+            )
+        if not _hmac_compare(x_service_token, expected):
+            raise HTTPException(status_code=401, detail="Invalid or missing service token")
+    elif expected and not _hmac_compare(x_service_token, expected):
+        # Local/dev: only validate if token is explicitly configured
         raise HTTPException(status_code=401, detail="Invalid or missing service token")
 
 
@@ -1039,12 +1056,39 @@ async def health() -> HealthResponse:
 async def ready() -> ReadinessResponse:
     """Readiness probe — used by load balancers to gate traffic.
 
-    Returns 200 when the service is ready to handle requests. Returns 503 if
-    feature freshness SLA violations exceed 10% of recent checks, indicating
-    that the online feature store is stale. Unlike /health, this endpoint may
-    be slightly slower (it reads SLA counters) and is NOT used for liveness.
+    In staging/production: all fail_closed_required models with artifacts must be loaded.
+    Returns 503 if any required model is missing or freshness SLA is violated.
+    Unlike /health, this may be slightly slower and is NOT used for liveness.
     """
-    models = server.loaded_models()
+    env = os.getenv("AETHER_ENV", "local").lower()
+    models_loaded = server.loaded_models()
+    missing_required: list[str] = []
+
+    # Required model gate — staging and production only
+    if env in ("staging", "production"):
+        try:
+            from common.model_registry import list_serving_models
+            required_ids = [
+                m.model_id for m in list_serving_models()
+                if m.fail_closed_required and m.artifact_required
+            ]
+            missing_required = [mid for mid in required_ids if mid not in models_loaded]
+        except ImportError:
+            logger.warning("Cannot import model registry for readiness check")
+
+    if missing_required:
+        raise HTTPException(
+            status_code=503,
+            detail=ReadinessResponse(
+                ready=False,
+                reason=f"Required models not loaded: {missing_required}",
+                models_loaded=models_loaded,
+                sla_violation_rate=0.0,
+                freshness_summary={},
+            ).model_dump(),
+        )
+
+    # Freshness SLA check
     violation_rate = 0.0
     summary: dict[str, Any] = {}
     if _freshness_tracker is not None:
@@ -1057,8 +1101,11 @@ async def ready() -> ReadinessResponse:
             status_code=503,
             detail=ReadinessResponse(
                 ready=False,
-                reason=f"Freshness SLA violation rate {violation_rate:.1%} exceeds threshold {_SLA_RATE_THRESHOLD:.0%}",
-                models_loaded=models,
+                reason=(
+                    f"Freshness SLA violation rate {violation_rate:.1%} "
+                    f"exceeds threshold {_SLA_RATE_THRESHOLD:.0%}"
+                ),
+                models_loaded=models_loaded,
                 sla_violation_rate=round(violation_rate, 4),
                 freshness_summary=summary,
             ).model_dump(),
@@ -1066,7 +1113,7 @@ async def ready() -> ReadinessResponse:
 
     return ReadinessResponse(
         ready=True,
-        models_loaded=models,
+        models_loaded=models_loaded,
         sla_violation_rate=round(violation_rate, 4),
         freshness_summary=summary,
     )
@@ -1482,9 +1529,9 @@ async def batch_predict(req: BatchPredictionRequest, request: Request) -> BatchP
             detail="Batch prediction is restricted to privileged callers",
         )
 
-    # ── Batch privilege enforcement via header ───────────────────────
-    privileged_header = request.headers.get("X-Batch-Privilege", "")
-    is_privileged = privileged_header == "internal" or (
+    # ── Batch privilege enforcement via RBAC only ────────────────────
+    # Caller-supplied headers are not trusted for privilege determination.
+    is_privileged = (
         hasattr(request.state, "tenant")
         and getattr(request.state.tenant, "role", None)
         and request.state.tenant.role.value == "service"

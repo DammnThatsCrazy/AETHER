@@ -91,7 +91,7 @@
     },
     {
       "model_id": "session_scorer",
-      "display_name": "Session Scorer",
+      "display_name": "Session Engagement Scorer",
       "implementation_type": "trainable_ml",
       "category": "behavioral_analytics",
       "task_type": "regression",

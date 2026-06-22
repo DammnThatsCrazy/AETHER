@@ -159,6 +159,30 @@ class TestBackendRoutesFileIntegrity:
             "Backend must warn when deprecated alias is used"
         )
 
+    def test_no_batch_privilege_header_check(self):
+        """X-Batch-Privilege header must not be used to determine batch privilege."""
+        import re
+        content = self._read_routes()
+        # Strip comments to avoid false negatives from commented-out code
+        stripped = re.sub(r'#.*$', '', content, flags=re.MULTILINE)
+        stripped = re.sub(r'""".*?"""', '', stripped, flags=re.DOTALL)
+        stripped = re.sub(r"'''.*?'''", '', stripped, flags=re.DOTALL)
+        assert "X-Batch-Privilege" not in stripped, (
+            "routes.py must not check X-Batch-Privilege header for privilege. "
+            "Privilege must be derived from RBAC (tenant.require_permission) only."
+        )
+
+    def test_synthetic_ratio_not_hardcoded_zero(self):
+        """synthetic_ratio in CIS telemetry must be derived, not hardcoded 0.0."""
+        import re
+        content = self._read_routes()
+        stripped = re.sub(r'#.*$', '', content, flags=re.MULTILINE)
+        stripped = re.sub(r'""".*?"""', '', stripped, flags=re.DOTALL)
+        stripped = re.sub(r"'''.*?'''", '', stripped, flags=re.DOTALL)
+        assert '"synthetic_ratio": 0.0' not in stripped and "'synthetic_ratio': 0.0" not in stripped, (
+            "synthetic_ratio must be derived from artifact metadata, not hardcoded 0.0"
+        )
+
     def test_no_hardcoded_available_models_list(self):
         """The AVAILABLE_MODELS static list should not contain legacy aliases."""
         content = self._read_routes()

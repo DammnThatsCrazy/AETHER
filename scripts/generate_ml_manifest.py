@@ -105,17 +105,72 @@ def build_manifest() -> dict:
     }
 
 
-def main() -> int:
+def _build_content() -> str:
+    manifest = build_manifest()
+    return json.dumps(manifest, indent=2, default=str) + "\n"
+
+
+def generate() -> int:
     try:
-        manifest = build_manifest()
+        content = _build_content()
     except Exception as exc:
         print(f"[FAIL] Could not generate manifest: {exc}", file=sys.stderr)
         return 1
-
     OUTPUT_PATH.parent.mkdir(parents=True, exist_ok=True)
-    OUTPUT_PATH.write_text(json.dumps(manifest, indent=2, default=str))
+    OUTPUT_PATH.write_text(content, encoding="utf-8")
+    manifest = json.loads(content)
     print(f"[OK] Generated {OUTPUT_PATH} ({manifest['total_models']} models)")
     return 0
+
+
+def check() -> int:
+    """Verify committed manifest matches what the registry would generate today."""
+    if not OUTPUT_PATH.exists():
+        print(
+            f"[FAIL] {OUTPUT_PATH} does not exist. "
+            "Run: python scripts/generate_ml_manifest.py",
+            file=sys.stderr,
+        )
+        return 1
+    try:
+        expected_content = _build_content()
+    except Exception as exc:
+        print(f"[FAIL] Could not build manifest for comparison: {exc}", file=sys.stderr)
+        return 1
+
+    actual_content = OUTPUT_PATH.read_text(encoding="utf-8")
+
+    # Compare model entries only (ignore top-level metadata like version that changes on bump)
+    try:
+        expected_models = json.loads(expected_content).get("models", [])
+        actual_models = json.loads(actual_content).get("models", [])
+        if expected_models == actual_models:
+            print(f"[OK] {OUTPUT_PATH} model content is current.")
+            return 0
+    except json.JSONDecodeError:
+        pass
+
+    print(
+        f"[FAIL] {OUTPUT_PATH} is stale. Run: python scripts/generate_ml_manifest.py",
+        file=sys.stderr,
+    )
+    import difflib
+    diff = list(difflib.unified_diff(
+        actual_content.splitlines(keepends=True),
+        expected_content.splitlines(keepends=True),
+        fromfile="committed",
+        tofile="current-registry",
+        n=3,
+    ))
+    for line in diff[:50]:
+        sys.stderr.write(line)
+    return 1
+
+
+def main() -> int:
+    if "--check" in sys.argv:
+        return check()
+    return generate()
 
 
 if __name__ == "__main__":

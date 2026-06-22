@@ -310,7 +310,7 @@ class TestModelMetadata:
     """Test model metadata."""
 
     def test_model_types_exist(self):
-        assert len(ModelType) == 9
+        assert len(ModelType) == 11
 
     def test_metadata_creation(self):
         meta = ModelMetadata(

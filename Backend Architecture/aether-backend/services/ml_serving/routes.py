@@ -445,7 +445,10 @@ async def predict(
                                 _json.dumps(ml_result, sort_keys=True, default=str).encode()
                             ).hexdigest()[:16],
                             "grounded": 1,
-                            "synthetic_ratio": 0.0,
+                            "synthetic_ratio": float(
+                                ml_result.get("synthetic_data", False)
+                                if isinstance(ml_result, dict) else False
+                            ),
                         },
                     ))
             except Exception:
@@ -495,11 +498,12 @@ async def predict_batch(
     tenant = request.state.tenant
     tenant.require_permission("ml:inference")
 
-    # Privileged batch enforcement
+    # Privileged batch enforcement — derived from RBAC role only.
+    # Caller-supplied headers (e.g. X-Batch-Privilege) are NOT trusted.
     is_privileged = (
         getattr(tenant, "role", None) is not None
         and getattr(tenant.role, "value", "") == "service"
-    ) or request.headers.get("X-Batch-Privilege", "") == "internal"
+    )
 
     try:
         tenant.require_permission("ml:batch")
@@ -550,8 +554,6 @@ async def predict_batch(
         headers = {}
         if api_key_hdr:
             headers["X-API-Key"] = api_key_hdr
-        if is_privileged:
-            headers["X-Batch-Privilege"] = "internal"
 
         resp = await client.post("/v1/predict/batch", json=payload, headers=headers)
 
