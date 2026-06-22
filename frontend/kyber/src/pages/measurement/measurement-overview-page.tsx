@@ -9,9 +9,14 @@ function Metric({ label, value, sub }: { readonly label: string; readonly value:
   return (
     <Card>
       <CardContent>
-        <div className="text-xs text-text-muted font-mono">{label}</div>
-        <div className="mt-1 text-2xl font-semibold text-text-primary">{String(value ?? '—')}</div>
-        {sub && <div className="text-xs text-text-muted mt-0.5">{sub}</div>}
+        <p className="text-xs text-text-muted font-mono" id={`metric-label-${label.replace(/\s+/g, '-').toLowerCase()}`}>{label}</p>
+        <p
+          className="mt-1 text-2xl font-semibold text-text-primary"
+          aria-labelledby={`metric-label-${label.replace(/\s+/g, '-').toLowerCase()}`}
+        >
+          {String(value ?? '—')}
+        </p>
+        {sub && <p className="text-xs text-text-muted mt-0.5">{sub}</p>}
       </CardContent>
     </Card>
   );
@@ -42,25 +47,26 @@ export function MeasurementOverviewPage() {
       title="Measurement Overview"
       subtitle="Spend, attributed revenue, ROAS, and data quality across all connected sources."
       actions={
-        <select value={window} onChange={e => setWindow(e.target.value)} className="text-sm bg-surface-secondary border border-border rounded px-2 py-1">
+        <label className="sr-only" htmlFor="overview-period-select">Time period</label>
+        <select id="overview-period-select" aria-label="Time period" value={window} onChange={e => setWindow(e.target.value)} className="text-sm bg-surface-secondary border border-border rounded px-2 py-1">
           <option value="7d">7 days</option>
           <option value="30d">30 days</option>
           <option value="90d">90 days</option>
         </select>
       }
     >
-      <div className="grid gap-4 md:grid-cols-4">
+      <section aria-label="Performance metrics" className="grid gap-4 md:grid-cols-4">
         <Metric label="Total spend" value={`$${Number(overview.campaign_spend?.usd_amount ?? 0).toLocaleString()}`} />
         <Metric label="Attributed revenue" value={`$${Number(overview.attributed_revenue?.usd_amount ?? 0).toLocaleString()}`} />
         <Metric label="ROAS" value={overview.roas ? `${Number(overview.roas).toFixed(2)}x` : '—'} sub="Actual spend basis" />
         <Metric label="Entities tracked" value={overview.entity_count ?? 0} />
-      </div>
+      </section>
 
-      <div className="mt-4 grid gap-4 lg:grid-cols-3">
+      <section aria-label="Data quality metrics" className="mt-4 grid gap-4 lg:grid-cols-3">
         <Metric label="Attribution coverage" value={`${Math.round(Number(quality.attribution_coverage ?? 0) * 100)}%`} sub="Conversions with active run" />
         <Metric label="Identity coverage" value={`${Math.round(Number(quality.identity_coverage ?? 0) * 100)}%`} sub="Touchpoints linked to profile" />
         <Metric label="Spend coverage" value={`${Math.round(Number(quality.spend_coverage ?? 0) * 100)}%`} sub="Campaign days with spend records" />
-      </div>
+      </section>
 
       {warnings.length > 0 && (
         <div className="mt-4 space-y-2">

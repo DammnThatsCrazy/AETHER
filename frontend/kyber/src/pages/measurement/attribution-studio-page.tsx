@@ -33,7 +33,8 @@ export function AttributionStudioPage() {
       subtitle="Per-conversion attribution runs, model selection, and backfill controls."
     >
       <div className="flex gap-3 mb-4">
-        <select value={filter.model_type ?? ''} onChange={e => setFilter(f => ({ ...f, model_type: e.target.value || undefined } as { model_type?: string; status?: string }))}
+        <label className="sr-only" htmlFor="attr-model-filter">Attribution model</label>
+        <select id="attr-model-filter" aria-label="Attribution model" value={filter.model_type ?? ''} onChange={e => setFilter(f => ({ ...f, model_type: e.target.value || undefined } as { model_type?: string; status?: string }))}
           className="text-sm bg-surface-secondary border border-border rounded px-2 py-1">
           <option value="">All models</option>
           <option value="linear">Linear</option>
@@ -43,7 +44,8 @@ export function AttributionStudioPage() {
           <option value="position_based">Position based</option>
           <option value="data_driven">Data driven</option>
         </select>
-        <select value={filter.status ?? ''} onChange={e => setFilter(f => ({ ...f, status: e.target.value || undefined } as { model_type?: string; status?: string }))}
+        <label className="sr-only" htmlFor="attr-status-filter">Run status</label>
+        <select id="attr-status-filter" aria-label="Run status" value={filter.status ?? ''} onChange={e => setFilter(f => ({ ...f, status: e.target.value || undefined } as { model_type?: string; status?: string }))}
           className="text-sm bg-surface-secondary border border-border rounded px-2 py-1">
           <option value="">All statuses</option>
           <option value="complete">Complete</option>

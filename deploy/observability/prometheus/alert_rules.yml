@@ -320,3 +320,153 @@ groups:
         annotations:
           summary: "ML model {{ $labels.model_id }} was rolled back"
           description: "A rollback was triggered for {{ $labels.model_id }}. Review promotion audit log for details."
+
+  # ============================================================
+  # Measurement Pipeline SLOs
+  # Target: p95 dashboard API ≤ 2 s, attribution run ≤ 30 s,
+  #         connector sync freshness ≤ 26 h, credit reconciliation ≤ 0.001 drift
+  # ============================================================
+  - name: aether_measurement_slos
+    rules:
+      # --- Attribution engine SLOs ---
+      - alert: AttributionRunLatencyHigh
+        expr: >
+          histogram_quantile(0.95,
+            rate(aether_attribution_run_duration_seconds_bucket[10m])
+          ) > 30
+        for: 5m
+        labels:
+          severity: warning
+          slo: "attribution_run_p95_30s"
+        annotations:
+          summary: "Attribution run p95 latency >30s for tenant {{ $labels.tenant_id }}"
+          description: "Attribution engine p95 is {{ $value }}s. SLO target is 30s. Check touchpoint volume and journey complexity."
+
+      - alert: AttributionRunFailureRateHigh
+        expr: >
+          rate(aether_attribution_run_failures_total[10m])
+          / rate(aether_attribution_run_total[10m]) > 0.05
+        for: 5m
+        labels:
+          severity: warning
+          slo: "attribution_success_rate_95pct"
+        annotations:
+          summary: "Attribution run failure rate >5% for tenant {{ $labels.tenant_id }}"
+          description: "{{ $value | humanizePercentage }} of attribution runs are failing. Check conversion eligibility and journey data."
+
+      - alert: AttributionCreditReconciliationDrift
+        expr: aether_attribution_credit_reconciliation_drift > 0.001
+        for: 2m
+        labels:
+          severity: critical
+          slo: "credit_reconciliation_tolerance_0.001"
+        annotations:
+          summary: "Attribution credit reconciliation drift >0.001 for tenant {{ $labels.tenant_id }}"
+          description: "Credit weight sum deviates from 1.0 by {{ $value }}. Financial accuracy guarantee violated."
+
+      # --- Connector freshness SLOs ---
+      - alert: ConnectorFreshnessStale
+        expr: >
+          time() - aether_connector_last_success_timestamp_seconds
+          > 93600
+        for: 10m
+        labels:
+          severity: warning
+          slo: "connector_freshness_26h"
+        annotations:
+          summary: "Connector {{ $labels.connector_type }} stale for tenant {{ $labels.tenant_id }}"
+          description: "Last successful sync was {{ $value | humanizeDuration }} ago. SLO target is 26h (daily sync + 2h buffer)."
+
+      - alert: ConnectorSyncFailureSpike
+        expr: rate(aether_connector_sync_failures_total[30m]) > 0
+        for: 15m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Connector {{ $labels.connector_type }} sync failing for tenant {{ $labels.tenant_id }}"
+          description: "Connector has been reporting sync failures for 15+ minutes. Spend data may be stale."
+
+      - alert: ConnectorHealthDegraded
+        expr: aether_connector_health_status{status="error"} > 0
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Connector {{ $labels.connector_type }} health check failing for tenant {{ $labels.tenant_id }}"
+          description: "Connector credentials may be expired or revoked. Operator action required."
+
+      # --- Gold materialization SLOs ---
+      - alert: GoldMaterializationLag
+        expr: >
+          time() - aether_gold_materialization_watermark_timestamp_seconds
+          > 7200
+        for: 10m
+        labels:
+          severity: warning
+          slo: "gold_freshness_2h"
+        annotations:
+          summary: "Gold materialization lag >2h for tenant {{ $labels.tenant_id }}"
+          description: "Dashboard data is stale. Last materialization was {{ $value | humanizeDuration }} ago."
+
+      - alert: GoldMaterializationFailure
+        expr: rate(aether_gold_materialization_failures_total[10m]) > 0
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Gold materialization failures for tenant {{ $labels.tenant_id }}"
+          description: "ClickHouse write failures are causing materialization to fail. Check ClickHouse connectivity."
+
+      # --- Dashboard API SLOs ---
+      - alert: MeasurementDashboardAPILatencyHigh
+        expr: >
+          histogram_quantile(0.95,
+            rate(http_request_duration_seconds_bucket{
+              route=~"/v1/measurement/.*|/v1/attribution/.*|/v1/conversions/.*"
+            }[5m])
+          ) > 2
+        for: 5m
+        labels:
+          severity: warning
+          slo: "dashboard_api_p95_2s"
+        annotations:
+          summary: "Measurement dashboard API p95 latency >2s"
+          description: "p95 API latency is {{ $value }}s. SLO target is 2s. Check Gold table query performance and ClickHouse load."
+
+      - alert: MeasurementAPIErrorRateHigh
+        expr: >
+          rate(http_requests_total{
+            status=~"5..",
+            route=~"/v1/measurement/.*|/v1/attribution/.*|/v1/conversions/.*"
+          }[5m])
+          / rate(http_requests_total{
+            route=~"/v1/measurement/.*|/v1/attribution/.*|/v1/conversions/.*"
+          }[5m]) > 0.01
+        for: 5m
+        labels:
+          severity: warning
+          slo: "measurement_api_error_rate_1pct"
+        annotations:
+          summary: "Measurement API 5xx error rate >1%"
+          description: "Error rate is {{ $value | humanizePercentage }}. SLO target is <1%."
+
+      # --- Journey compiler SLOs ---
+      - alert: JourneyCompilerBacklogHigh
+        expr: aether_journey_compiler_queue_depth > 1000
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Journey compiler queue depth >1000 for tenant {{ $labels.tenant_id }}"
+          description: "{{ $value }} journeys pending rebuild. Attribution latency will increase as backlog clears."
+
+      # --- Spend coverage SLOs ---
+      - alert: SpendCoverageGapDetected
+        expr: aether_spend_coverage_pct < 0.8
+        for: 60m
+        labels:
+          severity: warning
+          slo: "spend_coverage_80pct"
+        annotations:
+          summary: "Spend coverage below 80% for tenant {{ $labels.tenant_id }}"
+          description: "Only {{ $value | humanizePercentage }} of campaign days have spend records. ROAS accuracy is degraded."
