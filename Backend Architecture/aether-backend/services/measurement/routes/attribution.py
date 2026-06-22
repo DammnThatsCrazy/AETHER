@@ -22,7 +22,15 @@ _engine = AttributionEngine()
 _SUPPORTED_MODELS = {
     "first_touch", "last_touch", "linear", "time_decay",
     "position_based", "data_driven", "actor_weighted", "exposure_aware",
+    "markov", "shapley_heuristic",
 }
+
+# In-memory config store for AETHER_ENV=local; production uses attribution_model_configs table.
+_model_configs: dict[str, list[dict]] = {}
+
+
+def _get_tenant_configs(tenant_id: str) -> list[dict]:
+    return _model_configs.get(tenant_id, [])
 
 
 def _require_tenant(request: Request):
@@ -33,9 +41,24 @@ def _require_tenant(request: Request):
     return tenant
 
 
+class ModelConfigRequest(BaseModel):
+    name: str = Field(..., min_length=1, max_length=120)
+    model_type: str
+    model_version: str = "1.0"
+    conversion_types: list[str] = Field(default_factory=lambda: ["all"])
+    click_lookback_window: int = Field(720, ge=1, le=8760)
+    view_lookback_window: int = Field(168, ge=1, le=8760)
+    session_timeout_seconds: int = Field(1800, ge=60, le=86400)
+    direct_traffic_policy: str = "include"
+    identity_confidence_min: float = Field(0.5, ge=0.0, le=1.0)
+    fraud_policy: str = "exclude"
+    status: str = "active"
+
+
 class RunAttributionRequest(BaseModel):
     conversion_id: str
     model_type: str = "last_touch"
+    model_config_id: Optional[str] = None
     lookback_hours: int = Field(720, ge=1, le=8760)
 
 
@@ -49,6 +72,47 @@ class ModelComparisonRequest(BaseModel):
     model_a: str
     model_b: str
     conversion_ids: list[str] = Field(..., min_length=1, max_length=50)
+
+
+@router.get("/configurations")
+async def list_model_configs(request: Request):
+    tenant = _require_tenant(request)
+    configs = _get_tenant_configs(tenant.tenant_id)
+    return APIResponse(data=configs, meta={"count": len(configs), "supported_models": sorted(_SUPPORTED_MODELS)}).to_dict()
+
+
+@router.post("/configurations")
+async def create_model_config(request: Request, body: ModelConfigRequest):
+    import uuid
+    from datetime import datetime, timezone
+    tenant = _require_tenant(request)
+    if body.model_type not in _SUPPORTED_MODELS:
+        raise BadRequestError(
+            f"Unknown model_type '{body.model_type}'. Supported: {sorted(_SUPPORTED_MODELS)}"
+        )
+    config = {
+        "model_config_id": str(uuid.uuid4()),
+        "tenant_id": tenant.tenant_id,
+        "name": body.name,
+        "model_type": body.model_type,
+        "model_version": body.model_version,
+        "conversion_types": body.conversion_types,
+        "click_lookback_window": body.click_lookback_window,
+        "view_lookback_window": body.view_lookback_window,
+        "session_timeout_seconds": body.session_timeout_seconds,
+        "direct_traffic_policy": body.direct_traffic_policy,
+        "identity_confidence_min": body.identity_confidence_min,
+        "fraud_policy": body.fraud_policy,
+        "status": body.status,
+        "effective_from": datetime.now(timezone.utc).isoformat(),
+        "created_at": datetime.now(timezone.utc).isoformat(),
+    }
+    _model_configs.setdefault(tenant.tenant_id, []).append(config)
+    logger.info(
+        "Attribution model config created: tenant=%s model_type=%s name=%s",
+        tenant.tenant_id, body.model_type, body.name,
+    )
+    return APIResponse(data=config, meta={"created": True}).to_dict()
 
 
 @router.get("/runs")
@@ -137,7 +201,7 @@ async def schedule_backfill(request: Request, body: BackfillRequest):
     return APIResponse(data=result).to_dict()
 
 
-@router.get("/model-comparisons")
+@router.post("/model-comparisons")
 async def compare_models(request: Request, body: ModelComparisonRequest):
     tenant = _require_tenant(request)
     for model in (body.model_a, body.model_b):
@@ -151,3 +215,31 @@ async def compare_models(request: Request, body: ModelComparisonRequest):
         body.conversion_ids,
     )
     return APIResponse(data=result).to_dict()
+
+
+@router.get("/models")
+async def list_available_models(request: Request):
+    _require_tenant(request)
+    models = []
+    for name in sorted(_SUPPORTED_MODELS):
+        is_algorithmic = name in ("markov", "shapley_heuristic")
+        models.append({
+            "name": name,
+            "type": "algorithmic" if is_algorithmic else "heuristic",
+            "description": _MODEL_DESCRIPTIONS.get(name, ""),
+        })
+    return APIResponse(data=models).to_dict()
+
+
+_MODEL_DESCRIPTIONS: dict[str, str] = {
+    "first_touch": "100% credit to the first touchpoint in the journey.",
+    "last_touch": "100% credit to the last touchpoint before conversion.",
+    "linear": "Equal credit distributed across all touchpoints.",
+    "time_decay": "Exponential decay — more recent touchpoints receive more credit.",
+    "position_based": "40% first, 40% last, 20% distributed across middle touchpoints.",
+    "data_driven": "Shapley-value approximation using heuristic coalition values.",
+    "actor_weighted": "U-shaped with human/agent actor splitting per touchpoint.",
+    "exposure_aware": "View-through weighted by viewability and dwell time.",
+    "markov": "Removal-effect Markov chain — trained on historical journey paths.",
+    "shapley_heuristic": "Honest alias for data_driven (Shapley heuristic).",
+}
