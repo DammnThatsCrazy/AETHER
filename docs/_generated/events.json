@@ -3,20 +3,33 @@
   "generated_from": "packages/shared/events.ts",
   "schema_version": "1.0.0",
   "families": [
-    "core",
-    "journey",
-    "identity",
-    "consent",
-    "commerce",
-    "wallet",
     "agent",
-    "x402",
-    "reward"
+    "b2b",
+    "commerce",
+    "comms",
+    "consent",
+    "core",
+    "credit",
+    "ecommerce",
+    "exposure",
+    "friction",
+    "identity",
+    "identity_lc",
+    "journey",
+    "location",
+    "outcome",
+    "reward",
+    "server",
+    "wallet",
+    "web3_lc",
+    "x402"
   ],
   "consent_purposes": [
     "agent",
     "analytics",
     "commerce",
+    "credit",
+    "location",
     "marketing",
     "web3"
   ],
@@ -25,703 +38,1489 @@
       "name": "track",
       "family": "core",
       "consent_purpose": "analytics",
-      "section_comment": "Core analytics"
+      "section_comment": "core"
     },
     {
       "name": "page",
       "family": "core",
       "consent_purpose": "analytics",
-      "section_comment": "Core analytics"
+      "section_comment": "core"
     },
     {
       "name": "screen",
       "family": "core",
       "consent_purpose": "analytics",
-      "section_comment": "Core analytics"
+      "section_comment": "core"
     },
     {
       "name": "heartbeat",
       "family": "core",
       "consent_purpose": "analytics",
-      "section_comment": "Core analytics"
+      "section_comment": "core"
     },
     {
       "name": "error",
       "family": "core",
       "consent_purpose": "analytics",
-      "section_comment": "Core analytics"
+      "section_comment": "core"
     },
     {
       "name": "performance",
       "family": "core",
       "consent_purpose": "analytics",
-      "section_comment": "Core analytics"
+      "section_comment": "core"
     },
     {
       "name": "experiment",
       "family": "core",
       "consent_purpose": "marketing",
-      "section_comment": "Core analytics"
+      "section_comment": "core"
     },
     {
       "name": "journey_started",
       "family": "journey",
       "consent_purpose": "analytics",
-      "section_comment": "Journey lifecycle"
+      "section_comment": "journey"
     },
     {
       "name": "journey_paused",
       "family": "journey",
       "consent_purpose": "analytics",
-      "section_comment": "Journey lifecycle"
+      "section_comment": "journey"
     },
     {
       "name": "journey_resumed",
       "family": "journey",
       "consent_purpose": "analytics",
-      "section_comment": "Journey lifecycle"
+      "section_comment": "journey"
     },
     {
       "name": "journey_continued",
       "family": "journey",
       "consent_purpose": "analytics",
-      "section_comment": "Journey lifecycle"
+      "section_comment": "journey"
     },
     {
       "name": "journey_completed",
       "family": "journey",
       "consent_purpose": "analytics",
-      "section_comment": "Journey lifecycle"
+      "section_comment": "journey"
     },
     {
       "name": "journey_abandoned",
       "family": "journey",
       "consent_purpose": "analytics",
-      "section_comment": "Journey lifecycle"
+      "section_comment": "journey"
     },
     {
       "name": "journey_checkpoint",
       "family": "journey",
       "consent_purpose": "analytics",
-      "section_comment": "Journey lifecycle"
+      "section_comment": "journey"
     },
     {
       "name": "identify",
       "family": "identity",
       "consent_purpose": "analytics",
-      "section_comment": "Identity"
+      "section_comment": "identity"
     },
     {
       "name": "consent",
       "family": "consent",
       "consent_purpose": "analytics",
-      "section_comment": "Identity"
+      "section_comment": "consent"
     },
     {
       "name": "conversion",
       "family": "commerce",
       "consent_purpose": "marketing",
-      "section_comment": "Commerce / access (Web2 + Web3 unified)"
+      "section_comment": "commerce"
     },
     {
       "name": "payment_initiated",
       "family": "commerce",
       "consent_purpose": "commerce",
-      "section_comment": "Commerce / access (Web2 + Web3 unified)"
+      "section_comment": "commerce"
     },
     {
       "name": "payment_completed",
       "family": "commerce",
       "consent_purpose": "commerce",
-      "section_comment": "Commerce / access (Web2 + Web3 unified)"
+      "section_comment": "commerce"
     },
     {
       "name": "payment_failed",
       "family": "commerce",
       "consent_purpose": "commerce",
-      "section_comment": "Commerce / access (Web2 + Web3 unified)"
+      "section_comment": "commerce"
     },
     {
       "name": "approval_requested",
       "family": "commerce",
       "consent_purpose": "commerce",
-      "section_comment": "Commerce / access (Web2 + Web3 unified)"
+      "section_comment": "commerce"
     },
     {
       "name": "approval_resolved",
       "family": "commerce",
       "consent_purpose": "commerce",
-      "section_comment": "Commerce / access (Web2 + Web3 unified)"
+      "section_comment": "commerce"
     },
     {
       "name": "entitlement_granted",
       "family": "commerce",
       "consent_purpose": "commerce",
-      "section_comment": "Commerce / access (Web2 + Web3 unified)"
+      "section_comment": "commerce"
     },
     {
       "name": "entitlement_revoked",
       "family": "commerce",
       "consent_purpose": "commerce",
-      "section_comment": "Commerce / access (Web2 + Web3 unified)"
+      "section_comment": "commerce"
     },
     {
       "name": "access_granted",
       "family": "commerce",
       "consent_purpose": "commerce",
-      "section_comment": "Commerce / access (Web2 + Web3 unified)"
+      "section_comment": "commerce"
     },
     {
       "name": "access_denied",
       "family": "commerce",
       "consent_purpose": "commerce",
-      "section_comment": "Commerce / access (Web2 + Web3 unified)"
+      "section_comment": "commerce"
     },
     {
       "name": "wallet",
       "family": "wallet",
       "consent_purpose": "web3",
-      "section_comment": "Wallet / on-chain (optional)"
+      "section_comment": "wallet"
     },
     {
       "name": "transaction",
       "family": "wallet",
       "consent_purpose": "web3",
-      "section_comment": "Wallet / on-chain (optional)"
+      "section_comment": "wallet"
     },
     {
       "name": "contract_action",
       "family": "wallet",
       "consent_purpose": "web3",
-      "section_comment": "Wallet / on-chain (optional)"
+      "section_comment": "wallet"
     },
     {
       "name": "agent_task",
       "family": "agent",
       "consent_purpose": "agent",
-      "section_comment": "Agent lifecycle (optional) \u2014 legacy aliases kept for backward compatibility"
+      "section_comment": "agent"
     },
     {
       "name": "agent_decision",
       "family": "agent",
       "consent_purpose": "agent",
-      "section_comment": "Agent lifecycle (optional) \u2014 legacy aliases kept for backward compatibility"
+      "section_comment": "agent"
     },
     {
       "name": "a2h_interaction",
       "family": "agent",
       "consent_purpose": "agent",
-      "section_comment": "Agent lifecycle (optional) \u2014 legacy aliases kept for backward compatibility"
+      "section_comment": "agent"
     },
     {
       "name": "agent_registered",
       "family": "agent",
       "consent_purpose": "agent",
-      "section_comment": "Agent lifecycle \u2014 granular events"
+      "section_comment": "agent"
     },
     {
       "name": "agent_updated",
       "family": "agent",
       "consent_purpose": "agent",
-      "section_comment": "Agent lifecycle \u2014 granular events"
+      "section_comment": "agent"
     },
     {
       "name": "agent_authorized",
       "family": "agent",
       "consent_purpose": "agent",
-      "section_comment": "Agent lifecycle \u2014 granular events"
+      "section_comment": "agent"
     },
     {
       "name": "agent_deauthorized",
       "family": "agent",
       "consent_purpose": "agent",
-      "section_comment": "Agent lifecycle \u2014 granular events"
+      "section_comment": "agent"
     },
     {
       "name": "agent_capability_granted",
       "family": "agent",
       "consent_purpose": "agent",
-      "section_comment": "Agent lifecycle \u2014 granular events"
+      "section_comment": "agent"
     },
     {
       "name": "agent_capability_revoked",
       "family": "agent",
       "consent_purpose": "agent",
-      "section_comment": "Agent lifecycle \u2014 granular events"
+      "section_comment": "agent"
     },
     {
       "name": "agent_task_created",
       "family": "agent",
       "consent_purpose": "agent",
-      "section_comment": "Agent lifecycle \u2014 granular events"
+      "section_comment": "agent"
     },
     {
       "name": "agent_task_decomposed",
       "family": "agent",
       "consent_purpose": "agent",
-      "section_comment": "Agent lifecycle \u2014 granular events"
+      "section_comment": "agent"
     },
     {
       "name": "agent_task_started",
       "family": "agent",
       "consent_purpose": "agent",
-      "section_comment": "Agent lifecycle \u2014 granular events"
+      "section_comment": "agent"
     },
     {
       "name": "agent_task_completed",
       "family": "agent",
       "consent_purpose": "agent",
-      "section_comment": "Agent lifecycle \u2014 granular events"
+      "section_comment": "agent"
     },
     {
       "name": "agent_task_failed",
       "family": "agent",
       "consent_purpose": "agent",
-      "section_comment": "Agent lifecycle \u2014 granular events"
+      "section_comment": "agent"
     },
     {
       "name": "agent_tool_called",
       "family": "agent",
       "consent_purpose": "agent",
-      "section_comment": "Agent lifecycle \u2014 granular events"
+      "section_comment": "agent"
     },
     {
       "name": "agent_resource_requested",
       "family": "agent",
       "consent_purpose": "agent",
-      "section_comment": "Agent lifecycle \u2014 granular events"
+      "section_comment": "agent"
     },
     {
       "name": "agent_delegated_task",
       "family": "agent",
       "consent_purpose": "agent",
-      "section_comment": "Agent lifecycle \u2014 granular events"
+      "section_comment": "agent"
     },
     {
       "name": "agent_subagent_spawned",
       "family": "agent",
       "consent_purpose": "agent",
-      "section_comment": "Agent lifecycle \u2014 granular events"
+      "section_comment": "agent"
     },
     {
       "name": "agent_policy_evaluated",
       "family": "agent",
       "consent_purpose": "agent",
-      "section_comment": "Agent lifecycle \u2014 granular events"
+      "section_comment": "agent"
     },
     {
       "name": "agent_handoff",
       "family": "agent",
       "consent_purpose": "agent",
-      "section_comment": "Agent lifecycle \u2014 granular events"
+      "section_comment": "agent"
     },
     {
       "name": "agent_escalated_to_human",
       "family": "agent",
       "consent_purpose": "agent",
-      "section_comment": "Agent lifecycle \u2014 granular events"
+      "section_comment": "agent"
     },
     {
       "name": "agent_outcome_recorded",
       "family": "agent",
       "consent_purpose": "agent",
-      "section_comment": "Agent lifecycle \u2014 granular events"
-    },
-    {
-      "name": "reward_action_queued",
-      "family": "reward",
-      "consent_purpose": "commerce",
-      "section_comment": "Reward enablement (A6) \u2014 eligibility events emitted by Aether, not the tenant"
-    },
-    {
-      "name": "reward_proof_generated",
-      "family": "reward",
-      "consent_purpose": "commerce",
-      "section_comment": "Reward enablement (A6) \u2014 eligibility events emitted by Aether, not the tenant"
-    },
-    {
-      "name": "reward_delivered",
-      "family": "reward",
-      "consent_purpose": "commerce",
-      "section_comment": "Reward enablement (A6) \u2014 eligibility events emitted by Aether, not the tenant"
-    },
-    {
-      "name": "reward_claim_submitted",
-      "family": "reward",
-      "consent_purpose": "commerce",
-      "section_comment": "Reward enablement (A6) \u2014 eligibility events emitted by Aether, not the tenant"
-    },
-    {
-      "name": "x402_payment",
-      "family": "x402",
-      "consent_purpose": "commerce",
-      "section_comment": "x402 (optional) \u2014 legacy alias kept for backward compatibility"
-    },
-    {
-      "name": "x402_resource_requested",
-      "family": "x402",
-      "consent_purpose": "commerce",
-      "section_comment": "x402 lifecycle \u2014 granular events"
-    },
-    {
-      "name": "x402_payment_required",
-      "family": "x402",
-      "consent_purpose": "commerce",
-      "section_comment": "x402 lifecycle \u2014 granular events"
-    },
-    {
-      "name": "x402_quote_received",
-      "family": "x402",
-      "consent_purpose": "commerce",
-      "section_comment": "x402 lifecycle \u2014 granular events"
-    },
-    {
-      "name": "x402_authorization_requested",
-      "family": "x402",
-      "consent_purpose": "commerce",
-      "section_comment": "x402 lifecycle \u2014 granular events"
-    },
-    {
-      "name": "x402_authorization_resolved",
-      "family": "x402",
-      "consent_purpose": "commerce",
-      "section_comment": "x402 lifecycle \u2014 granular events"
-    },
-    {
-      "name": "x402_payment_intent_created",
-      "family": "x402",
-      "consent_purpose": "commerce",
-      "section_comment": "x402 lifecycle \u2014 granular events"
-    },
-    {
-      "name": "x402_payment_submitted",
-      "family": "x402",
-      "consent_purpose": "commerce",
-      "section_comment": "x402 lifecycle \u2014 granular events"
-    },
-    {
-      "name": "x402_payment_settled",
-      "family": "x402",
-      "consent_purpose": "commerce",
-      "section_comment": "x402 lifecycle \u2014 granular events"
-    },
-    {
-      "name": "x402_payment_failed",
-      "family": "x402",
-      "consent_purpose": "commerce",
-      "section_comment": "x402 lifecycle \u2014 granular events"
-    },
-    {
-      "name": "x402_payment_timeout",
-      "family": "x402",
-      "consent_purpose": "commerce",
-      "section_comment": "x402 lifecycle \u2014 granular events"
-    },
-    {
-      "name": "x402_receipt_verified",
-      "family": "x402",
-      "consent_purpose": "commerce",
-      "section_comment": "x402 lifecycle \u2014 granular events"
-    },
-    {
-      "name": "x402_access_granted",
-      "family": "x402",
-      "consent_purpose": "commerce",
-      "section_comment": "x402 lifecycle \u2014 granular events"
-    },
-    {
-      "name": "x402_access_denied",
-      "family": "x402",
-      "consent_purpose": "commerce",
-      "section_comment": "x402 lifecycle \u2014 granular events"
-    },
-    {
-      "name": "x402_refund_or_reversal",
-      "family": "x402",
-      "consent_purpose": "commerce",
-      "section_comment": "x402 lifecycle \u2014 granular events"
+      "section_comment": "agent"
     },
     {
       "name": "agentic_account_observed",
       "family": "agent",
       "consent_purpose": "agent",
-      "section_comment": "Agentic observability family \u2014 account / MCP / tool"
+      "section_comment": "agent"
     },
     {
       "name": "agentic_account_connected_observed",
       "family": "agent",
       "consent_purpose": "agent",
-      "section_comment": "Agentic observability family \u2014 account / MCP / tool"
+      "section_comment": "agent"
     },
     {
       "name": "agentic_account_disconnected_observed",
       "family": "agent",
       "consent_purpose": "agent",
-      "section_comment": "Agentic observability family \u2014 account / MCP / tool"
+      "section_comment": "agent"
     },
     {
       "name": "agent_budget_observed",
       "family": "agent",
       "consent_purpose": "agent",
-      "section_comment": "Agentic observability family \u2014 account / MCP / tool"
+      "section_comment": "agent"
     },
     {
       "name": "agent_budget_changed_observed",
       "family": "agent",
       "consent_purpose": "agent",
-      "section_comment": "Agentic observability family \u2014 account / MCP / tool"
+      "section_comment": "agent"
     },
     {
       "name": "agent_permission_observed",
       "family": "agent",
       "consent_purpose": "agent",
-      "section_comment": "Agentic observability family \u2014 account / MCP / tool"
+      "section_comment": "agent"
     },
     {
       "name": "agent_mcp_connection_observed",
       "family": "agent",
       "consent_purpose": "agent",
-      "section_comment": "Agentic observability family \u2014 account / MCP / tool"
+      "section_comment": "agent"
     },
     {
       "name": "agent_tool_observed",
       "family": "agent",
       "consent_purpose": "agent",
-      "section_comment": "Agentic observability family \u2014 account / MCP / tool"
+      "section_comment": "agent"
     },
     {
       "name": "agent_tool_invocation_observed",
       "family": "agent",
       "consent_purpose": "agent",
-      "section_comment": "Agentic observability family \u2014 account / MCP / tool"
+      "section_comment": "agent"
     },
     {
       "name": "agent_activity_observed",
       "family": "agent",
       "consent_purpose": "agent",
-      "section_comment": "Agentic observability family \u2014 account / MCP / tool"
+      "section_comment": "agent"
     },
     {
       "name": "agent_risk_signal_observed",
       "family": "agent",
       "consent_purpose": "agent",
-      "section_comment": "Agentic observability family \u2014 account / MCP / tool"
+      "section_comment": "agent"
     },
     {
       "name": "agent_notification_observed",
       "family": "agent",
       "consent_purpose": "agent",
-      "section_comment": "Agentic observability family \u2014 account / MCP / tool"
+      "section_comment": "agent"
     },
     {
       "name": "agent_strategy_observed",
       "family": "agent",
       "consent_purpose": "agent",
-      "section_comment": "Agentic observability family \u2014 Robinhood-style trading observation"
+      "section_comment": "agent"
     },
     {
       "name": "agent_trade_intent_observed",
       "family": "agent",
       "consent_purpose": "agent",
-      "section_comment": "Agentic observability family \u2014 Robinhood-style trading observation"
+      "section_comment": "agent"
     },
     {
       "name": "agent_trade_order_observed",
       "family": "agent",
       "consent_purpose": "agent",
-      "section_comment": "Agentic observability family \u2014 Robinhood-style trading observation"
+      "section_comment": "agent"
     },
     {
       "name": "agent_trade_fill_observed",
       "family": "agent",
       "consent_purpose": "agent",
-      "section_comment": "Agentic observability family \u2014 Robinhood-style trading observation"
+      "section_comment": "agent"
     },
     {
       "name": "agent_trade_rejection_observed",
       "family": "agent",
       "consent_purpose": "agent",
-      "section_comment": "Agentic observability family \u2014 Robinhood-style trading observation"
+      "section_comment": "agent"
     },
     {
       "name": "agent_position_observed",
       "family": "agent",
       "consent_purpose": "agent",
-      "section_comment": "Agentic observability family \u2014 Robinhood-style trading observation"
+      "section_comment": "agent"
     },
     {
       "name": "agent_portfolio_snapshot_observed",
       "family": "agent",
       "consent_purpose": "agent",
-      "section_comment": "Agentic observability family \u2014 Robinhood-style trading observation"
+      "section_comment": "agent"
     },
     {
       "name": "agent_performance_snapshot_observed",
       "family": "agent",
       "consent_purpose": "agent",
-      "section_comment": "Agentic observability family \u2014 Robinhood-style trading observation"
+      "section_comment": "agent"
     },
     {
       "name": "agent_disconnect_observed",
       "family": "agent",
       "consent_purpose": "agent",
-      "section_comment": "Agentic observability family \u2014 Robinhood-style trading observation"
+      "section_comment": "agent"
     },
     {
       "name": "agent_inbox_observed",
       "family": "agent",
       "consent_purpose": "agent",
-      "section_comment": "Agentic observability family \u2014 AgentMail-style communication observation"
+      "section_comment": "agent"
     },
     {
       "name": "agent_email_address_observed",
       "family": "agent",
       "consent_purpose": "agent",
-      "section_comment": "Agentic observability family \u2014 AgentMail-style communication observation"
+      "section_comment": "agent"
     },
     {
       "name": "agent_thread_observed",
       "family": "agent",
       "consent_purpose": "agent",
-      "section_comment": "Agentic observability family \u2014 AgentMail-style communication observation"
+      "section_comment": "agent"
     },
     {
       "name": "agent_message_received_observed",
       "family": "agent",
       "consent_purpose": "agent",
-      "section_comment": "Agentic observability family \u2014 AgentMail-style communication observation"
+      "section_comment": "agent"
     },
     {
       "name": "agent_message_sent_observed",
       "family": "agent",
       "consent_purpose": "agent",
-      "section_comment": "Agentic observability family \u2014 AgentMail-style communication observation"
+      "section_comment": "agent"
     },
     {
       "name": "agent_reply_observed",
       "family": "agent",
       "consent_purpose": "agent",
-      "section_comment": "Agentic observability family \u2014 AgentMail-style communication observation"
+      "section_comment": "agent"
     },
     {
       "name": "agent_attachment_observed",
       "family": "agent",
       "consent_purpose": "agent",
-      "section_comment": "Agentic observability family \u2014 AgentMail-style communication observation"
+      "section_comment": "agent"
     },
     {
       "name": "agent_attachment_parsed_observed",
       "family": "agent",
       "consent_purpose": "agent",
-      "section_comment": "Agentic observability family \u2014 AgentMail-style communication observation"
+      "section_comment": "agent"
     },
     {
       "name": "agent_otp_detected_observed",
       "family": "agent",
       "consent_purpose": "agent",
-      "section_comment": "Agentic observability family \u2014 AgentMail-style communication observation"
+      "section_comment": "agent"
     },
     {
       "name": "agent_invoice_detected_observed",
       "family": "agent",
       "consent_purpose": "agent",
-      "section_comment": "Agentic observability family \u2014 AgentMail-style communication observation"
+      "section_comment": "agent"
     },
     {
       "name": "agent_receipt_detected_observed",
       "family": "agent",
       "consent_purpose": "agent",
-      "section_comment": "Agentic observability family \u2014 AgentMail-style communication observation"
+      "section_comment": "agent"
     },
     {
       "name": "agent_calendar_intent_observed",
       "family": "agent",
       "consent_purpose": "agent",
-      "section_comment": "Agentic observability family \u2014 AgentMail-style communication observation"
+      "section_comment": "agent"
     },
     {
       "name": "agent_support_route_observed",
       "family": "agent",
       "consent_purpose": "agent",
-      "section_comment": "Agentic observability family \u2014 AgentMail-style communication observation"
+      "section_comment": "agent"
     },
     {
       "name": "agent_semantic_search_observed",
       "family": "agent",
       "consent_purpose": "agent",
-      "section_comment": "Agentic observability family \u2014 AgentMail-style communication observation"
+      "section_comment": "agent"
     },
     {
       "name": "agent_data_extraction_observed",
       "family": "agent",
       "consent_purpose": "agent",
-      "section_comment": "Agentic observability family \u2014 AgentMail-style communication observation"
+      "section_comment": "agent"
+    },
+    {
+      "name": "agent_evaluation_observed",
+      "family": "agent",
+      "consent_purpose": "agent",
+      "section_comment": "agent"
+    },
+    {
+      "name": "agent_cost_observed",
+      "family": "agent",
+      "consent_purpose": "agent",
+      "section_comment": "agent"
+    },
+    {
+      "name": "agent_grounding_observed",
+      "family": "agent",
+      "consent_purpose": "agent",
+      "section_comment": "agent"
+    },
+    {
+      "name": "agent_guardrail_observed",
+      "family": "agent",
+      "consent_purpose": "agent",
+      "section_comment": "agent"
+    },
+    {
+      "name": "agent_human_override_observed",
+      "family": "agent",
+      "consent_purpose": "agent",
+      "section_comment": "agent"
+    },
+    {
+      "name": "reward_action_queued",
+      "family": "reward",
+      "consent_purpose": "commerce",
+      "section_comment": "reward"
+    },
+    {
+      "name": "reward_proof_generated",
+      "family": "reward",
+      "consent_purpose": "commerce",
+      "section_comment": "reward"
+    },
+    {
+      "name": "reward_delivered",
+      "family": "reward",
+      "consent_purpose": "commerce",
+      "section_comment": "reward"
+    },
+    {
+      "name": "reward_claim_submitted",
+      "family": "reward",
+      "consent_purpose": "commerce",
+      "section_comment": "reward"
+    },
+    {
+      "name": "x402_payment",
+      "family": "x402",
+      "consent_purpose": "commerce",
+      "section_comment": "x402"
+    },
+    {
+      "name": "x402_resource_requested",
+      "family": "x402",
+      "consent_purpose": "commerce",
+      "section_comment": "x402"
+    },
+    {
+      "name": "x402_payment_required",
+      "family": "x402",
+      "consent_purpose": "commerce",
+      "section_comment": "x402"
+    },
+    {
+      "name": "x402_quote_received",
+      "family": "x402",
+      "consent_purpose": "commerce",
+      "section_comment": "x402"
+    },
+    {
+      "name": "x402_authorization_requested",
+      "family": "x402",
+      "consent_purpose": "commerce",
+      "section_comment": "x402"
+    },
+    {
+      "name": "x402_authorization_resolved",
+      "family": "x402",
+      "consent_purpose": "commerce",
+      "section_comment": "x402"
+    },
+    {
+      "name": "x402_payment_intent_created",
+      "family": "x402",
+      "consent_purpose": "commerce",
+      "section_comment": "x402"
+    },
+    {
+      "name": "x402_payment_submitted",
+      "family": "x402",
+      "consent_purpose": "commerce",
+      "section_comment": "x402"
+    },
+    {
+      "name": "x402_payment_settled",
+      "family": "x402",
+      "consent_purpose": "commerce",
+      "section_comment": "x402"
+    },
+    {
+      "name": "x402_payment_failed",
+      "family": "x402",
+      "consent_purpose": "commerce",
+      "section_comment": "x402"
+    },
+    {
+      "name": "x402_payment_timeout",
+      "family": "x402",
+      "consent_purpose": "commerce",
+      "section_comment": "x402"
+    },
+    {
+      "name": "x402_receipt_verified",
+      "family": "x402",
+      "consent_purpose": "commerce",
+      "section_comment": "x402"
+    },
+    {
+      "name": "x402_access_granted",
+      "family": "x402",
+      "consent_purpose": "commerce",
+      "section_comment": "x402"
+    },
+    {
+      "name": "x402_access_denied",
+      "family": "x402",
+      "consent_purpose": "commerce",
+      "section_comment": "x402"
+    },
+    {
+      "name": "x402_refund_or_reversal",
+      "family": "x402",
+      "consent_purpose": "commerce",
+      "section_comment": "x402"
     },
     {
       "name": "x402_resource_request_observed",
       "family": "x402",
-      "consent_purpose": "agent",
-      "section_comment": "x402 protocol observation family (from external observer perspective)"
+      "consent_purpose": "commerce",
+      "section_comment": "x402"
     },
     {
       "name": "x402_challenge_observed",
       "family": "x402",
-      "consent_purpose": "agent",
-      "section_comment": "x402 protocol observation family (from external observer perspective)"
+      "consent_purpose": "commerce",
+      "section_comment": "x402"
     },
     {
       "name": "x402_payment_requirement_observed",
       "family": "x402",
-      "consent_purpose": "agent",
-      "section_comment": "x402 protocol observation family (from external observer perspective)"
+      "consent_purpose": "commerce",
+      "section_comment": "x402"
     },
     {
       "name": "x402_signature_observed",
       "family": "x402",
-      "consent_purpose": "agent",
-      "section_comment": "x402 protocol observation family (from external observer perspective)"
+      "consent_purpose": "commerce",
+      "section_comment": "x402"
     },
     {
       "name": "x402_verification_observed",
       "family": "x402",
-      "consent_purpose": "agent",
-      "section_comment": "x402 protocol observation family (from external observer perspective)"
+      "consent_purpose": "commerce",
+      "section_comment": "x402"
     },
     {
       "name": "x402_settlement_observed",
       "family": "x402",
-      "consent_purpose": "agent",
-      "section_comment": "x402 protocol observation family (from external observer perspective)"
+      "consent_purpose": "commerce",
+      "section_comment": "x402"
     },
     {
       "name": "x402_resource_access_observed",
       "family": "x402",
-      "consent_purpose": "agent",
-      "section_comment": "x402 protocol observation family (from external observer perspective)"
+      "consent_purpose": "commerce",
+      "section_comment": "x402"
     },
     {
       "name": "x402_resource_access_denied_observed",
       "family": "x402",
-      "consent_purpose": "agent",
-      "section_comment": "x402 protocol observation family (from external observer perspective)"
+      "consent_purpose": "commerce",
+      "section_comment": "x402"
     },
     {
       "name": "x402_failure_observed",
       "family": "x402",
-      "consent_purpose": "agent",
-      "section_comment": "x402 protocol observation family (from external observer perspective)"
+      "consent_purpose": "commerce",
+      "section_comment": "x402"
     },
     {
       "name": "x402_replay_risk_observed",
       "family": "x402",
-      "consent_purpose": "agent",
-      "section_comment": "x402 protocol observation family (from external observer perspective)"
+      "consent_purpose": "commerce",
+      "section_comment": "x402"
     },
     {
       "name": "x402_provider_observed",
       "family": "x402",
-      "consent_purpose": "agent",
-      "section_comment": "x402 protocol observation family (from external observer perspective)"
+      "consent_purpose": "commerce",
+      "section_comment": "x402"
+    },
+    {
+      "name": "content_impression",
+      "family": "exposure",
+      "consent_purpose": "analytics",
+      "section_comment": "exposure"
+    },
+    {
+      "name": "recommendation_exposed",
+      "family": "exposure",
+      "consent_purpose": "analytics",
+      "section_comment": "exposure"
+    },
+    {
+      "name": "offer_exposed",
+      "family": "exposure",
+      "consent_purpose": "analytics",
+      "section_comment": "exposure"
+    },
+    {
+      "name": "feature_exposed",
+      "family": "exposure",
+      "consent_purpose": "analytics",
+      "section_comment": "exposure"
+    },
+    {
+      "name": "search_result_exposed",
+      "family": "exposure",
+      "consent_purpose": "analytics",
+      "section_comment": "exposure"
+    },
+    {
+      "name": "ad_exposed",
+      "family": "exposure",
+      "consent_purpose": "marketing",
+      "section_comment": "exposure"
+    },
+    {
+      "name": "notification_presented",
+      "family": "exposure",
+      "consent_purpose": "analytics",
+      "section_comment": "exposure"
+    },
+    {
+      "name": "decision_observed",
+      "family": "exposure",
+      "consent_purpose": "analytics",
+      "section_comment": "exposure"
+    },
+    {
+      "name": "outcome_observed",
+      "family": "outcome",
+      "consent_purpose": "analytics",
+      "section_comment": "outcome"
+    },
+    {
+      "name": "goal_achieved",
+      "family": "outcome",
+      "consent_purpose": "analytics",
+      "section_comment": "outcome"
+    },
+    {
+      "name": "goal_failed",
+      "family": "outcome",
+      "consent_purpose": "analytics",
+      "section_comment": "outcome"
+    },
+    {
+      "name": "recommendation_accepted",
+      "family": "outcome",
+      "consent_purpose": "analytics",
+      "section_comment": "outcome"
+    },
+    {
+      "name": "recommendation_rejected",
+      "family": "outcome",
+      "consent_purpose": "analytics",
+      "section_comment": "outcome"
+    },
+    {
+      "name": "feedback_submitted",
+      "family": "outcome",
+      "consent_purpose": "analytics",
+      "section_comment": "outcome"
+    },
+    {
+      "name": "retention_observed",
+      "family": "outcome",
+      "consent_purpose": "analytics",
+      "section_comment": "outcome"
+    },
+    {
+      "name": "churn_observed",
+      "family": "outcome",
+      "consent_purpose": "analytics",
+      "section_comment": "outcome"
+    },
+    {
+      "name": "human_override_observed",
+      "family": "outcome",
+      "consent_purpose": "analytics",
+      "section_comment": "outcome"
+    },
+    {
+      "name": "organization_observed",
+      "family": "b2b",
+      "consent_purpose": "analytics",
+      "section_comment": "b2b"
+    },
+    {
+      "name": "workspace_created",
+      "family": "b2b",
+      "consent_purpose": "analytics",
+      "section_comment": "b2b"
+    },
+    {
+      "name": "workspace_updated",
+      "family": "b2b",
+      "consent_purpose": "analytics",
+      "section_comment": "b2b"
+    },
+    {
+      "name": "member_invited",
+      "family": "b2b",
+      "consent_purpose": "analytics",
+      "section_comment": "b2b"
+    },
+    {
+      "name": "member_joined",
+      "family": "b2b",
+      "consent_purpose": "analytics",
+      "section_comment": "b2b"
+    },
+    {
+      "name": "member_removed",
+      "family": "b2b",
+      "consent_purpose": "analytics",
+      "section_comment": "b2b"
+    },
+    {
+      "name": "role_changed",
+      "family": "b2b",
+      "consent_purpose": "analytics",
+      "section_comment": "b2b"
+    },
+    {
+      "name": "seat_assigned",
+      "family": "b2b",
+      "consent_purpose": "analytics",
+      "section_comment": "b2b"
+    },
+    {
+      "name": "seat_released",
+      "family": "b2b",
+      "consent_purpose": "analytics",
+      "section_comment": "b2b"
+    },
+    {
+      "name": "integration_connected",
+      "family": "b2b",
+      "consent_purpose": "analytics",
+      "section_comment": "b2b"
+    },
+    {
+      "name": "integration_disconnected",
+      "family": "b2b",
+      "consent_purpose": "analytics",
+      "section_comment": "b2b"
+    },
+    {
+      "name": "service_account_created",
+      "family": "b2b",
+      "consent_purpose": "analytics",
+      "section_comment": "b2b"
+    },
+    {
+      "name": "service_account_revoked",
+      "family": "b2b",
+      "consent_purpose": "analytics",
+      "section_comment": "b2b"
+    },
+    {
+      "name": "api_key_created",
+      "family": "b2b",
+      "consent_purpose": "analytics",
+      "section_comment": "b2b"
+    },
+    {
+      "name": "api_key_revoked",
+      "family": "b2b",
+      "consent_purpose": "analytics",
+      "section_comment": "b2b"
+    },
+    {
+      "name": "project_created",
+      "family": "b2b",
+      "consent_purpose": "analytics",
+      "section_comment": "b2b"
+    },
+    {
+      "name": "project_archived",
+      "family": "b2b",
+      "consent_purpose": "analytics",
+      "section_comment": "b2b"
+    },
+    {
+      "name": "workflow_started",
+      "family": "b2b",
+      "consent_purpose": "analytics",
+      "section_comment": "b2b"
+    },
+    {
+      "name": "workflow_completed",
+      "family": "b2b",
+      "consent_purpose": "analytics",
+      "section_comment": "b2b"
+    },
+    {
+      "name": "workflow_failed",
+      "family": "b2b",
+      "consent_purpose": "analytics",
+      "section_comment": "b2b"
+    },
+    {
+      "name": "product_viewed",
+      "family": "ecommerce",
+      "consent_purpose": "commerce",
+      "section_comment": "ecommerce"
+    },
+    {
+      "name": "cart_item_added",
+      "family": "ecommerce",
+      "consent_purpose": "commerce",
+      "section_comment": "ecommerce"
+    },
+    {
+      "name": "cart_item_removed",
+      "family": "ecommerce",
+      "consent_purpose": "commerce",
+      "section_comment": "ecommerce"
+    },
+    {
+      "name": "cart_updated",
+      "family": "ecommerce",
+      "consent_purpose": "commerce",
+      "section_comment": "ecommerce"
+    },
+    {
+      "name": "coupon_applied",
+      "family": "ecommerce",
+      "consent_purpose": "commerce",
+      "section_comment": "ecommerce"
+    },
+    {
+      "name": "checkout_started",
+      "family": "ecommerce",
+      "consent_purpose": "commerce",
+      "section_comment": "ecommerce"
+    },
+    {
+      "name": "checkout_step_completed",
+      "family": "ecommerce",
+      "consent_purpose": "commerce",
+      "section_comment": "ecommerce"
+    },
+    {
+      "name": "order_completed",
+      "family": "ecommerce",
+      "consent_purpose": "commerce",
+      "section_comment": "ecommerce"
+    },
+    {
+      "name": "order_cancelled",
+      "family": "ecommerce",
+      "consent_purpose": "commerce",
+      "section_comment": "ecommerce"
+    },
+    {
+      "name": "order_refunded",
+      "family": "ecommerce",
+      "consent_purpose": "commerce",
+      "section_comment": "ecommerce"
+    },
+    {
+      "name": "chargeback_observed",
+      "family": "ecommerce",
+      "consent_purpose": "commerce",
+      "section_comment": "ecommerce"
+    },
+    {
+      "name": "subscription_started",
+      "family": "ecommerce",
+      "consent_purpose": "commerce",
+      "section_comment": "ecommerce"
+    },
+    {
+      "name": "trial_started",
+      "family": "ecommerce",
+      "consent_purpose": "commerce",
+      "section_comment": "ecommerce"
+    },
+    {
+      "name": "trial_converted",
+      "family": "ecommerce",
+      "consent_purpose": "commerce",
+      "section_comment": "ecommerce"
+    },
+    {
+      "name": "subscription_renewed",
+      "family": "ecommerce",
+      "consent_purpose": "commerce",
+      "section_comment": "ecommerce"
+    },
+    {
+      "name": "subscription_upgrade_observed",
+      "family": "ecommerce",
+      "consent_purpose": "commerce",
+      "section_comment": "ecommerce"
+    },
+    {
+      "name": "subscription_downgrade_observed",
+      "family": "ecommerce",
+      "consent_purpose": "commerce",
+      "section_comment": "ecommerce"
+    },
+    {
+      "name": "subscription_cancelled",
+      "family": "ecommerce",
+      "consent_purpose": "commerce",
+      "section_comment": "ecommerce"
+    },
+    {
+      "name": "invoice_issued",
+      "family": "ecommerce",
+      "consent_purpose": "commerce",
+      "section_comment": "ecommerce"
+    },
+    {
+      "name": "invoice_paid",
+      "family": "ecommerce",
+      "consent_purpose": "commerce",
+      "section_comment": "ecommerce"
+    },
+    {
+      "name": "invoice_failed",
+      "family": "ecommerce",
+      "consent_purpose": "commerce",
+      "section_comment": "ecommerce"
+    },
+    {
+      "name": "dunning_started",
+      "family": "ecommerce",
+      "consent_purpose": "commerce",
+      "section_comment": "ecommerce"
+    },
+    {
+      "name": "dunning_resolved",
+      "family": "ecommerce",
+      "consent_purpose": "commerce",
+      "section_comment": "ecommerce"
+    },
+    {
+      "name": "dead_click_observed",
+      "family": "friction",
+      "consent_purpose": "analytics",
+      "section_comment": "friction"
+    },
+    {
+      "name": "rage_click_observed",
+      "family": "friction",
+      "consent_purpose": "analytics",
+      "section_comment": "friction"
+    },
+    {
+      "name": "scroll_depth_observed",
+      "family": "friction",
+      "consent_purpose": "analytics",
+      "section_comment": "friction"
+    },
+    {
+      "name": "form_started",
+      "family": "friction",
+      "consent_purpose": "analytics",
+      "section_comment": "friction"
+    },
+    {
+      "name": "form_field_interaction",
+      "family": "friction",
+      "consent_purpose": "analytics",
+      "section_comment": "friction"
+    },
+    {
+      "name": "form_validation_failed",
+      "family": "friction",
+      "consent_purpose": "analytics",
+      "section_comment": "friction"
+    },
+    {
+      "name": "form_submitted",
+      "family": "friction",
+      "consent_purpose": "analytics",
+      "section_comment": "friction"
+    },
+    {
+      "name": "form_abandoned",
+      "family": "friction",
+      "consent_purpose": "analytics",
+      "section_comment": "friction"
+    },
+    {
+      "name": "search_reformulated",
+      "family": "friction",
+      "consent_purpose": "analytics",
+      "section_comment": "friction"
+    },
+    {
+      "name": "retry_observed",
+      "family": "friction",
+      "consent_purpose": "analytics",
+      "section_comment": "friction"
+    },
+    {
+      "name": "journey_stalled",
+      "family": "friction",
+      "consent_purpose": "analytics",
+      "section_comment": "friction"
+    },
+    {
+      "name": "backtrack_observed",
+      "family": "friction",
+      "consent_purpose": "analytics",
+      "section_comment": "friction"
+    },
+    {
+      "name": "api_request_observed",
+      "family": "server",
+      "consent_purpose": "analytics",
+      "section_comment": "server"
+    },
+    {
+      "name": "webhook_delivery_observed",
+      "family": "server",
+      "consent_purpose": "analytics",
+      "section_comment": "server"
+    },
+    {
+      "name": "connector_sync_started",
+      "family": "server",
+      "consent_purpose": "analytics",
+      "section_comment": "server"
+    },
+    {
+      "name": "connector_sync_completed",
+      "family": "server",
+      "consent_purpose": "analytics",
+      "section_comment": "server"
+    },
+    {
+      "name": "connector_sync_failed",
+      "family": "server",
+      "consent_purpose": "analytics",
+      "section_comment": "server"
+    },
+    {
+      "name": "job_started",
+      "family": "server",
+      "consent_purpose": "analytics",
+      "section_comment": "server"
+    },
+    {
+      "name": "job_completed",
+      "family": "server",
+      "consent_purpose": "analytics",
+      "section_comment": "server"
+    },
+    {
+      "name": "job_failed",
+      "family": "server",
+      "consent_purpose": "analytics",
+      "section_comment": "server"
+    },
+    {
+      "name": "rate_limit_observed",
+      "family": "server",
+      "consent_purpose": "analytics",
+      "section_comment": "server"
+    },
+    {
+      "name": "dependency_failure_observed",
+      "family": "server",
+      "consent_purpose": "analytics",
+      "section_comment": "server"
+    },
+    {
+      "name": "export_completed",
+      "family": "server",
+      "consent_purpose": "analytics",
+      "section_comment": "server"
+    },
+    {
+      "name": "signup_started",
+      "family": "identity_lc",
+      "consent_purpose": "analytics",
+      "section_comment": "identity_lc"
+    },
+    {
+      "name": "signup_completed",
+      "family": "identity_lc",
+      "consent_purpose": "analytics",
+      "section_comment": "identity_lc"
+    },
+    {
+      "name": "login_succeeded",
+      "family": "identity_lc",
+      "consent_purpose": "analytics",
+      "section_comment": "identity_lc"
+    },
+    {
+      "name": "login_failed",
+      "family": "identity_lc",
+      "consent_purpose": "analytics",
+      "section_comment": "identity_lc"
+    },
+    {
+      "name": "logout_observed",
+      "family": "identity_lc",
+      "consent_purpose": "analytics",
+      "section_comment": "identity_lc"
+    },
+    {
+      "name": "sso_observed",
+      "family": "identity_lc",
+      "consent_purpose": "analytics",
+      "section_comment": "identity_lc"
+    },
+    {
+      "name": "mfa_challenge_observed",
+      "family": "identity_lc",
+      "consent_purpose": "analytics",
+      "section_comment": "identity_lc"
+    },
+    {
+      "name": "identity_verified",
+      "family": "identity_lc",
+      "consent_purpose": "analytics",
+      "section_comment": "identity_lc"
+    },
+    {
+      "name": "alias_link_requested",
+      "family": "identity_lc",
+      "consent_purpose": "analytics",
+      "section_comment": "identity_lc"
+    },
+    {
+      "name": "alias_link_confirmed",
+      "family": "identity_lc",
+      "consent_purpose": "analytics",
+      "section_comment": "identity_lc"
+    },
+    {
+      "name": "alias_revoked",
+      "family": "identity_lc",
+      "consent_purpose": "analytics",
+      "section_comment": "identity_lc"
+    },
+    {
+      "name": "account_recovery_started",
+      "family": "identity_lc",
+      "consent_purpose": "analytics",
+      "section_comment": "identity_lc"
+    },
+    {
+      "name": "account_recovery_completed",
+      "family": "identity_lc",
+      "consent_purpose": "analytics",
+      "section_comment": "identity_lc"
+    },
+    {
+      "name": "device_registered",
+      "family": "identity_lc",
+      "consent_purpose": "analytics",
+      "section_comment": "identity_lc"
+    },
+    {
+      "name": "device_revoked",
+      "family": "identity_lc",
+      "consent_purpose": "analytics",
+      "section_comment": "identity_lc"
+    },
+    {
+      "name": "transaction_pending_observed",
+      "family": "web3_lc",
+      "consent_purpose": "web3",
+      "section_comment": "web3_lc"
+    },
+    {
+      "name": "transaction_confirmed_observed",
+      "family": "web3_lc",
+      "consent_purpose": "web3",
+      "section_comment": "web3_lc"
+    },
+    {
+      "name": "transaction_reverted_observed",
+      "family": "web3_lc",
+      "consent_purpose": "web3",
+      "section_comment": "web3_lc"
+    },
+    {
+      "name": "transaction_reorged_observed",
+      "family": "web3_lc",
+      "consent_purpose": "web3",
+      "section_comment": "web3_lc"
+    },
+    {
+      "name": "token_approval_observed",
+      "family": "web3_lc",
+      "consent_purpose": "web3",
+      "section_comment": "web3_lc"
+    },
+    {
+      "name": "allowance_changed_observed",
+      "family": "web3_lc",
+      "consent_purpose": "web3",
+      "section_comment": "web3_lc"
+    },
+    {
+      "name": "bridge_transfer_observed",
+      "family": "web3_lc",
+      "consent_purpose": "web3",
+      "section_comment": "web3_lc"
+    },
+    {
+      "name": "settlement_finality_observed",
+      "family": "web3_lc",
+      "consent_purpose": "web3",
+      "section_comment": "web3_lc"
+    },
+    {
+      "name": "notification_delivered",
+      "family": "comms",
+      "consent_purpose": "analytics",
+      "section_comment": "comms"
+    },
+    {
+      "name": "notification_opened",
+      "family": "comms",
+      "consent_purpose": "analytics",
+      "section_comment": "comms"
+    },
+    {
+      "name": "notification_clicked",
+      "family": "comms",
+      "consent_purpose": "analytics",
+      "section_comment": "comms"
+    },
+    {
+      "name": "email_delivered",
+      "family": "comms",
+      "consent_purpose": "marketing",
+      "section_comment": "comms"
+    },
+    {
+      "name": "email_opened",
+      "family": "comms",
+      "consent_purpose": "marketing",
+      "section_comment": "comms"
+    },
+    {
+      "name": "email_clicked",
+      "family": "comms",
+      "consent_purpose": "marketing",
+      "section_comment": "comms"
+    },
+    {
+      "name": "email_bounced",
+      "family": "comms",
+      "consent_purpose": "marketing",
+      "section_comment": "comms"
+    },
+    {
+      "name": "message_received_observed",
+      "family": "comms",
+      "consent_purpose": "analytics",
+      "section_comment": "comms"
+    },
+    {
+      "name": "message_sent_observed",
+      "family": "comms",
+      "consent_purpose": "analytics",
+      "section_comment": "comms"
+    },
+    {
+      "name": "message_replied_observed",
+      "family": "comms",
+      "consent_purpose": "analytics",
+      "section_comment": "comms"
+    },
+    {
+      "name": "unsubscribe_observed",
+      "family": "comms",
+      "consent_purpose": "marketing",
+      "section_comment": "comms"
+    },
+    {
+      "name": "support_case_created",
+      "family": "comms",
+      "consent_purpose": "analytics",
+      "section_comment": "comms"
+    },
+    {
+      "name": "support_case_resolved",
+      "family": "comms",
+      "consent_purpose": "analytics",
+      "section_comment": "comms"
+    },
+    {
+      "name": "support_case_escalated",
+      "family": "comms",
+      "consent_purpose": "analytics",
+      "section_comment": "comms"
+    },
+    {
+      "name": "support_sla_breached",
+      "family": "comms",
+      "consent_purpose": "analytics",
+      "section_comment": "comms"
+    },
+    {
+      "name": "credit_signal_observed",
+      "family": "credit",
+      "consent_purpose": "credit",
+      "section_comment": "credit"
+    },
+    {
+      "name": "credit_account_observed",
+      "family": "credit",
+      "consent_purpose": "credit",
+      "section_comment": "credit"
+    },
+    {
+      "name": "credit_decision_observed",
+      "family": "credit",
+      "consent_purpose": "credit",
+      "section_comment": "credit"
+    },
+    {
+      "name": "location_observed",
+      "family": "location",
+      "consent_purpose": "location",
+      "section_comment": "location"
+    },
+    {
+      "name": "geofence_transition_observed",
+      "family": "location",
+      "consent_purpose": "location",
+      "section_comment": "location"
     }
   ]
 }

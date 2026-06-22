@@ -271,7 +271,13 @@ graph-docs-check: ## Docs drift check scoped to graph source files
 # Production status & release gate
 # ---------------------------------------------------------------------------
 
-validate-schema-parity: ## Check TypeScript EventType registry matches Python CANONICAL_EVENT_TYPES
+generate-contracts: ## Regenerate all contract artifacts from JSON canonical registries
+	python scripts/generate_contracts.py
+
+generate-contracts-check: ## CI gate — exits 1 if generated contract artifacts differ from committed
+	python scripts/generate_contracts.py --check
+
+validate-schema-parity: ## Check event-registry.json, TS, and Python are in parity
 	python scripts/validate_event_schema_parity.py
 
 validate-meter-names: ## Check metrics.increment() names in ingestion/connector paths are canonical

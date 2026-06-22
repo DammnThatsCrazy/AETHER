@@ -42,5 +42,11 @@ jobs:
       - name: Install Node dependencies
         run: npm ci --ignore-scripts
 
+      - name: Contract generator parity check
+        run: make generate-contracts-check
+
+      - name: Event registry schema parity check
+        run: make validate-schema-parity
+
       - name: Run repo consistency checks
         run: make ci-check
