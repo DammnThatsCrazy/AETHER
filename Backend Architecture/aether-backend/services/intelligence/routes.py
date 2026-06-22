@@ -1552,3 +1552,231 @@ def _lifecycle_stage(requirement, authorization, receipt, settlement, entitlemen
     if requirement:
         return "challenged"
     return "unknown"
+
+
+# ── Gold Intelligence Extensions ──────────────────────────────────────────────
+# Each endpoint aggregates Silver fact tables into tenant-scoped intelligence
+# metrics. All accept ?window=30d|60d|90d|lifetime (default 30d).
+# Degrade gracefully to empty metrics when Silver data is absent.
+
+_WINDOW_DAYS = {"30d": 30, "60d": 60, "90d": 90, "lifetime": 36500}
+
+
+def _window_days(window: str) -> int:
+    return _WINDOW_DAYS.get(window, 30)
+
+
+async def _query_silver(table: str, tenant_id: str, entity_id: str | None, limit: int = 500) -> list[dict]:
+    try:
+        from repositories.repos import AnalyticsRepository
+        repo = AnalyticsRepository()
+        filters: dict = {"tenant_id": tenant_id}
+        if entity_id:
+            filters["user_id"] = entity_id
+        return await repo.query_silver(table, filters, limit=limit)
+    except Exception:
+        return []
+
+
+@router.get("/account-health")
+async def get_account_health(
+    request: Request,
+    entity_id: str | None = None,
+    window: str = "30d",
+):
+    """Account health score with activation, adoption, seat utilization, and churn signals."""
+    tenant = request.state.tenant
+    tenant.require_permission("read")
+    tenant_id = tenant.tenant_id
+
+    from services.intelligence.customer_success import (
+        CustomerSuccessService,
+        CustomerSuccessAccountRepository,
+    )
+
+    try:
+        repo = CustomerSuccessAccountRepository()
+        account = await repo.get_for_tenant(tenant_id, entity_id=entity_id)
+        health = {
+            "health_score": account.get("health_score", 0.0),
+            "lifecycle_stage": account.get("lifecycle_stage", "unknown"),
+            "expansion_score": account.get("expansion_score", 0.0),
+            "renewal_risk_score": account.get("renewal_risk_score", 0.0),
+            "activation_score": account.get("activation_score"),
+            "adoption_depth": account.get("adoption_depth"),
+            "seat_utilization": account.get("seat_utilization"),
+            "churn_likelihood": account.get("churn_likelihood"),
+        }
+    except Exception:
+        health = {}
+
+    activity = await _query_silver("silver_account_activity_facts", tenant_id, entity_id, limit=200)
+    health["activity_count_in_window"] = len(activity)
+    health["window"] = window
+
+    metrics.increment("intelligence_account_health")
+    return APIResponse(data={"tenant_id": tenant_id, "entity_id": entity_id, "metrics": health}).to_dict()
+
+
+@router.get("/revenue-intelligence")
+async def get_revenue_intelligence(
+    request: Request,
+    entity_id: str | None = None,
+    window: str = "30d",
+):
+    """GMV, MRR, ARR, NRR, churn, and expansion metrics from Silver revenue facts."""
+    tenant = request.state.tenant
+    tenant.require_permission("read")
+    tenant_id = tenant.tenant_id
+
+    rows = await _query_silver("silver_revenue_facts", tenant_id, entity_id)
+
+    gmv = sum(float(r.get("amount", 0) or 0) for r in rows if r.get("revenue_type") in (None, "order"))
+    mrr = sum(float(r.get("mrr_delta", 0) or 0) for r in rows)
+    arr = mrr * 12
+    expansion = sum(float(r.get("amount", 0) or 0) for r in rows if r.get("revenue_type") == "expansion")
+    churn_count = sum(1 for r in rows if r.get("revenue_type") == "churn")
+    total = len(rows)
+
+    metrics.increment("intelligence_revenue")
+    return APIResponse(data={
+        "tenant_id": tenant_id, "entity_id": entity_id, "window": window,
+        "metrics": {
+            "gmv": gmv, "mrr": mrr, "arr": arr,
+            "expansion_revenue": expansion,
+            "churn_events": churn_count,
+            "nrr": (1 - churn_count / max(total, 1)) * 100,
+            "record_count": total,
+        },
+    }).to_dict()
+
+
+@router.get("/experience-intelligence")
+async def get_experience_intelligence(
+    request: Request,
+    entity_id: str | None = None,
+    window: str = "30d",
+):
+    """Journey completion, friction score, and dead/rage click hotspots from Silver friction facts."""
+    tenant = request.state.tenant
+    tenant.require_permission("read")
+    tenant_id = tenant.tenant_id
+
+    rows = await _query_silver("silver_friction_facts", tenant_id, entity_id)
+    payload = rows[0].get("payload", {}) if rows else {}
+
+    dead_clicks = sum(int((r.get("payload") or {}).get("dead_click_count", 0)) for r in rows)
+    rage_clicks = sum(int((r.get("payload") or {}).get("rage_click_count", 0)) for r in rows)
+    form_abandons = sum(1 for r in rows if (r.get("payload") or {}).get("form_abandoned"))
+    total = len(rows)
+    friction_score = min(1.0, (dead_clicks + rage_clicks * 2 + form_abandons * 3) / max(total * 10, 1))
+
+    metrics.increment("intelligence_experience")
+    return APIResponse(data={
+        "tenant_id": tenant_id, "entity_id": entity_id, "window": window,
+        "metrics": {
+            "friction_score": round(friction_score, 4),
+            "dead_click_count": dead_clicks,
+            "rage_click_count": rage_clicks,
+            "form_abandon_count": form_abandons,
+            "friction_event_count": total,
+        },
+    }).to_dict()
+
+
+@router.get("/exposure-intelligence")
+async def get_exposure_intelligence(
+    request: Request,
+    entity_id: str | None = None,
+    window: str = "30d",
+):
+    """Exposure-to-action rate and recommendation acceptance from Silver exposure facts."""
+    tenant = request.state.tenant
+    tenant.require_permission("read")
+    tenant_id = tenant.tenant_id
+
+    rows = await _query_silver("silver_exposure_facts", tenant_id, entity_id)
+    total = len(rows)
+    accepted = sum(1 for r in rows if (r.get("payload") or {}).get("accepted"))
+    rejected = sum(1 for r in rows if (r.get("payload") or {}).get("rejected"))
+    action_taken = sum(1 for r in rows if (r.get("payload") or {}).get("action_taken"))
+
+    metrics.increment("intelligence_exposure")
+    return APIResponse(data={
+        "tenant_id": tenant_id, "entity_id": entity_id, "window": window,
+        "metrics": {
+            "exposure_count": total,
+            "accepted_count": accepted,
+            "rejected_count": rejected,
+            "action_taken_count": action_taken,
+            "acceptance_rate": round(accepted / max(total, 1), 4),
+            "exposure_to_action_rate": round(action_taken / max(total, 1), 4),
+        },
+    }).to_dict()
+
+
+@router.get("/agent-intelligence")
+async def get_agent_intelligence(
+    request: Request,
+    entity_id: str | None = None,
+    window: str = "30d",
+):
+    """Cost per outcome, reliability rate, escalation rate, and human override rate from Silver agent facts."""
+    tenant = request.state.tenant
+    tenant.require_permission("read")
+    tenant_id = tenant.tenant_id
+
+    rows = await _query_silver("silver_agent_execution_facts", tenant_id, entity_id)
+    total = len(rows)
+    succeeded = sum(1 for r in rows if (r.get("payload") or {}).get("outcome") == "success")
+    escalated = sum(1 for r in rows if (r.get("payload") or {}).get("escalated"))
+    overridden = sum(1 for r in rows if (r.get("payload") or {}).get("human_override"))
+    total_cost = sum(float((r.get("payload") or {}).get("cost_usd", 0) or 0) for r in rows)
+    outcome_count = max(succeeded, 1)
+
+    metrics.increment("intelligence_agent")
+    return APIResponse(data={
+        "tenant_id": tenant_id, "entity_id": entity_id, "window": window,
+        "metrics": {
+            "execution_count": total,
+            "reliability_rate": round(succeeded / max(total, 1), 4),
+            "escalation_rate": round(escalated / max(total, 1), 4),
+            "human_override_rate": round(overridden / max(total, 1), 4),
+            "total_cost_usd": round(total_cost, 4),
+            "cost_per_outcome_usd": round(total_cost / outcome_count, 4),
+        },
+    }).to_dict()
+
+
+@router.get("/integration-intelligence")
+async def get_integration_intelligence(
+    request: Request,
+    entity_id: str | None = None,
+    window: str = "30d",
+):
+    """Integration health: adoption, failure rate, and latency from Silver server operation facts."""
+    tenant = request.state.tenant
+    tenant.require_permission("read")
+    tenant_id = tenant.tenant_id
+
+    rows = await _query_silver("silver_server_operation_facts", tenant_id, entity_id)
+    total = len(rows)
+    failed = sum(1 for r in rows if (r.get("payload") or {}).get("status") in ("failed", "error"))
+    latencies = [
+        float((r.get("payload") or {}).get("duration_ms", 0) or 0)
+        for r in rows
+        if (r.get("payload") or {}).get("duration_ms") is not None
+    ]
+    avg_latency = sum(latencies) / max(len(latencies), 1)
+
+    metrics.increment("intelligence_integration")
+    return APIResponse(data={
+        "tenant_id": tenant_id, "entity_id": entity_id, "window": window,
+        "metrics": {
+            "operation_count": total,
+            "failure_count": failed,
+            "failure_rate": round(failed / max(total, 1), 4),
+            "avg_latency_ms": round(avg_latency, 2),
+            "integrations_active": len({(r.get("payload") or {}).get("integration_id") for r in rows if r.get("payload")} - {None}),
+        },
+    }).to_dict()

@@ -253,6 +253,18 @@ CANONICAL_EVENT_TYPES: frozenset[str] = frozenset({
     "geofence_transition_observed",
 })
 
+# Canonical consent purposes — generated from consent-registry.json.
+CONSENT_PURPOSES: frozenset[str] = frozenset({
+    "agent",
+    "analytics",
+    "commerce",
+    "credit",
+    "location",
+    "marketing",
+    "personalization",
+    "web3",
+})
+
 # Primary required consent purpose per event type.
 # Events with no required purposes (e.g. 'consent') map to 'analytics'.
 EVENT_CONSENT_PURPOSE: dict[str, str] = {

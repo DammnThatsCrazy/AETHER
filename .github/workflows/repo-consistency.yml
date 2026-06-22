@@ -48,5 +48,8 @@ jobs:
       - name: Event registry schema parity check
         run: make validate-schema-parity
 
+      - name: Consent registry parity check
+        run: python scripts/validate_consent_schema_parity.py
+
       - name: Run repo consistency checks
         run: make ci-check

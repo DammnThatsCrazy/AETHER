@@ -234,6 +234,8 @@ export const api = {
       restClient.get(`/v1/profile/${userId}/quality`, wrap(unknownSchema)).then(r => r.data),
     dataFreshness: (userId: string) =>
       restClient.get(`/v1/profile/${userId}/data-freshness`, wrap(unknownSchema)).then(r => r.data),
+    dataQuality: (entityId: string) =>
+      restClient.get(`/v1/profile/${entityId}/data-quality`, wrap(unknownSchema)).then(r => r.data),
   },
 
   // ── Profile360 normalized surfaces ─────────────────────────────────────────
@@ -640,6 +642,15 @@ export const api = {
 
     downloadAuditExport: (exportId: string) =>
       restClient.get(`/v1/intelligence/audit-exports/${exportId}/download`, wrap(unknownSchema)).then(r => r.data),
+
+    accountHealth: (entityId?: string, params?: { window?: string }) =>
+      restClient.get(`/v1/intelligence/account-health${buildQS({ entity_id: entityId, ...params })}`, wrap(unknownSchema)).then(r => r.data),
+
+    revenueIntelligence: (entityId?: string, params?: { window?: string }) =>
+      restClient.get(`/v1/intelligence/revenue-intelligence${buildQS({ entity_id: entityId, ...params })}`, wrap(unknownSchema)).then(r => r.data),
+
+    experienceIntelligence: (entityId?: string, params?: { window?: string }) =>
+      restClient.get(`/v1/intelligence/experience-intelligence${buildQS({ entity_id: entityId, ...params })}`, wrap(unknownSchema)).then(r => r.data),
   },
 
   // ── Analytics ─────────────────────────────────────────────────────────────

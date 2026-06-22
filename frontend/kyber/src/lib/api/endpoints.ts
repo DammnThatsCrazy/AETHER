@@ -781,6 +781,22 @@ export const api = {
 
     completeDsr: (requestId: string, notes?: string) =>
       restClient.post(`/v1/consent/dsr/${requestId}/complete`, wrap(unknownSchema), { notes }),
+
+    getRecords: (userId: string) =>
+      restClient.get(`/v1/consent/records/${encodeURIComponent(userId)}`, wrap(z.object({
+        user_id: z.string(),
+        purposes: z.array(z.string()),
+        granted: z.boolean().optional(),
+        source: z.string().optional(),
+        snapshot_id: z.string().optional().nullable(),
+        mode: z.string().optional().nullable(),
+        jurisdiction: z.string().optional().nullable(),
+        gpc_observed: z.boolean().optional().nullable(),
+        dnt_observed: z.boolean().optional().nullable(),
+      }).passthrough())).then(r => r.data),
+
+    retentionManifest: () =>
+      restClient.get('/v1/consent/retention-manifest', wrap(unknownSchema)).then(r => r.data),
   },
 
   // ── Rewards ────────────────────────────────────────────────────────────────
@@ -1903,6 +1919,9 @@ export const api = {
 
     rolloutStatus: () =>
       restClient.get('/v1/config/sdk/rollout', wrap(unknownSchema)).then(r => r.data),
+
+    pipelineLag: () =>
+      restClient.get('/v1/health/pipeline', wrap(unknownSchema)).then(r => r.data),
   },
 };
 

@@ -273,7 +273,7 @@ def update_events_ts(event_reg: dict, current: str) -> str:
 # generated_registry.py generator
 # ---------------------------------------------------------------------------
 
-def gen_python_registry(event_reg: dict) -> str:
+def gen_python_registry(event_reg: dict, consent_reg: dict) -> str:
     events = event_reg["events"]
     version = event_reg["contractVersion"]
 
@@ -288,6 +288,9 @@ def gen_python_registry(event_reg: dict) -> str:
 
     family_lines = "\n".join(f'    "{e["type"]}": "{e["family"]}",' for e in events)
 
+    purpose_keys = sorted(p["key"] for p in consent_reg.get("purposes", []))
+    purpose_lines = ",\n".join(f'    "{k}"' for k in purpose_keys)
+
     return (
         f"{GENERATED_PY_HEADER}"
         f"# Contract version: {version}\n"
@@ -295,6 +298,11 @@ def gen_python_registry(event_reg: dict) -> str:
         f'CANONICAL_EVENT_TYPES: frozenset[str] = frozenset({{\n'
         f'{type_lines},\n'
         f'}})\n'
+        f"\n"
+        f"# Canonical consent purposes — generated from consent-registry.json.\n"
+        f"CONSENT_PURPOSES: frozenset[str] = frozenset({{\n"
+        f"{purpose_lines},\n"
+        f"}})\n"
         f"\n"
         f"# Primary required consent purpose per event type.\n"
         f"# Events with no required purposes (e.g. 'consent') map to 'analytics'.\n"
@@ -420,7 +428,7 @@ def main() -> int:
 
     _apply(CONSENT_TS, gen_consent_ts(consent_reg), args.check, diffs)
     _apply_events_ts(event_reg, args.check, diffs)
-    _apply(GENERATED_REGISTRY_PY, gen_python_registry(event_reg), args.check, diffs)
+    _apply(GENERATED_REGISTRY_PY, gen_python_registry(event_reg, consent_reg), args.check, diffs)
     _apply(EVENT_TABLE_MD, gen_event_table_md(event_reg), args.check, diffs)
     _apply(CONSENT_TABLE_MD, gen_consent_table_md(consent_reg), args.check, diffs)
 

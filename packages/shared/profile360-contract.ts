@@ -243,6 +243,22 @@ export interface Profile360SubResources {
   readonly exchange_profile?: ExchangeProfile;
   /** Yield platform: TVL, APY, depositors (staking or savings or robo-advisor) */
   readonly yield_platform_profile?: YieldPlatformProfile;
+
+  // ── Silver-backed dimensions (v8.10.0+) ────────────────────────────────────
+  /** Content and recommendation exposure facts from silver_exposure_facts */
+  readonly exposures?: ExposuresResponse;
+  /** Revenue and subscription facts from silver_revenue_facts */
+  readonly silver_revenue?: SilverRevenueResponse;
+  /** UX friction observations from silver_friction_facts */
+  readonly silver_friction?: SilverFrictionResponse;
+  /** B2B account activity facts from silver_account_activity_facts */
+  readonly accounts?: SilverAccountsResponse;
+  /** Notification/email/message delivery facts from silver_comms_facts */
+  readonly communications?: SilverCommunicationsResponse;
+  /** Integration and server operation facts from silver_server_operation_facts */
+  readonly integrations?: SilverIntegrationsResponse;
+  /** Data quality and schema completeness from silver_data_quality_facts */
+  readonly data_quality?: DataQualityResponse;
 }
 
 // ── Canonical response ────────────────────────────────────────────────────────
@@ -362,3 +378,22 @@ export interface LakeResponse {
   readonly records: unknown[];
   readonly count: number;
 }
+
+// ── Silver-backed sub-resource types (v8.10.0+) ──────────────────────────────
+
+/** Wire format returned by all Silver-backed /v1/profile/{id}/<dim> endpoints. */
+export interface SilverFactsEnvelope {
+  readonly entity_id: string;
+  readonly items: unknown[];
+  readonly count: number;
+  readonly source: 'silver';
+  readonly source_status: 'available' | 'empty';
+}
+
+export type ExposuresResponse = SilverFactsEnvelope;
+export type SilverRevenueResponse = SilverFactsEnvelope;
+export type SilverFrictionResponse = SilverFactsEnvelope;
+export type SilverAccountsResponse = SilverFactsEnvelope;
+export type SilverCommunicationsResponse = SilverFactsEnvelope;
+export type SilverIntegrationsResponse = SilverFactsEnvelope;
+export type DataQualityResponse = SilverFactsEnvelope;
