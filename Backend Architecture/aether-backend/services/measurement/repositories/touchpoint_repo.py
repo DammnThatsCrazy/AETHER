@@ -236,6 +236,52 @@ class TouchpointRepository:
             )
             return dict(row) if row else None
 
+    async def tombstone_for_profile(self, tenant_id: str, profile_id: str) -> int:
+        """Privacy erasure: mark all touchpoints for a profile as deleted.
+
+        Sets privacy_class='deleted' and nulls identity fields. The row is
+        retained for aggregate counts but excluded from attribution and journey
+        compilation. Returns the count of affected rows.
+        """
+        pool = await self._pool()
+        if pool is None:
+            count = 0
+            for row in _local_store.values():
+                if row.get("tenant_id") == tenant_id and (
+                    row.get("profile_id") == profile_id or row.get("anonymous_id") == profile_id
+                ):
+                    row["privacy_class"] = "deleted"
+                    row["profile_id"] = None
+                    row["anonymous_id"] = None
+                    row["cluster_id"] = None
+                    row["account_id"] = None
+                    row["wallet_id"] = None
+                    row["agent_id"] = None
+                    count += 1
+            return count
+
+        async with pool.acquire() as conn:
+            result = await conn.execute(
+                """
+                UPDATE silver_campaign_touchpoint_facts
+                SET privacy_class = 'deleted',
+                    profile_id    = NULL,
+                    anonymous_id  = NULL,
+                    cluster_id    = NULL,
+                    account_id    = NULL,
+                    wallet_id     = NULL,
+                    agent_id      = NULL
+                WHERE tenant_id = $1
+                  AND (profile_id = $2 OR anonymous_id = $2)
+                  AND privacy_class != 'deleted'
+                """,
+                tenant_id, profile_id,
+            )
+        try:
+            return int(result.split()[-1])
+        except Exception:
+            return 0
+
 
 # ── Helpers ──────────────────────────────────────────────────────────────────
 

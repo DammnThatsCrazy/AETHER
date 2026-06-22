@@ -304,6 +304,55 @@ class ConversionRepository:
             rows = await conn.fetch(sql, *params)
             return [dict(r) for r in rows]
 
+    async def tombstone_for_profile(self, tenant_id: str, profile_id: str) -> int:
+        """Privacy erasure: mark all conversions for a profile as attribution-ineligible.
+
+        Sets attribution_eligible=FALSE and nulls identity fields. The conversion
+        record is retained for financial reconciliation but excluded from all
+        attribution runs. Returns the count of affected rows.
+        """
+        pool = await self._pool()
+        if pool is None:
+            count = 0
+            for row in _local_store.values():
+                if row.get("tenant_id") == tenant_id and (
+                    row.get("profile_id") == profile_id
+                    or row.get("cluster_id") == profile_id
+                    or row.get("account_id") == profile_id
+                ):
+                    row["attribution_eligible"] = False
+                    row["profile_id"] = None
+                    row["cluster_id"] = None
+                    row["account_id"] = None
+                    row["wallet_id"] = None
+                    row["agent_id"] = None
+                    row["conversion_status"] = "privacy_tombstoned"
+                    count += 1
+            return count
+
+        async with pool.acquire() as conn:
+            result = await conn.execute(
+                """
+                UPDATE canonical_conversions
+                SET attribution_eligible = FALSE,
+                    profile_id           = NULL,
+                    cluster_id           = NULL,
+                    account_id           = NULL,
+                    wallet_id            = NULL,
+                    agent_id             = NULL,
+                    conversion_status    = 'privacy_tombstoned',
+                    adjusted_at          = now()
+                WHERE tenant_id = $1
+                  AND (profile_id = $2 OR cluster_id = $2 OR account_id = $2)
+                  AND attribution_eligible = TRUE
+                """,
+                tenant_id, profile_id,
+            )
+        try:
+            return int(result.split()[-1])
+        except Exception:
+            return 0
+
     async def mark_reversed(self, tenant_id: str, conversion_id: str) -> Optional[dict[str, Any]]:
         """Mark a conversion as reversed (e.g., full refund/chargeback)."""
         pool = await self._pool()

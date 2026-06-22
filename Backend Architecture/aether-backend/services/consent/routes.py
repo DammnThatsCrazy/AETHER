@@ -108,6 +108,9 @@ async def submit_dsr(
     producer: EventProducer = Depends(get_producer),
 ):
     """Submit a GDPR data subject request."""
+    import asyncio
+    from services.measurement.privacy import handle_erasure_background
+
     tenant = request.state.tenant
     tenant.require_permission("consent:manage")
 
@@ -132,6 +135,11 @@ async def submit_dsr(
         source_service="consent",
         payload={"dsr_id": dsr_id, "type": body.request_type, "user_id": body.user_id},
     ))
+
+    if body.request_type == "erasure":
+        asyncio.create_task(
+            handle_erasure_background(tenant.tenant_id, body.user_id)
+        )
 
     return APIResponse(data=dsr).to_dict()
 
