@@ -11,8 +11,8 @@ export function ConversionExplorerPage() {
   const [submitted, setSubmitted] = useState({ profile_id: '', conversion_type: '' });
 
   const { data, loading, error } = useConversionExplorer({
-    profile_id: submitted.profile_id || undefined,
-    conversion_type: submitted.conversion_type || undefined,
+    ...(submitted.profile_id ? { profile_id: submitted.profile_id } : {}),
+    ...(submitted.conversion_type ? { conversion_type: submitted.conversion_type } : {}),
   });
 
   if (loading) return <PageWrapper title="Conversion Explorer"><LoadingState lines={6} /></PageWrapper>;

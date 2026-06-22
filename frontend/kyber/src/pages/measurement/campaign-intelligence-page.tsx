@@ -8,7 +8,7 @@ type Row = Record<string, unknown>;
 export function CampaignIntelligencePage() {
   const [campaignId, setCampaignId] = useState('');
   const [submitted, setSubmitted] = useState('');
-  const { data, loading, error } = useCampaignIntelligence({ campaign_id: submitted || undefined });
+  const { data, loading, error } = useCampaignIntelligence(submitted ? { campaign_id: submitted } : {});
 
   if (loading) return <PageWrapper title="Campaign Intelligence"><LoadingState lines={6} /></PageWrapper>;
   if (error) return <PageWrapper title="Campaign Intelligence"><ErrorState title="Unable to load campaign intelligence" message={error} /></PageWrapper>;

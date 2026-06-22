@@ -130,6 +130,7 @@ class TestAttributionCreditContract:
         from services.measurement.contracts import AttributionCredit
         credit = AttributionCredit(
             tenant_id="t1",
+            attribution_run_id=str(uuid4()),
             conversion_id=str(uuid4()),
             credit_weight="0.5",
         )
@@ -141,6 +142,7 @@ class TestAttributionCreditContract:
         try:
             credit = AttributionCredit(
                 tenant_id="t1",
+                attribution_run_id=str(uuid4()),
                 conversion_id=str(uuid4()),
                 credit_weight="1.5",
             )

@@ -21,9 +21,10 @@ export function useCampaignIntelligence(params: { campaign_id?: string; period_s
   useEffect(() => {
     let active = true;
     setLoading(true);
+    const campaignIdParam = params.campaign_id ? { campaign_id: params.campaign_id } : {};
     Promise.all([
-      api.spend.list({ campaign_id: params.campaign_id }),
-      api.spend.reconciliation({ campaign_id: params.campaign_id, period_start: start, period_end: end }),
+      api.spend.list(campaignIdParam),
+      api.spend.reconciliation({ ...campaignIdParam, period_start: start, period_end: end }),
     ])
       .then(([spendResult, recon]: [any, any]) => {
         if (!active) return;

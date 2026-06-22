@@ -46,7 +46,6 @@ class TestJourneyCompilerLocal:
         result = await compiler.compile_for_profile(
             tenant_id="tenant-a",
             profile_id="profile-001",
-            trigger_reason="test",
         )
         assert result is not None
         assert result.get("tenant_id") == "tenant-a" or result.get("profile_id") == "profile-001" or isinstance(result, dict)
@@ -87,8 +86,8 @@ class TestJourneyCompilerLocal:
         """Compiling for tenant-a must not return tenant-b data."""
         from services.measurement.engine.journey_compiler import JourneyCompiler
         compiler = JourneyCompiler()
-        result_a = await compiler.compile_for_profile("tenant-a", "profile-001", "test")
-        result_b = await compiler.compile_for_profile("tenant-b", "profile-001", "test")
+        result_a = await compiler.compile_for_profile("tenant-a", "profile-001")
+        result_b = await compiler.compile_for_profile("tenant-b", "profile-001")
         # Both may return None/empty in local mode — what matters is no cross-tenant bleed
         if result_a and result_b:
             assert result_a != result_b or (

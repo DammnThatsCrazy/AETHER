@@ -45,7 +45,7 @@ export function KyberMeasurementOpsPage() {
   if (loading) return <PageWrapper title="Measurement Operations"><LoadingState lines={8} /></PageWrapper>;
   if (error) return <PageWrapper title="Measurement Operations"><ErrorState title="Unable to load operations data" message={error} /></PageWrapper>;
 
-  const connectors = Object.entries((overview.connectors as Record<string, Row> | undefined) ?? {}).map(([id, c]) => ({ connector_id: id, ...c }));
+  const connectors: Row[] = Object.entries((overview.connectors as Record<string, Row> | undefined) ?? {}).map(([id, c]) => ({ connector_id: id, ...c }));
   const tenants = (overview.tenants as Row[] | undefined) ?? [];
 
   return (

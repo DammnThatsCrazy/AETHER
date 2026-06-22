@@ -31,17 +31,17 @@ export function MeasurementOverviewPage() {
   if (loading) return <PageWrapper title="Measurement Overview"><LoadingState lines={8} /></PageWrapper>;
   if (error) return <PageWrapper title="Measurement Overview"><ErrorState title="Unable to load measurement data" message={error} /></PageWrapper>;
 
-  const overview = data.overview as Row;
+  const overview = data.overview as Record<string, any>;
   const quality = data.quality as Row;
   const health = data.health as Row;
-  const connectors = Object.entries((health.connectors as Record<string, Row> | undefined) ?? {}).map(([name, c]) => ({ name, ...c }));
+  const connectors: Row[] = Object.entries((health.connectors as Record<string, Row> | undefined) ?? {}).map(([name, c]) => ({ name, ...c }));
   const warnings = ((overview.warnings as Row[]) ?? []);
 
   return (
     <PageWrapper
       title="Measurement Overview"
       subtitle="Spend, attributed revenue, ROAS, and data quality across all connected sources."
-      action={
+      actions={
         <select value={window} onChange={e => setWindow(e.target.value)} className="text-sm bg-surface-secondary border border-border rounded px-2 py-1">
           <option value="7d">7 days</option>
           <option value="30d">30 days</option>
