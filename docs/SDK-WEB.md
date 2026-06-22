@@ -16,7 +16,7 @@ toc_depth: 3
 last_synced_commit: b8b0072
 ---
 
-# Aether Web SDK v8.9.0 — Integration Guide
+# Aether Web SDK v8.10.0 — Integration Guide
 
 ## Installation
 

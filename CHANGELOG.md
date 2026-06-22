@@ -284,6 +284,26 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ---
 
+## [8.10.0] — 2026-06-22
+
+### Added — Capture-to-Intelligence Foundation Phase 2
+
+- **Canonical JSON registries** — `packages/shared/contracts/event-registry.json` and `consent-registry.json` as machine-readable source of truth; `scripts/generate_contracts.py` generates TS/Python artifacts deterministically with `--check` CI gate.
+- **Eight-purpose consent model** — added `personalization`, `credit` (explicit opt-in only), and `location` (explicit opt-in only) to the five existing purposes; all SDKs, backend validator, and consent registry updated atomically.
+- **Ingestion contract repair** — `EventContext` expanded with ~30 missing fields (campaign, fingerprint, journey, tenantId, actorId, provenance, impressions, etc.); `BatchRequest.consents` made optional.
+- **100+ new event types** across 11 new families: `exposure`, `outcome`, `b2b`, `ecommerce`, `friction`, `server`, `identity_lc`, `web3_lc`, `comms`, `credit`, `location`.
+- **Server SDK packages** — `packages/server/` (Node/TypeScript) and `Backend Architecture/aether-backend/shared/server_sdk/` (Python) server observation clients with durable queue, retry, and consent gating.
+- **Silver fact tables and projectors** — 12 Silver fact tables (exposure, outcome, account_activity, revenue, friction, server_operation, identity_evidence, agent_execution, web3_transaction, x402_flow, data_quality) with Alembic migrations and 10 projectors.
+- **Evidence-backed graph projections** — `SilverGraphProjector` emits `PURCHASED`, `ACHIEVED_OUTCOME`, `CONTACTED`, `EXPOSED_TO`, `SUBSCRIBED_TO` edges only from Silver projector output; `source_event_id` required for all Silver-sourced edges; `SILVER_SOURCED_REQUIRED` enforced in `GraphWriteValidator`.
+- **Gold intelligence endpoints** — 6 new tenant-scoped endpoints: `GET /v1/intelligence/account-health`, `revenue-intelligence`, `experience-intelligence`, `exposure-intelligence`, `agent-intelligence`, `integration-intelligence`; each aggregates the relevant Silver fact table with graceful degradation.
+- **Profile360 Silver types** — `SilverFactsEnvelope` wire format and 7 typed dimension aliases in `packages/shared/profile360-contract.ts`; 7 new optional fields on `Profile360SubResources`.
+- **Aether UI features** — `account-health`, `revenue-intelligence`, `experience-friction`, `data-quality` feature hooks using `useQuery` with 2-minute stale time.
+- **Kyber UI features** — `data-pipeline` (30s polling for Silver lag), `consent-governance` (`useConsentGovernance`, `useConsentRetentionManifest`) feature hooks.
+- **Governance extensions** — `ConsentRecord` expanded with `snapshot_id`, `mode`, `jurisdiction`, `gpc_observed`, `dnt_observed`; `gdprMode` backward-compat mapping; `GET /v1/consent/retention-manifest` endpoint; Silver DSR scoping in `DeletionPlan` via `dsrDeleteScope` from consent registry.
+- **CI enforcement** — `validate_consent_schema_parity.py` gates TS/Python/registry parity; `test:contracts`, `test:privacy`, `test:ingestion-roundtrip` Makefile targets; consent-registry-parity step added to `repo-consistency.yml`.
+
+---
+
 ## [8.9.0] — 2026-05-28
 
 ### Added — Entity-Agnostic Profile360: Social, Financial, Business, Graph, Intelligence

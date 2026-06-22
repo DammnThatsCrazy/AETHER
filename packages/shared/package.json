@@ -1,6 +1,6 @@
 {
   "name": "@aether/shared",
-  "version": "8.9.0",
+  "version": "8.10.0",
   "description": "Aether SDK \u2014 canonical shared TypeScript contracts (events, consent, wallet, identity, entities, commerce, agent, capabilities). Single source of truth for Web, React Native, iOS, and Android SDKs.",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
