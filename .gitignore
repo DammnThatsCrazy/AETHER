@@ -78,8 +78,6 @@ htmlcov/
 # Extracted originals (enhanced versions exist in package dirs)
 extracted/
 
-# Generated docs
-docs/api/
 
 # Terraform local state / plugin cache (lock file IS committed)
 .terraform/
