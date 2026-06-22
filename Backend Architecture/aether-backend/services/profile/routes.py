@@ -1618,28 +1618,6 @@ async def get_entity_exposures(
     return _silver_response(user_id, items)
 
 
-@router.get("/{user_id}/outcomes")
-async def get_entity_outcomes(
-    user_id: str,
-    request: Request,
-    limit: int = Query(default=50, ge=1, le=200),
-):
-    """Outcome and goal achievement facts for this entity."""
-    tenant = request.state.tenant
-    tenant.require_permission("read")
-    try:
-        from repositories.repos import AnalyticsRepository
-        repo = AnalyticsRepository()
-        items = await repo.query_silver(
-            "silver_outcome_facts",
-            {"tenant_id": tenant.tenant_id, "user_id": user_id},
-            limit=limit,
-        )
-    except Exception:
-        items = []
-    return _silver_response(user_id, items)
-
-
 @router.get("/{user_id}/revenue")
 async def get_entity_revenue(
     user_id: str,
@@ -1742,28 +1720,6 @@ async def get_entity_integrations(
         repo = AnalyticsRepository()
         items = await repo.query_silver(
             "silver_server_operation_facts",
-            {"tenant_id": tenant.tenant_id, "user_id": user_id},
-            limit=limit,
-        )
-    except Exception:
-        items = []
-    return _silver_response(user_id, items)
-
-
-@router.get("/{user_id}/agents")
-async def get_entity_agent_facts(
-    user_id: str,
-    request: Request,
-    limit: int = Query(default=50, ge=1, le=200),
-):
-    """Agent execution and evaluation facts involving this entity."""
-    tenant = request.state.tenant
-    tenant.require_permission("read")
-    try:
-        from repositories.repos import AnalyticsRepository
-        repo = AnalyticsRepository()
-        items = await repo.query_silver(
-            "silver_agent_execution_facts",
             {"tenant_id": tenant.tenant_id, "user_id": user_id},
             limit=limit,
         )

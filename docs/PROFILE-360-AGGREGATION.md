@@ -13,7 +13,7 @@ source_files:
 canonical_owner: backend@aether
 estimated_read_minutes: 8
 toc_depth: 3
-last_synced_commit: d5b2b67
+last_synced_commit: 70aedff
 ---
 
 # Profile 360 Aggregation Layer
@@ -408,6 +408,28 @@ To add a new dimension:
 
 That's it — no graph schema change, no event schema change, no
 repository change unless the underlying read pattern is new.
+
+---
+
+### Silver-backed sub-resource endpoints (v8.10.0+)
+
+These endpoints read directly from Silver fact tables populated by the Silver projector layer.
+They return `{entity_id, items, count, source, source_status}` and degrade gracefully to an empty
+list when Silver data is unavailable.  All require the `read` permission on the active tenant.
+
+| Method | Path                              | Silver table                    | Returns                                    |
+|--------|-----------------------------------|---------------------------------|--------------------------------------------|
+| GET    | `/v1/profile/{id}/exposures`      | `silver_exposure_facts`         | Content and recommendation exposures       |
+| GET    | `/v1/profile/{id}/revenue`        | `silver_revenue_facts`          | Revenue and subscription facts             |
+| GET    | `/v1/profile/{id}/friction`       | `silver_friction_facts`         | UX friction observations                   |
+| GET    | `/v1/profile/{id}/accounts`       | `silver_account_activity_facts` | B2B account activity facts                 |
+| GET    | `/v1/profile/{id}/communications` | `silver_comms_facts`            | Notification/email/message delivery facts  |
+| GET    | `/v1/profile/{id}/integrations`   | `silver_server_operation_facts` | Integration and server operation facts     |
+| GET    | `/v1/profile/{id}/data-quality`   | `silver_data_quality_facts`     | Data quality and schema completeness       |
+
+Silver fact tables are populated asynchronously by the `SilverDispatcher` projector chain (see
+`services/silver/dispatcher.py`).  Until a projector has written records for a given entity the
+endpoint returns `source_status: "empty"` — this is correct behavior, not an error.
 
 ---
 
