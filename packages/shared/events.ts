@@ -7,13 +7,13 @@
 import type { ConsentState } from './consent';
 import type { ActorKind, Provenance } from './provenance';
 
-// ---------------------------------------------------------------------------
-// Event families
-// ---------------------------------------------------------------------------
+// @generated-start
+// @generated — DO NOT EDIT. Source: packages/shared/contracts/event-registry.json
+// Contract version: 8.10.0 — Run: python scripts/generate_contracts.py
 
 /** The canonical event-type string union the backend validates. */
 export type EventType =
-  // Core analytics
+  // core
   | 'track'
   | 'page'
   | 'screen'
@@ -21,7 +21,7 @@ export type EventType =
   | 'error'
   | 'performance'
   | 'experiment'
-  // Journey lifecycle
+  // journey
   | 'journey_started'
   | 'journey_paused'
   | 'journey_resumed'
@@ -29,10 +29,11 @@ export type EventType =
   | 'journey_completed'
   | 'journey_abandoned'
   | 'journey_checkpoint'
-  // Identity
+  // identity
   | 'identify'
+  // consent
   | 'consent'
-  // Commerce / access (Web2 + Web3 unified)
+  // commerce
   | 'conversion'
   | 'payment_initiated'
   | 'payment_completed'
@@ -43,15 +44,14 @@ export type EventType =
   | 'entitlement_revoked'
   | 'access_granted'
   | 'access_denied'
-  // Wallet / on-chain (optional)
+  // wallet
   | 'wallet'
   | 'transaction'
   | 'contract_action'
-  // Agent lifecycle (optional) — legacy aliases kept for backward compatibility
+  // agent
   | 'agent_task'
   | 'agent_decision'
   | 'a2h_interaction'
-  // Agent lifecycle — granular events
   | 'agent_registered'
   | 'agent_updated'
   | 'agent_authorized'
@@ -71,29 +71,6 @@ export type EventType =
   | 'agent_handoff'
   | 'agent_escalated_to_human'
   | 'agent_outcome_recorded'
-  // Reward enablement (A6) — eligibility events emitted by Aether, not the tenant
-  | 'reward_action_queued'
-  | 'reward_proof_generated'
-  | 'reward_delivered'
-  | 'reward_claim_submitted'
-  // x402 (optional) — legacy alias kept for backward compatibility
-  | 'x402_payment'
-  // x402 lifecycle — granular events
-  | 'x402_resource_requested'
-  | 'x402_payment_required'
-  | 'x402_quote_received'
-  | 'x402_authorization_requested'
-  | 'x402_authorization_resolved'
-  | 'x402_payment_intent_created'
-  | 'x402_payment_submitted'
-  | 'x402_payment_settled'
-  | 'x402_payment_failed'
-  | 'x402_payment_timeout'
-  | 'x402_receipt_verified'
-  | 'x402_access_granted'
-  | 'x402_access_denied'
-  | 'x402_refund_or_reversal'
-  // Agentic observability family — account / MCP / tool
   | 'agentic_account_observed'
   | 'agentic_account_connected_observed'
   | 'agentic_account_disconnected_observed'
@@ -106,7 +83,6 @@ export type EventType =
   | 'agent_activity_observed'
   | 'agent_risk_signal_observed'
   | 'agent_notification_observed'
-  // Agentic observability family — Robinhood-style trading observation
   | 'agent_strategy_observed'
   | 'agent_trade_intent_observed'
   | 'agent_trade_order_observed'
@@ -116,7 +92,6 @@ export type EventType =
   | 'agent_portfolio_snapshot_observed'
   | 'agent_performance_snapshot_observed'
   | 'agent_disconnect_observed'
-  // Agentic observability family — AgentMail-style communication observation
   | 'agent_inbox_observed'
   | 'agent_email_address_observed'
   | 'agent_thread_observed'
@@ -132,7 +107,32 @@ export type EventType =
   | 'agent_support_route_observed'
   | 'agent_semantic_search_observed'
   | 'agent_data_extraction_observed'
-  // x402 protocol observation family (from external observer perspective)
+  | 'agent_evaluation_observed'
+  | 'agent_cost_observed'
+  | 'agent_grounding_observed'
+  | 'agent_guardrail_observed'
+  | 'agent_human_override_observed'
+  // reward
+  | 'reward_action_queued'
+  | 'reward_proof_generated'
+  | 'reward_delivered'
+  | 'reward_claim_submitted'
+  // x402
+  | 'x402_payment'
+  | 'x402_resource_requested'
+  | 'x402_payment_required'
+  | 'x402_quote_received'
+  | 'x402_authorization_requested'
+  | 'x402_authorization_resolved'
+  | 'x402_payment_intent_created'
+  | 'x402_payment_submitted'
+  | 'x402_payment_settled'
+  | 'x402_payment_failed'
+  | 'x402_payment_timeout'
+  | 'x402_receipt_verified'
+  | 'x402_access_granted'
+  | 'x402_access_denied'
+  | 'x402_refund_or_reversal'
   | 'x402_resource_request_observed'
   | 'x402_challenge_observed'
   | 'x402_payment_requirement_observed'
@@ -143,59 +143,241 @@ export type EventType =
   | 'x402_resource_access_denied_observed'
   | 'x402_failure_observed'
   | 'x402_replay_risk_observed'
-  | 'x402_provider_observed';
+  | 'x402_provider_observed'
+  // exposure
+  | 'content_impression'
+  | 'recommendation_exposed'
+  | 'offer_exposed'
+  | 'feature_exposed'
+  | 'search_result_exposed'
+  | 'ad_exposed'
+  | 'notification_presented'
+  | 'decision_observed'
+  // outcome
+  | 'outcome_observed'
+  | 'goal_achieved'
+  | 'goal_failed'
+  | 'recommendation_accepted'
+  | 'recommendation_rejected'
+  | 'feedback_submitted'
+  | 'retention_observed'
+  | 'churn_observed'
+  | 'human_override_observed'
+  // b2b
+  | 'organization_observed'
+  | 'workspace_created'
+  | 'workspace_updated'
+  | 'member_invited'
+  | 'member_joined'
+  | 'member_removed'
+  | 'role_changed'
+  | 'seat_assigned'
+  | 'seat_released'
+  | 'integration_connected'
+  | 'integration_disconnected'
+  | 'service_account_created'
+  | 'service_account_revoked'
+  | 'api_key_created'
+  | 'api_key_revoked'
+  | 'project_created'
+  | 'project_archived'
+  | 'workflow_started'
+  | 'workflow_completed'
+  | 'workflow_failed'
+  // ecommerce
+  | 'product_viewed'
+  | 'cart_item_added'
+  | 'cart_item_removed'
+  | 'cart_updated'
+  | 'coupon_applied'
+  | 'checkout_started'
+  | 'checkout_step_completed'
+  | 'order_completed'
+  | 'order_cancelled'
+  | 'order_refunded'
+  | 'chargeback_observed'
+  | 'subscription_started'
+  | 'trial_started'
+  | 'trial_converted'
+  | 'subscription_renewed'
+  | 'subscription_upgrade_observed'
+  | 'subscription_downgrade_observed'
+  | 'subscription_cancelled'
+  | 'invoice_issued'
+  | 'invoice_paid'
+  | 'invoice_failed'
+  | 'dunning_started'
+  | 'dunning_resolved'
+  // friction
+  | 'dead_click_observed'
+  | 'rage_click_observed'
+  | 'scroll_depth_observed'
+  | 'form_started'
+  | 'form_field_interaction'
+  | 'form_validation_failed'
+  | 'form_submitted'
+  | 'form_abandoned'
+  | 'search_reformulated'
+  | 'retry_observed'
+  | 'journey_stalled'
+  | 'backtrack_observed'
+  // server
+  | 'api_request_observed'
+  | 'webhook_delivery_observed'
+  | 'connector_sync_started'
+  | 'connector_sync_completed'
+  | 'connector_sync_failed'
+  | 'job_started'
+  | 'job_completed'
+  | 'job_failed'
+  | 'rate_limit_observed'
+  | 'dependency_failure_observed'
+  | 'export_completed'
+  // identity_lc
+  | 'signup_started'
+  | 'signup_completed'
+  | 'login_succeeded'
+  | 'login_failed'
+  | 'logout_observed'
+  | 'sso_observed'
+  | 'mfa_challenge_observed'
+  | 'identity_verified'
+  | 'alias_link_requested'
+  | 'alias_link_confirmed'
+  | 'alias_revoked'
+  | 'account_recovery_started'
+  | 'account_recovery_completed'
+  | 'device_registered'
+  | 'device_revoked'
+  // web3_lc
+  | 'transaction_pending_observed'
+  | 'transaction_confirmed_observed'
+  | 'transaction_reverted_observed'
+  | 'transaction_reorged_observed'
+  | 'token_approval_observed'
+  | 'allowance_changed_observed'
+  | 'bridge_transfer_observed'
+  | 'settlement_finality_observed'
+  // comms
+  | 'notification_delivered'
+  | 'notification_opened'
+  | 'notification_clicked'
+  | 'email_delivered'
+  | 'email_opened'
+  | 'email_clicked'
+  | 'email_bounced'
+  | 'message_received_observed'
+  | 'message_sent_observed'
+  | 'message_replied_observed'
+  | 'unsubscribe_observed'
+  | 'support_case_created'
+  | 'support_case_resolved'
+  | 'support_case_escalated'
+  | 'support_sla_breached'
+  // credit
+  | 'credit_signal_observed'
+  | 'credit_account_observed'
+  | 'credit_decision_observed'
+  // location
+  | 'location_observed'
+  | 'geofence_transition_observed'
+  ;
 
 export type EventFamily =
-  | 'core'
-  | 'journey'
-  | 'identity'
-  | 'consent'
-  | 'commerce'
-  | 'wallet'
   | 'agent'
+  | 'b2b'
+  | 'commerce'
+  | 'comms'
+  | 'consent'
+  | 'core'
+  | 'credit'
+  | 'ecommerce'
+  | 'exposure'
+  | 'friction'
+  | 'identity'
+  | 'identity_lc'
+  | 'journey'
+  | 'location'
+  | 'outcome'
+  | 'reward'
+  | 'server'
+  | 'wallet'
+  | 'web3_lc'
   | 'x402'
-  | 'reward';
+  ;
 
-/** Map from each event type to the family it belongs to. */
+/** Map from each event type to its family. */
 export const EVENT_FAMILY: Record<EventType, EventFamily> = {
-  track: 'core', page: 'core', screen: 'core', heartbeat: 'core',
-  error: 'core', performance: 'core', experiment: 'core',
-  journey_started: 'journey', journey_paused: 'journey', journey_resumed: 'journey',
-  journey_continued: 'journey', journey_completed: 'journey', journey_abandoned: 'journey',
+  track: 'core',
+  page: 'core',
+  screen: 'core',
+  heartbeat: 'core',
+  error: 'core',
+  performance: 'core',
+  experiment: 'core',
+  journey_started: 'journey',
+  journey_paused: 'journey',
+  journey_resumed: 'journey',
+  journey_continued: 'journey',
+  journey_completed: 'journey',
+  journey_abandoned: 'journey',
   journey_checkpoint: 'journey',
   identify: 'identity',
   consent: 'consent',
   conversion: 'commerce',
-  payment_initiated: 'commerce', payment_completed: 'commerce', payment_failed: 'commerce',
-  approval_requested: 'commerce', approval_resolved: 'commerce',
-  entitlement_granted: 'commerce', entitlement_revoked: 'commerce',
-  access_granted: 'commerce', access_denied: 'commerce',
-  wallet: 'wallet', transaction: 'wallet', contract_action: 'wallet',
-  // agent legacy
-  agent_task: 'agent', agent_decision: 'agent', a2h_interaction: 'agent',
-  // agent lifecycle
-  agent_registered: 'agent', agent_updated: 'agent', agent_authorized: 'agent',
-  agent_deauthorized: 'agent', agent_capability_granted: 'agent', agent_capability_revoked: 'agent',
-  agent_task_created: 'agent', agent_task_decomposed: 'agent', agent_task_started: 'agent',
-  agent_task_completed: 'agent', agent_task_failed: 'agent', agent_tool_called: 'agent',
-  agent_resource_requested: 'agent', agent_delegated_task: 'agent', agent_subagent_spawned: 'agent',
-  agent_policy_evaluated: 'agent', agent_handoff: 'agent', agent_escalated_to_human: 'agent',
+  payment_initiated: 'commerce',
+  payment_completed: 'commerce',
+  payment_failed: 'commerce',
+  approval_requested: 'commerce',
+  approval_resolved: 'commerce',
+  entitlement_granted: 'commerce',
+  entitlement_revoked: 'commerce',
+  access_granted: 'commerce',
+  access_denied: 'commerce',
+  wallet: 'wallet',
+  transaction: 'wallet',
+  contract_action: 'wallet',
+  agent_task: 'agent',
+  agent_decision: 'agent',
+  a2h_interaction: 'agent',
+  agent_registered: 'agent',
+  agent_updated: 'agent',
+  agent_authorized: 'agent',
+  agent_deauthorized: 'agent',
+  agent_capability_granted: 'agent',
+  agent_capability_revoked: 'agent',
+  agent_task_created: 'agent',
+  agent_task_decomposed: 'agent',
+  agent_task_started: 'agent',
+  agent_task_completed: 'agent',
+  agent_task_failed: 'agent',
+  agent_tool_called: 'agent',
+  agent_resource_requested: 'agent',
+  agent_delegated_task: 'agent',
+  agent_subagent_spawned: 'agent',
+  agent_policy_evaluated: 'agent',
+  agent_handoff: 'agent',
+  agent_escalated_to_human: 'agent',
   agent_outcome_recorded: 'agent',
-  // reward enablement (A6)
   reward_action_queued: 'reward',
   reward_proof_generated: 'reward',
   reward_delivered: 'reward',
   reward_claim_submitted: 'reward',
-  // x402 legacy
   x402_payment: 'x402',
-  // x402 lifecycle
-  x402_resource_requested: 'x402', x402_payment_required: 'x402', x402_quote_received: 'x402',
-  x402_authorization_requested: 'x402', x402_authorization_resolved: 'x402',
-  x402_payment_intent_created: 'x402', x402_payment_submitted: 'x402',
-  x402_payment_settled: 'x402', x402_payment_failed: 'x402', x402_payment_timeout: 'x402',
-  x402_receipt_verified: 'x402', x402_access_granted: 'x402', x402_access_denied: 'x402',
+  x402_resource_requested: 'x402',
+  x402_payment_required: 'x402',
+  x402_quote_received: 'x402',
+  x402_authorization_requested: 'x402',
+  x402_authorization_resolved: 'x402',
+  x402_payment_intent_created: 'x402',
+  x402_payment_submitted: 'x402',
+  x402_payment_settled: 'x402',
+  x402_payment_failed: 'x402',
+  x402_payment_timeout: 'x402',
+  x402_receipt_verified: 'x402',
+  x402_access_granted: 'x402',
+  x402_access_denied: 'x402',
   x402_refund_or_reversal: 'x402',
-  // agentic observability — account / MCP / tool
   agentic_account_observed: 'agent',
   agentic_account_connected_observed: 'agent',
   agentic_account_disconnected_observed: 'agent',
@@ -208,7 +390,6 @@ export const EVENT_FAMILY: Record<EventType, EventFamily> = {
   agent_activity_observed: 'agent',
   agent_risk_signal_observed: 'agent',
   agent_notification_observed: 'agent',
-  // agentic observability — Robinhood-style trading observation
   agent_strategy_observed: 'agent',
   agent_trade_intent_observed: 'agent',
   agent_trade_order_observed: 'agent',
@@ -218,7 +399,6 @@ export const EVENT_FAMILY: Record<EventType, EventFamily> = {
   agent_portfolio_snapshot_observed: 'agent',
   agent_performance_snapshot_observed: 'agent',
   agent_disconnect_observed: 'agent',
-  // agentic observability — AgentMail-style communication observation
   agent_inbox_observed: 'agent',
   agent_email_address_observed: 'agent',
   agent_thread_observed: 'agent',
@@ -234,7 +414,6 @@ export const EVENT_FAMILY: Record<EventType, EventFamily> = {
   agent_support_route_observed: 'agent',
   agent_semantic_search_observed: 'agent',
   agent_data_extraction_observed: 'agent',
-  // x402 protocol observation family
   x402_resource_request_observed: 'x402',
   x402_challenge_observed: 'x402',
   x402_payment_requirement_observed: 'x402',
@@ -246,79 +425,394 @@ export const EVENT_FAMILY: Record<EventType, EventFamily> = {
   x402_failure_observed: 'x402',
   x402_replay_risk_observed: 'x402',
   x402_provider_observed: 'x402',
+  content_impression: 'exposure',
+  recommendation_exposed: 'exposure',
+  offer_exposed: 'exposure',
+  feature_exposed: 'exposure',
+  search_result_exposed: 'exposure',
+  ad_exposed: 'exposure',
+  notification_presented: 'exposure',
+  decision_observed: 'exposure',
+  outcome_observed: 'outcome',
+  goal_achieved: 'outcome',
+  goal_failed: 'outcome',
+  recommendation_accepted: 'outcome',
+  recommendation_rejected: 'outcome',
+  feedback_submitted: 'outcome',
+  retention_observed: 'outcome',
+  churn_observed: 'outcome',
+  human_override_observed: 'outcome',
+  organization_observed: 'b2b',
+  workspace_created: 'b2b',
+  workspace_updated: 'b2b',
+  member_invited: 'b2b',
+  member_joined: 'b2b',
+  member_removed: 'b2b',
+  role_changed: 'b2b',
+  seat_assigned: 'b2b',
+  seat_released: 'b2b',
+  integration_connected: 'b2b',
+  integration_disconnected: 'b2b',
+  service_account_created: 'b2b',
+  service_account_revoked: 'b2b',
+  api_key_created: 'b2b',
+  api_key_revoked: 'b2b',
+  project_created: 'b2b',
+  project_archived: 'b2b',
+  workflow_started: 'b2b',
+  workflow_completed: 'b2b',
+  workflow_failed: 'b2b',
+  product_viewed: 'ecommerce',
+  cart_item_added: 'ecommerce',
+  cart_item_removed: 'ecommerce',
+  cart_updated: 'ecommerce',
+  coupon_applied: 'ecommerce',
+  checkout_started: 'ecommerce',
+  checkout_step_completed: 'ecommerce',
+  order_completed: 'ecommerce',
+  order_cancelled: 'ecommerce',
+  order_refunded: 'ecommerce',
+  chargeback_observed: 'ecommerce',
+  subscription_started: 'ecommerce',
+  trial_started: 'ecommerce',
+  trial_converted: 'ecommerce',
+  subscription_renewed: 'ecommerce',
+  subscription_upgrade_observed: 'ecommerce',
+  subscription_downgrade_observed: 'ecommerce',
+  subscription_cancelled: 'ecommerce',
+  invoice_issued: 'ecommerce',
+  invoice_paid: 'ecommerce',
+  invoice_failed: 'ecommerce',
+  dunning_started: 'ecommerce',
+  dunning_resolved: 'ecommerce',
+  dead_click_observed: 'friction',
+  rage_click_observed: 'friction',
+  scroll_depth_observed: 'friction',
+  form_started: 'friction',
+  form_field_interaction: 'friction',
+  form_validation_failed: 'friction',
+  form_submitted: 'friction',
+  form_abandoned: 'friction',
+  search_reformulated: 'friction',
+  retry_observed: 'friction',
+  journey_stalled: 'friction',
+  backtrack_observed: 'friction',
+  api_request_observed: 'server',
+  webhook_delivery_observed: 'server',
+  connector_sync_started: 'server',
+  connector_sync_completed: 'server',
+  connector_sync_failed: 'server',
+  job_started: 'server',
+  job_completed: 'server',
+  job_failed: 'server',
+  rate_limit_observed: 'server',
+  dependency_failure_observed: 'server',
+  export_completed: 'server',
+  signup_started: 'identity_lc',
+  signup_completed: 'identity_lc',
+  login_succeeded: 'identity_lc',
+  login_failed: 'identity_lc',
+  logout_observed: 'identity_lc',
+  sso_observed: 'identity_lc',
+  mfa_challenge_observed: 'identity_lc',
+  identity_verified: 'identity_lc',
+  alias_link_requested: 'identity_lc',
+  alias_link_confirmed: 'identity_lc',
+  alias_revoked: 'identity_lc',
+  account_recovery_started: 'identity_lc',
+  account_recovery_completed: 'identity_lc',
+  device_registered: 'identity_lc',
+  device_revoked: 'identity_lc',
+  agent_evaluation_observed: 'agent',
+  agent_cost_observed: 'agent',
+  agent_grounding_observed: 'agent',
+  agent_guardrail_observed: 'agent',
+  agent_human_override_observed: 'agent',
+  transaction_pending_observed: 'web3_lc',
+  transaction_confirmed_observed: 'web3_lc',
+  transaction_reverted_observed: 'web3_lc',
+  transaction_reorged_observed: 'web3_lc',
+  token_approval_observed: 'web3_lc',
+  allowance_changed_observed: 'web3_lc',
+  bridge_transfer_observed: 'web3_lc',
+  settlement_finality_observed: 'web3_lc',
+  notification_delivered: 'comms',
+  notification_opened: 'comms',
+  notification_clicked: 'comms',
+  email_delivered: 'comms',
+  email_opened: 'comms',
+  email_clicked: 'comms',
+  email_bounced: 'comms',
+  message_received_observed: 'comms',
+  message_sent_observed: 'comms',
+  message_replied_observed: 'comms',
+  unsubscribe_observed: 'comms',
+  support_case_created: 'comms',
+  support_case_resolved: 'comms',
+  support_case_escalated: 'comms',
+  support_sla_breached: 'comms',
+  credit_signal_observed: 'credit',
+  credit_account_observed: 'credit',
+  credit_decision_observed: 'credit',
+  location_observed: 'location',
+  geofence_transition_observed: 'location',
 };
 
 /**
- * Required consent purpose for each event type. If the purpose is not
- * granted, the SDK event queue MUST drop the event before transport.
+ * Primary required consent purpose for each event type.
+ * Events with empty requiredPurposes (e.g. 'consent') are omitted — always allowed.
  */
 export const EVENT_CONSENT_PURPOSE: Record<EventType, string> = {
-  track: 'analytics', page: 'analytics', screen: 'analytics',
-  heartbeat: 'analytics', error: 'analytics', performance: 'analytics',
-  journey_started: 'analytics', journey_paused: 'analytics', journey_resumed: 'analytics',
-  journey_continued: 'analytics', journey_completed: 'analytics', journey_abandoned: 'analytics',
+  track: 'analytics',
+  page: 'analytics',
+  screen: 'analytics',
+  heartbeat: 'analytics',
+  error: 'analytics',
+  performance: 'analytics',
+  experiment: 'marketing',
+  journey_started: 'analytics',
+  journey_paused: 'analytics',
+  journey_resumed: 'analytics',
+  journey_continued: 'analytics',
+  journey_completed: 'analytics',
+  journey_abandoned: 'analytics',
   journey_checkpoint: 'analytics',
   identify: 'analytics',
-  experiment: 'marketing', conversion: 'marketing',
   consent: 'analytics',
-  payment_initiated: 'commerce', payment_completed: 'commerce', payment_failed: 'commerce',
-  approval_requested: 'commerce', approval_resolved: 'commerce',
-  entitlement_granted: 'commerce', entitlement_revoked: 'commerce',
-  access_granted: 'commerce', access_denied: 'commerce',
-  wallet: 'web3', transaction: 'web3', contract_action: 'web3',
-  // agent legacy
-  agent_task: 'agent', agent_decision: 'agent', a2h_interaction: 'agent',
-  // agent lifecycle
-  agent_registered: 'agent', agent_updated: 'agent', agent_authorized: 'agent',
-  agent_deauthorized: 'agent', agent_capability_granted: 'agent', agent_capability_revoked: 'agent',
-  agent_task_created: 'agent', agent_task_decomposed: 'agent', agent_task_started: 'agent',
-  agent_task_completed: 'agent', agent_task_failed: 'agent', agent_tool_called: 'agent',
-  agent_resource_requested: 'agent', agent_delegated_task: 'agent', agent_subagent_spawned: 'agent',
-  agent_policy_evaluated: 'agent', agent_handoff: 'agent', agent_escalated_to_human: 'agent',
+  conversion: 'marketing',
+  payment_initiated: 'commerce',
+  payment_completed: 'commerce',
+  payment_failed: 'commerce',
+  approval_requested: 'commerce',
+  approval_resolved: 'commerce',
+  entitlement_granted: 'commerce',
+  entitlement_revoked: 'commerce',
+  access_granted: 'commerce',
+  access_denied: 'commerce',
+  wallet: 'web3',
+  transaction: 'web3',
+  contract_action: 'web3',
+  agent_task: 'agent',
+  agent_decision: 'agent',
+  a2h_interaction: 'agent',
+  agent_registered: 'agent',
+  agent_updated: 'agent',
+  agent_authorized: 'agent',
+  agent_deauthorized: 'agent',
+  agent_capability_granted: 'agent',
+  agent_capability_revoked: 'agent',
+  agent_task_created: 'agent',
+  agent_task_decomposed: 'agent',
+  agent_task_started: 'agent',
+  agent_task_completed: 'agent',
+  agent_task_failed: 'agent',
+  agent_tool_called: 'agent',
+  agent_resource_requested: 'agent',
+  agent_delegated_task: 'agent',
+  agent_subagent_spawned: 'agent',
+  agent_policy_evaluated: 'agent',
+  agent_handoff: 'agent',
+  agent_escalated_to_human: 'agent',
   agent_outcome_recorded: 'agent',
-  // x402 legacy
+  reward_action_queued: 'commerce',
+  reward_proof_generated: 'commerce',
+  reward_delivered: 'commerce',
+  reward_claim_submitted: 'commerce',
   x402_payment: 'commerce',
-  // x402 lifecycle
-  x402_resource_requested: 'commerce', x402_payment_required: 'commerce',
-  x402_quote_received: 'commerce', x402_authorization_requested: 'commerce',
-  x402_authorization_resolved: 'commerce', x402_payment_intent_created: 'commerce',
-  x402_payment_submitted: 'commerce', x402_payment_settled: 'commerce',
-  x402_payment_failed: 'commerce', x402_payment_timeout: 'commerce',
-  x402_receipt_verified: 'commerce', x402_access_granted: 'commerce',
-  x402_access_denied: 'commerce', x402_refund_or_reversal: 'commerce',
-  // reward enablement (A6)
-  reward_action_queued: 'commerce', reward_proof_generated: 'commerce',
-  reward_delivered: 'commerce', reward_claim_submitted: 'commerce',
-  // agentic observability — account / MCP / tool
-  agentic_account_observed: 'agent', agentic_account_connected_observed: 'agent',
-  agentic_account_disconnected_observed: 'agent', agent_budget_observed: 'agent',
-  agent_budget_changed_observed: 'agent', agent_permission_observed: 'agent',
-  agent_mcp_connection_observed: 'agent', agent_tool_observed: 'agent',
-  agent_tool_invocation_observed: 'agent', agent_activity_observed: 'agent',
-  agent_risk_signal_observed: 'agent', agent_notification_observed: 'agent',
-  // agentic observability — Robinhood-style trading observation
-  agent_strategy_observed: 'agent', agent_trade_intent_observed: 'agent',
-  agent_trade_order_observed: 'agent', agent_trade_fill_observed: 'agent',
-  agent_trade_rejection_observed: 'agent', agent_position_observed: 'agent',
-  agent_portfolio_snapshot_observed: 'agent', agent_performance_snapshot_observed: 'agent',
+  x402_resource_requested: 'commerce',
+  x402_payment_required: 'commerce',
+  x402_quote_received: 'commerce',
+  x402_authorization_requested: 'commerce',
+  x402_authorization_resolved: 'commerce',
+  x402_payment_intent_created: 'commerce',
+  x402_payment_submitted: 'commerce',
+  x402_payment_settled: 'commerce',
+  x402_payment_failed: 'commerce',
+  x402_payment_timeout: 'commerce',
+  x402_receipt_verified: 'commerce',
+  x402_access_granted: 'commerce',
+  x402_access_denied: 'commerce',
+  x402_refund_or_reversal: 'commerce',
+  agentic_account_observed: 'agent',
+  agentic_account_connected_observed: 'agent',
+  agentic_account_disconnected_observed: 'agent',
+  agent_budget_observed: 'agent',
+  agent_budget_changed_observed: 'agent',
+  agent_permission_observed: 'agent',
+  agent_mcp_connection_observed: 'agent',
+  agent_tool_observed: 'agent',
+  agent_tool_invocation_observed: 'agent',
+  agent_activity_observed: 'agent',
+  agent_risk_signal_observed: 'agent',
+  agent_notification_observed: 'agent',
+  agent_strategy_observed: 'agent',
+  agent_trade_intent_observed: 'agent',
+  agent_trade_order_observed: 'agent',
+  agent_trade_fill_observed: 'agent',
+  agent_trade_rejection_observed: 'agent',
+  agent_position_observed: 'agent',
+  agent_portfolio_snapshot_observed: 'agent',
+  agent_performance_snapshot_observed: 'agent',
   agent_disconnect_observed: 'agent',
-  // agentic observability — AgentMail-style communication observation
-  agent_inbox_observed: 'agent', agent_email_address_observed: 'agent',
-  agent_thread_observed: 'agent', agent_message_received_observed: 'agent',
-  agent_message_sent_observed: 'agent', agent_reply_observed: 'agent',
-  agent_attachment_observed: 'agent', agent_attachment_parsed_observed: 'agent',
-  agent_otp_detected_observed: 'agent', agent_invoice_detected_observed: 'agent',
-  agent_receipt_detected_observed: 'agent', agent_calendar_intent_observed: 'agent',
-  agent_support_route_observed: 'agent', agent_semantic_search_observed: 'agent',
+  agent_inbox_observed: 'agent',
+  agent_email_address_observed: 'agent',
+  agent_thread_observed: 'agent',
+  agent_message_received_observed: 'agent',
+  agent_message_sent_observed: 'agent',
+  agent_reply_observed: 'agent',
+  agent_attachment_observed: 'agent',
+  agent_attachment_parsed_observed: 'agent',
+  agent_otp_detected_observed: 'agent',
+  agent_invoice_detected_observed: 'agent',
+  agent_receipt_detected_observed: 'agent',
+  agent_calendar_intent_observed: 'agent',
+  agent_support_route_observed: 'agent',
+  agent_semantic_search_observed: 'agent',
   agent_data_extraction_observed: 'agent',
-  // x402 protocol observation family
-  x402_resource_request_observed: 'agent', x402_challenge_observed: 'agent',
-  x402_payment_requirement_observed: 'agent', x402_signature_observed: 'agent',
-  x402_verification_observed: 'agent', x402_settlement_observed: 'agent',
-  x402_resource_access_observed: 'agent', x402_resource_access_denied_observed: 'agent',
-  x402_failure_observed: 'agent', x402_replay_risk_observed: 'agent',
-  x402_provider_observed: 'agent',
+  x402_resource_request_observed: 'commerce',
+  x402_challenge_observed: 'commerce',
+  x402_payment_requirement_observed: 'commerce',
+  x402_signature_observed: 'commerce',
+  x402_verification_observed: 'commerce',
+  x402_settlement_observed: 'commerce',
+  x402_resource_access_observed: 'commerce',
+  x402_resource_access_denied_observed: 'commerce',
+  x402_failure_observed: 'commerce',
+  x402_replay_risk_observed: 'commerce',
+  x402_provider_observed: 'commerce',
+  content_impression: 'analytics',
+  recommendation_exposed: 'analytics',
+  offer_exposed: 'analytics',
+  feature_exposed: 'analytics',
+  search_result_exposed: 'analytics',
+  ad_exposed: 'marketing',
+  notification_presented: 'analytics',
+  decision_observed: 'analytics',
+  outcome_observed: 'analytics',
+  goal_achieved: 'analytics',
+  goal_failed: 'analytics',
+  recommendation_accepted: 'analytics',
+  recommendation_rejected: 'analytics',
+  feedback_submitted: 'analytics',
+  retention_observed: 'analytics',
+  churn_observed: 'analytics',
+  human_override_observed: 'analytics',
+  organization_observed: 'analytics',
+  workspace_created: 'analytics',
+  workspace_updated: 'analytics',
+  member_invited: 'analytics',
+  member_joined: 'analytics',
+  member_removed: 'analytics',
+  role_changed: 'analytics',
+  seat_assigned: 'analytics',
+  seat_released: 'analytics',
+  integration_connected: 'analytics',
+  integration_disconnected: 'analytics',
+  service_account_created: 'analytics',
+  service_account_revoked: 'analytics',
+  api_key_created: 'analytics',
+  api_key_revoked: 'analytics',
+  project_created: 'analytics',
+  project_archived: 'analytics',
+  workflow_started: 'analytics',
+  workflow_completed: 'analytics',
+  workflow_failed: 'analytics',
+  product_viewed: 'commerce',
+  cart_item_added: 'commerce',
+  cart_item_removed: 'commerce',
+  cart_updated: 'commerce',
+  coupon_applied: 'commerce',
+  checkout_started: 'commerce',
+  checkout_step_completed: 'commerce',
+  order_completed: 'commerce',
+  order_cancelled: 'commerce',
+  order_refunded: 'commerce',
+  chargeback_observed: 'commerce',
+  subscription_started: 'commerce',
+  trial_started: 'commerce',
+  trial_converted: 'commerce',
+  subscription_renewed: 'commerce',
+  subscription_upgrade_observed: 'commerce',
+  subscription_downgrade_observed: 'commerce',
+  subscription_cancelled: 'commerce',
+  invoice_issued: 'commerce',
+  invoice_paid: 'commerce',
+  invoice_failed: 'commerce',
+  dunning_started: 'commerce',
+  dunning_resolved: 'commerce',
+  dead_click_observed: 'analytics',
+  rage_click_observed: 'analytics',
+  scroll_depth_observed: 'analytics',
+  form_started: 'analytics',
+  form_field_interaction: 'analytics',
+  form_validation_failed: 'analytics',
+  form_submitted: 'analytics',
+  form_abandoned: 'analytics',
+  search_reformulated: 'analytics',
+  retry_observed: 'analytics',
+  journey_stalled: 'analytics',
+  backtrack_observed: 'analytics',
+  api_request_observed: 'analytics',
+  webhook_delivery_observed: 'analytics',
+  connector_sync_started: 'analytics',
+  connector_sync_completed: 'analytics',
+  connector_sync_failed: 'analytics',
+  job_started: 'analytics',
+  job_completed: 'analytics',
+  job_failed: 'analytics',
+  rate_limit_observed: 'analytics',
+  dependency_failure_observed: 'analytics',
+  export_completed: 'analytics',
+  signup_started: 'analytics',
+  signup_completed: 'analytics',
+  login_succeeded: 'analytics',
+  login_failed: 'analytics',
+  logout_observed: 'analytics',
+  sso_observed: 'analytics',
+  mfa_challenge_observed: 'analytics',
+  identity_verified: 'analytics',
+  alias_link_requested: 'analytics',
+  alias_link_confirmed: 'analytics',
+  alias_revoked: 'analytics',
+  account_recovery_started: 'analytics',
+  account_recovery_completed: 'analytics',
+  device_registered: 'analytics',
+  device_revoked: 'analytics',
+  agent_evaluation_observed: 'agent',
+  agent_cost_observed: 'agent',
+  agent_grounding_observed: 'agent',
+  agent_guardrail_observed: 'agent',
+  agent_human_override_observed: 'agent',
+  transaction_pending_observed: 'web3',
+  transaction_confirmed_observed: 'web3',
+  transaction_reverted_observed: 'web3',
+  transaction_reorged_observed: 'web3',
+  token_approval_observed: 'web3',
+  allowance_changed_observed: 'web3',
+  bridge_transfer_observed: 'web3',
+  settlement_finality_observed: 'web3',
+  notification_delivered: 'analytics',
+  notification_opened: 'analytics',
+  notification_clicked: 'analytics',
+  email_delivered: 'marketing',
+  email_opened: 'marketing',
+  email_clicked: 'marketing',
+  email_bounced: 'marketing',
+  message_received_observed: 'analytics',
+  message_sent_observed: 'analytics',
+  message_replied_observed: 'analytics',
+  unsubscribe_observed: 'marketing',
+  support_case_created: 'analytics',
+  support_case_resolved: 'analytics',
+  support_case_escalated: 'analytics',
+  support_sla_breached: 'analytics',
+  credit_signal_observed: 'credit',
+  credit_account_observed: 'credit',
+  credit_decision_observed: 'credit',
+  location_observed: 'location',
+  geofence_transition_observed: 'location',
 };
+// @generated-end
 
 // ---------------------------------------------------------------------------
 // Envelope

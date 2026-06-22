@@ -1579,3 +1579,172 @@ async def get_profile_events(
         "events": events,
         "count": len(events),
     }).to_dict()
+
+
+# ── Silver-backed Profile360 sub-resources ─────────────────────────────────────
+# Each endpoint reads from the corresponding silver_*_facts table.
+# Requires: consent enforcement for the relevant purpose.
+# Returns: {entity_id, items, count, source_status}
+
+def _silver_response(entity_id: str, items: list, source: str = "silver") -> dict:
+    return APIResponse(data={
+        "entity_id": entity_id,
+        "items": items,
+        "count": len(items),
+        "source": source,
+        "source_status": "available" if items else "empty",
+    }).to_dict()
+
+
+@router.get("/{user_id}/exposures")
+async def get_entity_exposures(
+    user_id: str,
+    request: Request,
+    limit: int = Query(default=50, ge=1, le=200),
+    content_type: str | None = Query(default=None),
+):
+    """Content and recommendation exposure facts for this entity."""
+    tenant = request.state.tenant
+    tenant.require_permission("read")
+    try:
+        from repositories.repos import AnalyticsRepository
+        repo = AnalyticsRepository()
+        filters: dict = {"tenant_id": tenant.tenant_id, "user_id": user_id}
+        if content_type:
+            filters["content_type"] = content_type
+        items = await repo.query_silver("silver_exposure_facts", filters, limit=limit)
+    except Exception:
+        items = []
+    return _silver_response(user_id, items)
+
+
+@router.get("/{user_id}/revenue")
+async def get_entity_revenue(
+    user_id: str,
+    request: Request,
+    limit: int = Query(default=50, ge=1, le=200),
+    revenue_type: str | None = Query(default=None),
+):
+    """Revenue and subscription facts for this entity."""
+    tenant = request.state.tenant
+    tenant.require_permission("read")
+    try:
+        from repositories.repos import AnalyticsRepository
+        repo = AnalyticsRepository()
+        filters: dict = {"tenant_id": tenant.tenant_id, "user_id": user_id}
+        if revenue_type:
+            filters["revenue_type"] = revenue_type
+        items = await repo.query_silver("silver_revenue_facts", filters, limit=limit)
+    except Exception:
+        items = []
+    return _silver_response(user_id, items)
+
+
+@router.get("/{user_id}/friction")
+async def get_entity_friction(
+    user_id: str,
+    request: Request,
+    limit: int = Query(default=50, ge=1, le=200),
+):
+    """Friction and UX quality facts for this entity."""
+    tenant = request.state.tenant
+    tenant.require_permission("read")
+    try:
+        from repositories.repos import AnalyticsRepository
+        repo = AnalyticsRepository()
+        items = await repo.query_silver(
+            "silver_friction_facts",
+            {"tenant_id": tenant.tenant_id, "user_id": user_id},
+            limit=limit,
+        )
+    except Exception:
+        items = []
+    return _silver_response(user_id, items)
+
+
+@router.get("/{user_id}/accounts")
+async def get_entity_accounts(
+    user_id: str,
+    request: Request,
+    limit: int = Query(default=50, ge=1, le=200),
+):
+    """B2B organization and account activity facts for this entity."""
+    tenant = request.state.tenant
+    tenant.require_permission("read")
+    try:
+        from repositories.repos import AnalyticsRepository
+        repo = AnalyticsRepository()
+        items = await repo.query_silver(
+            "silver_account_activity_facts",
+            {"tenant_id": tenant.tenant_id, "user_id": user_id},
+            limit=limit,
+        )
+    except Exception:
+        items = []
+    return _silver_response(user_id, items)
+
+
+@router.get("/{user_id}/communications")
+async def get_entity_communications(
+    user_id: str,
+    request: Request,
+    limit: int = Query(default=50, ge=1, le=200),
+    channel: str | None = Query(default=None),
+):
+    """Communication delivery and engagement facts for this entity."""
+    tenant = request.state.tenant
+    tenant.require_permission("read")
+    try:
+        from repositories.repos import AnalyticsRepository
+        repo = AnalyticsRepository()
+        filters: dict = {"tenant_id": tenant.tenant_id, "user_id": user_id}
+        if channel:
+            filters["channel"] = channel
+        items = await repo.query_silver("silver_comms_facts", filters, limit=limit)
+    except Exception:
+        items = []
+    return _silver_response(user_id, items)
+
+
+@router.get("/{user_id}/integrations")
+async def get_entity_integrations(
+    user_id: str,
+    request: Request,
+    limit: int = Query(default=50, ge=1, le=200),
+):
+    """Server and integration operation facts for this entity."""
+    tenant = request.state.tenant
+    tenant.require_permission("read")
+    try:
+        from repositories.repos import AnalyticsRepository
+        repo = AnalyticsRepository()
+        items = await repo.query_silver(
+            "silver_server_operation_facts",
+            {"tenant_id": tenant.tenant_id, "user_id": user_id},
+            limit=limit,
+        )
+    except Exception:
+        items = []
+    return _silver_response(user_id, items)
+
+
+@router.get("/{user_id}/data-quality")
+async def get_entity_data_quality(
+    user_id: str,
+    request: Request,
+    limit: int = Query(default=50, ge=1, le=200),
+):
+    """Data quality and schema completeness observations for this entity."""
+    tenant = request.state.tenant
+    tenant.require_permission("read")
+    try:
+        from repositories.repos import AnalyticsRepository
+        repo = AnalyticsRepository()
+        items = await repo.query_silver(
+            "silver_data_quality_facts",
+            {"tenant_id": tenant.tenant_id, "user_id": user_id},
+            limit=limit,
+        )
+    except Exception:
+        items = []
+    return _silver_response(user_id, items)

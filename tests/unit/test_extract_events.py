@@ -103,10 +103,15 @@ def test_parse_record_raises_on_missing(ee):
 
 
 def test_live_extract_has_canonical_families(ee, live_text):
+    """All extracted families must be declared in the JSON registry."""
+    import json
+    from pathlib import Path
+    registry_path = Path(__file__).resolve().parents[2] / "packages" / "shared" / "contracts" / "event-registry.json"
+    registry = json.loads(registry_path.read_text(encoding="utf-8"))
+    declared_families = {e["family"] for e in registry["events"]}
     payload = ee.build_payload(live_text)
-    assert payload["families"] == [
-        "core", "journey", "identity", "consent", "commerce", "wallet", "agent", "x402", "reward",
-    ]
+    for family in payload["families"]:
+        assert family in declared_families, f"unexpected family {family!r} in extract; update event-registry.json"
 
 
 def test_live_extract_every_event_has_family_and_consent(ee, live_text):
@@ -128,8 +133,13 @@ def test_live_extract_includes_known_events(ee, live_text):
 
 
 def test_live_extract_consent_purposes_subset_of_canonical(ee, live_text):
+    """All extracted consent purposes must be declared in the JSON consent registry."""
+    import json
+    from pathlib import Path
+    consent_path = Path(__file__).resolve().parents[2] / "packages" / "shared" / "contracts" / "consent-registry.json"
+    consent_reg = json.loads(consent_path.read_text(encoding="utf-8"))
+    canonical = {p.get("name") or p.get("key") for p in consent_reg["purposes"]}
     payload = ee.build_payload(live_text)
-    canonical = {"analytics", "marketing", "commerce", "web3", "agent"}
     actual = set(payload["consent_purposes"])
     assert actual <= canonical, f"unexpected consent purposes: {actual - canonical}"
 

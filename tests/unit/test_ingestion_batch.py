@@ -53,75 +53,19 @@ def backend_path():
 
 def test_canonical_event_types_match_typescript():
     """
-    Python CANONICAL_EVENT_TYPES must match the TypeScript EventType union.
-    This test encodes the expected set. If packages/shared/events.ts changes,
-    update this test to match.
+    Python CANONICAL_EVENT_TYPES must match the JSON event registry.
+    The registry is the single source of truth; the generated Python module
+    is derived from it via scripts/generate_contracts.py.
     """
-    expected = {
-        "track", "page", "screen", "heartbeat", "error", "performance", "experiment",
-        "journey_started", "journey_paused", "journey_resumed", "journey_continued",
-        "journey_completed", "journey_abandoned", "journey_checkpoint",
-        "identify", "consent",
-        "conversion", "payment_initiated", "payment_completed", "payment_failed",
-        "approval_requested", "approval_resolved",
-        "entitlement_granted", "entitlement_revoked",
-        "access_granted", "access_denied",
-        "wallet", "transaction", "contract_action",
-        # Agent — legacy
-        "agent_task", "agent_decision", "a2h_interaction",
-        # Agent — lifecycle (granular)
-        "agent_registered", "agent_updated", "agent_authorized", "agent_deauthorized",
-        "agent_capability_granted", "agent_capability_revoked",
-        "agent_task_created", "agent_task_decomposed", "agent_task_started",
-        "agent_task_completed", "agent_task_failed", "agent_tool_called",
-        "agent_resource_requested", "agent_delegated_task", "agent_subagent_spawned",
-        "agent_policy_evaluated", "agent_handoff", "agent_escalated_to_human",
-        "agent_outcome_recorded",
-        # x402 — legacy
-        "x402_payment",
-        # x402 — lifecycle (granular)
-        "x402_resource_requested", "x402_payment_required", "x402_quote_received",
-        "x402_authorization_requested", "x402_authorization_resolved",
-        "x402_payment_intent_created", "x402_payment_submitted", "x402_payment_settled",
-        "x402_payment_failed", "x402_payment_timeout", "x402_receipt_verified",
-        "x402_access_granted", "x402_access_denied", "x402_refund_or_reversal",
-        # Reward enablement (A6)
-        "reward_action_queued", "reward_proof_generated", "reward_delivered", "reward_claim_submitted",
-        # Agentic observability — account / MCP / tool
-        "agentic_account_observed", "agentic_account_connected_observed",
-        "agentic_account_disconnected_observed", "agent_budget_observed",
-        "agent_budget_changed_observed", "agent_permission_observed",
-        "agent_mcp_connection_observed", "agent_tool_observed",
-        "agent_tool_invocation_observed", "agent_activity_observed",
-        "agent_risk_signal_observed", "agent_notification_observed",
-        # Agentic observability — Robinhood-style trading observation
-        "agent_strategy_observed", "agent_trade_intent_observed",
-        "agent_trade_order_observed", "agent_trade_fill_observed",
-        "agent_trade_rejection_observed", "agent_position_observed",
-        "agent_portfolio_snapshot_observed", "agent_performance_snapshot_observed",
-        "agent_disconnect_observed",
-        # Agentic observability — AgentMail-style communication observation
-        "agent_inbox_observed", "agent_email_address_observed",
-        "agent_thread_observed", "agent_message_received_observed",
-        "agent_message_sent_observed", "agent_reply_observed",
-        "agent_attachment_observed", "agent_attachment_parsed_observed",
-        "agent_otp_detected_observed", "agent_invoice_detected_observed",
-        "agent_receipt_detected_observed", "agent_calendar_intent_observed",
-        "agent_support_route_observed", "agent_semantic_search_observed",
-        "agent_data_extraction_observed",
-        # x402 protocol observation (from external observer perspective)
-        "x402_resource_request_observed", "x402_challenge_observed",
-        "x402_payment_requirement_observed", "x402_signature_observed",
-        "x402_verification_observed", "x402_settlement_observed",
-        "x402_resource_access_observed", "x402_resource_access_denied_observed",
-        "x402_failure_observed", "x402_replay_risk_observed",
-        "x402_provider_observed",
-    }
+    import json
+    registry_path = ROOT / "packages" / "shared" / "contracts" / "event-registry.json"
+    registry = json.loads(registry_path.read_text(encoding="utf-8"))
+    expected = frozenset(e["type"] for e in registry["events"])
     with backend_path():
         m = importlib.import_module("services.ingestion.batch")
         assert m.CANONICAL_EVENT_TYPES == expected, (
-            "CANONICAL_EVENT_TYPES diverged from packages/shared/events.ts. "
-            "Update services/ingestion/batch.py to match."
+            "CANONICAL_EVENT_TYPES diverged from event-registry.json. "
+            "Run: python scripts/generate_contracts.py"
         )
 
 
@@ -288,12 +232,18 @@ def test_web_sdk_uses_authorization_header():
 # ── Event family mapping ─────────────────────────────────────────────────────
 
 def test_all_canonical_types_have_family():
+    """Every canonical event type must have a known family per the JSON registry."""
+    import json
+    registry_path = ROOT / "packages" / "shared" / "contracts" / "event-registry.json"
+    registry = json.loads(registry_path.read_text(encoding="utf-8"))
+    declared_families = {e["family"] for e in registry["events"]}
     with backend_path():
         m = importlib.import_module("services.ingestion.batch")
         for event_type in m.CANONICAL_EVENT_TYPES:
             family = m._get_event_family(event_type)
-            assert family in {"core", "journey", "identity", "consent", "commerce", "wallet", "agent", "x402", "reward"}, (
-                f"Event type {event_type!r} has unexpected family {family!r}"
+            assert family in declared_families, (
+                f"Event type {event_type!r} has unexpected family {family!r}. "
+                f"Known families: {sorted(declared_families)}"
             )
 
 

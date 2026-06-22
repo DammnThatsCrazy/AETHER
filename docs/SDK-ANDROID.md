@@ -13,7 +13,7 @@ source_files:
 canonical_owner: sdk@aether
 estimated_read_minutes: 10
 toc_depth: 3
-last_synced_commit: e711d05
+last_synced_commit: b8b0072
 ---
 
 # Aether Android SDK v8.9.0 — Integration Guide
@@ -123,15 +123,29 @@ Aether.walletTransaction(
 
 ## Consent Management
 
+Eight canonical purposes: `analytics`, `marketing`, `personalization`, `web3`, `agent`, `commerce`,
+`credit`, `location`. `credit` and `location` **always require explicit opt-in** — they are never
+granted by `grantAll()` and must be presented as separate consent choices in your UI.
+
 ```kotlin
-// Grant consent
+// Grant specific purposes
 Aether.grantConsent(listOf("analytics", "marketing"))
+
+// Grant all non-sensitive purposes (excludes credit and location)
+Aether.grantAll()
+
+// Explicitly grant credit after showing separate consent UI
+Aether.grantConsent(listOf("credit"))
 
 // Revoke consent
 Aether.revokeConsent(listOf("marketing"))
 
 // Check current state
-val state = Aether.getConsentState() // ["analytics"]
+val state = Aether.getConsentState() // ["analytics", ...]
+
+// All canonical purposes
+val purposes = Aether.canonicalConsentPurposes
+// ["analytics", "marketing", "personalization", "web3", "agent", "commerce", "credit", "location"]
 ```
 
 ## Ecommerce

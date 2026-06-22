@@ -14,7 +14,7 @@ source_files:
 canonical_owner: sdk@aether
 estimated_read_minutes: 9
 toc_depth: 3
-last_synced_commit: e711d05
+last_synced_commit: b8b0072
 ---
 
 # Aether React Native SDK v8.9.0 — Integration Guide
@@ -209,15 +209,27 @@ Aether.wallet.transaction('0xabc123...', {
 
 ## Consent Management
 
+Eight canonical purposes: `analytics`, `marketing`, `personalization`, `web3`, `agent`, `commerce`,
+`credit`, `location`. `credit` and `location` **always require explicit opt-in** — they are never
+granted by `grantAll()` and must be presented as separate consent choices in your UI.
+
 ```typescript
-// Grant consent
+// Grant specific purposes
 Aether.consent.grant(['analytics', 'marketing']);
+
+// Grant all non-sensitive purposes (excludes credit and location)
+Aether.consent.grantAll();
+
+// Explicitly grant credit after showing separate consent UI
+Aether.consent.grant(['credit']);
 
 // Revoke consent
 Aether.consent.revoke(['marketing']);
 
-// Get state
+// Get state (all 8 purposes with boolean values)
 const state = await Aether.consent.getState();
+// { analytics: true, marketing: false, personalization: false, web3: false,
+//   agent: false, commerce: false, credit: false, location: false, ... }
 ```
 
 ## Ecommerce

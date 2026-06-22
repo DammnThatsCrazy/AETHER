@@ -13,7 +13,7 @@ source_files:
 canonical_owner: sdk@aether
 estimated_read_minutes: 10
 toc_depth: 3
-last_synced_commit: 531f423
+last_synced_commit: b8b0072
 ---
 
 # Aether iOS SDK v8.9.0 — Integration Guide
@@ -119,15 +119,29 @@ Aether.shared.walletTransaction(
 
 ## Consent Management
 
+Eight canonical purposes: `analytics`, `marketing`, `personalization`, `web3`, `agent`, `commerce`,
+`credit`, `location`. `credit` and `location` **always require explicit opt-in** — they are never
+granted by `grantAll()` and must be presented as separate consent choices in your UI.
+
 ```swift
-// Grant consent
+// Grant specific purposes
 Aether.shared.grantConsent(categories: ["analytics", "marketing"])
+
+// Grant all non-sensitive purposes (excludes credit and location)
+Aether.shared.grantAll()
+
+// Explicitly grant credit after showing separate consent UI
+Aether.shared.grantConsent(categories: ["credit"])
 
 // Revoke consent
 Aether.shared.revokeConsent(categories: ["marketing"])
 
 // Check current state
-let state = Aether.shared.getConsentState() // ["analytics"]
+let state = Aether.shared.getConsentState() // ["analytics", ...]
+
+// All canonical purposes
+let purposes = AetherSDK.canonicalConsentPurposes
+// ["analytics", "marketing", "personalization", "web3", "agent", "commerce", "credit", "location"]
 ```
 
 ## Ecommerce

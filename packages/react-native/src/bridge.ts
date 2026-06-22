@@ -270,12 +270,30 @@ const Aether = {
   consent: {
     async getState(): Promise<ConsentState> {
       return AetherNative?.getConsentState() ?? {
-        analytics: false, marketing: false, web3: false, agent: false, commerce: false,
-        updatedAt: '', policyVersion: '',
+        analytics: false,
+        marketing: false,
+        personalization: false,
+        web3: false,
+        agent: false,
+        commerce: false,
+        credit: false,
+        location: false,
+        updatedAt: '',
+        policyVersion: '',
       };
     },
     grant(purposes: ConsentPurpose[]): void {
       AetherNative?.grantConsent(purposes);
+    },
+    /**
+     * Grant all non-explicit-opt-in purposes (excludes credit and location).
+     * Passes through to native grantAll() which enforces the same exclusion.
+     */
+    grantAll(): void {
+      const grantable: ConsentPurpose[] = [
+        'analytics', 'marketing', 'personalization', 'web3', 'agent', 'commerce',
+      ];
+      AetherNative?.grantConsent(grantable);
     },
     revoke(purposes: ConsentPurpose[]): void {
       AetherNative?.revokeConsent(purposes);

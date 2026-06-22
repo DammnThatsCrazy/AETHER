@@ -6,6 +6,7 @@
   "workspaces": [
     "packages/shared",
     "packages/web",
+    "packages/server",
     "packages/react-native",
     "frontend/aether",
     "frontend/kyber",

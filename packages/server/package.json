@@ -1,0 +1,38 @@
+{
+  "name": "@aether/server",
+  "version": "8.9.0",
+  "description": "Aether Server SDK — Node.js server-side event observation client with consent, retry, and scrubbing.",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "source": "./src/index.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "sideEffects": false,
+  "files": [
+    "dist",
+    "src"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "test": "vitest run",
+    "prepublishOnly": "npm run build"
+  },
+  "publishConfig": {
+    "access": "public",
+    "registry": "https://registry.npmjs.org"
+  },
+  "peerDependencies": {
+    "@aether/shared": ">=8.9.0"
+  },
+  "devDependencies": {
+    "@aether/shared": "^8.9.0",
+    "@vitest/coverage-v8": "^1.6.0",
+    "vitest": "^1.6.0",
+    "typescript": "^5.4.0"
+  },
+  "license": "UNLICENSED"
+}

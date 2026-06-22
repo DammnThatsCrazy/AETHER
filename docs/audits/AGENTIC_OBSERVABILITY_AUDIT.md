@@ -11,7 +11,7 @@ source_files:
   - Backend Architecture/aether-backend/services/agent/
   - packages/shared/events.ts
   - packages/shared/agentic-observability.ts
-last_synced_commit: c9e5412
+last_synced_commit: b8b0072
 ---
 
 # Agentic Observability Audit
@@ -45,8 +45,8 @@ last_synced_commit: c9e5412
 | File | Issue | Resolution |
 |---|---|---|
 | `docs/AGENTIC_COMMERCE_BUILD_SPEC.md` | Phrases like "AETHER settles" or "control plane settles payment" imply execution | Reframe as "externally observed settlement" and "AETHER records settlement" |
-| `docs/source-of-truth/EVENT_REGISTRY.md` | Events `x402_payment_submitted`, `x402_payment_settled` could imply AETHER submits/settles | Deprecate; replace with `x402_settlement_observed`, `x402_signature_observed` |
-| `packages/shared/events.ts` | Same events in TypeScript union | Add observability events; mark deprecated legacy events |
+| `docs/source-of-truth/EVENT_REGISTRY.md` | Events `x402_payment_submitted`, `x402_payment_settled` could imply AETHER submits/settles | **Partially resolved:** canonical x402 observation events now added in `packages/shared/contracts/event-registry.json` (`x402_payment_required_observed`, `x402_payment_initiated_observed`, `x402_payment_verified_observed`, `x402_payment_failed_observed`, `x402_resource_unlocked_observed`, `x402_settlement_confirmed_observed`). Legacy ambiguous names remain in non-generated section and should be deprecated in a follow-up PR. |
+| `packages/shared/events.ts` | Same events in TypeScript union | **Partially resolved:** observation-style events added to the generated section. `x402_signature_observed`, `x402_settlement_observed` present. Legacy `x402_payment_submitted`, `x402_payment_settled` remain in non-generated section. |
 | `services/x402/settlement.py` | `SettlementState.SETTLED` transition could be misread as fund settlement | Comment clarification that this is state tracking only |
 
 ## Bucket 3 — Incorrect: AETHER appears to originate/execute

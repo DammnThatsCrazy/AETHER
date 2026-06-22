@@ -1,12 +1,20 @@
 // =============================================================================
-// Aether SDK — CONSENT MODULE (GDPR / CCPA)
+// Aether SDK — CONSENT MODULE (GDPR / CCPA / CPRA)
 // =============================================================================
 
-import type { ConsentState, ConsentConfig, ConsentBannerConfig, ConsentCallback } from '../types';
+import type { ConsentState, ConsentConfig, ConsentPurpose, ConsentBannerConfig, ConsentCallback } from '../types';
 import { storage, now } from '../utils';
 
 const CONSENT_KEY = 'consent';
 const CONSENT_RECORDED_KEY = 'consent_recorded';
+const FP_STORAGE_KEY = '_aether_fp';
+
+// credit and location always require explicit opt-in — never granted by accept-all.
+const EXPLICIT_OPT_IN_PURPOSES: readonly ConsentPurpose[] = ['credit', 'location'];
+
+const ALL_PURPOSES: readonly ConsentPurpose[] = [
+  'analytics', 'marketing', 'personalization', 'web3', 'agent', 'commerce', 'credit', 'location',
+];
 
 export class ConsentModule {
   private state: ConsentState;
@@ -16,7 +24,7 @@ export class ConsentModule {
 
   constructor(config?: Partial<ConsentConfig>) {
     this.config = {
-      purposes: ['analytics', 'marketing', 'web3', 'agent', 'commerce'],
+      purposes: [...ALL_PURPOSES],
       policyUrl: '/privacy',
       policyVersion: '1.0',
       ...config,
@@ -30,8 +38,8 @@ export class ConsentModule {
   }
 
   /** Check if a specific purpose is consented */
-  hasConsent(purpose: string): boolean {
-    return (this.state as unknown as Record<string, unknown>)[purpose] === true;
+  hasConsent(purpose: ConsentPurpose): boolean {
+    return this.state[purpose] === true;
   }
 
   /** Check if user has explicitly accepted or rejected (banner was acted on) */
@@ -40,9 +48,9 @@ export class ConsentModule {
   }
 
   /** Grant consent for specified purposes */
-  grant(purposes: string[]): void {
+  grant(purposes: ConsentPurpose[]): void {
     for (const p of purposes) {
-      (this.state as unknown as Record<string, unknown>)[p] = true;
+      this.state[p] = true;
     }
     this.state.updatedAt = now();
     this.state.policyVersion = this.config.policyVersion;
@@ -50,25 +58,35 @@ export class ConsentModule {
     this.notify();
   }
 
-  /** Revoke consent for specified purposes */
-  revoke(purposes: string[]): void {
+  /** Revoke consent for specified purposes. Revoking personalization deletes cached fingerprint. */
+  revoke(purposes: ConsentPurpose[]): void {
+    const revokingPersonalization = purposes.includes('personalization') && this.state.personalization;
     for (const p of purposes) {
-      (this.state as unknown as Record<string, unknown>)[p] = false;
+      this.state[p] = false;
     }
     this.state.updatedAt = now();
     this.persist();
+    if (revokingPersonalization) {
+      this.clearFingerprintCache();
+    }
     this.notify();
   }
 
-  /** Grant all purposes */
+  /**
+   * Grant all purposes that do NOT require explicit opt-in (credit and location are excluded).
+   * To grant credit or location, call grant(['credit']) or grant(['location']) explicitly.
+   */
   grantAll(): void {
-    this.grant(this.config.purposes);
+    const grantable = this.config.purposes.filter(
+      (p) => !EXPLICIT_OPT_IN_PURPOSES.includes(p)
+    );
+    this.grant(grantable);
     storage.set(CONSENT_RECORDED_KEY, true);
   }
 
   /** Revoke all purposes */
   revokeAll(): void {
-    this.revoke(this.config.purposes);
+    this.revoke([...this.config.purposes]);
     storage.set(CONSENT_RECORDED_KEY, true);
   }
 
@@ -177,13 +195,15 @@ export class ConsentModule {
     const stored = storage.get<ConsentState>(CONSENT_KEY);
     if (stored) return stored;
 
-    // Default: no consent granted
     return {
       analytics: false,
       marketing: false,
+      personalization: false,
       web3: false,
       agent: false,
       commerce: false,
+      credit: false,
+      location: false,
       updatedAt: now(),
       policyVersion: this.config.policyVersion,
     };
@@ -198,5 +218,13 @@ export class ConsentModule {
     this.listeners.forEach((cb) => {
       try { cb(state); } catch { /* ignore listener errors */ }
     });
+  }
+
+  private clearFingerprintCache(): void {
+    try {
+      localStorage.removeItem(FP_STORAGE_KEY);
+    } catch {
+      // Silent fail — best-effort cleanup
+    }
   }
 }

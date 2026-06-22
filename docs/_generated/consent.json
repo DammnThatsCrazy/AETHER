@@ -4,31 +4,46 @@
   "purposes": [
     {
       "name": "analytics",
-      "description": "track/page/screen/identify/heartbeat/error/performance/conversion"
+      "description": "Basic product usage and operational analytics. Required for core platform function."
     },
     {
       "name": "marketing",
-      "description": "conversion/experiment/campaign-derived attribution"
+      "description": "Attribution, experiments, conversion tracking, and advertising attribution."
+    },
+    {
+      "name": "personalization",
+      "description": "Cross-device fingerprinting, recommendations, and personalised content. Required for device fingerprint generation."
     },
     {
       "name": "web3",
-      "description": "wallet, transaction, on-chain action, token/nft/defi signals"
+      "description": "Wallet connections, on-chain transactions, and decentralised protocol observations."
     },
     {
       "name": "agent",
-      "description": "agent_task, agent_decision, A2H notifications"
+      "description": "Agentic workflow observations, AI task lifecycle, delegation, and tool usage."
     },
     {
       "name": "commerce",
-      "description": "payment, approval, entitlement, access, x402"
+      "description": "Payments, approvals, entitlements, subscriptions, orders, and access control events."
+    },
+    {
+      "name": "credit",
+      "description": "Credit signals, account observations, and credit decisions. Always requires explicit opt-in. Always requires explicit opt-in."
+    },
+    {
+      "name": "location",
+      "description": "Precise or coarse location observations and geofence transitions. Always requires explicit opt-in. Always requires explicit opt-in."
     }
   ],
   "state_fields": [
     "analytics",
     "marketing",
+    "personalization",
     "web3",
     "agent",
     "commerce",
+    "credit",
+    "location",
     "updatedAt",
     "policyVersion"
   ]
