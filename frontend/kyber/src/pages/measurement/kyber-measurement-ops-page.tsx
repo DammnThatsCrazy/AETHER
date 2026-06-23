@@ -69,8 +69,8 @@ export function KyberMeasurementOpsPage() {
                     <span className="flex gap-2">
                       <ConfirmButton label="Restart" onConfirm={() => restartConnector(String(r.connector_id))} />
                       <ConfirmButton label="Backfill 30d" onConfirm={() => {
-                        const end = new Date().toISOString().split('T')[0];
-                        const start = new Date(Date.now() - 30 * 86400000).toISOString().split('T')[0];
+                        const end = new Date().toISOString().split('T')[0] ?? '';
+                        const start = new Date(Date.now() - 30 * 86400000).toISOString().split('T')[0] ?? '';
                         return backfillConnector(String(r.connector_id), { start_date: start, end_date: end });
                       }} />
                     </span>

@@ -50,7 +50,7 @@ export function CampaignIntelligencePage() {
         </CardContent></Card>
       </div>
 
-      {recon.days && (
+      {!!recon.days && (
         <Card className="mb-4">
           <CardHeader><CardTitle>Spend reconciliation</CardTitle></CardHeader>
           <CardContent>

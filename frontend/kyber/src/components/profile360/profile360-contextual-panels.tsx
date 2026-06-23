@@ -523,9 +523,9 @@ export function Profile360AttributionPanel({ sections }: { readonly sections: re
                 <div className="text-[10px] uppercase tracking-wide text-text-muted mb-1">First campaign</div>
                 <div className="flex flex-wrap items-center gap-2 px-3 py-2 rounded border border-border-subtle bg-surface-raised text-xs">
                   <span className="font-mono text-text-primary">{String(firstCampaign.campaign_id ?? firstCampaign.id ?? '—').slice(0, 12)}</span>
-                  {firstCampaign.name && <span className="text-text-secondary">{String(firstCampaign.name)}</span>}
-                  {firstCampaign.channel && <Badge size="sm">{String(firstCampaign.channel)}</Badge>}
-                  {firstCampaign.first_touch_at && (
+                  {!!firstCampaign.name && <span className="text-text-secondary">{String(firstCampaign.name)}</span>}
+                  {!!firstCampaign.channel && <Badge size="sm">{String(firstCampaign.channel)}</Badge>}
+                  {!!firstCampaign.first_touch_at && (
                     <span className="font-mono text-text-muted">{new Date(String(firstCampaign.first_touch_at)).toLocaleDateString()}</span>
                   )}
                 </div>
@@ -539,8 +539,8 @@ export function Profile360AttributionPanel({ sections }: { readonly sections: re
                     {campaignHistory.map((c, i) => (
                       <div key={String(c.campaign_id ?? i)} className="flex flex-wrap items-center gap-2 px-2 py-1.5 rounded border border-border-subtle bg-surface-raised text-xs">
                         <span className="font-mono text-text-muted">{String(c.campaign_id ?? '—').slice(0, 10)}…</span>
-                        {c.name && <span className="text-text-secondary truncate max-w-[120px]">{String(c.name)}</span>}
-                        {c.channel && <Badge size="sm">{String(c.channel)}</Badge>}
+                        {!!c.name && <span className="text-text-secondary truncate max-w-[120px]">{String(c.name)}</span>}
+                        {!!c.channel && <Badge size="sm">{String(c.channel)}</Badge>}
                         {c.attributed_revenue != null && <span className="font-mono text-text-primary ml-auto">{fmtUsd(c.attributed_revenue)}</span>}
                       </div>
                     ))}
@@ -556,9 +556,9 @@ export function Profile360AttributionPanel({ sections }: { readonly sections: re
                     {attributedConversions.map((cv, i) => (
                       <div key={String(cv.conversion_id ?? i)} className="flex flex-wrap items-center gap-2 px-2 py-1.5 rounded border border-border-subtle bg-surface-raised text-xs">
                         <span className="font-mono text-text-muted">{String(cv.conversion_id ?? '—').slice(0, 8)}…</span>
-                        {cv.conversion_type && <Badge size="sm">{String(cv.conversion_type)}</Badge>}
+                        {!!cv.conversion_type && <Badge size="sm">{String(cv.conversion_type)}</Badge>}
                         {cv.gross_value != null && <span className="font-mono text-text-primary">{fmtUsd(cv.gross_value)}</span>}
-                        {cv.occurred_at && <span className="font-mono text-text-muted ml-auto">{new Date(String(cv.occurred_at)).toLocaleDateString()}</span>}
+                        {!!cv.occurred_at && <span className="font-mono text-text-muted ml-auto">{new Date(String(cv.occurred_at)).toLocaleDateString()}</span>}
                       </div>
                     ))}
                   </div>

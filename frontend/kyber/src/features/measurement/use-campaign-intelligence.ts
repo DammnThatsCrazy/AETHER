@@ -15,8 +15,8 @@ export function useCampaignIntelligence(params: { campaign_id?: string; period_s
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const now = new Date();
-  const start = params.period_start ?? new Date(now.getTime() - 30 * 86400000).toISOString().split('T')[0];
-  const end = params.period_end ?? now.toISOString().split('T')[0];
+  const start = params.period_start ?? new Date(now.getTime() - 30 * 86400000).toISOString().split('T')[0] ?? '';
+  const end = params.period_end ?? now.toISOString().split('T')[0] ?? '';
 
   useEffect(() => {
     let active = true;
