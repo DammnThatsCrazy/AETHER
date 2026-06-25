@@ -248,6 +248,7 @@ async def traverse_graph(
         direction=body.direction or "both",
         edge_types=edge_types,
         limit=body.limit,
+        tenant_id=body.tenantId,
     )
 
     if body.filter:
@@ -299,6 +300,7 @@ async def shortest_path(
         from_id=body.from_.id,
         to_id=body.to.id,
         max_depth=body.maxDepth,
+        tenant_id=body.tenantId,
     )
 
     if not result.nodes:
@@ -335,6 +337,7 @@ async def temporal_graph(
         depth=body.depth,
         direction="both",
         limit=100,
+        tenant_id=body.tenantId,
     )
 
     anchor_v = await graph.get_vertex(body.anchor.id)
@@ -420,6 +423,7 @@ async def graph_filter(
     metrics.increment("graph_filter")
 
     all_verts = await graph.get_all_vertices(limit=body.limit)
+    all_verts = [v for v in all_verts if v.properties.get("tenantId") == body.tenantId]
     all_edges: list = []
     for v in all_verts:
         all_edges.extend(await graph.get_edges(v.vertex_id, direction="out"))

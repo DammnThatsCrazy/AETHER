@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo, useCallback } from 'react';
 import { api } from '@aether-app/lib/api/endpoints';
 import type { GraphNode, GraphEdge } from '@aether-app/components/graph/graph-canvas';
+import { classifyEdgeType } from '@aether/shared';
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -18,15 +19,6 @@ export type GraphOverlay = 'none' | 'trust' | 'risk';
 
 function asRecord(v: unknown): Record<string, unknown> {
   return v !== null && typeof v === 'object' ? (v as Record<string, unknown>) : {};
-}
-
-function interactionClass(edgeType: string | undefined): string {
-  if (!edgeType) return 'H2H';
-  const t = edgeType.toUpperCase();
-  if (t.startsWith('H2A')) return 'H2A';
-  if (t.startsWith('A2H')) return 'A2H';
-  if (t.startsWith('A2A')) return 'A2A';
-  return 'H2H';
 }
 
 // ── Mappers ────────────────────────────────────────────────────────────────────
@@ -52,13 +44,18 @@ function mapDelegationEdge(raw: unknown, idx: number): GraphEdge | null {
   const source = String(r.grantor_entity_id ?? r.grantor_id ?? r.source ?? '');
   const target = String(r.grantee_entity_id ?? r.grantee_id ?? r.target ?? '');
   if (!source || !target) return null;
-  const edgeType = String(r.relation_type ?? r.type ?? 'H2A');
+  const edgeType = String(r.relation_type ?? r.type ?? '');
+  const layer = classifyEdgeType(edgeType);
+  if (!layer) {
+    console.warn(`[graph] Unknown delegation edge type "${edgeType}" — filtered (fail closed)`);
+    return null;
+  }
   return {
     id: String(r.id ?? r.delegation_id ?? `del-${idx}`),
     source,
     target,
     relationType: edgeType,
-    interactionClass: interactionClass(edgeType),
+    interactionClass: layer,
     weight: typeof r.weight === 'number' ? r.weight : 1,
     metadata: asRecord(r.properties ?? r.metadata),
   };
@@ -68,14 +65,19 @@ function mapLinkEdge(raw: unknown, entityId: string, idx: number): GraphEdge | n
   const r = asRecord(raw);
   const otherId = String(r.entity_id ?? r.linked_entity_id ?? r.target_entity_id ?? '');
   if (!otherId || otherId === entityId) return null;
-  const edgeType = String(r.relation_type ?? r.interaction_class ?? r.link_type ?? 'H2H');
+  const edgeType = String(r.relation_type ?? r.interaction_class ?? r.link_type ?? '');
+  const layer = classifyEdgeType(edgeType);
+  if (!layer) {
+    console.warn(`[graph] Unknown link edge type "${edgeType}" — filtered (fail closed)`);
+    return null;
+  }
   const confidence = typeof r.confidence === 'number' ? r.confidence : 0.5;
   return {
     id: String(r.id ?? r.link_id ?? `link-${entityId}-${idx}`),
     source: entityId,
     target: otherId,
     relationType: edgeType,
-    interactionClass: interactionClass(edgeType),
+    interactionClass: layer,
     weight: typeof r.weight === 'number' ? r.weight : confidence,
     metadata: asRecord(r.properties ?? r.metadata),
   };
