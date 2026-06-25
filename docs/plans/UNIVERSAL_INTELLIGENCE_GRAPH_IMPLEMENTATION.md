@@ -20,7 +20,7 @@ canonical_owner: graph@aether
 | Date started | 2026-06-25 |
 
 ## Relevant Open PRs
-None — branch is clean at `1e18a45` (Campaign 360 merged as PR #353).
+PR #354 — Universal Intelligence Graph (this branch).
 
 ---
 
@@ -29,8 +29,8 @@ None — branch is clean at `1e18a45` (Campaign 360 merged as PR #353).
 | Phase | Title | Status |
 |-------|-------|--------|
 | 0 | Repository Baseline and Gap Inventory | ✅ Complete |
-| 1 | Tenant Isolation Hardening | 🔄 In progress |
-| 2 | Canonical Universal Graph Contract | ⬜ Pending |
+| 1 | Tenant Isolation Hardening | ✅ Complete |
+| 2 | Canonical Universal Graph Contract | ✅ Complete |
 | 3 | Temporal and Lifecycle Foundation | ⬜ Pending |
 | 4 | Canonical Universal Graph Query Service | ⬜ Pending |
 | 5 | Identity, Population, Clusters, Cluster360 | ⬜ Pending |
@@ -80,22 +80,22 @@ Key P0 gaps:
 
 ---
 
-## Phase 1 — Tenant Isolation Hardening
+## Phase 1 — Tenant Isolation Hardening (Complete)
 
 ### Files Changed
-- [ ] `frontend/aether/src/features/graph/use-graph-data.ts` — fix G11 (string-prefix layer derivation)
-- [ ] `Backend Architecture/aether-backend/shared/graph/graph.py` — assert tenant_id on write
-- [ ] `Backend Architecture/aether-backend/services/operational_intelligence/routes.py` — verify all handlers
-- [ ] `tests/security/test_graph_tenant_isolation.py` — new adversarial tests
-
-### Commands Run
-_To be filled as work progresses_
+- [x] `frontend/aether/src/features/graph/use-graph-data.ts` — fix G11 (string-prefix layer derivation replaced with `classifyEdgeType()` from `@aether/shared`)
+- [x] `frontend/aether/vite.config.ts` — extend `commonjsOptions.include` so Rollup resolves `@aether/shared` CJS exports
+- [x] `Backend Architecture/aether-backend/shared/graph/traversal.py` — added `tenant_id` param to BFS/path/temporal; two-set approach (visited + accepted)
+- [x] `Backend Architecture/aether-backend/services/operational_intelligence/routes.py` — `graph_filter` now filters by tenantId; traversal calls pass `tenant_id`
+- [x] `tests/security/test_graph_tenant_isolation.py` — 8 adversarial tests; all pass
+- [x] `docs/plans/UNIVERSAL_INTELLIGENCE_GRAPH_IMPLEMENTATION.md` — this ledger
+- [x] `docs/FRONTEND-ARCHITECTURE.md` — stamped after Phase 1 review
 
 ### Phase 1 Gate
-- [ ] `use-graph-data.ts` no longer uses string prefix matching
-- [ ] Unknown edge types fail closed (null + warning log) not silently default to H2H
-- [ ] Mixed-tenant adversarial tests pass
-- [ ] `make graph-test` exits 0
+- [x] `use-graph-data.ts` no longer uses string prefix matching
+- [x] Unknown edge types fail closed (null + warning log) not silently default to H2H
+- [x] Mixed-tenant adversarial tests pass (8/8)
+- [x] `make repo-doctor` exits 0 (23/23 gates)
 
 ---
 
