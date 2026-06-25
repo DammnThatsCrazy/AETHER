@@ -15,10 +15,10 @@ export function Campaign360Conversions({ campaignId, timeStart, timeEnd }: Props
 
   const { data, loading, error } = useCampaign360Conversions({
     campaignId,
-    cluster_id: clusterId || undefined,
-    channel: channel || undefined,
-    after: timeStart,
-    before: timeEnd,
+    ...(clusterId ? { cluster_id: clusterId } : {}),
+    ...(channel ? { channel } : {}),
+    ...(timeStart !== undefined ? { after: timeStart } : {}),
+    ...(timeEnd !== undefined ? { before: timeEnd } : {}),
     include_unattributed: includeUnattributed,
     limit: 100,
   });

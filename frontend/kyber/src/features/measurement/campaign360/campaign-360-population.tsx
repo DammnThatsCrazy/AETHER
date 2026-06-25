@@ -24,9 +24,9 @@ export function Campaign360Population({ campaignId, timeStart, timeEnd }: Props)
   const { data, loading, error } = useCampaign360Population({
     campaignId,
     population,
-    channel: channel || undefined,
-    time_start: timeStart,
-    time_end: timeEnd,
+    ...(channel ? { channel } : {}),
+    ...(timeStart !== undefined ? { time_start: timeStart } : {}),
+    ...(timeEnd !== undefined ? { time_end: timeEnd } : {}),
     limit: 100,
   });
 

@@ -12,8 +12,8 @@ export function Campaign360Journeys({ campaignId, timeStart, timeEnd }: Props) {
   const navigate = useNavigate();
   const { data, loading, error } = useCampaign360Journeys({
     campaignId,
-    time_start: timeStart,
-    time_end: timeEnd,
+    ...(timeStart !== undefined ? { time_start: timeStart } : {}),
+    ...(timeEnd !== undefined ? { time_end: timeEnd } : {}),
     limit: 50,
   });
 
@@ -46,7 +46,7 @@ export function Campaign360Journeys({ campaignId, timeStart, timeEnd }: Props) {
                   : '—'
                 },
                 { key: 'stage_count', header: 'Stages', render: r => Number(r.stage_count ?? 0) },
-                { key: 'converted', header: 'Converted', render: r => r.converted ? <Badge variant="success">Yes</Badge> : <Badge variant="secondary">No</Badge> },
+                { key: 'converted', header: 'Converted', render: r => r.converted ? <Badge variant="success">Yes</Badge> : <Badge variant="default">No</Badge> },
                 { key: 'started_at', header: 'Started', render: r => r.started_at ? new Date(String(r.started_at)).toLocaleDateString() : '—' },
                 { key: 'completed_at', header: 'Completed', render: r => r.completed_at ? new Date(String(r.completed_at)).toLocaleDateString() : '—' },
               ]}

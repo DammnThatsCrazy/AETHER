@@ -19,7 +19,14 @@ export function Campaign360Graph({ campaignId, timeStart, timeEnd }: Props) {
 
   const { data, loading, error } = useCampaign360Graph(
     submitted
-      ? { campaignId, population, depth, time_range, max_nodes: 200, max_edges: 600 }
+      ? {
+          campaignId,
+          population,
+          depth,
+          ...(time_range !== undefined ? { time_range } : {}),
+          max_nodes: 200,
+          max_edges: 600,
+        }
       : { campaignId: '', population: 'observed' },
   );
 
@@ -94,9 +101,9 @@ export function Campaign360Graph({ campaignId, timeStart, timeEnd }: Props) {
             <div className="flex items-center justify-between">
               <CardTitle className="text-sm">Campaign graph</CardTitle>
               <div className="flex gap-2">
-                {graphData.truncated && <Badge variant="warning">Truncated: {String(graphData.truncation_reason)}</Badge>}
-                <Badge variant="secondary">{Number(graphData.node_count ?? 0)} nodes</Badge>
-                <Badge variant="secondary">{Number(graphData.edge_count ?? 0)} edges</Badge>
+                {!!graphData.truncated && <Badge variant="warning">Truncated: {String(graphData.truncation_reason ?? '')}</Badge>}
+                <Badge variant="default">{Number(graphData.node_count ?? 0)} nodes</Badge>
+                <Badge variant="default">{Number(graphData.edge_count ?? 0)} edges</Badge>
               </div>
             </div>
           </CardHeader>

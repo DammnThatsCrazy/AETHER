@@ -45,7 +45,7 @@ export function Campaign360Attribution({ params }: Props) {
             <div>
               <div className="text-xs text-text-muted font-mono">Connector freshness</div>
               <div className="mt-1">
-                <Badge variant={quality?.connector_freshness === 'fresh' ? 'success' : quality?.connector_freshness === 'stale' ? 'warning' : 'secondary'}>
+                <Badge variant={quality?.connector_freshness === 'fresh' ? 'success' : quality?.connector_freshness === 'stale' ? 'warning' : 'default'}>
                   {String(quality?.connector_freshness ?? 'unknown')}
                 </Badge>
               </div>
@@ -53,7 +53,7 @@ export function Campaign360Attribution({ params }: Props) {
             <div>
               <div className="text-xs text-text-muted font-mono">Attribution run</div>
               <div className="mt-1">
-                <Badge variant={quality?.attribution_run_freshness === 'fresh' ? 'success' : quality?.attribution_run_freshness === 'stale' ? 'warning' : 'secondary'}>
+                <Badge variant={quality?.attribution_run_freshness === 'fresh' ? 'success' : quality?.attribution_run_freshness === 'stale' ? 'warning' : 'default'}>
                   {String(quality?.attribution_run_freshness ?? 'unknown')}
                 </Badge>
               </div>
@@ -61,7 +61,7 @@ export function Campaign360Attribution({ params }: Props) {
             <div>
               <div className="text-xs text-text-muted font-mono">Reconciliation</div>
               <div className="mt-1">
-                <Badge variant={quality?.reconciliation_status === 'ok' ? 'success' : quality?.reconciliation_status === 'warn' ? 'warning' : 'error'}>
+                <Badge variant={quality?.reconciliation_status === 'ok' ? 'success' : quality?.reconciliation_status === 'warn' ? 'warning' : 'danger'}>
                   {String(quality?.reconciliation_status ?? 'unknown')}
                 </Badge>
               </div>

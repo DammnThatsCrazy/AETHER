@@ -40,10 +40,10 @@ export function Campaign360Overview({ params }: Props) {
     <div className="space-y-4">
       <div className="flex items-center gap-2">
         <span className="text-sm text-text-secondary">Attribution model:</span>
-        <Badge variant="secondary">{String(d.attribution_model ?? 'last_touch')}</Badge>
+        <Badge variant="default">{String(d.attribution_model ?? 'last_touch')}</Badge>
         {qualityStatus === 'ok' && <Badge variant="success">Reconciled</Badge>}
         {qualityStatus === 'warn' && <Badge variant="warning">Reconciliation warning</Badge>}
-        {qualityStatus === 'error' && <Badge variant="error">Reconciliation error</Badge>}
+        {qualityStatus === 'error' && <Badge variant="danger">Reconciliation error</Badge>}
       </div>
 
       <div className="grid gap-4 md:grid-cols-3 lg:grid-cols-5">

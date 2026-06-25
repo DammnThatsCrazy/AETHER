@@ -17,9 +17,9 @@ export function Campaign360Entities({ campaignId, timeStart, timeEnd }: Props) {
 
   const { data, loading, error } = useCampaign360Entities({
     campaignId,
-    entity_type: entityType || undefined,
-    time_start: timeStart,
-    time_end: timeEnd,
+    ...(entityType ? { entity_type: entityType } : {}),
+    ...(timeStart !== undefined ? { time_start: timeStart } : {}),
+    ...(timeEnd !== undefined ? { time_end: timeEnd } : {}),
     limit: 100,
   });
 

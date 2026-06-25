@@ -12,7 +12,7 @@ function QualityRow({ label, value, status }: { label: string; value: string; st
       <span className="text-sm text-text-secondary">{label}</span>
       <div className="flex items-center gap-2">
         {status && (
-          <Badge variant={status === 'ok' ? 'success' : status === 'warn' ? 'warning' : status === 'error' ? 'error' : 'secondary'}>
+          <Badge variant={status === 'ok' ? 'success' : status === 'warn' ? 'warning' : status === 'error' ? 'danger' : 'default'}>
             {status}
           </Badge>
         )}

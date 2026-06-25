@@ -13,9 +13,9 @@ export function Campaign360Clusters({ campaignId, attributionRunId, timeStart, t
   const navigate = useNavigate();
   const { data, loading, error } = useCampaign360Clusters({
     campaignId,
-    attribution_run_id: attributionRunId,
-    time_start: timeStart,
-    time_end: timeEnd,
+    ...(attributionRunId !== undefined ? { attribution_run_id: attributionRunId } : {}),
+    ...(timeStart !== undefined ? { time_start: timeStart } : {}),
+    ...(timeEnd !== undefined ? { time_end: timeEnd } : {}),
     limit: 100,
   });
 
