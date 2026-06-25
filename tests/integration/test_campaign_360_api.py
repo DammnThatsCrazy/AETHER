@@ -88,14 +88,18 @@ async def clear_stores():
     from services.measurement.repositories.touchpoint_repo import _local_store as tp
     from services.measurement.repositories.conversion_repo import _local_store as cv
     from services.measurement.repositories.attribution_run_repo import _local_credits as cr
-    tp.clear(); cv.clear(); cr.clear()
+    tp.clear()
+    cv.clear()
+    cr.clear()
     try:
         from services.campaign.routes import _local_campaigns
         _local_campaigns.clear()
     except (ImportError, AttributeError):
         pass
     yield
-    tp.clear(); cv.clear(); cr.clear()
+    tp.clear()
+    cv.clear()
+    cr.clear()
     try:
         from services.campaign.routes import _local_campaigns
         _local_campaigns.clear()

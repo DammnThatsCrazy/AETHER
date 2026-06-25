@@ -130,9 +130,13 @@ class TestReconciliationInvariants:
         from services.measurement.repositories.touchpoint_repo import _local_store as tp
         from services.measurement.repositories.conversion_repo import _local_store as cv
         from services.measurement.repositories.attribution_run_repo import _local_credits as cr
-        tp.clear(); cv.clear(); cr.clear()
+        tp.clear()
+        cv.clear()
+        cr.clear()
         yield
-        tp.clear(); cv.clear(); cr.clear()
+        tp.clear()
+        cv.clear()
+        cr.clear()
 
     @pytest.mark.asyncio
     async def test_attributed_lte_converted(self):
@@ -273,9 +277,11 @@ class TestTenantIdPropagation:
     def clear_all(self):
         from services.measurement.repositories.touchpoint_repo import _local_store as tp
         from services.measurement.repositories.conversion_repo import _local_store as cv
-        tp.clear(); cv.clear()
+        tp.clear()
+        cv.clear()
         yield
-        tp.clear(); cv.clear()
+        tp.clear()
+        cv.clear()
 
     @pytest.mark.asyncio
     async def test_get_overview_isolates_by_tenant(self):
