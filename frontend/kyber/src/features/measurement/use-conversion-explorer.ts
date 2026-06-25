@@ -10,7 +10,7 @@ interface ConversionExplorerData {
 
 const EMPTY: ConversionExplorerData = { conversions: [], hasMore: false };
 
-export function useConversionExplorer(params: { profile_id?: string; conversion_type?: string; status?: string; limit?: number } = {}) {
+export function useConversionExplorer(params: { profile_id?: string; campaign_id?: string; cluster_id?: string; attribution_run_id?: string; channel?: string; conversion_type?: string; status?: string; limit?: number } = {}) {
   const [data, setData] = useState<ConversionExplorerData>(EMPTY);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -27,7 +27,7 @@ export function useConversionExplorer(params: { profile_id?: string; conversion_
       .catch((e) => active && setError(e instanceof Error ? e.message : String(e)))
       .finally(() => active && setLoading(false));
     return () => { active = false; };
-  }, [params.profile_id, params.conversion_type, params.status, params.limit]);
+  }, [params.profile_id, params.campaign_id, params.cluster_id, params.attribution_run_id, params.channel, params.conversion_type, params.status, params.limit]);
 
   return { data, loading, error };
 }

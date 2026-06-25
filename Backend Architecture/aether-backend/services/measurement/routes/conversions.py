@@ -49,9 +49,15 @@ async def list_conversions(
     conversion_type: Optional[str] = Query(None),
     status: Optional[str] = Query(None),
     profile_id: Optional[str] = Query(None),
+    campaign_id: Optional[str] = Query(None),
+    cluster_id: Optional[str] = Query(None),
+    attribution_run_id: Optional[str] = Query(None),
+    channel: Optional[str] = Query(None),
+    creative_id: Optional[str] = Query(None),
     after: Optional[str] = Query(None, description="ISO datetime lower bound on occurred_at"),
     before: Optional[str] = Query(None, description="ISO datetime upper bound on occurred_at"),
     attribution_eligible_only: bool = Query(False),
+    include_unattributed: bool = Query(False),
     limit: int = Query(50, ge=1, le=500),
     cursor: Optional[str] = Query(None),
 ):
@@ -59,7 +65,22 @@ async def list_conversions(
     after_dt = _parse_ts(after) if after else None
     before_dt = _parse_ts(before) if before else None
 
-    if profile_id:
+    if campaign_id:
+        rows = await _conversion_repo.list_by_campaign(
+            tenant.tenant_id, campaign_id,
+            cluster_id=cluster_id,
+            conversion_type=conversion_type,
+            status=status,
+            attribution_run_id=attribution_run_id,
+            channel=channel,
+            creative_id=creative_id,
+            after_occurred=after_dt,
+            before_occurred=before_dt,
+            include_unattributed=include_unattributed,
+            limit=limit,
+            cursor=cursor,
+        )
+    elif profile_id:
         rows = await _conversion_repo.list_by_profile(
             tenant.tenant_id, profile_id,
             conversion_type=conversion_type,

@@ -189,6 +189,10 @@ class TouchpointRepository:
         tenant_id: str,
         campaign_id: str,
         *,
+        after_occurred: Optional[datetime] = None,
+        before_occurred: Optional[datetime] = None,
+        channel: Optional[str] = None,
+        touchpoint_type: Optional[str] = None,
         limit: int = 1000,
         cursor: Optional[str] = None,
     ) -> list[dict[str, Any]]:
@@ -197,7 +201,12 @@ class TouchpointRepository:
         if pool is None:
             rows = [
                 r for r in _local_store.values()
-                if r.get("tenant_id") == tenant_id and r.get("campaign_id") == campaign_id
+                if r.get("tenant_id") == tenant_id
+                and r.get("campaign_id") == campaign_id
+                and (channel is None or r.get("channel") == channel)
+                and (touchpoint_type is None or r.get("touchpoint_type") == touchpoint_type)
+                and (after_occurred is None or r.get("occurred_at", "") > after_occurred.isoformat())
+                and (before_occurred is None or r.get("occurred_at", "") < before_occurred.isoformat())
             ]
             rows.sort(key=lambda r: r.get("occurred_at", ""))
             return rows[:limit]
@@ -205,6 +214,22 @@ class TouchpointRepository:
         conditions = ["tenant_id = $1", "campaign_id = $2"]
         params: list[Any] = [tenant_id, campaign_id]
         p = 3
+        if after_occurred:
+            conditions.append(f"occurred_at > ${p}")
+            params.append(after_occurred)
+            p += 1
+        if before_occurred:
+            conditions.append(f"occurred_at < ${p}")
+            params.append(before_occurred)
+            p += 1
+        if channel:
+            conditions.append(f"channel = ${p}")
+            params.append(channel)
+            p += 1
+        if touchpoint_type:
+            conditions.append(f"touchpoint_type = ${p}")
+            params.append(touchpoint_type)
+            p += 1
         if cursor:
             conditions.append(f"occurred_at > ${p}")
             params.append(_decode_cursor(cursor))
@@ -220,6 +245,87 @@ class TouchpointRepository:
         async with pool.acquire() as conn:
             rows = await conn.fetch(sql, *params)
             return [dict(r) for r in rows]
+
+    async def population_summary(
+        self,
+        tenant_id: str,
+        campaign_id: str,
+        *,
+        after_occurred: Optional[datetime] = None,
+        before_occurred: Optional[datetime] = None,
+    ) -> dict[str, int]:
+        """Aggregate population funnel counts for a campaign.
+
+        Returns observed/resolved/engaged counts from touchpoint data.
+        Engagement is defined as any non-passive interaction
+        (excludes impression, viewable_impression, ad_exposure, email_delivery, push_presentation).
+        """
+        _passive = {"impression", "viewable_impression", "ad_exposure", "email_delivery", "push_presentation"}
+
+        pool = await self._pool()
+        if pool is None:
+            rows = [
+                r for r in _local_store.values()
+                if r.get("tenant_id") == tenant_id
+                and r.get("campaign_id") == campaign_id
+                and r.get("privacy_class") != "deleted"
+                and (after_occurred is None or r.get("occurred_at", "") > after_occurred.isoformat())
+                and (before_occurred is None or r.get("occurred_at", "") < before_occurred.isoformat())
+            ]
+            observed_ids: set[str] = set()
+            resolved_ids: set[str] = set()
+            engaged_ids: set[str] = set()
+            for r in rows:
+                anon = r.get("anonymous_id")
+                pid = r.get("profile_id")
+                cid = r.get("cluster_id")
+                canonical = pid or cid or anon
+                if canonical:
+                    observed_ids.add(canonical)
+                if pid or cid:
+                    resolved_ids.add(pid or cid)
+                if (pid or cid) and r.get("touchpoint_type") not in _passive:
+                    engaged_ids.add(pid or cid)
+            return {
+                "observed": len(observed_ids),
+                "resolved": len(resolved_ids),
+                "engaged": len(engaged_ids),
+            }
+
+        conditions = ["tenant_id = $1", "campaign_id = $2", "privacy_class != 'deleted'"]
+        params: list[Any] = [tenant_id, campaign_id]
+        p = 3
+        if after_occurred:
+            conditions.append(f"occurred_at > ${p}")
+            params.append(after_occurred)
+            p += 1
+        if before_occurred:
+            conditions.append(f"occurred_at < ${p}")
+            params.append(before_occurred)
+            p += 1
+
+        sql = f"""
+            SELECT
+              COUNT(DISTINCT COALESCE(profile_id, cluster_id, anonymous_id)) AS observed,
+              COUNT(DISTINCT CASE WHEN profile_id IS NOT NULL OR cluster_id IS NOT NULL
+                THEN COALESCE(profile_id, cluster_id) END) AS resolved,
+              COUNT(DISTINCT CASE
+                WHEN (profile_id IS NOT NULL OR cluster_id IS NOT NULL)
+                  AND touchpoint_type NOT IN (
+                    'impression','viewable_impression','ad_exposure',
+                    'email_delivery','push_presentation'
+                  )
+                THEN COALESCE(profile_id, cluster_id) END) AS engaged
+            FROM silver_campaign_touchpoint_facts
+            WHERE {' AND '.join(conditions)}
+        """
+        async with pool.acquire() as conn:
+            row = await conn.fetchrow(sql, *params)
+            return {
+                "observed": row["observed"] or 0,
+                "resolved": row["resolved"] or 0,
+                "engaged": row["engaged"] or 0,
+            }
 
     async def get(self, tenant_id: str, touchpoint_id: str) -> Optional[dict[str, Any]]:
         pool = await self._pool()

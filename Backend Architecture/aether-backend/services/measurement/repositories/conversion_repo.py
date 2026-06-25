@@ -224,17 +224,94 @@ class ConversionRepository:
         tenant_id: str,
         campaign_id: str,
         *,
+        cluster_id: Optional[str] = None,
+        conversion_type: Optional[str] = None,
+        status: Optional[str] = None,
+        attribution_run_id: Optional[str] = None,
+        channel: Optional[str] = None,
+        creative_id: Optional[str] = None,
+        after_occurred: Optional[datetime] = None,
+        before_occurred: Optional[datetime] = None,
+        include_unattributed: bool = False,
         limit: int = 500,
         cursor: Optional[str] = None,
     ) -> list[dict[str, Any]]:
-        """Return conversions linked to a campaign (via attribution credits join)."""
+        """Return conversions linked to a campaign.
+
+        By default returns only attributed conversions (via attribution_credits join).
+        Set include_unattributed=True to include all conversions that touched this campaign
+        via touchpoint facts (profile_id match), though local mode returns empty for this path.
+        """
         pool = await self._pool()
         if pool is None:
-            return []
+            rows = [
+                r for r in _local_store.values()
+                if r.get("tenant_id") == tenant_id
+                and r.get("campaign_id") == campaign_id
+                and (cluster_id is None or r.get("cluster_id") == cluster_id)
+                and (conversion_type is None or r.get("conversion_type") == conversion_type)
+                and (status is None or r.get("conversion_status") == status)
+                and (after_occurred is None or r.get("occurred_at", "") > after_occurred.isoformat())
+                and (before_occurred is None or r.get("occurred_at", "") < before_occurred.isoformat())
+            ]
+            rows.sort(key=lambda r: r.get("occurred_at", ""))
+            return rows[:limit]
 
-        conditions = ["cc.tenant_id = $1", "ac.campaign_id = $2", "ar.is_active = TRUE"]
-        params: list[Any] = [tenant_id, campaign_id]
-        p = 3
+        if include_unattributed:
+            # Join through touchpoint facts — wider net than attribution credits
+            conditions = [
+                "cc.tenant_id = $1",
+                "tp.campaign_id = $2",
+                "tp.tenant_id = $1",
+            ]
+            params: list[Any] = [tenant_id, campaign_id]
+            p = 3
+            join_clause = (
+                "JOIN silver_campaign_touchpoint_facts tp "
+                "ON (tp.profile_id = cc.profile_id OR tp.cluster_id = cc.cluster_id) "
+                "AND tp.tenant_id = cc.tenant_id"
+            )
+        else:
+            conditions = ["cc.tenant_id = $1", "ac.campaign_id = $2", "ar.is_active = TRUE"]
+            params = [tenant_id, campaign_id]
+            p = 3
+            join_clause = (
+                "JOIN attribution_credits ac ON ac.conversion_id = cc.conversion_id "
+                "JOIN attribution_runs ar ON ar.attribution_run_id = ac.attribution_run_id"
+            )
+            if attribution_run_id:
+                conditions.append(f"ac.attribution_run_id = ${p}")
+                params.append(attribution_run_id)
+                p += 1
+            if channel:
+                conditions.append(f"ac.channel = ${p}")
+                params.append(channel)
+                p += 1
+            if creative_id:
+                conditions.append(f"ac.creative_id = ${p}")
+                params.append(creative_id)
+                p += 1
+
+        if cluster_id:
+            conditions.append(f"cc.cluster_id = ${p}")
+            params.append(cluster_id)
+            p += 1
+        if conversion_type:
+            conditions.append(f"cc.conversion_type = ${p}")
+            params.append(conversion_type)
+            p += 1
+        if status:
+            conditions.append(f"cc.conversion_status = ${p}")
+            params.append(status)
+            p += 1
+        if after_occurred:
+            conditions.append(f"cc.occurred_at > ${p}")
+            params.append(after_occurred)
+            p += 1
+        if before_occurred:
+            conditions.append(f"cc.occurred_at < ${p}")
+            params.append(before_occurred)
+            p += 1
         if cursor:
             conditions.append(f"cc.occurred_at > ${p}")
             params.append(_decode_cursor(cursor))
@@ -244,8 +321,7 @@ class ConversionRepository:
         sql = f"""
             SELECT DISTINCT cc.*
             FROM canonical_conversions cc
-            JOIN attribution_credits ac ON ac.conversion_id = cc.conversion_id
-            JOIN attribution_runs ar ON ar.attribution_run_id = ac.attribution_run_id
+            {join_clause}
             WHERE {' AND '.join(conditions)}
             ORDER BY cc.occurred_at ASC
             LIMIT ${p}
@@ -253,6 +329,58 @@ class ConversionRepository:
         async with pool.acquire() as conn:
             rows = await conn.fetch(sql, *params)
             return [dict(r) for r in rows]
+
+    async def campaign_population_summary(
+        self,
+        tenant_id: str,
+        campaign_id: str,
+        *,
+        attribution_run_id: Optional[str] = None,
+    ) -> dict[str, Any]:
+        """Return converted/attributed counts and revenue for a campaign.
+
+        Queries canonical_conversions + attribution_credits to give the lower
+        funnel numbers that complement touchpoint-level population_summary().
+        """
+        pool = await self._pool()
+        if pool is None:
+            rows = [r for r in _local_store.values() if r.get("tenant_id") == tenant_id]
+            converted = len([r for r in rows if r.get("attribution_eligible")])
+            return {
+                "converted_count": converted,
+                "attributed_count": 0,
+                "attributed_gross_revenue": 0.0,
+                "attributed_net_revenue": 0.0,
+            }
+
+        run_filter = ""
+        params: list[Any] = [tenant_id, campaign_id]
+        if attribution_run_id:
+            run_filter = "AND ac.attribution_run_id = $3"
+            params.append(attribution_run_id)
+
+        sql = f"""
+            SELECT
+              COUNT(DISTINCT cc.conversion_id) AS converted_count,
+              COUNT(DISTINCT CASE WHEN ac.conversion_id IS NOT NULL THEN cc.conversion_id END) AS attributed_count,
+              COALESCE(SUM(ac.credit_weight * cc.gross_value), 0) AS attributed_gross_revenue,
+              COALESCE(SUM(ac.credit_weight * cc.net_value), 0) AS attributed_net_revenue
+            FROM canonical_conversions cc
+            JOIN attribution_credits ac ON ac.conversion_id = cc.conversion_id
+            JOIN attribution_runs ar ON ar.attribution_run_id = ac.attribution_run_id
+            WHERE cc.tenant_id = $1
+              AND ac.campaign_id = $2
+              AND ar.is_active = TRUE
+              {run_filter}
+        """
+        async with pool.acquire() as conn:
+            row = await conn.fetchrow(sql, *params)
+            return {
+                "converted_count": row["converted_count"] or 0,
+                "attributed_count": row["attributed_count"] or 0,
+                "attributed_gross_revenue": float(row["attributed_gross_revenue"] or 0),
+                "attributed_net_revenue": float(row["attributed_net_revenue"] or 0),
+            }
 
     async def list_by_tenant(
         self,

@@ -740,6 +740,32 @@ export const api = {
     /** Multi-touch attribution — models: multi_touch | first_touch | last_touch | linear | time_decay */
     attribution: (campaignId: string, params?: { model?: string; start_date?: string; end_date?: string }) =>
       restClient.get(`/v1/campaigns/${campaignId}/attribution${buildQS({ ...params })}`, wrap(unknownSchema)).then(r => r.data),
+
+    // ── Campaign 360 Exploration ──────────────────────────────────────────────
+
+    overview: (campaignId: string, params?: { time_start?: string; time_end?: string; tz?: string; attribution_model?: string; attribution_run_id?: string }) =>
+      restClient.get(`/v1/campaigns/${campaignId}/overview${buildQS({ ...params })}`, wrap(unknownSchema)).then(r => r.data),
+
+    population: (campaignId: string, params?: { population?: string; channel?: string; cluster_id?: string; time_start?: string; time_end?: string; limit?: number; cursor?: string }) =>
+      restClient.get(`/v1/campaigns/${campaignId}/population${buildQS({ ...params })}`, wrap(unknownSchema)).then(r => r.data),
+
+    entities: (campaignId: string, params?: { entity_type?: string; time_start?: string; time_end?: string; limit?: number; cursor?: string }) =>
+      restClient.get(`/v1/campaigns/${campaignId}/entities${buildQS({ ...params })}`, wrap(unknownSchema)).then(r => r.data),
+
+    clusters: (campaignId: string, params?: { attribution_run_id?: string; time_start?: string; time_end?: string; limit?: number; cursor?: string }) =>
+      restClient.get(`/v1/campaigns/${campaignId}/clusters${buildQS({ ...params })}`, wrap(unknownSchema)).then(r => r.data),
+
+    journeys: (campaignId: string, params?: { time_start?: string; time_end?: string; limit?: number; cursor?: string }) =>
+      restClient.get(`/v1/campaigns/${campaignId}/journeys${buildQS({ ...params })}`, wrap(unknownSchema)).then(r => r.data),
+
+    conversions: (campaignId: string, params?: { cluster_id?: string; conversion_type?: string; status?: string; attribution_run_id?: string; channel?: string; after?: string; before?: string; include_unattributed?: boolean; limit?: number; cursor?: string }) =>
+      restClient.get(`/v1/campaigns/${campaignId}/conversions${buildQS({ ...params })}`, wrap(unknownSchema)).then(r => r.data),
+
+    touchpoints: (campaignId: string, params?: { channel?: string; touchpoint_type?: string; after?: string; before?: string; limit?: number; cursor?: string }) =>
+      restClient.get(`/v1/campaigns/${campaignId}/touchpoints${buildQS({ ...params })}`, wrap(unknownSchema)).then(r => r.data),
+
+    graph: (campaignId: string, body: { population?: string; time_range?: { start: string; end: string }; depth?: number; max_nodes?: number; max_edges?: number; filters?: Record<string, unknown> }) =>
+      restClient.post(`/v1/campaigns/${campaignId}/graph`, wrap(unknownSchema), body).then(r => r.data),
   },
 
   // ── Attribution ────────────────────────────────────────────────────────────
@@ -1948,7 +1974,7 @@ export const api = {
   },
 
   conversions: {
-    list: (params: { profile_id?: string; conversion_type?: string; status?: string; limit?: number; cursor?: string }) =>
+    list: (params: { profile_id?: string; campaign_id?: string; cluster_id?: string; attribution_run_id?: string; channel?: string; creative_id?: string; conversion_type?: string; status?: string; include_unattributed?: boolean; limit?: number; cursor?: string }) =>
       restClient.get(`/v1/conversions${buildQS(params)}`, wrap(unknownSchema)).then(r => r.data),
     get: (id: string) =>
       restClient.get(`/v1/conversions/${id}`, wrap(unknownSchema)).then(r => r.data),
@@ -1961,7 +1987,7 @@ export const api = {
   },
 
   journeysMeasurement: {
-    list: (params: { profile_id?: string; limit?: number; cursor?: string }) =>
+    list: (params: { profile_id?: string; campaign_id?: string; limit?: number; cursor?: string }) =>
       restClient.get(`/v1/journeys${buildQS(params)}`, wrap(unknownSchema)).then(r => r.data),
     get: (id: string) =>
       restClient.get(`/v1/journeys/${id}`, wrap(unknownSchema)).then(r => r.data),

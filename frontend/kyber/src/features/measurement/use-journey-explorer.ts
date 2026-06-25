@@ -10,7 +10,7 @@ interface JourneyExplorerData {
 
 const EMPTY: JourneyExplorerData = { journeys: [], hasMore: false };
 
-export function useJourneyExplorer(params: { profile_id?: string; limit?: number } = {}) {
+export function useJourneyExplorer(params: { profile_id?: string; campaign_id?: string; limit?: number } = {}) {
   const [data, setData] = useState<JourneyExplorerData>(EMPTY);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -27,7 +27,7 @@ export function useJourneyExplorer(params: { profile_id?: string; limit?: number
       .catch((e) => active && setError(e instanceof Error ? e.message : String(e)))
       .finally(() => active && setLoading(false));
     return () => { active = false; };
-  }, [params.profile_id, params.limit]);
+  }, [params.profile_id, params.campaign_id, params.limit]);
 
   return { data, loading, error };
 }

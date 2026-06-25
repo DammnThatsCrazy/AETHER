@@ -464,7 +464,7 @@ export function Profile360BehavioralPanel({ sections, window: _window }: { reado
 
 // ── Attribution ───────────────────────────────────────────────────────────────
 
-export function Profile360AttributionPanel({ sections }: { readonly sections: readonly Profile360Section[] }) {
+export function Profile360AttributionPanel({ sections, profileId }: { readonly sections: readonly Profile360Section[]; readonly profileId?: string }) {
   const section = sections.find(s => s.id === 'attribution-journey');
   const data = asRec(section?.data);
   const touchpoints = Array.isArray(data.touchpoints) ? data.touchpoints : [];
@@ -496,7 +496,7 @@ export function Profile360AttributionPanel({ sections }: { readonly sections: re
         <Card>
           <CardHeader>
             <CardTitle>Acquisition</CardTitle>
-            <div className="flex gap-2 mt-1">
+            <div className="flex gap-2 mt-1 flex-wrap">
               <Link to="/measurement/journeys" className="text-xs text-accent hover:underline">Journey Explorer →</Link>
               <Link to="/measurement/campaigns" className="text-xs text-accent hover:underline">Campaign Intelligence →</Link>
             </div>
@@ -536,14 +536,25 @@ export function Profile360AttributionPanel({ sections }: { readonly sections: re
                 <div className="text-[10px] uppercase tracking-wide text-text-muted mb-1">Campaign history ({campaignHistory.length})</div>
                 <ScrollArea maxHeight="200px">
                   <div className="space-y-1">
-                    {campaignHistory.map((c, i) => (
-                      <div key={String(c.campaign_id ?? i)} className="flex flex-wrap items-center gap-2 px-2 py-1.5 rounded border border-border-subtle bg-surface-raised text-xs">
-                        <span className="font-mono text-text-muted">{String(c.campaign_id ?? '—').slice(0, 10)}…</span>
-                        {!!c.name && <span className="text-text-secondary truncate max-w-[120px]">{String(c.name)}</span>}
-                        {!!c.channel && <Badge size="sm">{String(c.channel)}</Badge>}
-                        {c.attributed_revenue != null && <span className="font-mono text-text-primary ml-auto">{fmtUsd(c.attributed_revenue)}</span>}
-                      </div>
-                    ))}
+                    {campaignHistory.map((c, i) => {
+                      const cid = String(c.campaign_id ?? '');
+                      const campaignPath = cid
+                        ? `/measurement/campaigns/${cid}${profileId ? `?profile_id=${profileId}` : ''}`
+                        : null;
+                      return (
+                        <div key={String(c.campaign_id ?? i)} className="flex flex-wrap items-center gap-2 px-2 py-1.5 rounded border border-border-subtle bg-surface-raised text-xs">
+                          <span className="font-mono text-text-muted">{cid.slice(0, 10) || '—'}…</span>
+                          {!!c.name && <span className="text-text-secondary truncate max-w-[120px]">{String(c.name)}</span>}
+                          {!!c.channel && <Badge size="sm">{String(c.channel)}</Badge>}
+                          {c.attributed_revenue != null && <span className="font-mono text-text-primary">{fmtUsd(c.attributed_revenue)}</span>}
+                          {campaignPath && (
+                            <Link to={campaignPath} className="ml-auto text-[10px] text-accent hover:underline shrink-0">
+                              Campaign 360 →
+                            </Link>
+                          )}
+                        </div>
+                      );
+                    })}
                   </div>
                 </ScrollArea>
               </div>
