@@ -1,5 +1,5 @@
 import { useState, useCallback, useEffect, useMemo } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { useSearchParams, useNavigate } from 'react-router-dom';
 import {
   Badge, Button, Card, CardContent, CardHeader, CardTitle,
   EmptyState, ErrorState, LoadingState, ScrollArea,
@@ -12,6 +12,41 @@ import {
   type GraphLayer, type GraphOverlay, type GraphCluster,
 } from '@aether-app/features/graph/use-graph-data';
 import type { GraphNode, GraphEdge } from '@aether-app/components/graph/graph-canvas';
+
+// ── Cluster Inspector ─────────────────────────────────────────────────────────
+
+function ClusterInspector({ cluster }: { cluster: GraphCluster }) {
+  const navigate = useNavigate();
+  return (
+    <div className="space-y-3 pt-2">
+      <div className="flex items-center gap-2">
+        <Badge variant="warning">cluster</Badge>
+        <span className="text-sm font-mono text-text-primary">{cluster.label}</span>
+      </div>
+      <p className="text-xs text-text-secondary">{cluster.size} member entities</p>
+      <Button
+        variant="primary"
+        size="sm"
+        className="w-full"
+        onClick={() => navigate(`/clusters/${cluster.id}`)}
+      >
+        Open Cluster360
+      </Button>
+      <div>
+        <p className="text-xs font-medium text-text-secondary mb-1">Member IDs</p>
+        <ScrollArea maxHeight="140px">
+          <div className="space-y-1">
+            {cluster.nodeIds.map(id => (
+              <div key={id} className="py-1 px-2 rounded bg-surface-raised text-[10px] font-mono text-text-primary truncate">
+                {id}
+              </div>
+            ))}
+          </div>
+        </ScrollArea>
+      </div>
+    </div>
+  );
+}
 
 // ── Inspector ─────────────────────────────────────────────────────────────────
 
@@ -155,25 +190,7 @@ function Inspector({ data, onClose }: { data: InspectorPayload; onClose: () => v
           )}
 
           {data.type === 'cluster' && (
-            <div className="space-y-3 pt-2">
-              <div className="flex items-center gap-2">
-                <Badge variant="warning">cluster</Badge>
-                <span className="text-sm font-mono text-text-primary">{data.cluster.label}</span>
-              </div>
-              <p className="text-xs text-text-secondary">{data.cluster.size} member entities</p>
-              <div>
-                <p className="text-xs font-medium text-text-secondary mb-1">Member IDs</p>
-                <ScrollArea maxHeight="140px">
-                  <div className="space-y-1">
-                    {data.cluster.nodeIds.map(id => (
-                      <div key={id} className="py-1 px-2 rounded bg-surface-raised text-[10px] font-mono text-text-primary truncate">
-                        {id}
-                      </div>
-                    ))}
-                  </div>
-                </ScrollArea>
-              </div>
-            </div>
+            <ClusterInspector cluster={data.cluster} />
           )}
         </ScrollArea>
       </CardContent>

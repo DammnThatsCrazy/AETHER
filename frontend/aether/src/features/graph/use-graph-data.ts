@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useCallback } from 'react';
+import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { api } from '@aether-app/lib/api/endpoints';
 import type { GraphNode, GraphEdge } from '@aether-app/components/graph/graph-canvas';
 import { classifyEdgeType } from '@aether/shared';
@@ -14,6 +14,7 @@ export interface GraphCluster {
 
 export type GraphLayer = 'all' | 'H2H' | 'H2A' | 'A2H' | 'A2A';
 export type GraphOverlay = 'none' | 'trust' | 'risk';
+export type GraphZoomLevel = 'macro' | 'cluster' | 'entity';
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
 
@@ -237,5 +238,124 @@ export function useGraphData() {
     selectedNodeId, setSelectedNodeId,
     selectedEdgeId, setSelectedEdgeId,
     getNeighbors,
+  };
+}
+
+// ── Semantic zoom hook ─────────────────────────────────────────────────────────
+//
+// Macro level: returns cluster-aggregate nodes (one node per cluster).
+// Cluster level: expands a single cluster into its member nodes.
+// Entity level: full flat graph (default useGraphData behaviour).
+//
+// The backend decides what to return based on depth=0 (macro) vs depth=1+.
+// This prevents the frontend from rendering millions of raw nodes directly.
+
+interface ZoomState {
+  level: GraphZoomLevel;
+  expandedClusterId: string | null;
+  nodes: GraphNode[];
+  edges: GraphEdge[];
+  isLoading: boolean;
+  error: string | null;
+}
+
+export function useGraphZoom() {
+  const [zoomLevel, setZoomLevel] = useState<GraphZoomLevel>('entity');
+  const [expandedClusterId, setExpandedClusterId] = useState<string | null>(null);
+  const [zoomNodes, setZoomNodes] = useState<GraphNode[]>([]);
+  const [zoomEdges, setZoomEdges] = useState<GraphEdge[]>([]);
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const cancelRef = useRef<boolean>(false);
+
+  const fetchMacro = useCallback(async () => {
+    cancelRef.current = false;
+    setIsLoading(true);
+    setError(null);
+    try {
+      const resp = await api.graphIntelligence.query({
+        depth: 0,
+        node_types: [
+          'IdentityCluster', 'HouseholdCluster', 'OrgCluster', 'DeviceCluster',
+          'WalletCluster', 'BehavioralCluster', 'GeographicCluster', 'EconomicSegment',
+          'EconomicCluster', 'CampaignCohort', 'JourneyCluster',
+          'FraudNetworkCluster', 'RiskCluster', 'DormantCohort',
+          'ReactivatedCohort', 'UnresolvedCluster',
+        ],
+        limit: 200,
+      });
+      if (cancelRef.current) return;
+      const data = asRecord(resp);
+      const nodes = (Array.isArray(data.nodes) ? data.nodes : []).map(mapNode).filter(n => n.id.length > 0);
+      setZoomNodes(nodes);
+      setZoomEdges([]);
+      setZoomLevel('macro');
+    } catch (err) {
+      if (!cancelRef.current) setError(err instanceof Error ? err.message : 'Failed to load macro graph');
+    } finally {
+      if (!cancelRef.current) setIsLoading(false);
+    }
+  }, []);
+
+  const expandCluster = useCallback(async (clusterId: string) => {
+    cancelRef.current = false;
+    setIsLoading(true);
+    setError(null);
+    try {
+      const resp = await api.graphIntelligence.query({
+        anchors: [clusterId],
+        depth: 1,
+        limit: 500,
+      });
+      if (cancelRef.current) return;
+      const data = asRecord(resp);
+      const nodes = (Array.isArray(data.nodes) ? data.nodes : []).map(mapNode).filter(n => n.id.length > 0);
+      const rawEdges = Array.isArray(data.edges) ? data.edges : [];
+      const edgeMap = new Map<string, GraphEdge>();
+      rawEdges.forEach((raw, i) => {
+        const r = asRecord(raw);
+        const edgeType = String(r.type ?? r.edge_type ?? '');
+        const layer = classifyEdgeType(edgeType);
+        if (!layer) return;
+        const e: GraphEdge = {
+          id: String(r.id ?? `e-${i}`),
+          source: String(r.source ?? r.from_vertex_id ?? ''),
+          target: String(r.target ?? r.to_vertex_id ?? ''),
+          relationType: edgeType,
+          interactionClass: layer,
+          weight: 1,
+          metadata: asRecord(r.properties),
+        };
+        if (e.source && e.target) edgeMap.set(e.id, e);
+      });
+      setZoomNodes(nodes);
+      setZoomEdges(Array.from(edgeMap.values()));
+      setExpandedClusterId(clusterId);
+      setZoomLevel('cluster');
+    } catch (err) {
+      if (!cancelRef.current) setError(err instanceof Error ? err.message : 'Failed to expand cluster');
+    } finally {
+      if (!cancelRef.current) setIsLoading(false);
+    }
+  }, []);
+
+  const resetZoom = useCallback(() => {
+    cancelRef.current = true;
+    setZoomLevel('entity');
+    setExpandedClusterId(null);
+    setZoomNodes([]);
+    setZoomEdges([]);
+    setError(null);
+  }, []);
+
+  useEffect(() => {
+    return () => { cancelRef.current = true; };
+  }, []);
+
+  return {
+    zoomLevel, expandedClusterId,
+    zoomNodes, zoomEdges,
+    isLoading, error,
+    fetchMacro, expandCluster, resetZoom,
   };
 }
