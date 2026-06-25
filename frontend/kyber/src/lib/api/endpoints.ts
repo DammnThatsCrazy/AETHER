@@ -1923,6 +1923,73 @@ export const api = {
     pipelineLag: () =>
       restClient.get('/v1/health/pipeline', wrap(unknownSchema)).then(r => r.data),
   },
+
+  measurement: {
+    overview: (window = '30d') =>
+      restClient.get(`/v1/measurement/overview${buildQS({ window })}`, wrap(unknownSchema)).then(r => r.data),
+    quality: (window = '30d') =>
+      restClient.get(`/v1/measurement/quality${buildQS({ window })}`, wrap(unknownSchema)).then(r => r.data),
+    freshness: () =>
+      restClient.get('/v1/measurement/freshness', wrap(unknownSchema)).then(r => r.data),
+    health: () =>
+      restClient.get('/v1/measurement/health', wrap(unknownSchema)).then(r => r.data),
+    kyberOverview: () =>
+      restClient.get('/v1/kyber/measurement/overview', wrap(unknownSchema)).then(r => r.data),
+    kyberTenant: (tenantId: string) =>
+      restClient.get(`/v1/kyber/measurement/tenants/${tenantId}`, wrap(unknownSchema)).then(r => r.data),
+    restartConnector: (connectorId: string) =>
+      restClient.post(`/v1/kyber/measurement/connectors/${connectorId}/restart`, wrap(unknownSchema), {}).then(r => r.data),
+    backfillConnector: (connectorId: string, params: Record<string, string>) =>
+      restClient.post(`/v1/kyber/measurement/connectors/${connectorId}/backfill`, wrap(unknownSchema), params).then(r => r.data),
+    recomputeConversion: (conversionId: string) =>
+      restClient.post(`/v1/kyber/measurement/conversions/${conversionId}/recompute`, wrap(unknownSchema), {}).then(r => r.data),
+    recomputeAll: (tenantId: string) =>
+      restClient.post(`/v1/kyber/measurement/tenants/${tenantId}/recompute-all`, wrap(unknownSchema), {}).then(r => r.data),
+  },
+
+  conversions: {
+    list: (params: { profile_id?: string; conversion_type?: string; status?: string; limit?: number; cursor?: string }) =>
+      restClient.get(`/v1/conversions${buildQS(params)}`, wrap(unknownSchema)).then(r => r.data),
+    get: (id: string) =>
+      restClient.get(`/v1/conversions/${id}`, wrap(unknownSchema)).then(r => r.data),
+    attribution: (id: string) =>
+      restClient.get(`/v1/conversions/${id}/attribution`, wrap(unknownSchema)).then(r => r.data),
+    adjustments: (id: string) =>
+      restClient.get(`/v1/conversions/${id}/adjustments`, wrap(unknownSchema)).then(r => r.data),
+    recompute: (id: string) =>
+      restClient.post(`/v1/conversions/${id}/recompute`, wrap(unknownSchema), {}).then(r => r.data),
+  },
+
+  journeysMeasurement: {
+    list: (params: { profile_id?: string; limit?: number; cursor?: string }) =>
+      restClient.get(`/v1/journeys${buildQS(params)}`, wrap(unknownSchema)).then(r => r.data),
+    get: (id: string) =>
+      restClient.get(`/v1/journeys/${id}`, wrap(unknownSchema)).then(r => r.data),
+    versions: (id: string) =>
+      restClient.get(`/v1/journeys/${id}/versions`, wrap(unknownSchema)).then(r => r.data),
+  },
+
+  attributionRuns: {
+    list: (params: { conversion_id?: string; model_type?: string; status?: string; limit?: number }) =>
+      restClient.get(`/v1/attribution/runs${buildQS(params)}`, wrap(unknownSchema)).then(r => r.data),
+    get: (id: string) =>
+      restClient.get(`/v1/attribution/runs/${id}`, wrap(unknownSchema)).then(r => r.data),
+    create: (params: { conversion_id: string; model_config_id?: string }) =>
+      restClient.post('/v1/attribution/runs', wrap(unknownSchema), params).then(r => r.data),
+    backfill: (params: { start_date: string; end_date: string; model_config_id?: string }) =>
+      restClient.post('/v1/attribution/backfills', wrap(unknownSchema), params).then(r => r.data),
+    compare: (params: { model_a_id: string; model_b_id: string; conversion_ids: string[] }) =>
+      restClient.get(`/v1/attribution/model-comparisons${buildQS({ model_a_id: params.model_a_id, model_b_id: params.model_b_id })}`, wrap(unknownSchema)).then(r => r.data),
+  },
+
+  spend: {
+    list: (params: { campaign_id?: string; platform?: string; limit?: number; cursor?: string }) =>
+      restClient.get(`/v1/spend${buildQS(params)}`, wrap(unknownSchema)).then(r => r.data),
+    import: (records: unknown[]) =>
+      restClient.post('/v1/spend/imports', wrap(unknownSchema), { records }).then(r => r.data),
+    reconciliation: (params: { campaign_id?: string; period_start: string; period_end: string }) =>
+      restClient.get(`/v1/spend/reconciliation${buildQS(params)}`, wrap(unknownSchema)).then(r => r.data),
+  },
 };
 
 // ─── Utility: call API with a typed fallback ─────────────────────────────────

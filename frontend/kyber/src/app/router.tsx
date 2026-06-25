@@ -42,6 +42,12 @@ const MLAdminPage = lazy(() => import('@kyber/pages/ml').then(m => ({ default: m
 const FraudNetworksPage = lazy(() => import('@kyber/pages/fraud/fraud-networks-page').then(m => ({ default: m.FraudNetworksPage })));
 const FraudNetworkDetailPage = lazy(() => import('@kyber/pages/fraud/fraud-network-detail-page').then(m => ({ default: m.FraudNetworkDetailPage })));
 const FlowTracePage = lazy(() => import('@kyber/pages/fraud/flow-trace-page').then(m => ({ default: m.FlowTracePage })));
+const MeasurementOverviewPage = lazy(() => import('@kyber/pages/measurement/measurement-overview-page').then(m => ({ default: m.MeasurementOverviewPage })));
+const AttributionStudioPage = lazy(() => import('@kyber/pages/measurement/attribution-studio-page').then(m => ({ default: m.AttributionStudioPage })));
+const JourneyExplorerPage = lazy(() => import('@kyber/pages/measurement/journey-explorer-page').then(m => ({ default: m.JourneyExplorerPage })));
+const ConversionExplorerPage = lazy(() => import('@kyber/pages/measurement/conversion-explorer-page').then(m => ({ default: m.ConversionExplorerPage })));
+const CampaignIntelligencePage = lazy(() => import('@kyber/pages/measurement/campaign-intelligence-page').then(m => ({ default: m.CampaignIntelligencePage })));
+const KyberMeasurementOpsPage = lazy(() => import('@kyber/pages/measurement/kyber-measurement-ops-page').then(m => ({ default: m.KyberMeasurementOpsPage })));
 
 function PageSuspense({ children }: { readonly children: React.ReactNode }) {
   return (
@@ -112,6 +118,12 @@ export function AppRouter() {
                 <Route path="/fraud-networks/flow-trace" element={<PageSuspense><FlowTracePage /></PageSuspense>} />
                 <Route path="/fraud-networks/flow-trace/:traceId" element={<PageSuspense><FlowTracePage /></PageSuspense>} />
                 <Route path="/fraud-networks/:networkId" element={<PageSuspense><FraudNetworkDetailPage /></PageSuspense>} />
+                <Route path="/measurement" element={<PageSuspense><MeasurementOverviewPage /></PageSuspense>} />
+                <Route path="/measurement/attribution" element={<PageSuspense><AttributionStudioPage /></PageSuspense>} />
+                <Route path="/measurement/journeys" element={<PageSuspense><JourneyExplorerPage /></PageSuspense>} />
+                <Route path="/measurement/conversions" element={<PageSuspense><ConversionExplorerPage /></PageSuspense>} />
+                <Route path="/measurement/campaigns" element={<PageSuspense><CampaignIntelligencePage /></PageSuspense>} />
+                <Route path="/measurement/ops" element={<PageSuspense><KyberMeasurementOpsPage /></PageSuspense>} />
                 <Route path="*" element={<Navigate to="/mission" replace />} />
               </Routes>
             </AppShell>

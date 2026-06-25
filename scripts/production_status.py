@@ -348,6 +348,45 @@ AREAS: list[Area] = [
          "scripts/validate_meter_names.py"],
     ),
     Area(
+        "measurement / attribution",
+        4,
+        "Complete measurement pipeline: canonical touchpoint ledger (silver_campaign_touchpoint_facts), "
+        "canonical conversion ledger (canonical_conversions) with authority ranking and deduplication, "
+        "revenue adjustments (append-only), spend ledger (spend_records) with idempotent upserts, "
+        "versioned journey compiler (journey_versions), per-conversion attribution engine delegating to "
+        "8 built-in models (last_touch, first_touch, linear, time_decay, position_based, data_driven, "
+        "actor_weighted, exposure_aware) + 2 new models (markov, shapley_heuristic). Attribution credits "
+        "reconcile to 1.0 (sum(credit_weight) + unattributed = 1.0, tolerance 0.001). "
+        "Paid-media connectors: Google Ads, Meta Ads, TikTok Ads, LinkedIn Ads, X Ads, Reddit Ads, "
+        "Microsoft Ads. Subscription LTV service computes cohort LTV and propagates acquisition "
+        "attribution to renewals. Incrementality experiment system with Z-test significance. "
+        "Gold ClickHouse materialization with ReplacingMergeTree, PROJECTION, and bloom-filter indexes. "
+        "SLO alerts: attribution run p95 ≤30s, credit reconciliation ≤0.001, connector freshness ≤26h, "
+        "Gold lag ≤2h, dashboard API p95 ≤2s. Agent/Web3: actor_weighted model reads agent_id from "
+        "touchpoints; x402 settlement conversions tracked with wallet_id. "
+        "Gaps: no staging validation with live connector credentials; Markov model requires ≥1000 "
+        "converting journeys before training (falls back to position_based); Gold ClickHouse writes "
+        "require provisioned ClickHouse instance.",
+        [
+            "Backend Architecture/aether-backend/services/measurement/",
+            "Backend Architecture/aether-backend/services/measurement/engine/attribution_engine.py",
+            "Backend Architecture/aether-backend/services/measurement/engine/journey_compiler.py",
+            "Backend Architecture/aether-backend/services/measurement/engine/subscription_ltv.py",
+            "Backend Architecture/aether-backend/services/measurement/engine/algorithmic_attribution.py",
+            "Backend Architecture/aether-backend/services/measurement/connectors/",
+            "Backend Architecture/aether-backend/services/measurement/routes/",
+            "Backend Architecture/aether-backend/alembic/versions/20260622_measurement_core.py",
+            "Backend Architecture/aether-backend/alembic/versions/20260622_incrementality.py",
+            "Backend Architecture/aether-backend/tests/e2e/test_paid_media_ecommerce_flow.py",
+            "Backend Architecture/aether-backend/tests/e2e/test_b2b_account_flow.py",
+            "Backend Architecture/aether-backend/tests/e2e/test_privacy_consent_flow.py",
+            "Backend Architecture/aether-backend/tests/e2e/test_agent_web3_attribution_flow.py",
+            "frontend/kyber/src/pages/measurement/",
+            "deploy/clickhouse/schemas/008_measurement_gold.sql",
+            "deploy/observability/grafana/dashboards/measurement-slos.json",
+        ],
+    ),
+    Area(
         "docs",
         4,
         "202 docs with validated frontmatter, 64 source-linked docs with strict drift "

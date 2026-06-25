@@ -232,7 +232,7 @@ class CanonicalConversion(BaseModel):
     reversed_at: Optional[datetime] = None
     conversion_status: ConversionStatus = ConversionStatus.confirmed
     conversion_source: Optional[str] = None
-    authority_rank: int = 0
+    authority_rank: int = 50
     deduplication_key: str
     attribution_eligible: bool = True
     consent_snapshot_id: Optional[str] = None

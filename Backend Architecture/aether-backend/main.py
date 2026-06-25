@@ -286,13 +286,14 @@ from services.data_quality import (
     tenant_router as data_quality_tenant_router,
 )
 
-# Canonical Measurement (conversions, journeys, attribution, spend, quality, ops)
+# Canonical Measurement (conversions, journeys, attribution, spend, quality, ops, experiments)
 from services.measurement.routes.conversions import router as measurement_conversions_router
 from services.measurement.routes.journeys import router as measurement_journeys_router
 from services.measurement.routes.attribution import router as measurement_attribution_router
 from services.measurement.routes.spend import router as measurement_spend_router
 from services.measurement.routes.quality import router as measurement_quality_router
 from services.measurement.routes.kyber import router as measurement_kyber_router
+from services.measurement.routes.experiments import router as measurement_experiments_router
 
 # ML predict routes — imported from the ML serving package when available.
 # When ML_SERVING_INLINE=true (E2 consolidated image) the predict routes are
@@ -346,6 +347,24 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         attach_profile360_workers(registry.consumer, registry.graph)
     except Exception as e:  # pragma: no cover — defensive
         logger.warning(f"Profile 360 worker wiring skipped: {e}")
+
+    # Measurement — identity change → journey rebuild → attribution recompute
+    try:
+        from services.measurement.identity_consumer import MeasurementIdentityConsumer
+        _measurement_identity_consumer = MeasurementIdentityConsumer(producer=registry.producer)
+        _measurement_identity_consumer.register(registry.consumer)
+    except Exception as e:  # pragma: no cover — defensive
+        logger.warning(f"Measurement identity consumer wiring skipped: {e}")
+
+    # Measurement — register algorithmic attribution models (markov, shapley_heuristic)
+    try:
+        from services.measurement.engine.algorithmic_attribution import register_algorithmic_models
+        from services.attribution.resolver import AttributionResolver, AttributionConfig
+        _resolver = AttributionResolver(AttributionConfig())
+        register_algorithmic_models(_resolver)
+        app.state.algorithmic_attribution_resolver = _resolver
+    except Exception as e:  # pragma: no cover — defensive
+        logger.warning(f"Algorithmic attribution model registration skipped: {e}")
 
     # Notification Intelligence — attach Kafka consumers and SLA expiry worker.
     _sla_worker_fn = None
@@ -562,12 +581,13 @@ def create_app() -> FastAPI:
 
     # ── Canonical Measurement domain ──────────────────────────────────────
     # Per-conversion attribution, durable journeys, spend ledger, ROAS, quality
-    app.include_router(measurement_conversions_router)  # GET/POST /v1/conversions
-    app.include_router(measurement_journeys_router)     # GET/POST /v1/journeys
-    app.include_router(measurement_attribution_router)  # GET/POST /v1/attribution/runs|backfills
-    app.include_router(measurement_spend_router)        # GET/POST /v1/spend
-    app.include_router(measurement_quality_router)      # GET /v1/measurement/*
-    app.include_router(measurement_kyber_router)        # GET/POST /v1/kyber/measurement/*
+    app.include_router(measurement_conversions_router)   # GET/POST /v1/conversions
+    app.include_router(measurement_journeys_router)      # GET/POST /v1/journeys
+    app.include_router(measurement_attribution_router)   # GET/POST /v1/attribution/runs|backfills|configurations|models
+    app.include_router(measurement_spend_router)         # GET/POST /v1/spend
+    app.include_router(measurement_quality_router)       # GET /v1/measurement/*
+    app.include_router(measurement_kyber_router)         # GET/POST /v1/kyber/measurement/*
+    app.include_router(measurement_experiments_router)   # GET/POST /v1/experiments
     logger.info("Canonical Measurement: 6 routers mounted")
     app.include_router(sdk_health_router)   # SDK health monitoring: heartbeats + fleet status
     app.include_router(sdk_drift_router)    # SDK drift detection: schema, stale, replay storm

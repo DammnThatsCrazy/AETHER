@@ -13,7 +13,7 @@ source_files:
 canonical_owner: frontend@aether
 estimated_read_minutes: 35
 toc_depth: 4
-last_synced_commit: 1dc232a
+last_synced_commit: d46320a
 ---
 
 # Aether Frontend Architecture & Designer Handoff
@@ -54,6 +54,12 @@ There are two separate frontend applications. **Do not mix them up.**
 - **OODA Suggestion Command Center** — cross-tenant suggestion feed with evidence drawer, policy panel, and outcome tracker
 - **Suggestion review queue** — approve, reject, or suppress suggestions with reason capture
 - **ML Operations** — model fleet health, artifact status, and extraction defense monitoring
+- **Measurement Overview** — spend, attributed revenue, ROAS, data quality, and connector health across all tenants (`/measurement/overview`)
+- **Attribution Studio** — per-conversion attribution runs, model selection, backfill controls (`/measurement/attribution`)
+- **Journey Explorer** — chronological journey timeline with attribution weight annotations (`/measurement/journeys`)
+- **Conversion Explorer** — canonical conversion detail, revenue history, attribution drill-down (`/measurement/conversions`)
+- **Campaign Intelligence** — campaign hierarchy, performance metrics, spend/ROAS time-series (`/measurement/campaigns`)
+- **Measurement Operations** — connector health grid, tenant drill-down, operator action buttons (restart/backfill/recompute) (`/kyber/measurement`)
 - Lab — test fixtures and replay
 
 **Shared (`frontend/shared/` — npm package `@aether/ui`):**

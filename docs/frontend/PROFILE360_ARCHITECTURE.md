@@ -12,7 +12,7 @@ source_files:
 canonical_owner: frontend@aether
 estimated_read_minutes: 10
 toc_depth: 3
-last_synced_commit: 70dcd8a
+last_synced_commit: cfc5417
 ---
 # Aether Profile360 Frontend Architecture
 
@@ -154,7 +154,7 @@ The following files implement the complete Profile360 frontend product:
 - `frontend/kyber/src/components/profile360/profile360-drill-stack.tsx`: Stackable drill panel. Each push records `kind`, `entityId`, `depth`, `openedAt` and renders a detail panel from the normalized payload.
 - `frontend/kyber/src/components/profile360/profile360-section-grid.tsx`: Renders `Profile360Section` arrays with metric tiles, reference links, and data panels.
 - `frontend/kyber/src/components/profile360/profile360-timeline-panel.tsx`: Timeline with filter controls and drill-on-click.
-- `frontend/kyber/src/components/profile360/profile360-contextual-panels.tsx`: All 13 contextual tab panels (sessions, journeys, wallets, behavioral, attribution, cluster, agents, consent, quality, recommendations, outcomes, intelligence, provenance).
+- `frontend/kyber/src/components/profile360/profile360-contextual-panels.tsx`: All 13 contextual tab panels (sessions, journeys, wallets, behavioral, attribution, cluster, agents, consent, quality, recommendations, outcomes, intelligence, provenance). The attribution panel (`Profile360AttributionPanel`) includes an **Acquisition** section surfacing `first_campaign`, `campaign_history`, `attributed_conversions`, and `attributed_revenue` from section data, with links to Journey Explorer (`/measurement/journeys`) and Campaign Intelligence (`/measurement/campaigns`).
 
 ### Entity360View graph tab (embedded)
 

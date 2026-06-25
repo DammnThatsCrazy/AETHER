@@ -129,6 +129,7 @@ Rubric: 0 absent · 1 stub/scaffold · 2 partial/pilot · 3 pre-production ·
 | smart contracts / proofs / rewards | 4 |
 | security / compliance | 4 |
 | agentic_x402_productization | 4 |
+| measurement / attribution | 4 |
 | CI / tests | 4 |
 | docs | 4 |
 | deployment / cloud readiness | 3 |

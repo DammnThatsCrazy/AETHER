@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { Link } from 'react-router-dom';
 import { Badge, Card, CardContent, CardHeader, CardTitle, EmptyState, EvidenceDrawer, GlyphIcon, ScrollArea } from '@aether/ui';
 import type { EvidenceRef } from '@aether/ui';
 import { cn } from '@kyber/lib/utils';
@@ -468,6 +469,11 @@ export function Profile360AttributionPanel({ sections }: { readonly sections: re
   const data = asRec(section?.data);
   const touchpoints = Array.isArray(data.touchpoints) ? data.touchpoints : [];
   const channelCredit = asRec(data.channel_credit);
+  const firstCampaign = data.first_campaign != null ? asRec(data.first_campaign) : null;
+  const campaignHistory: Record<string, unknown>[] = Array.isArray(data.campaign_history) ? data.campaign_history.map(asRec) : [];
+  const attributedConversions: Record<string, unknown>[] = Array.isArray(data.attributed_conversions) ? data.attributed_conversions.map(asRec) : [];
+  const attributedRevenue = typeof data.attributed_revenue === 'number' ? data.attributed_revenue : null;
+  const attributedRevenueNet = typeof data.attributed_revenue_net === 'number' ? data.attributed_revenue_net : null;
 
   const maxCredit = Math.max(...Object.values(channelCredit).map(v => typeof v === 'number' ? v : 0), 0.001);
 
@@ -484,6 +490,83 @@ export function Profile360AttributionPanel({ sections }: { readonly sections: re
             </div>
           ))}
         </div>
+      )}
+
+      {(firstCampaign != null || attributedRevenue != null || attributedConversions.length > 0 || campaignHistory.length > 0) && (
+        <Card>
+          <CardHeader>
+            <CardTitle>Acquisition</CardTitle>
+            <div className="flex gap-2 mt-1">
+              <Link to="/measurement/journeys" className="text-xs text-accent hover:underline">Journey Explorer →</Link>
+              <Link to="/measurement/campaigns" className="text-xs text-accent hover:underline">Campaign Intelligence →</Link>
+            </div>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            {(attributedRevenue != null || attributedRevenueNet != null) && (
+              <div className="grid grid-cols-2 gap-2">
+                {attributedRevenue != null && (
+                  <div className="rounded border border-border-subtle bg-surface-raised p-2 text-center">
+                    <div className="text-[10px] uppercase tracking-wide text-text-muted">Attributed revenue (gross)</div>
+                    <div className="mt-1 text-base font-semibold font-mono text-text-primary">{fmtUsd(attributedRevenue)}</div>
+                  </div>
+                )}
+                {attributedRevenueNet != null && (
+                  <div className="rounded border border-border-subtle bg-surface-raised p-2 text-center">
+                    <div className="text-[10px] uppercase tracking-wide text-text-muted">Attributed revenue (net)</div>
+                    <div className="mt-1 text-base font-semibold font-mono text-text-primary">{fmtUsd(attributedRevenueNet)}</div>
+                  </div>
+                )}
+              </div>
+            )}
+            {firstCampaign != null && (
+              <div>
+                <div className="text-[10px] uppercase tracking-wide text-text-muted mb-1">First campaign</div>
+                <div className="flex flex-wrap items-center gap-2 px-3 py-2 rounded border border-border-subtle bg-surface-raised text-xs">
+                  <span className="font-mono text-text-primary">{String(firstCampaign.campaign_id ?? firstCampaign.id ?? '—').slice(0, 12)}</span>
+                  {!!firstCampaign.name && <span className="text-text-secondary">{String(firstCampaign.name)}</span>}
+                  {!!firstCampaign.channel && <Badge size="sm">{String(firstCampaign.channel)}</Badge>}
+                  {!!firstCampaign.first_touch_at && (
+                    <span className="font-mono text-text-muted">{new Date(String(firstCampaign.first_touch_at)).toLocaleDateString()}</span>
+                  )}
+                </div>
+              </div>
+            )}
+            {campaignHistory.length > 0 && (
+              <div>
+                <div className="text-[10px] uppercase tracking-wide text-text-muted mb-1">Campaign history ({campaignHistory.length})</div>
+                <ScrollArea maxHeight="200px">
+                  <div className="space-y-1">
+                    {campaignHistory.map((c, i) => (
+                      <div key={String(c.campaign_id ?? i)} className="flex flex-wrap items-center gap-2 px-2 py-1.5 rounded border border-border-subtle bg-surface-raised text-xs">
+                        <span className="font-mono text-text-muted">{String(c.campaign_id ?? '—').slice(0, 10)}…</span>
+                        {!!c.name && <span className="text-text-secondary truncate max-w-[120px]">{String(c.name)}</span>}
+                        {!!c.channel && <Badge size="sm">{String(c.channel)}</Badge>}
+                        {c.attributed_revenue != null && <span className="font-mono text-text-primary ml-auto">{fmtUsd(c.attributed_revenue)}</span>}
+                      </div>
+                    ))}
+                  </div>
+                </ScrollArea>
+              </div>
+            )}
+            {attributedConversions.length > 0 && (
+              <div>
+                <div className="text-[10px] uppercase tracking-wide text-text-muted mb-1">Attributed conversions ({attributedConversions.length})</div>
+                <ScrollArea maxHeight="200px">
+                  <div className="space-y-1">
+                    {attributedConversions.map((cv, i) => (
+                      <div key={String(cv.conversion_id ?? i)} className="flex flex-wrap items-center gap-2 px-2 py-1.5 rounded border border-border-subtle bg-surface-raised text-xs">
+                        <span className="font-mono text-text-muted">{String(cv.conversion_id ?? '—').slice(0, 8)}…</span>
+                        {!!cv.conversion_type && <Badge size="sm">{String(cv.conversion_type)}</Badge>}
+                        {cv.gross_value != null && <span className="font-mono text-text-primary">{fmtUsd(cv.gross_value)}</span>}
+                        {!!cv.occurred_at && <span className="font-mono text-text-muted ml-auto">{new Date(String(cv.occurred_at)).toLocaleDateString()}</span>}
+                      </div>
+                    ))}
+                  </div>
+                </ScrollArea>
+              </div>
+            )}
+          </CardContent>
+        </Card>
       )}
 
       {Object.keys(channelCredit).length > 0 && (

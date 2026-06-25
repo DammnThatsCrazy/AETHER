@@ -14,6 +14,7 @@ from services.measurement.repositories.conversion_repo import ConversionReposito
 from services.measurement.repositories.adjustment_repo import AdjustmentRepository
 from services.measurement.repositories.attribution_run_repo import AttributionRunRepository
 from services.measurement.engine.attribution_engine import AttributionEngine
+from services.measurement.engine.subscription_ltv import SubscriptionLTVService
 
 logger = get_logger("aether.measurement.routes.conversions")
 router = APIRouter(prefix="/v1/conversions", tags=["Conversions"])
@@ -22,6 +23,7 @@ _conversion_repo = ConversionRepository()
 _adjustment_repo = AdjustmentRepository()
 _run_repo = AttributionRunRepository()
 _engine = AttributionEngine()
+_ltv_service = SubscriptionLTVService()
 
 
 def _require_tenant(request: Request):
@@ -35,6 +37,10 @@ def _require_tenant(request: Request):
 class RecomputeRequest(BaseModel):
     model_type: str = "last_touch"
     lookback_hours: int = Field(720, ge=1, le=8760)
+
+
+class RenewalAttributionRequest(BaseModel):
+    pass  # body reserved for future options
 
 
 @router.get("")
@@ -162,6 +168,69 @@ async def recompute_attribution(conversion_id: str, request: Request, body: Reco
         raise BadRequestError(str(exc))
 
     return APIResponse(data=run, meta={"triggered": True}).to_dict()
+
+
+@router.post("/{conversion_id}/attribute-renewal")
+async def attribute_renewal_conversion(conversion_id: str, request: Request):
+    """Attribute a renewal conversion by inheriting acquisition touchpoint weights.
+
+    For subscription_renewed and invoice_paid conversions, this endpoint finds the
+    original acquisition conversion (subscription_started/trial_converted) for the
+    same subscription_id and propagates its attribution credits — scaled to this
+    renewal's net_value — without re-running the full attribution engine.
+
+    Returns the new attribution run with inherited credits.
+    """
+    tenant = _require_tenant(request)
+    try:
+        run = await _ltv_service.attribute_renewal(tenant.tenant_id, conversion_id)
+    except ValueError as exc:
+        raise BadRequestError(str(exc))
+    return APIResponse(data=run, meta={"triggered": True, "method": "subscription_renewal"}).to_dict()
+
+
+@router.get("/subscriptions/{subscription_id}/ltv")
+async def get_subscription_ltv(
+    subscription_id: str,
+    request: Request,
+    include_pending: bool = Query(False),
+):
+    """Return cumulative LTV metrics for a subscription.
+
+    Aggregates net_value across all conversions sharing the same subscription_id,
+    from acquisition through renewals to cancellation. Excludes pending conversions
+    unless include_pending=true.
+    """
+    tenant = _require_tenant(request)
+    ltv = await _ltv_service.compute_ltv(
+        tenant.tenant_id, subscription_id, include_pending=include_pending
+    )
+    return APIResponse(data=ltv).to_dict()
+
+
+@router.get("/cohort-ltv")
+async def get_cohort_ltv(
+    request: Request,
+    cohort_month: str = Query(..., description="Cohort acquisition month in YYYY-MM format"),
+    conversion_type: str = Query("subscription_started"),
+    limit: int = Query(1000, ge=1, le=5000),
+):
+    """Return aggregate LTV metrics for a subscription acquisition cohort.
+
+    Identifies all subscriptions that started in the given cohort_month and
+    computes cohort-level LTV: total, average, median, avg renewals.
+    """
+    tenant = _require_tenant(request)
+    try:
+        cohort = await _ltv_service.compute_cohort_ltv(
+            tenant.tenant_id,
+            cohort_month,
+            conversion_type=conversion_type,
+            limit=limit,
+        )
+    except ValueError as exc:
+        raise BadRequestError(str(exc))
+    return APIResponse(data=cohort).to_dict()
 
 
 def _parse_ts(value: str) -> Optional[datetime]:
