@@ -31,7 +31,7 @@ PR #354 — Universal Intelligence Graph (this branch).
 | 0 | Repository Baseline and Gap Inventory | ✅ Complete |
 | 1 | Tenant Isolation Hardening | ✅ Complete |
 | 2 | Canonical Universal Graph Contract | ✅ Complete |
-| 3 | Temporal and Lifecycle Foundation | ⬜ Pending |
+| 3 | Temporal and Lifecycle Foundation | ✅ Complete |
 | 4 | Canonical Universal Graph Query Service | ⬜ Pending |
 | 5 | Identity, Population, Clusters, Cluster360 | ⬜ Pending |
 | 6 | Campaign, Attribution, Journey, Causality | ⬜ Pending |
@@ -110,14 +110,22 @@ Key P0 gaps:
 
 ---
 
-## Phase 3 — Temporal and Lifecycle Foundation
+## Phase 3 — Temporal and Lifecycle Foundation (Complete)
 
 ### Files Changed
-- [ ] `Backend Architecture/aether-backend/shared/graph/edge_properties.py`
-- [ ] `Backend Architecture/aether-backend/shared/graph/graph.py`
-- [ ] `Backend Architecture/aether-backend/services/operational_intelligence/routes.py`
-- [ ] `Backend Architecture/aether-backend/services/operational_intelligence/models.py`
-- [ ] `tests/graph/test_graph_temporal_integration.py`
+- [x] `Backend Architecture/aether-backend/shared/graph/edge_properties.py` — added `BITEMPORAL_EDGE_PROPERTIES` frozenset; added `valid_to`, `recorded_at`, `superseded_at` to `OPTIONAL_EDGE_PROPERTIES`; extended `build_edge_properties()` signature
+- [x] `Backend Architecture/aether-backend/shared/graph/traversal.py` — `temporal_bfs()` enhanced with bitemporal valid-time filtering (`valid_from <= as_of` + `valid_to > as_of`); falls back to `created_at` for pre-Phase-3 edges
+- [x] `Backend Architecture/aether-backend/services/operational_intelligence/routes.py` — added `POST /v1/graph/compare` route with two-snapshot BFS diff; updated `/contracts` route listing
+- [x] `Backend Architecture/aether-backend/services/operational_intelligence/models.py` — added `GraphCompareRequest`, `GraphCompareNodeDiff`, `GraphCompareEdgeDiff`, `GraphCompareResult` models
+- [x] `tests/graph/test_graph_temporal_integration.py` — 7 new tests; all pass (7/7)
+
+### Phase 3 Gate
+- [x] `temporal_bfs` applies bitemporal valid-time window filtering (not just `created_at`)
+- [x] Point-in-time replay returns materially different node sets at T1 vs T4
+- [x] Expired nodes/edges (valid_to ≤ as_of) excluded from temporal results
+- [x] `POST /v1/graph/compare` computes added/removed/changed nodes and edges
+- [x] Cross-tenant vertices invisible across all time points
+- [x] All 7 temporal integration tests pass (1409/1409 total Python tests pass)
 
 ---
 

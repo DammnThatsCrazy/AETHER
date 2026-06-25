@@ -518,3 +518,44 @@ class GovernanceDecision(ContractModel):
     obligations: Optional[list[str]] = None
     explanation: ExplainabilityMetadata
     evaluatedAt: str
+
+
+class GraphCompareRequest(TenantScopedRequest):
+    """Request to compare graph state at two points in time."""
+    anchor: EntityRef
+    asOf: str          # primary snapshot time (ISO-8601)
+    compareTo: str     # baseline snapshot time (ISO-8601); typically earlier
+    depth: int = Field(default=2, ge=1, le=10)
+    filter: Optional[GraphQueryFilter] = None
+
+
+class GraphCompareNodeDiff(ContractModel):
+    id: str
+    kind: str
+    label: Optional[str] = None
+    changeType: Literal["added", "removed", "changed"]
+    changedProperties: Optional[dict[str, Any]] = None
+
+
+class GraphCompareEdgeDiff(ContractModel):
+    id: str
+    type: str
+    from_: str = Field(alias="from")
+    to: str
+    changeType: Literal["added", "removed", "changed"]
+
+
+class GraphCompareResult(ContractModel):
+    """Result of a bitemporal graph comparison between two as_of snapshots."""
+    tenantId: str
+    anchor: EntityRef
+    asOf: str
+    compareTo: str
+    addedNodes: list[GraphCompareNodeDiff] = Field(default_factory=list)
+    removedNodes: list[GraphCompareNodeDiff] = Field(default_factory=list)
+    changedNodes: list[GraphCompareNodeDiff] = Field(default_factory=list)
+    addedEdges: list[GraphCompareEdgeDiff] = Field(default_factory=list)
+    removedEdges: list[GraphCompareEdgeDiff] = Field(default_factory=list)
+    unchangedNodeCount: int = 0
+    unchangedEdgeCount: int = 0
+    computedAt: str

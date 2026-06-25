@@ -20,6 +20,10 @@ from shared.logger.logger import metrics
 from services.data_quality.service import drift_service, intelligence_quality_service
 from services.operational_intelligence.models import (
     ExplainabilityMetadata,
+    GraphCompareNodeDiff,
+    GraphCompareEdgeDiff,
+    GraphCompareRequest,
+    GraphCompareResult,
     GraphEdge,
     GraphFilterRequest,
     GraphNode,
@@ -354,6 +358,133 @@ async def temporal_graph(
     )
 
 
+@router.post("/compare", response_model=GraphCompareResult)
+async def graph_compare(
+    body: GraphCompareRequest,
+    request: Request,
+    graph: GraphClient = Depends(get_graph),
+) -> GraphCompareResult:
+    """Compare graph state at two points in time using bitemporal valid-time windows.
+
+    Returns nodes/edges that were added or removed between compareTo (baseline)
+    and asOf (target). Both snapshots use valid-time filtering so superseded
+    facts at the baseline are excluded even if they share the same vertex ID.
+    """
+    _require_read(request, body.tenantId)
+    metrics.increment("graph_compare")
+
+    engine = GraphTraversalEngine(graph)
+
+    # Fetch the two temporal snapshots in parallel would require asyncio.gather;
+    # sequential is safe here since both are read-only BFS over in-memory graph.
+    result_at = await engine.temporal_bfs(
+        start_id=body.anchor.id,
+        as_of=body.asOf,
+        depth=body.depth,
+        direction="both",
+        limit=500,
+        tenant_id=body.tenantId,
+    )
+    result_base = await engine.temporal_bfs(
+        start_id=body.anchor.id,
+        as_of=body.compareTo,
+        depth=body.depth,
+        direction="both",
+        limit=500,
+        tenant_id=body.tenantId,
+    )
+
+    if body.filter:
+        result_at = _filter_result(result_at, body.filter)
+        result_base = _filter_result(result_base, body.filter)
+
+    nodes_at = {v.vertex_id: v for v in result_at.nodes}
+    nodes_base = {v.vertex_id: v for v in result_base.nodes}
+
+    def _edge_id(e: Edge) -> str:
+        return f"{e.from_vertex_id}:{e.edge_type}:{e.to_vertex_id}"
+
+    edges_at = {_edge_id(e): e for e in result_at.edges}
+    edges_base = {_edge_id(e): e for e in result_base.edges}
+
+    added_nodes: list[GraphCompareNodeDiff] = []
+    removed_nodes: list[GraphCompareNodeDiff] = []
+    changed_nodes: list[GraphCompareNodeDiff] = []
+    unchanged_nodes = 0
+
+    for vid, v in nodes_at.items():
+        if vid not in nodes_base:
+            added_nodes.append(GraphCompareNodeDiff(
+                id=vid, kind=v.vertex_type.lower(),
+                label=v.properties.get("display_name") or v.properties.get("label"),
+                changeType="added",
+            ))
+        else:
+            base_v = nodes_base[vid]
+            changed_props = {
+                k: v.properties[k]
+                for k in v.properties
+                if k not in ("valid_from", "valid_to", "recorded_at", "superseded_at")
+                and str(v.properties.get(k)) != str(base_v.properties.get(k))
+            }
+            if changed_props:
+                changed_nodes.append(GraphCompareNodeDiff(
+                    id=vid, kind=v.vertex_type.lower(),
+                    label=v.properties.get("display_name") or v.properties.get("label"),
+                    changeType="changed",
+                    changedProperties=changed_props,
+                ))
+            else:
+                unchanged_nodes += 1
+
+    for vid, v in nodes_base.items():
+        if vid not in nodes_at:
+            removed_nodes.append(GraphCompareNodeDiff(
+                id=vid, kind=v.vertex_type.lower(),
+                label=v.properties.get("display_name") or v.properties.get("label"),
+                changeType="removed",
+            ))
+
+    added_edges: list[GraphCompareEdgeDiff] = []
+    removed_edges: list[GraphCompareEdgeDiff] = []
+    unchanged_edges = 0
+
+    for eid, e in edges_at.items():
+        if eid not in edges_base:
+            added_edges.append(GraphCompareEdgeDiff(
+                id=eid, type=e.edge_type,
+                **{"from": e.from_vertex_id},
+                to=e.to_vertex_id,
+                changeType="added",
+            ))
+        else:
+            unchanged_edges += 1
+
+    for eid, e in edges_base.items():
+        if eid not in edges_at:
+            removed_edges.append(GraphCompareEdgeDiff(
+                id=eid, type=e.edge_type,
+                **{"from": e.from_vertex_id},
+                to=e.to_vertex_id,
+                changeType="removed",
+            ))
+
+    return GraphCompareResult(
+        tenantId=body.tenantId,
+        anchor=body.anchor,
+        asOf=body.asOf,
+        compareTo=body.compareTo,
+        addedNodes=added_nodes,
+        removedNodes=removed_nodes,
+        changedNodes=changed_nodes,
+        addedEdges=added_edges,
+        removedEdges=removed_edges,
+        unchangedNodeCount=unchanged_nodes,
+        unchangedEdgeCount=unchanged_edges,
+        computedAt=_utc_now(),
+    )
+
+
 @router.post("/overlay", response_model=GraphResult)
 async def graph_overlay(
     body: GraphOverlayRequest,
@@ -441,7 +572,7 @@ async def graph_contracts() -> dict:
     return APIResponse(
         data={
             "version": _GRAPH_CONTRACT_VERSION,
-            "routes": ["traverse", "path", "temporal", "overlay", "filter"],
+            "routes": ["traverse", "path", "temporal", "compare", "overlay", "filter"],
             "status": "traversal_engine_active",
             "relationship_layers": _RELATIONSHIP_LAYERS,
             "layer_count": len(_RELATIONSHIP_LAYERS),
