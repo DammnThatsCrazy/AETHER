@@ -294,6 +294,87 @@ async def _compute_overlay_scores(
                     "computed_at": _utc_now(),
                 },
             ))
+        elif overlay_id == "geography":
+            # Geography overlay — aggregate country/region distribution from node properties
+            country_dist: dict[str, int] = {}
+            region_dist: dict[str, int] = {}
+            location_type_dist: dict[str, int] = {}
+            nodes_with_geo = 0
+            for n in nodes:
+                country = (
+                    n.properties.get("country")
+                    or n.properties.get("geo_country")
+                    or n.properties.get("location_country")
+                )
+                region = n.properties.get("region") or n.properties.get("geo_region")
+                loc_type = n.properties.get("location_type")
+                if country:
+                    nodes_with_geo += 1
+                    country_dist[str(country)] = country_dist.get(str(country), 0) + 1
+                if region:
+                    region_dist[str(region)] = region_dist.get(str(region), 0) + 1
+                if loc_type:
+                    location_type_dist[str(loc_type)] = location_type_dist.get(str(loc_type), 0) + 1
+            top_countries = sorted(country_dist.items(), key=lambda x: x[1], reverse=True)[:10]
+            overlays.append(GraphOverlay(
+                id=overlay_id,
+                name="Geography",
+                dimensions=[],
+                properties={
+                    "status": "computed",
+                    "nodes_with_geo_data": nodes_with_geo,
+                    "geo_coverage_pct": round(nodes_with_geo / total_nodes * 100, 1) if total_nodes > 0 else 0.0,
+                    "country_count": len(country_dist),
+                    "top_countries": [{"country": c, "count": n} for c, n in top_countries],
+                    "region_count": len(region_dist),
+                    "location_type_distribution": location_type_dist,
+                    "computed_at": _utc_now(),
+                },
+            ))
+        elif overlay_id == "consent":
+            # Consent overlay — aggregate activation_eligible states from node properties
+            eligible_count = sum(
+                1 for n in nodes
+                if n.properties.get("activation_eligible") is True
+                or n.properties.get("consent_state") in ("granted", "active")
+            )
+            withdrawn_count = sum(
+                1 for n in nodes
+                if n.properties.get("consent_state") in ("withdrawn", "expired")
+            )
+            overlays.append(GraphOverlay(
+                id=overlay_id,
+                name="Consent / Eligibility",
+                dimensions=[],
+                properties={
+                    "status": "computed",
+                    "activation_eligible_count": eligible_count,
+                    "consent_withdrawn_or_expired_count": withdrawn_count,
+                    "activation_eligible_pct": round(eligible_count / total_nodes * 100, 1) if total_nodes > 0 else 0.0,
+                    "computed_at": _utc_now(),
+                },
+            ))
+        elif overlay_id == "confidence":
+            # Confidence/provenance overlay — aggregate confidence scores
+            scores = [
+                float(n.properties["confidence"])
+                for n in nodes
+                if isinstance(n.properties.get("confidence"), (int, float))
+            ]
+            avg_conf = round(sum(scores) / len(scores), 3) if scores else None
+            overlays.append(GraphOverlay(
+                id=overlay_id,
+                name="Confidence",
+                dimensions=[],
+                properties={
+                    "status": "computed",
+                    "nodes_with_confidence": len(scores),
+                    "avg_confidence": avg_conf,
+                    "high_confidence_count": sum(1 for s in scores if s >= 0.8),
+                    "low_confidence_count": sum(1 for s in scores if s < 0.5),
+                    "computed_at": _utc_now(),
+                },
+            ))
         else:
             overlays.append(GraphOverlay(
                 id=overlay_id,
