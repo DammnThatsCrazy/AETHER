@@ -60,13 +60,14 @@ class CampaignPopulationExplorer:
         self,
         tenant_id: str,
         campaign_id: str,
-        campaign: dict[str, Any],
+        campaign: Optional[dict[str, Any]] = None,
         *,
         time_range: Optional[dict[str, str]] = None,
         attribution_model: str = "last_touch",
         attribution_run_id: Optional[str] = None,
     ) -> dict[str, Any]:
         """Reconciled campaign overview from spend + touchpoints + conversions + credits."""
+        campaign = campaign or {}
         after = _parse_ts(time_range.get("start")) if time_range else None
         before = _parse_ts(time_range.get("end")) if time_range else None
 
@@ -157,6 +158,7 @@ class CampaignPopulationExplorer:
         campaign_id: str,
         *,
         population: str = "observed",
+        population_type: Optional[str] = None,
         time_range: Optional[dict[str, str]] = None,
         channel: Optional[str] = None,
         cluster_id: Optional[str] = None,
@@ -164,6 +166,7 @@ class CampaignPopulationExplorer:
         cursor: Optional[str] = None,
     ) -> dict[str, Any]:
         """Paginated entity population for a campaign, filtered by funnel stage."""
+        population = population_type or population
         after = _parse_ts(time_range.get("start")) if time_range else None
         before = _parse_ts(time_range.get("end")) if time_range else None
 

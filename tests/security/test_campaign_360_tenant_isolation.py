@@ -69,12 +69,14 @@ class TestCampaignTouchpointTenantIsolation:
         for i in range(3):
             await repo.upsert({
                 "tenant_id": TENANT_A, "campaign_id": CAMPAIGN_A,
-                "touchpoint_type": "click", "occurred_at": _ts(),
+                "touchpoint_type": "click", "anonymous_id": f"anon-a-{i}",
+                "occurred_at": _ts(),
                 "idempotency_key": f"tp-pop-a-{uuid4()}",
             })
         await repo.upsert({
             "tenant_id": TENANT_B, "campaign_id": CAMPAIGN_A,
-            "touchpoint_type": "click", "occurred_at": _ts(),
+            "touchpoint_type": "click", "anonymous_id": "anon-b-1",
+            "occurred_at": _ts(),
             "idempotency_key": f"tp-pop-b-{uuid4()}",
         })
         summary = await repo.population_summary(TENANT_A, CAMPAIGN_A)

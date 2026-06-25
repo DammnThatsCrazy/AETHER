@@ -247,6 +247,7 @@ class ConversionRepository:
             rows = [
                 r for r in _local_store.values()
                 if r.get("tenant_id") == tenant_id
+                and r.get("campaign_id") == campaign_id
                 and (cluster_id is None or r.get("cluster_id") == cluster_id)
                 and (conversion_type is None or r.get("conversion_type") == conversion_type)
                 and (status is None or r.get("conversion_status") == status)

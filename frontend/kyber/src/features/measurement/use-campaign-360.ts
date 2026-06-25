@@ -49,11 +49,11 @@ export interface Campaign360OverviewParams {
 export function useCampaign360Overview(params: Campaign360OverviewParams) {
   return useQuery<AnyRecord>(
     () => api.campaigns.overview(params.campaignId, {
-      time_start: params.time_start,
-      time_end: params.time_end,
-      tz: params.tz,
-      attribution_model: params.attribution_model,
-      attribution_run_id: params.attribution_run_id,
+      ...(params.time_start !== undefined ? { time_start: params.time_start } : {}),
+      ...(params.time_end !== undefined ? { time_end: params.time_end } : {}),
+      ...(params.tz !== undefined ? { tz: params.tz } : {}),
+      ...(params.attribution_model !== undefined ? { attribution_model: params.attribution_model } : {}),
+      ...(params.attribution_run_id !== undefined ? { attribution_run_id: params.attribution_run_id } : {}),
     }) as Promise<AnyRecord>,
     [params.campaignId, params.time_start, params.time_end, params.attribution_model, params.attribution_run_id],
   );
@@ -75,13 +75,13 @@ export interface Campaign360PopulationParams {
 export function useCampaign360Population(params: Campaign360PopulationParams) {
   return useQuery<AnyRecord>(
     () => api.campaigns.population(params.campaignId, {
-      population: params.population,
-      channel: params.channel,
-      cluster_id: params.cluster_id,
-      time_start: params.time_start,
-      time_end: params.time_end,
-      limit: params.limit,
-      cursor: params.cursor,
+      ...(params.population !== undefined ? { population: params.population } : {}),
+      ...(params.channel !== undefined ? { channel: params.channel } : {}),
+      ...(params.cluster_id !== undefined ? { cluster_id: params.cluster_id } : {}),
+      ...(params.time_start !== undefined ? { time_start: params.time_start } : {}),
+      ...(params.time_end !== undefined ? { time_end: params.time_end } : {}),
+      ...(params.limit !== undefined ? { limit: params.limit } : {}),
+      ...(params.cursor !== undefined ? { cursor: params.cursor } : {}),
     }) as Promise<AnyRecord>,
     [params.campaignId, params.population, params.channel, params.cluster_id, params.time_start, params.time_end, params.cursor],
   );
@@ -101,11 +101,11 @@ export interface Campaign360ClustersParams {
 export function useCampaign360Clusters(params: Campaign360ClustersParams) {
   return useQuery<AnyRecord>(
     () => api.campaigns.clusters(params.campaignId, {
-      attribution_run_id: params.attribution_run_id,
-      time_start: params.time_start,
-      time_end: params.time_end,
-      limit: params.limit,
-      cursor: params.cursor,
+      ...(params.attribution_run_id !== undefined ? { attribution_run_id: params.attribution_run_id } : {}),
+      ...(params.time_start !== undefined ? { time_start: params.time_start } : {}),
+      ...(params.time_end !== undefined ? { time_end: params.time_end } : {}),
+      ...(params.limit !== undefined ? { limit: params.limit } : {}),
+      ...(params.cursor !== undefined ? { cursor: params.cursor } : {}),
     }) as Promise<AnyRecord>,
     [params.campaignId, params.attribution_run_id, params.time_start, params.time_end, params.cursor],
   );
@@ -125,11 +125,11 @@ export interface Campaign360EntitiesParams {
 export function useCampaign360Entities(params: Campaign360EntitiesParams) {
   return useQuery<AnyRecord>(
     () => api.campaigns.entities(params.campaignId, {
-      entity_type: params.entity_type,
-      time_start: params.time_start,
-      time_end: params.time_end,
-      limit: params.limit,
-      cursor: params.cursor,
+      ...(params.entity_type !== undefined ? { entity_type: params.entity_type } : {}),
+      ...(params.time_start !== undefined ? { time_start: params.time_start } : {}),
+      ...(params.time_end !== undefined ? { time_end: params.time_end } : {}),
+      ...(params.limit !== undefined ? { limit: params.limit } : {}),
+      ...(params.cursor !== undefined ? { cursor: params.cursor } : {}),
     }) as Promise<AnyRecord>,
     [params.campaignId, params.entity_type, params.time_start, params.time_end, params.cursor],
   );
@@ -148,10 +148,10 @@ export interface Campaign360JourneysParams {
 export function useCampaign360Journeys(params: Campaign360JourneysParams) {
   return useQuery<AnyRecord>(
     () => api.campaigns.journeys(params.campaignId, {
-      time_start: params.time_start,
-      time_end: params.time_end,
-      limit: params.limit,
-      cursor: params.cursor,
+      ...(params.time_start !== undefined ? { time_start: params.time_start } : {}),
+      ...(params.time_end !== undefined ? { time_end: params.time_end } : {}),
+      ...(params.limit !== undefined ? { limit: params.limit } : {}),
+      ...(params.cursor !== undefined ? { cursor: params.cursor } : {}),
     }) as Promise<AnyRecord>,
     [params.campaignId, params.time_start, params.time_end, params.cursor],
   );
@@ -176,16 +176,16 @@ export interface Campaign360ConversionsParams {
 export function useCampaign360Conversions(params: Campaign360ConversionsParams) {
   return useQuery<AnyRecord>(
     () => api.campaigns.conversions(params.campaignId, {
-      cluster_id: params.cluster_id,
-      conversion_type: params.conversion_type,
-      status: params.status,
-      attribution_run_id: params.attribution_run_id,
-      channel: params.channel,
-      after: params.after,
-      before: params.before,
-      include_unattributed: params.include_unattributed,
-      limit: params.limit,
-      cursor: params.cursor,
+      ...(params.cluster_id !== undefined ? { cluster_id: params.cluster_id } : {}),
+      ...(params.conversion_type !== undefined ? { conversion_type: params.conversion_type } : {}),
+      ...(params.status !== undefined ? { status: params.status } : {}),
+      ...(params.attribution_run_id !== undefined ? { attribution_run_id: params.attribution_run_id } : {}),
+      ...(params.channel !== undefined ? { channel: params.channel } : {}),
+      ...(params.after !== undefined ? { after: params.after } : {}),
+      ...(params.before !== undefined ? { before: params.before } : {}),
+      ...(params.include_unattributed !== undefined ? { include_unattributed: params.include_unattributed } : {}),
+      ...(params.limit !== undefined ? { limit: params.limit } : {}),
+      ...(params.cursor !== undefined ? { cursor: params.cursor } : {}),
     }) as Promise<AnyRecord>,
     [params.campaignId, params.cluster_id, params.conversion_type, params.status, params.attribution_run_id, params.channel, params.after, params.before, params.cursor],
   );
@@ -206,12 +206,12 @@ export interface Campaign360GraphParams {
 export function useCampaign360Graph(params: Campaign360GraphParams) {
   return useQuery<AnyRecord>(
     () => api.campaigns.graph(params.campaignId, {
-      population: params.population,
-      time_range: params.time_range,
-      depth: params.depth,
-      max_nodes: params.max_nodes,
-      max_edges: params.max_edges,
-      filters: params.filters,
+      ...(params.population !== undefined ? { population: params.population } : {}),
+      ...(params.time_range !== undefined ? { time_range: params.time_range } : {}),
+      ...(params.depth !== undefined ? { depth: params.depth } : {}),
+      ...(params.max_nodes !== undefined ? { max_nodes: params.max_nodes } : {}),
+      ...(params.max_edges !== undefined ? { max_edges: params.max_edges } : {}),
+      ...(params.filters !== undefined ? { filters: params.filters } : {}),
     }) as Promise<AnyRecord>,
     [params.campaignId, params.population, params.depth, params.max_nodes],
   );

@@ -12,6 +12,7 @@ import { Campaign360Conversions } from '@kyber/features/measurement/campaign360/
 import { Campaign360Attribution } from '@kyber/features/measurement/campaign360/campaign-360-attribution';
 import { Campaign360Graph } from '@kyber/features/measurement/campaign360/campaign-360-graph';
 import { Campaign360Quality } from '@kyber/features/measurement/campaign360/campaign-360-quality';
+import type { Campaign360OverviewParams } from '@kyber/features/measurement/use-campaign-360';
 
 const TABS = [
   { value: 'overview', label: 'Overview' },
@@ -60,18 +61,22 @@ export function Campaign360Page() {
     return <PageWrapper title="Campaign 360"><ErrorState title="No campaign ID" message="Navigate to this page with a valid campaign ID." /></PageWrapper>;
   }
 
-  const overviewParams = {
+  const overviewParams: Campaign360OverviewParams = {
     campaignId,
-    time_start: timeStart,
-    time_end: timeEnd,
+    ...(timeStart !== undefined ? { time_start: timeStart } : {}),
+    ...(timeEnd !== undefined ? { time_end: timeEnd } : {}),
     attribution_model: attributionModel,
-    attribution_run_id: attributionRunId,
+    ...(attributionRunId !== undefined ? { attribution_run_id: attributionRunId } : {}),
   };
+
+  const subtitle = campaign
+    ? `${String(campaign.channel ?? '')} · ${String(campaign.status ?? '')}`
+    : undefined;
 
   return (
     <PageWrapper
       title={campaignLoading ? 'Campaign 360' : `Campaign 360 — ${String(campaign?.name ?? campaignId)}`}
-      subtitle={campaign ? `${String(campaign.channel ?? '')} · ${String(campaign.status ?? '')}` : undefined}
+      {...(subtitle !== undefined ? { subtitle } : {})}
       actions={
         <button
           onClick={() => navigate('/measurement/campaigns')}
@@ -85,9 +90,9 @@ export function Campaign360Page() {
       {campaignError && <ErrorState title="Campaign not found" message={campaignError} className="mb-4" />}
       {campaign && (
         <div className="flex items-center gap-2 mb-4">
-          <Badge variant="secondary">{String(campaign.channel ?? '—')}</Badge>
-          <Badge variant={campaign.status === 'active' ? 'success' : 'secondary'}>{String(campaign.status ?? '—')}</Badge>
-          {campaign.start_date && (
+          <Badge variant="default">{String(campaign.channel ?? '—')}</Badge>
+          <Badge variant={campaign.status === 'active' ? 'success' : 'default'}>{String(campaign.status ?? '—')}</Badge>
+          {!!campaign.start_date && (
             <span className="text-xs text-text-muted">
               {String(campaign.start_date)} → {String(campaign.end_date ?? 'ongoing')}
             </span>
@@ -107,28 +112,44 @@ export function Campaign360Page() {
         </TabsContent>
 
         <TabsContent value="population">
-          <Campaign360Population campaignId={campaignId} timeStart={timeStart} timeEnd={timeEnd} />
+          <Campaign360Population
+            campaignId={campaignId}
+            {...(timeStart !== undefined ? { timeStart } : {})}
+            {...(timeEnd !== undefined ? { timeEnd } : {})}
+          />
         </TabsContent>
 
         <TabsContent value="clusters">
           <Campaign360Clusters
             campaignId={campaignId}
-            attributionRunId={attributionRunId}
-            timeStart={timeStart}
-            timeEnd={timeEnd}
+            {...(attributionRunId !== undefined ? { attributionRunId } : {})}
+            {...(timeStart !== undefined ? { timeStart } : {})}
+            {...(timeEnd !== undefined ? { timeEnd } : {})}
           />
         </TabsContent>
 
         <TabsContent value="entities">
-          <Campaign360Entities campaignId={campaignId} timeStart={timeStart} timeEnd={timeEnd} />
+          <Campaign360Entities
+            campaignId={campaignId}
+            {...(timeStart !== undefined ? { timeStart } : {})}
+            {...(timeEnd !== undefined ? { timeEnd } : {})}
+          />
         </TabsContent>
 
         <TabsContent value="journeys">
-          <Campaign360Journeys campaignId={campaignId} timeStart={timeStart} timeEnd={timeEnd} />
+          <Campaign360Journeys
+            campaignId={campaignId}
+            {...(timeStart !== undefined ? { timeStart } : {})}
+            {...(timeEnd !== undefined ? { timeEnd } : {})}
+          />
         </TabsContent>
 
         <TabsContent value="conversions">
-          <Campaign360Conversions campaignId={campaignId} timeStart={timeStart} timeEnd={timeEnd} />
+          <Campaign360Conversions
+            campaignId={campaignId}
+            {...(timeStart !== undefined ? { timeStart } : {})}
+            {...(timeEnd !== undefined ? { timeEnd } : {})}
+          />
         </TabsContent>
 
         <TabsContent value="attribution">
@@ -136,7 +157,11 @@ export function Campaign360Page() {
         </TabsContent>
 
         <TabsContent value="graph">
-          <Campaign360Graph campaignId={campaignId} timeStart={timeStart} timeEnd={timeEnd} />
+          <Campaign360Graph
+            campaignId={campaignId}
+            {...(timeStart !== undefined ? { timeStart } : {})}
+            {...(timeEnd !== undefined ? { timeEnd } : {})}
+          />
         </TabsContent>
 
         <TabsContent value="quality">

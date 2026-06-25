@@ -17,7 +17,7 @@ logger = get_logger("aether.measurement.attribution_run_repo")
 _IS_LOCAL = os.getenv("AETHER_ENV", "local").lower() == "local"
 
 _local_runs: dict[str, dict[str, Any]] = {}
-_local_credits: dict[str, dict[str, Any]] = {}
+_local_credits: list[dict[str, Any]] = []
 
 
 class AttributionRunRepository:
@@ -242,7 +242,7 @@ class AttributionRunRepository:
             for c in credits:
                 c.setdefault("credit_id", str(uuid4()))
                 c.setdefault("created_at", datetime.now(timezone.utc).isoformat())
-                _local_credits[c["credit_id"]] = c
+                _local_credits.append(c)
             return len(credits)
 
         async with pool.acquire() as conn:
@@ -293,7 +293,7 @@ class AttributionRunRepository:
         pool = await self._pool()
         if pool is None:
             return [
-                c for c in _local_credits.values()
+                c for c in _local_credits
                 if c.get("tenant_id") == tenant_id
                 and c.get("attribution_run_id") == attribution_run_id
             ]
@@ -321,11 +321,11 @@ class AttributionRunRepository:
                     return []
                 run_id = active["attribution_run_id"]
                 return [
-                    c for c in _local_credits.values()
+                    c for c in _local_credits
                     if c.get("attribution_run_id") == run_id
                 ]
             return [
-                c for c in _local_credits.values()
+                c for c in _local_credits
                 if c.get("tenant_id") == tenant_id and c.get("conversion_id") == conversion_id
             ]
 
@@ -375,7 +375,7 @@ class AttributionRunRepository:
         pool = await self._pool()
         if pool is None:
             credits = [
-                c for c in _local_credits.values()
+                c for c in _local_credits
                 if c.get("tenant_id") == tenant_id
                 and c.get("campaign_id") == campaign_id
                 and (cluster_id is None or c.get("cluster_id") == cluster_id)
@@ -440,7 +440,7 @@ class AttributionRunRepository:
         pool = await self._pool()
         if pool is None:
             credits_by_cluster: dict[str, dict[str, Any]] = {}
-            for c in _local_credits.values():
+            for c in _local_credits:
                 if c.get("tenant_id") != tenant_id or c.get("campaign_id") != campaign_id:
                     continue
                 if attribution_run_id and c.get("attribution_run_id") != attribution_run_id:
@@ -456,10 +456,10 @@ class AttributionRunRepository:
                 entry = credits_by_cluster[cid]
                 entry["conversion_count"] += 1
                 entry["attributed_gross_revenue"] += float(
-                    _to_decimal(c.get("attributed_gross_revenue") or "0") or 0
+                    _to_decimal(c.get("attributed_gross_revenue") or c.get("gross_value") or "0") or 0
                 )
                 entry["attributed_net_revenue"] += float(
-                    _to_decimal(c.get("attributed_net_revenue") or "0") or 0
+                    _to_decimal(c.get("attributed_net_revenue") or c.get("net_value") or "0") or 0
                 )
             return sorted(
                 credits_by_cluster.values(),
