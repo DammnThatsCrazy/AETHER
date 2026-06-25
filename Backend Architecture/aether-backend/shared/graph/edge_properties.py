@@ -41,6 +41,24 @@ OPTIONAL_EDGE_PROPERTIES: frozenset[str] = frozenset({
     "valid_to",          # ISO-8601; when this fact stops being true in the world
     "recorded_at",       # ISO-8601; when Aether first recorded this edge (system-time)
     "superseded_at",     # ISO-8601; when a later write superseded this edge (system-time)
+    # Causality classification (required for prediction/attribution edges):
+    "causality_class",   # observed_sequence|correlation|attributed_influence|inferred_influence|experiment_incremental|direct_cause
+    # Campaign / journey context:
+    "campaign_id",       # campaign that produced this edge
+    "journey_id",        # journey this edge belongs to
+    "journey_version",   # version of the journey definition
+    "step_index",        # ordinal position within the journey
+})
+
+# Valid causality classes — prediction edges must NOT use direct_cause
+# unless backed by a held-out experiment (experiment_incremental or above).
+CAUSALITY_CLASSES: frozenset[str] = frozenset({
+    "observed_sequence",      # time-ordered without causal claim
+    "correlation",            # statistical co-occurrence
+    "attributed_influence",   # attribution model output
+    "inferred_influence",     # ML-inferred causal path
+    "experiment_incremental", # measured via A/B or geo experiment
+    "direct_cause",           # established causal mechanism
 })
 
 # The four bitemporal fields that together model valid-time and system-time.

@@ -13,7 +13,7 @@ export interface GraphCluster {
 }
 
 export type GraphLayer = 'all' | 'H2H' | 'H2A' | 'A2H' | 'A2A';
-export type GraphOverlay = 'none' | 'trust' | 'risk';
+export type GraphOverlay = 'none' | 'trust' | 'risk' | 'campaign';
 export type GraphZoomLevel = 'macro' | 'cluster' | 'entity';
 
 // ── Helpers ────────────────────────────────────────────────────────────────────

@@ -48,6 +48,26 @@ function ClusterInspector({ cluster }: { cluster: GraphCluster }) {
   );
 }
 
+// ── Campaign drill-down ───────────────────────────────────────────────────────
+
+function CampaignDrillDown({ campaignId }: { campaignId: string }) {
+  const navigate = useNavigate();
+  return (
+    <div className="p-2 rounded border border-border-subtle bg-surface-raised space-y-1">
+      <p className="text-xs text-text-muted">Campaign attribution</p>
+      <code className="text-[10px] font-mono text-text-primary block truncate">{campaignId}</code>
+      <Button
+        variant="ghost"
+        size="sm"
+        className="w-full text-xs"
+        onClick={() => navigate(`/measurement/campaigns/${campaignId}`)}
+      >
+        View Campaign Attribution →
+      </Button>
+    </div>
+  );
+}
+
 // ── Inspector ─────────────────────────────────────────────────────────────────
 
 function ScoreBar({ label, value, colorFn }: { label: string; value: number | undefined; colorFn: (v: number) => string }) {
@@ -102,6 +122,11 @@ function Inspector({ data, onClose }: { data: InspectorPayload; onClose: () => v
                   <code className="text-xs text-text-muted break-all block">{data.node.id}</code>
                   <ScoreBar label="Trust" value={data.node.trustScore} colorFn={trustColor} />
                   <ScoreBar label="Risk" value={data.node.riskScore} colorFn={riskColor} />
+                  {(typeof data.node.metadata.attributed_campaign_id === 'string' || typeof data.node.metadata.campaign_id === 'string') && (
+                    <CampaignDrillDown
+                      campaignId={String(data.node.metadata.attributed_campaign_id ?? data.node.metadata.campaign_id)}
+                    />
+                  )}
                   {Object.keys(data.node.metadata).length > 0 && (
                     <div>
                       <p className="text-xs font-medium text-text-secondary mb-2">Properties</p>
@@ -212,6 +237,7 @@ const OVERLAYS: { value: GraphOverlay; label: string }[] = [
   { value: 'none', label: 'None' },
   { value: 'trust', label: 'Trust' },
   { value: 'risk', label: 'Risk' },
+  { value: 'campaign', label: 'Campaign' },
 ];
 
 // ── Node table ────────────────────────────────────────────────────────────────

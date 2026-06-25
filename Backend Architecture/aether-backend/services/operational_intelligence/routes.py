@@ -186,6 +186,43 @@ def _compute_overlay_scores(
                     "computed_at": _utc_now(),
                 },
             ))
+        elif overlay_id == "campaign":
+            # Campaign attribution overlay — aggregate from node properties
+            attributed_nodes = [
+                n for n in nodes
+                if n.properties.get("attributed_campaign_id") or n.properties.get("campaign_id")
+            ]
+            campaign_ids: set[str] = set()
+            total_revenue = 0.0
+            for n in attributed_nodes:
+                cid = n.properties.get("attributed_campaign_id") or n.properties.get("campaign_id")
+                if cid:
+                    campaign_ids.add(str(cid))
+                rev = n.properties.get("revenue") or n.properties.get("attributed_revenue") or 0
+                try:
+                    total_revenue += float(rev)
+                except (TypeError, ValueError):
+                    pass
+            # Count ACQUIRED_VIA / ATTRIBUTED_TO_CAMPAIGN edges
+            campaign_edges = [
+                e for e in edges
+                if e.edge_type in ("ACQUIRED_VIA", "ATTRIBUTED_TO_CAMPAIGN", "CONVERTED_FROM", "TOUCHPOINT_IN")
+            ]
+            overlays.append(GraphOverlay(
+                id=overlay_id,
+                name="Campaign Attribution",
+                dimensions=[],
+                properties={
+                    "status": "computed",
+                    "attributed_node_count": len(attributed_nodes),
+                    "campaign_count": len(campaign_ids),
+                    "campaign_ids": sorted(campaign_ids)[:20],
+                    "campaign_edge_count": len(campaign_edges),
+                    "total_attributed_revenue": round(total_revenue, 2),
+                    "attribution_coverage_pct": round(len(attributed_nodes) / total_nodes * 100, 1) if total_nodes > 0 else 0.0,
+                    "computed_at": _utc_now(),
+                },
+            ))
         else:
             overlays.append(GraphOverlay(
                 id=overlay_id,
@@ -210,6 +247,7 @@ _OVERLAY_DIMENSIONS: dict[str, list] = {
     "trust":          ["behavioral", "temporal", "coordination"],
     "risk":           ["behavioral", "economic", "chain"],
     "attribution":    ["attribution", "governance"],
+    "campaign":       ["attribution", "economic", "behavioral"],
     "agent":          ["agent", "operational"],
     "wallet":         ["wallet", "chain", "economic"],
 }
@@ -222,6 +260,7 @@ _OVERLAY_SCORE_KEY: dict[str, str] = {
     "trust":          "events",
     "risk":           "events",
     "attribution":    "schema",
+    "campaign":       "schema",
     "agent":          "graph",
     "wallet":         "identity",
 }

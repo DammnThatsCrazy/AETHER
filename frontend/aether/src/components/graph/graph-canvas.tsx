@@ -39,7 +39,7 @@ export interface GraphEdge {
   metadata: Record<string, unknown>;
 }
 
-export type GraphOverlay = 'none' | 'trust' | 'risk';
+export type GraphOverlay = 'none' | 'trust' | 'risk' | 'campaign';
 
 interface GraphCanvasProps {
   readonly nodes: GraphNode[];
