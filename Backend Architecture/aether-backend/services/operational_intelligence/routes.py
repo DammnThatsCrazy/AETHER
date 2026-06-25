@@ -137,10 +137,11 @@ def _filter_result(result: TraversalResult, f: GraphQueryFilter) -> TraversalRes
     return TraversalResult(nodes=nodes, edges=edges)
 
 
-def _compute_overlay_scores(
+async def _compute_overlay_scores(
     nodes: list[Vertex],
     edges: list[Edge],
     requested_overlays: list[str] | None,
+    tenant_id: str = "",
 ) -> list[GraphOverlay] | None:
     """Compute deterministic overlay scores from graph data.
 
@@ -252,6 +253,44 @@ def _compute_overlay_scores(
                     "campaign_edge_count": len(campaign_edges),
                     "total_attributed_revenue": round(total_revenue, 2),
                     "attribution_coverage_pct": round(len(attributed_nodes) / total_nodes * 100, 1) if total_nodes > 0 else 0.0,
+                    "computed_at": _utc_now(),
+                },
+            ))
+        elif overlay_id == "fraud":
+            # Fraud overlay — join entity IDs against fraud network membership records
+            from repositories.repos import FraudNetworkMemberRepository as _FNMRepo
+            _fnm_repo = _FNMRepo()
+            fraud_node_data: dict[str, dict] = {}
+            for n in nodes:
+                eid = n.properties.get("entity_id") or n.vertex_id
+                try:
+                    memberships = await _fnm_repo.list_by_entity(eid, tenant_id)
+                except Exception:
+                    memberships = []
+                if memberships:
+                    # Use highest-severity membership for node annotation
+                    top = sorted(memberships, key=lambda m: m.get("risk_contribution", 0), reverse=True)[0]
+                    fraud_node_data[n.vertex_id] = {
+                        "fraud_network_id": top.get("network_id"),
+                        "fraud_network_type": top.get("network_type"),
+                        "member_role": top.get("role"),
+                        "risk_score": top.get("risk_contribution") or n.properties.get("risk_score"),
+                        "alert_state": top.get("alert_state") or n.properties.get("alert_state"),
+                        "membership_count": len(memberships),
+                    }
+            fraud_member_count = len(fraud_node_data)
+            network_ids: set[str] = {d["fraud_network_id"] for d in fraud_node_data.values() if d.get("fraud_network_id")}
+            overlays.append(GraphOverlay(
+                id=overlay_id,
+                name="Fraud Network",
+                dimensions=[],
+                properties={
+                    "status": "computed",
+                    "fraud_member_count": fraud_member_count,
+                    "network_count": len(network_ids),
+                    "network_ids": sorted(str(nid) for nid in network_ids)[:20],
+                    "fraud_coverage_pct": round(fraud_member_count / total_nodes * 100, 1) if total_nodes > 0 else 0.0,
+                    "node_annotations": fraud_node_data,
                     "computed_at": _utc_now(),
                 },
             ))
@@ -512,7 +551,7 @@ async def traverse_graph(
     node_count = 1 + len(extra_nodes)
     edge_count = len(result.edges)
 
-    overlays = _compute_overlay_scores(result.nodes, result.edges, body.overlays)
+    overlays = await _compute_overlay_scores(result.nodes, result.edges, body.overlays, tenant_id=body.tenantId)
 
     return GraphResult(
         nodes=[start_node] + extra_nodes,
@@ -901,11 +940,11 @@ async def universal_graph_query(
     # ── Overlays ──────────────────────────────────────────────────────────────
     overlays = None
     if body.include_overlays:
-        known_overlays = {"risk", "trust", "attribution", "layer_coverage", "economic", "campaign", "geography", "consent", "confidence"}
+        known_overlays = {"risk", "trust", "attribution", "layer_coverage", "economic", "campaign", "fraud", "geography", "consent", "confidence"}
         unknown = [o for o in body.include_overlays if o not in known_overlays]
         if unknown:
             warnings.append(f"unknown_overlays: {unknown}")
-        overlays = _compute_overlay_scores(page_nodes, page_edges, body.include_overlays)
+        overlays = await _compute_overlay_scores(page_nodes, page_edges, body.include_overlays, tenant_id=body.tenant_id)
 
     meta = _make_meta(
         nodes=page_nodes,
@@ -1162,7 +1201,7 @@ async def graph_capabilities() -> dict:
         data={
             "version": _GRAPH_CONTRACT_VERSION,
             "filter_operators": sorted(FilterOperator.valid_values()),
-            "supported_overlays": ["risk", "trust", "attribution", "layer_coverage", "economic", "campaign", "geography", "consent", "confidence"],
+            "supported_overlays": ["risk", "trust", "attribution", "layer_coverage", "economic", "campaign", "fraud", "geography", "consent", "confidence"],
             "supported_facet_fields": ["node_type", "lifecycle_state", "risk_tier", "layer", "geography.country"],
             "relationship_layers": _RELATIONSHIP_LAYERS,
             "query_budget": QUERY_BUDGET_DEFAULTS,

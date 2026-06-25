@@ -13,7 +13,7 @@ source_files:
 canonical_owner: frontend@aether
 estimated_read_minutes: 35
 toc_depth: 4
-last_synced_commit: fae02a9
+last_synced_commit: 74ed792
 ---
 
 # Aether Frontend Architecture & Designer Handoff
@@ -33,7 +33,7 @@ There are two separate frontend applications. **Do not mix them up.**
 
 **Aether (customer-facing) contains:**
 - Auth flows (signup, login, SSO, billing)
-- The intelligence **graph canvas** showing the tenant's users, organizations, and AI agents — layer/overlay toggles (H2H/H2A/A2H/A2A, risk, trust, campaign), path finder, cluster panel, and cluster drill-down to Cluster360
+- The intelligence **graph canvas** showing the tenant's users, organizations, and AI agents — layer/overlay toggles (H2H/H2A/A2H/A2A, risk, trust, campaign, economic, fraud), path finder, cluster panel, and cluster drill-down to Cluster360
 - **Cluster360** (`/clusters/:clusterId`) — 7-tab cluster surface: Overview (type, state, formation reason, confidence, risk score, properties), Members (paginated DataTable with confidence + join date), Timeline (merge/split/growth events), Economic (revenue, spend, LTV, value tier, top-member breakdown), Campaigns (attributed campaigns, top channel, conversion rate), Risk (aggregate score, fraud network link, alert count, evidence refs, high-risk members), Geography (country distribution bars, concentration score)
 - **Semantic zoom** — graph canvas supports server-backed macro→cluster→entity zoom: depth-0 query returns cluster-aggregate nodes; clicking a cluster fetches depth-1 member expansion via `useGraphZoom`
 - **Entity Profile360** panels — what tenants drill into when they click a graph node

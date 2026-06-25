@@ -68,6 +68,50 @@ function CampaignDrillDown({ campaignId }: { campaignId: string }) {
   );
 }
 
+// ── Fraud investigation action ────────────────────────────────────────────────
+
+function FraudInvestigationAction({ nodeId, nodeLabel }: { nodeId: string; nodeLabel: string }) {
+  const [sent, setSent] = useState(false);
+  const [creating, setCreating] = useState(false);
+
+  async function handleCreate() {
+    setCreating(true);
+    try {
+      const { api } = await import('@aether-app/lib/api/endpoints');
+      await api.investigations.create({
+        tenantId: '',
+        title: `Risk investigation — ${nodeLabel}`,
+        subjects: [{ kind: 'entity', id: nodeId }],
+        createdBy: 'analyst',
+      });
+      setSent(true);
+    } catch {
+      setSent(false);
+    } finally {
+      setCreating(false);
+    }
+  }
+
+  return (
+    <div className="p-2 rounded border border-border-subtle bg-surface-raised space-y-1">
+      <p className="text-xs text-text-muted">Risk signals detected</p>
+      {sent ? (
+        <p className="text-xs text-success">Investigation case created</p>
+      ) : (
+        <Button
+          variant="ghost"
+          size="sm"
+          className="w-full text-xs"
+          onClick={handleCreate}
+          disabled={creating}
+        >
+          {creating ? 'Creating…' : 'Add to Investigation →'}
+        </Button>
+      )}
+    </div>
+  );
+}
+
 // ── Inspector ─────────────────────────────────────────────────────────────────
 
 function ScoreBar({ label, value, colorFn }: { label: string; value: number | undefined; colorFn: (v: number) => string }) {
@@ -126,6 +170,9 @@ function Inspector({ data, onClose }: { data: InspectorPayload; onClose: () => v
                     <CampaignDrillDown
                       campaignId={String(data.node.metadata.attributed_campaign_id ?? data.node.metadata.campaign_id)}
                     />
+                  )}
+                  {(data.node.riskScore !== undefined && data.node.riskScore >= 0.4) && (
+                    <FraudInvestigationAction nodeId={data.node.id} nodeLabel={data.node.label} />
                   )}
                   {Object.keys(data.node.metadata).length > 0 && (
                     <div>
@@ -239,6 +286,7 @@ const OVERLAYS: { value: GraphOverlay; label: string }[] = [
   { value: 'risk', label: 'Risk' },
   { value: 'campaign', label: 'Campaign' },
   { value: 'economic', label: 'Economic' },
+  { value: 'fraud', label: 'Fraud' },
 ];
 
 // ── Node table ────────────────────────────────────────────────────────────────
