@@ -3518,6 +3518,21 @@
       "status": "stable"
     },
     {
+      "path": "docs/plans/UNIVERSAL_INTELLIGENCE_GRAPH_IMPLEMENTATION.md",
+      "title": "Universal Intelligence Graph — Implementation Ledger",
+      "slug": "plans/universal-intelligence-graph-implementation",
+      "section": "architecture",
+      "visibility": "I",
+      "audience": [
+        "architect",
+        "dev-senior",
+        "ai"
+      ],
+      "status": "experimental",
+      "since_version": "8.10.0",
+      "canonical_owner": "graph@aether"
+    },
+    {
       "path": "docs/productization/aether_productization_audit.md",
       "title": "AETHER Productization Audit",
       "slug": "operations/productization-audit",

@@ -38,6 +38,7 @@ class GraphTraversalEngine:
         direction: str = "both",
         edge_types: Optional[list[str]] = None,
         limit: int = 100,
+        tenant_id: Optional[str] = None,
     ) -> TraversalResult:
         """BFS bounded neighbourhood traversal from start_id up to depth hops.
 
@@ -45,9 +46,15 @@ class GraphTraversalEngine:
         while traversing A2A orchestration edges, the cycle is recorded in
         result.a2a_cycles_detected (as a list of vertex IDs) rather than
         raising an exception, preserving observability.
+
+        When tenant_id is provided, traversal is scoped to vertices that carry
+        a matching tenantId property. Cross-tenant vertices and their edges are
+        silently dropped (fail-closed). This provides graph-level tenant
+        isolation on top of the API-level _require_read check.
         """
         client = self._client
         visited: set[str] = {start_id}
+        accepted: set[str] = {start_id}  # vertices that passed tenant check
         current_layer: list[str] = [start_id]
         result_nodes: list[Vertex] = []
         result_edges: list[Edge] = []
@@ -74,17 +81,26 @@ class GraphTraversalEngine:
                         a2a_cycles.append([vid, neighbor_id])
                         continue  # skip; do not re-traverse cyclic edge
 
-                    # Deduplicate edges
-                    edge_key = (edge.from_vertex_id, edge.to_vertex_id, edge.edge_type)
-                    if edge_key not in seen_edge_keys:
-                        seen_edge_keys.add(edge_key)
-                        result_edges.append(edge)
+                    neighbor_accepted = neighbor_id in accepted
+
                     if neighbor_id not in visited and len(result_nodes) < limit:
                         visited.add(neighbor_id)
                         neighbor = await client.get_vertex(neighbor_id)
                         if neighbor:
-                            result_nodes.append(neighbor)
-                            next_layer.append(neighbor_id)
+                            if tenant_id and neighbor.properties.get("tenantId") != tenant_id:
+                                pass  # cross-tenant: fail closed, do not add
+                            else:
+                                accepted.add(neighbor_id)
+                                neighbor_accepted = True
+                                result_nodes.append(neighbor)
+                                next_layer.append(neighbor_id)
+
+                    # Only include edges where the neighbor vertex was accepted
+                    if neighbor_accepted:
+                        edge_key = (edge.from_vertex_id, edge.to_vertex_id, edge.edge_type)
+                        if edge_key not in seen_edge_keys:
+                            seen_edge_keys.add(edge_key)
+                            result_edges.append(edge)
             current_layer = next_layer
 
         return TraversalResult(
@@ -98,8 +114,13 @@ class GraphTraversalEngine:
         from_id: str,
         to_id: str,
         max_depth: int = 6,
+        tenant_id: Optional[str] = None,
     ) -> TraversalResult:
-        """BFS shortest path between two vertices. Returns empty result if no path exists."""
+        """BFS shortest path between two vertices. Returns empty result if no path exists.
+
+        When tenant_id is provided, path search is restricted to vertices with a
+        matching tenantId property (fail-closed cross-tenant isolation).
+        """
         client = self._client
         if from_id == to_id:
             vertex = await client.get_vertex(from_id)
@@ -125,6 +146,11 @@ class GraphTraversalEngine:
                 new_path_edges = path_edges + [edge]
 
                 if neighbor_id == to_id:
+                    # Verify the destination vertex belongs to the tenant
+                    if tenant_id:
+                        dest = await client.get_vertex(neighbor_id)
+                        if dest and dest.properties.get("tenantId") != tenant_id:
+                            continue  # destination is cross-tenant; skip this path
                     vertices: list[Vertex] = []
                     for vid in new_path_ids:
                         v = await client.get_vertex(vid)
@@ -133,6 +159,11 @@ class GraphTraversalEngine:
                     return TraversalResult(nodes=vertices, edges=new_path_edges)
 
                 if neighbor_id not in visited:
+                    neighbor = await client.get_vertex(neighbor_id)
+                    if neighbor:
+                        if tenant_id and neighbor.properties.get("tenantId") != tenant_id:
+                            visited.add(neighbor_id)  # mark visited to prevent retry
+                            continue  # cross-tenant vertex: fail closed
                     visited.add(neighbor_id)
                     queue.append((neighbor_id, new_path_ids, new_path_edges))
 
@@ -145,10 +176,16 @@ class GraphTraversalEngine:
         depth: int = 2,
         direction: str = "both",
         limit: int = 100,
+        tenant_id: Optional[str] = None,
     ) -> TraversalResult:
-        """BFS traversal restricted to edges and vertices created at or before as_of (ISO8601)."""
+        """BFS traversal restricted to edges and vertices created at or before as_of (ISO8601).
+
+        When tenant_id is provided, vertices with a mismatched tenantId property are
+        silently dropped (fail-closed cross-tenant isolation).
+        """
         client = self._client
         visited: set[str] = {start_id}
+        accepted: set[str] = {start_id}
         current_layer: list[str] = [start_id]
         result_nodes: list[Vertex] = []
         result_edges: list[Edge] = []
@@ -168,18 +205,23 @@ class GraphTraversalEngine:
                     neighbor_id = (
                         edge.to_vertex_id if edge.from_vertex_id == vid else edge.from_vertex_id
                     )
-                    edge_key = (edge.from_vertex_id, edge.to_vertex_id, edge.edge_type)
-                    if edge_key not in seen_edge_keys:
-                        seen_edge_keys.add(edge_key)
-                        result_edges.append(edge)
+                    neighbor_accepted = neighbor_id in accepted
                     if neighbor_id not in visited and len(result_nodes) < limit:
+                        visited.add(neighbor_id)
                         neighbor = await client.get_vertex(neighbor_id)
-                        if neighbor and (
-                            not neighbor.created_at or neighbor.created_at <= as_of
-                        ):
-                            visited.add(neighbor_id)
-                            result_nodes.append(neighbor)
-                            next_layer.append(neighbor_id)
+                        if neighbor and (not neighbor.created_at or neighbor.created_at <= as_of):
+                            if tenant_id and neighbor.properties.get("tenantId") != tenant_id:
+                                pass  # cross-tenant: fail closed
+                            else:
+                                accepted.add(neighbor_id)
+                                neighbor_accepted = True
+                                result_nodes.append(neighbor)
+                                next_layer.append(neighbor_id)
+                    if neighbor_accepted:
+                        edge_key = (edge.from_vertex_id, edge.to_vertex_id, edge.edge_type)
+                        if edge_key not in seen_edge_keys:
+                            seen_edge_keys.add(edge_key)
+                            result_edges.append(edge)
             current_layer = next_layer
 
         return TraversalResult(nodes=result_nodes, edges=result_edges)

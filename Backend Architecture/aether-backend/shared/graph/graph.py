@@ -580,6 +580,31 @@ class EdgeType:
     ACHIEVED_OUTCOME         = "ACHIEVED_OUTCOME"          # User/Entity → Goal (from silver_outcome_facts)
     CONTACTED                = "CONTACTED"                 # Agent/System → User (from silver_comms_facts)
 
+    # ── Phase 2: Economic flow edges ─────────────────────────────────────
+    TRANSFERS_TO             = "TRANSFERS_TO"              # Entity → Entity (fiat/onchain transfer)
+    REFUNDED_BY              = "REFUNDED_BY"               # Order/Payment → Entity (refund)
+    CHARGED_BACK_BY          = "CHARGED_BACK_BY"           # Order/Payment → Entity (chargeback)
+
+    # ── Phase 2: Fraud ring edges ─────────────────────────────────────────
+    LAYERED_THROUGH          = "LAYERED_THROUGH"           # Entity → Entity (money layering)
+    SMURFED_VIA              = "SMURFED_VIA"               # Entity → Entity (smurfing / structuring)
+
+    # ── Phase 2: Campaign and attribution edges ───────────────────────────
+    ACQUIRED_VIA             = "ACQUIRED_VIA"              # Entity → Campaign (acquisition channel)
+    CONVERTED_FROM           = "CONVERTED_FROM"            # Entity → Touchpoint (conversion source)
+    ATTRIBUTED_TO_CAMPAIGN   = "ATTRIBUTED_TO_CAMPAIGN"    # Event/Conversion → Campaign
+    TOUCHPOINT_IN            = "TOUCHPOINT_IN"             # Touchpoint → Journey
+
+    # ── Phase 2: Journey step edges ──────────────────────────────────────
+    NEXT_IN_JOURNEY          = "NEXT_IN_JOURNEY"           # Touchpoint → Touchpoint (ordered)
+    ABANDONED_AT             = "ABANDONED_AT"              # Entity → Touchpoint (drop-off)
+    CONVERTED_AT             = "CONVERTED_AT"              # Entity → Touchpoint (conversion)
+
+    # ── Phase 2: Cluster lifecycle edges ─────────────────────────────────
+    BRIDGES                  = "BRIDGES"                   # Entity → Cluster (bridge node)
+    MERGED_INTO              = "MERGED_INTO"               # Cluster → Cluster (merge event)
+    SPLIT_FROM               = "SPLIT_FROM"                # Cluster → Cluster (split event)
+
 
 # ═══════════════════════════════════════════════════════════════════════════
 # SAFE VALUE ESCAPING

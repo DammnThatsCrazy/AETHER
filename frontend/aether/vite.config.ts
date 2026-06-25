@@ -20,6 +20,11 @@ export default defineConfig({
   },
   build: {
     sourcemap: true,
+    commonjsOptions: {
+      // @aether/shared ships CJS-only. Extend the default node_modules include
+      // to also cover the workspace package so Rollup resolves named exports.
+      include: [/node_modules/, /packages\/shared/],
+    },
     rollupOptions: {
       // Exclude MSW from production bundles — it's only used in local-mocked mode
       external: (id) => id.includes('msw') && process.env.VITE_AETHER_ENV !== 'local-mocked',

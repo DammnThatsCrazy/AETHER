@@ -10,6 +10,9 @@ Validated in CI by tests/contracts/test_graph_contract_parity.py.
 
 from __future__ import annotations
 
+from enum import Enum
+from typing import Literal
+
 from shared.graph.relationship_layers import (
     RelationshipLayer,
     _EDGE_LAYER_MAP,
@@ -140,3 +143,87 @@ OVERLAY_STATUS_NO_DATA = "no_data"
 OVERLAY_STATUS_VALUES = frozenset({OVERLAY_STATUS_COMPUTED, OVERLAY_STATUS_NO_DATA})
 # "placeholder" is never a valid overlay status in production
 OVERLAY_STATUS_FORBIDDEN = frozenset({"placeholder"})
+
+# ── Universal Envelopes — Python mirrors (Phase 2) ────────────────────────────
+
+# ObservationClass: how a data point was produced.
+# Mirrors ObservationClass in packages/shared/graph-contract.ts.
+OBSERVATION_CLASS_VALUES: frozenset[str] = frozenset({
+    "observed",
+    "deterministic",
+    "probabilistic",
+    "derived",
+    "predicted",
+    "simulated",
+    "manually_asserted",
+    "externally_enriched",
+})
+
+# LifecycleState: lifecycle state of a graph node or cluster.
+# Mirrors LifecycleState in packages/shared/graph-contract.ts.
+LIFECYCLE_STATE_VALUES: frozenset[str] = frozenset({
+    "provisional",
+    "unresolved",
+    "active",
+    "growing",
+    "stable",
+    "shrinking",
+    "dormant",
+    "decaying",
+    "reactivated",
+    "merged",
+    "split",
+    "suppressed",
+    "disputed",
+    "expired",
+    "revoked",
+    "invalidated",
+    "deleted",
+    "tombstoned",
+})
+
+# ClusterType: all supported cluster classification types.
+# Mirrors ClusterType in packages/shared/graph-contract.ts.
+CLUSTER_TYPE_VALUES: frozenset[str] = frozenset({
+    "identity",
+    "household",
+    "org",
+    "device",
+    "wallet",
+    "behavioral",
+    "geographic",
+    "economic_segment",
+    "campaign_cohort",
+    "journey",
+    "fraud_network",
+    "risk",
+    "dormant",
+    "reactivated",
+    "unresolved",
+})
+
+# FilterOperator: comparison operators for graph filter expressions.
+# Mirrors FilterOperator in packages/shared/graph-contract.ts.
+FILTER_OPERATOR_VALUES: frozenset[str] = frozenset({
+    "eq", "neq",
+    "gt", "gte", "lt", "lte",
+    "in", "not_in",
+    "exists", "not_exists",
+    "contains", "starts_with",
+    "between", "relative_time", "threshold",
+})
+
+# Phase 2 new edge types added to EDGE_LAYER_MAP (TypeScript side).
+# These must also be present in relationship_layers.py when added there.
+PHASE2_NEW_EDGE_TYPES: frozenset[str] = frozenset({
+    # Economic flow
+    "PAYS_FOR", "TRANSFERS_TO", "SETTLED_VIA", "REFUNDED_BY", "CHARGED_BACK_BY",
+    # Fraud ring
+    "LAYERED_THROUGH", "SMURFED_VIA",
+    # Campaign attribution
+    "ACQUIRED_VIA", "CONVERTED_FROM", "ATTRIBUTED_TO_CAMPAIGN", "TOUCHPOINT_IN",
+    # Journey
+    "NEXT_IN_JOURNEY", "ABANDONED_AT", "CONVERTED_AT",
+    # Cluster lifecycle
+    "BRIDGES", "MERGED_INTO", "SPLIT_FROM",
+})
