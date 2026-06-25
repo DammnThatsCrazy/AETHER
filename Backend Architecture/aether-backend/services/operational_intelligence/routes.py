@@ -28,6 +28,7 @@ from services.operational_intelligence.models import (
     FilterExpression,
     FilterGroup,
     FilterOperator,
+    FlowGraphRequest,
     GraphCompareNodeDiff,
     GraphCompareEdgeDiff,
     GraphCompareRequest,
@@ -186,6 +187,37 @@ def _compute_overlay_scores(
                     "computed_at": _utc_now(),
                 },
             ))
+        elif overlay_id == "economic":
+            # Economic overlay — aggregate revenue/spend/LTV from node properties
+            economic_nodes = [n for n in nodes if n.properties.get("revenue") or n.properties.get("ltv")]
+            currencies: set[str] = set()
+            total_rev = 0.0
+            total_spend = 0.0
+            for n in economic_nodes:
+                try:
+                    total_rev += float(n.properties.get("revenue") or 0)
+                    total_spend += float(n.properties.get("spend") or 0)
+                except (TypeError, ValueError):
+                    pass
+                if n.properties.get("currency"):
+                    currencies.add(str(n.properties["currency"]))
+            flow_edges = [e for e in edges if e.edge_type in ("PAYS_FOR", "TRANSFERS_TO", "SETTLED_VIA", "REFUNDED_BY")]
+            multi_currency = len(currencies) > 1
+            overlays.append(GraphOverlay(
+                id=overlay_id,
+                name="Economic",
+                dimensions=[],
+                properties={
+                    "status": "computed",
+                    "economic_node_count": len(economic_nodes),
+                    "total_revenue": round(total_rev, 2),
+                    "total_spend": round(total_spend, 2),
+                    "currencies": sorted(currencies),
+                    "multi_currency_warning": multi_currency,
+                    "flow_edge_count": len(flow_edges),
+                    "computed_at": _utc_now(),
+                },
+            ))
         elif overlay_id == "campaign":
             # Campaign attribution overlay — aggregate from node properties
             attributed_nodes = [
@@ -248,6 +280,7 @@ _OVERLAY_DIMENSIONS: dict[str, list] = {
     "risk":           ["behavioral", "economic", "chain"],
     "attribution":    ["attribution", "governance"],
     "campaign":       ["attribution", "economic", "behavioral"],
+    "economic":       ["economic", "chain", "behavioral"],
     "agent":          ["agent", "operational"],
     "wallet":         ["wallet", "chain", "economic"],
 }
@@ -261,6 +294,7 @@ _OVERLAY_SCORE_KEY: dict[str, str] = {
     "risk":           "events",
     "attribution":    "schema",
     "campaign":       "schema",
+    "economic":       "events",
     "agent":          "graph",
     "wallet":         "identity",
 }
@@ -298,6 +332,25 @@ def _get_field_value(vertex: Vertex, field: str) -> Any:
         return vertex.vertex_type
     if field == "tenant_id":
         return vertex.properties.get("tenantId")
+    # Economic field aliases — map economic.* shorthand to vertex properties
+    _ECONOMIC_ALIASES: dict[str, str] = {
+        "economic.revenue": "revenue",
+        "economic.spend": "spend",
+        "economic.ltv": "ltv",
+        "economic.margin": "margin",
+        "economic.transaction_volume": "transaction_volume",
+        "economic.currency": "currency",
+        "economic.rail": "rail",
+        "economic.inflow": "inflow",
+        "economic.outflow": "outflow",
+        # geography shortcuts
+        "geography.country": "country",
+        "geography.region": "region",
+        "geography.city": "city",
+        "geography.jurisdiction": "jurisdiction",
+    }
+    if field in _ECONOMIC_ALIASES:
+        return vertex.properties.get(_ECONOMIC_ALIASES[field])
     # dot-path into properties dict
     parts = field.split(".")
     val: Any = vertex.properties
@@ -984,6 +1037,122 @@ async def graph_export(
         completed_at=now,
         download_url=f"/v1/graph/export/{job_id}/download?format={body.format}&count={len(nodes)}",
     )
+
+
+@router.post("/flow")
+async def graph_flow(
+    body: FlowGraphRequest,
+    request: Request,
+    graph: GraphClient = Depends(get_graph),
+) -> dict:
+    """Trace flow-of-funds from an anchor entity via economic edges.
+
+    Traverses PAYS_FOR, TRANSFERS_TO, SETTLED_VIA, and REFUNDED_BY edges up to
+    the requested depth and returns nodes and edges suitable for graph rendering.
+    Multi-currency results include a warning when amounts cannot be safely summed.
+    """
+    _require_read(request, body.tenant_id)
+
+    _FLOW_EDGE_TYPES = frozenset({"PAYS_FOR", "TRANSFERS_TO", "SETTLED_VIA", "REFUNDED_BY", "CHARGED_BACK_BY"})
+    start = time.monotonic()
+    query_id = str(uuid.uuid4())
+
+    direction_map = {"downstream": "out", "upstream": "in", "both": "both"}
+    bfs_direction = direction_map.get(body.direction, "out")
+
+    engine = GraphTraversalEngine(graph)
+    try:
+        result: TraversalResult = engine.bfs(
+            start_id=body.anchor_entity_id,
+            depth=body.depth,
+            direction=bfs_direction,
+            edge_types=list(_FLOW_EDGE_TYPES),
+            limit=body.limit,
+            tenant_id=body.tenant_id,
+        )
+    except Exception:
+        result = TraversalResult(nodes=[], edges=[])
+
+    # Filter to only flow edge types (BFS may have included non-flow edges if edge_types not enforced)
+    flow_edges = [e for e in result.edges if e.edge_type in _FLOW_EDGE_TYPES]
+    flow_node_ids: set[str] = {body.anchor_entity_id}
+    for e in flow_edges:
+        flow_node_ids.add(e.from_vertex_id)
+        flow_node_ids.add(e.to_vertex_id)
+    flow_nodes = [n for n in result.nodes if n.vertex_id in flow_node_ids]
+
+    # Include anchor node even if BFS did not return it
+    anchor_ids = {n.vertex_id for n in flow_nodes}
+    if body.anchor_entity_id not in anchor_ids:
+        try:
+            anchor = await graph.get_vertex(body.anchor_entity_id)
+            if anchor and anchor.properties.get("tenantId") == body.tenant_id:
+                flow_nodes.insert(0, anchor)
+        except Exception:
+            pass
+
+    # Multi-currency check
+    currencies: set[str] = set()
+    for n in flow_nodes:
+        if n.properties.get("currency"):
+            currencies.add(str(n.properties["currency"]))
+
+    truncated = len(result.nodes) >= body.limit
+    duration_ms = int((time.monotonic() - start) * 1000)
+
+    out_nodes = [
+        GraphNode(
+            id=n.vertex_id,
+            node_type=n.vertex_type,
+            label=n.properties.get("display_name") or n.properties.get("name") or n.vertex_id,
+            properties=n.properties,
+            trust_score=n.properties.get("trust_score"),
+            risk_score=n.properties.get("risk_score"),
+            lifecycle_state=n.properties.get("lifecycle_state"),
+        )
+        for n in flow_nodes
+    ]
+    out_edges = [
+        GraphEdge(
+            id=e.edge_id,
+            source=e.from_vertex_id,
+            target=e.to_vertex_id,
+            edge_type=e.edge_type,
+            layer=classify_edge_type(e.edge_type) or RelationshipLayer.H2H,
+            properties=e.properties,
+        )
+        for e in flow_edges
+    ]
+
+    meta = GraphResultMeta(
+        truncated=truncated,
+        truncation_reason="limit_reached" if truncated else None,
+        node_count=len(out_nodes),
+        edge_count=len(out_edges),
+        execution_ms=duration_ms,
+        query_id=query_id,
+        budget_used=min(len(out_nodes) / body.limit, 1.0),
+        cursor=None,
+        as_of=None,
+        freshness_seconds=None,
+        warnings=(["multi_currency_amounts_not_summed"] if len(currencies) > 1 else []),
+    )
+
+    return APIResponse(
+        data={
+            "nodes": [n.model_dump() for n in out_nodes],
+            "edges": [e.model_dump() for e in out_edges],
+            "meta": meta.model_dump(),
+            "flow_summary": {
+                "anchor_entity_id": body.anchor_entity_id,
+                "direction": body.direction,
+                "currencies": sorted(currencies),
+                "multi_currency_warning": len(currencies) > 1,
+                "flow_edge_count": len(out_edges),
+                "hop_depth": body.depth,
+            },
+        }
+    ).to_dict()
 
 
 @router.get("/capabilities")

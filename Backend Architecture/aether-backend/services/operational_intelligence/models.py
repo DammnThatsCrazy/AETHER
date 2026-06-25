@@ -696,3 +696,14 @@ class GraphExportJob(ContractModel):
     completed_at: Optional[str] = None
     download_url: Optional[str] = None
     error: Optional[str] = None
+
+
+class FlowGraphRequest(ContractModel):
+    """Request body for POST /v1/graph/flow — flow-of-funds graph traversal."""
+    tenant_id: str
+    anchor_entity_id: str
+    direction: Literal["downstream", "upstream", "both"] = "downstream"
+    depth: int = Field(default=4, ge=1, le=6)
+    limit: int = Field(default=200, ge=1, le=500)
+    min_amount_usd: Optional[float] = Field(default=None, ge=0)
+    include_overlays: list[str] = []

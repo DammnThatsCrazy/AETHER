@@ -39,7 +39,7 @@ export interface GraphEdge {
   metadata: Record<string, unknown>;
 }
 
-export type GraphOverlay = 'none' | 'trust' | 'risk' | 'campaign';
+export type GraphOverlay = 'none' | 'trust' | 'risk' | 'campaign' | 'economic';
 
 interface GraphCanvasProps {
   readonly nodes: GraphNode[];
@@ -154,7 +154,7 @@ export function GraphCanvas({
 
     // Re-apply overlay immediately so colors survive canvas rebuilds triggered by layer changes
     const currentOverlay = overlayRef.current;
-    if (currentOverlay !== 'none') {
+    if (currentOverlay === 'trust' || currentOverlay === 'risk') {
       cy.batch(() => {
         cy.nodes().forEach(node => {
           const d = node.data();

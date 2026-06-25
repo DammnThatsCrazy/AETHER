@@ -238,6 +238,7 @@ const OVERLAYS: { value: GraphOverlay; label: string }[] = [
   { value: 'trust', label: 'Trust' },
   { value: 'risk', label: 'Risk' },
   { value: 'campaign', label: 'Campaign' },
+  { value: 'economic', label: 'Economic' },
 ];
 
 // ── Node table ────────────────────────────────────────────────────────────────
