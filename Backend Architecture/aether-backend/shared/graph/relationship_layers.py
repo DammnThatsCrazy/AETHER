@@ -375,6 +375,31 @@ _EDGE_LAYER_MAP: dict[str, RelationshipLayer] = {
     EdgeType.PURCHASED:        RelationshipLayer.H2A,  # User → Product/Order
     EdgeType.ACHIEVED_OUTCOME: RelationshipLayer.H2H,  # User → Goal
     EdgeType.CONTACTED:        RelationshipLayer.A2H,  # Agent/System → User
+
+    # ── Phase 2: Economic flow edges ─────────────────────────────────────
+    EdgeType.TRANSFERS_TO:           RelationshipLayer.H2H,  # Entity → Entity (fiat/onchain transfer)
+    EdgeType.REFUNDED_BY:            RelationshipLayer.H2H,  # Order → Entity (refund)
+    EdgeType.CHARGED_BACK_BY:        RelationshipLayer.H2H,  # Order → Entity (chargeback)
+
+    # ── Phase 2: Fraud ring edges ─────────────────────────────────────────
+    EdgeType.LAYERED_THROUGH:        RelationshipLayer.H2H,  # Entity → Entity (money layering)
+    EdgeType.SMURFED_VIA:            RelationshipLayer.H2H,  # Entity → Entity (structuring)
+
+    # ── Phase 2: Campaign and attribution edges ───────────────────────────
+    EdgeType.ACQUIRED_VIA:           RelationshipLayer.H2H,  # Entity → Campaign
+    EdgeType.CONVERTED_FROM:         RelationshipLayer.H2H,  # Entity → Touchpoint (source)
+    EdgeType.ATTRIBUTED_TO_CAMPAIGN: RelationshipLayer.H2H,  # Conversion → Campaign
+    EdgeType.TOUCHPOINT_IN:          RelationshipLayer.H2H,  # Touchpoint → Journey
+
+    # ── Phase 2: Journey step edges ──────────────────────────────────────
+    EdgeType.NEXT_IN_JOURNEY:        RelationshipLayer.H2H,  # Touchpoint → Touchpoint (sequence)
+    EdgeType.ABANDONED_AT:           RelationshipLayer.H2H,  # Entity → Touchpoint (drop-off)
+    EdgeType.CONVERTED_AT:           RelationshipLayer.H2H,  # Entity → Touchpoint (conversion)
+
+    # ── Phase 2: Cluster lifecycle edges ─────────────────────────────────
+    EdgeType.BRIDGES:                RelationshipLayer.H2H,  # Entity → Cluster (bridge)
+    EdgeType.MERGED_INTO:            RelationshipLayer.H2H,  # Cluster → Cluster (merge)
+    EdgeType.SPLIT_FROM:             RelationshipLayer.H2H,  # Cluster → Cluster (split)
 }
 
 
