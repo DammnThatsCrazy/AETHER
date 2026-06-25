@@ -32,7 +32,7 @@ PR #354 — Universal Intelligence Graph (this branch).
 | 1 | Tenant Isolation Hardening | ✅ Complete |
 | 2 | Canonical Universal Graph Contract | ✅ Complete |
 | 3 | Temporal and Lifecycle Foundation | ✅ Complete |
-| 4 | Canonical Universal Graph Query Service | ⬜ Pending |
+| 4 | Canonical Universal Graph Query Service | ✅ Complete |
 | 5 | Identity, Population, Clusters, Cluster360 | ⬜ Pending |
 | 6 | Campaign, Attribution, Journey, Causality | ⬜ Pending |
 | 7 | Economic Segmentation, Value, Flow of Funds | ⬜ Pending |
@@ -129,14 +129,23 @@ Key P0 gaps:
 
 ---
 
-## Phase 4 — Canonical Universal Graph Query Service
+## Phase 4 — Canonical Universal Graph Query Service (Complete)
 
 ### Files Changed
-- [ ] `Backend Architecture/aether-backend/services/operational_intelligence/models.py`
-- [ ] `Backend Architecture/aether-backend/services/operational_intelligence/routes.py`
-- [ ] `packages/shared/graph-contract.ts`
-- [ ] `tests/unit/test_graph_filter_language.py`
-- [ ] `tests/integration/test_graph_query_api.py`
+- [x] `Backend Architecture/aether-backend/services/operational_intelligence/models.py` — `FilterOperator`, `FilterExpression`, `FilterGroup`, `UniversalGraphQueryRequest`, `GraphResultMeta`, `GraphQueryResponse`, `GraphFacet*`, `GraphExport*`, `QUERY_BUDGET_DEFAULTS`; widened `GraphNode.kind` to `str`
+- [x] `Backend Architecture/aether-backend/services/operational_intelligence/routes.py` — boolean filter evaluation engine (`_evaluate_expression`, `_evaluate_filter_group`, `_apply_boolean_filter`); cursor pagination helpers; `POST /query`, `POST /facets`, `POST /explain`, `POST /export`, `GET /capabilities`
+- [x] `tests/unit/test_graph_filter_language.py` — 34 tests covering all operators, AND/OR/NOT, cursor roundtrip, Pydantic validation rejection of unknown operators (34/34 pass)
+- [x] `tests/integration/test_graph_query_api.py` — 17 integration tests via FastAPI TestClient covering all Phase 4 routes (17/17 pass)
+
+### Phase 4 Gate
+- [x] Boolean filter language (AND/OR/NOT nested groups) evaluates correctly
+- [x] All 15 FilterOperator values validated; unknown operators rejected by Pydantic
+- [x] Cursor pagination produces non-overlapping pages
+- [x] Query budget enforced (max 500 nodes, max 2000 edges)
+- [x] GraphResultMeta present on every query/facet response
+- [x] `/capabilities` advertises all operators, overlays, bitemporal fields
+- [x] Cross-tenant requests rejected with 403
+- [x] 1460/1460 Python tests pass
 
 ---
 

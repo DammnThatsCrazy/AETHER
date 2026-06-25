@@ -8,7 +8,9 @@ underlying engines are implemented incrementally.
 
 from __future__ import annotations
 
-from typing import Any, Generic, Literal, Optional, TypeVar
+import uuid
+from enum import Enum
+from typing import Any, Generic, Literal, Optional, TypeVar, Union
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -320,7 +322,7 @@ class GraphQueryFilter(ContractModel):
 
 class GraphNode(ContractModel):
     id: str
-    kind: OperationalEntityKind
+    kind: str  # VertexType has 200+ types; OperationalEntityKind used only for filter input
     label: Optional[str] = None
     properties: Optional[dict[str, Any]] = None
     scores: Optional[list[IntelligenceScore]] = None
@@ -559,3 +561,138 @@ class GraphCompareResult(ContractModel):
     unchangedNodeCount: int = 0
     unchangedEdgeCount: int = 0
     computedAt: str
+
+
+# ── Phase 4: Boolean Filter Language ──────────────────────────────────────────
+
+class FilterOperator(str, Enum):
+    EQ = "eq"
+    NEQ = "neq"
+    GT = "gt"
+    GTE = "gte"
+    LT = "lt"
+    LTE = "lte"
+    IN = "in"
+    NOT_IN = "not_in"
+    EXISTS = "exists"
+    NOT_EXISTS = "not_exists"
+    CONTAINS = "contains"
+    STARTS_WITH = "starts_with"
+    BETWEEN = "between"
+    RELATIVE_TIME = "relative_time"
+    THRESHOLD = "threshold"
+
+    @classmethod
+    def valid_values(cls) -> frozenset[str]:
+        return frozenset(m.value for m in cls)
+
+
+class FilterExpression(ContractModel):
+    field: str
+    op: FilterOperator
+    value: Optional[Any] = None
+
+
+class FilterGroup(ContractModel):
+    logic: Literal["AND", "OR", "NOT"]
+    expressions: list[Union[FilterExpression, "FilterGroup"]]
+
+FilterGroup.model_rebuild()
+
+
+# ── Phase 4: Universal graph query ────────────────────────────────────────────
+
+QUERY_BUDGET_DEFAULTS = {
+    "max_depth": 6,
+    "max_nodes": 500,
+    "max_edges": 2000,
+    "timeout_seconds": 30,
+}
+
+
+class UniversalGraphQueryRequest(ContractModel):
+    """Universal graph query with boolean filter, temporal replay, and pagination."""
+    tenant_id: str
+    anchors: list[str] = Field(default_factory=list)
+    node_types: list[str] = Field(default_factory=list)
+    edge_types: list[str] = Field(default_factory=list)
+    layers: list[str] = Field(default_factory=list)
+    filter: Optional[FilterGroup] = None
+    depth: int = Field(default=2, ge=1, le=6)
+    limit: int = Field(default=100, ge=1, le=500)
+    cursor: Optional[str] = None
+    include_overlays: list[str] = Field(default_factory=list)
+    as_of: Optional[str] = None
+    include_evidence: bool = False
+    include_provenance: bool = False
+    include_clusters: bool = False
+    explain: bool = False
+
+
+class GraphResultMeta(ContractModel):
+    truncated: bool = False
+    truncation_reason: Optional[str] = None
+    node_count: int = 0
+    edge_count: int = 0
+    execution_ms: int = 0
+    query_id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    budget_used: float = 0.0
+    cursor: Optional[str] = None
+    as_of: Optional[str] = None
+    freshness_seconds: Optional[int] = None
+    warnings: list[str] = Field(default_factory=list)
+
+
+class GraphQueryResponse(ContractModel):
+    nodes: list[GraphNode] = Field(default_factory=list)
+    edges: list[GraphEdge] = Field(default_factory=list)
+    overlays: Optional[list[GraphOverlay]] = None
+    meta: GraphResultMeta
+    explainability: Optional[ExplainabilityMetadata] = None
+
+
+# ── Phase 4: Facets ───────────────────────────────────────────────────────────
+
+class FacetValue(ContractModel):
+    value: str
+    count: int
+
+
+class GraphFacet(ContractModel):
+    field: str
+    values: list[FacetValue] = Field(default_factory=list)
+
+
+class GraphFacetRequest(ContractModel):
+    tenant_id: str
+    filter: Optional[FilterGroup] = None
+    facet_fields: list[str] = Field(default_factory=list)
+    limit: int = Field(default=100, ge=1, le=500)
+    as_of: Optional[str] = None
+
+
+class GraphFacetResponse(ContractModel):
+    facets: list[GraphFacet] = Field(default_factory=list)
+    meta: GraphResultMeta
+
+
+# ── Phase 4: Export ────────────────────────────────────────────────────────────
+
+class GraphExportRequest(ContractModel):
+    tenant_id: str
+    filter: Optional[FilterGroup] = None
+    format: Literal["json", "csv", "jsonl"] = "jsonl"
+    depth: int = Field(default=2, ge=1, le=6)
+    limit: int = Field(default=10000, ge=1, le=100000)
+    as_of: Optional[str] = None
+
+
+class GraphExportJob(ContractModel):
+    job_id: str
+    status: Literal["queued", "running", "completed", "failed"]
+    tenant_id: str
+    format: str
+    created_at: str
+    completed_at: Optional[str] = None
+    download_url: Optional[str] = None
+    error: Optional[str] = None

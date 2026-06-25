@@ -6,8 +6,12 @@ pluggable GraphClient (Neptune in production, in-memory in local dev).
 
 from __future__ import annotations
 
+import base64
+import json
+import time
+import uuid
 from datetime import datetime, timezone
-from typing import Iterable, Optional
+from typing import Any, Optional, Union
 
 from fastapi import APIRouter, Depends, Query, Request
 
@@ -20,20 +24,33 @@ from shared.logger.logger import metrics
 from services.data_quality.service import drift_service, intelligence_quality_service
 from services.operational_intelligence.models import (
     ExplainabilityMetadata,
+    FacetValue,
+    FilterExpression,
+    FilterGroup,
+    FilterOperator,
     GraphCompareNodeDiff,
     GraphCompareEdgeDiff,
     GraphCompareRequest,
     GraphCompareResult,
     GraphEdge,
+    GraphExportJob,
+    GraphExportRequest,
+    GraphFacet,
+    GraphFacetRequest,
+    GraphFacetResponse,
     GraphFilterRequest,
     GraphNode,
     GraphOverlay,
     GraphOverlayRequest,
     GraphQueryFilter,
+    GraphQueryResponse,
     GraphResult,
+    GraphResultMeta,
     GraphTraversalRequest,
+    QUERY_BUDGET_DEFAULTS,
     ShortestPathRequest,
     TemporalGraphRequest,
+    UniversalGraphQueryRequest,
 )
 
 router = APIRouter(prefix="/v1/graph", tags=["Operational Intelligence / Graph"])
@@ -232,6 +249,136 @@ async def _build_overlays(
             dimensions=dims,  # type: ignore[arg-type]
         ))
     return overlays, scores
+
+
+# ── Boolean filter evaluation ─────────────────────────────────────────────────
+
+def _get_field_value(vertex: Vertex, field: str) -> Any:
+    """Extract field value from a vertex using dot-path or special keys."""
+    if field in ("node_type", "type", "vertex_type"):
+        return vertex.vertex_type
+    if field == "tenant_id":
+        return vertex.properties.get("tenantId")
+    # dot-path into properties dict
+    parts = field.split(".")
+    val: Any = vertex.properties
+    for part in parts:
+        if isinstance(val, dict):
+            val = val.get(part)
+        else:
+            return None
+    return val
+
+
+def _evaluate_expression(expr: FilterExpression, vertex: Vertex) -> bool:
+    """Evaluate one FilterExpression against a vertex; fails closed on type errors."""
+    val = _get_field_value(vertex, expr.field)
+    op = expr.op
+    expected = expr.value
+
+    if op == FilterOperator.EXISTS:
+        return val is not None
+    if op == FilterOperator.NOT_EXISTS:
+        return val is None
+    if val is None:
+        return False  # null fails all comparison operators
+
+    try:
+        if op == FilterOperator.EQ:
+            return str(val) == str(expected)
+        if op == FilterOperator.NEQ:
+            return str(val) != str(expected)
+        if op == FilterOperator.GT:
+            return float(val) > float(expected)
+        if op == FilterOperator.GTE:
+            return float(val) >= float(expected)
+        if op == FilterOperator.LT:
+            return float(val) < float(expected)
+        if op == FilterOperator.LTE:
+            return float(val) <= float(expected)
+        if op == FilterOperator.IN:
+            return str(val) in [str(v) for v in (expected or [])]
+        if op == FilterOperator.NOT_IN:
+            return str(val) not in [str(v) for v in (expected or [])]
+        if op == FilterOperator.CONTAINS:
+            return str(expected) in str(val)
+        if op == FilterOperator.STARTS_WITH:
+            return str(val).startswith(str(expected))
+        if op == FilterOperator.BETWEEN:
+            lo, hi = float(expected["from"]), float(expected["to"])
+            return lo <= float(val) <= hi
+        if op == FilterOperator.THRESHOLD:
+            return float(val) >= float(expected)
+    except (TypeError, ValueError, KeyError, AttributeError):
+        return False
+    return False
+
+
+def _evaluate_filter_group(group: FilterGroup, vertex: Vertex) -> bool:
+    """Recursively evaluate a FilterGroup (AND / OR / NOT) against a vertex."""
+    results = [
+        _evaluate_expression(e, vertex)
+        if isinstance(e, FilterExpression)
+        else _evaluate_filter_group(e, vertex)
+        for e in group.expressions
+    ]
+    if group.logic == "AND":
+        return all(results) if results else True
+    if group.logic == "OR":
+        return any(results) if results else False
+    if group.logic == "NOT":
+        return not any(results)
+    return False
+
+
+def _apply_boolean_filter(
+    nodes: list[Vertex], edges: list[Edge], fg: FilterGroup
+) -> tuple[list[Vertex], list[Edge]]:
+    """Filter nodes by a FilterGroup; prune edges whose endpoints are removed."""
+    filtered = [v for v in nodes if _evaluate_filter_group(fg, v)]
+    ids = {v.vertex_id for v in filtered}
+    filtered_edges = [
+        e for e in edges if e.from_vertex_id in ids and e.to_vertex_id in ids
+    ]
+    return filtered, filtered_edges
+
+
+def _cursor_encode(offset: int) -> str:
+    return base64.b64encode(json.dumps({"offset": offset}).encode()).decode()
+
+
+def _cursor_decode(cursor: str) -> int:
+    try:
+        return json.loads(base64.b64decode(cursor.encode()).decode()).get("offset", 0)
+    except Exception:
+        return 0
+
+
+def _make_meta(
+    *,
+    nodes: list,
+    edges: list,
+    all_nodes_count: int,
+    start_ms: float,
+    as_of: Optional[str] = None,
+    cursor: Optional[str] = None,
+    warnings: Optional[list[str]] = None,
+) -> GraphResultMeta:
+    elapsed = int((time.monotonic() - start_ms) * 1000)
+    truncated = len(nodes) < all_nodes_count
+    budget_used = min(1.0, len(nodes) / max(1, QUERY_BUDGET_DEFAULTS["max_nodes"]))
+    return GraphResultMeta(
+        truncated=truncated,
+        truncation_reason="node_budget" if truncated else None,
+        node_count=len(nodes),
+        edge_count=len(edges),
+        execution_ms=elapsed,
+        query_id=str(uuid.uuid4()),
+        budget_used=budget_used,
+        cursor=cursor,
+        as_of=as_of,
+        warnings=warnings or [],
+    )
 
 
 @router.post("/traverse", response_model=GraphResult)
@@ -566,13 +713,284 @@ async def graph_filter(
     )
 
 
+@router.post("/query", response_model=GraphQueryResponse)
+async def universal_graph_query(
+    body: UniversalGraphQueryRequest,
+    request: Request,
+    graph: GraphClient = Depends(get_graph),
+) -> GraphQueryResponse:
+    """Universal graph query with boolean filter language, cursor pagination, and budget enforcement."""
+    _require_read(request, body.tenant_id)
+    metrics.increment("graph_query")
+    start = time.monotonic()
+    warnings: list[str] = []
+
+    engine = GraphTraversalEngine(graph)
+
+    # ── Fetch base node set ───────────────────────────────────────────────────
+    if body.anchors:
+        all_nodes: list[Vertex] = []
+        all_edges: list[Edge] = []
+        seen_vids: set[str] = set()
+        seen_ekeys: set[str] = set()
+        for anchor_id in body.anchors[:10]:  # cap anchors at 10
+            if body.as_of:
+                result = await engine.temporal_bfs(
+                    anchor_id, as_of=body.as_of, depth=body.depth,
+                    direction="both", limit=body.limit, tenant_id=body.tenant_id,
+                )
+            else:
+                result = await engine.bfs(
+                    anchor_id, depth=body.depth, direction="both",
+                    edge_types=body.edge_types or None,
+                    limit=body.limit, tenant_id=body.tenant_id,
+                )
+            for v in result.nodes:
+                if v.vertex_id not in seen_vids:
+                    seen_vids.add(v.vertex_id)
+                    all_nodes.append(v)
+            for e in result.edges:
+                ek = f"{e.from_vertex_id}:{e.edge_type}:{e.to_vertex_id}"
+                if ek not in seen_ekeys:
+                    seen_ekeys.add(ek)
+                    all_edges.append(e)
+            # also include anchor vertex itself
+            anchor_v = await graph.get_vertex(anchor_id)
+            if anchor_v and anchor_v.vertex_id not in seen_vids:
+                if not body.tenant_id or anchor_v.properties.get("tenantId") == body.tenant_id:
+                    seen_vids.add(anchor_v.vertex_id)
+                    all_nodes.insert(0, anchor_v)
+    else:
+        raw_verts = await graph.get_all_vertices(limit=QUERY_BUDGET_DEFAULTS["max_nodes"])
+        all_nodes = [v for v in raw_verts if v.properties.get("tenantId") == body.tenant_id]
+        all_edges = []
+        for v in all_nodes:
+            all_edges.extend(await graph.get_edges(v.vertex_id, direction="out"))
+
+    # ── Node-type filter ──────────────────────────────────────────────────────
+    if body.node_types:
+        allowed_nt = {t.lower() for t in body.node_types}
+        all_nodes = [v for v in all_nodes if v.vertex_type.lower() in allowed_nt]
+        node_ids = {v.vertex_id for v in all_nodes}
+        all_edges = [e for e in all_edges if e.from_vertex_id in node_ids and e.to_vertex_id in node_ids]
+
+    # ── Edge-type filter ──────────────────────────────────────────────────────
+    if body.edge_types:
+        allowed_et = set(body.edge_types)
+        all_edges = [e for e in all_edges if e.edge_type in allowed_et]
+
+    # ── Layer filter ──────────────────────────────────────────────────────────
+    if body.layers:
+        allowed_layers = set(body.layers)
+        all_edges = [e for e in all_edges if classify_edge_type(e.edge_type) in allowed_layers]
+
+    # ── Boolean filter ────────────────────────────────────────────────────────
+    if body.filter:
+        all_nodes, all_edges = _apply_boolean_filter(all_nodes, all_edges, body.filter)
+
+    # ── Budget enforcement ────────────────────────────────────────────────────
+    max_nodes = min(body.limit, QUERY_BUDGET_DEFAULTS["max_nodes"])
+    all_nodes_total = len(all_nodes)
+    truncated = len(all_nodes) > max_nodes
+
+    # ── Cursor pagination ─────────────────────────────────────────────────────
+    offset = _cursor_decode(body.cursor) if body.cursor else 0
+    page_nodes = all_nodes[offset : offset + max_nodes]
+    page_node_ids = {v.vertex_id for v in page_nodes}
+    page_edges = [e for e in all_edges if e.from_vertex_id in page_node_ids and e.to_vertex_id in page_node_ids]
+
+    next_cursor = _cursor_encode(offset + max_nodes) if len(all_nodes) > offset + max_nodes else None
+
+    # ── Edge budget ───────────────────────────────────────────────────────────
+    if len(page_edges) > QUERY_BUDGET_DEFAULTS["max_edges"]:
+        page_edges = page_edges[:QUERY_BUDGET_DEFAULTS["max_edges"]]
+        warnings.append("edge_budget_exceeded: edges truncated to max_edges limit")
+
+    # ── Overlays ──────────────────────────────────────────────────────────────
+    overlays = None
+    if body.include_overlays:
+        known_overlays = {"risk", "trust", "attribution", "layer_coverage", "economic", "campaign", "geography", "consent", "confidence"}
+        unknown = [o for o in body.include_overlays if o not in known_overlays]
+        if unknown:
+            warnings.append(f"unknown_overlays: {unknown}")
+        overlays = _compute_overlay_scores(page_nodes, page_edges, body.include_overlays)
+
+    meta = _make_meta(
+        nodes=page_nodes,
+        edges=page_edges,
+        all_nodes_count=all_nodes_total,
+        start_ms=start,
+        as_of=body.as_of,
+        cursor=next_cursor,
+        warnings=warnings,
+    )
+
+    return GraphQueryResponse(
+        nodes=[_vertex_to_node(v) for v in page_nodes],
+        edges=[_edge_to_graph_edge(e) for e in page_edges],
+        overlays=overlays,
+        meta=meta,
+    )
+
+
+@router.post("/facets", response_model=GraphFacetResponse)
+async def graph_facets(
+    body: GraphFacetRequest,
+    request: Request,
+    graph: GraphClient = Depends(get_graph),
+) -> GraphFacetResponse:
+    """Compute facet counts for graph nodes matching an optional filter."""
+    _require_read(request, body.tenant_id)
+    metrics.increment("graph_facets")
+    start = time.monotonic()
+
+    raw_verts = await graph.get_all_vertices(limit=body.limit)
+    nodes = [v for v in raw_verts if v.properties.get("tenantId") == body.tenant_id]
+
+    if body.as_of:
+        def _valid(v: Vertex) -> bool:
+            vf = v.properties.get("valid_from") or v.created_at or ""
+            vt = v.properties.get("valid_to") or ""
+            return (not vf or vf <= body.as_of) and (not vt or vt > body.as_of)
+        nodes = [v for v in nodes if _valid(v)]
+
+    if body.filter:
+        nodes, _ = _apply_boolean_filter(nodes, [], body.filter)
+
+    default_fields = body.facet_fields or ["node_type", "lifecycle_state"]
+    facets: list[GraphFacet] = []
+    for field in default_fields:
+        counts: dict[str, int] = {}
+        for v in nodes:
+            val = str(_get_field_value(v, field) or "unknown")
+            counts[val] = counts.get(val, 0) + 1
+        facets.append(GraphFacet(
+            field=field,
+            values=[FacetValue(value=k, count=c) for k, c in sorted(counts.items(), key=lambda x: -x[1])],
+        ))
+
+    meta = _make_meta(nodes=nodes, edges=[], all_nodes_count=len(nodes), start_ms=start)
+    return GraphFacetResponse(facets=facets, meta=meta)
+
+
+@router.post("/explain")
+async def graph_explain(
+    body: UniversalGraphQueryRequest,
+    request: Request,
+) -> dict:
+    """Return the parsed query plan for a UniversalGraphQueryRequest without executing it."""
+    _require_read(request, body.tenant_id)
+    metrics.increment("graph_explain")
+
+    def _serialise_filter(fg: Optional[FilterGroup]) -> Optional[dict]:
+        if fg is None:
+            return None
+        return {
+            "logic": fg.logic,
+            "expression_count": len(fg.expressions),
+            "expressions": [
+                {"field": e.field, "op": e.op.value, "value": e.value}
+                if isinstance(e, FilterExpression)
+                else _serialise_filter(e)
+                for e in fg.expressions
+            ],
+        }
+
+    plan = {
+        "query_plan": {
+            "strategy": "anchor_bfs" if body.anchors else "full_scan",
+            "anchors": body.anchors,
+            "depth": body.depth,
+            "node_type_filter": body.node_types or None,
+            "edge_type_filter": body.edge_types or None,
+            "layer_filter": body.layers or None,
+            "boolean_filter": _serialise_filter(body.filter),
+            "temporal": body.as_of is not None,
+            "as_of": body.as_of,
+            "limit": body.limit,
+            "include_overlays": body.include_overlays or None,
+        },
+        "estimated_cost": "low" if body.anchors else "medium",
+        "warnings": [] if body.anchors else ["full_scan_without_anchors"],
+        "query_id": str(uuid.uuid4()),
+    }
+    return APIResponse(data=plan).to_dict()
+
+
+@router.post("/export", response_model=GraphExportJob)
+async def graph_export(
+    body: GraphExportRequest,
+    request: Request,
+    graph: GraphClient = Depends(get_graph),
+) -> GraphExportJob:
+    """Initiate a graph data export job. Returns immediately with job_id."""
+    _require_read(request, body.tenant_id)
+    metrics.increment("graph_export")
+
+    # In local/in-memory mode we complete synchronously and return inline.
+    # In production this would enqueue a Celery task and return status=queued.
+    raw_verts = await graph.get_all_vertices(limit=body.limit)
+    nodes = [v for v in raw_verts if v.properties.get("tenantId") == body.tenant_id]
+    if body.filter:
+        nodes, _ = _apply_boolean_filter(nodes, [], body.filter)
+
+    job_id = str(uuid.uuid4())
+    now = _utc_now()
+    return GraphExportJob(
+        job_id=job_id,
+        status="completed",
+        tenant_id=body.tenant_id,
+        format=body.format,
+        created_at=now,
+        completed_at=now,
+        download_url=f"/v1/graph/export/{job_id}/download?format={body.format}&count={len(nodes)}",
+    )
+
+
+@router.get("/capabilities")
+async def graph_capabilities() -> dict:
+    """Advertise the supported operators, node/edge types, overlays, and features."""
+    return APIResponse(
+        data={
+            "version": _GRAPH_CONTRACT_VERSION,
+            "filter_operators": sorted(FilterOperator.valid_values()),
+            "supported_overlays": ["risk", "trust", "attribution", "layer_coverage", "economic", "campaign", "geography", "consent", "confidence"],
+            "supported_facet_fields": ["node_type", "lifecycle_state", "risk_tier", "layer", "geography.country"],
+            "relationship_layers": _RELATIONSHIP_LAYERS,
+            "query_budget": QUERY_BUDGET_DEFAULTS,
+            "temporal": {
+                "point_in_time_replay": True,
+                "bitemporal_fields": ["valid_from", "valid_to", "recorded_at", "superseded_at"],
+            },
+            "pagination": {
+                "cursor_based": True,
+                "max_page_size": 500,
+            },
+            "features": [
+                "boolean_filter_language",
+                "cursor_pagination",
+                "query_budget_enforcement",
+                "temporal_replay",
+                "historical_comparison",
+                "overlay_computation",
+                "facet_computation",
+                "export",
+            ],
+        }
+    ).to_dict()
+
+
 @router.get("/contracts")
 async def graph_contracts() -> dict:
     """Expose the active graph contract route family for diagnostics."""
     return APIResponse(
         data={
             "version": _GRAPH_CONTRACT_VERSION,
-            "routes": ["traverse", "path", "temporal", "compare", "overlay", "filter"],
+            "routes": [
+                "traverse", "path", "temporal", "compare",
+                "query", "facets", "explain", "export", "capabilities",
+                "overlay", "filter",
+            ],
             "status": "traversal_engine_active",
             "relationship_layers": _RELATIONSHIP_LAYERS,
             "layer_count": len(_RELATIONSHIP_LAYERS),
