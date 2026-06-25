@@ -286,6 +286,8 @@ from services.data_quality import (
     tenant_router as data_quality_tenant_router,
 )
 
+from services.kyber_operator.routes import router as kyber_operator_router
+
 # Canonical Measurement (conversions, journeys, attribution, spend, quality, ops, experiments)
 from services.measurement.routes.conversions import router as measurement_conversions_router
 from services.measurement.routes.journeys import router as measurement_journeys_router
@@ -524,6 +526,7 @@ def create_app() -> FastAPI:
     app.include_router(lake_router)
     app.include_router(intelligence_router)
     app.include_router(kyber_admin_router)
+    app.include_router(kyber_operator_router)
     app.include_router(customer_success_admin_router)
     app.include_router(value_review_router)
     app.include_router(extraction_intel_router)
