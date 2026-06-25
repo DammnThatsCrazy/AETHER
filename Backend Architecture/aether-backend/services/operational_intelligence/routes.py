@@ -354,6 +354,39 @@ async def _compute_overlay_scores(
                     "computed_at": _utc_now(),
                 },
             ))
+        elif overlay_id == "agent":
+            # Agent economic overlay — surface agent spend/revenue/task data from node properties
+            agent_nodes = [
+                n for n in nodes
+                if n.vertex_type in ("agent", "Agent", "bot", "Bot")
+                or n.properties.get("entity_type") in ("agent", "bot")
+            ]
+            total_agent_spend = 0.0
+            total_agent_revenue = 0.0
+            total_tasks = 0
+            for n in agent_nodes:
+                try:
+                    total_agent_spend += float(n.properties.get("total_spend") or 0)
+                    total_agent_revenue += float(n.properties.get("total_revenue_produced") or 0)
+                    total_tasks += int(n.properties.get("task_count") or 0)
+                except (TypeError, ValueError):
+                    pass
+            # A2A edges (delegation chains)
+            a2a_edges = [e for e in edges if e.edge_type in ("HIRED", "SPAWNED_SUBAGENT", "DELEGATED_TO", "DELEGATED")]
+            overlays.append(GraphOverlay(
+                id=overlay_id,
+                name="Agent Intelligence",
+                dimensions=[],
+                properties={
+                    "status": "computed",
+                    "agent_node_count": len(agent_nodes),
+                    "total_agent_spend": round(total_agent_spend, 2),
+                    "total_agent_revenue_produced": round(total_agent_revenue, 2),
+                    "total_task_count": total_tasks,
+                    "delegation_chain_count": len(a2a_edges),
+                    "computed_at": _utc_now(),
+                },
+            ))
         elif overlay_id == "confidence":
             # Confidence/provenance overlay — aggregate confidence scores
             scores = [
@@ -1021,7 +1054,7 @@ async def universal_graph_query(
     # ── Overlays ──────────────────────────────────────────────────────────────
     overlays = None
     if body.include_overlays:
-        known_overlays = {"risk", "trust", "attribution", "layer_coverage", "economic", "campaign", "fraud", "geography", "consent", "confidence"}
+        known_overlays = {"risk", "trust", "attribution", "layer_coverage", "economic", "campaign", "fraud", "geography", "consent", "confidence", "agent"}
         unknown = [o for o in body.include_overlays if o not in known_overlays]
         if unknown:
             warnings.append(f"unknown_overlays: {unknown}")
@@ -1282,7 +1315,7 @@ async def graph_capabilities() -> dict:
         data={
             "version": _GRAPH_CONTRACT_VERSION,
             "filter_operators": sorted(FilterOperator.valid_values()),
-            "supported_overlays": ["risk", "trust", "attribution", "layer_coverage", "economic", "campaign", "fraud", "geography", "consent", "confidence"],
+            "supported_overlays": ["risk", "trust", "attribution", "layer_coverage", "economic", "campaign", "fraud", "geography", "consent", "confidence", "agent"],
             "supported_facet_fields": ["node_type", "lifecycle_state", "risk_tier", "layer", "geography.country"],
             "relationship_layers": _RELATIONSHIP_LAYERS,
             "query_budget": QUERY_BUDGET_DEFAULTS,
