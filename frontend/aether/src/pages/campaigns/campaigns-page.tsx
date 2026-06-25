@@ -88,6 +88,7 @@ function FunnelBar({ label, value, max, variant = 'default' }: {
 
 function CampaignRow({ campaign }: { campaign: Record<string, unknown> }) {
   const [open, setOpen] = useState(false);
+  const navigate = useNavigate();
   const metrics = asRecord(campaign.metrics);
   const funnel = asRecord(campaign.funnel ?? metrics.funnel);
   const channels = asList(campaign.top_channels ?? metrics.top_channels);

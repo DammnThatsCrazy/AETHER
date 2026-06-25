@@ -13,7 +13,7 @@ source_files:
 canonical_owner: frontend@aether
 estimated_read_minutes: 35
 toc_depth: 4
-last_synced_commit: d46320a
+last_synced_commit: a0a22bb
 ---
 
 # Aether Frontend Architecture & Designer Handoff
@@ -39,7 +39,7 @@ There are two separate frontend applications. **Do not mix them up.**
 - **Social Intelligence** panels — their users' social platform presence
 - **Recommendation cards** — pending retargeting / campaign actions for the tenant to approve
 - **Suggestion feed** — OODA-driven prioritised recommendations with helpful/not helpful/dismiss feedback
-- Campaign management, attribution dashboards
+- Campaign management, attribution dashboards, Campaign 360 (`/campaigns/:id`) — per-campaign overview, population, clusters, conversions, attribution
 - API key management, plan management, usage metering
 - Webhook endpoint management — add/test/delete outbound delivery endpoints
 
@@ -59,6 +59,7 @@ There are two separate frontend applications. **Do not mix them up.**
 - **Journey Explorer** — chronological journey timeline with attribution weight annotations (`/measurement/journeys`)
 - **Conversion Explorer** — canonical conversion detail, revenue history, attribution drill-down (`/measurement/conversions`)
 - **Campaign Intelligence** — campaign hierarchy, performance metrics, spend/ROAS time-series (`/measurement/campaigns`)
+- **Campaign 360** — full per-campaign drill-down: overview metrics, population funnel (observed→resolved→engaged→converted→attributed), identity clusters, entities, journeys, conversions, attribution model comparison, graph anchor, quality/freshness diagnostics (`/measurement/campaigns/:campaignId`); launched via "Campaign 360 →" links in Campaign Intelligence rows and Profile360 attribution panel
 - **Measurement Operations** — connector health grid, tenant drill-down, operator action buttons (restart/backfill/recompute) (`/kyber/measurement`)
 - Lab — test fixtures and replay
 

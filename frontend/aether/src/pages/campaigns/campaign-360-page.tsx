@@ -34,8 +34,8 @@ function fmtPct(n: number | null | undefined) {
 
 function OverviewTab({ campaignId, timeStart, timeEnd, attributionModel }: { campaignId: string; timeStart?: string; timeEnd?: string; attributionModel: string }) {
   const { data, loading, error } = useCampaign360Overview(campaignId, {
-    time_start: timeStart,
-    time_end: timeEnd,
+    ...(timeStart !== undefined ? { time_start: timeStart } : {}),
+    ...(timeEnd !== undefined ? { time_end: timeEnd } : {}),
     attribution_model: attributionModel,
   });
 
@@ -84,7 +84,12 @@ function OverviewTab({ campaignId, timeStart, timeEnd, attributionModel }: { cam
 
 function PopulationTab({ campaignId, timeStart, timeEnd }: { campaignId: string; timeStart?: string; timeEnd?: string }) {
   const [population, setPopulation] = useState('observed');
-  const { data, loading, error } = useCampaign360Population(campaignId, { population, time_start: timeStart, time_end: timeEnd, limit: 50 });
+  const { data, loading, error } = useCampaign360Population(campaignId, {
+    population,
+    ...(timeStart !== undefined ? { time_start: timeStart } : {}),
+    ...(timeEnd !== undefined ? { time_end: timeEnd } : {}),
+    limit: 50,
+  });
   const items = (data as AnyRecord)?.items as AnyRecord[] | undefined;
 
   return (
@@ -160,7 +165,11 @@ function ClustersTab({ campaignId }: { campaignId: string }) {
 // ── Conversions tab ───────────────────────────────────────────────────────────
 
 function ConversionsTab({ campaignId, timeStart, timeEnd }: { campaignId: string; timeStart?: string; timeEnd?: string }) {
-  const { data, loading, error } = useCampaign360Conversions(campaignId, { after: timeStart, before: timeEnd, limit: 50 });
+  const { data, loading, error } = useCampaign360Conversions(campaignId, {
+    ...(timeStart !== undefined ? { after: timeStart } : {}),
+    ...(timeEnd !== undefined ? { before: timeEnd } : {}),
+    limit: 50,
+  });
   const items = (data as AnyRecord)?.items as AnyRecord[] | undefined;
 
   if (loading) return <LoadingState lines={4} />;
@@ -280,11 +289,20 @@ export function Campaign360Page() {
         </TabsList>
 
         <TabsContent value="overview">
-          <OverviewTab campaignId={campaignId} timeStart={timeStart} timeEnd={timeEnd} attributionModel={attributionModel} />
+          <OverviewTab
+            campaignId={campaignId}
+            {...(timeStart !== undefined ? { timeStart } : {})}
+            {...(timeEnd !== undefined ? { timeEnd } : {})}
+            attributionModel={attributionModel}
+          />
         </TabsContent>
 
         <TabsContent value="population">
-          <PopulationTab campaignId={campaignId} timeStart={timeStart} timeEnd={timeEnd} />
+          <PopulationTab
+            campaignId={campaignId}
+            {...(timeStart !== undefined ? { timeStart } : {})}
+            {...(timeEnd !== undefined ? { timeEnd } : {})}
+          />
         </TabsContent>
 
         <TabsContent value="clusters">
@@ -292,7 +310,11 @@ export function Campaign360Page() {
         </TabsContent>
 
         <TabsContent value="conversions">
-          <ConversionsTab campaignId={campaignId} timeStart={timeStart} timeEnd={timeEnd} />
+          <ConversionsTab
+            campaignId={campaignId}
+            {...(timeStart !== undefined ? { timeStart } : {})}
+            {...(timeEnd !== undefined ? { timeEnd } : {})}
+          />
         </TabsContent>
 
         <TabsContent value="attribution">
