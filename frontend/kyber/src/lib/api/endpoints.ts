@@ -1996,7 +1996,7 @@ export const api = {
   },
 
   attributionRuns: {
-    list: (params: { conversion_id?: string; model_type?: string; status?: string; limit?: number }) =>
+    list: (params: { campaign_id?: string; conversion_id?: string; model_type?: string; status?: string; limit?: number }) =>
       restClient.get(`/v1/attribution/runs${buildQS(params)}`, wrap(unknownSchema)).then(r => r.data),
     get: (id: string) =>
       restClient.get(`/v1/attribution/runs/${id}`, wrap(unknownSchema)).then(r => r.data),

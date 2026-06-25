@@ -10,7 +10,7 @@ interface AttributionStudioData {
 
 const EMPTY: AttributionStudioData = { runs: [], hasMore: false };
 
-export function useAttributionStudio(params: { conversion_id?: string; model_type?: string; status?: string; limit?: number } = {}) {
+export function useAttributionStudio(params: { campaign_id?: string; conversion_id?: string; model_type?: string; status?: string; limit?: number } = {}) {
   const [data, setData] = useState<AttributionStudioData>(EMPTY);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -27,7 +27,7 @@ export function useAttributionStudio(params: { conversion_id?: string; model_typ
       .catch((e) => active && setError(e instanceof Error ? e.message : String(e)))
       .finally(() => active && setLoading(false));
     return () => { active = false; };
-  }, [params.conversion_id, params.model_type, params.status, params.limit]);
+  }, [params.campaign_id, params.conversion_id, params.model_type, params.status, params.limit]);
 
   return { data, loading, error };
 }
