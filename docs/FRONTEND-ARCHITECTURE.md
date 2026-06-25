@@ -13,7 +13,7 @@ source_files:
 canonical_owner: frontend@aether
 estimated_read_minutes: 35
 toc_depth: 4
-last_synced_commit: 28e7739
+last_synced_commit: 461f084
 ---
 
 # Aether Frontend Architecture & Designer Handoff
@@ -47,7 +47,8 @@ There are two separate frontend applications. **Do not mix them up.**
 
 **Kyber (internal operator console) contains:**
 - Mission dashboard — real-time system health across all tenants
-- Noesis — operator graph view of cross-tenant entity relationships
+- Noesis — operator graph view of cross-tenant entity relationships; graph explorer at `/noesis/graph`, fleet graph at `/noesis/fleet`
+- **Fleet Graph** (`/noesis/fleet`) — tenant portfolio comparison table showing per-tenant operational envelope (graph node count, fraud network count, SDK health score, status); privileged operator tenant-entry modal with access reason, purpose enum, and duration; active operator session banner with exit action; all actions immutably audited via `POST /v1/kyber/operator/tenant-entry`
 - Live event stream — raw event firehose for debugging
 - Entity admin — manage any entity across any tenant
 - Command center — controller management
