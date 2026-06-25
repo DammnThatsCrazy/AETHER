@@ -3237,8 +3237,7 @@
       "visibility": "I",
       "audience": [
         "dev-senior",
-        "dev-mid",
-        "integration"
+        "dev-junior"
       ],
       "status": "stable",
       "estimated_read_minutes": 15,
@@ -3620,7 +3619,7 @@
       "path": "docs/runbooks/CAMPAIGN-360-ATTRIBUTION-RUN-FAILED.md",
       "title": "Runbook — Attribution Run Failed (Campaign 360)",
       "slug": "runbooks/campaign-360-attribution-run-failed",
-      "section": "runbooks",
+      "section": "operations",
       "visibility": "I",
       "audience": [
         "ops",
@@ -3635,7 +3634,7 @@
       "path": "docs/runbooks/CAMPAIGN-360-GRAPH-DISAGREES-WITH-TOTALS.md",
       "title": "Runbook — Graph Results Disagree With Campaign Totals",
       "slug": "runbooks/campaign-360-graph-disagrees",
-      "section": "runbooks",
+      "section": "operations",
       "visibility": "I",
       "audience": [
         "ops",
@@ -3650,7 +3649,7 @@
       "path": "docs/runbooks/CAMPAIGN-360-MISSING-CONVERSIONS.md",
       "title": "Runbook — Missing Conversions (Campaign 360)",
       "slug": "runbooks/campaign-360-missing-conversions",
-      "section": "runbooks",
+      "section": "operations",
       "visibility": "I",
       "audience": [
         "ops",
@@ -3665,7 +3664,7 @@
       "path": "docs/runbooks/CAMPAIGN-360-STALE-SPEND.md",
       "title": "Runbook — Stale Spend Warning (Campaign 360)",
       "slug": "runbooks/campaign-360-stale-spend",
-      "section": "runbooks",
+      "section": "operations",
       "visibility": "I",
       "audience": [
         "ops",
