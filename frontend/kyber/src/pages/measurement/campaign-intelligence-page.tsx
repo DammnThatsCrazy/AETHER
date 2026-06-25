@@ -2,12 +2,14 @@ import { Badge, Card, CardContent, CardHeader, CardTitle, DataTable, EmptyState,
 import { PageWrapper } from '@kyber/components/layout';
 import { useCampaignIntelligence } from '@kyber/features/measurement';
 import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 
 type Row = Record<string, unknown>;
 
 export function CampaignIntelligencePage() {
   const [campaignId, setCampaignId] = useState('');
   const [submitted, setSubmitted] = useState('');
+  const navigate = useNavigate();
   const { data, loading, error } = useCampaignIntelligence(submitted ? { campaign_id: submitted } : {});
 
   if (loading) return <PageWrapper title="Campaign Intelligence"><LoadingState lines={6} /></PageWrapper>;
@@ -76,6 +78,10 @@ export function CampaignIntelligencePage() {
                 { key: 'impressions', header: 'Impressions', render: r => Number(r.impressions ?? 0).toLocaleString() },
                 { key: 'clicks', header: 'Clicks', render: r => Number(r.clicks ?? 0).toLocaleString() },
                 { key: 'currency', header: 'Currency', render: r => String(r.billing_currency ?? 'USD') },
+                { key: 'actions', header: '', render: r => r.campaign_id
+                  ? <button onClick={() => navigate(`/measurement/campaigns/${r.campaign_id}`)} className="text-xs text-accent hover:underline whitespace-nowrap">Campaign 360 →</button>
+                  : null
+                },
               ]} />
           }
         </CardContent>

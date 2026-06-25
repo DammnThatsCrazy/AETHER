@@ -358,6 +358,8 @@ class AttributionRunRepository:
         model_type: Optional[str] = None,
         start_date: Optional[datetime] = None,
         end_date: Optional[datetime] = None,
+        cluster_id: Optional[str] = None,
+        channel: Optional[str] = None,
     ) -> dict[str, Any]:
         """Aggregate attribution credits for a campaign — used by campaign attribution endpoint.
 
@@ -374,7 +376,10 @@ class AttributionRunRepository:
         if pool is None:
             credits = [
                 c for c in _local_credits.values()
-                if c.get("tenant_id") == tenant_id and c.get("campaign_id") == campaign_id
+                if c.get("tenant_id") == tenant_id
+                and c.get("campaign_id") == campaign_id
+                and (cluster_id is None or c.get("cluster_id") == cluster_id)
+                and (channel is None or c.get("channel") == channel)
             ]
             return _aggregate_campaign_credits(credits, model_type)
 
@@ -394,6 +399,14 @@ class AttributionRunRepository:
             conditions.append(f"ar.completed_at < ${p}")
             params.append(end_date)
             p += 1
+        if cluster_id:
+            conditions.append(f"ac.cluster_id = ${p}")
+            params.append(cluster_id)
+            p += 1
+        if channel:
+            conditions.append(f"ac.channel = ${p}")
+            params.append(channel)
+            p += 1
 
         sql = f"""
             SELECT
@@ -411,6 +424,74 @@ class AttributionRunRepository:
             credits = [dict(r) for r in rows]
 
         return _aggregate_campaign_credits(credits, model_type)
+
+    async def campaign_cluster_rollup(
+        self,
+        tenant_id: str,
+        campaign_id: str,
+        *,
+        attribution_run_id: Optional[str] = None,
+    ) -> list[dict[str, Any]]:
+        """Return attribution economics grouped by cluster_id for a campaign.
+
+        Useful for populating the Campaign 360 clusters tab with revenue rollups.
+        Local mode always returns an empty list (no cross-table joins available).
+        """
+        pool = await self._pool()
+        if pool is None:
+            credits_by_cluster: dict[str, dict[str, Any]] = {}
+            for c in _local_credits.values():
+                if c.get("tenant_id") != tenant_id or c.get("campaign_id") != campaign_id:
+                    continue
+                if attribution_run_id and c.get("attribution_run_id") != attribution_run_id:
+                    continue
+                cid = c.get("cluster_id") or "__unresolved__"
+                if cid not in credits_by_cluster:
+                    credits_by_cluster[cid] = {
+                        "cluster_id": cid if cid != "__unresolved__" else None,
+                        "conversion_count": 0,
+                        "attributed_gross_revenue": 0.0,
+                        "attributed_net_revenue": 0.0,
+                    }
+                entry = credits_by_cluster[cid]
+                entry["conversion_count"] += 1
+                entry["attributed_gross_revenue"] += float(
+                    _to_decimal(c.get("attributed_gross_revenue") or "0") or 0
+                )
+                entry["attributed_net_revenue"] += float(
+                    _to_decimal(c.get("attributed_net_revenue") or "0") or 0
+                )
+            return sorted(
+                credits_by_cluster.values(),
+                key=lambda x: x["attributed_gross_revenue"],
+                reverse=True,
+            )
+
+        run_filter = ""
+        params: list[Any] = [tenant_id, campaign_id]
+        if attribution_run_id:
+            run_filter = "AND ac.attribution_run_id = $3"
+            params.append(attribution_run_id)
+
+        sql = f"""
+            SELECT
+                ac.cluster_id,
+                COUNT(DISTINCT ac.conversion_id) AS conversion_count,
+                COALESCE(SUM(ac.credit_weight * cc.gross_value), 0) AS attributed_gross_revenue,
+                COALESCE(SUM(ac.credit_weight * cc.net_value), 0) AS attributed_net_revenue
+            FROM attribution_credits ac
+            JOIN canonical_conversions cc ON cc.conversion_id = ac.conversion_id
+            JOIN attribution_runs ar ON ar.attribution_run_id = ac.attribution_run_id
+            WHERE ac.tenant_id = $1
+              AND ac.campaign_id = $2
+              AND ar.is_active = TRUE
+              {run_filter}
+            GROUP BY ac.cluster_id
+            ORDER BY attributed_gross_revenue DESC
+        """
+        async with pool.acquire() as conn:
+            rows = await conn.fetch(sql, *params)
+            return [dict(r) for r in rows]
 
 
 # ── Helpers ──────────────────────────────────────────────────────────────────

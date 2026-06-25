@@ -37,3 +37,4 @@ export * from './customer-onboarding';
 export * from './security-governance';
 export * from './suggestions';
 export * from './connector-taxonomy';
+export * from './campaign-exploration-contract';

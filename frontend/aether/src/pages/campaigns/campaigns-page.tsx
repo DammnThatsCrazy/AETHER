@@ -143,6 +143,12 @@ function CampaignRow({ campaign }: { campaign: Record<string, unknown> }) {
               <p className="text-sm font-semibold text-danger">{Number(fraudBlocked).toLocaleString()}</p>
             </div>
           )}
+          <button
+            onClick={e => { e.stopPropagation(); navigate(`/campaigns/${String(campaign.id ?? campaign.campaign_id)}`); }}
+            className="text-xs text-accent hover:underline whitespace-nowrap"
+          >
+            360 →
+          </button>
           <span className="text-text-muted text-xs">{open ? '▲' : '▼'}</span>
         </div>
       </button>

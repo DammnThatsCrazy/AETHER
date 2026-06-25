@@ -7,30 +7,52 @@ type Row = Record<string, unknown>;
 
 export function JourneyExplorerPage() {
   const [profileId, setProfileId] = useState('');
-  const [submitted, setSubmitted] = useState('');
-  const { data, loading, error } = useJourneyExplorer(submitted ? { profile_id: submitted } : {});
+  const [campaignId, setCampaignId] = useState('');
+  const [submitted, setSubmitted] = useState({ profile_id: '', campaign_id: '' });
+
+  const { data, loading, error } = useJourneyExplorer({
+    ...(submitted.profile_id ? { profile_id: submitted.profile_id } : {}),
+    ...(submitted.campaign_id ? { campaign_id: submitted.campaign_id } : {}),
+  });
+
+  function handleSearch() {
+    setSubmitted({ profile_id: profileId, campaign_id: campaignId });
+  }
+
+  function handleClear() {
+    setProfileId('');
+    setCampaignId('');
+    setSubmitted({ profile_id: '', campaign_id: '' });
+  }
 
   if (loading) return <PageWrapper title="Journey Explorer"><LoadingState lines={6} /></PageWrapper>;
   if (error) return <PageWrapper title="Journey Explorer"><ErrorState title="Unable to load journeys" message={error} /></PageWrapper>;
 
   const journeys = data.journeys as Row[];
+  const hasFilters = submitted.profile_id || submitted.campaign_id;
 
   return (
     <PageWrapper
       title="Journey Explorer"
       subtitle="Versioned customer journeys — ordered touchpoint sequences from first exposure to conversion."
     >
-      <div className="flex gap-2 mb-4">
+      <div className="flex gap-2 mb-4 flex-wrap">
         <input
           value={profileId}
           onChange={e => setProfileId(e.target.value)}
           placeholder="Filter by profile ID…"
-          className="text-sm bg-surface-secondary border border-border rounded px-3 py-1.5 flex-1 max-w-sm"
+          className="text-sm bg-surface-secondary border border-border rounded px-3 py-1.5 w-48"
         />
-        <button onClick={() => setSubmitted(profileId)} className="px-4 py-1.5 text-sm bg-accent text-white rounded">
+        <input
+          value={campaignId}
+          onChange={e => setCampaignId(e.target.value)}
+          placeholder="Filter by campaign ID…"
+          className="text-sm bg-surface-secondary border border-border rounded px-3 py-1.5 w-48"
+        />
+        <button onClick={handleSearch} className="px-4 py-1.5 text-sm bg-accent text-white rounded">
           Search
         </button>
-        {submitted && <button onClick={() => { setProfileId(''); setSubmitted(''); }} className="px-4 py-1.5 text-sm border border-border rounded">Clear</button>}
+        {hasFilters && <button onClick={handleClear} className="px-4 py-1.5 text-sm border border-border rounded">Clear</button>}
       </div>
 
       <Card>

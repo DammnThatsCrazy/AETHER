@@ -151,7 +151,7 @@ export function Profile360View({ type, id, onBack }: Profile360ViewProps) {
         <TabsContent value="social"><KyberSocialIntelligencePanel entityId={id} window={timeWindow} /></TabsContent>
         <TabsContent value="wallets"><Profile360WalletsPanel sections={sections.wallets ?? []} /></TabsContent>
         <TabsContent value="behavioral"><Profile360BehavioralPanel sections={sections.behavioral ?? []} window={timeWindow} /></TabsContent>
-        <TabsContent value="attribution"><Profile360AttributionPanel sections={sections.attribution ?? []} /></TabsContent>
+        <TabsContent value="attribution"><Profile360AttributionPanel sections={sections.attribution ?? []} profileId={id} /></TabsContent>
         <TabsContent value="cluster"><Profile360ClusterPanel sections={sections.cluster ?? []} /></TabsContent>
         <TabsContent value="agents"><Profile360AgentsPanel sections={sections.agents ?? []} /></TabsContent>
         <TabsContent value="intelligence"><Profile360IntelligencePanel sections={sections.intelligence ?? []} /></TabsContent>

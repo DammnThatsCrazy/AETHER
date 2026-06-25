@@ -237,6 +237,61 @@ class JourneyRepository:
             rows = await conn.fetch(sql, *params)
             return [dict(r) for r in rows]
 
+    async def list_by_campaign(
+        self,
+        tenant_id: str,
+        campaign_id: str,
+        *,
+        after_started: Optional[datetime] = None,
+        before_started: Optional[datetime] = None,
+        limit: int = 100,
+        cursor: Optional[str] = None,
+    ) -> list[dict[str, Any]]:
+        """Return current journey versions that include this campaign_id in their campaign_ids array."""
+        pool = await self._pool()
+        if pool is None:
+            rows = [
+                v for v in _local_store.values()
+                if v.get("tenant_id") == tenant_id
+                and v.get("is_current")
+                and campaign_id in (v.get("campaign_ids") or [])
+                and (after_started is None or (v.get("started_at") or "") > after_started.isoformat())
+                and (before_started is None or (v.get("started_at") or "") < before_started.isoformat())
+            ]
+            rows.sort(key=lambda v: v.get("started_at", ""), reverse=True)
+            return rows[:limit]
+
+        conditions = [
+            "tenant_id = $1",
+            "is_current = TRUE",
+            "campaign_ids @> ARRAY[$2]::text[]",
+        ]
+        params: list[Any] = [tenant_id, campaign_id]
+        p = 3
+        if after_started:
+            conditions.append(f"started_at > ${p}")
+            params.append(after_started)
+            p += 1
+        if before_started:
+            conditions.append(f"started_at < ${p}")
+            params.append(before_started)
+            p += 1
+        if cursor:
+            conditions.append(f"started_at < ${p}")
+            params.append(_decode_cursor(cursor))
+            p += 1
+        params.append(limit)
+
+        sql = f"""
+            SELECT * FROM journey_versions
+            WHERE {' AND '.join(conditions)}
+            ORDER BY started_at DESC
+            LIMIT ${p}
+        """
+        async with pool.acquire() as conn:
+            rows = await conn.fetch(sql, *params)
+            return [dict(r) for r in rows]
+
 
 # ── Helpers ──────────────────────────────────────────────────────────────────
 
