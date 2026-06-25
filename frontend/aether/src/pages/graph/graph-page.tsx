@@ -174,6 +174,40 @@ function Inspector({ data, onClose }: { data: InspectorPayload; onClose: () => v
                   {(data.node.riskScore !== undefined && data.node.riskScore >= 0.4) && (
                     <FraudInvestigationAction nodeId={data.node.id} nodeLabel={data.node.label} />
                   )}
+                  {typeof data.node.metadata.observation_class === 'string' && (
+                    <div className="flex items-center gap-2">
+                      <Badge variant={
+                        data.node.metadata.observation_class === 'observed' ? 'success' :
+                        data.node.metadata.observation_class === 'predicted' ? 'warning' :
+                        'default'
+                      } size="sm">{data.node.metadata.observation_class}</Badge>
+                      {data.node.metadata.observation_class === 'predicted' && (
+                        <span className="text-[10px] text-text-muted italic">unverified prediction</span>
+                      )}
+                    </div>
+                  )}
+                  {(data.node.kind === 'Recommendation' || data.node.kind === 'Prediction') && (
+                    <div className="space-y-1 p-2 rounded border border-border-subtle bg-surface-raised">
+                      <p className="text-xs font-medium text-text-secondary">Outcome</p>
+                      {typeof data.node.metadata.result_state === 'string' && (
+                        <div className="flex items-center gap-2">
+                          <Badge size="sm" variant={
+                            data.node.metadata.result_state === 'converted' ? 'success' :
+                            data.node.metadata.result_state === 'churned' ? 'danger' : 'default'
+                          }>{data.node.metadata.result_state}</Badge>
+                        </div>
+                      )}
+                      {typeof data.node.metadata.observed_outcome === 'string' && (
+                        <p className="text-xs text-text-muted">{data.node.metadata.observed_outcome}</p>
+                      )}
+                      {typeof data.node.metadata.model_id === 'string' && (
+                        <div className="text-[10px] text-text-muted font-mono">
+                          {data.node.metadata.model_id}
+                          {typeof data.node.metadata.model_version === 'string' && ` v${data.node.metadata.model_version}`}
+                        </div>
+                      )}
+                    </div>
+                  )}
                   {Object.keys(data.node.metadata).length > 0 && (
                     <div>
                       <p className="text-xs font-medium text-text-secondary mb-2">Properties</p>

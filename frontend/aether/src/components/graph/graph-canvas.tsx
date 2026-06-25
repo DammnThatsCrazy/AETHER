@@ -75,10 +75,14 @@ export function GraphCanvas({
     const cy = cytoscape({
       container: containerRef.current,
       elements: [
-        ...nodes.map(n => ({
-          data: { id: n.id, label: n.label, kind: n.kind, trustScore: n.trustScore, riskScore: n.riskScore },
-          classes: n.kind,
-        })),
+        ...nodes.map(n => {
+          const obsClass = typeof n.metadata.observation_class === 'string' ? n.metadata.observation_class : '';
+          const classes = [n.kind, obsClass ? `obs-${obsClass}` : ''].filter(Boolean).join(' ');
+          return {
+            data: { id: n.id, label: n.label, kind: n.kind, trustScore: n.trustScore, riskScore: n.riskScore, observationClass: obsClass },
+            classes,
+          };
+        }),
         ...edges.map(e => ({
           data: { id: e.id, source: e.source, target: e.target, relationType: e.relationType, interactionClass: e.interactionClass, weight: e.weight },
           classes: e.interactionClass,
@@ -114,6 +118,15 @@ export function GraphCanvas({
         { selector: 'node.highlighted', style: { 'border-width': 3, 'border-color': '#4a6cf7' } },
         { selector: 'node.path', style: { 'border-width': 3, 'border-color': '#a855f7' } },
         { selector: 'node:selected', style: { 'border-width': 3, 'border-color': '#ffffff' } },
+        // ObservationClass visual treatment — never show predictions with same weight as observations
+        { selector: 'node.obs-observed', style: { 'border-width': 2, 'border-color': '#22c55e', 'border-style': 'solid' } },
+        { selector: 'node.obs-deterministic', style: { 'border-width': 2, 'border-color': '#4a6cf7', 'border-style': 'solid' } },
+        { selector: 'node.obs-probabilistic', style: { 'border-width': 2, 'border-color': '#eab308', 'border-style': 'dashed' } },
+        { selector: 'node.obs-derived', style: { 'opacity': 0.7, 'border-width': 1, 'border-color': '#64748b', 'border-style': 'dashed' } },
+        { selector: 'node.obs-predicted', style: { 'opacity': 0.55, 'border-width': 2, 'border-color': '#a855f7', 'border-style': 'dotted' } },
+        { selector: 'node.obs-simulated', style: { 'opacity': 0.45, 'border-width': 1, 'border-color': '#f97316', 'border-style': 'dotted' } },
+        { selector: 'node.obs-manually_asserted', style: { 'border-width': 2, 'border-color': '#f59e0b', 'border-style': 'solid' } },
+        { selector: 'node.obs-externally_enriched', style: { 'border-width': 1, 'border-color': '#38bdf8', 'border-style': 'dashed' } },
         {
           selector: 'edge',
           style: {
