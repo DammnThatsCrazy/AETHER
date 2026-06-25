@@ -1,7 +1,7 @@
 ---
 title: Runbook — Stale Spend Warning (Campaign 360)
 slug: runbooks/campaign-360-stale-spend
-section: runbooks
+section: operations
 visibility: I
 audience: [ops, dev-senior]
 status: stable

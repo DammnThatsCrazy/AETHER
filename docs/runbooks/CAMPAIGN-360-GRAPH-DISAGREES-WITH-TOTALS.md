@@ -1,7 +1,7 @@
 ---
 title: Runbook — Graph Results Disagree With Campaign Totals
 slug: runbooks/campaign-360-graph-disagrees
-section: runbooks
+section: operations
 visibility: I
 audience: [ops, dev-senior]
 status: stable

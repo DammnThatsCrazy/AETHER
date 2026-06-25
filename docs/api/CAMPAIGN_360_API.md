@@ -3,7 +3,7 @@ title: Campaign 360 API Reference
 slug: api/campaign-360
 section: api
 visibility: I
-audience: [dev-senior, dev-mid, integration]
+audience: [dev-senior, dev-junior]
 status: stable
 canonical_owner: platform@aether
 estimated_read_minutes: 15

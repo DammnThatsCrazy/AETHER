@@ -1,7 +1,7 @@
 ---
 title: Runbook — Attribution Run Failed (Campaign 360)
 slug: runbooks/campaign-360-attribution-run-failed
-section: runbooks
+section: operations
 visibility: I
 audience: [ops, dev-senior]
 status: stable
