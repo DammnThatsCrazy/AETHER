@@ -352,6 +352,7 @@ export function GraphPage() {
   const [pathSource, setPathSource] = useState<string | null>(null);
   const [pathResult, setPathResult] = useState<{ nodeIds: string[]; edgeIds: string[] } | null>(null);
   const [highlightedCluster, setHighlightedCluster] = useState<string[] | null>(null);
+  const [replayDate, setReplayDate] = useState<string | null>(null);
 
   const highlightedNodeIds = useMemo(() => {
     if (highlightedCluster) return highlightedCluster;
@@ -434,6 +435,12 @@ export function GraphPage() {
     );
   }
 
+  // ── Summary stats derived from current graph data ─────────────────────────
+  const riskAlertCount = useMemo(
+    () => nodes.filter(n => (n.riskScore ?? 0) >= 0.7).length,
+    [nodes],
+  );
+
   return (
     <div className="p-6 space-y-4 h-full flex flex-col">
       {/* Header */}
@@ -445,12 +452,37 @@ export function GraphPage() {
           </p>
         </div>
         <div className="flex items-center gap-2 flex-wrap">
-          <Badge variant="accent">{nodes.length} nodes</Badge>
-          <Badge>{edges.length} edges</Badge>
           <Button variant={viewMode === 'graph' ? 'primary' : 'ghost'} size="sm" onClick={() => setViewMode('graph')}>Graph</Button>
           <Button variant={viewMode === 'table' ? 'primary' : 'ghost'} size="sm" onClick={() => setViewMode('table')}>Table</Button>
         </div>
       </div>
+
+      {/* Summary strip */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+        <div className="p-3 rounded-md border border-border-default bg-surface-raised text-center">
+          <p className="text-lg font-semibold text-text-primary">{nodes.length}</p>
+          <p className="text-xs text-text-muted">Entities</p>
+        </div>
+        <div className="p-3 rounded-md border border-border-default bg-surface-raised text-center">
+          <p className="text-lg font-semibold text-text-primary">{edges.length}</p>
+          <p className="text-xs text-text-muted">Relationships</p>
+        </div>
+        <div className="p-3 rounded-md border border-border-default bg-surface-raised text-center">
+          <p className="text-lg font-semibold text-text-primary">{clusters.length}</p>
+          <p className="text-xs text-text-muted">Clusters</p>
+        </div>
+        <div className={cn('p-3 rounded-md border text-center', riskAlertCount > 0 ? 'border-danger/40 bg-danger/5' : 'border-border-default bg-surface-raised')}>
+          <p className={cn('text-lg font-semibold', riskAlertCount > 0 ? 'text-danger' : 'text-text-primary')}>{riskAlertCount}</p>
+          <p className="text-xs text-text-muted">Risk alerts</p>
+        </div>
+      </div>
+
+      {/* Truncation warning */}
+      {nodes.length >= 200 && (
+        <div className="text-xs px-3 py-2 rounded bg-warning/10 border border-warning/30 text-warning">
+          Graph shows the first 200 entities. Relationships may be partial. Use filters or zoom to a specific cluster to see complete data.
+        </div>
+      )}
 
       {/* Toolbar */}
       <div className="flex items-center gap-4 flex-wrap border border-border-default rounded-md px-3 py-2 bg-surface-raised">
@@ -492,7 +524,32 @@ export function GraphPage() {
         >
           {pathMode ? 'Exit path mode' : 'Path finder'}
         </Button>
+
+        {/* Replay control */}
+        <div className="flex items-center gap-1 ml-auto">
+          <span className="text-xs text-text-muted">As of:</span>
+          <input
+            type="date"
+            className="text-xs bg-surface-base border border-border-default rounded px-2 py-1 text-text-primary"
+            value={replayDate ?? ''}
+            onChange={e => setReplayDate(e.target.value || null)}
+            aria-label="Replay graph as of date"
+          />
+          {replayDate && (
+            <Button variant="ghost" size="sm" onClick={() => setReplayDate(null)}>
+              Live
+            </Button>
+          )}
+        </div>
       </div>
+
+      {/* Replay mode banner */}
+      {replayDate && (
+        <div className="text-xs px-3 py-2 rounded bg-accent/10 border border-accent/30 text-accent flex items-center justify-between">
+          <span>Viewing graph as of <span className="font-mono font-bold">{replayDate}</span> — historical replay mode. Point-in-time filtering applies.</span>
+          <Button variant="ghost" size="sm" onClick={() => setReplayDate(null)}>Exit replay</Button>
+        </div>
+      )}
 
       {/* Path mode hint */}
       {pathMode && (
