@@ -13,7 +13,7 @@ source_files:
 canonical_owner: frontend@aether
 estimated_read_minutes: 35
 toc_depth: 4
-last_synced_commit: 5cb0411
+last_synced_commit: c127df6
 ---
 
 # Aether Frontend Architecture & Designer Handoff
@@ -55,7 +55,7 @@ There are two separate frontend applications. **Do not mix them up.**
 - **Suggestion review queue** — approve, reject, or suppress suggestions with reason capture
 - **ML Operations** — model fleet health, artifact status, and extraction defense monitoring
 - **Measurement Overview** — spend, attributed revenue, ROAS, data quality, and connector health across all tenants (`/measurement/overview`)
-- **Attribution Studio** — per-conversion attribution runs, model selection, backfill controls (`/measurement/attribution`)
+- **Attribution Studio** — per-conversion attribution runs, model selection, backfill controls; reads `?campaign_id=` URL param to pre-filter runs and surface a "Compare in Campaign 360 →" contextual link (`/measurement/attribution`)
 - **Journey Explorer** — chronological journey timeline with attribution weight annotations (`/measurement/journeys`)
 - **Conversion Explorer** — canonical conversion detail, revenue history, attribution drill-down (`/measurement/conversions`)
 - **Campaign Intelligence** — campaign hierarchy, performance metrics, spend/ROAS time-series (`/measurement/campaigns`)
