@@ -3230,6 +3230,22 @@
       ]
     },
     {
+      "path": "docs/api/CAMPAIGN_360_API.md",
+      "title": "Campaign 360 API Reference",
+      "slug": "api/campaign-360",
+      "section": "api",
+      "visibility": "I",
+      "audience": [
+        "dev-senior",
+        "dev-mid",
+        "integration"
+      ],
+      "status": "stable",
+      "estimated_read_minutes": 15,
+      "toc_depth": 3,
+      "canonical_owner": "platform@aether"
+    },
+    {
       "path": "docs/api/FLOW-TRACE.md",
       "title": "Flow Trace API Reference",
       "slug": "api/flow-trace",
@@ -3269,6 +3285,21 @@
       ],
       "status": "experimental",
       "estimated_read_minutes": 30,
+      "toc_depth": 4,
+      "canonical_owner": "platform@aether"
+    },
+    {
+      "path": "docs/architecture/CAMPAIGN_360_ARCHITECTURE.md",
+      "title": "Campaign 360 Architecture",
+      "slug": "architecture/campaign-360",
+      "section": "architecture",
+      "visibility": "I",
+      "audience": [
+        "architect",
+        "dev-senior"
+      ],
+      "status": "stable",
+      "estimated_read_minutes": 20,
       "toc_depth": 4,
       "canonical_owner": "platform@aether"
     },
@@ -3584,6 +3615,66 @@
       ],
       "since_version": "8.9.0",
       "canonical_owner": "sdk@aether"
+    },
+    {
+      "path": "docs/runbooks/CAMPAIGN-360-ATTRIBUTION-RUN-FAILED.md",
+      "title": "Runbook — Attribution Run Failed (Campaign 360)",
+      "slug": "runbooks/campaign-360-attribution-run-failed",
+      "section": "runbooks",
+      "visibility": "I",
+      "audience": [
+        "ops",
+        "dev-senior"
+      ],
+      "status": "stable",
+      "estimated_read_minutes": 6,
+      "toc_depth": 2,
+      "canonical_owner": "platform@aether"
+    },
+    {
+      "path": "docs/runbooks/CAMPAIGN-360-GRAPH-DISAGREES-WITH-TOTALS.md",
+      "title": "Runbook — Graph Results Disagree With Campaign Totals",
+      "slug": "runbooks/campaign-360-graph-disagrees",
+      "section": "runbooks",
+      "visibility": "I",
+      "audience": [
+        "ops",
+        "dev-senior"
+      ],
+      "status": "stable",
+      "estimated_read_minutes": 6,
+      "toc_depth": 2,
+      "canonical_owner": "platform@aether"
+    },
+    {
+      "path": "docs/runbooks/CAMPAIGN-360-MISSING-CONVERSIONS.md",
+      "title": "Runbook — Missing Conversions (Campaign 360)",
+      "slug": "runbooks/campaign-360-missing-conversions",
+      "section": "runbooks",
+      "visibility": "I",
+      "audience": [
+        "ops",
+        "dev-senior"
+      ],
+      "status": "stable",
+      "estimated_read_minutes": 5,
+      "toc_depth": 2,
+      "canonical_owner": "platform@aether"
+    },
+    {
+      "path": "docs/runbooks/CAMPAIGN-360-STALE-SPEND.md",
+      "title": "Runbook — Stale Spend Warning (Campaign 360)",
+      "slug": "runbooks/campaign-360-stale-spend",
+      "section": "runbooks",
+      "visibility": "I",
+      "audience": [
+        "ops",
+        "dev-senior"
+      ],
+      "status": "stable",
+      "estimated_read_minutes": 5,
+      "toc_depth": 2,
+      "canonical_owner": "platform@aether"
     },
     {
       "path": "docs/runbooks/ML-INCIDENT-RUNBOOK.md",

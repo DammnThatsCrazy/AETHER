@@ -2,13 +2,19 @@ import { Badge, Card, CardContent, CardHeader, CardTitle, DataTable, EmptyState,
 import { PageWrapper } from '@kyber/components/layout';
 import { useAttributionStudio } from '@kyber/features/measurement';
 import { useState } from 'react';
+import { Link, useSearchParams } from 'react-router-dom';
 import { api } from '@kyber/lib/api';
 
 type Row = Record<string, unknown>;
 
 export function AttributionStudioPage() {
+  const [searchParams] = useSearchParams();
+  const campaignId = searchParams.get('campaign_id') ?? undefined;
   const [filter, setFilter] = useState<{ model_type?: string; status?: string }>({});
-  const { data, loading, error } = useAttributionStudio(filter);
+  const { data, loading, error } = useAttributionStudio({
+    ...filter,
+    ...(campaignId !== undefined ? { campaign_id: campaignId } : {}),
+  });
   const [triggering, setTriggering] = useState(false);
   const [backfillDates, setBackfillDates] = useState({ start: '', end: '' });
 
@@ -32,6 +38,14 @@ export function AttributionStudioPage() {
       title="Attribution Studio"
       subtitle="Per-conversion attribution runs, model selection, and backfill controls."
     >
+      {campaignId && (
+        <div className="flex items-center justify-between mb-4 px-3 py-2 bg-surface-secondary border border-border rounded text-sm">
+          <span className="text-text-secondary">Filtered to campaign <span className="font-mono text-text-primary">{campaignId}</span></span>
+          <Link to={`/measurement/campaigns/${campaignId}?tab=attribution`} className="text-accent hover:underline text-xs">
+            Compare in Campaign 360 →
+          </Link>
+        </div>
+      )}
       <div className="flex gap-3 mb-4">
         <label className="sr-only" htmlFor="attr-model-filter">Attribution model</label>
         <select id="attr-model-filter" aria-label="Attribution model" value={filter.model_type ?? ''} onChange={e => setFilter(f => ({ ...f, model_type: e.target.value || undefined } as { model_type?: string; status?: string }))}
