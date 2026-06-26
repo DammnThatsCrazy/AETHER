@@ -2,8 +2,8 @@
 title: Universal Intelligence Graph Operations Runbook
 slug: operations/universal-graph-runbook
 section: operations
-visibility: internal
-audience: [sre, dev-senior, ai]
+visibility: I
+audience: [ops, dev-senior, ai]
 status: stable
 since_version: "8.10.0"
 canonical_owner: sre@aether

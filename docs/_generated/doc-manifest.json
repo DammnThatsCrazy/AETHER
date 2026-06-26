@@ -3320,7 +3320,7 @@
       "title": "Universal Intelligence Graph Architecture",
       "slug": "architecture/universal-graph-architecture",
       "section": "architecture",
-      "visibility": "internal",
+      "visibility": "I",
       "audience": [
         "architect",
         "dev-senior",
@@ -3537,9 +3537,9 @@
       "title": "Universal Intelligence Graph Operations Runbook",
       "slug": "operations/universal-graph-runbook",
       "section": "operations",
-      "visibility": "internal",
+      "visibility": "I",
       "audience": [
-        "sre",
+        "ops",
         "dev-senior",
         "ai"
       ],
@@ -3742,7 +3742,7 @@
       "title": "Universal Intelligence Graph Security Model",
       "slug": "security/universal-graph-security-model",
       "section": "security",
-      "visibility": "internal",
+      "visibility": "I",
       "audience": [
         "architect",
         "dev-senior",

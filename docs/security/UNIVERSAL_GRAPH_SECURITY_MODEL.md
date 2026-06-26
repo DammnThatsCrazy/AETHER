@@ -2,7 +2,7 @@
 title: Universal Intelligence Graph Security Model
 slug: security/universal-graph-security-model
 section: security
-visibility: internal
+visibility: I
 audience: [architect, dev-senior, security, ai]
 status: stable
 since_version: "8.10.0"

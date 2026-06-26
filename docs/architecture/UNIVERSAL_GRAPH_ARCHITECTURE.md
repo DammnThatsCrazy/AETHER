@@ -2,7 +2,7 @@
 title: Universal Intelligence Graph Architecture
 slug: architecture/universal-graph-architecture
 section: architecture
-visibility: internal
+visibility: I
 audience: [architect, dev-senior, ai]
 status: stable
 since_version: "8.10.0"
