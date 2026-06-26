@@ -115,12 +115,15 @@ class APIResponse(Generic[T]):
     request_id: str = field(default_factory=lambda: str(uuid.uuid4()))
 
     def to_dict(self) -> dict:
+        ts = utc_now().isoformat()
         return {
             "data": self.data,
+            "status": "success",
+            "timestamp": ts,
             "meta": {
                 **self.meta,
                 "request_id": self.request_id,
-                "timestamp": utc_now().isoformat(),
+                "timestamp": ts,
             },
         }
 
