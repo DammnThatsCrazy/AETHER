@@ -28,7 +28,6 @@ import pytest
 pytest.importorskip("fastapi", reason="Backend deps not installed")
 
 import uuid
-from datetime import timezone
 
 
 TENANT = "e2e-test-tenant"
