@@ -1109,7 +1109,7 @@ async def universal_graph_query(
             if body.as_of:  # as_of_dt already bound above
                 edges = [
                     e for e in edges
-                    if (e.properties.get("valid_from", e.created_at) <= as_of_dt)
+                    if (not e.properties.get("valid_from") or e.properties["valid_from"] <= as_of_dt)
                     and (not e.properties.get("valid_to") or e.properties["valid_to"] > as_of_dt)
                     and e.to_vertex_id in valid_node_ids
                 ]
@@ -1345,7 +1345,7 @@ async def graph_export_status(
     )
 
 
-_EXPORT_FORMATS = {"json", "jsonl", "csv", "ndjson"}
+_EXPORT_FORMATS = {"jsonl", "csv", "ndjson"}
 
 
 @router.get("/export/{job_id}/download")
