@@ -238,7 +238,7 @@ class AttributionRunRepository:
         params.append(limit)
 
         join_clause = (
-            "JOIN attribution_credits ac ON ac.attribution_run_id = ar.attribution_run_id"
+            "JOIN attribution_credits ac ON ac.attribution_run_id = ar.attribution_run_id AND ac.tenant_id = ar.tenant_id"
             if join_credits
             else ""
         )
