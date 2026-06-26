@@ -16,6 +16,8 @@ the test suite acts as a regression guard for traversal performance.
 from __future__ import annotations
 
 import asyncio
+import math
+import os
 import sys
 import time
 import uuid
@@ -28,6 +30,13 @@ if BACKEND not in sys.path:
     sys.path.insert(0, BACKEND)
 
 pytest.importorskip("fastapi", reason="Backend deps not installed")
+
+# Force the in-memory backend regardless of the ambient CI environment.
+# Without this, GraphClient.connect() may prefer Neptune when NEPTUNE_ENDPOINT
+# is exported, which would seed random vertices into external infrastructure
+# and assert latency against real network RTT rather than local memory.
+os.environ["AETHER_ENV"] = "local"
+os.environ.pop("NEPTUNE_ENDPOINT", None)
 
 
 TENANT = "load-test-tenant"
@@ -42,8 +51,14 @@ def _uid() -> str:
 
 
 def _percentile(latencies: list[float], p: int) -> float:
+    """Nearest-rank percentile using ceiling-based index.
+
+    With n=30 and p=95: ceil(30*0.95) - 1 = ceil(28.5) - 1 = 29 - 1 = 28.
+    The old floor-based formula gave index 27, which allowed two slow requests
+    to exceed the SLO undetected.
+    """
     sorted_l = sorted(latencies)
-    idx = max(0, int(len(sorted_l) * p / 100) - 1)
+    idx = min(len(sorted_l) - 1, math.ceil(len(sorted_l) * p / 100) - 1)
     return sorted_l[idx]
 
 
@@ -151,7 +166,8 @@ async def test_concurrent_bfs_depth3_latency():
         t0 = time.perf_counter()
         result = await engine.bfs(anchor_id, depth=3, direction="both", tenant_id=TENANT)
         latencies.append(time.perf_counter() - t0)
-        assert result is not None
+        # depth=3 must actually traverse nodes — assert result is not None was vacuously true
+        assert len(result.nodes) > 0, "depth=3 BFS returned no nodes; traversal may have regressed"
 
     sem = asyncio.Semaphore(CONCURRENCY)
 
@@ -171,15 +187,17 @@ async def test_concurrent_bfs_depth3_latency():
 @pytest.mark.asyncio
 async def test_concurrent_temporal_bfs_latency():
     """Concurrent temporal BFS queries must complete with P95 < 1000ms."""
-    from datetime import datetime, timedelta, timezone
+    from datetime import datetime, timezone
     from shared.graph.graph import GraphClient
     from shared.graph.traversal import GraphTraversalEngine
 
     graph = GraphClient()
     anchor_id, _, _ = await _seed_graph(graph, n_entities=20, n_clusters=3)
+    # Set as_of AFTER seeding so created_at timestamps fall before the replay point.
+    # Setting as_of to yesterday would exclude all seeded vertices because temporal_bfs
+    # uses created_at as the fallback valid_from, and seeded vertices have created_at=now.
+    as_of = datetime.now(timezone.utc).isoformat()
     engine = GraphTraversalEngine(graph)
-
-    as_of = (datetime.now(timezone.utc) - timedelta(days=1)).isoformat()
 
     latencies: list[float] = []
 
@@ -187,7 +205,11 @@ async def test_concurrent_temporal_bfs_latency():
         t0 = time.perf_counter()
         result = await engine.temporal_bfs(anchor_id, as_of=as_of, depth=2, tenant_id=TENANT)
         latencies.append(time.perf_counter() - t0)
-        assert result is not None
+        # Temporal BFS must return the seeded nodes, not an empty result
+        assert len(result.nodes) > 0, (
+            "temporal_bfs returned no nodes; check that as_of is set after seeding "
+            f"(as_of={as_of})"
+        )
 
     sem = asyncio.Semaphore(CONCURRENCY)
 
@@ -226,6 +248,11 @@ async def test_tenant_isolation_under_concurrent_load():
                                   properties={"tenantId": tenant_b, "label": "should-not-leak"}))
     await graph.add_edge(Edge(edge_type="RELATED_TO", from_vertex_id=anchor_b,
                               to_vertex_id=secret_b, properties={"tenantId": tenant_b}))
+    # Add a cross-tenant edge reachable from anchor_a so that the tenant filter is actually
+    # exercised. Without this edge, secret_b was only reachable from anchor_b and the test
+    # would pass even if the tenant filter were removed entirely.
+    await graph.add_edge(Edge(edge_type="RELATED_TO", from_vertex_id=anchor_a,
+                              to_vertex_id=secret_b, properties={"tenantId": tenant_b}))
 
     violations: list[str] = []
 
@@ -241,18 +268,38 @@ async def test_tenant_isolation_under_concurrent_load():
 
 @pytest.mark.asyncio
 async def test_query_budget_enforcement_under_load():
-    """Graph traversal must respect depth and node budgets under concurrent load."""
+    """Graph traversal must respect the node budget under concurrent load.
+
+    Seeds more than QUERY_BUDGET_DEFAULTS['max_nodes'] reachable vertices so that
+    the budget cap is actually exercised — a graph with only 56 nodes can never
+    trigger the 500-node limit even if enforcement is removed.
+    """
     from shared.graph.graph import GraphClient
     from shared.graph.traversal import GraphTraversalEngine
+    from services.operational_intelligence.models import QUERY_BUDGET_DEFAULTS
+
+    max_nodes = QUERY_BUDGET_DEFAULTS["max_nodes"]  # 500
 
     graph = GraphClient()
-    anchor_id, _, _ = await _seed_graph(graph, n_entities=50, n_clusters=5)
+    # Seed 550 entities (+ 10 clusters + 1 anchor = 561 total) so there are more than
+    # max_nodes reachable nodes; the budget cap must truncate the result.
+    anchor_id, _, _ = await _seed_graph(graph, n_entities=550, n_clusters=10)
     engine = GraphTraversalEngine(graph)
 
     async def _one_query():
-        # depth=6 is the maximum allowed; result must not exceed QUERY_BUDGET max_nodes
-        result = await engine.bfs(anchor_id, depth=6, direction="out", tenant_id=TENANT)
-        assert len(result.nodes) <= 500, f"Node budget exceeded: {len(result.nodes)} nodes"
+        result = await engine.bfs(
+            anchor_id, depth=6, direction="out",
+            limit=max_nodes, tenant_id=TENANT,
+        )
+        assert len(result.nodes) <= max_nodes, (
+            f"Node budget violated: got {len(result.nodes)}, expected <= {max_nodes}"
+        )
+        # Budget must have been hit — if result is smaller than the graph but equals
+        # the limit, enforcement worked correctly.
+        assert len(result.nodes) == max_nodes, (
+            f"Budget cap not triggered: got {len(result.nodes)} nodes; "
+            f"expected exactly {max_nodes} (graph has 561 reachable nodes)"
+        )
 
     await asyncio.gather(*[_one_query() for _ in range(CONCURRENCY)])
 
