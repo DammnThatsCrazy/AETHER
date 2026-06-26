@@ -5,6 +5,9 @@ import type { RelationshipPath } from '@aether/shared/operational-intelligence';
 
 vi.mock('@aether-app/lib/api/endpoints', () => ({
   api: {
+    me: {
+      profile: vi.fn().mockResolvedValue({ tenant_id: 't1' }),
+    },
     graphIntelligence: {
       paths: vi.fn().mockResolvedValue({
         data: {
