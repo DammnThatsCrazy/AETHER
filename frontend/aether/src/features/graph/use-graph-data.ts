@@ -341,7 +341,7 @@ export function useGraphZoom(tenantId?: string) {
     } finally {
       if (!cancelRef.current) setIsLoading(false);
     }
-  }, []);
+  }, [tenantId]);
 
   const expandCluster = useCallback(async (clusterId: string) => {
     cancelRef.current = false;
@@ -384,7 +384,7 @@ export function useGraphZoom(tenantId?: string) {
     } finally {
       if (!cancelRef.current) setIsLoading(false);
     }
-  }, []);
+  }, [tenantId]);
 
   const resetZoom = useCallback(() => {
     cancelRef.current = true;

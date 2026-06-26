@@ -195,10 +195,18 @@ class AttributionRunRepository:
     ) -> list[dict[str, Any]]:
         pool = await self._pool()
         if pool is None:
+            # campaign_id lives on attribution_credits, not attribution_runs — look up via credits
+            if campaign_id is not None:
+                run_ids_for_campaign = {
+                    c["attribution_run_id"] for c in _local_credits
+                    if c.get("campaign_id") == campaign_id and c.get("tenant_id") == tenant_id
+                }
+            else:
+                run_ids_for_campaign = None
             rows = [
                 r for r in _local_runs.values()
                 if r.get("tenant_id") == tenant_id
-                and (campaign_id is None or r.get("campaign_id") == campaign_id)
+                and (run_ids_for_campaign is None or r.get("attribution_run_id") in run_ids_for_campaign)
                 and (conversion_id is None or r.get("conversion_id") == conversion_id)
                 and (status is None or r.get("status") == status)
             ]

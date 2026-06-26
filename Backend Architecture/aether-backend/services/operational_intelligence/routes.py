@@ -586,10 +586,15 @@ def _evaluate_expression(expr: FilterExpression, vertex: Vertex) -> bool:
                 return False
             amount, unit = int(m.group(1)), m.group(2)
             unit_map = {'s': 'seconds', 'm': 'minutes', 'h': 'hours', 'd': 'days', 'w': 'weeks'}
-            if unit not in unit_map:
+            month_year = {'M': 30, 'y': 365}  # approximate in days
+            if unit in month_year:
+                delta = timedelta(days=month_year[unit] * abs(amount))
+            elif unit in unit_map:
+                delta = timedelta(**{unit_map[unit]: abs(amount)})
+            else:
                 return False
-            delta = timedelta(**{unit_map[unit]: abs(amount)})
-            cutoff = datetime.now(tz=timezone.utc) - delta if amount < 0 else datetime.now(tz=timezone.utc) + delta
+            now = datetime.now(tz=timezone.utc)
+            cutoff = now - delta if amount < 0 else now + delta
             try:
                 ts = datetime.fromisoformat(str(val).replace("Z", "+00:00"))
                 if ts.tzinfo is None:
@@ -1101,14 +1106,16 @@ async def universal_graph_query(
         valid_node_ids = {v.vertex_id for v in all_nodes}
         for v in all_nodes:
             edges = await graph.get_edges(v.vertex_id, direction="out")
-            if body.as_of:
-                as_of_dt = body.as_of
+            if body.as_of:  # as_of_dt already bound above
                 edges = [
                     e for e in edges
                     if (not e.properties.get("valid_from") or e.properties["valid_from"] <= as_of_dt)
                     and (not e.properties.get("valid_to") or e.properties["valid_to"] > as_of_dt)
                     and e.to_vertex_id in valid_node_ids
                 ]
+            else:
+                # Always filter edges to tenant-owned destination nodes to prevent cross-tenant leaks
+                edges = [e for e in edges if e.to_vertex_id in valid_node_ids]
             all_edges.extend(edges)
 
     # ── Node-type filter ──────────────────────────────────────────────────────
@@ -1311,7 +1318,7 @@ async def graph_export(
         format=body.format,
         created_at=now,
         completed_at=now,
-        download_url=f"/v1/graph/export/{job_id}/download?format={body.format}&count={len(nodes)}",
+        download_url=f"/v1/graph/export/{job_id}/download?format={body.format}",
     )
 
 
@@ -1338,12 +1345,14 @@ async def graph_export_status(
     )
 
 
+_EXPORT_FORMATS = {"jsonl", "csv", "ndjson"}
+
+
 @router.get("/export/{job_id}/download")
 async def graph_export_download(
     job_id: str,
+    request: Request,
     format: str = "jsonl",
-    count: int = 0,
-    request: Request = None,
 ) -> dict:
     """Download endpoint for completed graph exports.
 
@@ -1351,13 +1360,16 @@ async def graph_export_download(
     persisted, so this endpoint returns a descriptive message. In production this
     would stream the export artifact from object storage.
     """
-    tenant = getattr(request.state, "tenant", None) if request else None
+    tenant = getattr(request.state, "tenant", None)
     if not tenant:
         raise ForbiddenError("Authentication required")
+    if format not in _EXPORT_FORMATS:
+        from fastapi import HTTPException
+        raise HTTPException(status_code=422, detail=f"format must be one of {sorted(_EXPORT_FORMATS)}")
     return {
         "job_id": job_id,
+        "tenant_id": getattr(tenant, "tenant_id", "unknown"),
         "format": format,
-        "count": count,
         "message": "In local mode exports are returned inline from POST /v1/graph/export. "
                    "In production this endpoint streams from object storage.",
     }
