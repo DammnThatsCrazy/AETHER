@@ -224,6 +224,9 @@ jobs:
       - name: Build shared package
         run: npm run build --workspace=packages/shared
 
+      - name: Build web package
+        run: npm run build --workspace=packages/web
+
       - name: TypeScript lint/static checks
         run: npm run lint
 
