@@ -262,7 +262,7 @@ async def list_clusters(
     return APIResponse(data={
         "clusters": records,
         "meta": ClusterPageMeta(total=total, limit=limit, cursor=next_cursor).model_dump(),
-    })
+    }).to_dict()
 
 
 @router.get("/{cluster_id}")
@@ -276,7 +276,7 @@ async def get_cluster(
     v = await _get_cluster_vertex(cluster_id, tenant_id, graph)
     members = await _get_cluster_member_vertices(cluster_id, tenant_id, graph)
     record = _vertex_to_record(v, tenant_id, member_count=len(members))
-    return APIResponse(data=record.model_dump())
+    return APIResponse(data=record.model_dump()).to_dict()
 
 
 @router.get("/{cluster_id}/members")
@@ -311,7 +311,7 @@ async def get_cluster_members(
     return APIResponse(data={
         "members": members,
         "meta": ClusterPageMeta(total=total, limit=limit, cursor=next_cursor).model_dump(),
-    })
+    }).to_dict()
 
 
 @router.get("/{cluster_id}/timeline")
@@ -346,7 +346,7 @@ async def get_cluster_timeline(
             metadata={"formation_reason": v.properties.get("formation_reason", "unknown")},
         ).model_dump())
 
-    return APIResponse(data={"cluster_id": cluster_id, "events": events})
+    return APIResponse(data={"cluster_id": cluster_id, "events": events}).to_dict()
 
 
 @router.get("/{cluster_id}/graph")
@@ -401,7 +401,7 @@ async def get_cluster_graph(
         "edges": edges,
         "node_count": len(nodes),
         "edge_count": len(edges),
-    })
+    }).to_dict()
 
 
 @router.get("/{cluster_id}/economic")
@@ -444,7 +444,7 @@ async def get_cluster_economic(
         value_tier=value_tier,
         member_economic_summaries=member_summaries,
     )
-    return APIResponse(data=summary.model_dump())
+    return APIResponse(data=summary.model_dump()).to_dict()
 
 
 @router.get("/{cluster_id}/campaigns")
@@ -486,7 +486,7 @@ async def get_cluster_campaigns(
         top_acquisition_channel=top_channel,
         conversion_rate=float(raw_rate) if raw_rate is not None else None,
     )
-    return APIResponse(data=summary.model_dump())
+    return APIResponse(data=summary.model_dump()).to_dict()
 
 
 @router.get("/{cluster_id}/risk")
@@ -526,7 +526,7 @@ async def get_cluster_risk(
         evidence_refs=evidence_refs,
         high_risk_members=high_risk,
     )
-    return APIResponse(data=summary.model_dump())
+    return APIResponse(data=summary.model_dump()).to_dict()
 
 
 @router.get("/{cluster_id}/geography")
@@ -562,4 +562,4 @@ async def get_cluster_geography(
         primary_country=primary_country,
         geo_concentration_score=concentration,
     )
-    return APIResponse(data=summary.model_dump())
+    return APIResponse(data=summary.model_dump()).to_dict()
