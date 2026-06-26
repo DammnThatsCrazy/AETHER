@@ -15,7 +15,8 @@ from typing import Any, Optional, Union
 
 from fastapi import APIRouter, Depends, Query, Request
 
-from dependencies.providers import get_graph
+from dependencies.providers import get_cache, get_graph
+from shared.cache.cache import CacheKey
 from shared.common.common import APIResponse, ForbiddenError
 from shared.graph.graph import Edge, GraphClient, Vertex
 from shared.graph.relationship_layers import RelationshipLayer, classify_edge_type, get_layer_stats
@@ -68,6 +69,11 @@ def _require_read(request: Request, tenant_id: str) -> None:
     tenant = request.state.tenant
     tenant.require_permission("read")
     if tenant_id != tenant.tenant_id:
+        # Counter is also a security signal — alert if count exceeds 0 in production
+        metrics.increment("graph_tenant_isolation_violation_total", labels={
+            "requested_tenant": tenant_id,
+            "authed_tenant": str(getattr(tenant, "tenant_id", "unknown")),
+        })
         raise ForbiddenError("tenantId does not match authenticated tenant")
 
 
@@ -963,12 +969,29 @@ async def universal_graph_query(
     body: UniversalGraphQueryRequest,
     request: Request,
     graph: GraphClient = Depends(get_graph),
+    cache=Depends(get_cache),
 ) -> GraphQueryResponse:
     """Universal graph query with boolean filter language, cursor pagination, and budget enforcement."""
     _require_read(request, body.tenant_id)
     metrics.increment("graph_query")
     start = time.monotonic()
     warnings: list[str] = []
+
+    # ── Cache lookup — keyed on tenant+query+contract+time ───────────────────
+    _q_body_key = json.dumps(body.model_dump(mode="json"), sort_keys=True, default=str)
+    _q_hash = CacheKey.hash_query(_q_body_key)
+    _cache_key = CacheKey.graph_query(
+        tenant_id=body.tenant_id,
+        query_hash=_q_hash,
+        as_of=body.as_of or "",
+    )
+    try:
+        _cached = await cache.get(_cache_key)
+        if _cached:
+            metrics.increment("graph_query_cache_hit")
+            return GraphQueryResponse(**json.loads(_cached))
+    except Exception:
+        pass  # cache miss is fine
 
     engine = GraphTraversalEngine(graph)
 
@@ -1070,12 +1093,32 @@ async def universal_graph_query(
         warnings=warnings,
     )
 
-    return GraphQueryResponse(
+    result = GraphQueryResponse(
         nodes=[_vertex_to_node(v) for v in page_nodes],
         edges=[_edge_to_graph_edge(e) for e in page_edges],
         overlays=overlays,
         meta=meta,
     )
+
+    # ── Cache write (short TTL for live queries, medium for temporal replay) ──
+    try:
+        from shared.cache.cache import TTL as _TTL
+        _ttl = _TTL.MEDIUM if body.as_of else _TTL.SHORT
+        await cache.set(_cache_key, json.dumps(result.model_dump(mode="json"), default=str), ttl=int(_ttl))
+    except Exception:
+        pass
+
+    # ── Observability histograms ──────────────────────────────────────────────
+    _duration_s = (time.monotonic() - start)
+    metrics.observe("graph_query_duration_seconds", _duration_s, labels={
+        "route": "query",
+        "truncated": str(meta.truncated).lower(),
+    })
+    metrics.observe("graph_query_node_count", float(meta.node_count), labels={"route": "query"})
+    if meta.truncated:
+        metrics.increment("graph_budget_exceeded_total", labels={"budget_type": meta.truncation_reason or "node_limit"})
+
+    return result
 
 
 @router.post("/facets", response_model=GraphFacetResponse)
@@ -1189,6 +1232,29 @@ async def graph_export(
         created_at=now,
         completed_at=now,
         download_url=f"/v1/graph/export/{job_id}/download?format={body.format}&count={len(nodes)}",
+    )
+
+
+@router.get("/export/{job_id}", response_model=GraphExportJob)
+async def graph_export_status(
+    job_id: str,
+    request: Request,
+) -> GraphExportJob:
+    """Get the status of an async graph export job.
+
+    In production this would look up the job in a persistent task store (Redis/DynamoDB).
+    In local mode, all exports complete synchronously so this always returns not_found.
+    """
+    tenant = getattr(request.state, "tenant", None)
+    if not tenant:
+        raise ForbiddenError("Authentication required")
+    return GraphExportJob(
+        job_id=job_id,
+        status="failed",
+        tenant_id=getattr(tenant, "tenant_id", "unknown"),
+        format="jsonl",
+        created_at=_utc_now(),
+        error="Job not found — in local mode exports complete synchronously and are not persisted.",
     )
 
 
