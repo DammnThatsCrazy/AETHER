@@ -42,7 +42,7 @@ class _UnderBudget:
     async def check_and_reserve(self, tenant_id: str, estimated_tokens: int) -> bool:
         return True
 
-    async def record(self, tenant_id: str, tokens_used: int) -> None:
+    async def release(self, tenant_id: str, tokens: int) -> None:
         pass
 
 
@@ -50,7 +50,7 @@ class _OverBudget:
     async def check_and_reserve(self, tenant_id: str, estimated_tokens: int) -> bool:
         return False
 
-    async def record(self, tenant_id: str, tokens_used: int) -> None:
+    async def release(self, tenant_id: str, tokens: int) -> None:
         pass
 
 

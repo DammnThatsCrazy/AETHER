@@ -179,6 +179,39 @@ jobs:
           python -m compileall "$AGENT_DIR" -q
           python -m compileall "$BACKEND_DIR" -q
 
+  noesis-backend-tests:
+    runs-on: ubuntu-latest
+    env:
+      NOESIS_ENABLED: "true"
+      NOESIS_LLM_ENABLED: "false"
+      NOESIS_DEBUG_ENABLED: "false"
+      AETHER_ENV: "local"
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+          cache-dependency-path: 'pyproject.toml'
+
+      - name: Install Python dependencies (backend + noesis)
+        run: |
+          pip install uv
+          uv pip install --system -e ".[dev,security,backend,agent]"
+
+      - name: Run Noesis backend tests
+        run: |
+          cd "$BACKEND_DIR"
+          python -m pytest \
+            tests/test_noesis_service.py \
+            tests/test_noesis_production.py \
+            tests/test_noesis_phase3.py \
+            tests/test_noesis_streaming.py \
+            tests/test_noesis_llm_provider.py \
+            -v --tb=short -n auto
+
   ml-tests:
     needs: detect-changes
     if: needs.detect-changes.outputs.ml == 'true'
@@ -282,15 +315,16 @@ jobs:
     # Aggregate gate: required-status check for branch protection rules.
     # Passes only when all dependent jobs pass (or skip via path filter).
     # pr-size is advisory only — it runs independently and never blocks this gate.
-    needs: [lint-docs, python-tests, ml-tests, typescript, e2e-tenant]
+    needs: [lint-docs, python-tests, noesis-backend-tests, ml-tests, typescript, e2e-tenant]
     if: always()
     runs-on: ubuntu-latest
     env:
-      LINT_DOCS_RESULT:    ${{ needs.lint-docs.result }}
-      PYTHON_TESTS_RESULT: ${{ needs.python-tests.result }}
-      TYPESCRIPT_RESULT:   ${{ needs.typescript.result }}
-      ML_TESTS_RESULT:     ${{ needs.ml-tests.result }}
-      E2E_TENANT_RESULT:   ${{ needs.e2e-tenant.result }}
+      LINT_DOCS_RESULT:          ${{ needs.lint-docs.result }}
+      PYTHON_TESTS_RESULT:       ${{ needs.python-tests.result }}
+      NOESIS_TESTS_RESULT:       ${{ needs.noesis-backend-tests.result }}
+      TYPESCRIPT_RESULT:         ${{ needs.typescript.result }}
+      ML_TESTS_RESULT:           ${{ needs.ml-tests.result }}
+      E2E_TENANT_RESULT:         ${{ needs.e2e-tenant.result }}
     steps:
       - name: Check job results
         run: |
@@ -300,6 +334,7 @@ jobs:
           for result in \
             "$LINT_DOCS_RESULT" \
             "$PYTHON_TESTS_RESULT" \
+            "$NOESIS_TESTS_RESULT" \
             "$TYPESCRIPT_RESULT" \
             "$ML_TESTS_RESULT" \
             "$E2E_TENANT_RESULT"; do
@@ -312,6 +347,9 @@ jobs:
           fi
           if [ "$PYTHON_TESTS_RESULT" != "success" ]; then
             echo "python-tests failed: $PYTHON_TESTS_RESULT"; exit 1
+          fi
+          if [ "$NOESIS_TESTS_RESULT" != "success" ]; then
+            echo "noesis-backend-tests failed: $NOESIS_TESTS_RESULT"; exit 1
           fi
           if [ "$TYPESCRIPT_RESULT" != "success" ]; then
             echo "typescript failed: $TYPESCRIPT_RESULT"; exit 1

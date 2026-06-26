@@ -8,7 +8,7 @@ import { storage } from '../utils';
 
 const QUEUE_STORAGE_KEY = 'event_queue';
 const MAX_STORED_EVENTS = 1000;
-const SDK_VERSION = '8.10.0'; // synchronized by scripts/bump-sdk-version.sh and scripts/validate_sdk_release_alignment.py
+const SDK_VERSION = '8.11.0'; // synchronized by scripts/bump-sdk-version.sh and scripts/validate_sdk_release_alignment.py
 
 interface QueueConfig {
   endpoint: string;

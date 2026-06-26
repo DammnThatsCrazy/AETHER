@@ -1,0 +1,403 @@
+{
+  "$defs": {
+    "EvidenceClaim": {
+      "properties": {
+        "claim": {
+          "title": "Claim",
+          "type": "string"
+        },
+        "claim_type": {
+          "enum": [
+            "fact",
+            "computation",
+            "inference",
+            "recommendation"
+          ],
+          "title": "Claim Type",
+          "type": "string"
+        },
+        "confidence": {
+          "maximum": 1.0,
+          "minimum": 0.0,
+          "title": "Confidence",
+          "type": "number"
+        },
+        "evidence_ids": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Evidence Ids",
+          "type": "array"
+        }
+      },
+      "required": [
+        "claim",
+        "claim_type",
+        "confidence"
+      ],
+      "title": "EvidenceClaim",
+      "type": "object"
+    },
+    "EvidenceEnvelope": {
+      "properties": {
+        "claims": {
+          "items": {
+            "$ref": "#/$defs/EvidenceClaim"
+          },
+          "title": "Claims",
+          "type": "array"
+        },
+        "generated_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Generated At"
+        },
+        "insufficient_reason": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Insufficient Reason"
+        },
+        "sources": {
+          "items": {
+            "$ref": "#/$defs/EvidenceSource"
+          },
+          "title": "Sources",
+          "type": "array"
+        },
+        "sufficient": {
+          "default": true,
+          "title": "Sufficient",
+          "type": "boolean"
+        }
+      },
+      "title": "EvidenceEnvelope",
+      "type": "object"
+    },
+    "EvidenceSource": {
+      "properties": {
+        "confidence": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Confidence"
+        },
+        "fetched_at": {
+          "format": "date-time",
+          "title": "Fetched At",
+          "type": "string"
+        },
+        "freshness_seconds": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Freshness Seconds"
+        },
+        "resource_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Resource Id"
+        },
+        "resource_type": {
+          "title": "Resource Type",
+          "type": "string"
+        },
+        "service": {
+          "title": "Service",
+          "type": "string"
+        }
+      },
+      "required": [
+        "service",
+        "resource_type",
+        "fetched_at"
+      ],
+      "title": "EvidenceSource",
+      "type": "object"
+    },
+    "NoesisAction": {
+      "properties": {
+        "edge_ids": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Edge Ids",
+          "type": "array"
+        },
+        "entity_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Entity Id"
+        },
+        "entity_type": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Entity Type"
+        },
+        "href": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Href"
+        },
+        "label": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Label"
+        },
+        "node_ids": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Node Ids",
+          "type": "array"
+        },
+        "prompt": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Prompt"
+        },
+        "type": {
+          "enum": [
+            "navigate",
+            "open_inspector",
+            "highlight_graph",
+            "refine_query"
+          ],
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "type"
+      ],
+      "title": "NoesisAction",
+      "type": "object"
+    },
+    "NoesisError": {
+      "properties": {
+        "code": {
+          "title": "Code",
+          "type": "string"
+        },
+        "details": {
+          "additionalProperties": true,
+          "title": "Details",
+          "type": "object"
+        },
+        "message": {
+          "title": "Message",
+          "type": "string"
+        }
+      },
+      "required": [
+        "code",
+        "message"
+      ],
+      "title": "NoesisError",
+      "type": "object"
+    },
+    "NoesisGraph": {
+      "properties": {
+        "edges": {
+          "items": {
+            "additionalProperties": true,
+            "type": "object"
+          },
+          "title": "Edges",
+          "type": "array"
+        },
+        "highlights": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Highlights",
+          "type": "array"
+        },
+        "nodes": {
+          "items": {
+            "additionalProperties": true,
+            "type": "object"
+          },
+          "title": "Nodes",
+          "type": "array"
+        }
+      },
+      "title": "NoesisGraph",
+      "type": "object"
+    }
+  },
+  "properties": {
+    "actions": {
+      "items": {
+        "$ref": "#/$defs/NoesisAction"
+      },
+      "title": "Actions",
+      "type": "array"
+    },
+    "answer": {
+      "title": "Answer",
+      "type": "string"
+    },
+    "confidence": {
+      "maximum": 1.0,
+      "minimum": 0.0,
+      "title": "Confidence",
+      "type": "number"
+    },
+    "entities": {
+      "items": {
+        "additionalProperties": true,
+        "type": "object"
+      },
+      "title": "Entities",
+      "type": "array"
+    },
+    "error": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/NoesisError"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "evidence": {
+      "$ref": "#/$defs/EvidenceEnvelope"
+    },
+    "graph": {
+      "$ref": "#/$defs/NoesisGraph"
+    },
+    "intent": {
+      "title": "Intent",
+      "type": "string"
+    },
+    "mode": {
+      "enum": [
+        "deterministic",
+        "llm_text_to_query",
+        "fallback"
+      ],
+      "title": "Mode",
+      "type": "string"
+    },
+    "query_debug": {
+      "anyOf": [
+        {
+          "additionalProperties": true,
+          "type": "object"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Query Debug"
+    },
+    "results": {
+      "items": {
+        "additionalProperties": true,
+        "type": "object"
+      },
+      "title": "Results",
+      "type": "array"
+    },
+    "scope_summary": {
+      "anyOf": [
+        {
+          "additionalProperties": true,
+          "type": "object"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Scope Summary"
+    },
+    "warnings": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Warnings",
+      "type": "array"
+    }
+  },
+  "required": [
+    "answer",
+    "mode",
+    "intent",
+    "confidence"
+  ],
+  "title": "NoesisResponse",
+  "type": "object"
+}

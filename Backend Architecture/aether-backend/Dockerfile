@@ -7,9 +7,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     gcc libpq-dev && \
     rm -rf /var/lib/apt/lists/*
 
-# Install Python dependencies (backend only, no dev/test deps)
+# Install Python dependencies (full production stack including noesis/anthropic)
 COPY pyproject.toml .
-RUN pip install --no-cache-dir ".[backend]"
+RUN pip install --no-cache-dir ".[all,noesis]"
 
 # ---------------------------------------------------------------------------
 # Optional: install onnxruntime for ML_SERVING_INLINE=true.

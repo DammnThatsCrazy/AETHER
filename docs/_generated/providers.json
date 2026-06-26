@@ -1,5 +1,5 @@
 {
-  "version": "8.10.0",
+  "version": "8.11.0",
   "generated_from": "Backend Architecture/aether-backend/shared/providers/categories.py",
   "category_enum_values": [
     {

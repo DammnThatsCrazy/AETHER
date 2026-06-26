@@ -86,7 +86,7 @@ data class IdentityData(
 
 object Aether : DefaultLifecycleObserver {
     private const val TAG = "AetherSDK"
-    private const val VERSION = "8.10.0"
+    private const val VERSION = "8.11.0"
     private const val PREFS_NAME = "com.aether.sdk"
 
     private var config: AetherConfig? = null

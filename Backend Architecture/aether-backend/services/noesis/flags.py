@@ -18,11 +18,18 @@ class NoesisFlags:
 
     @property
     def debug_enabled(self) -> bool:
-        return os.getenv("NOESIS_DEBUG_ENABLED", "true").lower() in ("true", "1", "yes")
+        # Always enabled in local dev; opt-in only in staging/production
+        if os.getenv("AETHER_ENV", "local").lower() == "local":
+            return True
+        return os.getenv("NOESIS_DEBUG_ENABLED", "false").lower() in ("true", "1", "yes")
 
     @property
     def cross_tenant_enabled(self) -> bool:
         return os.getenv("NOESIS_CROSS_TENANT_ENABLED", "true").lower() in ("true", "1", "yes")
+
+    @property
+    def multi_hop_enabled(self) -> bool:
+        return os.getenv("NOESIS_MULTI_HOP_ENABLED", "false").lower() in ("true", "1", "yes")
 
     @property
     def max_queries_per_minute(self) -> int:

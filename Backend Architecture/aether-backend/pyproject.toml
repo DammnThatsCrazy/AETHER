@@ -21,10 +21,16 @@ databases = [
 ]
 # Kafka event bus
 kafka = ["aiokafka>=0.10"]
+# Noesis LLM provider
+noesis = [
+    "anthropic>=0.25",
+    "httpx>=0.27",
+]
 # Full production stack
 all = [
     "aether-backend[databases]",
     "aether-backend[kafka]",
+    "aether-backend[noesis]",
     "httpx>=0.27",
     "prometheus-client>=0.20",
 ]

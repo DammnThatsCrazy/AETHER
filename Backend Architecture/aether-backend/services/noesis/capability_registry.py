@@ -1,0 +1,234 @@
+"""Noesis capability registry — single source of truth for all supported intents.
+
+Every entry here drives: LLM system prompt generation, the /v1/noesis/capabilities
+API endpoint, and frontend suggested prompts.
+"""
+
+from __future__ import annotations
+
+from dataclasses import dataclass, field
+
+
+@dataclass(frozen=True)
+class NoesisCapability:
+    intent: str
+    label: str
+    description: str
+    surfaces: list[str]
+    requires_target: bool
+    example_prompts: list[str]
+    data_sources: list[str]
+
+
+CAPABILITY_REGISTRY: list[NoesisCapability] = [
+    NoesisCapability(
+        intent="entity_search",
+        label="Entity Search",
+        description="Search tenant-scoped entities by name, type, or partial match.",
+        surfaces=["aether", "kyber"],
+        requires_target=False,
+        example_prompts=[
+            "Show me all entities",
+            "Find entities named Acme",
+            "List all wallet entities",
+            "Search for human profiles matching 'john'",
+        ],
+        data_sources=["entity_repository"],
+    ),
+    NoesisCapability(
+        intent="graph_lookup",
+        label="Graph Lookup",
+        description="Traverse graph neighbors for a specific entity ID.",
+        surfaces=["aether", "kyber"],
+        requires_target=True,
+        example_prompts=[
+            "Show connections for entity ent_123",
+            "What is linked to wallet w_abc?",
+            "Graph neighbors of agent ag_xyz",
+        ],
+        data_sources=["graph_client"],
+    ),
+    NoesisCapability(
+        intent="alert_lookup",
+        label="Alert Lookup",
+        description="List unresolved alerts or incidents for the tenant.",
+        surfaces=["aether", "kyber"],
+        requires_target=False,
+        example_prompts=[
+            "Show me open alerts",
+            "What incidents are unresolved?",
+            "List high-severity alerts from the last 24 hours",
+        ],
+        data_sources=["alert_repository"],
+    ),
+    NoesisCapability(
+        intent="tenant_summary",
+        label="Tenant Summary",
+        description="Aggregate a tenant's health, entity counts, and event statistics. Kyber operators only.",
+        surfaces=["kyber"],
+        requires_target=False,
+        example_prompts=[
+            "Summarize tenant health",
+            "What is the overall status of this tenant?",
+            "Give me a dashboard overview",
+        ],
+        data_sources=["admin_repository", "analytics"],
+    ),
+    NoesisCapability(
+        intent="profile_lookup",
+        label="Profile Lookup",
+        description="Look up human or user profile records.",
+        surfaces=["aether", "kyber"],
+        requires_target=False,
+        example_prompts=[
+            "Show me user profiles",
+            "Look up the profile for user ent_456",
+            "Find profiles with high identity confidence",
+        ],
+        data_sources=["entity_repository"],
+    ),
+    NoesisCapability(
+        intent="wallet_lookup",
+        label="Wallet Lookup",
+        description="Search wallet records by address or linked entity.",
+        surfaces=["aether", "kyber"],
+        requires_target=False,
+        example_prompts=[
+            "Show all wallets",
+            "Find wallet 0xABC",
+            "Which wallets have high risk scores?",
+        ],
+        data_sources=["wallet_repository"],
+    ),
+    NoesisCapability(
+        intent="agent_lookup",
+        label="Agent Lookup",
+        description="Find agent configuration or execution records.",
+        surfaces=["aether", "kyber"],
+        requires_target=False,
+        example_prompts=[
+            "List active agents",
+            "Show me failed agent executions",
+            "What agents ran in the last 7 days?",
+        ],
+        data_sources=["agent_config_repository", "agent_execution_repository"],
+    ),
+    NoesisCapability(
+        intent="health_lookup",
+        label="Health Lookup",
+        description="Show SDK provider health, failed agents, or system diagnostics.",
+        surfaces=["aether", "kyber"],
+        requires_target=False,
+        example_prompts=[
+            "What is the system health?",
+            "Show me provider failures",
+            "Are any agents unhealthy?",
+        ],
+        data_sources=["providers_repository", "agent_execution_repository", "analytics"],
+    ),
+    NoesisCapability(
+        intent="campaign_reward_lookup",
+        label="Campaign & Reward Lookup",
+        description="List campaigns and associated reward records.",
+        surfaces=["aether", "kyber"],
+        requires_target=False,
+        example_prompts=[
+            "Show active campaigns",
+            "What rewards exist for campaign camp_1?",
+            "List campaigns created in the last 30 days",
+        ],
+        data_sources=["campaign_repository", "wallet_repository"],
+    ),
+    NoesisCapability(
+        intent="risk_cluster_lookup",
+        label="Risk Cluster Lookup",
+        description="Rank entities by risk score to identify suspicious clusters.",
+        surfaces=["aether", "kyber"],
+        requires_target=False,
+        example_prompts=[
+            "Show me the highest risk entities",
+            "Which entities have a risk score above 0.8?",
+            "Find suspicious clusters",
+        ],
+        data_sources=["entity_repository"],
+    ),
+    NoesisCapability(
+        intent="suggestion_lookup",
+        label="Suggestion Lookup",
+        description="Look up individual suggestion records (read-only).",
+        surfaces=["aether", "kyber"],
+        requires_target=False,
+        example_prompts=[
+            "Show me recent suggestions",
+            "List suggestions for entity ent_789",
+        ],
+        data_sources=["suggestion_repository"],
+    ),
+    NoesisCapability(
+        intent="suggestion_summary",
+        label="Suggestion Summary",
+        description="Summarize suggestion activity and acceptance rates.",
+        surfaces=["aether", "kyber"],
+        requires_target=False,
+        example_prompts=[
+            "Summarize suggestions this week",
+            "What is the suggestion acceptance rate?",
+        ],
+        data_sources=["suggestion_repository"],
+    ),
+    NoesisCapability(
+        intent="suggestion_review_queue",
+        label="Suggestion Review Queue",
+        description="Show the pending suggestion review queue.",
+        surfaces=["aether", "kyber"],
+        requires_target=False,
+        example_prompts=[
+            "What suggestions need review?",
+            "Show the review queue",
+        ],
+        data_sources=["suggestion_repository"],
+    ),
+    NoesisCapability(
+        intent="suggestion_explain",
+        label="Explain Suggestion",
+        description="Explain the rationale behind a specific suggestion.",
+        surfaces=["aether", "kyber"],
+        requires_target=True,
+        example_prompts=[
+            "Explain suggestion sug_123",
+            "Why was this suggestion generated?",
+        ],
+        data_sources=["suggestion_repository"],
+    ),
+    NoesisCapability(
+        intent="suggestion_outcome_lookup",
+        label="Suggestion Outcome Lookup",
+        description="Look up outcomes and results for processed suggestions.",
+        surfaces=["aether", "kyber"],
+        requires_target=False,
+        example_prompts=[
+            "What happened with recent suggestions?",
+            "Show suggestion outcomes for last 7 days",
+        ],
+        data_sources=["suggestion_repository"],
+    ),
+]
+
+# Fast lookup by intent name
+_REGISTRY_BY_INTENT: dict[str, NoesisCapability] = {cap.intent: cap for cap in CAPABILITY_REGISTRY}
+
+
+def get_capability(intent: str) -> NoesisCapability | None:
+    return _REGISTRY_BY_INTENT.get(intent)
+
+
+def capabilities_for_surface(surface: str) -> list[NoesisCapability]:
+    return [cap for cap in CAPABILITY_REGISTRY if surface in cap.surfaces]
+
+
+def build_intent_descriptions() -> str:
+    lines = ["Supported intents and when to use each:"]
+    for cap in CAPABILITY_REGISTRY:
+        lines.append(f"- {cap.intent:<28}: {cap.description}")
+    lines.append("\nIf none of these intents safely matches the prompt, use intent=\"unsupported\".")
+    return "\n".join(lines)

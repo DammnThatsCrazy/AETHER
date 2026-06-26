@@ -184,9 +184,11 @@ class AnthropicNoesisPlanProvider:
                     timeout=self.timeout_s,
                 )
                 plan = _parse_plan_json(result["text"], effective_tenant_id)
+                tokens = result.get("tokens_used", _ESTIMATED_REQUEST_TOKENS)
+                # Adjust reservation: release over-estimate if actual < estimated
+                if tokens < _ESTIMATED_REQUEST_TOKENS:
+                    await self._budget.release(effective_tenant_id, _ESTIMATED_REQUEST_TOKENS - tokens)
                 if plan is not None:
-                    tokens = result.get("tokens_used", _ESTIMATED_REQUEST_TOKENS)
-                    await self._budget.record(effective_tenant_id, tokens)
                     metrics.increment("noesis_provider_success", labels={"provider": self.provider_name})
                     logger.info(
                         "Noesis Anthropic provider returned plan",
@@ -197,17 +199,17 @@ class AnthropicNoesisPlanProvider:
             except asyncio.TimeoutError:
                 logger.warning(f"Noesis Anthropic provider timeout (attempt {attempt})", extra={"timeout_s": self.timeout_s})
                 metrics.increment("noesis_provider_timeout", labels={"provider": self.provider_name})
-                if attempt <= self.max_retries:
-                    await asyncio.sleep(0.5 * attempt)
-                    continue
-                return None
+                if attempt > self.max_retries:
+                    await self._budget.release(effective_tenant_id, _ESTIMATED_REQUEST_TOKENS)
+                    return None
+                await asyncio.sleep(0.5 * attempt)
             except Exception as exc:  # noqa: BLE001
                 logger.warning(f"Noesis Anthropic provider error: {exc}", extra={"attempt": attempt})
                 metrics.increment("noesis_provider_error", labels={"provider": self.provider_name})
-                if attempt <= self.max_retries:
-                    await asyncio.sleep(0.5 * attempt)
-                    continue
-                return None
+                if attempt > self.max_retries:
+                    await self._budget.release(effective_tenant_id, _ESTIMATED_REQUEST_TOKENS)
+                    return None
+                await asyncio.sleep(0.5 * attempt)
         return None
 
     async def _call_api(self, user_message: str) -> dict:
@@ -280,9 +282,10 @@ class OpenAINoesisPlanProvider:
                     timeout=self.timeout_s,
                 )
                 plan = _parse_plan_json(result["text"], effective_tenant_id)
+                tokens = result.get("tokens_used", _ESTIMATED_REQUEST_TOKENS)
+                if tokens < _ESTIMATED_REQUEST_TOKENS:
+                    await self._budget.release(effective_tenant_id, _ESTIMATED_REQUEST_TOKENS - tokens)
                 if plan is not None:
-                    tokens = result.get("tokens_used", _ESTIMATED_REQUEST_TOKENS)
-                    await self._budget.record(effective_tenant_id, tokens)
                     metrics.increment("noesis_provider_success", labels={"provider": self.provider_name})
                     logger.info(
                         "Noesis OpenAI provider returned plan",
@@ -293,17 +296,17 @@ class OpenAINoesisPlanProvider:
             except asyncio.TimeoutError:
                 logger.warning(f"Noesis OpenAI provider timeout (attempt {attempt})")
                 metrics.increment("noesis_provider_timeout", labels={"provider": self.provider_name})
-                if attempt <= self.max_retries:
-                    await asyncio.sleep(0.5 * attempt)
-                    continue
-                return None
+                if attempt > self.max_retries:
+                    await self._budget.release(effective_tenant_id, _ESTIMATED_REQUEST_TOKENS)
+                    return None
+                await asyncio.sleep(0.5 * attempt)
             except Exception as exc:  # noqa: BLE001
                 logger.warning(f"Noesis OpenAI provider error: {exc}", extra={"attempt": attempt})
                 metrics.increment("noesis_provider_error", labels={"provider": self.provider_name})
-                if attempt <= self.max_retries:
-                    await asyncio.sleep(0.5 * attempt)
-                    continue
-                return None
+                if attempt > self.max_retries:
+                    await self._budget.release(effective_tenant_id, _ESTIMATED_REQUEST_TOKENS)
+                    return None
+                await asyncio.sleep(0.5 * attempt)
         return None
 
     async def _call_api(self, user_message: str) -> dict:

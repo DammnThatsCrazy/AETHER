@@ -6,26 +6,13 @@ and nothing else — no explanation, no SQL, no code, no chain-of-thought.
 
 from __future__ import annotations
 
+from .capability_registry import build_intent_descriptions
+
 PROMPT_VERSION = "v1"
 
-# ─── Supported intent descriptions ────────────────────────────────────────────
+# ─── Supported intent descriptions (auto-generated from capability registry) ──
 
-_INTENT_DESCRIPTIONS = """
-Supported intents and when to use each:
-
-- entity_search      : Search tenant-scoped entities by name, type, or partial match.
-- graph_lookup       : Traverse graph neighbors for a specific entity ID.
-- alert_lookup       : List unresolved alerts or incidents.
-- tenant_summary     : Aggregate a tenant's health, entities, and event counts. Kyber operators only.
-- profile_lookup     : Look up human/user profile records.
-- wallet_lookup      : Search wallet records by address or entity.
-- agent_lookup       : Find agent configuration or execution records.
-- health_lookup      : Show SDK/provider health, failed agents, or system diagnostics.
-- campaign_reward_lookup : List campaigns and reward records.
-- risk_cluster_lookup    : Rank entities by risk score to find suspicious clusters.
-
-If none of these intents safely matches the prompt, use intent="unsupported".
-""".strip()
+_INTENT_DESCRIPTIONS = build_intent_descriptions()
 
 # ─── Output schema instructions ───────────────────────────────────────────────
 

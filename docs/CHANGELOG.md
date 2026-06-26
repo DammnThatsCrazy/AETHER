@@ -108,6 +108,28 @@ last_synced_commit: 48fb9d4
 
 ---
 
+## v8.11.0 — Noesis 5/5 Production Release (2026-06-26)
+
+### Added
+
+- **Evidence envelope** — All Noesis responses include `EvidenceEnvelope` with typed `EvidenceSource` provenance, `EvidenceClaim` classification (fact/computation/inference/recommendation), and `insufficient` flag.
+- **Atomic rate limiting and token budget** — Lua-based atomic Redis scripts replace non-atomic TOCTOU patterns; `release()` method rolls back reserved tokens on LLM failure.
+- **Tamper-evident audit log** — `NoesisService` calls `AuditLedger.record()` for all 15 query outcomes; SHA-256 chained entries in the security audit trail.
+- **Startup configuration validator** — `NoesisStartupValidator` validates API keys, QPM/quota values, and provider names at app startup; raises `RuntimeError` with a clear error list on failure.
+- **Capability registry** — `GET /v1/noesis/capabilities` returns surface-filtered intent descriptions with example prompts; LLM system prompt is auto-generated from this registry.
+- **Health probe** — `GET /v1/noesis/health` returns dependency check status (200/503).
+- **Circuit breakers** — `NoesisCircuitBreaker` wraps graph and LLM provider calls; CLOSED → OPEN → HALF_OPEN state machine prevents cascading failures.
+- **Test infrastructure** — Schema contract tests, tenant isolation tests (6 intents, ForbiddenError on cross-tenant LLM injection), classifier evaluation suite (67 examples, ≥ 85% accuracy).
+- **anthropic SDK** — `anthropic>=0.25` added to `[noesis]` optional dep group; installed in production Dockerfile.
+
+### Fixed
+
+- `NOESIS_DEBUG_ENABLED` now defaults to `false` in production (was `true`, leaking full QueryPlan).
+- `query_stream` uses `model_dump(mode="json")` to prevent `datetime` serialization errors in SSE events.
+- Classifier priority bug: high-confidence domain matches no longer fall through to low-confidence `entity_search`.
+
+---
+
 ## v8.10.0 — Capture-to-Intelligence Foundation Phase 2 (2026-06-22)
 
 ### Added

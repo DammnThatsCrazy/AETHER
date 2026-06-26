@@ -3,7 +3,7 @@
 // =============================================================================
 
 /** Current productized SDK release version across Web, React Native, iOS, Android, package metadata, docs, and release tooling. */
-export const SDK_VERSION = '8.10.0' as const;
+export const SDK_VERSION = '8.11.0' as const;
 
 /** Canonical SDK ingestion endpoint. SDKs MUST post batches here. */
 export const SDK_INGESTION_PATH = '/v1/batch' as const;
