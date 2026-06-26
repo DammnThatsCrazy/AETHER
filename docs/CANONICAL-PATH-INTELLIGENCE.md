@@ -1,6 +1,9 @@
 ---
 title: Canonical Path Intelligence
-last_synced_commit: ""
+slug: concepts/canonical-path-intelligence
+section: concepts
+visibility: P
+audience: [architect, dev-senior, ai]
 source_files:
   - Backend Architecture/aether-backend/services/operational_intelligence/models.py
   - Backend Architecture/aether-backend/services/operational_intelligence/routes.py

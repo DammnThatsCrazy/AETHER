@@ -1,6 +1,9 @@
 ---
 title: Phase 20 Gap Ledger
-last_synced_commit: ""
+slug: reference/phase-20-gap-ledger
+section: reference
+visibility: P
+audience: [architect, dev-senior]
 source_files: []
 ---
 

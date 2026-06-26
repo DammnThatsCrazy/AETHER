@@ -1,6 +1,9 @@
 ---
 title: Multi-Hop Traversal Algorithms
-last_synced_commit: ""
+slug: concepts/multi-hop-traversal
+section: concepts
+visibility: P
+audience: [architect, dev-senior, ai]
 source_files:
   - Backend Architecture/aether-backend/shared/graph/traversal.py
   - Backend Architecture/aether-backend/shared/graph/path_scoring.py

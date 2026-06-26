@@ -397,7 +397,7 @@ export function GraphPage() {
           source_id: pathSource,
           target_id: node.id,
           mode: traversalMode,
-          k: traversalMode === 'k_shortest' ? kPaths : undefined,
+          ...(traversalMode === 'k_shortest' && kPaths !== undefined ? { k: kPaths } : {}),
           include_explanation: true,
           save_snapshot: true,
         });
@@ -408,7 +408,7 @@ export function GraphPage() {
         setActivePaths(paths);
         setActivePathIndex(0);
         if (paths.length > 0) {
-          const firstPath = paths[0];
+          const firstPath = paths[0]!;
           setPathResult({ nodeIds: firstPath.ordered_node_ids, edgeIds: firstPath.ordered_edge_ids });
           const explanationMap: Record<string, PathExplanation> = {};
           for (const exp of explanations) {
@@ -765,14 +765,21 @@ export function GraphPage() {
                 </TabsList>
               </Tabs>
             )}
-            <PathInspector
-              path={activePaths[activePathIndex]}
-              explanation={pathExplanations[activePaths[activePathIndex]?.path_id]}
-              onLoadExplanation={() => handleLoadExplanation(activePaths[activePathIndex]?.path_id)}
-              onSaveToInvestigation={handleSaveToInvestigation}
-              onClose={handleClose}
-              className="flex-1 overflow-hidden"
-            />
+            {(() => {
+              const currentPath = activePaths[activePathIndex];
+              if (!currentPath) return null;
+              const currentExplanation = pathExplanations[currentPath.path_id];
+              return (
+                <PathInspector
+                  path={currentPath}
+                  {...(currentExplanation !== undefined ? { explanation: currentExplanation } : {})}
+                  onLoadExplanation={() => handleLoadExplanation(currentPath.path_id)}
+                  onSaveToInvestigation={handleSaveToInvestigation}
+                  onClose={handleClose}
+                  className="flex-1 overflow-hidden"
+                />
+              );
+            })()}
           </div>
         )}
 
