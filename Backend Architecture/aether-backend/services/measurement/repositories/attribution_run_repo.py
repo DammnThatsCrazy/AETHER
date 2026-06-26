@@ -187,6 +187,7 @@ class AttributionRunRepository:
         self,
         tenant_id: str,
         *,
+        campaign_id: Optional[str] = None,
         conversion_id: Optional[str] = None,
         status: Optional[str] = None,
         limit: int = 100,
@@ -197,6 +198,7 @@ class AttributionRunRepository:
             rows = [
                 r for r in _local_runs.values()
                 if r.get("tenant_id") == tenant_id
+                and (campaign_id is None or r.get("campaign_id") == campaign_id)
                 and (conversion_id is None or r.get("conversion_id") == conversion_id)
                 and (status is None or r.get("status") == status)
             ]
@@ -206,6 +208,10 @@ class AttributionRunRepository:
         conditions = ["tenant_id = $1"]
         params: list[Any] = [tenant_id]
         p = 2
+        if campaign_id:
+            conditions.append(f"campaign_id = ${p}")
+            params.append(campaign_id)
+            p += 1
         if conversion_id:
             conditions.append(f"conversion_id = ${p}")
             params.append(conversion_id)

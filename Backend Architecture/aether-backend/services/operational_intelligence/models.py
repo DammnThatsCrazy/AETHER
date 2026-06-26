@@ -549,6 +549,7 @@ class GraphCompareEdgeDiff(ContractModel):
     from_: str = Field(alias="from")
     to: str
     changeType: Literal["added", "removed", "changed"]
+    changedProperties: Optional[dict[str, Any]] = None
 
 
 class GraphCompareResult(ContractModel):
@@ -562,6 +563,7 @@ class GraphCompareResult(ContractModel):
     changedNodes: list[GraphCompareNodeDiff] = Field(default_factory=list)
     addedEdges: list[GraphCompareEdgeDiff] = Field(default_factory=list)
     removedEdges: list[GraphCompareEdgeDiff] = Field(default_factory=list)
+    changedEdges: list[GraphCompareEdgeDiff] = Field(default_factory=list)
     unchangedNodeCount: int = 0
     unchangedEdgeCount: int = 0
     computedAt: str

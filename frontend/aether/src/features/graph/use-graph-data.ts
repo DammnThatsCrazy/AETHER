@@ -144,7 +144,7 @@ export function bfsPath(
 
 const ENTITY_LINK_SAMPLE = 30;
 
-export function useGraphData() {
+export function useGraphData(options?: { asOf?: string | null; tenantId?: string }) {
   const [allNodes, setAllNodes] = useState<GraphNode[]>([]);
   const [allEdges, setAllEdges] = useState<GraphEdge[]>([]);
   const [clusters, setClusters] = useState<GraphCluster[]>([]);
@@ -156,12 +156,33 @@ export function useGraphData() {
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
   const [selectedEdgeId, setSelectedEdgeId] = useState<string | null>(null);
 
+  const asOf = options?.asOf ?? null;
+  const tenantId = options?.tenantId ?? '';
+
   useEffect(() => {
     let cancelled = false;
     setIsLoading(true);
     setError(null);
 
     async function fetchGraph(): Promise<{ nodes: GraphNode[]; edges: GraphEdge[]; clusters: GraphCluster[] }> {
+      // For historical replay, use the universal graph query endpoint with as_of filtering
+      if (asOf && tenantId) {
+        const resp = await api.graphIntelligence.query({
+          tenant_id: tenantId,
+          as_of: asOf,
+          limit: 200,
+        });
+        const data = asRecord(resp);
+        const nodes = (Array.isArray(data.nodes) ? data.nodes : []).map(mapNode).filter(n => n.id.length > 0);
+        const rawEdges = Array.isArray(data.edges) ? data.edges : [];
+        const edgeMap = new Map<string, GraphEdge>();
+        rawEdges.forEach((e: unknown, i: number) => {
+          const r = asRecord(e);
+          const edge = mapLinkEdge(r, String(r.from ?? r.from_vertex_id ?? ''), i);
+          if (edge && !edgeMap.has(edge.id)) edgeMap.set(edge.id, edge);
+        });
+        return { nodes, edges: Array.from(edgeMap.values()), clusters: [] };
+      }
       // 1. All entities → nodes
       const entitiesData = await api.entities.list({ limit: 200 });
       const rawEntities: unknown[] = entitiesData.entities;
@@ -212,7 +233,7 @@ export function useGraphData() {
       });
 
     return () => { cancelled = true; };
-  }, []);
+  }, [asOf, tenantId]);
 
   const nodes = useMemo(() => allNodes, [allNodes]);
 
@@ -273,8 +294,11 @@ export function useGraphZoom() {
     setIsLoading(true);
     setError(null);
     try {
+      // depth=0 is rejected by the backend (min=1). Use depth=1 with cluster node_types
+      // so we get only cluster-aggregate vertices without expanding their members.
       const resp = await api.graphIntelligence.query({
-        depth: 0,
+        tenant_id: tenantId || undefined,
+        depth: 1,
         node_types: [
           'IdentityCluster', 'HouseholdCluster', 'OrgCluster', 'DeviceCluster',
           'WalletCluster', 'BehavioralCluster', 'GeographicCluster', 'EconomicSegment',
@@ -303,6 +327,7 @@ export function useGraphZoom() {
     setError(null);
     try {
       const resp = await api.graphIntelligence.query({
+        tenant_id: tenantId || undefined,
         anchors: [clusterId],
         depth: 1,
         limit: 500,

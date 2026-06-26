@@ -17,7 +17,6 @@ last_synced_commit: 1d13c74
 # Campaign 360 API Reference
 
 > All endpoints require a valid tenant session with `campaign:read` permission.
-> Graph endpoints additionally require `campaign:graph` permission.
 > Base path: `/v1/campaigns/{campaign_id}/`
 
 ---
@@ -26,8 +25,7 @@ last_synced_commit: 1d13c74
 
 | Permission | Required for |
 |------------|-------------|
-| `campaign:read` | All Campaign 360 endpoints |
-| `campaign:graph` | `POST /{campaign_id}/graph` |
+| `campaign:read` | All Campaign 360 endpoints including `POST /{campaign_id}/graph` |
 
 Requests without a valid session return `401 Unauthorized`.
 Requests for campaigns belonging to another tenant return `404 Not Found`
@@ -53,7 +51,12 @@ All list endpoints support keyset cursor pagination:
 
 - `limit` — number of items per page (default: 50, max: 500)
 - `cursor` — opaque string returned as `next_cursor` in the previous response
-- Response shape: `{ items: [...], next_cursor: string | null, total_count?: number }`
+- Response shape: `{ data: { items: [...], pagination: { limit, next_cursor, has_more } }, status, timestamp }`
+
+> **Envelope note:** All responses are wrapped in the standard API envelope. The `data` key
+> contains the payload shown in the examples below. The `status` field is `"ok"` on success
+> and `timestamp` is an ISO 8601 UTC string. For brevity, the examples below show only the
+> `data.items` array and `data.pagination` (or `data.next_cursor`) fields.
 
 ---
 
@@ -149,7 +152,7 @@ population tier and returned with attribution economics.
       "channels": ["email", "paid_search"]
     }
   ],
-  "next_cursor": "string | null"
+  "pagination": { "limit": 50, "next_cursor": "string | null", "has_more": false }
 }
 ```
 
@@ -185,7 +188,7 @@ Paginated touchpoint list for the campaign.
       "occurred_at": "ISO 8601"
     }
   ],
-  "next_cursor": "string | null"
+  "pagination": { "limit": 50, "next_cursor": "string | null", "has_more": false }
 }
 ```
 
@@ -220,7 +223,7 @@ Paginated entity list grouped by canonical entity type.
       "last_activity_at": "ISO 8601 | null"
     }
   ],
-  "next_cursor": "string | null"
+  "pagination": { "limit": 50, "next_cursor": "string | null", "has_more": false }
 }
 ```
 
@@ -256,7 +259,7 @@ Cluster rollup with attribution economics for the campaign.
       "identity_confidence": null
     }
   ],
-  "next_cursor": "string | null"
+  "pagination": { "limit": 50, "next_cursor": "string | null", "has_more": false }
 }
 ```
 
@@ -290,7 +293,7 @@ Journey versions where this campaign appears as a touchpoint source.
       "compiled_at": "ISO 8601"
     }
   ],
-  "next_cursor": "string | null"
+  "pagination": { "limit": 50, "next_cursor": "string | null", "has_more": false }
 }
 ```
 
@@ -332,7 +335,7 @@ pass `include_unattributed=true` to include all campaign-associated conversions.
       "occurred_at": "ISO 8601"
     }
   ],
-  "next_cursor": "string | null"
+  "pagination": { "limit": 50, "next_cursor": "string | null", "has_more": false }
 }
 ```
 
@@ -343,7 +346,7 @@ pass `include_unattributed=true` to include all campaign-associated conversions.
 Build a bounded campaign-centered graph query. Returns nodes, edges, and
 truncation status when limits are hit.
 
-**Required permission:** `campaign:graph`
+**Required permission:** `campaign:read`
 
 **Request body:**
 

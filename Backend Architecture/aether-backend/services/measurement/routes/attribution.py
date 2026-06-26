@@ -118,6 +118,7 @@ async def create_model_config(request: Request, body: ModelConfigRequest):
 @router.get("/runs")
 async def list_attribution_runs(
     request: Request,
+    campaign_id: Optional[str] = Query(None),
     conversion_id: Optional[str] = Query(None),
     status: Optional[str] = Query(None),
     limit: int = Query(50, ge=1, le=200),
@@ -126,6 +127,7 @@ async def list_attribution_runs(
     tenant = _require_tenant(request)
     runs = await _run_repo.list_runs(
         tenant.tenant_id,
+        campaign_id=campaign_id,
         conversion_id=conversion_id,
         status=status,
         limit=limit,

@@ -8,9 +8,10 @@ from __future__ import annotations
 
 import base64
 import json
+import re
 import time
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Any, Optional, Union
 
 from fastapi import APIRouter, Depends, Query, Request
@@ -574,6 +575,25 @@ def _evaluate_expression(expr: FilterExpression, vertex: Vertex) -> bool:
             return lo <= float(val) <= hi
         if op == FilterOperator.THRESHOLD:
             return float(val) >= float(expected)
+        if op == FilterOperator.RELATIVE_TIME:
+            # expected is an ISO-8601 duration string like "-7d", "-30d", "-1h"
+            # val should be an ISO datetime string
+            m = re.match(r'^(-?\d+)([smhdwMy])$', str(expected).strip())
+            if not m:
+                return False
+            amount, unit = int(m.group(1)), m.group(2)
+            unit_map = {'s': 'seconds', 'm': 'minutes', 'h': 'hours', 'd': 'days', 'w': 'weeks'}
+            if unit not in unit_map:
+                return False
+            delta = timedelta(**{unit_map[unit]: abs(amount)})
+            cutoff = datetime.now(tz=timezone.utc) - delta if amount < 0 else datetime.now(tz=timezone.utc) + delta
+            try:
+                ts = datetime.fromisoformat(str(val).replace("Z", "+00:00"))
+                if ts.tzinfo is None:
+                    ts = ts.replace(tzinfo=timezone.utc)
+                return ts >= cutoff if amount < 0 else ts <= cutoff
+            except (ValueError, TypeError):
+                return False
     except (TypeError, ValueError, KeyError, AttributeError):
         return False
     return False
@@ -833,11 +853,12 @@ async def graph_compare(
             ))
         else:
             base_v = nodes_base[vid]
+            _ts_fields = {"valid_from", "valid_to", "recorded_at", "superseded_at"}
+            all_prop_keys = (set(v.properties.keys()) | set(base_v.properties.keys())) - _ts_fields
             changed_props = {
-                k: v.properties[k]
-                for k in v.properties
-                if k not in ("valid_from", "valid_to", "recorded_at", "superseded_at")
-                and str(v.properties.get(k)) != str(base_v.properties.get(k))
+                k: v.properties.get(k)
+                for k in all_prop_keys
+                if str(v.properties.get(k)) != str(base_v.properties.get(k))
             }
             if changed_props:
                 changed_nodes.append(GraphCompareNodeDiff(
@@ -859,6 +880,7 @@ async def graph_compare(
 
     added_edges: list[GraphCompareEdgeDiff] = []
     removed_edges: list[GraphCompareEdgeDiff] = []
+    changed_edges: list[GraphCompareEdgeDiff] = []
     unchanged_edges = 0
 
     for eid, e in edges_at.items():
@@ -870,7 +892,24 @@ async def graph_compare(
                 changeType="added",
             ))
         else:
-            unchanged_edges += 1
+            base_e = edges_base[eid]
+            _ts_fields_e = {"valid_from", "valid_to", "recorded_at", "superseded_at"}
+            all_edge_keys = (set(e.properties.keys()) | set(base_e.properties.keys())) - _ts_fields_e
+            changed_edge_props = {
+                k: e.properties.get(k)
+                for k in all_edge_keys
+                if str(e.properties.get(k)) != str(base_e.properties.get(k))
+            }
+            if changed_edge_props:
+                changed_edges.append(GraphCompareEdgeDiff(
+                    id=eid, type=e.edge_type,
+                    **{"from": e.from_vertex_id},
+                    to=e.to_vertex_id,
+                    changeType="changed",
+                    changedProperties=changed_edge_props,
+                ))
+            else:
+                unchanged_edges += 1
 
     for eid, e in edges_base.items():
         if eid not in edges_at:
@@ -891,6 +930,7 @@ async def graph_compare(
         changedNodes=changed_nodes,
         addedEdges=added_edges,
         removedEdges=removed_edges,
+        changedEdges=changed_edges,
         unchangedNodeCount=unchanged_nodes,
         unchangedEdgeCount=unchanged_edges,
         computedAt=_utc_now(),
@@ -1020,6 +1060,7 @@ async def universal_graph_query(
                 result = await engine.temporal_bfs(
                     anchor_id, as_of=body.as_of, depth=body.depth,
                     direction="both", limit=body.limit, tenant_id=body.tenant_id,
+                    edge_types=body.edge_types or None,
                 )
             else:
                 result = await engine.bfs(
@@ -1045,9 +1086,27 @@ async def universal_graph_query(
     else:
         raw_verts = await graph.get_all_vertices(limit=QUERY_BUDGET_DEFAULTS["max_nodes"])
         all_nodes = [v for v in raw_verts if v.properties.get("tenantId") == body.tenant_id]
+        if body.as_of:
+            # Apply valid-time filter for historical replay on full-scan results
+            as_of_dt = body.as_of
+            def _valid_at(v: Vertex) -> bool:
+                vf = v.properties.get("valid_from") or v.created_at or ""
+                vt = v.properties.get("valid_to") or ""
+                return (not vf or vf <= as_of_dt) and (not vt or vt > as_of_dt)
+            all_nodes = [v for v in all_nodes if _valid_at(v)]
         all_edges = []
+        valid_node_ids = {v.vertex_id for v in all_nodes}
         for v in all_nodes:
-            all_edges.extend(await graph.get_edges(v.vertex_id, direction="out"))
+            edges = await graph.get_edges(v.vertex_id, direction="out")
+            if body.as_of:
+                as_of_dt = body.as_of
+                edges = [
+                    e for e in edges
+                    if (not e.properties.get("valid_from") or e.properties["valid_from"] <= as_of_dt)
+                    and (not e.properties.get("valid_to") or e.properties["valid_to"] > as_of_dt)
+                    and e.to_vertex_id in valid_node_ids
+                ]
+            all_edges.extend(edges)
 
     # ── Node-type filter ──────────────────────────────────────────────────────
     if body.node_types:
@@ -1146,8 +1205,12 @@ async def graph_facets(
     metrics.increment("graph_facets")
     start = time.monotonic()
 
-    raw_verts = await graph.get_all_vertices(limit=body.limit)
+    # Fetch the global hard cap first, then filter by tenant before applying body.limit
+    # so tenant vertices beyond the global scan slice are not silently excluded.
+    raw_verts = await graph.get_all_vertices(limit=QUERY_BUDGET_DEFAULTS["max_nodes"])
     nodes = [v for v in raw_verts if v.properties.get("tenantId") == body.tenant_id]
+    if body.limit:
+        nodes = nodes[:body.limit]
 
     if body.as_of:
         def _valid(v: Vertex) -> bool:
@@ -1272,6 +1335,31 @@ async def graph_export_status(
     )
 
 
+@router.get("/export/{job_id}/download")
+async def graph_export_download(
+    job_id: str,
+    format: str = "jsonl",
+    count: int = 0,
+    request: Request = None,
+) -> dict:
+    """Download endpoint for completed graph exports.
+
+    In local/in-memory mode, exports complete synchronously and the data is not
+    persisted, so this endpoint returns a descriptive message. In production this
+    would stream the export artifact from object storage.
+    """
+    tenant = getattr(request.state, "tenant", None) if request else None
+    if not tenant:
+        raise ForbiddenError("Authentication required")
+    return {
+        "job_id": job_id,
+        "format": format,
+        "count": count,
+        "message": "In local mode exports are returned inline from POST /v1/graph/export. "
+                   "In production this endpoint streams from object storage.",
+    }
+
+
 @router.post("/flow")
 async def graph_flow(
     body: FlowGraphRequest,
@@ -1295,7 +1383,7 @@ async def graph_flow(
 
     engine = GraphTraversalEngine(graph)
     try:
-        result: TraversalResult = engine.bfs(
+        result: TraversalResult = await engine.bfs(
             start_id=body.anchor_entity_id,
             depth=body.depth,
             direction=bfs_direction,
