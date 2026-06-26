@@ -1774,6 +1774,36 @@ export const api = {
       filter: Record<string, unknown>;
       limit?: number;
     }) => restClient.post('/v1/graph/filter', unknownSchema, body),
+
+    paths: (body: import('@aether/shared/operational-intelligence').PathQuery) =>
+      restClient.post('/v1/graph/paths', unknownSchema, body),
+
+    expand: (body: import('@aether/shared/operational-intelligence').NodeExpansionRequest) =>
+      restClient.post('/v1/graph/paths/expand', unknownSchema, body),
+
+    explain: (body: { tenant_id: string; path_id: string }) =>
+      restClient.post('/v1/graph/paths/explain', unknownSchema, body),
+
+    createSnapshot: (body: {
+      tenant_id: string;
+      query?: Record<string, unknown>;
+      path_ids?: string[];
+      node_ids?: string[];
+      edge_ids?: string[];
+      graph_watermark?: string;
+    }) => restClient.post('/v1/graph/snapshots', unknownSchema, body),
+
+    getSnapshot: (id: string, tenant_id: string) =>
+      restClient.get(`/v1/graph/snapshots/${id}?tenant_id=${encodeURIComponent(tenant_id)}`, unknownSchema),
+
+    compareSnapshot: (id: string, body: { tenantId: string; anchor: unknown; asOf: string; compareTo: string }) =>
+      restClient.post(`/v1/graph/snapshots/${id}/compare`, unknownSchema, body),
+
+    createJob: (body: import('@aether/shared/operational-intelligence').PathQuery) =>
+      restClient.post('/v1/graph/paths/jobs', unknownSchema, body),
+
+    getJob: (jobId: string, tenant_id: string) =>
+      restClient.get(`/v1/graph/paths/jobs/${jobId}?tenant_id=${encodeURIComponent(tenant_id)}`, unknownSchema),
   },
 
   // ── Entity Intelligence (profile, timeline, relationships) ─────────────────

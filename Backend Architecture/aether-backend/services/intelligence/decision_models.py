@@ -73,6 +73,8 @@ class Recommendation(BaseModel):
     downside_risk: str | None = None
     evidence: list[RecommendationEvidence]
     graph_snapshot_id: str | None = None
+    path_refs: list[str] = Field(default_factory=list)  # canonical path_ids from /v1/graph/paths
+    snapshot_ref: str | None = None                      # snapshot_id from /v1/graph/snapshots
     computed_at: str
     required_approval_level: ApprovalLevel
     policy_governance_flags: list[str] = Field(default_factory=list)

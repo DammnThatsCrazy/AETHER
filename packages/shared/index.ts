@@ -24,7 +24,7 @@ export * from './graph-contract';
 export * from './intelligence';
 export * from './financials';
 export * from './profile360-contract';
-export * from './operational-intelligence';
+export * from './operational-intelligence'; // includes Phase 20 path intelligence types (RelationshipPath, PathQuery, PathExplanation, TraversalSnapshot, DeepTraversalJob)
 export * from './decision-outcome-intelligence';
 
 // Existing partial contracts (already referenced by RN SDK).

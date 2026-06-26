@@ -507,6 +507,10 @@ class InvestigationCase(ContractModel):
     createdBy: str
     createdAt: str
     updatedAt: str
+    snapshot_id: Optional[str] = None
+    path_ids: list[str] = Field(default_factory=list)
+    pinned_node_ids: list[str] = Field(default_factory=list)
+    pinned_edge_ids: list[str] = Field(default_factory=list)
 
 
 class GovernanceDecision(ContractModel):
@@ -707,3 +711,165 @@ class FlowGraphRequest(ContractModel):
     limit: int = Field(default=200, ge=1, le=500)
     min_amount_usd: Optional[float] = Field(default=None, ge=0)
     include_overlays: list[str] = []
+
+
+# ── Phase 20: Canonical Path Intelligence ─────────────────────────────────────
+
+PathClassification = Literal[
+    "observed",         # all edges causality_class == observed_sequence
+    "inferred",         # at least one edge is inferred_influence
+    "attributed",       # at least one edge is attributed_influence
+    "correlated",       # weakest claim: at least one edge is correlation
+    "causal_supported", # at least one edge is experiment_incremental or direct_cause
+    "mixed",            # multiple causality classes present
+]
+
+
+class PathNode(ContractModel):
+    id: str
+    kind: str
+    label: Optional[str] = None
+    hop: int = Field(ge=0)
+    discovered_from: Optional[str] = None
+    properties: Optional[dict[str, Any]] = None
+
+
+class PathEdge(ContractModel):
+    id: str
+    type: str
+    from_: str = Field(alias="from")
+    to: str
+    layer: str
+    hop: int = Field(ge=0)
+    confidence: float = Field(ge=0, le=1)
+    causality_class: Optional[str] = None
+    validFrom: Optional[str] = None
+    properties: Optional[dict[str, Any]] = None
+
+
+class PathScoreBreakdown(ContractModel):
+    geometric_mean_confidence: float = Field(ge=0, le=1)
+    min_edge_confidence: float = Field(ge=0, le=1)
+    hop_penalty: float = Field(ge=0, le=1)
+    causality_penalty: float = Field(ge=0, le=1)
+    overall: float = Field(ge=0, le=1)
+    scoring_version: str = "1"
+    components: dict[str, float] = Field(default_factory=dict)
+
+
+class RelationshipPath(ContractModel):
+    path_id: str
+    tenant_id: str
+    source_id: str
+    target_id: str
+    ordered_node_ids: list[str]
+    ordered_edge_ids: list[str]
+    nodes: list[PathNode]
+    edges: list[PathEdge]
+    hop_count: int = Field(ge=0)
+    path_confidence: float = Field(ge=0, le=1)
+    evidence_coverage: float = Field(ge=0, le=1)
+    classification: PathClassification
+    layer_sequence: list[str]
+    score_breakdown: PathScoreBreakdown
+    as_of: Optional[str] = None
+    computed_at: str
+
+
+class PathExplanation(ContractModel):
+    path_id: str
+    summary: str
+    why_connected: str
+    hop_narrative: list[str]
+    supporting_evidence: list[dict[str, Any]] = Field(default_factory=list)
+    contradictory_evidence: list[dict[str, Any]] = Field(default_factory=list)
+    score_breakdown: PathScoreBreakdown
+    classification: PathClassification
+    causal_language_allowed: bool
+    policy_ids: list[str] = Field(default_factory=list)
+    computed_at: str
+
+
+class TraversalSnapshot(ContractModel):
+    snapshot_id: str
+    tenant_id: str
+    query: dict[str, Any]
+    graph_watermark: str
+    path_ids: list[str] = Field(default_factory=list)
+    node_ids: list[str] = Field(default_factory=list)
+    edge_ids: list[str] = Field(default_factory=list)
+    result_digest: str
+    created_at: str
+    expires_at: Optional[str] = None
+
+
+class PathQuery(ContractModel):
+    tenant_id: str
+    source_id: str
+    target_id: Optional[str] = None
+    mode: Literal[
+        "neighborhood", "shortest", "strongest", "k_shortest",
+        "temporal", "attribution", "decision_outcome", "evidence",
+        "multi_source",
+    ] = "shortest"
+    k: int = Field(default=3, ge=1, le=10)
+    max_depth: int = Field(default=6, ge=1, le=20)
+    direction: Literal["in", "out", "both"] = "both"
+    filter: Optional[GraphQueryFilter] = None
+    as_of: Optional[str] = None
+    min_confidence: float = Field(default=0.0, ge=0, le=1)
+    include_explanation: bool = False
+    save_snapshot: bool = False
+    additional_sources: list[str] = Field(default_factory=list)
+
+
+class PathQueryResponse(ContractModel):
+    paths: list[RelationshipPath]
+    explanations: list[PathExplanation] = Field(default_factory=list)
+    snapshot_id: Optional[str] = None
+    meta: GraphResultMeta
+
+
+class NodeExpansionRequest(ContractModel):
+    tenant_id: str
+    node_id: str
+    direction: Literal["in", "out", "both"] = "both"
+    filter: Optional[GraphQueryFilter] = None
+
+
+class NodeExpansionResponse(ContractModel):
+    node_id: str
+    added_nodes: list[GraphNode]
+    added_edges: list[GraphEdge]
+    meta: GraphResultMeta
+
+
+class DeepTraversalJob(ContractModel):
+    job_id: str
+    tenant_id: str
+    query: PathQuery
+    status: Literal[
+        "queued", "planning", "running", "partial",
+        "complete", "failed", "cancelled", "expired",
+    ]
+    progress_pct: float = Field(default=0, ge=0, le=100)
+    partial_path_ids: list[str] = Field(default_factory=list)
+    created_at: str
+    started_at: Optional[str] = None
+    completed_at: Optional[str] = None
+    error: Optional[str] = None
+    expires_at: Optional[str] = None
+
+
+class SnapshotCreateRequest(ContractModel):
+    tenant_id: str
+    query: Optional[dict[str, Any]] = None
+    path_ids: list[str] = Field(default_factory=list)
+    node_ids: list[str] = Field(default_factory=list)
+    edge_ids: list[str] = Field(default_factory=list)
+    graph_watermark: Optional[str] = None
+
+
+class PathExplainRequest(ContractModel):
+    tenant_id: str
+    path_id: str

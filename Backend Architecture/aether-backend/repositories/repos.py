@@ -2088,3 +2088,46 @@ class RiskOverlaySnapshotRepository(BaseRepository):
 
     async def list_by_tenant(self, tenant_id: str, limit: int = 20) -> list[dict]:
         return await self.find_many(filters={"tenant_id": tenant_id}, limit=limit)
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# PATH INTELLIGENCE REPOSITORIES (Phase 20)
+# ═══════════════════════════════════════════════════════════════════════════
+
+class TraversalSnapshotRepository(BaseRepository):
+    def __init__(self) -> None:
+        super().__init__("traversal_snapshots")
+
+    async def create(self, snapshot: dict) -> dict:
+        return await self.insert(snapshot["snapshot_id"], snapshot)
+
+    async def get(self, snapshot_id: str, tenant_id: str) -> Optional[dict]:
+        row = await self.find_by_id(snapshot_id)
+        if row and row.get("tenant_id") == tenant_id:
+            return row
+        return None  # fail-closed: tenant mismatch returns None
+
+    async def find_by_path_id(self, path_id: str, tenant_id: str) -> Optional[dict]:
+        rows = await self.find_many(filters={"tenant_id": tenant_id}, limit=1000)
+        for row in rows:
+            if path_id in (row.get("path_ids") or []):
+                return row
+        return None
+
+
+class DeepTraversalJobRepository(BaseRepository):
+    def __init__(self) -> None:
+        super().__init__("deep_traversal_jobs")
+
+    async def create(self, job: dict) -> dict:
+        return await self.insert(job["job_id"], job)
+
+    async def get(self, job_id: str, tenant_id: str) -> Optional[dict]:
+        row = await self.find_by_id(job_id)
+        if row and row.get("tenant_id") == tenant_id:
+            return row
+        return None  # fail-closed: tenant mismatch
+
+    async def update_status(self, job_id: str, status: str, **kwargs: Any) -> dict:
+        fields: dict[str, Any] = {"status": status, **kwargs}
+        return await self.update(job_id, fields)

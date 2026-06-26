@@ -91,4 +91,13 @@ def create_suggestion_from_graph_event(
             }
         ],
         lineage_event_ids=[event_id] if event_id else [],
+        graph_refs=[
+            {
+                "kind": "graph_event",
+                "path_id": None,          # populated later by _hydrate_graph_refs
+                "snapshot_id": None,      # populated later by _hydrate_graph_refs
+                "entity_id": entity_id,
+                "event_type": event_type,
+            }
+        ],
     )

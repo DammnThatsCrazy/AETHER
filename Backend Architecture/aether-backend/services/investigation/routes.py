@@ -532,3 +532,69 @@ async def add_annotation(
         payload={"case_id": case_id, "update": "annotation_added", "annotation_id": annotation.id},
     ))
     return InvestigationCase(**updated)
+
+
+# ── Phase 20: Snapshot linkage ─────────────────────────────────────────────
+
+class SnapshotAttachRequest(BaseModel):
+    tenantId: str
+    snapshot_id: str
+
+
+@router.post("/{case_id}/snapshot")
+async def attach_snapshot_to_investigation(
+    case_id: str,
+    body: SnapshotAttachRequest,
+    request: Request,
+) -> dict:
+    """Attach a traversal snapshot to an investigation case.
+
+    Validates that the snapshot belongs to the same tenant as the case (fail-closed).
+    """
+    _require(request, body.tenantId, "write")
+    from repositories.repos import TraversalSnapshotRepository
+    from shared.common.common import NotFoundError
+
+    snap_repo = TraversalSnapshotRepository()
+    snap = await snap_repo.get(body.snapshot_id, body.tenantId)
+    if not snap:
+        raise NotFoundError(f"Snapshot {body.snapshot_id} not found for tenant {body.tenantId}")
+    if snap.get("tenant_id") != body.tenantId:
+        raise ForbiddenError("snapshot tenant mismatch")
+
+    await _get_case(case_id, body.tenantId)  # validates existence and tenant
+    updated = await _repo.update(case_id, {
+        "snapshot_id": body.snapshot_id,
+        "path_ids": snap.get("path_ids", []),
+        "updatedAt": _utc_now(),
+    })
+    return APIResponse(data=InvestigationCase(**updated).model_dump()).to_dict()
+
+
+@router.get("/{case_id}/paths")
+async def get_investigation_paths(
+    case_id: str,
+    request: Request,
+    tenantId: str = Query(..., description="Tenant ID"),
+) -> dict:
+    """Return the path IDs linked to an investigation's snapshot."""
+    _require(request, tenantId, "read")
+    from repositories.repos import TraversalSnapshotRepository
+    from shared.common.common import NotFoundError
+
+    row = await _get_case(case_id, tenantId)
+    snap_id = row.get("snapshot_id")
+    if not snap_id:
+        return APIResponse(data={"path_ids": [], "snapshot_id": None}).to_dict()
+
+    snap_repo = TraversalSnapshotRepository()
+    snap = await snap_repo.get(snap_id, tenantId)
+    if not snap:
+        raise NotFoundError(f"Snapshot {snap_id} not found")
+
+    return APIResponse(data={
+        "snapshot_id": snap_id,
+        "path_ids": snap.get("path_ids", []),
+        "node_ids": snap.get("node_ids", []),
+        "edge_ids": snap.get("edge_ids", []),
+    }).to_dict()

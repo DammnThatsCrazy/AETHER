@@ -11,6 +11,7 @@
 import type { BaseEvent, EventType } from './events';
 import type { EntityKind, EntityRef } from './entities';
 import type { ActorKind } from './provenance';
+import type { GraphResultMeta } from './graph-contract';
 
 // ---------------------------------------------------------------------------
 // Shared API standards
@@ -468,4 +469,166 @@ export interface ReplayJobResponse {
   submittedAt: string;
   completedAt?: string;
   totalReplayed: number;
+}
+
+// ---------------------------------------------------------------------------
+// Path Intelligence Types (Phase 20)
+// ---------------------------------------------------------------------------
+
+export type PathClassification =
+  | 'observed'
+  | 'inferred'
+  | 'attributed'
+  | 'correlated'
+  | 'causal_supported'
+  | 'mixed';
+
+export interface PathNode {
+  id: string;
+  kind: string;
+  label?: string;
+  hop: number;
+  discovered_from?: string;
+  properties?: Record<string, unknown>;
+}
+
+export interface PathEdge {
+  id: string;
+  type: string;
+  from: string;
+  to: string;
+  layer: string;
+  hop: number;
+  confidence: number;
+  causality_class?: string;
+  validFrom?: string;
+  properties?: Record<string, unknown>;
+}
+
+export interface PathScoreBreakdown {
+  geometric_mean_confidence: number;
+  min_edge_confidence: number;
+  hop_penalty: number;
+  causality_penalty: number;
+  overall: number;
+  scoring_version: string;
+  components: Record<string, number>;
+}
+
+export interface RelationshipPath {
+  path_id: string;
+  tenant_id: string;
+  source_id: string;
+  target_id: string;
+  ordered_node_ids: string[];
+  ordered_edge_ids: string[];
+  nodes: PathNode[];
+  edges: PathEdge[];
+  hop_count: number;
+  path_confidence: number;
+  evidence_coverage: number;
+  classification: PathClassification;
+  layer_sequence: string[];
+  score_breakdown: PathScoreBreakdown;
+  as_of?: string;
+  computed_at: string;
+}
+
+export interface PathExplanation {
+  path_id: string;
+  summary: string;
+  why_connected: string;
+  hop_narrative: string[];
+  supporting_evidence: Record<string, unknown>[];
+  contradictory_evidence: Record<string, unknown>[];
+  score_breakdown: PathScoreBreakdown;
+  classification: PathClassification;
+  causal_language_allowed: boolean;
+  policy_ids: string[];
+  computed_at: string;
+}
+
+export interface TraversalSnapshot {
+  snapshot_id: string;
+  tenant_id: string;
+  query: Record<string, unknown>;
+  graph_watermark: string;
+  path_ids: string[];
+  node_ids: string[];
+  edge_ids: string[];
+  result_digest: string;
+  created_at: string;
+  expires_at?: string;
+}
+
+export type PathMode =
+  | 'neighborhood'
+  | 'shortest'
+  | 'strongest'
+  | 'k_shortest'
+  | 'temporal'
+  | 'attribution'
+  | 'decision_outcome'
+  | 'evidence'
+  | 'multi_source';
+
+export interface PathQuery {
+  tenant_id: string;
+  source_id: string;
+  target_id?: string;
+  mode?: PathMode;
+  k?: number;
+  max_depth?: number;
+  direction?: 'in' | 'out' | 'both';
+  filter?: GraphQueryFilter;
+  as_of?: string;
+  min_confidence?: number;
+  include_explanation?: boolean;
+  save_snapshot?: boolean;
+  additional_sources?: string[];
+}
+
+export interface PathQueryResponse {
+  paths: RelationshipPath[];
+  explanations: PathExplanation[];
+  snapshot_id?: string;
+  meta: GraphResultMeta;
+}
+
+export interface NodeExpansionRequest {
+  tenant_id: string;
+  node_id: string;
+  direction?: 'in' | 'out' | 'both';
+  filter?: GraphQueryFilter;
+}
+
+export interface NodeExpansionResponse {
+  node_id: string;
+  added_nodes: GraphNode[];
+  added_edges: GraphEdge[];
+  meta: GraphResultMeta;
+}
+
+export type DeepTraversalJobStatus =
+  | 'queued'
+  | 'planning'
+  | 'running'
+  | 'partial'
+  | 'complete'
+  | 'failed'
+  | 'cancelled'
+  | 'expired';
+
+export interface DeepTraversalJob {
+  job_id: string;
+  tenant_id: string;
+  query: PathQuery;
+  status: DeepTraversalJobStatus;
+  progress_pct: number;
+  partial_path_ids: string[];
+  created_at: string;
+  started_at?: string;
+  completed_at?: string;
+  error?: string;
+  expires_at?: string;
 }

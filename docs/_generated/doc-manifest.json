@@ -401,6 +401,18 @@
       "since_version": "8.9.0"
     },
     {
+      "path": "docs/CANONICAL-PATH-INTELLIGENCE.md",
+      "title": "Canonical Path Intelligence",
+      "slug": "concepts/canonical-path-intelligence",
+      "section": "concepts",
+      "visibility": "P",
+      "audience": [
+        "architect",
+        "dev-senior",
+        "ai"
+      ]
+    },
+    {
       "path": "docs/CHANGELOG.md",
       "title": "Changelog",
       "slug": "changelog",
@@ -1788,6 +1800,18 @@
       "canonical_owner": "security@aether"
     },
     {
+      "path": "docs/MULTI-HOP-TRAVERSAL.md",
+      "title": "Multi-Hop Traversal Algorithms",
+      "slug": "concepts/multi-hop-traversal",
+      "section": "concepts",
+      "visibility": "P",
+      "audience": [
+        "architect",
+        "dev-senior",
+        "ai"
+      ]
+    },
+    {
       "path": "docs/ONBOARDING-TEMPLATES.md",
       "title": "Onboarding Templates",
       "slug": "kyber/onboarding-templates",
@@ -1949,6 +1973,17 @@
       "since_version": "8.9.0",
       "estimated_read_minutes": 3,
       "canonical_owner": "platform@aether"
+    },
+    {
+      "path": "docs/PHASE-20-GAP-LEDGER.md",
+      "title": "Phase 20 Gap Ledger",
+      "slug": "reference/phase-20-gap-ledger",
+      "section": "reference",
+      "visibility": "P",
+      "audience": [
+        "architect",
+        "dev-senior"
+      ]
     },
     {
       "path": "docs/PIPELINE-HEALTH.md",
