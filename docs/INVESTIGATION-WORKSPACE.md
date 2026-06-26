@@ -19,7 +19,7 @@ related:
 canonical_owner: platform@aether
 estimated_read_minutes: 5
 toc_depth: 3
-last_synced_commit: 1dc232a
+last_synced_commit: bb04c46
 ---
 # Investigation Workspace
 
@@ -30,6 +30,10 @@ Every recommendation can be opened as an investigation workspace without leaving
 `GET /v1/intelligence/recommendations/{recommendation_id}/investigation`
 
 The response includes the recommendation, confidence breakdown, evidence, related profile/entity summary, related graph edges when available, related events, attribution path, candidate actions, decision history, action history, outcome history, prior similar tenant outcomes, governance flags, data freshness, and suppression reason.
+
+When the recommendation carries canonical path references (populated by `_compute_path_refs` in the recommendation family), the workspace also returns:
+- `graph_paths` — list of canonical `path_id` strings (SHA256[:32]) linking to saved `TraversalSnapshot` records
+- `snapshot_ref` — the `snapshot_id` of the traversal snapshot most relevant to this recommendation
 
 ## Tenant isolation
 

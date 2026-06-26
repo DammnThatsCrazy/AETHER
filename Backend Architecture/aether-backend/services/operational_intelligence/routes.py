@@ -64,6 +64,7 @@ from services.operational_intelligence.models import (
     RelationshipPath,
     QUERY_BUDGET_DEFAULTS,
     ShortestPathRequest,
+    SnapshotCompareRequest,
     SnapshotCreateRequest,
     TemporalGraphRequest,
     TraversalSnapshot,
@@ -1927,10 +1928,16 @@ async def create_traversal_snapshot(
 async def get_traversal_snapshot(
     snapshot_id: str,
     request: Request,
-    tenant_id: str = Query(..., description="Tenant ID for ownership check"),
+    tenant_id: Optional[str] = Query(None, description="Tenant ID for ownership check; defaults to authenticated tenant"),
 ) -> dict:
     """Retrieve a saved traversal snapshot. Fails closed on tenant mismatch."""
-    _require_read(request, tenant_id)
+    # When the function is called directly (e.g., in tests), FastAPI does not inject
+    # Query parameters, so tenant_id may be the FieldInfo sentinel rather than a str.
+    if not isinstance(tenant_id, str):
+        tenant_id = None
+    effective_tenant_id = tenant_id or request.state.tenant.tenant_id
+    _require_read(request, effective_tenant_id)
+    tenant_id = effective_tenant_id
     from repositories.repos import TraversalSnapshotRepository
     snap_repo = TraversalSnapshotRepository()
     snap = await snap_repo.get(snapshot_id, tenant_id)
@@ -1946,7 +1953,7 @@ async def get_traversal_snapshot(
 @router.post("/snapshots/{snapshot_id}/compare")
 async def compare_traversal_snapshots(
     snapshot_id: str,
-    body: GraphCompareRequest,
+    body: SnapshotCompareRequest,
     request: Request,
     graph: GraphClient = Depends(get_graph),
 ) -> dict:
@@ -2090,3 +2097,10 @@ async def graph_health(
             "computed_at": _utc_now(),
         }
     ).to_dict()
+
+
+# Stable aliases so tests and external callers can import by canonical names.
+graph_create_snapshot = create_traversal_snapshot
+graph_get_snapshot = get_traversal_snapshot
+graph_compare_snapshots = compare_traversal_snapshots
+graph_paths_create_job = create_deep_traversal_job

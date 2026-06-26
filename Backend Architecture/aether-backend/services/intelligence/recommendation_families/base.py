@@ -157,6 +157,10 @@ class BaseRecommendationFamily:
     def action_specs(self, context: RecommendationGenerationContext) -> list[dict[str, Any]]:
         return [{"key": "open_investigation", "label": "Open investigation", "approval": "none", "flags": ["explanation_required"]}]
 
+    def _compute_path_refs(self, context: RecommendationGenerationContext) -> list[str]:
+        """Return canonical path_ids relevant to this recommendation. Subclasses override."""
+        return list(context.value("path_refs", None) or [])
+
     def generate_candidate_actions(self, context: RecommendationGenerationContext) -> list[CandidateAction]:
         confidence = self.score(context)
         expected_value = self.expected_value(context)
@@ -260,6 +264,7 @@ class BaseRecommendationFamily:
             ))
             candidates = [action.model_copy(update={"confidence": confidence}) for action in candidates]
         policy_flags = sorted(set(flags + candidates[0].policy_flags + list(self.default_policy_flags)))
+        path_refs = self._compute_path_refs(context)
         return Recommendation(
             recommendation_id=str(uuid.uuid4()),
             tenant_id=context.tenant_id,
@@ -274,6 +279,8 @@ class BaseRecommendationFamily:
             downside_risk=candidates[0].downside_risk,
             evidence=self.build_evidence(context),
             graph_snapshot_id=self.graph_snapshot_id(context),
+            path_refs=path_refs,
+            snapshot_ref=context.value("snapshot_ref"),
             computed_at=context.computed_at,
             required_approval_level=approval,
             policy_governance_flags=policy_flags,

@@ -54,6 +54,8 @@ async def build_recommendation_investigation(
             logger.warning(f"recommendation investigation graph lookup skipped: {exc}")
 
     evidence = recommendation.get("evidence", [])
+    path_refs = recommendation.get("path_refs", [])
+    snapshot_ref = recommendation.get("snapshot_ref")
     return {
         "recommendation": recommendation,
         "confidence_breakdown": recommendation.get("confidence", {}),
@@ -70,4 +72,6 @@ async def build_recommendation_investigation(
         "governance_flags": recommendation.get("policy_governance_flags", []),
         "data_freshness": recommendation.get("data_freshness", {}),
         "suppression_reason": recommendation.get("policy_governance_flags", []) if recommendation.get("status") == "suppressed" else [],
+        "graph_paths": path_refs,
+        "snapshot_ref": snapshot_ref,
     }

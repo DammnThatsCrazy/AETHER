@@ -535,6 +535,11 @@ class GraphCompareRequest(TenantScopedRequest):
     filter: Optional[GraphQueryFilter] = None
 
 
+class SnapshotCompareRequest(TenantScopedRequest):
+    """Request to compare a saved traversal snapshot against the current graph state."""
+    snapshot_id: Optional[str] = None
+
+
 class GraphCompareNodeDiff(ContractModel):
     id: str
     kind: str
