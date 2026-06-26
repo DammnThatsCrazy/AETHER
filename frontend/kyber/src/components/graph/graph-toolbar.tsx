@@ -1,6 +1,7 @@
 import { cn } from '@kyber/lib/utils';
-import { Button, Toggle, Select, Badge } from '@aether/ui';
+import { Button, Toggle, Select, Badge, Input } from '@aether/ui';
 import type { GraphLayer, GraphOverlay, EntityType } from '@kyber/types';
+import type { PathMode } from '@aether/shared/operational-intelligence';
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -15,6 +16,12 @@ const LAYERS: { value: GraphLayer; label: string }[] = [
 ];
 
 const ENTITY_TYPES: EntityType[] = ['human', 'customer', 'agent', 'organization', 'wallet', 'journey', 'session', 'protocol', 'platform', 'device', 'browser', 'reward', 'financial_activity', 'delegation', 'relationship', 'contract', 'cluster'];
+
+const TRAVERSAL_MODE_OPTIONS: { value: PathMode; label: string }[] = [
+  { value: 'shortest', label: 'Shortest' },
+  { value: 'strongest', label: 'Strongest' },
+  { value: 'k_shortest', label: 'K-Shortest' },
+];
 
 const OVERLAY_OPTIONS = [
   { value: 'none', label: 'No Overlay' },
@@ -46,6 +53,12 @@ interface GraphToolbarProps {
   readonly onTimeWindowChange: (window: string) => void;
   readonly pathMode: boolean;
   readonly onPathModeChange: (enabled: boolean) => void;
+  readonly traversalMode?: PathMode;
+  readonly onTraversalModeChange?: (mode: PathMode) => void;
+  readonly targetNodeId?: string;
+  readonly onTargetSelect?: (nodeId: string | undefined) => void;
+  readonly kPaths?: number;
+  readonly onKPathsChange?: (k: number) => void;
   readonly className?: string;
 }
 
@@ -64,6 +77,12 @@ export function GraphToolbar({
   onTimeWindowChange,
   pathMode,
   onPathModeChange,
+  traversalMode = 'shortest',
+  onTraversalModeChange,
+  targetNodeId,
+  onTargetSelect,
+  kPaths = 3,
+  onKPathsChange,
   className,
 }: GraphToolbarProps) {
   return (
@@ -128,8 +147,62 @@ export function GraphToolbar({
           onChange={onPathModeChange}
           label="Path Mode"
         />
-        {pathMode && <Badge variant="accent">Select 2 nodes</Badge>}
+        {pathMode && !targetNodeId && <Badge variant="accent">Select source node</Badge>}
+        {pathMode && targetNodeId && <Badge variant="accent">Select target node</Badge>}
       </div>
+
+      {/* Traversal controls — only visible when path mode is active */}
+      {pathMode && (
+        <>
+          <div className="w-px h-6 bg-border-default" />
+
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-text-secondary">Mode:</span>
+            {TRAVERSAL_MODE_OPTIONS.map((opt) => (
+              <Button
+                key={opt.value}
+                variant={traversalMode === opt.value ? 'primary' : 'ghost'}
+                size="sm"
+                onClick={() => onTraversalModeChange?.(opt.value)}
+                aria-pressed={traversalMode === opt.value}
+              >
+                {opt.label}
+              </Button>
+            ))}
+          </div>
+
+          {traversalMode === 'k_shortest' && (
+            <div className="flex items-center gap-1">
+              <span className="text-xs text-text-secondary">K:</span>
+              <Input
+                type="number"
+                min={1}
+                max={10}
+                value={kPaths}
+                onChange={(e) => onKPathsChange?.(Math.max(1, Math.min(10, Number(e.target.value))))}
+                className="w-14 h-7 text-xs"
+                aria-label="Number of paths (K)"
+              />
+            </div>
+          )}
+
+          {targetNodeId && (
+            <div className="flex items-center gap-1">
+              <Badge variant="info" aria-label={`Target node: ${targetNodeId}`}>
+                Target: <span className="font-mono ml-1">{targetNodeId.slice(0, 8)}</span>
+              </Badge>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => onTargetSelect?.(undefined)}
+                aria-label="Clear target node"
+              >
+                ✕
+              </Button>
+            </div>
+          )}
+        </>
+      )}
     </div>
   );
 }

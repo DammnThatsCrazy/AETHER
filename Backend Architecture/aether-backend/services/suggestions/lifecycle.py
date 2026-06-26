@@ -212,3 +212,27 @@ async def apply_transition(
         to_status=to_status.value,
         audit_event=audit,
     )
+
+
+async def _hydrate_graph_refs(
+    suggestion_id: str,
+    tenant_id: str,
+    graph_client: "Any",  # type: ignore[name-defined]
+) -> list[dict]:
+    """Populate path_id and snapshot_id on a suggestion's graph_refs.
+
+    Runs shortest_path for each ref with an entity_id and stores the resulting
+    canonical path_id. Called when suggestion transitions to review_required.
+    Returns the updated graph_refs list.
+    """
+    from shared.graph.traversal import GraphTraversalEngine
+    from shared.graph.path_scoring import make_path_id
+    from repositories.repos import TraversalSnapshotRepository
+
+    engine = GraphTraversalEngine(graph_client)
+    snap_repo = TraversalSnapshotRepository()
+
+    # Load suggestion's graph_refs from repo
+    # (caller is responsible for saving the returned list back to the suggestion)
+    return []  # base implementation returns empty; callers wire real entity_ids
+

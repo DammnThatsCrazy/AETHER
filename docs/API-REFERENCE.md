@@ -93,3 +93,57 @@ Decisions: `eligible` | `ineligible` | `needs_review` | `blocked_fraud` | `block
 
 No-custody model: Aether verifies eligibility and generates signed proofs. Tenants execute
 rewards through their own configured rails (webhook, smart contract, manual export, etc.).
+
+
+---
+
+## Path Intelligence (Phase 20)
+
+Full reference: [`docs/CANONICAL-PATH-INTELLIGENCE.md`](./CANONICAL-PATH-INTELLIGENCE.md)
+
+**Find paths** (`POST /v1/graph/paths`)
+```json
+{
+  "tenant_id": "t1",
+  "source_id": "node-A",
+  "target_id": "node-B",
+  "mode": "shortest",
+  "k": 3,
+  "max_depth": 6,
+  "min_confidence": 0.5,
+  "include_explanation": true,
+  "save_snapshot": true
+}
+```
+Modes: `shortest` | `strongest` | `k_shortest` | `temporal` | `neighborhood` | `attribution` | `decision_outcome` | `evidence` | `multi_source`
+
+**Expand node** (`POST /v1/graph/paths/expand`)
+```json
+{ "tenant_id": "t1", "node_id": "node-A", "direction": "both" }
+```
+
+**Explain path** (`POST /v1/graph/paths/explain`)
+```json
+{ "tenant_id": "t1", "path_id": "deadbeef12345678" }
+```
+Returns `PathExplanation` with `why_connected`, `hop_narrative[]`, `causal_language_allowed`.
+
+**Create async job** (`POST /v1/graph/paths/jobs`)
+Same body as `/paths`. Routed to async when `max_depth > 6`.
+
+**Get job status** (`GET /v1/graph/paths/jobs/{job_id}?tenant_id=t1`)
+Returns `DeepTraversalJob` with `status`, `progress_pct`, `partial_path_ids`.
+
+**Create snapshot** (`POST /v1/graph/snapshots`)
+```json
+{ "tenant_id": "t1", "path_ids": ["..."], "node_ids": ["..."], "edge_ids": ["..."] }
+```
+
+**Get snapshot** (`GET /v1/graph/snapshots/{snapshot_id}?tenant_id=t1`)
+Returns `TraversalSnapshot`. Tenant ownership enforced fail-closed.
+
+**Compare snapshots** (`POST /v1/graph/snapshots/{snapshot_id}/compare`)
+```json
+{ "tenantId": "t1", "anchor": { "kind": "entity", "id": "e1" }, "asOf": "2026-01-01T00:00:00Z", "compareTo": "snap-id-2" }
+```
+Returns added/removed node and edge IDs.

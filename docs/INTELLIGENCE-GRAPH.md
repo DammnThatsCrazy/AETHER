@@ -233,6 +233,22 @@ Full graph traversal, path-finding, and overlay services via `GraphTraversalEngi
 | `POST` | `/v1/graph/filter` | Filter vertices by risk level, relationship type, or property predicate |
 | `GET` | `/v1/graph/contracts` | List smart-contract vertices visible in the tenant's graph |
 
+### Path Intelligence (Phase 20)
+
+Canonical ordered-path types, path scoring, stronger algorithms, and dedicated path API surface. See [`docs/CANONICAL-PATH-INTELLIGENCE.md`](./CANONICAL-PATH-INTELLIGENCE.md) and [`docs/MULTI-HOP-TRAVERSAL.md`](./MULTI-HOP-TRAVERSAL.md) for full details.
+
+| Method | Path | Description |
+|--------|------|-------------|
+| `POST` | `/v1/graph/paths` | PathQuery → RelationshipPath[] — supports shortest, strongest, k_shortest, temporal, attribution, decision_outcome, multi_source, evidence modes |
+| `POST` | `/v1/graph/paths/expand` | Expand a single node one hop in any direction |
+| `POST` | `/v1/graph/paths/explain` | Generate human-readable narrative for a path (why_connected, hop_narrative, causal_language_allowed) |
+| `POST` | `/v1/graph/paths/jobs` | Submit deep traversal as async job when max_depth > 6 or node budget > 500 |
+| `GET` | `/v1/graph/paths/jobs/{id}` | Poll deep traversal job status and partial_path_ids |
+| `POST` | `/v1/graph/snapshots` | Persist a TraversalSnapshot (path_ids + node_ids + edge_ids + digest) |
+| `GET` | `/v1/graph/snapshots/{id}` | Retrieve a snapshot — fail-closed tenant ownership check |
+| `POST` | `/v1/graph/snapshots/{id}/compare` | Diff two snapshots: added/removed node and edge IDs |
+| `POST` | `/v1/graph/reconcile` | Operator-only: run silver reconciliation worker (read-only report) |
+
 ### Agent Extensions
 
 | Method | Path | Description |

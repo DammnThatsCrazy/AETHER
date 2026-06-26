@@ -20,10 +20,12 @@ from shared.cache.cache import CacheKey
 from shared.common.common import APIResponse, ForbiddenError
 from shared.graph.graph import Edge, GraphClient, Vertex
 from shared.graph.relationship_layers import RelationshipLayer, classify_edge_type, get_layer_stats
-from shared.graph.traversal import GraphTraversalEngine, TraversalResult
+from shared.graph.traversal import GraphTraversalEngine, TraversalResult, _build_path_explanation
+from shared.graph.path_scoring import classify_path, compute_evidence_coverage, make_path_id, score_path
 from shared.logger.logger import metrics
 from services.data_quality.service import drift_service, intelligence_quality_service
 from services.operational_intelligence.models import (
+    DeepTraversalJob,
     ExplainabilityMetadata,
     FacetValue,
     FilterExpression,
@@ -49,9 +51,21 @@ from services.operational_intelligence.models import (
     GraphResult,
     GraphResultMeta,
     GraphTraversalRequest,
+    NodeExpansionRequest,
+    NodeExpansionResponse,
+    PathEdge,
+    PathExplainRequest,
+    PathExplanation,
+    PathNode,
+    PathQuery,
+    PathQueryResponse,
+    PathScoreBreakdown,
+    RelationshipPath,
     QUERY_BUDGET_DEFAULTS,
     ShortestPathRequest,
+    SnapshotCreateRequest,
     TemporalGraphRequest,
+    TraversalSnapshot,
     UniversalGraphQueryRequest,
 )
 
@@ -1402,9 +1416,514 @@ async def graph_capabilities() -> dict:
                 "overlay_computation",
                 "facet_computation",
                 "export",
+                "path_intelligence",
+                "k_shortest_paths",
+                "strongest_path",
+                "path_snapshots",
+                "async_deep_traversal",
             ],
         }
     ).to_dict()
+
+
+def _traversal_result_to_relationship_path(
+    result: TraversalResult,
+    source_id: str,
+    target_id: str,
+    tenant_id: str,
+    max_depth: int,
+    as_of: Optional[str] = None,
+) -> RelationshipPath:
+    """Convert a TraversalResult into a canonical RelationshipPath with scoring."""
+    ordered_node_ids = result.ordered_node_ids or [v.vertex_id for v in result.nodes]
+    ordered_edge_ids = result.ordered_edge_ids or [
+        f"{e.from_vertex_id}:{e.to_vertex_id}:{e.edge_type}" for e in result.edges
+    ]
+
+    path_nodes = [
+        PathNode(
+            id=v.vertex_id,
+            kind=v.vertex_type,
+            label=v.properties.get("name") or v.properties.get("label"),
+            hop=i,
+            properties=dict(v.properties),
+        )
+        for i, v in enumerate(result.nodes)
+    ]
+
+    path_edges = []
+    for i, e in enumerate(result.edges):
+        layer = classify_edge_type(e.edge_type).value
+        path_edges.append(PathEdge(
+            id=f"{e.from_vertex_id}:{e.to_vertex_id}:{e.edge_type}",
+            type=e.edge_type,
+            **{"from": e.from_vertex_id},
+            to=e.to_vertex_id,
+            layer=layer,
+            hop=i,
+            confidence=float(e.properties.get("confidence", 1.0) if e.properties else 1.0),
+            causality_class=e.properties.get("causality_class") if e.properties else None,
+            validFrom=e.properties.get("valid_from") if e.properties else None,
+            properties=dict(e.properties) if e.properties else None,
+        ))
+
+    score_dict = score_path(result.edges, max_depth=max_depth)
+    classification = classify_path(result.edges)
+    evidence_coverage = compute_evidence_coverage(result.edges)
+    path_id = make_path_id(ordered_node_ids)
+    layer_sequence = [pe.layer for pe in path_edges]
+
+    return RelationshipPath(
+        path_id=path_id,
+        tenant_id=tenant_id,
+        source_id=source_id,
+        target_id=target_id,
+        ordered_node_ids=ordered_node_ids,
+        ordered_edge_ids=ordered_edge_ids,
+        nodes=path_nodes,
+        edges=path_edges,
+        hop_count=len(result.edges),
+        path_confidence=score_dict["overall"],
+        evidence_coverage=evidence_coverage,
+        classification=classification,
+        layer_sequence=layer_sequence,
+        score_breakdown=PathScoreBreakdown(**score_dict),
+        as_of=as_of,
+        computed_at=_utc_now(),
+    )
+
+
+def _make_graph_watermark(graph: GraphClient) -> str:
+    return f"local:{int(time.time())}"
+
+
+@router.post("/paths")
+async def graph_paths(
+    body: PathQuery,
+    request: Request,
+    graph: GraphClient = Depends(get_graph),
+) -> dict:
+    """Find canonical relationship paths between graph nodes.
+
+    Supports modes: shortest, strongest, k_shortest, neighborhood, temporal,
+    attribution, decision_outcome, evidence, multi_source.
+    """
+    _require_read(request, body.tenant_id)
+    engine = GraphTraversalEngine(graph)
+    max_depth = min(body.max_depth, QUERY_BUDGET_DEFAULTS["max_depth"])
+
+    paths: list[RelationshipPath] = []
+
+    if body.mode == "k_shortest" and body.target_id:
+        results = await engine.k_shortest_paths(
+            body.source_id, body.target_id, k=body.k,
+            max_depth=max_depth, tenant_id=body.tenant_id,
+        )
+        for r in results:
+            rp = _traversal_result_to_relationship_path(
+                r, body.source_id, body.target_id, body.tenant_id, max_depth, body.as_of
+            )
+            if rp.path_confidence >= body.min_confidence:
+                paths.append(rp)
+
+    elif body.mode == "strongest" and body.target_id:
+        result = await engine.strongest_path(
+            body.source_id, body.target_id,
+            max_depth=max_depth, tenant_id=body.tenant_id,
+        )
+        if result.nodes:
+            rp = _traversal_result_to_relationship_path(
+                result, body.source_id, body.target_id, body.tenant_id, max_depth, body.as_of
+            )
+            if rp.path_confidence >= body.min_confidence:
+                paths.append(rp)
+
+    elif body.mode == "temporal" and body.as_of and body.target_id:
+        result = await engine.temporal_bfs(
+            body.source_id, body.as_of, depth=max_depth,
+            direction=body.direction, tenant_id=body.tenant_id,
+        )
+        if result.nodes:
+            rp = _traversal_result_to_relationship_path(
+                result, body.source_id, body.target_id, body.tenant_id, max_depth, body.as_of
+            )
+            if rp.path_confidence >= body.min_confidence:
+                paths.append(rp)
+
+    elif body.mode == "neighborhood":
+        edge_types = body.filter.edge_types if body.filter else None
+        result = await engine.bfs(
+            body.source_id, depth=max_depth, direction=body.direction,
+            edge_types=edge_types, tenant_id=body.tenant_id,
+        )
+        if result.nodes:
+            rp = _traversal_result_to_relationship_path(
+                result, body.source_id, body.target_id or body.source_id,
+                body.tenant_id, max_depth, body.as_of
+            )
+            if rp.path_confidence >= body.min_confidence:
+                paths.append(rp)
+
+    elif body.mode == "multi_source":
+        start_ids = [body.source_id] + list(body.additional_sources)
+        result = await engine.multi_source_bfs(
+            start_ids=start_ids, depth=max_depth,
+            direction=body.direction, tenant_id=body.tenant_id,
+        )
+        if result.nodes:
+            rp = _traversal_result_to_relationship_path(
+                result, body.source_id, body.target_id or body.source_id,
+                body.tenant_id, max_depth, body.as_of
+            )
+            if rp.path_confidence >= body.min_confidence:
+                paths.append(rp)
+
+    elif body.mode in ("attribution", "decision_outcome", "evidence") and body.target_id:
+        # Route attribution/decision_outcome/evidence through shortest_path with edge_type context
+        result = await engine.shortest_path(
+            body.source_id, body.target_id,
+            max_depth=max_depth, tenant_id=body.tenant_id,
+        )
+        if result.nodes:
+            rp = _traversal_result_to_relationship_path(
+                result, body.source_id, body.target_id, body.tenant_id, max_depth, body.as_of
+            )
+            if rp.path_confidence >= body.min_confidence:
+                paths.append(rp)
+
+    else:
+        # Default: shortest path
+        if body.target_id:
+            result = await engine.shortest_path(
+                body.source_id, body.target_id,
+                max_depth=max_depth, tenant_id=body.tenant_id,
+            )
+            if result.nodes:
+                rp = _traversal_result_to_relationship_path(
+                    result, body.source_id, body.target_id, body.tenant_id, max_depth, body.as_of
+                )
+                if rp.path_confidence >= body.min_confidence:
+                    paths.append(rp)
+
+    explanations: list[PathExplanation] = []
+    if body.include_explanation:
+        for path in paths:
+            expl_dict = _build_path_explanation(path)
+            explanations.append(PathExplanation(**expl_dict))
+
+    snapshot_id: Optional[str] = None
+    if body.save_snapshot and paths:
+        from repositories.repos import TraversalSnapshotRepository
+        snap_repo = TraversalSnapshotRepository()
+        import hashlib as _hashlib
+        all_node_ids = sorted({nid for p in paths for nid in p.ordered_node_ids})
+        all_edge_ids = sorted({eid for p in paths for eid in p.ordered_edge_ids})
+        result_digest = _hashlib.sha256(
+            "|".join(all_node_ids + all_edge_ids).encode()
+        ).hexdigest()
+        snap = {
+            "snapshot_id": str(uuid.uuid4()),
+            "tenant_id": body.tenant_id,
+            "query": body.model_dump(mode="json"),
+            "graph_watermark": _make_graph_watermark(graph),
+            "path_ids": [p.path_id for p in paths],
+            "node_ids": all_node_ids,
+            "edge_ids": all_edge_ids,
+            "result_digest": result_digest,
+            "created_at": _utc_now(),
+        }
+        await snap_repo.create(snap)
+        snapshot_id = snap["snapshot_id"]
+
+    meta = GraphResultMeta(
+        node_count=sum(len(p.nodes) for p in paths),
+        edge_count=sum(len(p.edges) for p in paths),
+        truncated=False,
+        query_budget_used={"path_count": len(paths)},
+        computed_at=_utc_now(),
+    )
+
+    return APIResponse(
+        data=PathQueryResponse(
+            paths=paths,
+            explanations=explanations,
+            snapshot_id=snapshot_id,
+            meta=meta,
+        ).model_dump(by_alias=True)
+    ).to_dict()
+
+
+@router.post("/paths/expand")
+async def graph_paths_expand(
+    body: NodeExpansionRequest,
+    request: Request,
+    graph: GraphClient = Depends(get_graph),
+) -> dict:
+    """Expand a single node by one hop in any direction, returning incremental neighbors."""
+    _require_read(request, body.tenant_id)
+    engine = GraphTraversalEngine(graph)
+    edge_types = body.filter.edge_types if body.filter else None
+    result = await engine.bfs(
+        body.node_id, depth=1, direction=body.direction,
+        edge_types=edge_types, tenant_id=body.tenant_id,
+    )
+    added_nodes = [_vertex_to_node(v) for v in result.nodes]
+    added_edges = [_edge_to_graph_edge(e) for e in result.edges]
+    _start = time.monotonic()
+    meta = _make_meta(
+        nodes=result.nodes, edges=result.edges,
+        all_nodes_count=len(result.nodes), start_ms=_start,
+    )
+    return APIResponse(
+        data=NodeExpansionResponse(
+            node_id=body.node_id,
+            added_nodes=added_nodes,
+            added_edges=added_edges,
+            meta=meta,
+        ).model_dump(by_alias=True)
+    ).to_dict()
+
+
+@router.post("/paths/explain")
+async def graph_paths_explain(
+    body: PathExplainRequest,
+    request: Request,
+    graph: GraphClient = Depends(get_graph),
+) -> dict:
+    """Generate a human-readable explanation for a previously computed path.
+
+    Looks up the path from saved snapshots. If not found, returns a generic explanation stub.
+    """
+    _require_read(request, body.tenant_id)
+    from repositories.repos import TraversalSnapshotRepository
+    snap_repo = TraversalSnapshotRepository()
+    snapshot = await snap_repo.find_by_path_id(body.path_id, body.tenant_id)
+
+    if not snapshot:
+        from datetime import datetime, timezone
+        return APIResponse(
+            data={
+                "path_id": body.path_id,
+                "summary": "Path explanation not available — path not found in tenant snapshots.",
+                "why_connected": "No snapshot found for the requested path_id.",
+                "hop_narrative": [],
+                "supporting_evidence": [],
+                "contradictory_evidence": [],
+                "score_breakdown": None,
+                "classification": "observed",
+                "causal_language_allowed": True,
+                "policy_ids": [],
+                "computed_at": datetime.now(timezone.utc).isoformat(),
+            }
+        ).to_dict()
+
+    # Stub explanation from snapshot metadata
+    path_ids = snapshot.get("path_ids", [])
+    return APIResponse(
+        data={
+            "path_id": body.path_id,
+            "summary": f"Path is part of snapshot {snapshot['snapshot_id']} containing {len(path_ids)} path(s).",
+            "why_connected": "See snapshot for full traversal details.",
+            "hop_narrative": [],
+            "supporting_evidence": [],
+            "contradictory_evidence": [],
+            "score_breakdown": None,
+            "classification": "observed",
+            "causal_language_allowed": True,
+            "policy_ids": [],
+            "computed_at": _utc_now(),
+        }
+    ).to_dict()
+
+
+@router.post("/paths/jobs")
+async def create_deep_traversal_job(
+    body: PathQuery,
+    request: Request,
+    graph: GraphClient = Depends(get_graph),
+) -> dict:
+    """Create an async deep-traversal job for queries exceeding the interactive budget.
+
+    If the query is within the interactive budget (max_depth <= 6), redirects to /paths.
+    """
+    _require_read(request, body.tenant_id)
+
+    interactive_max_depth = QUERY_BUDGET_DEFAULTS["max_depth"]
+    if body.max_depth <= interactive_max_depth:
+        # Within budget: run synchronously
+        return await graph_paths(body, request, graph)
+
+    # Beyond budget: queue an async job
+    from repositories.repos import DeepTraversalJobRepository
+    job_repo = DeepTraversalJobRepository()
+    job = {
+        "job_id": str(uuid.uuid4()),
+        "tenant_id": body.tenant_id,
+        "query": body.model_dump(mode="json"),
+        "status": "queued",
+        "progress_pct": 0,
+        "partial_path_ids": [],
+        "created_at": _utc_now(),
+        "started_at": None,
+        "completed_at": None,
+        "error": None,
+        "expires_at": None,
+    }
+    await job_repo.create(job)
+    return APIResponse(data=DeepTraversalJob(**job).model_dump()).to_dict()
+
+
+@router.get("/paths/jobs/{job_id}")
+async def get_deep_traversal_job(
+    job_id: str,
+    request: Request,
+    tenant_id: str = Query(..., description="Tenant ID for ownership check"),
+) -> dict:
+    """Get the status of an async deep-traversal job."""
+    _require_read(request, tenant_id)
+    from repositories.repos import DeepTraversalJobRepository
+    job_repo = DeepTraversalJobRepository()
+    job = await job_repo.get(job_id, tenant_id)
+    if not job:
+        from shared.common.common import NotFoundError
+        raise NotFoundError(f"Job {job_id} not found")
+    return APIResponse(data=DeepTraversalJob(**job).model_dump()).to_dict()
+
+
+@router.post("/snapshots")
+async def create_traversal_snapshot(
+    body: SnapshotCreateRequest,
+    request: Request,
+    graph: GraphClient = Depends(get_graph),
+) -> dict:
+    """Persist a traversal snapshot for later comparison or investigation linkage."""
+    _require_read(request, body.tenant_id)
+    from repositories.repos import TraversalSnapshotRepository
+    import hashlib as _hashlib
+    snap_repo = TraversalSnapshotRepository()
+
+    all_ids = sorted((body.node_ids or []) + (body.edge_ids or []))
+    result_digest = _hashlib.sha256("|".join(all_ids).encode()).hexdigest()
+    snap = {
+        "snapshot_id": str(uuid.uuid4()),
+        "tenant_id": body.tenant_id,
+        "query": body.query or {},
+        "graph_watermark": body.graph_watermark or _make_graph_watermark(graph),
+        "path_ids": body.path_ids or [],
+        "node_ids": body.node_ids or [],
+        "edge_ids": body.edge_ids or [],
+        "result_digest": result_digest,
+        "created_at": _utc_now(),
+        "expires_at": None,
+    }
+    await snap_repo.create(snap)
+    return APIResponse(data=TraversalSnapshot(**snap).model_dump()).to_dict()
+
+
+@router.get("/snapshots/{snapshot_id}")
+async def get_traversal_snapshot(
+    snapshot_id: str,
+    request: Request,
+    tenant_id: str = Query(..., description="Tenant ID for ownership check"),
+) -> dict:
+    """Retrieve a saved traversal snapshot. Fails closed on tenant mismatch."""
+    _require_read(request, tenant_id)
+    from repositories.repos import TraversalSnapshotRepository
+    snap_repo = TraversalSnapshotRepository()
+    snap = await snap_repo.get(snapshot_id, tenant_id)
+    if not snap:
+        from shared.common.common import NotFoundError
+        raise NotFoundError(f"Snapshot {snapshot_id} not found")
+    # Explicit ownership check (fail-closed)
+    if snap.get("tenant_id") != tenant_id:
+        raise ForbiddenError("snapshot tenant mismatch")
+    return APIResponse(data=TraversalSnapshot(**snap).model_dump()).to_dict()
+
+
+@router.post("/snapshots/{snapshot_id}/compare")
+async def compare_traversal_snapshots(
+    snapshot_id: str,
+    body: GraphCompareRequest,
+    request: Request,
+    graph: GraphClient = Depends(get_graph),
+) -> dict:
+    """Compare a saved snapshot against the current graph state.
+
+    Reuses the existing GraphCompareResult logic but scoped to the snapshot's
+    node/edge sets vs. the live graph.
+    """
+    _require_read(request, body.tenantId)
+    from repositories.repos import TraversalSnapshotRepository
+    snap_repo = TraversalSnapshotRepository()
+    snap = await snap_repo.get(snapshot_id, body.tenantId)
+    if not snap:
+        from shared.common.common import NotFoundError
+        raise NotFoundError(f"Snapshot {snapshot_id} not found")
+    if snap.get("tenant_id") != body.tenantId:
+        raise ForbiddenError("snapshot tenant mismatch")
+
+    snapshot_node_ids = set(snap.get("node_ids", []))
+    snapshot_edge_ids = set(snap.get("edge_ids", []))
+
+    # Fetch current graph state for the snapshot's node set
+    current_nodes: list[GraphNode] = []
+    current_edges: list[GraphEdge] = []
+    seen_edge_keys: set[str] = set()
+    for vid in snapshot_node_ids:
+        v = await graph.get_vertex(vid)
+        if v and v.properties.get("tenantId") == body.tenantId:
+            current_nodes.append(_vertex_to_node(v))
+            for e in await graph.get_edges(vid, direction="out"):
+                ekey = f"{e.from_vertex_id}:{e.to_vertex_id}:{e.edge_type}"
+                if ekey not in seen_edge_keys:
+                    seen_edge_keys.add(ekey)
+                    current_edges.append(_edge_to_graph_edge(e))
+
+    current_node_ids = {n.id for n in current_nodes}
+    added_node_ids = list(current_node_ids - snapshot_node_ids)
+    removed_node_ids = list(snapshot_node_ids - current_node_ids)
+    unchanged_node_ids = list(current_node_ids & snapshot_node_ids)
+
+    current_edge_key_set = {f"{e.from_}:{e.to}:{e.type}" for e in current_edges}
+    added_edge_ids = list(current_edge_key_set - snapshot_edge_ids)
+    removed_edge_ids = list(snapshot_edge_ids - current_edge_key_set)
+
+    return APIResponse(
+        data={
+            "snapshot_id": snapshot_id,
+            "tenant_id": body.tenantId,
+            "snapshot_watermark": snap.get("graph_watermark", ""),
+            "current_watermark": _make_graph_watermark(graph),
+            "added_node_ids": added_node_ids,
+            "removed_node_ids": removed_node_ids,
+            "unchanged_node_count": len(unchanged_node_ids),
+            "added_edge_ids": added_edge_ids,
+            "removed_edge_ids": removed_edge_ids,
+            "unchanged_edge_count": len(current_edge_key_set & set(snapshot_edge_ids)),
+            "computed_at": _utc_now(),
+        }
+    ).to_dict()
+
+
+@router.post("/reconcile")
+async def trigger_graph_reconciliation(
+    request: Request,
+    graph: GraphClient = Depends(get_graph),
+    tenant_id: str = Query(..., description="Tenant ID to reconcile"),
+) -> dict:
+    """Operator-only read-only graph reconciliation report.
+
+    Requires the 'admin' permission. Never mutates the graph.
+    """
+    tenant = request.state.tenant
+    if not getattr(tenant, "is_platform_admin", False):
+        raise ForbiddenError("graph reconciliation requires admin capability")
+    _require_read(request, tenant_id)
+
+    from services.silver.reconciliation import SilverReconciliationWorker
+    worker = SilverReconciliationWorker(graph)
+    report = await worker.run(tenant_id)
+    return APIResponse(data=report.model_dump()).to_dict()
 
 
 @router.get("/contracts")

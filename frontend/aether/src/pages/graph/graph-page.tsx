@@ -8,10 +8,13 @@ import {
 } from '@aether/ui';
 import { GraphCanvas } from '@aether-app/components/graph/graph-canvas';
 import {
-  useGraphData, bfsPath,
+  useGraphData,
   type GraphLayer, type GraphOverlay, type GraphCluster,
 } from '@aether-app/features/graph/use-graph-data';
 import type { GraphNode, GraphEdge } from '@aether-app/components/graph/graph-canvas';
+import { PathInspector } from '@aether-app/components/graph/path-inspector';
+import type { RelationshipPath, PathExplanation, PathMode } from '@aether/shared/operational-intelligence';
+import { api } from '@aether-app/lib/api/endpoints';
 
 // ── Cluster Inspector ─────────────────────────────────────────────────────────
 
@@ -349,8 +352,15 @@ export function GraphPage() {
   const [viewMode, setViewMode] = useState<'graph' | 'table'>('graph');
   const [inspector, setInspector] = useState<InspectorPayload | null>(null);
   const [pathMode, setPathMode] = useState(false);
+  const [traversalMode, setTraversalMode] = useState<PathMode>('shortest');
+  const [kPaths, setKPaths] = useState(3);
   const [pathSource, setPathSource] = useState<string | null>(null);
   const [pathResult, setPathResult] = useState<{ nodeIds: string[]; edgeIds: string[] } | null>(null);
+  const [activePaths, setActivePaths] = useState<RelationshipPath[]>([]);
+  const [activePathIndex, setActivePathIndex] = useState(0);
+  const [pathExplanations, setPathExplanations] = useState<Record<string, PathExplanation>>({});
+  const [pathLoading, setPathLoading] = useState(false);
+  const [pathError, setPathError] = useState<string | null>(null);
   const [highlightedCluster, setHighlightedCluster] = useState<string[] | null>(null);
   const [replayDate, setReplayDate] = useState<string | null>(null);
 
@@ -366,24 +376,61 @@ export function GraphPage() {
     return Array.from(ids);
   }, [inspector, edges, highlightedCluster]);
 
-  const handleSelectNode = useCallback((node: GraphNode | null) => {
+  const handleSelectNode = useCallback(async (node: GraphNode | null) => {
     if (!node) {
       if (!pathMode) { setInspector(null); setHighlightedCluster(null); }
       return;
     }
     if (pathMode) {
-      if (!pathSource) { setPathSource(node.id); setPathResult(null); return; }
-      const result = bfsPath(pathSource, node.id, edges);
-      setPathResult(result);
-      setPathSource(null);
-      if (result) {
-        setInspector({ type: 'node', node, neighbors: getNeighbors(node.id), paths: [result.nodeIds] });
+      if (!pathSource) {
+        setPathSource(node.id);
+        setPathResult(null);
+        setActivePaths([]);
+        setPathError(null);
+        return;
+      }
+      setPathLoading(true);
+      setPathError(null);
+      try {
+        const resp = await api.graphIntelligence.paths({
+          tenant_id: '',
+          source_id: pathSource,
+          target_id: node.id,
+          mode: traversalMode,
+          k: traversalMode === 'k_shortest' ? kPaths : undefined,
+          include_explanation: true,
+          save_snapshot: true,
+        });
+        const data = (resp as { data?: { paths?: RelationshipPath[]; explanations?: PathExplanation[] } }).data;
+        const paths: RelationshipPath[] = data?.paths ?? [];
+        const explanations: PathExplanation[] = data?.explanations ?? [];
+
+        setActivePaths(paths);
+        setActivePathIndex(0);
+        if (paths.length > 0) {
+          const firstPath = paths[0];
+          setPathResult({ nodeIds: firstPath.ordered_node_ids, edgeIds: firstPath.ordered_edge_ids });
+          const explanationMap: Record<string, PathExplanation> = {};
+          for (const exp of explanations) {
+            explanationMap[exp.path_id] = exp;
+          }
+          setPathExplanations(explanationMap);
+        } else {
+          setPathResult(null);
+          setPathError('No path found between the selected nodes.');
+        }
+      } catch (err) {
+        setPathError(err instanceof Error ? err.message : 'Failed to find path.');
+        setPathResult(null);
+      } finally {
+        setPathLoading(false);
+        setPathSource(null);
       }
       return;
     }
     setHighlightedCluster(null);
     setInspector({ type: 'node', node, neighbors: getNeighbors(node.id) });
-  }, [pathMode, pathSource, edges, getNeighbors]);
+  }, [pathMode, pathSource, traversalMode, kPaths, getNeighbors]);
 
   useEffect(() => {
     if (!deepLinkedEntity || isLoading || error) return;
@@ -410,13 +457,46 @@ export function GraphPage() {
     setHighlightedCluster(null);
     setPathResult(null);
     setPathSource(null);
+    setActivePaths([]);
+    setPathError(null);
   }, []);
 
   const handlePathModeToggle = useCallback(() => {
     setPathMode(m => {
-      if (m) { setPathSource(null); setPathResult(null); }
+      if (m) { setPathSource(null); setPathResult(null); setActivePaths([]); setPathError(null); }
       return !m;
     });
+  }, []);
+
+  const handlePathTabChange = useCallback((idx: number) => {
+    setActivePathIndex(idx);
+    const path = activePaths[idx];
+    if (path) {
+      setPathResult({ nodeIds: path.ordered_node_ids, edgeIds: path.ordered_edge_ids });
+    }
+  }, [activePaths]);
+
+  const handleLoadExplanation = useCallback(async (pathId: string) => {
+    if (pathExplanations[pathId]) return;
+    try {
+      const resp = await api.graphIntelligence.explain({ tenant_id: '', path_id: pathId });
+      const exp = (resp as { data?: PathExplanation }).data;
+      if (exp) setPathExplanations(prev => ({ ...prev, [pathId]: exp }));
+    } catch { /* ignore */ }
+  }, [pathExplanations]);
+
+  const handleSaveToInvestigation = useCallback(async (pathId: string, snapshotId?: string) => {
+    try {
+      await api.investigations.create({
+        tenantId: '',
+        title: `Path investigation — ${pathId.slice(0, 8)}`,
+        subjects: [],
+        createdBy: 'analyst',
+      });
+      if (snapshotId) {
+        // Best-effort: attach snapshot to new case (would need caseId from create response)
+      }
+    } catch { /* ignore */ }
   }, []);
 
   if (error) {
@@ -525,6 +605,37 @@ export function GraphPage() {
           {pathMode ? 'Exit path mode' : 'Path finder'}
         </Button>
 
+        {/* Traversal mode (only when path mode is on) */}
+        {pathMode && (
+          <>
+            {(['shortest', 'strongest', 'k_shortest'] as PathMode[]).map(mode => (
+              <Button
+                key={mode}
+                variant={traversalMode === mode ? 'primary' : 'ghost'}
+                size="sm"
+                onClick={() => setTraversalMode(mode)}
+                aria-pressed={traversalMode === mode}
+              >
+                {mode === 'shortest' ? 'Shortest' : mode === 'strongest' ? 'Strongest' : 'K-Shortest'}
+              </Button>
+            ))}
+            {traversalMode === 'k_shortest' && (
+              <div className="flex items-center gap-1">
+                <span className="text-xs text-text-muted">K:</span>
+                <input
+                  type="number"
+                  min={1}
+                  max={10}
+                  value={kPaths}
+                  onChange={e => setKPaths(Math.max(1, Math.min(10, Number(e.target.value))))}
+                  className="w-14 h-7 text-xs bg-surface-base border border-border-default rounded px-2 text-text-primary"
+                  aria-label="Number of paths"
+                />
+              </div>
+            )}
+          </>
+        )}
+
         {/* Replay control */}
         <div className="flex items-center gap-1 ml-auto">
           <span className="text-xs text-text-muted">As of:</span>
@@ -554,9 +665,13 @@ export function GraphPage() {
       {/* Path mode hint */}
       {pathMode && (
         <div className="text-xs px-3 py-2 rounded bg-accent/10 border border-accent/30 text-accent">
-          {pathSource
-            ? <>Source: <span className="font-mono font-bold">{pathSource}</span> — click a second node to trace the shortest path.</>
-            : 'Click the first node to set the path source.'
+          {pathLoading
+            ? 'Finding path…'
+            : pathError
+            ? <span className="text-danger">{pathError}</span>
+            : pathSource
+            ? <>Source: <span className="font-mono font-bold">{pathSource}</span> — click a target node to find the path.</>
+            : 'Click the source node to begin.'
           }
         </div>
       )}
@@ -630,8 +745,39 @@ export function GraphPage() {
           )}
         </div>
 
-        {/* Inspector */}
-        {inspector && <Inspector data={inspector} onClose={handleClose} />}
+        {/* Path Inspector — shown when paths are available from the API */}
+        {activePaths.length > 0 && (
+          <div className="w-80 flex-shrink-0 flex flex-col gap-2 overflow-hidden">
+            {activePaths.length > 1 && (
+              <Tabs
+                value={String(activePathIndex)}
+                onValueChange={v => handlePathTabChange(Number(v))}
+              >
+                <TabsList>
+                  {activePaths.map((p, i) => (
+                    <TabsTrigger key={p.path_id} value={String(i)}>
+                      Path {i + 1}
+                      <span className="ml-1 text-[10px] text-text-muted font-mono">
+                        {Math.round(p.path_confidence * 100)}%
+                      </span>
+                    </TabsTrigger>
+                  ))}
+                </TabsList>
+              </Tabs>
+            )}
+            <PathInspector
+              path={activePaths[activePathIndex]}
+              explanation={pathExplanations[activePaths[activePathIndex]?.path_id]}
+              onLoadExplanation={() => handleLoadExplanation(activePaths[activePathIndex]?.path_id)}
+              onSaveToInvestigation={handleSaveToInvestigation}
+              onClose={handleClose}
+              className="flex-1 overflow-hidden"
+            />
+          </div>
+        )}
+
+        {/* Node/edge/cluster Inspector — shown when no path is active */}
+        {activePaths.length === 0 && inspector && <Inspector data={inspector} onClose={handleClose} />}
       </div>
     </div>
   );
