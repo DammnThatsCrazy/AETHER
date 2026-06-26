@@ -106,6 +106,51 @@ class CacheKey:
     def hash_query(query: str) -> str:
         return hashlib.sha256(query.encode()).hexdigest()[:16]
 
+    @staticmethod
+    def graph_query(
+        tenant_id: str,
+        query_hash: str,
+        contract_version: str = "",
+        as_of: str = "",
+        permission_hash: str = "",
+    ) -> str:
+        """Cache key for graph query results.
+
+        Must include tenant_id to prevent cross-tenant cache collisions.
+        The contract_version ensures stale results are never served after
+        schema migrations. The as_of discriminates temporal replay queries.
+        The permission_hash captures the redaction state so a downgraded
+        permission level cannot read a cached response built under elevated
+        permissions.
+        """
+        parts = [tenant_id, query_hash, contract_version, as_of, permission_hash]
+        suffix = ":".join(p for p in parts if p)
+        return f"aether:graph:query:{suffix}"
+
+    @staticmethod
+    def graph_facets(
+        tenant_id: str,
+        query_hash: str,
+        contract_version: str = "",
+    ) -> str:
+        """Cache key for graph facet counts."""
+        parts = [tenant_id, query_hash, contract_version]
+        suffix = ":".join(p for p in parts if p)
+        return f"aether:graph:facets:{suffix}"
+
+    @staticmethod
+    def graph_replay(
+        tenant_id: str,
+        anchor: str,
+        as_of: str,
+        depth: int = 2,
+        contract_version: str = "",
+    ) -> str:
+        """Cache key for point-in-time graph replay results."""
+        parts = [tenant_id, anchor, as_of, str(depth), contract_version]
+        suffix = ":".join(p for p in parts if p)
+        return f"aether:graph:replay:{suffix}"
+
 
 # ═══════════════════════════════════════════════════════════════════════════
 # ENVIRONMENT HELPERS

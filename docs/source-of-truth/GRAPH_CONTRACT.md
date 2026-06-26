@@ -11,7 +11,7 @@ source_files:
   - Backend Architecture/aether-backend/shared/graph/relationship_layers.py
   - packages/shared/graph-contract.ts
 canonical_owner: graph@aether
-last_synced_commit: fd2288c
+last_synced_commit: fae02a9
 ---
 # Intelligence Graph Contract
 

@@ -792,6 +792,27 @@ export const api = {
       filter: Record<string, unknown>;
       limit?: number;
     }) => restClient.post('/v1/graph/filter', unknownSchema, body),
+
+    query: (body: Record<string, unknown>) =>
+      restClient.post('/v1/graph/query', unknownSchema, body),
+  },
+
+  // ── Cluster360 ─────────────────────────────────────────────────────────────
+  clusters: {
+    get: (clusterId: string, params?: { tenant_id?: string }) =>
+      restClient.get(`/v1/clusters/${clusterId}${buildQS({ ...(params ?? {}) })}`, wrap(unknownSchema)).then(r => r.data),
+    members: (clusterId: string, params?: { tenant_id?: string; limit?: number; cursor?: string }) =>
+      restClient.get(`/v1/clusters/${clusterId}/members${buildQS({ ...(params ?? {}) })}`, wrap(unknownSchema)).then(r => r.data),
+    timeline: (clusterId: string, params?: { tenant_id?: string }) =>
+      restClient.get(`/v1/clusters/${clusterId}/timeline${buildQS({ ...(params ?? {}) })}`, wrap(unknownSchema)).then(r => r.data),
+    economic: (clusterId: string, params?: { tenant_id?: string }) =>
+      restClient.get(`/v1/clusters/${clusterId}/economic${buildQS({ ...(params ?? {}) })}`, wrap(unknownSchema)).then(r => r.data),
+    campaigns: (clusterId: string, params?: { tenant_id?: string }) =>
+      restClient.get(`/v1/clusters/${clusterId}/campaigns${buildQS({ ...(params ?? {}) })}`, wrap(unknownSchema)).then(r => r.data),
+    risk: (clusterId: string, params?: { tenant_id?: string }) =>
+      restClient.get(`/v1/clusters/${clusterId}/risk${buildQS({ ...(params ?? {}) })}`, wrap(unknownSchema)).then(r => r.data),
+    geography: (clusterId: string, params?: { tenant_id?: string }) =>
+      restClient.get(`/v1/clusters/${clusterId}/geography${buildQS({ ...(params ?? {}) })}`, wrap(unknownSchema)).then(r => r.data),
   },
 
   // ── Entity Intelligence (profile, timeline, relationships) ─────────────────

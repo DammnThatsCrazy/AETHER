@@ -3316,6 +3316,21 @@
       "since_version": "9.0.0"
     },
     {
+      "path": "docs/architecture/UNIVERSAL_GRAPH_ARCHITECTURE.md",
+      "title": "Universal Intelligence Graph Architecture",
+      "slug": "architecture/universal-graph-architecture",
+      "section": "architecture",
+      "visibility": "I",
+      "audience": [
+        "architect",
+        "dev-senior",
+        "ai"
+      ],
+      "status": "stable",
+      "since_version": "8.10.0",
+      "canonical_owner": "graph@aether"
+    },
+    {
       "path": "docs/audits/AGENTIC_OBSERVABILITY_AUDIT.md",
       "title": "Agentic Observability Audit",
       "slug": "audits/agentic-observability-audit",
@@ -3518,6 +3533,21 @@
       "status": "stable"
     },
     {
+      "path": "docs/operations/UNIVERSAL_GRAPH_RUNBOOK.md",
+      "title": "Universal Intelligence Graph Operations Runbook",
+      "slug": "operations/universal-graph-runbook",
+      "section": "operations",
+      "visibility": "I",
+      "audience": [
+        "ops",
+        "dev-senior",
+        "ai"
+      ],
+      "status": "stable",
+      "since_version": "8.10.0",
+      "canonical_owner": "sre@aether"
+    },
+    {
       "path": "docs/plans/UNIVERSAL_INTELLIGENCE_GRAPH_IMPLEMENTATION.md",
       "title": "Universal Intelligence Graph — Implementation Ledger",
       "slug": "plans/universal-intelligence-graph-implementation",
@@ -3706,6 +3736,22 @@
       "estimated_read_minutes": 10,
       "toc_depth": 3,
       "canonical_owner": "ml@aether"
+    },
+    {
+      "path": "docs/security/UNIVERSAL_GRAPH_SECURITY_MODEL.md",
+      "title": "Universal Intelligence Graph Security Model",
+      "slug": "security/universal-graph-security-model",
+      "section": "security",
+      "visibility": "I",
+      "audience": [
+        "architect",
+        "dev-senior",
+        "security",
+        "ai"
+      ],
+      "status": "stable",
+      "since_version": "8.10.0",
+      "canonical_owner": "security@aether"
     },
     {
       "path": "docs/source-of-truth/API_ANTI_DISTILLATION.md",
@@ -3970,6 +4016,21 @@
       "status": "draft",
       "estimated_read_minutes": 7,
       "canonical_owner": "ml@aether"
+    },
+    {
+      "path": "docs/source-of-truth/UNIVERSAL_GRAPH_CONTRACT.md",
+      "title": "Universal Intelligence Graph Contract",
+      "slug": "source-of-truth/universal-graph-contract",
+      "section": "source-of-truth",
+      "visibility": "internal",
+      "audience": [
+        "architect",
+        "dev-senior",
+        "ai"
+      ],
+      "status": "stable",
+      "since_version": "8.10.0",
+      "canonical_owner": "graph@aether"
     }
   ]
 }

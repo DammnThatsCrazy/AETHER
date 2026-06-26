@@ -178,10 +178,17 @@ class GraphTraversalEngine:
         limit: int = 100,
         tenant_id: Optional[str] = None,
     ) -> TraversalResult:
-        """BFS traversal restricted to edges and vertices created at or before as_of (ISO8601).
+        """BFS traversal restricted to edges/vertices valid at as_of (ISO8601).
 
-        When tenant_id is provided, vertices with a mismatched tenantId property are
-        silently dropped (fail-closed cross-tenant isolation).
+        Applies bitemporal valid-time filtering:
+          - valid_from <= as_of  (edge/node must have started being true)
+          - valid_to is absent OR valid_to > as_of  (not yet expired)
+
+        Falls back to created_at when valid_from is absent, preserving
+        compatibility with edges written before Phase 3.
+
+        When tenant_id is provided, vertices with a mismatched tenantId property
+        are silently dropped (fail-closed cross-tenant isolation).
         """
         client = self._client
         visited: set[str] = {start_id}
@@ -190,6 +197,26 @@ class GraphTraversalEngine:
         result_nodes: list[Vertex] = []
         result_edges: list[Edge] = []
         seen_edge_keys: set[tuple[str, str, str]] = set()
+
+        def _edge_valid_at(edge: Edge) -> bool:
+            """Return True if edge's valid-time window covers as_of."""
+            ef = edge.properties.get("valid_from") or edge.created_at or ""
+            et = edge.properties.get("valid_to") or ""
+            if ef and ef > as_of:
+                return False  # edge hasn't started yet
+            if et and et <= as_of:
+                return False  # edge has expired
+            return True
+
+        def _vertex_valid_at(v: Vertex) -> bool:
+            """Return True if vertex's valid-time window covers as_of."""
+            vf = v.properties.get("valid_from") or v.created_at or ""
+            vt = v.properties.get("valid_to") or ""
+            if vf and vf > as_of:
+                return False
+            if vt and vt <= as_of:
+                return False
+            return True
 
         for _ in range(depth):
             if not current_layer or len(result_nodes) >= limit:
@@ -200,7 +227,7 @@ class GraphTraversalEngine:
                     break
                 edges = await client.get_edges(vid, direction=direction)
                 for edge in edges:
-                    if edge.created_at and edge.created_at > as_of:
+                    if not _edge_valid_at(edge):
                         continue
                     neighbor_id = (
                         edge.to_vertex_id if edge.from_vertex_id == vid else edge.from_vertex_id
@@ -209,7 +236,7 @@ class GraphTraversalEngine:
                     if neighbor_id not in visited and len(result_nodes) < limit:
                         visited.add(neighbor_id)
                         neighbor = await client.get_vertex(neighbor_id)
-                        if neighbor and (not neighbor.created_at or neighbor.created_at <= as_of):
+                        if neighbor and _vertex_valid_at(neighbor):
                             if tenant_id and neighbor.properties.get("tenantId") != tenant_id:
                                 pass  # cross-tenant: fail closed
                             else:

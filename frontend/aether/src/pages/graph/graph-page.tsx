@@ -1,5 +1,5 @@
 import { useState, useCallback, useEffect, useMemo } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { useSearchParams, useNavigate } from 'react-router-dom';
 import {
   Badge, Button, Card, CardContent, CardHeader, CardTitle,
   EmptyState, ErrorState, LoadingState, ScrollArea,
@@ -12,6 +12,105 @@ import {
   type GraphLayer, type GraphOverlay, type GraphCluster,
 } from '@aether-app/features/graph/use-graph-data';
 import type { GraphNode, GraphEdge } from '@aether-app/components/graph/graph-canvas';
+
+// ── Cluster Inspector ─────────────────────────────────────────────────────────
+
+function ClusterInspector({ cluster }: { cluster: GraphCluster }) {
+  const navigate = useNavigate();
+  return (
+    <div className="space-y-3 pt-2">
+      <div className="flex items-center gap-2">
+        <Badge variant="warning">cluster</Badge>
+        <span className="text-sm font-mono text-text-primary">{cluster.label}</span>
+      </div>
+      <p className="text-xs text-text-secondary">{cluster.size} member entities</p>
+      <Button
+        variant="primary"
+        size="sm"
+        className="w-full"
+        onClick={() => navigate(`/clusters/${cluster.id}`)}
+      >
+        Open Cluster360
+      </Button>
+      <div>
+        <p className="text-xs font-medium text-text-secondary mb-1">Member IDs</p>
+        <ScrollArea maxHeight="140px">
+          <div className="space-y-1">
+            {cluster.nodeIds.map(id => (
+              <div key={id} className="py-1 px-2 rounded bg-surface-raised text-[10px] font-mono text-text-primary truncate">
+                {id}
+              </div>
+            ))}
+          </div>
+        </ScrollArea>
+      </div>
+    </div>
+  );
+}
+
+// ── Campaign drill-down ───────────────────────────────────────────────────────
+
+function CampaignDrillDown({ campaignId }: { campaignId: string }) {
+  const navigate = useNavigate();
+  return (
+    <div className="p-2 rounded border border-border-subtle bg-surface-raised space-y-1">
+      <p className="text-xs text-text-muted">Campaign attribution</p>
+      <code className="text-[10px] font-mono text-text-primary block truncate">{campaignId}</code>
+      <Button
+        variant="ghost"
+        size="sm"
+        className="w-full text-xs"
+        onClick={() => navigate(`/measurement/campaigns/${campaignId}`)}
+      >
+        View Campaign Attribution →
+      </Button>
+    </div>
+  );
+}
+
+// ── Fraud investigation action ────────────────────────────────────────────────
+
+function FraudInvestigationAction({ nodeId, nodeLabel }: { nodeId: string; nodeLabel: string }) {
+  const [sent, setSent] = useState(false);
+  const [creating, setCreating] = useState(false);
+
+  async function handleCreate() {
+    setCreating(true);
+    try {
+      const { api } = await import('@aether-app/lib/api/endpoints');
+      await api.investigations.create({
+        tenantId: '',
+        title: `Risk investigation — ${nodeLabel}`,
+        subjects: [{ kind: 'entity', id: nodeId }],
+        createdBy: 'analyst',
+      });
+      setSent(true);
+    } catch {
+      setSent(false);
+    } finally {
+      setCreating(false);
+    }
+  }
+
+  return (
+    <div className="p-2 rounded border border-border-subtle bg-surface-raised space-y-1">
+      <p className="text-xs text-text-muted">Risk signals detected</p>
+      {sent ? (
+        <p className="text-xs text-success">Investigation case created</p>
+      ) : (
+        <Button
+          variant="ghost"
+          size="sm"
+          className="w-full text-xs"
+          onClick={handleCreate}
+          disabled={creating}
+        >
+          {creating ? 'Creating…' : 'Add to Investigation →'}
+        </Button>
+      )}
+    </div>
+  );
+}
 
 // ── Inspector ─────────────────────────────────────────────────────────────────
 
@@ -67,6 +166,48 @@ function Inspector({ data, onClose }: { data: InspectorPayload; onClose: () => v
                   <code className="text-xs text-text-muted break-all block">{data.node.id}</code>
                   <ScoreBar label="Trust" value={data.node.trustScore} colorFn={trustColor} />
                   <ScoreBar label="Risk" value={data.node.riskScore} colorFn={riskColor} />
+                  {(typeof data.node.metadata.attributed_campaign_id === 'string' || typeof data.node.metadata.campaign_id === 'string') && (
+                    <CampaignDrillDown
+                      campaignId={String(data.node.metadata.attributed_campaign_id ?? data.node.metadata.campaign_id)}
+                    />
+                  )}
+                  {(data.node.riskScore !== undefined && data.node.riskScore >= 0.4) && (
+                    <FraudInvestigationAction nodeId={data.node.id} nodeLabel={data.node.label} />
+                  )}
+                  {typeof data.node.metadata.observation_class === 'string' && (
+                    <div className="flex items-center gap-2">
+                      <Badge variant={
+                        data.node.metadata.observation_class === 'observed' ? 'success' :
+                        data.node.metadata.observation_class === 'predicted' ? 'warning' :
+                        'default'
+                      } size="sm">{data.node.metadata.observation_class}</Badge>
+                      {data.node.metadata.observation_class === 'predicted' && (
+                        <span className="text-[10px] text-text-muted italic">unverified prediction</span>
+                      )}
+                    </div>
+                  )}
+                  {(data.node.kind === 'Recommendation' || data.node.kind === 'Prediction') && (
+                    <div className="space-y-1 p-2 rounded border border-border-subtle bg-surface-raised">
+                      <p className="text-xs font-medium text-text-secondary">Outcome</p>
+                      {typeof data.node.metadata.result_state === 'string' && (
+                        <div className="flex items-center gap-2">
+                          <Badge size="sm" variant={
+                            data.node.metadata.result_state === 'converted' ? 'success' :
+                            data.node.metadata.result_state === 'churned' ? 'danger' : 'default'
+                          }>{data.node.metadata.result_state}</Badge>
+                        </div>
+                      )}
+                      {typeof data.node.metadata.observed_outcome === 'string' && (
+                        <p className="text-xs text-text-muted">{data.node.metadata.observed_outcome}</p>
+                      )}
+                      {typeof data.node.metadata.model_id === 'string' && (
+                        <div className="text-[10px] text-text-muted font-mono">
+                          {data.node.metadata.model_id}
+                          {typeof data.node.metadata.model_version === 'string' && ` v${data.node.metadata.model_version}`}
+                        </div>
+                      )}
+                    </div>
+                  )}
                   {Object.keys(data.node.metadata).length > 0 && (
                     <div>
                       <p className="text-xs font-medium text-text-secondary mb-2">Properties</p>
@@ -155,25 +296,7 @@ function Inspector({ data, onClose }: { data: InspectorPayload; onClose: () => v
           )}
 
           {data.type === 'cluster' && (
-            <div className="space-y-3 pt-2">
-              <div className="flex items-center gap-2">
-                <Badge variant="warning">cluster</Badge>
-                <span className="text-sm font-mono text-text-primary">{data.cluster.label}</span>
-              </div>
-              <p className="text-xs text-text-secondary">{data.cluster.size} member entities</p>
-              <div>
-                <p className="text-xs font-medium text-text-secondary mb-1">Member IDs</p>
-                <ScrollArea maxHeight="140px">
-                  <div className="space-y-1">
-                    {data.cluster.nodeIds.map(id => (
-                      <div key={id} className="py-1 px-2 rounded bg-surface-raised text-[10px] font-mono text-text-primary truncate">
-                        {id}
-                      </div>
-                    ))}
-                  </div>
-                </ScrollArea>
-              </div>
-            </div>
+            <ClusterInspector cluster={data.cluster} />
           )}
         </ScrollArea>
       </CardContent>
@@ -195,6 +318,9 @@ const OVERLAYS: { value: GraphOverlay; label: string }[] = [
   { value: 'none', label: 'None' },
   { value: 'trust', label: 'Trust' },
   { value: 'risk', label: 'Risk' },
+  { value: 'campaign', label: 'Campaign' },
+  { value: 'economic', label: 'Economic' },
+  { value: 'fraud', label: 'Fraud' },
 ];
 
 // ── Node table ────────────────────────────────────────────────────────────────
@@ -226,6 +352,7 @@ export function GraphPage() {
   const [pathSource, setPathSource] = useState<string | null>(null);
   const [pathResult, setPathResult] = useState<{ nodeIds: string[]; edgeIds: string[] } | null>(null);
   const [highlightedCluster, setHighlightedCluster] = useState<string[] | null>(null);
+  const [replayDate, setReplayDate] = useState<string | null>(null);
 
   const highlightedNodeIds = useMemo(() => {
     if (highlightedCluster) return highlightedCluster;
@@ -308,6 +435,12 @@ export function GraphPage() {
     );
   }
 
+  // ── Summary stats derived from current graph data ─────────────────────────
+  const riskAlertCount = useMemo(
+    () => nodes.filter(n => (n.riskScore ?? 0) >= 0.7).length,
+    [nodes],
+  );
+
   return (
     <div className="p-6 space-y-4 h-full flex flex-col">
       {/* Header */}
@@ -319,12 +452,37 @@ export function GraphPage() {
           </p>
         </div>
         <div className="flex items-center gap-2 flex-wrap">
-          <Badge variant="accent">{nodes.length} nodes</Badge>
-          <Badge>{edges.length} edges</Badge>
           <Button variant={viewMode === 'graph' ? 'primary' : 'ghost'} size="sm" onClick={() => setViewMode('graph')}>Graph</Button>
           <Button variant={viewMode === 'table' ? 'primary' : 'ghost'} size="sm" onClick={() => setViewMode('table')}>Table</Button>
         </div>
       </div>
+
+      {/* Summary strip */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+        <div className="p-3 rounded-md border border-border-default bg-surface-raised text-center">
+          <p className="text-lg font-semibold text-text-primary">{nodes.length}</p>
+          <p className="text-xs text-text-muted">Entities</p>
+        </div>
+        <div className="p-3 rounded-md border border-border-default bg-surface-raised text-center">
+          <p className="text-lg font-semibold text-text-primary">{edges.length}</p>
+          <p className="text-xs text-text-muted">Relationships</p>
+        </div>
+        <div className="p-3 rounded-md border border-border-default bg-surface-raised text-center">
+          <p className="text-lg font-semibold text-text-primary">{clusters.length}</p>
+          <p className="text-xs text-text-muted">Clusters</p>
+        </div>
+        <div className={cn('p-3 rounded-md border text-center', riskAlertCount > 0 ? 'border-danger/40 bg-danger/5' : 'border-border-default bg-surface-raised')}>
+          <p className={cn('text-lg font-semibold', riskAlertCount > 0 ? 'text-danger' : 'text-text-primary')}>{riskAlertCount}</p>
+          <p className="text-xs text-text-muted">Risk alerts</p>
+        </div>
+      </div>
+
+      {/* Truncation warning */}
+      {nodes.length >= 200 && (
+        <div className="text-xs px-3 py-2 rounded bg-warning/10 border border-warning/30 text-warning">
+          Graph shows the first 200 entities. Relationships may be partial. Use filters or zoom to a specific cluster to see complete data.
+        </div>
+      )}
 
       {/* Toolbar */}
       <div className="flex items-center gap-4 flex-wrap border border-border-default rounded-md px-3 py-2 bg-surface-raised">
@@ -366,7 +524,32 @@ export function GraphPage() {
         >
           {pathMode ? 'Exit path mode' : 'Path finder'}
         </Button>
+
+        {/* Replay control */}
+        <div className="flex items-center gap-1 ml-auto">
+          <span className="text-xs text-text-muted">As of:</span>
+          <input
+            type="date"
+            className="text-xs bg-surface-base border border-border-default rounded px-2 py-1 text-text-primary"
+            value={replayDate ?? ''}
+            onChange={e => setReplayDate(e.target.value || null)}
+            aria-label="Replay graph as of date"
+          />
+          {replayDate && (
+            <Button variant="ghost" size="sm" onClick={() => setReplayDate(null)}>
+              Live
+            </Button>
+          )}
+        </div>
       </div>
+
+      {/* Replay mode banner */}
+      {replayDate && (
+        <div className="text-xs px-3 py-2 rounded bg-accent/10 border border-accent/30 text-accent flex items-center justify-between">
+          <span>Viewing graph as of <span className="font-mono font-bold">{replayDate}</span> — historical replay mode. Point-in-time filtering applies.</span>
+          <Button variant="ghost" size="sm" onClick={() => setReplayDate(null)}>Exit replay</Button>
+        </div>
+      )}
 
       {/* Path mode hint */}
       {pathMode && (

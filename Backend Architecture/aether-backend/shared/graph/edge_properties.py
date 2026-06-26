@@ -37,6 +37,38 @@ OPTIONAL_EDGE_PROPERTIES: frozenset[str] = frozenset({
     "scope_hash",
     "consent_purpose",
     "source_event_id",
+    # Bitemporal valid-time (external truth window):
+    "valid_to",          # ISO-8601; when this fact stops being true in the world
+    "recorded_at",       # ISO-8601; when Aether first recorded this edge (system-time)
+    "superseded_at",     # ISO-8601; when a later write superseded this edge (system-time)
+    # Causality classification (required for prediction/attribution edges):
+    "causality_class",   # observed_sequence|correlation|attributed_influence|inferred_influence|experiment_incremental|direct_cause
+    # Campaign / journey context:
+    "campaign_id",       # campaign that produced this edge
+    "journey_id",        # journey this edge belongs to
+    "journey_version",   # version of the journey definition
+    "step_index",        # ordinal position within the journey
+})
+
+# Valid causality classes — prediction edges must NOT use direct_cause
+# unless backed by a held-out experiment (experiment_incremental or above).
+CAUSALITY_CLASSES: frozenset[str] = frozenset({
+    "observed_sequence",      # time-ordered without causal claim
+    "correlation",            # statistical co-occurrence
+    "attributed_influence",   # attribution model output
+    "inferred_influence",     # ML-inferred causal path
+    "experiment_incremental", # measured via A/B or geo experiment
+    "direct_cause",           # established causal mechanism
+})
+
+# The four bitemporal fields that together model valid-time and system-time.
+# valid_from is in REQUIRED_EDGE_PROPERTIES (open-ended start is always mandatory).
+# The other three are optional — set by callers that manage bitemporal history.
+BITEMPORAL_EDGE_PROPERTIES: frozenset[str] = frozenset({
+    "valid_from",        # valid-time start (required; defaults to write time)
+    "valid_to",          # valid-time end (null = still valid)
+    "recorded_at",       # system-time when edge was recorded by Aether
+    "superseded_at",     # system-time when a later revision superseded this edge
 })
 
 # Consent-bearing layers require consent_purpose.
@@ -88,6 +120,9 @@ def build_edge_properties(
     consent_purpose: str = "",
     provenance_class: str = "direct",
     schema_version: str = SCHEMA_VERSION,
+    valid_to: str = "",
+    recorded_at: str = "",
+    superseded_at: str = "",
     **extra: object,
 ) -> dict:
     """Return a property dict with all required and any extra properties set.
@@ -116,5 +151,11 @@ def build_edge_properties(
         props["scope_hash"] = scope_hash
     if consent_purpose:
         props["consent_purpose"] = consent_purpose
+    if valid_to:
+        props["valid_to"] = valid_to
+    if recorded_at:
+        props["recorded_at"] = recorded_at
+    if superseded_at:
+        props["superseded_at"] = superseded_at
     props.update(extra)
     return props

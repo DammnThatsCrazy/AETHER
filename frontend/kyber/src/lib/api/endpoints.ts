@@ -2016,6 +2016,23 @@ export const api = {
     reconciliation: (params: { campaign_id?: string; period_start: string; period_end: string }) =>
       restClient.get(`/v1/spend/reconciliation${buildQS(params)}`, wrap(unknownSchema)).then(r => r.data),
   },
+
+  // ── Kyber Operator — privileged tenant access and fleet intelligence ─────────
+  kyberOperator: {
+    enterTenant: (params: {
+      tenant_id: string;
+      access_reason: string;
+      purpose: 'incident_response' | 'customer_support' | 'compliance_audit' | 'security_investigation' | 'data_request' | 'diagnostics' | 'break_glass';
+      duration_minutes?: number;
+    }) =>
+      restClient.post('/v1/kyber/operator/tenant-entry', wrap(unknownSchema), params).then(r => r.data),
+
+    exitTenant: (sessionId: string) =>
+      restClient.delete(`/v1/kyber/operator/tenant-entry${buildQS({ session_id: sessionId })}`, wrap(unknownSchema)).then(r => r.data),
+
+    tenantEnvelope: (tenantId: string) =>
+      restClient.get(`/v1/kyber/tenants/${encodeURIComponent(tenantId)}/operational-envelope`, wrap(unknownSchema)).then(r => r.data),
+  },
 };
 
 // ─── Utility: call API with a typed fallback ─────────────────────────────────

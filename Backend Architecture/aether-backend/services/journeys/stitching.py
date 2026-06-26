@@ -256,6 +256,36 @@ class JourneyStitchingService:
         items = [d for d in self._dropped if tenant_id is None or d.get("tenant_id") == tenant_id]
         return items[-limit:]
 
+    def build_journey_edges(self, record: JourneyRecord) -> list[dict[str, Any]]:
+        """Return NEXT_IN_JOURNEY edge dicts for consecutive events in a journey.
+
+        Each edge connects adjacent touchpoint event IDs with journey metadata,
+        enabling graph traversal to follow journey paths in topological order.
+        Callers may write these edges to the graph via GraphClient.add_edge().
+        """
+        edges: list[dict[str, Any]] = []
+        events = record.events
+        for i in range(len(events) - 1):
+            src = events[i]
+            dst = events[i + 1]
+            edges.append({
+                "edge_type": "NEXT_IN_JOURNEY",
+                "from_vertex_id": src.event_id,
+                "to_vertex_id": dst.event_id,
+                "properties": {
+                    "tenant_id": record.tenant_id,
+                    "journey_id": record.journey_id,
+                    "journey_version": "1",
+                    "step_index": i,
+                    "from_event_type": src.event_type,
+                    "to_event_type": dst.event_type,
+                    "confidence": record.confidence,
+                    "causality_class": "observed_sequence",
+                    "valid_from": src.timestamp,
+                },
+            })
+        return edges
+
 
 def serialize_journey(journey: JourneyRecord) -> dict[str, Any]:
     return {

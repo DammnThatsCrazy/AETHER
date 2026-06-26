@@ -56,6 +56,22 @@ class VertexType:
     WALLET = "Wallet"
     IDENTITY_CLUSTER = "IdentityCluster"
 
+    # ── Cluster types — full taxonomy ─────────────────────────────────────
+    HOUSEHOLD_CLUSTER = "HouseholdCluster"
+    ORG_CLUSTER = "OrgCluster"
+    DEVICE_CLUSTER = "DeviceCluster"
+    WALLET_CLUSTER = "WalletCluster"
+    BEHAVIORAL_CLUSTER = "BehavioralCluster"
+    GEOGRAPHIC_CLUSTER = "GeographicCluster"
+    ECONOMIC_SEGMENT = "EconomicSegment"
+    CAMPAIGN_COHORT = "CampaignCohort"
+    JOURNEY_CLUSTER = "JourneyCluster"
+    FRAUD_NETWORK_CLUSTER = "FraudNetworkCluster"
+    RISK_CLUSTER = "RiskCluster"
+    DORMANT_COHORT = "DormantCohort"
+    REACTIVATED_COHORT = "ReactivatedCohort"
+    UNRESOLVED_CLUSTER = "UnresolvedCluster"
+
     # Intelligence Graph — Actor nodes
     AGENT = "Agent"
     SERVICE = "Service"

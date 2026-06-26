@@ -13,7 +13,7 @@ source_files:
 canonical_owner: frontend@aether
 estimated_read_minutes: 35
 toc_depth: 4
-last_synced_commit: 27c8edb
+last_synced_commit: 461f084
 ---
 
 # Aether Frontend Architecture & Designer Handoff
@@ -33,7 +33,9 @@ There are two separate frontend applications. **Do not mix them up.**
 
 **Aether (customer-facing) contains:**
 - Auth flows (signup, login, SSO, billing)
-- The intelligence **graph canvas** showing the tenant's users, organizations, and AI agents
+- The intelligence **graph canvas** showing the tenant's users, organizations, and AI agents — layer/overlay toggles (H2H/H2A/A2H/A2A, risk, trust, campaign, economic, fraud), path finder, cluster panel, and cluster drill-down to Cluster360; summary strip (entity/relationship/cluster/risk-alert counts), truncation warning when entity set exceeds 200, replay mode with date picker, observation-class node styling (solid/dashed/dotted borders), Recommendation/Prediction outcome panel in Inspector
+- **Cluster360** (`/clusters/:clusterId`) — 7-tab cluster surface: Overview (type, state, formation reason, confidence, risk score, properties), Members (paginated DataTable with confidence + join date), Timeline (merge/split/growth events), Economic (revenue, spend, LTV, value tier, top-member breakdown), Campaigns (attributed campaigns, top channel, conversion rate), Risk (aggregate score, fraud network link, alert count, evidence refs, high-risk members), Geography (country distribution bars, concentration score)
+- **Semantic zoom** — graph canvas supports server-backed macro→cluster→entity zoom: depth-0 query returns cluster-aggregate nodes; clicking a cluster fetches depth-1 member expansion via `useGraphZoom`
 - **Entity Profile360** panels — what tenants drill into when they click a graph node
 - **Geographic Intelligence** view — their users by location
 - **Social Intelligence** panels — their users' social platform presence
@@ -45,7 +47,8 @@ There are two separate frontend applications. **Do not mix them up.**
 
 **Kyber (internal operator console) contains:**
 - Mission dashboard — real-time system health across all tenants
-- Noesis — operator graph view of cross-tenant entity relationships
+- Noesis — operator graph view of cross-tenant entity relationships; graph explorer at `/noesis/graph`, fleet graph at `/noesis/fleet`
+- **Fleet Graph** (`/noesis/fleet`) — tenant portfolio comparison table showing per-tenant operational envelope (graph node count, fraud network count, SDK health score, status); privileged operator tenant-entry modal with access reason, purpose enum, and duration; active operator session banner with exit action; all actions immutably audited via `POST /v1/kyber/operator/tenant-entry`
 - Live event stream — raw event firehose for debugging
 - Entity admin — manage any entity across any tenant
 - Command center — controller management
