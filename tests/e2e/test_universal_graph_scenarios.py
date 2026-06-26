@@ -80,7 +80,9 @@ async def test_scenario_a_campaign_macro_to_micro() -> None:
     await graph.add_edge(_edge(entity_id, cluster_id, "MEMBER_OF_CLUSTER", {"confidence": 0.92}))
 
     engine = GraphTraversalEngine(graph)
-    result = await engine.bfs(campaign_id, depth=2, direction="in", tenant_id=TENANT)
+    # direction="both": depth-1 follows ACQUIRED_VIA in-edge to entity;
+    # depth-2 follows MEMBER_OF_CLUSTER out-edge from entity to cluster.
+    result = await engine.bfs(campaign_id, depth=2, direction="both", tenant_id=TENANT)
 
     visited_ids = {v.vertex_id for v in result.nodes}
     assert entity_id in visited_ids, "Entity should be reachable from campaign node via BFS"
