@@ -289,14 +289,17 @@ async def _compute_overlay_scores(
                 except Exception:
                     memberships = []
                 if memberships:
-                    # Use highest-severity membership for node annotation
-                    top = sorted(memberships, key=lambda m: m.get("risk_contribution", 0), reverse=True)[0]
+                    # Use highest-severity membership for node annotation.
+                    # FraudNetworkMember schema uses risk_score (0–100), not risk_contribution.
+                    # network_type and alert_state are not member-level fields; fall back to
+                    # member metadata or node properties.
+                    top = sorted(memberships, key=lambda m: m.get("risk_score", 0), reverse=True)[0]
                     fraud_node_data[n.vertex_id] = {
                         "fraud_network_id": top.get("network_id"),
-                        "fraud_network_type": top.get("network_type"),
+                        "fraud_network_type": top.get("metadata", {}).get("network_type"),
                         "member_role": top.get("role"),
-                        "risk_score": top.get("risk_contribution") or n.properties.get("risk_score"),
-                        "alert_state": top.get("alert_state") or n.properties.get("alert_state"),
+                        "risk_score": top.get("risk_score") or n.properties.get("risk_score"),
+                        "alert_state": top.get("metadata", {}).get("alert_state") or n.properties.get("alert_state"),
                         "membership_count": len(memberships),
                     }
             fraud_member_count = len(fraud_node_data)
