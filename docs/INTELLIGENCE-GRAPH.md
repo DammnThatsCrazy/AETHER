@@ -501,3 +501,135 @@ Trigger a rebuild via the existing lake-to-graph pipeline:
 ```python
 await economic_graph.snapshot_to_graph(tenant_id)
 ```
+
+---
+
+## Universal Intelligence Graph (v8.10.0)
+
+The Universal Intelligence Graph extends the base graph with production-grade query infrastructure, universal envelopes, Cluster360, semantic zoom, bitemporal replay, historical comparison, Kyber fleet graph, and a boolean filter language.
+
+See `docs/source-of-truth/UNIVERSAL_GRAPH_CONTRACT.md` for the full contract reference.
+See `docs/architecture/UNIVERSAL_GRAPH_ARCHITECTURE.md` for system architecture.
+See `docs/security/UNIVERSAL_GRAPH_SECURITY_MODEL.md` for the security model.
+See `docs/operations/UNIVERSAL_GRAPH_RUNBOOK.md` for operational procedures.
+
+### Universal Query API (v8.10.0)
+
+New routes added to `services/operational_intelligence/routes.py`:
+
+| Method | Path | Description |
+|--------|------|-------------|
+| `POST` | `/v1/graph/query` | Universal query — BFS + boolean filter + overlays + temporal + cursor pagination |
+| `POST` | `/v1/graph/facets` | Compute facet counts for a filter (node types, risk tiers, geography, etc.) |
+| `POST` | `/v1/graph/compare` | Historical comparison — diff between two point-in-time snapshots |
+| `POST` | `/v1/graph/replay` | Server-backed point-in-time replay (changes result set, not just labels) |
+| `POST` | `/v1/graph/explain` | Query plan explanation with budget projection |
+| `POST` | `/v1/graph/export` | Async export job (returns job_id; Celery-backed when `IG_EXPORT_JOBS=true`) |
+| `POST` | `/v1/graph/flow` | Flow-of-funds trace via PAYS_FOR/TRANSFERS_TO/SETTLED_VIA edges |
+| `GET` | `/v1/graph/capabilities` | Advertise supported operators, overlays, node types, edge types |
+| `GET` | `/v1/graph/export/{job_id}` | Check export job status + download URL when complete |
+
+### Boolean Filter Language
+
+`POST /v1/graph/query` and `POST /v1/graph/facets` accept a structured `filter` field:
+
+```json
+{
+  "filter": {
+    "logic": "AND",
+    "expressions": [
+      {"field": "lifecycle_state", "op": "eq", "value": "active"},
+      {"field": "risk_score", "op": "gt", "value": 0.7},
+      {
+        "logic": "OR",
+        "expressions": [
+          {"field": "vertex_type", "op": "eq", "value": "human"},
+          {"field": "vertex_type", "op": "eq", "value": "agent"}
+        ]
+      }
+    ]
+  }
+}
+```
+
+Supported operators: `eq`, `neq`, `gt`, `gte`, `lt`, `lte`, `in`, `not_in`, `exists`, `not_exists`, `contains`, `starts_with`, `between`, `relative_time`, `threshold`. Unknown operators return HTTP 400.
+
+### Universal Envelopes
+
+Every graph vertex and edge carries typed sub-objects:
+
+| Envelope | Key Fields |
+|----------|-----------|
+| `TemporalEnvelope` | `valid_from`, `valid_to`, `recorded_at`, `superseded_at`, `lifecycle_state` |
+| `ProvenanceEnvelope` | `source_system`, `observation_class`, `model_id`, `quality_score`, `evidence_refs` |
+| `RiskEnvelope` | `risk_score`, `severity`, `confidence`, `reason_codes`, `alert_state` |
+| `EconomicEnvelope` | `amount`, `currency`, `direction`, `rail`, `attribution_share` |
+| `GovernanceEnvelope` | `tenant_id`, `consent_state`, `activation_eligible`, `jurisdiction` |
+| `IdentityEnvelope` | `canonical_entity_id`, `cluster_memberships`, `resolution_state` |
+| `OutcomeEnvelope` | `intended_outcome`, `observed_outcome`, `result_state`, `value` |
+
+### Overlays
+
+`POST /v1/graph/query` with `include_overlays: ["risk", "economic", "campaign", "geography", "consent", "confidence", "fraud", "agent"]` appends overlay data per node in the result.
+
+### Cluster360
+
+Full Cluster360 surface available at `/clusters/:clusterId` in Aether. API routes:
+
+| Method | Path | Description |
+|--------|------|-------------|
+| `GET` | `/v1/clusters/{cluster_id}` | Full cluster record with all 25 standard fields |
+| `GET` | `/v1/clusters/{cluster_id}/members` | Paginated member list |
+| `GET` | `/v1/clusters/{cluster_id}/timeline` | Merge/split/growth events |
+| `GET` | `/v1/clusters/{cluster_id}/graph` | Cluster subgraph |
+| `GET` | `/v1/clusters/{cluster_id}/economic` | Economic summary |
+| `GET` | `/v1/clusters/{cluster_id}/risk` | Risk summary + evidence |
+| `GET` | `/v1/clusters/{cluster_id}/geography` | Geographic distribution |
+
+Supported cluster types: `identity`, `household`, `org`, `device`, `behavioral`, `geographic`, `economic_segment`, `campaign_cohort`, `journey`, `fraud_network`, `risk`, `dormant`, `reactivated`, `unresolved`, `wallet`.
+
+### Semantic Zoom
+
+Graph queries support server-backed macro→micro transitions:
+
+- **Macro (zoom out):** `depth=0, include_clusters=true` returns `ClusterNode` aggregates (member_count, risk_score, cluster_type) without expanding individual nodes.
+- **Expand (zoom in):** `anchors=[cluster_id], depth=1` expands a specific cluster into its member nodes.
+
+Controlled by `IG_SEMANTIC_ZOOM` feature flag.
+
+### Bitemporal Replay and Comparison
+
+**Replay** — `POST /v1/graph/replay` with `as_of: "2026-01-01T00:00:00Z"` returns the graph as it existed at that point in time. The result set is materially different (different nodes, different edges) — not just a timestamp label change.
+
+**Comparison** — `POST /v1/graph/compare` with `as_of` and `compare_to` returns:
+- `added_nodes` — nodes that appeared between the two snapshots
+- `removed_nodes` — nodes that disappeared
+- `changed_nodes` — nodes whose properties changed
+- `added_edges` / `removed_edges` / `changed_edges` — same for edges
+
+All nodes and edges carry `valid_from`/`valid_to`/`recorded_at`/`superseded_at` bitemporal fields.
+
+### Kyber Fleet Graph and Operator Access
+
+Available at `/noesis/fleet` in the Kyber console. Controlled by `IG_FLEET_GRAPH` feature flag.
+
+**Fleet graph** shows the platform universe: tenant operational envelopes connected to their SDK, connector, pipeline, and model nodes.
+
+**Tenant portfolio table** — all tenants × (graph_size, event_throughput, freshness, sdk_health, connector_health, fraud_volume, query_latency).
+
+**Privileged operator entry** — Kyber operators call `POST /v1/kyber/operator/tenant-entry` with `access_reason` and `purpose`. An immutable audit record is created. An "OPERATOR SESSION ACTIVE — all actions audited" banner is shown. Exit via `DELETE /v1/kyber/operator/tenant-entry`.
+
+### ObservationClass Visual Treatment
+
+Aether graph nodes are styled based on `observation_class`:
+
+| Class | Visual | Meaning |
+|-------|--------|---------|
+| `observed` | Solid border | Directly measured |
+| `deterministic` | Solid border (dimmed) | Rule-resolved |
+| `probabilistic` | Dashed border | ML confidence |
+| `predicted` | Dotted border + future label | Model prediction |
+| `derived` | Semi-transparent | Computed |
+| `manually_asserted` | Solid + annotation icon | Human-annotated |
+
+Predicted nodes must never render with the same visual weight as observed nodes.
