@@ -125,9 +125,14 @@ async def exit_tenant(session_id: str, request: Request) -> dict:
     if not session:
         return APIResponse(data={"status": "already_expired"}).to_dict()
 
+    # Idempotent exit: already-exited sessions (concurrent or duplicate calls) return early
+    # so we never overwrite the original exited_at audit timestamp.
+    if session.get("exited_at") or not session.get("active"):
+        return APIResponse(data={"status": "already_expired", "session_id": session_id}).to_dict()
+
     # Enforce expiry — treat expired sessions as already exited
     expires_at_str = session.get("expires_at")
-    if expires_at_str and session.get("active"):
+    if expires_at_str:
         try:
             exp = datetime.fromisoformat(expires_at_str.replace("Z", "+00:00"))
             if datetime.now(tz=timezone.utc) >= exp:

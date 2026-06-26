@@ -87,10 +87,9 @@ function CampaignDrillDown({ campaignId }: { campaignId: string }) {
 
 // ── Fraud investigation action ────────────────────────────────────────────────
 
-function FraudInvestigationAction({ nodeId, nodeLabel }: { nodeId: string; nodeLabel: string }) {
+function FraudInvestigationAction({ nodeId, nodeLabel, tenantId }: { nodeId: string; nodeLabel: string; tenantId: string }) {
   const [sent, setSent] = useState(false);
   const [creating, setCreating] = useState(false);
-  const tenantId = useTenantId();
 
   async function handleCreate() {
     setCreating(true);
@@ -155,7 +154,7 @@ type InspectorPayload =
   | { type: 'edge'; edge: GraphEdge }
   | { type: 'cluster'; cluster: GraphCluster };
 
-function Inspector({ data, onClose }: { data: InspectorPayload; onClose: () => void }) {
+function Inspector({ data, onClose, tenantId }: { data: InspectorPayload; onClose: () => void; tenantId: string }) {
   return (
     <Card className="w-72 flex-shrink-0 overflow-hidden">
       <CardHeader>
@@ -190,7 +189,7 @@ function Inspector({ data, onClose }: { data: InspectorPayload; onClose: () => v
                     />
                   )}
                   {(data.node.riskScore !== undefined && data.node.riskScore >= 0.4) && (
-                    <FraudInvestigationAction nodeId={data.node.id} nodeLabel={data.node.label} />
+                    <FraudInvestigationAction nodeId={data.node.id} nodeLabel={data.node.label} tenantId={tenantId} />
                   )}
                   {typeof data.node.metadata.observation_class === 'string' && (
                     <div className="flex items-center gap-2">
@@ -803,7 +802,7 @@ export function GraphPage() {
         )}
 
         {/* Node/edge/cluster Inspector — shown when no path is active */}
-        {activePaths.length === 0 && inspector && <Inspector data={inspector} onClose={handleClose} />}
+        {activePaths.length === 0 && inspector && <Inspector data={inspector} onClose={handleClose} tenantId={tenantId} />}
       </div>
     </div>
   );
