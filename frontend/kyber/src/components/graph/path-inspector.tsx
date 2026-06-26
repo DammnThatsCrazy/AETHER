@@ -168,12 +168,12 @@ export function PathInspector({
                       {i < path.edges.length && (
                         <div className="mt-1 ml-1 text-xs text-text-secondary flex items-center gap-1">
                           <span aria-hidden="true">↓</span>
-                          <span>{path.edges[i].type}</span>
+                          <span>{path.edges[i]!.type}</span>
                           <span className="font-mono">
-                            ({Math.round(path.edges[i].confidence * 100)}%)
+                            ({Math.round(path.edges[i]!.confidence * 100)}%)
                           </span>
                           <Badge variant="default" className="text-[10px] py-0">
-                            {path.edges[i].layer}
+                            {path.edges[i]!.layer}
                           </Badge>
                         </div>
                       )}
