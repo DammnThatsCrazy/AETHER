@@ -98,7 +98,7 @@ export function AppRouter() {
                 <Route path="/rewards/rails" element={<PageSuspense><RewardRailSetupPage /></PageSuspense>} />
                 <Route path="/rewards/campaigns/new" element={<PageSuspense><CampaignBuilderPage /></PageSuspense>} />
                 <Route path="/suggestions" element={<PageSuspense><SuggestionsPage /></PageSuspense>} />
-                <Route path="/clusters/:id" element={<PageSuspense><Cluster360Page /></PageSuspense>} />
+                <Route path="/clusters/:clusterId" element={<PageSuspense><Cluster360Page /></PageSuspense>} />
                 <Route path="*" element={<Navigate to="/settings" replace />} />
               </Routes>
             </AppShell>

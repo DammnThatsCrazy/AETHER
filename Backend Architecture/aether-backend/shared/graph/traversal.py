@@ -190,6 +190,7 @@ class GraphTraversalEngine:
         direction: str = "both",
         limit: int = 100,
         tenant_id: Optional[str] = None,
+        edge_types: Optional[list[str]] = None,
     ) -> TraversalResult:
         """BFS traversal restricted to edges/vertices valid at as_of (ISO8601).
 
@@ -241,6 +242,8 @@ class GraphTraversalEngine:
                 edges = await client.get_edges(vid, direction=direction)
                 for edge in edges:
                     if not _edge_valid_at(edge):
+                        continue
+                    if edge_types and edge.edge_type not in edge_types:
                         continue
                     neighbor_id = (
                         edge.to_vertex_id if edge.from_vertex_id == vid else edge.from_vertex_id
