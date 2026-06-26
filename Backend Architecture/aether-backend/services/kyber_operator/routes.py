@@ -8,7 +8,7 @@ Routes:
 from __future__ import annotations
 
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Literal, Optional
 
 from fastapi import APIRouter, Depends, Path, Request
@@ -78,6 +78,9 @@ async def enter_tenant(body: TenantEntryRequest, request: Request) -> dict:
     session_id = str(uuid.uuid4())
     entered_at = _utc_now()
 
+    expires_dt = datetime.now(tz=timezone.utc) + timedelta(minutes=body.duration_minutes)
+    expires_at = expires_dt.isoformat().replace("+00:00", "Z")
+
     session = {
         "session_id": session_id,
         "operator_id": operator_id,
@@ -85,6 +88,7 @@ async def enter_tenant(body: TenantEntryRequest, request: Request) -> dict:
         "purpose": body.purpose,
         "access_reason": body.access_reason,
         "entered_at": entered_at,
+        "expires_at": expires_at,
         "duration_minutes": body.duration_minutes,
         "active": True,
     }
@@ -106,7 +110,7 @@ async def enter_tenant(body: TenantEntryRequest, request: Request) -> dict:
             "tenant_id": body.tenant_id,
             "purpose": body.purpose,
             "entered_at": entered_at,
-            "expires_at": None,
+            "expires_at": expires_at,
             "message": f"Entering tenant {body.tenant_id} as operator — all actions audited",
         }
     ).to_dict()
@@ -120,6 +124,17 @@ async def exit_tenant(session_id: str, request: Request) -> dict:
     session = _active_sessions.get(session_id)
     if not session:
         return APIResponse(data={"status": "already_expired"}).to_dict()
+
+    # Enforce expiry — treat expired sessions as already exited
+    expires_at_str = session.get("expires_at")
+    if expires_at_str and session.get("active"):
+        try:
+            exp = datetime.fromisoformat(expires_at_str.replace("Z", "+00:00"))
+            if datetime.now(tz=timezone.utc) >= exp:
+                session["active"] = False
+                return APIResponse(data={"status": "already_expired", "session_id": session_id}).to_dict()
+        except (ValueError, TypeError):
+            pass
 
     session["active"] = False
     session["exited_at"] = _utc_now()

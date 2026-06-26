@@ -187,6 +187,7 @@ class AttributionRunRepository:
         self,
         tenant_id: str,
         *,
+        campaign_id: Optional[str] = None,
         conversion_id: Optional[str] = None,
         status: Optional[str] = None,
         limit: int = 100,
@@ -197,33 +198,47 @@ class AttributionRunRepository:
             rows = [
                 r for r in _local_runs.values()
                 if r.get("tenant_id") == tenant_id
+                and (campaign_id is None or r.get("campaign_id") == campaign_id)
                 and (conversion_id is None or r.get("conversion_id") == conversion_id)
                 and (status is None or r.get("status") == status)
             ]
             rows.sort(key=lambda r: r.get("created_at", ""), reverse=True)
             return rows[:limit]
 
-        conditions = ["tenant_id = $1"]
+        conditions = ["ar.tenant_id = $1"]
         params: list[Any] = [tenant_id]
         p = 2
+        join_credits = False
+        if campaign_id:
+            # campaign_id lives on attribution_credits, not attribution_runs
+            join_credits = True
+            conditions.append(f"ac.campaign_id = ${p}")
+            params.append(campaign_id)
+            p += 1
         if conversion_id:
-            conditions.append(f"conversion_id = ${p}")
+            conditions.append(f"ar.conversion_id = ${p}")
             params.append(conversion_id)
             p += 1
         if status:
-            conditions.append(f"status = ${p}")
+            conditions.append(f"ar.status = ${p}")
             params.append(status)
             p += 1
         if cursor:
-            conditions.append(f"created_at < ${p}")
+            conditions.append(f"ar.created_at < ${p}")
             params.append(_decode_cursor(cursor))
             p += 1
         params.append(limit)
 
+        join_clause = (
+            "JOIN attribution_credits ac ON ac.attribution_run_id = ar.attribution_run_id"
+            if join_credits
+            else ""
+        )
         sql = f"""
-            SELECT * FROM attribution_runs
+            SELECT DISTINCT ar.* FROM attribution_runs ar
+            {join_clause}
             WHERE {' AND '.join(conditions)}
-            ORDER BY created_at DESC
+            ORDER BY ar.created_at DESC
             LIMIT ${p}
         """
         async with pool.acquire() as conn:

@@ -14,7 +14,7 @@ from __future__ import annotations
 import asyncio
 import sys
 from pathlib import Path
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, call, patch
 
 import pytest
 
@@ -43,14 +43,44 @@ def _run(coro):
 
 # ── Helpers ────────────────────────────────────────────────────────────────────
 
-def _fraud_membership(network_id: str, network_type: str, role: str, risk: float) -> dict:
+def _fraud_membership(
+    network_id: str,
+    role: str,
+    risk: float,
+    network_type: str = "payment_fraud",
+    alert_state: str = "open",
+) -> dict:
+    """Return a dict matching the FraudNetworkMember repo schema.
+
+    Uses risk_score (0–100 float) — the real schema field — not risk_contribution.
+    network_type and alert_state live in metadata because they are not member-level columns.
+    """
     return {
+        "id": f"member-{network_id}",
         "network_id": network_id,
-        "network_type": network_type,
+        "entity_type": "human",
         "role": role,
-        "risk_contribution": risk,
-        "alert_state": "open",
+        "risk_score": risk,
+        "confidence": 0.9,
+        "in_degree": 1,
+        "out_degree": 0,
+        "joined_at": "2026-01-01T00:00:00Z",
+        "metadata": {"network_type": network_type, "alert_state": alert_state},
     }
+
+
+def _make_repo_mock(return_value: list[dict]) -> MagicMock:
+    """Create a repo mock whose list_by_entity validates tenant_id == TENANT."""
+
+    async def _side_effect(entity_id: str, tenant_id: str) -> list[dict]:
+        assert tenant_id == TENANT, (
+            f"list_by_entity called with wrong tenant_id={tenant_id!r}; expected {TENANT!r}"
+        )
+        return return_value
+
+    mock_repo = MagicMock()
+    mock_repo.list_by_entity = AsyncMock(side_effect=_side_effect)
+    return mock_repo
 
 
 # ── Tests ──────────────────────────────────────────────────────────────────────
@@ -62,10 +92,9 @@ class TestFraudOverlayStructure:
         from services.operational_intelligence.routes import _compute_overlay_scores
 
         nodes = [_make_vertex("u1")]
-        membership = [_fraud_membership("fn-001", "payment_fraud", "mule", 0.82)]
+        membership = [_fraud_membership("fn-001", "mule", 0.82)]
 
-        mock_repo = MagicMock()
-        mock_repo.list_by_entity = AsyncMock(return_value=membership)
+        mock_repo = _make_repo_mock(membership)
 
         with patch("repositories.repos.FraudNetworkMemberRepository", return_value=mock_repo):
             overlays = _run(_compute_overlay_scores(nodes, [], ["fraud"], tenant_id=TENANT))
@@ -74,15 +103,17 @@ class TestFraudOverlayStructure:
         fraud_overlay = next((o for o in overlays if o.id == "fraud"), None)
         assert fraud_overlay is not None
         assert fraud_overlay.name == "Fraud Network"
+        # Verify tenant_id was passed correctly on every call
+        for c in mock_repo.list_by_entity.call_args_list:
+            assert c == call("u1", TENANT)
 
     def test_fraud_overlay_properties_keys(self):
         from services.operational_intelligence.routes import _compute_overlay_scores
 
         nodes = [_make_vertex("u1")]
-        membership = [_fraud_membership("fn-001", "payment_fraud", "mule", 0.9)]
+        membership = [_fraud_membership("fn-001", "mule", 0.9)]
 
-        mock_repo = MagicMock()
-        mock_repo.list_by_entity = AsyncMock(return_value=membership)
+        mock_repo = _make_repo_mock(membership)
 
         with patch("repositories.repos.FraudNetworkMemberRepository", return_value=mock_repo):
             overlays = _run(_compute_overlay_scores(nodes, [], ["fraud"], tenant_id=TENANT))
@@ -96,8 +127,7 @@ class TestFraudOverlayStructure:
         from services.operational_intelligence.routes import _compute_overlay_scores
 
         nodes = [_make_vertex("u1")]
-        mock_repo = MagicMock()
-        mock_repo.list_by_entity = AsyncMock(return_value=[])
+        mock_repo = _make_repo_mock([])
 
         with patch("repositories.repos.FraudNetworkMemberRepository", return_value=mock_repo):
             overlays = _run(_compute_overlay_scores(nodes, [], ["fraud"], tenant_id=TENANT))
@@ -112,10 +142,9 @@ class TestFraudOverlayNodeAnnotation:
         from services.operational_intelligence.routes import _compute_overlay_scores
 
         member = _make_vertex("u-member")
-        membership = [_fraud_membership("fn-002", "account_takeover", "beneficiary", 0.75)]
+        membership = [_fraud_membership("fn-002", "beneficiary", 0.75, network_type="account_takeover")]
 
-        mock_repo = MagicMock()
-        mock_repo.list_by_entity = AsyncMock(return_value=membership)
+        mock_repo = _make_repo_mock(membership)
 
         with patch("repositories.repos.FraudNetworkMemberRepository", return_value=mock_repo):
             overlays = _run(_compute_overlay_scores([member], [], ["fraud"], tenant_id=TENANT))
@@ -132,8 +161,7 @@ class TestFraudOverlayNodeAnnotation:
         from services.operational_intelligence.routes import _compute_overlay_scores
 
         non_member = _make_vertex("u-clean")
-        mock_repo = MagicMock()
-        mock_repo.list_by_entity = AsyncMock(return_value=[])
+        mock_repo = _make_repo_mock([])
 
         with patch("repositories.repos.FraudNetworkMemberRepository", return_value=mock_repo):
             overlays = _run(_compute_overlay_scores([non_member], [], ["fraud"], tenant_id=TENANT))
@@ -146,9 +174,10 @@ class TestFraudOverlayNodeAnnotation:
 
         member = _make_vertex("u-bad")
         clean = _make_vertex("u-good")
-        membership = [_fraud_membership("fn-003", "payment_fraud", "controller", 0.95)]
+        membership = [_fraud_membership("fn-003", "controller", 0.95)]
 
-        async def _side_effect(entity_id, tenant_id):
+        async def _side_effect(entity_id: str, tenant_id: str) -> list[dict]:
+            assert tenant_id == TENANT
             return membership if entity_id == "u-bad" else []
 
         mock_repo = MagicMock()
@@ -172,10 +201,9 @@ class TestFraudOverlayCoverage:
         from services.operational_intelligence.routes import _compute_overlay_scores
 
         nodes = [_make_vertex(f"u{i}") for i in range(4)]
-        membership = [_fraud_membership("fn-x", "payment_fraud", "mule", 0.7)]
+        membership = [_fraud_membership("fn-x", "mule", 0.7)]
 
-        mock_repo = MagicMock()
-        mock_repo.list_by_entity = AsyncMock(return_value=membership)
+        mock_repo = _make_repo_mock(membership)
 
         with patch("repositories.repos.FraudNetworkMemberRepository", return_value=mock_repo):
             overlays = _run(_compute_overlay_scores(nodes, [], ["fraud"], tenant_id=TENANT))
@@ -186,9 +214,10 @@ class TestFraudOverlayCoverage:
         from services.operational_intelligence.routes import _compute_overlay_scores
 
         nodes = [_make_vertex(f"u{i}") for i in range(4)]
-        # Only u0 is a member
-        async def _side(entity_id, tenant_id):
-            return [_fraud_membership("fn-y", "payment_fraud", "mule", 0.6)] if entity_id == "u0" else []
+
+        async def _side(entity_id: str, tenant_id: str) -> list[dict]:
+            assert tenant_id == TENANT
+            return [_fraud_membership("fn-y", "mule", 0.6)] if entity_id == "u0" else []
 
         mock_repo = MagicMock()
         mock_repo.list_by_entity = AsyncMock(side_effect=_side)
@@ -201,8 +230,7 @@ class TestFraudOverlayCoverage:
     def test_empty_nodes_no_data_status(self):
         from services.operational_intelligence.routes import _compute_overlay_scores
 
-        mock_repo = MagicMock()
-        mock_repo.list_by_entity = AsyncMock(return_value=[])
+        mock_repo = _make_repo_mock([])
 
         with patch("repositories.repos.FraudNetworkMemberRepository", return_value=mock_repo):
             overlays = _run(_compute_overlay_scores([], [], ["fraud"], tenant_id=TENANT))
@@ -219,13 +247,12 @@ class TestFraudOverlayMultipleMemberships:
 
         node = _make_vertex("u-multi")
         memberships = [
-            _fraud_membership("fn-low", "payment_fraud", "mule", 0.3),
-            _fraud_membership("fn-high", "account_takeover", "controller", 0.95),
-            _fraud_membership("fn-mid", "identity_fraud", "beneficiary", 0.6),
+            _fraud_membership("fn-low", "mule", 0.3, network_type="payment_fraud"),
+            _fraud_membership("fn-high", "controller", 0.95, network_type="account_takeover"),
+            _fraud_membership("fn-mid", "beneficiary", 0.6, network_type="identity_fraud"),
         ]
 
-        mock_repo = MagicMock()
-        mock_repo.list_by_entity = AsyncMock(return_value=memberships)
+        mock_repo = _make_repo_mock(memberships)
 
         with patch("repositories.repos.FraudNetworkMemberRepository", return_value=mock_repo):
             overlays = _run(_compute_overlay_scores([node], [], ["fraud"], tenant_id=TENANT))
@@ -243,9 +270,10 @@ class TestFraudOverlayRepositoryFailure:
         from services.operational_intelligence.routes import _compute_overlay_scores
 
         nodes = [_make_vertex("u-fail"), _make_vertex("u-ok")]
-        membership = [_fraud_membership("fn-001", "payment_fraud", "mule", 0.8)]
+        membership = [_fraud_membership("fn-001", "mule", 0.8)]
 
-        async def _side(entity_id, tenant_id):
+        async def _side(entity_id: str, tenant_id: str) -> list[dict]:
+            assert tenant_id == TENANT
             if entity_id == "u-fail":
                 raise RuntimeError("DB connection failed")
             return membership

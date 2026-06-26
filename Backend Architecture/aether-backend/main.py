@@ -287,6 +287,7 @@ from services.data_quality import (
 )
 
 from services.kyber_operator.routes import router as kyber_operator_router
+from services.cluster.routes import router as cluster_router
 
 # Canonical Measurement (conversions, journeys, attribution, spend, quality, ops, experiments)
 from services.measurement.routes.conversions import router as measurement_conversions_router
@@ -572,6 +573,7 @@ def create_app() -> FastAPI:
     app.include_router(realtime_router)
     app.include_router(operational_graph_router)
     app.include_router(entity_intelligence_router)
+    app.include_router(cluster_router)         # Cluster360: /v1/clusters
     app.include_router(investigation_router)
     app.include_router(governance_router)
     app.include_router(security_router)
