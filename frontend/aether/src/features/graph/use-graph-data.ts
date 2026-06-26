@@ -84,6 +84,29 @@ function mapLinkEdge(raw: unknown, entityId: string, idx: number): GraphEdge | n
   };
 }
 
+function mapGraphEdge(raw: unknown, idx: number): GraphEdge | null {
+  const r = asRecord(raw);
+  const fromId = String(r.from ?? r.from_vertex_id ?? '');
+  const toId = String(r.to ?? r.to_vertex_id ?? '');
+  if (!fromId || !toId) return null;
+  const edgeType = String(r.edge_type ?? r.type ?? r.relation_type ?? '');
+  const layer = classifyEdgeType(edgeType);
+  if (!layer) {
+    console.warn(`[graph] Unknown graph edge type "${edgeType}" — filtered (fail closed)`);
+    return null;
+  }
+  const confidence = typeof r.confidence === 'number' ? r.confidence : 0.5;
+  return {
+    id: String(r.id ?? r.edge_id ?? `edge-${fromId}-${toId}-${idx}`),
+    source: fromId,
+    target: toId,
+    relationType: edgeType,
+    interactionClass: layer,
+    weight: typeof r.weight === 'number' ? r.weight : confidence,
+    metadata: asRecord(r.properties ?? r.metadata),
+  };
+}
+
 // ── Cluster derivation from entity properties ─────────────────────────────────
 
 function deriveClusters(rawEntities: unknown[]): GraphCluster[] {
@@ -177,8 +200,7 @@ export function useGraphData(options?: { asOf?: string | null; tenantId?: string
         const rawEdges = Array.isArray(data.edges) ? data.edges : [];
         const edgeMap = new Map<string, GraphEdge>();
         rawEdges.forEach((e: unknown, i: number) => {
-          const r = asRecord(e);
-          const edge = mapLinkEdge(r, String(r.from ?? r.from_vertex_id ?? ''), i);
+          const edge = mapGraphEdge(e, i);
           if (edge && !edgeMap.has(edge.id)) edgeMap.set(edge.id, edge);
         });
         return { nodes, edges: Array.from(edgeMap.values()), clusters: [] };
