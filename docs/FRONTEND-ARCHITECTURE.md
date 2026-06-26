@@ -13,7 +13,7 @@ source_files:
 canonical_owner: frontend@aether
 estimated_read_minutes: 35
 toc_depth: 4
-last_synced_commit: 97fc85c
+last_synced_commit: 9eba3f0
 ---
 
 # Aether Frontend Architecture & Designer Handoff
@@ -33,7 +33,7 @@ There are two separate frontend applications. **Do not mix them up.**
 
 **Aether (customer-facing) contains:**
 - Auth flows (signup, login, SSO, billing)
-- The intelligence **graph canvas** showing the tenant's users, organizations, and AI agents — layer/overlay toggles (H2H/H2A/A2H/A2A, risk, trust, campaign, economic, fraud), path finder, cluster panel, and cluster drill-down to Cluster360; summary strip (entity/relationship/cluster/risk-alert counts), truncation warning when entity set exceeds 200, replay mode with date picker, observation-class node styling (solid/dashed/dotted borders), Recommendation/Prediction outcome panel in Inspector
+- The intelligence **graph canvas** showing the tenant's users, organizations, and AI agents — layer/overlay toggles (H2H/H2A/A2H/A2A, risk, trust, campaign, economic, fraud), path finder with multi-hop traversal modes (Shortest / Strongest / K-Shortest), cluster panel, and cluster drill-down to Cluster360; summary strip (entity/relationship/cluster/risk-alert counts), truncation warning when entity set exceeds 200, replay mode with date picker, observation-class node styling (solid/dashed/dotted borders), Recommendation/Prediction outcome panel in Inspector, **PathInspector** panel (shown in right panel when a path is active — Overview/Hops/Evidence/Score tabs, save-to-investigation action)
 - **Cluster360** (`/clusters/:clusterId`) — 7-tab cluster surface: Overview (type, state, formation reason, confidence, risk score, properties), Members (paginated DataTable with confidence + join date), Timeline (merge/split/growth events), Economic (revenue, spend, LTV, value tier, top-member breakdown), Campaigns (attributed campaigns, top channel, conversion rate), Risk (aggregate score, fraud network link, alert count, evidence refs, high-risk members), Geography (country distribution bars, concentration score)
 - **Semantic zoom** — graph canvas supports server-backed macro→cluster→entity zoom: depth-0 query returns cluster-aggregate nodes; clicking a cluster fetches depth-1 member expansion via `useGraphZoom`
 - **Entity Profile360** panels — what tenants drill into when they click a graph node
@@ -70,6 +70,7 @@ There are two separate frontend applications. **Do not mix them up.**
 - Design system components used by both Aether and Kyber
 - `TimeWindowSelector`, `FreshnessIndicator`, `EvidenceDrawer`, `UsageBar`, `Toast`, etc.
 - Graph layer type contracts: `RelationshipLayer` (`H2H | H2A | A2H | A2A`), `RELATIONSHIP_LAYERS`, `LAYER_DESCRIPTIONS`, `EDGE_LAYER_MAP`, `classifyEdgeType`, `countEdgesByLayer` — shared between Aether and Kyber graph health features
+- **Path intelligence types** (Phase 20): `PathClassification`, `PathNode`, `PathEdge`, `PathScoreBreakdown`, `RelationshipPath`, `PathExplanation`, `TraversalSnapshot`, `PathQuery`, `PathQueryResponse`, `NodeExpansionRequest`, `NodeExpansionResponse`, `DeepTraversalJob` — canonical TS contracts in `packages/shared/operational-intelligence.ts`, mirroring the Pydantic models exactly
 
 ---
 
@@ -275,6 +276,8 @@ Shown only when entity `kind` is `governance_org`, `exchange`, `yield_platform`,
   <MiniMap>                          — overview thumbnail when graph is large (>50 nodes)
   <ViewModeSelector>                 — Relationship Map | Attribution Web | Journey Flow | Geographic
   <GraphSearchBar>                   — search by entity name, ID, or identifier
+  <GraphToolbar>                     — path mode toggle, traversal mode selector (Shortest/Strongest/K-Shortest),
+                                       target-node selector, K-paths input (when k_shortest mode is active)
 
 <ProfilePanel entity={selected}>     — right-side panel, 40% viewport width on desktop
   <EntityHeader>                     — name, kind badge, operational tier indicator, freshness dot
@@ -285,6 +288,16 @@ Shown only when entity `kind` is `governance_org`, `exchange`, `yield_platform`,
     <GraphEdgeList>                  — related entities with quick-navigate
     <EvidenceDrawer signal={}>       — expands signal detail with evidence_refs
   </TabContent>
+
+<PathInspector path={RelationshipPath}>  — shown in right panel instead of ProfilePanel when a path is active
+  <Tab: Overview>                    — classification badge (observed/causal/attributed/inferred/correlated/mixed),
+                                       layer_sequence badges, path_confidence + evidence_coverage score bars,
+                                       hop_count / source_id / target_id / computed_at metadata grid
+  <Tab: Hops>                        — vertical breadcrumb: node kind badge → label → edge type/confidence/layer → next node
+  <Tab: Evidence>                    — why_connected narrative, supporting_evidence list, contradictory_evidence list;
+                                       "Load explanation" button triggers POST /v1/graph/paths/explain
+  <Tab: Score>                       — PathScoreBreakdown: geometric_mean, min_edge, hop_penalty, causality_penalty, overall
+  <SaveToInvestigation button>       — calls POST /v1/investigations/{case_id}/snapshot with path_id + snapshot_id
 
 <GeographicView>                     — full-screen geographic surface
   <ChoroplethMap level={geo_level}>
@@ -390,6 +403,15 @@ Every Profile360 panel maps to a backend sub-resource endpoint. The frontend bin
 | Governance activity | `GET /v1/profile/{id}/governance-activity` | Yes |
 | Intelligence | `GET /v1/profile/{id}/intelligence` | No |
 | Geographic summary | `GET /v1/geo/summary` | Yes |
+| Path query | `POST /v1/graph/paths` | No |
+| Node expansion | `POST /v1/graph/paths/expand` | No |
+| Path explanation | `POST /v1/graph/paths/explain` | No |
+| Create snapshot | `POST /v1/graph/snapshots` | No |
+| Get snapshot | `GET /v1/graph/snapshots/{id}` | No |
+| Compare snapshots | `POST /v1/graph/snapshots/{id}/compare` | No |
+| Async deep traversal | `POST /v1/graph/paths/jobs` | No |
+| Deep traversal job status | `GET /v1/graph/paths/jobs/{id}` | No |
+| Link snapshot to investigation | `POST /v1/investigations/{case_id}/snapshot` | No |
 
 All window-aware endpoints accept `?window=30d|60d|90d|lifetime`. The time window selector updates all window-aware panels on the active tab simultaneously.
 
