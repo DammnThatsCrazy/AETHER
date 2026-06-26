@@ -280,7 +280,7 @@ interface ZoomState {
   error: string | null;
 }
 
-export function useGraphZoom() {
+export function useGraphZoom(tenantId?: string) {
   const [zoomLevel, setZoomLevel] = useState<GraphZoomLevel>('entity');
   const [expandedClusterId, setExpandedClusterId] = useState<string | null>(null);
   const [zoomNodes, setZoomNodes] = useState<GraphNode[]>([]);
