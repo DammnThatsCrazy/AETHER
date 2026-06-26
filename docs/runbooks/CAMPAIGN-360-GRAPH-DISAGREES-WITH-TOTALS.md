@@ -78,12 +78,14 @@ entities.
    Look for `WARNING: campaign vertex not found in graph store` in the service logs.
 
 **Resolution:**
-Re-materialize the campaign vertex:
+Re-materialize the campaign vertex by triggering a graph refresh:
 ```bash
-curl -X POST "$API_BASE/v1/campaigns/$CAMPAIGN_ID/graph-sync" \
-  -H "Authorization: Bearer $TOKEN"
+curl -X POST "$API_BASE/v1/campaigns/$CAMPAIGN_ID/graph" \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"depth": 1}'
 ```
-If this endpoint is not available, escalate to the platform engineering team
+If the campaign vertex is still missing after this call, escalate to the platform engineering team
 to manually insert the campaign vertex into the graph store.
 
 ---
@@ -126,7 +128,7 @@ window and population tier.
 
 | Condition | Escalate to |
 |-----------|------------|
-| Campaign anchor node missing after graph-sync | Platform engineering |
+| Campaign anchor node missing after graph refresh | Platform engineering |
 | Graph query times out at depth ≤ 2 with < 100 nodes | Database infrastructure (query plan regression) |
 | `truncated: true` even at `max_nodes=500, max_edges=1500` | Expected; document for tenant |
 | Ghost nodes persist after refresh | Platform engineering with node IDs |

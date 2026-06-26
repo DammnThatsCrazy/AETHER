@@ -16,6 +16,20 @@ import { PathInspector } from '@aether-app/components/graph/path-inspector';
 import type { RelationshipPath, PathExplanation, PathMode } from '@aether/shared/operational-intelligence';
 import { api } from '@aether-app/lib/api/endpoints';
 
+// ── Tenant ID resolution ──────────────────────────────────────────────────────
+
+function useTenantId(): string {
+  const [tenantId, setTenantId] = useState('');
+  useEffect(() => {
+    api.me.profile().then(data => {
+      const r = data as Record<string, unknown>;
+      const id = String(r['tenant_id'] ?? r['tenantId'] ?? '');
+      if (id) setTenantId(id);
+    }).catch(() => {});
+  }, []);
+  return tenantId;
+}
+
 // ── Cluster Inspector ─────────────────────────────────────────────────────────
 
 function ClusterInspector({ cluster }: { cluster: GraphCluster }) {
@@ -63,7 +77,7 @@ function CampaignDrillDown({ campaignId }: { campaignId: string }) {
         variant="ghost"
         size="sm"
         className="w-full text-xs"
-        onClick={() => navigate(`/measurement/campaigns/${campaignId}`)}
+        onClick={() => navigate(`/campaigns/${campaignId}`)}
       >
         View Campaign Attribution →
       </Button>
@@ -76,13 +90,14 @@ function CampaignDrillDown({ campaignId }: { campaignId: string }) {
 function FraudInvestigationAction({ nodeId, nodeLabel }: { nodeId: string; nodeLabel: string }) {
   const [sent, setSent] = useState(false);
   const [creating, setCreating] = useState(false);
+  const tenantId = useTenantId();
 
   async function handleCreate() {
     setCreating(true);
     try {
       const { api } = await import('@aether-app/lib/api/endpoints');
       await api.investigations.create({
-        tenantId: '',
+        tenantId,
         title: `Risk investigation — ${nodeLabel}`,
         subjects: [{ kind: 'entity', id: nodeId }],
         createdBy: 'analyst',
@@ -341,13 +356,18 @@ const NODE_COLUMNS = [
 export function GraphPage() {
   const [searchParams] = useSearchParams();
   const deepLinkedEntity = searchParams.get('entity') ?? searchParams.get('selected_entity');
+
+  // Declared before useGraphData so they can be passed as options
+  const [replayDate, setReplayDate] = useState<string | null>(null);
+  const tenantId = useTenantId();
+
   const {
     nodes, edges, clusters,
     isLoading, error,
     activeLayer, setActiveLayer,
     overlay, setOverlay,
     getNeighbors,
-  } = useGraphData();
+  } = useGraphData({ asOf: replayDate, tenantId });
 
   const [viewMode, setViewMode] = useState<'graph' | 'table'>('graph');
   const [inspector, setInspector] = useState<InspectorPayload | null>(null);
@@ -362,7 +382,6 @@ export function GraphPage() {
   const [pathLoading, setPathLoading] = useState(false);
   const [pathError, setPathError] = useState<string | null>(null);
   const [highlightedCluster, setHighlightedCluster] = useState<string[] | null>(null);
-  const [replayDate, setReplayDate] = useState<string | null>(null);
 
   const highlightedNodeIds = useMemo(() => {
     if (highlightedCluster) return highlightedCluster;
@@ -393,7 +412,7 @@ export function GraphPage() {
       setPathError(null);
       try {
         const resp = await api.graphIntelligence.paths({
-          tenant_id: '',
+          tenant_id: tenantId,
           source_id: pathSource,
           target_id: node.id,
           mode: traversalMode,
@@ -430,7 +449,7 @@ export function GraphPage() {
     }
     setHighlightedCluster(null);
     setInspector({ type: 'node', node, neighbors: getNeighbors(node.id) });
-  }, [pathMode, pathSource, traversalMode, kPaths, getNeighbors]);
+  }, [pathMode, pathSource, traversalMode, kPaths, tenantId, getNeighbors]);
 
   useEffect(() => {
     if (!deepLinkedEntity || isLoading || error) return;
@@ -479,16 +498,16 @@ export function GraphPage() {
   const handleLoadExplanation = useCallback(async (pathId: string) => {
     if (pathExplanations[pathId]) return;
     try {
-      const resp = await api.graphIntelligence.explain({ tenant_id: '', path_id: pathId });
+      const resp = await api.graphIntelligence.explain({ tenant_id: tenantId, path_id: pathId });
       const exp = (resp as { data?: PathExplanation }).data;
       if (exp) setPathExplanations(prev => ({ ...prev, [pathId]: exp }));
     } catch { /* ignore */ }
-  }, [pathExplanations]);
+  }, [pathExplanations, tenantId]);
 
   const handleSaveToInvestigation = useCallback(async (pathId: string, snapshotId?: string) => {
     try {
       await api.investigations.create({
-        tenantId: '',
+        tenantId,
         title: `Path investigation — ${pathId.slice(0, 8)}`,
         subjects: [],
         createdBy: 'analyst',
@@ -497,7 +516,7 @@ export function GraphPage() {
         // Best-effort: attach snapshot to new case (would need caseId from create response)
       }
     } catch { /* ignore */ }
-  }, []);
+  }, [tenantId]);
 
   if (error) {
     return (
