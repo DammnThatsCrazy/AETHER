@@ -13,7 +13,7 @@ source_files:
 canonical_owner: frontend@aether
 estimated_read_minutes: 35
 toc_depth: 4
-last_synced_commit: 461f084
+last_synced_commit: 97fc85c
 ---
 
 # Aether Frontend Architecture & Designer Handoff
