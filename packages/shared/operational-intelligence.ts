@@ -11,6 +11,7 @@
 import type { BaseEvent, EventType } from './events';
 import type { EntityKind, EntityRef } from './entities';
 import type { ActorKind } from './provenance';
+import type { GraphResultMeta } from './graph-contract';
 
 // ---------------------------------------------------------------------------
 // Shared API standards
@@ -585,20 +586,6 @@ export interface PathQuery {
   include_explanation?: boolean;
   save_snapshot?: boolean;
   additional_sources?: string[];
-}
-
-export interface GraphResultMeta {
-  truncated: boolean;
-  truncation_reason?: string;
-  node_count: number;
-  edge_count: number;
-  execution_ms: number;
-  query_id: string;
-  budget_used: number;
-  cursor?: string;
-  as_of?: string;
-  freshness_seconds?: number;
-  warnings: string[];
 }
 
 export interface PathQueryResponse {
