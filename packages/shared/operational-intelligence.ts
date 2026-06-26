@@ -587,6 +587,20 @@ export interface PathQuery {
   additional_sources?: string[];
 }
 
+export interface GraphResultMeta {
+  truncated: boolean;
+  truncation_reason?: string;
+  node_count: number;
+  edge_count: number;
+  execution_ms: number;
+  query_id: string;
+  budget_used: number;
+  cursor?: string;
+  as_of?: string;
+  freshness_seconds?: number;
+  warnings: string[];
+}
+
 export interface PathQueryResponse {
   paths: RelationshipPath[];
   explanations: PathExplanation[];

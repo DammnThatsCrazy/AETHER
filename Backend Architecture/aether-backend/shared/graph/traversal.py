@@ -8,7 +8,10 @@ from __future__ import annotations
 import heapq
 from collections import deque
 from dataclasses import dataclass, field
-from typing import Optional
+from typing import TYPE_CHECKING, Optional
+
+if TYPE_CHECKING:
+    from services.operational_intelligence.models import PathExplanation, RelationshipPath
 
 from shared.graph.graph import Edge, GraphClient, Vertex
 from shared.graph.path_scoring import classify_path, compute_evidence_coverage, make_path_id, score_path
@@ -610,7 +613,7 @@ class GraphTraversalEngine:
         return TraversalResult(nodes=result_nodes, edges=result_edges)  # multi_source_bfs
 
 
-def _build_path_explanation(path: "RelationshipPath") -> "PathExplanation":  # type: ignore[name-defined]
+def _build_path_explanation(path: "RelationshipPath") -> "PathExplanation":
     """Generate a human-readable PathExplanation from a RelationshipPath.
 
     Produces why_connected prose and per-hop narrative from layer_sequence and node kinds/labels.

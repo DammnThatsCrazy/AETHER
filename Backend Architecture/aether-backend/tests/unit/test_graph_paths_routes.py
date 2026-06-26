@@ -288,7 +288,6 @@ async def test_snapshot_tenant_isolation():
 @pytest.mark.asyncio
 async def test_compare_snapshot():
     from services.operational_intelligence.routes import create_traversal_snapshot, compare_traversal_snapshots
-    from services.operational_intelligence.models import GraphCompareRequest
     graph = await _build_graph(
         _v("A"), _v("B"),
         edges=[_e("A", "B")],

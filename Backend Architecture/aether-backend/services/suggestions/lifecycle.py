@@ -8,7 +8,7 @@ raise BadRequestError on further transition attempts.
 from __future__ import annotations
 
 import uuid
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING, Any, Optional
 
 if TYPE_CHECKING:
     from .repository import SuggestionRepository
@@ -217,7 +217,7 @@ async def apply_transition(
 async def _hydrate_graph_refs(
     suggestion_id: str,
     tenant_id: str,
-    graph_client: "Any",  # type: ignore[name-defined]
+    graph_client: Any,
 ) -> list[dict]:
     """Populate path_id and snapshot_id on a suggestion's graph_refs.
 
