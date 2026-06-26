@@ -402,7 +402,15 @@
     },
     {
       "path": "docs/CANONICAL-PATH-INTELLIGENCE.md",
-      "title": "Canonical Path Intelligence"
+      "title": "Canonical Path Intelligence",
+      "slug": "concepts/canonical-path-intelligence",
+      "section": "concepts",
+      "visibility": "P",
+      "audience": [
+        "architect",
+        "dev-senior",
+        "ai"
+      ]
     },
     {
       "path": "docs/CHANGELOG.md",
@@ -1793,7 +1801,15 @@
     },
     {
       "path": "docs/MULTI-HOP-TRAVERSAL.md",
-      "title": "Multi-Hop Traversal Algorithms"
+      "title": "Multi-Hop Traversal Algorithms",
+      "slug": "concepts/multi-hop-traversal",
+      "section": "concepts",
+      "visibility": "P",
+      "audience": [
+        "architect",
+        "dev-senior",
+        "ai"
+      ]
     },
     {
       "path": "docs/ONBOARDING-TEMPLATES.md",
@@ -1960,7 +1976,14 @@
     },
     {
       "path": "docs/PHASE-20-GAP-LEDGER.md",
-      "title": "Phase 20 Gap Ledger"
+      "title": "Phase 20 Gap Ledger",
+      "slug": "reference/phase-20-gap-ledger",
+      "section": "reference",
+      "visibility": "P",
+      "audience": [
+        "architect",
+        "dev-senior"
+      ]
     },
     {
       "path": "docs/PIPELINE-HEALTH.md",
