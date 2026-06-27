@@ -249,12 +249,21 @@ class NoesisService:
 
             self._assert_read_only(plan)
 
+            yield _sse({"type": "planning", "mode": mode, "plan_summary": f"Querying {plan.intent.replace('_', ' ')}…"})
+
             response = await self._dispatch(plan, scope, body)
             response.mode = mode  # type: ignore[assignment]
             if not scope.debug_allowed:
                 response.query_debug = None
 
             yield _sse({"type": "results", "count": len(response.results)})
+
+            if response.evidence:
+                evidence_data = response.evidence.model_dump(mode="json", exclude_none=True)
+                if not response.evidence.sufficient:
+                    yield _sse({"type": "insufficient_evidence", "reason": response.evidence.insufficient_reason or "Insufficient evidence"})
+                else:
+                    yield _sse({"type": "evidence", "sources": evidence_data.get("sources", [])})
 
             if body.conversation_id and response.intent not in ("rejected", "unsupported"):
                 await self.conversation_store.append(
@@ -563,7 +572,11 @@ class NoesisService:
                 pass
             elif vtid not in (scope.effective_tenant_id, None, ""):
                 vertex = None
-        neighbors = await self._graph_cb.call(self.graph.get_neighbors(plan.target, direction="both"), []) if vertex else []
+        depth = int(plan.filters.get("depth", 1))
+        if depth > 1 and self.flags.multi_hop_enabled:
+            neighbors = await self._graph_cb.call(self.graph.k_hop_neighbors(plan.target, max_depth=depth, direction="both"), []) if vertex else []
+        else:
+            neighbors = await self._graph_cb.call(self.graph.get_neighbors(plan.target, direction="both"), []) if vertex else []
         if scope.cross_tenant and not scope.effective_tenant_id:
             safe_neighbors = list(neighbors)
         else:
@@ -639,6 +652,26 @@ class NoesisService:
                 insufficient_reason=f"No wallet matching '{plan.target}'" if not rows and needle else None,
             )
             return self._response(plan, f"Found {len(rows)} wallet records in the authorized tenant scope.", rows, self._entity_actions(rows, scope), evidence=evidence, scope=scope)
+        if plan.intent == "profile_lookup" and plan.target:
+            try:
+                from services.profile.aggregator import Profile360Aggregator
+                agg = Profile360Aggregator(
+                    entity_repo=self.entities,
+                    wallet_repo=self.wallets,
+                    agent_config_repo=self.agents,
+                    agent_exec_repo=self.agent_executions,
+                )
+                profile = await agg.summary(entity_id=plan.target, tenant_id=scope.effective_tenant_id)
+                evidence = EvidenceEnvelope(
+                    sources=[EvidenceSource(service="profile360_aggregator", resource_type="profile_summary", resource_id=plan.target, fetched_at=fetched_at)],
+                    sufficient=profile.get("entity") is not None,
+                    insufficient_reason=f"No profile found for '{plan.target}'" if profile.get("entity") is None else None,
+                )
+                answer = f"Profile 360 summary for {plan.target}: {profile.get('counts', {}).get('wallets', 0)} wallets, risk score {profile.get('behavior', {}).get('risk_score')}."
+                return self._response(plan, answer, [profile], self._entity_actions([profile.get("entity") or {}], scope), evidence=evidence, scope=scope)
+            except Exception:
+                pass  # Fall through to standard entity lookup on failure
+
         filters: dict[str, Any] = self._tenant_filter(scope) or {}
         if plan.entity_type:
             filters["entity_type"] = plan.entity_type
@@ -681,14 +714,42 @@ class NoesisService:
         fetched_at = utc_now()
         campaigns = await self.campaigns.find_many(filters=self._tenant_filter(scope), limit=plan.limit)
         rewards = await self.rewards.find_many(filters=self._tenant_filter(scope), limit=plan.limit)
-        rows = [{"type": "campaign", **r} for r in campaigns] + [{"type": "reward", **r} for r in rewards]
-        evidence = EvidenceEnvelope(
-            sources=[
-                EvidenceSource(service="campaign_repository", resource_type="campaign", fetched_at=fetched_at),
-                EvidenceSource(service="rewards_repository", resource_type="reward", fetched_at=fetched_at),
-            ],
-            sufficient=True,
-        )
+
+        attribution_rows: list[dict] = []
+        try:
+            from .adapters.attribution_adapter import NoesisAttributionAdapter
+            attr_adapter = NoesisAttributionAdapter()
+            attribution_rows = await attr_adapter.campaign_performance(
+                scope.effective_tenant_id,
+                time_range=plan.time_range,
+                limit=plan.limit,
+            )
+        except Exception:
+            pass
+
+        # Merge attribution performance data into campaign rows by campaign_id
+        attr_by_id = {r["campaign_id"]: r for r in attribution_rows}
+        merged_campaigns = []
+        for c in campaigns:
+            cid = c.get("campaign_id") or c.get("id", "")
+            merged = {"type": "campaign", **c}
+            if cid in attr_by_id:
+                perf = attr_by_id[cid]
+                merged["roas"] = perf.get("roas")
+                merged["conversion_count"] = perf.get("conversion_count")
+                merged["total_revenue"] = perf.get("total_revenue")
+            merged_campaigns.append(merged)
+
+        rows = merged_campaigns + [{"type": "reward", **r} for r in rewards]
+        sources = [
+            EvidenceSource(service="campaign_repository", resource_type="campaign", fetched_at=fetched_at),
+            EvidenceSource(service="rewards_repository", resource_type="reward", fetched_at=fetched_at),
+        ]
+        claims: list[EvidenceClaim] = []
+        if attribution_rows:
+            sources.append(EvidenceSource(service="attribution_run_repository", resource_type="attribution_run", fetched_at=fetched_at))
+            claims.append(EvidenceClaim(claim="ROAS computed from completed attribution runs", claim_type="computation", confidence=0.9))
+        evidence = EvidenceEnvelope(sources=sources, claims=claims, sufficient=True)
         return self._response(plan, f"Found {len(campaigns)} campaigns and {len(rewards)} rewards in scope.", rows, [NoesisAction(type="navigate", label="Open campaigns", href="/campaigns")], evidence=evidence, scope=scope)
 
     async def _risk_cluster_lookup(self, plan: QueryPlan, scope: Scope) -> NoesisResponse:

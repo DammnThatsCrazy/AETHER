@@ -52,12 +52,36 @@ All answers are scoped to your tenant. You cannot see or query another tenant's 
 
 Results reflect the current state of your data stores. Some analytics summaries may be cached for up to 5 minutes.
 
+## Evidence model
+
+Every Noesis answer includes an **evidence envelope** — a structured record of where the answer came from:
+
+- **Sources**: each data service queried (e.g. `entity_repository`, `graph_client`, `profile360_aggregator`) with the resource type and fetch time.
+- **Claims**: structured assertions about the answer (`fact`, `computation`, `inference`, or `recommendation`) with confidence scores.
+- **Sufficient flag**: `true` when the data supports the answer. When `false`, Noesis explains *why* the graph cannot support the conclusion (e.g. "No profile found for 'entity-123'").
+
+### Insufficient evidence
+
+If no matching records exist for a specific target, Noesis returns an **Insufficient evidence** state with a plain-language reason. This is not an error — it means the graph has been checked and the answer is genuinely absent.
+
+### Profile 360 lookups
+
+When you ask about a specific user or entity (e.g. "Explain this user's Profile 360"), Noesis calls the Profile 360 aggregator directly and returns a full summary: wallet count, agent count, transfer inflow/outflow, active delegations, behavior flags, and risk score — all in one response.
+
+### Campaign performance
+
+Campaign queries include ROAS (return on ad spend) and conversion counts derived from attribution run data, not just the raw campaign record.
+
 ## Limitations
 
 - Results are capped at 50 records per query (default 10).
 - Complex multi-step analysis is not supported — ask specific, focused questions.
 - Noesis uses keyword-based classification. If your question isn't recognized, try rephrasing with specific terms like "wallet", "alert", "profile", "agent", "campaign", "risk", or "health".
-- Graph traversal shows direct neighbors only, not multi-hop paths.
+- Graph traversal shows direct neighbors only by default. Multi-hop traversal (depth > 1) is available when enabled by your operator.
+
+## Conversation history
+
+Your Noesis conversations are stored for the current session. On the Aether dashboard, the sidebar shows your recent conversations so you can resume a previous inquiry.
 
 ## Error messages
 
@@ -66,3 +90,4 @@ Results reflect the current state of your data stores. Some analytics summaries 
 | "Noesis could not safely map this request" | Your question doesn't match a supported query type. Try rephrasing. |
 | "Which graph node or entity should I inspect?" | Noesis needs a specific entity ID to look up graph connections. |
 | Fallback with suggested prompt | Use the suggested prompt to refine your question. |
+| Insufficient evidence | The graph was checked but no matching data exists for your query. |
