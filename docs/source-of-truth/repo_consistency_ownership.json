@@ -37,7 +37,7 @@
     {
       "id": "sdk_public_api",
       "name": "SDK public method changed",
-      "source_globs": ["packages/web/src/index.ts", "packages/web/src/**/*.ts", "packages/react-native/src/index.tsx", "packages/react-native/src/**/*.ts", "packages/shared/index.ts", "packages/shared/*.ts"],
+      "source_globs": ["packages/web/src/index.ts", "packages/web/src/**/*.ts", "packages/react-native/src/index.tsx", "packages/react-native/src/**/*.ts", "packages/shared/index.ts", "packages/shared/*.ts", "!packages/**/*.test.ts", "!packages/**/*.spec.ts", "!packages/**/*.test.tsx", "!packages/**/*.spec.tsx"],
       "required_changed_globs": ["packages/**/src/index.ts", "packages/**/src/index.tsx", "packages/**/package.json", "packages/**/dist/**/*.d.ts", "docs/SDK*.md", "docs/_generated/**", "tests/**", "scripts/validate_ts_public_exports.py"],
       "required_commands": ["python scripts/validate_ts_public_exports.py", "python scripts/validate_sdk_release_alignment.py", "npm run typecheck", "npm run build", "npm test"],
       "remediation": "Export public types from package barrels, regenerate declarations, update SDK docs, and add package-root import tests."
@@ -45,7 +45,7 @@
     {
       "id": "package_public_type",
       "name": "package public type changed",
-      "source_globs": ["packages/**/*.ts", "packages/**/*.tsx"],
+      "source_globs": ["packages/**/*.ts", "packages/**/*.tsx", "!packages/**/*.test.ts", "!packages/**/*.spec.ts", "!packages/**/*.test.tsx", "!packages/**/*.spec.tsx"],
       "required_changed_globs": ["packages/**/src/index.ts", "packages/**/src/index.tsx", "packages/shared/index.ts", "packages/**/dist/**/*.d.ts", "tests/**"],
       "required_commands": ["python scripts/validate_ts_public_exports.py", "npm run typecheck", "npm run build"],
       "remediation": "Update barrel exports and declaration outputs with the source change."
