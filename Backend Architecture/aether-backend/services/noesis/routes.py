@@ -184,3 +184,29 @@ async def noesis_health(request: Request):
         status_code=status_code,
         content={"status": status, "checks": checks},
     )
+
+
+@router.get("/conversations")
+async def list_conversations(request: Request, graph: GraphClient = Depends(get_graph)):
+    """List recent Noesis conversations for the authenticated tenant scope."""
+    from .conversation import NoesisConversationStore
+    tenant = request.state.tenant
+    store = NoesisConversationStore()
+    try:
+        conversations = await store.list_for_tenant(tenant.tenant_id, limit=20)
+    except Exception:
+        conversations = []
+    return JSONResponse(content={"data": conversations, "count": len(conversations)})
+
+
+@router.get("/conversations/{conversation_id}")
+async def get_conversation(conversation_id: str, request: Request, graph: GraphClient = Depends(get_graph)):
+    """Retrieve a specific Noesis conversation by ID."""
+    from .conversation import NoesisConversationStore
+    tenant = request.state.tenant
+    store = NoesisConversationStore()
+    try:
+        messages = await store.get_recent(conversation_id, tenant.tenant_id, limit=50)
+    except Exception:
+        messages = []
+    return JSONResponse(content={"conversation_id": conversation_id, "messages": messages, "count": len(messages)})

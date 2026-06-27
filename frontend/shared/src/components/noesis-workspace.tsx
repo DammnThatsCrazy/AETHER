@@ -23,6 +23,32 @@ export interface NoesisGraphPayload {
   readonly highlights: readonly string[];
 }
 
+export type EvidenceClaimType = 'fact' | 'computation' | 'inference' | 'recommendation';
+
+export interface EvidenceSource {
+  readonly service: string;
+  readonly resource_type: string;
+  readonly resource_id?: string | undefined;
+  readonly fetched_at: string;
+  readonly freshness_seconds?: number | undefined;
+  readonly confidence?: number | undefined;
+}
+
+export interface EvidenceClaim {
+  readonly claim: string;
+  readonly claim_type: EvidenceClaimType;
+  readonly evidence_ids?: readonly string[] | undefined;
+  readonly confidence: number;
+}
+
+export interface EvidenceEnvelope {
+  readonly sources: readonly EvidenceSource[];
+  readonly claims: readonly EvidenceClaim[];
+  readonly sufficient: boolean;
+  readonly insufficient_reason?: string | undefined;
+  readonly generated_at?: string | undefined;
+}
+
 export interface NoesisResponsePayload {
   readonly answer: string;
   readonly mode: 'deterministic' | 'llm_text_to_query' | 'fallback';
@@ -35,6 +61,8 @@ export interface NoesisResponsePayload {
   readonly query_debug?: Record<string, unknown> | undefined;
   readonly warnings: readonly string[];
   readonly error?: { readonly code: string; readonly message: string } | undefined;
+  readonly evidence?: EvidenceEnvelope | undefined;
+  readonly scope_summary?: Record<string, unknown> | undefined;
 }
 
 export interface NoesisMessageItem {
@@ -101,6 +129,56 @@ function ActionBar({ actions }: { readonly actions: readonly NoesisAction[] }) {
   );
 }
 
+const CLAIM_TYPE_COLORS: Record<EvidenceClaimType, string> = {
+  fact: 'bg-success/20 text-success border-success/30',
+  computation: 'bg-accent/20 text-accent border-accent/30',
+  inference: 'bg-warning/20 text-warning border-warning/30',
+  recommendation: 'bg-purple-500/20 text-purple-300 border-purple-500/30',
+};
+
+function EvidencePanel({ evidence }: { readonly evidence: EvidenceEnvelope }) {
+  if (!evidence.sufficient) {
+    return (
+      <div className="rounded border border-warning/30 bg-warning/10 px-3 py-2 text-xs text-warning">
+        <span className="font-semibold">Insufficient evidence</span>
+        {evidence.insufficient_reason ? ` — ${evidence.insufficient_reason}` : ''}
+      </div>
+    );
+  }
+  const hasSources = evidence.sources.length > 0;
+  const hasClaims = evidence.claims.length > 0;
+  if (!hasSources && !hasClaims) return null;
+  return (
+    <details className="rounded border border-border-subtle bg-surface-sunken/50 px-3 py-2 text-xs">
+      <summary className="cursor-pointer font-mono text-text-secondary">Evidence ({evidence.sources.length} source{evidence.sources.length !== 1 ? 's' : ''})</summary>
+      <div className="mt-2 space-y-2">
+        {hasSources && (
+          <div className="space-y-1">
+            {evidence.sources.map((src, i) => (
+              <div key={i} className="flex flex-wrap items-center gap-1 text-text-muted">
+                <span className="font-mono">{src.service}</span>
+                <span className="text-border-subtle">·</span>
+                <span>{src.resource_type}</span>
+                {src.resource_id ? <><span className="text-border-subtle">·</span><span className="truncate max-w-[120px]">{src.resource_id}</span></> : null}
+                {src.freshness_seconds != null ? <span className="ml-auto text-[10px]">{src.freshness_seconds}s fresh</span> : null}
+              </div>
+            ))}
+          </div>
+        )}
+        {hasClaims && (
+          <div className="flex flex-wrap gap-1">
+            {evidence.claims.map((claim, i) => (
+              <span key={i} className={`rounded border px-1.5 py-0.5 text-[10px] font-mono ${CLAIM_TYPE_COLORS[claim.claim_type] ?? ''}`}>
+                {claim.claim_type}: {claim.claim}
+              </span>
+            ))}
+          </div>
+        )}
+      </div>
+    </details>
+  );
+}
+
 function AssistantResponse({ response }: { readonly response: NoesisResponsePayload }) {
   return (
     <div className="space-y-3">
@@ -128,6 +206,7 @@ function AssistantResponse({ response }: { readonly response: NoesisResponsePayl
         </div>
       ) : null}
       <ActionBar actions={response.actions} />
+      {response.evidence ? <EvidencePanel evidence={response.evidence} /> : null}
       {response.query_debug ? (
         <details className="rounded border border-border-subtle bg-surface-sunken/50 px-3 py-2 text-xs text-text-muted">
           <summary className="cursor-pointer font-mono text-text-secondary">Query debug</summary>

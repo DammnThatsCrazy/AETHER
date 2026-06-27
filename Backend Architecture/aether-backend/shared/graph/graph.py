@@ -880,6 +880,42 @@ class _NeptuneGraphBackend:
             logger.error(f"Neptune get_neighbors error for {vertex_id}: {e}")
         return results
 
+    async def k_hop_neighbors(
+        self, vertex_id: str, max_depth: int = 2, direction: str = "both", max_results: int = 100,
+    ) -> list["Vertex"]:
+        g = await self._ensure_connected()
+        max_depth = min(max_depth, 3)
+        results: list[Vertex] = []
+        try:
+            if direction == "out":
+                step = __.out()
+            elif direction == "in":
+                step = __.in_()
+            else:
+                step = __.both()
+            vmap_list = (
+                g.V(vertex_id)
+                .repeat(step.simplePath())
+                .times(max_depth)
+                .dedup()
+                .limit(max_results)
+                .valueMap(True)
+                .toList()
+            )
+            for v_map in vmap_list:
+                results.append(Vertex(
+                    vertex_type=v_map.get(T.label, "unknown"),
+                    vertex_id=str(v_map.get(T.id, "")),
+                    properties={
+                        k: v[0] if isinstance(v, list) and len(v) == 1 else v
+                        for k, v in v_map.items()
+                        if k not in (T.id, T.label)
+                    },
+                ))
+        except Exception as e:
+            logger.error(f"Neptune k_hop_neighbors error for {vertex_id}: {e}")
+        return results
+
     async def get_edges(
         self, vertex_id: str, edge_type: Optional[str] = None, direction: str = "out",
     ) -> list["Edge"]:
@@ -1064,6 +1100,52 @@ class GraphClient:
         if self._backend is None:
             await self.connect()
         return await self._backend.get_neighbors(vertex_id, edge_type, direction)  # type: ignore[union-attr]
+
+    async def k_hop_neighbors(
+        self,
+        vertex_id: str,
+        max_depth: int = 2,
+        direction: str = "both",
+        max_results: int = 100,
+    ) -> list[Vertex]:
+        """BFS up to max_depth hops from vertex_id.
+
+        max_depth is hard-capped at 3 to prevent runaway traversals.
+        Returns deduplicated vertices (excluding the start vertex itself).
+
+        In-memory backend: pure Python BFS.
+        Neptune backend: single parameterized Gremlin query.
+        """
+        max_depth = min(max_depth, 3)
+        if self._backend is None:
+            await self.connect()
+        backend = self._backend  # type: ignore[union-attr]
+
+        # Neptune path: single Gremlin traversal avoids N+1 round-trips
+        if isinstance(backend, _NeptuneGraphBackend):
+            return await backend.k_hop_neighbors(vertex_id, max_depth, direction, max_results)
+
+        # In-memory path: iterative BFS
+        visited: set[str] = {vertex_id}
+        frontier: list[str] = [vertex_id]
+        results: list[Vertex] = []
+        for _ in range(max_depth):
+            if not frontier or len(results) >= max_results:
+                break
+            next_frontier: list[str] = []
+            for vid in frontier:
+                neighbours = await backend.get_neighbors(vid, direction=direction)
+                for v in neighbours:
+                    if v.vertex_id not in visited:
+                        visited.add(v.vertex_id)
+                        results.append(v)
+                        next_frontier.append(v.vertex_id)
+                        if len(results) >= max_results:
+                            break
+                if len(results) >= max_results:
+                    break
+            frontier = next_frontier
+        return results
 
     async def get_edges(
         self,

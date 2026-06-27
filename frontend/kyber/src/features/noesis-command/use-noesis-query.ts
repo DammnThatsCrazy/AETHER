@@ -32,6 +32,30 @@ const noesisErrorSchema = z.object({
   details: z.record(z.unknown()).optional(),
 });
 
+const evidenceSourceSchema = z.object({
+  service: z.string(),
+  resource_type: z.string(),
+  resource_id: z.string().optional(),
+  fetched_at: z.string(),
+  freshness_seconds: z.number().optional(),
+  confidence: z.number().optional(),
+});
+
+const evidenceClaimSchema = z.object({
+  claim: z.string(),
+  claim_type: z.enum(['fact', 'computation', 'inference', 'recommendation']),
+  evidence_ids: z.array(z.string()).optional(),
+  confidence: z.number(),
+});
+
+const evidenceEnvelopeSchema = z.object({
+  sources: z.array(evidenceSourceSchema).default([]),
+  claims: z.array(evidenceClaimSchema).default([]),
+  sufficient: z.boolean().default(true),
+  insufficient_reason: z.string().optional(),
+  generated_at: z.string().optional(),
+});
+
 export const noesisResponsePayloadSchema = z.object({
   answer: z.string(),
   mode: z.enum(['deterministic', 'llm_text_to_query', 'fallback']),
@@ -44,6 +68,8 @@ export const noesisResponsePayloadSchema = z.object({
   query_debug: z.record(z.unknown()).optional(),
   warnings: z.array(z.string()).default([]),
   error: noesisErrorSchema.optional(),
+  evidence: evidenceEnvelopeSchema.optional(),
+  scope_summary: z.record(z.unknown()).optional(),
 });
 
 const noesisApiResponseSchema = z.object({
