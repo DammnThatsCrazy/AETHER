@@ -458,3 +458,189 @@ class AttributionCredit(BaseModel):
         if v < Decimal("0") or v > Decimal("1"):
             raise ValueError(f"credit_weight must be in [0, 1], got {v}")
         return v
+
+
+# ── Canonical Activity ────────────────────────────────────────────────────────
+
+class ActivityFamily(str, Enum):
+    web2 = "web2"
+    web3 = "web3"
+    campaign = "campaign"
+    commerce = "commerce"
+    agent = "agent"
+    x402 = "x402"
+    outcome = "outcome"
+
+
+class ActivityStatus(str, Enum):
+    observed = "observed"
+    pending = "pending"
+    confirmed = "confirmed"
+    finalized = "finalized"
+    failed = "failed"
+    reverted = "reverted"
+    reorged = "reorged"
+    adjusted = "adjusted"
+    deleted = "deleted"
+    tombstoned = "tombstoned"
+    consent_restricted = "consent_restricted"
+    unresolved = "unresolved"
+
+
+class TransitionType(str, Enum):
+    same_session = "same_session"
+    new_session = "new_session"
+    cross_device = "cross_device"
+    cross_browser = "cross_browser"
+    cross_domain = "cross_domain"
+    web_to_mobile = "web_to_mobile"
+    mobile_to_web = "mobile_to_web"
+    web_to_dapp = "web_to_dapp"
+    dapp_to_web = "dapp_to_web"
+    web2_to_web3 = "web2_to_web3"
+    web3_to_web2 = "web3_to_web2"
+    wallet_connected = "wallet_connected"
+    wallet_disconnected = "wallet_disconnected"
+    cross_wallet = "cross_wallet"
+    cross_chain = "cross_chain"
+    cross_protocol = "cross_protocol"
+    human_to_agent = "human_to_agent"
+    agent_to_human = "agent_to_human"
+    agent_to_agent = "agent_to_agent"
+    campaign_to_owned_surface = "campaign_to_owned_surface"
+    owned_surface_to_conversion = "owned_surface_to_conversion"
+    identity_resolved = "identity_resolved"
+    identity_merged = "identity_merged"
+    identity_split = "identity_split"
+    consent_state_changed = "consent_state_changed"
+    unknown = "unknown"
+
+
+class CanonicalActivity(BaseModel):
+    activity_id: Optional[UUID] = Field(default_factory=uuid4)
+    tenant_id: str
+    idempotency_key: str
+
+    # Identity links
+    profile_id: Optional[str] = None
+    cluster_id: Optional[str] = None
+    anonymous_id: Optional[str] = None
+    account_id: Optional[str] = None
+    organization_id: Optional[str] = None
+    session_id: Optional[str] = None
+    device_id: Optional[str] = None
+    browser_id: Optional[str] = None
+    install_id: Optional[str] = None
+    wallet_id: Optional[str] = None
+    wallet_address: Optional[str] = None
+    agent_id: Optional[str] = None
+
+    # Classification
+    activity_family: ActivityFamily
+    activity_type: str
+    actor_type: Optional[str] = None
+
+    # Surface / location
+    channel: Optional[str] = None
+    source: Optional[str] = None
+    medium: Optional[str] = None
+    platform: Optional[str] = None
+    domain: Optional[str] = None
+    app_id: Optional[str] = None
+    screen: Optional[str] = None
+    landing_url: Optional[str] = None
+    referrer: Optional[str] = None
+    dapp_id: Optional[str] = None
+    protocol_id: Optional[str] = None
+    chain_id: Optional[str] = None
+    contract_address: Optional[str] = None
+
+    # Web3 specifics
+    tx_hash: Optional[str] = None
+    block_number: Optional[int] = None
+
+    # Campaign linkage
+    campaign_id: Optional[str] = None
+    conversion_id: Optional[str] = None
+
+    # Timing
+    occurred_at: datetime
+    client_occurred_at: Optional[datetime] = None
+    server_received_at: datetime = Field(default_factory=datetime.utcnow)
+    chain_observed_at: Optional[datetime] = None
+    chain_confirmed_at: Optional[datetime] = None
+
+    # Lifecycle
+    activity_status: ActivityStatus = ActivityStatus.observed
+
+    # Provenance
+    source_event_id: str
+    source_system: Optional[str] = None
+    source_connector_id: Optional[str] = None
+
+    # Identity evidence
+    identity_method: Optional[str] = None
+    identity_confidence: Optional[float] = None
+    identity_version: Optional[str] = None
+    consent_snapshot_id: Optional[str] = None
+    privacy_class: str = "behavioral"
+
+    # Ordering / replay
+    sequence_key: Optional[str] = None
+    schema_version: int = 1
+
+    # Silver lineage
+    silver_fact_id: Optional[UUID] = None
+    silver_table: Optional[str] = None
+
+    # Economic semantics
+    gross_amount: Optional[Decimal] = None
+    net_amount: Optional[Decimal] = None
+    fee_amount: Optional[Decimal] = None
+    currency: Optional[str] = None
+    token_address: Optional[str] = None
+    value_wei: Optional[str] = None
+
+
+# ── Journey Step ──────────────────────────────────────────────────────────────
+
+class JourneyStep(BaseModel):
+    step_id: UUID = Field(default_factory=uuid4)
+    tenant_id: str
+    journey_id: UUID
+    journey_version_id: UUID
+    profile_id: Optional[str] = None
+    cluster_id: Optional[str] = None
+
+    step_position: int
+    occurred_at: datetime
+
+    activity_id: UUID
+    activity_family: ActivityFamily
+    activity_type: str
+
+    transition_type: Optional[TransitionType] = None
+    transition_evidence: dict[str, Any] = Field(default_factory=dict)
+
+    # Denormalized display fields
+    actor_type: Optional[str] = None
+    channel: Optional[str] = None
+    source: Optional[str] = None
+    domain: Optional[str] = None
+    app_id: Optional[str] = None
+    dapp_id: Optional[str] = None
+    chain_id: Optional[str] = None
+    campaign_id: Optional[str] = None
+    conversion_id: Optional[str] = None
+    wallet_id: Optional[str] = None
+    agent_id: Optional[str] = None
+    session_id: Optional[str] = None
+    device_id: Optional[str] = None
+    activity_status: ActivityStatus = ActivityStatus.observed
+
+    identity_confidence: Optional[float] = None
+    identity_method: Optional[str] = None
+    identity_version: Optional[str] = None
+    evidence_summary: dict[str, Any] = Field(default_factory=dict)
+
+    schema_version: int = 1

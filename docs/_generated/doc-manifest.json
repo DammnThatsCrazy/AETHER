@@ -3641,6 +3641,48 @@
       "canonical_owner": "platform@aether"
     },
     {
+      "path": "docs/productization/unified-canonical-journey/DATA_AND_IDENTITY_CONTRACT.md",
+      "title": "Data and Identity Contract — Unified Canonical Journey",
+      "slug": "productization/unified-canonical-journey/data-and-identity-contract",
+      "section": "operations",
+      "visibility": "I",
+      "audience": [
+        "architect",
+        "ops",
+        "exec"
+      ],
+      "status": "stable",
+      "since_version": "8.12.0"
+    },
+    {
+      "path": "docs/productization/unified-canonical-journey/EXECUTION_STATE.md",
+      "title": "Unified Web2/Web3 Canonical Journey — Execution State",
+      "slug": "productization/unified-canonical-journey/execution-state",
+      "section": "operations",
+      "visibility": "I",
+      "audience": [
+        "architect",
+        "ops",
+        "exec"
+      ],
+      "status": "beta",
+      "since_version": "8.12.0"
+    },
+    {
+      "path": "docs/productization/unified-canonical-journey/REPO_TRUTH_AND_GAP_MATRIX.md",
+      "title": "Repo Truth and Gap Matrix — Unified Canonical Journey",
+      "slug": "productization/unified-canonical-journey/repo-truth-and-gap-matrix",
+      "section": "operations",
+      "visibility": "I",
+      "audience": [
+        "architect",
+        "ops",
+        "exec"
+      ],
+      "status": "stable",
+      "since_version": "8.12.0"
+    },
+    {
       "path": "docs/reports/ML-FULL-PRODUCTIONIZATION-REPORT.md",
       "title": "ML Full Productionization Report",
       "slug": "ai/ml-full-productionization-report",

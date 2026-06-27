@@ -626,6 +626,34 @@ async def get_profile_journeys(
     return APIResponse(data=await agg.journeys(user_id, tenant.tenant_id, limit=limit)).to_dict()
 
 
+@router.get("/{user_id}/unified-journey")
+async def get_unified_journey(
+    user_id: str,
+    request: Request,
+    agg: Profile360Aggregator = Depends(_get_aggregator),
+    limit: int = Query(50, ge=1, le=200),
+    family: Optional[str] = Query(None, description="Filter by activity family: web2,web3,campaign,commerce,agent,x402,outcome"),
+    after: Optional[str] = Query(None, description="ISO8601 timestamp — only steps after this time"),
+    before: Optional[str] = Query(None, description="ISO8601 timestamp — only steps before this time"),
+):
+    """Unified canonical journey — interleaved Web2/Web3/campaign/agent/x402 steps.
+
+    Sources from journey_steps produced by JourneyCompiler v2.0. Returns a
+    not_provisioned state when no canonical journey has been compiled yet.
+    """
+    tenant = request.state.tenant
+    tenant.require_permission("read")
+    return APIResponse(
+        data=await agg.unified_journey(
+            user_id, tenant.tenant_id,
+            steps_limit=limit,
+            family=family,
+            after=after,
+            before=before,
+        )
+    ).to_dict()
+
+
 @router.get("/{user_id}/rewards")
 async def get_profile_rewards(
     user_id: str,

@@ -2023,6 +2023,16 @@ export const api = {
       restClient.get(`/v1/journeys/${id}`, wrap(unknownSchema)).then(r => r.data),
     versions: (id: string) =>
       restClient.get(`/v1/journeys/${id}/versions`, wrap(unknownSchema)).then(r => r.data),
+    steps: (id: string, params?: { family?: string; status?: string; session_id?: string; wallet_id?: string; chain_id?: string; campaign_id?: string; after?: string; before?: string; limit?: number; cursor?: string }) =>
+      restClient.get(`/v1/journeys/${id}/steps${buildQS({ ...params })}`, wrap(unknownSchema)).then(r => r.data),
+    step: (journeyId: string, stepId: string, params?: { include_activity?: boolean }) =>
+      restClient.get(`/v1/journeys/${journeyId}/steps/${stepId}${buildQS({ ...params })}`, wrap(unknownSchema)).then(r => r.data),
+    transitions: (id: string) =>
+      restClient.get(`/v1/journeys/${id}/transitions`, wrap(unknownSchema)).then(r => r.data),
+    explain: (id: string) =>
+      restClient.get(`/v1/journeys/${id}/explain`, wrap(unknownSchema)).then(r => r.data),
+    rebuild: (id: string, trigger_reason?: string) =>
+      restClient.post(`/v1/journeys/${id}/rebuild`, wrap(unknownSchema), { trigger_reason: trigger_reason ?? 'operator' }).then(r => r.data),
   },
 
   attributionRuns: {
