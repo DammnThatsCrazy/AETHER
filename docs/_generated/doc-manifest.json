@@ -3545,6 +3545,19 @@
       "status": "stable"
     },
     {
+      "path": "docs/noesis-operator-guide.md",
+      "title": "Noesis — Operator Guide (Kyber)",
+      "slug": "noesis-operator-guide",
+      "section": "concepts",
+      "visibility": "I",
+      "audience": [
+        "dev-senior",
+        "architect",
+        "operator"
+      ],
+      "status": "stable"
+    },
+    {
       "path": "docs/noesis-operator-runbook.md",
       "title": "Noesis Operator Runbook",
       "slug": "noesis-operator-runbook",
@@ -3553,6 +3566,19 @@
       "audience": [
         "ops",
         "dev-senior"
+      ],
+      "status": "stable"
+    },
+    {
+      "path": "docs/noesis-runbook.md",
+      "title": "Noesis — Operations Runbook",
+      "slug": "noesis-runbook",
+      "section": "operations",
+      "visibility": "I",
+      "audience": [
+        "dev-senior",
+        "architect",
+        "operator"
       ],
       "status": "stable"
     },
