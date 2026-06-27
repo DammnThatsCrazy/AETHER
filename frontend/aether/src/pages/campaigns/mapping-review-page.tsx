@@ -198,7 +198,7 @@ export function MappingReviewPage() {
   }
 
   async function handleResolve(reviewId: string, campaignId: string, note: string) {
-    await resolveMutation.mutate({ reviewId, campaignId, note: note || undefined });
+    await resolveMutation.mutate({ reviewId, campaignId, ...(note ? { note } : {}) });
     setResolving(null);
     refetch();
   }

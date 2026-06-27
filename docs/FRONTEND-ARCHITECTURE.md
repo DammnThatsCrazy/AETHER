@@ -13,7 +13,7 @@ source_files:
 canonical_owner: frontend@aether
 estimated_read_minutes: 35
 toc_depth: 4
-last_synced_commit: 11925c3
+last_synced_commit: e279268
 ---
 
 # Aether Frontend Architecture & Designer Handoff
@@ -63,6 +63,11 @@ There are two separate frontend applications. **Do not mix them up.**
 - **Conversion Explorer** — canonical conversion detail, revenue history, attribution drill-down (`/measurement/conversions`)
 - **Campaign Intelligence** — campaign hierarchy, performance metrics, spend/ROAS time-series (`/measurement/campaigns`)
 - **Campaign 360** — full per-campaign drill-down: overview metrics, population funnel (observed→resolved→engaged→converted→attributed), identity clusters, entities, journeys, conversions, attribution model comparison, graph anchor, quality/freshness diagnostics (`/measurement/campaigns/:campaignId`); launched via "Campaign 360 →" links in Campaign Intelligence rows and Profile360 attribution panel
+- **Campaign Registry** (v8.11.0+) — canonical campaign list with origin/platform/status filters, alias management, external references view (`/campaign-intelligence/registry`)
+- **Campaign Sources** (v8.11.0+) — connected ad platform sources with sync controls and health indicators (`/campaign-intelligence/sources`)
+- **Mapping Review** (v8.11.0+) — unresolved/ambiguous attribution evidence queue; resolve/ignore actions create durable aliases and trigger reprocessing (`/campaign-intelligence/mapping-review`)
+- **Campaign Quality** (v8.11.0+) — measurement mapping rate gauges and quality metrics (`/campaign-intelligence/quality`)
+- **Custom Campaign** (v8.11.0+) — creation form for custom (non-platform) campaigns (`/campaign-intelligence/new`)
 - **Measurement Operations** — connector health grid, tenant drill-down, operator action buttons (restart/backfill/recompute) (`/kyber/measurement`)
 - Lab — test fixtures and replay
 

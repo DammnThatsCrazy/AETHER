@@ -11,7 +11,7 @@ toc_depth: 3
 source_files:
   - Backend Architecture/aether-backend/services/campaign/routes.py
   - Backend Architecture/aether-backend/services/campaign/exploration.py
-last_synced_commit: 1d13c74
+last_synced_commit: e279268
 ---
 
 # Campaign 360 API Reference
@@ -431,3 +431,12 @@ All errors use this envelope:
 | 422 | `validation_error` | Request body fails schema validation |
 | 429 | `rate_limited` | Too many requests |
 | 504 | `timeout` | Graph query exceeded 10s budget |
+
+
+---
+
+## Campaign Registry API (v8.11.0+)
+
+The Campaign Registry API is a separate API surface introduced in v8.11.0 for managing canonical campaign identities, external references, aliases, campaign sources, and mapping review. It lives at `/v1/campaigns` (list/create), `/v1/campaign-sources`, `/v1/mapping-review`, and `/v1/campaign-quality`. These endpoints use the same permission model (`campaign:read` / `campaign:write`) and error envelope as the Campaign 360 API above.
+
+See `docs/campaign/CAMPAIGN_INTELLIGENCE_OVERVIEW.md` and `docs/campaign/CAMPAIGN_REGISTRY_ARCHITECTURE.md` for the full contract.

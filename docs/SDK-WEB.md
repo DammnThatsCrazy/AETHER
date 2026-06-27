@@ -13,7 +13,7 @@ source_files:
 canonical_owner: sdk@aether
 estimated_read_minutes: 12
 toc_depth: 3
-last_synced_commit: b8b0072
+last_synced_commit: e279268
 ---
 
 # Aether Web SDK v8.11.0 — Integration Guide
@@ -319,6 +319,8 @@ The SDK automatically captures on init:
 - Landing page URL
 
 **SPA persistence:** Traffic source data is cached in `sessionStorage` on first detection. Subsequent SPA navigations return the original source data instead of losing it when `document.referrer` clears.
+
+**Acquisition evidence envelope (v8.11.0+):** The SDK emits an `AcquisitionEvidence` envelope (from `@aether/shared`) on landing that captures the full attribution signal set — UTM params, click IDs, platform identity, `utm_id`, `externalCampaignId`, `canonicalCampaignId`, and temporal metadata. This envelope is attached to touchpoint events as `acquisitionEvidence` and is used by the server-side `CampaignResolver` to deterministically link touchpoints to canonical campaign UUIDs. Import via `import type { AcquisitionEvidence } from '@aether/shared'` or call `evidenceFromSearchParams(new URLSearchParams(window.location.search))`.
 
 Classification (organic, paid, social, email, direct, etc.) happens server-side via `POST /v1/track/traffic-source` using the `SourceClassifier` — the SDK ships raw signals only.
 

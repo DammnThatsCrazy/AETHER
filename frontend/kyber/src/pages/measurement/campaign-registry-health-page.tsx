@@ -1,7 +1,27 @@
-import { useState } from 'react';
-import { Badge, Card, CardContent, CardHeader, CardTitle, DataTable, EmptyState, ErrorState, LoadingState } from '@aether/ui';
+import { useCallback, useEffect, useState } from 'react';
+import { Card, CardContent, CardHeader, CardTitle, DataTable, EmptyState, ErrorState, LoadingState } from '@aether/ui';
 import { PageWrapper } from '@kyber/components/layout';
-import { useKyberApi } from '@kyber/features/api';
+
+function useKyberFetch<T>(url: string | null): { data: T | null; loading: boolean; error: string | null; refetch: () => void } {
+  const [data, setData] = useState<T | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [tick, setTick] = useState(0);
+  const refetch = useCallback(() => setTick(t => t + 1), []);
+  useEffect(() => {
+    if (!url) return;
+    let active = true;
+    setLoading(true);
+    setError(null);
+    fetch(url, { credentials: 'include' })
+      .then(r => r.ok ? r.json() as Promise<{ data: T }> : Promise.reject(new Error(`HTTP ${r.status}`)))
+      .then(json => { if (active) setData(json.data ?? (json as unknown as T)); })
+      .catch(e => { if (active) setError(e instanceof Error ? e.message : String(e)); })
+      .finally(() => { if (active) setLoading(false); });
+    return () => { active = false; };
+  }, [url, tick]);
+  return { data, loading, error, refetch };
+}
 
 type Row = Record<string, unknown>;
 
@@ -62,16 +82,15 @@ export function CampaignRegistryHealthPage() {
   const [reprocessResult, setReprocessResult] = useState<string | null>(null);
 
   const { data: fleetData, loading: fleetLoading, error: fleetError } =
-    useKyberApi<{ quality: Row }>('/v1/kyber/measurement/campaign/fleet-health', {});
+    useKyberFetch<{ quality: Row }>('/v1/kyber/measurement/campaign/fleet-health');
 
   const { data: tenantData, loading: tenantLoading, error: tenantError, refetch: refetchTenant } =
-    useKyberApi<{ tenant_id: string; quality: Row; open_reviews_sample: Row[] }>(
+    useKyberFetch<{ tenant_id: string; quality: Row; open_reviews_sample: Row[] }>(
       submittedTenant ? `/v1/kyber/measurement/campaign/tenant/${submittedTenant}` : null,
-      {},
     );
 
   const { data: auditData, loading: auditLoading } =
-    useKyberApi<{ audit_entries: Row[]; count: number }>('/v1/kyber/measurement/campaign/audit', {});
+    useKyberFetch<{ audit_entries: Row[]; count: number }>('/v1/kyber/measurement/campaign/audit');
 
   async function handleReprocess(dryRun: boolean) {
     if (!submittedTenant) return;
