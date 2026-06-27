@@ -194,7 +194,8 @@ async def journey_health(request: Request):
         all_journeys.extend(page)
         if len(page) < 500:
             break
-        cursor = page[-1].get("computed_at")
+        raw_cursor = page[-1].get("computed_at")
+        cursor = raw_cursor.isoformat() if hasattr(raw_cursor, "isoformat") else raw_cursor
 
     quality_counts: dict[str, int] = {}
     failed_rebuilds: list[dict] = []
@@ -203,21 +204,17 @@ async def journey_health(request: Request):
 
     for j in all_journeys:
         step_count = j.get("step_count") or 0
-        rebuild_reason = j.get("rebuild_reason")
         cv = j.get("compiler_version") or "unknown"
 
-        # Derive quality from available fields — journey_versions has no quality_status column.
-        if step_count == 0:
-            qs = "empty"
-        elif rebuild_reason:
-            qs = "partial"
-        else:
-            qs = "complete"
+        # rebuild_reason is always set (it equals trigger_reason), so it cannot
+        # distinguish healthy from failed compiles. Use step_count == 0 as the
+        # only available failure signal; all non-empty journeys are classified complete.
+        qs = "empty" if step_count == 0 else "complete"
 
         quality_counts[qs] = quality_counts.get(qs, 0) + 1
         total_steps += step_count
         compiler_versions[cv] = compiler_versions.get(cv, 0) + 1
-        if qs in ("empty", "partial"):
+        if qs == "empty":
             failed_rebuilds.append({
                 "journey_id": j.get("journey_id"),
                 "profile_id": j.get("profile_id"),

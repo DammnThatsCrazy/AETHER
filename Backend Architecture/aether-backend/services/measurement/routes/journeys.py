@@ -369,8 +369,14 @@ async def list_journeys_for_campaign(
         tenant.tenant_id,
         campaign_id,
         limit=limit,
+        cursor=cursor,
     )
-    next_cursor = journeys[-1].get("computed_at") if len(journeys) == limit else None
+    # list_by_campaign orders by started_at DESC, so use started_at as the keyset cursor.
+    if len(journeys) == limit:
+        raw = journeys[-1].get("started_at")
+        next_cursor: Optional[str] = raw.isoformat() if hasattr(raw, "isoformat") else raw
+    else:
+        next_cursor = None
     return APIResponse(
         data=journeys,
         meta={"campaign_id": campaign_id, "count": len(journeys), "next_cursor": next_cursor},
