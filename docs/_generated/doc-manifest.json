@@ -3641,6 +3641,21 @@
       "canonical_owner": "platform@aether"
     },
     {
+      "path": "docs/productization/unified-canonical-journey/DATA_AND_IDENTITY_CONTRACT.md",
+      "title": "Data and Identity Contract — Unified Canonical Journey",
+      "status": "current"
+    },
+    {
+      "path": "docs/productization/unified-canonical-journey/EXECUTION_STATE.md",
+      "title": "Unified Web2/Web3 Canonical Journey — Execution State",
+      "status": "in_progress"
+    },
+    {
+      "path": "docs/productization/unified-canonical-journey/REPO_TRUTH_AND_GAP_MATRIX.md",
+      "title": "Repo Truth and Gap Matrix — Unified Canonical Journey",
+      "status": "current"
+    },
+    {
       "path": "docs/reports/ML-FULL-PRODUCTIONIZATION-REPORT.md",
       "title": "ML Full Productionization Report",
       "slug": "ai/ml-full-productionization-report",

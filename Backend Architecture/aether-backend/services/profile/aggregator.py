@@ -161,6 +161,49 @@ async def _safe(label: str, coro):
         return []
 
 
+def _unified_journey_unavailable(entity_id: str, tenant_id: str, reason: str) -> dict:
+    return {
+        "entity_id": entity_id,
+        "tenant_id": tenant_id,
+        "kind": "unified_journey",
+        "items": [],
+        "summary": {
+            "journey_id": None,
+            "step_count": 0,
+            "data_quality": {"status": reason, "message": None},
+        },
+        "pagination": {"limit": 0, "count": 0, "has_more": False},
+        "computed_at": "",
+        "provenance": {"sources": []},
+    }
+
+
+def _step_display_label(step: dict) -> str:
+    family = step.get("activity_family", "")
+    activity_type = step.get("activity_type", "")
+    labels = {
+        "campaign": "Campaign touchpoint",
+        "web2": "Web activity",
+        "web3": "Blockchain activity",
+        "commerce": "Commerce event",
+        "agent": "Agent action",
+        "x402": "x402 payment",
+        "outcome": "Outcome",
+    }
+    family_label = labels.get(family, family)
+    return f"{family_label}: {activity_type.replace('_', ' ')}"
+
+
+def _parse_optional_ts(value: Optional[str]) -> Optional["datetime"]:
+    if value is None:
+        return None
+    from datetime import datetime
+    try:
+        return datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except (ValueError, AttributeError):
+        return None
+
+
 # ───────────────────────────────────────────────────────────────────────
 # Aggregator
 # ───────────────────────────────────────────────────────────────────────
@@ -581,6 +624,124 @@ class Profile360Aggregator:
             "total_journeys": sum(i["journeyCount"] for i in items),
         }
         return _envelope(entity_id, tenant_id, "journeys", items, summary, limit, ["journey_chains"])
+
+    async def unified_journey(
+        self,
+        entity_id: str,
+        tenant_id: str,
+        *,
+        steps_limit: int = 50,
+        family: Optional[str] = None,
+        after: Optional[str] = None,
+        before: Optional[str] = None,
+    ) -> dict:
+        """Return the canonical unified journey for a profile (Web2+Web3 interleaved).
+
+        Sources from journey_versions + journey_steps produced by JourneyCompiler v2.0.
+        Falls back to a not_provisioned state when no journey version exists yet.
+        """
+        try:
+            from services.measurement.repositories.journey_repo import JourneyRepository
+            from services.measurement.repositories.journey_step_repo import JourneyStepRepository
+            journey_repo = JourneyRepository()
+            step_repo = JourneyStepRepository()
+        except Exception as exc:
+            logger.warning("unified_journey_dependency_unavailable", extra={"error": str(exc)})
+            return _unified_journey_unavailable(entity_id, tenant_id, "dependency_unavailable")
+
+        # Load current journey version
+        versions = await _safe(
+            "unified_journey.version_lookup",
+            journey_repo.find_current_for_profile(tenant_id, entity_id),
+        )
+        if not versions:
+            return _unified_journey_unavailable(entity_id, tenant_id, "not_provisioned")
+
+        journey = versions[0]
+        journey_id = str(journey.get("journey_id"))
+        journey_version_id = str(journey.get("journey_version_id"))
+
+        # Determine quality status
+        compiler_version = journey.get("compiler_version", "1.0")
+        quality_status = "complete" if compiler_version >= "2.0" else "partial"
+        quality_message = (
+            None if quality_status == "complete"
+            else "Journey was compiled before cross-rail activity was available. A rebuild will include Web3, agent, and x402 steps."
+        )
+
+        # Parse time filters
+        after_dt = _parse_optional_ts(after)
+        before_dt = _parse_optional_ts(before)
+        families = [family] if family else None
+
+        steps = await _safe(
+            "unified_journey.steps",
+            step_repo.list_by_version(
+                tenant_id,
+                journey_version_id,
+                limit=steps_limit,
+                families=families,
+                after=after_dt,
+                before=before_dt,
+            ),
+        )
+
+        # Shape steps for frontend consumption
+        items = [
+            {
+                "id": str(s.get("step_id")),
+                "type": "journey_step",
+                "step_position": s.get("step_position"),
+                "displayLabel": _step_display_label(s),
+                "activityFamily": s.get("activity_family"),
+                "activityType": s.get("activity_type"),
+                "actorType": s.get("actor_type"),
+                "transitionType": s.get("transition_type"),
+                "activityStatus": s.get("activity_status", "observed"),
+                "identityConfidence": s.get("identity_confidence"),
+                "timestamps": {"occurredAt": str(s.get("occurred_at") or "")},
+                "metadata": {
+                    "channel": s.get("channel"),
+                    "source": s.get("source"),
+                    "domain": s.get("domain"),
+                    "chain_id": s.get("chain_id"),
+                    "wallet_id": s.get("wallet_id"),
+                    "agent_id": s.get("agent_id"),
+                    "campaign_id": s.get("campaign_id"),
+                    "session_id": s.get("session_id"),
+                },
+                "links": {
+                    "step": f"/v1/journeys/{journey_id}/steps/{s.get('step_id')}",
+                    "journey": f"/v1/journeys/{journey_id}",
+                },
+            }
+            for s in steps
+        ]
+
+        summary = {
+            "journey_id": journey_id,
+            "journey_version_id": journey_version_id,
+            "journey_state": journey.get("journey_state"),
+            "step_count": journey.get("step_count", 0),
+            "compiler_version": compiler_version,
+            "has_web3": bool(journey.get("web3_activity_ids")),
+            "has_agent": bool(journey.get("agent_activity_ids")),
+            "has_x402": bool(journey.get("x402_activity_ids")),
+            "started_at": str(journey.get("started_at") or ""),
+            "ended_at": str(journey.get("ended_at") or ""),
+            "converted_at": str(journey.get("converted_at") or "") or None,
+            "data_quality": {
+                "status": quality_status,
+                "message": quality_message,
+            },
+        }
+
+        envelope = _envelope(
+            entity_id, tenant_id, "unified_journey", items, summary, steps_limit,
+            ["journey_versions", "journey_steps"],
+        )
+        envelope["pagination"]["step_count"] = journey.get("step_count", 0)
+        return envelope
 
     async def rewards(self, entity_id: str, tenant_id: str, limit: int = 100) -> dict:
         # Rewards live in the analytics event stream under the reward event
