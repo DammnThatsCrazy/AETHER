@@ -1,6 +1,6 @@
 import { Badge, Card, CardContent, CardHeader, CardTitle, DataTable, EmptyState, ErrorState, LoadingState } from '@aether/ui';
 import { PageWrapper } from '@kyber/components/layout';
-import { useJourneyExplorer, useJourneySteps, useJourneyTransitions, useJourneyExplain } from '@kyber/features/measurement';
+import { useJourneyExplorer, useJourneySteps, useJourneyTransitions, useJourneyExplain, useJourneyHealth } from '@kyber/features/measurement';
 import { useState } from 'react';
 import { api } from '@kyber/lib/api';
 
@@ -172,6 +172,75 @@ function RebuildButton({ journeyId, onRebuilt }: { journeyId: string; onRebuilt:
   );
 }
 
+function HealthPanel() {
+  const { data, loading, error, refresh } = useJourneyHealth();
+  if (loading) return <LoadingState lines={3} />;
+  if (error) return <ErrorState title="Health fetch failed" message={error} />;
+  const s = data.summary;
+  const QUALITY_VARIANT: Record<string, 'success' | 'warning' | 'danger' | 'default'> = {
+    complete: 'success', partial: 'warning', empty: 'danger', not_provisioned: 'default',
+  };
+  return (
+    <div className="space-y-4">
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
+        <div className="bg-surface-secondary rounded p-3">
+          <div className="text-text-muted mb-0.5">Total journeys</div>
+          <div className="text-lg font-semibold">{s.total_journeys}</div>
+        </div>
+        <div className="bg-surface-secondary rounded p-3">
+          <div className="text-text-muted mb-0.5">Avg steps</div>
+          <div className="text-lg font-semibold">{s.avg_steps_per_journey}</div>
+        </div>
+        <div className="bg-surface-secondary rounded p-3">
+          <div className="text-text-muted mb-0.5">Rebuild queue</div>
+          <div className="text-lg font-semibold">{data.rebuild_queue_depth ?? '—'}</div>
+        </div>
+        <div className="bg-surface-secondary rounded p-3">
+          <div className="text-text-muted mb-0.5">Web3 finality backlog</div>
+          <div className="text-lg font-semibold">{data.web3_finality_backlog ?? '—'}</div>
+        </div>
+      </div>
+      <div>
+        <h4 className="text-xs font-medium text-text-muted mb-2">Quality breakdown</h4>
+        <div className="flex gap-2 flex-wrap">
+          {Object.entries(s.quality_breakdown).map(([status, count]) => (
+            <div key={status} className="flex items-center gap-1 text-xs">
+              <Badge variant={QUALITY_VARIANT[status] ?? 'default'}>{status}</Badge>
+              <span className="font-medium">{count}</span>
+            </div>
+          ))}
+          {Object.keys(s.quality_breakdown).length === 0 && <span className="text-text-muted text-xs">No data</span>}
+        </div>
+      </div>
+      <div>
+        <h4 className="text-xs font-medium text-text-muted mb-2">Compiler versions</h4>
+        <div className="flex gap-3 flex-wrap text-xs">
+          {Object.entries(s.compiler_versions).map(([v, count]) => (
+            <span key={v} className="font-mono text-text-muted">{v}: <strong className="text-text">{count}</strong></span>
+          ))}
+          {Object.keys(s.compiler_versions).length === 0 && <span className="text-text-muted">No data</span>}
+        </div>
+      </div>
+      {data.failed_or_partial.length > 0 && (
+        <div>
+          <h4 className="text-xs font-medium text-text-muted mb-2">Failed / partial journeys</h4>
+          <DataTable
+            data={data.failed_or_partial as Row[]}
+            keyExtractor={r => String(r.journey_id ?? r.profile_id ?? Math.random())}
+            columns={[
+              { key: 'profile', header: 'Profile', render: r => <span className="font-mono text-xs">{String(r.profile_id ?? '—').slice(0, 12)}…</span> },
+              { key: 'quality', header: 'Quality', render: r => <Badge variant={QUALITY_VARIANT[String(r.quality_status)] ?? 'default'}>{String(r.quality_status ?? '—')}</Badge> },
+              { key: 'compiler', header: 'Compiler', render: r => <span className="font-mono text-xs">{String(r.compiler_version ?? '—')}</span> },
+              { key: 'computed', header: 'Last compiled', render: r => r.computed_at ? new Date(String(r.computed_at)).toLocaleString() : '—' },
+            ]}
+          />
+        </div>
+      )}
+      <button onClick={refresh} className="text-xs text-accent underline mt-1">Refresh</button>
+    </div>
+  );
+}
+
 export function JourneyExplorerPage() {
   const [profileId, setProfileId] = useState('');
   const [campaignId, setCampaignId] = useState('');
@@ -228,6 +297,11 @@ export function JourneyExplorerPage() {
         </button>
         {hasFilters && <button onClick={handleClear} className="px-4 py-1.5 text-sm border border-border rounded">Clear</button>}
       </div>
+
+      <Card className="mb-4">
+        <CardHeader><CardTitle>Compiler health</CardTitle></CardHeader>
+        <CardContent><HealthPanel /></CardContent>
+      </Card>
 
       <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
         <Card>

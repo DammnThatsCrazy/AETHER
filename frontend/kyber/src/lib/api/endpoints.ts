@@ -2033,6 +2033,8 @@ export const api = {
       restClient.get(`/v1/journeys/${id}/explain`, wrap(unknownSchema)).then(r => r.data),
     rebuild: (id: string, trigger_reason?: string) =>
       restClient.post(`/v1/journeys/${id}/rebuild`, wrap(unknownSchema), { trigger_reason: trigger_reason ?? 'operator' }).then(r => r.data),
+    health: () =>
+      restClient.get('/v1/kyber/measurement/journey-health', wrap(unknownSchema)).then(r => r.data),
   },
 
   attributionRuns: {

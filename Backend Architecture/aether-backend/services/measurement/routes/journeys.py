@@ -8,7 +8,7 @@ from datetime import datetime
 from typing import Optional
 
 from fastapi import APIRouter, Query, Request
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
 
 from shared.common.common import APIResponse, NotFoundError
 from shared.logger.logger import get_logger
@@ -16,6 +16,7 @@ from services.measurement.repositories.activity_repo import ActivityRepository
 from services.measurement.repositories.journey_repo import JourneyRepository
 from services.measurement.repositories.journey_step_repo import JourneyStepRepository
 from services.measurement.engine.journey_compiler import JourneyCompiler
+from services.measurement.contracts import ActivityStatus
 
 logger = get_logger("aether.measurement.routes.journeys")
 router = APIRouter(prefix="/v1/journeys", tags=["Journeys"])
@@ -346,3 +347,82 @@ async def rebuild_journey(journey_id: str, request: Request, body: RebuildReques
         tenant.tenant_id, profile_id, trigger_reason=body.trigger_reason
     )
     return APIResponse(data=new_version, meta={"rebuilt": True}).to_dict()
+
+
+# ---------------------------------------------------------------------------
+# Campaign → journeys navigation
+# ---------------------------------------------------------------------------
+
+campaign_router = APIRouter(prefix="/v1/campaigns", tags=["Journeys"])
+
+
+@campaign_router.get("/{campaign_id}/journeys")
+async def list_journeys_for_campaign(
+    campaign_id: str,
+    request: Request,
+    limit: int = Query(50, ge=1, le=200),
+    cursor: Optional[str] = Query(None),
+):
+    """List current journey versions that include steps from a given campaign."""
+    tenant = _require_tenant(request)
+    journeys = await _journey_repo.list_by_campaign(
+        tenant.tenant_id,
+        campaign_id,
+        limit=limit,
+        cursor=cursor,
+    )
+    # list_by_campaign orders by started_at DESC, so use started_at as the keyset cursor.
+    if len(journeys) == limit:
+        raw = journeys[-1].get("started_at")
+        next_cursor: Optional[str] = raw.isoformat() if hasattr(raw, "isoformat") else raw
+    else:
+        next_cursor = None
+    return APIResponse(
+        data=journeys,
+        meta={"campaign_id": campaign_id, "count": len(journeys), "next_cursor": next_cursor},
+    ).to_dict()
+
+
+# ---------------------------------------------------------------------------
+# Web3 reorg / status-change webhook
+# ---------------------------------------------------------------------------
+
+_WEB3_ALLOWED_STATUSES = {
+    ActivityStatus.confirmed,
+    ActivityStatus.finalized,
+    ActivityStatus.reverted,
+    ActivityStatus.reorged,
+    ActivityStatus.failed,
+}
+
+
+class Web3StatusChangeRequest(BaseModel):
+    tx_hash: str
+    new_status: ActivityStatus
+
+    @field_validator("new_status")
+    @classmethod
+    def must_be_web3_status(cls, v: ActivityStatus) -> ActivityStatus:
+        if v not in _WEB3_ALLOWED_STATUSES:
+            raise ValueError(f"new_status must be one of {[s.value for s in _WEB3_ALLOWED_STATUSES]}")
+        return v
+
+
+web3_router = APIRouter(prefix="/v1/web3", tags=["Journeys"])
+
+
+@web3_router.post("/status-change")
+async def web3_status_change(request: Request, body: Web3StatusChangeRequest):
+    """Receive a Web3 transaction status update from the chain indexer.
+
+    Updates canonical_activity rows and triggers journey rebuilds for all
+    profiles that have a step referencing this transaction.
+    """
+    tenant = _require_tenant(request)
+    affected = await _compiler.rebuild_affected_by_web3_status_change(
+        tenant.tenant_id, body.tx_hash, body.new_status
+    )
+    return APIResponse(
+        data=None,
+        meta={"tx_hash": body.tx_hash, "new_status": body.new_status, "profiles_rebuilt": affected},
+    ).to_dict()

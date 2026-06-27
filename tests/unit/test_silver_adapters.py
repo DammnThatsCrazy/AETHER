@@ -155,6 +155,57 @@ class TestSilverAdapters:
         if r1 and r2:
             assert r1.get("idempotency_key") == r2.get("idempotency_key")
 
+    def test_adapt_from_silver_exposure(self):
+        from services.measurement.silver_adapters import adapt_from_silver
+        row = {
+            "fact_id": str(uuid4()),
+            "tenant_id": "tenant-a",
+            "profile_id": "profile-001",
+            "recommendation_id": "rec-123",
+            "position": 2,
+            "occurred_at": _now(),
+            "idempotency_key": str(uuid4()),
+        }
+        result = adapt_from_silver("silver_exposure_facts", row)
+        assert result is not None
+        assert result.get("activity_family") == "campaign"
+        assert result.get("activity_type") == "recommendation_exposure"
+        assert result.get("tenant_id") == "tenant-a"
+
+    def test_adapt_from_silver_account_activity(self):
+        from services.measurement.silver_adapters import adapt_from_silver
+        row = {
+            "fact_id": str(uuid4()),
+            "tenant_id": "tenant-a",
+            "profile_id": "profile-001",
+            "activity_type": "login",
+            "channel": "web",
+            "occurred_at": _now(),
+            "idempotency_key": str(uuid4()),
+        }
+        result = adapt_from_silver("silver_account_activity_facts", row)
+        assert result is not None
+        assert result.get("activity_family") == "web2"
+        assert result.get("activity_type") == "login"
+        assert result.get("tenant_id") == "tenant-a"
+
+    def test_adapt_from_silver_comms(self):
+        from services.measurement.silver_adapters import adapt_from_silver
+        row = {
+            "fact_id": str(uuid4()),
+            "tenant_id": "tenant-a",
+            "profile_id": "profile-001",
+            "comms_type": "email",
+            "channel": "email",
+            "occurred_at": _now(),
+            "idempotency_key": str(uuid4()),
+        }
+        result = adapt_from_silver("silver_comms_facts", row)
+        assert result is not None
+        assert result.get("activity_family") == "web2"
+        assert result.get("activity_type") == "comms_email"
+        assert result.get("tenant_id") == "tenant-a"
+
     def test_canonical_conversion_adapter(self):
         from services.measurement.silver_adapters import adapt_from_silver
         row = {
