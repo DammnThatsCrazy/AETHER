@@ -7,8 +7,10 @@ import logging
 from datetime import date, datetime, timedelta, timezone
 from typing import Any
 
+from decimal import Decimal
+
 from services.measurement.connectors.base import BaseConnector, ConnectorHealth, SyncResult
-from services.measurement.repositories.spend_repo import SpendRepository
+from services.measurement.connectors.writer import CampaignMeasurementWriter, ExternalCampaignMetric
 
 logger = logging.getLogger("aether.measurement.connectors.reddit_ads")
 
@@ -34,7 +36,7 @@ class RedditAdsConnector(BaseConnector):
 
     def __init__(self, connector_id: str, tenant_id: str, config: dict[str, Any], cursor_state: dict[str, Any]) -> None:
         super().__init__(connector_id, tenant_id, config, cursor_state)
-        self._spend_repo = SpendRepository()
+        self._writer = CampaignMeasurementWriter()
 
     async def sync_incremental(self, cursor: dict[str, Any]) -> SyncResult:
         last_date_str = cursor.get("last_sync_date")
@@ -57,31 +59,24 @@ class RedditAdsConnector(BaseConnector):
 
     async def _mock_backfill(self, start: date, end: date) -> SyncResult:
         """Return a mock SyncResult for local/test environments."""
-        rows_upserted = 0
+        account_id = self.config.get("account_id", "")
+        metrics_list: list[ExternalCampaignMetric] = []
         current = start
         while current <= end:
-            record = {
-                "spend_record_id": _idempotency_id(self.connector_id, str(current)),
-                "tenant_id": self.tenant_id,
-                "platform": "reddit_ads",
-                "ad_account_id": self.config.get("account_id", ""),
-                "campaign_id": f"mock-reddit-camp-{self.connector_id[:8]}",
-                "period_start": datetime.combine(current, datetime.min.time()).replace(tzinfo=timezone.utc).isoformat(),
-                "period_end": datetime.combine(current, datetime.max.time()).replace(tzinfo=timezone.utc).isoformat(),
-                "billing_currency": "USD",
-                "impressions": 8000,
-                "clicks": 120,
-                "media_spend": "110.00",
-                "total_cost": "110.00",
-                "source_connector_id": self.connector_id,
-                "idempotency_key": f"reddit-{self.connector_id}-{current}",
-            }
-            await self._spend_repo.upsert(record)
-            rows_upserted += 1
+            metrics_list.append(ExternalCampaignMetric(
+                platform=_CONNECTOR_TYPE,
+                external_account_id=account_id,
+                external_campaign_id=f"mock-reddit-camp-{self.connector_id[:8]}",
+                external_campaign_name="Mock Reddit Campaign",
+                period_start=datetime.combine(current, datetime.min.time()).replace(tzinfo=timezone.utc),
+                period_end=datetime.combine(current, datetime.max.time()).replace(tzinfo=timezone.utc),
+                impressions=8000, clicks=120, spend=Decimal("110.00"), currency="USD",
+            ))
             current += timedelta(days=1)
 
-        logger.info("Reddit Ads mock backfill: connector=%s rows=%d", self.connector_id, rows_upserted)
-        return SyncResult(rows_upserted=rows_upserted, new_cursor={"last_sync_date": str(end)})
+        write_result = await self._writer.write_metrics(self.tenant_id, self.connector_id, metrics_list)
+        logger.info("Reddit Ads mock backfill: connector=%s rows=%d", self.connector_id, write_result.spend_records_written)
+        return SyncResult(rows_upserted=write_result.spend_records_written, new_cursor={"last_sync_date": str(end)})
 
     async def _live_backfill(self, start: date, end: date) -> SyncResult:
         try:
@@ -99,12 +94,11 @@ class RedditAdsConnector(BaseConnector):
             "Authorization": f"Bearer {access_token}",
             "User-Agent": "Aether/1.0",
         }
-        rows_upserted = 0
         errors: list[str] = []
+        metrics_list: list[ExternalCampaignMetric] = []
 
         async with httpx.AsyncClient(timeout=30) as client:
             try:
-                # Fetch campaigns first
                 camps_resp = await client.get(
                     f"{_BASE_URL}/accounts/{account_id}/campaigns",
                     headers=headers,
@@ -114,14 +108,15 @@ class RedditAdsConnector(BaseConnector):
                 campaigns = camps_resp.json().get("data", {}).get("campaigns", [])
 
                 for campaign in campaigns:
-                    campaign_id = campaign.get("id", "")
-                    if not campaign_id:
+                    ext_campaign_id = campaign.get("id", "")
+                    campaign_name = campaign.get("name")
+                    if not ext_campaign_id:
                         continue
 
                     current = start
                     while current <= end:
                         stats_resp = await client.get(
-                            f"{_BASE_URL}/accounts/{account_id}/campaigns/{campaign_id}/report",
+                            f"{_BASE_URL}/accounts/{account_id}/campaigns/{ext_campaign_id}/report",
                             headers=headers,
                             params={
                                 "date_start": str(current),
@@ -131,36 +126,32 @@ class RedditAdsConnector(BaseConnector):
                             },
                         )
                         stats_resp.raise_for_status()
-                        report_data = stats_resp.json().get("data", {})
-                        rows = report_data.get("rows", [])
+                        rows = stats_resp.json().get("data", {}).get("rows", [])
 
                         for row in rows:
-                            spend = float(row.get("spend", 0)) / 100  # cents to dollars
-                            record = {
-                                "spend_record_id": _idempotency_id(self.connector_id, str(current) + campaign_id),
-                                "tenant_id": self.tenant_id,
-                                "platform": "reddit_ads",
-                                "ad_account_id": account_id,
-                                "campaign_id": campaign_id,
-                                "period_start": datetime.combine(current, datetime.min.time()).replace(tzinfo=timezone.utc).isoformat(),
-                                "period_end": datetime.combine(current, datetime.max.time()).replace(tzinfo=timezone.utc).isoformat(),
-                                "billing_currency": "USD",
-                                "impressions": int(row.get("impressions", 0)),
-                                "clicks": int(row.get("clicks", 0)),
-                                "media_spend": str(spend),
-                                "total_cost": str(spend),
-                                "source_connector_id": self.connector_id,
-                                "idempotency_key": f"reddit-{self.connector_id}-{current}-{campaign_id}",
-                            }
-                            await self._spend_repo.upsert(record)
-                            rows_upserted += 1
+                            spend = Decimal(str(float(row.get("spend", 0)) / 100))  # cents to dollars
+                            metrics_list.append(ExternalCampaignMetric(
+                                platform=_CONNECTOR_TYPE,
+                                external_account_id=account_id,
+                                external_campaign_id=ext_campaign_id,
+                                external_campaign_name=campaign_name,
+                                period_start=datetime.combine(current, datetime.min.time()).replace(tzinfo=timezone.utc),
+                                period_end=datetime.combine(current, datetime.max.time()).replace(tzinfo=timezone.utc),
+                                impressions=int(row.get("impressions", 0)),
+                                clicks=int(row.get("clicks", 0)),
+                                spend=spend,
+                                currency="USD",
+                                raw_dimensions={"date": str(current), "campaign_id": ext_campaign_id},
+                            ))
                         current += timedelta(days=1)
 
             except Exception as exc:
                 logger.error("Reddit Ads API error: %s", exc)
                 errors.append(str(exc))
 
-        return SyncResult(rows_upserted=rows_upserted, errors=errors, new_cursor={"last_sync_date": str(end)})
+        write_result = await self._writer.write_metrics(self.tenant_id, self.connector_id, metrics_list)
+        errors.extend(write_result.errors)
+        return SyncResult(rows_upserted=write_result.spend_records_written, errors=errors, new_cursor={"last_sync_date": str(end)})
 
     async def health_check(self) -> ConnectorHealth:
         import os

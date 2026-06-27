@@ -6,6 +6,8 @@ import {
   TabsContent, TabsList, TabsTrigger,
 } from '@aether/ui';
 import { useCampaigns, usePlatformOverview, useAutomationInsights } from '@aether-app/features/campaigns/use-campaigns';
+import { useCampaignQuality } from '@aether-app/features/campaigns/use-campaign-quality';
+import { useMappingReviews } from '@aether-app/features/campaigns/use-mapping-review';
 
 // ── helpers ────────────────────────────────────────────────────────────────────
 
@@ -400,6 +402,75 @@ function AttributionOverviewTab() {
   );
 }
 
+// ── Campaign Intelligence overview strip ──────────────────────────────────────
+
+function CampaignIntelligenceStrip() {
+  const navigate = useNavigate();
+  const { data: quality } = useCampaignQuality();
+  const { data: reviewsData } = useMappingReviews({ status: 'open', limit: 1 });
+
+  const q = (quality ?? {}) as Record<string, unknown>;
+  const spendRate = q.spend_mapping_rate as number | null ?? null;
+  const openReviews = (reviewsData as Record<string, unknown>)?.total as number | undefined
+    ?? (Array.isArray(reviewsData) ? (reviewsData as unknown[]).length : 0);
+
+  const spendPct = spendRate !== null ? (spendRate * 100).toFixed(1) : null;
+  const qualityBad = spendRate !== null && spendRate < 0.9;
+
+  return (
+    <Card className="border-border-default">
+      <CardHeader>
+        <div className="flex items-center justify-between">
+          <span className="text-sm font-medium text-text-primary">Campaign Intelligence</span>
+          <div className="flex items-center gap-2">
+            <Button variant="ghost" size="sm" onClick={() => navigate('/campaign-intelligence/sources')}>
+              Sources
+            </Button>
+            <Button variant="ghost" size="sm" onClick={() => navigate('/campaign-intelligence/registry')}>
+              Registry
+            </Button>
+            <Button variant="ghost" size="sm" onClick={() => navigate('/campaign-intelligence/mapping-review')}>
+              Review queue
+            </Button>
+            <Button variant="primary" size="sm" onClick={() => navigate('/campaign-intelligence/sources')}>
+              Connect campaign source
+            </Button>
+          </div>
+        </div>
+      </CardHeader>
+      <CardContent>
+        <div className="flex items-center gap-6 text-xs flex-wrap">
+          {spendPct !== null && (
+            <div className="flex items-center gap-1.5">
+              <span className="text-text-secondary">Spend mapping rate</span>
+              <span className={`font-semibold ${qualityBad ? 'text-warning' : 'text-success'}`}>
+                {spendPct}%
+              </span>
+              {qualityBad && (
+                <Badge variant="warning" size="sm">Below target</Badge>
+              )}
+            </div>
+          )}
+          {openReviews > 0 && (
+            <button
+              onClick={() => navigate('/campaign-intelligence/mapping-review')}
+              className="flex items-center gap-1.5 text-warning hover:underline"
+            >
+              <Badge variant="warning" size="sm">{openReviews}</Badge>
+              <span>open mapping review{openReviews !== 1 ? 's' : ''}</span>
+            </button>
+          )}
+          {spendPct === null && openReviews === 0 && (
+            <span className="text-text-muted">
+              Connect a campaign source to start populating the registry.
+            </span>
+          )}
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
 // ── Page ──────────────────────────────────────────────────────────────────────
 
 export function CampaignsPage() {
@@ -429,6 +500,9 @@ export function CampaignsPage() {
           ))}
         </div>
       </div>
+
+      {/* Campaign Intelligence overview */}
+      <CampaignIntelligenceStrip />
 
       {/* Tabs */}
       <Tabs defaultValue="overview">

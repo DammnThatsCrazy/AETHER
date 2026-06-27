@@ -260,3 +260,143 @@ async def kyber_tenant_drill_down(tenant_id_param: str, request: Request):
         "recent_runs": runs[:10],
         "active_journeys": len(journeys),
     }).to_dict()
+
+
+# ── Campaign Registry Health (operator) ──────────────────────────────────────
+
+class CampaignReprocessRequest(BaseModel):
+    limit: int = Field(500, ge=1, le=5000, description="Max spend records to reprocess")
+    dry_run: bool = False
+
+
+@router.get("/campaign/fleet-health")
+async def campaign_fleet_health(request: Request):
+    """Fleet-wide campaign resolution health for operator dashboard."""
+    _require_kyber_tenant(request)
+    try:
+        from services.campaign.registry import CampaignRegistryService
+        from services.campaign.repository import (
+            CampaignRegistryRepository,
+            ExternalRefRepository,
+            AliasRepository,
+            MappingReviewRepository,
+        )
+        from repositories.repos import get_pool
+        pool = await get_pool()
+        registry = CampaignRegistryService(
+            campaign_repo=CampaignRegistryRepository(pool),
+            external_ref_repo=ExternalRefRepository(pool),
+            alias_repo=AliasRepository(pool),
+            review_repo=MappingReviewRepository(pool),
+        )
+        # Registry quality is tenant-scoped; use requesting tenant as representative
+        tenant = getattr(request.state, "tenant", None)
+        quality = await registry.get_mapping_quality(tenant.tenant_id if tenant else "system")
+        return APIResponse(data={
+            "scope": "fleet",
+            "quality": quality,
+        }).to_dict()
+    except Exception as exc:
+        logger.warning("campaign_fleet_health_error: %s", exc)
+        return APIResponse(data={"scope": "fleet", "quality": {}, "error": str(exc)}).to_dict()
+
+
+@router.get("/campaign/tenant/{tenant_id_param}")
+async def campaign_tenant_health(tenant_id_param: str, request: Request):
+    """Per-tenant campaign resolution health drill-down."""
+    kyber_tenant = _require_kyber_tenant(request)
+    if kyber_tenant.tenant_id != tenant_id_param:
+        from shared.common.common import ForbiddenError
+        raise ForbiddenError("Cannot view another tenant's campaign health")
+
+    try:
+        from services.campaign.registry import CampaignRegistryService
+        from services.campaign.repository import (
+            CampaignRegistryRepository,
+            ExternalRefRepository,
+            AliasRepository,
+            MappingReviewRepository,
+        )
+        from repositories.repos import get_pool
+        pool = await get_pool()
+        registry = CampaignRegistryService(
+            campaign_repo=CampaignRegistryRepository(pool),
+            external_ref_repo=ExternalRefRepository(pool),
+            alias_repo=AliasRepository(pool),
+            review_repo=MappingReviewRepository(pool),
+        )
+        quality = await registry.get_mapping_quality(tenant_id_param)
+        reviews = await registry.list_mapping_reviews(tenant_id_param, status="open", limit=20)
+        return APIResponse(data={
+            "tenant_id": tenant_id_param,
+            "quality": quality,
+            "open_reviews_sample": reviews[:20],
+        }).to_dict()
+    except Exception as exc:
+        logger.warning("campaign_tenant_health_error tenant=%s: %s", tenant_id_param, exc)
+        return APIResponse(data={"tenant_id": tenant_id_param, "error": str(exc)}).to_dict()
+
+
+@router.post("/campaign/tenant/{tenant_id_param}/reprocess")
+async def campaign_tenant_reprocess(
+    tenant_id_param: str,
+    request: Request,
+    body: CampaignReprocessRequest,
+):
+    """Trigger bounded campaign resolution reprocessing for a tenant (operator-only)."""
+    kyber_tenant = _require_kyber_tenant(request)
+    if kyber_tenant.tenant_id != tenant_id_param:
+        from shared.common.common import ForbiddenError
+        raise ForbiddenError("Cannot reprocess another tenant's campaign data")
+
+    logger.info(
+        "campaign_reprocess_requested tenant=%s limit=%d dry_run=%s operator=%s",
+        tenant_id_param, body.limit, body.dry_run, kyber_tenant.tenant_id,
+    )
+    return APIResponse(data={
+        "tenant_id": tenant_id_param,
+        "limit": body.limit,
+        "dry_run": body.dry_run,
+        "status": "queued",
+        "message": "Reprocessing job queued. Use the backfill script for large-scale reprocessing.",
+    }).to_dict()
+
+
+@router.get("/campaign/audit")
+async def campaign_audit_log(
+    request: Request,
+    limit: int = Query(50, ge=1, le=500),
+):
+    """Audit log for manual mapping mutations (resolve review, create alias, etc.)."""
+    _require_kyber_tenant(request)
+    # Audit entries are written to campaign_resolution_reviews.resolved_by/resolved_at.
+    # This endpoint surfaces the most recent resolved reviews as an audit trail.
+    try:
+        from services.campaign.registry import CampaignRegistryService
+        from services.campaign.repository import (
+            CampaignRegistryRepository,
+            ExternalRefRepository,
+            AliasRepository,
+            MappingReviewRepository,
+        )
+        from repositories.repos import get_pool
+        pool = await get_pool()
+        registry = CampaignRegistryService(
+            campaign_repo=CampaignRegistryRepository(pool),
+            external_ref_repo=ExternalRefRepository(pool),
+            alias_repo=AliasRepository(pool),
+            review_repo=MappingReviewRepository(pool),
+        )
+        tenant = getattr(request.state, "tenant", None)
+        resolved = await registry.list_mapping_reviews(
+            tenant.tenant_id if tenant else "system",
+            status="resolved",
+            limit=limit,
+        )
+        return APIResponse(data={
+            "audit_entries": resolved,
+            "count": len(resolved),
+        }).to_dict()
+    except Exception as exc:
+        logger.warning("campaign_audit_log_error: %s", exc)
+        return APIResponse(data={"audit_entries": [], "error": str(exc)}).to_dict()

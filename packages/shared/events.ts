@@ -847,9 +847,17 @@ export interface CampaignContext {
   campaign?: string;
   content?: string;
   term?: string;
+  /** utm_id — highest-confidence UTM alias token. */
+  utmId?: string;
   clickId?: string;
   referrerDomain?: string;
   referrerType?: 'direct' | 'organic' | 'paid' | 'social' | 'email' | 'referral' | 'unknown';
+  /** Provider campaign ID (e.g. Google, Meta). Never treated as canonical Aether UUID. */
+  externalCampaignId?: string;
+  externalAccountId?: string;
+  platform?: string;
+  /** Aether canonical campaign UUID. Validated server-side before use. */
+  canonicalCampaignId?: string;
 }
 
 export interface LibraryContext {
@@ -987,6 +995,8 @@ export interface EventContext {
   page?: PageContext;
   device?: DeviceContext;
   campaign?: CampaignContext;
+  /** Full acquisition evidence envelope captured at landing; superset of CampaignContext. */
+  acquisitionEvidence?: import('./acquisition-evidence').AcquisitionEvidence;
   fingerprint?: { id: string };
   ip?: string;
   locale?: string;

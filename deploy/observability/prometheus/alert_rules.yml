@@ -470,3 +470,91 @@ groups:
         annotations:
           summary: "Spend coverage below 80% for tenant {{ $labels.tenant_id }}"
           description: "Only {{ $value | humanizePercentage }} of campaign days have spend records. ROAS accuracy is degraded."
+
+  # ============================================================
+  # Campaign Intelligence — Registry & Resolution Alerts
+  # ============================================================
+  - name: aether_campaign_intelligence
+    rules:
+      - alert: CampaignSpendMissingCanonicalId
+        expr: >
+          rate(campaign_resolution_total{status="unresolved"}[10m])
+          / rate(campaign_resolution_total[10m]) > 0.1
+        for: 10m
+        labels:
+          severity: warning
+          slo: "campaign_resolution_unresolved_rate_10pct"
+        annotations:
+          summary: "Campaign resolution unresolved rate >10% for tenant {{ $labels.tenant_id }}"
+          description: "{{ $value | humanizePercentage }} of spend/touchpoint records cannot be resolved to a canonical campaign UUID. Check mapping review queue and connector configuration."
+
+      - alert: CampaignResolutionUnresolvedRateHigh
+        expr: >
+          rate(campaign_resolution_total{status="unresolved"}[5m])
+          / rate(campaign_resolution_total[5m]) > 0.25
+        for: 5m
+        labels:
+          severity: critical
+          slo: "campaign_resolution_unresolved_spike"
+        annotations:
+          summary: "Campaign resolution unresolved spike >25% for tenant {{ $labels.tenant_id }}"
+          description: "Sudden spike in unresolved resolution rate ({{ $value | humanizePercentage }}). Possible connector misconfiguration, platform ID format change, or registry corruption."
+
+      - alert: CampaignSourceSyncFailed
+        expr: rate(campaign_source_sync_total{status="error"}[30m]) > 0
+        for: 15m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Campaign source sync failing for {{ $labels.platform }} (tenant {{ $labels.tenant_id }})"
+          description: "Campaign source on {{ $labels.platform }} has been reporting sync failures for 15+ minutes. Spend data may be stale and resolution quality may degrade."
+
+      - alert: CampaignSourceStale
+        expr: campaign_source_freshness_seconds > 93600
+        for: 10m
+        labels:
+          severity: warning
+          slo: "campaign_source_freshness_26h"
+        annotations:
+          summary: "Campaign source stale for {{ $labels.platform }} (tenant {{ $labels.tenant_id }})"
+          description: "Last successful campaign sync was {{ $value | humanizeDuration }} ago. SLO target is 26h. External campaign data may be outdated."
+
+      - alert: CampaignBackfillStuck
+        expr: >
+          rate(campaign_reprocess_requested_total[30m]) > 0
+          and rate(campaign_reprocess_completed_total[30m]) == 0
+        for: 20m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Campaign reprocess job stuck for tenant {{ $labels.tenant_id }}"
+          description: "Reprocessing was requested but no completions recorded for 20+ minutes. Check job queue and worker health."
+
+      - alert: CampaignMappingReviewQueueHigh
+        expr: campaign_mapping_review_open > 500
+        for: 30m
+        labels:
+          severity: info
+        annotations:
+          summary: "Campaign mapping review queue >500 for tenant {{ $labels.tenant_id }}"
+          description: "{{ $value }} open mapping reviews require operator attention. Unresolved evidence cannot be attributed."
+
+      - alert: CampaignSpendMappingRateLow
+        expr: campaign_spend_mapping_rate < 0.7
+        for: 60m
+        labels:
+          severity: warning
+          slo: "campaign_spend_mapping_rate_70pct"
+        annotations:
+          summary: "Campaign spend mapping rate below 70% for tenant {{ $labels.tenant_id }}"
+          description: "Only {{ $value | humanizePercentage }} of spend records resolve to a canonical campaign UUID. ROAS reporting accuracy is degraded."
+
+      - alert: CampaignTouchpointMappingRateLow
+        expr: campaign_touchpoint_mapping_rate < 0.7
+        for: 60m
+        labels:
+          severity: warning
+          slo: "campaign_touchpoint_mapping_rate_70pct"
+        annotations:
+          summary: "Campaign touchpoint mapping rate below 70% for tenant {{ $labels.tenant_id }}"
+          description: "Only {{ $value | humanizePercentage }} of touchpoint facts resolve to a canonical campaign UUID. Attribution accuracy is degraded."

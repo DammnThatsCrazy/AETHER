@@ -13,6 +13,11 @@ const UsersPage = lazy(() => import('@aether-app/pages/users').then(m => ({ defa
 const UserProfilePage = lazy(() => import('@aether-app/pages/user-profile').then(m => ({ default: m.UserProfilePage })));
 const CampaignsPage = lazy(() => import('@aether-app/pages/campaigns').then(m => ({ default: m.CampaignsPage })));
 const CampaignDetail360Page = lazy(() => import('@aether-app/pages/campaigns/campaign-360-page').then(m => ({ default: m.Campaign360Page })));
+const CampaignRegistryPage = lazy(() => import('@aether-app/pages/campaigns/campaign-registry-page').then(m => ({ default: m.CampaignRegistryPage })));
+const CampaignSourcesPage = lazy(() => import('@aether-app/pages/campaigns/campaign-sources-page').then(m => ({ default: m.CampaignSourcesPage })));
+const MappingReviewPage = lazy(() => import('@aether-app/pages/campaigns/mapping-review-page').then(m => ({ default: m.MappingReviewPage })));
+const CampaignQualityPage = lazy(() => import('@aether-app/pages/campaigns/campaign-quality-page').then(m => ({ default: m.CampaignQualityPage })));
+const CustomCampaignPage = lazy(() => import('@aether-app/pages/campaigns/custom-campaign-page').then(m => ({ default: m.CustomCampaignPage })));
 const GraphPage = lazy(() => import('@aether-app/pages/graph').then(m => ({ default: m.GraphPage })));
 const NoesisPage = lazy(() => import('@aether-app/pages/noesis').then(m => ({ default: m.NoesisPage })));
 const SettingsPage = lazy(() => import('@aether-app/pages/settings/settings-page').then(m => ({ default: m.SettingsPage })));
@@ -76,6 +81,13 @@ export function AppRouter() {
                 <Route path="/users/:id" element={<PageSuspense><UserProfilePage /></PageSuspense>} />
                 <Route path="/campaigns" element={<PageSuspense><CampaignsPage /></PageSuspense>} />
                 <Route path="/campaigns/:id" element={<PageSuspense><CampaignDetail360Page /></PageSuspense>} />
+                {/* Campaign Intelligence */}
+                <Route path="/campaign-intelligence" element={<PageSuspense><CampaignsPage /></PageSuspense>} />
+                <Route path="/campaign-intelligence/registry" element={<PageSuspense><CampaignRegistryPage /></PageSuspense>} />
+                <Route path="/campaign-intelligence/sources" element={<PageSuspense><CampaignSourcesPage /></PageSuspense>} />
+                <Route path="/campaign-intelligence/mapping-review" element={<PageSuspense><MappingReviewPage /></PageSuspense>} />
+                <Route path="/campaign-intelligence/quality" element={<PageSuspense><CampaignQualityPage /></PageSuspense>} />
+                <Route path="/campaign-intelligence/campaigns/new" element={<PageSuspense><CustomCampaignPage /></PageSuspense>} />
                 <Route path="/graph" element={<PageSuspense><GraphPage /></PageSuspense>} />
                 <Route path="/noesis" element={<PageSuspense><NoesisPage /></PageSuspense>} />
                 <Route path="/settings" element={<PageSuspense><SettingsPage /></PageSuspense>} />

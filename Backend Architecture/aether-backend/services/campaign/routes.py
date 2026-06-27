@@ -622,3 +622,318 @@ async def get_campaign_graph(
     emit_latency("campaign_graph", ctx.elapsed_ms(), labels={"depth": str(body.depth)})
     metrics.increment("campaign_graph_queries")
     return APIResponse(data=result).to_dict()
+
+
+# =============================================================================
+# Campaign Registry sub-routes (external refs, aliases)
+# =============================================================================
+
+def _get_registry():
+    from services.campaign.registry import CampaignRegistryService
+    from services.campaign.repository import (
+        CampaignRegistryRepository,
+        ExternalRefRepository,
+        AliasRepository,
+        MappingReviewRepository,
+    )
+    return CampaignRegistryService(
+        campaign_repo=CampaignRegistryRepository(None),
+        external_ref_repo=ExternalRefRepository(None),
+        alias_repo=AliasRepository(None),
+        review_repo=MappingReviewRepository(None),
+    )
+
+
+@router.get("/{campaign_id}/external-refs")
+async def list_external_refs(campaign_id: str, request: Request):
+    """List all external platform references for a canonical campaign."""
+    tenant = request.state.tenant
+    tenant.require_permission("campaign:read")
+    await _require_campaign(campaign_id, tenant)
+
+    try:
+        from services.campaign.repository import ExternalRefRepository
+        ref_repo = ExternalRefRepository(None)
+        refs = await ref_repo.list_for_campaign(tenant.tenant_id, campaign_id)
+    except Exception as exc:
+        logger.warning("external-refs unavailable: %s", exc)
+        refs = []
+
+    metrics.increment("campaign_external_refs_read")
+    return APIResponse(data={"campaign_id": campaign_id, "items": refs}).to_dict()
+
+
+class AliasCreate(BaseModel):
+    alias_type: str = Field(..., description="e.g. utm_campaign, utm_id, external_campaign_id")
+    alias_value: str
+    platform: Optional[str] = None
+    external_account_id: Optional[str] = None
+    source: Optional[str] = None
+    medium: Optional[str] = None
+
+
+@router.get("/{campaign_id}/aliases")
+async def list_aliases(campaign_id: str, request: Request):
+    """List active campaign aliases."""
+    tenant = request.state.tenant
+    tenant.require_permission("campaign:read")
+    await _require_campaign(campaign_id, tenant)
+
+    try:
+        from services.campaign.repository import AliasRepository
+        alias_repo = AliasRepository(None)
+        aliases = await alias_repo.list_for_campaign(tenant.tenant_id, campaign_id)
+    except Exception as exc:
+        logger.warning("aliases unavailable: %s", exc)
+        aliases = []
+
+    metrics.increment("campaign_aliases_read")
+    return APIResponse(data={"campaign_id": campaign_id, "items": aliases}).to_dict()
+
+
+@router.post("/{campaign_id}/aliases")
+async def add_alias(campaign_id: str, body: AliasCreate, request: Request):
+    """Add a campaign alias (used for UTM/tracking resolution)."""
+    tenant = request.state.tenant
+    tenant.require_permission("campaign:manage")
+    await _require_campaign(campaign_id, tenant)
+
+    try:
+        registry = _get_registry()
+        alias_id = await registry.add_alias(
+            tenant_id=tenant.tenant_id,
+            campaign_id=campaign_id,
+            alias_type=body.alias_type,
+            value=body.alias_value,
+            platform=body.platform,
+            external_account_id=body.external_account_id,
+            source=body.source,
+            medium=body.medium,
+            created_by=getattr(tenant, "user_id", "api"),
+        )
+    except Exception as exc:
+        raise BadRequestError(str(exc)) from exc
+
+    metrics.increment("campaign_aliases_created")
+    return APIResponse(data={"alias_id": str(alias_id) if alias_id else None}).to_dict()
+
+
+@router.delete("/{campaign_id}/aliases/{alias_id}")
+async def expire_alias(campaign_id: str, alias_id: str, request: Request):
+    """Expire an active campaign alias."""
+    tenant = request.state.tenant
+    tenant.require_permission("campaign:manage")
+    await _require_campaign(campaign_id, tenant)
+
+    try:
+        registry = _get_registry()
+        await registry.expire_alias(tenant.tenant_id, alias_id)
+    except Exception as exc:
+        raise BadRequestError(str(exc)) from exc
+
+    metrics.increment("campaign_aliases_expired")
+    return APIResponse(data={"expired": True, "alias_id": alias_id}).to_dict()
+
+
+# =============================================================================
+# Campaign Sources router (/v1/campaign-sources)
+# =============================================================================
+
+sources_router = APIRouter(prefix="/v1/campaign-sources", tags=["Campaign Sources"])
+
+
+class CampaignSourceCreate(BaseModel):
+    platform: str
+    display_name: Optional[str] = None
+    config: dict[str, Any] = Field(default_factory=dict)
+
+
+@sources_router.get("")
+async def list_campaign_sources(request: Request):
+    """List all connected campaign sources for the tenant."""
+    tenant = request.state.tenant
+    tenant.require_permission("campaign:read")
+    try:
+        from repositories.repos import get_pool
+        pool = await get_pool()
+        rows = await pool.fetch(
+            "SELECT * FROM measurement_connectors WHERE tenant_id = $1 ORDER BY created_at DESC",
+            tenant.tenant_id,
+        ) if pool else []
+        items = [dict(r) for r in rows]
+    except Exception as exc:
+        logger.warning("campaign sources list failed: %s", exc)
+        items = []
+    return APIResponse(data={"items": items}).to_dict()
+
+
+@sources_router.post("")
+async def connect_campaign_source(body: CampaignSourceCreate, request: Request):
+    """Connect a new campaign source (ad platform)."""
+    tenant = request.state.tenant
+    tenant.require_permission("campaign:manage")
+    connector_id = str(uuid.uuid4())
+    try:
+        from repositories.repos import get_pool
+        pool = await get_pool()
+        if pool:
+            await pool.execute(
+                """
+                INSERT INTO measurement_connectors
+                  (connector_id, tenant_id, connector_type, display_name, config, status, created_at, updated_at)
+                VALUES ($1, $2, $3, $4, $5, 'active', NOW(), NOW())
+                """,
+                connector_id, tenant.tenant_id, body.platform,
+                body.display_name or body.platform,
+                __import__("json").dumps(body.config) if body.config else "{}",
+            )
+    except Exception as exc:
+        logger.warning("source connect failed: %s", exc)
+    metrics.increment("campaign_sources_connected", labels={"platform": body.platform})
+    return APIResponse(data={"connector_id": connector_id, "platform": body.platform}).to_dict()
+
+
+@sources_router.get("/{connector_id}/health")
+async def get_source_health(connector_id: str, request: Request):
+    """Return health status of a campaign source connector."""
+    tenant = request.state.tenant
+    tenant.require_permission("campaign:read")
+    try:
+        from services.measurement.orchestrator import ConnectorOrchestrator
+        orch = ConnectorOrchestrator()
+        health = await orch.health_check(tenant.tenant_id, connector_id)
+        return APIResponse(data=health).to_dict()
+    except Exception as exc:
+        logger.warning("health_check unavailable: %s", exc)
+        return APIResponse(data={"connector_id": connector_id, "status": "unknown", "error": str(exc)}).to_dict()
+
+
+@sources_router.post("/{connector_id}/sync")
+async def trigger_sync(connector_id: str, request: Request):
+    """Trigger an incremental sync for a campaign source."""
+    tenant = request.state.tenant
+    tenant.require_permission("campaign:manage")
+    try:
+        from services.measurement.orchestrator import ConnectorOrchestrator
+        orch = ConnectorOrchestrator()
+        result = await orch.sync_connector(tenant.tenant_id, connector_id)
+        metrics.increment("campaign_source_sync_triggered", labels={"connector_id": connector_id})
+        return APIResponse(data=result).to_dict()
+    except Exception as exc:
+        logger.warning("sync trigger failed: %s", exc)
+        raise BadRequestError(str(exc)) from exc
+
+
+# =============================================================================
+# Mapping Review router (/v1/mapping-review)
+# =============================================================================
+
+mapping_router = APIRouter(prefix="/v1/mapping-review", tags=["Mapping Review"])
+
+
+class ReviewResolve(BaseModel):
+    campaign_id: str
+    note: Optional[str] = None
+
+
+class ReviewIgnore(BaseModel):
+    note: Optional[str] = None
+
+
+@mapping_router.get("")
+async def list_mapping_reviews(
+    request: Request,
+    status: str = Query(default="open"),
+    limit: int = Query(default=50, ge=1, le=200),
+    cursor: Optional[str] = Query(default=None),
+):
+    """List campaign mapping reviews."""
+    tenant = request.state.tenant
+    tenant.require_permission("campaign:read")
+    try:
+        registry = _get_registry()
+        reviews = await registry.list_mapping_reviews(
+            tenant_id=tenant.tenant_id,
+            status=status,
+            limit=limit,
+            cursor=cursor,
+        )
+    except Exception as exc:
+        logger.warning("mapping reviews unavailable: %s", exc)
+        reviews = []
+    next_cursor = reviews[-1].get("review_id") if len(reviews) == limit else None
+    return APIResponse(data={
+        "items": reviews,
+        "pagination": {"limit": limit, "next_cursor": next_cursor, "has_more": next_cursor is not None},
+    }).to_dict()
+
+
+@mapping_router.post("/{review_id}/resolve")
+async def resolve_mapping_review(review_id: str, body: ReviewResolve, request: Request):
+    """Resolve a mapping review by assigning a canonical campaign_id."""
+    tenant = request.state.tenant
+    tenant.require_permission("campaign:manage")
+    try:
+        registry = _get_registry()
+        await registry.resolve_review(
+            tenant_id=tenant.tenant_id,
+            review_id=review_id,
+            campaign_id=body.campaign_id,
+            resolved_by=getattr(tenant, "user_id", "api"),
+            note=body.note,
+        )
+    except Exception as exc:
+        raise BadRequestError(str(exc)) from exc
+    metrics.increment("campaign_mapping_reviews_resolved")
+    return APIResponse(data={"review_id": review_id, "status": "resolved"}).to_dict()
+
+
+@mapping_router.post("/{review_id}/ignore")
+async def ignore_mapping_review(review_id: str, body: ReviewIgnore, request: Request):
+    """Ignore a mapping review (no auto-resolution will be attempted)."""
+    tenant = request.state.tenant
+    tenant.require_permission("campaign:manage")
+    try:
+        registry = _get_registry()
+        await registry.ignore_review(tenant.tenant_id, review_id)
+    except Exception as exc:
+        raise BadRequestError(str(exc)) from exc
+    metrics.increment("campaign_mapping_reviews_ignored")
+    return APIResponse(data={"review_id": review_id, "status": "ignored"}).to_dict()
+
+
+@mapping_router.post("/{review_id}/reopen")
+async def reopen_mapping_review(review_id: str, request: Request):
+    """Reopen an ignored or resolved mapping review."""
+    tenant = request.state.tenant
+    tenant.require_permission("campaign:manage")
+    try:
+        registry = _get_registry()
+        await registry.reopen_review(tenant.tenant_id, review_id)
+    except Exception as exc:
+        raise BadRequestError(str(exc)) from exc
+    return APIResponse(data={"review_id": review_id, "status": "open"}).to_dict()
+
+
+# =============================================================================
+# Campaign Quality router (/v1/campaign-quality)
+# =============================================================================
+
+quality_router = APIRouter(prefix="/v1/campaign-quality", tags=["Campaign Quality"])
+
+
+@quality_router.get("")
+async def get_campaign_quality(request: Request):
+    """Return measurement quality metrics for the tenant's campaign data."""
+    tenant = request.state.tenant
+    tenant.require_permission("campaign:read")
+    try:
+        registry = _get_registry()
+        quality = await registry.get_mapping_quality(tenant.tenant_id)
+    except Exception as exc:
+        logger.warning("campaign quality unavailable: %s", exc)
+        quality = {"error": str(exc), "status": "unavailable"}
+    metrics.increment("campaign_quality_read")
+    return APIResponse(data=quality).to_dict()
+
+
