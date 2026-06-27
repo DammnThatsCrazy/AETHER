@@ -3,7 +3,7 @@ title: Noesis — Operator Guide (Kyber)
 slug: noesis-operator-guide
 section: concepts
 visibility: I
-audience: [dev-senior, architect, operator]
+audience: [dev-senior, architect, ops]
 status: stable
 ---
 

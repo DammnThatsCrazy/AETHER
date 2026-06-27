@@ -3553,7 +3553,7 @@
       "audience": [
         "dev-senior",
         "architect",
-        "operator"
+        "ops"
       ],
       "status": "stable"
     },
@@ -3578,7 +3578,7 @@
       "audience": [
         "dev-senior",
         "architect",
-        "operator"
+        "ops"
       ],
       "status": "stable"
     },

@@ -3,7 +3,7 @@ title: Noesis — Operations Runbook
 slug: noesis-runbook
 section: operations
 visibility: I
-audience: [dev-senior, architect, operator]
+audience: [dev-senior, architect, ops]
 status: stable
 ---
 
