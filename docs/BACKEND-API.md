@@ -2011,8 +2011,30 @@ Multi-channel campaign management with attribution and touchpoint tracking.
 | DELETE | `/v1/campaigns/{id}` | Delete a campaign |
 | GET | `/v1/campaigns/{id}/attribution` | Multi-touch attribution for a campaign |
 | POST | `/v1/campaigns/{id}/touchpoints` | Record a campaign touchpoint (publishes `aether.campaign.touchpoint.recorded`) |
+| GET | `/v1/campaigns/{id}/journeys` | List current journey versions that include steps from this campaign (keyset-paginated by `started_at`) |
 
-**Permissions:** `write` for create/update/delete, `read` for queries
+**Permissions:** `write` for create/update/delete, `campaign:read` for queries
+
+---
+
+### Canonical Journey API (v8.12.0)
+
+Unified cross-rail journey compilation — Web2, Web3, agent, x402, and campaign activity interleaved in a single deterministic timeline.
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/v1/journeys` | List current journey versions for the tenant (filterable by `profile_id`, `journey_state`) |
+| GET | `/v1/journeys/{id}` | Get the current journey version for a journey |
+| GET | `/v1/journeys/{id}/versions` | List all versions of a journey, newest first |
+| GET | `/v1/journeys/{id}/steps` | Paginated journey steps (filterable by `family`, `status`, `session_id`, `wallet_id`, `chain_id`, `campaign_id`) |
+| GET | `/v1/journeys/{id}/steps/{step_id}` | Single step with full activity detail |
+| GET | `/v1/journeys/{id}/transitions` | Transition type summary between steps |
+| GET | `/v1/journeys/{id}/explain` | Identity evidence and confidence explanation |
+| POST | `/v1/journeys/{id}/rebuild` | Trigger a manual journey recompile |
+| GET | `/v1/profiles/{profile_id}/unified-journey` | Current journey for a profile (Profile360 integration) |
+| POST | `/v1/web3/status-change` | Receive a Web3 tx status update from the chain indexer; updates `canonical_activity` and triggers journey rebuilds |
+
+**Permissions:** `read` for GET endpoints; `write` required for `/v1/web3/status-change` and `/v1/journeys/{id}/rebuild`
 
 ---
 

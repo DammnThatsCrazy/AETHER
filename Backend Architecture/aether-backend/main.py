@@ -291,7 +291,7 @@ from services.cluster.routes import router as cluster_router
 
 # Canonical Measurement (conversions, journeys, attribution, spend, quality, ops, experiments)
 from services.measurement.routes.conversions import router as measurement_conversions_router
-from services.measurement.routes.journeys import router as measurement_journeys_router, campaign_router as measurement_campaign_journeys_router, web3_router as measurement_web3_router
+from services.measurement.routes.journeys import router as measurement_journeys_router, web3_router as measurement_web3_router
 from services.measurement.routes.attribution import router as measurement_attribution_router
 from services.measurement.routes.spend import router as measurement_spend_router
 from services.measurement.routes.quality import router as measurement_quality_router
@@ -599,7 +599,6 @@ def create_app() -> FastAPI:
     # Per-conversion attribution, durable journeys, spend ledger, ROAS, quality
     app.include_router(measurement_conversions_router)   # GET/POST /v1/conversions
     app.include_router(measurement_journeys_router)      # GET/POST /v1/journeys
-    app.include_router(measurement_campaign_journeys_router)  # GET /v1/campaigns/{id}/journeys
     app.include_router(measurement_web3_router)          # POST /v1/web3/status-change
     app.include_router(measurement_attribution_router)   # GET/POST /v1/attribution/runs|backfills|configurations|models
     app.include_router(measurement_spend_router)         # GET/POST /v1/spend
