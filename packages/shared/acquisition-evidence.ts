@@ -105,8 +105,8 @@ export function evidenceFromSearchParams(params: URLSearchParams): AcquisitionEv
     utmId: params.get('utm_id') ?? undefined,
     canonicalCampaignId: params.get('aether_cid') ?? undefined,
     clickIds: Object.keys(clickIds).length > 0 ? clickIds : undefined,
-    landingPage: typeof window !== 'undefined' ? window.location.href : undefined,
-    referrer: typeof document !== 'undefined' ? document.referrer || undefined : undefined,
+    landingPage: (globalThis as any).window?.location?.href,
+    referrer: (globalThis as any).document?.referrer || undefined,
     firstCapturedAt: new Date().toISOString(),
     schemaVersion: ACQUISITION_EVIDENCE_SCHEMA_VERSION,
   };
