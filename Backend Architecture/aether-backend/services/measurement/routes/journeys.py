@@ -8,7 +8,7 @@ from datetime import datetime
 from typing import Optional
 
 from fastapi import APIRouter, Query, Request
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
 
 from shared.common.common import APIResponse, NotFoundError
 from shared.logger.logger import get_logger
@@ -16,6 +16,7 @@ from services.measurement.repositories.activity_repo import ActivityRepository
 from services.measurement.repositories.journey_repo import JourneyRepository
 from services.measurement.repositories.journey_step_repo import JourneyStepRepository
 from services.measurement.engine.journey_compiler import JourneyCompiler
+from services.measurement.contracts import ActivityStatus
 
 logger = get_logger("aether.measurement.routes.journeys")
 router = APIRouter(prefix="/v1/journeys", tags=["Journeys"])
@@ -364,11 +365,10 @@ async def list_journeys_for_campaign(
 ):
     """List current journey versions that include steps from a given campaign."""
     tenant = _require_tenant(request)
-    journeys = await _journey_repo.list_current(
+    journeys = await _journey_repo.list_by_campaign(
         tenant.tenant_id,
-        campaign_id=campaign_id,
+        campaign_id,
         limit=limit,
-        cursor=cursor,
     )
     next_cursor = journeys[-1].get("computed_at") if len(journeys) == limit else None
     return APIResponse(
@@ -381,9 +381,25 @@ async def list_journeys_for_campaign(
 # Web3 reorg / status-change webhook
 # ---------------------------------------------------------------------------
 
+_WEB3_ALLOWED_STATUSES = {
+    ActivityStatus.confirmed,
+    ActivityStatus.finalized,
+    ActivityStatus.reverted,
+    ActivityStatus.reorged,
+    ActivityStatus.failed,
+}
+
+
 class Web3StatusChangeRequest(BaseModel):
     tx_hash: str
-    new_status: str  # confirmed | finalized | reverted | reorged
+    new_status: ActivityStatus
+
+    @field_validator("new_status")
+    @classmethod
+    def must_be_web3_status(cls, v: ActivityStatus) -> ActivityStatus:
+        if v not in _WEB3_ALLOWED_STATUSES:
+            raise ValueError(f"new_status must be one of {[s.value for s in _WEB3_ALLOWED_STATUSES]}")
+        return v
 
 
 web3_router = APIRouter(prefix="/v1/web3", tags=["Journeys"])

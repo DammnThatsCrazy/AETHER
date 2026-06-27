@@ -30,6 +30,11 @@ class ActivityRepository:
 
     async def upsert(self, activity: dict[str, Any]) -> dict[str, Any]:
         """Insert a canonical activity row; silently skip if already present."""
+        from uuid import uuid4
+        # Ensure activity_id is always set before hitting the DB so the PK is never NULL.
+        if not activity.get("activity_id"):
+            activity = {**activity, "activity_id": str(uuid4())}
+
         pool = await self._pool()
         idem_key = f"{activity.get('tenant_id')}:{activity.get('idempotency_key')}"
 

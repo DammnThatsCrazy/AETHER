@@ -186,33 +186,51 @@ async def journey_health(request: Request):
     """Journey compiler health — throughput, queue depth, quality breakdown, rebuild audit log."""
     tenant = _require_kyber_tenant(request)
 
-    journeys = await _journey_repo.list_current(tenant.tenant_id, limit=500)
+    # Page through all current journeys for tenant-wide accuracy.
+    all_journeys: list[dict] = []
+    cursor = None
+    while True:
+        page = await _journey_repo.list_current(tenant.tenant_id, limit=500, cursor=cursor)
+        all_journeys.extend(page)
+        if len(page) < 500:
+            break
+        cursor = page[-1].get("computed_at")
 
     quality_counts: dict[str, int] = {}
     failed_rebuilds: list[dict] = []
     total_steps = 0
     compiler_versions: dict[str, int] = {}
 
-    for j in journeys:
-        qs = j.get("quality_status") or "unknown"
-        quality_counts[qs] = quality_counts.get(qs, 0) + 1
-        total_steps += j.get("step_count") or 0
+    for j in all_journeys:
+        step_count = j.get("step_count") or 0
+        rebuild_reason = j.get("rebuild_reason")
         cv = j.get("compiler_version") or "unknown"
+
+        # Derive quality from available fields — journey_versions has no quality_status column.
+        if step_count == 0:
+            qs = "empty"
+        elif rebuild_reason:
+            qs = "partial"
+        else:
+            qs = "complete"
+
+        quality_counts[qs] = quality_counts.get(qs, 0) + 1
+        total_steps += step_count
         compiler_versions[cv] = compiler_versions.get(cv, 0) + 1
-        if j.get("rebuild_reason") and j.get("quality_status") in ("empty", "partial"):
+        if qs in ("empty", "partial"):
             failed_rebuilds.append({
                 "journey_id": j.get("journey_id"),
                 "profile_id": j.get("profile_id"),
-                "quality_status": j.get("quality_status"),
-                "compiler_version": j.get("compiler_version"),
+                "quality_status": qs,
+                "compiler_version": cv,
                 "computed_at": j.get("computed_at"),
             })
 
-    avg_steps = round(total_steps / len(journeys), 1) if journeys else 0
+    avg_steps = round(total_steps / len(all_journeys), 1) if all_journeys else 0
 
     return APIResponse(data={
         "summary": {
-            "total_journeys": len(journeys),
+            "total_journeys": len(all_journeys),
             "avg_steps_per_journey": avg_steps,
             "quality_breakdown": quality_counts,
             "compiler_versions": compiler_versions,
