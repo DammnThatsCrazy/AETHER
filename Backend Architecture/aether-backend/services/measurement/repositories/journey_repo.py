@@ -79,11 +79,13 @@ class JourneyRepository:
                         session_ids, device_ids, campaign_ids, channel_sequence,
                         previous_version_id, rebuild_reason,
                         identity_version, data_watermark,
-                        compiler_version, computed_at, is_current
+                        compiler_version, computed_at, is_current,
+                        step_count, web3_activity_ids, agent_activity_ids, x402_activity_ids
                     ) VALUES (
                         $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,
                         $11,$12,$13,$14,$15,$16,$17,$18,$19,$20,
-                        $21,$22,$23,$24,$25,$26,$27,$28,$29,$30
+                        $21,$22,$23,$24,$25,$26,$27,$28,$29,$30,
+                        $31,$32,$33,$34
                     )
                     """,
                     version_id, journey_id, journey.get("tenant_id"),
@@ -111,6 +113,10 @@ class JourneyRepository:
                     journey.get("compiler_version", "1.0"),
                     _parse_ts(journey.get("computed_at")),
                     True,
+                    journey.get("step_count", 0),
+                    json.dumps(journey.get("web3_activity_ids", [])),
+                    json.dumps(journey.get("agent_activity_ids", [])),
+                    json.dumps(journey.get("x402_activity_ids", [])),
                 )
         return journey
 

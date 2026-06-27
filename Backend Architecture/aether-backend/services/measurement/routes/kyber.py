@@ -187,12 +187,16 @@ async def journey_health(request: Request):
     tenant = _require_kyber_tenant(request)
 
     # Page through all current journeys for tenant-wide accuracy.
+    # When running without a DB pool the in-memory store ignores the cursor and always
+    # returns the same first page, so we cap at one pass in that case.
+    from repositories.repos import get_pool as _get_pool
+    pool = await _get_pool()
     all_journeys: list[dict] = []
     cursor = None
     while True:
         page = await _journey_repo.list_current(tenant.tenant_id, limit=500, cursor=cursor)
         all_journeys.extend(page)
-        if len(page) < 500:
+        if len(page) < 500 or pool is None:
             break
         raw_cursor = page[-1].get("computed_at")
         cursor = raw_cursor.isoformat() if hasattr(raw_cursor, "isoformat") else raw_cursor

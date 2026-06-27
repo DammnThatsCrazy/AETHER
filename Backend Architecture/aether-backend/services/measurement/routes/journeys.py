@@ -350,40 +350,6 @@ async def rebuild_journey(journey_id: str, request: Request, body: RebuildReques
 
 
 # ---------------------------------------------------------------------------
-# Campaign → journeys navigation
-# ---------------------------------------------------------------------------
-
-campaign_router = APIRouter(prefix="/v1/campaigns", tags=["Journeys"])
-
-
-@campaign_router.get("/{campaign_id}/journeys")
-async def list_journeys_for_campaign(
-    campaign_id: str,
-    request: Request,
-    limit: int = Query(50, ge=1, le=200),
-    cursor: Optional[str] = Query(None),
-):
-    """List current journey versions that include steps from a given campaign."""
-    tenant = _require_tenant(request)
-    journeys = await _journey_repo.list_by_campaign(
-        tenant.tenant_id,
-        campaign_id,
-        limit=limit,
-        cursor=cursor,
-    )
-    # list_by_campaign orders by started_at DESC, so use started_at as the keyset cursor.
-    if len(journeys) == limit:
-        raw = journeys[-1].get("started_at")
-        next_cursor: Optional[str] = raw.isoformat() if hasattr(raw, "isoformat") else raw
-    else:
-        next_cursor = None
-    return APIResponse(
-        data=journeys,
-        meta={"campaign_id": campaign_id, "count": len(journeys), "next_cursor": next_cursor},
-    ).to_dict()
-
-
-# ---------------------------------------------------------------------------
 # Web3 reorg / status-change webhook
 # ---------------------------------------------------------------------------
 
@@ -419,6 +385,7 @@ async def web3_status_change(request: Request, body: Web3StatusChangeRequest):
     profiles that have a step referencing this transaction.
     """
     tenant = _require_tenant(request)
+    tenant.require_permission("write")
     affected = await _compiler.rebuild_affected_by_web3_status_change(
         tenant.tenant_id, body.tx_hash, body.new_status
     )
