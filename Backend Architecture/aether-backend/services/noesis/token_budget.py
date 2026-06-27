@@ -108,6 +108,21 @@ class NoesisTokenBudget:
             logger.warning(f"Noesis token budget check failed, allowing: {exc}")
             return True
 
+    async def charge(self, tenant_id: str, tokens: int) -> None:
+        """Record additional token spend beyond the initial reservation.
+
+        Called when actual usage exceeds the upfront estimate so counters
+        accurately reflect total spend even without a budget gate.
+        """
+        if tokens <= 0:
+            return
+        try:
+            await self._cache.incr_by(self._daily_key(tenant_id), tokens)
+            await self._cache.incr_by(self._monthly_key(tenant_id), tokens)
+            await self._cache.incr_by(self._global_daily_key(), tokens)
+        except Exception as exc:  # noqa: BLE001
+            logger.warning(f"Noesis token budget charge failed: {exc}")
+
     async def release(self, tenant_id: str, tokens: int) -> None:
         """Release previously reserved tokens (on failure or over-estimate).
 

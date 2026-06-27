@@ -378,7 +378,7 @@ class NoesisService:
                 return Scope(body.surface, tenant.tenant_id, False, False)
             low_msg = body.message.lower()
             wants_all_tenants = not requested and any(token in low_msg for token in ("all tenants", "across tenants", "across all tenants", "tenants with", "show tenants", "list tenants"))
-            return Scope(body.surface, requested or ("" if wants_all_tenants else tenant.tenant_id), wants_all_tenants or bool(requested and requested != tenant.tenant_id), is_operator)
+            return Scope(body.surface, requested or ("" if wants_all_tenants else tenant.tenant_id), wants_all_tenants or bool(requested and requested != tenant.tenant_id), is_operator and self.flags.debug_enabled)
         raise BadRequestError("Unsupported Noesis surface")
 
     def _classify(

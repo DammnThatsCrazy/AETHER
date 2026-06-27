@@ -47,6 +47,7 @@ class NoesisCircuitBreaker:
         self._state: str = _STATE_CLOSED
         self._failure_count: int = 0
         self._opened_at: Optional[float] = None
+        self._probing: bool = False  # True while a HALF_OPEN probe is in-flight
         self._lock = asyncio.Lock()
 
     @property
@@ -61,6 +62,14 @@ class NoesisCircuitBreaker:
         """
         async with self._lock:
             current_state = self._current_state()
+            # In HALF_OPEN only one probe is allowed through; all other concurrent
+            # requests are rejected until the probe settles (success → CLOSED,
+            # failure → OPEN again).
+            if current_state == _STATE_HALF_OPEN:
+                if self._probing:
+                    current_state = _STATE_OPEN  # treat as still open for this caller
+                else:
+                    self._probing = True
 
         if current_state == _STATE_OPEN:
             logger.warning(
@@ -75,10 +84,12 @@ class NoesisCircuitBreaker:
         try:
             result = await coro
             async with self._lock:
+                self._probing = False
                 self._on_success()
             return result
         except Exception as exc:
             async with self._lock:
+                self._probing = False
                 self._on_failure()
             logger.warning(
                 "Circuit breaker recorded failure",
@@ -130,3 +141,4 @@ class NoesisCircuitBreaker:
         self._state = _STATE_CLOSED
         self._failure_count = 0
         self._opened_at = None
+        self._probing = False

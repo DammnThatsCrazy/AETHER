@@ -185,9 +185,11 @@ class AnthropicNoesisPlanProvider:
                 )
                 plan = _parse_plan_json(result["text"], effective_tenant_id)
                 tokens = result.get("tokens_used", _ESTIMATED_REQUEST_TOKENS)
-                # Adjust reservation: release over-estimate if actual < estimated
+                # Adjust reservation to match actual spend
                 if tokens < _ESTIMATED_REQUEST_TOKENS:
                     await self._budget.release(effective_tenant_id, _ESTIMATED_REQUEST_TOKENS - tokens)
+                elif tokens > _ESTIMATED_REQUEST_TOKENS:
+                    await self._budget.charge(effective_tenant_id, tokens - _ESTIMATED_REQUEST_TOKENS)
                 if plan is not None:
                     metrics.increment("noesis_provider_success", labels={"provider": self.provider_name})
                     logger.info(

@@ -38,7 +38,7 @@ async def query_noesis(
         analytics = AnalyticsRepository(get_cache())
         service = NoesisService(graph=graph, analytics=analytics)
         response = await service.query(body, request.state.tenant, request_id=request_id)
-        data = response.model_dump(exclude_none=True)
+        data = response.model_dump(mode="json", exclude_none=True)
         result = APIResponse(data=data).to_dict()
     except RateLimitedError as exc:
         retry_after = exc.details.get("retry_after_seconds", 60)
@@ -163,7 +163,7 @@ async def noesis_health(request: Request):
     cache = get_cache()
 
     checks: dict[str, bool] = {
-        "noesis_enabled": flags.enabled,
+        "noesis_enabled": flags.noesis_enabled,
         "llm_provider_configured": not flags.llm_enabled or bool(
             os.environ.get("ANTHROPIC_API_KEY") or os.environ.get("OPENAI_API_KEY")
         ),
