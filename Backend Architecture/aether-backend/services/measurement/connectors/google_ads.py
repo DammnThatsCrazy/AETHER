@@ -9,7 +9,7 @@ from decimal import Decimal
 from typing import Any, Optional
 
 from services.measurement.connectors.base import BaseConnector, ConnectorHealth, SyncResult
-from services.measurement.repositories.spend_repo import SpendRepository
+from services.measurement.connectors.writer import CampaignMeasurementWriter, ExternalCampaignMetric
 
 logger = logging.getLogger("aether.measurement.connectors.google_ads")
 
@@ -37,7 +37,7 @@ class GoogleAdsConnector(BaseConnector):
 
     def __init__(self, connector_id: str, tenant_id: str, config: dict[str, Any], cursor_state: dict[str, Any]) -> None:
         super().__init__(connector_id, tenant_id, config, cursor_state)
-        self._spend_repo = SpendRepository()
+        self._writer = CampaignMeasurementWriter()
 
     async def sync_incremental(self, cursor: dict[str, Any]) -> SyncResult:
         last_date_str = cursor.get("last_sync_date")
@@ -56,47 +56,44 @@ class GoogleAdsConnector(BaseConnector):
         )
 
     async def backfill(self, start: datetime, end: datetime) -> SyncResult:
-        from datetime import timezone as tz
         errors: list[str] = []
-        spend_written = 0
         started_at = datetime.now(timezone.utc)
+        account_id = str(self._config.get("customer_id", ""))
 
         try:
             client = await self._get_client()
             rows = await self._fetch_campaign_spend(client, start.date(), end.date())
+
+            metrics_list: list[ExternalCampaignMetric] = []
             for row in rows:
-                idem_key = self._make_spend_idem_key(
-                    str(row.get("campaign_id")),
-                    str(row.get("date")),
-                    "daily",
-                )
                 period_start = datetime.combine(
                     date.fromisoformat(str(row["date"])), datetime.min.time()
                 ).replace(tzinfo=timezone.utc)
                 period_end = period_start + timedelta(days=1)
+                metrics_list.append(ExternalCampaignMetric(
+                    platform=_CONNECTOR_TYPE,
+                    external_account_id=account_id,
+                    external_campaign_id=str(row.get("campaign_id", "")),
+                    external_campaign_name=row.get("campaign_name"),
+                    period_start=period_start,
+                    period_end=period_end,
+                    impressions=int(row.get("impressions", 0)),
+                    clicks=int(row.get("clicks", 0)),
+                    spend=Decimal(str(row.get("cost_micros", 0) / 1_000_000)),
+                    currency=row.get("currency", "USD"),
+                    raw_dimensions={"date": str(row.get("date"))},
+                ))
 
-                await self._spend_repo.upsert({
-                    "tenant_id": self.tenant_id,
-                    "platform": _CONNECTOR_TYPE,
-                    "ad_account_id": self._config.get("customer_id"),
-                    "campaign_id": str(row.get("campaign_id")),
-                    "period_start": period_start.isoformat(),
-                    "period_end": period_end.isoformat(),
-                    "billing_currency": row.get("currency", "USD"),
-                    "normalized_currency": "USD",
-                    "impressions": int(row.get("impressions", 0)),
-                    "clicks": int(row.get("clicks", 0)),
-                    "media_spend": str(row.get("cost_micros", 0) / 1_000_000),
-                    "total_cost": str(row.get("cost_micros", 0) / 1_000_000),
-                    "source_record_id": idem_key,
-                    "source_connector_id": self.connector_id,
-                    "idempotency_key": idem_key,
-                })
-                spend_written += 1
+            write_result = await self._writer.write_metrics(
+                self.tenant_id, self.connector_id, metrics_list
+            )
+            errors.extend(write_result.errors)
+            spend_written = write_result.spend_records_written
 
         except Exception as exc:
             errors.append(str(exc))
             logger.exception("Google Ads sync failed: connector=%s", self.connector_id)
+            spend_written = 0
 
         return SyncResult(
             connector_id=self.connector_id,

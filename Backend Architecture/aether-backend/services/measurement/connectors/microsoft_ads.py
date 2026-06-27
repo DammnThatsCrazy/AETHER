@@ -7,8 +7,10 @@ import logging
 from datetime import date, datetime, timedelta, timezone
 from typing import Any
 
+from decimal import Decimal
+
 from services.measurement.connectors.base import BaseConnector, ConnectorHealth, SyncResult
-from services.measurement.repositories.spend_repo import SpendRepository
+from services.measurement.connectors.writer import CampaignMeasurementWriter, ExternalCampaignMetric
 
 logger = logging.getLogger("aether.measurement.connectors.microsoft_ads")
 
@@ -39,7 +41,7 @@ class MicrosoftAdsConnector(BaseConnector):
 
     def __init__(self, connector_id: str, tenant_id: str, config: dict[str, Any], cursor_state: dict[str, Any]) -> None:
         super().__init__(connector_id, tenant_id, config, cursor_state)
-        self._spend_repo = SpendRepository()
+        self._writer = CampaignMeasurementWriter()
 
     async def sync_incremental(self, cursor: dict[str, Any]) -> SyncResult:
         last_date_str = cursor.get("last_sync_date")
@@ -62,31 +64,24 @@ class MicrosoftAdsConnector(BaseConnector):
 
     async def _mock_backfill(self, start: date, end: date) -> SyncResult:
         """Return a mock SyncResult for local/test environments."""
-        rows_upserted = 0
+        account_id = self.config.get("account_id", "")
+        metrics_list: list[ExternalCampaignMetric] = []
         current = start
         while current <= end:
-            record = {
-                "spend_record_id": _idempotency_id(self.connector_id, str(current)),
-                "tenant_id": self.tenant_id,
-                "platform": "microsoft_ads",
-                "ad_account_id": self.config.get("account_id", ""),
-                "campaign_id": f"mock-msft-camp-{self.connector_id[:8]}",
-                "period_start": datetime.combine(current, datetime.min.time()).replace(tzinfo=timezone.utc).isoformat(),
-                "period_end": datetime.combine(current, datetime.max.time()).replace(tzinfo=timezone.utc).isoformat(),
-                "billing_currency": "USD",
-                "impressions": 6500,
-                "clicks": 85,
-                "media_spend": "95.00",
-                "total_cost": "95.00",
-                "source_connector_id": self.connector_id,
-                "idempotency_key": f"msft-{self.connector_id}-{current}",
-            }
-            await self._spend_repo.upsert(record)
-            rows_upserted += 1
+            metrics_list.append(ExternalCampaignMetric(
+                platform=_CONNECTOR_TYPE,
+                external_account_id=account_id,
+                external_campaign_id=f"mock-msft-camp-{self.connector_id[:8]}",
+                external_campaign_name="Mock Microsoft Ads Campaign",
+                period_start=datetime.combine(current, datetime.min.time()).replace(tzinfo=timezone.utc),
+                period_end=datetime.combine(current, datetime.max.time()).replace(tzinfo=timezone.utc),
+                impressions=6500, clicks=85, spend=Decimal("95.00"), currency="USD",
+            ))
             current += timedelta(days=1)
 
-        logger.info("Microsoft Ads mock backfill: connector=%s rows=%d", self.connector_id, rows_upserted)
-        return SyncResult(rows_upserted=rows_upserted, new_cursor={"last_sync_date": str(end)})
+        write_result = await self._writer.write_metrics(self.tenant_id, self.connector_id, metrics_list)
+        logger.info("Microsoft Ads mock backfill: connector=%s rows=%d", self.connector_id, write_result.spend_records_written)
+        return SyncResult(rows_upserted=write_result.spend_records_written, new_cursor={"last_sync_date": str(end)})
 
     async def _get_access_token(self) -> str | None:
         """Exchange refresh token for a fresh access token."""
@@ -124,7 +119,6 @@ class MicrosoftAdsConnector(BaseConnector):
         if not access_token:
             return SyncResult(rows_upserted=0, errors=["Failed to obtain access token"], new_cursor={})
 
-        rows_upserted = 0
         errors: list[str] = []
 
         headers = {
@@ -204,38 +198,38 @@ class MicrosoftAdsConnector(BaseConnector):
                 dl_resp = await client.get(download_url)
                 dl_resp.raise_for_status()
                 reader = csv.DictReader(io.StringIO(dl_resp.text))
+                metrics_list: list[ExternalCampaignMetric] = []
                 for row in reader:
                     try:
                         period_str = row.get("TimePeriod", "")
                         period_date = date.fromisoformat(period_str) if period_str else start
-                        campaign_id = str(row.get("CampaignId", ""))
-                        spend = float(row.get("Spend", 0) or 0)
-                        record = {
-                            "spend_record_id": _idempotency_id(self.connector_id, str(period_date) + campaign_id),
-                            "tenant_id": self.tenant_id,
-                            "platform": "microsoft_ads",
-                            "ad_account_id": account_id,
-                            "campaign_id": campaign_id,
-                            "period_start": datetime.combine(period_date, datetime.min.time()).replace(tzinfo=timezone.utc).isoformat(),
-                            "period_end": datetime.combine(period_date, datetime.max.time()).replace(tzinfo=timezone.utc).isoformat(),
-                            "billing_currency": "USD",
-                            "impressions": int(row.get("Impressions", 0) or 0),
-                            "clicks": int(row.get("Clicks", 0) or 0),
-                            "media_spend": str(spend),
-                            "total_cost": str(spend),
-                            "source_connector_id": self.connector_id,
-                            "idempotency_key": f"msft-{self.connector_id}-{period_date}-{campaign_id}",
-                        }
-                        await self._spend_repo.upsert(record)
-                        rows_upserted += 1
+                        ext_campaign_id = str(row.get("CampaignId", ""))
+                        campaign_name = row.get("CampaignName")
+                        spend = Decimal(str(float(row.get("Spend", 0) or 0)))
+                        metrics_list.append(ExternalCampaignMetric(
+                            platform=_CONNECTOR_TYPE,
+                            external_account_id=account_id,
+                            external_campaign_id=ext_campaign_id,
+                            external_campaign_name=campaign_name,
+                            period_start=datetime.combine(period_date, datetime.min.time()).replace(tzinfo=timezone.utc),
+                            period_end=datetime.combine(period_date, datetime.max.time()).replace(tzinfo=timezone.utc),
+                            impressions=int(row.get("Impressions", 0) or 0),
+                            clicks=int(row.get("Clicks", 0) or 0),
+                            spend=spend,
+                            currency="USD",
+                            raw_dimensions={"TimePeriod": period_str, "CampaignId": ext_campaign_id},
+                        ))
                     except Exception as row_exc:
                         logger.warning("Microsoft Ads row parse error: %s", row_exc)
 
             except Exception as exc:
                 logger.error("Microsoft Ads API error: %s", exc)
                 errors.append(str(exc))
+                metrics_list = []
 
-        return SyncResult(rows_upserted=rows_upserted, errors=errors, new_cursor={"last_sync_date": str(end)})
+        write_result = await self._writer.write_metrics(self.tenant_id, self.connector_id, metrics_list)
+        errors.extend(write_result.errors)
+        return SyncResult(rows_upserted=write_result.spend_records_written, errors=errors, new_cursor={"last_sync_date": str(end)})
 
     async def health_check(self) -> ConnectorHealth:
         import os

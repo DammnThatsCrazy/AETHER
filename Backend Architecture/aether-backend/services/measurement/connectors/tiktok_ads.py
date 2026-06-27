@@ -6,8 +6,10 @@ import logging
 from datetime import date, datetime, timedelta, timezone
 from typing import Any
 
+from decimal import Decimal
+
 from services.measurement.connectors.base import BaseConnector, ConnectorHealth, SyncResult
-from services.measurement.repositories.spend_repo import SpendRepository
+from services.measurement.connectors.writer import CampaignMeasurementWriter, ExternalCampaignMetric
 
 logger = logging.getLogger("aether.measurement.connectors.tiktok_ads")
 
@@ -30,7 +32,7 @@ class TikTokAdsConnector(BaseConnector):
 
     def __init__(self, connector_id: str, tenant_id: str, config: dict[str, Any], cursor_state: dict[str, Any]) -> None:
         super().__init__(connector_id, tenant_id, config, cursor_state)
-        self._spend_repo = SpendRepository()
+        self._writer = CampaignMeasurementWriter()
 
     async def sync_incremental(self, cursor: dict[str, Any]) -> SyncResult:
         last_date_str = cursor.get("last_sync_date")
@@ -50,45 +52,36 @@ class TikTokAdsConnector(BaseConnector):
 
     async def backfill(self, start: datetime, end: datetime) -> SyncResult:
         errors: list[str] = []
-        spend_written = 0
         started_at = datetime.now(timezone.utc)
+        account_id = str(self._config.get("advertiser_id", ""))
 
         try:
             rows = await self._fetch_spend(start.date(), end.date())
+            metrics_list: list[ExternalCampaignMetric] = []
             for row in rows:
-                idem_key = self._make_spend_idem_key(
-                    str(row.get("campaign_id")),
-                    str(row.get("stat_time_day", row.get("date"))),
-                    "daily",
-                )
                 stat_date_str = str(row.get("stat_time_day", row.get("date", start.date().isoformat())))[:10]
-                period_start = datetime.combine(
-                    date.fromisoformat(stat_date_str), datetime.min.time()
-                ).replace(tzinfo=timezone.utc)
+                period_start = datetime.combine(date.fromisoformat(stat_date_str), datetime.min.time()).replace(tzinfo=timezone.utc)
                 period_end = period_start + timedelta(days=1)
-
-                await self._spend_repo.upsert({
-                    "tenant_id": self.tenant_id,
-                    "platform": _CONNECTOR_TYPE,
-                    "ad_account_id": self._config.get("advertiser_id"),
-                    "campaign_id": str(row.get("campaign_id")),
-                    "period_start": period_start.isoformat(),
-                    "period_end": period_end.isoformat(),
-                    "billing_currency": "USD",
-                    "normalized_currency": "USD",
-                    "impressions": int(row.get("impression", row.get("impressions", 0))),
-                    "clicks": int(row.get("click", row.get("clicks", 0))),
-                    "media_spend": str(row.get("spend", "0")),
-                    "total_cost": str(row.get("spend", "0")),
-                    "source_record_id": idem_key,
-                    "source_connector_id": self.connector_id,
-                    "idempotency_key": idem_key,
-                })
-                spend_written += 1
-
+                metrics_list.append(ExternalCampaignMetric(
+                    platform=_CONNECTOR_TYPE,
+                    external_account_id=account_id,
+                    external_campaign_id=str(row.get("campaign_id", "")),
+                    external_campaign_name=row.get("campaign_name"),
+                    period_start=period_start,
+                    period_end=period_end,
+                    impressions=int(row.get("impression", row.get("impressions", 0))),
+                    clicks=int(row.get("click", row.get("clicks", 0))),
+                    spend=Decimal(str(row.get("spend", "0"))),
+                    currency="USD",
+                    raw_dimensions={"stat_time_day": stat_date_str},
+                ))
+            write_result = await self._writer.write_metrics(self.tenant_id, self.connector_id, metrics_list)
+            errors.extend(write_result.errors)
+            spend_written = write_result.spend_records_written
         except Exception as exc:
             errors.append(str(exc))
             logger.exception("TikTok Ads sync failed: connector=%s", self.connector_id)
+            spend_written = 0
 
         return SyncResult(
             connector_id=self.connector_id,

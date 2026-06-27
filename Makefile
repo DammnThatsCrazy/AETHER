@@ -346,6 +346,34 @@ load-smoke-ci: ## Load smoke in CI — exits 0 when backend unreachable (non-blo
 	python scripts/load_smoke.py || [ $$? -eq 2 ]
 
 # ---------------------------------------------------------------------------
+# Campaign Intelligence
+# ---------------------------------------------------------------------------
+
+campaign-test: ## Run campaign registry unit tests
+	cd "Backend Architecture/aether-backend" && python -m pytest tests/unit/test_campaign_registry.py -v
+
+campaign-integration-test: ## Run campaign registry integration tests
+	cd "Backend Architecture/aether-backend" && python -m pytest tests/integration/test_campaign_registry_api.py -v
+
+campaign-e2e: ## Run campaign registry E2E tests
+	cd "Backend Architecture/aether-backend" && python -m pytest tests/e2e/test_campaign_registry_e2e.py -v
+
+campaign-security-check: ## Run campaign registry security tests
+	cd "Backend Architecture/aether-backend" && python -m pytest tests/security/test_campaign_registry_security.py -v
+
+campaign-migration-check: ## Verify campaign registry migration round-trip
+	cd "Backend Architecture/aether-backend" && alembic upgrade head && alembic downgrade -1 && alembic upgrade head
+
+campaign-contracts-check: ## Validate campaign registry contracts
+	python scripts/validate_contracts.py --domain campaign
+
+campaign-release-check: ## Run full Campaign Intelligence release gate
+	python scripts/campaign/check_campaign_release_gate.py
+
+campaign-release-check-strict: ## Run Campaign Intelligence release gate with test suites
+	python scripts/campaign/check_campaign_release_gate.py --strict
+
+# ---------------------------------------------------------------------------
 # Cleanup
 # ---------------------------------------------------------------------------
 

@@ -387,6 +387,51 @@ AREAS: list[Area] = [
         ],
     ),
     Area(
+        "campaign intelligence",
+        5,
+        "Canonical Campaign Registry with deterministic 7-step resolution (confidence 1.00→0.85). "
+        "Four new PostgreSQL tables: campaigns (canonical UUID registry), campaign_external_refs "
+        "(provider ID → UUID mapping), campaign_aliases (UTM/tracking lookup keys), "
+        "campaign_resolution_reviews (ambiguity queue). Registry-aware CampaignMeasurementWriter "
+        "used by all 7 paid-media connectors — provider IDs never written directly as campaign_id. "
+        "CampaignResolver with tenant isolation, no fuzzy matching, and Mapping Review creation "
+        "on ambiguous/unresolved evidence. AcquisitionEvidence SDK contract with UTM capture, "
+        "SPA persistence, and backward-compatible deprecated fields. Historical backfill script "
+        "(idempotent, dry-run, cursor, JSON audit log). Tenant UI: Campaign Sources, Campaign "
+        "Registry, Mapping Review, Measurement Quality, Custom Campaign creation. Kyber operator "
+        "UI: fleet health gauges, tenant drill-down, bounded reprocess actions (audited). "
+        "Observability: 18 named metrics across registry/resolver/sources/backfill domains; "
+        "8 alert rules covering unresolved rate spikes, source freshness SLO, backfill stuck, "
+        "mapping review queue high. Release gate script with 20+ checks. Unit, integration, "
+        "E2E, and security test suites. 8 docs including ADR, architecture, contract, "
+        "migration guide, SDK guide, connector guide, Kyber guide, and operator runbooks.",
+        [
+            "Backend Architecture/aether-backend/services/campaign/registry.py",
+            "Backend Architecture/aether-backend/services/campaign/resolver.py",
+            "Backend Architecture/aether-backend/services/campaign/normalization.py",
+            "Backend Architecture/aether-backend/services/campaign/repository.py",
+            "Backend Architecture/aether-backend/services/campaign/routes.py",
+            "Backend Architecture/aether-backend/services/campaign/metrics.py",
+            "Backend Architecture/aether-backend/services/measurement/connectors/writer.py",
+            "Backend Architecture/aether-backend/alembic/versions/20260627_campaign_registry.py",
+            "Backend Architecture/aether-backend/tests/unit/test_campaign_registry.py",
+            "Backend Architecture/aether-backend/tests/integration/test_campaign_registry_api.py",
+            "Backend Architecture/aether-backend/tests/e2e/test_campaign_registry_e2e.py",
+            "Backend Architecture/aether-backend/tests/security/test_campaign_registry_security.py",
+            "packages/shared/acquisition-evidence.ts",
+            "frontend/aether/src/pages/campaigns/campaign-sources-page.tsx",
+            "frontend/aether/src/pages/campaigns/campaign-registry-page.tsx",
+            "frontend/aether/src/pages/campaigns/mapping-review-page.tsx",
+            "frontend/aether/src/pages/campaigns/campaign-quality-page.tsx",
+            "frontend/kyber/src/pages/measurement/campaign-registry-health-page.tsx",
+            "scripts/campaign/backfill_campaign_ids.py",
+            "scripts/campaign/check_campaign_release_gate.py",
+            "docs/campaign/CAMPAIGN_INTELLIGENCE_OVERVIEW.md",
+            "docs/campaign/ADR_CAMPAIGN_IDENTITY.md",
+            "deploy/observability/prometheus/alert_rules.yml",
+        ],
+    ),
+    Area(
         "docs",
         4,
         "202 docs with validated frontmatter, 64 source-linked docs with strict drift "

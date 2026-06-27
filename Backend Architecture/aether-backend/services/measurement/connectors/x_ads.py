@@ -7,8 +7,10 @@ import logging
 from datetime import date, datetime, timedelta, timezone
 from typing import Any
 
+from decimal import Decimal
+
 from services.measurement.connectors.base import BaseConnector, ConnectorHealth, SyncResult
-from services.measurement.repositories.spend_repo import SpendRepository
+from services.measurement.connectors.writer import CampaignMeasurementWriter, ExternalCampaignMetric
 
 logger = logging.getLogger("aether.measurement.connectors.x_ads")
 
@@ -38,7 +40,7 @@ class XAdsConnector(BaseConnector):
 
     def __init__(self, connector_id: str, tenant_id: str, config: dict[str, Any], cursor_state: dict[str, Any]) -> None:
         super().__init__(connector_id, tenant_id, config, cursor_state)
-        self._spend_repo = SpendRepository()
+        self._writer = CampaignMeasurementWriter()
 
     async def sync_incremental(self, cursor: dict[str, Any]) -> SyncResult:
         last_date_str = cursor.get("last_sync_date")
@@ -61,31 +63,24 @@ class XAdsConnector(BaseConnector):
 
     async def _mock_backfill(self, start: date, end: date) -> SyncResult:
         """Return a mock SyncResult for local/test environments."""
-        rows_upserted = 0
+        account_id = self.config.get("account_id", "")
+        metrics_list: list[ExternalCampaignMetric] = []
         current = start
         while current <= end:
-            record = {
-                "spend_record_id": _idempotency_id(self.connector_id, str(current)),
-                "tenant_id": self.tenant_id,
-                "platform": "x_ads",
-                "ad_account_id": self.config.get("account_id", ""),
-                "campaign_id": f"mock-x-camp-{self.connector_id[:8]}",
-                "period_start": datetime.combine(current, datetime.min.time()).replace(tzinfo=timezone.utc).isoformat(),
-                "period_end": datetime.combine(current, datetime.max.time()).replace(tzinfo=timezone.utc).isoformat(),
-                "billing_currency": "USD",
-                "impressions": 5000,
-                "clicks": 60,
-                "media_spend": "90.00",
-                "total_cost": "90.00",
-                "source_connector_id": self.connector_id,
-                "idempotency_key": f"x-{self.connector_id}-{current}",
-            }
-            await self._spend_repo.upsert(record)
-            rows_upserted += 1
+            metrics_list.append(ExternalCampaignMetric(
+                platform=_CONNECTOR_TYPE,
+                external_account_id=account_id,
+                external_campaign_id=f"mock-x-camp-{self.connector_id[:8]}",
+                external_campaign_name="Mock X Campaign",
+                period_start=datetime.combine(current, datetime.min.time()).replace(tzinfo=timezone.utc),
+                period_end=datetime.combine(current, datetime.max.time()).replace(tzinfo=timezone.utc),
+                impressions=5000, clicks=60, spend=Decimal("90.00"), currency="USD",
+            ))
             current += timedelta(days=1)
 
-        logger.info("X Ads mock backfill: connector=%s rows=%d", self.connector_id, rows_upserted)
-        return SyncResult(rows_upserted=rows_upserted, new_cursor={"last_sync_date": str(end)})
+        write_result = await self._writer.write_metrics(self.tenant_id, self.connector_id, metrics_list)
+        logger.info("X Ads mock backfill: connector=%s rows=%d", self.connector_id, write_result.spend_records_written)
+        return SyncResult(rows_upserted=write_result.spend_records_written, new_cursor={"last_sync_date": str(end)})
 
     async def _live_backfill(self, start: date, end: date) -> SyncResult:
         try:
@@ -99,11 +94,9 @@ class XAdsConnector(BaseConnector):
         if not account_id or not access_token:
             return SyncResult(rows_upserted=0, errors=["Missing account_id or access_token"], new_cursor={})
 
-        headers = {
-            "Authorization": f"Bearer {access_token}",
-        }
-        rows_upserted = 0
+        headers = {"Authorization": f"Bearer {access_token}"}
         errors: list[str] = []
+        metrics_list: list[ExternalCampaignMetric] = []
 
         start_str = start.strftime("%Y-%m-%dT00:00:00Z")
         end_str = end.strftime("%Y-%m-%dT23:59:59Z")
@@ -129,40 +122,36 @@ class XAdsConnector(BaseConnector):
                 for item in data_items:
                     id_data = item.get("id_data", [])
                     for segment in id_data:
-                        metrics = segment.get("metrics", {})
-                        billed_charge_local_micro = metrics.get("billed_charge_local_micro", [])
-                        impressions_list = metrics.get("impressions", [])
-                        clicks_list = metrics.get("clicks", [])
-                        # Each element corresponds to one day in the requested range
+                        seg_metrics = segment.get("metrics", {})
+                        billed_charge_local_micro = seg_metrics.get("billed_charge_local_micro", [])
+                        impressions_list = seg_metrics.get("impressions", [])
+                        clicks_list = seg_metrics.get("clicks", [])
+                        # Each element in the arrays corresponds to one day in the requested range
                         current = start
                         for i, spend_micro in enumerate(billed_charge_local_micro):
                             if current > end:
                                 break
-                            spend = (spend_micro or 0) / 1_000_000
-                            record = {
-                                "spend_record_id": _idempotency_id(self.connector_id, str(current)),
-                                "tenant_id": self.tenant_id,
-                                "platform": "x_ads",
-                                "ad_account_id": account_id,
-                                "campaign_id": account_id,
-                                "period_start": datetime.combine(current, datetime.min.time()).replace(tzinfo=timezone.utc).isoformat(),
-                                "period_end": datetime.combine(current, datetime.max.time()).replace(tzinfo=timezone.utc).isoformat(),
-                                "billing_currency": "USD",
-                                "impressions": int(impressions_list[i]) if i < len(impressions_list) else 0,
-                                "clicks": int(clicks_list[i]) if i < len(clicks_list) else 0,
-                                "media_spend": str(spend),
-                                "total_cost": str(spend),
-                                "source_connector_id": self.connector_id,
-                                "idempotency_key": f"x-{self.connector_id}-{current}",
-                            }
-                            await self._spend_repo.upsert(record)
-                            rows_upserted += 1
+                            spend = Decimal(str((spend_micro or 0) / 1_000_000))
+                            metrics_list.append(ExternalCampaignMetric(
+                                platform=_CONNECTOR_TYPE,
+                                external_account_id=account_id,
+                                external_campaign_id=account_id,  # X Ads account-level stats endpoint; no campaign granularity
+                                period_start=datetime.combine(current, datetime.min.time()).replace(tzinfo=timezone.utc),
+                                period_end=datetime.combine(current, datetime.max.time()).replace(tzinfo=timezone.utc),
+                                impressions=int(impressions_list[i]) if i < len(impressions_list) else 0,
+                                clicks=int(clicks_list[i]) if i < len(clicks_list) else 0,
+                                spend=spend,
+                                currency="USD",
+                                raw_dimensions={"date": str(current)},
+                            ))
                             current += timedelta(days=1)
             except Exception as exc:
                 logger.error("X Ads API error: %s", exc)
                 errors.append(str(exc))
 
-        return SyncResult(rows_upserted=rows_upserted, errors=errors, new_cursor={"last_sync_date": str(end)})
+        write_result = await self._writer.write_metrics(self.tenant_id, self.connector_id, metrics_list)
+        errors.extend(write_result.errors)
+        return SyncResult(rows_upserted=write_result.spend_records_written, errors=errors, new_cursor={"last_sync_date": str(end)})
 
     async def health_check(self) -> ConnectorHealth:
         import os

@@ -48,6 +48,8 @@ class TouchpointProjector(BaseProjector):
         props = event.get("properties") or {}
         campaign_ctx = ctx.get("campaign") or {}
         page_ctx = ctx.get("page") or {}
+        # AcquisitionEvidence injected by SDK on landing; camelCase keys from JS
+        acq_ev: dict[str, Any] = ctx.get("acquisitionEvidence") or {}
 
         tenant_id = ctx.get("tenantId") or event.get("tenantId") or "default"
         event_type = event.get("type", "page")
@@ -61,18 +63,52 @@ class TouchpointProjector(BaseProjector):
             f"{source_event_id}:{tenant_id}:{touchpoint_type}".encode()
         ).hexdigest()
 
-        # Consent check — skip if no marketing consent
         consent_id = ctx.get("consentSnapshotId")
-        # Projectors are not responsible for loading/checking consent; that check happens upstream
-        # in the consent middleware. Presence of consentSnapshotId means consent was recorded.
 
-        # UTM parameters: prefer campaign context over properties
-        utm_source = campaign_ctx.get("source") or props.get("utm_source")
-        utm_medium = campaign_ctx.get("medium") or props.get("utm_medium")
-        utm_campaign = campaign_ctx.get("name") or props.get("utm_campaign")
-        utm_content = campaign_ctx.get("content") or props.get("utm_content")
-        utm_term = campaign_ctx.get("term") or props.get("utm_term")
-        click_id = props.get("click_id") or props.get("gclid") or props.get("fbclid")
+        # UTM parameters: prefer campaign context over acquisitionEvidence over properties.
+        # campaign_ctx.get("campaign") is the utm_campaign token;
+        # campaign_ctx.get("name") is the deprecated field kept for backward compat.
+        utm_source = campaign_ctx.get("source") or acq_ev.get("source") or props.get("utm_source")
+        utm_medium = campaign_ctx.get("medium") or acq_ev.get("medium") or props.get("utm_medium")
+        utm_campaign = (
+            campaign_ctx.get("campaign")
+            or campaign_ctx.get("name")  # deprecated; removed after one SDK release window
+            or acq_ev.get("utmCampaign")
+            or props.get("utm_campaign")
+        )
+        utm_content = campaign_ctx.get("content") or acq_ev.get("content") or props.get("utm_content")
+        utm_term = campaign_ctx.get("term") or acq_ev.get("term") or props.get("utm_term")
+        utm_id = campaign_ctx.get("utmId") or acq_ev.get("utmId") or props.get("utm_id")
+
+        click_ids = acq_ev.get("clickIds") or {}
+        click_id = (
+            props.get("click_id")
+            or click_ids.get("gclid")
+            or props.get("gclid")
+            or click_ids.get("fbclid")
+            or props.get("fbclid")
+        )
+
+        # Campaign identity evidence — drive resolution in the dispatcher.
+        # canonicalCampaignId is an Aether UUID already validated upstream (e.g. from
+        # a server-side connector write); the dispatcher validates tenant ownership.
+        canonical_campaign_id_hint: str | None = (
+            campaign_ctx.get("canonicalCampaignId") or acq_ev.get("canonicalCampaignId")
+        )
+        external_campaign_id: str | None = (
+            campaign_ctx.get("externalCampaignId") or acq_ev.get("externalCampaignId")
+        )
+        external_account_id: str | None = (
+            campaign_ctx.get("externalAccountId") or acq_ev.get("externalAccountId")
+        )
+        # marketing platform (google, meta, …) — distinct from the SDK library name
+        marketing_platform: str | None = (
+            campaign_ctx.get("platform") or acq_ev.get("platform")
+        )
+
+        has_campaign_evidence = bool(
+            canonical_campaign_id_hint or external_campaign_id or utm_id or utm_campaign
+        )
 
         row: dict[str, Any] = {
             "tenant_id": tenant_id,
@@ -83,7 +119,9 @@ class TouchpointProjector(BaseProjector):
             "agent_id": ctx.get("agentId"),
             "wallet_id": ctx.get("walletId"),
             "cluster_id": ctx.get("clusterId"),
-            "campaign_id": campaign_ctx.get("id") or props.get("campaign_id"),
+            # campaign_id is always a canonical Aether UUID or None.
+            # The dispatcher calls CampaignResolver and writes the resolved UUID.
+            "campaign_id": None,
             "ad_group_id": props.get("ad_group_id"),
             "ad_set_id": props.get("ad_set_id"),
             "creative_id": props.get("creative_id"),
@@ -93,7 +131,7 @@ class TouchpointProjector(BaseProjector):
             "channel": _infer_channel(utm_medium, utm_source),
             "source": utm_source or props.get("source"),
             "medium": utm_medium,
-            "platform": ctx.get("library", {}).get("name") if isinstance(ctx.get("library"), dict) else None,
+            "platform": marketing_platform,
             "touchpoint_type": touchpoint_type,
             "interaction_type": props.get("interaction_type"),
             "is_view_through": bool(props.get("is_view_through", False)),
@@ -113,8 +151,18 @@ class TouchpointProjector(BaseProjector):
             "utm_content": utm_content,
             "utm_term": utm_term,
             "click_id": click_id,
-            "referrer": page_ctx.get("referrer") or props.get("referrer"),
-            "landing_url": page_ctx.get("url") or props.get("landing_url"),
+            "referrer": page_ctx.get("referrer") or acq_ev.get("referrer") or props.get("referrer"),
+            "landing_url": page_ctx.get("url") or acq_ev.get("landingPage") or props.get("landing_url"),
+            # Resolution evidence fields — populated here; status/method set by dispatcher
+            "external_campaign_id": external_campaign_id,
+            "external_account_id": external_account_id,
+            "campaign_resolution_status": "not_applicable" if not has_campaign_evidence else "not_applicable",
+            "campaign_resolution_method": None,
+            "campaign_resolution_confidence": None,
+            "campaign_resolution_version": None,
+            # Private pass-through for dispatcher resolver; popped before DB write
+            "_canonical_campaign_id_hint": canonical_campaign_id_hint,
+            "_utm_id": utm_id,
             "identity_resolution_method": ctx.get("identityResolutionMethod"),
             "identity_confidence": ctx.get("identityConfidence"),
             "identity_version": ctx.get("identityVersion"),

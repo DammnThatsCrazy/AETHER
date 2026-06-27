@@ -377,7 +377,7 @@ export const api = {
 
   // ── Campaigns ──────────────────────────────────────────────────────────────
   campaigns: {
-    list: (params?: { status?: string; limit?: number; offset?: number }) =>
+    list: (params?: { status?: string; limit?: number; offset?: number; origin?: string; platform?: string; mapping_quality?: string }) =>
       restClient.get(`/v1/campaigns${buildQS({ ...params })}`, wrap(z.object({ campaigns: z.array(z.unknown()), total: z.number() }))).then(r => r.data),
 
     get: (campaignId: string) =>
@@ -391,6 +391,21 @@ export const api = {
 
     delete: (campaignId: string) =>
       restClient.delete(`/v1/campaigns/${campaignId}`, wrap(z.object({ deleted: z.boolean() }))),
+
+    externalRefs: (campaignId: string) =>
+      restClient.get(`/v1/campaigns/${campaignId}/external-refs`, wrap(unknownSchema)).then(r => r.data),
+
+    aliases: (campaignId: string) =>
+      restClient.get(`/v1/campaigns/${campaignId}/aliases`, wrap(unknownSchema)).then(r => r.data),
+
+    createAlias: (campaignId: string, body: { alias_type: string; alias_value: string; platform?: string; source?: string; medium?: string }) =>
+      restClient.post(`/v1/campaigns/${campaignId}/aliases`, wrap(unknownSchema), body).then(r => r.data),
+
+    expireAlias: (campaignId: string, aliasId: string) =>
+      restClient.delete(`/v1/campaigns/${campaignId}/aliases/${aliasId}`, wrap(unknownSchema)),
+
+    quality: () =>
+      restClient.get('/v1/campaign-quality', wrap(unknownSchema)).then(r => r.data),
 
     touchpoint: (campaignId: string, tp: { channel?: string; source?: string; user_id?: string; session_id?: string; event_type?: string; is_conversion?: boolean; revenue_usd?: number; timestamp?: string; properties?: Record<string, unknown> }) =>
       restClient.post(`/v1/campaigns/${campaignId}/touchpoints`, wrap(unknownSchema), tp).then(r => r.data),
@@ -422,6 +437,30 @@ export const api = {
 
     conversions: (campaignId: string, params?: { cluster_id?: string; conversion_type?: string; status?: string; after?: string; before?: string; include_unattributed?: boolean; limit?: number; cursor?: string }) =>
       restClient.get(`/v1/campaigns/${campaignId}/conversions${buildQS({ ...params })}`, wrap(unknownSchema)).then(r => r.data),
+  },
+
+  // ── Campaign Sources (paid-media connectors) ───────────────────────────────
+  campaignSources: {
+    list: () =>
+      restClient.get('/v1/campaign-sources', wrap(unknownSchema)).then(r => r.data),
+    create: (body: { platform: string; connector_id: string; credentials?: Record<string, unknown>; label?: string }) =>
+      restClient.post('/v1/campaign-sources', wrap(unknownSchema), body).then(r => r.data),
+    health: (connectorId: string) =>
+      restClient.get(`/v1/campaign-sources/${connectorId}/health`, wrap(unknownSchema)).then(r => r.data),
+    sync: (connectorId: string) =>
+      restClient.post(`/v1/campaign-sources/${connectorId}/sync`, wrap(unknownSchema), {}).then(r => r.data),
+  },
+
+  // ── Mapping Review ──────────────────────────────────────────────────────────
+  mappingReview: {
+    list: (params?: { status?: string; limit?: number; cursor?: string }) =>
+      restClient.get(`/v1/mapping-review${buildQS({ ...params })}`, wrap(unknownSchema)).then(r => r.data),
+    resolve: (reviewId: string, body: { campaign_id: string; note?: string }) =>
+      restClient.post(`/v1/mapping-review/${reviewId}/resolve`, wrap(unknownSchema), body).then(r => r.data),
+    ignore: (reviewId: string, body?: { note?: string }) =>
+      restClient.post(`/v1/mapping-review/${reviewId}/ignore`, wrap(unknownSchema), body ?? {}).then(r => r.data),
+    reopen: (reviewId: string) =>
+      restClient.post(`/v1/mapping-review/${reviewId}/reopen`, wrap(unknownSchema), {}).then(r => r.data),
   },
 
   // ── Rewards ────────────────────────────────────────────────────────────────

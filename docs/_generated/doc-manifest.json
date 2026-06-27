@@ -3380,6 +3380,113 @@
       "since_version": "8.9.0"
     },
     {
+      "path": "docs/campaign/ADR_CAMPAIGN_IDENTITY.md",
+      "title": "ADR: Campaign Identity — Canonical UUID Strategy",
+      "slug": "campaign/adr-campaign-identity",
+      "section": "architecture",
+      "visibility": "I",
+      "audience": [
+        "dev-senior",
+        "architect"
+      ]
+    },
+    {
+      "path": "docs/campaign/CAMPAIGN_CONNECTORS.md",
+      "title": "Campaign Source Connectors",
+      "slug": "campaign/campaign-connectors",
+      "section": "reference",
+      "visibility": "I",
+      "audience": [
+        "dev-senior",
+        "ops"
+      ]
+    },
+    {
+      "path": "docs/campaign/CAMPAIGN_INTELLIGENCE_OVERVIEW.md",
+      "title": "Campaign Intelligence Overview",
+      "slug": "campaign/campaign-intelligence-overview",
+      "section": "reference",
+      "visibility": "I",
+      "audience": [
+        "dev-senior",
+        "architect"
+      ]
+    },
+    {
+      "path": "docs/campaign/CAMPAIGN_KYBER_GUIDE.md",
+      "title": "Campaign Intelligence — Kyber Operator Guide",
+      "slug": "campaign/campaign-kyber-guide",
+      "section": "kyber",
+      "visibility": "I",
+      "audience": [
+        "ops"
+      ]
+    },
+    {
+      "path": "docs/campaign/CAMPAIGN_MIGRATION.md",
+      "title": "Campaign Registry Migration Guide",
+      "slug": "campaign/campaign-migration",
+      "section": "operations",
+      "visibility": "I",
+      "audience": [
+        "dev-senior",
+        "ops"
+      ]
+    },
+    {
+      "path": "docs/campaign/CAMPAIGN_REGISTRY_ARCHITECTURE.md",
+      "title": "Campaign Registry Architecture",
+      "slug": "campaign/campaign-registry-architecture",
+      "section": "architecture",
+      "visibility": "I",
+      "audience": [
+        "dev-senior",
+        "architect"
+      ]
+    },
+    {
+      "path": "docs/campaign/CAMPAIGN_RESOLUTION_CONTRACT.md",
+      "title": "Campaign Resolution Contract",
+      "slug": "campaign/campaign-resolution-contract",
+      "section": "reference",
+      "visibility": "I",
+      "audience": [
+        "dev-senior",
+        "architect"
+      ]
+    },
+    {
+      "path": "docs/campaign/CAMPAIGN_SDK_ACQUISITION.md",
+      "title": "Campaign SDK Acquisition Evidence",
+      "slug": "campaign/campaign-sdk-acquisition",
+      "section": "sdks",
+      "visibility": "I",
+      "audience": [
+        "dev-junior",
+        "dev-senior"
+      ]
+    },
+    {
+      "path": "docs/campaign/runbooks/source-sync-failure.md",
+      "title": "Runbook: Campaign Source Sync Failure",
+      "slug": "campaign/runbooks/source-sync-failure",
+      "section": "operations",
+      "visibility": "I",
+      "audience": [
+        "ops"
+      ]
+    },
+    {
+      "path": "docs/campaign/runbooks/unresolved-rate-spike.md",
+      "title": "Runbook: Campaign Resolution Unresolved Rate Spike",
+      "slug": "campaign/runbooks/unresolved-rate-spike",
+      "section": "operations",
+      "visibility": "I",
+      "audience": [
+        "ops"
+      ]
+    },
+    {
       "path": "docs/decisions/ADR-001-docs-stamp-system.md",
       "title": "ADR-001: Documentation Sync Stamp System",
       "slug": "decisions/adr-001-docs-stamp-system",

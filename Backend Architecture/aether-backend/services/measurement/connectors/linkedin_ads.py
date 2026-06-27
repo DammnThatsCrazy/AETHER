@@ -7,8 +7,10 @@ import logging
 from datetime import date, datetime, timedelta, timezone
 from typing import Any
 
+from decimal import Decimal
+
 from services.measurement.connectors.base import BaseConnector, ConnectorHealth, SyncResult
-from services.measurement.repositories.spend_repo import SpendRepository
+from services.measurement.connectors.writer import CampaignMeasurementWriter, ExternalCampaignMetric
 
 logger = logging.getLogger("aether.measurement.connectors.linkedin_ads")
 
@@ -35,7 +37,7 @@ class LinkedInAdsConnector(BaseConnector):
 
     def __init__(self, connector_id: str, tenant_id: str, config: dict[str, Any], cursor_state: dict[str, Any]) -> None:
         super().__init__(connector_id, tenant_id, config, cursor_state)
-        self._spend_repo = SpendRepository()
+        self._writer = CampaignMeasurementWriter()
 
     async def sync_incremental(self, cursor: dict[str, Any]) -> SyncResult:
         last_date_str = cursor.get("last_sync_date")
@@ -58,31 +60,24 @@ class LinkedInAdsConnector(BaseConnector):
 
     async def _mock_backfill(self, start: date, end: date) -> SyncResult:
         """Return a mock SyncResult for local/test environments."""
-        rows_upserted = 0
+        account_id = self._config.get("ad_account_id", "mock-li-account")
+        metrics_list: list[ExternalCampaignMetric] = []
         current = start
         while current <= end:
-            record = {
-                "spend_record_id": _idempotency_id(self.connector_id, str(current)),
-                "tenant_id": self.tenant_id,
-                "platform": "linkedin_ads",
-                "ad_account_id": self.config.get("ad_account_id", ""),
-                "campaign_id": f"mock-li-camp-{self.connector_id[:8]}",
-                "period_start": datetime.combine(current, datetime.min.time()).replace(tzinfo=timezone.utc).isoformat(),
-                "period_end": datetime.combine(current, datetime.max.time()).replace(tzinfo=timezone.utc).isoformat(),
-                "billing_currency": "USD",
-                "impressions": 3000,
-                "clicks": 45,
-                "media_spend": "75.00",
-                "total_cost": "75.00",
-                "source_connector_id": self.connector_id,
-                "idempotency_key": f"li-{self.connector_id}-{current}",
-            }
-            await self._spend_repo.upsert(record)
-            rows_upserted += 1
+            metrics_list.append(ExternalCampaignMetric(
+                platform=_CONNECTOR_TYPE,
+                external_account_id=account_id,
+                external_campaign_id=f"mock-li-camp-{self.connector_id[:8]}",
+                external_campaign_name="Mock LinkedIn Campaign",
+                period_start=datetime.combine(current, datetime.min.time()).replace(tzinfo=timezone.utc),
+                period_end=datetime.combine(current, datetime.max.time()).replace(tzinfo=timezone.utc),
+                impressions=3000, clicks=45, spend=Decimal("75.00"), currency="USD",
+            ))
             current += timedelta(days=1)
 
-        logger.info("LinkedIn mock backfill: connector=%s rows=%d", self.connector_id, rows_upserted)
-        return SyncResult(rows_upserted=rows_upserted, new_cursor={"last_sync_date": str(end)})
+        write_result = await self._writer.write_metrics(self.tenant_id, self.connector_id, metrics_list)
+        logger.info("LinkedIn mock backfill: connector=%s rows=%d", self.connector_id, write_result.spend_records_written)
+        return SyncResult(rows_upserted=write_result.spend_records_written, new_cursor={"last_sync_date": str(end)})
 
     async def _live_backfill(self, start: date, end: date) -> SyncResult:
         try:
@@ -131,30 +126,28 @@ class LinkedInAdsConnector(BaseConnector):
                 data = resp.json()
                 elements = data.get("elements", [])
 
+                metrics_list: list[ExternalCampaignMetric] = []
                 for el in elements:
                     date_range = el.get("dateRange", {})
                     dr_start = date_range.get("start", {})
                     period_date = date(dr_start.get("year", start.year), dr_start.get("month", start.month), dr_start.get("day", start.day))
                     campaign_urn = el.get("pivotValue", "")
                     spend = el.get("costInLocalCurrency", 0)
-                    record = {
-                        "spend_record_id": _idempotency_id(self.connector_id, str(period_date) + campaign_urn),
-                        "tenant_id": self.tenant_id,
-                        "platform": "linkedin_ads",
-                        "ad_account_id": ad_account_id,
-                        "campaign_id": campaign_urn,
-                        "period_start": datetime.combine(period_date, datetime.min.time()).replace(tzinfo=timezone.utc).isoformat(),
-                        "period_end": datetime.combine(period_date, datetime.max.time()).replace(tzinfo=timezone.utc).isoformat(),
-                        "billing_currency": "USD",
-                        "impressions": int(el.get("impressions", 0)),
-                        "clicks": int(el.get("clicks", 0)),
-                        "media_spend": str(spend),
-                        "total_cost": str(spend),
-                        "source_connector_id": self.connector_id,
-                        "idempotency_key": f"li-{self.connector_id}-{period_date}-{campaign_urn}",
-                    }
-                    await self._spend_repo.upsert(record)
-                    rows_upserted += 1
+                    metrics_list.append(ExternalCampaignMetric(
+                        platform=_CONNECTOR_TYPE,
+                        external_account_id=ad_account_id,
+                        external_campaign_id=campaign_urn,
+                        period_start=datetime.combine(period_date, datetime.min.time()).replace(tzinfo=timezone.utc),
+                        period_end=datetime.combine(period_date, datetime.max.time()).replace(tzinfo=timezone.utc),
+                        impressions=int(el.get("impressions", 0)),
+                        clicks=int(el.get("clicks", 0)),
+                        spend=Decimal(str(spend)),
+                        currency="USD",
+                        raw_dimensions={"pivotValue": campaign_urn, "date": str(period_date)},
+                    ))
+                write_result = await self._writer.write_metrics(self.tenant_id, self.connector_id, metrics_list)
+                rows_upserted = write_result.spend_records_written
+                errors.extend(write_result.errors)
             except Exception as exc:
                 logger.error("LinkedIn API error: %s", exc)
                 errors.append(str(exc))

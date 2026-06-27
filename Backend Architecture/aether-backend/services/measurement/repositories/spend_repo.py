@@ -60,12 +60,16 @@ class SpendRepository:
                     media_spend, platform_fees, agency_fees,
                     creative_cost, affiliate_cost, other_cost, total_cost,
                     source_record_id, source_connector_id, sync_run_id,
-                    provenance, idempotency_key, schema_version, created_at
+                    provenance, idempotency_key, schema_version, created_at,
+                    external_campaign_id, external_account_id,
+                    campaign_resolution_status, campaign_resolution_method,
+                    campaign_resolution_version
                 ) VALUES (
                     $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,
                     $11,$12,$13,$14,$15,$16,$17,$18,$19,$20,
                     $21,$22,$23,$24,$25,$26,$27,$28,$29,$30,
-                    $31,$32,$33,$34,$35,$36,$37,$38
+                    $31,$32,$33,$34,$35,$36,$37,$38,
+                    $39,$40,$41,$42,$43
                 )
                 ON CONFLICT (tenant_id, idempotency_key) DO UPDATE SET
                     impressions = EXCLUDED.impressions,
@@ -81,7 +85,12 @@ class SpendRepository:
                     affiliate_cost = EXCLUDED.affiliate_cost,
                     other_cost = EXCLUDED.other_cost,
                     total_cost = EXCLUDED.total_cost,
-                    exchange_rate = EXCLUDED.exchange_rate
+                    exchange_rate = EXCLUDED.exchange_rate,
+                    external_campaign_id = COALESCE(EXCLUDED.external_campaign_id, spend_records.external_campaign_id),
+                    external_account_id = COALESCE(EXCLUDED.external_account_id, spend_records.external_account_id),
+                    campaign_resolution_status = COALESCE(EXCLUDED.campaign_resolution_status, spend_records.campaign_resolution_status),
+                    campaign_resolution_method = COALESCE(EXCLUDED.campaign_resolution_method, spend_records.campaign_resolution_method),
+                    campaign_resolution_version = COALESCE(EXCLUDED.campaign_resolution_version, spend_records.campaign_resolution_version)
                 """,
                 row.get("spend_record_id"), row.get("tenant_id"),
                 row.get("platform"), row.get("ad_account_id"),
@@ -109,6 +118,11 @@ class SpendRepository:
                 json.dumps(row.get("provenance", {})),
                 key, row.get("schema_version", 1),
                 _parse_ts(row.get("created_at")),
+                row.get("external_campaign_id"),
+                row.get("external_account_id"),
+                row.get("campaign_resolution_status"),
+                row.get("campaign_resolution_method"),
+                row.get("campaign_resolution_version"),
             )
         return row
 
