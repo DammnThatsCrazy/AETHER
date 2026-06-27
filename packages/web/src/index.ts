@@ -1145,5 +1145,6 @@ const aether = new AetherSDK();
 export default aether;
 export { AetherSDK };
 export type { AetherConfig, AetherSDKInterface, ResolvedIdentity, JourneyPayload, CurrentJourney, JourneyStatus, JourneyLifecycleEventType, AcquisitionEvidence, CampaignContext } from './types';
+// AcquisitionEvidence and CampaignContext were added in the campaign registry milestone.
 export { SDKHealthAgent } from './health';
 export type { SDKHealthAgentConfig, SDKHeartbeatPayload, SDKManifest, ManifestUpdateCallback } from './health';

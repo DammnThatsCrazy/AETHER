@@ -3467,6 +3467,66 @@
       ]
     },
     {
+      "path": "docs/campaign/runbooks/connector-credential-rotation.md",
+      "title": "Runbook: Campaign Source Connector Credential Rotation",
+      "slug": "campaign/runbooks/connector-credential-rotation",
+      "section": "operations",
+      "visibility": "I",
+      "audience": [
+        "ops"
+      ]
+    },
+    {
+      "path": "docs/campaign/runbooks/duplicate-campaigns.md",
+      "title": "Runbook: Duplicate Campaign Records",
+      "slug": "campaign/runbooks/duplicate-campaigns",
+      "section": "operations",
+      "visibility": "I",
+      "audience": [
+        "ops"
+      ]
+    },
+    {
+      "path": "docs/campaign/runbooks/mapping-review-resolution.md",
+      "title": "Runbook: Clearing the Mapping Review Queue",
+      "slug": "campaign/runbooks/mapping-review-resolution",
+      "section": "operations",
+      "visibility": "I",
+      "audience": [
+        "ops"
+      ]
+    },
+    {
+      "path": "docs/campaign/runbooks/missing-spend-attribution.md",
+      "title": "Runbook: Spend Records Missing Campaign Attribution",
+      "slug": "campaign/runbooks/missing-spend-attribution",
+      "section": "operations",
+      "visibility": "I",
+      "audience": [
+        "ops"
+      ]
+    },
+    {
+      "path": "docs/campaign/runbooks/remap-and-recompute.md",
+      "title": "Runbook: Remap Campaign and Recompute Attribution",
+      "slug": "campaign/runbooks/remap-and-recompute",
+      "section": "operations",
+      "visibility": "I",
+      "audience": [
+        "ops"
+      ]
+    },
+    {
+      "path": "docs/campaign/runbooks/source-stale.md",
+      "title": "Runbook: Campaign Source Staleness SLO Violation",
+      "slug": "campaign/runbooks/source-stale",
+      "section": "operations",
+      "visibility": "I",
+      "audience": [
+        "ops"
+      ]
+    },
+    {
       "path": "docs/campaign/runbooks/source-sync-failure.md",
       "title": "Runbook: Campaign Source Sync Failure",
       "slug": "campaign/runbooks/source-sync-failure",
@@ -3477,9 +3537,29 @@
       ]
     },
     {
+      "path": "docs/campaign/runbooks/stuck-backfill.md",
+      "title": "Runbook: Stuck Campaign ID Backfill",
+      "slug": "campaign/runbooks/stuck-backfill",
+      "section": "operations",
+      "visibility": "I",
+      "audience": [
+        "ops"
+      ]
+    },
+    {
       "path": "docs/campaign/runbooks/unresolved-rate-spike.md",
       "title": "Runbook: Campaign Resolution Unresolved Rate Spike",
       "slug": "campaign/runbooks/unresolved-rate-spike",
+      "section": "operations",
+      "visibility": "I",
+      "audience": [
+        "ops"
+      ]
+    },
+    {
+      "path": "docs/campaign/runbooks/utm-ambiguity.md",
+      "title": "Runbook: UTM Ambiguity — Multiple Campaigns Match Same UTM Signal",
+      "slug": "campaign/runbooks/utm-ambiguity",
       "section": "operations",
       "visibility": "I",
       "audience": [

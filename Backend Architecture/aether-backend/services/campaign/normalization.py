@@ -18,11 +18,13 @@ _PLATFORM_ALIASES: dict[str, str] = {
     "google": "google_ads",
     "google_ads": "google_ads",
     "google ads": "google_ads",
+    "google-ads": "google_ads",
     "googleads": "google_ads",
     "adwords": "google_ads",
     "meta": "meta_ads",
     "meta_ads": "meta_ads",
     "facebook": "meta_ads",
+    "facebook ads": "meta_ads",
     "facebook_ads": "meta_ads",
     "fb": "meta_ads",
     "instagram": "meta_ads",
@@ -65,9 +67,9 @@ def normalize_utm_value(raw: str | None) -> str | None:
     this function to validate or sanitize user input for storage.
     """
     if raw is None:
-        return None
+        return ""
     decoded = urllib.parse.unquote_plus(raw)
-    return decoded.strip().lower() or None
+    return decoded.strip().lower()
 
 
 def normalize_external_id(raw: str | None) -> str | None:

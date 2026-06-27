@@ -447,9 +447,50 @@ export interface CampaignContext {
     campaign?: string;
     content?: string;
     term?: string;
+    /** utm_id — highest-confidence UTM alias token. */
+    utmId?: string;
     clickId?: string;
     referrerDomain?: string;
     referrerType?: 'direct' | 'organic' | 'paid' | 'social' | 'email' | 'referral' | 'unknown';
+    /** Provider campaign ID (e.g. Google, Meta). Never treated as canonical Aether UUID. */
+    externalCampaignId?: string;
+    externalAccountId?: string;
+    platform?: string;
+    /** Aether canonical campaign UUID. Validated server-side before use. */
+    canonicalCampaignId?: string;
+}
+export interface AcquisitionEvidence {
+    utmSource?: string;
+    utmMedium?: string;
+    /** utm_campaign — the campaign identifier token, NOT the human display name. */
+    utmCampaign?: string;
+    utmContent?: string;
+    utmTerm?: string;
+    utmId?: string;
+    platform?: string;
+    externalAccountId?: string;
+    externalCampaignId?: string;
+    canonicalCampaignId?: string;
+    clickIds?: {
+        gclid?: string;
+        fbclid?: string;
+        msclkid?: string;
+        ttclid?: string;
+        liEFatId?: string;
+        rdtCid?: string;
+        [key: string]: string | undefined;
+    };
+    referrer?: string;
+    referrerDomain?: string;
+    landingPage?: string;
+    firstCapturedAt?: string;
+    lastObservedAt?: string;
+    sessionId?: string;
+    schemaVersion: number;
+    /** @deprecated use utmCampaign */
+    name?: string;
+    /** @deprecated use externalCampaignId */
+    campaignId?: string;
 }
 export interface TrackEvent extends BaseEvent {
     type: 'track';
