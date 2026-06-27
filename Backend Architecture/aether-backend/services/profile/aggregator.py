@@ -37,6 +37,7 @@ from __future__ import annotations
 
 import asyncio
 from collections import Counter, defaultdict
+from datetime import datetime
 from typing import Any, Optional
 
 from shared.common.common import utc_now
@@ -194,10 +195,9 @@ def _step_display_label(step: dict) -> str:
     return f"{family_label}: {activity_type.replace('_', ' ')}"
 
 
-def _parse_optional_ts(value: Optional[str]) -> Optional["datetime"]:
+def _parse_optional_ts(value: Optional[str]) -> Optional[datetime]:
     if value is None:
         return None
-    from datetime import datetime
     try:
         return datetime.fromisoformat(value.replace("Z", "+00:00"))
     except (ValueError, AttributeError):
