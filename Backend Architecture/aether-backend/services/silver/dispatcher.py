@@ -66,7 +66,7 @@ class SilverDispatcher:
         if projector is None:
             return []
         try:
-            result = projector.project(event)  # type: ignore[union-attr]
+            result = projector.project_and_emit(event)  # type: ignore[union-attr]
             if result and not result.skipped:
                 # Fire-and-forget graph mutations; never block or fail Silver writes
                 asyncio.create_task(_graph_projector.maybe_emit(result, event))
@@ -83,7 +83,7 @@ class SilverDispatcher:
         if projector is None:
             return []
         try:
-            result = projector.project(event)  # type: ignore[union-attr]
+            result = projector.project_and_emit(event)  # type: ignore[union-attr]
             return [result] if result and not result.skipped else []
         except Exception as exc:
             logger.error("silver_projection_error", event_type=event_type, error=str(exc))

@@ -139,3 +139,48 @@ export function useJourneyExplain(journeyId: string | null) {
 
   return { data, loading, error };
 }
+
+interface JourneyHealthData {
+  summary: {
+    total_journeys: number;
+    avg_steps_per_journey: number;
+    quality_breakdown: Record<string, number>;
+    compiler_versions: Record<string, number>;
+  };
+  failed_or_partial: AnyRecord[];
+  web3_finality_backlog: number | null;
+  rebuild_queue_depth: number | null;
+}
+
+const EMPTY_HEALTH: JourneyHealthData = {
+  summary: { total_journeys: 0, avg_steps_per_journey: 0, quality_breakdown: {}, compiler_versions: {} },
+  failed_or_partial: [],
+  web3_finality_backlog: null,
+  rebuild_queue_depth: null,
+};
+
+export function useJourneyHealth() {
+  const [data, setData] = useState<JourneyHealthData>(EMPTY_HEALTH);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  const refresh = useCallback(() => {
+    let active = true;
+    setLoading(true);
+    api.journeysMeasurement.health()
+      .then((result: any) => {
+        if (!active) return;
+        const d = result?.data ?? result;
+        setData(d as JourneyHealthData);
+      })
+      .catch((e: Error) => active && setError(e.message))
+      .finally(() => active && setLoading(false));
+    return () => { active = false; };
+  }, []);
+
+  useEffect(() => {
+    return refresh();
+  }, [refresh]);
+
+  return { data, loading, error, refresh };
+}

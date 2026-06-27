@@ -3655,6 +3655,20 @@
       "since_version": "8.12.0"
     },
     {
+      "path": "docs/productization/unified-canonical-journey/DEPLOYMENT_PROFILE_MATRIX.md",
+      "title": "Deployment Profile Matrix — Unified Canonical Journey",
+      "slug": "productization/unified-canonical-journey/deployment-profile-matrix",
+      "section": "operations",
+      "visibility": "I",
+      "audience": [
+        "architect",
+        "ops",
+        "exec"
+      ],
+      "status": "stable",
+      "since_version": "8.12.0"
+    },
+    {
       "path": "docs/productization/unified-canonical-journey/EXECUTION_STATE.md",
       "title": "Unified Web2/Web3 Canonical Journey — Execution State",
       "slug": "productization/unified-canonical-journey/execution-state",
@@ -3669,9 +3683,37 @@
       "since_version": "8.12.0"
     },
     {
+      "path": "docs/productization/unified-canonical-journey/RELEASE_READINESS.md",
+      "title": "Release Readiness — Unified Canonical Journey",
+      "slug": "productization/unified-canonical-journey/release-readiness",
+      "section": "operations",
+      "visibility": "I",
+      "audience": [
+        "architect",
+        "ops",
+        "exec"
+      ],
+      "status": "stable",
+      "since_version": "8.12.0"
+    },
+    {
       "path": "docs/productization/unified-canonical-journey/REPO_TRUTH_AND_GAP_MATRIX.md",
       "title": "Repo Truth and Gap Matrix — Unified Canonical Journey",
       "slug": "productization/unified-canonical-journey/repo-truth-and-gap-matrix",
+      "section": "operations",
+      "visibility": "I",
+      "audience": [
+        "architect",
+        "ops",
+        "exec"
+      ],
+      "status": "stable",
+      "since_version": "8.12.0"
+    },
+    {
+      "path": "docs/productization/unified-canonical-journey/TEST_EVIDENCE.md",
+      "title": "Test Evidence — Unified Canonical Journey",
+      "slug": "productization/unified-canonical-journey/test-evidence",
       "section": "operations",
       "visibility": "I",
       "audience": [

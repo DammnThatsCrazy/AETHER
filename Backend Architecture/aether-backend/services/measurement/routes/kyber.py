@@ -181,6 +181,48 @@ async def kyber_overview(request: Request):
     }).to_dict()
 
 
+@router.get("/journey-health")
+async def journey_health(request: Request):
+    """Journey compiler health — throughput, queue depth, quality breakdown, rebuild audit log."""
+    tenant = _require_kyber_tenant(request)
+
+    journeys = await _journey_repo.list_current(tenant.tenant_id, limit=500)
+
+    quality_counts: dict[str, int] = {}
+    failed_rebuilds: list[dict] = []
+    total_steps = 0
+    compiler_versions: dict[str, int] = {}
+
+    for j in journeys:
+        qs = j.get("quality_status") or "unknown"
+        quality_counts[qs] = quality_counts.get(qs, 0) + 1
+        total_steps += j.get("step_count") or 0
+        cv = j.get("compiler_version") or "unknown"
+        compiler_versions[cv] = compiler_versions.get(cv, 0) + 1
+        if j.get("rebuild_reason") and j.get("quality_status") in ("empty", "partial"):
+            failed_rebuilds.append({
+                "journey_id": j.get("journey_id"),
+                "profile_id": j.get("profile_id"),
+                "quality_status": j.get("quality_status"),
+                "compiler_version": j.get("compiler_version"),
+                "computed_at": j.get("computed_at"),
+            })
+
+    avg_steps = round(total_steps / len(journeys), 1) if journeys else 0
+
+    return APIResponse(data={
+        "summary": {
+            "total_journeys": len(journeys),
+            "avg_steps_per_journey": avg_steps,
+            "quality_breakdown": quality_counts,
+            "compiler_versions": compiler_versions,
+        },
+        "failed_or_partial": failed_rebuilds[:50],
+        "web3_finality_backlog": None,
+        "rebuild_queue_depth": None,
+    }).to_dict()
+
+
 @router.get("/tenants/{tenant_id_param}")
 async def kyber_tenant_drill_down(tenant_id_param: str, request: Request):
     """Per-tenant measurement drill-down."""

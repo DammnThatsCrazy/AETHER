@@ -346,3 +346,61 @@ async def rebuild_journey(journey_id: str, request: Request, body: RebuildReques
         tenant.tenant_id, profile_id, trigger_reason=body.trigger_reason
     )
     return APIResponse(data=new_version, meta={"rebuilt": True}).to_dict()
+
+
+# ---------------------------------------------------------------------------
+# Campaign → journeys navigation
+# ---------------------------------------------------------------------------
+
+campaign_router = APIRouter(prefix="/v1/campaigns", tags=["Journeys"])
+
+
+@campaign_router.get("/{campaign_id}/journeys")
+async def list_journeys_for_campaign(
+    campaign_id: str,
+    request: Request,
+    limit: int = Query(50, ge=1, le=200),
+    cursor: Optional[str] = Query(None),
+):
+    """List current journey versions that include steps from a given campaign."""
+    tenant = _require_tenant(request)
+    journeys = await _journey_repo.list_current(
+        tenant.tenant_id,
+        campaign_id=campaign_id,
+        limit=limit,
+        cursor=cursor,
+    )
+    next_cursor = journeys[-1].get("computed_at") if len(journeys) == limit else None
+    return APIResponse(
+        data=journeys,
+        meta={"campaign_id": campaign_id, "count": len(journeys), "next_cursor": next_cursor},
+    ).to_dict()
+
+
+# ---------------------------------------------------------------------------
+# Web3 reorg / status-change webhook
+# ---------------------------------------------------------------------------
+
+class Web3StatusChangeRequest(BaseModel):
+    tx_hash: str
+    new_status: str  # confirmed | finalized | reverted | reorged
+
+
+web3_router = APIRouter(prefix="/v1/web3", tags=["Journeys"])
+
+
+@web3_router.post("/status-change")
+async def web3_status_change(request: Request, body: Web3StatusChangeRequest):
+    """Receive a Web3 transaction status update from the chain indexer.
+
+    Updates canonical_activity rows and triggers journey rebuilds for all
+    profiles that have a step referencing this transaction.
+    """
+    tenant = _require_tenant(request)
+    affected = await _compiler.rebuild_affected_by_web3_status_change(
+        tenant.tenant_id, body.tx_hash, body.new_status
+    )
+    return APIResponse(
+        data=None,
+        meta={"tx_hash": body.tx_hash, "new_status": body.new_status, "profiles_rebuilt": affected},
+    ).to_dict()
