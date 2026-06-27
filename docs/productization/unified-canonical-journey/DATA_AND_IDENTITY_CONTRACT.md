@@ -1,11 +1,15 @@
 ---
 title: Data and Identity Contract — Unified Canonical Journey
-status: current
-last_updated: 2026-06-27
+slug: productization/unified-canonical-journey/data-and-identity-contract
+section: operations
+visibility: I
+audience: [architect, ops, exec]
+since_version: "8.12.0"
+status: stable
 source_files:
   - Backend Architecture/aether-backend/services/measurement/contracts.py
   - Backend Architecture/aether-backend/alembic/versions/20260627_canonical_activity.py
-last_synced_commit: HEAD
+last_synced_commit: 3f483817d03d32b20fc99f984ec9a85e24a77e46
 ---
 
 # Data and Identity Contract

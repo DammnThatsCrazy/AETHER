@@ -1,7 +1,11 @@
 ---
 title: Repo Truth and Gap Matrix — Unified Canonical Journey
-status: current
-last_updated: 2026-06-27
+slug: productization/unified-canonical-journey/repo-truth-and-gap-matrix
+section: operations
+visibility: I
+audience: [architect, ops, exec]
+since_version: "8.12.0"
+status: stable
 ---
 
 # Repo Truth and Gap Matrix

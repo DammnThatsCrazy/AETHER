@@ -1,14 +1,18 @@
 ---
 title: Unified Web2/Web3 Canonical Journey — Execution State
-status: in_progress
-last_updated: 2026-06-27
+slug: productization/unified-canonical-journey/execution-state
+section: operations
+visibility: I
+audience: [architect, ops, exec]
+since_version: "8.12.0"
+status: beta
 source_files:
   - Backend Architecture/aether-backend/services/measurement/engine/journey_compiler.py
   - Backend Architecture/aether-backend/services/measurement/repositories/activity_repo.py
   - Backend Architecture/aether-backend/services/measurement/repositories/journey_step_repo.py
   - Backend Architecture/aether-backend/services/measurement/silver_adapters.py
   - Backend Architecture/aether-backend/alembic/versions/20260627_canonical_activity.py
-last_synced_commit: HEAD
+last_synced_commit: 3f483817d03d32b20fc99f984ec9a85e24a77e46
 ---
 
 # Unified Web2/Web3 Canonical Journey — Execution State
