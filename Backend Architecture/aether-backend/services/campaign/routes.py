@@ -630,18 +630,7 @@ async def get_campaign_graph(
 
 def _get_registry():
     from services.campaign.registry import CampaignRegistryService
-    from services.campaign.repository import (
-        CampaignRegistryRepository,
-        ExternalRefRepository,
-        AliasRepository,
-        MappingReviewRepository,
-    )
-    return CampaignRegistryService(
-        campaign_repo=CampaignRegistryRepository(None),
-        external_ref_repo=ExternalRefRepository(None),
-        alias_repo=AliasRepository(None),
-        review_repo=MappingReviewRepository(None),
-    )
+    return CampaignRegistryService()
 
 
 @router.get("/{campaign_id}/external-refs")
@@ -780,8 +769,9 @@ async def connect_campaign_source(body: CampaignSourceCreate, request: Request):
             await pool.execute(
                 """
                 INSERT INTO measurement_connectors
-                  (connector_id, tenant_id, connector_type, display_name, config, status, created_at, updated_at)
-                VALUES ($1, $2, $3, $4, $5, 'active', NOW(), NOW())
+                  (connector_id, tenant_id, connector_type, name, config, status,
+                   cursor_state, health_status, created_at, updated_at)
+                VALUES ($1, $2, $3, $4, $5, 'active', '{}'::jsonb, 'unknown', NOW(), NOW())
                 """,
                 connector_id, tenant.tenant_id, body.platform,
                 body.display_name or body.platform,
@@ -799,10 +789,29 @@ async def get_source_health(connector_id: str, request: Request):
     tenant = request.state.tenant
     tenant.require_permission("campaign:read")
     try:
-        from services.measurement.orchestrator import ConnectorOrchestrator
-        orch = ConnectorOrchestrator()
-        health = await orch.health_check(tenant.tenant_id, connector_id)
+        from repositories.repos import get_pool
+        pool = await get_pool()
+        row = await pool.fetchrow(
+            "SELECT connector_id, connector_type, name, status, health_status, health_message, "
+            "last_sync_at, last_success_at, error_count FROM measurement_connectors "
+            "WHERE tenant_id = $1 AND connector_id = $2",
+            tenant.tenant_id, connector_id,
+        ) if pool else None
+        if row is None:
+            raise BadRequestError(f"Campaign source {connector_id} not found")
+        health = {
+            "connector_id": connector_id,
+            "status": row["health_status"],
+            "name": row["name"],
+            "connector_type": row["connector_type"],
+            "last_sync_at": row["last_sync_at"].isoformat() if row["last_sync_at"] else None,
+            "last_success_at": row["last_success_at"].isoformat() if row["last_success_at"] else None,
+            "error_count": row["error_count"],
+            "health_message": row["health_message"],
+        }
         return APIResponse(data=health).to_dict()
+    except BadRequestError:
+        raise
     except Exception as exc:
         logger.warning("health_check unavailable: %s", exc)
         return APIResponse(data={"connector_id": connector_id, "status": "unknown", "error": str(exc)}).to_dict()
@@ -814,11 +823,25 @@ async def trigger_sync(connector_id: str, request: Request):
     tenant = request.state.tenant
     tenant.require_permission("campaign:manage")
     try:
-        from services.measurement.orchestrator import ConnectorOrchestrator
-        orch = ConnectorOrchestrator()
-        result = await orch.sync_connector(tenant.tenant_id, connector_id)
+        from repositories.repos import get_pool
+        pool = await get_pool()
+        row = await pool.fetchrow(
+            "SELECT connector_id FROM measurement_connectors WHERE tenant_id = $1 AND connector_id = $2",
+            tenant.tenant_id, connector_id,
+        ) if pool else None
+        if row is None:
+            raise BadRequestError(f"Campaign source {connector_id} not found")
+        # Record sync request — the scheduler picks this up on its next tick.
+        if pool:
+            await pool.execute(
+                "UPDATE measurement_connectors SET next_sync_at = NOW(), updated_at = NOW() "
+                "WHERE tenant_id = $1 AND connector_id = $2",
+                tenant.tenant_id, connector_id,
+            )
         metrics.increment("campaign_source_sync_triggered", labels={"connector_id": connector_id})
-        return APIResponse(data=result).to_dict()
+        return APIResponse(data={"connector_id": connector_id, "status": "queued"}).to_dict()
+    except BadRequestError:
+        raise
     except Exception as exc:
         logger.warning("sync trigger failed: %s", exc)
         raise BadRequestError(str(exc)) from exc

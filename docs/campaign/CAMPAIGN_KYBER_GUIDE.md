@@ -42,10 +42,10 @@ Enter a tenant ID to view:
 
 ## Reprocessing
 
-Reprocessing re-runs campaign resolution for a tenant's spend records (bounded by `limit`). Use dry-run first to estimate scope.
+Reprocessing re-runs campaign resolution for a tenant's spend records (bounded by `limit`). The API endpoint runs the backfill inline as a background task and returns immediately with `"status": "running"`. Monitor `campaign_reprocess_completed_total` to confirm completion. Use dry-run first to estimate scope.
 
 ```bash
-# Via API:
+# Via API (bounded, runs in background — suitable for ≤5000 records):
 curl -X POST /v1/kyber/measurement/campaign/tenant/{tenant_id}/reprocess \
   -H "Authorization: Bearer $KYBER_TOKEN" \
   -d '{"limit": 500, "dry_run": true}'

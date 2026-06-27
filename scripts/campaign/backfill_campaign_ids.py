@@ -114,7 +114,7 @@ async def _fetch_batch(
     if pool is None:
         return []
 
-    filters = ["campaign_resolution_status = 'not_applicable' OR campaign_resolution_status IS NULL"]
+    filters = ["(campaign_resolution_status = 'not_applicable' OR campaign_resolution_status IS NULL)"]
     params: list[Any] = []
     param_idx = 1
 
@@ -178,9 +178,9 @@ async def _resolve_row(
             platform=platform,
             external_account_id=ad_account_id,
             external_campaign_id=provider_id,
-            name=None,
-            connector_id=connector_id,
-            metadata={},
+            external_campaign_name=None,
+            source_connector_id=connector_id,
+            raw_metadata={},
         )
         if canonical_id is None:
             report.unresolved += 1

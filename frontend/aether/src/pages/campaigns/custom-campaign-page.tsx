@@ -11,8 +11,8 @@ export function CustomCampaignPage() {
 
   const [name, setName] = useState('');
   const [channel, setChannel] = useState('');
-  const [startAt, setStartAt] = useState('');
-  const [endAt, setEndAt] = useState('');
+  const [startDate, setStartDate] = useState('');
+  const [endDate, setEndDate] = useState('');
   const [error, setError] = useState<string | null>(null);
 
   const mutation = useMutation({
@@ -30,14 +30,13 @@ export function CustomCampaignPage() {
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (!name.trim()) return;
+    if (!name.trim() || !channel) return;
     setError(null);
     mutation.mutate({
       name: name.trim(),
-      origin: 'custom',
-      channel: channel || undefined,
-      start_at: startAt || undefined,
-      end_at: endAt || undefined,
+      channel,
+      start_date: startDate || new Date().toISOString().slice(0, 10),
+      end_date: endDate || undefined,
     });
   }
 
@@ -77,7 +76,7 @@ export function CustomCampaignPage() {
 
             <div className="space-y-1.5">
               <label htmlFor="campaign-channel" className="text-xs font-medium text-text-secondary">
-                Channel
+                Channel <span aria-hidden>*</span>
               </label>
               <select
                 id="campaign-channel"
@@ -94,22 +93,22 @@ export function CustomCampaignPage() {
 
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1.5">
-                <label htmlFor="start-at" className="text-xs font-medium text-text-secondary">Start date</label>
+                <label htmlFor="start-date" className="text-xs font-medium text-text-secondary">Start date</label>
                 <input
-                  id="start-at"
+                  id="start-date"
                   type="date"
-                  value={startAt}
-                  onChange={e => setStartAt(e.target.value)}
+                  value={startDate}
+                  onChange={e => setStartDate(e.target.value)}
                   className="w-full text-sm border border-border-default rounded px-3 py-2 bg-surface-raised text-text-primary focus:outline-none focus:ring-2 focus:ring-accent"
                 />
               </div>
               <div className="space-y-1.5">
-                <label htmlFor="end-at" className="text-xs font-medium text-text-secondary">End date</label>
+                <label htmlFor="end-date" className="text-xs font-medium text-text-secondary">End date</label>
                 <input
-                  id="end-at"
+                  id="end-date"
                   type="date"
-                  value={endAt}
-                  onChange={e => setEndAt(e.target.value)}
+                  value={endDate}
+                  onChange={e => setEndDate(e.target.value)}
                   className="w-full text-sm border border-border-default rounded px-3 py-2 bg-surface-raised text-text-primary focus:outline-none focus:ring-2 focus:ring-accent"
                 />
               </div>
@@ -128,7 +127,7 @@ export function CustomCampaignPage() {
                 type="submit"
                 variant="primary"
                 size="sm"
-                disabled={!name.trim() || mutation.isLoading}
+                disabled={!name.trim() || !channel || mutation.isLoading}
               >
                 {mutation.isLoading ? 'Creating…' : 'Create campaign'}
               </Button>

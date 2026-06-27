@@ -94,7 +94,9 @@ export function CampaignSourcesPage() {
   const syncMutation = useSyncCampaignSource();
   const [syncingId, setSyncingId] = useState<string | null>(null);
 
-  const rawSources = Array.isArray(data) ? data : Array.isArray((data as Record<string, unknown>)?.sources) ? (data as Record<string, unknown[]>).sources : [];
+  const rawSources = Array.isArray((data as Record<string, unknown>)?.items)
+    ? (data as Record<string, unknown[]>).items
+    : Array.isArray(data) ? data : [];
   const sources = rawSources as Source[];
 
   async function handleSync(connectorId: string) {
@@ -117,7 +119,7 @@ export function CampaignSourcesPage() {
           </p>
         </div>
         <a
-          href="/campaign-intelligence/sources/connect"
+          href="/campaign-intelligence/sources"
           aria-label="Connect campaign source"
           className="inline-flex items-center justify-center rounded-md font-medium transition-colors bg-accent text-text-inverse hover:bg-accent-hover px-2 py-1 text-xs"
         >

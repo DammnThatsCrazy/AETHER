@@ -68,16 +68,34 @@ class TouchpointProjector(BaseProjector):
         # UTM parameters: prefer campaign context over acquisitionEvidence over properties.
         # campaign_ctx.get("campaign") is the utm_campaign token;
         # campaign_ctx.get("name") is the deprecated field kept for backward compat.
-        utm_source = campaign_ctx.get("source") or acq_ev.get("source") or props.get("utm_source")
-        utm_medium = campaign_ctx.get("medium") or acq_ev.get("medium") or props.get("utm_medium")
+        # AcquisitionEvidence uses camelCase keys (utmSource, utmMedium, …).
+        # Fallback to snake_case for backward compat with older SDK payloads.
+        utm_source = (
+            campaign_ctx.get("source")
+            or acq_ev.get("utmSource") or acq_ev.get("source")
+            or props.get("utm_source")
+        )
+        utm_medium = (
+            campaign_ctx.get("medium")
+            or acq_ev.get("utmMedium") or acq_ev.get("medium")
+            or props.get("utm_medium")
+        )
         utm_campaign = (
             campaign_ctx.get("campaign")
             or campaign_ctx.get("name")  # deprecated; removed after one SDK release window
-            or acq_ev.get("utmCampaign")
+            or acq_ev.get("utmCampaign") or acq_ev.get("campaign")
             or props.get("utm_campaign")
         )
-        utm_content = campaign_ctx.get("content") or acq_ev.get("content") or props.get("utm_content")
-        utm_term = campaign_ctx.get("term") or acq_ev.get("term") or props.get("utm_term")
+        utm_content = (
+            campaign_ctx.get("content")
+            or acq_ev.get("utmContent") or acq_ev.get("content")
+            or props.get("utm_content")
+        )
+        utm_term = (
+            campaign_ctx.get("term")
+            or acq_ev.get("utmTerm") or acq_ev.get("term")
+            or props.get("utm_term")
+        )
         utm_id = campaign_ctx.get("utmId") or acq_ev.get("utmId") or props.get("utm_id")
 
         click_ids = acq_ev.get("clickIds") or {}

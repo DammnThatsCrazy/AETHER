@@ -190,7 +190,7 @@ export function MappingReviewPage() {
   const [resolving, setResolving] = useState<string | null>(null);
 
   const raw = data as Record<string, unknown> | null;
-  const reviews: Review[] = Array.isArray(raw?.reviews) ? (raw!.reviews as Review[]) : Array.isArray(data) ? (data as Review[]) : [];
+  const reviews: Review[] = Array.isArray(raw?.items) ? (raw!.items as Review[]) : Array.isArray(data) ? (data as Review[]) : [];
 
   async function handleIgnore(reviewId: string) {
     await ignoreMutation.mutate({ reviewId });
