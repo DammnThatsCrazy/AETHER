@@ -1,12 +1,14 @@
 ---
 title: Campaign Registry Architecture
-section: campaign
-last_updated: 2026-06-27
+slug: campaign/campaign-registry-architecture
+section: architecture
+visibility: I
+audience: [dev-senior, architect]
 source_files:
   - Backend Architecture/aether-backend/services/campaign/registry.py
   - Backend Architecture/aether-backend/services/campaign/repository.py
   - Backend Architecture/aether-backend/alembic/versions/20260627_campaign_registry.py
-last_synced_commit: placeholder
+last_synced_commit: 0d8c5ee76e27caa09d3ce2fc49131737b8c7b8d3
 ---
 
 # Campaign Registry Architecture

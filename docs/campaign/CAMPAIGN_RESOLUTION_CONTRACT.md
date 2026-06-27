@@ -1,11 +1,13 @@
 ---
 title: Campaign Resolution Contract
-section: campaign
-last_updated: 2026-06-27
+slug: campaign/campaign-resolution-contract
+section: reference
+visibility: I
+audience: [dev-senior, architect]
 source_files:
   - Backend Architecture/aether-backend/services/campaign/resolver.py
   - Backend Architecture/aether-backend/services/campaign/normalization.py
-last_synced_commit: placeholder
+last_synced_commit: 0d8c5ee76e27caa09d3ce2fc49131737b8c7b8d3
 ---
 
 # Campaign Resolution Contract

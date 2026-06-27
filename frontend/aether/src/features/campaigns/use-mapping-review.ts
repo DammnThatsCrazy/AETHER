@@ -1,4 +1,4 @@
-import { useQuery, useMutation, useQueryClient } from '@aether/ui';
+import { useQuery, useMutation, queryCache } from '@aether/ui';
 import { api } from '@aether-app/lib/api/endpoints';
 
 const STALE = 20_000;
@@ -12,23 +12,26 @@ export function useMappingReviews(params?: { status?: string; limit?: number }) 
 }
 
 export function useResolveReview() {
-  const qc = useQueryClient();
   return useMutation({
     mutationFn: ({ reviewId, campaignId, note }: { reviewId: string; campaignId: string; note?: string }) =>
-      api.mappingReview.resolve(reviewId, { campaign_id: campaignId, note }),
+      api.mappingReview.resolve(reviewId, {
+        campaign_id: campaignId,
+        ...(note !== undefined ? { note } : {}),
+      }),
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['mapping-review'] });
+      queryCache.invalidatePrefix('mapping-review:');
     },
   });
 }
 
 export function useIgnoreReview() {
-  const qc = useQueryClient();
   return useMutation({
     mutationFn: ({ reviewId, note }: { reviewId: string; note?: string }) =>
-      api.mappingReview.ignore(reviewId, { note }),
+      api.mappingReview.ignore(reviewId, {
+        ...(note !== undefined ? { note } : {}),
+      }),
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['mapping-review'] });
+      queryCache.invalidatePrefix('mapping-review:');
     },
   });
 }

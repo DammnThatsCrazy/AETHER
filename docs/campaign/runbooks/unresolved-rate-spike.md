@@ -1,3 +1,11 @@
+---
+title: "Runbook: Campaign Resolution Unresolved Rate Spike"
+slug: campaign/runbooks/unresolved-rate-spike
+section: operations
+visibility: I
+audience: [ops]
+---
+
 # Runbook: Campaign Resolution Unresolved Rate Spike
 
 **Alert:** `CampaignResolutionUnresolvedRateHigh`  

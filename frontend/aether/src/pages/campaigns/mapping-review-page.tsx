@@ -193,12 +193,12 @@ export function MappingReviewPage() {
   const reviews: Review[] = Array.isArray(raw?.reviews) ? (raw!.reviews as Review[]) : Array.isArray(data) ? (data as Review[]) : [];
 
   async function handleIgnore(reviewId: string) {
-    await ignoreMutation.mutateAsync({ reviewId });
+    await ignoreMutation.mutate({ reviewId });
     refetch();
   }
 
   async function handleResolve(reviewId: string, campaignId: string, note: string) {
-    await resolveMutation.mutateAsync({ reviewId, campaignId, note: note || undefined });
+    await resolveMutation.mutate({ reviewId, campaignId, note: note || undefined });
     setResolving(null);
     refetch();
   }

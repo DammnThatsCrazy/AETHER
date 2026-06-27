@@ -1,4 +1,4 @@
-import { useQuery, useMutation, useQueryClient } from '@aether/ui';
+import { useQuery, useMutation } from '@aether/ui';
 import { api } from '@aether-app/lib/api/endpoints';
 
 const STALE = 30_000;
@@ -21,22 +21,16 @@ export function useCampaignSourceHealth(connectorId: string) {
 }
 
 export function useSyncCampaignSource() {
-  const qc = useQueryClient();
   return useMutation({
     mutationFn: (connectorId: string) => api.campaignSources.sync(connectorId),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['campaign-sources:list'] });
-    },
+    invalidateKeys: ['campaign-sources:list'],
   });
 }
 
 export function useCreateCampaignSource() {
-  const qc = useQueryClient();
   return useMutation({
     mutationFn: (body: { platform: string; connector_id: string; credentials?: Record<string, unknown>; label?: string }) =>
       api.campaignSources.create(body),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['campaign-sources:list'] });
-    },
+    invalidateKeys: ['campaign-sources:list'],
   });
 }

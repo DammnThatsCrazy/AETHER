@@ -1,11 +1,13 @@
 ---
 title: Campaign Registry Migration Guide
-section: campaign
-last_updated: 2026-06-27
+slug: campaign/campaign-migration
+section: operations
+visibility: I
+audience: [dev-senior, ops]
 source_files:
   - Backend Architecture/aether-backend/alembic/versions/20260627_campaign_registry.py
   - scripts/campaign/backfill_campaign_ids.py
-last_synced_commit: placeholder
+last_synced_commit: 0d8c5ee76e27caa09d3ce2fc49131737b8c7b8d3
 ---
 
 # Campaign Registry Migration Guide

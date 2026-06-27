@@ -65,7 +65,7 @@ export function CampaignRegistryPage() {
   const platform = searchParams.get('platform') ?? undefined;
   const origin = searchParams.get('origin') ?? undefined;
 
-  const { data, isLoading, error } = useCampaigns({ status, limit: 100 });
+  const { data, isLoading, error } = useCampaigns({ ...(status !== undefined ? { status } : {}), limit: 100 });
 
   const raw = data as Record<string, unknown> | null;
   const rows: Row[] = Array.isArray(raw?.campaigns) ? (raw!.campaigns as Row[]) : [];

@@ -1,7 +1,9 @@
 ---
 title: Campaign Source Connectors
-section: campaign
-last_updated: 2026-06-27
+slug: campaign/campaign-connectors
+section: reference
+visibility: I
+audience: [dev-senior, ops]
 source_files:
   - Backend Architecture/aether-backend/services/measurement/connectors/google_ads.py
   - Backend Architecture/aether-backend/services/measurement/connectors/meta_ads.py
@@ -10,7 +12,7 @@ source_files:
   - Backend Architecture/aether-backend/services/measurement/connectors/x_ads.py
   - Backend Architecture/aether-backend/services/measurement/connectors/reddit_ads.py
   - Backend Architecture/aether-backend/services/measurement/connectors/microsoft_ads.py
-last_synced_commit: placeholder
+last_synced_commit: 0d8c5ee76e27caa09d3ce2fc49131737b8c7b8d3
 ---
 
 # Campaign Source Connectors

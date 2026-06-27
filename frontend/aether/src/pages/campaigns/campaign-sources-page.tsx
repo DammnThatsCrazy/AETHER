@@ -77,7 +77,7 @@ function SourceCard({ source, onSync }: { source: Source; onSync: (id: string) =
               <dd className="text-text-primary">{campaignCount.toLocaleString()}</dd>
             </>
           )}
-          {source.account_label && (
+          {source.account_label != null && (
             <>
               <dt className="text-text-secondary">Account</dt>
               <dd className="text-text-primary">{fmt(source.account_label)}</dd>
@@ -100,7 +100,7 @@ export function CampaignSourcesPage() {
   async function handleSync(connectorId: string) {
     setSyncingId(connectorId);
     try {
-      await syncMutation.mutateAsync(connectorId);
+      await syncMutation.mutate(connectorId);
       refetch();
     } finally {
       setSyncingId(null);
@@ -116,11 +116,13 @@ export function CampaignSourcesPage() {
             Connected ad platforms. Each source syncs campaign metadata and spend.
           </p>
         </div>
-        <Button variant="primary" size="sm" asChild>
-          <a href="/campaign-intelligence/sources/connect" aria-label="Connect campaign source">
-            Connect source
-          </a>
-        </Button>
+        <a
+          href="/campaign-intelligence/sources/connect"
+          aria-label="Connect campaign source"
+          className="inline-flex items-center justify-center rounded-md font-medium transition-colors bg-accent text-text-inverse hover:bg-accent-hover px-2 py-1 text-xs"
+        >
+          Connect source
+        </a>
       </div>
 
       {error && <ErrorState title="Failed to load sources" message={String(error)} />}
@@ -131,9 +133,12 @@ export function CampaignSourcesPage() {
           title="No campaign sources connected"
           description="Connect a paid-media platform to start importing campaigns and syncing spend data."
           action={
-            <Button variant="primary" size="sm" asChild>
-              <a href="/campaign-intelligence/sources/connect">Connect your first source</a>
-            </Button>
+            <a
+              href="/campaign-intelligence/sources/connect"
+              className="inline-flex items-center justify-center rounded-md font-medium transition-colors bg-accent text-text-inverse hover:bg-accent-hover px-2 py-1 text-xs"
+            >
+              Connect your first source
+            </a>
           }
         />
       )}

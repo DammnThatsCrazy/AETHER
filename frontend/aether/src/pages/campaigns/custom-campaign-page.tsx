@@ -1,14 +1,13 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Button, Card, CardContent, CardHeader, ErrorState } from '@aether/ui';
-import { useMutation, useQueryClient } from '@aether/ui';
+import { useMutation, queryCache } from '@aether/ui';
 import { api } from '@aether-app/lib/api/endpoints';
 
 const CHANNELS = ['paid_search', 'paid_social', 'email', 'push', 'sms', 'organic', 'referral', 'direct', 'affiliate', 'other'];
 
 export function CustomCampaignPage() {
   const navigate = useNavigate();
-  const qc = useQueryClient();
 
   const [name, setName] = useState('');
   const [channel, setChannel] = useState('');
@@ -20,12 +19,12 @@ export function CustomCampaignPage() {
     mutationFn: (body: Record<string, unknown>) =>
       api.campaigns.create(body),
     onSuccess: (result) => {
-      qc.invalidateQueries({ queryKey: ['campaigns'] });
+      queryCache.invalidatePrefix('campaigns:');
       const id = (result as Record<string, unknown>)?.campaign_id as string | undefined;
       navigate(id ? `/campaigns/${id}` : '/campaign-intelligence/registry');
     },
-    onError: (err: unknown) => {
-      setError(err instanceof Error ? err.message : String(err));
+    onError: (err: string) => {
+      setError(err);
     },
   });
 
@@ -129,9 +128,9 @@ export function CustomCampaignPage() {
                 type="submit"
                 variant="primary"
                 size="sm"
-                disabled={!name.trim() || mutation.isPending}
+                disabled={!name.trim() || mutation.isLoading}
               >
-                {mutation.isPending ? 'Creating…' : 'Create campaign'}
+                {mutation.isLoading ? 'Creating…' : 'Create campaign'}
               </Button>
             </div>
           </form>

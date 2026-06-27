@@ -1,7 +1,9 @@
 ---
 title: Campaign Intelligence Overview
-section: campaign
-last_updated: 2026-06-27
+slug: campaign/campaign-intelligence-overview
+section: reference
+visibility: I
+audience: [dev-senior, architect]
 ---
 
 # Campaign Intelligence Overview

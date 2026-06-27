@@ -1,3 +1,11 @@
+---
+title: "Runbook: Campaign Source Sync Failure"
+slug: campaign/runbooks/source-sync-failure
+section: operations
+visibility: I
+audience: [ops]
+---
+
 # Runbook: Campaign Source Sync Failure
 
 **Alert:** `CampaignSourceSyncFailed`  

@@ -1,7 +1,9 @@
 ---
 title: "ADR: Campaign Identity — Canonical UUID Strategy"
-section: campaign
-last_updated: 2026-06-27
+slug: campaign/adr-campaign-identity
+section: architecture
+visibility: I
+audience: [dev-senior, architect]
 ---
 
 # ADR: Campaign Identity — Canonical UUID Strategy
