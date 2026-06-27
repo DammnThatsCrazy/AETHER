@@ -152,6 +152,7 @@ class NoesisService:
         self._assert_read_only(plan)
 
         response = await self._dispatch(plan, scope, body)
+        response = self._faithfulness_check(plan, response)
         response.mode = mode  # type: ignore[assignment]
         response.warnings.extend(warnings)
         if not scope.debug_allowed:
@@ -252,6 +253,7 @@ class NoesisService:
             yield _sse({"type": "planning", "mode": mode, "plan_summary": f"Querying {plan.intent.replace('_', ' ')}…"})
 
             response = await self._dispatch(plan, scope, body)
+            response = self._faithfulness_check(plan, response)
             response.mode = mode  # type: ignore[assignment]
             if not scope.debug_allowed:
                 response.query_debug = None
@@ -513,6 +515,24 @@ class NoesisService:
         plan.limit = min(max(plan.limit, 1), MAX_LIMIT)
         plan.source = "llm"
         return plan
+
+    def _faithfulness_check(self, plan: QueryPlan, response: NoesisResponse) -> NoesisResponse:
+        """Warn when the LLM answer references entity IDs not present in results (LLM path only)."""
+        if plan.source != "llm":
+            return response
+        result_blob = " ".join(str(r) for r in response.results)
+        claimed_ids: set[str] = set()
+        for m in _ID_RE.finditer(response.answer):
+            claimed_ids.add(m.group(1))
+        for m in _WALLET_RE.finditer(response.answer):
+            claimed_ids.add(m.group(0))
+        unverified = [cid for cid in claimed_ids if cid not in result_blob]
+        if unverified:
+            warnings = list(response.warnings or []) + [
+                f"Answer references identifier(s) not found in evidence: {', '.join(unverified[:5])}"
+            ]
+            return NoesisResponse(**{**response.model_dump(mode="json"), "warnings": warnings})
+        return response
 
     async def _dispatch(self, plan: QueryPlan, scope: Scope, body: NoesisQueryRequest) -> NoesisResponse:
         if plan.intent == "entity_search":

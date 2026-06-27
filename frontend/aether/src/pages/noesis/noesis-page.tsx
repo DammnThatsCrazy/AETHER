@@ -44,13 +44,34 @@ interface ConversationSummary {
   readonly last_ts: string;
 }
 
+const SESSION_CONV_KEY = 'noesis:conversationId';
+
 export function NoesisPage() {
   const [messages, setMessages] = useState<NoesisMessageItem[]>([]);
-  const [conversationId, setConversationId] = useState<string | null>(null);
+  const [conversationId, setConversationId] = useState<string | null>(
+    () => sessionStorage.getItem(SESSION_CONV_KEY)
+  );
   const [suggestedPrompts, setSuggestedPrompts] = useState<readonly string[]>(FALLBACK_PROMPTS);
   const [pastConversations, setPastConversations] = useState<ConversationSummary[]>([]);
   const [showHistory, setShowHistory] = useState(false);
   const query = useNoesisQuery();
+
+  // Restore conversation history on page load if a session conversation exists
+  useEffect(() => {
+    const savedId = sessionStorage.getItem(SESSION_CONV_KEY);
+    if (savedId) {
+      void restClient.get(`/v1/noesis/conversations/${savedId}`, conversationDetailSchema).then(res => {
+        if (res.messages && res.messages.length > 0) {
+          const restored: NoesisMessageItem[] = [];
+          for (const turn of res.messages) {
+            restored.push({ id: `user-${Math.random()}`, role: 'user', content: turn.message ?? '' });
+            restored.push({ id: `assistant-${Math.random()}`, role: 'assistant', content: turn.answer ?? '' });
+          }
+          setMessages(restored);
+        }
+      }).catch(() => {});
+    }
+  }, []);
 
   useEffect(() => {
     void restClient.get('/v1/noesis/capabilities', capabilitiesSchema).then(res => {
@@ -73,7 +94,10 @@ export function NoesisPage() {
 
   async function handleSubmit(message: string) {
     const convId = conversationId ?? `conv-${Date.now()}`;
-    if (!conversationId) setConversationId(convId);
+    if (!conversationId) {
+      setConversationId(convId);
+      sessionStorage.setItem(SESSION_CONV_KEY, convId);
+    }
     const userMessage: NoesisMessageItem = { id: `user-${Date.now()}`, role: 'user', content: message };
     setMessages(prev => [...prev, userMessage]);
     const response = await query.mutate({ message, context: { current_page: window.location.pathname, conversation_id: convId } });
@@ -89,6 +113,7 @@ export function NoesisPage() {
 
   async function resumeConversation(conv: ConversationSummary) {
     setConversationId(conv.conversation_id);
+    sessionStorage.setItem(SESSION_CONV_KEY, conv.conversation_id);
     setMessages([]);
     setShowHistory(false);
     const res = await restClient.get(`/v1/noesis/conversations/${conv.conversation_id}`, conversationDetailSchema).catch(() => null);
