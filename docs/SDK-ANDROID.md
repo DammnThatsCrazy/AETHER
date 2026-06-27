@@ -16,7 +16,7 @@ toc_depth: 3
 last_synced_commit: 7d38405
 ---
 
-# Aether Android SDK v8.10.0 — Integration Guide
+# Aether Android SDK v8.11.0 — Integration Guide
 
 ## Installation
 

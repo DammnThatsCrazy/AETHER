@@ -7,6 +7,25 @@ from typing import Any, Literal, Optional
 
 from pydantic import BaseModel, Field
 
+ClaimType = Literal["fact", "computation", "inference", "recommendation"]
+
+NoesisErrorCode = Literal[
+    "rate_limited_qpm",
+    "rate_limited_daily",
+    "token_budget_exceeded",
+    "safety_injection_detected",
+    "safety_write_keyword",
+    "plan_tenant_override_blocked",
+    "plan_unsupported_filter",
+    "plan_invalid_intent",
+    "service_disabled",
+    "canary_gate_blocked",
+    "graph_unavailable",
+    "internal_error",
+    "safety_rejection",
+    "unsupported_intent",
+]
+
 NoesisSurface = Literal["kyber", "aether"]
 NoesisMode = Literal["deterministic", "llm_text_to_query", "fallback"]
 
@@ -62,6 +81,33 @@ INJECTION_PATTERNS: frozenset[str] = frozenset({
     "jailbreak", "dan", "bypass",
 })
 
+# ─── Evidence envelope ────────────────────────────────────────────────────
+
+
+class EvidenceSource(BaseModel):
+    service: str
+    resource_type: str
+    resource_id: Optional[str] = None
+    fetched_at: datetime
+    freshness_seconds: Optional[int] = None
+    confidence: Optional[float] = None
+
+
+class EvidenceClaim(BaseModel):
+    claim: str
+    claim_type: ClaimType
+    evidence_ids: list[str] = Field(default_factory=list)
+    confidence: float = Field(ge=0.0, le=1.0)
+
+
+class EvidenceEnvelope(BaseModel):
+    sources: list[EvidenceSource] = Field(default_factory=list)
+    claims: list[EvidenceClaim] = Field(default_factory=list)
+    sufficient: bool = True
+    insufficient_reason: Optional[str] = None
+    generated_at: Optional[datetime] = None
+
+
 # ─── Request / Response models ────────────────────────────────────────────
 
 
@@ -116,6 +162,8 @@ class NoesisResponse(BaseModel):
     query_debug: Optional[dict[str, Any]] = None
     warnings: list[str] = Field(default_factory=list)
     error: Optional[NoesisError] = None
+    evidence: EvidenceEnvelope = Field(default_factory=EvidenceEnvelope)
+    scope_summary: Optional[dict[str, Any]] = None
 
 
 class QueryPlan(BaseModel):

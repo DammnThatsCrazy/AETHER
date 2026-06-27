@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import uuid
 
 from fastapi import APIRouter, Depends, Request
@@ -13,6 +14,8 @@ from shared.common.common import APIResponse, BadRequestError, ForbiddenError, R
 from shared.graph.graph import GraphClient
 from shared.logger.logger import get_logger
 
+from .capability_registry import capabilities_for_surface
+from .flags import NoesisFlags
 from .models import NoesisQueryRequest
 from .service import NoesisService
 
@@ -35,7 +38,7 @@ async def query_noesis(
         analytics = AnalyticsRepository(get_cache())
         service = NoesisService(graph=graph, analytics=analytics)
         response = await service.query(body, request.state.tenant, request_id=request_id)
-        data = response.model_dump(exclude_none=True)
+        data = response.model_dump(mode="json", exclude_none=True)
         result = APIResponse(data=data).to_dict()
     except RateLimitedError as exc:
         retry_after = exc.details.get("retry_after_seconds", 60)
@@ -120,4 +123,64 @@ async def query_noesis_stream(
             "cache-control": "no-cache",
             "x-accel-buffering": "no",
         },
+    )
+
+
+@router.get("/capabilities")
+async def list_capabilities(request: Request):
+    """Return the Noesis capability registry filtered by the caller's surface.
+
+    Surface is inferred from the Host header: 'kyber' hosts see all capabilities
+    (including tenant_summary), 'aether' hosts see only aether-surface capabilities.
+    """
+    host = request.headers.get("host", "")
+    surface = "kyber" if "kyber" in host else "aether"
+    caps = capabilities_for_surface(surface)
+    return JSONResponse(content={
+        "surface": surface,
+        "capabilities": [
+            {
+                "intent": cap.intent,
+                "label": cap.label,
+                "description": cap.description,
+                "requires_target": cap.requires_target,
+                "example_prompts": cap.example_prompts,
+                "data_sources": cap.data_sources,
+            }
+            for cap in caps
+        ],
+        "count": len(caps),
+    })
+
+
+@router.get("/health")
+async def noesis_health(request: Request):
+    """Noesis readiness probe — no auth required.
+
+    Returns 200 when all critical dependencies are healthy, 503 when degraded.
+    """
+    flags = NoesisFlags()
+    cache = get_cache()
+
+    checks: dict[str, bool] = {
+        "noesis_enabled": flags.noesis_enabled,
+        "llm_provider_configured": not flags.llm_enabled or bool(
+            os.environ.get("ANTHROPIC_API_KEY") or os.environ.get("OPENAI_API_KEY")
+        ),
+    }
+
+    # Lightweight Redis connectivity check
+    try:
+        redis_ok = await cache.health_check()
+        checks["conversation_redis"] = redis_ok
+        checks["rate_limiter_redis"] = redis_ok
+    except Exception:
+        checks["conversation_redis"] = False
+        checks["rate_limiter_redis"] = False
+
+    status = "ok" if all(checks.values()) else "degraded"
+    status_code = 200 if status == "ok" else 503
+    return JSONResponse(
+        status_code=status_code,
+        content={"status": status, "checks": checks},
     )

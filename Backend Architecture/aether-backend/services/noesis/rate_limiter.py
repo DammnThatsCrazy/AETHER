@@ -4,8 +4,9 @@ Uses CacheClient (Redis in production, in-memory in dev) to enforce:
 - QPM (queries per minute) limit per tenant, keyed per UTC minute
 - Daily quota per tenant, keyed per calendar day
 
-Both limits increment atomically via CacheClient.incr. On any cache
-failure the request is allowed through and a warning is logged.
+Both limits use incr_if_under (Lua-backed atomic check+increment) so
+concurrent requests cannot both read count=0 and both slip through.
+On any cache failure the request is allowed through and a warning is logged.
 """
 
 from __future__ import annotations
@@ -48,16 +49,16 @@ class NoesisRateLimiter:
         return CacheKey.custom(f"noesis:rl:daily:{tenant_id}:{day}")
 
     async def check_and_increment(self, tenant_id: str) -> RateLimitState:
-        """Increment both counters and return current state.
+        """Atomically increment both counters and return current state.
 
         Raises RateLimitedError when QPM or daily quota is exceeded.
         On any cache failure, allows the request through.
         """
         try:
-            qpm_count = await self._cache.incr(self._qpm_key(tenant_id), ttl=_QPM_TTL)
-            daily_count = await self._cache.incr(self._daily_key(tenant_id), ttl=_DAILY_TTL)
-
-            if qpm_count > self._qpm_limit:
+            qpm_count, qpm_allowed = await self._cache.incr_if_under(
+                self._qpm_key(tenant_id), limit=self._qpm_limit, ttl=_QPM_TTL
+            )
+            if not qpm_allowed:
                 logger.warning(
                     "Noesis QPM rate limit exceeded",
                     extra={"tenant_id": tenant_id, "count": qpm_count, "limit": self._qpm_limit},
@@ -65,7 +66,10 @@ class NoesisRateLimiter:
                 metrics.increment("noesis_rate_limited", labels={"scope": "qpm"})
                 raise RateLimitedError(retry_after=60)
 
-            if daily_count > self._daily_limit:
+            daily_count, daily_allowed = await self._cache.incr_if_under(
+                self._daily_key(tenant_id), limit=self._daily_limit, ttl=_DAILY_TTL
+            )
+            if not daily_allowed:
                 logger.warning(
                     "Noesis daily quota exceeded",
                     extra={"tenant_id": tenant_id, "count": daily_count, "limit": self._daily_limit},

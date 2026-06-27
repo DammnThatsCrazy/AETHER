@@ -14,7 +14,7 @@ toc_depth: 3
 last_synced_commit: bf87315
 
 ---
-# Aether Backend API v8.10.0 — Endpoint Specification
+# Aether Backend API v8.11.0 — Endpoint Specification
 
 ## Overview
 

@@ -17,7 +17,7 @@ toc_depth: 3
 last_synced_commit: b8b0072
 ---
 
-# Aether React Native SDK v8.10.0 — Integration Guide
+# Aether React Native SDK v8.11.0 — Integration Guide
 
 ## Installation
 

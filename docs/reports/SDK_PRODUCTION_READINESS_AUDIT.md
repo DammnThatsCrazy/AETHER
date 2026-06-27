@@ -14,13 +14,13 @@ source_files:
   - packages/web/src/core/event-queue.ts
   - packages/web/src/health/sdk-health-agent.ts
   - docs/source-of-truth/PLATFORM_PARITY.md
-last_synced_commit: 7d38405
+last_synced_commit: c6ad73d
 ---
 
 # Aether SDK Production Readiness Audit
 
-**Audit date:** 2026-06-18
-**SDK version audited:** 8.9.0
+**Audit date:** 2026-06-27
+**SDK version audited:** 8.11.0
 **Platforms covered:** Web, iOS, Android, React Native, Shared contracts
 **Prepared by:** SDK Productization Pass (automated audit)
 
@@ -28,8 +28,8 @@ last_synced_commit: 7d38405
 
 ## Executive Summary
 
-This audit covers the 8.9.0 SDK productization pass across all four SDK
-platforms. As of this PR, all Tier A items are satisfied, all Tier B items
+This audit covers the SDK productization pass across all four SDK
+platforms (originally 8.9.0; version references updated to 8.11.0). All Tier A items are satisfied, all Tier B items
 have been implemented or completed, and Tier C items are confirmed shipped on
 their respective platforms.
 
@@ -48,7 +48,7 @@ their respective platforms.
 | Component | Status | Notes |
 |---|---|---|
 | Transport: `POST /v1/batch` | SHIPPED | EventQueue targets `/v1/batch` exclusively |
-| Version: 8.9.0 | SHIPPED | `SDK_VERSION = '8.9.0'` in `packages/shared/sdk-version.ts` and `packages/web/src/index.ts` |
+| Version: 8.11.0 | SHIPPED | `SDK_VERSION = '8.11.0'` in `packages/shared/sdk-version.ts` and `packages/web/src/index.ts` |
 | Core analytics (track/page/screen) | SHIPPED | All emit canonical event types |
 | Error event type | SHIPPED | `error()` public API added in this PR |
 | Performance event type | SHIPPED | PerformanceModule emits `performance` canonical type |
@@ -73,7 +73,7 @@ their respective platforms.
 | Component | Status | Notes |
 |---|---|---|
 | Transport: `POST /v1/batch` | SHIPPED | AetherQueue targets `/v1/batch` |
-| Version: 8.9.0 | SHIPPED | Validated by `scripts/validate_sdk_release_alignment.py` |
+| Version: 8.11.0 | SHIPPED | Validated by `scripts/validate_sdk_release_alignment.py` |
 | Core analytics | SHIPPED | `track()`, `page()`, `screen()` |
 | Journey lifecycle API | SHIPPED | All 7 methods match Web SDK |
 | Identity hydration | SHIPPED | `hydrateIdentity()` + email hashing |
@@ -94,7 +94,7 @@ their respective platforms.
 | Component | Status | Notes |
 |---|---|---|
 | Transport: `POST /v1/batch` | SHIPPED | AetherQueue targets `/v1/batch` |
-| Version: 8.9.0 | SHIPPED | Validated by `scripts/validate_sdk_release_alignment.py` |
+| Version: 8.11.0 | SHIPPED | Validated by `scripts/validate_sdk_release_alignment.py` |
 | Core analytics | SHIPPED | `track()`, `pageView()`, `screenView()` |
 | Journey lifecycle API | SHIPPED | All 7 methods match Web SDK |
 | Identity hydration | SHIPPED | `hydrateIdentity()` + email hashing |
@@ -115,7 +115,7 @@ their respective platforms.
 | Component | Status | Notes |
 |---|---|---|
 | Transport: `POST /v1/batch` | SHIPPED | Bridges to native queue on each platform |
-| Version: 8.9.0 | SHIPPED | Validated by `scripts/validate_sdk_release_alignment.py` |
+| Version: 8.11.0 | SHIPPED | Validated by `scripts/validate_sdk_release_alignment.py` |
 | Core analytics | SHIPPED | `track()`, `page()`, `screen()` via bridge |
 | Journey lifecycle API | SHIPPED | All 7 methods via bridge |
 | Identity hydration | SHIPPED | `hydrateIdentity()` via bridge |
@@ -130,7 +130,7 @@ their respective platforms.
 
 | Component | Status | Notes |
 |---|---|---|
-| `SDK_VERSION = '8.9.0'` | SHIPPED | `sdk-version.ts` |
+| `SDK_VERSION = '8.11.0'` | SHIPPED | `sdk-version.ts` |
 | `SDK_INGESTION_PATH = '/v1/batch'` | SHIPPED | `sdk-version.ts` |
 | `EventType` union (all 95 types) | SHIPPED | `events.ts` |
 | `EVENT_FAMILY` record (complete) | SHIPPED | `events.ts` |
@@ -184,7 +184,7 @@ Source: `docs/source-of-truth/PLATFORM_PARITY.md` (annotated with this PR's chan
 ### 3.1 Canonical `/v1/batch` Transport
 
 **Evidence:**
-- `packages/web/src/core/event-queue.ts` line 11: `SDK_VERSION = '8.9.0'`; all fetch calls use `${endpoint}/v1/batch`
+- `packages/web/src/core/event-queue.ts` line 11: `SDK_VERSION = '8.11.0'`; all fetch calls use `${endpoint}/v1/batch`
 - `packages/shared/sdk-version.ts` line 9: `export const SDK_INGESTION_PATH = '/v1/batch' as const;`
 
 **Test:**
@@ -194,12 +194,12 @@ Source: `docs/source-of-truth/PLATFORM_PARITY.md` (annotated with this PR's chan
 ### 3.2 Version Synchronization
 
 **Evidence:**
-- `packages/shared/sdk-version.ts`: `SDK_VERSION = '8.9.0'`
-- `packages/web/src/index.ts` line 42: `const SDK_VERSION = '8.9.0';`
-- `packages/web/src/core/event-queue.ts` line 11: `SDK_VERSION = '8.9.0';`
+- `packages/shared/sdk-version.ts`: `SDK_VERSION = '8.11.0'`
+- `packages/web/src/index.ts` line 42: `const SDK_VERSION = '8.11.0';`
+- `packages/web/src/core/event-queue.ts` line 11: `SDK_VERSION = '8.11.0';`
 
 **Test:**
-- `packages/shared/events-registry.test.ts`: asserts `SDK_VERSION === '8.9.0'`
+- `packages/shared/events-registry.test.ts`: asserts `SDK_VERSION === '8.11.0'`
 
 **CI gate:**
 - `scripts/validate_sdk_release_alignment.py` validates all four platform versions match

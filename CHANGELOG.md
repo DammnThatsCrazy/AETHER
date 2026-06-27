@@ -284,6 +284,33 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ---
 
+## [8.11.0] — 2026-06-26
+
+### Added — Noesis 5/5 Production Release
+
+- **Noesis evidence envelope** — Every intelligence query response now includes a typed `EvidenceEnvelope` with `EvidenceSource` provenance records (service, resource_type, fetched_at, confidence), `EvidenceClaim` classification (fact/computation/inference/recommendation), and an `insufficient: bool` signal when data is unavailable.
+- **Atomic rate limiting** — Replaced non-atomic QPM/daily Redis read-then-write with Lua `INCR_IF_UNDER` scripts; concurrent requests can no longer race past QPM limits.
+- **Atomic token budget** — Replaced silent broken `incr(key, amount=N)` call (ignored kwarg) with `incr_by_if_under` Lua atomics + `release()` on failure; token spend is now correctly tracked with rollback on error.
+- **SecurityAuditLedger integration** — `NoesisService._audit_log` now calls `AuditLedger.record()` producing SHA-256 chained tamper-evident audit entries for all 15 outcomes; falls back to logger if ledger unavailable.
+- **Startup configuration validator** — `NoesisStartupValidator` checks: LLM provider API key present when enabled, QPM/quota are positive integers, unknown providers rejected; wired into app lifespan.
+- **Capability registry** — `capability_registry.py` defines all 15 supported intents with labels, descriptions, example prompts, data sources, and surface filters; LLM system prompt is now auto-generated from registry; `GET /v1/noesis/capabilities` endpoint returns surface-filtered list.
+- **Health endpoint** — `GET /v1/noesis/health` returns `200 ok` or `503 degraded` with per-dependency check flags (noesis_enabled, llm_provider_configured, conversation_redis, rate_limiter_redis).
+- **Circuit breakers** — `NoesisCircuitBreaker` (CLOSED → OPEN → HALF_OPEN) wraps `graph.get_vertex`, `graph.get_neighbors`, `graph.get_edges`, and `provider.plan` calls; graph/provider failures return graceful fallbacks instead of 500s.
+- **Schema contract tests** — `tests/contracts/test_noesis_schema_contract.py` snapshots `NoesisResponse.model_json_schema()` and fails CI on field renames or type changes.
+- **Tenant isolation tests** — `tests/security/test_noesis_tenant_isolation.py` verifies zero cross-tenant data leakage for 6 intent categories; asserts LLM-injected cross-tenant `tenant_id` is rejected with `ForbiddenError`.
+- **Classifier evaluation suite** — `tests/evaluation/test_noesis_classifier_eval.py` runs 67 annotated `(message, expected_intent)` examples across all 15 intents; asserts ≥ 85% overall accuracy and ≥ 75% per-intent recall.
+- **Classifier improvements** — Added keywords: `connections` (graph_lookup), `failure`/`failures` (health_lookup), `anomalous` (risk_cluster_lookup), `summarize` (suggestion_summary), `need review` (suggestion_review_queue), `happened` (suggestion_outcome_lookup); fixed priority bug where high-confidence strong matches were overridden by low-confidence `entity_search`.
+- **anthropic SDK dependency** — Added `anthropic>=0.25` and `httpx>=0.27` to `[noesis]` optional group; Dockerfile and CI now install `.[all,noesis]`.
+- **Debug flag security fix** — `NOESIS_DEBUG_ENABLED` now defaults to `false` in production; auto-enables only when `AETHER_ENV=local`.
+- **Streaming datetime fix** — `query_stream` now uses `model_dump(mode="json")` to serialize `EvidenceEnvelope.generated_at` correctly; prevents silent stream errors.
+
+### Fixed
+
+- Token budget `release()` reduces reserved tokens on LLM provider failure, preventing false budget exhaustion.
+- `query_stream` safety and unsupported response paths now use `mode="json"` in `model_dump()` to prevent `datetime` serialization errors.
+
+---
+
 ## [8.10.0] — 2026-06-22
 
 ### Added — Capture-to-Intelligence Foundation Phase 2

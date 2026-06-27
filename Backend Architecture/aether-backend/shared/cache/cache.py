@@ -171,6 +171,34 @@ def _redis_url() -> str:
 
 
 # ═══════════════════════════════════════════════════════════════════════════
+# LUA SCRIPTS (Redis atomic operations)
+# ═══════════════════════════════════════════════════════════════════════════
+
+# KEYS[1]=key  ARGV[1]=ttl  ARGV[2]=limit
+# Returns {new_count, 1} if allowed, {new_count, 0} if over limit.
+_LUA_INCR_IF_UNDER = """\
+local count = redis.call('INCR', KEYS[1])
+if count == 1 then redis.call('EXPIRE', KEYS[1], ARGV[1]) end
+if count > tonumber(ARGV[2]) then return {count, 0} end
+return {count, 1}
+"""
+
+# KEYS[1]=key  ARGV[1]=ttl  ARGV[2]=amount  ARGV[3]=limit
+# Atomically reserves `amount` if current+amount <= limit.
+# Returns {new_val, 1} if reserved, {current, 0} if would exceed.
+_LUA_INCR_BY_IF_UNDER = """\
+local current = tonumber(redis.call('GET', KEYS[1])) or 0
+local amount = tonumber(ARGV[2])
+local limit = tonumber(ARGV[3])
+local new_val = current + amount
+if new_val > limit then return {current, 0} end
+local result = redis.call('INCRBY', KEYS[1], amount)
+if result == amount then redis.call('EXPIRE', KEYS[1], ARGV[1]) end
+return {result, 1}
+"""
+
+
+# ═══════════════════════════════════════════════════════════════════════════
 # IN-MEMORY BACKEND (local/dev only)
 # ═══════════════════════════════════════════════════════════════════════════
 
@@ -179,6 +207,7 @@ class _InMemoryBackend:
 
     def __init__(self) -> None:
         self._store: dict[str, tuple[str, Optional[float]]] = {}
+        self._lock: asyncio.Lock = asyncio.Lock()
 
     def _is_expired(self, key: str) -> bool:
         entry = self._store.get(key)
@@ -230,6 +259,43 @@ class _InMemoryBackend:
         new_val = int(entry[0]) + 1
         self._store[key] = (str(new_val), entry[1])
         return new_val
+
+    async def incr_if_under(self, key: str, limit: int, ttl: int = 60) -> tuple[int, bool]:
+        async with self._lock:
+            entry = self._store.get(key)
+            now = time.time()
+            if entry is None or (entry[1] is not None and now > entry[1]):
+                self._store[key] = ("1", now + ttl if ttl > 0 else None)
+                return (1, 1 <= limit)
+            new_val = int(entry[0]) + 1
+            self._store[key] = (str(new_val), entry[1])
+            return (new_val, new_val <= limit)
+
+    async def incr_by(self, key: str, amount: int, ttl: int = 0) -> int:
+        async with self._lock:
+            entry = self._store.get(key)
+            now = time.time()
+            if entry is None or (entry[1] is not None and now > entry[1]):
+                self._store[key] = (str(amount), now + ttl if ttl > 0 else None)
+                return amount
+            new_val = int(entry[0]) + amount
+            self._store[key] = (str(new_val), entry[1])
+            return new_val
+
+    async def incr_by_if_under(self, key: str, amount: int, limit: int, ttl: int = 0) -> tuple[int, bool]:
+        async with self._lock:
+            entry = self._store.get(key)
+            now = time.time()
+            if entry is None or (entry[1] is not None and now > entry[1]):
+                current, old_expires = 0, None
+            else:
+                current, old_expires = int(entry[0]), entry[1]
+            new_val = current + amount
+            if new_val > limit:
+                return (current, False)
+            expires_at = (now + ttl if ttl > 0 else None) if current == 0 else old_expires
+            self._store[key] = (str(new_val), expires_at)
+            return (new_val, True)
 
     async def ping(self) -> bool:
         return True
@@ -305,6 +371,27 @@ class _RedisBackend:
             pipe.expire(key, ttl)
         results = await pipe.execute()
         return results[0]
+
+    async def incr_if_under(self, key: str, limit: int, ttl: int = 60) -> tuple[int, bool]:
+        client = await self._ensure_connected()
+        result = await client.eval(_LUA_INCR_IF_UNDER, 1, key, str(ttl), str(limit))
+        count, allowed = result
+        return (int(count), bool(allowed))
+
+    async def incr_by(self, key: str, amount: int, ttl: int = 0) -> int:
+        client = await self._ensure_connected()
+        pipe = client.pipeline()
+        pipe.incrby(key, amount)
+        if ttl > 0:
+            pipe.expire(key, ttl)
+        results = await pipe.execute()
+        return int(results[0])
+
+    async def incr_by_if_under(self, key: str, amount: int, limit: int, ttl: int = 0) -> tuple[int, bool]:
+        client = await self._ensure_connected()
+        result = await client.eval(_LUA_INCR_BY_IF_UNDER, 1, key, str(ttl), str(amount), str(limit))
+        val, allowed = result
+        return (int(val), bool(allowed))
 
     async def ping(self) -> bool:
         try:
@@ -429,6 +516,40 @@ class _DynamoDBBackend:
 
         return await asyncio.get_event_loop().run_in_executor(None, _update)
 
+    async def incr_if_under(self, key: str, limit: int, ttl: int = 60) -> tuple[int, bool]:
+        new_count = await self.incr(key, ttl)
+        return (new_count, new_count <= limit)
+
+    async def incr_by(self, key: str, amount: int, ttl: int = 0) -> int:
+        expires_at = int(time.time()) + ttl if ttl > 0 else None
+        update_expr = "ADD cnt :amt"
+        expr_values: dict[str, Any] = {":amt": amount}
+        if expires_at is not None:
+            update_expr += " SET #t = if_not_exists(#t, :ttl)"
+            expr_values[":ttl"] = expires_at
+
+        def _update() -> int:
+            kwargs: dict[str, Any] = {
+                "Key": {"cache_key": key},
+                "UpdateExpression": update_expr,
+                "ExpressionAttributeValues": expr_values,
+                "ReturnValues": "ALL_NEW",
+            }
+            if expires_at is not None:
+                kwargs["ExpressionAttributeNames"] = {"#t": "ttl"}
+            resp = self._get_table().update_item(**kwargs)
+            return int(resp["Attributes"].get("cnt", amount))
+
+        return await asyncio.get_event_loop().run_in_executor(None, _update)
+
+    async def incr_by_if_under(self, key: str, amount: int, limit: int, ttl: int = 0) -> tuple[int, bool]:
+        new_val = await self.incr_by(key, amount, ttl)
+        if new_val > limit:
+            # Best-effort rollback — not truly atomic for DynamoDB
+            await self.incr_by(key, -amount, 0)
+            return (new_val - amount, False)
+        return (new_val, True)
+
     async def ping(self) -> bool:
         try:
             await self._run(lambda: self._get_table().table_status)
@@ -543,6 +664,24 @@ class CacheClient:
         if self._backend is None:
             await self.connect()
         return await self._backend.incr(key, ttl)  # type: ignore[union-attr]
+
+    async def incr_if_under(self, key: str, limit: int, ttl: int = 60) -> tuple[int, bool]:
+        """Atomically increment key and return (new_count, allowed). Allowed is False when new_count > limit."""
+        if self._backend is None:
+            await self.connect()
+        return await self._backend.incr_if_under(key, limit, ttl)  # type: ignore[union-attr]
+
+    async def incr_by(self, key: str, amount: int, ttl: int = 0) -> int:
+        """Atomically increment key by amount. Sets TTL only on first write when ttl > 0."""
+        if self._backend is None:
+            await self.connect()
+        return await self._backend.incr_by(key, amount, ttl)  # type: ignore[union-attr]
+
+    async def incr_by_if_under(self, key: str, amount: int, limit: int, ttl: int = 0) -> tuple[int, bool]:
+        """Atomically reserve amount if current+amount <= limit. Returns (new_val, True) or (current, False)."""
+        if self._backend is None:
+            await self.connect()
+        return await self._backend.incr_by_if_under(key, amount, limit, ttl)  # type: ignore[union-attr]
 
     async def health_check(self) -> bool:
         """Check if cache is reachable."""

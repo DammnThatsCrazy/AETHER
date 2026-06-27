@@ -425,6 +425,17 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     except Exception as e:  # pragma: no cover — defensive
         logger.warning(f"Dune polling worker skipped: {e}")
 
+    # Noesis startup validation
+    try:
+        from services.noesis.startup import NoesisStartupValidator
+        noesis_errors = NoesisStartupValidator().validate()
+        if noesis_errors:
+            for err in noesis_errors:
+                logger.error("Noesis startup validation failed: %s", err)
+            raise RuntimeError(f"Noesis startup validation failed: {'; '.join(noesis_errors)}")
+    except ImportError:
+        pass  # Noesis module not present in this build
+
     logger.info(
         f"Aether Backend started | env={settings.env.value} "
         f"| debug={settings.debug} | version={settings.api.version}"
