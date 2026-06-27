@@ -7,7 +7,7 @@ audience: [dev-senior, architect]
 source_files:
   - Backend Architecture/aether-backend/services/campaign/resolver.py
   - Backend Architecture/aether-backend/services/campaign/normalization.py
-last_synced_commit: 5712dac
+last_synced_commit: 7c85af5
 ---
 
 # Campaign Resolution Contract
