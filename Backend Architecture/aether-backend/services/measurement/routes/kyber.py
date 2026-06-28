@@ -275,20 +275,7 @@ async def campaign_fleet_health(request: Request):
     _require_kyber_tenant(request)
     try:
         from services.campaign.registry import CampaignRegistryService
-        from services.campaign.repository import (
-            CampaignRegistryRepository,
-            ExternalRefRepository,
-            AliasRepository,
-            MappingReviewRepository,
-        )
-        from repositories.repos import get_pool
-        pool = await get_pool()
-        registry = CampaignRegistryService(
-            campaign_repo=CampaignRegistryRepository(pool),
-            external_ref_repo=ExternalRefRepository(pool),
-            alias_repo=AliasRepository(pool),
-            review_repo=MappingReviewRepository(pool),
-        )
+        registry = CampaignRegistryService()
         # Registry quality is tenant-scoped; use requesting tenant as representative
         tenant = getattr(request.state, "tenant", None)
         quality = await registry.get_mapping_quality(tenant.tenant_id if tenant else "system")
@@ -311,20 +298,7 @@ async def campaign_tenant_health(tenant_id_param: str, request: Request):
 
     try:
         from services.campaign.registry import CampaignRegistryService
-        from services.campaign.repository import (
-            CampaignRegistryRepository,
-            ExternalRefRepository,
-            AliasRepository,
-            MappingReviewRepository,
-        )
-        from repositories.repos import get_pool
-        pool = await get_pool()
-        registry = CampaignRegistryService(
-            campaign_repo=CampaignRegistryRepository(pool),
-            external_ref_repo=ExternalRefRepository(pool),
-            alias_repo=AliasRepository(pool),
-            review_repo=MappingReviewRepository(pool),
-        )
+        registry = CampaignRegistryService()
         quality = await registry.get_mapping_quality(tenant_id_param)
         reviews = await registry.list_mapping_reviews(tenant_id_param, status="open", limit=20)
         return APIResponse(data={
@@ -353,12 +327,79 @@ async def campaign_tenant_reprocess(
         "campaign_reprocess_requested tenant=%s limit=%d dry_run=%s operator=%s",
         tenant_id_param, body.limit, body.dry_run, kyber_tenant.tenant_id,
     )
+
+    from shared.logger.logger import metrics as _metrics
+    _metrics.increment("campaign_reprocess_requested_total", labels={"tenant_id": tenant_id_param})
+
+    # Run bounded reprocessing inline as a background task so the HTTP response
+    # returns immediately while work proceeds.
+    import asyncio as _asyncio
+
+    async def _run_backfill():
+        try:
+            from repositories.repos import get_pool
+            from services.campaign.registry import CampaignRegistryService
+            from services.campaign.normalization import normalize_platform, normalize_external_id
+            pool = await get_pool()
+            if pool is None:
+                return
+            registry = CampaignRegistryService()
+            rows = await pool.fetch(
+                """
+                SELECT spend_record_id, tenant_id, platform, ad_account_id,
+                       campaign_id, external_campaign_id, source_connector_id
+                FROM spend_records
+                WHERE tenant_id = $1
+                  AND (campaign_resolution_status = 'not_applicable' OR campaign_resolution_status IS NULL)
+                ORDER BY spend_record_id
+                LIMIT $2
+                """,
+                tenant_id_param, body.limit,
+            )
+            resolved = 0
+            for row in rows:
+                if body.dry_run:
+                    resolved += 1
+                    continue
+                try:
+                    provider_id = row["external_campaign_id"] or str(row["campaign_id"] or "")
+                    if not provider_id:
+                        continue
+                    campaign = await registry.upsert_external_campaign(
+                        tenant_id=row["tenant_id"],
+                        platform=row["platform"] or "unknown",
+                        external_account_id=str(row["ad_account_id"] or ""),
+                        external_campaign_id=provider_id,
+                        source_connector_id=row["source_connector_id"],
+                    )
+                    await pool.execute(
+                        """
+                        UPDATE spend_records
+                        SET campaign_id = $1, external_campaign_id = $2,
+                            campaign_resolution_status = 'resolved',
+                            campaign_resolution_method = 'kyber_reprocess',
+                            campaign_resolution_version = '1.0'
+                        WHERE spend_record_id = $3
+                        """,
+                        str(campaign["campaign_id"]), provider_id, row["spend_record_id"],
+                    )
+                    resolved += 1
+                except Exception as exc:
+                    logger.warning("reprocess row failed: %s", exc)
+            _metrics.increment("campaign_reprocess_completed_total", labels={"tenant_id": tenant_id_param})
+            logger.info("campaign_reprocess_complete tenant=%s resolved=%d dry_run=%s", tenant_id_param, resolved, body.dry_run)
+        except Exception as exc:
+            _metrics.increment("campaign_reprocess_failed_total", labels={"tenant_id": tenant_id_param})
+            logger.error("campaign_reprocess_failed tenant=%s error=%s", tenant_id_param, exc)
+
+    _asyncio.ensure_future(_run_backfill())
+
     return APIResponse(data={
         "tenant_id": tenant_id_param,
         "limit": body.limit,
         "dry_run": body.dry_run,
-        "status": "queued",
-        "message": "Reprocessing job queued. Use the backfill script for large-scale reprocessing.",
+        "status": "running",
+        "message": "Reprocessing started in background. Monitor campaign_reprocess_completed_total metric.",
     }).to_dict()
 
 
@@ -373,20 +414,7 @@ async def campaign_audit_log(
     # This endpoint surfaces the most recent resolved reviews as an audit trail.
     try:
         from services.campaign.registry import CampaignRegistryService
-        from services.campaign.repository import (
-            CampaignRegistryRepository,
-            ExternalRefRepository,
-            AliasRepository,
-            MappingReviewRepository,
-        )
-        from repositories.repos import get_pool
-        pool = await get_pool()
-        registry = CampaignRegistryService(
-            campaign_repo=CampaignRegistryRepository(pool),
-            external_ref_repo=ExternalRefRepository(pool),
-            alias_repo=AliasRepository(pool),
-            review_repo=MappingReviewRepository(pool),
-        )
+        registry = CampaignRegistryService()
         tenant = getattr(request.state, "tenant", None)
         resolved = await registry.list_mapping_reviews(
             tenant.tenant_id if tenant else "system",

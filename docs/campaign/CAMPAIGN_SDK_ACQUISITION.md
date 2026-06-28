@@ -8,7 +8,7 @@ source_files:
   - packages/shared/acquisition-evidence.ts
   - packages/web/src/types.ts
   - packages/web/src/index.ts
-last_synced_commit: 0d8c5ee76e27caa09d3ce2fc49131737b8c7b8d3
+last_synced_commit: 5712dac
 ---
 
 # Campaign SDK Acquisition Evidence

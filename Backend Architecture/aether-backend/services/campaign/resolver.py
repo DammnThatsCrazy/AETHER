@@ -142,10 +142,10 @@ class CampaignResolver:
         result.normalized_evidence = {k: v for k, v in evidence.items() if v is not None}
 
         latency_ms = (time.monotonic() - t0) * 1000
-        metrics.histogram("campaign_resolution_latency", latency_ms)
+        metrics.observe("campaign_resolution_latency", latency_ms)
         metrics.increment(
             "campaign_resolution_total",
-            tags={"status": result.status, "method": result.method or "none"},
+            labels={"status": result.status, "method": result.method or "none"},
         )
         if result.status == "unresolved":
             metrics.increment("campaign_resolution_unresolved_total")
@@ -284,7 +284,7 @@ class CampaignResolver:
         Each evidence dict may contain the same keys as resolve_one kwargs.
         Returns results in the same order as evidences.
         """
-        metrics.histogram("campaign_resolution_batch_size", len(evidences))
+        metrics.observe("campaign_resolution_batch_size", len(evidences))
 
         # For now: parallel individual resolutions (batch DB optimisation via
         # AliasRepository.get_active_batch is applied when alias lookups dominate).

@@ -67,8 +67,7 @@ export function CampaignRegistryPage() {
 
   const { data, isLoading, error } = useCampaigns({ ...(status !== undefined ? { status } : {}), limit: 100 });
 
-  const raw = data as Record<string, unknown> | null;
-  const rows: Row[] = Array.isArray(raw?.campaigns) ? (raw!.campaigns as Row[]) : [];
+  const rows: Row[] = Array.isArray(data) ? (data as Row[]) : [];
 
   function setFilter(key: string, value: string | null) {
     const next = new URLSearchParams(searchParams);

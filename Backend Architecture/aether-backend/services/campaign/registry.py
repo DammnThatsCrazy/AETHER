@@ -109,7 +109,7 @@ class CampaignRegistryService:
                 source_connector_id=source_connector_id,
                 raw_metadata=raw_metadata,
             )
-            metrics.increment("campaign_registry_upsert_total", tags={"origin": "external", "action": "update"})
+            metrics.increment("campaign_registry_upsert_total", labels={"origin": "external", "action": "update"})
             return campaign or await self._campaigns.get_by_id_or_fail(tenant_id, existing_ref["campaign_id"])
 
         # 2. Create canonical campaign then external reference
@@ -157,7 +157,7 @@ class CampaignRegistryService:
             source_connector_id=source_connector_id,
         )
 
-        metrics.increment("campaign_registry_upsert_total", tags={"origin": "external", "action": "create"})
+        metrics.increment("campaign_registry_upsert_total", labels={"origin": "external", "action": "create"})
         logger.info(
             "campaign_registered",
             tenant_id=tenant_id,
@@ -194,7 +194,24 @@ class CampaignRegistryService:
             created_by="system",
             provenance=provenance,
         )
-        metrics.increment("campaign_alias_created_total", tags={"alias_type": ALIAS_TYPE_EXTERNAL_CAMPAIGN_ID})
+        metrics.increment("campaign_alias_created_total", labels={"alias_type": ALIAS_TYPE_EXTERNAL_CAMPAIGN_ID})
+
+        # Also register as a UTM_CAMPAIGN composite alias so the resolver's composite
+        # step can match SDK touchpoints that carry the provider campaign ID in utm_campaign
+        # (which tracking templates often do automatically).
+        utm_composite_normalized = alias_value_normalized  # same scoped composite key
+        await self._aliases.create(
+            tenant_id, campaign_id,
+            ALIAS_TYPE_UTM_CAMPAIGN,
+            external_campaign_id,
+            utm_composite_normalized,
+            platform=platform,
+            external_account_id=external_account_id,
+            source_connector_id=source_connector_id,
+            created_by="system",
+            provenance={**provenance, "auto_utm_alias": True},
+        )
+        metrics.increment("campaign_alias_created_total", labels={"alias_type": ALIAS_TYPE_UTM_CAMPAIGN})
 
     # ── Custom campaign creation ──────────────────────────────────────────────
 
@@ -225,7 +242,7 @@ class CampaignRegistryService:
             budget_usd=budget_usd,
             properties=properties or {},
         )
-        metrics.increment("campaign_registry_upsert_total", tags={"origin": "custom", "action": "create"})
+        metrics.increment("campaign_registry_upsert_total", labels={"origin": "custom", "action": "create"})
         logger.info("custom_campaign_created", tenant_id=tenant_id, campaign_id=str(campaign["campaign_id"]))
         return campaign
 
@@ -257,9 +274,9 @@ class CampaignRegistryService:
             created_by=created_by, provenance=provenance or {},
         )
         if result:
-            metrics.increment("campaign_alias_created_total", tags={"alias_type": alias_type})
+            metrics.increment("campaign_alias_created_total", labels={"alias_type": alias_type})
         else:
-            metrics.increment("campaign_alias_conflict_total", tags={"alias_type": alias_type})
+            metrics.increment("campaign_alias_conflict_total", labels={"alias_type": alias_type})
         return result
 
     async def expire_alias(self, tenant_id: str, alias_id: UUID) -> bool:
@@ -307,7 +324,7 @@ class CampaignRegistryService:
         review = await self._reviews.get_or_create_open(
             tenant_id, evidence_hash, evidence, candidate_campaign_ids or []
         )
-        metrics.gauge("campaign_mapping_review_open", 1, tags={"tenant_id": tenant_id})
+        metrics.gauge("campaign_mapping_review_open", 1, labels={"tenant_id": tenant_id})
         return review
 
     async def resolve_review(
@@ -324,6 +341,23 @@ class CampaignRegistryService:
             raise ValueError(f"campaign {campaign_id} not found for tenant {tenant_id}")
         result = await self._reviews.resolve(tenant_id, review_id, campaign_id, resolved_by, note)
         if result:
+            # Create a durable alias from the review evidence so the same evidence
+            # resolves deterministically in future without creating another review.
+            evidence = result.get("evidence") or {}
+            utm_campaign = evidence.get("utm_campaign")
+            if utm_campaign:
+                normalized = normalize_utm_value(utm_campaign)
+                if normalized:
+                    await self._aliases.create(
+                        tenant_id, campaign_id,
+                        ALIAS_TYPE_UTM_CAMPAIGN,
+                        utm_campaign,
+                        normalized,
+                        platform=evidence.get("platform"),
+                        external_account_id=evidence.get("external_account_id"),
+                        created_by=resolved_by,
+                        provenance={"source": "mapping_review_resolution", "review_id": str(review_id)},
+                    )
             logger.info("mapping_review_resolved", tenant_id=tenant_id, review_id=str(review_id), campaign_id=str(campaign_id))
         return result
 
