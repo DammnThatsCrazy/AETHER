@@ -34,11 +34,11 @@ async def _http_get(url: str, headers: dict) -> tuple[int, dict]:
         return 0, {"error": str(exc)}
 
 
-async def _http_post(url: str, headers: dict, json: dict) -> tuple[int, dict]:
+async def _http_post(url: str, headers: dict, body: dict) -> tuple[int, dict]:
     try:
         import httpx
         async with httpx.AsyncClient(timeout=10) as client:
-            r = await client.post(url, headers=headers, json=json)
+            r = await client.post(url, headers=headers, json=body)
             return r.status_code, r.json() if r.content else {}
     except Exception as exc:
         return 0, {"error": str(exc)}

@@ -88,6 +88,104 @@ def _get_lifecycle_engine() -> LifecycleEngine:
     return LifecycleEngine(repo=_notif_repo, producer=producer, graph=graph)
 
 
+def _enqueue_notification_delivery(notif: Any) -> None:
+    """D7: After persisting a notification, create durable DeliveryIntent + DeliveryJobs.
+
+    Called synchronously from emit_notification() so the jobs are queued
+    before the API response is returned. Errors are logged but never raised
+    so the API response is always returned to the caller.
+    """
+    from services.notification_intelligence.consumer import _create_notification_delivery_jobs
+    try:
+        _create_notification_delivery_jobs(notif)
+    except Exception as exc:
+        logger.warning(f"_enqueue_notification_delivery failed notif={getattr(notif, 'notification_id', '?')!r}: {exc}")
+
+
+async def _create_delivery_jobs_for_replay(notif: Any) -> int:
+    """D5: Create DeliveryIntent + DeliveryJobs for replay. Returns jobs_queued count."""
+    try:
+        from repositories.repos import UserNotificationChannelRepository
+        from repositories.delivery_repos import DeliveryIntentRepository, DeliveryJobRepository
+        from services.delivery.models import (
+            DeliveryChannel, DeliveryIntent, DeliveryJob, DeliveryJobPriority,
+            generate_idempotency_key,
+        )
+        import uuid as _uuid
+
+        tenant_id = notif.tenant_id
+        notif_id = notif.notification_id
+
+        ch_repo = UserNotificationChannelRepository()
+        channels = await ch_repo.list_for_tenant(tenant_id, active_only=True)
+        if not channels:
+            return 0
+
+        intent_repo = DeliveryIntentRepository()
+        job_repo = DeliveryJobRepository()
+
+        severity = notif.severity.value if hasattr(notif.severity, "value") else str(notif.severity)
+        # Replay always gets a fresh intent key so it can re-queue even if one already exists
+        intent_key = generate_idempotency_key("notification-replay", notif_id, str(_uuid.uuid4()))
+
+        intent = DeliveryIntent(
+            tenant_id=tenant_id,
+            source_type="notification",
+            source_id=notif_id,
+            channels=[ch.get("channel_type", "notification") for ch in channels],
+            idempotency_key=intent_key,
+            metadata={"severity": severity, "title": notif.title, "replay": True},
+        )
+        await intent_repo.insert(intent.id, intent.model_dump())
+
+        prio_map = {"P0": DeliveryJobPriority.P0, "P1": DeliveryJobPriority.P1,
+                    "P2": DeliveryJobPriority.P2, "P3": DeliveryJobPriority.P3,
+                    "INFO": DeliveryJobPriority.INFO}
+        job_priority = prio_map.get(severity, DeliveryJobPriority.P3)
+
+        payload = {
+            "title": notif.title,
+            "body": notif.body or "",
+            "summary": notif.body or "",
+            "priority": severity,
+            "notification_id": notif_id,
+            "tenant_id": tenant_id,
+            "source": "notification-replay",
+        }
+
+        count = 0
+        for ch in channels:
+            channel_type = ch.get("channel_type", "notification")
+            try:
+                ch_enum = DeliveryChannel(channel_type)
+            except ValueError:
+                ch_enum = DeliveryChannel.NOTIFICATION
+
+            provider_config = {
+                **(ch.get("config") or {}),
+                "secret_ref": ch.get("credentials_ref"),
+                "channel_id": ch.get("destination") or ch.get("channel_id"),
+                "tenant_id": tenant_id,
+            }
+            job = DeliveryJob(
+                intent_id=intent.id,
+                tenant_id=tenant_id,
+                channel=ch_enum,
+                provider_adapter=channel_type,
+                priority=job_priority,
+                payload=payload,
+                provider_config=provider_config,
+            )
+            await job_repo.insert(job.id, job.model_dump())
+            count += 1
+
+        logger.info(f"Replay jobs queued: notification={notif_id!r} count={count}")
+        return count
+    except Exception as exc:
+        logger.error(f"_create_delivery_jobs_for_replay failed: {exc}")
+        return 0
+
+
 # ═══════════════════════════════════════════════════════════════════════════
 # INTELLIGENCE NOTIFICATIONS
 # ═══════════════════════════════════════════════════════════════════════════
@@ -125,6 +223,9 @@ async def emit_notification(body: EmitNotificationRequest, request: Request):
     notif_dict["id"] = notif.notification_id
     notif_dict["tenant_id"] = notif.tenant_id
     result = await _notif_repo.create(notif_dict)
+
+    # D7 fix: enqueue durable delivery jobs after persisting the notification
+    _enqueue_notification_delivery(notif)
 
     metrics.increment("aether_notifications_emitted_total",
                       labels={"tenant_id": body.tenant_id,
@@ -308,22 +409,24 @@ async def annotate_notification(
 
 @router.post("/intelligence/{notification_id}/replay")
 async def replay_notification(notification_id: str, request: Request, tenantId: str = Query(...)):
-    """Re-emit a notification event through the pipeline (e.g. retry propagation)."""
+    """Re-queue a notification for delivery by creating fresh DeliveryIntent + DeliveryJobs.
+
+    Returns 202 Accepted with jobs_queued count. The DeliveryWorker handles
+    actual dispatch asynchronously.
+    """
     _require(request, tenantId, "write")
     row = await _notif_repo.find_by_id(notification_id)
     if not row or row.get("tenant_id") != tenantId:
         raise NotFoundError(f"Notification {notification_id!r} not found")
-    # Re-deliver to channels
+
     from services.notification_intelligence.models import IntelligenceNotificationEvent
-    from services.notification_intelligence.delivery_router import DeliveryRouter
     notif = IntelligenceNotificationEvent(**{k: v for k, v in row.items() if k != "id"})
     notif.notification_id = row.get("id", notification_id)
-    router_inst = DeliveryRouter(channel_repo=_channel_repo)
-    results = await router_inst.route(notif)
-    return APIResponse(data={"replayed": True, "delivery_results": [
-        {"channel_type": r.channel_type, "success": r.success, "error": r.error}
-        for r in results
-    ]}).to_dict()
+
+    # D5 fix: use _create_notification_delivery_jobs() — creates durable DB records
+    # instead of fire-and-forget DeliveryRouter instantiated without providers_repo.
+    jobs_queued = await _create_delivery_jobs_for_replay(notif)
+    return APIResponse(data={"replayed": True, "jobs_queued": jobs_queued}, status_code=202).to_dict()
 
 
 # ═══════════════════════════════════════════════════════════════════════════
