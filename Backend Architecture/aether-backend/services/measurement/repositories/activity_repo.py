@@ -423,6 +423,80 @@ class ActivityRepository:
             )
         return [dict(r) for r in rows]
 
+    async def update_risk_annotation(
+        self,
+        tenant_id: str,
+        activity_id: str,
+        annotation: dict[str, Any],
+    ) -> None:
+        """Write fraud/risk annotation fields back to a canonical activity row."""
+        import json as _json
+        from datetime import datetime as _dt, timezone as _tz
+        from decimal import Decimal
+
+        pool = await self._pool()
+        idem_key = f"{tenant_id}:{activity_id}"
+
+        risk_score = annotation.get("risk_score")
+        if isinstance(risk_score, float):
+            risk_score = round(risk_score, 2)
+
+        if pool is None:
+            for key, row in _local_store.items():
+                if row.get("tenant_id") == tenant_id and str(row.get("activity_id", "")) == str(activity_id):
+                    row.update({
+                        "risk_score": risk_score,
+                        "risk_tier": annotation.get("risk_tier"),
+                        "fraud_status": annotation.get("fraud_status"),
+                        "fraud_disposition": annotation.get("fraud_disposition"),
+                        "fraud_decision_id": annotation.get("fraud_decision_id"),
+                        "fraud_network_ids": annotation.get("fraud_network_ids", []),
+                        "fraud_signal_types": annotation.get("fraud_signal_types", []),
+                        "fraud_evidence_refs": annotation.get("fraud_evidence_refs", []),
+                        "risk_evaluated_at": annotation.get("risk_evaluated_at"),
+                        "risk_model_version": annotation.get("risk_model_version"),
+                        "risk_policy_version": annotation.get("risk_policy_version"),
+                        "risk_explanation": annotation.get("risk_explanation"),
+                        "risk_evaluation_state": annotation.get("risk_evaluation_state", "not_evaluated"),
+                    })
+            return
+
+        async with pool.acquire() as conn:
+            await conn.execute(
+                """
+                UPDATE canonical_activity SET
+                    risk_score = $3,
+                    risk_tier = $4,
+                    fraud_status = $5,
+                    fraud_disposition = $6,
+                    fraud_decision_id = $7,
+                    fraud_network_ids = $8,
+                    fraud_signal_types = $9,
+                    fraud_evidence_refs = $10::jsonb,
+                    risk_evaluated_at = $11,
+                    risk_model_version = $12,
+                    risk_policy_version = $13,
+                    risk_explanation = $14,
+                    risk_evaluation_state = $15
+                WHERE tenant_id = $1 AND activity_id = $2
+                """,
+                tenant_id,
+                activity_id,
+                Decimal(str(risk_score)) if risk_score is not None else None,
+                annotation.get("risk_tier"),
+                annotation.get("fraud_status"),
+                annotation.get("fraud_disposition"),
+                annotation.get("fraud_decision_id"),
+                annotation.get("fraud_network_ids", []),
+                annotation.get("fraud_signal_types", []),
+                _json.dumps(annotation.get("fraud_evidence_refs", [])),
+                annotation.get("risk_evaluated_at"),
+                annotation.get("risk_model_version"),
+                annotation.get("risk_policy_version"),
+                annotation.get("risk_explanation"),
+                annotation.get("risk_evaluation_state", "not_evaluated"),
+            )
+
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 

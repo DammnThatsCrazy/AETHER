@@ -876,6 +876,56 @@
       ]
     },
     {
+      "name": "Fraud Decision Intelligence",
+      "topics": [
+        {
+          "member": "FRAUD_DECISION_CREATED",
+          "value": "aether.fraud.decision.created"
+        },
+        {
+          "member": "FRAUD_DECISION_SUPERSEDED",
+          "value": "aether.fraud.decision.superseded"
+        },
+        {
+          "member": "FRAUD_DECISION_REVIEWED",
+          "value": "aether.fraud.decision.reviewed"
+        },
+        {
+          "member": "FRAUD_DECISION_SUPPRESSED",
+          "value": "aether.fraud.decision.suppressed"
+        },
+        {
+          "member": "FRAUD_EVALUATION_TRIGGERED",
+          "value": "aether.fraud.evaluation.triggered"
+        },
+        {
+          "member": "FRAUD_EVALUATION_COMPLETED",
+          "value": "aether.fraud.evaluation.completed"
+        },
+        {
+          "member": "FRAUD_EVALUATION_FAILED",
+          "value": "aether.fraud.evaluation.failed"
+        },
+        {
+          "member": "RISK_ANNOTATION_UPDATED",
+          "value": "aether.risk.annotation.updated"
+        }
+      ]
+    },
+    {
+      "name": "Canonical Activity",
+      "topics": [
+        {
+          "member": "CANONICAL_ACTIVITY_INGESTED",
+          "value": "aether.canonical.activity.ingested"
+        },
+        {
+          "member": "CANONICAL_ACTIVITY_RISK_UPDATED",
+          "value": "aether.canonical.activity.risk_updated"
+        }
+      ]
+    },
+    {
       "name": "Dead letter",
       "topics": [
         {
@@ -1613,6 +1663,46 @@
     {
       "member": "RISK_OVERLAY_GENERATED",
       "value": "aether.risk.overlay.generated"
+    },
+    {
+      "member": "FRAUD_DECISION_CREATED",
+      "value": "aether.fraud.decision.created"
+    },
+    {
+      "member": "FRAUD_DECISION_SUPERSEDED",
+      "value": "aether.fraud.decision.superseded"
+    },
+    {
+      "member": "FRAUD_DECISION_REVIEWED",
+      "value": "aether.fraud.decision.reviewed"
+    },
+    {
+      "member": "FRAUD_DECISION_SUPPRESSED",
+      "value": "aether.fraud.decision.suppressed"
+    },
+    {
+      "member": "FRAUD_EVALUATION_TRIGGERED",
+      "value": "aether.fraud.evaluation.triggered"
+    },
+    {
+      "member": "FRAUD_EVALUATION_COMPLETED",
+      "value": "aether.fraud.evaluation.completed"
+    },
+    {
+      "member": "FRAUD_EVALUATION_FAILED",
+      "value": "aether.fraud.evaluation.failed"
+    },
+    {
+      "member": "RISK_ANNOTATION_UPDATED",
+      "value": "aether.risk.annotation.updated"
+    },
+    {
+      "member": "CANONICAL_ACTIVITY_INGESTED",
+      "value": "aether.canonical.activity.ingested"
+    },
+    {
+      "member": "CANONICAL_ACTIVITY_RISK_UPDATED",
+      "value": "aether.canonical.activity.risk_updated"
     },
     {
       "member": "DEAD_LETTER",
