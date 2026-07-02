@@ -308,6 +308,20 @@ class Topic(str, Enum):
     FLOW_TRACE_COMPLETED     = "aether.flow.trace.completed"
     RISK_OVERLAY_GENERATED   = "aether.risk.overlay.generated"
 
+    # Fraud Decision Intelligence
+    FRAUD_DECISION_CREATED    = "aether.fraud.decision.created"
+    FRAUD_DECISION_SUPERSEDED = "aether.fraud.decision.superseded"
+    FRAUD_DECISION_REVIEWED   = "aether.fraud.decision.reviewed"
+    FRAUD_DECISION_SUPPRESSED = "aether.fraud.decision.suppressed"
+    FRAUD_EVALUATION_TRIGGERED = "aether.fraud.evaluation.triggered"
+    FRAUD_EVALUATION_COMPLETED = "aether.fraud.evaluation.completed"
+    FRAUD_EVALUATION_FAILED    = "aether.fraud.evaluation.failed"
+    RISK_ANNOTATION_UPDATED    = "aether.risk.annotation.updated"
+
+    # Canonical Activity
+    CANONICAL_ACTIVITY_INGESTED = "aether.canonical.activity.ingested"
+    CANONICAL_ACTIVITY_RISK_UPDATED = "aether.canonical.activity.risk_updated"
+
     # Dead letter
     DEAD_LETTER = "aether.dlq"
 
