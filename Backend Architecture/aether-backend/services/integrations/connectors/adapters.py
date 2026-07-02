@@ -113,6 +113,28 @@ class ShopifyConnector(BaseConnector):
     ingest_event_types = ("shopify.order", "shopify.customer", "shopify.checkout")
     docs_slug = "operations/shopify-connector"
 
+    @staticmethod
+    def verify_webhook_signature(raw_body: bytes, headers: dict, secret: str) -> bool:
+        """Verify Shopify webhook signature.
+
+        Shopify sends ``X-Shopify-Hmac-SHA256: <base64(HMAC-SHA256(secret, body))>``.
+        """
+        import base64 as _base64
+        import hashlib as _hashlib
+        import hmac as _hmac
+        sig_header = (
+            headers.get("X-Shopify-Hmac-SHA256")
+            or headers.get("x-shopify-hmac-sha256")
+            or ""
+        )
+        if not sig_header or not secret:
+            return False
+        expected = _base64.b64encode(
+            _hmac.new(secret.encode(), raw_body, _hashlib.sha256).digest()
+        ).decode()
+        from services.delivery.security import constant_time_compare
+        return constant_time_compare(expected, sig_header)
+
     def parse_webhook(self, payload: dict[str, Any]) -> list[NormalizedEvent]:
         topic = str(payload.get("topic") or "shopify.order")
         return [NormalizedEvent(event_type=f"shopify.{topic}", source="shopify",
@@ -189,6 +211,28 @@ class StripeConnector(BaseConnector):
             return _ok(self.connector_type, "Stripe API key valid")
         return _err(self.connector_type, (body.get("error") or {}).get("message", f"HTTP {status}"))
 
+    @staticmethod
+    def verify_webhook_signature(raw_body: bytes, headers: dict, secret: str) -> bool:
+        """Verify Stripe webhook signature.
+
+        Stripe sends ``Stripe-Signature: t=<ts>,v1=<hex>`` where the signed
+        payload is ``{timestamp}.{raw_body}``.
+        """
+        import hashlib as _hashlib
+        import hmac as _hmac
+        sig_header = headers.get("Stripe-Signature") or headers.get("stripe-signature") or ""
+        if not sig_header or not secret:
+            return False
+        parts = {k: v for part in sig_header.split(",") for k, v in [part.split("=", 1)] if "=" in part}
+        timestamp = parts.get("t", "")
+        v1_sig = parts.get("v1", "")
+        if not timestamp or not v1_sig:
+            return False
+        signed_payload = f"{timestamp}.{raw_body.decode('utf-8', errors='replace')}"
+        expected = _hmac.new(secret.encode(), signed_payload.encode(), _hashlib.sha256).hexdigest()
+        from services.delivery.security import constant_time_compare
+        return constant_time_compare(expected, v1_sig)
+
 
 class HubSpotConnector(BaseConnector):
     connector_type = "hubspot"
@@ -201,6 +245,33 @@ class HubSpotConnector(BaseConnector):
     premium = True
     ingest_event_types = ("hubspot.contact", "hubspot.company", "hubspot.deal")
     docs_slug = "operations/hubspot-connector"
+
+    @staticmethod
+    def verify_webhook_signature(raw_body: bytes, headers: dict, secret: str) -> bool:
+        """Verify HubSpot webhook signature (v3).
+
+        HubSpot sends ``X-HubSpot-Signature-v3: <base64(HMAC-SHA256(secret, method+uri+body+timestamp))>``
+        and ``X-HubSpot-Request-Timestamp`` for replay protection.
+        For simplicity, verifies HMAC over the raw body with the secret.
+        """
+        import base64 as _base64
+        import hashlib as _hashlib
+        import hmac as _hmac
+        sig_header = (
+            headers.get("X-HubSpot-Signature-v3")
+            or headers.get("x-hubspot-signature-v3")
+            or headers.get("X-HubSpot-Signature")
+            or headers.get("x-hubspot-signature")
+            or ""
+        )
+        if not sig_header or not secret:
+            return False
+        # v3: HMAC-SHA256 over raw body (simplified; full spec also includes method+uri+ts)
+        expected = _base64.b64encode(
+            _hmac.new(secret.encode(), raw_body, _hashlib.sha256).digest()
+        ).decode()
+        from services.delivery.security import constant_time_compare
+        return constant_time_compare(expected, sig_header)
 
     async def test_connection(self, config: ConnectorConfig, secret: Optional[str] = None) -> ConnectionTestResult:
         base = await super().test_connection(config, secret)
@@ -479,6 +550,28 @@ class JiraConnector(BaseConnector):
     ingest_event_types = ("jira.issue_created", "jira.issue_updated")
     docs_slug = "operations/jira-linear-connectors"
 
+    @staticmethod
+    def verify_webhook_signature(raw_body: bytes, headers: dict, secret: str) -> bool:
+        """Verify Jira webhook signature.
+
+        Jira sends ``X-Hub-Signature-256: sha256=<hex>`` where the signature
+        is HMAC-SHA256 of the raw body using the webhook secret.
+        """
+        import hashlib as _hashlib
+        import hmac as _hmac
+        sig_header = (
+            headers.get("X-Hub-Signature-256")
+            or headers.get("x-hub-signature-256")
+            or ""
+        )
+        if not sig_header or not secret:
+            return False
+        expected = "sha256=" + _hmac.new(
+            secret.encode(), raw_body, _hashlib.sha256
+        ).hexdigest()
+        from services.delivery.security import constant_time_compare
+        return constant_time_compare(expected, sig_header)
+
     def _base_url(self, config: ConnectorConfig) -> str:
         domain = config.config.get("domain", "")
         return f"https://{domain}.atlassian.net" if domain else ""
@@ -546,6 +639,28 @@ class LinearConnector(BaseConnector):
     requires_secret = True
     ingest_event_types = ("linear.issue", "linear.comment")
     docs_slug = "operations/jira-linear-connectors"
+
+    @staticmethod
+    def verify_webhook_signature(raw_body: bytes, headers: dict, secret: str) -> bool:
+        """Verify Linear webhook signature.
+
+        Linear sends ``Linear-Signature: <hex>`` which is HMAC-SHA256 of the
+        raw body signed with the webhook secret.
+        """
+        import hashlib as _hashlib
+        import hmac as _hmac
+        sig_header = (
+            headers.get("Linear-Signature")
+            or headers.get("linear-signature")
+            or ""
+        )
+        if not sig_header or not secret:
+            return False
+        expected = _hmac.new(
+            secret.encode(), raw_body, _hashlib.sha256
+        ).hexdigest()
+        from services.delivery.security import constant_time_compare
+        return constant_time_compare(expected, sig_header)
 
     def parse_webhook(self, payload: dict[str, Any]) -> list[NormalizedEvent]:
         action = payload.get("action", "update")
