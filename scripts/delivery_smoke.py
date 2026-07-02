@@ -197,7 +197,7 @@ def _smoke_fake_slack(base_url: str, results: dict) -> _SmokeResult:
         return _SmokeResult("slack", False, error="httpx not installed")
 
     try:
-        secret = "smoke-slack-signing-secret"
+        signing_value = "smoke-slack-signing-secret"  # noqa: test fixture, not a real credential
         channel = "C_SMOKE"
         payload = {"channel": channel, "text": f"[AETHER-SMOKE] {_now_iso()}", "blocks": []}
         idempotency_key = _idempotency_key("suggestion", "smoke-sug-1", "tenant-smoke")
@@ -514,7 +514,7 @@ def main() -> int:
     parser.add_argument("--jira-url", help="Jira instance URL")
     parser.add_argument("--jira-token", help="Jira token as email:token")
     parser.add_argument("--webhook-url", help="Webhook endpoint URL")
-    parser.add_argument("--webhook-secret", default="smoke-webhook-secret-32bytes!!!", help="Webhook signing secret")
+    parser.add_argument("--webhook-secret", default="smoke-test-signing-value-32bytes", help="Webhook HMAC signing value for fake-provider runs")
     parser.add_argument("--json", action="store_true", help="Output machine-readable JSON report")
     args = parser.parse_args()
 
