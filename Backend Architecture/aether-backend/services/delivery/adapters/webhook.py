@@ -49,8 +49,6 @@ def _check_ssrf(url: str) -> None:
     if not hostname:
         raise SSRFBlockedError(f"Cannot parse hostname from URL: {url!r}")
     try:
-        _, _, addresses = socket.getaddrinfo(hostname, None, socket.AF_UNSPEC, socket.SOCK_STREAM)[0][:3] + ([],)
-        # getaddrinfo returns (family, type, proto, canonname, sockaddr)
         infos = socket.getaddrinfo(hostname, None)
     except socket.gaierror as exc:
         raise SSRFBlockedError(f"DNS resolution failed for {hostname!r}: {exc}")
@@ -88,9 +86,10 @@ class WebhookAdapter(ProviderAdapter):
         credential: Optional[str] = None,
         idempotency_key: Optional[str] = None,
     ) -> AdapterReceipt:
-        url = provider_config.get("url") or provider_config.get("webhook_url")
+        # URL may be in provider_config OR in credential (vault-backed channels)
+        url = provider_config.get("url") or provider_config.get("webhook_url") or credential
         if not url:
-            raise ConfigurationError("WebhookAdapter requires provider_config.url")
+            raise ConfigurationError("WebhookAdapter requires provider_config.url or a vault-backed URL credential")
         if not url.startswith("https://"):
             raise ConfigurationError(
                 f"WebhookAdapter only supports HTTPS URLs, got: {url!r}"
@@ -129,6 +128,7 @@ class WebhookAdapter(ProviderAdapter):
                 data=body_bytes,
                 timeout=aiohttp.ClientTimeout(total=20),
                 ssl=True,
+                allow_redirects=False,
             ) as resp:
                 status = resp.status
                 try:

@@ -1412,18 +1412,21 @@ export const api = {
       }).then(r => r.data),
   },
 
-  // ─── Delivery — outbox, jobs, receipts, attempts (tenant-scoped) ──────────
+  // ─── Delivery — outbox, jobs, receipts (tenant-scoped) ───────────────────
   delivery: {
     listIntents: (params: Record<string, string | number | undefined> = {}) =>
       restClient.get(`/v1/delivery/intents${buildQS(params as Record<string, string | number | boolean | undefined>)}`, wrap(unknownSchema)).then(r => r.data),
     listJobs: (params: Record<string, string | number | undefined> = {}) =>
       restClient.get(`/v1/delivery/jobs${buildQS(params as Record<string, string | number | boolean | undefined>)}`, wrap(unknownSchema)).then(r => r.data),
-    getReceipt: (jobId: string) =>
-      restClient.get(`/v1/delivery/jobs/${jobId}/receipt`, wrap(unknownSchema)).then(r => r.data),
-    listAttempts: (jobId: string) =>
-      restClient.get(`/v1/delivery/jobs/${jobId}/attempts`, wrap(unknownSchema)).then(r => r.data),
-    listLinks: (params: Record<string, string | number | undefined> = {}) =>
-      restClient.get(`/v1/delivery/links${buildQS(params as Record<string, string | number | boolean | undefined>)}`, wrap(unknownSchema)).then(r => r.data),
+    // GET /v1/delivery/jobs/{id} returns { job, attempts } inline — no separate attempts endpoint
+    getJob: (jobId: string, tenantId: string) =>
+      restClient.get(`/v1/delivery/jobs/${encodeURIComponent(jobId)}?tenantId=${encodeURIComponent(tenantId)}`, wrap(unknownSchema)).then(r => r.data),
+    // GET /v1/delivery/receipts — pass intent_id to filter by intent
+    listReceipts: (params: Record<string, string | number | undefined> = {}) =>
+      restClient.get(`/v1/delivery/receipts${buildQS(params as Record<string, string | number | boolean | undefined>)}`, wrap(unknownSchema)).then(r => r.data),
+    // GET /v1/delivery/intents/{id}/receipts — receipts + external links for an intent
+    getIntentReceipts: (intentId: string, tenantId: string) =>
+      restClient.get(`/v1/delivery/intents/${encodeURIComponent(intentId)}/receipts?tenantId=${encodeURIComponent(tenantId)}`, wrap(unknownSchema)).then(r => r.data),
   },
 };
 

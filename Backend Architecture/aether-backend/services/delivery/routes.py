@@ -8,6 +8,7 @@ from __future__ import annotations
 from typing import Any, Optional
 
 from fastapi import APIRouter, Query, Request, Response
+from fastapi.responses import JSONResponse
 
 from shared.common.common import APIResponse, ForbiddenError, NotFoundError
 from shared.logger.logger import get_logger
@@ -182,7 +183,7 @@ async def ingest_outcome(
         raw_payload=body,
     )
     stored = await _outcome_repo.insert(event.id, event.model_dump())
-    return APIResponse(data=stored, status_code=201).to_dict()
+    return JSONResponse(status_code=201, content=APIResponse(data=stored).to_dict())
 
 
 @router.get("/outcomes")
@@ -235,3 +236,75 @@ async def get_intent_jobs(
         raise NotFoundError(f"DeliveryIntent {intent_id!r} not found")
     jobs = await _job_repo.find_for_intent(intent_id, tenantId)
     return APIResponse(data=jobs).to_dict()
+
+
+# ─── Replay (re-queue dead-letter job) ──────────────────────────────────────
+
+@router.post("/jobs/{job_id}/replay")
+async def replay_job(
+    job_id: str,
+    request: Request,
+    tenantId: str = Query(...),
+):
+    """Re-queue a dead-letter DeliveryJob for another attempt.
+
+    Resets attempt_count to 0, clears last_error, and moves the job back to
+    QUEUED. Requires write permission. Only valid for DEAD_LETTER jobs.
+    """
+    _require(request, tenantId, "write")
+    from datetime import datetime, timezone
+    job = await _job_repo.find_by_id(job_id)
+    if not job or job.get("tenant_id") != tenantId:
+        raise NotFoundError(f"DeliveryJob {job_id!r} not found")
+    if job.get("state") != "dead_letter":
+        return APIResponse(
+            data={"replayed": False, "reason": f"job is in state {job.get('state')!r}, expected dead_letter"}
+        ).to_dict()
+    updated = await _job_repo.update(job_id, {
+        "state": "queued",
+        "attempt_count": 0,
+        "last_error": None,
+        "next_attempt_at": None,
+        "leased_by": None,
+        "lease_expires_at": None,
+        "updated_at": datetime.now(timezone.utc).isoformat(),
+    })
+    logger.info("delivery_job_replayed id=%s tenant=%s", job_id, tenantId)
+    return APIResponse(data={"replayed": True, "job": updated}).to_dict()
+
+
+# ─── Admin: cross-tenant operator routes ────────────────────────────────────
+# These routes require operator (Kyber) credentials. No tenantId filter applied.
+
+admin_router = APIRouter(prefix="/v1/admin/delivery", tags=["Delivery (Admin)"])
+
+
+def _require_operator(request: Request) -> None:
+    """Verify the caller has operator-level access (Kyber service account)."""
+    tenant = request.state.tenant
+    tenant.require_permission("operator")
+
+
+@admin_router.get("/jobs")
+async def admin_list_jobs(
+    request: Request,
+    state: Optional[str] = Query(None),
+    tenant_id: Optional[str] = Query(None),
+    provider_adapter: Optional[str] = Query(None),
+    limit: int = Query(default=50, ge=1, le=200),
+    offset: int = Query(default=0, ge=0),
+    page: int = Query(default=1, ge=1),
+):
+    """Cross-tenant DeliveryJob listing for Kyber operators."""
+    _require_operator(request)
+    filters: dict[str, Any] = {}
+    if state:
+        filters["state"] = state
+    if tenant_id:
+        filters["tenant_id"] = tenant_id
+    if provider_adapter:
+        filters["provider_adapter"] = provider_adapter
+    # Support both offset and page-based pagination
+    effective_offset = offset if offset else (page - 1) * limit
+    results = await _job_repo.find_many(filters=filters, limit=limit, offset=effective_offset)
+    return APIResponse(data={"items": results}).to_dict()

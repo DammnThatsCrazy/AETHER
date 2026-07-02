@@ -202,7 +202,7 @@ class ConnectorService:
         except Exception as exc:
             logger.warning(f"connector pull failed tenant={tenant_id} type={connector_type}: {exc}")
             events = []
-            status = "error"
+            status = "failed"
             error_detail = str(exc)[:500]
         # Persist sync status and error history (connector health signal).
         config.last_synced_at = now_iso()

@@ -1605,10 +1605,11 @@ export const api = {
         restClient.post(`/v1/suggestions/${suggestionId}/suppress`, wrap(unknownSchema), body).then(r => r.data),
 
       // ── Delivery operations (cross-tenant, operator-only) ─────────────────
+      // Uses /v1/admin/delivery/jobs — no tenantId required, operator auth
       listDeliveryJobs: (params?: Record<string, string | number | undefined>) =>
-        restClient.get(`/v1/delivery/jobs${buildQS({ ...params })}`, wrap(unknownSchema)).then(r => r.data),
-      replayDeliveryJob: (jobId: string) =>
-        restClient.post(`/v1/delivery/jobs/${encodeURIComponent(jobId)}/replay`, wrap(unknownSchema), {}).then(r => r.data),
+        restClient.get(`/v1/admin/delivery/jobs${buildQS({ ...params })}`, wrap(unknownSchema)).then(r => r.data),
+      replayDeliveryJob: (jobId: string, tenantId: string) =>
+        restClient.post(`/v1/delivery/jobs/${encodeURIComponent(jobId)}/replay?tenantId=${encodeURIComponent(tenantId)}`, wrap(unknownSchema), {}).then(r => r.data),
     },
   },
 

@@ -68,7 +68,12 @@ class DeliveryJobRepository(BaseRepository):
                 if len(results) >= batch_size:
                     break
                 state = job.get("state", "")
-                if state not in ("queued", "failed"):
+                lease_expires_at = job.get("lease_expires_at", "")
+                # Reclaim expired leases so crashed-worker jobs are not stranded forever
+                expired_lease = (
+                    state == "leased" and lease_expires_at and lease_expires_at <= now_str
+                )
+                if not expired_lease and state not in ("queued", "failed"):
                     continue
                 next_at = job.get("next_attempt_at", "")
                 if next_at and next_at > now_str:
@@ -102,7 +107,13 @@ class DeliveryJobRepository(BaseRepository):
                 WHERE id IN (
                     SELECT id FROM delivery_jobs
                     WHERE
-                        data->>'state' IN ('queued', 'failed')
+                        (
+                            data->>'state' IN ('queued', 'failed')
+                            OR (
+                                data->>'state' = 'leased'
+                                AND (data->>'lease_expires_at')::timestamptz <= NOW()
+                            )
+                        )
                         AND (data->>'next_attempt_at' IS NULL
                              OR (data->>'next_attempt_at')::timestamptz <= NOW())
                     ORDER BY
@@ -203,6 +214,50 @@ class ExternalOutcomeEventRepository(BaseRepository):
 class WebhookInboxRepository(BaseRepository):
     def __init__(self) -> None:
         super().__init__("webhook_inbox")
+        import asyncio
+        self._claim_lock = asyncio.Lock()
+
+    async def claim_pending(self, limit: int = 20) -> list[dict[str, Any]]:
+        """Atomically claim unprocessed inbox records for processing.
+
+        Uses SELECT FOR UPDATE SKIP LOCKED in PostgreSQL mode, and a local
+        asyncio lock in in-memory mode to prevent duplicate processing.
+        """
+        pool = await self._ensure_pool()
+        if pool is None:
+            # In-memory mode: use asyncio lock to cooperatively claim records
+            async with self._claim_lock:
+                results = []
+                for record in list(self._store.values()):
+                    if record.get("processed") or record.get("processing"):
+                        continue
+                    record["processing"] = True
+                    record["processing_started_at"] = _now_iso()
+                    results.append(dict(record))
+                    if len(results) >= limit:
+                        break
+                return results
+
+        # PostgreSQL mode: SELECT FOR UPDATE SKIP LOCKED
+        await self._ensure_table()
+        rows = await pool.fetch(
+            f"""
+            UPDATE {self.table_name}
+            SET data = data || '{{"processing": true, "processing_started_at": "{_now_iso()}"}}'
+            WHERE id IN (
+                SELECT id FROM {self.table_name}
+                WHERE (data->>'processed')::boolean IS NOT TRUE
+                  AND (data->>'processing')::boolean IS NOT TRUE
+                ORDER BY created_at ASC
+                LIMIT $1
+                FOR UPDATE SKIP LOCKED
+            )
+            RETURNING data
+            """,
+            limit,
+        )
+        import json as _json
+        return [_json.loads(r["data"]) for r in rows]
 
     async def find_unprocessed(
         self, provider: str, limit: int = 50
@@ -215,7 +270,7 @@ class WebhookInboxRepository(BaseRepository):
     async def mark_processed(
         self, record_id: str, *, error: Optional[str] = None
     ) -> None:
-        update = {"processed": True, "updated_at": _now_iso()}
+        update = {"processed": True, "processing": False, "updated_at": _now_iso()}
         if error:
             update["processing_error"] = error
         await self.update(record_id, update)

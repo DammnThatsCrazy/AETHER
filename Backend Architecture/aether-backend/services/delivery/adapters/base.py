@@ -158,6 +158,8 @@ class ProviderAdapterRegistry:
         from services.delivery.adapters.marketing import MarketingAdapter
         from services.delivery.adapters.ticketing import TicketingAdapter
         from services.delivery.adapters.agent_assist import AgentAssistAdapter
+        from services.delivery.adapters.discord import DiscordAdapter
+        from services.delivery.adapters.telegram import TelegramAdapter
 
         registry = cls()
         registry.register(SlackAdapter())
@@ -168,4 +170,6 @@ class ProviderAdapterRegistry:
         registry.register(MarketingAdapter())
         registry.register(TicketingAdapter())
         registry.register(AgentAssistAdapter())
+        registry.register(DiscordAdapter())
+        registry.register(TelegramAdapter())
         return registry

@@ -387,44 +387,125 @@ def _smoke_fake_webhook(base_url: str, secret: str, results: dict) -> _SmokeResu
 # Credentialed smoke tests
 # ---------------------------------------------------------------------------
 
-def _smoke_real_slack(token: str) -> _SmokeResult:
+def _smoke_real_slack(token: str, channel: str = "#general") -> _SmokeResult:
     try:
         import httpx
     except ImportError:
         return _SmokeResult("slack", False, error="httpx not installed")
 
     try:
-        resp = httpx.get(
+        # Step 1: verify credentials
+        auth_resp = httpx.get(
             "https://slack.com/api/auth.test",
             headers={"Authorization": f"Bearer {token}"},
             timeout=10,
         )
-        body = resp.json()
-        if not body.get("ok"):
-            return _SmokeResult("slack", False, error=f"auth.test failed: {body.get('error')}")
-        return _SmokeResult("slack", True, details={"team": body.get("team"), "user": body.get("user")})
+        auth_body = auth_resp.json()
+        if not auth_body.get("ok"):
+            return _SmokeResult("slack", False, error=f"auth.test failed: {auth_body.get('error')}")
+
+        # Step 2: send a real test message and capture the receipt
+        import datetime
+        ts_label = datetime.datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ")
+        msg_resp = httpx.post(
+            "https://slack.com/api/chat.postMessage",
+            json={
+                "channel": channel,
+                "text": f"[AETHER-SMOKE-TEST {ts_label}] Delivery smoke test — please disregard.",
+            },
+            headers={"Authorization": f"Bearer {token}"},
+            timeout=10,
+        )
+        msg_body = msg_resp.json()
+        if not msg_body.get("ok"):
+            return _SmokeResult("slack", False, error=f"chat.postMessage failed: {msg_body.get('error')}")
+
+        ch = msg_body.get("channel", "")
+        ts = msg_body.get("ts", "")
+        if not ch or not ts:
+            return _SmokeResult("slack", False, error=f"Missing channel/ts in response: {msg_body}")
+
+        external_id = f"{ch}:{ts}"
+        return _SmokeResult(
+            "slack", True,
+            external_id=external_id,
+            details={"team": auth_body.get("team"), "channel": ch, "ts": ts},
+        )
     except Exception as exc:
         return _SmokeResult("slack", False, error=str(exc))
 
 
-def _smoke_real_linear(api_key: str) -> _SmokeResult:
+def _smoke_real_linear(api_key: str, team_id: str = "") -> _SmokeResult:
     try:
         import httpx
     except ImportError:
         return _SmokeResult("linear", False, error="httpx not installed")
 
+    headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
+
     try:
-        resp = httpx.post(
+        # Step 1: verify credentials
+        auth_resp = httpx.post(
             "https://api.linear.app/graphql",
             json={"query": "{ viewer { id name } }"},
-            headers={"Authorization": f"Bearer {api_key}"},
+            headers=headers,
             timeout=10,
         )
-        body = resp.json()
-        if "errors" in body:
-            return _SmokeResult("linear", False, error=str(body["errors"]))
-        viewer = body.get("data", {}).get("viewer", {})
-        return _SmokeResult("linear", True, details={"name": viewer.get("name"), "id": viewer.get("id")})
+        auth_body = auth_resp.json()
+        if "errors" in auth_body:
+            return _SmokeResult("linear", False, error=str(auth_body["errors"]))
+        viewer = auth_body.get("data", {}).get("viewer", {})
+
+        # Step 2: get a team_id if not provided
+        if not team_id:
+            teams_resp = httpx.post(
+                "https://api.linear.app/graphql",
+                json={"query": "{ teams { nodes { id name } } }"},
+                headers=headers,
+                timeout=10,
+            )
+            teams_body = teams_resp.json()
+            teams = teams_body.get("data", {}).get("teams", {}).get("nodes", [])
+            if not teams:
+                return _SmokeResult("linear", False, error="No Linear teams found — cannot create test issue")
+            team_id = teams[0]["id"]
+
+        # Step 3: create a real test issue and capture the external_id
+        import datetime
+        ts_label = datetime.datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ")
+        mutation = """
+        mutation CreateIssue($teamId: String!, $title: String!) {
+            issueCreate(input: { teamId: $teamId, title: $title }) {
+                success
+                issue { id identifier url }
+            }
+        }
+        """
+        create_resp = httpx.post(
+            "https://api.linear.app/graphql",
+            json={
+                "query": mutation,
+                "variables": {
+                    "teamId": team_id,
+                    "title": f"[AETHER-SMOKE-TEST {ts_label}] Delivery smoke test — please close/delete",
+                },
+            },
+            headers=headers,
+            timeout=10,
+        )
+        create_body = create_resp.json()
+        if "errors" in create_body:
+            return _SmokeResult("linear", False, error=str(create_body["errors"]))
+        issue_create = create_body.get("data", {}).get("issueCreate", {})
+        if not issue_create.get("success"):
+            return _SmokeResult("linear", False, error=f"issueCreate returned success=false: {create_body}")
+        issue = issue_create.get("issue", {})
+        return _SmokeResult(
+            "linear", True,
+            external_id=issue.get("id", ""),
+            external_url=issue.get("url"),
+            details={"viewer": viewer.get("name"), "identifier": issue.get("identifier")},
+        )
     except Exception as exc:
         return _SmokeResult("linear", False, error=str(exc))
 
@@ -451,17 +532,23 @@ def _smoke_real_jira(jira_url: str, jira_token: str) -> _SmokeResult:
         return _SmokeResult("jira", False, error=str(exc))
 
 
-def _smoke_real_webhook(webhook_url: str) -> _SmokeResult:
-    # Validate SSRF constraints locally
+def _smoke_real_webhook(webhook_url: str, signing_secret: str = "") -> _SmokeResult:
     try:
+        import datetime
+        import hashlib
+        import hmac
         import ipaddress
         import socket
         import urllib.parse
+        import httpx
+    except ImportError as exc:
+        return _SmokeResult("webhook", False, error=f"missing dependency: {exc}")
 
+    # Step 1: SSRF validation
+    try:
         parsed = urllib.parse.urlparse(webhook_url)
         if parsed.scheme != "https" and os.environ.get("AETHER_ENV") != "local":
             return _SmokeResult("webhook", False, error="Webhook URL must use HTTPS")
-
         BLOCKED = [
             ipaddress.ip_network("127.0.0.0/8"),
             ipaddress.ip_network("10.0.0.0/8"),
@@ -473,8 +560,59 @@ def _smoke_real_webhook(webhook_url: str) -> _SmokeResult:
             ip = ipaddress.ip_address(addr)
             if any(ip in net for net in BLOCKED):
                 return _SmokeResult("webhook", False, error=f"SSRF: {addr} is a private address")
+    except Exception as exc:
+        return _SmokeResult("webhook", False, error=f"SSRF check failed: {exc}")
 
-        return _SmokeResult("webhook", True, details={"url": webhook_url, "ssrf_check": "passed"})
+    # Step 2: send a real signed POST and verify 2xx
+    try:
+        import datetime
+        import json as _json
+        import uuid
+        ts_label = datetime.datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ")
+        delivery_id = str(uuid.uuid4())
+        payload = {
+            "schema_version": "1",
+            "delivery_id": delivery_id,
+            "event_type": "smoke_test",
+            "timestamp": ts_label,
+            "test": True,
+            "message": f"[AETHER-SMOKE-TEST {ts_label}] Delivery smoke test — please disregard.",
+        }
+        body_bytes = _json.dumps(payload).encode()
+        timestamp = str(int(datetime.datetime.utcnow().timestamp()))
+        sig_value = "v1=unsigned"
+        if signing_secret:
+            digest = hmac.new(
+                signing_secret.encode(),
+                f"{timestamp}.".encode() + body_bytes,
+                hashlib.sha256,
+            ).hexdigest()
+            sig_value = f"v1={digest}"
+
+        resp = httpx.post(
+            webhook_url,
+            content=body_bytes,
+            headers={
+                "Content-Type": "application/json",
+                "X-Aether-Delivery-ID": delivery_id,
+                "X-Aether-Timestamp": timestamp,
+                "X-Aether-Signature": sig_value,
+                "X-Aether-Signature-Version": "v1",
+                "User-Agent": "Aether-Webhook/1.0",
+            },
+            timeout=15,
+            follow_redirects=False,
+        )
+        if resp.status_code >= 300:
+            return _SmokeResult(
+                "webhook", False,
+                error=f"Webhook returned HTTP {resp.status_code}: {resp.text[:200]}",
+            )
+        return _SmokeResult(
+            "webhook", True,
+            external_id=delivery_id,
+            details={"url": webhook_url, "ssrf_check": "passed", "http_status": resp.status_code},
+        )
     except Exception as exc:
         return _SmokeResult("webhook", False, error=str(exc))
 
@@ -569,7 +707,7 @@ def main() -> int:
             if not args.webhook_url:
                 print("ERROR: --webhook-url required for --provider webhook", file=sys.stderr)
                 return 1
-            results.append(_smoke_real_webhook(args.webhook_url))
+            results.append(_smoke_real_webhook(args.webhook_url, signing_secret=getattr(args, "webhook_secret", "")))
 
     for r in results:
         _print_result(r)

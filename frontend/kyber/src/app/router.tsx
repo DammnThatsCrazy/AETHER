@@ -50,6 +50,7 @@ const ConversionExplorerPage = lazy(() => import('@kyber/pages/measurement/conve
 const CampaignIntelligencePage = lazy(() => import('@kyber/pages/measurement/campaign-intelligence-page').then(m => ({ default: m.CampaignIntelligencePage })));
 const KyberMeasurementOpsPage = lazy(() => import('@kyber/pages/measurement/kyber-measurement-ops-page').then(m => ({ default: m.KyberMeasurementOpsPage })));
 const Campaign360Page = lazy(() => import('@kyber/pages/measurement/campaign-360-page').then(m => ({ default: m.Campaign360Page })));
+const DeliveryOpsPage = lazy(() => import('@kyber/pages/delivery').then(m => ({ default: m.DeliveryOpsPage })));
 
 function PageSuspense({ children }: { readonly children: React.ReactNode }) {
   return (
@@ -128,6 +129,7 @@ export function AppRouter() {
                 <Route path="/measurement/campaigns" element={<PageSuspense><CampaignIntelligencePage /></PageSuspense>} />
                 <Route path="/measurement/campaigns/:campaignId" element={<PageSuspense><Campaign360Page /></PageSuspense>} />
                 <Route path="/measurement/ops" element={<PageSuspense><KyberMeasurementOpsPage /></PageSuspense>} />
+                <Route path="/delivery" element={<PageSuspense><DeliveryOpsPage /></PageSuspense>} />
                 <Route path="*" element={<Navigate to="/mission" replace />} />
               </Routes>
             </AppShell>
