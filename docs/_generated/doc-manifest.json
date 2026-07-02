@@ -521,7 +521,7 @@
         "dev-senior",
         "ops"
       ],
-      "status": "production",
+      "status": "stable",
       "since_version": "9.1.0",
       "estimated_read_minutes": 4,
       "canonical_owner": "platform@aether"
@@ -791,7 +791,7 @@
         "dev-senior",
         "ops"
       ],
-      "status": "production",
+      "status": "stable",
       "since_version": "9.0.0",
       "estimated_read_minutes": 8,
       "canonical_owner": "platform@aether"
@@ -806,7 +806,7 @@
         "architect",
         "dev-senior"
       ],
-      "status": "production",
+      "status": "stable",
       "since_version": "9.0.0",
       "estimated_read_minutes": 4,
       "canonical_owner": "platform@aether"
@@ -1576,7 +1576,7 @@
         "dev-senior",
         "ops"
       ],
-      "status": "production",
+      "status": "stable",
       "since_version": "9.0.0",
       "estimated_read_minutes": 5,
       "canonical_owner": "platform@aether"
@@ -1708,7 +1708,7 @@
         "dev-senior",
         "ops"
       ],
-      "status": "production",
+      "status": "stable",
       "since_version": "9.0.0",
       "estimated_read_minutes": 4,
       "canonical_owner": "platform@aether"
@@ -2857,7 +2857,7 @@
         "dev-senior",
         "ops"
       ],
-      "status": "production",
+      "status": "stable",
       "since_version": "9.0.0",
       "estimated_read_minutes": 5,
       "canonical_owner": "platform@aether"
@@ -3298,7 +3298,7 @@
         "ops",
         "security"
       ],
-      "status": "production",
+      "status": "stable",
       "since_version": "9.0.0",
       "estimated_read_minutes": 5,
       "canonical_owner": "platform@aether"
@@ -3483,7 +3483,7 @@
         "architect",
         "dev-senior"
       ],
-      "status": "accepted",
+      "status": "stable",
       "since_version": "9.1.0",
       "estimated_read_minutes": 8,
       "canonical_owner": "platform@aether"
@@ -4179,13 +4179,13 @@
       "path": "docs/runbooks/CREDENTIAL-ROTATION.md",
       "title": "Credential Rotation Runbook",
       "slug": "runbooks/credential-rotation",
-      "section": "runbooks",
+      "section": "operations",
       "visibility": "I",
       "audience": [
         "ops",
         "security"
       ],
-      "status": "production",
+      "status": "stable",
       "since_version": "9.0.0",
       "estimated_read_minutes": 5,
       "canonical_owner": "platform@aether"
@@ -4194,13 +4194,13 @@
       "path": "docs/runbooks/DELIVERY-FAILURES.md",
       "title": "Delivery Failures Runbook",
       "slug": "runbooks/delivery-failures",
-      "section": "runbooks",
+      "section": "operations",
       "visibility": "I",
       "audience": [
         "ops",
         "dev-senior"
       ],
-      "status": "production",
+      "status": "stable",
       "since_version": "9.0.0",
       "estimated_read_minutes": 8,
       "canonical_owner": "platform@aether"
@@ -4226,13 +4226,13 @@
       "path": "docs/runbooks/RECONCILIATION.md",
       "title": "Delivery Reconciliation Runbook",
       "slug": "runbooks/reconciliation",
-      "section": "runbooks",
+      "section": "operations",
       "visibility": "I",
       "audience": [
         "ops",
         "dev-senior"
       ],
-      "status": "production",
+      "status": "stable",
       "since_version": "9.0.0",
       "estimated_read_minutes": 5,
       "canonical_owner": "platform@aether"

@@ -19,6 +19,6 @@ describe('Aether Connectors page', () => {
     expect(screen.getByText('Slack')).toBeInTheDocument();
     expect(screen.getByText('Generic Signed Webhook')).toBeInTheDocument();
     expect(screen.getByText('HubSpot')).toBeInTheDocument();
-    expect(screen.getByText('healthy')).toBeInTheDocument();
+    expect(screen.getByText('Connected')).toBeInTheDocument();
   });
 });
