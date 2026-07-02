@@ -2634,3 +2634,9 @@ These endpoints are gated by feature flags (`FEATURE_FRAUD_NETWORKS`, `FEATURE_F
 | POST | `/v1/webhooks/linear/events` | Linear-Signature HMAC | Linear issue/event webhook; persisted to WebhookInbox and processed async |
 | POST | `/v1/webhooks/jira/events` | X-Hub-Signature-256 HMAC | Jira issue webhook; persisted to WebhookInbox and processed async |
 | POST | `/v1/webhooks/aether/callback` | X-Aether-Signature HMAC | Generic signed outcome callback from webhook delivery targets |
+
+## Semantic-Sentiment Intelligence APIs
+
+The semantic-sentiment intelligence plane adds tenant-scoped APIs under `/v1/semantic` for observation creation, observation reads, entity state, entity sentiment, timelines, narrative listing, cascade status, and bounded reprocessing. Kyber operator APIs under `/v1/kyber/semantic` expose fleet health and review queues and require explicit operator scope.
+
+The APIs return real classified observations from the semantic-sentiment repository, include evidence/model/taxonomy metadata, enforce canonical `camp_*` campaign IDs, and preserve insufficient-data states instead of returning fake zero insights.
