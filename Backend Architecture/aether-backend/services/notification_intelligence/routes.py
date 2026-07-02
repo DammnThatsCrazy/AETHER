@@ -997,11 +997,13 @@ async def linear_webhook(request: Request):
     """Persist Linear webhook to WebhookInbox, verify signature, return 200 immediately."""
     body_bytes = await request.body()
     linear_sig = request.headers.get("Linear-Signature", "")
+    # Prefer explicit tenant header; processor will also resolve via ExternalResourceLink
+    tenant_id = request.headers.get("X-Aether-Tenant-ID", "")
     inbox_id = str(uuid.uuid4())
     try:
         await _webhook_inbox_repo.insert(inbox_id, {
             "id": inbox_id,
-            "tenant_id": "",  # resolved during async processing
+            "tenant_id": tenant_id,
             "provider": "linear",
             "headers": _sanitize_headers(dict(request.headers)),
             "raw_body": body_bytes.decode("utf-8", errors="replace"),
@@ -1012,6 +1014,8 @@ async def linear_webhook(request: Request):
         })
     except Exception as exc:
         logger.warning("linear_webhook_inbox_write_failed: %s", exc)
+        # Return 500 so Linear retries — we must not silently lose outcomes
+        return Response(status_code=500)
     return Response(status_code=200)
 
 
@@ -1020,11 +1024,12 @@ async def jira_webhook(request: Request):
     """Persist Jira webhook to WebhookInbox, verify Jira signature, return 200 immediately."""
     body_bytes = await request.body()
     jira_sig = request.headers.get("X-Hub-Signature-256", "")
+    tenant_id = request.headers.get("X-Aether-Tenant-ID", "")
     inbox_id = str(uuid.uuid4())
     try:
         await _webhook_inbox_repo.insert(inbox_id, {
             "id": inbox_id,
-            "tenant_id": "",  # resolved during async processing
+            "tenant_id": tenant_id,
             "provider": "jira",
             "headers": _sanitize_headers(dict(request.headers)),
             "raw_body": body_bytes.decode("utf-8", errors="replace"),
@@ -1035,6 +1040,8 @@ async def jira_webhook(request: Request):
         })
     except Exception as exc:
         logger.warning("jira_webhook_inbox_write_failed: %s", exc)
+        # Return 500 so Jira retries — we must not silently lose outcomes
+        return Response(status_code=500)
     return Response(status_code=200)
 
 
@@ -1048,10 +1055,8 @@ async def aether_callback(request: Request):
     body_bytes = await request.body()
     aether_sig = request.headers.get("X-Aether-Signature", "")
     aether_ts = request.headers.get("X-Aether-Timestamp", "")
-    delivery_id = request.headers.get("X-Aether-Delivery-Id", "")
     inbox_id = str(uuid.uuid4())
     try:
-        # Resolve tenant from delivery_id or query param
         tenant_id = request.query_params.get("tenant_id", "")
         await _webhook_inbox_repo.insert(inbox_id, {
             "id": inbox_id,
@@ -1066,4 +1071,6 @@ async def aether_callback(request: Request):
         })
     except Exception as exc:
         logger.warning("aether_callback_inbox_write_failed: %s", exc)
+        # Return 500 so the sender retries — we must not silently lose outcomes
+        return Response(status_code=500)
     return Response(status_code=200)

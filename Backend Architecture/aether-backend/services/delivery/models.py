@@ -139,8 +139,17 @@ class DeliveryJob(BaseModel):
     @model_validator(mode="after")
     def _set_idempotency_key(self) -> "DeliveryJob":
         if not self.idempotency_key:
+            # Include destination to prevent key collision for multiple channels under one intent
+            destination = (
+                self.provider_config.get("channel_id")
+                or self.provider_config.get("webhook_url")
+                or self.provider_config.get("chat_id")
+                or self.provider_config.get("project_key")
+                or self.provider_config.get("team_id")
+                or self.provider_adapter
+            )
             self.idempotency_key = generate_idempotency_key(
-                self.intent_id, self.channel.value, str(self.priority.value)
+                self.intent_id, self.channel.value, str(self.priority.value), str(destination)
             )
         return self
 

@@ -2,6 +2,18 @@ import { useEffect, useState } from 'react';
 import { Badge, Button, Card, CardContent, CardHeader, CardTitle, EmptyState, LoadingState } from '@aether/ui';
 import { api } from '@aether-app/lib/api/endpoints';
 
+function useTenantId(): string {
+  const [tenantId, setTenantId] = useState('');
+  useEffect(() => {
+    api.me.profile().then((data: unknown) => {
+      const r = data as Record<string, unknown>;
+      const id = String(r['tenant_id'] ?? r['tenantId'] ?? '');
+      if (id) setTenantId(id);
+    }).catch(() => {});
+  }, []);
+  return tenantId;
+}
+
 type AnyRecord = Record<string, unknown>;
 
 const STATE_VARIANT: Record<string, 'success' | 'warning' | 'danger' | 'default'> = {
@@ -112,9 +124,10 @@ function JobRow({ job, receipt, attempts, expanded, onToggle }: JobRowProps) {
 
 interface IntentCardProps {
   readonly intent: AnyRecord;
+  readonly tenantId: string;
 }
 
-function IntentCard({ intent }: IntentCardProps) {
+function IntentCard({ intent, tenantId }: IntentCardProps) {
   const [jobs, setJobs] = useState<AnyRecord[]>([]);
   const [receipts, setReceipts] = useState<Record<string, AnyRecord>>({});
   const [attempts, setAttempts] = useState<Record<string, AnyRecord[]>>({});
@@ -124,21 +137,23 @@ function IntentCard({ intent }: IntentCardProps) {
   function loadJobs() {
     if (loaded) return;
     setLoaded(true);
-    api.delivery.listJobs({ intent_id: String(intent.id) })
+    api.delivery.listJobs({ intent_id: String(intent.id), tenantId })
       .then(async (d: unknown) => {
-        const jobList = (((d as AnyRecord).items) ?? []) as AnyRecord[];
+        const jobList = (((d as AnyRecord).data ?? (d as AnyRecord).items) ?? []) as AnyRecord[];
         setJobs(jobList);
         const rcpts: Record<string, AnyRecord> = {};
         const atts: Record<string, AnyRecord[]> = {};
         await Promise.allSettled(jobList.map(async (j) => {
           const jid = String(j.id);
           try {
-            const r = await api.delivery.getReceipt(jid) as AnyRecord;
-            if (r?.id) rcpts[jid] = r;
-          } catch { /* no receipt yet */ }
-          try {
-            const a = await api.delivery.listAttempts(jid) as AnyRecord;
-            atts[jid] = ((a?.items ?? []) as AnyRecord[]);
+            // GET /v1/delivery/jobs/{id} returns { job, attempts } inline
+            const r = await api.delivery.getJob(jid, tenantId) as AnyRecord;
+            const inner = (r?.data ?? r) as AnyRecord;
+            const jobData = (inner?.job ?? inner) as AnyRecord;
+            const receiptData = (inner?.receipt) as AnyRecord | undefined;
+            if (receiptData?.id) rcpts[jid] = receiptData;
+            else if (jobData?.provider_receipt) rcpts[jid] = jobData.provider_receipt as AnyRecord;
+            atts[jid] = ((inner?.attempts ?? []) as AnyRecord[]);
           } catch { atts[jid] = []; }
         }));
         setReceipts(rcpts);
@@ -209,6 +224,7 @@ function IntentCard({ intent }: IntentCardProps) {
 }
 
 export function DeliveryHistoryPage() {
+  const tenantId = useTenantId();
   const [intents, setIntents] = useState<AnyRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -217,10 +233,12 @@ export function DeliveryHistoryPage() {
   const PAGE_SIZE = 10;
 
   function load(p: number) {
+    if (!tenantId) return;
     setLoading(true);
-    api.delivery.listIntents({ page: p, per_page: PAGE_SIZE })
+    api.delivery.listIntents({ tenantId, page: p, per_page: PAGE_SIZE })
       .then((d: unknown) => {
-        const items = (((d as AnyRecord).items) ?? []) as AnyRecord[];
+        const r = (d as AnyRecord);
+        const items = ((r.data ?? r.items) ?? []) as AnyRecord[];
         setIntents(items);
         setHasMore(items.length === PAGE_SIZE);
       })
@@ -228,7 +246,7 @@ export function DeliveryHistoryPage() {
       .finally(() => setLoading(false));
   }
 
-  useEffect(() => { load(page); }, [page]);
+  useEffect(() => { load(page); }, [page, tenantId]);
 
   if (loading) return <main className="p-6"><LoadingState lines={6} /></main>;
   if (error) return <main className="p-6"><EmptyState title="Unable to load delivery history" description={error} /></main>;
@@ -248,7 +266,7 @@ export function DeliveryHistoryPage() {
         : (
           <>
             <div className="space-y-3">
-              {intents.map((intent) => <IntentCard key={String(intent.id)} intent={intent} />)}
+              {intents.map((intent) => <IntentCard key={String(intent.id)} intent={intent} tenantId={tenantId} />)}
             </div>
             <div className="flex gap-2 justify-end">
               {page > 1 && <Button variant="secondary" onClick={() => setPage(p => p - 1)}>Previous</Button>}

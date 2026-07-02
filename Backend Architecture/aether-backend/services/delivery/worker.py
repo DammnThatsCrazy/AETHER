@@ -147,6 +147,7 @@ class DeliveryWorker:
         )
 
         start_ms = _now_ms()
+        receipt_raw = None
         try:
             adapter = self._registry.get_or_raise(provider)
             credential = await self._resolve_credential(job)
@@ -157,13 +158,21 @@ class DeliveryWorker:
                 credential=credential,
                 idempotency_key=job.get("idempotency_key"),
             )
-
-            duration_ms = _now_ms() - start_ms
-            await self._on_success(job, receipt_raw, attempt_number, duration_ms)
-
         except Exception as exc:
             duration_ms = _now_ms() - start_ms
             await self._on_failure(job, exc, attempt_number, duration_ms)
+            return
+
+        # Provider call succeeded — now persist (separate try so DB errors
+        # don't re-trigger _on_failure and cause duplicate deliveries on retry)
+        duration_ms = _now_ms() - start_ms
+        try:
+            await self._on_success(job, receipt_raw, attempt_number, duration_ms)
+        except Exception as exc:
+            logger.error(
+                f"Persistence error after successful provider call job={job_id!r}: {exc}",
+                exc_info=True,
+            )
 
     async def _on_success(
         self, job: dict[str, Any], receipt_raw: Any,
@@ -225,19 +234,29 @@ class DeliveryWorker:
             "updated_at": _now_iso(),
         })
 
-        # Persist ExternalResourceLink if URL present
+        # Load intent to get source object type/id for downstream steps
+        intent_data = await self._intent_repo.find_by_id(intent_id) if intent_id else None
+        source_type = (intent_data or {}).get("source_type", "")
+        source_id = (intent_data or {}).get("source_id", "")
+
+        # Persist ExternalResourceLink — always, with source object fields for outcome routing
         raw = receipt_raw.raw_response or {}
         external_url = raw.get("url") or raw.get("permalink") or raw.get("html_url")
-        if external_url:
-            link = ExternalResourceLink(
-                tenant_id=tenant_id,
-                intent_id=intent_id,
-                receipt_id=receipt.id,
-                provider=provider,
-                external_id=receipt_raw.external_id,
-                external_url=external_url,
-            )
-            await self._resource_link_repo.insert(link.id, link.model_dump())
+        link = ExternalResourceLink(
+            tenant_id=tenant_id,
+            intent_id=intent_id,
+            receipt_id=receipt.id,
+            provider=provider,
+            external_id=receipt_raw.external_id,
+            external_url=external_url,
+            aether_object_type=source_type,
+            aether_object_id=source_id,
+        )
+        await self._resource_link_repo.insert(link.id, link.model_dump())
+
+        # Transition source suggestion to DELIVERED only after confirmed provider receipt
+        if source_type == "suggestion" and source_id:
+            await self._advance_suggestion_delivered(source_id, receipt.id)
 
         # Check if all jobs for this intent are done
         await self._maybe_complete_intent(intent_id, tenant_id, DeliveryIntentStatus.DELIVERED)
@@ -299,8 +318,13 @@ class DeliveryWorker:
                 intent_id, tenant_id, DeliveryIntentStatus.FAILED
             )
         else:
-            # Schedule retry
-            retry_at = _compute_next_attempt_at(attempt_number)
+            # Schedule retry, respecting provider Retry-After when present
+            retry_after = getattr(exc, "retry_after_seconds", None)
+            if retry_after:
+                from datetime import timedelta
+                retry_at = (datetime.now(timezone.utc) + timedelta(seconds=int(retry_after))).isoformat()
+            else:
+                retry_at = _compute_next_attempt_at(attempt_number)
             await self._job_repo.update(job_id, {
                 "state": DeliveryJobState.FAILED.value,
                 "attempt_count": attempt_number,
@@ -355,7 +379,12 @@ class DeliveryWorker:
             logger.warning(f"Intent completion check failed for {intent_id!r}: {exc}")
 
     async def _resolve_credential(self, job: dict[str, Any]) -> Optional[str]:
-        """Look up credential from vault via secret_ref in provider_config."""
+        """Look up credential from vault via secret_ref in provider_config.
+
+        Raises RetryableProviderError on transient vault failures so the job
+        is retried rather than dead-lettered.
+        """
+        from services.delivery.adapters.base import RetryableProviderError
         provider_config = job.get("provider_config") or {}
         secret_ref = provider_config.get("secret_ref")
         if not secret_ref:
@@ -366,9 +395,26 @@ class DeliveryWorker:
             record = await repo.find_by_id(secret_ref)
             if record:
                 return record.get("api_key") or record.get("token")
+            return None
         except Exception as exc:
             logger.warning(f"Credential resolution failed for secret_ref={secret_ref!r}: {exc}")
-        return None
+            raise RetryableProviderError(
+                f"Transient vault failure resolving credential: {exc}"
+            ) from exc
+
+    async def _advance_suggestion_delivered(self, suggestion_id: str, receipt_id: str) -> None:
+        """Transition a suggestion to DELIVERED status after confirmed provider receipt."""
+        try:
+            from repositories.repos import SuggestionsRepository
+            repo = SuggestionsRepository()
+            await repo.update(suggestion_id, {
+                "status": "delivered",
+                "delivery_receipt_id": receipt_id,
+                "delivered_at": _now_iso(),
+            })
+            logger.info("suggestion_delivered id=%s receipt=%s", suggestion_id, receipt_id)
+        except Exception as exc:
+            logger.warning("advance_suggestion_delivered_failed id=%s: %s", suggestion_id, exc)
 
     # ── one-shot dispatch (used by routes/tests) ──────────────────────────────
 

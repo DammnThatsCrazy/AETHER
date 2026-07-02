@@ -86,7 +86,7 @@ export function DeliveryOpsPage() {
   useEffect(() => { load(page); }, [tab, page, tenantFilter, providerFilter]);
 
   function handleReplay(job: AnyRecord) {
-    (api.admin.kyber.replayDeliveryJob(String(job.id)) as Promise<AnyRecord>)
+    (api.admin.kyber.replayDeliveryJob(String(job.id), String(job.tenant_id ?? '')) as Promise<AnyRecord>)
       .then(() => {
         setReplayTarget(null);
         setReplayMsg(`Job ${truncate(job.id)} re-queued successfully.`);

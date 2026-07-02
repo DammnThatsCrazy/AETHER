@@ -185,11 +185,9 @@ class WebhookInboxProcessor:
         Returns the count of records processed (successfully or with error).
         """
         try:
-            records = await self._inbox_repo.find_many(
-                filters={"processed": False}, limit=limit
-            )
+            records = await self._inbox_repo.claim_pending(limit=limit)
         except Exception as exc:
-            logger.warning("inbox_find_failed: %s", exc)
+            logger.warning("inbox_claim_pending_failed: %s", exc)
             return 0
 
         count = 0
@@ -201,7 +199,17 @@ class WebhookInboxProcessor:
                 try:
                     await self._inbox_repo.update(record_id, {"verified": sig_verified})
                 except Exception:
-                    pass  # best-effort; don't abort processing
+                    pass  # best-effort status update
+
+                # Reject unverified records — do not route forged payloads
+                if not sig_verified:
+                    logger.warning(
+                        "inbox_signature_unverified id=%s provider=%s — skipping routing",
+                        record_id, record.get("provider"),
+                    )
+                    await self._inbox_repo.mark_processed(record_id, error="signature_unverified")
+                    count += 1
+                    continue
 
                 # 2. Normalise
                 outcome = await self._normalize(record)
@@ -210,11 +218,9 @@ class WebhookInboxProcessor:
                     count += 1
                     continue
 
-                # 3. Persist ExternalOutcomeEvent
-                try:
-                    await self._outcome_repo.insert(outcome.id, outcome.model_dump())
-                except Exception as exc:
-                    logger.warning("outcome_persist_failed id=%s: %s", record_id, exc)
+                # 3. Persist ExternalOutcomeEvent — re-raise on failure so the inbox
+                #    record is NOT marked processed and will be retried
+                await self._outcome_repo.insert(outcome.id, outcome.model_dump())
 
                 # 4. Route
                 if self._router is not None:
@@ -293,9 +299,14 @@ class WebhookInboxProcessor:
                 aether_sig = headers.get("x-aether-signature", "")
                 aether_ts = headers.get("x-aether-timestamp", "")
                 signing_secret = inbox.get("signing_secret", "")
+                # Require both signature and a known secret — never accept unsigned
                 if not aether_sig or not signing_secret:
-                    # Signature already verified at ingestion time; trust if present
-                    return bool(aether_sig)
+                    return False
+                # Reject stale timestamps (replay protection)
+                from services.delivery.security import verify_timestamp_tolerance, constant_time_compare
+                if aether_ts and not verify_timestamp_tolerance(aether_ts, max_age_seconds=300):
+                    logger.warning("webhook_callback_timestamp_stale inbox_id=%s", inbox.get("id"))
+                    return False
                 # Verify HMAC-SHA256 of timestamp.body
                 base = f"{aether_ts}.{raw_body_str}"
                 expected_hex = hmac.new(
@@ -303,7 +314,6 @@ class WebhookInboxProcessor:
                 ).hexdigest()
                 # X-Aether-Signature may be "sha256=<hex>" or "v1=<hex>" or bare hex
                 sig_value = aether_sig.split("=", 1)[-1] if "=" in aether_sig else aether_sig
-                from services.delivery.security import constant_time_compare
                 return constant_time_compare(expected_hex, sig_value)
 
             else:
@@ -379,9 +389,14 @@ class WebhookInboxProcessor:
                         new_state = state_name
                     else:
                         event_type = "status_changed"
-                identifier = data.get("identifier") or data.get("id")
+                # Use UUID (data.id) for link lookup — matches what LinearAdapter stores in receipt
+                # Include human-readable identifier in meta only
+                uuid_id = data.get("id")
+                if uuid_id:
+                    external_id = str(uuid_id)
+                identifier = data.get("identifier")
                 if identifier:
-                    external_id = str(identifier)
+                    extra_meta["linear_identifier"] = identifier
                 extra_meta["linear_action"] = action
 
             elif provider == "jira":

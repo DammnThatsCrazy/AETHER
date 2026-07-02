@@ -440,7 +440,11 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     delivery_worker_task = asyncio.create_task(asyncio.sleep(0))  # placeholder
     try:
         if settings.delivery.enabled:
-            from services.delivery.worker import delivery_worker as _delivery_worker
+            from services.delivery.worker import DeliveryWorker as _DeliveryWorkerCls
+            _delivery_worker = _DeliveryWorkerCls(
+                batch_size=getattr(settings.delivery, "batch_size", 10),
+                poll_interval_seconds=getattr(settings.delivery, "poll_interval_seconds", 5),
+            )
             await _delivery_worker.start()
             delivery_worker_task = _delivery_worker._task or asyncio.create_task(asyncio.sleep(0))
             logger.info("DeliveryWorker started")
@@ -459,6 +463,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
                 ExternalResourceLinkRepository as _LinkRepo,
             )
             from services.delivery.outcome_processor import WebhookInboxProcessor, OutcomeRouter
+            from repositories.repos import SuggestionsRepository as _SuggestRepo, NotificationIntelligenceRepository as _NotifRepo
             _inbox_proc = WebhookInboxProcessor(
                 inbox_repo=_InboxRepo(),
                 outcome_repo=_OutcomeRepo(),
@@ -466,6 +471,8 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
                 router=OutcomeRouter(
                     outcome_repo=_OutcomeRepo(),
                     link_repo=_LinkRepo(),
+                    suggestion_repo=_SuggestRepo(),
+                    notification_repo=_NotifRepo(),
                 ),
             )
             webhook_inbox_task = asyncio.create_task(_inbox_proc.run())
@@ -849,9 +856,10 @@ def create_app() -> FastAPI:
 
     # ── Delivery API (durable provider dispatch + outcome tracking) ──────
     try:
-        from services.delivery.routes import router as delivery_router
+        from services.delivery.routes import router as delivery_router, admin_router as delivery_admin_router
         app.include_router(delivery_router)
-        logger.info("Delivery: routes mounted (/v1/delivery)")
+        app.include_router(delivery_admin_router)
+        logger.info("Delivery: routes mounted (/v1/delivery + /v1/admin/delivery)")
     except Exception as e:  # pragma: no cover — defensive
         logger.warning(f"Delivery routes mount skipped: {e}")
 
