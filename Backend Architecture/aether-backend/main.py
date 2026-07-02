@@ -436,6 +436,19 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     except ImportError:
         pass  # Noesis module not present in this build
 
+    # Delivery Worker — durable provider dispatch + outcome tracking
+    delivery_worker_task = asyncio.create_task(asyncio.sleep(0))  # placeholder
+    try:
+        if settings.delivery.enabled:
+            from services.delivery.worker import delivery_worker as _delivery_worker
+            await _delivery_worker.start()
+            delivery_worker_task = _delivery_worker._task or asyncio.create_task(asyncio.sleep(0))
+            logger.info("DeliveryWorker started")
+        else:
+            logger.info("DeliveryWorker disabled (AETHER_DELIVERY_WORKER_ENABLED=false)")
+    except Exception as e:  # pragma: no cover — defensive
+        logger.warning(f"DeliveryWorker failed to start: {e}")
+
     logger.info(
         f"Aether Backend started | env={settings.env.value} "
         f"| debug={settings.debug} | version={settings.api.version}"
@@ -449,6 +462,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     overage_cron_task.cancel()
     sla_worker_task.cancel()
     dune_poll_task.cancel()
+    delivery_worker_task.cancel()
     try:
         await replay_worker_task
     except asyncio.CancelledError:
@@ -465,6 +479,16 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         await dune_poll_task
     except asyncio.CancelledError:
         pass
+    try:
+        await delivery_worker_task
+    except asyncio.CancelledError:
+        pass
+    try:
+        if settings.delivery.enabled:
+            from services.delivery.worker import delivery_worker as _delivery_worker
+            await _delivery_worker.stop()
+    except Exception as e:
+        logger.warning(f"DeliveryWorker stop failed: {e}")
     if provider_gateway:
         await provider_gateway.shutdown()
     await registry.shutdown()
@@ -791,6 +815,14 @@ def create_app() -> FastAPI:
     app.include_router(comm_obs_router, tags=["Agent Comm Observability"])
     app.include_router(ext_account_obs_router, tags=["External Account Observability"])
     logger.info("Agentic Observability Layer mounted (30 observation routes + 7 Kyber routes)")
+
+    # ── Delivery API (durable provider dispatch + outcome tracking) ──────
+    try:
+        from services.delivery.routes import router as delivery_router
+        app.include_router(delivery_router)
+        logger.info("Delivery: routes mounted (/v1/delivery)")
+    except Exception as e:  # pragma: no cover — defensive
+        logger.warning(f"Delivery routes mount skipped: {e}")
 
     return app
 

@@ -79,15 +79,12 @@ class BaseActionTarget:
         return payload
 
     async def dispatch(self, dispatch: ActionDispatch, config: ActionIntegrationConfig | None) -> ActionDeliveryReceipt:
-        return ActionDeliveryReceipt(
-            receipt_id=str(uuid.uuid4()),
-            dispatch_id=dispatch.dispatch_id,
-            target_type=self.target_type,
-            external_id=f"sim-{self.target_type}-{dispatch.dispatch_id[:8]}",
-            external_url=self.external_url(dispatch, config),
-            delivered_at=now_iso(),
-            retry_count=dispatch.retry_count,
-            raw={"simulated": True, "payload": dispatch.payload},
+        raise NotImplementedError(
+            f"{type(self).__name__}.dispatch() is not implemented. "
+            f"Use ProviderAdapterRegistry.default().get({self.target_type!r}) "
+            "and route through DeliveryWorker. "
+            "Simulated delivery (sim-* external_ids) has been removed — "
+            "all dispatch must go through a real ProviderAdapter."
         )
 
     def external_url(self, dispatch: ActionDispatch, config: ActionIntegrationConfig | None) -> str | None:

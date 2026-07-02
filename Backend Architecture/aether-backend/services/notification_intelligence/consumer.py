@@ -67,6 +67,16 @@ _TOPIC_MAP: dict[str, tuple[str, str, str, str]] = {
         "Reasoning Contradiction Detected",
         "CIS detected a logical contradiction in a reasoning chain",
     ),
+    Topic.SUGGESTION_APPROVED.value: (
+        "P2", "action-request",
+        "Suggestion Approved",
+        "An Aether suggestion has been approved and is ready for delivery",
+    ),
+    Topic.SUGGESTION_CREATED.value: (
+        "P3", "operational",
+        "New Suggestion Available",
+        "A new Aether suggestion has been created for tenant review",
+    ),
 }
 
 
@@ -118,7 +128,120 @@ def _normalise(event: Event) -> IntelligenceNotificationEvent | None:
     return notif
 
 
-def attach_notification_consumers(consumer, repo=None, policy_engine=None, delivery_router=None, producer=None, cache=None) -> None:
+def _create_notification_delivery_jobs(notif: Any, intent_repo: Any = None, job_repo: Any = None) -> None:
+    """Create durable DeliveryIntent + DeliveryJob records for a notification.
+
+    Called synchronously (not fire-and-forget) so records are committed
+    to the database before the caller returns. The DeliveryWorker picks
+    them up and executes the actual dispatch.
+    """
+    import asyncio
+
+    async def _create() -> None:
+        try:
+            from repositories.repos import UserNotificationChannelRepository
+            from repositories.delivery_repos import DeliveryIntentRepository, DeliveryJobRepository
+            from services.delivery.models import (
+                DeliveryChannel, DeliveryIntent, DeliveryJob, DeliveryJobPriority,
+                generate_idempotency_key,
+            )
+
+            _ch_repo = UserNotificationChannelRepository()
+            _intent_repo = intent_repo or DeliveryIntentRepository()
+            _job_repo = job_repo or DeliveryJobRepository()
+
+            tenant_id = notif.tenant_id
+            notif_id = notif.notification_id
+            severity = notif.severity.value if hasattr(notif.severity, "value") else str(notif.severity)
+
+            channels = await _ch_repo.list_for_tenant(tenant_id, active_only=True)
+            if not channels:
+                logger.info(
+                    "no_active_channels tenant=%s notification=%s", tenant_id, notif_id
+                )
+                return
+
+            intent_key = generate_idempotency_key("notification", notif_id, tenant_id)
+            existing = await _intent_repo.find_by_idempotency_key(intent_key)
+            if existing:
+                logger.info("delivery_intent_exists notification=%s", notif_id)
+                return
+
+            intent = DeliveryIntent(
+                tenant_id=tenant_id,
+                source_type="notification",
+                source_id=notif_id,
+                channels=[ch.get("channel_type", "notification") for ch in channels],
+                idempotency_key=intent_key,
+                metadata={"severity": severity, "title": notif.title},
+            )
+            await _intent_repo.insert(intent.id, intent.model_dump())
+
+            prio_map = {"P0": DeliveryJobPriority.P0, "P1": DeliveryJobPriority.P1,
+                        "P2": DeliveryJobPriority.P2, "P3": DeliveryJobPriority.P3,
+                        "INFO": DeliveryJobPriority.INFO}
+            job_priority = prio_map.get(severity, DeliveryJobPriority.P3)
+
+            payload = {
+                "title": notif.title,
+                "body": notif.body or notif.why or "",
+                "summary": notif.body or "",
+                "priority": severity,
+                "notification_id": notif_id,
+                "tenant_id": tenant_id,
+                "source": "notification",
+            }
+
+            for ch in channels:
+                channel_type = ch.get("channel_type", "notification")
+                try:
+                    ch_enum = DeliveryChannel(channel_type)
+                except ValueError:
+                    ch_enum = DeliveryChannel.NOTIFICATION
+
+                provider_config = {
+                    **(ch.get("config") or {}),
+                    "secret_ref": ch.get("credentials_ref"),
+                    "channel_id": ch.get("destination") or ch.get("channel_id"),
+                    "tenant_id": tenant_id,
+                }
+                job = DeliveryJob(
+                    intent_id=intent.id,
+                    tenant_id=tenant_id,
+                    channel=ch_enum,
+                    provider_adapter=channel_type,
+                    priority=job_priority,
+                    payload=payload,
+                    provider_config=provider_config,
+                )
+                await _job_repo.insert(job.id, job.model_dump())
+
+            logger.info(
+                "delivery_jobs_created notification=%s intent=%s jobs=%d",
+                notif_id, intent.id, len(channels),
+            )
+        except Exception as exc:
+            logger.error("delivery_job_creation_failed notification=%s error=%s",
+                         getattr(notif, "notification_id", "?"), exc)
+
+    # Run synchronously within the current event loop
+    loop = asyncio.get_event_loop()
+    if loop.is_running():
+        asyncio.ensure_future(_create())
+    else:
+        loop.run_until_complete(_create())
+
+
+def attach_notification_consumers(
+    consumer,
+    repo=None,
+    policy_engine=None,
+    delivery_router=None,
+    producer=None,
+    cache=None,
+    intent_repo=None,
+    job_repo=None,
+) -> None:
     """Wire notification handlers onto the shared EventConsumer.
 
     Called from main.py lifespan after attach_profile360_workers().
@@ -185,9 +308,9 @@ def attach_notification_consumers(consumer, repo=None, policy_engine=None, deliv
         await _lifecycle.advance(notif.notification_id, NotificationLifecycleState.QUEUED,
                                  actor_user_id="system")
 
-        # Deliver to all configured channels
-        import asyncio
-        asyncio.create_task(_router.route(notif))
+        # Create durable DeliveryIntent + DeliveryJobs — synchronous DB write,
+        # picked up by DeliveryWorker. Replaces fire-and-forget create_task.
+        _create_notification_delivery_jobs(notif, intent_repo=intent_repo, job_repo=job_repo)
 
         # If operator review required, advance to that state after delivery
         if policy_result.requires_operator_review:
@@ -219,6 +342,8 @@ def attach_notification_consumers(consumer, repo=None, policy_engine=None, deliv
         Topic.GOVERNANCE_DECISION_EVALUATED,
         Topic.COMMERCE_APPROVAL_REQUESTED,
         Topic.CIS_REASONING_CONTRADICTION_DETECTED,
+        Topic.SUGGESTION_APPROVED,
+        Topic.SUGGESTION_CREATED,
     ]:
         consumer.subscribe(topic, _handle)
 

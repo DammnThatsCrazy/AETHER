@@ -579,6 +579,40 @@ class FraudIntelligenceConfig:
 
 
 # ---------------------------------------------------------------------------
+# Delivery Worker
+# ---------------------------------------------------------------------------
+
+@dataclass(frozen=True)
+class DeliveryConfig:
+    """Durable delivery worker configuration.
+
+    Controls the DeliveryWorker poll loop, lease window, and retry behaviour.
+    Provider credentials are resolved from the vault (ProvidersRepository)
+    via secret_ref — never stored in this config.
+    """
+    enabled: bool = _env_bool("AETHER_DELIVERY_WORKER_ENABLED", True)
+    batch_size: int = _env_int("DELIVERY_WORKER_BATCH_SIZE", 10)
+    lease_seconds: int = _env_int("DELIVERY_WORKER_LEASE_SECONDS", 120)
+    poll_interval_seconds: float = float(_env("DELIVERY_WORKER_POLL_INTERVAL_S", "5"))
+    max_attempts: int = _env_int("DELIVERY_WORKER_MAX_ATTEMPTS", 5)
+
+    # Slack provider config (system-level default; per-tenant configured in UserNotificationChannel)
+    slack_bot_token: str = _env("DELIVERY_SLACK_BOT_TOKEN", "")
+    slack_default_channel: str = _env("DELIVERY_SLACK_DEFAULT_CHANNEL", "#aether-notifications")
+
+    # Webhook signing secret (for outbound X-Aether-Signature)
+    webhook_signing_secret: str = _env("DELIVERY_WEBHOOK_SIGNING_SECRET", "")
+
+    # Linear API key (system-level default)
+    linear_api_key: str = _env("DELIVERY_LINEAR_API_KEY", "")
+
+    # Jira (system-level default; per-tenant configured in connector config)
+    jira_base_url: str = _env("DELIVERY_JIRA_BASE_URL", "")
+    jira_email: str = _env("DELIVERY_JIRA_EMAIL", "")
+    jira_api_token: str = _env("DELIVERY_JIRA_API_TOKEN", "")
+
+
+# ---------------------------------------------------------------------------
 # Master settings
 # ---------------------------------------------------------------------------
 
@@ -657,6 +691,9 @@ class Settings:
 
     # Fraud Network Intelligence + Flow-of-Funds (disabled by default)
     fraud_intelligence: FraudIntelligenceConfig = field(default_factory=FraudIntelligenceConfig)
+
+    # Delivery Worker (durable provider dispatch + outcome tracking)
+    delivery: DeliveryConfig = field(default_factory=DeliveryConfig)
 
     def __post_init__(self):
         _is_non_local = self.env != Environment.LOCAL

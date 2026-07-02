@@ -221,8 +221,12 @@ class ConnectorService:
                      "allowed" if status == "healthy" else "blocked",
                      {"events": len(events), "status": status})
         if status == "failed":
-            return SyncResult(connector_type=connector_type, status=status,  # type: ignore[arg-type]
-                              events_ingested=0, detail=error_detail or "pull failed")
+            from services.delivery.adapters.base import ConnectorSyncError
+            raise ConnectorSyncError(
+                f"Connector sync failed: {error_detail}",
+                connector_type=connector_type,
+                tenant_id=tenant_id,
+            )
         import os
         import uuid as _uuid
         from repositories.lake import bronze_connectors
@@ -260,6 +264,13 @@ class ConnectorService:
         if secret:
             from services.security.integration_security import verify_signature
             if not (signature and timestamp and verify_signature(secret, raw_body, timestamp, signature)):
+                # D9: update health to error state on failed signature verification
+                config.sync_status = "failed"  # type: ignore[assignment]
+                config.error_count += 1
+                config.last_error_at = now_iso()
+                config.last_error_message = "webhook signature verification failed"
+                config.updated_at = now_iso()
+                await self.repo.insert(_key(tenant_id, connector_type), config.model_dump())
                 await _audit(tenant_id, "system", "system", "connector_webhook_ingested",
                              connector_type, "blocked", {"reason": "invalid signature"})
                 return {"accepted": False, "reason": "invalid signature", "events_ingested": 0}
@@ -268,6 +279,13 @@ class ConnectorService:
         try:
             payload = json.loads(raw_body.decode("utf-8")) if raw_body else {}
         except (json.JSONDecodeError, UnicodeDecodeError):
+            # D9: update health on invalid payload
+            config.sync_status = "failed"  # type: ignore[assignment]
+            config.error_count += 1
+            config.last_error_at = now_iso()
+            config.last_error_message = "webhook payload parse error"
+            config.updated_at = now_iso()
+            await self.repo.insert(_key(tenant_id, connector_type), config.model_dump())
             return {"accepted": False, "reason": "invalid payload", "events_ingested": 0}
         events = connector.parse_webhook(payload if isinstance(payload, dict) else {"items": payload})
         await _meter(tenant_id, "webhook_ingested", connector_type, "connector")
