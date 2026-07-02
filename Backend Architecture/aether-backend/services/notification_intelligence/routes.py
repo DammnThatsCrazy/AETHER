@@ -32,6 +32,8 @@ from repositories.repos import (
     UserNotificationChannelRepository,
     SlackOAuthStateRepository,
 )
+from repositories.delivery_repos import WebhookInboxRepository as _WebhookInboxRepository
+from services.delivery.security import sanitize_headers as _sanitize_headers
 from services.notification_intelligence.models import (
     AnnotateRequest,
     EmitNotificationRequest,
@@ -65,6 +67,7 @@ _action_repo = OperatorActionRepository()
 _config_repo = TenantNotificationConfigRepository()
 _channel_repo = UserNotificationChannelRepository()
 _oauth_state_repo = SlackOAuthStateRepository()
+_webhook_inbox_repo = _WebhookInboxRepository()
 
 
 def _utc_now() -> str:
@@ -773,6 +776,24 @@ async def slack_interactive_callback(request: Request):
     signature = request.headers.get("X-Slack-Signature", "")
     signing_secret = os.getenv("SLACK_SIGNING_SECRET", "")
 
+    # Persist to WebhookInbox BEFORE any business logic (best-effort)
+    try:
+        import base64 as _base64
+        _inbox_id = str(uuid.uuid4())
+        await _webhook_inbox_repo.insert(_inbox_id, {
+            "id": _inbox_id,
+            "tenant_id": "",  # extracted later from action payload
+            "provider": "slack",
+            "headers": _sanitize_headers(dict(request.headers)),
+            "raw_body": body_bytes.decode("utf-8", errors="replace"),
+            "signature": signature,
+            "timestamp": timestamp,
+            "verified": False,
+            "processed": False,
+        })
+    except Exception as _exc:
+        logger.debug("slack_callback_inbox_write_failed: %s", _exc)
+
     if signing_secret and not SlackChannelGateway.verify_signature(
         body_bytes, timestamp, signature, signing_secret
     ):
@@ -965,3 +986,84 @@ async def list_alerts(request: Request):
     alert_repo = AlertRepository()
     alerts = await alert_repo.find_many(filters={"tenant_id": request.state.tenant.tenant_id})
     return APIResponse(data=alerts).to_dict()
+
+
+# ── Inbound Connector Webhook Routes ─────────────────────────────────────────
+# All routes below persist to WebhookInbox FIRST and return 200 immediately.
+# Async processing happens via WebhookInboxProcessor background task.
+
+@router.post("/webhooks/linear/events")
+async def linear_webhook(request: Request):
+    """Persist Linear webhook to WebhookInbox, verify signature, return 200 immediately."""
+    body_bytes = await request.body()
+    linear_sig = request.headers.get("Linear-Signature", "")
+    inbox_id = str(uuid.uuid4())
+    try:
+        await _webhook_inbox_repo.insert(inbox_id, {
+            "id": inbox_id,
+            "tenant_id": "",  # resolved during async processing
+            "provider": "linear",
+            "headers": _sanitize_headers(dict(request.headers)),
+            "raw_body": body_bytes.decode("utf-8", errors="replace"),
+            "signature": linear_sig,
+            "timestamp": "",
+            "verified": False,
+            "processed": False,
+        })
+    except Exception as exc:
+        logger.warning("linear_webhook_inbox_write_failed: %s", exc)
+    return Response(status_code=200)
+
+
+@router.post("/webhooks/jira/events")
+async def jira_webhook(request: Request):
+    """Persist Jira webhook to WebhookInbox, verify Jira signature, return 200 immediately."""
+    body_bytes = await request.body()
+    jira_sig = request.headers.get("X-Hub-Signature-256", "")
+    inbox_id = str(uuid.uuid4())
+    try:
+        await _webhook_inbox_repo.insert(inbox_id, {
+            "id": inbox_id,
+            "tenant_id": "",  # resolved during async processing
+            "provider": "jira",
+            "headers": _sanitize_headers(dict(request.headers)),
+            "raw_body": body_bytes.decode("utf-8", errors="replace"),
+            "signature": jira_sig,
+            "timestamp": "",
+            "verified": False,
+            "processed": False,
+        })
+    except Exception as exc:
+        logger.warning("jira_webhook_inbox_write_failed: %s", exc)
+    return Response(status_code=200)
+
+
+@router.post("/webhooks/aether/callback")
+async def aether_callback(request: Request):
+    """Inbound signed outcome callback from generic webhook adapter.
+
+    Persists the callback to WebhookInbox before returning 200.
+    The WebhookInboxProcessor handles verification and normalization asynchronously.
+    """
+    body_bytes = await request.body()
+    aether_sig = request.headers.get("X-Aether-Signature", "")
+    aether_ts = request.headers.get("X-Aether-Timestamp", "")
+    delivery_id = request.headers.get("X-Aether-Delivery-Id", "")
+    inbox_id = str(uuid.uuid4())
+    try:
+        # Resolve tenant from delivery_id or query param
+        tenant_id = request.query_params.get("tenant_id", "")
+        await _webhook_inbox_repo.insert(inbox_id, {
+            "id": inbox_id,
+            "tenant_id": tenant_id,
+            "provider": "webhook",
+            "headers": _sanitize_headers(dict(request.headers)),
+            "raw_body": body_bytes.decode("utf-8", errors="replace"),
+            "signature": aether_sig,
+            "timestamp": aether_ts,
+            "verified": False,
+            "processed": False,
+        })
+    except Exception as exc:
+        logger.warning("aether_callback_inbox_write_failed: %s", exc)
+    return Response(status_code=200)

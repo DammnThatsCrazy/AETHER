@@ -449,6 +449,32 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     except Exception as e:  # pragma: no cover — defensive
         logger.warning(f"DeliveryWorker failed to start: {e}")
 
+    # WebhookInboxProcessor — async closed-loop outcome processing
+    webhook_inbox_task = asyncio.create_task(asyncio.sleep(0))  # placeholder
+    try:
+        if settings.delivery.enabled:
+            from repositories.delivery_repos import (
+                WebhookInboxRepository as _InboxRepo,
+                ExternalOutcomeEventRepository as _OutcomeRepo,
+                ExternalResourceLinkRepository as _LinkRepo,
+            )
+            from services.delivery.outcome_processor import WebhookInboxProcessor, OutcomeRouter
+            _inbox_proc = WebhookInboxProcessor(
+                inbox_repo=_InboxRepo(),
+                outcome_repo=_OutcomeRepo(),
+                link_repo=_LinkRepo(),
+                router=OutcomeRouter(
+                    outcome_repo=_OutcomeRepo(),
+                    link_repo=_LinkRepo(),
+                ),
+            )
+            webhook_inbox_task = asyncio.create_task(_inbox_proc.run())
+            logger.info("WebhookInboxProcessor started")
+        else:
+            logger.info("WebhookInboxProcessor disabled (AETHER_DELIVERY_WORKER_ENABLED=false)")
+    except Exception as e:  # pragma: no cover — defensive
+        logger.warning(f"WebhookInboxProcessor failed to start: {e}")
+
     logger.info(
         f"Aether Backend started | env={settings.env.value} "
         f"| debug={settings.debug} | version={settings.api.version}"
@@ -463,6 +489,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     sla_worker_task.cancel()
     dune_poll_task.cancel()
     delivery_worker_task.cancel()
+    webhook_inbox_task.cancel()
     try:
         await replay_worker_task
     except asyncio.CancelledError:
@@ -481,6 +508,10 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         pass
     try:
         await delivery_worker_task
+    except asyncio.CancelledError:
+        pass
+    try:
+        await webhook_inbox_task
     except asyncio.CancelledError:
         pass
     try:

@@ -2613,3 +2613,24 @@ These endpoints are gated by feature flags (`FEATURE_FRAUD_NETWORKS`, `FEATURE_F
 | GET | `/v1/risk-overlay` | `fraud:read` | List overlay snapshots |
 | GET | `/v1/risk-overlay/{overlay_id}` | `fraud:read` | Get overlay snapshot |
 | POST | `/v1/admin/kyber/data-rights/grants/{grant_id}/revoke` | Operator-initiated revocation |
+
+
+### Delivery Management (`/v1/delivery/*`)
+
+| Method | Path | Permission | Description |
+|--------|------|-----------|-------------|
+| GET | `/v1/delivery/intents` | `delivery:read` | List DeliveryIntent records for tenant |
+| GET | `/v1/delivery/jobs` | `delivery:read` | List DeliveryJob records for tenant |
+| GET | `/v1/delivery/jobs/{id}/attempts` | `delivery:read` | List DeliveryAttempt records for job |
+| GET | `/v1/delivery/jobs/{id}/receipt` | `delivery:read` | Get ProviderReceipt for job |
+| POST | `/v1/delivery/jobs/{id}/replay` | `kyber:operator` | Re-queue dead-letter job (Kyber only) |
+| GET | `/v1/delivery/links` | `delivery:read` | List ExternalResourceLink records for tenant |
+
+### Inbound Webhooks (`/v1/webhooks/*`)
+
+| Method | Path | Auth | Description |
+|--------|------|------|-------------|
+| POST | `/v1/webhooks/slack/interactive` | Slack signing secret | Slack interactive action callback; written to WebhookInbox before processing |
+| POST | `/v1/webhooks/linear/events` | Linear-Signature HMAC | Linear issue/event webhook; persisted to WebhookInbox and processed async |
+| POST | `/v1/webhooks/jira/events` | X-Hub-Signature-256 HMAC | Jira issue webhook; persisted to WebhookInbox and processed async |
+| POST | `/v1/webhooks/aether/callback` | X-Aether-Signature HMAC | Generic signed outcome callback from webhook delivery targets |

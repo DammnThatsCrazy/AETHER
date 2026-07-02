@@ -202,7 +202,7 @@ class ConnectorService:
         except Exception as exc:
             logger.warning(f"connector pull failed tenant={tenant_id} type={connector_type}: {exc}")
             events = []
-            status = "failed"
+            status = "error"
             error_detail = str(exc)[:500]
         # Persist sync status and error history (connector health signal).
         config.last_synced_at = now_iso()
@@ -220,7 +220,7 @@ class ConnectorService:
         await _audit(tenant_id, actor_id, "system", "connector_sync", connector_type,
                      "allowed" if status == "healthy" else "blocked",
                      {"events": len(events), "status": status})
-        if status == "failed":
+        if status == "error":
             from services.delivery.adapters.base import ConnectorSyncError
             raise ConnectorSyncError(
                 f"Connector sync failed: {error_detail}",
@@ -244,6 +244,18 @@ class ConnectorService:
                     ingested += 1
             except Exception as exc:  # pragma: no cover - best-effort, never break sync
                 logger.warning(f"connector bronze ingest failed tenant={tenant_id} type={connector_type}: {exc}")
+        # Upsert ConnectorCursor with the latest sync position
+        try:
+            from repositories.delivery_repos import ConnectorCursorRepository
+            cursor_repo = ConnectorCursorRepository()
+            cursor_value = now_iso()
+            await cursor_repo.set_cursor(
+                tenant_id, connector_type,
+                cursor_value=cursor_value,
+                event_count=ingested,
+            )
+        except Exception as exc:  # pragma: no cover - best-effort, never break sync
+            logger.warning(f"connector cursor upsert failed tenant={tenant_id} type={connector_type}: {exc}")
         mode = os.getenv("AETHER_ENV", "local").lower()
         detail = f"live sync ({connector_type})" if mode != "local" else f"local mode — no external API call ({connector_type})"
         return SyncResult(connector_type=connector_type, status=status,  # type: ignore[arg-type]
@@ -252,10 +264,36 @@ class ConnectorService:
 
     async def ingest_webhook(self, connector_type: str, tenant_id: str, *, raw_body: bytes,
                              signature: Optional[str] = None, timestamp: Optional[str] = None,
-                             secret: Optional[str] = None) -> dict[str, Any]:
+                             secret: Optional[str] = None,
+                             headers: Optional[dict[str, Any]] = None,
+                             webhook_inbox_repo: Any = None) -> dict[str, Any]:
         connector = get_connector(connector_type)
         if connector is None:
             raise ValueError(f"unknown connector {connector_type}")
+
+        # Write to WebhookInbox BEFORE any business logic (best-effort)
+        _inbox_id: Optional[str] = None
+        try:
+            import uuid as _uuid
+            from repositories.delivery_repos import WebhookInboxRepository as _InboxRepo
+            from services.delivery.security import sanitize_headers as _sanitize
+            _repo = webhook_inbox_repo or _InboxRepo()
+            _inbox_id = str(_uuid.uuid4())
+            _headers = _sanitize(headers or {})
+            await _repo.insert(_inbox_id, {
+                "id": _inbox_id,
+                "tenant_id": tenant_id,
+                "provider": connector_type,
+                "headers": _headers,
+                "raw_body": raw_body.decode("utf-8", errors="replace"),
+                "signature": signature or "",
+                "timestamp": timestamp or "",
+                "verified": False,
+                "processed": False,
+            })
+        except Exception as exc:  # pragma: no cover - best-effort, never break ingestion
+            logger.warning(f"connector ingest_webhook inbox write failed: {exc}")
+
         cfg = await self.repo.find_by_id(_key(tenant_id, connector_type))
         config = ConnectorConfig(**cfg) if cfg else None
         if config is None or not config.enabled:
