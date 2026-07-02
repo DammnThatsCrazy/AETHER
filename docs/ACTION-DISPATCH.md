@@ -48,9 +48,21 @@ Action Dispatch connects approved Decision & Outcome Intelligence actions to ext
 
 The built-in target registry supports Slack, webhook, CRM, marketing automation, ticketing, and agent-assist workflows. Targets expose whether configuration, retries, delivery receipts, cancellation, and premium metering apply.
 
+## Dispatch flow (as of 9.1.0)
+
+`POST /v1/intelligence/actions/{action_id}/dispatch` no longer produces a simulated receipt. The dispatch call now:
+
+1. Creates a `DeliveryIntent` (durable outbox record) atomically in the same DB transaction.
+2. Creates a `DeliveryJob` per configured destination channel.
+3. Returns `202 Accepted` with the job IDs.
+4. `DeliveryWorker` (background process) leases jobs and calls the concrete `ProviderAdapter.deliver()` method.
+5. A `ProviderReceipt` with a real `external_id` is required before the suggestion advances to DELIVERED.
+
+`BaseActionTarget.dispatch()` raises `NotImplementedError` — it is no longer callable. `ActionTargetRegistry` delegates adapter resolution to `ProviderAdapterRegistry`. See [Delivery Architecture](DELIVERY-ARCHITECTURE.md) and [ADR-001](architecture/adr-001-canonical-delivery-pipeline.md).
+
 ## Secret handling
 
-Integration secrets such as `auth_secret`, `secret`, `api_key`, and `webhook_secret` are converted to internal secret references and omitted from API responses. Responses only expose `has_secret` so tenants can verify a credential is configured without leaking a stable credential fingerprint.
+Integration secrets such as `auth_secret`, `secret`, `api_key`, and `webhook_secret` are converted to internal secret references and omitted from API responses. Responses only expose `has_secret` so tenants can verify a credential is configured without leaking a stable credential fingerprint. Credentials are resolved from the vault at job-lease time — never stored in job payloads, Kafka events, or logs.
 
 ## Governance
 

@@ -1411,6 +1411,20 @@ export const api = {
         reason,
       }).then(r => r.data),
   },
+
+  // ─── Delivery — outbox, jobs, receipts, attempts (tenant-scoped) ──────────
+  delivery: {
+    listIntents: (params: Record<string, string | number | undefined> = {}) =>
+      restClient.get(`/v1/delivery/intents${buildQS(params as Record<string, string | number | boolean | undefined>)}`, wrap(unknownSchema)).then(r => r.data),
+    listJobs: (params: Record<string, string | number | undefined> = {}) =>
+      restClient.get(`/v1/delivery/jobs${buildQS(params as Record<string, string | number | boolean | undefined>)}`, wrap(unknownSchema)).then(r => r.data),
+    getReceipt: (jobId: string) =>
+      restClient.get(`/v1/delivery/jobs/${jobId}/receipt`, wrap(unknownSchema)).then(r => r.data),
+    listAttempts: (jobId: string) =>
+      restClient.get(`/v1/delivery/jobs/${jobId}/attempts`, wrap(unknownSchema)).then(r => r.data),
+    listLinks: (params: Record<string, string | number | undefined> = {}) =>
+      restClient.get(`/v1/delivery/links${buildQS(params as Record<string, string | number | boolean | undefined>)}`, wrap(unknownSchema)).then(r => r.data),
+  },
 };
 
 // ─── Utility: call API with typed fallback ────────────────────────────────────

@@ -60,9 +60,25 @@ See per-connector pages: [Slack](SLACK-CONNECTOR.md),
   `POST /{type}/test`, `POST /{type}/sync`, `POST /{type}/webhook` (authenticated).
 - Kyber: `GET /v1/admin/kyber/connectors/overview` (aggregate-only, operator-gated).
 
+## Outbound delivery capabilities (9.1.0+)
+
+Connectors now support bidirectional operation:
+
+- **Slack, Linear, Jira** — full outbound delivery: `DeliveryWorker` calls the concrete provider API, persists a `ProviderReceipt` with a real `external_id`, and creates an `ExternalResourceLink`. Provider webhooks feed back as `ExternalOutcomeEvent` records that update the suggestion outcome state and emit graph edges.
+- **Generic signed webhook** — versioned, HMAC-SHA256-signed outbound POST. Outcome callbacks return via `POST /v1/webhooks/aether/callback`.
+- **CRM / Marketing** — fail-closed. Require a concrete `crm_provider` / `marketing_provider` config; planned for a future release.
+- **Agent Assist** — publishes a Kafka `AGENT_ASSIST_ACTION_QUEUED` event and records a receipt with an internal `agent-assist:{id}` external ID.
+
+All inbound webhook routes persist to `WebhookInbox` before any business processing. Provider-native signature verification is enforced for every connector that supports signed webhooks. See [Connector Support Matrix](CONNECTOR-SUPPORT-MATRIX.md).
+
+## Delivery runbooks
+
+- [Delivery Failures](runbooks/DELIVERY-FAILURES.md)
+- [Credential Rotation](runbooks/CREDENTIAL-ROTATION.md)
+- [Reconciliation](runbooks/RECONCILIATION.md)
+
 ## Implementation status
 
-These are **production-shaped, disabled-by-default adapters**: config,
-connection test, sync, webhook parsing, and the audit/metering/health hooks are
-implemented and mocked locally; real provider API calls are credential-gated
-TODOs noted in each adapter. See [Data Ingestion Paths](DATA-INGESTION-PATHS.md).
+Inbound adapters: connector config, connection test, sync, webhook parsing, audit/metering/health hooks, and `WebhookInbox` persistence are fully implemented. Real provider API calls require credentials. See [Data Ingestion Paths](DATA-INGESTION-PATHS.md).
+
+Outbound adapters: Slack, Linear, Jira, and signed webhook are production-ready. See [Connector Support Matrix](CONNECTOR-SUPPORT-MATRIX.md).

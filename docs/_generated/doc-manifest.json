@@ -511,6 +511,22 @@
       "canonical_owner": "compliance@aether"
     },
     {
+      "path": "docs/CONNECTOR-SUPPORT-MATRIX.md",
+      "title": "Connector Support Matrix",
+      "slug": "operations/connector-support-matrix",
+      "section": "operations",
+      "visibility": "I",
+      "audience": [
+        "architect",
+        "dev-senior",
+        "ops"
+      ],
+      "status": "stable",
+      "since_version": "9.1.0",
+      "estimated_read_minutes": 4,
+      "canonical_owner": "platform@aether"
+    },
+    {
       "path": "docs/CONNECTORS.md",
       "title": "Connectors",
       "slug": "operations/connectors",
@@ -763,6 +779,37 @@
         "KYBER_RECOMMENDATION_OBSERVABILITY_ENABLED",
         "AETHER_RECOMMENDATION_CONFIDENCE_THRESHOLD"
       ]
+    },
+    {
+      "path": "docs/DELIVERY-ARCHITECTURE.md",
+      "title": "Delivery Architecture",
+      "slug": "architecture/delivery-architecture",
+      "section": "architecture",
+      "visibility": "I",
+      "audience": [
+        "architect",
+        "dev-senior",
+        "ops"
+      ],
+      "status": "stable",
+      "since_version": "9.0.0",
+      "estimated_read_minutes": 8,
+      "canonical_owner": "platform@aether"
+    },
+    {
+      "path": "docs/DELIVERY-STATE-MACHINE.md",
+      "title": "Delivery State Machine",
+      "slug": "architecture/delivery-state-machine",
+      "section": "architecture",
+      "visibility": "I",
+      "audience": [
+        "architect",
+        "dev-senior"
+      ],
+      "status": "stable",
+      "since_version": "9.0.0",
+      "estimated_read_minutes": 4,
+      "canonical_owner": "platform@aether"
     },
     {
       "path": "docs/DEMO-APP-UX.md",
@@ -1520,6 +1567,21 @@
       "since_version": "8.9.0"
     },
     {
+      "path": "docs/JIRA-CONNECTOR-SETUP.md",
+      "title": "Jira Connector Setup (Outbound Delivery)",
+      "slug": "operations/jira-connector-setup",
+      "section": "operations",
+      "visibility": "I",
+      "audience": [
+        "dev-senior",
+        "ops"
+      ],
+      "status": "stable",
+      "since_version": "9.0.0",
+      "estimated_read_minutes": 5,
+      "canonical_owner": "platform@aether"
+    },
+    {
       "path": "docs/JIRA-LINEAR-CONNECTORS.md",
       "title": "Jira & Linear Connectors",
       "slug": "operations/jira-linear-connectors",
@@ -1635,6 +1697,21 @@
       "since_version": "8.9.0",
       "estimated_read_minutes": 20,
       "canonical_owner": "kyber@aether"
+    },
+    {
+      "path": "docs/LINEAR-CONNECTOR-SETUP.md",
+      "title": "Linear Connector Setup (Outbound Delivery)",
+      "slug": "operations/linear-connector-setup",
+      "section": "operations",
+      "visibility": "I",
+      "audience": [
+        "dev-senior",
+        "ops"
+      ],
+      "status": "stable",
+      "since_version": "9.0.0",
+      "estimated_read_minutes": 4,
+      "canonical_owner": "platform@aether"
     },
     {
       "path": "docs/LIVE-TELEMETRY-WIRING.md",
@@ -2771,6 +2848,21 @@
       ]
     },
     {
+      "path": "docs/SLACK-CONNECTOR-SETUP.md",
+      "title": "Slack Connector Setup (Outbound Delivery)",
+      "slug": "operations/slack-connector-setup",
+      "section": "operations",
+      "visibility": "I",
+      "audience": [
+        "dev-senior",
+        "ops"
+      ],
+      "status": "stable",
+      "since_version": "9.0.0",
+      "estimated_read_minutes": 5,
+      "canonical_owner": "platform@aether"
+    },
+    {
       "path": "docs/SLACK-CONNECTOR.md",
       "title": "Slack Connector",
       "slug": "operations/slack-connector",
@@ -3196,6 +3288,22 @@
       "canonical_owner": "platform@aether"
     },
     {
+      "path": "docs/WEBHOOK-CONNECTOR-SETUP.md",
+      "title": "Webhook Connector Setup (Outbound Delivery)",
+      "slug": "operations/webhook-connector-setup",
+      "section": "operations",
+      "visibility": "I",
+      "audience": [
+        "dev-senior",
+        "ops",
+        "security"
+      ],
+      "status": "stable",
+      "since_version": "9.0.0",
+      "estimated_read_minutes": 5,
+      "canonical_owner": "platform@aether"
+    },
+    {
       "path": "docs/WEBHOOK-EVENTS.md",
       "title": "Webhook Events",
       "slug": "api/webhook-events",
@@ -3364,6 +3472,21 @@
       "status": "stable",
       "since_version": "8.10.0",
       "canonical_owner": "graph@aether"
+    },
+    {
+      "path": "docs/architecture/adr-001-canonical-delivery-pipeline.md",
+      "title": "ADR-001: Canonical Delivery Pipeline",
+      "slug": "architecture/adr-001",
+      "section": "architecture",
+      "visibility": "I",
+      "audience": [
+        "architect",
+        "dev-senior"
+      ],
+      "status": "stable",
+      "since_version": "9.1.0",
+      "estimated_read_minutes": 8,
+      "canonical_owner": "platform@aether"
     },
     {
       "path": "docs/audits/AGENTIC_OBSERVABILITY_AUDIT.md",
@@ -4053,6 +4176,36 @@
       "canonical_owner": "platform@aether"
     },
     {
+      "path": "docs/runbooks/CREDENTIAL-ROTATION.md",
+      "title": "Credential Rotation Runbook",
+      "slug": "runbooks/credential-rotation",
+      "section": "operations",
+      "visibility": "I",
+      "audience": [
+        "ops",
+        "security"
+      ],
+      "status": "stable",
+      "since_version": "9.0.0",
+      "estimated_read_minutes": 5,
+      "canonical_owner": "platform@aether"
+    },
+    {
+      "path": "docs/runbooks/DELIVERY-FAILURES.md",
+      "title": "Delivery Failures Runbook",
+      "slug": "runbooks/delivery-failures",
+      "section": "operations",
+      "visibility": "I",
+      "audience": [
+        "ops",
+        "dev-senior"
+      ],
+      "status": "stable",
+      "since_version": "9.0.0",
+      "estimated_read_minutes": 8,
+      "canonical_owner": "platform@aether"
+    },
+    {
       "path": "docs/runbooks/ML-INCIDENT-RUNBOOK.md",
       "title": "ML Incident Runbook",
       "slug": "ai/ml-incident-runbook",
@@ -4068,6 +4221,21 @@
       "estimated_read_minutes": 10,
       "toc_depth": 3,
       "canonical_owner": "ml@aether"
+    },
+    {
+      "path": "docs/runbooks/RECONCILIATION.md",
+      "title": "Delivery Reconciliation Runbook",
+      "slug": "runbooks/reconciliation",
+      "section": "operations",
+      "visibility": "I",
+      "audience": [
+        "ops",
+        "dev-senior"
+      ],
+      "status": "stable",
+      "since_version": "9.0.0",
+      "estimated_read_minutes": 5,
+      "canonical_owner": "platform@aether"
     },
     {
       "path": "docs/security/UNIVERSAL_GRAPH_SECURITY_MODEL.md",

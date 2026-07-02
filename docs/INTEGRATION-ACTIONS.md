@@ -27,7 +27,9 @@ Integration-ready actions let tenants log governed action targets without forcin
 
 `POST /v1/intelligence/actions/integration-ready`
 
-Initial targets are Slack notification, webhook, CRM task placeholder, marketing automation placeholder, and ticketing placeholder.
+Supported targets: Slack, signed webhook, ticketing (delegates to Linear or Jira), agent-assist. CRM and marketing automation targets require a concrete provider config; they fail closed with `InvalidPayloadError` until configured.
+
+As of 9.1.0, dispatch creates a `DeliveryIntent` + `DeliveryJob` in the database. A `ProviderReceipt` with a real external ID is required before the suggestion advances to DELIVERED. Simulated dispatch (`{"simulated": true}`) has been removed. See [ADR-001](architecture/adr-001-canonical-delivery-pipeline.md).
 
 ## Controls
 

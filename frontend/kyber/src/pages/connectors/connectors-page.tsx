@@ -105,13 +105,15 @@ export function ConnectorsPage() {
                     <th className="py-2 px-2 text-right">Enabled tenants</th>
                     <th className="py-2 px-2 text-left">Status</th>
                     <th className="py-2 px-2 text-left">Last synced</th>
+                    <th className="py-2 px-2 text-left">Last webhook</th>
+                    <th className="py-2 px-2 text-left">Cursor</th>
                   </tr>
                 </thead>
                 <tbody>
                   {typeDetail.map((row) => {
-                    const STATUS_SEVERITY: Record<string, number> = { failed: 3, degraded: 2, never_synced: 1, healthy: 0 };
+                    const STATUS_SEVERITY: Record<string, number> = { failed: 3, degraded: 2, error: 2, never_synced: 1, healthy: 0 };
                     const worstStatus = Object.keys(row.status_breakdown).sort((a, b) => (STATUS_SEVERITY[b] ?? 0) - (STATUS_SEVERITY[a] ?? 0))[0] ?? 'never_synced';
-                    const dominantStatus = worstStatus;
+                    const rowAny = row as unknown as AnyRecord;
                     return (
                       <tr key={row.connector_type} className="border-b border-border-subtle hover:bg-surface-hover">
                         <td className="py-2 px-2 font-semibold text-text-primary">{row.label}</td>
@@ -124,9 +126,19 @@ export function ConnectorsPage() {
                         <td className="py-2 px-2">
                           {row.enabled_tenants === 0
                             ? <span className="text-text-muted">—</span>
-                            : <Badge variant={statusColor(dominantStatus)}>{dominantStatus}</Badge>}
+                            : <Badge variant={statusColor(worstStatus)}>{worstStatus}</Badge>}
                         </td>
                         <td className="py-2 px-2 text-text-muted">{formatTs(row.last_synced_at)}</td>
+                        <td className="py-2 px-2 text-text-muted">
+                          {rowAny.last_webhook_at
+                            ? <>{formatTs(rowAny.last_webhook_at as string)} {rowAny.last_webhook_verified === false && <Badge variant="warning">unverified</Badge>}</>
+                            : '—'}
+                        </td>
+                        <td className="py-2 px-2 text-text-muted">
+                          {rowAny.cursor_last_polled_at
+                            ? <>{formatTs(rowAny.cursor_last_polled_at as string)}<br /><span className="text-text-faint">{String(rowAny.cursor_events_fetched ?? 0)} events</span></>
+                            : '—'}
+                        </td>
                       </tr>
                     );
                   })}
