@@ -116,5 +116,12 @@ class DeliveryRouter:
             if record:
                 return record.get("api_key", "")
         except Exception as exc:
-            logger.warning("credentials_resolve_failed ref=%s error=%s", credentials_ref, exc)
-        return credentials_ref
+            logger.error("credentials_resolve_failed ref=%s error=%s", credentials_ref, exc)
+            raise RuntimeError(
+                f"Credential resolution failed for ref={credentials_ref!r}. "
+                f"Cannot proceed without valid credentials: {exc}"
+            ) from exc
+        raise RuntimeError(
+            f"Credential record not found for ref={credentials_ref!r}. "
+            f"The vault reference does not exist in the providers repository."
+        )
