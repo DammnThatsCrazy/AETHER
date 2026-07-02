@@ -68,7 +68,7 @@ export function DeliveryOpsPage() {
 
   function load(p: number) {
     setLoading(true);
-    const params: AnyRecord = { page: p, per_page: PAGE_SIZE };
+    const params: Record<string, string | number | undefined> = { page: p, per_page: PAGE_SIZE };
     if (tab === 'dead_letter') params.state = 'dead_letter';
     if (tenantFilter) params.tenant_id = tenantFilter;
     if (providerFilter) params.provider_adapter = providerFilter;
