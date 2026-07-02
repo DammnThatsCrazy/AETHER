@@ -4,7 +4,7 @@ slug: architecture/delivery-state-machine
 section: architecture
 visibility: I
 audience: [architect, dev-senior]
-status: production
+status: stable
 since_version: "9.0.0"
 canonical_owner: platform@aether
 estimated_read_minutes: 4

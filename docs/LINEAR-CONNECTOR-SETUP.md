@@ -4,7 +4,7 @@ slug: operations/linear-connector-setup
 section: operations
 visibility: I
 audience: [dev-senior, ops]
-status: production
+status: stable
 since_version: "9.0.0"
 canonical_owner: platform@aether
 estimated_read_minutes: 4

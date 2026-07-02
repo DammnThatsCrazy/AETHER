@@ -4,7 +4,7 @@ slug: architecture/adr-001
 section: architecture
 visibility: I
 audience: [architect, dev-senior]
-status: accepted
+status: stable
 since_version: "9.1.0"
 canonical_owner: platform@aether
 estimated_read_minutes: 8

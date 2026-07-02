@@ -4,7 +4,7 @@ slug: operations/connector-support-matrix
 section: operations
 visibility: I
 audience: [architect, dev-senior, ops]
-status: production
+status: stable
 since_version: "9.1.0"
 canonical_owner: platform@aether
 estimated_read_minutes: 4

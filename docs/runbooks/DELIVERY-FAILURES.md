@@ -1,10 +1,10 @@
 ---
 title: Delivery Failures Runbook
 slug: runbooks/delivery-failures
-section: runbooks
+section: operations
 visibility: I
 audience: [ops, dev-senior]
-status: production
+status: stable
 since_version: "9.0.0"
 canonical_owner: platform@aether
 estimated_read_minutes: 8

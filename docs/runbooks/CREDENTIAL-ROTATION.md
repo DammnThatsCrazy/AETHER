@@ -1,10 +1,10 @@
 ---
 title: Credential Rotation Runbook
 slug: runbooks/credential-rotation
-section: runbooks
+section: operations
 visibility: I
 audience: [ops, security]
-status: production
+status: stable
 since_version: "9.0.0"
 canonical_owner: platform@aether
 estimated_read_minutes: 5
