@@ -102,7 +102,6 @@ def test_d2_no_create_task_in_consumer():
 
 def test_d3_delivery_router_raises_without_providers_repo():
     """D3: _resolve_credentials must raise RuntimeError when providers_repo is None."""
-    import asyncio
     from services.notification_intelligence.delivery_router import DeliveryRouter
 
     router = DeliveryRouter(channel_repo=None, providers_repo=None)
