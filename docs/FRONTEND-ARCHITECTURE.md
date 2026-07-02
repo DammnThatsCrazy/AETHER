@@ -13,7 +13,7 @@ source_files:
 canonical_owner: frontend@aether
 estimated_read_minutes: 35
 toc_depth: 4
-last_synced_commit: 7c85af5
+last_synced_commit: 5145dd0
 ---
 
 # Aether Frontend Architecture & Designer Handoff
@@ -668,3 +668,65 @@ Supporting components:
 | `FlowTracePaths` | `components/fraud/flow-trace-paths.tsx` | Path list with pattern tags, hop count, and risk score bar |
 
 All components use `useQuery` / `useMutation` from `@aether/ui`, the `api.fraudNetworks` and `api.flowTrace` domain objects from `endpoints.ts`, and the hooks in `features/fraud/use-fraud.ts`.
+
+---
+
+## Delivery & Connector Pages (v9.1.0)
+
+### Aether (tenant) — Delivery History
+
+**File:** `frontend/aether/src/pages/connectors/delivery-history.tsx`
+
+`DeliveryHistoryPage` provides tenants with a paginated view of their outbound `DeliveryIntent` records and their associated per-provider jobs, attempt details, and provider receipts.
+
+| Feature | Detail |
+|---------|--------|
+| Intents list | Paginated (10 per page), shows source type, channels, created timestamp, and state badge |
+| State badges | PENDING / SCHEDULED / DELIVERED / FAILED mapped via `STATE_VARIANT` to success/warning/danger/default |
+| Expandable jobs | Click an intent card to load `DeliveryJob` rows: provider, attempt count, external ID, created timestamp |
+| Attempt detail | Expand a job row to see individual `DeliveryAttempt` records: outcome, HTTP status, latency, error message, started-at |
+| Provider receipt | External ID rendered as a clickable link when `external_url` is present |
+| Dead-letter message | When job state is `dead_letter`, shows "Contact support to replay" — tenants cannot self-replay |
+| Empty states | Loading spinner, empty state (no records), and error state are all handled |
+| API | `GET /v1/delivery/intents` → `GET /v1/delivery/jobs` → `GET /v1/delivery/jobs/{id}/attempts` + `/receipt` |
+
+### Aether (tenant) — Connectors Page Health Labels
+
+**File:** `frontend/aether/src/pages/connectors/connectors-page.tsx`
+
+The `healthLabel(connector)` function maps `sync_status` + `secret_configured` to a human-readable label. **Critical invariant: never returns "Connected" when `secret_configured` is absent or false.**
+
+| `sync_status` | `secret_configured` | Label returned |
+|---------------|---------------------|----------------|
+| `healthy` | `true` | Connected |
+| `healthy` | falsy | Credentials Missing |
+| `error` | any | Error |
+| `rate_limited` | any | Rate Limited |
+| `credentials_invalid` | any | Credentials Invalid |
+| `credentials_missing` | any | Credentials Missing |
+| `revoked` | any | Revoked |
+| `permission_missing` | any | Permission Missing |
+| `never_synced` | any | Never Synced |
+| (other) | any | Unconfigured |
+
+The `STATUS_VARIANT` map covers all states above with appropriate badge colors.
+
+### Kyber (operator) — Delivery Operations
+
+**File:** `frontend/kyber/src/pages/delivery/delivery-ops.tsx`
+
+`DeliveryOpsPage` is an operator cross-tenant delivery management surface with two tabs:
+
+| Tab | Content |
+|-----|---------|
+| All Jobs | Filterable list (by tenant ID, provider/adapter type, job state); columns: job ID, tenant, provider, state badge, attempt count, created, external ID with link |
+| Dead Letter | Jobs in `dead_letter` state with last error summary; "Replay" button opens a confirmation dialog before calling `POST /v1/delivery/jobs/{id}/replay` |
+
+Pagination: 20 jobs per page with Previous/Next controls. Replay requires explicit operator confirmation via modal dialog — no action taken without approval.
+
+The `api.delivery` namespace in `frontend/aether/src/lib/api/endpoints.ts` and `frontend/kyber/src/lib/api/endpoints.ts` exposes:
+- `listIntents(params)` → `GET /v1/delivery/intents`
+- `listJobs(params)` → `GET /v1/delivery/jobs`
+- `getReceipt(jobId)` → `GET /v1/delivery/jobs/{id}/receipt`
+- `listAttempts(jobId)` → `GET /v1/delivery/jobs/{id}/attempts`
+- `listLinks(params)` → `GET /v1/delivery/links`
