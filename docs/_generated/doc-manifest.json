@@ -4116,6 +4116,18 @@
       "canonical_owner": "sdk@aether"
     },
     {
+      "path": "docs/reports/UNIFIED_WEB2_WEB3_FRAUD_GAP_RECOVERY.md",
+      "title": "Unified Web2/Web3 + Fraud Intelligence — Gap Recovery Ledger",
+      "slug": "reports/unified-web2-web3-fraud-gap-recovery",
+      "section": "reference",
+      "visibility": "I",
+      "audience": [
+        "dev-senior"
+      ],
+      "status": "stable",
+      "since_version": "8.11.0"
+    },
+    {
       "path": "docs/runbooks/CAMPAIGN-360-ATTRIBUTION-RUN-FAILED.md",
       "title": "Runbook — Attribution Run Failed (Campaign 360)",
       "slug": "runbooks/campaign-360-attribution-run-failed",

@@ -12,7 +12,7 @@ source_files:
   - Backend Architecture/aether-backend/services/measurement/routes/kyber.py
   - frontend/aether/src/pages/journey-explorer/journey-explorer-page.tsx
   - frontend/kyber/src/pages/measurement/journey-explorer-page.tsx
-last_synced_commit: 7c85af5
+last_synced_commit: "9461239"
 ---
 
 # Release Readiness — Unified Canonical Journey
@@ -46,7 +46,7 @@ last_synced_commit: 7c85af5
 
 ## Quality Gates Checked
 
-- [x] `make repo-doctor` — 20/21 gates pass (1 pre-existing env dep gap, not a code issue)
+- [x] `make repo-doctor` — 23/23 gates pass (numpy env dep gap resolved in fraud intelligence PR)
 - [x] TypeScript build + typecheck — clean
 - [x] `npm test` — passing
 - [x] `python -m pytest` — 50 new tests passing
