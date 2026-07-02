@@ -125,7 +125,7 @@ function IntentCard({ intent }: IntentCardProps) {
     if (loaded) return;
     setLoaded(true);
     api.delivery.listJobs({ intent_id: String(intent.id) })
-      .then(async (d) => {
+      .then(async (d: unknown) => {
         const jobList = (((d as AnyRecord).items) ?? []) as AnyRecord[];
         setJobs(jobList);
         const rcpts: Record<string, AnyRecord> = {};
@@ -219,7 +219,7 @@ export function DeliveryHistoryPage() {
   function load(p: number) {
     setLoading(true);
     api.delivery.listIntents({ page: p, per_page: PAGE_SIZE })
-      .then((d) => {
+      .then((d: unknown) => {
         const items = (((d as AnyRecord).items) ?? []) as AnyRecord[];
         setIntents(items);
         setHasMore(items.length === PAGE_SIZE);
