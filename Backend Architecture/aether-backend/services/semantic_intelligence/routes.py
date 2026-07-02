@@ -1,10 +1,10 @@
 from __future__ import annotations
 
-from typing import Any
 from fastapi import APIRouter, Request, Query
 from pydantic import BaseModel, Field
 
-from shared.common.common import APIResponse, NotFoundError, ForbiddenError
+from shared.common.common import APIResponse, NotFoundError
+from services.security.request_context import require_kyber_operator
 from .engine import classify_event, entity_state, store
 
 router = APIRouter(prefix="/v1/semantic", tags=["Semantic Sentiment Intelligence"])
@@ -35,10 +35,7 @@ def tenant_id(request: Request) -> str:
 
 
 def require_operator(request: Request) -> None:
-    if request.headers.get("x-kyber-operator") != "true":
-        tenant = getattr(request.state, "tenant", None)
-        if not (tenant and getattr(tenant, "is_admin", False)):
-            raise ForbiddenError("Kyber semantic operation requires operator scope")
+    require_kyber_operator(request)
 
 
 @router.post("/observations")

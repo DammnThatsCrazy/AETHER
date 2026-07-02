@@ -4,6 +4,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from fastapi import FastAPI
+from shared.auth.auth import TenantContext
 from shared.common.common import AetherError
 from services.semantic_intelligence.models import SemanticObservation, SentimentObservation
 from services.semantic_intelligence.routes import router, kyber_router
@@ -89,11 +90,30 @@ def test_kyber_requires_operator_scope():
 
         return JSONResponse(status_code=exc.code.value, content=exc.to_dict())
 
+    @app.middleware("http")
+    async def tenant_context(request, call_next):
+        permissions = []
+        if request.headers.get("x-test-operator") == "true":
+            permissions.append("kyber:operator")
+        request.state.tenant = TenantContext(
+            tenant_id=request.headers.get("x-tenant-id", "tenant_a"),
+            permissions=permissions,
+        )
+        return await call_next(request)
+
     app.include_router(router)
     app.include_router(kyber_router)
     client = TestClient(app)
     denied = client.get("/v1/kyber/semantic/fleet-health", headers={"x-tenant-id": "tenant_a"})
     assert denied.status_code == 403
-    allowed = client.get("/v1/kyber/semantic/fleet-health", headers={"x-kyber-operator": "true"})
+    spoofed = client.get(
+        "/v1/kyber/semantic/fleet-health",
+        headers={"x-tenant-id": "tenant_a", "x-kyber-operator": "true"},
+    )
+    assert spoofed.status_code == 403
+    allowed = client.get(
+        "/v1/kyber/semantic/fleet-health",
+        headers={"x-tenant-id": "olympus", "x-test-operator": "true"},
+    )
     assert allowed.status_code == 200
     assert allowed.json()["data"]["cross_tenant_contamination"] is False

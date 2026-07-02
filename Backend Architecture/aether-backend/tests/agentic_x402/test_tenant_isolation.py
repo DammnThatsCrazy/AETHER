@@ -7,7 +7,6 @@ tenants does not leak rows across tenants.
 from __future__ import annotations
 
 import pytest
-import pytest_asyncio
 
 from repositories.repos import (
     AgentEconomicIdentityRepository,

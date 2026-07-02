@@ -2,13 +2,33 @@
 
 from __future__ import annotations
 
+import asyncio
+import functools
 import os
 import sys
 from pathlib import Path
 from unittest.mock import AsyncMock
 
 import pytest
-import pytest_asyncio
+
+try:
+    import pytest_asyncio
+except ImportError:  # pragma: no cover - fallback for constrained local sandboxes
+    class _PytestAsyncioFallback:
+        @staticmethod
+        def fixture(func=None, **kwargs):
+            def decorate(inner):
+                @functools.wraps(inner)
+                def wrapper(*args, **fixture_kwargs):
+                    return asyncio.run(inner(*args, **fixture_kwargs))
+
+                return pytest.fixture(**kwargs)(wrapper)
+
+            if func is None:
+                return decorate
+            return decorate(func)
+
+    pytest_asyncio = _PytestAsyncioFallback()
 
 ROOT = Path(__file__).resolve().parents[3]
 BACKEND_ROOT = ROOT / "Backend Architecture" / "aether-backend"

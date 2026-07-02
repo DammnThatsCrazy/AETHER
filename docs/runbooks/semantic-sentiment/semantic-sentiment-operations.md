@@ -1,3 +1,16 @@
+---
+title: Semantic-Sentiment Operations Runbook
+slug: runbooks/semantic-sentiment/operations
+section: operations
+visibility: I
+audience: [ops, dev-senior]
+status: experimental
+since_version: "8.11.0"
+canonical_owner: platform-intelligence@aether
+estimated_read_minutes: 5
+toc_depth: 3
+---
+
 # Semantic-Sentiment Operations Runbook
 
 ## Model unavailable

@@ -1,3 +1,16 @@
+---
+title: Semantic-Sentiment Intelligence Plane
+slug: semantic-sentiment/intelligence-plane
+section: concepts
+visibility: I
+audience: [dev-senior, ops]
+status: experimental
+since_version: "8.11.0"
+canonical_owner: platform-intelligence@aether
+estimated_read_minutes: 8
+toc_depth: 3
+---
+
 # Semantic-Sentiment Intelligence Plane
 
 This document describes the first productized vertical slice of Aether's graph-native semantic context and sentiment intelligence system.
