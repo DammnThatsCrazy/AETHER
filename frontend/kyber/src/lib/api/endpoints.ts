@@ -1603,6 +1603,12 @@ export const api = {
         restClient.post(`/v1/suggestions/${suggestionId}/reject`, wrap(unknownSchema), body).then(r => r.data),
       suppressSuggestion: (suggestionId: string, body: { reason: string; suppress_duration_hours?: number }) =>
         restClient.post(`/v1/suggestions/${suggestionId}/suppress`, wrap(unknownSchema), body).then(r => r.data),
+
+      // ── Delivery operations (cross-tenant, operator-only) ─────────────────
+      listDeliveryJobs: (params?: Record<string, string | number | undefined>) =>
+        restClient.get(`/v1/delivery/jobs${buildQS({ ...params })}`, wrap(unknownSchema)).then(r => r.data),
+      replayDeliveryJob: (jobId: string) =>
+        restClient.post(`/v1/delivery/jobs/${encodeURIComponent(jobId)}/replay`, wrap(unknownSchema), {}).then(r => r.data),
     },
   },
 
