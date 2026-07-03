@@ -138,3 +138,39 @@ class AgentPerformanceRepository(BaseRepository):
     """Stores observed agent performance snapshots (obs_agent_performance)."""
     def __init__(self) -> None:
         super().__init__("obs_agent_performance")
+
+
+class AgenticBronzeObservationRepository(BaseRepository):
+    """Compatibility handle for sanitized agentic Bronze records (bronze_agentic_observations)."""
+    def __init__(self) -> None:
+        super().__init__("bronze_agentic_observations")
+
+
+class SilverAgentToolInvocationFactRepository(BaseRepository):
+    """Typed Silver facts for observed agent tool invocations."""
+    def __init__(self) -> None:
+        super().__init__("silver_agent_tool_invocation_facts")
+
+
+class SilverMCPConnectionFactRepository(BaseRepository):
+    """Typed Silver facts for observed MCP connection lifecycle events."""
+    def __init__(self) -> None:
+        super().__init__("silver_mcp_connection_facts")
+
+
+class SilverAgentRiskFactRepository(BaseRepository):
+    """Typed Silver facts for observed/computed agent risk signals."""
+    def __init__(self) -> None:
+        super().__init__("silver_agent_risk_facts")
+
+
+class SilverAgentActivityFactRepository(BaseRepository):
+    """Typed Silver facts for generic observed agent activity."""
+    def __init__(self) -> None:
+        super().__init__("silver_agent_activity_facts")
+
+
+class AgenticProjectionOutboxRepository(BaseRepository):
+    """Durable agentic projection outbox for graph/profile/journey follow-up work."""
+    def __init__(self) -> None:
+        super().__init__("agentic_projection_outbox")

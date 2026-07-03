@@ -9,14 +9,20 @@ from __future__ import annotations
 import uuid
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, HTTPException, Request, status
+from fastapi import APIRouter, Request
 from pydantic import BaseModel, Field
-from shared.graph.graph import Vertex, Edge
 from typing import Literal, Optional
 
 from repositories.agentic_observability_repos import (
     AgentInboxRepository, AgentMessageRepository,
     AgentAttachmentRepository, ExtractedEntityRepository,
+)
+from services.agentic_observability.foundation import (
+    active_tenant_id as _tenant_id,
+    check_no_execution as _check_no_execution,
+    persist_mutations as _persist_mutations,
+    require_permission as _require_perm,
+    validate_payload_tenant,
 )
 from services.agent_comm_observability.graph_mutations import (
     build_inbox_mutations, build_message_mutations, build_extraction_mutations,
@@ -35,50 +41,6 @@ def _utc_now() -> str:
 
 def _new_id() -> str:
     return str(uuid.uuid4())
-
-
-def _tenant_id(request: Request) -> str:
-    tenant = getattr(request.state, "tenant", None)
-    if not tenant:
-        raise HTTPException(status_code=401, detail="Missing tenant context")
-    return tenant.tenant_id
-
-
-def _require_perm(request: Request, perm: str) -> None:
-    tenant = getattr(request.state, "tenant", None)
-    if not tenant:
-        raise HTTPException(status_code=401, detail="Missing tenant context")
-    if hasattr(tenant, "require_permission"):
-        try:
-            tenant.require_permission(perm)
-            return
-        except Exception as e:
-            raise HTTPException(status_code=403, detail=str(e))
-    if hasattr(tenant, "has_permission") and not tenant.has_permission(perm):
-        raise HTTPException(status_code=403, detail=f"Permission denied: {perm}")
-
-
-def _check_no_execution(data: dict) -> None:
-    if data.get("execution_by_aether") is True:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail="execution_by_aether must be false. AETHER does not execute.",
-        )
-
-
-async def _persist_mutations(mutations: list) -> None:
-    if not mutations:
-        return
-    try:
-        from dependencies.providers import get_graph
-        graph = get_graph()
-        for m in mutations:
-            if isinstance(m, Vertex):
-                await graph.add_vertex(m)
-            elif isinstance(m, Edge):
-                await graph.add_edge(m)
-    except Exception:
-        pass
 
 
 class InboxObsRequest(BaseModel):
@@ -141,6 +103,7 @@ async def observe_agent_inbox(req: InboxObsRequest, request: Request) -> CommObs
     """Observe an agent inbox from an external communication provider."""
     _require_perm(request, "write")
     tenant_id = _tenant_id(request)
+    validate_payload_tenant(req, tenant_id)
     _check_no_execution(req.model_dump())
     obs_id = _new_id()
     record = AgentInboxObservedRecord(
@@ -155,10 +118,10 @@ async def observe_agent_inbox(req: InboxObsRequest, request: Request) -> CommObs
     repo = AgentInboxRepository()
     await repo.insert(obs_id, record.model_dump(mode="json"))
     mutations = build_inbox_mutations(tenant_id, obs_id, req.agent_id)
-    await _persist_mutations(mutations)
+    projection = await _persist_mutations(mutations, tenant_id=tenant_id, trace_id=obs_id)
     return CommObsResponse(
         observation_id=obs_id, received_at=_utc_now(),
-        graph_mutations_queued=len(mutations), tenant_id=tenant_id,
+        graph_mutations_queued=projection.graph_mutations_persisted, tenant_id=tenant_id,
     )
 
 
@@ -167,6 +130,7 @@ async def observe_agent_message(req: MessageObsRequest, request: Request) -> Com
     """Observe an agent message (inbound or outbound, as observed by AETHER)."""
     _require_perm(request, "write")
     tenant_id = _tenant_id(request)
+    validate_payload_tenant(req, tenant_id)
     _check_no_execution(req.model_dump())
     if req.raw_provider_payload:
         record = normalize_agentmail_message(req.raw_provider_payload, tenant_id)
@@ -188,10 +152,10 @@ async def observe_agent_message(req: MessageObsRequest, request: Request) -> Com
     await repo.insert(record.message_obs_id, record.model_dump(mode="json"))
     # Use record.thread_obs_id so provider-normalized messages link correctly
     mutations = build_message_mutations(tenant_id, record.message_obs_id, record.thread_obs_id)
-    await _persist_mutations(mutations)
+    projection = await _persist_mutations(mutations, tenant_id=tenant_id, trace_id=record.message_obs_id)
     return CommObsResponse(
         observation_id=record.message_obs_id, received_at=_utc_now(),
-        graph_mutations_queued=len(mutations), tenant_id=tenant_id,
+        graph_mutations_queued=projection.graph_mutations_persisted, tenant_id=tenant_id,
     )
 
 
@@ -200,6 +164,7 @@ async def observe_agent_attachment(req: AttachmentObsRequest, request: Request) 
     """Observe an agent message attachment."""
     _require_perm(request, "write")
     tenant_id = _tenant_id(request)
+    validate_payload_tenant(req, tenant_id)
     _check_no_execution(req.model_dump())
     obs_id = _new_id()
     record = AgentAttachmentObservedRecord(
@@ -224,6 +189,7 @@ async def observe_agent_extraction(req: ExtractionObsRequest, request: Request) 
     """Observe an entity extracted from an agent message or attachment."""
     _require_perm(request, "write")
     tenant_id = _tenant_id(request)
+    validate_payload_tenant(req, tenant_id)
     _check_no_execution(req.model_dump())
     obs_id = _new_id()
     try:
@@ -242,10 +208,10 @@ async def observe_agent_extraction(req: ExtractionObsRequest, request: Request) 
     repo = ExtractedEntityRepository()
     await repo.insert(obs_id, record.model_dump(mode="json"))
     mutations = build_extraction_mutations(tenant_id, obs_id, req.message_obs_id)
-    await _persist_mutations(mutations)
+    projection = await _persist_mutations(mutations, tenant_id=tenant_id, trace_id=obs_id)
     return CommObsResponse(
         observation_id=obs_id, received_at=_utc_now(),
-        graph_mutations_queued=len(mutations), tenant_id=tenant_id,
+        graph_mutations_queued=projection.graph_mutations_persisted, tenant_id=tenant_id,
     )
 
 
@@ -253,4 +219,6 @@ async def observe_agent_extraction(req: ExtractionObsRequest, request: Request) 
 async def kyber_inboxes_overview(request: Request) -> dict:
     """Kyber operator: agent inbox observability overview."""
     _require_perm(request, "admin")
-    return {"status": "ok", "inboxes": []}
+    repo = AgentInboxRepository()
+    items = await repo.find_many(limit=100)
+    return {"status": "ok", "inboxes": items, "count": len(items)}
