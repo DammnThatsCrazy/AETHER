@@ -617,6 +617,16 @@ class DeliveryConfig:
 # ---------------------------------------------------------------------------
 
 @dataclass
+class AgenticObservabilityConfig:
+    enabled: bool = _env_bool("AGENTIC_OBSERVABILITY_ENABLED", True)
+    mcp_enabled: bool = _env_bool("AGENTIC_MCP_OBSERVABILITY_ENABLED", True)
+    external_accounts_enabled: bool = _env_bool("AGENTIC_EXTERNAL_ACCOUNTS_ENABLED", True)
+    provider_verification_enabled: bool = _env_bool("AGENTIC_PROVIDER_VERIFICATION_ENABLED", False)
+    communication_enabled: bool = _env_bool("AGENTIC_COMMUNICATION_OBSERVABILITY_ENABLED", True)
+    protocol_enabled: bool = _env_bool("AGENTIC_PROTOCOL_OBSERVABILITY_ENABLED", True)
+    kyber_enabled: bool = _env_bool("KYBER_AGENTIC_OBSERVABILITY_ENABLED", True)
+
+@dataclass
 class Settings:
     env: Environment = Environment(_env("AETHER_ENV", "local"))
     debug: bool = _env_bool("DEBUG", False)
@@ -694,6 +704,9 @@ class Settings:
 
     # Delivery Worker (durable provider dispatch + outcome tracking)
     delivery: DeliveryConfig = field(default_factory=DeliveryConfig)
+
+    # Agentic Intelligence observability rollout flags
+    agentic_observability: AgenticObservabilityConfig = field(default_factory=AgenticObservabilityConfig)
 
     def __post_init__(self):
         _is_non_local = self.env != Environment.LOCAL
