@@ -362,51 +362,6 @@ class SalesforceConnector(BaseConnector):
         ]
 
 
-class KlaviyoConnector(BaseConnector):
-    connector_type = "klaviyo"
-    label = "Klaviyo"
-    category = "marketing"
-    description = "Ingest Klaviyo profiles and metric events."
-    supports_webhook = True
-    supports_pull = True
-    requires_secret = True
-    ingest_event_types = ("klaviyo.profile", "klaviyo.metric")
-    docs_slug = "operations/klaviyo-connector"
-
-    async def test_connection(self, config: ConnectorConfig, secret: Optional[str] = None) -> ConnectionTestResult:
-        base = await super().test_connection(config, secret)
-        if not base.ok or not _is_live(secret):
-            return base
-        status, body = await _http_get(
-            "https://a.klaviyo.com/api/accounts/",
-            {"Authorization": f"Klaviyo-API-Key {secret}", "revision": "2023-10-15"},
-        )
-        if status == 200:
-            return _ok(self.connector_type, "Klaviyo API key valid")
-        return _err(self.connector_type, f"HTTP {status}")
-
-    async def pull(self, config: ConnectorConfig, since: Optional[str] = None, secret: Optional[str] = None) -> list[NormalizedEvent]:
-        if not _is_live(secret):
-            return []
-        url = "https://a.klaviyo.com/api/profiles/?page[size]=50"
-        status, body = await _http_get(
-            url,
-            {"Authorization": f"Klaviyo-API-Key {secret}", "revision": "2023-10-15"},
-        )
-        if status != 200:
-            return []
-        return [
-            NormalizedEvent(
-                event_type="klaviyo.profile",
-                source="klaviyo",
-                external_id=r.get("id"),
-                occurred_at=r.get("attributes", {}).get("updated", now_iso()),
-                properties=r.get("attributes", {}),
-            )
-            for r in body.get("data", [])
-        ]
-
-
 class SegmentConnector(BaseConnector):
     connector_type = "segment"
     label = "Segment"
@@ -889,6 +844,8 @@ async def _http_post(url: str, payload: dict, headers: dict) -> tuple[int, dict]
     except Exception:
         return 0, {}
 
+
+from services.integrations.connectors.klaviyo import KlaviyoConnector  # noqa: E402
 
 ALL_CONNECTORS: list[type[BaseConnector]] = [
     SlackConnector, WebhookConnector, ShopifyConnector, StripeConnector, HubSpotConnector,

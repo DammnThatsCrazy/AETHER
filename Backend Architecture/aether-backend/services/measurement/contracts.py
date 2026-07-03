@@ -32,6 +32,7 @@ class TouchpointType(str, Enum):
     email_delivery = "email_delivery"
     email_open = "email_open"
     email_click = "email_click"
+    email_reply = "email_reply"
     push_presentation = "push_presentation"
     push_click = "push_click"
     sms_interaction = "sms_interaction"

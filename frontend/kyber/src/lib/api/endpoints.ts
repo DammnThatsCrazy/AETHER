@@ -2020,6 +2020,10 @@ export const api = {
       restClient.post(`/v1/kyber/measurement/conversions/${conversionId}/recompute`, wrap(unknownSchema), {}).then(r => r.data),
     recomputeAll: (tenantId: string) =>
       restClient.post(`/v1/kyber/measurement/tenants/${tenantId}/recompute-all`, wrap(unknownSchema), {}).then(r => r.data),
+
+    // Communications Intelligence — fleet projection/resolution health
+    commsFleetHealth: (tenantId?: string) =>
+      restClient.get(`/v1/comms/admin/health${tenantId ? `?tenant_id=${encodeURIComponent(tenantId)}` : ''}`, wrap(unknownSchema)).then(r => r.data),
   },
 
   conversions: {

@@ -163,6 +163,8 @@ public enum AetherEventType: String, Codable, CaseIterable {
     // Comms family
     case notification_delivered, notification_opened, notification_clicked
     case email_delivered, email_opened, email_clicked, email_bounced
+    case email_queued, email_processed, email_sent, email_deferred
+    case email_dropped, email_replied, email_spam_complaint, email_suppressed
     case message_replied_observed, unsubscribe_observed
     case support_case_created, support_case_resolved, support_case_escalated, support_sla_breached
     // Credit family (explicit opt-in)
@@ -440,6 +442,10 @@ public final class Aether: NSObject {
         .notification_clicked: "analytics",
         .email_delivered: "marketing", .email_opened: "marketing",
         .email_clicked: "marketing", .email_bounced: "marketing",
+        .email_queued: "marketing", .email_processed: "marketing",
+        .email_sent: "marketing", .email_deferred: "marketing",
+        .email_dropped: "marketing", .email_replied: "marketing",
+        .email_spam_complaint: "marketing", .email_suppressed: "marketing",
         .message_replied_observed: "analytics", .unsubscribe_observed: "marketing",
         .support_case_created: "analytics", .support_case_resolved: "analytics",
         .support_case_escalated: "analytics", .support_sla_breached: "analytics",

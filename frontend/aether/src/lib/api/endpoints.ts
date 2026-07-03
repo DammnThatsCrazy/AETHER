@@ -437,6 +437,32 @@ export const api = {
 
     conversions: (campaignId: string, params?: { cluster_id?: string; conversion_type?: string; status?: string; after?: string; before?: string; include_unattributed?: boolean; limit?: number; cursor?: string }) =>
       restClient.get(`/v1/campaigns/${campaignId}/conversions${buildQS({ ...params })}`, wrap(unknownSchema)).then(r => r.data),
+
+    // ── Communications Intelligence (Campaign 360 Messages surface) ──────────
+
+    messages: (campaignId: string) =>
+      restClient.get(`/v1/campaigns/${campaignId}/messages`, wrap(unknownSchema)).then(r => r.data),
+
+    messageDetail: (campaignId: string, externalMessageId: string) =>
+      restClient.get(`/v1/campaigns/${campaignId}/messages/${encodeURIComponent(externalMessageId)}`, wrap(unknownSchema)).then(r => r.data),
+
+    links: (campaignId: string) =>
+      restClient.get(`/v1/campaigns/${campaignId}/links`, wrap(unknownSchema)).then(r => r.data),
+
+    commsFunnel: (campaignId: string) =>
+      restClient.get(`/v1/campaigns/${campaignId}/comms-funnel`, wrap(unknownSchema)).then(r => r.data),
+  },
+
+  // ── Communications Intelligence ─────────────────────────────────────────────
+  comms: {
+    health: () =>
+      restClient.get('/v1/comms/health', wrap(unknownSchema)).then(r => r.data),
+
+    entityCommunications: (entityId: string, params?: { channel?: string; category?: string; direction?: string; campaign_id?: string; state?: string; human_qualified?: boolean; limit?: number; cursor?: string }) =>
+      restClient.get(`/v1/profile/${entityId}/communications${buildQS({ ...params })}`, wrap(unknownSchema)).then(r => r.data),
+
+    entityCommunicationState: (entityId: string, params?: { channel?: string; scope?: string }) =>
+      restClient.get(`/v1/profile/${entityId}/communication-state${buildQS({ ...params })}`, wrap(unknownSchema)).then(r => r.data),
   },
 
   // ── Campaign Sources (paid-media connectors) ───────────────────────────────

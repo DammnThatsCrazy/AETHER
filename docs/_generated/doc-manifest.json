@@ -1610,11 +1610,12 @@
         "ops"
       ],
       "status": "beta",
-      "since_version": "8.9.0",
-      "estimated_read_minutes": 2,
+      "since_version": "8.11.0",
+      "estimated_read_minutes": 3,
       "canonical_owner": "platform@aether",
       "flags": [
-        "AETHER_CONNECTORS_ENABLED"
+        "AETHER_CONNECTORS_ENABLED",
+        "AETHER_COMMS_INGESTION_ENABLED"
       ]
     },
     {
@@ -3715,6 +3716,73 @@
       "visibility": "I",
       "audience": [
         "ops"
+      ]
+    },
+    {
+      "path": "docs/comms/ADR_COMMUNICATIONS_INTELLIGENCE.md",
+      "title": "ADRs — Communications Intelligence",
+      "slug": "comms/adr-communications-intelligence",
+      "section": "architecture",
+      "visibility": "I",
+      "audience": [
+        "dev-senior",
+        "architect"
+      ]
+    },
+    {
+      "path": "docs/comms/COMMS_BACKFILL_RUNBOOK.md",
+      "title": "Communications Backfill & Replay Runbook",
+      "slug": "comms/comms-backfill-runbook",
+      "section": "operations",
+      "visibility": "I",
+      "audience": [
+        "ops",
+        "dev-senior"
+      ]
+    },
+    {
+      "path": "docs/comms/COMMS_GENERIC_WEBHOOK.md",
+      "title": "Generic Signed Communications Webhook",
+      "slug": "comms/comms-generic-webhook",
+      "section": "operations",
+      "visibility": "P",
+      "audience": [
+        "dev-senior",
+        "dev-junior"
+      ]
+    },
+    {
+      "path": "docs/comms/COMMS_RELEASE_READINESS.md",
+      "title": "Communications Intelligence — Release Readiness",
+      "slug": "comms/comms-release-readiness",
+      "section": "operations",
+      "visibility": "I",
+      "audience": [
+        "ops",
+        "dev-senior"
+      ]
+    },
+    {
+      "path": "docs/comms/COMMS_TRUTH_MATRIX.md",
+      "title": "Communications Intelligence — Repository Truth Matrix",
+      "slug": "comms/comms-truth-matrix",
+      "section": "architecture",
+      "visibility": "I",
+      "audience": [
+        "dev-senior",
+        "architect"
+      ]
+    },
+    {
+      "path": "docs/comms/COMMUNICATIONS_INTELLIGENCE_OVERVIEW.md",
+      "title": "Communications Intelligence Overview",
+      "slug": "comms/communications-intelligence-overview",
+      "section": "architecture",
+      "visibility": "I",
+      "audience": [
+        "dev-senior",
+        "architect",
+        "exec"
       ]
     },
     {

@@ -1,6 +1,6 @@
 # DO NOT EDIT — generated from packages/shared/contracts/event-registry.json
 # Run: python scripts/generate_contracts.py
-# Contract version: 8.10.0
+# Contract version: 8.11.0
 
 CANONICAL_EVENT_TYPES: frozenset[str] = frozenset({
     "track",
@@ -238,6 +238,14 @@ CANONICAL_EVENT_TYPES: frozenset[str] = frozenset({
     "email_opened",
     "email_clicked",
     "email_bounced",
+    "email_queued",
+    "email_processed",
+    "email_sent",
+    "email_deferred",
+    "email_dropped",
+    "email_replied",
+    "email_spam_complaint",
+    "email_suppressed",
     "message_received_observed",
     "message_sent_observed",
     "message_replied_observed",
@@ -503,6 +511,14 @@ EVENT_CONSENT_PURPOSE: dict[str, str] = {
     "email_opened": "marketing",
     "email_clicked": "marketing",
     "email_bounced": "marketing",
+    "email_queued": "marketing",
+    "email_processed": "marketing",
+    "email_sent": "marketing",
+    "email_deferred": "marketing",
+    "email_dropped": "marketing",
+    "email_replied": "marketing",
+    "email_spam_complaint": "marketing",
+    "email_suppressed": "marketing",
     "message_received_observed": "analytics",
     "message_sent_observed": "analytics",
     "message_replied_observed": "analytics",
@@ -754,6 +770,14 @@ EVENT_FAMILY: dict[str, str] = {
     "email_opened": "comms",
     "email_clicked": "comms",
     "email_bounced": "comms",
+    "email_queued": "comms",
+    "email_processed": "comms",
+    "email_sent": "comms",
+    "email_deferred": "comms",
+    "email_dropped": "comms",
+    "email_replied": "comms",
+    "email_spam_complaint": "comms",
+    "email_suppressed": "comms",
     "message_received_observed": "comms",
     "message_sent_observed": "comms",
     "message_replied_observed": "comms",

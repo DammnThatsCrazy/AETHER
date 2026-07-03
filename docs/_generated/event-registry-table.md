@@ -1,7 +1,7 @@
 <!-- DO NOT EDIT — generated from packages/shared/contracts/event-registry.json -->
 <!-- Run: python scripts/generate_contracts.py -->
 
-# Aether Event Registry (248 types, contract v8.10.0)
+# Aether Event Registry (256 types, contract v8.11.0)
 
 | Event Type | Family | Required Purposes | Privacy Class | Description |
 |---|---|---|---|---|
@@ -240,6 +240,14 @@
 | `email_opened` | `comms` | marketing | behavioral | Email opened |
 | `email_clicked` | `comms` | marketing | behavioral | Email link clicked |
 | `email_bounced` | `comms` | marketing | behavioral | Email bounced |
+| `email_queued` | `comms` | marketing | behavioral | Email accepted by provider queue (lifecycle state) |
+| `email_processed` | `comms` | marketing | behavioral | Email processed by provider (lifecycle state) |
+| `email_sent` | `comms` | marketing | behavioral | Email handed to recipient MTA by provider |
+| `email_deferred` | `comms` | marketing | behavioral | Email delivery deferred by recipient MTA |
+| `email_dropped` | `comms` | marketing | behavioral | Email dropped by provider before send |
+| `email_replied` | `comms` | marketing | behavioral | Inbound human reply to a sent email |
+| `email_spam_complaint` | `comms` | marketing | behavioral | Recipient marked email as spam |
+| `email_suppressed` | `comms` | marketing | behavioral | Send suppressed by provider suppression list |
 | `message_received_observed` | `comms` | analytics | behavioral | Message received (structural metadata only — no content) |
 | `message_sent_observed` | `comms` | analytics | behavioral | Message sent (structural metadata only — no content) |
 | `message_replied_observed` | `comms` | analytics | behavioral | Message replied to |

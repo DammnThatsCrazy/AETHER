@@ -244,6 +244,16 @@ class ConnectorService:
                     ingested += 1
             except Exception as exc:  # pragma: no cover - best-effort, never break sync
                 logger.warning(f"connector bronze ingest failed tenant={tenant_id} type={connector_type}: {exc}")
+        # Canonical communication events and campaign catalog records flow
+        # into the standard Bronze → bus → Silver pipeline (ADR-C3).
+        if events:
+            try:
+                from services.comms.ingest import ingest_normalized_events
+                await ingest_normalized_events(
+                    tenant_id, events, source_connector_id=config.config_id,
+                )
+            except Exception as exc:  # pragma: no cover - Bronze retains records for replay
+                logger.warning(f"connector sync comms ingest failed tenant={tenant_id}: {exc}")
         # Upsert ConnectorCursor with the latest sync position
         try:
             from repositories.delivery_repos import ConnectorCursorRepository
@@ -326,10 +336,23 @@ class ConnectorService:
             await self.repo.insert(_key(tenant_id, connector_type), config.model_dump())
             return {"accepted": False, "reason": "invalid payload", "events_ingested": 0}
         events = connector.parse_webhook(payload if isinstance(payload, dict) else {"items": payload})
+        # Route canonical communication events and campaign catalog records
+        # into the durable Bronze → bus → Silver pipeline (ADR-C1/C3).
+        ingest_counts: dict[str, int] = {}
+        if events:
+            try:
+                from services.comms.ingest import ingest_normalized_events
+                ingest_counts = await ingest_normalized_events(
+                    tenant_id, events, source_connector_id=config.config_id,
+                )
+            except Exception as exc:  # pragma: no cover — inbox retains raw payload for replay
+                logger.warning(f"connector webhook comms ingest failed tenant={tenant_id}: {exc}")
         await _meter(tenant_id, "webhook_ingested", connector_type, "connector")
         await _audit(tenant_id, "system", "system", "connector_webhook_ingested", connector_type,
-                     "allowed", {"events": len(events), "verified": verified})
+                     "allowed", {"events": len(events), "verified": verified,
+                                 "ingested": ingest_counts})
         return {"accepted": True, "verified": verified, "events_ingested": len(events),
+                "ingest_counts": ingest_counts,
                 "events": [e.model_dump() for e in events]}
 
     async def health_for_tenant(self, tenant_id: str) -> list[dict[str, Any]]:

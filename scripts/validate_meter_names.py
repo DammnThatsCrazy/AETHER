@@ -56,6 +56,9 @@ CANONICAL_NAMES: frozenset[str] = frozenset({
     "ingestion_bronze_write_latency_ms",
     "sdk_bronze_written_total",
     "ingestion_silver_written_total",
+    # Silver fact projection (multi-projector dispatch — ADR-C3)
+    "silver_facts_written_total",
+    "silver_projection_dead_letters_total",
     # Dune feeder
     "dune_feeder_promoted",
     "dune_feeder_rejected",

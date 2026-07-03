@@ -180,6 +180,16 @@ class MetricsCollector:
             except Exception:
                 pass
 
+    def timing(self, name: str, value_ms: float, labels: Optional[dict] = None) -> None:
+        """Record a duration in milliseconds (histogram-backed)."""
+        self.observe(name, value_ms, labels)
+
+    def gauge(self, name: str, value: float, labels: Optional[dict] = None) -> None:
+        """Record a point-in-time value. Backed by the histogram store so the
+        latest observation is queryable; Prometheus export reuses Histogram to
+        avoid a third metric family."""
+        self.observe(name, value, labels)
+
     def get_counter(self, name: str, labels: Optional[dict] = None) -> int:
         return self._counters.get(self._key(name, labels), 0)
 

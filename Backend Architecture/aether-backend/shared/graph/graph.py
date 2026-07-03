@@ -1183,3 +1183,30 @@ class GraphClient:
     @property
     def mode(self) -> str:
         return self._mode
+
+
+# ── Module-level accessor ────────────────────────────────────────────────────
+
+_shared_client: Optional[GraphClient] = None
+
+
+def get_graph_client() -> GraphClient:
+    """Return the process-wide GraphClient.
+
+    Prefers the provider registry's client (already connected and
+    lifecycle-managed by main.py); falls back to a lazily connected module
+    singleton for workers and scripts that run outside the API process.
+    """
+    try:
+        from dependencies.providers import get_registry
+        registry = get_registry()
+        client = getattr(registry, "graph", None)
+        if client is not None:
+            return client
+    except Exception:
+        pass
+
+    global _shared_client
+    if _shared_client is None:
+        _shared_client = GraphClient()
+    return _shared_client
