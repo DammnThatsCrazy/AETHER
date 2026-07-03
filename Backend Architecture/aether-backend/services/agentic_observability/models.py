@@ -80,9 +80,106 @@ class ObservationActor(BaseModel):
 class AgentRef(BaseModel):
     agent_id: Optional[str] = None
     external_agent_id: Optional[str] = None
+    agent_version: Optional[str] = None
     model: Optional[str] = None
+    model_version: Optional[str] = None
     framework: Optional[str] = None
+    framework_version: Optional[str] = None
+    runtime_id: Optional[str] = None
+    environment: Optional[str] = None
     autonomy_level: Optional[AutonomyLevel] = None
+    owner_id: Optional[str] = None
+    organization_id: Optional[str] = None
+
+
+class RuntimeRef(BaseModel):
+    runtime_id: Optional[str] = None
+    environment: Optional[str] = None
+    region: Optional[str] = None
+    sdk_name: Optional[str] = None
+    sdk_version: Optional[str] = None
+
+
+class CorrelationRef(BaseModel):
+    trace_id: Optional[str] = None
+    span_id: Optional[str] = None
+    task_id: Optional[str] = None
+    parent_task_id: Optional[str] = None
+    connection_id: Optional[str] = None
+    session_id: Optional[str] = None
+    invocation_id: Optional[str] = None
+    provider_request_id: Optional[str] = None
+    external_object_id: Optional[str] = None
+    campaign_id: Optional[str] = None
+    journey_id: Optional[str] = None
+
+
+class MCPObservationContext(BaseModel):
+    protocol: Optional[str] = None
+    protocol_version: Optional[str] = None
+    transport: Optional[str] = None
+    client_name: Optional[str] = None
+    client_version: Optional[str] = None
+    server_name: Optional[str] = None
+    server_version: Optional[str] = None
+    server_identity_hash: Optional[str] = None
+    connection_state: Optional[str] = None
+    negotiated_capabilities: list[str] = Field(default_factory=list)
+    tool_catalog_revision: Optional[str] = None
+    resource_catalog_revision: Optional[str] = None
+    prompt_catalog_revision: Optional[str] = None
+    reconnect_count: Optional[int] = None
+    disconnect_reason: Optional[str] = None
+    tool_name: Optional[str] = None
+    tool_id: Optional[str] = None
+    tool_schema_hash: Optional[str] = None
+    invocation_phase: Optional[str] = None
+    attempt: Optional[int] = None
+    duration_ms: Optional[int] = None
+    error_code: Optional[str] = None
+    error_class: Optional[str] = None
+    cancelled: Optional[bool] = None
+    arguments_policy: Optional[str] = None
+    arguments_hash: Optional[str] = None
+    result_policy: Optional[str] = None
+    result_hash: Optional[str] = None
+    result_ref: Optional[str] = None
+
+
+class AuthorizationContext(BaseModel):
+    authorization_id: Optional[str] = None
+    credential_ref: Optional[str] = None
+    external_account_id: Optional[str] = None
+    workspace_id: Optional[str] = None
+    grantor_id: Optional[str] = None
+    grantee_id: Optional[str] = None
+    scopes: list[str] = Field(default_factory=list)
+    scope_hash: Optional[str] = None
+    approved_at: Optional[str] = None
+    expires_at: Optional[str] = None
+    revoked_at: Optional[str] = None
+    revocation_reason: Optional[str] = None
+    approval_evidence_ref: Optional[str] = None
+
+
+class VerificationContext(BaseModel):
+    verification_status: Optional[str] = None
+    verification_source: Optional[str] = None
+    verification_confidence: Optional[float] = None
+    verified_at: Optional[str] = None
+    provider_request_id: Optional[str] = None
+    external_object_id: Optional[str] = None
+    evidence_ref: Optional[str] = None
+    contradiction_reason: Optional[str] = None
+
+
+class PrivacyContext(BaseModel):
+    content_capture_mode: Optional[str] = None
+    redaction_policy_id: Optional[str] = None
+    privacy_class: Optional[str] = None
+    retention_class: Optional[str] = None
+    consent_reference: Optional[str] = None
+    contains_sensitive_data: Optional[bool] = None
 
 
 class ObservationObject(BaseModel):
@@ -138,10 +235,16 @@ class AgenticObservationRecord(BaseModel):
     source: ObservationSource = Field(default_factory=ObservationSource)
     actor: ObservationActor
     agent: Optional[AgentRef] = None
+    runtime: Optional[RuntimeRef] = None
+    correlation: Optional[CorrelationRef] = None
+    mcp: Optional[MCPObservationContext] = None
+    authorization: Optional[AuthorizationContext] = None
     object: ObservationObject
     action: ObservationAction
     economics: Optional[ObservationEconomics] = None
+    verification: Optional[VerificationContext] = None
     risk: Optional[ObservationRisk] = None
+    privacy: Optional[PrivacyContext] = None
     provenance: ObservationProvenance
 
     @classmethod
