@@ -1718,20 +1718,119 @@ async def get_entity_communications(
     request: Request,
     limit: int = Query(default=50, ge=1, le=200),
     channel: str | None = Query(default=None),
+    category: str | None = Query(default=None),
+    direction: str | None = Query(default=None),
+    campaign_id: str | None = Query(default=None),
+    message_id: str | None = Query(default=None),
+    state: str | None = Query(default=None),
+    human_qualified: bool | None = Query(default=None),
+    after: str | None = Query(default=None),
+    before: str | None = Query(default=None),
+    cursor: str | None = Query(default=None),
 ):
-    """Communication delivery and engagement facts for this entity."""
+    """Communication facts for this entity (Phase 18).
+
+    Every item carries campaign/message/link references, delivery and
+    engagement state, machine-activity classification, confidence, and
+    provenance. ``human_qualified=true`` restricts to human-qualified
+    engagement (suspected machine activity excluded).
+    """
     tenant = request.state.tenant
     tenant.require_permission("read")
+    from services.comms.repository import CommsFactsRepository
+
+    repo = CommsFactsRepository()
+    items, next_cursor = await repo.list_for_entity(
+        tenant.tenant_id, user_id,
+        channel=channel, category=category, direction=direction,
+        campaign_id=campaign_id, external_message_id=message_id,
+        state=state, human_qualified=human_qualified,
+        after=after, before=before, limit=limit, cursor=cursor,
+    )
+    summary = await repo.entity_summary(tenant.tenant_id, user_id)
+    return {
+        "entity_id": user_id,
+        "items": [_comm_item(row) for row in items],
+        "counts": {k: int(v or 0) for k, v in summary.items()},
+        "next_cursor": next_cursor,
+        "count": len(items),
+    }
+
+
+def _comm_item(row: dict) -> dict:
+    """Normalized communication item envelope — no raw PII, no payload blob."""
+    return {
+        "communication_fact_id": str(row.get("fact_id") or row.get("idempotency_key") or ""),
+        "event_type": row.get("source_event_type") or row.get("comms_type"),
+        "channel": row.get("channel"),
+        "direction": row.get("direction"),
+        "message_category": row.get("message_category"),
+        "communication_state": row.get("communication_state") or row.get("deliverability"),
+        "journey_role": row.get("journey_role"),
+        "provider": row.get("provider"),
+        "campaign_id": str(row["campaign_id"]) if row.get("campaign_id") else None,
+        "external_message_id": row.get("external_message_id"),
+        "external_thread_id": row.get("external_thread_id"),
+        "sequence_step": row.get("sequence_step"),
+        "variant_id": row.get("variant_id"),
+        "link_id": row.get("link_id"),
+        "recipient_display": row.get("recipient_display"),
+        "bounce_type": row.get("bounce_type"),
+        "engagement_type": row.get("engagement_type"),
+        "engagement_confidence": _num_or_none(row.get("engagement_confidence")),
+        "engagement_strength": row.get("engagement_strength"),
+        "suspected_machine_activity": bool(row.get("suspected_machine_activity")),
+        "machine_activity_probability": _num_or_none(row.get("machine_activity_probability")),
+        "automated_response_kind": row.get("automated_response_kind"),
+        "identity_confidence": _num_or_none(row.get("identity_confidence")),
+        "campaign_resolution_confidence": _num_or_none(row.get("campaign_resolution_confidence")),
+        "consent_snapshot_id": row.get("consent_snapshot_id"),
+        "occurred_at": str(row.get("occurred_at")) if row.get("occurred_at") else None,
+        "provenance": row.get("provenance"),
+        "drill": {
+            "campaign": f"/v1/campaigns/{row['campaign_id']}" if row.get("campaign_id") else None,
+            "message": (
+                f"/v1/campaigns/{row['campaign_id']}/messages/{row['external_message_id']}"
+                if row.get("campaign_id") and row.get("external_message_id") else None
+            ),
+        },
+    }
+
+
+def _num_or_none(value) -> float | None:
     try:
-        from repositories.repos import AnalyticsRepository
-        repo = AnalyticsRepository()
-        filters: dict = {"tenant_id": tenant.tenant_id, "user_id": user_id}
-        if channel:
-            filters["channel"] = channel
-        items = await repo.query_silver("silver_comms_facts", filters, limit=limit)
-    except Exception:
-        items = []
-    return _silver_response(user_id, items)
+        return float(value) if value is not None else None
+    except (TypeError, ValueError):
+        return None
+
+
+@router.get("/{user_id}/communication-state")
+async def get_entity_communication_state(
+    user_id: str,
+    request: Request,
+    channel: str = Query(default="email"),
+    scope: str = Query(default="marketing"),
+):
+    """Current communication state for this entity (Phase 8/18).
+
+    Rebuildable projection: subscription and deliverability status, last
+    engagement timestamps, human-qualified engagement counters, bounce and
+    complaint counts, and suppression scopes.
+    """
+    tenant = request.state.tenant
+    tenant.require_permission("read")
+    from services.comms.state import CommunicationStateService
+
+    service = CommunicationStateService()
+    state = await service.get(tenant.tenant_id, user_id, channel=channel, scope=scope)
+    if state is None:
+        # Derive on first read so the endpoint degrades gracefully for
+        # entities whose async rebuild has not run yet.
+        state = await service.rebuild_for_entity(
+            tenant.tenant_id, user_id, channel=channel, scope=scope,
+        )
+    state = {k: (str(v) if hasattr(v, "isoformat") else v) for k, v in state.items()}
+    return {"entity_id": user_id, "communication_state": state}
 
 
 @router.get("/{user_id}/integrations")

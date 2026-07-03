@@ -144,15 +144,29 @@ class AttributionEngine:
                             exclusion_reasons[tp_id] = "low_identity_confidence"
                             continue
 
+                    eligible, reason = _comms_eligibility(tp)
+                    if not eligible:
+                        excluded_ids.append(tp_id)
+                        exclusion_reasons[tp_id] = reason or "comms_policy"
+                        continue
+
                     raw_touchpoints.append(tp)
             else:
                 # No journey — try to find touchpoints by profile/anonymous_id
                 if profile_id:
-                    raw_touchpoints = await self._touchpoint_repo.list_by_profile(
+                    candidates = await self._touchpoint_repo.list_by_profile(
                         tenant_id, profile_id,
                         before_occurred=conversion_ts,
                         limit=500,
                     )
+                    for tp in candidates:
+                        eligible, reason = _comms_eligibility(tp)
+                        if eligible:
+                            raw_touchpoints.append(tp)
+                        else:
+                            tp_key = str(tp.get("touchpoint_id") or tp.get("idempotency_key") or "")
+                            excluded_ids.append(tp_key)
+                            exclusion_reasons[tp_key] = reason or "comms_policy"
 
             # 5. Build Touchpoint objects for resolver
             resolver_touchpoints = _build_resolver_touchpoints(raw_touchpoints)
@@ -396,6 +410,14 @@ def _touchpoint_to_resolver_dict(tp: dict[str, Any]) -> dict[str, Any]:
             "dwell_ms": tp.get("dwell_ms"),
         },
     }
+
+
+def _comms_eligibility(tp: dict[str, Any]) -> tuple[bool, Optional[str]]:
+    """Comms touchpoint eligibility (ADR-C8): delivery = context only,
+    reported opens excluded by default, machine activity excluded, replies
+    configurable. Non-comms touchpoints always pass."""
+    from services.comms.attribution_policy import comms_touchpoint_eligibility
+    return comms_touchpoint_eligibility(tp)
 
 
 def _build_resolver_touchpoints(raw: list[dict[str, Any]]) -> list[Touchpoint]:

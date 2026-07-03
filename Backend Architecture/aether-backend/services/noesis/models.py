@@ -42,6 +42,8 @@ SUPPORTED_INTENTS: frozenset[str] = frozenset({
     "health_lookup",
     "campaign_reward_lookup",
     "risk_cluster_lookup",
+    # Communications Intelligence (read-only, evidence-backed)
+    "communications_insight",
     # Suggestion Intelligence (read-only — Noesis may not mutate suggestions)
     "suggestion_lookup",
     "suggestion_summary",
@@ -182,6 +184,7 @@ class QueryPlan(BaseModel):
         "health_lookup",
         "campaign_reward_lookup",
         "risk_cluster_lookup",
+        "communications_insight",
         "suggestion_lookup",
         "suggestion_summary",
         "suggestion_review_queue",

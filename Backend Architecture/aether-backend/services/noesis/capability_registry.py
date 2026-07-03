@@ -239,6 +239,23 @@ CAPABILITY_REGISTRY: list[NoesisCapability] = [
         example_prompts=["Explain this user's semantic profile", "Which topics and stances are active for profile ent_456?"],
         data_sources=["profile360", "semantic_intelligence_api"],
     ),
+    NoesisCapability(
+        intent="communications_insight",
+        label="Communications Insight",
+        description=(
+            "Evidence-backed communications intelligence: deliverability, "
+            "human-qualified engagement, machine-activity inflation, and "
+            "campaign resolution coverage."
+        ),
+        surfaces=["aether", "kyber"],
+        requires_target=False,
+        example_prompts=[
+            "Is our email engagement inflated by machine activity?",
+            "How is email deliverability trending?",
+            "What share of communications resolve to a campaign?",
+        ],
+        data_sources=["comms_facts_repository"],
+    ),
 ]
 
 # Fast lookup by intent name

@@ -11,7 +11,7 @@ toc_depth: 3
 source_files:
   - Backend Architecture/aether-backend/services/campaign/routes.py
   - Backend Architecture/aether-backend/services/campaign/exploration.py
-last_synced_commit: 7c85af5
+last_synced_commit: 4d76caf
 ---
 
 # Campaign 360 API Reference
@@ -405,6 +405,21 @@ truncation status when limits are hit.
 - `404` — campaign not found
 - `429` — rate limit exceeded (10 req/min)
 - `504` — graph query timed out (10s budget)
+
+---
+
+### Communications surfaces (v8.11.0+)
+
+Email-aware Campaign 360 endpoints backed by `silver_comms_facts` and the
+`campaign_messages` dimension (see
+[Communications Intelligence Overview](../comms/COMMUNICATIONS_INTELLIGENCE_OVERVIEW.md)):
+
+| Endpoint | Returns |
+|---|---|
+| GET `/{campaign_id}/messages` | Per-message rollup: delivered, human-qualified clicks, replies, bounces, machine events; merged with synced message dimension rows |
+| GET `/{campaign_id}/messages/{external_message_id}` | Message detail: dimension record, engagement stats, link rollup |
+| GET `/{campaign_id}/links` | Link performance: human-qualified clicks and unique clickers per link |
+| GET `/{campaign_id}/comms-funnel` | Email funnel in two modes — `provider_reported` (every provider event) and `human_qualified` (suspected machine activity and automated replies excluded) — plus delivery detail (bounces, complaints, unsubscribes, suppressions) and quality (machine-event rate) |
 
 ---
 

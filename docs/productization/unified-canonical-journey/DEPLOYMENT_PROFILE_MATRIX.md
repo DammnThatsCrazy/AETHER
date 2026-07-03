@@ -11,7 +11,7 @@ source_files:
   - Backend Architecture/aether-backend/services/measurement/engine/journey_compiler.py
   - Backend Architecture/aether-backend/services/measurement/repositories/activity_repo.py
   - Backend Architecture/aether-backend/services/measurement/repositories/journey_step_repo.py
-last_synced_commit: "9461239"
+last_synced_commit: 4d76caf
 ---
 
 # Deployment Profile Matrix — Unified Canonical Journey
@@ -52,7 +52,7 @@ None. The journey compiler v2.0 is always active once the migration is applied. 
 
 ## Ingestion Wiring
 
-The `SilverDispatcher` calls `project_and_emit()` on each projector after the migration is applied. This is the hook that writes silver fact rows into `canonical_activity`. No additional configuration is required; the dispatch happens inline on every Bronze event.
+The `SilverDispatcher` runs an ordered projector list per event type (multi-projector fan-out, ADR-C3) and calls `project_and_emit()` on each. It is attached to `SDK_EVENTS_VALIDATED` via the `silver_fact_projector` ingestion worker; rows are persisted by `services/silver/writer.py`, and canonical activity emission is owned by exactly one projector per event (ADR-C4). No additional configuration is required.
 
 ## Scaling Considerations
 

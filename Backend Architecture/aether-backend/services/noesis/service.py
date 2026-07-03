@@ -424,6 +424,8 @@ class NoesisService:
             candidates.append(("tenant_summary", 0.8))
         if any(k in low for k in ("connected", "connections", "neighbors", "graph", "what is connected", "traversal", "linked", "relationships", "edges", "adjacent")):
             candidates.append(("graph_lookup", 0.84))
+        if any(k in low for k in ("email", "message", "communications", "comms", "deliverability", "open rate", "click rate", "reply", "replies", "unsubscribe", "bounce", "machine activity", "inflated")):
+            candidates.append(("communications_insight", 0.8))
         if any(k in low for k in ("campaign", "reward", "spending", "valuable", "loyalty", "incentive")):
             candidates.append(("campaign_reward_lookup", 0.78))
         if any(k in low for k in ("risk", "cluster", "abnormal", "anomalous", "fraud", "risky", "suspicious", "anomaly", "anomalies")):
@@ -555,6 +557,8 @@ class NoesisService:
             return await self._health_lookup(plan, scope)
         if plan.intent == "campaign_reward_lookup":
             return await self._campaign_reward_lookup(plan, scope)
+        if plan.intent == "communications_insight":
+            return await self._communications_insight(plan, scope)
         if plan.intent == "risk_cluster_lookup":
             return await self._risk_cluster_lookup(plan, scope)
         if plan.intent in (
@@ -737,6 +741,47 @@ class NoesisService:
             sufficient=True,
         )
         return self._response(plan, f"Health summary: {len(provider_rows)} provider/SDK records, {len(failed_agents)} failed agent executions, and {summary.get('total_events', 0)} events in the dashboard summary.", [result], [NoesisAction(type="navigate", label="Open diagnostics", href="/diagnostics"), NoesisAction(type="navigate", label="Open system status", href="/system-status")], evidence=evidence, scope=scope)
+
+    async def _communications_insight(self, plan: QueryPlan, scope: Scope) -> NoesisResponse:
+        """Evidence-backed communications intelligence (Phase 22).
+
+        Answers deliverability/engagement questions from silver_comms_facts
+        aggregates: pipeline volume, campaign resolution coverage, and
+        whether provider-reported engagement is inflated by machine activity.
+        Derived intelligence only — Noesis never executes or mutates.
+        """
+        from services.comms.routes import _health_snapshot
+
+        tenant_id = scope.effective_tenant_id or plan.tenant_id or ""
+        snapshot = await _health_snapshot(tenant_id)
+        facts = snapshot.get("communication_facts") or 0
+        machine_rate = snapshot.get("machine_event_rate")
+        resolution_rate = snapshot.get("campaign_resolution_rate")
+
+        parts = [f"{facts} communication facts observed"]
+        if resolution_rate is not None:
+            parts.append(f"{resolution_rate:.0%} resolve to a canonical campaign")
+        if machine_rate is not None:
+            inflation = (
+                "provider-reported engagement is materially inflated by machine activity"
+                if machine_rate >= 0.3 else
+                "machine activity is within normal range"
+            )
+            parts.append(f"{machine_rate:.0%} of events are suspected machine activity — {inflation}")
+        summary = "Communications: " + "; ".join(parts) + "."
+
+        fetched_at = utc_now()
+        evidence = EvidenceEnvelope(
+            sources=[
+                EvidenceSource(service="comms_facts_repository", resource_type="silver_comms_facts", fetched_at=fetched_at),
+            ],
+            sufficient=facts > 0,
+        )
+        return self._response(
+            plan, summary, [snapshot],
+            [NoesisAction(type="navigate", label="Open Campaign Intelligence", href="/campaigns")],
+            evidence=evidence, scope=scope,
+        )
 
     async def _campaign_reward_lookup(self, plan: QueryPlan, scope: Scope) -> NoesisResponse:
         fetched_at = utc_now()

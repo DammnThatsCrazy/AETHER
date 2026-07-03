@@ -1445,6 +1445,54 @@
       "section_comment": "comms"
     },
     {
+      "name": "email_queued",
+      "family": "comms",
+      "consent_purpose": "marketing",
+      "section_comment": "comms"
+    },
+    {
+      "name": "email_processed",
+      "family": "comms",
+      "consent_purpose": "marketing",
+      "section_comment": "comms"
+    },
+    {
+      "name": "email_sent",
+      "family": "comms",
+      "consent_purpose": "marketing",
+      "section_comment": "comms"
+    },
+    {
+      "name": "email_deferred",
+      "family": "comms",
+      "consent_purpose": "marketing",
+      "section_comment": "comms"
+    },
+    {
+      "name": "email_dropped",
+      "family": "comms",
+      "consent_purpose": "marketing",
+      "section_comment": "comms"
+    },
+    {
+      "name": "email_replied",
+      "family": "comms",
+      "consent_purpose": "marketing",
+      "section_comment": "comms"
+    },
+    {
+      "name": "email_spam_complaint",
+      "family": "comms",
+      "consent_purpose": "marketing",
+      "section_comment": "comms"
+    },
+    {
+      "name": "email_suppressed",
+      "family": "comms",
+      "consent_purpose": "marketing",
+      "section_comment": "comms"
+    },
+    {
       "name": "message_received_observed",
       "family": "comms",
       "consent_purpose": "analytics",

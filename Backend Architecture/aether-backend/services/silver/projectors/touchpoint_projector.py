@@ -27,10 +27,20 @@ _TOUCHPOINT_TYPE_MAP: dict[str, str] = {
     "email_delivered": "email_delivery",
     "email_opened": "email_open",
     "email_clicked": "email_click",
+    "email_replied": "email_reply",
+    "message_replied_observed": "email_reply",
     "notification_presented": "push_presentation",
     "notification_clicked": "push_click",
     "outcome_observed": "page_view",
 }
+
+# Positive-engagement touchpoint types that must never be created from
+# machine-generated activity (scanner clicks, proxy opens) or automated
+# replies. Delivery observations are population evidence, not engagement,
+# so they pass through regardless (Phase 7 engagement policy).
+_ENGAGEMENT_TOUCHPOINT_TYPES = frozenset({
+    "email_open", "email_click", "email_reply", "push_click",
+})
 
 
 class TouchpointProjector(BaseProjector):
@@ -58,6 +68,22 @@ class TouchpointProjector(BaseProjector):
         source_event_id = event.get("messageId") or event.get("id")
         if not source_event_id:
             return ProjectionResult(table="silver_campaign_touchpoint_facts", rows=[], skipped=True, skip_reason="missing_message_id")
+
+        # Comms classification propagated by the dispatcher (CommsProjector
+        # runs first — ADR-C3 ordering). Machine-generated engagement and
+        # automated replies never become positive engagement touchpoints.
+        comms_fact: dict[str, Any] = event.get("_comms_fact") or {}
+        if touchpoint_type in _ENGAGEMENT_TOUCHPOINT_TYPES:
+            if comms_fact.get("suspected_machine_activity"):
+                return ProjectionResult(
+                    table="silver_campaign_touchpoint_facts", rows=[],
+                    skipped=True, skip_reason="machine_activity_excluded",
+                )
+            if comms_fact.get("automated_response_kind"):
+                return ProjectionResult(
+                    table="silver_campaign_touchpoint_facts", rows=[],
+                    skipped=True, skip_reason="automated_response_excluded",
+                )
 
         idem_key = hashlib.sha256(
             f"{source_event_id}:{tenant_id}:{touchpoint_type}".encode()
@@ -113,15 +139,20 @@ class TouchpointProjector(BaseProjector):
         canonical_campaign_id_hint: str | None = (
             campaign_ctx.get("canonicalCampaignId") or acq_ev.get("canonicalCampaignId")
         )
+        # Connector-normalized comm events carry provider campaign evidence in
+        # snake_case properties; SDK web events carry it in context/acq evidence.
         external_campaign_id: str | None = (
             campaign_ctx.get("externalCampaignId") or acq_ev.get("externalCampaignId")
+            or props.get("external_campaign_id") or props.get("external_flow_id")
         )
         external_account_id: str | None = (
             campaign_ctx.get("externalAccountId") or acq_ev.get("externalAccountId")
+            or props.get("provider_account_id")
         )
         # marketing platform (google, meta, …) — distinct from the SDK library name
         marketing_platform: str | None = (
             campaign_ctx.get("platform") or acq_ev.get("platform")
+            or props.get("provider")
         )
 
         has_campaign_evidence = bool(
@@ -181,6 +212,15 @@ class TouchpointProjector(BaseProjector):
             # Private pass-through for dispatcher resolver; popped before DB write
             "_canonical_campaign_id_hint": canonical_campaign_id_hint,
             "_utm_id": utm_id,
+            # Comms lineage — links this touchpoint back to the authoritative
+            # communication fact for the same real-world event (ADR-C4).
+            "communication_fact_id": comms_fact.get("idempotency_key"),
+            "external_message_id": comms_fact.get("external_message_id") or props.get("external_message_id"),
+            "sequence_step": comms_fact.get("sequence_step"),
+            "variant_id": comms_fact.get("variant_id"),
+            "link_id": comms_fact.get("link_id") or props.get("link_id"),
+            "engagement_confidence": comms_fact.get("engagement_confidence"),
+            "machine_activity_probability": comms_fact.get("machine_activity_probability"),
             "identity_resolution_method": ctx.get("identityResolutionMethod"),
             "identity_confidence": ctx.get("identityConfidence"),
             "identity_version": ctx.get("identityVersion"),
