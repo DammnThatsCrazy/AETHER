@@ -12,7 +12,7 @@ source_files:
   - Backend Architecture/aether-backend/services/measurement/routes/kyber.py
   - frontend/aether/src/pages/journey-explorer/journey-explorer-page.tsx
   - frontend/kyber/src/pages/measurement/journey-explorer-page.tsx
-last_synced_commit: 17f52a5
+last_synced_commit: 4d76caf
 ---
 
 # Release Readiness — Unified Canonical Journey

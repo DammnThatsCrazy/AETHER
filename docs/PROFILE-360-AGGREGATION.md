@@ -13,7 +13,7 @@ source_files:
 canonical_owner: backend@aether
 estimated_read_minutes: 8
 toc_depth: 3
-last_synced_commit: de258c3
+last_synced_commit: 4d76caf
 ---
 
 # Profile 360 Aggregation Layer
@@ -423,13 +423,21 @@ list when Silver data is unavailable.  All require the `read` permission on the 
 | GET    | `/v1/profile/{id}/revenue`        | `silver_revenue_facts`          | Revenue and subscription facts             |
 | GET    | `/v1/profile/{id}/friction`       | `silver_friction_facts`         | UX friction observations                   |
 | GET    | `/v1/profile/{id}/accounts`       | `silver_account_activity_facts` | B2B account activity facts                 |
-| GET    | `/v1/profile/{id}/communications` | `silver_comms_facts`            | Notification/email/message delivery facts  |
+| GET    | `/v1/profile/{id}/communications` | `silver_comms_facts`            | Communication facts (filterable: channel, category, direction, campaign, state, `human_qualified`; cursor paginated; includes summary counts) |
+| GET    | `/v1/profile/{id}/communication-state` | `communication_state`      | Rebuildable per-channel state: subscription, deliverability, engagement counters, suppression scopes |
 | GET    | `/v1/profile/{id}/integrations`   | `silver_server_operation_facts` | Integration and server operation facts     |
 | GET    | `/v1/profile/{id}/data-quality`   | `silver_data_quality_facts`     | Data quality and schema completeness       |
 
-Silver fact tables are populated asynchronously by the `SilverDispatcher` projector chain (see
-`services/silver/dispatcher.py`).  Until a projector has written records for a given entity the
+Silver fact tables are populated asynchronously by the `SilverDispatcher` projector chain
+(`services/silver/dispatcher.py`), attached to `SDK_EVENTS_VALIDATED` via the
+`silver_fact_projector` ingestion worker. One event may fan out to several projectors
+(communications lifecycle first — ADR-C3); rows are persisted by
+`services/silver/writer.py`. Until a projector has written records for a given entity the
 endpoint returns `source_status: "empty"` — this is correct behavior, not an error.
+
+Communication items never contain raw addresses (tenant-scoped alias hashes with
+redacted displays only) and carry machine-activity classification so reported
+engagement and human-qualified engagement are always distinguishable.
 
 ---
 

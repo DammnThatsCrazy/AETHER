@@ -9,7 +9,7 @@ status: stable
 source_files:
   - Backend Architecture/aether-backend/services/measurement/contracts.py
   - Backend Architecture/aether-backend/alembic/versions/20260627_canonical_activity.py
-last_synced_commit: 3f483817d03d32b20fc99f984ec9a85e24a77e46
+last_synced_commit: 4d76caf
 ---
 
 # Data and Identity Contract
@@ -19,6 +19,12 @@ last_synced_commit: 3f483817d03d32b20fc99f984ec9a85e24a77e46
 The `canonical_activity` table is the single source of truth for all cross-rail activity facts.
 Every silver projector writes to its silver table; the base projector (`project_and_emit`) then
 adapts and upserts into `canonical_activity` via `adapt_from_silver`.
+
+For communication events the dispatcher fans one event out to multiple projectors
+(comms lifecycle first) but only the `CommsProjector` emits canonical activity, keyed by a
+source-derived canonical key — one real-world event always maps to exactly one activity
+regardless of how many Silver projections it produces (ADR-C4,
+`docs/comms/ADR_COMMUNICATIONS_INTELLIGENCE.md`).
 
 ### Identity Links
 
