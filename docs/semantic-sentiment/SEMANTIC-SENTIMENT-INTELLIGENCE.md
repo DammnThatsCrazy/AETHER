@@ -3,12 +3,16 @@ title: Semantic-Sentiment Intelligence Plane
 slug: semantic-sentiment/intelligence-plane
 section: concepts
 visibility: I
-audience: [dev-senior, ops]
+audience: [dev-senior, architect, ops]
 status: experimental
 since_version: "8.11.0"
+source_files:
+  - Backend Architecture/aether-backend/services/semantic_intelligence/models.py
+  - Backend Architecture/aether-backend/services/semantic_intelligence/engine.py
+  - Backend Architecture/aether-backend/services/semantic_intelligence/routes.py
+  - packages/shared/semantic-sentiment.ts
 canonical_owner: platform-intelligence@aether
 estimated_read_minutes: 8
-toc_depth: 3
 ---
 
 # Semantic-Sentiment Intelligence Plane
@@ -73,3 +77,18 @@ make semantic-sentiment-release-check-strict
 ```
 
 The strict gate validates required files and executes the semantic-sentiment tests.
+
+## Second iteration additions
+
+This iteration adds the next release slice beyond observation APIs:
+
+- Shared TypeScript contracts in `packages/shared/semantic-sentiment.ts` for frontend, SDK-adjacent, Kyber, and API-client consumption.
+- Silver and Gold migration scaffolding for semantic observations, sentiment observations, semantic entity mentions, subject links, claims, narrative facts, exposure/adoption/retransmission facts, agent semantic facts, entity states, relationship states, campaign impact, narrative state, episodes, cascades, and agent alignment state.
+- Campaign semantic impact and campaign sentiment APIs that preserve the distinction between ordinary attribution and semantic-mediated estimates.
+- A graph semantic overlay API that returns bounded temporal overlays rather than mutating canonical relationship meaning.
+- A population semantic compare API for cluster/population-style subject comparisons.
+- Cascade derivation from repeated tenant-scoped observations. Cascades remain labelled with `observed_sequence` until stronger exposure/path evidence exists.
+
+## Non-goals in this slice
+
+This slice still does not perform hosted ML inference, graph promotion, vector writes, frontend page rendering, or autonomous campaign execution. Those remain behind explicit release gates and feature flags. The current implementation is intentionally deterministic and evidence-first so downstream model providers can be added without contract drift.

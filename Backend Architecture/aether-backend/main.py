@@ -231,7 +231,13 @@ from services.intelligence.customer_success import admin_router as customer_succ
 from services.intelligence.extraction_intel import router as extraction_intel_router
 from services.profile.routes import router as profile_router, profile360_router
 from services.population.routes import router as population_router
-from services.semantic_intelligence.routes import router as semantic_intelligence_router, kyber_router as kyber_semantic_router
+from services.semantic_intelligence.routes import (
+    campaign_router as campaign_semantic_router,
+    graph_router as graph_semantic_router,
+    kyber_router as kyber_semantic_router,
+    population_router as population_semantic_router,
+    router as semantic_intelligence_router,
+)
 from services.expectations.routes import router as expectations_router
 from services.behavioral.routes import router as behavioral_router
 from services.rwa.routes import router as rwa_router
@@ -618,6 +624,9 @@ def create_app() -> FastAPI:
     app.include_router(population_router)
     app.include_router(semantic_intelligence_router)
     app.include_router(kyber_semantic_router)
+    app.include_router(campaign_semantic_router)
+    app.include_router(graph_semantic_router)
+    app.include_router(population_semantic_router)
     app.include_router(expectations_router)
     app.include_router(behavioral_router)
     app.include_router(rwa_router)

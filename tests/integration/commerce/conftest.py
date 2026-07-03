@@ -3,32 +3,36 @@
 from __future__ import annotations
 
 import asyncio
-import functools
+import inspect
 import os
 import sys
+from functools import wraps
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
 import pytest
 
 try:
     import pytest_asyncio
-except ImportError:  # pragma: no cover - fallback for constrained local sandboxes
-    class _PytestAsyncioFallback:
-        @staticmethod
-        def fixture(func=None, **kwargs):
-            def decorate(inner):
-                @functools.wraps(inner)
-                def wrapper(*args, **fixture_kwargs):
-                    return asyncio.run(inner(*args, **fixture_kwargs))
+except ImportError:  # pragma: no cover - constrained local sandboxes only
 
-                return pytest.fixture(**kwargs)(wrapper)
+    def _async_fixture(*fixture_args, **fixture_kwargs):
+        def decorate(func):
+            if not inspect.iscoroutinefunction(func):
+                return pytest.fixture(**fixture_kwargs)(func)
 
-            if func is None:
-                return decorate
-            return decorate(func)
+            @wraps(func)
+            def run_async_fixture(*args, **kwargs):
+                return asyncio.run(func(*args, **kwargs))
 
-    pytest_asyncio = _PytestAsyncioFallback()
+            return pytest.fixture(**fixture_kwargs)(run_async_fixture)
+
+        if fixture_args and callable(fixture_args[0]) and len(fixture_args) == 1:
+            return decorate(fixture_args[0])
+        return decorate
+
+    pytest_asyncio = SimpleNamespace(fixture=_async_fixture)
 
 ROOT = Path(__file__).resolve().parents[3]
 BACKEND_ROOT = ROOT / "Backend Architecture" / "aether-backend"
@@ -86,6 +90,7 @@ async def seeded_resource():
     from services.x402.commerce_models import ProtectedResource, ResourceClass
     from services.x402.facilitators import seed_facilitators_and_assets
     from services.x402.resources import ProtectedResourceRegistry
+
     await seed_facilitators_and_assets(TENANT)
     registry = ProtectedResourceRegistry()
     resource = ProtectedResource(
@@ -109,6 +114,7 @@ async def seeded_resource():
 async def cp(seeded_resource):
     """X402ControlPlane with a mocked event producer."""
     from services.x402.control_plane import X402ControlPlane
+
     producer = AsyncMock()
     producer.publish = AsyncMock()
     return X402ControlPlane(event_producer=producer)

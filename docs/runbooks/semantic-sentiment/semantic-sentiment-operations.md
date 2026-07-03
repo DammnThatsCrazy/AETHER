@@ -1,14 +1,16 @@
 ---
 title: Semantic-Sentiment Operations Runbook
-slug: runbooks/semantic-sentiment/operations
+slug: semantic-sentiment/operations-runbook
 section: operations
 visibility: I
-audience: [ops, dev-senior]
+audience: [dev-senior, ops]
 status: experimental
 since_version: "8.11.0"
+source_files:
+  - Backend Architecture/aether-backend/services/semantic_intelligence/routes.py
+  - Backend Architecture/aether-backend/alembic/versions/20260702_semantic_sentiment.py
 canonical_owner: platform-intelligence@aether
-estimated_read_minutes: 5
-toc_depth: 3
+estimated_read_minutes: 6
 ---
 
 # Semantic-Sentiment Operations Runbook
@@ -49,3 +51,16 @@ toc_depth: 3
 
 1. Keep promotion disabled until minimum support, confidence, evidence, density budget, and edge cap checks pass.
 2. Treat current semantic-sentiment API outputs as temporal overlays, not unconditional edge mutations.
+
+## Migration or replay failure
+
+1. Validate the semantic-sentiment Alembic revision before rollout.
+2. Confirm tenant/time indexes and idempotency indexes exist for every Silver and Gold table.
+3. Replay only bounded tenant/time windows.
+4. Compare replayed semantic observations, entity state, campaign impact, graph overlay, and cascade counts before promotion.
+
+## Cascade appears without enough evidence
+
+1. Confirm at least two tenant-scoped observations support the cascade grouping.
+2. Keep causal confidence at `observed_sequence` unless verified exposure/path evidence exists.
+3. Do not promote cascade edges to the graph until support count, confidence, evidence, and density-budget checks pass.

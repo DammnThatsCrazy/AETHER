@@ -2640,3 +2640,5 @@ These endpoints are gated by feature flags (`FEATURE_FRAUD_NETWORKS`, `FEATURE_F
 The semantic-sentiment intelligence plane adds tenant-scoped APIs under `/v1/semantic` for observation creation, observation reads, entity state, entity sentiment, timelines, narrative listing, cascade status, and bounded reprocessing. Kyber operator APIs under `/v1/kyber/semantic` expose fleet health and review queues and require explicit operator scope.
 
 The APIs return real classified observations from the semantic-sentiment repository, include evidence/model/taxonomy metadata, enforce canonical `camp_*` campaign IDs, and preserve insufficient-data states instead of returning fake zero insights.
+
+Additional semantic-sentiment routes in this iteration include `GET /v1/campaigns/{campaign_id}/semantic-impact`, `GET /v1/campaigns/{campaign_id}/sentiment`, `POST /v1/graph/semantic-overlay`, and `POST /v1/population/semantic-compare`. These routes are tenant-scoped and return bounded overlays or insufficient-data states instead of mutating graph edges or merging semantic-mediated estimates into ordinary attribution.

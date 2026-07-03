@@ -77,6 +77,7 @@ def check_registry() -> list[str]:
     for alias, canonical in EXPECTED_ALIASES.items():
         try:
             import warnings
+
             with warnings.catch_warnings():
                 warnings.simplefilter("ignore", DeprecationWarning)
                 resolved = resolve_model_id(alias)
@@ -93,7 +94,9 @@ def check_registry() -> list[str]:
     for entry in _REGISTRY.values():
         ep = entry.serving_endpoint
         if ep in endpoints:
-            errors.append(f"Duplicate serving endpoint '{ep}' for '{entry.model_id}' and '{endpoints[ep]}'")
+            errors.append(
+                f"Duplicate serving endpoint '{ep}' for '{entry.model_id}' and '{endpoints[ep]}'"
+            )
         endpoints[ep] = entry.model_id
     if not errors or all("endpoint" not in e for e in errors):
         ok(f"No duplicate serving endpoints ({len(endpoints)} unique)")
@@ -193,7 +196,14 @@ def check_training_configs() -> list[str]:
 
 def check_backend_routes() -> list[str]:
     errors: list[str] = []
-    routes_path = REPO_ROOT / "Backend Architecture" / "aether-backend" / "services" / "ml_serving" / "routes.py"
+    routes_path = (
+        REPO_ROOT
+        / "Backend Architecture"
+        / "aether-backend"
+        / "services"
+        / "ml_serving"
+        / "routes.py"
+    )
     if not routes_path.exists():
         errors.append(f"Backend routes file not found: {routes_path}")
         return errors
@@ -201,9 +211,9 @@ def check_backend_routes() -> list[str]:
     content = routes_path.read_text()
 
     # Strip comments and docstrings before checking
-    stripped = re.sub(r'""".*?"""', '', content, flags=re.DOTALL)
-    stripped = re.sub(r"'''.*?'''", '', stripped, flags=re.DOTALL)
-    stripped = re.sub(r'#.*$', '', stripped, flags=re.MULTILINE)
+    stripped = re.sub(r'""".*?"""', "", content, flags=re.DOTALL)
+    stripped = re.sub(r"'''.*?'''", "", stripped, flags=re.DOTALL)
+    stripped = re.sub(r"#.*$", "", stripped, flags=re.MULTILINE)
 
     # modified_output must not exist in code (only .output)
     if "modified_output" in stripped:
@@ -235,6 +245,7 @@ def check_backend_routes() -> list[str]:
 def check_no_authored_model_lists() -> list[str]:
     """Serving API must not define MODEL_NAMES or MODEL_TYPES as authored literal constants."""
     import ast
+
     errors: list[str] = []
     serving_api = ML_ROOT / "serving" / "src" / "api.py"
     if not serving_api.exists():
@@ -268,30 +279,51 @@ def check_no_authored_model_lists() -> list[str]:
 
 
 def check_model_type_enum() -> list[str]:
-    """ModelType enum in common/src/base.py must contain all 11 registry models."""
+    """ModelType enum in common/src/base.py must contain all registry models.
+
+    Parse ``base.py`` instead of importing it so this consistency gate can run
+    in lightweight repo-health jobs before optional ML runtime packages (for
+    example joblib/sklearn) are available. The registry itself is intentionally
+    lightweight and remains the canonical source for model IDs.
+    """
+    import ast
+
     errors: list[str] = []
-    base_path = ML_ROOT / "common" / "src"
-    sys.path.insert(0, str(base_path))
+    base_file = ML_ROOT / "common" / "src" / "base.py"
+    if not base_file.exists():
+        errors.append(f"ModelType source not found: {base_file}")
+        return errors
+
     try:
-        import importlib
-        base_mod = importlib.import_module("base")
-        ModelType = getattr(base_mod, "ModelType", None)
-        if ModelType is None:
-            errors.append("ModelType not found in common/src/base.py")
-            return errors
+        tree = ast.parse(base_file.read_text())
         from common.model_registry import list_models
-        enum_values = {e.value for e in ModelType}
-        registry_ids = {m.model_id for m in list_models()}
-        missing = registry_ids - enum_values
-        if missing:
-            errors.append(
-                f"ModelType enum missing entries: {sorted(missing)}. "
-                "Add to ML Models/aether-ml/common/src/base.py."
-            )
-        else:
-            ok(f"ModelType enum covers all {len(registry_ids)} registry models")
-    except ImportError as e:
-        errors.append(f"Cannot import ModelType or model_registry: {e}")
+    except (ImportError, SyntaxError) as e:
+        errors.append(f"Cannot parse ModelType or import model_registry: {e}")
+        return errors
+
+    enum_values: set[str] = set()
+    for node in tree.body:
+        if not isinstance(node, ast.ClassDef) or node.name != "ModelType":
+            continue
+        for stmt in node.body:
+            if not isinstance(stmt, ast.Assign):
+                continue
+            if isinstance(stmt.value, ast.Constant) and isinstance(stmt.value.value, str):
+                enum_values.add(stmt.value.value)
+        break
+    else:
+        errors.append("ModelType not found in common/src/base.py")
+        return errors
+
+    registry_ids = {m.model_id for m in list_models()}
+    missing = registry_ids - enum_values
+    if missing:
+        errors.append(
+            f"ModelType enum missing entries: {sorted(missing)}. "
+            "Add to ML Models/aether-ml/common/src/base.py."
+        )
+    else:
+        ok(f"ModelType enum covers all {len(registry_ids)} registry models")
     return errors
 
 
@@ -299,16 +331,20 @@ def check_no_privilege_header() -> list[str]:
     """Backend routes must not accept X-Batch-Privilege header as proof of privilege."""
     errors: list[str] = []
     routes_path = (
-        REPO_ROOT / "Backend Architecture" / "aether-backend"
-        / "services" / "ml_serving" / "routes.py"
+        REPO_ROOT
+        / "Backend Architecture"
+        / "aether-backend"
+        / "services"
+        / "ml_serving"
+        / "routes.py"
     )
     if not routes_path.exists():
         return errors  # already checked above
 
     content = routes_path.read_text()
-    stripped = re.sub(r'#.*$', '', content, flags=re.MULTILINE)
-    stripped = re.sub(r'""".*?"""', '', stripped, flags=re.DOTALL)
-    stripped = re.sub(r"'''.*?'''", '', stripped, flags=re.DOTALL)
+    stripped = re.sub(r"#.*$", "", content, flags=re.MULTILINE)
+    stripped = re.sub(r'""".*?"""', "", stripped, flags=re.DOTALL)
+    stripped = re.sub(r"'''.*?'''", "", stripped, flags=re.DOTALL)
 
     if "X-Batch-Privilege" in stripped:
         errors.append(

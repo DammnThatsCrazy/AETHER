@@ -4252,17 +4252,16 @@
     {
       "path": "docs/runbooks/semantic-sentiment/semantic-sentiment-operations.md",
       "title": "Semantic-Sentiment Operations Runbook",
-      "slug": "runbooks/semantic-sentiment/operations",
+      "slug": "semantic-sentiment/operations-runbook",
       "section": "operations",
       "visibility": "I",
       "audience": [
-        "ops",
-        "dev-senior"
+        "dev-senior",
+        "ops"
       ],
       "status": "experimental",
       "since_version": "8.11.0",
-      "estimated_read_minutes": 5,
-      "toc_depth": 3,
+      "estimated_read_minutes": 6,
       "canonical_owner": "platform-intelligence@aether"
     },
     {
@@ -4289,12 +4288,12 @@
       "visibility": "I",
       "audience": [
         "dev-senior",
+        "architect",
         "ops"
       ],
       "status": "experimental",
       "since_version": "8.11.0",
       "estimated_read_minutes": 8,
-      "toc_depth": 3,
       "canonical_owner": "platform-intelligence@aether"
     },
     {

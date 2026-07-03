@@ -12,6 +12,8 @@ REQUIRED = [
     "Backend Architecture/aether-backend/tests/semantic_intelligence/test_semantic_intelligence.py",
     "docs/semantic-sentiment/SEMANTIC-SENTIMENT-INTELLIGENCE.md",
     "docs/runbooks/semantic-sentiment/semantic-sentiment-operations.md",
+    "Backend Architecture/aether-backend/alembic/versions/20260702_semantic_sentiment.py",
+    "packages/shared/semantic-sentiment.ts",
 ]
 
 

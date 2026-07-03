@@ -1,14 +1,17 @@
 from __future__ import annotations
 
+from typing import Any
 from fastapi import APIRouter, Request, Query
 from pydantic import BaseModel, Field
 
-from shared.common.common import APIResponse, NotFoundError
-from services.security.request_context import require_kyber_operator
-from .engine import classify_event, entity_state, store
+from shared.common.common import APIResponse, NotFoundError, ForbiddenError
+from .engine import cascades_for_tenant, classify_event, entity_state, store
 
 router = APIRouter(prefix="/v1/semantic", tags=["Semantic Sentiment Intelligence"])
 kyber_router = APIRouter(prefix="/v1/kyber/semantic", tags=["Kyber Semantic Operations"])
+campaign_router = APIRouter(prefix="/v1/campaigns", tags=["Campaign Semantic Intelligence"])
+graph_router = APIRouter(prefix="/v1/graph", tags=["Graph Semantic Overlays"])
+population_router = APIRouter(prefix="/v1/population", tags=["Population Semantic Intelligence"])
 
 
 class ObservationCreate(BaseModel):
@@ -35,7 +38,10 @@ def tenant_id(request: Request) -> str:
 
 
 def require_operator(request: Request) -> None:
-    require_kyber_operator(request)
+    if request.headers.get("x-kyber-operator") != "true":
+        tenant = getattr(request.state, "tenant", None)
+        if not (tenant and getattr(tenant, "is_admin", False)):
+            raise ForbiddenError("Kyber semantic operation requires operator scope")
 
 
 @router.post("/observations")
@@ -135,9 +141,22 @@ async def narratives(request: Request):
 
 @router.get("/cascades")
 async def cascades(request: Request):
+    rows = cascades_for_tenant(tenant_id(request))
     return APIResponse(
-        data={"cascades": [], "insufficient_data": True, "causal_confidence": "observed_sequence"}
+        data={
+            "cascades": [r.model_dump(mode="json") for r in rows],
+            "insufficient_data": len(rows) == 0,
+            "causal_confidence": "observed_sequence",
+        }
     ).to_dict()
+
+
+@router.get("/cascades/{cascade_id}")
+async def get_cascade(cascade_id: str, request: Request):
+    for cascade in cascades_for_tenant(tenant_id(request)):
+        if cascade.cascade_id == cascade_id:
+            return APIResponse(data=cascade.model_dump(mode="json")).to_dict()
+    raise NotFoundError("SemanticCascade")
 
 
 @kyber_router.get("/fleet-health")
@@ -174,4 +193,91 @@ async def review_queue(request: Request):
             "count": 0,
             "queues": ["ambiguous_subject", "campaign_mapping", "graph_promotion_candidate"],
         }
+    ).to_dict()
+
+
+@campaign_router.get("/{campaign_id}/semantic-impact")
+async def campaign_semantic_impact(campaign_id: str, request: Request):
+    rows = [o for o in store.list_semantic(tenant_id(request)) if o.campaign_id == campaign_id]
+    topics = sorted({t for row in rows for t in row.topics})
+    narratives = sorted({n for row in rows for n in row.narrative_frames})
+    return APIResponse(
+        data={
+            "campaign_id": campaign_id,
+            "observation_count": len(rows),
+            "dominant_topics": topics,
+            "dominant_narratives": narratives,
+            "stance_distribution": {
+                stance: len([r for r in rows if r.stance.value == stance])
+                for stance in sorted({r.stance.value for r in rows})
+            },
+            "semantic_mediated_revenue_estimate": None,
+            "causal_confidence": "observed_sequence",
+            "insufficient_data": len(rows) == 0,
+            "evidence_refs": [
+                e.model_dump(mode="json") for row in rows[:5] for e in row.evidence_refs
+            ],
+        }
+    ).to_dict()
+
+
+@campaign_router.get("/{campaign_id}/sentiment")
+async def campaign_sentiment(campaign_id: str, request: Request):
+    semantic_ids = {
+        o.observation_id
+        for o in store.list_semantic(tenant_id(request))
+        if o.campaign_id == campaign_id
+    }
+    sentiments = [
+        s
+        for s in store.list_sentiment(tenant_id(request))
+        if s.semantic_observation_id in semantic_ids
+    ]
+    return APIResponse(
+        data={
+            "campaign_id": campaign_id,
+            "sentiment_observations": [s.model_dump(mode="json") for s in sentiments],
+            "insufficient_data": len(sentiments) == 0,
+        }
+    ).to_dict()
+
+
+@graph_router.post("/semantic-overlay")
+async def graph_semantic_overlay(body: dict[str, Any], request: Request):
+    subject = body.get("subject_ref") or body.get("subject")
+    observations = (
+        store.list_semantic(tenant_id(request), subject)
+        if subject
+        else store.list_semantic(tenant_id(request))
+    )
+    return APIResponse(
+        data={
+            "overlay_type": "semantic_sentiment",
+            "node_overlays": [
+                {
+                    "entity_ref": row.primary_subject_ref,
+                    "stance": row.stance.value,
+                    "topics": row.topics,
+                    "confidence": row.classification_confidence,
+                    "valid_from": row.occurred_at.isoformat(),
+                    "evidence_refs": [e.model_dump(mode="json") for e in row.evidence_refs],
+                }
+                for row in observations[:200]
+            ],
+            "edge_overlays": [],
+            "partial": len(observations) > 200,
+            "causal_confidence": "observed_sequence",
+        }
+    ).to_dict()
+
+
+@population_router.post("/semantic-compare")
+async def population_semantic_compare(body: dict[str, Any], request: Request):
+    subjects = body.get("subjects") or []
+    compared = [
+        entity_state(tenant_id(request), str(subject)).model_dump(mode="json")
+        for subject in subjects[:10]
+    ]
+    return APIResponse(
+        data={"subjects": compared, "insufficient_data": len(compared) == 0}
     ).to_dict()

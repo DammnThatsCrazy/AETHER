@@ -39,3 +39,5 @@ export * from './suggestions';
 export * from './connector-taxonomy';
 export * from './campaign-exploration-contract';
 export * from './acquisition-evidence';
+
+export * from './semantic-sentiment';

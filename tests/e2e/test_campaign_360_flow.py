@@ -39,6 +39,7 @@ def _make_explorer():
     from services.measurement.repositories.journey_repo import JourneyRepository
     from services.measurement.repositories.spend_repo import SpendRepository
     from services.campaign.exploration import CampaignPopulationExplorer
+
     return CampaignPopulationExplorer(
         touchpoint_repo=TouchpointRepository(),
         conversion_repo=ConversionRepository(),
@@ -49,10 +50,11 @@ def _make_explorer():
 
 
 @pytest.fixture(autouse=True)
-async def clear_all_stores():
+def clear_all_stores():
     from services.measurement.repositories.touchpoint_repo import _local_store as tp
     from services.measurement.repositories.conversion_repo import _local_store as cv
     from services.measurement.repositories.attribution_run_repo import _local_credits as cr
+
     tp.clear()
     cv.clear()
     cr.clear()
@@ -63,6 +65,7 @@ async def clear_all_stores():
 
 
 # ── Scenario A ────────────────────────────────────────────────────────────────
+
 
 class TestScenarioAMultiChannelFlow:
     """
@@ -93,31 +96,45 @@ class TestScenarioAMultiChannelFlow:
         cluster_id = f"cl-a-{uuid.uuid4()}"
 
         for i, channel in enumerate(channels):
-            await tp_repo.upsert({
-                "tenant_id": self.TENANT, "campaign_id": self.CAMPAIGN,
-                "touchpoint_type": "click" if channel != "display" else "impression",
-                "channel": channel,
-                "profile_id": f"prof-a-{i}",
-                "cluster_id": cluster_id,
-                "occurred_at": _ts(),
-                "idempotency_key": f"tp-a-{uuid.uuid4()}",
-            })
+            await tp_repo.upsert(
+                {
+                    "tenant_id": self.TENANT,
+                    "campaign_id": self.CAMPAIGN,
+                    "touchpoint_type": "click" if channel != "display" else "impression",
+                    "channel": channel,
+                    "profile_id": f"prof-a-{i}",
+                    "cluster_id": cluster_id,
+                    "occurred_at": _ts(),
+                    "idempotency_key": f"tp-a-{uuid.uuid4()}",
+                }
+            )
 
         conversion_id = str(uuid.uuid4())
-        await cv_repo.upsert({
-            "tenant_id": self.TENANT, "campaign_id": self.CAMPAIGN,
-            "source_event_id": f"ev-a-{uuid.uuid4()}", "conversion_type": "purchase",
-            "gross_value": 300.0, "net_value": 250.0,
-            "occurred_at": _ts(),
-        })
+        await cv_repo.upsert(
+            {
+                "tenant_id": self.TENANT,
+                "campaign_id": self.CAMPAIGN,
+                "source_event_id": f"ev-a-{uuid.uuid4()}",
+                "conversion_type": "purchase",
+                "gross_value": 300.0,
+                "net_value": 250.0,
+                "occurred_at": _ts(),
+            }
+        )
 
-        _local_credits.append({
-            "credit_id": str(uuid.uuid4()),
-            "tenant_id": self.TENANT, "campaign_id": self.CAMPAIGN,
-            "cluster_id": cluster_id, "credit_weight": 1.0,
-            "gross_value": 300.0, "net_value": 250.0, "is_active": True,
-            "conversion_id": conversion_id,
-        })
+        _local_credits.append(
+            {
+                "credit_id": str(uuid.uuid4()),
+                "tenant_id": self.TENANT,
+                "campaign_id": self.CAMPAIGN,
+                "cluster_id": cluster_id,
+                "credit_weight": 1.0,
+                "gross_value": 300.0,
+                "net_value": 250.0,
+                "is_active": True,
+                "conversion_id": conversion_id,
+            }
+        )
 
         return cluster_id
 
@@ -138,7 +155,9 @@ class TestScenarioAMultiChannelFlow:
     async def test_population_observed_returns_all_entities(self):
         await self._seed()
         explorer = _make_explorer()
-        result = await explorer.get_population(self.TENANT, self.CAMPAIGN, population_type="observed", limit=50)
+        result = await explorer.get_population(
+            self.TENANT, self.CAMPAIGN, population_type="observed", limit=50
+        )
         assert "items" in result
         assert len(result["items"]) >= 3
 
@@ -147,6 +166,7 @@ class TestScenarioAMultiChannelFlow:
         cluster_id = await self._seed()
 
         from services.measurement.repositories.attribution_run_repo import AttributionRunRepository
+
         repo = AttributionRunRepository()
         rows = await repo.campaign_cluster_rollup(self.TENANT, self.CAMPAIGN)
 
@@ -159,8 +179,11 @@ class TestScenarioAMultiChannelFlow:
         await self._seed()
 
         from services.measurement.repositories.conversion_repo import ConversionRepository
+
         repo = ConversionRepository()
-        conversions = await repo.list_by_campaign(self.TENANT, self.CAMPAIGN, include_unattributed=True)
+        conversions = await repo.list_by_campaign(
+            self.TENANT, self.CAMPAIGN, include_unattributed=True
+        )
         assert len(conversions) >= 1, "At least one conversion must be returned"
         assert conversions[0].get("gross_value", 0) > 0
 
@@ -168,13 +191,16 @@ class TestScenarioAMultiChannelFlow:
     async def test_graph_anchor_returns_campaign_node(self):
         await self._seed()
         explorer = _make_explorer()
-        result = await explorer.get_graph_anchor(self.TENANT, self.CAMPAIGN, request={"depth": 2, "max_nodes": 50, "max_edges": 150})
+        result = await explorer.get_graph_anchor(
+            self.TENANT, self.CAMPAIGN, request={"depth": 2, "max_nodes": 50, "max_edges": 150}
+        )
 
         node_ids = [n.get("id") for n in result.get("nodes", [])]
         assert self.CAMPAIGN in node_ids, "Campaign must be the anchor node in the graph"
 
 
 # ── Scenario B ────────────────────────────────────────────────────────────────
+
 
 class TestScenarioBAttributionModelComparison:
     """
@@ -193,25 +219,39 @@ class TestScenarioBAttributionModelComparison:
         from services.measurement.repositories.attribution_run_repo import _local_credits
 
         tp_repo = TouchpointRepository()
-        await tp_repo.upsert({
-            "tenant_id": self.TENANT, "campaign_id": self.CAMPAIGN,
-            "touchpoint_type": "click", "profile_id": "prof-b-1",
-            "occurred_at": _ts(), "idempotency_key": f"tp-b-{uuid.uuid4()}",
-        })
+        await tp_repo.upsert(
+            {
+                "tenant_id": self.TENANT,
+                "campaign_id": self.CAMPAIGN,
+                "touchpoint_type": "click",
+                "profile_id": "prof-b-1",
+                "occurred_at": _ts(),
+                "idempotency_key": f"tp-b-{uuid.uuid4()}",
+            }
+        )
 
         cluster = f"cl-b-{uuid.uuid4()}"
         cv_id = str(uuid.uuid4())
         # Last-touch credit (full attribution)
-        _local_credits.append({
-            "credit_id": str(uuid.uuid4()), "tenant_id": self.TENANT,
-            "campaign_id": self.CAMPAIGN, "cluster_id": cluster,
-            "credit_weight": 1.0, "gross_value": 100.0, "net_value": 80.0,
-            "is_active": True, "conversion_id": cv_id,
-            "model": "last_touch",
-        })
+        _local_credits.append(
+            {
+                "credit_id": str(uuid.uuid4()),
+                "tenant_id": self.TENANT,
+                "campaign_id": self.CAMPAIGN,
+                "cluster_id": cluster,
+                "credit_weight": 1.0,
+                "gross_value": 100.0,
+                "net_value": 80.0,
+                "is_active": True,
+                "conversion_id": cv_id,
+                "model": "last_touch",
+            }
+        )
 
         explorer = _make_explorer()
-        overview = await explorer.get_overview(self.TENANT, self.CAMPAIGN, attribution_model="last_touch")
+        overview = await explorer.get_overview(
+            self.TENANT, self.CAMPAIGN, attribution_model="last_touch"
+        )
         assert overview["attributed_count"] >= 0
         # Overview is model-agnostic at the summary level but credits exist
         assert isinstance(overview, dict)
@@ -220,17 +260,25 @@ class TestScenarioBAttributionModelComparison:
     async def test_overview_always_satisfies_reconciliation_invariants(self):
         """Regardless of attribution model, overview invariants must hold."""
         from services.measurement.repositories.touchpoint_repo import TouchpointRepository
+
         tp_repo = TouchpointRepository()
         for i in range(5):
-            await tp_repo.upsert({
-                "tenant_id": self.TENANT, "campaign_id": self.CAMPAIGN,
-                "touchpoint_type": "click", "profile_id": f"prof-b-inv-{i}",
-                "occurred_at": _ts(), "idempotency_key": f"tp-b-inv-{uuid.uuid4()}",
-            })
+            await tp_repo.upsert(
+                {
+                    "tenant_id": self.TENANT,
+                    "campaign_id": self.CAMPAIGN,
+                    "touchpoint_type": "click",
+                    "profile_id": f"prof-b-inv-{i}",
+                    "occurred_at": _ts(),
+                    "idempotency_key": f"tp-b-inv-{uuid.uuid4()}",
+                }
+            )
 
         explorer = _make_explorer()
         for model in ("last_touch", "first_touch", "linear"):
-            overview = await explorer.get_overview(self.TENANT, self.CAMPAIGN, attribution_model=model)
+            overview = await explorer.get_overview(
+                self.TENANT, self.CAMPAIGN, attribution_model=model
+            )
             assert overview["resolved_count"] <= overview["observed_count"], (
                 f"Model={model}: resolved > observed"
             )
@@ -240,6 +288,7 @@ class TestScenarioBAttributionModelComparison:
 
 
 # ── Scenario C ────────────────────────────────────────────────────────────────
+
 
 class TestScenarioCEmptyCampaign:
     """
@@ -257,19 +306,27 @@ class TestScenarioCEmptyCampaign:
         explorer = _make_explorer()
         overview = await explorer.get_overview(self.TENANT, self.CAMPAIGN)
 
-        for key in ("observed_count", "resolved_count", "engaged_count",
-                    "converted_count", "attributed_count"):
+        for key in (
+            "observed_count",
+            "resolved_count",
+            "engaged_count",
+            "converted_count",
+            "attributed_count",
+        ):
             assert overview.get(key, 0) == 0, f"Empty campaign: {key} must be 0"
 
     @pytest.mark.asyncio
     async def test_empty_campaign_population_returns_empty_items(self):
         explorer = _make_explorer()
-        result = await explorer.get_population(self.TENANT, self.CAMPAIGN, population_type="observed")
+        result = await explorer.get_population(
+            self.TENANT, self.CAMPAIGN, population_type="observed"
+        )
         assert result.get("items", []) == []
 
     @pytest.mark.asyncio
     async def test_empty_campaign_clusters_returns_empty(self):
         from services.measurement.repositories.attribution_run_repo import AttributionRunRepository
+
         repo = AttributionRunRepository()
         rows = await repo.campaign_cluster_rollup(self.TENANT, self.CAMPAIGN)
         assert rows == []

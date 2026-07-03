@@ -18,6 +18,7 @@ from .models import (
     EvidenceRef,
     IntentLabel,
     ObservationStatus,
+    SemanticCascade,
     SemanticObservation,
     SentimentObservation,
     SpeechAct,
@@ -238,3 +239,60 @@ def entity_state(tenant_id: str, entity_ref: str) -> EntitySemanticState:
         freshness="fresh" if rows else "insufficient_data",
         evidence_refs=[e for r in rows[-5:] for e in r.evidence_refs],
     )
+
+
+def cascades_for_tenant(tenant_id: str) -> list[SemanticCascade]:
+    rows = store.list_semantic(tenant_id)
+    grouped: dict[tuple[str, str, StanceLabel], list[SemanticObservation]] = defaultdict(list)
+    for row in rows:
+        for topic in row.topics or ["general"]:
+            if row.status == ObservationStatus.CLASSIFIED:
+                grouped[(row.primary_subject_ref, topic, row.stance)].append(row)
+    cascades: list[SemanticCascade] = []
+    for (subject, topic, stance), observations in grouped.items():
+        if len(observations) < 2:
+            continue
+        actors = sorted({o.actor_ref for o in observations})
+        first = observations[0]
+        last = observations[-1]
+        duration = max((last.occurred_at - first.occurred_at).total_seconds(), 1)
+        confidence = sum(o.classification_confidence for o in observations) / len(observations)
+        cascades.append(
+            SemanticCascade(
+                tenant_id=tenant_id,
+                subject_ref=subject,
+                topic_ref=topic,
+                stance=stance,
+                origin_ref=first.observation_id,
+                campaign_id=first.campaign_id,
+                creative_id=first.creative_id,
+                seed_entities=actors[:3],
+                seed_observations=[o.observation_id for o in observations[:3]],
+                first_observed_at=first.occurred_at,
+                last_observed_at=last.occurred_at,
+                exposed_entities=actors,
+                adopting_entities=actors
+                if stance
+                in {
+                    StanceLabel.SUPPORTIVE,
+                    StanceLabel.STRONGLY_SUPPORTIVE,
+                    StanceLabel.WEAKLY_SUPPORTIVE,
+                }
+                else [],
+                rejecting_entities=actors
+                if stance
+                in {StanceLabel.OPPOSED, StanceLabel.STRONGLY_OPPOSED, StanceLabel.WEAKLY_OPPOSED}
+                else [],
+                transmitting_entities=actors[: max(1, len(actors) // 2)],
+                affected_relationship_layers=sorted(
+                    {o.relationship_layer for o in observations if o.relationship_layer}
+                ),
+                depth=min(3, max(1, len(actors) - 1)),
+                breadth=len(actors),
+                velocity=round(len(observations) / duration, 6),
+                reproduction_rate=round(max(len(actors) - 1, 0) / max(len(actors), 1), 4),
+                confidence=round(confidence, 4),
+                evidence_refs=[e for o in observations[:5] for e in o.evidence_refs],
+            )
+        )
+    return cascades

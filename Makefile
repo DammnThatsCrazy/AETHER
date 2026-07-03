@@ -358,7 +358,13 @@ semantic-sentiment-test: semantic-sentiment-unit-test ## Run semantic/sentiment 
 semantic-sentiment-release-check: ## Validate semantic/sentiment release assets
 	python scripts/semantic_sentiment/check_release_gate.py
 
-semantic-sentiment-release-check-strict: ## Validate semantic/sentiment assets and tests
+semantic-sentiment-contracts-check: ## Validate semantic/sentiment shared contract exports
+	npm run build --workspace=packages/shared
+
+semantic-sentiment-migration-check: ## Validate semantic/sentiment migration file is present
+	python scripts/semantic_sentiment/check_release_gate.py
+
+semantic-sentiment-release-check-strict: semantic-sentiment-contracts-check ## Validate semantic/sentiment assets and tests
 	python scripts/semantic_sentiment/check_release_gate.py --strict
 
 # ---------------------------------------------------------------------------

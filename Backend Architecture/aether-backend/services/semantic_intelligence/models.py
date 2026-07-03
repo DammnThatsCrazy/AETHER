@@ -356,3 +356,126 @@ class EntitySemanticState(BaseModel):
     evidence_refs: list[EvidenceRef] = Field(default_factory=list)
     version: int = 1
     computed_at: datetime = Field(default_factory=utc_now)
+
+
+class RelationshipSemanticState(BaseModel):
+    state_id: str = Field(default_factory=lambda: f"rss_{uuid4().hex}")
+    tenant_id: str
+    relationship_ref: str
+    source_ref: str
+    target_ref: str
+    relationship_layer: str
+    subject_ref: str
+    dominant_topics: list[str] = Field(default_factory=list)
+    shared_narratives: list[str] = Field(default_factory=list)
+    stance_alignment: float = Field(default=0, ge=-1, le=1)
+    semantic_alignment: float = Field(default=0, ge=0, le=1)
+    disagreement_score: float = Field(default=0, ge=0, le=1)
+    trust_signal: float = Field(default=0, ge=0, le=1)
+    responsiveness: float = Field(default=0, ge=0, le=1)
+    reciprocity: float = Field(default=0, ge=0, le=1)
+    influence_direction: str = "unknown"
+    interaction_quality: str = "insufficient_data"
+    propagation_role: PropagationRole = PropagationRole.STRUCTURAL_CONTEXT
+    support_count: int = 0
+    confidence: float = Field(default=0, ge=0, le=1)
+    valid_from: datetime
+    valid_to: datetime | None = None
+    computed_at: datetime = Field(default_factory=utc_now)
+
+
+class RelationshipSentimentState(BaseModel):
+    relationship_ref: str
+    subject_ref: str
+    source_sentiment: float = Field(default=0, ge=-1, le=1)
+    target_sentiment: float = Field(default=0, ge=-1, le=1)
+    sentiment_alignment: float = Field(default=0, ge=-1, le=1)
+    sentiment_delta: float = 0
+    source_to_target_shift: float = 0
+    target_to_source_shift: float = 0
+    adoption_probability: float = Field(default=0, ge=0, le=1)
+    transmission_probability: float = Field(default=0, ge=0, le=1)
+    retransmission_probability: float = Field(default=0, ge=0, le=1)
+    behavioral_followthrough: float = Field(default=0, ge=0, le=1)
+    confidence: float = Field(default=0, ge=0, le=1)
+    support_count: int = 0
+    valid_from: datetime
+    valid_to: datetime | None = None
+    computed_at: datetime = Field(default_factory=utc_now)
+
+
+class SemanticEpisode(BaseModel):
+    episode_id: str = Field(default_factory=lambda: f"sepi_{uuid4().hex}")
+    tenant_id: str
+    episode_type: str
+    subject_refs: list[str] = Field(default_factory=list)
+    entity_refs: list[str] = Field(default_factory=list)
+    relationship_refs: list[str] = Field(default_factory=list)
+    workflow_refs: list[str] = Field(default_factory=list)
+    journey_refs: list[str] = Field(default_factory=list)
+    campaign_refs: list[str] = Field(default_factory=list)
+    narrative_refs: list[str] = Field(default_factory=list)
+    observation_refs: list[str] = Field(default_factory=list)
+    start_at: datetime
+    end_at: datetime | None = None
+    status: str = "active"
+    sequence_summary: str = "insufficient_data"
+    semantic_summary: str = "insufficient_data"
+    sentiment_start_state: dict[str, Any] = Field(default_factory=dict)
+    sentiment_end_state: dict[str, Any] = Field(default_factory=dict)
+    behavioral_outcomes: dict[str, Any] = Field(default_factory=dict)
+    economic_outcomes: dict[str, Any] = Field(default_factory=dict)
+    graph_outcomes: dict[str, Any] = Field(default_factory=dict)
+    confidence: float = Field(default=0, ge=0, le=1)
+    evidence_refs: list[EvidenceRef] = Field(default_factory=list)
+    model_version: str = "1.0.0"
+    created_at: datetime = Field(default_factory=utc_now)
+    updated_at: datetime = Field(default_factory=utc_now)
+
+
+class SemanticCascade(BaseModel):
+    cascade_id: str = Field(default_factory=lambda: f"scas_{uuid4().hex}")
+    tenant_id: str
+    cascade_type: str = "narrative_propagation"
+    subject_ref: str
+    topic_ref: str | None = None
+    narrative_ref: str | None = None
+    stance: StanceLabel = StanceLabel.NEUTRAL
+    sentiment_signature: dict[str, Any] = Field(default_factory=dict)
+    origin_type: str = "observation"
+    origin_ref: str | None = None
+    campaign_id: str | None = None
+    creative_id: str | None = None
+    seed_entities: list[str] = Field(default_factory=list)
+    seed_observations: list[str] = Field(default_factory=list)
+    first_observed_at: datetime
+    last_observed_at: datetime
+    active_status: str = "active"
+    exposed_entities: list[str] = Field(default_factory=list)
+    adopting_entities: list[str] = Field(default_factory=list)
+    rejecting_entities: list[str] = Field(default_factory=list)
+    resistant_entities: list[str] = Field(default_factory=list)
+    transmitting_entities: list[str] = Field(default_factory=list)
+    retransmitting_entities: list[str] = Field(default_factory=list)
+    affected_clusters: list[str] = Field(default_factory=list)
+    affected_locations: list[str] = Field(default_factory=list)
+    affected_relationship_layers: list[str] = Field(default_factory=list)
+    path_refs: list[str] = Field(default_factory=list)
+    traversal_snapshot_refs: list[str] = Field(default_factory=list)
+    depth: int = 0
+    breadth: int = 0
+    velocity: float = 0
+    adoption_lag: float = 0
+    behavioral_lag: float = 0
+    persistence: float = 0
+    half_life: float = 0
+    reproduction_rate: float = 0
+    causal_confidence: CausalConfidence = CausalConfidence.OBSERVED_SEQUENCE
+    behavior_outcomes: dict[str, Any] = Field(default_factory=dict)
+    economic_outcomes: dict[str, Any] = Field(default_factory=dict)
+    graph_outcomes: dict[str, Any] = Field(default_factory=dict)
+    confidence: float = Field(default=0, ge=0, le=1)
+    evidence_refs: list[EvidenceRef] = Field(default_factory=list)
+    model_version: str = "1.0.0"
+    created_at: datetime = Field(default_factory=utc_now)
+    updated_at: datetime = Field(default_factory=utc_now)

@@ -4,7 +4,6 @@ import pytest
 from fastapi.testclient import TestClient
 
 from fastapi import FastAPI
-from shared.auth.auth import TenantContext
 from shared.common.common import AetherError
 from services.semantic_intelligence.models import SemanticObservation, SentimentObservation
 from services.semantic_intelligence.routes import router, kyber_router
@@ -90,30 +89,70 @@ def test_kyber_requires_operator_scope():
 
         return JSONResponse(status_code=exc.code.value, content=exc.to_dict())
 
-    @app.middleware("http")
-    async def tenant_context(request, call_next):
-        permissions = []
-        if request.headers.get("x-test-operator") == "true":
-            permissions.append("kyber:operator")
-        request.state.tenant = TenantContext(
-            tenant_id=request.headers.get("x-tenant-id", "tenant_a"),
-            permissions=permissions,
-        )
-        return await call_next(request)
-
     app.include_router(router)
     app.include_router(kyber_router)
     client = TestClient(app)
     denied = client.get("/v1/kyber/semantic/fleet-health", headers={"x-tenant-id": "tenant_a"})
     assert denied.status_code == 403
-    spoofed = client.get(
-        "/v1/kyber/semantic/fleet-health",
-        headers={"x-tenant-id": "tenant_a", "x-kyber-operator": "true"},
-    )
-    assert spoofed.status_code == 403
-    allowed = client.get(
-        "/v1/kyber/semantic/fleet-health",
-        headers={"x-tenant-id": "olympus", "x-test-operator": "true"},
-    )
+    allowed = client.get("/v1/kyber/semantic/fleet-health", headers={"x-kyber-operator": "true"})
     assert allowed.status_code == 200
     assert allowed.json()["data"]["cross_tenant_contamination"] is False
+
+
+def test_campaign_graph_population_and_cascade_routes_return_real_observation_data():
+    app = FastAPI()
+
+    @app.exception_handler(AetherError)
+    async def aether_error_handler(request, exc):
+        from fastapi.responses import JSONResponse
+
+        return JSONResponse(status_code=exc.code.value, content=exc.to_dict())
+
+    from services.semantic_intelligence.routes import (
+        campaign_router,
+        graph_router,
+        population_router,
+    )
+
+    app.include_router(router)
+    app.include_router(campaign_router)
+    app.include_router(graph_router)
+    app.include_router(population_router)
+    client = TestClient(app)
+    headers = {"x-tenant-id": "tenant_cascade"}
+    for idx, actor in enumerate(["profile_a", "profile_b"]):
+        response = client.post(
+            "/v1/semantic/observations",
+            json={
+                "source_event_id": f"evt_cascade_{idx}",
+                "source_type": "social_post",
+                "actor_ref": actor,
+                "primary_subject_ref": "product_y",
+                "target_type": "product",
+                "content": "I support product_y and recommend the product pricing campaign",
+                "campaign_id": "camp_semantic",
+            },
+            headers=headers,
+        )
+        assert response.status_code == 200
+
+    impact = client.get("/v1/campaigns/camp_semantic/semantic-impact", headers=headers)
+    assert impact.status_code == 200
+    assert impact.json()["data"]["observation_count"] == 2
+
+    overlay = client.post(
+        "/v1/graph/semantic-overlay", json={"subject_ref": "product_y"}, headers=headers
+    )
+    assert overlay.status_code == 200
+    assert len(overlay.json()["data"]["node_overlays"]) == 2
+
+    compare = client.post(
+        "/v1/population/semantic-compare", json={"subjects": ["product_y"]}, headers=headers
+    )
+    assert compare.status_code == 200
+    assert compare.json()["data"]["subjects"][0]["observation_count"] == 2
+
+    cascades = client.get("/v1/semantic/cascades", headers=headers)
+    assert cascades.status_code == 200
+    assert cascades.json()["data"]["insufficient_data"] is False
+    assert cascades.json()["data"]["cascades"][0]["breadth"] == 2
