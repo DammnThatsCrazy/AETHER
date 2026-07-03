@@ -78,20 +78,16 @@ async def observe_agent_event(req: AgentEventRequest, request: Request) -> Obser
         record.risk = computed_risk
 
     mutations = build_mutations(record)
-    pipeline_result = await AgenticIngestionPipeline().ingest_record(
-        record,
-        raw_payload=raw,
-        graph_mutations=mutations,
-    )
+    projection = await _persist_mutations(mutations, tenant_id=tenant_id, trace_id=record.observation_id)
     received_at = _utc_now()
     return ObservationResponse(
         observation_id=record.observation_id,
         received_at=received_at,
-        graph_mutations_queued=pipeline_result.outbox_records_created,
+        graph_mutations_queued=projection.graph_mutations_persisted,
         tenant_id=tenant_id,
-        graph_mutations_built=len(mutations),
-        graph_mutations_persisted=pipeline_result.outbox_records_created,
-        graph_projection_status="outbox_queued" if pipeline_result.outbox_records_created else "not_applicable",
+        graph_mutations_built=projection.graph_mutations_built,
+        graph_mutations_persisted=projection.graph_mutations_persisted,
+        graph_projection_status=projection.graph_projection_status,
     )
 
 
