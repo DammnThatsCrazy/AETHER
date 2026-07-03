@@ -22,6 +22,7 @@ from repositories.repos import (
     AgentExecutionRepository,
     BehaviorProfileRepository,
     DelegationRepository,
+    FraudDecisionRepository,
     JourneyChainRepository,
 )
 
@@ -286,6 +287,78 @@ class AnomalyFlagger:
         )
 
 
+# ── FraudSummaryProjector ──────────────────────────────────────────────
+
+class FraudSummaryProjector:
+    """Updates the behavior profile snapshot with fraud decision summary.
+
+    Listens to FRAUD_DECISION_CREATED and FRAUD_EVALUATION_COMPLETED. On each
+    event it fetches all decisions for the subject entity, computes the risk
+    tier distribution, and writes the latest risk_score and fraud summary into
+    the behavior profile row so Profile360 reads authoritative fraud state.
+    """
+
+    def __init__(
+        self,
+        behavior_repo: Optional[BehaviorProfileRepository] = None,
+        fraud_repo: Optional[FraudDecisionRepository] = None,
+    ) -> None:
+        self._behavior = behavior_repo or BehaviorProfileRepository()
+        self._fraud = fraud_repo or FraudDecisionRepository()
+
+    async def handle(self, event: Event) -> None:
+        p = event.payload or {}
+        entity_id = (
+            _entity_from_event(event)
+            or p.get("entity_id")
+            or p.get("subject_id")
+        )
+        if not entity_id or not event.tenant_id:
+            return
+
+        decisions = await self._fraud.list_for_entity(
+            tenant_id=event.tenant_id,
+            entity_id=entity_id,
+            limit=100,
+        )
+        if not decisions:
+            return
+
+        tier_counts: dict[str, int] = defaultdict(int)
+        for d in decisions:
+            tier = d.get("risk_tier") or "unknown"
+            tier_counts[tier] += 1
+
+        latest = decisions[0]
+        risk_score = float(latest.get("risk_score") or 0.0)
+        fraud_risk_tier = latest.get("risk_tier") or "unknown"
+
+        existing = await self._behavior.find_by_id(entity_id) or {}
+        now = datetime.now(timezone.utc)
+
+        await self._behavior.upsert_snapshot(
+            entity_id=entity_id,
+            tenant_id=event.tenant_id,
+            window_start=existing.get("window_start") or now.isoformat(),
+            window_end=now.isoformat(),
+            automation_ratio=float(existing.get("automation_ratio") or 0.0),
+            decision_latency_ms=int(existing.get("decision_latency_ms") or 0),
+            top_patterns=existing.get("top_patterns"),
+            anomaly_flags=existing.get("anomaly_flags"),
+            risk_score=risk_score,
+            predicted_next=existing.get("predicted_next"),
+            fraud_risk_tier=fraud_risk_tier,
+            fraud_decision_count=len(decisions),
+            fraud_summary={
+                "tier_distribution": dict(tier_counts),
+                "latest_decision_id": latest.get("decision_id"),
+                "latest_decision": latest.get("decision"),
+                "latest_evaluated_at": latest.get("evaluated_at"),
+            },
+        )
+        metrics.increment("profile360_fraud_summary_updated")
+
+
 # ── Wiring ─────────────────────────────────────────────────────────────
 
 def attach_profile360_workers(consumer: EventConsumer, graph: GraphClient) -> None:
@@ -296,6 +369,7 @@ def attach_profile360_workers(consumer: EventConsumer, graph: GraphClient) -> No
     chain = JourneyChainLinker()
     projector = DelegationProjector(graph=graph)
     anomaly = AnomalyFlagger()
+    fraud_summary = FraudSummaryProjector()
 
     # BehaviorScorer + JourneyChainLinker + IntentInferrer listen broadly.
     broad_topics = (
@@ -333,5 +407,9 @@ def attach_profile360_workers(consumer: EventConsumer, graph: GraphClient) -> No
     # AnomalyFlagger samples broadly on the same broad set.
     for t in broad_topics:
         consumer.subscribe(t, anomaly.handle)
+
+    # FraudSummaryProjector keeps behavior profile in sync with FraudDecision store.
+    for t in (Topic.FRAUD_DECISION_CREATED, Topic.FRAUD_EVALUATION_COMPLETED):
+        consumer.subscribe(t, fraud_summary.handle)
 
     logger.info("Profile 360 workers attached to consumer")
