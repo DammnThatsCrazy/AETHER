@@ -78,7 +78,8 @@ class TestReducer:
         ]
         a = reduce_facts(facts, tenant_id="t", entity_id="e")
         b = reduce_facts(facts, tenant_id="t", entity_id="e")
-        a.pop("computed_at"); b.pop("computed_at")
+        a.pop("computed_at")
+        b.pop("computed_at")
         assert a == b
 
 

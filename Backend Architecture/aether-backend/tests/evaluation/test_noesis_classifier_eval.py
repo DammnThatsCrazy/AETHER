@@ -1,7 +1,7 @@
 """Classifier evaluation suite for Noesis (P4.3).
 
 Tests the deterministic keyword classifier (_classify) against 60+ annotated
-examples covering all 15 supported intents. Asserts:
+examples covering all 16 supported intents. Asserts:
   - Overall accuracy >= 85%
   - Per-intent recall >= 75% (minimum 1 example per intent)
 """
@@ -134,6 +134,13 @@ EVAL_CASES: list[tuple[str, str]] = [
     ("Show suggestion outcomes", "suggestion_outcome_lookup"),
     ("What was the result of suggestions?", "suggestion_outcome_lookup"),
     ("Show suggestion impact and feedback", "suggestion_outcome_lookup"),
+
+    # communications_insight (5 examples)
+    ("Is our email engagement inflated by machine activity?", "communications_insight"),
+    ("How is email deliverability trending?", "communications_insight"),
+    ("What is our email bounce rate?", "communications_insight"),
+    ("How many unsubscribes happened this month?", "communications_insight"),
+    ("Show comms open rate and click rate", "communications_insight"),
 ]
 
 

@@ -180,6 +180,7 @@ class QueryPlan(BaseModel):
         "health_lookup",
         "campaign_reward_lookup",
         "risk_cluster_lookup",
+        "communications_insight",
         "suggestion_lookup",
         "suggestion_summary",
         "suggestion_review_queue",
