@@ -425,6 +425,175 @@ async def get_campaign_touchpoints(
     }).to_dict()
 
 
+# ── Communications surfaces (Phase 19) ───────────────────────────────────────
+
+@router.get("/{campaign_id}/messages")
+async def get_campaign_messages(campaign_id: str, request: Request):
+    """Messages tab: per-message dimension rows merged with engagement stats.
+
+    Human-qualified metrics exclude suspected machine activity; the raw
+    provider-reported numbers ride alongside so the funnel toggle needs no
+    second request.
+    """
+    tenant = request.state.tenant
+    tenant.require_permission("campaign:read")
+    await _require_campaign(campaign_id, tenant)
+
+    from services.comms.repository import CampaignMessageRepository, CommsFactsRepository
+    dims = await CampaignMessageRepository().list_for_campaign(tenant.tenant_id, campaign_id)
+    stats = await CommsFactsRepository().message_stats(tenant.tenant_id, campaign_id)
+
+    dims_by_ext = {str(d.get("external_message_id")): d for d in dims}
+    items = []
+    seen = set()
+    for stat in stats:
+        ext_id = str(stat.get("external_message_id"))
+        seen.add(ext_id)
+        dim = dims_by_ext.get(ext_id, {})
+        items.append({
+            "external_message_id": ext_id,
+            "message_id": str(dim["message_id"]) if dim.get("message_id") else None,
+            "name": dim.get("name"),
+            "status": dim.get("status", "active"),
+            "sequence_step": stat.get("sequence_step") or dim.get("sequence_step"),
+            "variant_id": dim.get("variant_id"),
+            "delivered": int(stat.get("delivered") or 0),
+            "human_clicks": int(stat.get("human_clicks") or 0),
+            "replies": int(stat.get("replies") or 0),
+            "bounces": int(stat.get("bounces") or 0),
+            "machine_events": int(stat.get("machine_events") or 0),
+            "total_events": int(stat.get("total_events") or 0),
+        })
+    # Synced messages that have no engagement yet still appear.
+    for ext_id, dim in dims_by_ext.items():
+        if ext_id not in seen:
+            items.append({
+                "external_message_id": ext_id,
+                "message_id": str(dim["message_id"]) if dim.get("message_id") else None,
+                "name": dim.get("name"),
+                "status": dim.get("status", "active"),
+                "sequence_step": dim.get("sequence_step"),
+                "variant_id": dim.get("variant_id"),
+                "delivered": 0, "human_clicks": 0, "replies": 0,
+                "bounces": 0, "machine_events": 0, "total_events": 0,
+            })
+    metrics.increment("campaign_messages_read")
+    return APIResponse(data={"campaign_id": campaign_id, "items": items}).to_dict()
+
+
+@router.get("/{campaign_id}/messages/{external_message_id}")
+async def get_campaign_message_detail(
+    campaign_id: str,
+    external_message_id: str,
+    request: Request,
+    limit: int = Query(default=100, ge=1, le=500),
+    cursor: Optional[str] = Query(default=None),
+):
+    """Message detail: dimension record, engagement facts, and link rollup."""
+    tenant = request.state.tenant
+    tenant.require_permission("campaign:read")
+    campaign = await _require_campaign(campaign_id, tenant)
+
+    from services.comms.repository import CampaignMessageRepository, CommsFactsRepository
+    facts_repo = CommsFactsRepository()
+    provider = campaign.get("primary_platform") or "klaviyo"
+    dim = await CampaignMessageRepository().get_by_external_id(
+        tenant.tenant_id, provider, external_message_id,
+    )
+    stats = await facts_repo.message_stats(tenant.tenant_id, campaign_id)
+    stat = next(
+        (s for s in stats if str(s.get("external_message_id")) == external_message_id), {},
+    )
+    links = [
+        l for l in await facts_repo.link_stats(tenant.tenant_id, campaign_id)
+        if l.get("external_message_id") in (external_message_id, None)
+    ]
+    metrics.increment("campaign_message_detail_read")
+    return APIResponse(data={
+        "campaign_id": campaign_id,
+        "external_message_id": external_message_id,
+        "message": {k: (str(v) if hasattr(v, "isoformat") else v) for k, v in (dim or {}).items()},
+        "stats": {k: int(v or 0) for k, v in stat.items() if k != "external_message_id"},
+        "links": links,
+    }).to_dict()
+
+
+@router.get("/{campaign_id}/links")
+async def get_campaign_links(campaign_id: str, request: Request):
+    """Link performance: human-qualified clicks and unique clickers per link."""
+    tenant = request.state.tenant
+    tenant.require_permission("campaign:read")
+    await _require_campaign(campaign_id, tenant)
+
+    from services.comms.repository import CommsFactsRepository
+    links = await CommsFactsRepository().link_stats(tenant.tenant_id, campaign_id)
+    metrics.increment("campaign_links_read")
+    return APIResponse(data={"campaign_id": campaign_id, "items": links}).to_dict()
+
+
+@router.get("/{campaign_id}/comms-funnel")
+async def get_campaign_comms_funnel(campaign_id: str, request: Request):
+    """Email funnel with provider-reported and human-qualified modes.
+
+    ``provider_reported`` counts every provider event; ``human_qualified``
+    excludes suspected machine activity and automated replies (ADR-C8).
+    Rates are computed against delivered recipients.
+    """
+    tenant = request.state.tenant
+    tenant.require_permission("campaign:read")
+    await _require_campaign(campaign_id, tenant)
+
+    from services.comms.repository import CommsFactsRepository
+    funnel = await CommsFactsRepository().campaign_funnel(tenant.tenant_id, campaign_id)
+    funnel = {k: int(v or 0) for k, v in funnel.items()}
+    delivered = funnel.get("delivered", 0)
+
+    def rate(n: int) -> Optional[float]:
+        return round(n / delivered, 4) if delivered else None
+
+    metrics.increment("campaign_comms_funnel_read")
+    return APIResponse(data={
+        "campaign_id": campaign_id,
+        "modes": {
+            "provider_reported": {
+                "sent": funnel.get("sent", 0),
+                "delivered": delivered,
+                "opens": funnel.get("reported_opens", 0),
+                "clicks": funnel.get("reported_clicks", 0),
+                "open_rate": rate(funnel.get("reported_opens", 0)),
+                "click_rate": rate(funnel.get("reported_clicks", 0)),
+            },
+            "human_qualified": {
+                "sent": funnel.get("sent", 0),
+                "delivered": delivered,
+                "opens": funnel.get("human_opens", 0),
+                "clicks": funnel.get("human_clicks", 0),
+                "replies": funnel.get("replies", 0),
+                "open_rate": rate(funnel.get("human_opens", 0)),
+                "click_rate": rate(funnel.get("human_clicks", 0)),
+                "reply_rate": rate(funnel.get("replies", 0)),
+            },
+        },
+        "delivery": {
+            "deferred": funnel.get("deferred", 0),
+            "dropped": funnel.get("dropped", 0),
+            "hard_bounces": funnel.get("hard_bounces", 0),
+            "soft_bounces": funnel.get("soft_bounces", 0),
+            "complaints": funnel.get("complaints", 0),
+            "unsubscribes": funnel.get("unsubscribes", 0),
+            "suppressions": funnel.get("suppressions", 0),
+        },
+        "quality": {
+            "machine_events": funnel.get("machine_events", 0),
+            "total_events": funnel.get("total_events", 0),
+            "machine_event_rate": (
+                round(funnel.get("machine_events", 0) / funnel["total_events"], 4)
+                if funnel.get("total_events") else None
+            ),
+        },
+    }).to_dict()
+
+
 @router.get("/{campaign_id}/population")
 async def get_campaign_population(
     campaign_id: str,

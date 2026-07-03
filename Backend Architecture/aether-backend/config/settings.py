@@ -178,6 +178,30 @@ class IntelligenceGraphConfig:
     commerce_feature_flag: str = _env("COMMERCE_FEATURE_FLAG", "ga")
 
 
+# ---------------------------------------------------------------------------
+# Communications Intelligence — rollout feature flags (Phase 36)
+# ---------------------------------------------------------------------------
+
+@dataclass(frozen=True)
+class CommsConfig:
+    """Feature flags for Communications Intelligence rollout.
+
+    Recommended activation order: ingestion → campaign projection →
+    journeys → graph → profile360 → campaign360 → noesis
+    (docs/comms/COMMS_RELEASE_READINESS.md).
+    """
+    ingestion_enabled: bool = _env_bool("AETHER_COMMS_INGESTION_ENABLED", True)
+    campaign_projection_enabled: bool = _env_bool("AETHER_COMMS_CAMPAIGN_PROJECTION_ENABLED", True)
+    journeys_enabled: bool = _env_bool("AETHER_COMMS_JOURNEYS_ENABLED", True)
+    graph_enabled: bool = _env_bool("AETHER_COMMS_GRAPH_ENABLED", True)
+    profile360_enabled: bool = _env_bool("AETHER_COMMS_PROFILE360_ENABLED", True)
+    campaign360_enabled: bool = _env_bool("AETHER_COMMS_CAMPAIGN360_ENABLED", True)
+    noesis_enabled: bool = _env_bool("AETHER_COMMS_NOESIS_ENABLED", True)
+    # Attribution policy switches (ADR-C8)
+    reported_opens_as_view_through: bool = _env_bool("AETHER_COMMS_OPENS_VIEW_THROUGH", False)
+    replies_attribution_eligible: bool = _env_bool("AETHER_COMMS_REPLIES_ELIGIBLE", True)
+
+
 @dataclass(frozen=True)
 class QuickNodeConfig:
     """L6 Infrastructure Backbone — single shared RPC gateway."""
@@ -639,6 +663,9 @@ class Settings:
     decision_outcome: DecisionOutcomeIntelligenceConfig = field(default_factory=DecisionOutcomeIntelligenceConfig)
     security_governance: SecurityGovernanceConfig = field(default_factory=SecurityGovernanceConfig)
     quicknode: QuickNodeConfig = field(default_factory=QuickNodeConfig)
+
+    # Communications Intelligence
+    comms: CommsConfig = field(default_factory=CommsConfig)
 
     # Provider Gateway
     provider_gateway: ProviderGatewayConfig = field(default_factory=ProviderGatewayConfig)

@@ -182,6 +182,12 @@ class JourneyCompiler:
         # ── 1. Sort deterministically ────────────────────────────────────────
         activities = _sort_deterministically(activities)
 
+        # ── 1b. Collapse passive comm lifecycle noise (ADR-C5) ───────────────
+        # queued/processed/deferred/bounced/dropped/suppressed communication
+        # activities are state, not journey steps; they stay in facts and
+        # Profile360 but never surface as primary journey steps.
+        activities, collapsed_lifecycle_count = _partition_comm_lifecycle(activities)
+
         # ── 2. Derive summary metadata ───────────────────────────────────────
         started_at: Optional[str] = activities[0].get("occurred_at") if activities else None
         ended_at: Optional[str] = activities[-1].get("occurred_at") if activities else None
@@ -246,6 +252,7 @@ class JourneyCompiler:
             "agent_activity_ids": agent_ids,
             "x402_activity_ids": x402_ids,
             "previous_version_id": previous_version_id,
+            "collapsed_lifecycle_count": collapsed_lifecycle_count,
             "rebuild_reason": trigger_reason,
             "compiler_version": _COMPILER_VERSION,
             "computed_at": datetime.now(timezone.utc).isoformat(),
@@ -279,6 +286,37 @@ class JourneyCompiler:
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
+
+def _partition_comm_lifecycle(
+    activities: list[dict[str, Any]],
+) -> tuple[list[dict[str, Any]], int]:
+    """Split out state-only communication lifecycle activities (ADR-C5).
+
+    Journey roles are derived deterministically from the comms taxonomy so
+    no schema change is required on canonical_activity. Non-communication
+    activities always pass through.
+    """
+    try:
+        from services.comms.contracts import (
+            COMMUNICATION_EVENT_TYPES,
+            JourneyRole,
+            journey_role_for,
+        )
+    except Exception:  # pragma: no cover — comms module unavailable
+        return activities, 0
+
+    primary: list[dict[str, Any]] = []
+    collapsed = 0
+    for activity in activities:
+        activity_type = activity.get("activity_type", "")
+        if activity_type in COMMUNICATION_EVENT_TYPES:
+            role = journey_role_for(activity_type)
+            if role == JourneyRole.STATE_ONLY:
+                collapsed += 1
+                continue
+        primary.append(activity)
+    return primary, collapsed
+
 
 def _sort_deterministically(activities: list[dict[str, Any]]) -> list[dict[str, Any]]:
     """Stable canonical sort: occurred_at → sequence_key → activity_id."""
