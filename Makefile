@@ -345,6 +345,28 @@ load-smoke: ## Load smoke gate: 20 users, 30s against localhost:8000 (exits 2 if
 load-smoke-ci: ## Load smoke in CI — exits 0 when backend unreachable (non-blocking), fails on threshold breach
 	python scripts/load_smoke.py || [ $$? -eq 2 ]
 
+
+# ---------------------------------------------------------------------------
+# Semantic Sentiment Intelligence
+# ---------------------------------------------------------------------------
+
+semantic-sentiment-unit-test: ## Run semantic/sentiment unit and API tests
+	cd "Backend Architecture/aether-backend" && python -m pytest tests/semantic_intelligence -v
+
+semantic-sentiment-test: semantic-sentiment-unit-test ## Run semantic/sentiment test suite
+
+semantic-sentiment-release-check: ## Validate semantic/sentiment release assets
+	python scripts/semantic_sentiment/check_release_gate.py
+
+semantic-sentiment-contracts-check: ## Validate semantic/sentiment shared contract exports
+	npm run build --workspace=packages/shared
+
+semantic-sentiment-migration-check: ## Validate semantic/sentiment migration file is present
+	python scripts/semantic_sentiment/check_release_gate.py
+
+semantic-sentiment-release-check-strict: semantic-sentiment-contracts-check ## Validate semantic/sentiment assets and tests
+	python scripts/semantic_sentiment/check_release_gate.py --strict
+
 # ---------------------------------------------------------------------------
 # Campaign Intelligence
 # ---------------------------------------------------------------------------
