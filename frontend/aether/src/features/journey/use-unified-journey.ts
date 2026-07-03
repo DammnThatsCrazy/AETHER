@@ -27,6 +27,10 @@ export interface JourneyStep {
   identity_method: string | null;
   occurred_at: string;
   displayLabel: string;
+  risk_score: number | null;
+  risk_tier: string | null;
+  fraud_status: string | null;
+  fraud_disposition: string | null;
 }
 
 export interface JourneyMeta {

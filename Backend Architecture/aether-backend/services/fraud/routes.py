@@ -240,3 +240,95 @@ async def get_stats(request: Request):
     """Return aggregated fraud detection statistics."""
     request.state.tenant.require_permission("fraud:read")
     return _stats.snapshot()
+
+
+# ========================================================================
+# FRAUD DECISION CRUD (durable, versioned, tenant-isolated decisions)
+# ========================================================================
+
+class _DecisionReviewRequest(BaseModel):
+    review_state: str
+    reviewed_by: str
+
+
+class _DecisionSuppressRequest(BaseModel):
+    reviewed_by: str
+    suppression_reason: str
+
+
+@router.get("/decisions", response_model=None)
+@api_response
+async def list_decisions(
+    request: Request,
+    risk_tier: Optional[str] = None,
+    decision: Optional[str] = None,
+    review_state: Optional[str] = None,
+    limit: int = 50,
+):
+    """List durable fraud decisions for this tenant, newest first."""
+    request.state.tenant.require_permission("fraud:read")
+    from repositories.repos import FraudDecisionRepository
+    repo = FraudDecisionRepository()
+    rows = await repo.list_for_tenant(
+        tenant_id=request.state.tenant.tenant_id,
+        risk_tier=risk_tier,
+        decision=decision,
+        review_state=review_state,
+        limit=min(limit, 200),
+    )
+    return {"decisions": rows, "total": len(rows)}
+
+
+@router.get("/decisions/{decision_id}", response_model=None)
+@api_response
+async def get_decision(decision_id: str, request: Request):
+    """Get a single fraud decision by ID (tenant-scoped)."""
+    request.state.tenant.require_permission("fraud:read")
+    from repositories.repos import FraudDecisionRepository
+    from fastapi import HTTPException
+    repo = FraudDecisionRepository()
+    row = await repo.get(decision_id, request.state.tenant.tenant_id)
+    if row is None:
+        raise HTTPException(status_code=404, detail="Decision not found")
+    return row
+
+
+@router.post("/decisions/{decision_id}/review", response_model=None)
+@api_response
+async def review_decision(decision_id: str, body: _DecisionReviewRequest, request: Request):
+    """Set the review state on a fraud decision (confirmed_fraud | dispute | review_clear)."""
+    request.state.tenant.require_permission("fraud:review")
+    from repositories.repos import FraudDecisionRepository
+    from fastapi import HTTPException
+    repo = FraudDecisionRepository()
+    updated = await repo.update_review(
+        decision_id=decision_id,
+        tenant_id=request.state.tenant.tenant_id,
+        review_state=body.review_state,
+        reviewed_by=body.reviewed_by,
+    )
+    if updated is None:
+        raise HTTPException(status_code=404, detail="Decision not found")
+    metrics.increment("fraud_decisions_reviewed", labels={"state": body.review_state})
+    return updated
+
+
+@router.post("/decisions/{decision_id}/suppress", response_model=None)
+@api_response
+async def suppress_decision(decision_id: str, body: _DecisionSuppressRequest, request: Request):
+    """Suppress a fraud decision — sets status=voided, decision=suppress."""
+    request.state.tenant.require_permission("fraud:review")
+    from repositories.repos import FraudDecisionRepository
+    from fastapi import HTTPException
+    repo = FraudDecisionRepository()
+    updated = await repo.update_review(
+        decision_id=decision_id,
+        tenant_id=request.state.tenant.tenant_id,
+        review_state="suppressed",
+        reviewed_by=body.reviewed_by,
+        suppression_reason=body.suppression_reason,
+    )
+    if updated is None:
+        raise HTTPException(status_code=404, detail="Decision not found")
+    metrics.increment("fraud_decisions_suppressed")
+    return updated

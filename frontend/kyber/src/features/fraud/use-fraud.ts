@@ -129,3 +129,80 @@ export function useCreateFlowTrace() {
     }) => api.flowTrace.create(body),
   });
 }
+
+// ── Journey risk hooks (wired to durable decision APIs) ──────────────────────
+
+export function useJourneyRisk(journeyId: string) {
+  return useQuery({
+    key: `journey-risk:${journeyId}`,
+    fetcher: () => api.journeysMeasurement.risk(journeyId),
+    staleTime: STALE,
+    enabled: Boolean(journeyId),
+  });
+}
+
+export function useJourneyFraudDecisions(journeyId: string, params?: { limit?: number }) {
+  return useQuery({
+    key: `journey-fraud-decisions:${journeyId}:${JSON.stringify(params)}`,
+    fetcher: () => api.journeysMeasurement.journeyFraudDecisions(journeyId, params),
+    staleTime: STALE,
+    enabled: Boolean(journeyId),
+  });
+}
+
+export function useJourneyFraudNetworks(journeyId: string) {
+  return useQuery({
+    key: `journey-fraud-networks:${journeyId}`,
+    fetcher: () => api.journeysMeasurement.journeyFraudNetworks(journeyId),
+    staleTime: STALE,
+    enabled: Boolean(journeyId),
+  });
+}
+
+export function useJourneyRiskExplain(journeyId: string) {
+  return useQuery({
+    key: `journey-risk-explain:${journeyId}`,
+    fetcher: () => api.journeysMeasurement.riskExplain(journeyId),
+    staleTime: STALE,
+    enabled: Boolean(journeyId),
+  });
+}
+
+export function useRecalculateJourneyRisk() {
+  return useMutation({
+    mutationFn: (journeyId: string) => api.journeysMeasurement.recalculateRisk(journeyId),
+  });
+}
+
+// ── Fraud decision CRUD hooks ─────────────────────────────────────────────────
+
+export function useFraudDecisions(params?: { risk_tier?: string; decision?: string; review_state?: string; limit?: number }) {
+  return useQuery({
+    key: `fraud-decisions:${JSON.stringify(params)}`,
+    fetcher: () => api.fraudDecisions.list(params),
+    staleTime: STALE,
+  });
+}
+
+export function useFraudDecision(decisionId: string) {
+  return useQuery({
+    key: `fraud-decision:${decisionId}`,
+    fetcher: () => api.fraudDecisions.get(decisionId),
+    staleTime: STALE,
+    enabled: Boolean(decisionId),
+  });
+}
+
+export function useReviewFraudDecision() {
+  return useMutation({
+    mutationFn: ({ id, review_state, reviewed_by }: { id: string; review_state: string; reviewed_by: string }) =>
+      api.fraudDecisions.review(id, { review_state, reviewed_by }),
+  });
+}
+
+export function useSuppressFraudDecision() {
+  return useMutation({
+    mutationFn: ({ id, reviewed_by, suppression_reason }: { id: string; reviewed_by: string; suppression_reason: string }) =>
+      api.fraudDecisions.suppress(id, { reviewed_by, suppression_reason }),
+  });
+}

@@ -1082,6 +1082,9 @@ class BehaviorProfileRepository(BaseRepository):
         anomaly_flags: Optional[list] = None,
         risk_score: float = 0.0,
         predicted_next: Optional[dict] = None,
+        fraud_risk_tier: Optional[str] = None,
+        fraud_decision_count: int = 0,
+        fraud_summary: Optional[dict] = None,
     ) -> dict:
         snapshot = {
             "entity_id": entity_id,
@@ -1094,6 +1097,9 @@ class BehaviorProfileRepository(BaseRepository):
             "anomaly_flags": anomaly_flags or [],
             "risk_score": risk_score,
             "predicted_next": predicted_next or {},
+            "fraud_risk_tier": fraud_risk_tier,
+            "fraud_decision_count": fraud_decision_count,
+            "fraud_summary": fraud_summary or {},
             "computed_at": utc_now().isoformat(),
         }
         # One row per entity (latest snapshot wins). Use entity_id as key.

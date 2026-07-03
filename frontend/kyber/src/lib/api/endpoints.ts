@@ -975,6 +975,18 @@ export const api = {
       restClient.post(`/v1/fraud/networks/${networkId}/escalate`, wrap(unknownSchema), {}).then(r => r.data),
   },
 
+  // ── Fraud Decisions (durable decision CRUD) ────────────────────────────────
+  fraudDecisions: {
+    list: (params?: { risk_tier?: string; decision?: string; review_state?: string; limit?: number }) =>
+      restClient.get(`/v1/fraud/decisions${buildQS({ ...params })}`, wrap(unknownSchema)).then(r => r.data),
+    get: (id: string) =>
+      restClient.get(`/v1/fraud/decisions/${id}`, wrap(unknownSchema)).then(r => r.data),
+    review: (id: string, body: { review_state: string; reviewed_by: string }) =>
+      restClient.post(`/v1/fraud/decisions/${id}/review`, wrap(unknownSchema), body).then(r => r.data),
+    suppress: (id: string, body: { reviewed_by: string; suppression_reason: string }) =>
+      restClient.post(`/v1/fraud/decisions/${id}/suppress`, wrap(unknownSchema), body).then(r => r.data),
+  },
+
   // ── Flow Trace ─────────────────────────────────────────────────────────────
   flowTrace: {
     create: (body: {
@@ -2042,6 +2054,16 @@ export const api = {
       restClient.post(`/v1/journeys/${id}/rebuild`, wrap(unknownSchema), { trigger_reason: trigger_reason ?? 'operator' }).then(r => r.data),
     health: () =>
       restClient.get('/v1/kyber/measurement/journey-health', wrap(unknownSchema)).then(r => r.data),
+    risk: (id: string) =>
+      restClient.get(`/v1/journeys/${id}/risk`, wrap(unknownSchema)).then(r => r.data),
+    journeyFraudDecisions: (id: string, params?: { limit?: number }) =>
+      restClient.get(`/v1/journeys/${id}/fraud-decisions${buildQS({ ...params })}`, wrap(unknownSchema)).then(r => r.data),
+    journeyFraudNetworks: (id: string) =>
+      restClient.get(`/v1/journeys/${id}/fraud-networks`, wrap(unknownSchema)).then(r => r.data),
+    riskExplain: (id: string) =>
+      restClient.get(`/v1/journeys/${id}/risk-explain`, wrap(unknownSchema)).then(r => r.data),
+    recalculateRisk: (id: string) =>
+      restClient.post(`/v1/journeys/${id}/risk/recalculate`, wrap(unknownSchema), {}).then(r => r.data),
   },
 
   attributionRuns: {

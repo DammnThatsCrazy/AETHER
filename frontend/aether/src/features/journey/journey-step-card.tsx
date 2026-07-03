@@ -31,6 +31,14 @@ const FAMILY_LABELS: Record<ActivityFamily, string> = {
   outcome: 'Outcome',
 };
 
+const RISK_TIER_VARIANTS: Record<string, string> = {
+  critical: 'bg-red-100 text-red-800 border border-red-300',
+  high: 'bg-orange-100 text-orange-800 border border-orange-300',
+  elevated: 'bg-yellow-100 text-yellow-800 border border-yellow-300',
+  low: 'bg-green-100 text-green-700 border border-green-300',
+  unknown: 'bg-gray-100 text-gray-500 border border-gray-300',
+};
+
 const STATUS_VARIANTS: Record<string, string> = {
   observed: 'bg-blue-100 text-blue-800',
   pending: 'bg-yellow-100 text-yellow-800',
@@ -87,6 +95,11 @@ export const JourneyStepCard: FC<Props> = ({ step, position }) => {
             {step.identity_confidence != null && (
               <span className="text-[10px] text-text-muted">
                 {(step.identity_confidence * 100).toFixed(0)}% confidence
+              </span>
+            )}
+            {step.risk_tier && (
+              <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded ${RISK_TIER_VARIANTS[step.risk_tier] ?? RISK_TIER_VARIANTS.unknown}`}>
+                ⚠ {step.risk_tier}
               </span>
             )}
           </div>
