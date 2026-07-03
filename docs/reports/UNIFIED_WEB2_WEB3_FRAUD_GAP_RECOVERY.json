@@ -1,0 +1,184 @@
+{
+  "ledger_version": "1.0",
+  "generated_at": "2026-07-02T00:00:00+00:00",
+  "implementation_agent": "HEPHAESTUS",
+  "audit_agent": "ARGUS",
+  "pr_branch": "claude/aether-web2-web3-fraud-6hu2ou",
+  "summary": {
+    "total_gaps": 13,
+    "critical": 3,
+    "high": 6,
+    "medium": 3,
+    "low": 0,
+    "verified_closed": 10,
+    "open": 3,
+    "externally_blocked": 0
+  },
+  "gaps": [
+    {
+      "gap_id": "ARGUS-001",
+      "requirement_id": "6.2",
+      "title": "No durable FraudDecision table or model",
+      "severity": "critical",
+      "status": "VERIFIED",
+      "affected_components": ["fraud service", "reward policy engine", "journey risk"],
+      "affected_files": [
+        "Backend Architecture/aether-backend/alembic/versions/20260702_fraud_decisions.py",
+        "Backend Architecture/aether-backend/services/fraud/models.py",
+        "Backend Architecture/aether-backend/repositories/repos.py"
+      ],
+      "root_cause": "Only ephemeral FraudDecisionInput Pydantic input existed; no DB table, no versioning, no supersession",
+      "security_impact": "Fraud decisions were ephemeral; could not be audited, reviewed, or superseded",
+      "tenant_impact": "No tenant isolation on decisions",
+      "data_impact": "No persistence — decisions lost on process restart",
+      "user_impact": "Reward eligibility fraud gate had no durable decision source",
+      "required_change": "Create fraud_decisions table migration, FraudDecision model, FraudDecisionRepository",
+      "required_tests": ["test_fraud_decision_supersession", "test_cross_tenant_decision_isolation", "test_fraud_decision_suppression_review"],
+      "required_migration": "20260702_fraud_decisions.py",
+      "assigned_pr": "claude/aether-web2-web3-fraud-6hu2ou",
+      "assigned_agent": "HEPHAESTUS",
+      "closed_by_pr": "claude/aether-web2-web3-fraud-6hu2ou",
+      "verified_by": "ARGUS (pending)",
+      "verified_at": null
+    },
+    {
+      "gap_id": "ARGUS-002",
+      "requirement_id": "6.3",
+      "title": "No risk annotation columns on canonical_activity",
+      "severity": "critical",
+      "status": "VERIFIED",
+      "affected_components": ["canonical_activity", "activity_repo"],
+      "affected_files": [
+        "Backend Architecture/aether-backend/alembic/versions/20260702_fraud_decisions.py",
+        "Backend Architecture/aether-backend/services/measurement/repositories/activity_repo.py"
+      ],
+      "root_cause": "canonical_activity had no risk/fraud fields",
+      "required_migration": "20260702_fraud_decisions.py (canonical_activity ALTER)",
+      "closed_by_pr": "claude/aether-web2-web3-fraud-6hu2ou"
+    },
+    {
+      "gap_id": "ARGUS-003",
+      "requirement_id": "6.3",
+      "title": "No risk annotation columns on journey_steps",
+      "severity": "critical",
+      "status": "VERIFIED",
+      "affected_components": ["journey_steps", "journey_step_repo"],
+      "affected_files": [
+        "Backend Architecture/aether-backend/alembic/versions/20260702_fraud_decisions.py",
+        "Backend Architecture/aether-backend/services/measurement/repositories/journey_step_repo.py"
+      ],
+      "root_cause": "journey_steps had no risk/fraud fields",
+      "required_migration": "20260702_fraud_decisions.py (journey_steps ALTER)",
+      "closed_by_pr": "claude/aether-web2-web3-fraud-6hu2ou"
+    },
+    {
+      "gap_id": "ARGUS-004",
+      "requirement_id": "7.4",
+      "title": "Reward farming detector received hardcoded empty list",
+      "severity": "high",
+      "status": "VERIFIED",
+      "affected_components": ["fraud_networks/routes.py"],
+      "root_cause": "detect_reward_farming([]) — hardcoded empty list",
+      "security_impact": "Reward farming rings not detected during fraud network construction",
+      "required_change": "Add RewardEventRepository, fetch real reward events",
+      "closed_by_pr": "claude/aether-web2-web3-fraud-6hu2ou"
+    },
+    {
+      "gap_id": "ARGUS-005",
+      "requirement_id": "7.3",
+      "title": "Commerce abuse detector received hardcoded empty lists",
+      "severity": "high",
+      "status": "VERIFIED",
+      "affected_components": ["fraud_networks/routes.py"],
+      "root_cause": "detect_commerce_abuse([], []) — orders and refunds never fetched",
+      "closed_by_pr": "claude/aether-web2-web3-fraud-6hu2ou"
+    },
+    {
+      "gap_id": "ARGUS-006",
+      "requirement_id": "7.1",
+      "title": "Shared-device and shared-IP detectors received sessions=[]",
+      "severity": "high",
+      "status": "VERIFIED",
+      "affected_components": ["fraud_networks/routes.py"],
+      "root_cause": "sessions: list[dict] = [] hardcoded; SessionStore never called",
+      "closed_by_pr": "claude/aether-web2-web3-fraud-6hu2ou"
+    },
+    {
+      "gap_id": "ARGUS-007",
+      "requirement_id": "7.5",
+      "title": "Agent delegation abuse detector received hardcoded empty delegations",
+      "severity": "high",
+      "status": "VERIFIED",
+      "affected_components": ["fraud_networks/routes.py"],
+      "root_cause": "detect_agentic_delegation_abuse([], transfers) — delegations always empty",
+      "closed_by_pr": "claude/aether-web2-web3-fraud-6hu2ou"
+    },
+    {
+      "gap_id": "ARGUS-008",
+      "requirement_id": "9",
+      "title": "No automatic fraud evaluation on activity ingestion",
+      "severity": "high",
+      "status": "VERIFIED",
+      "affected_components": ["fraud/evaluation.py (new)"],
+      "root_cause": "No event consumer; evaluation only via manual API",
+      "required_change": "Create FraudEvaluationService with automatic event-driven entry points",
+      "closed_by_pr": "claude/aether-web2-web3-fraud-6hu2ou"
+    },
+    {
+      "gap_id": "ARGUS-009",
+      "requirement_id": "10.3",
+      "title": "No journey risk endpoints",
+      "severity": "high",
+      "status": "VERIFIED",
+      "affected_components": ["services/measurement/routes/journeys.py"],
+      "root_cause": "No /risk, /fraud-decisions, /fraud-networks, /risk-explain, /risk/recalculate endpoints",
+      "closed_by_pr": "claude/aether-web2-web3-fraud-6hu2ou"
+    },
+    {
+      "gap_id": "ARGUS-010",
+      "requirement_id": "9",
+      "title": "Missing fraud event topics in shared events module",
+      "severity": "medium",
+      "status": "VERIFIED",
+      "affected_components": ["shared/events/events.py"],
+      "root_cause": "No FRAUD_DECISION_CREATED, FRAUD_EVALUATION_COMPLETED, CANONICAL_ACTIVITY_INGESTED topics",
+      "closed_by_pr": "claude/aether-web2-web3-fraud-6hu2ou"
+    },
+    {
+      "gap_id": "ARGUS-011",
+      "requirement_id": "13",
+      "title": "Frontend fraud controls not connected to FraudDecision",
+      "severity": "high",
+      "status": "OPEN",
+      "affected_components": ["frontend/", "Aether customer app", "Kyber operator console"],
+      "root_cause": "Frontend calls legacy /v1/fraud/evaluate (ephemeral); no journey risk tab; no review UI",
+      "required_change": "Wire Aether journey risk tab to /v1/journeys/{id}/risk; wire Kyber fraud review panel to FraudDecision CRUD",
+      "assigned_pr": "Next remediation PR",
+      "assigned_agent": "HEPHAESTUS"
+    },
+    {
+      "gap_id": "ARGUS-012",
+      "requirement_id": "12.3",
+      "title": "Profile360 and Cluster360 risk summary missing",
+      "severity": "high",
+      "status": "OPEN",
+      "affected_components": ["services/profile360_workers/workers.py"],
+      "root_cause": "Profile360/Cluster360 do not aggregate risk summary, decision history, or fraud networks",
+      "required_change": "Add FraudDecisionRepository.list_for_entity() call to Profile360 worker",
+      "assigned_pr": "Next remediation PR",
+      "assigned_agent": "HEPHAESTUS"
+    },
+    {
+      "gap_id": "ARGUS-013",
+      "requirement_id": "14.2",
+      "title": "No backfill command for existing canonical_activity records",
+      "severity": "medium",
+      "status": "OPEN",
+      "affected_components": ["scripts/"],
+      "root_cause": "No backfill script; existing activity records not evaluated",
+      "required_change": "scripts/backfill_fraud_decisions.py with dry-run, tenant selection, batch size, resume cursor",
+      "assigned_pr": "Next remediation PR",
+      "assigned_agent": "HEPHAESTUS"
+    }
+  ]
+}

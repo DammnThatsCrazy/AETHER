@@ -30,7 +30,12 @@ import logging
 from dataclasses import dataclass, field
 from typing import Any, Optional
 
-import numpy as np
+try:
+    import numpy as np
+    _HAS_NUMPY = True
+except ModuleNotFoundError:
+    np = None  # type: ignore[assignment]
+    _HAS_NUMPY = False
 
 logger = logging.getLogger("aether.ml.feature_contracts")
 
@@ -474,13 +479,16 @@ def validate_features(
             continue
 
         if spec.dtype == "float":
-            if not isinstance(value, (int, float, np.floating, np.integer)):
+            _float_types = (int, float) + ((np.floating, np.integer) if _HAS_NUMPY else ())  # type: ignore[misc]
+            if not isinstance(value, _float_types):
                 type_errors.append(f"{spec.name}: expected float, got {type(value).__name__}")
         elif spec.dtype == "int":
-            if not isinstance(value, (int, np.integer)):
+            _int_types = (int,) + ((np.integer,) if _HAS_NUMPY else ())  # type: ignore[misc]
+            if not isinstance(value, _int_types):
                 type_errors.append(f"{spec.name}: expected int, got {type(value).__name__}")
         elif spec.dtype == "bool":
-            if not isinstance(value, (bool, np.bool_)):
+            _bool_types = (bool,) + ((np.bool_,) if _HAS_NUMPY else ())  # type: ignore[misc]
+            if not isinstance(value, _bool_types):
                 type_errors.append(f"{spec.name}: expected bool, got {type(value).__name__}")
         elif spec.dtype == "str":
             if not isinstance(value, str):

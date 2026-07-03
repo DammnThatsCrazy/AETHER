@@ -125,6 +125,8 @@ async def list_journey_steps(
     campaign_id: Optional[str] = Query(None),
     after: Optional[datetime] = Query(None),
     before: Optional[datetime] = Query(None),
+    risk_tier: Optional[str] = Query(None, description="Filter by risk tier: low,medium,high,critical"),
+    fraud_disposition: Optional[str] = Query(None, description="Filter by fraud disposition: allow,monitor,review,hold,block"),
 ):
     """List ordered journey steps for the current journey version.
 
@@ -155,6 +157,12 @@ async def list_journey_steps(
         after=after,
         before=before,
     )
+
+    # Apply risk-layer filters in-process (no additional DB query)
+    if risk_tier:
+        steps = [s for s in steps if s.get("risk_tier") == risk_tier]
+    if fraud_disposition:
+        steps = [s for s in steps if s.get("fraud_disposition") == fraud_disposition]
 
     next_cursor = None
     if len(steps) == limit and steps:
@@ -393,3 +401,183 @@ async def web3_status_change(request: Request, body: Web3StatusChangeRequest):
         data=None,
         meta={"tx_hash": body.tx_hash, "new_status": body.new_status, "profiles_rebuilt": affected},
     ).to_dict()
+
+
+# ── Journey risk endpoints ─────────────────────────────────────────────────────
+
+from repositories.repos import FraudDecisionRepository as _FraudDecisionRepo
+
+_fraud_decision_repo = _FraudDecisionRepo()
+
+
+@router.get("/{journey_id}/risk")
+async def get_journey_risk(journey_id: str, request: Request):
+    """Return a risk summary for the current journey version.
+
+    Aggregates risk_score, risk_tier, fraud_disposition, and fraud signal coverage
+    across all journey steps.  Uses batched repository queries — no per-step calls.
+    """
+    tenant = _require_tenant(request)
+    journey = await _journey_repo.get_current(tenant.tenant_id, journey_id)
+    if journey is None:
+        raise NotFoundError("Journey")
+
+    journey_version_id = str(journey.get("journey_version_id"))
+    steps = await _step_repo.list_by_version(
+        tenant.tenant_id,
+        journey_version_id,
+        limit=_MAX_STEPS_PAGE,
+    )
+
+    evaluated_steps = [s for s in steps if s.get("risk_evaluation_state") == "evaluated"]
+    scores = [s["risk_score"] for s in evaluated_steps if s.get("risk_score") is not None]
+    max_score = max(scores, default=None)
+    avg_score = round(sum(scores) / len(scores), 2) if scores else None
+
+    all_signals: set[str] = set()
+    all_network_ids: set[str] = set()
+    all_dispositions: set[str] = set()
+    decision_ids: set[str] = set()
+
+    for s in evaluated_steps:
+        for sig in (s.get("fraud_signal_types") or []):
+            all_signals.add(sig)
+        for nid in (s.get("fraud_network_ids") or []):
+            all_network_ids.add(nid)
+        if s.get("fraud_disposition"):
+            all_dispositions.add(s["fraud_disposition"])
+        if s.get("fraud_decision_id"):
+            decision_ids.add(s["fraud_decision_id"])
+
+    from services.fraud.models import risk_tier_from_score
+
+    return APIResponse(data={
+        "journey_id": journey_id,
+        "journey_version_id": journey_version_id,
+        "step_count": len(steps),
+        "evaluated_step_count": len(evaluated_steps),
+        "coverage_pct": round(len(evaluated_steps) / max(len(steps), 1) * 100, 1),
+        "max_risk_score": max_score,
+        "avg_risk_score": avg_score,
+        "risk_tier": risk_tier_from_score(max_score) if max_score is not None else None,
+        "signal_types": sorted(all_signals),
+        "fraud_network_ids": sorted(all_network_ids),
+        "dispositions": sorted(all_dispositions),
+        "fraud_decision_ids": sorted(decision_ids),
+        "evaluation_state": "evaluated" if evaluated_steps else "not_evaluated",
+        "evaluated_at": max(
+            (s.get("risk_evaluated_at", "") for s in evaluated_steps),
+            default=None,
+        ) or None,
+    }).to_dict()
+
+
+@router.get("/{journey_id}/fraud-decisions")
+async def list_journey_fraud_decisions(
+    journey_id: str,
+    request: Request,
+    limit: int = Query(50, ge=1, le=200),
+):
+    """List all fraud decisions linked to a journey, newest first."""
+    tenant = _require_tenant(request)
+    journey = await _journey_repo.get_current(tenant.tenant_id, journey_id)
+    if journey is None:
+        raise NotFoundError("Journey")
+
+    decisions = await _fraud_decision_repo.list_for_journey(
+        tenant.tenant_id, journey_id, limit=limit
+    )
+    return APIResponse(data=decisions, meta={"count": len(decisions)}).to_dict()
+
+
+@router.get("/{journey_id}/fraud-networks")
+async def list_journey_fraud_networks(journey_id: str, request: Request):
+    """List fraud network IDs referenced in this journey's fraud decisions."""
+    tenant = _require_tenant(request)
+    journey = await _journey_repo.get_current(tenant.tenant_id, journey_id)
+    if journey is None:
+        raise NotFoundError("Journey")
+
+    decisions = await _fraud_decision_repo.list_for_journey(
+        tenant.tenant_id, journey_id, limit=200
+    )
+    network_ids: set[str] = set()
+    for d in decisions:
+        for nid in (d.get("fraud_network_ids") or []):
+            network_ids.add(nid)
+
+    return APIResponse(data=sorted(network_ids), meta={"count": len(network_ids)}).to_dict()
+
+
+@router.get("/{journey_id}/risk-explain")
+async def explain_journey_risk(journey_id: str, request: Request):
+    """Return the most recent fraud decision explanation for this journey."""
+    tenant = _require_tenant(request)
+    journey = await _journey_repo.get_current(tenant.tenant_id, journey_id)
+    if journey is None:
+        raise NotFoundError("Journey")
+
+    decisions = await _fraud_decision_repo.list_for_journey(
+        tenant.tenant_id, journey_id, limit=1
+    )
+    if not decisions:
+        return APIResponse(data={
+            "journey_id": journey_id,
+            "evaluation_state": "not_evaluated",
+            "explanation": None,
+        }).to_dict()
+
+    latest = decisions[0]
+    return APIResponse(data={
+        "journey_id": journey_id,
+        "decision_id": latest.get("decision_id"),
+        "decision": latest.get("decision"),
+        "risk_score": latest.get("risk_score"),
+        "risk_tier": latest.get("risk_tier"),
+        "signal_types": latest.get("signal_types", []),
+        "reason_codes": latest.get("reason_codes", []),
+        "machine_explanation": latest.get("machine_explanation"),
+        "human_explanation": latest.get("human_explanation"),
+        "evaluation_state": latest.get("evaluation_state"),
+        "evaluated_at": latest.get("evaluated_at"),
+        "policy_version": latest.get("policy_version"),
+        "detector_versions": latest.get("detector_versions", {}),
+    }).to_dict()
+
+
+@router.post("/{journey_id}/risk/recalculate")
+async def recalculate_journey_risk(journey_id: str, request: Request):
+    """Trigger a forced fraud re-evaluation for this journey.
+
+    Evaluates the journey's primary subject, persists a new FraudDecision,
+    and propagates the risk annotation to all journey steps.
+    """
+    tenant = _require_tenant(request)
+    journey = await _journey_repo.get_current(tenant.tenant_id, journey_id)
+    if journey is None:
+        raise NotFoundError("Journey")
+
+    from services.fraud.evaluation import FraudEvaluationService
+    evaluator = FraudEvaluationService()
+    profile_id = journey.get("profile_id") or journey.get("cluster_id")
+    if not profile_id:
+        return APIResponse(data={"status": "skipped", "reason": "no profile_id on journey"}).to_dict()
+
+    decision = await evaluator.evaluate_subject(
+        tenant_id=tenant.tenant_id,
+        subject_type="entity",
+        subject_id=profile_id,
+        profile_id=profile_id,
+        journey_id=journey_id,
+        journey_version_id=str(journey.get("journey_version_id")),
+        force=True,
+    )
+    return APIResponse(data={
+        "journey_id": journey_id,
+        "decision_id": decision.decision_id,
+        "decision": decision.decision,
+        "risk_score": decision.risk_score,
+        "risk_tier": decision.risk_tier,
+        "signal_types": decision.signal_types,
+        "evaluated_at": decision.evaluated_at,
+    }).to_dict()

@@ -1082,6 +1082,9 @@ class BehaviorProfileRepository(BaseRepository):
         anomaly_flags: Optional[list] = None,
         risk_score: float = 0.0,
         predicted_next: Optional[dict] = None,
+        fraud_risk_tier: Optional[str] = None,
+        fraud_decision_count: int = 0,
+        fraud_summary: Optional[dict] = None,
     ) -> dict:
         snapshot = {
             "entity_id": entity_id,
@@ -1094,6 +1097,9 @@ class BehaviorProfileRepository(BaseRepository):
             "anomaly_flags": anomaly_flags or [],
             "risk_score": risk_score,
             "predicted_next": predicted_next or {},
+            "fraud_risk_tier": fraud_risk_tier,
+            "fraud_decision_count": fraud_decision_count,
+            "fraud_summary": fraud_summary or {},
             "computed_at": utc_now().isoformat(),
         }
         # One row per entity (latest snapshot wins). Use entity_id as key.
@@ -2131,3 +2137,254 @@ class DeepTraversalJobRepository(BaseRepository):
     async def update_status(self, job_id: str, status: str, **kwargs: Any) -> dict:
         fields: dict[str, Any] = {"status": status, **kwargs}
         return await self.update(job_id, fields)
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# FRAUD DECISION REPOSITORY
+# ═══════════════════════════════════════════════════════════════════════════
+
+class FraudDecisionRepository(BaseRepository):
+    """Durable, versioned, tenant-isolated fraud decision store.
+
+    Decisions are immutable once created; supersession creates a new row and
+    links the old row via superseded_by_decision_id.
+    """
+
+    def __init__(self) -> None:
+        super().__init__("fraud_decisions")
+
+    async def create(self, decision: dict) -> dict:
+        return await self.insert(decision["decision_id"], decision)
+
+    async def get(self, decision_id: str, tenant_id: str) -> Optional[dict]:
+        row = await self.find_by_id(decision_id)
+        if row and row.get("tenant_id") == tenant_id:
+            return row
+        return None
+
+    async def get_current_for_subject(
+        self,
+        tenant_id: str,
+        subject_type: str,
+        subject_id: str,
+    ) -> Optional[dict]:
+        """Return the most recent active decision for a subject."""
+        rows = await self.find_many(
+            filters={"tenant_id": tenant_id, "subject_type": subject_type, "subject_id": subject_id, "status": "active"},
+            limit=50,
+        )
+        if not rows:
+            return None
+        rows.sort(key=lambda r: r.get("evaluated_at", ""), reverse=True)
+        return rows[0]
+
+    async def get_current_for_entity(self, tenant_id: str, entity_id: str) -> Optional[dict]:
+        rows = await self.find_many(
+            filters={"tenant_id": tenant_id, "entity_id": entity_id, "status": "active"},
+            limit=50,
+        )
+        if not rows:
+            return None
+        rows.sort(key=lambda r: r.get("evaluated_at", ""), reverse=True)
+        return rows[0]
+
+    async def get_current_for_activity(self, tenant_id: str, activity_id: str) -> Optional[dict]:
+        rows = await self.find_many(
+            filters={"tenant_id": tenant_id, "activity_id": activity_id, "status": "active"},
+            limit=10,
+        )
+        if not rows:
+            return None
+        rows.sort(key=lambda r: r.get("evaluated_at", ""), reverse=True)
+        return rows[0]
+
+    async def list_for_journey(
+        self,
+        tenant_id: str,
+        journey_id: str,
+        limit: int = 50,
+    ) -> list[dict]:
+        rows = await self.find_many(
+            filters={"tenant_id": tenant_id, "journey_id": journey_id},
+            limit=limit,
+        )
+        rows.sort(key=lambda r: r.get("evaluated_at", ""), reverse=True)
+        return rows
+
+    async def list_for_entity(self, tenant_id: str, entity_id: str, limit: int = 50) -> list[dict]:
+        rows = await self.find_many(
+            filters={"tenant_id": tenant_id, "entity_id": entity_id},
+            limit=limit,
+        )
+        rows.sort(key=lambda r: r.get("evaluated_at", ""), reverse=True)
+        return rows
+
+    async def list_for_tenant(
+        self,
+        tenant_id: str,
+        risk_tier: Optional[str] = None,
+        decision: Optional[str] = None,
+        review_state: Optional[str] = None,
+        limit: int = 100,
+    ) -> list[dict]:
+        filters: dict[str, Any] = {"tenant_id": tenant_id}
+        if risk_tier:
+            filters["risk_tier"] = risk_tier
+        if decision:
+            filters["decision"] = decision
+        if review_state:
+            filters["review_state"] = review_state
+        rows = await self.find_many(filters=filters, limit=limit)
+        rows.sort(key=lambda r: r.get("evaluated_at", ""), reverse=True)
+        return rows
+
+    async def supersede(
+        self,
+        old_decision_id: str,
+        new_decision_id: str,
+        tenant_id: str,
+    ) -> None:
+        """Mark old decision as superseded and link to new decision."""
+        old = await self.get(old_decision_id, tenant_id)
+        if old:
+            await self.update(old_decision_id, {
+                "status": "superseded",
+                "superseded_by_decision_id": new_decision_id,
+                "updated_at": utc_now().isoformat(),
+            })
+
+    async def update_review(
+        self,
+        decision_id: str,
+        tenant_id: str,
+        review_state: str,
+        reviewed_by: str,
+        suppression_reason: Optional[str] = None,
+    ) -> Optional[dict]:
+        row = await self.get(decision_id, tenant_id)
+        if not row:
+            return None
+        updates: dict[str, Any] = {
+            "review_state": review_state,
+            "reviewed_by": reviewed_by,
+            "reviewed_at": utc_now().isoformat(),
+            "updated_at": utc_now().isoformat(),
+        }
+        if suppression_reason:
+            updates["suppression_reason"] = suppression_reason
+        if review_state == "suppressed":
+            updates["status"] = "voided"
+            updates["decision"] = "suppress"
+        return await self.update(decision_id, updates)
+
+
+class SessionRepository(BaseRepository):
+    """Sessions with device fingerprints and IP addresses for fraud detection."""
+
+    def __init__(self) -> None:
+        super().__init__("sessions")
+
+    async def list_for_entities(
+        self,
+        entity_ids: list[str],
+        tenant_id: str,
+        limit: int = 500,
+    ) -> list[dict]:
+        """Fetch sessions for a set of entities (for shared-device/IP detection)."""
+        results: list[dict] = []
+        seen: set[str] = set()
+        for eid in entity_ids:
+            rows = await self.find_many(
+                filters={"entity_id": eid, "tenant_id": tenant_id},
+                limit=limit,
+            )
+            for r in rows:
+                sid = r.get("session_id") or r.get("id")
+                if sid and sid not in seen:
+                    seen.add(sid)
+                    results.append(r)
+        return results
+
+    async def list_by_tenant(self, tenant_id: str, limit: int = 200) -> list[dict]:
+        return await self.find_many(filters={"tenant_id": tenant_id}, limit=limit)
+
+
+class OrderRepository(BaseRepository):
+    """Commerce orders for commerce-abuse detection."""
+
+    def __init__(self) -> None:
+        super().__init__("commerce_orders")
+
+    async def list_for_entities(
+        self,
+        entity_ids: list[str],
+        tenant_id: str,
+        limit: int = 500,
+    ) -> list[dict]:
+        results: list[dict] = []
+        seen: set[str] = set()
+        for eid in entity_ids:
+            rows = await self.find_many(
+                filters={"entity_id": eid, "tenant_id": tenant_id},
+                limit=limit,
+            )
+            for r in rows:
+                oid = r.get("order_id") or r.get("id")
+                if oid and oid not in seen:
+                    seen.add(oid)
+                    results.append(r)
+        return results
+
+
+class RefundRepository(BaseRepository):
+    """Commerce refunds for commerce-abuse detection."""
+
+    def __init__(self) -> None:
+        super().__init__("commerce_refunds")
+
+    async def list_for_entities(
+        self,
+        entity_ids: list[str],
+        tenant_id: str,
+        limit: int = 500,
+    ) -> list[dict]:
+        results: list[dict] = []
+        seen: set[str] = set()
+        for eid in entity_ids:
+            rows = await self.find_many(
+                filters={"entity_id": eid, "tenant_id": tenant_id},
+                limit=limit,
+            )
+            for r in rows:
+                rid = r.get("refund_id") or r.get("id")
+                if rid and rid not in seen:
+                    seen.add(rid)
+                    results.append(r)
+        return results
+
+
+class RewardEventRepository(BaseRepository):
+    """Reward and referral events for reward-farming detection."""
+
+    def __init__(self) -> None:
+        super().__init__("reward_events")
+
+    async def list_for_entities(
+        self,
+        entity_ids: list[str],
+        tenant_id: str,
+        limit: int = 500,
+    ) -> list[dict]:
+        results: list[dict] = []
+        seen: set[str] = set()
+        for eid in entity_ids:
+            rows = await self.find_many(
+                filters={"entity_id": eid, "tenant_id": tenant_id},
+                limit=limit,
+            )
+            for r in rows:
+                reid = r.get("reward_event_id") or r.get("id")
+                if reid and reid not in seen:
+                    seen.add(reid)
+                    results.append(r)
+        return results

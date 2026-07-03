@@ -301,6 +301,85 @@ class JourneyStepRepository:
         except (IndexError, ValueError):
             return 0
 
+    async def update_risk_annotation_for_journey(
+        self,
+        tenant_id: str,
+        journey_id: str,
+        annotation: dict[str, Any],
+    ) -> int:
+        """Write fraud/risk annotation to all steps in a journey (current version)."""
+        import json as _json
+        from decimal import Decimal
+
+        pool = await self._pool()
+        risk_score = annotation.get("risk_score")
+        if isinstance(risk_score, float):
+            risk_score = round(risk_score, 2)
+
+        if pool is None:
+            count = 0
+            for version_steps in _local_store.values():
+                for step in version_steps:
+                    if (step.get("tenant_id") == tenant_id
+                            and str(step.get("journey_id")) == str(journey_id)):
+                        step.update({
+                            "risk_score": risk_score,
+                            "risk_tier": annotation.get("risk_tier"),
+                            "fraud_status": annotation.get("fraud_status"),
+                            "fraud_disposition": annotation.get("fraud_disposition"),
+                            "fraud_decision_id": annotation.get("fraud_decision_id"),
+                            "fraud_network_ids": annotation.get("fraud_network_ids", []),
+                            "fraud_signal_types": annotation.get("fraud_signal_types", []),
+                            "fraud_evidence_refs": annotation.get("fraud_evidence_refs", []),
+                            "risk_evaluated_at": annotation.get("risk_evaluated_at"),
+                            "risk_model_version": annotation.get("risk_model_version"),
+                            "risk_policy_version": annotation.get("risk_policy_version"),
+                            "risk_explanation": annotation.get("risk_explanation"),
+                            "risk_evaluation_state": annotation.get("risk_evaluation_state", "not_evaluated"),
+                        })
+                        count += 1
+            return count
+
+        async with pool.acquire() as conn:
+            result = await conn.execute(
+                """
+                UPDATE journey_steps SET
+                    risk_score = $3,
+                    risk_tier = $4,
+                    fraud_status = $5,
+                    fraud_disposition = $6,
+                    fraud_decision_id = $7,
+                    fraud_network_ids = $8,
+                    fraud_signal_types = $9,
+                    fraud_evidence_refs = $10::jsonb,
+                    risk_evaluated_at = $11,
+                    risk_model_version = $12,
+                    risk_policy_version = $13,
+                    risk_explanation = $14,
+                    risk_evaluation_state = $15
+                WHERE tenant_id = $1 AND journey_id = $2::uuid
+                """,
+                tenant_id,
+                journey_id,
+                Decimal(str(risk_score)) if risk_score is not None else None,
+                annotation.get("risk_tier"),
+                annotation.get("fraud_status"),
+                annotation.get("fraud_disposition"),
+                annotation.get("fraud_decision_id"),
+                annotation.get("fraud_network_ids", []),
+                annotation.get("fraud_signal_types", []),
+                _json.dumps(annotation.get("fraud_evidence_refs", [])),
+                annotation.get("risk_evaluated_at"),
+                annotation.get("risk_model_version"),
+                annotation.get("risk_policy_version"),
+                annotation.get("risk_explanation"),
+                annotation.get("risk_evaluation_state", "not_evaluated"),
+            )
+        try:
+            return int(result.split()[-1])
+        except (IndexError, ValueError):
+            return 0
+
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 

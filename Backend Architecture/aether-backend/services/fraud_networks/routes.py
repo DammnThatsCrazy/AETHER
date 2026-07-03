@@ -121,18 +121,34 @@ async def _run_detection_pipeline(
     anchor_entity_ids: list[str],
     max_depth: int,
 ) -> tuple[list[dict], list[dict], list[Any]]:
-    """Run all detectors against transfers/sessions/wallets for the anchors.
+    """Run all detectors against real system data for the anchor entities.
 
-    In production this would fetch from the repo. We fetch what's available;
-    in-memory backend returns empty lists which yield zero-signal networks.
+    Fetches sessions, wallets, transfers, delegations, reward events,
+    orders, and refunds from their respective repositories and supplies
+    them to each detector.  Each detector is pure; only data fetching
+    happens here.
+
     Returns (member_dicts, transfer_dicts, detector_results).
     """
-    from repositories.repos import TransferRepository, WalletRepository
+    from repositories.repos import (
+        DelegationRepository,
+        OrderRepository,
+        RefundRepository,
+        RewardEventRepository,
+        SessionRepository,
+        TransferRepository,
+        WalletRepository,
+    )
 
     transfer_repo = TransferRepository()
     wallet_repo = WalletRepository()
+    session_repo = SessionRepository()
+    delegation_repo = DelegationRepository()
+    reward_repo = RewardEventRepository()
+    order_repo = OrderRepository()
+    refund_repo = RefundRepository()
 
-    # Collect transfers involving any anchor entity (up to max_depth hops)
+    # ── Hop-based entity expansion ───────────────────────────────────────────
     seen_entities: set[str] = set(anchor_entity_ids)
     transfers: list[dict] = []
     frontier = list(anchor_entity_ids)
@@ -148,8 +164,8 @@ async def _run_detection_pipeline(
             )
             for t in outbound + inbound:
                 transfers.append(t)
-                for field in ("from_entity_id", "to_entity_id"):
-                    neighbor = t.get(field, "")
+                for field_name in ("from_entity_id", "to_entity_id"):
+                    neighbor = t.get(field_name, "")
                     if neighbor and neighbor not in seen_entities:
                         seen_entities.add(neighbor)
                         next_frontier.append(neighbor)
@@ -157,9 +173,11 @@ async def _run_detection_pipeline(
         if not frontier:
             break
 
-    # Collect wallet links
+    entity_list = list(seen_entities)
+
+    # ── Wallet links (for wallet-cluster detector) ───────────────────────────
     wallet_links: list[dict] = []
-    for eid in seen_entities:
+    for eid in entity_list:
         wallets = await wallet_repo.find_many(
             filters={"owner_entity_id": eid, "tenant_id": tenant_id}, limit=50
         )
@@ -170,7 +188,29 @@ async def _run_detection_pipeline(
                 "chain": w.get("chain", "unknown"),
             })
 
-    # Build member stubs from seen entities
+    # ── Sessions (for shared-device and shared-IP detectors) ─────────────────
+    sessions = await session_repo.list_for_entities(entity_list, tenant_id, limit=500)
+
+    # ── Delegations (for agentic-delegation-abuse detector) ──────────────────
+    delegations: list[dict] = []
+    for eid in entity_list:
+        rows = await delegation_repo.find_many(
+            filters={"principal_id": eid, "tenant_id": tenant_id}, limit=100
+        )
+        delegations.extend(rows)
+        rows2 = await delegation_repo.find_many(
+            filters={"agent_id": eid, "tenant_id": tenant_id}, limit=100
+        )
+        delegations.extend(rows2)
+
+    # ── Reward events (for reward-farming detector) ───────────────────────────
+    reward_events = await reward_repo.list_for_entities(entity_list, tenant_id, limit=500)
+
+    # ── Orders and refunds (for commerce-abuse detector) ────────────────────
+    orders = await order_repo.list_for_entities(entity_list, tenant_id, limit=500)
+    refunds = await refund_repo.list_for_entities(entity_list, tenant_id, limit=500)
+
+    # ── Build member stubs ───────────────────────────────────────────────────
     member_dicts = [
         {
             "entity_id": eid,
@@ -181,17 +221,16 @@ async def _run_detection_pipeline(
         for eid in seen_entities
     ]
 
-    # Run detectors
-    sessions: list[dict] = []
+    # ── Run all detectors with real data ─────────────────────────────────────
     detector_results = (
         detect_shared_device(sessions)
         + detect_shared_ip(sessions)
         + detect_wallet_cluster(wallet_links)
         + detect_circular_transfers(transfers, max_depth=max_depth)
         + detect_split_merge(transfers)
-        + detect_reward_farming([])
-        + detect_agentic_delegation_abuse([], transfers)
-        + detect_commerce_abuse([], [])
+        + detect_reward_farming(reward_events)
+        + detect_agentic_delegation_abuse(delegations, transfers)
+        + detect_commerce_abuse(orders, refunds)
     )
 
     return member_dicts, transfers, detector_results
