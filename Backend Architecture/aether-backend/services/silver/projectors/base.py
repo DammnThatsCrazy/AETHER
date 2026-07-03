@@ -40,14 +40,20 @@ class BaseProjector:
     def project(self, event: dict[str, Any]) -> ProjectionResult | None:
         raise NotImplementedError
 
-    def project_and_emit(self, event: dict[str, Any]) -> ProjectionResult | None:
+    def project_and_emit(
+        self, event: dict[str, Any], *, emit_activity: bool = True
+    ) -> ProjectionResult | None:
         """Project the event then emit canonical activity records.
 
         Synchronous callers (dispatcher) use this wrapper. Async callers
         can await emit_canonical_activity() directly after calling project().
+
+        ``emit_activity=False`` suppresses the canonical-activity emission —
+        the dispatcher sets this for projectors that are not the activity
+        owner of the event (ADR-C4: one real-world event, one activity).
         """
         result = self.project(event)
-        if result and not result.skipped and result.rows:
+        if result and not result.skipped and result.rows and emit_activity:
             try:
                 loop = asyncio.get_event_loop()
                 if loop.is_running():

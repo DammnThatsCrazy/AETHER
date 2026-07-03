@@ -8,6 +8,8 @@ app startup via attach_ingestion_workers().
 Worker topology:
   SDK_EVENTS_VALIDATED → sdk_bronze_writer → writes to bronze_sdk_events
                        → silver_normalizer  → writes to silver_sdk_events
+                       → silver_fact_projector → SilverDispatcher fan-out →
+                         silver fact tables (+ canonical activity, graph queue)
                        → identity_signal_emitter → publishes IDENTITY_RESOLVED
 
 These workers never mutate graph/profile directly; they emit signals that
@@ -15,6 +17,8 @@ the Profile360 and identity-resolution services consume.
 """
 
 from __future__ import annotations
+
+import os
 
 from shared.events.events import Event, EventConsumer, EventProducer, Topic
 from shared.logger.logger import get_logger, metrics
@@ -112,6 +116,92 @@ async def silver_normalizer(event: Event) -> None:
         raise  # triggers DLQ in EventConsumer
 
 
+def _bus_payload_to_sdk_envelope(payload: dict) -> dict:
+    """Translate the normalized bus payload back to the SDK envelope shape
+    the Silver projectors consume (type/messageId/context/properties)."""
+    context = dict(payload.get("context") or {})
+    context.setdefault("tenantId", payload.get("tenant_id"))
+    return {
+        "type": payload.get("event_type", ""),
+        "messageId": payload.get("event_id"),
+        "userId": payload.get("user_id"),
+        "anonymousId": payload.get("anonymous_id"),
+        "sessionId": payload.get("session_id"),
+        "timestamp": payload.get("timestamp"),
+        "receivedAt": payload.get("received_at"),
+        "properties": payload.get("properties") or {},
+        "context": context,
+        "family": payload.get("event_family", ""),
+    }
+
+
+async def silver_fact_projector(event: Event) -> None:
+    """Fan the validated event out to Silver fact projectors and persist rows.
+
+    This is the durable Bronze → Silver fact path: the SilverDispatcher runs
+    the ordered projector list (comms lifecycle first — ADR-C3), the writer
+    persists each table idempotently, and communication events additionally
+    trigger an asynchronous communication-state rebuild.
+
+    Projection failures never raise: Bronze is already durable, and replaying
+    the Bronze range recovers any missed facts.
+    """
+    payload = event.payload
+    tenant_id = event.tenant_id or payload.get("tenant_id", "")
+    event_type = payload.get("event_type", "")
+
+    from services.silver.dispatcher import SilverDispatcher
+    from services.comms.contracts import COMMUNICATION_EVENT_TYPES
+
+    if event_type in COMMUNICATION_EVENT_TYPES and not _comms_ingestion_enabled():
+        return
+
+    dispatcher = SilverDispatcher()
+    if not dispatcher.handles(event_type):
+        return
+
+    envelope = _bus_payload_to_sdk_envelope(payload)
+    try:
+        outcome = await dispatcher.project_with_outcome(envelope)
+        if outcome.results:
+            from services.silver.writer import SilverFactWriter
+            written = await SilverFactWriter().persist(outcome.results)
+            metrics.increment(
+                "silver_facts_written_total", written,
+                labels={"tenant_id": tenant_id, "event_type": event_type},
+            )
+        for failed in outcome.failed_projectors:
+            metrics.increment(
+                "silver_projection_dead_letters_total",
+                labels={"tenant_id": tenant_id, "projector": failed},
+            )
+    except Exception as exc:
+        logger.error(
+            "silver_fact_projector failed for event %s: %s",
+            payload.get("event_id"), exc, exc_info=True,
+        )
+        return
+
+    # Communication events keep the per-entity state projection fresh.
+    if event_type in COMMUNICATION_EVENT_TYPES:
+        entity_id = payload.get("user_id") or payload.get("anonymous_id")
+        props = payload.get("properties") or {}
+        entity_id = props.get("recipient_entity_id") or props.get("profile_id") or entity_id
+        if entity_id:
+            try:
+                from services.comms.state import CommunicationStateService
+                await CommunicationStateService().rebuild_for_entity(
+                    tenant_id, str(entity_id),
+                    channel=props.get("channel") or "email",
+                )
+            except Exception as exc:
+                logger.warning("comms_state_rebuild_failed entity=%s: %s", entity_id, exc)
+
+
+def _comms_ingestion_enabled() -> bool:
+    return os.getenv("AETHER_COMMS_INGESTION_ENABLED", "true").lower() != "false"
+
+
 async def identity_signal_emitter(event: Event, producer: EventProducer) -> None:
     """
     Emit an identity resolution signal for identify/user events.
@@ -177,6 +267,10 @@ def attach_ingestion_workers(consumer: EventConsumer, producer: EventProducer) -
     # Silver normalizer
     consumer.subscribe(Topic.SDK_EVENTS_VALIDATED, silver_normalizer)
     logger.info("Ingestion worker attached: silver_normalizer → SDK_EVENTS_VALIDATED")
+
+    # Silver fact projector — multi-projector dispatch into silver fact tables
+    consumer.subscribe(Topic.SDK_EVENTS_VALIDATED, silver_fact_projector)
+    logger.info("Ingestion worker attached: silver_fact_projector → SDK_EVENTS_VALIDATED")
 
     # Identity signal emitter (needs producer reference via partial)
     identity_handler = functools.partial(identity_signal_emitter, producer=producer)
