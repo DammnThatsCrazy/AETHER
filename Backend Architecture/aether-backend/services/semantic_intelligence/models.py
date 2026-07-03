@@ -8,12 +8,17 @@ They extend the compact SemanticContextEnvelope instead of replacing it.
 from __future__ import annotations
 
 import hashlib
+import re
 from datetime import datetime, timezone
 from enum import Enum
 from typing import Any, Literal
 from uuid import uuid4
 
 from pydantic import BaseModel, Field, field_validator, model_validator
+
+_UUID_RE = re.compile(
+    r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$", re.I
+)
 
 TAXONOMY_VERSION = "semantic-sentiment-taxonomy.v1"
 SCHEMA_VERSION = "semantic-sentiment.v1"
@@ -279,12 +284,17 @@ class SemanticObservation(BaseModel):
             self.subject_refs = [
                 SubjectRef(ref=self.primary_subject_ref, type=self.target_type or SubjectType.OTHER)
             ]
-        if self.campaign_id and not self.campaign_id.startswith("camp_"):
-            raise ValueError("campaign_id must be a canonical campaign id (camp_*)")
+        if self.campaign_id and not (
+            self.campaign_id.startswith("camp_") or _UUID_RE.match(self.campaign_id)
+        ):
+            raise ValueError(
+                "campaign_id must be a canonical campaign id (camp_*) or a UUID"
+            )
         base = "|".join(
             [
                 self.tenant_id,
                 self.source_event_id,
+                self.source_type,
                 self.primary_subject_ref,
                 self.taxonomy_version,
                 self.model_version,
