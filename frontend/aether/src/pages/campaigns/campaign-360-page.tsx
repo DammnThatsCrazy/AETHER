@@ -200,6 +200,136 @@ function ConversionsTab({ campaignId, timeStart, timeEnd }: { campaignId: string
   );
 }
 
+// ── Messages tab (Communications Intelligence) ────────────────────────────────
+
+function MessagesTab({ campaignId }: { campaignId: string }) {
+  const [funnel, setFunnel] = useState<AnyRecord | null>(null);
+  const [messages, setMessages] = useState<AnyRecord[] | null>(null);
+  const [links, setLinks] = useState<AnyRecord[] | null>(null);
+  const [mode, setMode] = useState<'provider_reported' | 'human_qualified'>('human_qualified');
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let active = true;
+    setLoading(true);
+    setError(null);
+    Promise.all([
+      api.campaigns.commsFunnel(campaignId) as Promise<AnyRecord>,
+      api.campaigns.messages(campaignId) as Promise<AnyRecord>,
+      api.campaigns.links(campaignId) as Promise<AnyRecord>,
+    ])
+      .then(([f, m, l]) => {
+        if (!active) return;
+        setFunnel(f as AnyRecord);
+        setMessages(((m as AnyRecord)?.items as AnyRecord[]) ?? []);
+        setLinks(((l as AnyRecord)?.items as AnyRecord[]) ?? []);
+      })
+      .catch(e => { if (active) setError(e instanceof Error ? e.message : String(e)); })
+      .finally(() => { if (active) setLoading(false); });
+    return () => { active = false; };
+  }, [campaignId]);
+
+  if (loading) return <LoadingState lines={6} />;
+  if (error) return <ErrorState title="Messages unavailable" message={error} />;
+
+  const modes = (funnel?.modes as AnyRecord) ?? {};
+  const selected = (modes[mode] as AnyRecord) ?? {};
+  const delivery = (funnel?.delivery as AnyRecord) ?? {};
+  const quality = (funnel?.quality as AnyRecord) ?? {};
+
+  return (
+    <div className="space-y-4">
+      <div
+        className="flex gap-1 border border-border-default rounded-md p-0.5 w-fit"
+        role="tablist"
+        aria-label="Engagement funnel mode"
+      >
+        {([
+          ['human_qualified', 'Human qualified'],
+          ['provider_reported', 'Provider reported'],
+        ] as const).map(([value, label]) => (
+          <button
+            key={value}
+            role="tab"
+            aria-selected={mode === value}
+            onClick={() => setMode(value)}
+            className={`px-3 py-1 text-xs rounded transition-colors ${mode === value ? 'bg-accent text-white' : 'text-text-secondary hover:text-text-primary'}`}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+      <p className="text-xs text-text-muted">
+        {mode === 'human_qualified'
+          ? 'Human-qualified engagement excludes suspected machine activity (security scanners, image proxies) and automated replies.'
+          : 'Provider-reported numbers count every provider event, including machine-generated opens and clicks.'}
+      </p>
+
+      <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
+        <Metric label="Sent" value={Number(selected.sent ?? 0).toLocaleString()} />
+        <Metric label="Delivered" value={Number(selected.delivered ?? 0).toLocaleString()} />
+        <Metric label={mode === 'human_qualified' ? 'Human opens' : 'Reported opens'} value={Number(selected.opens ?? 0).toLocaleString()} />
+        <Metric label={mode === 'human_qualified' ? 'Human clicks' : 'Reported clicks'} value={Number(selected.clicks ?? 0).toLocaleString()} />
+        <Metric label="Replies" value={Number(((modes.human_qualified as AnyRecord) ?? {}).replies ?? 0).toLocaleString()} />
+      </div>
+
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+        <Metric label="Hard bounces" value={Number(delivery.hard_bounces ?? 0).toLocaleString()} />
+        <Metric label="Complaints" value={Number(delivery.complaints ?? 0).toLocaleString()} />
+        <Metric label="Unsubscribes" value={Number(delivery.unsubscribes ?? 0).toLocaleString()} />
+        <Metric label="Suspected machine events" value={fmtPct(quality.machine_event_rate as number | null)} />
+      </div>
+
+      <Card>
+        <CardHeader><CardTitle className="text-sm">Messages</CardTitle></CardHeader>
+        <CardContent>
+          {!messages?.length
+            ? <EmptyState title="No messages" description="No provider messages observed for this campaign yet." />
+            : (
+              <DataTable
+                data={messages}
+                keyExtractor={r => String(r.external_message_id)}
+                columns={[
+                  { key: 'name', header: 'Message', render: r => String(r.name ?? r.external_message_id ?? '—') },
+                  { key: 'sequence_step', header: 'Step', render: r => r.sequence_step != null ? String(r.sequence_step) : '—' },
+                  { key: 'status', header: 'Status', render: r => <Badge variant={r.status === 'active' ? 'success' : 'default'}>{String(r.status ?? '—')}</Badge> },
+                  { key: 'delivered', header: 'Delivered', render: r => Number(r.delivered ?? 0).toLocaleString() },
+                  { key: 'human_clicks', header: 'Human clicks', render: r => Number(r.human_clicks ?? 0).toLocaleString() },
+                  { key: 'replies', header: 'Replies', render: r => Number(r.replies ?? 0).toLocaleString() },
+                  { key: 'bounces', header: 'Bounces', render: r => Number(r.bounces ?? 0).toLocaleString() },
+                  { key: 'machine_events', header: 'Machine', render: r => Number(r.machine_events ?? 0).toLocaleString() },
+                ]}
+              />
+            )
+          }
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader><CardTitle className="text-sm">Link performance</CardTitle></CardHeader>
+        <CardContent>
+          {!links?.length
+            ? <EmptyState title="No link activity" description="No human-qualified link clicks observed yet." />
+            : (
+              <DataTable
+                data={links}
+                keyExtractor={r => String(r.link_id)}
+                columns={[
+                  { key: 'link_id', header: 'Link', render: r => <span className="font-mono text-xs break-all">{String(r.link_id ?? '')}</span> },
+                  { key: 'external_message_id', header: 'Message', render: r => String(r.external_message_id ?? '—') },
+                  { key: 'human_clicks', header: 'Human clicks', render: r => Number(r.human_clicks ?? 0).toLocaleString() },
+                  { key: 'unique_clickers', header: 'Unique clickers', render: r => r.unique_clickers != null ? Number(r.unique_clickers).toLocaleString() : '—' },
+                ]}
+              />
+            )
+          }
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
 // ── Attribution tab ───────────────────────────────────────────────────────────
 
 function AttributionTab({ campaignId }: { campaignId: string }) {
@@ -232,6 +362,7 @@ function AttributionTab({ campaignId }: { campaignId: string }) {
 
 const TABS = [
   { value: 'overview', label: 'Overview' },
+  { value: 'messages', label: 'Messages' },
   { value: 'population', label: 'Population' },
   { value: 'clusters', label: 'Clusters' },
   { value: 'conversions', label: 'Conversions' },
@@ -295,6 +426,10 @@ export function Campaign360Page() {
             {...(timeEnd !== undefined ? { timeEnd } : {})}
             attributionModel={attributionModel}
           />
+        </TabsContent>
+
+        <TabsContent value="messages">
+          <MessagesTab campaignId={campaignId} />
         </TabsContent>
 
         <TabsContent value="population">

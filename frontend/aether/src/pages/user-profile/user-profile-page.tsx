@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import {
   Badge, Button, Card, CardContent, CardHeader,
@@ -97,6 +97,114 @@ function Stat({ label, value }: { label: string; value: React.ReactNode }) {
     <div className="bg-surface-raised border border-border-default rounded-md px-3 py-2">
       <p className="text-xs text-text-secondary">{label}</p>
       <p className="text-sm font-medium text-text-primary mt-0.5">{value}</p>
+    </div>
+  );
+}
+
+// ── Communications tab (Communications Intelligence) ─────────────────────────
+
+function CommunicationsTab({ userId }: { userId: string }) {
+  const [items, setItems] = useState<Record<string, unknown>[]>([]);
+  const [counts, setCounts] = useState<Record<string, unknown>>({});
+  const [state, setState] = useState<Record<string, unknown> | null>(null);
+  const [humanOnly, setHumanOnly] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let active = true;
+    setLoading(true);
+    setError(null);
+    Promise.all([
+      api.comms.entityCommunications(userId, humanOnly ? { human_qualified: true, limit: 50 } : { limit: 50 }),
+      api.comms.entityCommunicationState(userId),
+    ])
+      .then(([comms, commState]) => {
+        if (!active) return;
+        const c = asRecord(comms);
+        setItems(asList(c.items) as Record<string, unknown>[]);
+        setCounts(asRecord(c.counts));
+        setState(asRecord(asRecord(commState).communication_state));
+      })
+      .catch(e => { if (active) setError(e instanceof Error ? e.message : String(e)); })
+      .finally(() => { if (active) setLoading(false); });
+    return () => { active = false; };
+  }, [userId, humanOnly]);
+
+  if (loading) return <LoadingState lines={6} />;
+  if (error) return <ErrorState title="Communications unavailable" message={error} />;
+
+  const s = state ?? {};
+
+  return (
+    <div className="space-y-6">
+      <Section title="Communication summary">
+        <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
+          <Stat label="Communications" value={fmt(counts.communications ?? 0)} />
+          <Stat label="Email campaigns" value={fmt(counts.email_campaigns ?? 0)} />
+          <Stat label="Human clicks" value={fmt(counts.human_clicks ?? 0)} />
+          <Stat label="Replies" value={fmt(counts.replies ?? 0)} />
+          <Stat label="Outcomes" value={fmt(counts.communication_outcomes ?? 0)} />
+        </div>
+      </Section>
+
+      <Section title="Communication state (email)">
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+          <Stat label="Subscription" value={
+            <Badge variant={s.subscription_status === 'subscribed' ? 'success' : s.subscription_status === 'unknown' ? 'default' : 'warning'} size="sm">
+              {fmt(s.subscription_status)}
+            </Badge>
+          } />
+          <Stat label="Deliverability" value={
+            <Badge variant={s.deliverability_status === 'deliverable' ? 'success' : s.deliverability_status === 'hard_bounced' ? 'danger' : 'default'} size="sm">
+              {fmt(s.deliverability_status)}
+            </Badge>
+          } />
+          <Stat label="Delivered" value={fmt(s.total_delivered ?? 0)} />
+          <Stat label="Human clicks" value={fmt(s.total_human_clicks ?? 0)} />
+          <Stat label="Replies" value={fmt(s.total_replies ?? 0)} />
+          <Stat label="Last engagement" value={s.last_human_engagement_at ? relTime(String(s.last_human_engagement_at)) : '—'} />
+          <Stat label="Last reply" value={s.last_reply_at ? relTime(String(s.last_reply_at)) : '—'} />
+          <Stat label="Suppression" value={s.suppression_scope ? <Badge variant="warning" size="sm">{fmt(s.suppression_scope)}</Badge> : 'none'} />
+        </div>
+      </Section>
+
+      <Section title="Communications timeline">
+        <label className="flex items-center gap-2 text-xs text-text-secondary w-fit cursor-pointer">
+          <input
+            type="checkbox"
+            checked={humanOnly}
+            onChange={e => setHumanOnly(e.target.checked)}
+            aria-label="Show human-qualified engagement only"
+          />
+          Human-qualified engagement only
+        </label>
+        {!items.length
+          ? <EmptyState title="No communications" description="No communication events observed for this entity yet." />
+          : (
+            <DataTable
+              data={items}
+              keyExtractor={r => String(r.communication_fact_id)}
+              columns={[
+                { key: 'event_type', header: 'Event', render: r => String(r.event_type ?? '—') },
+                { key: 'channel', header: 'Channel', render: r => String(r.channel ?? '—') },
+                { key: 'message_category', header: 'Category', render: r => String(r.message_category ?? '—') },
+                { key: 'external_message_id', header: 'Message', render: r => String(r.external_message_id ?? '—') },
+                {
+                  key: 'suspected_machine_activity', header: 'Engagement',
+                  render: r => r.suspected_machine_activity
+                    ? <Badge variant="warning" size="sm">suspected machine</Badge>
+                    : r.engagement_strength
+                      ? <Badge variant="success" size="sm">{String(r.engagement_strength)}</Badge>
+                      : <span className="text-text-muted text-xs">—</span>,
+                },
+                { key: 'provider', header: 'Provider', render: r => String(r.provider ?? '—') },
+                { key: 'occurred_at', header: 'When', render: r => r.occurred_at ? relTime(String(r.occurred_at)) : '—' },
+              ]}
+            />
+          )
+        }
+      </Section>
     </div>
   );
 }
@@ -1348,6 +1456,7 @@ export function UserProfilePage() {
           <TabsTrigger value="overview">Overview</TabsTrigger>
           <TabsTrigger value="sessions">Sessions & Devices</TabsTrigger>
           <TabsTrigger value="journeys">Journeys</TabsTrigger>
+          <TabsTrigger value="communications">Communications</TabsTrigger>
           <TabsTrigger value="social">Social</TabsTrigger>
           <TabsTrigger value="wallets">Web3 Wallets</TabsTrigger>
           <TabsTrigger value="financials">Financials</TabsTrigger>
@@ -1367,6 +1476,7 @@ export function UserProfilePage() {
           <RecommendationCards userId={userId} />
           <JourneysTab userId={userId} />
         </TabsContent>
+        <TabsContent value="communications"><CommunicationsTab userId={userId} /></TabsContent>
         <TabsContent value="social"><SocialTab userId={userId} window={window} /></TabsContent>
         <TabsContent value="wallets"><WalletsTab userId={userId} /></TabsContent>
         <TabsContent value="financials"><FinancialsTab userId={userId} /></TabsContent>

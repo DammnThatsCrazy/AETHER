@@ -1,7 +1,8 @@
 import { Badge, Card, CardContent, CardHeader, CardTitle, DataTable, EmptyState, ErrorState, LoadingState } from '@aether/ui';
 import { PageWrapper } from '@kyber/components/layout';
 import { useMeasurementOps } from '@kyber/features/measurement';
-import { useState } from 'react';
+import { api } from '@kyber/lib/api';
+import { useEffect, useState } from 'react';
 
 type Row = Record<string, unknown>;
 
@@ -36,6 +37,53 @@ function statusVariant(status: string): 'success' | 'warning' | 'danger' | 'defa
   if (status === 'degraded') return 'warning';
   if (status === 'error' || status === 'failed') return 'danger';
   return 'default';
+}
+
+function CommsFleetHealthCard() {
+  const [tenants, setTenants] = useState<Row[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let active = true;
+    (api.measurement.commsFleetHealth() as Promise<Row>)
+      .then(d => { if (active) setTenants(((d as Row).tenants as Row[]) ?? []); })
+      .catch(e => { if (active) setError(e instanceof Error ? e.message : String(e)); })
+      .finally(() => { if (active) setLoading(false); });
+    return () => { active = false; };
+  }, []);
+
+  const pct = (v: unknown) => (v == null ? '—' : `${Math.round(Number(v) * 100)}%`);
+  const resolutionVariant = (v: unknown): 'success' | 'warning' | 'danger' | 'default' => {
+    if (v == null) return 'default';
+    const n = Number(v);
+    if (n >= 0.9) return 'success';
+    if (n >= 0.6) return 'warning';
+    return 'danger';
+  };
+
+  return (
+    <Card>
+      <CardHeader><CardTitle>Communications pipeline health</CardTitle></CardHeader>
+      <CardContent>
+        {loading && <LoadingState lines={3} />}
+        {error && <ErrorState title="Comms health unavailable" message={error} />}
+        {!loading && !error && (
+          tenants.length === 0
+            ? <EmptyState title="No communication facts" description="Per-tenant projection and resolution health appears once communication events are ingested." />
+            : <DataTable data={tenants} keyExtractor={r => String(r.tenant_id)} columns={[
+                { key: 'tenant', header: 'Tenant', render: r => <span className="font-mono text-xs">{String(r.tenant_id ?? '—')}</span> },
+                { key: 'facts', header: 'Comm facts', render: r => Number(r.communication_facts ?? 0).toLocaleString() },
+                { key: 'resolution', header: 'Campaign resolution', render: r => (
+                  <Badge variant={resolutionVariant(r.campaign_resolution_rate)}>{pct(r.campaign_resolution_rate)}</Badge>
+                )},
+                { key: 'machine', header: 'Machine events', render: r => pct(r.machine_event_rate) },
+                { key: 'last', header: 'Last event', render: r => String(r.last_event_at ?? '—') },
+              ]} />
+        )}
+      </CardContent>
+    </Card>
+  );
 }
 
 export function KyberMeasurementOpsPage() {
@@ -97,6 +145,8 @@ export function KyberMeasurementOpsPage() {
             }
           </CardContent>
         </Card>
+
+        <CommsFleetHealthCard />
 
         <Card>
           <CardHeader><CardTitle>Ad-hoc conversion recompute</CardTitle></CardHeader>
