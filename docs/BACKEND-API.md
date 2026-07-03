@@ -2399,8 +2399,14 @@ Tenant-managed outbound webhook delivery endpoints. Aether signs each delivery w
 >
 > All observation responses return:
 > ```json
-> { "observation_id": "<uuid>", "received_at": "<ISO8601>", "graph_mutations_queued": <int>, "tenant_id": "<str>" }
+> { "observation_id": "<uuid>", "received_at": "<ISO8601>", "graph_mutations_queued": <persisted_count>, "tenant_id": "<str>", "graph_mutations_built": <built_count>, "graph_mutations_persisted": <persisted_count>, "graph_projection_status": "persisted|partial|failed|not_applicable" }
 > ```
+
+### Feature flags and tenant boundary
+
+Agentic observability routers are mounted only when `AGENTIC_OBSERVABILITY_ENABLED=true` (default true for local compatibility). Subsystems are separately controlled by `AGENTIC_MCP_OBSERVABILITY_ENABLED`, `AGENTIC_EXTERNAL_ACCOUNTS_ENABLED`, `AGENTIC_PROVIDER_VERIFICATION_ENABLED`, `AGENTIC_COMMUNICATION_OBSERVABILITY_ENABLED`, `AGENTIC_PROTOCOL_OBSERVABILITY_ENABLED`, and `KYBER_AGENTIC_OBSERVABILITY_ENABLED`. Authenticated tenant context is authoritative: request-body `tenant_id`/`tenantId` may not override it, and mismatches return HTTP 403.
+
+Graph projection is currently best-effort until the durable outbox ships. Responses distinguish mutations built from mutations actually persisted; `graph_mutations_queued` is retained for compatibility and equals the persisted count, not a fake queued count.
 
 ### Agentic Account / MCP / Tool Observability
 
