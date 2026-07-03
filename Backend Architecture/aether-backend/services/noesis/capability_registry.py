@@ -212,6 +212,33 @@ CAPABILITY_REGISTRY: list[NoesisCapability] = [
         ],
         data_sources=["suggestion_repository"],
     ),
+    NoesisCapability(
+        intent="sentiment_explain",
+        label="Sentiment Explain",
+        description="Explain tenant-scoped target-specific sentiment with evidence, freshness, model versions, and causal-confidence labels.",
+        surfaces=["aether", "kyber"],
+        requires_target=True,
+        example_prompts=["Why did sentiment toward Product X decline?", "What evidence supports sentiment for campaign camp_123?"],
+        data_sources=["semantic_intelligence_api", "evidence_envelope"],
+    ),
+    NoesisCapability(
+        intent="narrative_analysis",
+        label="Narrative Analysis",
+        description="Analyze tenant-scoped narratives, claims, adoption, rejection, and diffusion without unsupported causal claims.",
+        surfaces=["aether", "kyber"],
+        requires_target=False,
+        example_prompts=["Which narrative drove Campaign Y conversions?", "How did this narrative move from Web2 to Web3?"],
+        data_sources=["semantic_intelligence_api", "graph_traversal"],
+    ),
+    NoesisCapability(
+        intent="semantic_profile_explain",
+        label="Semantic Profile Explain",
+        description="Summarize semantic state, stance, intent, active topics, evidence and freshness for a Profile360 entity.",
+        surfaces=["aether", "kyber"],
+        requires_target=True,
+        example_prompts=["Explain this user's semantic profile", "Which topics and stances are active for profile ent_456?"],
+        data_sources=["profile360", "semantic_intelligence_api"],
+    ),
 ]
 
 # Fast lookup by intent name

@@ -4238,6 +4238,21 @@
       "canonical_owner": "platform@aether"
     },
     {
+      "path": "docs/runbooks/semantic-sentiment/semantic-sentiment-operations.md",
+      "title": "Semantic-Sentiment Operations Runbook",
+      "slug": "semantic-sentiment/operations-runbook",
+      "section": "operations",
+      "visibility": "I",
+      "audience": [
+        "dev-senior",
+        "ops"
+      ],
+      "status": "experimental",
+      "since_version": "8.11.0",
+      "estimated_read_minutes": 6,
+      "canonical_owner": "platform-intelligence@aether"
+    },
+    {
       "path": "docs/security/UNIVERSAL_GRAPH_SECURITY_MODEL.md",
       "title": "Universal Intelligence Graph Security Model",
       "slug": "security/universal-graph-security-model",
@@ -4252,6 +4267,22 @@
       "status": "stable",
       "since_version": "8.10.0",
       "canonical_owner": "security@aether"
+    },
+    {
+      "path": "docs/semantic-sentiment/SEMANTIC-SENTIMENT-INTELLIGENCE.md",
+      "title": "Semantic-Sentiment Intelligence Plane",
+      "slug": "semantic-sentiment/intelligence-plane",
+      "section": "concepts",
+      "visibility": "I",
+      "audience": [
+        "dev-senior",
+        "architect",
+        "ops"
+      ],
+      "status": "experimental",
+      "since_version": "8.11.0",
+      "estimated_read_minutes": 8,
+      "canonical_owner": "platform-intelligence@aether"
     },
     {
       "path": "docs/source-of-truth/API_ANTI_DISTILLATION.md",

@@ -38,6 +38,7 @@ def _make_explorer():
     from services.measurement.repositories.journey_repo import JourneyRepository
     from services.measurement.repositories.spend_repo import SpendRepository
     from services.campaign.exploration import CampaignPopulationExplorer
+
     return CampaignPopulationExplorer(
         touchpoint_repo=TouchpointRepository(),
         conversion_repo=ConversionRepository(),
@@ -48,10 +49,11 @@ def _make_explorer():
 
 
 @pytest.fixture(autouse=True)
-async def clear_all_stores():
+def clear_all_stores():
     from services.measurement.repositories.touchpoint_repo import _local_store as tp
     from services.measurement.repositories.conversion_repo import _local_store as cv
     from services.measurement.repositories.attribution_run_repo import _local_credits as cr
+
     tp.clear()
     cv.clear()
     cr.clear()
@@ -78,51 +80,79 @@ async def _seed_full_journey():
     cv_repo = ConversionRepository()
 
     # Step 1: display impression (upper funnel)
-    await tp_repo.upsert({
-        "tenant_id": TENANT, "campaign_id": CAMPAIGN_ID,
-        "touchpoint_type": "impression", "channel": "display",
-        "profile_id": PROFILE_ID, "cluster_id": CLUSTER_ID,
-        "anonymous_id": "anon-pm-1",
-        "occurred_at": _ts(), "idempotency_key": f"tp-pm-imp-{uuid.uuid4()}",
-    })
+    await tp_repo.upsert(
+        {
+            "tenant_id": TENANT,
+            "campaign_id": CAMPAIGN_ID,
+            "touchpoint_type": "impression",
+            "channel": "display",
+            "profile_id": PROFILE_ID,
+            "cluster_id": CLUSTER_ID,
+            "anonymous_id": "anon-pm-1",
+            "occurred_at": _ts(),
+            "idempotency_key": f"tp-pm-imp-{uuid.uuid4()}",
+        }
+    )
 
     # Step 2: paid search click (mid funnel)
-    await tp_repo.upsert({
-        "tenant_id": TENANT, "campaign_id": CAMPAIGN_ID,
-        "touchpoint_type": "click", "channel": "paid_search",
-        "profile_id": PROFILE_ID, "cluster_id": CLUSTER_ID,
-        "anonymous_id": "anon-pm-1",
-        "occurred_at": _ts(), "idempotency_key": f"tp-pm-click-{uuid.uuid4()}",
-    })
+    await tp_repo.upsert(
+        {
+            "tenant_id": TENANT,
+            "campaign_id": CAMPAIGN_ID,
+            "touchpoint_type": "click",
+            "channel": "paid_search",
+            "profile_id": PROFILE_ID,
+            "cluster_id": CLUSTER_ID,
+            "anonymous_id": "anon-pm-1",
+            "occurred_at": _ts(),
+            "idempotency_key": f"tp-pm-click-{uuid.uuid4()}",
+        }
+    )
 
     # Step 3: email re-engagement (mid funnel)
-    await tp_repo.upsert({
-        "tenant_id": TENANT, "campaign_id": CAMPAIGN_ID,
-        "touchpoint_type": "email_open", "channel": "email",
-        "profile_id": PROFILE_ID, "cluster_id": CLUSTER_ID,
-        "anonymous_id": "anon-pm-1",
-        "occurred_at": _ts(), "idempotency_key": f"tp-pm-email-{uuid.uuid4()}",
-    })
+    await tp_repo.upsert(
+        {
+            "tenant_id": TENANT,
+            "campaign_id": CAMPAIGN_ID,
+            "touchpoint_type": "email_open",
+            "channel": "email",
+            "profile_id": PROFILE_ID,
+            "cluster_id": CLUSTER_ID,
+            "anonymous_id": "anon-pm-1",
+            "occurred_at": _ts(),
+            "idempotency_key": f"tp-pm-email-{uuid.uuid4()}",
+        }
+    )
 
     # Step 4: purchase conversion (lower funnel)
-    await cv_repo.upsert({
-        "tenant_id": TENANT, "campaign_id": CAMPAIGN_ID,
-        "source_event_id": f"ev-pm-{uuid.uuid4()}",
-        "conversion_type": "purchase",
-        "gross_value": 199.99, "net_value": 169.99,
-        "occurred_at": _ts(),
-    })
+    await cv_repo.upsert(
+        {
+            "tenant_id": TENANT,
+            "campaign_id": CAMPAIGN_ID,
+            "source_event_id": f"ev-pm-{uuid.uuid4()}",
+            "conversion_type": "purchase",
+            "gross_value": 199.99,
+            "net_value": 169.99,
+            "occurred_at": _ts(),
+        }
+    )
 
     # Attribution credit (linear model — equal weight across 3 touchpoints)
     for weight in [1.0 / 3] * 3:
-        _local_credits.append({
-            "credit_id": str(uuid.uuid4()),
-            "tenant_id": TENANT, "campaign_id": CAMPAIGN_ID,
-            "cluster_id": CLUSTER_ID, "credit_weight": weight,
-            "gross_value": 199.99 * weight, "net_value": 169.99 * weight,
-            "is_active": True, "conversion_id": CONVERSION_ID,
-            "model": "linear",
-        })
+        _local_credits.append(
+            {
+                "credit_id": str(uuid.uuid4()),
+                "tenant_id": TENANT,
+                "campaign_id": CAMPAIGN_ID,
+                "cluster_id": CLUSTER_ID,
+                "credit_weight": weight,
+                "gross_value": 199.99 * weight,
+                "net_value": 169.99 * weight,
+                "is_active": True,
+                "conversion_id": CONVERSION_ID,
+                "model": "linear",
+            }
+        )
 
 
 class TestPaidMediaEcommerceFlow:
@@ -163,6 +193,7 @@ class TestPaidMediaEcommerceFlow:
     async def test_conversions_returned_for_campaign(self):
         await _seed_full_journey()
         from services.measurement.repositories.conversion_repo import ConversionRepository
+
         repo = ConversionRepository()
         conversions = await repo.list_by_campaign(TENANT, CAMPAIGN_ID, include_unattributed=True)
         assert len(conversions) >= 1, "Purchase conversion must be returned"
@@ -172,6 +203,7 @@ class TestPaidMediaEcommerceFlow:
     async def test_cluster_rollup_captures_linear_attribution(self):
         await _seed_full_journey()
         from services.measurement.repositories.attribution_run_repo import AttributionRunRepository
+
         repo = AttributionRunRepository()
         rows = await repo.campaign_cluster_rollup(TENANT, CAMPAIGN_ID)
         cluster_row = next((r for r in rows if r.get("cluster_id") == CLUSTER_ID), None)
@@ -183,7 +215,8 @@ class TestPaidMediaEcommerceFlow:
         await _seed_full_journey()
         explorer = _make_explorer()
         result = await explorer.get_graph_anchor(
-            TENANT, CAMPAIGN_ID,
+            TENANT,
+            CAMPAIGN_ID,
             request={"depth": 2, "max_nodes": 100, "max_edges": 300},
         )
         node_ids = [n.get("id") for n in result.get("nodes", [])]
@@ -194,7 +227,8 @@ class TestPaidMediaEcommerceFlow:
         await _seed_full_journey()
         explorer = _make_explorer()
         result = await explorer.get_graph_anchor(
-            TENANT, CAMPAIGN_ID,
+            TENANT,
+            CAMPAIGN_ID,
             request={"depth": 2, "max_nodes": 10, "max_edges": 20},
         )
         assert len(result.get("nodes", [])) <= 10
@@ -206,6 +240,7 @@ class TestPaidMediaEcommerceFlow:
         be visible through the touchpoint repo's campaign read."""
         await _seed_full_journey()
         from services.measurement.repositories.touchpoint_repo import TouchpointRepository
+
         repo = TouchpointRepository()
         touchpoints = await repo.list_by_campaign(TENANT, CAMPAIGN_ID, limit=50)
         channels = {t.get("channel") for t in touchpoints}
@@ -218,10 +253,13 @@ class TestPaidMediaEcommerceFlow:
         """Linear attribution across 3 touchpoints must sum to ~1.0."""
         await _seed_full_journey()
         from services.measurement.repositories.attribution_run_repo import _local_credits
+
         campaign_credits = [
-            c for c in _local_credits
-            if c.get("campaign_id") == CAMPAIGN_ID
-            and c.get("conversion_id") == CONVERSION_ID
+            c
+            for c in _local_credits
+            if c.get("campaign_id") == CAMPAIGN_ID and c.get("conversion_id") == CONVERSION_ID
         ]
         total_weight = sum(c.get("credit_weight", 0) for c in campaign_credits)
-        assert abs(total_weight - 1.0) < 0.001, f"Credit weights must sum to 1.0 ± 0.001, got {total_weight}"
+        assert abs(total_weight - 1.0) < 0.001, (
+            f"Credit weights must sum to 1.0 ± 0.001, got {total_weight}"
+        )

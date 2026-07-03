@@ -76,17 +76,34 @@ def top_level_summary(tracked: list[str]) -> list[tuple[str, int, int]]:
 
 
 def authored_docs() -> dict[str, list[str]]:
+    """Group authored docs for REPO-INDEX coverage.
+
+    Most authored docs live at ``docs/*.md``. Product-domain slices may also
+    introduce narrowly scoped nested docs (for example
+    ``docs/semantic-sentiment/`` and its runbooks). Include those nested docs
+    explicitly so ``sync_docs.py`` is deterministic in CI without sweeping in
+    archive/source-of-truth trees owned by separate documentation validators.
+    """
     groups: dict[str, list[str]] = defaultdict(list)
-    for path in sorted(DOCS.glob("*.md")):
+    paths = list(DOCS.glob("*.md"))
+    paths.extend((DOCS / "semantic-sentiment").glob("*.md"))
+    paths.extend((DOCS / "runbooks" / "semantic-sentiment").glob("*.md"))
+    for path in sorted(paths):
+        rel = path.relative_to(DOCS)
         if path.name in {INDEX_PATH.name, AUTOMATION_PATH.name, "CHANGELOG.md"}:
             continue
+        doc_ref = rel.as_posix()
         stem = path.stem
-        if stem.startswith("SDK-"):
-            groups["SDKs"].append(path.name)
+        if rel.parts[0] == "runbooks":
+            groups["Runbooks"].append(doc_ref)
+        elif rel.parts[0] == "semantic-sentiment":
+            groups["Product Domains"].append(doc_ref)
+        elif stem.startswith("SDK-"):
+            groups["SDKs"].append(doc_ref)
         elif stem in {"ARCHITECTURE", "BACKEND-API", "INTELLIGENCE-GRAPH", "AGENT-CONTROLLER"}:
-            groups["Platform"].append(path.name)
+            groups["Platform"].append(doc_ref)
         else:
-            groups["Specialized"].append(path.name)
+            groups["Specialized"].append(doc_ref)
     return dict(sorted(groups.items()))
 
 
@@ -149,25 +166,29 @@ def write_index(tracked: list[str]) -> None:
     for name, dirs, files in rows:
         lines.append(f"| `{name}` | {dirs} | {files} |")
 
-    lines.extend([
-        "",
-        "## Authored documentation coverage",
-        "",
-        "The following authored docs are expected to stay aligned with code changes:",
-        "",
-    ])
+    lines.extend(
+        [
+            "",
+            "## Authored documentation coverage",
+            "",
+            "The following authored docs are expected to stay aligned with code changes:",
+            "",
+        ]
+    )
     for group, docs in authored_docs().items():
         lines.append(f"### {group}")
         for doc in docs:
             lines.append(f"- `{doc}`")
         lines.append("")
 
-    lines.extend([
-        "## Operational rule",
-        "",
-        "Any code change that modifies subsystem behavior must update at least one authored doc or explicitly document why no authored doc changed in the pull request.",
-        "",
-    ])
+    lines.extend(
+        [
+            "## Operational rule",
+            "",
+            "Any code change that modifies subsystem behavior must update at least one authored doc or explicitly document why no authored doc changed in the pull request.",
+            "",
+        ]
+    )
     INDEX_PATH.write_text("\n".join(lines))
 
 
