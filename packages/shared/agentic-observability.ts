@@ -198,6 +198,140 @@ export type AgenticObservabilityEventType =
   | 'x402_replay_risk_observed'
   | 'x402_provider_observed';
 
+
+// ---------------------------------------------------------------------------
+// Agentic Observation Contract v2
+// ---------------------------------------------------------------------------
+
+export type AgenticVerificationStatus =
+  | 'unverified'
+  | 'runtime_observed'
+  | 'gateway_observed'
+  | 'server_confirmed'
+  | 'provider_confirmed'
+  | 'contradicted'
+  | 'reconciled'
+  | 'verification_expired';
+
+export type AgenticObservationSchemaVersion = '1.0' | '2.0';
+
+export type AgenticRuntimeContext = {
+  runtime_id?: string;
+  environment?: string;
+  region?: string;
+  sdk_name?: string;
+  sdk_version?: string;
+};
+
+export type AgenticCorrelationContext = {
+  trace_id?: string;
+  span_id?: string;
+  task_id?: string;
+  parent_task_id?: string;
+  connection_id?: string;
+  session_id?: string;
+  invocation_id?: string;
+  provider_request_id?: string;
+  external_object_id?: string;
+  campaign_id?: string;
+  journey_id?: string;
+};
+
+export type AgenticMcpContext = {
+  protocol?: string;
+  protocol_version?: string;
+  transport?: string;
+  client_name?: string;
+  client_version?: string;
+  server_name?: string;
+  server_version?: string;
+  server_identity_hash?: string;
+  connection_state?: string;
+  negotiated_capabilities?: string[];
+  tool_catalog_revision?: string;
+  resource_catalog_revision?: string;
+  prompt_catalog_revision?: string;
+  reconnect_count?: number;
+  disconnect_reason?: string;
+  tool_name?: string;
+  tool_id?: string;
+  tool_schema_hash?: string;
+  invocation_phase?: string;
+  attempt?: number;
+  duration_ms?: number;
+  error_code?: string;
+  error_class?: string;
+  cancelled?: boolean;
+  arguments_policy?: string;
+  arguments_hash?: string;
+  result_policy?: string;
+  result_hash?: string;
+  result_ref?: string;
+};
+
+export type AgenticAuthorizationContext = {
+  authorization_id?: string;
+  credential_ref?: string;
+  external_account_id?: string;
+  workspace_id?: string;
+  grantor_id?: string;
+  grantee_id?: string;
+  scopes?: string[];
+  scope_hash?: string;
+  approved_at?: string;
+  expires_at?: string;
+  revoked_at?: string;
+  revocation_reason?: string;
+  approval_evidence_ref?: string;
+};
+
+export type AgenticVerificationContext = {
+  verification_status?: AgenticVerificationStatus;
+  verification_source?: string;
+  verification_confidence?: number;
+  verified_at?: string;
+  provider_request_id?: string;
+  external_object_id?: string;
+  evidence_ref?: string;
+  contradiction_reason?: string;
+};
+
+export type AgenticPrivacyContext = {
+  content_capture_mode?: string;
+  redaction_policy_id?: string;
+  privacy_class?: string;
+  retention_class?: string;
+  consent_reference?: string;
+  contains_sensitive_data?: boolean;
+};
+
+/**
+ * Schema v2 envelope used by server-side SDKs and MCP middleware.
+ * event_type is the v2 name; event_name remains accepted as a v1 compatibility
+ * alias by backend routes. Aether observes these records and never executes the
+ * represented provider action.
+ */
+export type AgenticObservationEventV2 = Omit<AgenticObservationEvent, 'event_name' | 'schema_version' | 'agent'> & {
+  event_type: AgenticObservabilityEventType;
+  event_name?: AgenticObservabilityEventType;
+  schema_version: '2.0';
+  agent?: AgenticObservationEvent['agent'] & {
+    agent_version?: string;
+    model_version?: string;
+    framework_version?: string;
+    runtime_id?: string;
+    environment?: string;
+    owner_id?: string;
+    organization_id?: string;
+  };
+  runtime?: AgenticRuntimeContext;
+  correlation?: AgenticCorrelationContext;
+  mcp?: AgenticMcpContext;
+  authorization?: AgenticAuthorizationContext;
+  verification?: AgenticVerificationContext;
+  privacy?: AgenticPrivacyContext;
+};
+
 // ---------------------------------------------------------------------------
 // x402 observation-specific types
 // ---------------------------------------------------------------------------

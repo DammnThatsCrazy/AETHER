@@ -3416,6 +3416,20 @@
       "since_version": "9.0.0"
     },
     {
+      "path": "docs/architecture/AGENTIC_INGESTION_PIPELINE.md",
+      "title": "Agentic Ingestion Pipeline",
+      "slug": "architecture/agentic-ingestion-pipeline",
+      "section": "architecture",
+      "visibility": "I",
+      "audience": [
+        "dev-senior",
+        "architect",
+        "ai"
+      ],
+      "status": "experimental",
+      "since_version": "8.11.0"
+    },
+    {
       "path": "docs/architecture/BACKEND_INTELLIGENCE_ARCHITECTURE.md",
       "title": "Aether Backend Intelligence Architecture Blueprint",
       "slug": "architecture/backend-intelligence",
@@ -3457,6 +3471,20 @@
       ],
       "status": "stable",
       "since_version": "9.0.0"
+    },
+    {
+      "path": "docs/architecture/GRAPH_OUTBOX.md",
+      "title": "Agentic Graph Outbox",
+      "slug": "architecture/agentic-graph-outbox",
+      "section": "architecture",
+      "visibility": "I",
+      "audience": [
+        "dev-senior",
+        "architect",
+        "ai"
+      ],
+      "status": "experimental",
+      "since_version": "8.11.0"
     },
     {
       "path": "docs/architecture/UNIVERSAL_GRAPH_ARCHITECTURE.md",
@@ -4250,6 +4278,34 @@
       "canonical_owner": "platform@aether"
     },
     {
+      "path": "docs/runbooks/agentic-graph-backlog.md",
+      "title": "Agentic Graph Backlog Runbook",
+      "slug": "operations/agentic-graph-backlog",
+      "section": "operations",
+      "visibility": "I",
+      "audience": [
+        "ops",
+        "dev-senior",
+        "architect"
+      ],
+      "status": "experimental",
+      "since_version": "8.11.0"
+    },
+    {
+      "path": "docs/runbooks/agentic-reconciliation.md",
+      "title": "Agentic Reconciliation Runbook",
+      "slug": "operations/agentic-reconciliation",
+      "section": "operations",
+      "visibility": "I",
+      "audience": [
+        "ops",
+        "dev-senior",
+        "architect"
+      ],
+      "status": "experimental",
+      "since_version": "8.11.0"
+    },
+    {
       "path": "docs/runbooks/semantic-sentiment/semantic-sentiment-operations.md",
       "title": "Semantic-Sentiment Operations Runbook",
       "slug": "semantic-sentiment/operations-runbook",
@@ -4263,6 +4319,20 @@
       "since_version": "8.11.0",
       "estimated_read_minutes": 6,
       "canonical_owner": "platform-intelligence@aether"
+    },
+    {
+      "path": "docs/sdk/AGENTIC_CONTRACT_V2.md",
+      "title": "Agentic Observation Contract v2",
+      "slug": "sdk/agentic-contract-v2",
+      "section": "sdk",
+      "visibility": "I",
+      "audience": [
+        "dev-senior",
+        "architect",
+        "ai"
+      ],
+      "status": "experimental",
+      "since_version": "8.11.0"
     },
     {
       "path": "docs/security/UNIVERSAL_GRAPH_SECURITY_MODEL.md",

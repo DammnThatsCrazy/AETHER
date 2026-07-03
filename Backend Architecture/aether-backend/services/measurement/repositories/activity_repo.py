@@ -140,6 +140,49 @@ class ActivityRepository:
             )
         return activity
 
+
+    async def find_by_source_event(self, tenant_id: str, source_event_id: str) -> list[dict[str, Any]]:
+        """Return tenant-scoped canonical activity rows for a source event."""
+        pool = await self._pool()
+        if pool is None:
+            return [
+                row for row in _local_store.values()
+                if row.get("tenant_id") == tenant_id and row.get("source_event_id") == source_event_id
+            ]
+
+        async with pool.acquire() as conn:
+            rows = await conn.fetch(
+                """
+                SELECT * FROM canonical_activity
+                WHERE tenant_id = $1 AND source_event_id = $2
+                ORDER BY server_received_at DESC
+                LIMIT 100
+                """,
+                tenant_id,
+                source_event_id,
+            )
+        return [dict(row) for row in rows]
+
+    async def count_by_source(self, tenant_id: str, source_system: str) -> int:
+        """Count tenant-scoped canonical activity rows from one source system."""
+        pool = await self._pool()
+        if pool is None:
+            return len([
+                row for row in _local_store.values()
+                if row.get("tenant_id") == tenant_id and row.get("source_system") == source_system
+            ])
+
+        async with pool.acquire() as conn:
+            row = await conn.fetchrow(
+                """
+                SELECT COUNT(*) AS cnt FROM canonical_activity
+                WHERE tenant_id = $1 AND source_system = $2
+                """,
+                tenant_id,
+                source_system,
+            )
+        return int(row["cnt"] if row else 0)
+
     async def update_status(
         self,
         tenant_id: str,
