@@ -3,7 +3,7 @@ title: Communications Backfill & Replay Runbook
 slug: comms/comms-backfill-runbook
 section: operations
 visibility: I
-audience: [operator, sre]
+audience: [ops, dev-senior]
 source_files:
   - Backend Architecture/aether-backend/services/integrations/connectors/klaviyo.py
   - Backend Architecture/aether-backend/services/comms/ingest.py

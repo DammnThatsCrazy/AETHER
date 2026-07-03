@@ -1,9 +1,9 @@
 ---
 title: Generic Signed Communications Webhook
 slug: comms/comms-generic-webhook
-section: integrations
-visibility: E
-audience: [dev, integrator]
+section: operations
+visibility: P
+audience: [dev-senior, dev-junior]
 source_files:
   - Backend Architecture/aether-backend/services/comms/routes.py
   - Backend Architecture/aether-backend/services/comms/ingest.py

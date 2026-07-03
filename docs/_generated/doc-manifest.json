@@ -3708,19 +3708,19 @@
       "section": "operations",
       "visibility": "I",
       "audience": [
-        "operator",
-        "sre"
+        "ops",
+        "dev-senior"
       ]
     },
     {
       "path": "docs/comms/COMMS_GENERIC_WEBHOOK.md",
       "title": "Generic Signed Communications Webhook",
       "slug": "comms/comms-generic-webhook",
-      "section": "integrations",
-      "visibility": "E",
+      "section": "operations",
+      "visibility": "P",
       "audience": [
-        "dev",
-        "integrator"
+        "dev-senior",
+        "dev-junior"
       ]
     },
     {
@@ -3730,8 +3730,8 @@
       "section": "operations",
       "visibility": "I",
       "audience": [
-        "operator",
-        "release-owner"
+        "ops",
+        "dev-senior"
       ]
     },
     {
@@ -3754,7 +3754,7 @@
       "audience": [
         "dev-senior",
         "architect",
-        "product"
+        "exec"
       ]
     },
     {

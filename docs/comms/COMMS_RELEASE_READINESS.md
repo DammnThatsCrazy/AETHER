@@ -3,7 +3,7 @@ title: Communications Intelligence — Release Readiness
 slug: comms/comms-release-readiness
 section: operations
 visibility: I
-audience: [operator, release-owner]
+audience: [ops, dev-senior]
 source_files:
   - Backend Architecture/aether-backend/config/settings.py
   - tests/integration/test_comms_golden_scenario.py

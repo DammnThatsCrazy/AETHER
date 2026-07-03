@@ -3,7 +3,7 @@ title: Communications Intelligence Overview
 slug: comms/communications-intelligence-overview
 section: architecture
 visibility: I
-audience: [dev-senior, architect, product]
+audience: [dev-senior, architect, exec]
 source_files:
   - Backend Architecture/aether-backend/services/comms/contracts.py
   - Backend Architecture/aether-backend/services/comms/projector.py
