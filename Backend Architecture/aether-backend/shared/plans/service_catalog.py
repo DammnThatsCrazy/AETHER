@@ -34,7 +34,7 @@ def _pricing(cost: str, opt_a: str, opt_b: str, opt_c: str) -> ServicePricing:
     )
 
 
-# 34-service registry. Numeric values match the Rate Limiting tab exactly.
+# 35-service registry. Numeric values match the Rate Limiting tab exactly.
 SERVICE_CATALOG: list[ServiceDefinition] = [
     # 1. Omni-Capture (Ingestion)
     ServiceDefinition(
@@ -315,6 +315,14 @@ SERVICE_CATALOG: list[ServiceDefinition] = [
         endpoint_pattern="/v1/crossdomain/*",
         pricing=_pricing("0.06", "0.15", "0.24", "0.40"),
         plan_access={_P1: None, _P2: None, _P3: None, _P4: "Core Feature"},
+    ),
+    # 35. Semantic-Sentiment Intelligence
+    ServiceDefinition(
+        name="Semantic-Sentiment",
+        pillar="Intelligence",
+        endpoint_pattern="/v1/semantic/*",
+        pricing=_pricing("0.10", "0.25", "0.40", "0.60"),
+        plan_access={_P1: None, _P2: None, _P3: "Advanced", _P4: "Core Feature"},
     ),
 ]
 

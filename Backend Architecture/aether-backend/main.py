@@ -859,15 +859,22 @@ def create_app() -> FastAPI:
         logger.info("Risk Overlays: disabled (set FEATURE_RISK_OVERLAYS=true to enable)")
 
     # Agentic Observability Layer — observation-only; AETHER never executes.
-    from services.agentic_observability.routes import router as agentic_obs_router
-    from services.protocol_observability.routes import router as protocol_obs_router
-    from services.agent_comm_observability.routes import router as comm_obs_router
-    from services.external_account_observability.routes import router as ext_account_obs_router
-    app.include_router(agentic_obs_router, tags=["Agentic Observability"])
-    app.include_router(protocol_obs_router, tags=["Protocol Observability"])
-    app.include_router(comm_obs_router, tags=["Agent Comm Observability"])
-    app.include_router(ext_account_obs_router, tags=["External Account Observability"])
-    logger.info("Agentic Observability Layer mounted (30 observation routes + 7 Kyber routes)")
+    agentic_flags = settings.agentic_observability
+    if agentic_flags.enabled:
+        from services.agentic_observability.routes import router as agentic_obs_router
+        app.include_router(agentic_obs_router, tags=["Agentic Observability"])
+        if agentic_flags.protocol_enabled:
+            from services.protocol_observability.routes import router as protocol_obs_router
+            app.include_router(protocol_obs_router, tags=["Protocol Observability"])
+        if agentic_flags.communication_enabled:
+            from services.agent_comm_observability.routes import router as comm_obs_router
+            app.include_router(comm_obs_router, tags=["Agent Comm Observability"])
+        if agentic_flags.external_accounts_enabled:
+            from services.external_account_observability.routes import router as ext_account_obs_router
+            app.include_router(ext_account_obs_router, tags=["External Account Observability"])
+        logger.info("Agentic Observability Layer mounted according to AGENTIC_* feature flags")
+    else:
+        logger.info("Agentic Observability Layer disabled (AGENTIC_OBSERVABILITY_ENABLED=false)")
 
     # ── Delivery API (durable provider dispatch + outcome tracking) ──────
     try:

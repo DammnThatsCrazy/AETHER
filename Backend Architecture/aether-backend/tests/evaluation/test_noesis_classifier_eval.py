@@ -135,12 +135,23 @@ EVAL_CASES: list[tuple[str, str]] = [
     ("What was the result of suggestions?", "suggestion_outcome_lookup"),
     ("Show suggestion impact and feedback", "suggestion_outcome_lookup"),
 
-    # communications_insight (5 examples)
-    ("Is our email engagement inflated by machine activity?", "communications_insight"),
-    ("How is email deliverability trending?", "communications_insight"),
-    ("What is our email bounce rate?", "communications_insight"),
-    ("How many unsubscribes happened this month?", "communications_insight"),
-    ("Show comms open rate and click rate", "communications_insight"),
+    # sentiment_explain (4 examples)
+    ("Why did sentiment toward Product X decline?", "sentiment_explain"),
+    ("Explain sentiment about campaign camp_123", "sentiment_explain"),
+    ("What is the sentiment toward entity ent_456?", "sentiment_explain"),
+    ("How did emotion toward this brand change?", "sentiment_explain"),
+
+    # narrative_analysis (4 examples)
+    ("Which narratives are active for this tenant?", "narrative_analysis"),
+    ("Show narrative diffusion across the graph", "narrative_analysis"),
+    ("Analyze narrative propagation this week", "narrative_analysis"),
+    ("What discourse is spreading among users?", "narrative_analysis"),
+
+    # semantic_profile_explain (4 examples)
+    ("Explain semantic profile for entity ent_789", "semantic_profile_explain"),
+    ("What is the semantic state of profile user_001?", "semantic_profile_explain"),
+    ("Show semantic summary for this user", "semantic_profile_explain"),
+    ("What semantic stance is active for ent_456?", "semantic_profile_explain"),
 ]
 
 

@@ -449,6 +449,12 @@ class NoesisService:
                 candidates.append(("suggestion_outcome_lookup", 0.82))
             else:
                 candidates.append(("suggestion_lookup", 0.80))
+        if any(k in low for k in ("sentiment", "feeling", "emotion")) and any(k in low for k in ("explain", "why", "what", "toward", "about", "declined", "changed", "shift")):
+            candidates.append(("sentiment_explain", 0.86))
+        if any(k in low for k in ("narrative", "narratives", "discourse", "story propagation", "narrative analysis", "narrative diffusion")):
+            candidates.append(("narrative_analysis", 0.85))
+        if any(k in low for k in ("semantic profile", "semantic state", "semantic summary", "semantic observations", "semantic stance")):
+            candidates.append(("semantic_profile_explain", 0.87))
 
         if not candidates:
             # If conversation history provides a prior intent, carry it forward with low confidence
@@ -563,6 +569,8 @@ class NoesisService:
             "suggestion_outcome_lookup",
         ):
             return await self._suggestion_dispatch(plan, scope)
+        if plan.intent in ("sentiment_explain", "narrative_analysis", "semantic_profile_explain"):
+            return await self._semantic_dispatch(plan, scope)
         return self._unsupported_response(body, [])
 
     def _tenant_filter(self, scope: Scope) -> Optional[dict[str, Any]]:
@@ -827,6 +835,74 @@ class NoesisService:
             sufficient=True,
         )
         return self._response(plan, f"Found {len(risky)} tenant-scoped entities sorted by available risk score.", risky, self._entity_actions(risky, scope), evidence=evidence, scope=scope)
+
+    async def _semantic_dispatch(self, plan: QueryPlan, scope: Scope) -> NoesisResponse:
+        """Read-only delegation to semantic-sentiment handlers."""
+        from services.semantic_intelligence.engine import (
+            cascades_for_tenant,
+            entity_state,
+            get_store,
+        )
+
+        tid = scope.effective_tenant_id
+        store = get_store()
+
+        if plan.intent == "semantic_profile_explain":
+            target = plan.target or ""
+            state = entity_state(tid, target)
+            answer = state.semantic_summary or "insufficient_data"
+            return NoesisResponse(
+                answer=answer,
+                mode="deterministic",
+                intent=plan.intent,
+                confidence=state.confidence,
+                results=[state.model_dump(mode="json")],
+                query_debug={"plan": plan.model_dump(), "read_only": True},
+            )
+
+        if plan.intent == "sentiment_explain":
+            target = plan.target or ""
+            rows = store.list_sentiment(tid, target)[:plan.limit]
+            if not rows:
+                return NoesisResponse(
+                    answer=f"No sentiment observations found for '{target}'.",
+                    mode="deterministic",
+                    intent=plan.intent,
+                    confidence=0.5,
+                    query_debug={"plan": plan.model_dump(), "read_only": True},
+                )
+            answer = (
+                f"Found {len(rows)} sentiment observation(s) for '{target}'. "
+                f"Most recent valence: {rows[-1].valence:+.2f}."
+            )
+            return NoesisResponse(
+                answer=answer,
+                mode="deterministic",
+                intent=plan.intent,
+                confidence=0.85,
+                results=[r.model_dump(mode="json") for r in rows],
+                query_debug={"plan": plan.model_dump(), "read_only": True},
+            )
+
+        if plan.intent == "narrative_analysis":
+            semantic_rows = store.list_semantic(tid)
+            narratives = sorted({n for r in semantic_rows for n in r.narrative_frames})
+            cascades = cascades_for_tenant(tid)
+            answer = (
+                f"{len(narratives)} active narrative(s) across {len(cascades)} cascade(s)."
+                if narratives
+                else "No narratives detected for this tenant."
+            )
+            return NoesisResponse(
+                answer=answer,
+                mode="deterministic",
+                intent=plan.intent,
+                confidence=0.8,
+                results=[{"narratives": narratives, "cascade_count": len(cascades)}],
+                query_debug={"plan": plan.model_dump(), "read_only": True},
+            )
+
+        return self._ambiguous(plan, f"Semantic intent '{plan.intent}' dispatched but not handled.")
 
     async def _suggestion_dispatch(self, plan: QueryPlan, scope: Scope) -> NoesisResponse:
         """Read-only delegation to suggestion Noesis handlers. Never mutates suggestion state."""

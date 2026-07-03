@@ -74,3 +74,6 @@ class ObservationResponse(BaseModel):
     received_at: str
     graph_mutations_queued: int = 0
     tenant_id: str
+    graph_mutations_built: int = 0
+    graph_mutations_persisted: int = 0
+    graph_projection_status: str = "not_applicable"
