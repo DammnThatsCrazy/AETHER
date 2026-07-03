@@ -108,3 +108,10 @@ not listed is backend responsibility.
 - If a host app needs to display or reference a canonical identity, it must
   read `canonical_entity_id` from the backend API (`GET /v1/identity/entities/{id}`)
   using server-side credentials, not from the SDK.
+
+
+## Agentic server-side contract v2
+
+Server-side agent and MCP SDKs use Agentic Observation Contract v2 for observation-only telemetry. The backend accepts `event_type` as the v2 canonical event field and keeps `event_name` as a v1 compatibility alias. The contract carries runtime, correlation, MCP, authorization, verification, and privacy context groups, and it still rejects any payload that claims `execution_by_aether=true`.
+
+The Node foundation is exposed from `@aether/server` as `sdk.agentic` helpers for agent, runtime, MCP connection, tool invocation, authorization, provider action, and provider verification observations. These helpers only enqueue Contract v2 telemetry and must not be used as provider execution clients.
