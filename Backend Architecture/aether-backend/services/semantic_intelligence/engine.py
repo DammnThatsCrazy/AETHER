@@ -7,9 +7,10 @@ external credentials.
 
 from __future__ import annotations
 
+import hashlib
 import re
 from collections import defaultdict
-from datetime import timedelta
+from datetime import datetime, timedelta
 from typing import Any
 
 from .models import (
@@ -60,6 +61,13 @@ class SemanticSentimentStore:
         return obs
 
     def put_sentiment(self, obs: SentimentObservation) -> SentimentObservation:
+        for existing in self.sentiment.values():
+            if (
+                existing.semantic_observation_id == obs.semantic_observation_id
+                and existing.tenant_id == obs.tenant_id
+                and existing.target_subject_ref == obs.target_subject_ref
+            ):
+                return existing
         self.sentiment[obs.sentiment_observation_id] = obs
         return obs
 
@@ -80,13 +88,45 @@ class SemanticSentimentStore:
         return sorted(rows, key=lambda o: o.occurred_at)
 
 
-store = SemanticSentimentStore()
+_store = SemanticSentimentStore()
+
+
+def get_store() -> SemanticSentimentStore:
+    return _store
+
+
+def set_store(new_store: SemanticSentimentStore) -> None:
+    """Replace the active store. Used by startup hooks and tests to inject a persistent backend."""
+    global _store
+    _store = new_store
+
+
+SUPPORTED_LANGUAGES: frozenset[str] = frozenset({
+    "en", "es", "fr", "de", "pt", "it", "nl", "pl", "sv", "da", "fi", "no",
+})
 
 
 def classify_event(
     payload: dict[str, Any], tenant_id: str
 ) -> tuple[SemanticObservation, list[SentimentObservation]]:
     text = str(payload.get("content") or payload.get("text") or "")[:5000]
+    text_stripped = text.strip()
+    language = str(payload.get("language", "en"))
+    should_abstain = not text_stripped or language not in SUPPORTED_LANGUAGES
+    abstention_reason: str | None = None
+    if not text_stripped:
+        abstention_reason = "insufficient_content"
+    elif language not in SUPPORTED_LANGUAGES:
+        abstention_reason = f"unsupported_language:{language}"
+
+    occurred_at_raw: str | None = payload.get("occurred_at")
+    occurred_at: datetime | None = None
+    if occurred_at_raw:
+        try:
+            occurred_at = datetime.fromisoformat(occurred_at_raw.replace("Z", "+00:00"))
+        except (ValueError, AttributeError):
+            occurred_at = None
+
     source_event_id = str(
         payload.get("source_event_id") or payload.get("event_id") or "event_unknown"
     )
@@ -107,7 +147,7 @@ def classify_event(
         if payload.get("target_type", "other") in SubjectType._value2member_map_
         else SubjectType.OTHER
     )
-    words = set(re.findall(r"[a-zA-Z_]+", text.lower()))
+    words = set(re.findall(r"[a-zA-Z_]+", text_stripped.lower()))
     pos = len(words & POSITIVE)
     neg = len(words & NEGATIVE)
     stance = StanceLabel.NEUTRAL
@@ -120,7 +160,7 @@ def classify_event(
         if candidate.value in words:
             intent = candidate
             break
-    speech = SpeechAct.QUESTION if "?" in text else SpeechAct.STATEMENT
+    speech = SpeechAct.QUESTION if "?" in text_stripped else SpeechAct.STATEMENT
     if "complain" in words or "broken" in words:
         speech = SpeechAct.COMPLAINT
     if "recommend" in words:
@@ -131,7 +171,7 @@ def classify_event(
         source_ref=source_event_id,
         confidence=0.9,
     )
-    obs = SemanticObservation(
+    obs_kwargs: dict[str, Any] = dict(
         tenant_id=tenant_id,
         project_id=payload.get("project_id"),
         source_event_id=source_event_id,
@@ -149,7 +189,7 @@ def classify_event(
         creative_id=payload.get("creative_id"),
         agent_id=payload.get("agent_id"),
         wallet_id=payload.get("wallet_id"),
-        language=str(payload.get("language", "en")),
+        language=language,
         topics=sorted(
             (
                 words
@@ -173,76 +213,91 @@ def classify_event(
         intent=intent,
         speech_act=speech,
         interaction_function=speech,
-        agent_semantics=[a for a in []],
+        agent_semantics=[],
         evidence_refs=[evidence],
-        classification_confidence=0.85 if text else 0.2,
+        classification_confidence=0.85 if not should_abstain else 0.2,
         consent_snapshot_id=payload.get("consent_snapshot_id"),
         purposes=payload.get("purposes", ["analytics"]),
-        status=ObservationStatus.CLASSIFIED if text else ObservationStatus.ABSTAINED,
-        abstention_reason=None if text else "insufficient_content",
+        status=ObservationStatus.ABSTAINED if should_abstain else ObservationStatus.CLASSIFIED,
+        abstention_reason=abstention_reason,
     )
-    sentiments: list[SentimentObservation] = []
-    if text and subject != "unknown_subject" and (pos or neg):
+    if occurred_at is not None:
+        obs_kwargs["occurred_at"] = occurred_at
+    obs = SemanticObservation(**obs_kwargs)
+    stored_obs = _store.put_semantic(obs)
+
+    stored_sentiments: list[SentimentObservation] = []
+    if not should_abstain and subject != "unknown_subject" and (pos or neg):
         total = pos + neg
         valence = (pos - neg) / total
-        emotion = EmotionLabel.JOY if valence > 0 else EmotionLabel.ANGER
-        sentiments.append(
-            SentimentObservation(
-                semantic_observation_id=obs.observation_id,
-                tenant_id=tenant_id,
-                actor_ref=actor_ref,
-                target_subject_ref=subject,
-                source_event_id=source_event_id,
-                valence=valence,
-                arousal=min(1.0, total / 4),
-                emotion_distribution={emotion: 0.75, EmotionLabel.NEUTRAL: 0.25},
-                intensity=min(1.0, total / 3),
-                stance_label=stance,
-                uncertainty=0.15,
-                confidence=0.82,
-                consent_snapshot_id=payload.get("consent_snapshot_id"),
-            )
+        if valence == 0:
+            emotion = EmotionLabel.NEUTRAL
+        elif valence > 0:
+            emotion = EmotionLabel.JOY
+        else:
+            emotion = EmotionLabel.ANGER
+        sent = SentimentObservation(
+            semantic_observation_id=stored_obs.observation_id,
+            tenant_id=tenant_id,
+            actor_ref=actor_ref,
+            target_subject_ref=subject,
+            source_event_id=source_event_id,
+            valence=valence,
+            arousal=min(1.0, total / 4),
+            emotion_distribution={emotion: 0.75, EmotionLabel.NEUTRAL: 0.25},
+            intensity=min(1.0, total / 3),
+            stance_label=stance,
+            uncertainty=0.15,
+            confidence=0.82,
+            consent_snapshot_id=payload.get("consent_snapshot_id"),
         )
-    return store.put_semantic(obs), [store.put_sentiment(s) for s in sentiments]
+        stored_sentiments = [_store.put_sentiment(sent)]
+    return stored_obs, stored_sentiments
 
 
 def entity_state(tenant_id: str, entity_ref: str) -> EntitySemanticState:
-    rows = store.list_semantic(tenant_id, entity_ref)
+    rows = _store.list_semantic(tenant_id, entity_ref)
+    active_rows = [r for r in rows if r.status != ObservationStatus.ABSTAINED]
     now = utc_now()
-    topics = sorted({t for row in rows for t in row.topics})
+    topics = sorted({t for row in active_rows for t in row.topics})
     stance_counts: dict[StanceLabel, float] = defaultdict(float)
     intent_counts: dict[IntentLabel, float] = defaultdict(float)
-    for row in rows:
+    for row in active_rows:
         stance_counts[row.stance] += row.classification_confidence
         intent_counts[row.intent] += row.classification_confidence
     total = sum(stance_counts.values()) or 1
+    inferred_entity_type = (
+        active_rows[0].target_type if active_rows and active_rows[0].target_type else SubjectType.OTHER
+    )
     return EntitySemanticState(
         tenant_id=tenant_id,
         entity_ref=entity_ref,
-        entity_type=SubjectType.OTHER,
+        entity_type=inferred_entity_type,
         subject_ref=entity_ref,
         window_start=(rows[0].occurred_at if rows else now - timedelta(days=1)),
         window_end=now,
         active_topics=topics,
-        dominant_narratives=sorted({n for row in rows for n in row.narrative_frames}),
+        dominant_narratives=sorted({n for row in active_rows for n in row.narrative_frames}),
         stance_distribution={k: round(v / total, 4) for k, v in stance_counts.items()},
         intent_distribution={k: round(v / total, 4) for k, v in intent_counts.items()},
         semantic_summary=(
-            f"{len(rows)} semantic observations for {entity_ref}" if rows else "insufficient_data"
+            f"{len(active_rows)} semantic observations for {entity_ref}"
+            if active_rows
+            else "insufficient_data"
         ),
         observation_count=len(rows),
         unique_source_count=len({r.source_event_id for r in rows}),
-        model_mix={"deterministic-semantic-classifier@1.0.0": len(rows)},
-        confidence=round(sum(r.classification_confidence for r in rows) / len(rows), 4)
-        if rows
+        model_mix={"deterministic-semantic-classifier@1.0.0": len(active_rows)},
+        confidence=round(sum(r.classification_confidence for r in active_rows) / len(active_rows), 4)
+        if active_rows
         else 0,
-        freshness="fresh" if rows else "insufficient_data",
-        evidence_refs=[e for r in rows[-5:] for e in r.evidence_refs],
+        freshness="fresh" if active_rows else "insufficient_data",
+        evidence_refs=[e for r in active_rows[-5:] for e in r.evidence_refs],
     )
 
 
 def cascades_for_tenant(tenant_id: str) -> list[SemanticCascade]:
-    rows = store.list_semantic(tenant_id)
+    rows = _store.list_semantic(tenant_id)
     grouped: dict[tuple[str, str, StanceLabel], list[SemanticObservation]] = defaultdict(list)
     for row in rows:
         for topic in row.topics or ["general"]:
@@ -257,8 +312,11 @@ def cascades_for_tenant(tenant_id: str) -> list[SemanticCascade]:
         last = observations[-1]
         duration = max((last.occurred_at - first.occurred_at).total_seconds(), 1)
         confidence = sum(o.classification_confidence for o in observations) / len(observations)
+        cascade_key = "|".join([tenant_id, subject, topic, stance.value])
+        cascade_id = "scas_" + hashlib.sha256(cascade_key.encode()).hexdigest()[:24]
         cascades.append(
             SemanticCascade(
+                cascade_id=cascade_id,
                 tenant_id=tenant_id,
                 subject_ref=subject,
                 topic_ref=topic,

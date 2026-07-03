@@ -79,20 +79,16 @@ async def observe_agent_event(req: AgentEventRequest, request: Request) -> Obser
         record.risk = computed_risk
 
     mutations = build_mutations(record)
-    pipeline_result = await AgenticIngestionPipeline().ingest_record(
-        record,
-        raw_payload=raw,
-        graph_mutations=mutations,
-    )
+    projection = await _persist_mutations(mutations, tenant_id=tenant_id, trace_id=record.observation_id)
     received_at = _utc_now()
     return ObservationResponse(
         observation_id=record.observation_id,
         received_at=received_at,
-        graph_mutations_queued=pipeline_result.outbox_records_created,
+        graph_mutations_queued=projection.graph_mutations_persisted,
         tenant_id=tenant_id,
-        graph_mutations_built=len(mutations),
-        graph_mutations_persisted=pipeline_result.outbox_records_created,
-        graph_projection_status="outbox_queued" if pipeline_result.outbox_records_created else "not_applicable",
+        graph_mutations_built=projection.graph_mutations_built,
+        graph_mutations_persisted=projection.graph_mutations_persisted,
+        graph_projection_status=projection.graph_projection_status,
     )
 
 
@@ -243,34 +239,3 @@ async def kyber_agentic_risk(request: Request) -> dict:
     repo = AgentRiskSignalRepository()
     items = await repo.find_many(limit=100)
     return {"status": "ok", "risk_signals": items, "count": len(items)}
-
-
-@router.get("/v1/admin/kyber/agentic-observability/pipeline-health")
-async def kyber_agentic_pipeline_health(request: Request) -> dict:
-    """Kyber operator: tenant-scoped Bronze/Silver/activity/outbox health."""
-    _require_perm(request, "admin")
-    tenant_id = _tenant_id(request)
-    return await AgenticReconciliationService().pipeline_health(tenant_id=tenant_id)
-
-
-@router.get("/v1/admin/kyber/agentic-observability/lineage/{source_event_id}")
-async def kyber_agentic_event_lineage(source_event_id: str, request: Request) -> dict:
-    """Kyber operator: inspect source event lineage across PR-2 pipeline stages."""
-    _require_perm(request, "admin")
-    tenant_id = _tenant_id(request)
-    lineage = await AgenticReconciliationService().lineage(
-        tenant_id=tenant_id,
-        source_event_id=source_event_id,
-    )
-    return lineage.as_dict()
-
-
-@router.post("/v1/admin/kyber/agentic-observability/reconcile")
-async def kyber_agentic_reconcile(request: Request) -> dict:
-    """Kyber operator: read-only detection of missing agentic pipeline stages."""
-    _require_perm(request, "admin")
-    tenant_id = _tenant_id(request)
-    body = await request.json() if request.headers.get("content-length") else {}
-    limit = int(body.get("limit", 100)) if isinstance(body, dict) else 100
-    limit = max(1, min(limit, 500))
-    return await AgenticReconciliationService().reconcile(tenant_id=tenant_id, limit=limit)
