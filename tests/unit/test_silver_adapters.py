@@ -190,8 +190,14 @@ class TestSilverAdapters:
         assert result.get("tenant_id") == "tenant-a"
 
     def test_adapt_from_silver_comms(self):
+        """Comms activities route family/actor by business meaning (ADR-C4).
+
+        Legacy rows without a message_category fall back to web2; rows with
+        marketing category route to the campaign family. actor_type comes
+        from provenance, never a hard-coded 'human'.
+        """
         from services.measurement.silver_adapters import adapt_from_silver
-        row = {
+        legacy_row = {
             "fact_id": str(uuid4()),
             "tenant_id": "tenant-a",
             "profile_id": "profile-001",
@@ -200,11 +206,28 @@ class TestSilverAdapters:
             "occurred_at": _now(),
             "idempotency_key": str(uuid4()),
         }
-        result = adapt_from_silver("silver_comms_facts", row)
+        result = adapt_from_silver("silver_comms_facts", legacy_row)
         assert result is not None
-        assert result.get("activity_family") == "web2"
-        assert result.get("activity_type") == "comms_email"
+        assert result.get("activity_family") == "web2"  # unknown category fallback
+        assert result.get("activity_type") == "email"
         assert result.get("tenant_id") == "tenant-a"
+
+        marketing_row = {
+            **legacy_row,
+            "source_event_type": "email_clicked",
+            "message_category": "marketing",
+            "direction": "outbound",
+            "organization_id": "org-1",
+            "provider": "klaviyo",
+            "provider_event_id": "ev-1",
+        }
+        result = adapt_from_silver("silver_comms_facts", marketing_row)
+        assert result.get("activity_family") == "campaign"
+        assert result.get("activity_type") == "email_clicked"
+        assert result.get("actor_type") == "organization"
+
+        excluded_row = {**marketing_row, "journey_role": "excluded"}
+        assert adapt_from_silver("silver_comms_facts", excluded_row) is None
 
     def test_canonical_conversion_adapter(self):
         from services.measurement.silver_adapters import adapt_from_silver
