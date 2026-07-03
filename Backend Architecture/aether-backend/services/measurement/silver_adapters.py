@@ -252,23 +252,61 @@ def adapt_account_activity(row: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def adapt_comms(row: dict[str, Any]) -> dict[str, Any]:
-    """silver_comms_facts → canonical_activity (family=web2)."""
-    comms_type = row.get("comms_type", "message")
-    activity_type = f"comms_{comms_type}"
+def adapt_comms(row: dict[str, Any]) -> Optional[dict[str, Any]]:
+    """silver_comms_facts → canonical_activity.
+
+    Family and actor kind are routed by business meaning (message category /
+    provenance), never hard-coded (ADR-C4/Phase 6). The idempotency key is the
+    source-derived canonical activity key so one real-world event maps to one
+    activity regardless of Silver row identity or replay.
+
+    Events whose journey role is ``excluded`` (machine engagement, automated
+    replies) produce no canonical activity at all.
+    """
+    from services.comms.contracts import (
+        activity_family_for,
+        actor_kind_from_provenance,
+        canonical_activity_key,
+    )
+
+    journey_role = row.get("journey_role")
+    if journey_role == "excluded":
+        return None
+
+    comms_type = row.get("source_event_type") or row.get("comms_type", "message")
+    category = row.get("message_category")
+    actor_kind = row.get("actor_kind") or actor_kind_from_provenance(
+        direction=row.get("direction"),
+        agent_id=row.get("agent_id"),
+        sender_is_organization=bool(row.get("organization_id") or row.get("org_id")),
+        category=category,
+    ).value
+    family = activity_family_for(category, actor_kind=actor_kind)
+
+    idem = row.get("canonical_activity_key") or canonical_activity_key(
+        str(row.get("tenant_id") or ""),
+        str(row.get("provider") or "sdk"),
+        row.get("provider_account_id"),
+        str(row.get("provider_event_id") or row.get("source_event_id") or ""),
+        str(comms_type),
+    )
 
     return _base(row, silver_table="silver_comms_facts") | {
-        "activity_family": "web2",
-        "activity_type": activity_type,
-        "actor_type": "human",
-        "profile_id": row.get("user_id") or row.get("actor_id"),
+        "activity_family": family,
+        "activity_type": comms_type,
+        "actor_type": actor_kind,
+        "profile_id": row.get("profile_id") or row.get("user_id") or row.get("actor_id"),
         "anonymous_id": row.get("anonymous_id"),
+        "cluster_id": row.get("cluster_id"),
+        "organization_id": row.get("organization_id"),
+        "agent_id": row.get("agent_id"),
         "channel": row.get("channel"),
         "campaign_id": row.get("campaign_id"),
+        "identity_confidence": _float_or_none(row.get("identity_confidence")),
         "privacy_class": row.get("privacy_class", "behavioral"),
         "silver_fact_id": _uuid(row.get("fact_id")),
         "silver_table": "silver_comms_facts",
-        "idempotency_key": f"comms:{row.get('fact_id') or row.get('idempotency_key')}:{row.get('tenant_id')}",
+        "idempotency_key": f"comms:{idem}",
     }
 
 
@@ -361,6 +399,13 @@ def _conversion_status(status: str) -> str:
         "ineligible": "observed",
     }
     return _map.get(status, "observed")
+
+
+def _float_or_none(value: Any) -> Optional[float]:
+    try:
+        return float(value) if value is not None else None
+    except (TypeError, ValueError):
+        return None
 
 
 def _uuid(value: Any) -> Optional[UUID]:

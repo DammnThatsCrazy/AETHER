@@ -153,22 +153,16 @@ class SilverGraphProjector:
         await graph.add_edge(edge)
 
     async def _emit_comms(self, result: ProjectionResult, event: dict[str, Any]) -> None:
-        from shared.graph.graph import get_graph_client
-        graph = get_graph_client()
-        ctx = event.get("context") or {}
-        tenant_id = ctx.get("tenantId") or event.get("tenantId") or "default"
-        props = event.get("properties") or {}
-        recipient_id = props.get("recipientId") or event.get("userId", "")
-        sender_id = props.get("senderId") or ctx.get("actorId", "system")
-        source_event_id = event.get("messageId", "")
-        occurred_at = event.get("timestamp", "")
-        if not (recipient_id and source_event_id):
-            return
-        edge = _edge(
-            EdgeType.CONTACTED, sender_id, recipient_id, tenant_id,
-            source_event_id, occurred_at, consent_purpose="analytics",
-        )
-        await graph.add_edge(edge)
+        """Aggregated communication relationships (ADR-C6).
+
+        Delegates to CommsGraphProjector: one durable edge per
+        (sender context, recipient, channel) relationship — never one edge
+        per event, never a global 'system' sender node.
+        """
+        from services.comms.graph_projection import CommsGraphProjector
+        projector = CommsGraphProjector()
+        for row in result.rows:
+            await projector.project_fact(row)
 
     async def _emit_agent_execution(self, result: ProjectionResult, event: dict[str, Any]) -> None:
         # agent_task events already drive existing EXECUTED_AS/PRODUCED edges
