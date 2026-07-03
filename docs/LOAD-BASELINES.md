@@ -12,7 +12,7 @@ source_files:
 canonical_owner: platform@aether
 estimated_read_minutes: 3
 toc_depth: 2
-last_synced_commit: faeef03fc5a5a7ae332b333a2bb94b7f7c320240
+last_synced_commit: a1a37b4
 ---
 
 # Load Baselines
@@ -32,6 +32,10 @@ every staging load run before a production deployment.
 | `GET /v1/profile360/user/{id}` | p95 latency | ≤ 500 ms | ≤ 1% |
 | `POST /v1/analytics/graphql` | p95 latency | ≤ 200 ms | ≤ 1% |
 | `POST /v1/agent/tasks` | p99 latency | ≤ 1,000 ms | ≤ 1% |
+| `POST /v1/fraud/evaluate` | p95 latency | ≤ 500 ms | ≤ 1% |
+| `POST /v1/fraud/evaluate/batch` | p99 latency | ≤ 2,000 ms | ≤ 1% |
+| `GET /v1/fraud/decisions` | p95 latency | ≤ 200 ms | ≤ 1% |
+| `GET /v1/fraud/stats` | p95 latency | ≤ 100 ms | ≤ 1% |
 
 ## Running a Baseline
 

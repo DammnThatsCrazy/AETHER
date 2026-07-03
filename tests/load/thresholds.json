@@ -1,12 +1,16 @@
 {
-  "version": "1.1",
+  "version": "1.2",
   "environment": "staging",
   "thresholds": {
     "/v1/ingest/events/batch": { "p95_ms": 200, "error_rate": 0.01 },
     "/sdk/identity/resolve": { "p95_ms": 300, "error_rate": 0.01 },
     "/v1/profile360/user/{id}": { "p95_ms": 500, "error_rate": 0.01 },
     "/v1/analytics/graphql": { "p95_ms": 200, "error_rate": 0.01 },
-    "/v1/agent/tasks": { "p99_ms": 1000, "error_rate": 0.01 }
+    "/v1/agent/tasks": { "p99_ms": 1000, "error_rate": 0.01 },
+    "/v1/fraud/evaluate": { "p95_ms": 500, "error_rate": 0.01 },
+    "/v1/fraud/evaluate/batch": { "p99_ms": 2000, "error_rate": 0.01 },
+    "/v1/fraud/decisions": { "p95_ms": 200, "error_rate": 0.01 },
+    "/v1/fraud/stats": { "p95_ms": 100, "error_rate": 0.01 }
   },
   "notes": "Run: locust -f tests/load/locustfile.py --headless -u 50 -r 10 --run-time 5m"
 }

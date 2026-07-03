@@ -574,6 +574,125 @@ class CampaignTasks(TaskSet):
 
 
 # =========================================================================
+# Fraud Evaluation Load Tests
+# =========================================================================
+
+class FraudEvaluationTasks(TaskSet):
+    """Fraud evaluation pipeline — real-time and batch evaluation + decision CRUD.
+
+    Thresholds (from tests/load/thresholds.json):
+      POST /v1/fraud/evaluate        p95 < 500 ms
+      POST /v1/fraud/evaluate/batch  p99 < 2000 ms
+      GET  /v1/fraud/decisions       p95 < 200 ms
+      GET  /v1/fraud/stats           p95 < 100 ms
+    """
+
+    headers = _api_headers()
+    _subject_types = ("entity", "profile", "cluster")
+    _event_types = ("page_view", "purchase", "wallet_transfer", "refund", "agent_execution")
+
+    def _make_event(self) -> dict:
+        return {
+            "event_type": random.choice(self._event_types),
+            "user_id": f"user-{_random_string()}",
+            "session_id": f"sess-{_random_string()}",
+            "timestamp": "2026-01-01T00:00:00Z",
+            "properties": {
+                "device_id": f"dev-{_random_string(4)}",
+                "ip": f"10.{random.randint(0,255)}.{random.randint(0,255)}.1",
+                "load_test": True,
+            },
+        }
+
+    @task(10)
+    def evaluate_single(self):
+        """Single-event fraud evaluation — real-time path (p95 < 500 ms)."""
+        self.client.post(
+            "/v1/fraud/evaluate",
+            json={
+                "event": self._make_event(),
+                "context": {
+                    "subject_type": random.choice(self._subject_types),
+                    "subject_id": f"subj-{_random_string()}",
+                },
+            },
+            headers=self.headers,
+            name="/v1/fraud/evaluate [single]",
+        )
+
+    @task(4)
+    def evaluate_batch_small(self):
+        """Batch of 5 events — scheduled flush pattern (p99 < 2000 ms)."""
+        self.client.post(
+            "/v1/fraud/evaluate/batch",
+            json={"events": [
+                {"event": self._make_event(), "context": {}}
+                for _ in range(5)
+            ]},
+            headers=self.headers,
+            name="/v1/fraud/evaluate/batch [5]",
+        )
+
+    @task(2)
+    def evaluate_batch_medium(self):
+        """Batch of 20 events — operator replay pattern."""
+        self.client.post(
+            "/v1/fraud/evaluate/batch",
+            json={"events": [
+                {"event": self._make_event(), "context": {}}
+                for _ in range(20)
+            ]},
+            headers=self.headers,
+            name="/v1/fraud/evaluate/batch [20]",
+        )
+
+    @task(6)
+    def list_decisions(self):
+        """List durable fraud decisions — monitoring path (p95 < 200 ms)."""
+        filters: dict[str, str] = {}
+        if random.random() < 0.4:
+            filters["risk_tier"] = random.choice(["critical", "high", "elevated", "low"])
+        if random.random() < 0.3:
+            filters["decision"] = random.choice(["block", "flag", "monitor", "clear"])
+        if random.random() < 0.2:
+            filters["review_state"] = random.choice(["required", "confirmed_fraud", "dispute"])
+        qs = "&".join(f"{k}={v}" for k, v in filters.items())
+        url = f"/v1/fraud/decisions?limit=25{'&' + qs if qs else ''}"
+        self.client.get(url, headers=self.headers, name="/v1/fraud/decisions [list]")
+
+    @task(3)
+    def get_stats(self):
+        """Fraud detection stats — operator dashboard (p95 < 100 ms)."""
+        self.client.get(
+            "/v1/fraud/stats",
+            headers=self.headers,
+            name="/v1/fraud/stats",
+        )
+
+    @task(2)
+    def get_config(self):
+        """Fraud engine config — infrequent read."""
+        self.client.get(
+            "/v1/fraud/config",
+            headers=self.headers,
+            name="/v1/fraud/config",
+        )
+
+    @task(1)
+    def evaluate_exceeds_batch_limit(self):
+        """101-event batch — should be rejected with 422, not 500."""
+        with self.client.post(
+            "/v1/fraud/evaluate/batch",
+            json={"events": [{"event": self._make_event(), "context": {}} for _ in range(101)]},
+            headers=self.headers,
+            name="/v1/fraud/evaluate/batch [over-limit-rejected]",
+            catch_response=True,
+        ) as resp:
+            if resp.status_code in (400, 422):
+                resp.success()
+
+
+# =========================================================================
 # User Profiles
 # =========================================================================
 
@@ -587,6 +706,7 @@ class SteadyStateUser(HttpUser):
         BatchIngestTasks: 4,
         IdentityResolveTasks: 3,
         Profile360Tasks: 2,
+        FraudEvaluationTasks: 2,
     }
     wait_time = between(0.5, 2.0)
 
@@ -623,3 +743,16 @@ class OperatorUser(HttpUser):
         Profile360Tasks: 3,
     }
     wait_time = between(1.0, 3.0)
+
+
+
+class FraudHeavyUser(HttpUser):
+    """Fraud-dominated workload — models a fraud analyst or automated scoring pipeline."""
+    tasks = {FraudEvaluationTasks: 1}
+    wait_time = between(0.2, 1.0)
+
+
+class FraudBurstUser(HttpUser):
+    """Burst fraud evaluation — models a spike from activity ingestion fan-out."""
+    tasks = {FraudEvaluationTasks: 1}
+    wait_time = between(0.05, 0.2)
