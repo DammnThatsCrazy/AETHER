@@ -13,7 +13,7 @@ source_files:
 canonical_owner: frontend@aether
 estimated_read_minutes: 35
 toc_depth: 4
-last_synced_commit: bdc1163
+last_synced_commit: 17f52a5
 ---
 
 # Aether Frontend Architecture & Designer Handoff
@@ -656,6 +656,7 @@ The fraud workspace lives under `/fraud-networks` in Kyber and consists of:
 | `FraudNetworksPage` | `pages/fraud/fraud-networks-page.tsx` | List of fraud networks with status/risk filter and build modal |
 | `FraudNetworkDetailPage` | `pages/fraud/fraud-network-detail-page.tsx` | Network detail: graph canvas, members table, evidence tray, case panel |
 | `FlowTracePage` | `pages/fraud/flow-trace-page.tsx` | Trace builder + recent traces list + trace result with paths |
+| `FraudDecisionsPage` | `pages/fraud/fraud-decisions-page.tsx` | Durable fraud decision review queue: filter by risk tier / decision / review state; review (confirmed_fraud / dispute / review_clear) and suppress actions with reason capture; wired to `GET /v1/fraud/decisions`, `POST /v1/fraud/decisions/{id}/review`, `POST /v1/fraud/decisions/{id}/suppress` |
 
 Supporting components:
 

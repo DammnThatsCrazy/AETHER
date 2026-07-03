@@ -12,7 +12,7 @@ source_files:
   - Backend Architecture/aether-backend/services/measurement/routes/kyber.py
   - frontend/aether/src/pages/journey-explorer/journey-explorer-page.tsx
   - frontend/kyber/src/pages/measurement/journey-explorer-page.tsx
-last_synced_commit: "9461239"
+last_synced_commit: 17f52a5
 ---
 
 # Release Readiness — Unified Canonical Journey
@@ -27,7 +27,7 @@ last_synced_commit: "9461239"
 | Journey compiler | 5/5 | v2.0, cross-rail, deterministic sort, transition taxonomy |
 | Journey steps API | 5/5 | `/steps`, `/steps/{id}`, `/transitions`, `/explain`, `/campaigns/{id}/journeys` |
 | Profile360 integration | 5/5 | `unified_journey()` in aggregator, `/v1/profile/{id}/unified-journey` |
-| Aether Journey UI | 5/5 | Virtualized timeline, filter bar, quality banners, accessibility |
+| Aether Journey UI | 5/5 | Virtualized timeline, filter bar, quality banners, accessibility; risk tab (GET /v1/journeys/{id}/risk); step-level risk tier badges |
 | Kyber journey ops | 5/5 | Steps/transitions/explain panels, rebuild action, compiler health panel |
 | Tests | 5/5 | 50 tests: unit, integration, security/tenant-isolation |
 | Observability | 5/5 | `CanonicalActivityMetrics`, `JourneyCompilerMetrics`, `CrossRailMetrics` |
