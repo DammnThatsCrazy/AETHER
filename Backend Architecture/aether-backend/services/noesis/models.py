@@ -48,6 +48,10 @@ SUPPORTED_INTENTS: frozenset[str] = frozenset({
     "suggestion_review_queue",
     "suggestion_explain",
     "suggestion_outcome_lookup",
+    # Semantic-Sentiment Intelligence (read-only)
+    "sentiment_explain",
+    "narrative_analysis",
+    "semantic_profile_explain",
 })
 
 SUPPORTED_ENTITY_TYPES: frozenset[str] = frozenset({
