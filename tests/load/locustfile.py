@@ -574,59 +574,6 @@ class CampaignTasks(TaskSet):
 
 
 # =========================================================================
-# User Profiles
-# =========================================================================
-
-class SteadyStateUser(HttpUser):
-    """Normal production traffic — mixed workload across all subsystems."""
-    tasks = {
-        GraphQLTasks: 4,
-        ExportTasks: 2,
-        AgentTaskTasks: 2,
-        CampaignTasks: 2,
-        BatchIngestTasks: 4,
-        IdentityResolveTasks: 3,
-        Profile360Tasks: 2,
-        FraudEvaluationTasks: 2,
-    }
-    wait_time = between(0.5, 2.0)
-
-
-class BurstUser(HttpUser):
-    """Burst traffic — hammers agent tasks, GraphQL, and batch ingest."""
-    tasks = {
-        GraphQLTasks: 6,
-        AgentTaskTasks: 4,
-        BatchIngestTasks: 6,
-    }
-    wait_time = between(0.1, 0.5)
-
-
-class ExportHeavyUser(HttpUser):
-    """Export-heavy workload — tests idempotency under load."""
-    tasks = {ExportTasks: 1}
-    wait_time = between(0.2, 1.0)
-
-
-class IngestHeavyUser(HttpUser):
-    """Ingest-dominated workload — models SDK batch flush pattern."""
-    tasks = {
-        BatchIngestTasks: 8,
-        IdentityResolveTasks: 2,
-    }
-    wait_time = between(0.05, 0.3)
-
-
-class OperatorUser(HttpUser):
-    """Operator dashboard — Kyber summaries and Profile360."""
-    tasks = {
-        KyberSummaryTasks: 5,
-        Profile360Tasks: 3,
-    }
-    wait_time = between(1.0, 3.0)
-
-
-# =========================================================================
 # Fraud Evaluation Load Tests
 # =========================================================================
 
@@ -743,6 +690,60 @@ class FraudEvaluationTasks(TaskSet):
         ) as resp:
             if resp.status_code in (400, 422):
                 resp.success()
+
+
+# =========================================================================
+# User Profiles
+# =========================================================================
+
+class SteadyStateUser(HttpUser):
+    """Normal production traffic — mixed workload across all subsystems."""
+    tasks = {
+        GraphQLTasks: 4,
+        ExportTasks: 2,
+        AgentTaskTasks: 2,
+        CampaignTasks: 2,
+        BatchIngestTasks: 4,
+        IdentityResolveTasks: 3,
+        Profile360Tasks: 2,
+        FraudEvaluationTasks: 2,
+    }
+    wait_time = between(0.5, 2.0)
+
+
+class BurstUser(HttpUser):
+    """Burst traffic — hammers agent tasks, GraphQL, and batch ingest."""
+    tasks = {
+        GraphQLTasks: 6,
+        AgentTaskTasks: 4,
+        BatchIngestTasks: 6,
+    }
+    wait_time = between(0.1, 0.5)
+
+
+class ExportHeavyUser(HttpUser):
+    """Export-heavy workload — tests idempotency under load."""
+    tasks = {ExportTasks: 1}
+    wait_time = between(0.2, 1.0)
+
+
+class IngestHeavyUser(HttpUser):
+    """Ingest-dominated workload — models SDK batch flush pattern."""
+    tasks = {
+        BatchIngestTasks: 8,
+        IdentityResolveTasks: 2,
+    }
+    wait_time = between(0.05, 0.3)
+
+
+class OperatorUser(HttpUser):
+    """Operator dashboard — Kyber summaries and Profile360."""
+    tasks = {
+        KyberSummaryTasks: 5,
+        Profile360Tasks: 3,
+    }
+    wait_time = between(1.0, 3.0)
+
 
 
 class FraudHeavyUser(HttpUser):
