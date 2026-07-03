@@ -447,6 +447,12 @@ class NoesisService:
                 candidates.append(("suggestion_outcome_lookup", 0.82))
             else:
                 candidates.append(("suggestion_lookup", 0.80))
+        if any(k in low for k in ("sentiment", "feeling", "emotion")) and any(k in low for k in ("explain", "why", "what", "toward", "about", "declined", "changed", "shift")):
+            candidates.append(("sentiment_explain", 0.86))
+        if any(k in low for k in ("narrative", "narratives", "discourse", "story propagation", "narrative analysis", "narrative diffusion")):
+            candidates.append(("narrative_analysis", 0.85))
+        if any(k in low for k in ("semantic profile", "semantic state", "semantic summary", "semantic observations", "semantic stance")):
+            candidates.append(("semantic_profile_explain", 0.87))
 
         if not candidates:
             # If conversation history provides a prior intent, carry it forward with low confidence

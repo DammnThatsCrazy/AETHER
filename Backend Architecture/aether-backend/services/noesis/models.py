@@ -187,6 +187,9 @@ class QueryPlan(BaseModel):
         "suggestion_review_queue",
         "suggestion_explain",
         "suggestion_outcome_lookup",
+        "sentiment_explain",
+        "narrative_analysis",
+        "semantic_profile_explain",
         "unsupported",
     ]
     target: Optional[str] = None
