@@ -267,6 +267,7 @@ CONSENT_PURPOSES: frozenset[str] = frozenset({
     "analytics",
     "commerce",
     "credit",
+    "financial_activity",
     "location",
     "marketing",
     "personalization",

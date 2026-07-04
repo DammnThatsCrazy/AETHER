@@ -41,3 +41,4 @@ export * from './campaign-exploration-contract';
 export * from './acquisition-evidence';
 
 export * from './semantic-sentiment';
+export * from './derivatives';
