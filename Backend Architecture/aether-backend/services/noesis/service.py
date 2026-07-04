@@ -447,6 +447,23 @@ class NoesisService:
                 candidates.append(("suggestion_outcome_lookup", 0.82))
             else:
                 candidates.append(("suggestion_lookup", 0.80))
+        if any(k in low for k in ("mcp", "tool schema", "tool usage", "tool invocation", "external account", "authorization", "permission", "provider verification", "provider-confirmed", "provider confirmed", "verified action", "verification mismatch", "write scope")):
+            if any(k in low for k in ("mcp", "server", "connection", "topology", "tool schema")):
+                candidates.append(("mcp_topology_lookup", 0.91))
+            elif any(k in low for k in ("mismatch", "contradict", "not provider-confirmed", "not provider confirmed")):
+                candidates.append(("verification_mismatch_lookup", 0.9))
+            elif any(k in low for k in ("verification", "verified", "provider-confirmed", "provider confirmed")):
+                candidates.append(("provider_verification_lookup", 0.88))
+            elif any(k in low for k in ("permission", "scope", "grant", "authorization", "external account", "write scope")):
+                candidates.append(("authorization_lookup", 0.86))
+        if "agent" in low and any(k in low for k in ("inventory", "fleet", "which agents", "list agents", "active agents")):
+            candidates.append(("agent_inventory_lookup", 0.9))
+        if "agent" in low and any(k in low for k in ("activity", "actions", "invocations", "attempted", "completed")):
+            candidates.append(("agent_activity_lookup", 0.86))
+        if "agent" in low and any(k in low for k in ("path", "evidence path", "strongest evidence", "chain")):
+            candidates.append(("agent_path_lookup", 0.86))
+        if "agent" in low and any(k in low for k in ("risk", "permission drift", "shared credential", "shared account", "unused write")):
+            candidates.append(("permission_risk_lookup", 0.88))
 
         if not candidates:
             # If conversation history provides a prior intent, carry it forward with low confidence
@@ -559,6 +576,20 @@ class NoesisService:
             "suggestion_outcome_lookup",
         ):
             return await self._suggestion_dispatch(plan, scope)
+        if plan.intent in (
+            "agent_inventory_lookup",
+            "agent_activity_lookup",
+            "mcp_topology_lookup",
+            "authorization_lookup",
+            "provider_verification_lookup",
+            "verification_mismatch_lookup",
+            "permission_risk_lookup",
+            "agent_path_lookup",
+            "agent_profile360_lookup",
+            "journey_agentic_steps_lookup",
+            "campaign_agentic_influence_lookup",
+        ):
+            return await self._agentic_dispatch(plan, scope)
         return self._unsupported_response(body, [])
 
     def _tenant_filter(self, scope: Scope) -> Optional[dict[str, Any]]:
@@ -824,6 +855,53 @@ class NoesisService:
             actions=result.get("actions", []),
             warnings=result.get("warnings", []),
             query_debug={"plan": plan.model_dump(), "read_only": True, "suggestion_dispatch": True},
+        )
+
+    async def _agentic_dispatch(self, plan: QueryPlan, scope: Scope) -> NoesisResponse:
+        """Read-only Agentic Intelligence answers with evidence classifications."""
+        from services.noesis.adapters.agentic_intelligence_adapter import AgenticIntelligenceAdapter
+
+        adapter = AgenticIntelligenceAdapter()
+        result = await adapter.answer(
+            intent=plan.intent,
+            tenant_id=scope.effective_tenant_id,
+            target=plan.target,
+            limit=plan.limit,
+        )
+        fetched_at = utc_now()
+        evidence = EvidenceEnvelope(
+            sources=[
+                EvidenceSource(
+                    service=source["service"],
+                    resource_type=source["resource_type"],
+                    fetched_at=source.get("fetched_at") or fetched_at,
+                )
+                for source in result.sources
+            ],
+            claims=[
+                EvidenceClaim(
+                    claim=claim["claim"],
+                    claim_type=claim["claim_type"],
+                    confidence=claim["confidence"],
+                )
+                for claim in result.claims
+            ],
+            sufficient=bool(result.results),
+            insufficient_reason=None if result.results else "No tenant-scoped agentic evidence matched the request.",
+        )
+        return self._response(
+            plan,
+            result.answer,
+            [
+                {
+                    **row,
+                    "noesis_claim_classification": next((claim["classification"] for claim in result.claims), "insufficient_evidence"),
+                }
+                for row in result.results
+            ],
+            [NoesisAction(type="navigate", label="Open agent fleet", href="/agents")],
+            evidence=evidence,
+            scope=scope,
         )
 
     def _response(

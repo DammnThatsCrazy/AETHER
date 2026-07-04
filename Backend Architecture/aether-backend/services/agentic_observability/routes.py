@@ -10,7 +10,7 @@ import uuid
 from datetime import datetime, timezone
 from typing import Any
 
-from fastapi import APIRouter, HTTPException, Request, status
+from fastapi import APIRouter, Request
 
 from repositories.agentic_observability_repos import (
     AgentActivityRepository, AgentConnectionRepository,
@@ -24,11 +24,22 @@ from services.agentic_observability.models import (
     AgentToolInvocationObserved, AgentRiskSignalRecord,
 )
 from services.agentic_observability.risk_signals import evaluate_risk
+from services.agentic_observability.pipeline import AgenticIngestionPipeline
+from services.agentic_observability.product_surfaces import AgenticProductSurfacesService
+from services.agentic_observability.reconciliation import AgenticReconciliationService
+from services.agentic_observability.release_readiness import AgenticReleaseReadinessService
 from services.agentic_observability.schemas import (
     AgentEventRequest, AgentAccountRequest, AgentToolRequest,
     AgentMCPRequest, AgentRiskSignalRequest, ObservationResponse,
 )
-from shared.graph.graph import Vertex, Edge
+from services.agentic_observability.foundation import (
+    active_tenant_id as _tenant_id,
+    check_no_execution as _check_no_execution,
+    persist_mutations as _persist_mutations,
+    require_permission as _require_perm,
+    validate_event_name,
+    validate_payload_tenant,
+)
 
 router = APIRouter()
 
@@ -39,63 +50,13 @@ def _utc_now() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
-async def _persist_mutations(mutations: list) -> None:
-    """Submit graph Vertex/Edge mutations to the graph backend. Best-effort."""
-    if not mutations:
-        return
-    try:
-        from dependencies.providers import get_graph
-        graph = get_graph()
-        for m in mutations:
-            if isinstance(m, Vertex):
-                await graph.add_vertex(m)
-            elif isinstance(m, Edge):
-                await graph.add_edge(m)
-    except Exception:
-        pass  # graph unavailable — observation still recorded; mutations deferred
-
-
-def _tenant_id(request: Request) -> str:
-    tenant = getattr(request.state, "tenant", None)
-    if not tenant:
-        raise HTTPException(status_code=401, detail="Missing tenant context")
-    return tenant.tenant_id
-
-
-def _require_perm(request: Request, perm: str) -> None:
-    tenant = getattr(request.state, "tenant", None)
-    if not tenant:
-        raise HTTPException(status_code=401, detail="Missing tenant context")
-    if hasattr(tenant, "require_permission"):
-        try:
-            tenant.require_permission(perm)
-            return
-        except Exception as e:
-            raise HTTPException(status_code=403, detail=str(e))
-    if hasattr(tenant, "has_permission") and not tenant.has_permission(perm):
-        raise HTTPException(status_code=403, detail=f"Permission denied: {perm}")
-
-
-def _check_no_execution(payload: Any) -> None:
-    """Reject any payload claiming execution_by_aether=True."""
-    data = payload if isinstance(payload, dict) else payload.model_dump()
-    if data.get("execution_by_aether") is True:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail="execution_by_aether must be false. AETHER does not execute.",
-        )
-    if "economics" in data and data["economics"] and data["economics"].get("is_execution_by_aether") is True:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail="economics.is_execution_by_aether must be false. AETHER does not execute.",
-        )
-
-
 @router.post("/v1/observability/agent/events", response_model=ObservationResponse, status_code=201)
 async def observe_agent_event(req: AgentEventRequest, request: Request) -> ObservationResponse:
     """Observe a generic agent activity event."""
     _require_perm(request, "write")
     tenant_id = _tenant_id(request)
+    validate_payload_tenant(req, tenant_id)
+    validate_event_name(req.event_name)
     _check_no_execution(req)
     raw = req.model_dump()
     record = normalize(raw, req.source.provider.value, tenant_id, req.event_name)
@@ -119,17 +80,21 @@ async def observe_agent_event(req: AgentEventRequest, request: Request) -> Obser
     elif computed_risk.risk_level and computed_risk.risk_level.value != "low":
         record.risk = computed_risk
 
-    repo = AgentActivityRepository()
-    await repo.insert(record.observation_id, record.model_dump(mode="json"))
-
     mutations = build_mutations(record)
-    await _persist_mutations(mutations)
+    pipeline_result = await AgenticIngestionPipeline().ingest_record(
+        record,
+        raw_payload=raw,
+        graph_mutations=mutations,
+    )
     received_at = _utc_now()
     return ObservationResponse(
         observation_id=record.observation_id,
         received_at=received_at,
-        graph_mutations_queued=len(mutations),
+        graph_mutations_queued=pipeline_result.outbox_records_created,
         tenant_id=tenant_id,
+        graph_mutations_built=len(mutations),
+        graph_mutations_persisted=pipeline_result.outbox_records_created,
+        graph_projection_status="outbox_queued" if pipeline_result.outbox_records_created else "not_applicable",
     )
 
 
@@ -138,6 +103,7 @@ async def observe_agent_account(req: AgentAccountRequest, request: Request) -> O
     """Observe an external agentic account."""
     _require_perm(request, "write")
     tenant_id = _tenant_id(request)
+    validate_payload_tenant(req, tenant_id)
     _check_no_execution(req)
     obs_id = str(uuid.uuid4())
     repo = ExternalAccountRepository()
@@ -148,12 +114,15 @@ async def observe_agent_account(req: AgentAccountRequest, request: Request) -> O
     await repo.insert(obs_id, record)
 
     mutations = build_account_mutations(tenant_id, req.agent_id, req.external_account_id)
-    await _persist_mutations(mutations)
+    projection = await _persist_mutations(mutations, tenant_id=tenant_id, trace_id=obs_id)
     return ObservationResponse(
         observation_id=obs_id,
         received_at=record["received_at"],
-        graph_mutations_queued=len(mutations),
+        graph_mutations_queued=projection.graph_mutations_persisted,
         tenant_id=tenant_id,
+        graph_mutations_built=projection.graph_mutations_built,
+        graph_mutations_persisted=projection.graph_mutations_persisted,
+        graph_projection_status=projection.graph_projection_status,
     )
 
 
@@ -162,6 +131,7 @@ async def observe_agent_tool(req: AgentToolRequest, request: Request) -> Observa
     """Observe an agent tool invocation."""
     _require_perm(request, "write")
     tenant_id = _tenant_id(request)
+    validate_payload_tenant(req, tenant_id)
     _check_no_execution(req)
     obs_id = str(uuid.uuid4())
     record = req.model_dump(mode="json")
@@ -173,7 +143,7 @@ async def observe_agent_tool(req: AgentToolRequest, request: Request) -> Observa
     return ObservationResponse(
         observation_id=obs_id,
         received_at=record["received_at"],
-        graph_mutations_queued=1,
+        graph_mutations_queued=0,
         tenant_id=tenant_id,
     )
 
@@ -183,6 +153,7 @@ async def observe_mcp_connection(req: AgentMCPRequest, request: Request) -> Obse
     """Observe an MCP server connection."""
     _require_perm(request, "write")
     tenant_id = _tenant_id(request)
+    validate_payload_tenant(req, tenant_id)
     _check_no_execution(req)
     obs_id = str(uuid.uuid4())
     record = req.model_dump(mode="json")
@@ -194,7 +165,7 @@ async def observe_mcp_connection(req: AgentMCPRequest, request: Request) -> Obse
     return ObservationResponse(
         observation_id=obs_id,
         received_at=record["received_at"],
-        graph_mutations_queued=2,
+        graph_mutations_queued=0,
         tenant_id=tenant_id,
     )
 
@@ -204,6 +175,7 @@ async def observe_risk_signal(req: AgentRiskSignalRequest, request: Request) -> 
     """Record an agent risk signal."""
     _require_perm(request, "write")
     tenant_id = _tenant_id(request)
+    validate_payload_tenant(req, tenant_id)
     _check_no_execution(req)
     signal = AgentRiskSignalRecord(
         agent_id=req.agent_id,
@@ -231,18 +203,114 @@ async def observe_risk_signal(req: AgentRiskSignalRequest, request: Request) -> 
 async def kyber_agentic_overview(request: Request) -> dict:
     """Kyber operator: agentic observability overview."""
     _require_perm(request, "admin")
-    return {"status": "ok", "message": "Agentic observability overview — queries TBD"}
+    activity_repo = AgentActivityRepository()
+    tool_repo = AgentToolRepository()
+    connection_repo = AgentConnectionRepository()
+    account_repo = ExternalAccountRepository()
+    risk_repo = AgentRiskSignalRepository()
+    return {
+        "status": "ok",
+        "counts": {
+            "activities": await activity_repo.count(),
+            "tools": await tool_repo.count(),
+            "mcp_connections": await connection_repo.count(),
+            "external_accounts": await account_repo.count(),
+            "risk_signals": await risk_repo.count(),
+        },
+    }
 
 
 @router.get("/v1/admin/kyber/agentic-observability/agents/{agent_id}")
 async def kyber_agentic_agent(agent_id: str, request: Request) -> dict:
     """Kyber operator: single agent observability view."""
     _require_perm(request, "admin")
-    return {"agent_id": agent_id, "status": "ok"}
+    activity_repo = AgentActivityRepository()
+    tool_repo = AgentToolRepository()
+    connection_repo = AgentConnectionRepository()
+    return {
+        "agent_id": agent_id,
+        "status": "ok",
+        "counts": {
+            "activities": await activity_repo.count({"agent_id": agent_id}),
+            "tools": await tool_repo.count({"agent_id": agent_id}),
+            "mcp_connections": await connection_repo.count({"agent_id": agent_id}),
+        },
+    }
 
 
 @router.get("/v1/admin/kyber/agentic-observability/risk")
 async def kyber_agentic_risk(request: Request) -> dict:
     """Kyber operator: risk signals overview."""
     _require_perm(request, "admin")
-    return {"status": "ok", "risk_signals": []}
+    repo = AgentRiskSignalRepository()
+    items = await repo.find_many(limit=100)
+    return {"status": "ok", "risk_signals": items, "count": len(items)}
+
+
+@router.get("/v1/admin/kyber/agentic-observability/pipeline-health")
+async def kyber_agentic_pipeline_health(request: Request) -> dict:
+    """Kyber operator: tenant-scoped Bronze/Silver/activity/outbox health."""
+    _require_perm(request, "admin")
+    tenant_id = _tenant_id(request)
+    return await AgenticReconciliationService().pipeline_health(tenant_id=tenant_id)
+
+
+@router.get("/v1/admin/kyber/agentic-observability/lineage/{source_event_id}")
+async def kyber_agentic_event_lineage(source_event_id: str, request: Request) -> dict:
+    """Kyber operator: inspect source event lineage across PR-2 pipeline stages."""
+    _require_perm(request, "admin")
+    tenant_id = _tenant_id(request)
+    lineage = await AgenticReconciliationService().lineage(
+        tenant_id=tenant_id,
+        source_event_id=source_event_id,
+    )
+    return lineage.as_dict()
+
+
+@router.post("/v1/admin/kyber/agentic-observability/reconcile")
+async def kyber_agentic_reconcile(request: Request) -> dict:
+    """Kyber operator: read-only detection of missing agentic pipeline stages."""
+    _require_perm(request, "admin")
+    tenant_id = _tenant_id(request)
+    body = await request.json() if request.headers.get("content-length") else {}
+    limit = int(body.get("limit", 100)) if isinstance(body, dict) else 100
+    limit = max(1, min(limit, 500))
+    return await AgenticReconciliationService().reconcile(tenant_id=tenant_id, limit=limit)
+
+@router.get("/v1/admin/kyber/agentic-observability/release-readiness")
+async def kyber_agentic_release_readiness(request: Request) -> dict:
+    """Kyber operator: release-readiness matrix for Agentic Intelligence."""
+    _require_perm(request, "admin")
+    return AgenticReleaseReadinessService().readiness()
+
+
+@router.get("/v1/admin/kyber/agentic-observability/agents/{agent_id}/profile360")
+async def kyber_agentic_agent_profile360(agent_id: str, request: Request) -> dict:
+    """Kyber operator: Agent Profile 360 evidence assembled from observed facts."""
+    _require_perm(request, "admin")
+    tenant_id = _tenant_id(request)
+    return await AgenticProductSurfacesService().agent_profile360(tenant_id=tenant_id, agent_id=agent_id)
+
+
+@router.get("/v1/admin/kyber/agentic-observability/journey-v2")
+async def kyber_agentic_journey_v2(request: Request, agent_id: str | None = None, limit: int = 50) -> dict:
+    """Kyber operator: tenant-scoped Unified Journey v2 agentic steps."""
+    _require_perm(request, "admin")
+    tenant_id = _tenant_id(request)
+    return await AgenticProductSurfacesService().journey_v2_agentic_steps(
+        tenant_id=tenant_id,
+        agent_id=agent_id,
+        limit=limit,
+    )
+
+
+@router.get("/v1/admin/kyber/agentic-observability/campaigns/{campaign_id}/influence")
+async def kyber_agentic_campaign_influence(campaign_id: str, request: Request, limit: int = 50) -> dict:
+    """Kyber operator: campaign touchpoints influenced by observed agentic activity."""
+    _require_perm(request, "admin")
+    tenant_id = _tenant_id(request)
+    return await AgenticProductSurfacesService().campaign_agentic_influence(
+        tenant_id=tenant_id,
+        campaign_id=campaign_id,
+        limit=limit,
+    )

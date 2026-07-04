@@ -140,6 +140,121 @@ class ActivityRepository:
             )
         return activity
 
+
+    async def find_by_source_event(self, tenant_id: str, source_event_id: str) -> list[dict[str, Any]]:
+        """Return tenant-scoped canonical activity rows for a source event."""
+        pool = await self._pool()
+        if pool is None:
+            return [
+                row for row in _local_store.values()
+                if row.get("tenant_id") == tenant_id and row.get("source_event_id") == source_event_id
+            ]
+
+        async with pool.acquire() as conn:
+            rows = await conn.fetch(
+                """
+                SELECT * FROM canonical_activity
+                WHERE tenant_id = $1 AND source_event_id = $2
+                ORDER BY server_received_at DESC
+                LIMIT 100
+                """,
+                tenant_id,
+                source_event_id,
+            )
+        return [dict(row) for row in rows]
+
+    async def count_by_source(self, tenant_id: str, source_system: str) -> int:
+        """Count tenant-scoped canonical activity rows from one source system."""
+        pool = await self._pool()
+        if pool is None:
+            return len([
+                row for row in _local_store.values()
+                if row.get("tenant_id") == tenant_id and row.get("source_system") == source_system
+            ])
+
+        async with pool.acquire() as conn:
+            row = await conn.fetchrow(
+                """
+                SELECT COUNT(*) AS cnt FROM canonical_activity
+                WHERE tenant_id = $1 AND source_system = $2
+                """,
+                tenant_id,
+                source_system,
+            )
+        return int(row["cnt"] if row else 0)
+
+    async def list_agentic_steps(
+        self,
+        tenant_id: str,
+        *,
+        agent_id: str | None = None,
+        limit: int = 50,
+    ) -> list[dict[str, Any]]:
+        """List tenant-scoped canonical agentic steps for Journey/Profile read models."""
+        limit = max(1, min(int(limit), 500))
+        pool = await self._pool()
+        if pool is None:
+            rows = [
+                row for row in _local_store.values()
+                if row.get("tenant_id") == tenant_id
+                and row.get("source_system") == "agentic_observability"
+                and (not agent_id or row.get("agent_id") == agent_id)
+            ]
+            return sorted(rows, key=lambda row: str(row.get("occurred_at") or row.get("server_received_at") or ""), reverse=True)[:limit]
+
+        where_agent = "AND agent_id = $2" if agent_id else ""
+        params: list[Any] = [tenant_id]
+        if agent_id:
+            params.append(agent_id)
+        params.append(limit)
+        limit_param = len(params)
+        async with pool.acquire() as conn:
+            rows = await conn.fetch(
+                f"""
+                SELECT * FROM canonical_activity
+                WHERE tenant_id = $1
+                  AND source_system = 'agentic_observability'
+                  {where_agent}
+                ORDER BY occurred_at DESC NULLS LAST, server_received_at DESC
+                LIMIT ${limit_param}
+                """,
+                *params,
+            )
+        return [dict(row) for row in rows]
+
+    async def list_agentic_by_agent(self, tenant_id: str, agent_id: str, *, limit: int = 50) -> list[dict[str, Any]]:
+        """List canonical agentic activity rows for one tenant-scoped agent."""
+        return await self.list_agentic_steps(tenant_id, agent_id=agent_id, limit=limit)
+
+    async def list_agentic_by_campaign(self, tenant_id: str, campaign_id: str, *, limit: int = 50) -> list[dict[str, Any]]:
+        """List canonical agentic activity rows linked to a campaign."""
+        limit = max(1, min(int(limit), 500))
+        pool = await self._pool()
+        if pool is None:
+            rows = [
+                row for row in _local_store.values()
+                if row.get("tenant_id") == tenant_id
+                and row.get("source_system") == "agentic_observability"
+                and row.get("campaign_id") == campaign_id
+            ]
+            return sorted(rows, key=lambda row: str(row.get("occurred_at") or row.get("server_received_at") or ""), reverse=True)[:limit]
+
+        async with pool.acquire() as conn:
+            rows = await conn.fetch(
+                """
+                SELECT * FROM canonical_activity
+                WHERE tenant_id = $1
+                  AND campaign_id = $2
+                  AND source_system = 'agentic_observability'
+                ORDER BY occurred_at DESC NULLS LAST, server_received_at DESC
+                LIMIT $3
+                """,
+                tenant_id,
+                campaign_id,
+                limit,
+            )
+        return [dict(row) for row in rows]
+
     async def update_status(
         self,
         tenant_id: str,

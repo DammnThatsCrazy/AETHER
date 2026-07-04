@@ -2399,8 +2399,14 @@ Tenant-managed outbound webhook delivery endpoints. Aether signs each delivery w
 >
 > All observation responses return:
 > ```json
-> { "observation_id": "<uuid>", "received_at": "<ISO8601>", "graph_mutations_queued": <int>, "tenant_id": "<str>" }
+> { "observation_id": "<uuid>", "received_at": "<ISO8601>", "graph_mutations_queued": <persisted_count>, "tenant_id": "<str>", "graph_mutations_built": <built_count>, "graph_mutations_persisted": <persisted_count>, "graph_projection_status": "outbox_queued|persisted|partial|failed|not_applicable" }
 > ```
+
+### Feature flags and tenant boundary
+
+Agentic observability routers are mounted only when `AGENTIC_OBSERVABILITY_ENABLED=true` (default true for local compatibility). Subsystems are separately controlled by `AGENTIC_MCP_OBSERVABILITY_ENABLED`, `AGENTIC_EXTERNAL_ACCOUNTS_ENABLED`, `AGENTIC_PROVIDER_VERIFICATION_ENABLED`, `AGENTIC_COMMUNICATION_OBSERVABILITY_ENABLED`, `AGENTIC_PROTOCOL_OBSERVABILITY_ENABLED`, and `KYBER_AGENTIC_OBSERVABILITY_ENABLED`. Authenticated tenant context is authoritative: request-body `tenant_id`/`tenantId` may not override it, and mismatches return HTTP 403.
+
+Generic agent events now enter the PR-2 pipeline: sanitized Bronze, typed Silver, canonical activity, and graph outbox records. Responses distinguish mutations built from graph work durably queued or persisted; `graph_mutations_queued` is retained for compatibility and equals the durable queued/persisted count, not a fake count.
 
 ### Agentic Account / MCP / Tool Observability
 
@@ -2642,3 +2648,38 @@ The semantic-sentiment intelligence plane adds tenant-scoped APIs under `/v1/sem
 The APIs return real classified observations from the semantic-sentiment repository, include evidence/model/taxonomy metadata, enforce canonical `camp_*` campaign IDs, and preserve insufficient-data states instead of returning fake zero insights.
 
 Additional semantic-sentiment routes in this iteration include `GET /v1/campaigns/{campaign_id}/semantic-impact`, `GET /v1/campaigns/{campaign_id}/sentiment`, `POST /v1/graph/semantic-overlay`, and `POST /v1/population/semantic-compare`. These routes are tenant-scoped and return bounded overlays or insufficient-data states instead of mutating graph edges or merging semantic-mediated estimates into ordinary attribution.
+
+#### Agentic Kyber pipeline diagnostics
+
+| Method | Path | Description |
+| --- | --- | --- |
+| `GET` | `/v1/admin/kyber/agentic-observability/pipeline-health` | Tenant-scoped Bronze/Silver/canonical activity/outbox counts and graph backlog. |
+| `GET` | `/v1/admin/kyber/agentic-observability/lineage/{source_event_id}` | Source event lineage across Bronze, Silver, canonical activity, and graph outbox. |
+| `POST` | `/v1/admin/kyber/agentic-observability/reconcile` | Read-only reconciliation scan that reports missing agentic pipeline stages. |
+
+These diagnostics are observation-only and require Kyber/admin permission; they do not replay, execute provider actions, or mutate external systems.
+
+#### Agentic Observation Contract v2 compatibility
+
+`POST /v1/observability/agent/events` accepts the v2 `event_type` field as an alias for the canonical event name while retaining v1 `event_name` compatibility. If both fields are supplied they must match. The v2 envelope also accepts `runtime`, `correlation`, `mcp`, `authorization`, `verification`, and `privacy` context groups; supported lineage fields are persisted into typed Silver facts and remain observation-only.
+
+The Node server SDK foundation in `@aether/server` exposes `sdk.agentic` helpers that enqueue these v2 observations for batching; they do not execute provider actions.
+The Python SDK foundation in `packages/python/aether_agentic` exposes `AgenticObservationClient` helpers that build the same v2 observations and preserve the no-execution invariant.
+
+#### Agentic provider verification framework
+
+The provider verification substrate now exposes a provider-neutral adapter contract in `services/agentic_observability/provider_framework.py`. The initial X reference adapter normalizes external accounts, authorization grants, provider actions, external objects, webhook evidence, provider verification records, and permission findings without executing provider actions or storing raw credentials.
+
+#### Noesis Agentic Intelligence
+
+Noesis now classifies read-only agentic questions into deterministic intents for agent inventory, agent activity, MCP topology, authorization/account access, provider verification, verification mismatches, permission risk, and evidence paths. Responses preserve the existing evidence envelope and add agentic-specific classifications such as `observed_fact`, `provider_confirmed_fact`, `deterministic_computation`, `recommendation`, and `insufficient_evidence` in result metadata. These intents read observation repositories only and do not execute provider actions, mutate grants, revoke access, or write graph state.
+
+#### Agentic product-surface read models
+
+| Method | Path | Description |
+| --- | --- | --- |
+| `GET` | `/v1/admin/kyber/agentic-observability/agents/{agent_id}/profile360` | Agent Profile 360 read model assembled from observed activity, MCP, tool, external account/grant, risk, Silver, and canonical activity evidence. |
+| `GET` | `/v1/admin/kyber/agentic-observability/journey-v2?agent_id={agent_id}` | Journey v2-compatible observed agentic steps from tenant-scoped `canonical_activity`. |
+| `GET` | `/v1/admin/kyber/agentic-observability/campaigns/{campaign_id}/influence` | Observed agentic campaign touchpoints and modeling eligibility without causal attribution claims. |
+
+These endpoints are Kyber/admin read surfaces. They use authenticated tenant scope, label evidence classifications, and do not execute provider actions or mutate external systems.

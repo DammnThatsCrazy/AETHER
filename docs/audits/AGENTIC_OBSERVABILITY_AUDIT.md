@@ -11,7 +11,7 @@ source_files:
   - Backend Architecture/aether-backend/services/agent/
   - packages/shared/events.ts
   - packages/shared/agentic-observability.ts
-last_synced_commit: e279268
+last_synced_commit: eb139e42
 ---
 
 # Agentic Observability Audit
@@ -66,6 +66,10 @@ No files in this bucket. The existing x402 and agent infrastructure is correctly
 | MCP connection observation | `services/agentic_observability/` — observe MCP connections, tool invocations, agent activity |
 | Agent risk signals | `services/agentic_observability/risk_signals.py` — compute and record risk signals from observed activity |
 | Canonical observation envelope | `packages/shared/agentic-observability.ts` — `AgenticObservationEvent` TypeScript type |
+| Node server-side agentic helpers | `packages/server/src/agentic.ts` — Contract v2 observation builders and SDK helper methods for agents, runtimes, MCP, authorization, provider actions, and provider verification |
+| Python server-side agentic helpers | `packages/python/aether_agentic/agentic.py` — Contract v2 observation builders and queue-backed helper methods for Python agents, MCP, authorization, provider actions, and provider verification |
+| Provider-neutral verification substrate | `services/agentic_observability/provider_framework.py` — adapter contract, X reference normalization, provider verification state machine, permission findings, and provider-neutral graph projection records |
+| Noesis agentic intelligence | `services/noesis/adapters/agentic_intelligence_adapter.py` — read-only deterministic intents for inventory, activity, MCP topology, authorization, verification, mismatch, permission risk, and evidence-path questions |
 
 ## Bucket 5 — Kyber visibility gap
 
@@ -97,3 +101,18 @@ No files in this bucket. The existing x402 and agent infrastructure is correctly
 | `docs/BACKEND-API.md` | Missing 30+ observability routes, 7 Kyber admin routes |
 | `docs/ECONOMIC-OBSERVABILITY.md` | Framing does not distinguish "externally observed" from "AETHER-originated" |
 | `docs/PROFILE-360-AGGREGATION.md` | No Agent entity Profile360 sections |
+
+## PR 1 current-state audit and gap matrix (2026-07-03)
+
+| Capability | Current implementation | Current source files | Status | Required action | Target PR | Acceptance test |
+|---|---|---|---|---|---|---|
+| Router activation | Agentic, protocol, communication, and external-account routers are mounted from `main.py` behind `AGENTIC_*` feature flags. | `Backend Architecture/aether-backend/main.py`, `Backend Architecture/aether-backend/config/settings.py` | partial | Add capabilities endpoint exposure and deeper per-route disabled-state tests. | PR 1 follow-up | Router mounting and feature-flag tests. |
+| Tenant authority | Routes now reject request-body tenant mismatches and use authenticated request tenant for persisted rows. | `services/agentic_observability/foundation.py`, observability route modules | partial | Extend the same helper through x402 routes and legacy repositories. | PR 1/2 | Missing/mismatched/cross-tenant tests. |
+| Graph tenant naming | Graph-boundary helper adds canonical `tenantId` while preserving legacy `tenant_id` for current graph readers. | `services/agentic_observability/foundation.py` | partial | Complete graph-contract migration to one reader-visible canonical property. | PR 5 | Graph contract parity and cross-tenant graph tests. |
+| Mutation counts | Agentic routes report built and persisted counts; compatibility `graph_mutations_queued` now equals persisted count. | `services/agentic_observability/routes.py`, `schemas.py` | partial | Move all graph writes to durable outbox and update protocol/comm/external responses with the richer schema. | PR 2 | Truthful mutation count tests. |
+| Silent graph failures | Shared helper logs structured graph projection failures and returns `failed` status without rejecting accepted observations. | `services/agentic_observability/foundation.py` | partial | Store failures durably in outbox/dead-letter tables. | PR 2 | Worker retry/dead-letter tests. |
+| Event name validation | Generic agent event endpoint rejects names not present in canonical generated registry. | `services/agentic_observability/foundation.py`, `services/ingestion/generated_registry.py` | partial | Add generated TS/Python/OpenAPI parity checks for all observability event families. | PR 1/3 | Unknown-event and parity tests. |
+| No-execution invariant | Existing `Literal[False]` checks are backed by a shared route validator with clearer error text. | `services/agentic_observability/foundation.py` | partial | Extend import-boundary/static dependency checks. | PR 8 | Negative route and import-boundary tests. |
+| Kyber placeholders | Agentic, inbox, and external-account Kyber endpoints return repository-backed counts/lists instead of placeholder messages or hardcoded empty arrays. | observability route modules | partial | Build full Kyber lineage, replay, reconciliation, and health surfaces. | PR 7 | Non-placeholder route tests. |
+| Canonical ingestion | Generic agent event observations now route through Bronze → typed Silver → canonical_activity → graph outbox while legacy JSONB remains synced for compatibility. | `services/agentic_observability/pipeline.py`, `repositories/agentic_observability_repos.py` | partial | Extend pipeline to all compatibility endpoints, formalize migrations, and add worker/replay/reconciliation. | PR 2 | Pipeline integration test. |
+| Product surfaces | Profile 360, Journey v2, Cluster360, campaign, Noesis, and frontend propagation remain incomplete. | profile/journey/cluster/campaign/noesis/frontend services | missing | Implement propagation and evidence labeling. | PR 6/7 | End-to-end product scenario. |

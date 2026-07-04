@@ -48,6 +48,18 @@ SUPPORTED_INTENTS: frozenset[str] = frozenset({
     "suggestion_review_queue",
     "suggestion_explain",
     "suggestion_outcome_lookup",
+    # Agentic Intelligence (read-only — Noesis explains observed evidence only)
+    "agent_inventory_lookup",
+    "agent_activity_lookup",
+    "mcp_topology_lookup",
+    "authorization_lookup",
+    "provider_verification_lookup",
+    "verification_mismatch_lookup",
+    "permission_risk_lookup",
+    "agent_path_lookup",
+    "agent_profile360_lookup",
+    "journey_agentic_steps_lookup",
+    "campaign_agentic_influence_lookup",
 })
 
 SUPPORTED_ENTITY_TYPES: frozenset[str] = frozenset({
@@ -183,6 +195,14 @@ class QueryPlan(BaseModel):
         "suggestion_review_queue",
         "suggestion_explain",
         "suggestion_outcome_lookup",
+        "agent_inventory_lookup",
+        "agent_activity_lookup",
+        "mcp_topology_lookup",
+        "authorization_lookup",
+        "provider_verification_lookup",
+        "verification_mismatch_lookup",
+        "permission_risk_lookup",
+        "agent_path_lookup",
         "unsupported",
     ]
     target: Optional[str] = None
