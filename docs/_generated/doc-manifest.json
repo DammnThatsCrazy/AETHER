@@ -3416,6 +3416,20 @@
       "since_version": "9.0.0"
     },
     {
+      "path": "docs/architecture/AGENTIC_INGESTION_PIPELINE.md",
+      "title": "Agentic Ingestion Pipeline",
+      "slug": "architecture/agentic-ingestion-pipeline",
+      "section": "architecture",
+      "visibility": "I",
+      "audience": [
+        "dev-senior",
+        "architect",
+        "ai"
+      ],
+      "status": "experimental",
+      "since_version": "8.11.0"
+    },
+    {
       "path": "docs/architecture/BACKEND_INTELLIGENCE_ARCHITECTURE.md",
       "title": "Aether Backend Intelligence Architecture Blueprint",
       "slug": "architecture/backend-intelligence",
@@ -3457,6 +3471,20 @@
       ],
       "status": "stable",
       "since_version": "9.0.0"
+    },
+    {
+      "path": "docs/architecture/GRAPH_OUTBOX.md",
+      "title": "Agentic Graph Outbox",
+      "slug": "architecture/agentic-graph-outbox",
+      "section": "architecture",
+      "visibility": "I",
+      "audience": [
+        "dev-senior",
+        "architect",
+        "ai"
+      ],
+      "status": "experimental",
+      "since_version": "8.11.0"
     },
     {
       "path": "docs/architecture/UNIVERSAL_GRAPH_ARCHITECTURE.md",
@@ -3690,6 +3718,34 @@
       ]
     },
     {
+      "path": "docs/connectors/PROVIDER_CONNECTOR_FRAMEWORK.md",
+      "title": "Agentic Provider Connector Framework",
+      "slug": "connectors/provider-connector-framework",
+      "section": "architecture",
+      "visibility": "I",
+      "audience": [
+        "dev-senior",
+        "architect",
+        "ai"
+      ],
+      "status": "experimental",
+      "since_version": "8.11.0"
+    },
+    {
+      "path": "docs/connectors/X_CONNECTOR.md",
+      "title": "X Agentic Reference Connector",
+      "slug": "connectors/x-agentic-reference-connector",
+      "section": "architecture",
+      "visibility": "I",
+      "audience": [
+        "dev-senior",
+        "architect",
+        "ai"
+      ],
+      "status": "experimental",
+      "since_version": "8.11.0"
+    },
+    {
       "path": "docs/decisions/ADR-001-docs-stamp-system.md",
       "title": "ADR-001: Documentation Sync Stamp System",
       "slug": "decisions/adr-001-docs-stamp-system",
@@ -3802,6 +3858,20 @@
       "canonical_owner": "frontend@aether"
     },
     {
+      "path": "docs/graph/AGENTIC_GRAPH_MODEL.md",
+      "title": "Agentic Delegated Authority Graph Model",
+      "slug": "graph/agentic-graph-model",
+      "section": "architecture",
+      "visibility": "I",
+      "audience": [
+        "dev-senior",
+        "architect",
+        "ai"
+      ],
+      "status": "experimental",
+      "since_version": "8.11.0"
+    },
+    {
       "path": "docs/internal/noesis-security-checklist.md",
       "title": "Noesis Production Security Checklist",
       "slug": "internal/noesis-security-checklist",
@@ -3840,6 +3910,20 @@
       "estimated_read_minutes": 8,
       "toc_depth": 3,
       "canonical_owner": "platform@aether"
+    },
+    {
+      "path": "docs/noesis/AGENTIC_INTELLIGENCE.md",
+      "title": "Noesis Agentic Intelligence",
+      "slug": "noesis/agentic-intelligence",
+      "section": "architecture",
+      "visibility": "I",
+      "audience": [
+        "dev-senior",
+        "architect",
+        "ai"
+      ],
+      "status": "experimental",
+      "since_version": "8.11.0"
     },
     {
       "path": "docs/noesis-ga-contract.md",
@@ -4033,6 +4117,21 @@
       ],
       "status": "stable",
       "since_version": "8.12.0"
+    },
+    {
+      "path": "docs/release/AGENTIC_GA_CERTIFICATION.md",
+      "title": "Agentic Intelligence GA Certification",
+      "slug": "release/agentic-ga-certification",
+      "section": "operations",
+      "visibility": "I",
+      "audience": [
+        "dev-senior",
+        "architect",
+        "ai",
+        "ops"
+      ],
+      "status": "experimental",
+      "since_version": "8.11.0"
     },
     {
       "path": "docs/reports/ML-FULL-PRODUCTIONIZATION-REPORT.md",
@@ -4250,6 +4349,34 @@
       "canonical_owner": "platform@aether"
     },
     {
+      "path": "docs/runbooks/agentic-graph-backlog.md",
+      "title": "Agentic Graph Backlog Runbook",
+      "slug": "operations/agentic-graph-backlog",
+      "section": "operations",
+      "visibility": "I",
+      "audience": [
+        "ops",
+        "dev-senior",
+        "architect"
+      ],
+      "status": "experimental",
+      "since_version": "8.11.0"
+    },
+    {
+      "path": "docs/runbooks/agentic-reconciliation.md",
+      "title": "Agentic Reconciliation Runbook",
+      "slug": "operations/agentic-reconciliation",
+      "section": "operations",
+      "visibility": "I",
+      "audience": [
+        "ops",
+        "dev-senior",
+        "architect"
+      ],
+      "status": "experimental",
+      "since_version": "8.11.0"
+    },
+    {
       "path": "docs/runbooks/semantic-sentiment/semantic-sentiment-operations.md",
       "title": "Semantic-Sentiment Operations Runbook",
       "slug": "semantic-sentiment/operations-runbook",
@@ -4263,6 +4390,62 @@
       "since_version": "8.11.0",
       "estimated_read_minutes": 6,
       "canonical_owner": "platform-intelligence@aether"
+    },
+    {
+      "path": "docs/sdk/AGENTIC_CONTRACT_V2.md",
+      "title": "Agentic Observation Contract v2",
+      "slug": "sdk/agentic-contract-v2",
+      "section": "sdks",
+      "visibility": "I",
+      "audience": [
+        "dev-senior",
+        "architect",
+        "ai"
+      ],
+      "status": "experimental",
+      "since_version": "8.11.0"
+    },
+    {
+      "path": "docs/sdk/NODE_AGENTIC_SDK.md",
+      "title": "Node Agentic SDK",
+      "slug": "sdk/node-agentic-sdk",
+      "section": "sdks",
+      "visibility": "I",
+      "audience": [
+        "dev-senior",
+        "architect",
+        "ai"
+      ],
+      "status": "experimental",
+      "since_version": "8.11.0"
+    },
+    {
+      "path": "docs/sdk/PYTHON_AGENTIC_SDK.md",
+      "title": "Python Agentic SDK",
+      "slug": "sdk/python-agentic-sdk",
+      "section": "sdks",
+      "visibility": "I",
+      "audience": [
+        "dev-senior",
+        "architect",
+        "ai"
+      ],
+      "status": "experimental",
+      "since_version": "8.11.0"
+    },
+    {
+      "path": "docs/security/AGENTIC_AUTHORIZATION_MODEL.md",
+      "title": "Agentic Authorization Model",
+      "slug": "security/agentic-authorization-model",
+      "section": "security",
+      "visibility": "I",
+      "audience": [
+        "dev-senior",
+        "architect",
+        "ai"
+      ],
+      "status": "experimental",
+      "since_version": "8.11.0"
     },
     {
       "path": "docs/security/UNIVERSAL_GRAPH_SECURITY_MODEL.md",

@@ -46,9 +46,16 @@ def normalize(raw: dict, provider: str, tenant_id: str, event_name: str) -> Agen
         agent = AgentRef(
             agent_id=agent_data.get("agent_id"),
             external_agent_id=agent_data.get("external_agent_id"),
+            agent_version=agent_data.get("agent_version"),
             model=agent_data.get("model"),
+            model_version=agent_data.get("model_version"),
             framework=agent_data.get("framework"),
+            framework_version=agent_data.get("framework_version"),
+            runtime_id=agent_data.get("runtime_id") or (raw.get("runtime") or {}).get("runtime_id"),
+            environment=agent_data.get("environment") or (raw.get("runtime") or {}).get("environment"),
             autonomy_level=autonomy,
+            owner_id=agent_data.get("owner_id"),
+            organization_id=agent_data.get("organization_id"),
         )
 
     obj_data = raw.get("object", {})
@@ -84,7 +91,7 @@ def normalize(raw: dict, provider: str, tenant_id: str, event_name: str) -> Agen
     provenance = ObservationProvenance(
         raw_event_hash=raw_hash,
         normalized_by=_NORMALIZER_ID,
-        schema_version="1.0",
+        schema_version=str(raw.get("schema_version") or "1.0"),
     )
 
     caller_risk = raw.get("risk")
@@ -105,10 +112,16 @@ def normalize(raw: dict, provider: str, tenant_id: str, event_name: str) -> Agen
         source=source,
         actor=actor,
         agent=agent,
+        runtime=raw.get("runtime"),
+        correlation=raw.get("correlation"),
+        mcp=raw.get("mcp"),
+        authorization=raw.get("authorization"),
         object=obj,
         action=action,
         economics=economics,
+        verification=raw.get("verification"),
         risk=risk,
+        privacy=raw.get("privacy"),
         provenance=provenance,
     )
 
