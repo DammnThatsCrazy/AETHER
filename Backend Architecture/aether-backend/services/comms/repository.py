@@ -428,6 +428,152 @@ class CommsFactsRepository:
             )
         return [dict(r) for r in records]
 
+    async def campaign_population(
+        self, tenant_id: str, campaign_id: str,
+        *, stage: Optional[str] = None,
+        bounced: Optional[bool] = None,
+        suppressed: Optional[bool] = None,
+        unsubscribed: Optional[bool] = None,
+        complained: Optional[bool] = None,
+        human_qualified: Optional[bool] = None,
+        limit: int = 100,
+    ) -> list[dict[str, Any]]:
+        """Per-recipient population rows for one campaign (Phase 19).
+
+        Each row carries the recipient's highest reached stage
+        (``attempted → delivered → engaged → replied``), delivery flags, and
+        human-qualified engagement counts. Stage/flag filters compose.
+        Recipients are keyed by alias hash (falling back to entity id) —
+        no raw addresses appear anywhere.
+        """
+        rows = await self._population_rows(tenant_id, campaign_id, limit=limit * 5)
+
+        out = []
+        for row in rows:
+            if stage and row["stage"] != stage:
+                continue
+            if bounced is not None and bool(row["bounced"]) != bounced:
+                continue
+            if suppressed is not None and bool(row["suppressed"]) != suppressed:
+                continue
+            if unsubscribed is not None and bool(row["unsubscribed"]) != unsubscribed:
+                continue
+            if complained is not None and bool(row["complained"]) != complained:
+                continue
+            if human_qualified is True and row["human_clicks"] == 0 and row["replies"] == 0:
+                continue
+            out.append(row)
+            if len(out) >= limit:
+                break
+        return out
+
+    async def _population_rows(
+        self, tenant_id: str, campaign_id: str, *, limit: int,
+    ) -> list[dict[str, Any]]:
+        pool = await self._pool()
+        if pool is None:
+            by_recipient: dict[str, list[dict[str, Any]]] = {}
+            for r in _local_facts.values():
+                if (r.get("tenant_id") == tenant_id
+                        and str(r.get("campaign_id")) == str(campaign_id)):
+                    key = str(r.get("recipient_alias_id") or r.get("recipient_entity_id")
+                              or r.get("profile_id") or r.get("fact_id"))
+                    by_recipient.setdefault(key, []).append(r)
+            return [
+                _classify_recipient(key, facts)
+                for key, facts in sorted(by_recipient.items())
+            ][:limit]
+
+        async with pool.acquire() as conn:
+            records = await conn.fetch(
+                """
+                SELECT
+                    COALESCE(recipient_alias_id, recipient_entity_id, profile_id,
+                             fact_id::text) AS recipient_key,
+                    MAX(COALESCE(recipient_entity_id, profile_id)) AS entity_id,
+                    MAX(recipient_display) AS recipient_display,
+                    COUNT(*) FILTER (WHERE source_event_type = 'email_sent') AS sent,
+                    COUNT(*) FILTER (WHERE source_event_type = 'email_delivered') AS delivered,
+                    COUNT(*) FILTER (
+                        WHERE source_event_type = 'email_opened'
+                        AND COALESCE(suspected_machine_activity, false) = false
+                    ) AS human_opens,
+                    COUNT(*) FILTER (
+                        WHERE source_event_type = 'email_clicked'
+                        AND COALESCE(suspected_machine_activity, false) = false
+                    ) AS human_clicks,
+                    COUNT(*) FILTER (
+                        WHERE source_event_type IN ('email_replied', 'message_replied_observed')
+                        AND automated_response_kind IS NULL
+                    ) AS replies,
+                    COUNT(*) FILTER (WHERE source_event_type = 'email_bounced') AS bounces,
+                    COUNT(*) FILTER (WHERE source_event_type = 'email_spam_complaint') AS complaints,
+                    COUNT(*) FILTER (WHERE source_event_type = 'unsubscribe_observed') AS unsubscribes,
+                    COUNT(*) FILTER (WHERE source_event_type = 'email_suppressed') AS suppressions,
+                    MAX(occurred_at) FILTER (
+                        WHERE engagement_type IS NOT NULL
+                        AND COALESCE(suspected_machine_activity, false) = false
+                    ) AS last_engagement_at,
+                    MAX(identity_confidence) AS identity_confidence
+                FROM silver_comms_facts
+                WHERE tenant_id = $1 AND campaign_id = $2
+                GROUP BY COALESCE(recipient_alias_id, recipient_entity_id, profile_id,
+                                  fact_id::text)
+                ORDER BY MAX(occurred_at) DESC
+                LIMIT $3
+                """,
+                tenant_id, campaign_id, limit,
+            )
+        return [_population_row_from_record(dict(r)) for r in records]
+
+    async def tombstone_by_profile(self, tenant_id: str, entity_id: str) -> int:
+        """DSR erasure: delete communication facts and derived state for an
+        entity (ADR-C10).
+
+        Active suppression records are intentionally retained — honoring an
+        opt-out after erasure requires keeping the suppression itself.
+        Returns the number of facts removed.
+        """
+        pool = await self._pool()
+        if pool is None:
+            keys = [
+                k for k, r in _local_facts.items()
+                if r.get("tenant_id") == tenant_id
+                and entity_id in (r.get("profile_id"), r.get("recipient_entity_id"),
+                                  r.get("user_id"), r.get("recipient_alias_id"))
+            ]
+            for k in keys:
+                _local_facts.pop(k, None)
+            state_keys = [k for k in _local_state if k.startswith(f"{tenant_id}:{entity_id}:")]
+            for k in state_keys:
+                _local_state.pop(k, None)
+            removed = len(keys)
+        else:
+            async with pool.acquire() as conn:
+                result = await conn.execute(
+                    """
+                    DELETE FROM silver_comms_facts
+                    WHERE tenant_id = $1
+                      AND (profile_id = $2 OR recipient_entity_id = $2
+                           OR user_id = $2 OR recipient_alias_id = $2)
+                    """,
+                    tenant_id, entity_id,
+                )
+                await conn.execute(
+                    "DELETE FROM communication_state WHERE tenant_id = $1 AND entity_id = $2",
+                    tenant_id, entity_id,
+                )
+            removed = int(result.split()[-1]) if result else 0
+        from shared.logger.logger import metrics as _metrics
+        _metrics.increment(
+            "comms_dsr_erasures_total", labels={"tenant_id": tenant_id}
+        )
+        logger.info(
+            "comms_dsr_erasure tenant=%s entity=%s facts_removed=%d",
+            tenant_id, entity_id, removed,
+        )
+        return removed
+
     async def facts_for_state_rebuild(
         self, tenant_id: str, entity_id: str, channel: str = "email",
     ) -> list[dict[str, Any]]:
@@ -721,6 +867,88 @@ def _local_funnel(rows: list[dict[str, Any]]) -> dict[str, Any]:
         "dropped": sum(1 for r in rows if r.get("source_event_type") == "email_dropped"),
         "machine_events": sum(1 for r in rows if r.get("suspected_machine_activity")),
         "total_events": len(rows),
+    }
+
+
+def _classify_recipient(key: str, facts: list[dict[str, Any]]) -> dict[str, Any]:
+    """Local-mode recipient classification mirroring the SQL rollup."""
+    def count(pred) -> int:
+        return sum(1 for f in facts if pred(f))
+
+    human = lambda f: not f.get("suspected_machine_activity")  # noqa: E731
+    record = {
+        "recipient_key": key,
+        "entity_id": next(
+            (f.get("recipient_entity_id") or f.get("profile_id")
+             for f in facts if f.get("recipient_entity_id") or f.get("profile_id")),
+            None,
+        ),
+        "recipient_display": next(
+            (f.get("recipient_display") for f in facts if f.get("recipient_display")), None,
+        ),
+        "sent": count(lambda f: f.get("source_event_type") == "email_sent"),
+        "delivered": count(lambda f: f.get("source_event_type") == "email_delivered"),
+        "human_opens": count(lambda f: f.get("source_event_type") == "email_opened" and human(f)),
+        "human_clicks": count(lambda f: f.get("source_event_type") == "email_clicked" and human(f)),
+        "replies": count(lambda f: f.get("source_event_type") in ("email_replied", "message_replied_observed")
+                         and not f.get("automated_response_kind")),
+        "bounces": count(lambda f: f.get("source_event_type") == "email_bounced"),
+        "complaints": count(lambda f: f.get("source_event_type") == "email_spam_complaint"),
+        "unsubscribes": count(lambda f: f.get("source_event_type") == "unsubscribe_observed"),
+        "suppressions": count(lambda f: f.get("source_event_type") == "email_suppressed"),
+        "last_engagement_at": max(
+            (str(f.get("occurred_at")) for f in facts
+             if f.get("engagement_type") and human(f)), default=None,
+        ),
+        "identity_confidence": max(
+            (float(f["identity_confidence"]) for f in facts
+             if f.get("identity_confidence") is not None), default=None,
+        ),
+    }
+    return _population_row_from_record(record)
+
+
+def _population_row_from_record(record: dict[str, Any]) -> dict[str, Any]:
+    """Derive the highest reached stage and delivery flags for one recipient."""
+    replies = int(record.get("replies") or 0)
+    human_clicks = int(record.get("human_clicks") or 0)
+    human_opens = int(record.get("human_opens") or 0)
+    delivered = int(record.get("delivered") or 0)
+    sent = int(record.get("sent") or 0)
+
+    if replies > 0:
+        stage = "replied"
+    elif human_clicks > 0 or human_opens > 0:
+        stage = "engaged"
+    elif delivered > 0:
+        stage = "delivered"
+    elif sent > 0:
+        stage = "attempted"
+    else:
+        stage = "observed"
+
+    return {
+        "recipient_key": str(record.get("recipient_key")),
+        "entity_id": record.get("entity_id"),
+        "recipient_display": record.get("recipient_display"),
+        "stage": stage,
+        "sent": sent,
+        "delivered": delivered,
+        "human_opens": human_opens,
+        "human_clicks": human_clicks,
+        "replies": replies,
+        "bounced": int(record.get("bounces") or 0) > 0,
+        "complained": int(record.get("complaints") or 0) > 0,
+        "unsubscribed": int(record.get("unsubscribes") or 0) > 0,
+        "suppressed": int(record.get("suppressions") or 0) > 0,
+        "last_engagement_at": (
+            str(record["last_engagement_at"]) if record.get("last_engagement_at") else None
+        ),
+        "identity_confidence": (
+            float(record["identity_confidence"])
+            if record.get("identity_confidence") is not None else None
+        ),
+        "profile360": f"/v1/profile/{record['entity_id']}" if record.get("entity_id") else None,
     }
 
 

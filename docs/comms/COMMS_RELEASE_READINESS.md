@@ -57,13 +57,32 @@ source_files:
 | Schema issue | `alembic downgrade 20260702_fraud_decisions` (additive-only drop) |
 | Attribution dispute | Toggle `AETHER_COMMS_REPLIES_ELIGIBLE` / `AETHER_COMMS_OPENS_VIEW_THROUGH`; rerun attribution |
 
-## Known limitations (initial version)
+## Operator remediation surface
+
+Audited, operator-gated actions under `/v1/comms/admin/*` (Kyber →
+Measurement Operations → Communications pipeline health):
+
+- `POST /state/rebuild` — recompute one entity's communication state and
+  journey from facts (idempotent).
+- `POST /graph/reproject` — re-fold a campaign's facts into the aggregated
+  relationship graph (aggregates upsert in place; no cardinality growth).
+- `POST /dsr/erase` — DSR erasure of an entity's communication facts and
+  derived state (`confirm=true` required; suppressions retained so
+  opt-outs stay honored).
+
+Rebuilds are coalesced (`services/comms/rebuild_coalescer.py`): an event
+burst for one profile inside the debounce window
+(`AETHER_COMMS_REBUILD_WINDOW_SECONDS`, default 5s) produces exactly one
+state recompute and one journey recompile.
+
+## Known limitations
 
 - Klaviyo pull requires credentials in a non-local environment
   (`CREDENTIAL_GATED`); local mode exercises webhook parsing only.
-- Cross-channel initiative rollups have schema + registry support but no
-  dedicated frontend surface yet.
-- Coalesced journey-rebuild batching uses the existing per-touchpoint
-  trigger; a debounced batch queue is deferred (non-blocking).
+- Initiative rollups sum per-campaign unique recipients; cross-channel
+  identity overlap is not deduplicated at the initiative level (stated in
+  the rollup response notes).
 - Reply intent classification (positive/negative/scheduling) is deferred;
   deterministic automated-response detection ships now.
+- The rebuild coalescer is process-local; a lost flush on restart
+  self-heals on the next event or via the operator rebuild action.
