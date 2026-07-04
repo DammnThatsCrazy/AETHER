@@ -37,8 +37,8 @@ def test_consent_purposes_match_union_and_docblock(ec):
     text = (ROOT / "packages" / "shared" / "consent.ts").read_text(encoding="utf-8")
     payload = ec.build_payload(text)
     names = [p["name"] for p in payload["purposes"]]
-    assert set(names) == {"analytics", "marketing", "personalization", "web3", "agent", "commerce", "credit", "location"}
-    assert len(names) == 8
+    assert set(names) == {"analytics", "marketing", "personalization", "web3", "agent", "commerce", "financial_activity", "credit", "location"}
+    assert len(names) == 9
     for p in payload["purposes"]:
         assert p["description"], f"{p['name']} has empty description"
 
@@ -46,7 +46,7 @@ def test_consent_purposes_match_union_and_docblock(ec):
 def test_consent_state_fields_include_all_purposes(ec):
     text = (ROOT / "packages" / "shared" / "consent.ts").read_text(encoding="utf-8")
     payload = ec.build_payload(text)
-    for purpose in ["analytics", "marketing", "personalization", "web3", "agent", "commerce", "credit", "location"]:
+    for purpose in ["analytics", "marketing", "personalization", "web3", "agent", "commerce", "financial_activity", "credit", "location"]:
         assert purpose in payload["state_fields"]
 
 

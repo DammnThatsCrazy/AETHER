@@ -532,6 +532,7 @@ class AetherSDK implements AetherSDKInterface {
         web3: false,
         agent: false,
         commerce: false,
+        financial_activity: false,
         credit: false,
         location: false,
         updatedAt: '',
