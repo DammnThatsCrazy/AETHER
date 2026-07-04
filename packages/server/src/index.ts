@@ -24,6 +24,13 @@ export { scrubSensitiveFields } from './scrubber';
 export { makeServerClient } from './client';
 export type { AetherServerConfig, ServerEvent, ServerConsentState, ConsentPurpose } from './types';
 export type { SdkHealthSnapshot } from './health';
+export {
+  buildAgentEvent,
+  buildMCPObservation,
+  buildToolInvocation,
+  buildRiskSignal,
+} from './agentic';
+export type { AgentEventEnvelope } from './agentic';
 
 const EXPLICIT_OPT_IN_PURPOSES: readonly ConsentPurpose[] = ['credit', 'location'];
 const ALL_PURPOSES: readonly ConsentPurpose[] = [

@@ -12,7 +12,7 @@ source_files:
   - Backend Architecture/aether-backend/services/measurement/repositories/journey_step_repo.py
   - Backend Architecture/aether-backend/services/measurement/silver_adapters.py
   - Backend Architecture/aether-backend/alembic/versions/20260627_canonical_activity.py
-last_synced_commit: 4d76caf
+last_synced_commit: 2ef5e44
 ---
 
 # Unified Web2/Web3 Canonical Journey — Execution State
