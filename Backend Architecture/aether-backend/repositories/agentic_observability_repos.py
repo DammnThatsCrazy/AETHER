@@ -138,3 +138,39 @@ class AgentPerformanceRepository(BaseRepository):
     """Stores observed agent performance snapshots (obs_agent_performance)."""
     def __init__(self) -> None:
         super().__init__("obs_agent_performance")
+
+
+class AgenticBronzeObservationRepository(BaseRepository):
+    """Bronze-tier immutable store for raw agentic observation payloads."""
+    def __init__(self) -> None:
+        super().__init__("bronze_agentic_observations")
+
+
+class SilverAgentToolInvocationFactRepository(BaseRepository):
+    """Silver-tier validated agent tool invocation facts."""
+    def __init__(self) -> None:
+        super().__init__("silver_agent_tool_invocation_facts")
+
+
+class SilverMCPConnectionFactRepository(BaseRepository):
+    """Silver-tier validated MCP connection facts."""
+    def __init__(self) -> None:
+        super().__init__("silver_mcp_connection_facts")
+
+
+class SilverAgentRiskFactRepository(BaseRepository):
+    """Silver-tier validated agent risk signal facts."""
+    def __init__(self) -> None:
+        super().__init__("silver_agent_risk_facts")
+
+
+class SilverAgentActivityFactRepository(BaseRepository):
+    """Silver-tier validated agent activity facts."""
+    def __init__(self) -> None:
+        super().__init__("silver_agent_activity_facts")
+
+
+class AgenticProjectionOutboxRepository(BaseRepository):
+    """Durable outbox for graph projection mutations (queued → persisted / dead_lettered)."""
+    def __init__(self) -> None:
+        super().__init__("agentic_projection_outbox")

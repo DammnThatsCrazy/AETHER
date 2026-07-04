@@ -77,12 +77,59 @@ class ObservationActor(BaseModel):
     external_actor_id: Optional[str] = None
 
 
+class RuntimeRef(BaseModel):
+    runtime_id: Optional[str] = None
+    environment: Optional[str] = None
+    instance_id: Optional[str] = None
+
+
+class CorrelationRef(BaseModel):
+    trace_id: Optional[str] = None
+    span_id: Optional[str] = None
+    session_id: Optional[str] = None
+    parent_observation_id: Optional[str] = None
+
+
+class MCPObservationContext(BaseModel):
+    server_name: Optional[str] = None
+    server_url: Optional[str] = None
+    tool_name: Optional[str] = None
+    protocol_version: Optional[str] = None
+
+
+class AuthorizationContext(BaseModel):
+    grant_id: Optional[str] = None
+    scope: list[str] = Field(default_factory=list)
+    delegated_by: Optional[str] = None
+    expires_at: Optional[str] = None
+
+
+class VerificationContext(BaseModel):
+    verified_by: Optional[str] = None
+    verification_method: Optional[str] = None
+    verification_status: Optional[str] = None
+    verified_at: Optional[str] = None
+
+
+class PrivacyContext(BaseModel):
+    privacy_class: str = "behavioral"
+    consent_snapshot_id: Optional[str] = None
+    dsr_applicable: bool = False
+
+
 class AgentRef(BaseModel):
     agent_id: Optional[str] = None
     external_agent_id: Optional[str] = None
     model: Optional[str] = None
     framework: Optional[str] = None
     autonomy_level: Optional[AutonomyLevel] = None
+    agent_version: Optional[str] = None
+    model_version: Optional[str] = None
+    framework_version: Optional[str] = None
+    runtime_id: Optional[str] = None
+    environment: Optional[str] = None
+    owner_id: Optional[str] = None
+    organization_id: Optional[str] = None
 
 
 class ObservationObject(BaseModel):
@@ -129,7 +176,7 @@ class ObservationProvenance(BaseModel):
 
 
 class AgenticObservationRecord(BaseModel):
-    """Canonical stored document for any agentic observation."""
+    """Canonical stored document for any agentic observation (Contract v2)."""
     observation_id: str = Field(default_factory=_new_id)
     event_name: str
     tenant_id: str
@@ -143,6 +190,12 @@ class AgenticObservationRecord(BaseModel):
     economics: Optional[ObservationEconomics] = None
     risk: Optional[ObservationRisk] = None
     provenance: ObservationProvenance
+    runtime: Optional[RuntimeRef] = None
+    correlation: Optional[CorrelationRef] = None
+    mcp: Optional[MCPObservationContext] = None
+    authorization: Optional[AuthorizationContext] = None
+    verification: Optional[VerificationContext] = None
+    privacy: Optional[PrivacyContext] = None
 
     @classmethod
     def hash_payload(cls, raw: dict) -> str:
