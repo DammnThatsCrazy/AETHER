@@ -27,6 +27,10 @@
       "description": "Payments, approvals, entitlements, subscriptions, orders, and access control events."
     },
     {
+      "name": "financial_activity",
+      "description": "Read-only derivatives trading analytics: account connections, orders, fills, positions, collateral, margin, funding, fees, PnL, risk profiling, agent trading activity, campaign linkage, and governed model training. Always requires explicit opt-in."
+    },
+    {
       "name": "credit",
       "description": "Credit signals, account observations, and credit decisions. Always requires explicit opt-in. Always requires explicit opt-in."
     },
@@ -42,6 +46,7 @@
     "web3",
     "agent",
     "commerce",
+    "financial_activity",
     "credit",
     "location",
     "updatedAt",

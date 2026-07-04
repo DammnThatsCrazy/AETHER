@@ -395,6 +395,24 @@ campaign-release-check: ## Run full Campaign Intelligence release gate
 campaign-release-check-strict: ## Run Campaign Intelligence release gate with test suites
 	python scripts/campaign/check_campaign_release_gate.py --strict
 
+
+# ---------------------------------------------------------------------------
+# Derivatives Intelligence
+# ---------------------------------------------------------------------------
+
+derivatives-test: ## Run derivatives ingestion/accounting foundation tests
+	python -m pytest tests/unit/test_derivatives_ingestion.py -v
+
+derivatives-connector-test: derivatives-test ## Validate derivatives connector normalization and credential gates
+
+derivatives-position-test: derivatives-test ## Validate deterministic derivatives position reconstruction
+
+derivatives-reconciliation-test: derivatives-test ## Validate derivatives reconciliation variance detection
+
+derivatives-replay: derivatives-test ## Validate deterministic derivatives replay fixtures
+
+derivatives-ingestion-release-check: derivatives-test ## PR2 derivatives ingestion release gate
+
 # ---------------------------------------------------------------------------
 # Cleanup
 # ---------------------------------------------------------------------------
@@ -414,3 +432,13 @@ help: ## Show this help message
 	@echo ""
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | \
 		awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-18s\033[0m %s\n", $$1, $$2}'
+
+.PHONY: derivatives-graph-check derivatives-profile-check derivatives-intelligence-release-check
+derivatives-graph-check:
+	python -m pytest tests/unit/test_derivatives_intelligence.py -v
+
+derivatives-profile-check:
+	python -m pytest tests/unit/test_derivatives_intelligence.py -v
+
+derivatives-intelligence-release-check: derivatives-graph-check derivatives-profile-check
+	python -m pytest tests/unit/test_derivatives_ingestion.py tests/unit/test_derivatives_intelligence.py -v

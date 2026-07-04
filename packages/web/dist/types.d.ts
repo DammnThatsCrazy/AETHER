@@ -1282,13 +1282,15 @@ export interface ConsentState {
     agent: boolean;
     commerce: boolean;
     /** Always requires explicit opt-in — never granted by accept-all. */
+    financial_activity: boolean;
+    /** Always requires explicit opt-in — never granted by accept-all. */
     credit: boolean;
     /** Always requires explicit opt-in — never granted by accept-all. */
     location: boolean;
     updatedAt: string;
     policyVersion: string;
 }
-export type ConsentPurpose = 'analytics' | 'marketing' | 'personalization' | 'web3' | 'agent' | 'commerce' | 'credit' | 'location';
+export type ConsentPurpose = 'analytics' | 'marketing' | 'personalization' | 'web3' | 'agent' | 'commerce' | 'financial_activity' | 'credit' | 'location';
 export interface ConsentConfig {
     purposes: ConsentPurpose[];
     policyUrl: string;
