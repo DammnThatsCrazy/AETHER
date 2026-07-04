@@ -18,11 +18,14 @@ import { sendBatch } from './transport';
 import { scrubSensitiveFields } from './scrubber';
 import { SdkHealthTracker } from './health';
 import { makeServerClient } from './client';
+import { makeAgenticObserver } from './agentic';
 import type { AetherServerConfig, ServerEvent, ServerConsentState, ConsentPurpose } from './types';
 
 export { scrubSensitiveFields } from './scrubber';
 export { makeServerClient } from './client';
+export { makeAgenticObserver, buildAgenticObservation, toServerEvent } from './agentic';
 export type { AetherServerConfig, ServerEvent, ServerConsentState, ConsentPurpose } from './types';
+export type { AgenticObservationInput, AgenticObserverBase } from './agentic';
 export type { SdkHealthSnapshot } from './health';
 
 const EXPLICIT_OPT_IN_PURPOSES: readonly ConsentPurpose[] = ['credit', 'location'];
@@ -41,6 +44,8 @@ export class AetherServerSDK {
 
   /** Typed helpers for common server observation patterns. */
   readonly observe: ReturnType<typeof makeServerClient>;
+  /** Observation-only helpers for Agentic Contract v2 events. */
+  readonly agentic: ReturnType<typeof makeAgenticObserver>;
 
   constructor(config: AetherServerConfig) {
     this.config = {
@@ -56,6 +61,7 @@ export class AetherServerSDK {
     this.queue = new EventQueue({ maxSize: this.config.maxQueueSize });
     this.health = new SdkHealthTracker();
     this.observe = makeServerClient((event) => this.track(event));
+    this.agentic = makeAgenticObserver((event) => this.track(event));
     this.scheduleFlush();
   }
 
