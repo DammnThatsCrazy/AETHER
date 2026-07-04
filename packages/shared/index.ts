@@ -14,7 +14,7 @@ export * from './commerce';
 export * from './agent';
 export * from './x402-lifecycle';
 export * from './events'; // includes reward enablement event types (A6)
-export * from './agentic-observability'; // agentic observability contracts
+export * from './agentic-observability'; // agentic observability contracts, including Contract v2
 export * from './capabilities';
 export * from './economic';
 export * from './economic-metrics';
