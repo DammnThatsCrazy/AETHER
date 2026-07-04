@@ -3824,6 +3824,131 @@
       "canonical_owner": "platform@aether"
     },
     {
+      "path": "docs/derivatives/ARCHITECTURE.md",
+      "title": "Derivatives Architecture",
+      "slug": "derivatives/architecture",
+      "section": "architecture",
+      "visibility": "I",
+      "audience": [
+        "architect",
+        "dev-senior",
+        "ops"
+      ],
+      "status": "experimental",
+      "since_version": "8.11.0"
+    },
+    {
+      "path": "docs/derivatives/INGESTION.md",
+      "title": "Derivatives Ingestion",
+      "slug": "derivatives/ingestion",
+      "section": "data",
+      "visibility": "I",
+      "audience": [
+        "architect",
+        "dev-senior",
+        "ops"
+      ],
+      "status": "experimental",
+      "since_version": "8.11.0"
+    },
+    {
+      "path": "docs/derivatives/INTELLIGENCE.md",
+      "title": "Derivatives Intelligence",
+      "slug": "derivatives/intelligence",
+      "section": "concepts",
+      "visibility": "I",
+      "audience": [
+        "architect",
+        "dev-senior",
+        "ops"
+      ],
+      "status": "experimental",
+      "since_version": "8.11.0"
+    },
+    {
+      "path": "docs/derivatives/MARKET_RESOLUTION.md",
+      "title": "Derivatives Market Resolution",
+      "slug": "derivatives/market-resolution",
+      "section": "data",
+      "visibility": "I",
+      "audience": [
+        "architect",
+        "dev-senior",
+        "ops"
+      ],
+      "status": "experimental",
+      "since_version": "8.11.0"
+    },
+    {
+      "path": "docs/derivatives/OVERVIEW.md",
+      "title": "Derivatives Overview",
+      "slug": "derivatives/overview",
+      "section": "concepts",
+      "visibility": "I",
+      "audience": [
+        "architect",
+        "dev-senior",
+        "ops"
+      ],
+      "status": "experimental",
+      "since_version": "8.11.0"
+    },
+    {
+      "path": "docs/derivatives/POSITION_ACCOUNTING.md",
+      "title": "Derivatives Position Accounting",
+      "slug": "derivatives/position-accounting",
+      "section": "data",
+      "visibility": "I",
+      "audience": [
+        "architect",
+        "dev-senior",
+        "ops"
+      ],
+      "status": "experimental",
+      "since_version": "8.11.0"
+    },
+    {
+      "path": "docs/derivatives/PRODUCT_OPERATIONS.md",
+      "title": "Derivatives Product Operations",
+      "slug": "derivatives/product-operations",
+      "section": "operations",
+      "visibility": "I",
+      "audience": [
+        "architect",
+        "dev-senior",
+        "ops"
+      ],
+      "status": "experimental",
+      "since_version": "8.11.0"
+    },
+    {
+      "path": "docs/derivatives/RUNBOOKS.md",
+      "title": "Derivatives Runbooks",
+      "slug": "derivatives/runbooks",
+      "section": "operations",
+      "visibility": "I",
+      "audience": [
+        "ops",
+        "dev-senior"
+      ],
+      "status": "experimental",
+      "since_version": "8.11.0"
+    },
+    {
+      "path": "docs/derivatives/SECURITY.md",
+      "title": "Derivatives Security",
+      "slug": "derivatives/security",
+      "section": "security",
+      "visibility": "I",
+      "audience": [
+        "architect",
+        "dev-senior",
+        "ops"
+      ],
+      "status": "experimental",
+      "since_version": "8.11.0"
+    },
+    {
       "path": "docs/examples/reward-demo-web2.md",
       "title": "Reward Enablement Demo — Web2 Rails (recommend_only + tenant_webhook)",
       "slug": "examples/reward-demo-web2",
@@ -4438,6 +4563,11 @@
       "status": "draft",
       "estimated_read_minutes": 7,
       "canonical_owner": "compliance@aether"
+    },
+    {
+      "path": "docs/source-of-truth/DERIVATIVES_INTELLIGENCE_ALIGNMENT.md",
+      "title": "Derivatives Intelligence Alignment",
+      "status": "draft"
     },
     {
       "path": "docs/source-of-truth/DUNE_ACCESS_MODES.md",

@@ -9,11 +9,11 @@ const CONSENT_KEY = 'consent';
 const CONSENT_RECORDED_KEY = 'consent_recorded';
 const FP_STORAGE_KEY = '_aether_fp';
 
-// credit and location always require explicit opt-in — never granted by accept-all.
-const EXPLICIT_OPT_IN_PURPOSES: readonly ConsentPurpose[] = ['credit', 'location'];
+// financial_activity, credit, and location always require explicit opt-in — never granted by accept-all.
+const EXPLICIT_OPT_IN_PURPOSES: readonly ConsentPurpose[] = ['financial_activity', 'credit', 'location'];
 
 const ALL_PURPOSES: readonly ConsentPurpose[] = [
-  'analytics', 'marketing', 'personalization', 'web3', 'agent', 'commerce', 'credit', 'location',
+  'analytics', 'marketing', 'personalization', 'web3', 'agent', 'commerce', 'financial_activity', 'credit', 'location',
 ];
 
 export class ConsentModule {
@@ -73,8 +73,8 @@ export class ConsentModule {
   }
 
   /**
-   * Grant all purposes that do NOT require explicit opt-in (credit and location are excluded).
-   * To grant credit or location, call grant(['credit']) or grant(['location']) explicitly.
+   * Grant all purposes that do NOT require explicit opt-in (financial_activity, credit, and location are excluded).
+   * To grant credit or location, call grant(['financial_activity']), grant(['credit']), or grant(['location']) explicitly.
    */
   grantAll(): void {
     const grantable = this.config.purposes.filter(
@@ -202,6 +202,7 @@ export class ConsentModule {
       web3: false,
       agent: false,
       commerce: false,
+      financial_activity: false,
       credit: false,
       location: false,
       updatedAt: now(),
