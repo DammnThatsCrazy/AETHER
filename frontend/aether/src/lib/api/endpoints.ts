@@ -451,6 +451,9 @@ export const api = {
 
     commsFunnel: (campaignId: string) =>
       restClient.get(`/v1/campaigns/${campaignId}/comms-funnel`, wrap(unknownSchema)).then(r => r.data),
+
+    commsPopulation: (campaignId: string, params?: { stage?: string; bounced?: boolean; suppressed?: boolean; unsubscribed?: boolean; complained?: boolean; human_qualified?: boolean; limit?: number }) =>
+      restClient.get(`/v1/campaigns/${campaignId}/comms-population${buildQS({ ...params })}`, wrap(unknownSchema)).then(r => r.data),
   },
 
   // ── Communications Intelligence ─────────────────────────────────────────────
@@ -463,6 +466,16 @@ export const api = {
 
     entityCommunicationState: (entityId: string, params?: { channel?: string; scope?: string }) =>
       restClient.get(`/v1/profile/${entityId}/communication-state${buildQS({ ...params })}`, wrap(unknownSchema)).then(r => r.data),
+
+    // Cross-channel initiatives (macro rollup over canonical campaigns)
+    listInitiatives: (limit = 50) =>
+      restClient.get(`/v1/comms/initiatives?limit=${limit}`, wrap(unknownSchema)).then(r => r.data),
+
+    createInitiative: (body: { name: string; description?: string; campaign_ids?: string[] }) =>
+      restClient.post('/v1/comms/initiatives', wrap(unknownSchema), body).then(r => r.data),
+
+    initiativeRollup: (initiativeId: string) =>
+      restClient.get(`/v1/comms/initiatives/${initiativeId}/rollup`, wrap(unknownSchema)).then(r => r.data),
   },
 
   // ── Campaign Sources (paid-media connectors) ───────────────────────────────

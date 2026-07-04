@@ -419,6 +419,7 @@ Email-aware Campaign 360 endpoints backed by `silver_comms_facts` and the
 | GET `/{campaign_id}/messages` | Per-message rollup: delivered, human-qualified clicks, replies, bounces, machine events; merged with synced message dimension rows |
 | GET `/{campaign_id}/messages/{external_message_id}` | Message detail: dimension record, engagement stats, link rollup |
 | GET `/{campaign_id}/links` | Link performance: human-qualified clicks and unique clickers per link |
+| GET `/{campaign_id}/comms-population` | Recipient population with communication stages (attempted → delivered → engaged → replied) and composable flag filters (`bounced`, `complained`, `unsubscribed`, `suppressed`, `human_qualified`); alias-keyed rows with Profile360 links |
 | GET `/{campaign_id}/comms-funnel` | Email funnel in two modes — `provider_reported` (every provider event) and `human_qualified` (suspected machine activity and automated replies excluded) — plus delivery detail (bounces, complaints, unsubscribes, suppressions) and quality (machine-event rate) |
 
 ---

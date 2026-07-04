@@ -2024,6 +2024,16 @@ export const api = {
     // Communications Intelligence — fleet projection/resolution health
     commsFleetHealth: (tenantId?: string) =>
       restClient.get(`/v1/comms/admin/health${tenantId ? `?tenant_id=${encodeURIComponent(tenantId)}` : ''}`, wrap(unknownSchema)).then(r => r.data),
+
+    // Communications Intelligence — operator actions (audited)
+    commsRebuildState: (body: { tenant_id: string; entity_id: string; channel?: string }) =>
+      restClient.post('/v1/comms/admin/state/rebuild', wrap(unknownSchema), body).then(r => r.data),
+
+    commsReprojectGraph: (body: { tenant_id: string; campaign_id: string; limit?: number }) =>
+      restClient.post('/v1/comms/admin/graph/reproject', wrap(unknownSchema), body).then(r => r.data),
+
+    commsDsrErase: (body: { tenant_id: string; entity_id: string; confirm: boolean }) =>
+      restClient.post('/v1/comms/admin/dsr/erase', wrap(unknownSchema), body).then(r => r.data),
   },
 
   conversions: {

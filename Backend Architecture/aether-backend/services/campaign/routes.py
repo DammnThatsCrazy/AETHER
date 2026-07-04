@@ -531,6 +531,49 @@ async def get_campaign_links(campaign_id: str, request: Request):
     return APIResponse(data={"campaign_id": campaign_id, "items": links}).to_dict()
 
 
+@router.get("/{campaign_id}/comms-population")
+async def get_campaign_comms_population(
+    campaign_id: str,
+    request: Request,
+    stage: Optional[str] = Query(default=None, pattern="^(observed|attempted|delivered|engaged|replied)$"),
+    bounced: Optional[bool] = Query(default=None),
+    suppressed: Optional[bool] = Query(default=None),
+    unsubscribed: Optional[bool] = Query(default=None),
+    complained: Optional[bool] = Query(default=None),
+    human_qualified: Optional[bool] = Query(default=None),
+    limit: int = Query(default=100, ge=1, le=500),
+):
+    """Recipient population with communication stages and filters (Phase 19).
+
+    Stages reflect the highest state each recipient reached
+    (attempted → delivered → engaged → replied); delivery flags (bounced,
+    complained, unsubscribed, suppressed) compose with stage filters.
+    Every row links to Profile360; recipients are alias-keyed — no raw
+    addresses.
+    """
+    tenant = request.state.tenant
+    tenant.require_permission("campaign:read")
+    await _require_campaign(campaign_id, tenant)
+
+    from services.comms.repository import CommsFactsRepository
+    rows = await CommsFactsRepository().campaign_population(
+        tenant.tenant_id, campaign_id,
+        stage=stage, bounced=bounced, suppressed=suppressed,
+        unsubscribed=unsubscribed, complained=complained,
+        human_qualified=human_qualified, limit=limit,
+    )
+    stage_counts: dict[str, int] = {}
+    for row in rows:
+        stage_counts[row["stage"]] = stage_counts.get(row["stage"], 0) + 1
+    metrics.increment("campaign_comms_population_read")
+    return APIResponse(data={
+        "campaign_id": campaign_id,
+        "items": rows,
+        "stage_counts": stage_counts,
+        "count": len(rows),
+    }).to_dict()
+
+
 @router.get("/{campaign_id}/comms-funnel")
 async def get_campaign_comms_funnel(campaign_id: str, request: Request):
     """Email funnel with provider-reported and human-qualified modes.

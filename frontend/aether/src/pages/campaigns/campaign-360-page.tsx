@@ -202,11 +202,181 @@ function ConversionsTab({ campaignId, timeStart, timeEnd }: { campaignId: string
 
 // ── Messages tab (Communications Intelligence) ────────────────────────────────
 
+function MessageDetailDrawer({ campaignId, externalMessageId, onClose }: {
+  campaignId: string;
+  externalMessageId: string;
+  onClose: () => void;
+}) {
+  const [detail, setDetail] = useState<AnyRecord | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let active = true;
+    setLoading(true);
+    setError(null);
+    (api.campaigns.messageDetail(campaignId, externalMessageId) as Promise<AnyRecord>)
+      .then(d => { if (active) setDetail(d as AnyRecord); })
+      .catch(e => { if (active) setError(e instanceof Error ? e.message : String(e)); })
+      .finally(() => { if (active) setLoading(false); });
+    return () => { active = false; };
+  }, [campaignId, externalMessageId]);
+
+  const message = (detail?.message as AnyRecord) ?? {};
+  const stats = (detail?.stats as AnyRecord) ?? {};
+  const links = (detail?.links as AnyRecord[]) ?? [];
+
+  return (
+    <div
+      role="dialog"
+      aria-modal="true"
+      aria-label={`Message detail: ${externalMessageId}`}
+      className="fixed inset-y-0 right-0 z-40 w-full max-w-lg bg-surface-base border-l border-border-default shadow-xl overflow-y-auto"
+    >
+      <div className="flex items-center justify-between px-5 py-4 border-b border-border-default sticky top-0 bg-surface-base">
+        <div>
+          <h2 className="text-sm font-semibold text-text-primary">{String(message.name ?? externalMessageId)}</h2>
+          <p className="text-xs text-text-muted font-mono">{externalMessageId}</p>
+        </div>
+        <button
+          onClick={onClose}
+          aria-label="Close message detail"
+          className="text-xs px-2 py-1 rounded border border-border-default text-text-secondary hover:text-text-primary"
+        >
+          Close
+        </button>
+      </div>
+      <div className="p-5 space-y-5">
+        {loading && <LoadingState lines={6} />}
+        {error && <ErrorState title="Message detail unavailable" message={error} />}
+        {!loading && !error && (
+          <>
+            <div className="grid grid-cols-2 gap-3">
+              <Metric label="Delivered" value={Number(stats.delivered ?? 0).toLocaleString()} />
+              <Metric label="Human clicks" value={Number(stats.human_clicks ?? 0).toLocaleString()} />
+              <Metric label="Replies" value={Number(stats.replies ?? 0).toLocaleString()} />
+              <Metric label="Bounces" value={Number(stats.bounces ?? 0).toLocaleString()} />
+              <Metric label="Machine events" value={Number(stats.machine_events ?? 0).toLocaleString()} />
+              <Metric label="Sequence step" value={message.sequence_step != null ? String(message.sequence_step) : '—'} />
+            </div>
+            <div className="text-xs text-text-secondary space-y-1">
+              <p>Provider: <span className="text-text-primary">{String(message.provider ?? '—')}</span></p>
+              <p>Template: <span className="font-mono">{String(message.external_template_id ?? '—')}</span></p>
+              <p>Variant: <span className="font-mono">{String(message.variant_id ?? '—')}</span></p>
+              <p>Status: <Badge variant={message.status === 'active' ? 'success' : 'default'}>{String(message.status ?? '—')}</Badge></p>
+              <p>First seen: {message.first_seen_at ? new Date(String(message.first_seen_at)).toLocaleString() : '—'}</p>
+            </div>
+            <div>
+              <h3 className="text-xs font-medium text-text-secondary uppercase tracking-wide mb-2">Links</h3>
+              {!links.length
+                ? <EmptyState title="No link activity" description="No human-qualified clicks recorded for this message yet." />
+                : (
+                  <DataTable
+                    data={links}
+                    keyExtractor={r => String(r.link_id)}
+                    columns={[
+                      { key: 'link_id', header: 'Link', render: r => <span className="font-mono text-xs break-all">{String(r.link_id ?? '')}</span> },
+                      { key: 'human_clicks', header: 'Human clicks', render: r => Number(r.human_clicks ?? 0).toLocaleString() },
+                    ]}
+                  />
+                )
+              }
+            </div>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
+const POPULATION_STAGES = ['all', 'attempted', 'delivered', 'engaged', 'replied'] as const;
+
+function CommsRecipientsSection({ campaignId }: { campaignId: string }) {
+  const [stage, setStage] = useState<(typeof POPULATION_STAGES)[number]>('all');
+  const [rows, setRows] = useState<AnyRecord[]>([]);
+  const [stageCounts, setStageCounts] = useState<AnyRecord>({});
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let active = true;
+    setLoading(true);
+    setError(null);
+    (api.campaigns.commsPopulation(campaignId, stage === 'all' ? { limit: 100 } : { stage, limit: 100 }) as Promise<AnyRecord>)
+      .then(d => {
+        if (!active) return;
+        setRows(((d as AnyRecord).items as AnyRecord[]) ?? []);
+        setStageCounts(((d as AnyRecord).stage_counts as AnyRecord) ?? {});
+      })
+      .catch(e => { if (active) setError(e instanceof Error ? e.message : String(e)); })
+      .finally(() => { if (active) setLoading(false); });
+    return () => { active = false; };
+  }, [campaignId, stage]);
+
+  return (
+    <Card>
+      <CardHeader><CardTitle className="text-sm">Recipients</CardTitle></CardHeader>
+      <CardContent className="space-y-3">
+        <div className="flex gap-1 border border-border-default rounded-md p-0.5 w-fit" role="tablist" aria-label="Recipient stage">
+          {POPULATION_STAGES.map(s => (
+            <button
+              key={s}
+              role="tab"
+              aria-selected={stage === s}
+              onClick={() => setStage(s)}
+              className={`px-3 py-1 text-xs rounded capitalize transition-colors ${stage === s ? 'bg-accent text-white' : 'text-text-secondary hover:text-text-primary'}`}
+            >
+              {s}{s !== 'all' && stageCounts[s] != null ? ` (${stageCounts[s]})` : ''}
+            </button>
+          ))}
+        </div>
+        {loading && <LoadingState lines={4} />}
+        {error && <ErrorState title="Recipients unavailable" message={error} />}
+        {!loading && !error && (
+          !rows.length
+            ? <EmptyState title="No recipients" description="No recipients match this stage yet." />
+            : (
+              <DataTable
+                data={rows}
+                keyExtractor={r => String(r.recipient_key)}
+                columns={[
+                  { key: 'recipient_display', header: 'Recipient', render: r => <span className="font-mono text-xs">{String(r.recipient_display ?? r.recipient_key ?? '').slice(0, 24)}</span> },
+                  { key: 'stage', header: 'Stage', render: r => <Badge variant={r.stage === 'replied' ? 'success' : r.stage === 'engaged' ? 'success' : 'default'}>{String(r.stage)}</Badge> },
+                  { key: 'delivered', header: 'Delivered', render: r => Number(r.delivered ?? 0).toLocaleString() },
+                  { key: 'human_clicks', header: 'Human clicks', render: r => Number(r.human_clicks ?? 0).toLocaleString() },
+                  { key: 'replies', header: 'Replies', render: r => Number(r.replies ?? 0).toLocaleString() },
+                  {
+                    key: 'flags', header: 'Flags',
+                    render: r => (
+                      <span className="flex gap-1">
+                        {Boolean(r.bounced) && <Badge variant="danger" size="sm">bounced</Badge>}
+                        {Boolean(r.complained) && <Badge variant="danger" size="sm">complained</Badge>}
+                        {Boolean(r.unsubscribed) && <Badge variant="warning" size="sm">unsubscribed</Badge>}
+                        {Boolean(r.suppressed) && <Badge variant="warning" size="sm">suppressed</Badge>}
+                      </span>
+                    ),
+                  },
+                  {
+                    key: 'profile', header: 'Profile360',
+                    render: r => r.entity_id
+                      ? <a className="text-xs text-accent hover:underline" href={`/users/${String(r.entity_id)}`}>Open</a>
+                      : <span className="text-text-muted text-xs">unresolved</span>,
+                  },
+                ]}
+              />
+            )
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
 function MessagesTab({ campaignId }: { campaignId: string }) {
   const [funnel, setFunnel] = useState<AnyRecord | null>(null);
   const [messages, setMessages] = useState<AnyRecord[] | null>(null);
   const [links, setLinks] = useState<AnyRecord[] | null>(null);
   const [mode, setMode] = useState<'provider_reported' | 'human_qualified'>('human_qualified');
+  const [selectedMessage, setSelectedMessage] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -299,6 +469,18 @@ function MessagesTab({ campaignId }: { campaignId: string }) {
                   { key: 'replies', header: 'Replies', render: r => Number(r.replies ?? 0).toLocaleString() },
                   { key: 'bounces', header: 'Bounces', render: r => Number(r.bounces ?? 0).toLocaleString() },
                   { key: 'machine_events', header: 'Machine', render: r => Number(r.machine_events ?? 0).toLocaleString() },
+                  {
+                    key: 'detail', header: '',
+                    render: r => (
+                      <button
+                        onClick={() => setSelectedMessage(String(r.external_message_id))}
+                        className="text-xs text-accent hover:underline"
+                        aria-label={`Open detail for message ${String(r.name ?? r.external_message_id)}`}
+                      >
+                        Detail
+                      </button>
+                    ),
+                  },
                 ]}
               />
             )
@@ -326,6 +508,16 @@ function MessagesTab({ campaignId }: { campaignId: string }) {
           }
         </CardContent>
       </Card>
+
+      <CommsRecipientsSection campaignId={campaignId} />
+
+      {selectedMessage && (
+        <MessageDetailDrawer
+          campaignId={campaignId}
+          externalMessageId={selectedMessage}
+          onClose={() => setSelectedMessage(null)}
+        />
+      )}
     </div>
   );
 }

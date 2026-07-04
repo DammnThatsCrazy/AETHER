@@ -83,8 +83,12 @@ organizations, never to individual humans.
   paginated) and `GET /v1/profile/{id}/communication-state`; Communications
   tab in the tenant frontend.
 - **Campaign 360**: `GET /v1/campaigns/{id}/messages`, `/messages/{ext_id}`,
-  `/links`, `/comms-funnel` (provider-reported vs human-qualified modes);
-  Messages tab in the tenant frontend.
+  `/links`, `/comms-funnel` (provider-reported vs human-qualified modes),
+  `/comms-population` (recipient stages + flag filters); Messages tab with
+  message-detail drawer and Recipients section in the tenant frontend.
+- **Initiatives**: `POST/GET /v1/comms/initiatives`, member management,
+  `GET /v1/comms/initiatives/{id}/rollup` — cross-channel macro rollup over
+  canonical campaigns (ADR-C9; no second registry).
 - **Kyber**: `GET /v1/comms/admin/health` fleet view; Communications
   pipeline health card on the Measurement Operations page.
 - **Noesis**: `communications_insight` intent — evidence-backed, read-only.

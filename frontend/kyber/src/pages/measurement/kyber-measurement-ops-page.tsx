@@ -81,8 +81,69 @@ function CommsFleetHealthCard() {
                 { key: 'last', header: 'Last event', render: r => String(r.last_event_at ?? '—') },
               ]} />
         )}
+        <CommsOperatorActions />
       </CardContent>
     </Card>
+  );
+}
+
+function CommsOperatorActions() {
+  const [tenantId, setTenantId] = useState('');
+  const [entityId, setEntityId] = useState('');
+  const [campaignId, setCampaignId] = useState('');
+  const [result, setResult] = useState<string | null>(null);
+
+  const run = async (label: string, fn: () => Promise<unknown>) => {
+    try {
+      const r = await fn();
+      setResult(`${label}: ${JSON.stringify((r as Row) ?? {})}`);
+    } catch (e) {
+      setResult(`${label} failed: ${e instanceof Error ? e.message : String(e)}`);
+    }
+  };
+
+  return (
+    <div className="mt-4 pt-4 border-t border-border space-y-3">
+      <p className="text-xs text-text-muted">
+        Operator actions — audited. Rebuilds are idempotent recomputations from durable facts;
+        DSR erasure deletes an entity's communication facts and derived state (suppressions are retained).
+      </p>
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+        <div>
+          <label className="text-xs text-text-muted block mb-1" htmlFor="comms-tenant">Tenant ID</label>
+          <input id="comms-tenant" type="text" value={tenantId} onChange={e => setTenantId(e.target.value)}
+                 className="w-full text-sm font-mono bg-surface-secondary border border-border rounded px-2 py-1" />
+        </div>
+        <div>
+          <label className="text-xs text-text-muted block mb-1" htmlFor="comms-entity">Entity ID</label>
+          <input id="comms-entity" type="text" value={entityId} onChange={e => setEntityId(e.target.value)}
+                 className="w-full text-sm font-mono bg-surface-secondary border border-border rounded px-2 py-1" />
+        </div>
+        <div>
+          <label className="text-xs text-text-muted block mb-1" htmlFor="comms-campaign">Campaign ID</label>
+          <input id="comms-campaign" type="text" value={campaignId} onChange={e => setCampaignId(e.target.value)}
+                 className="w-full text-sm font-mono bg-surface-secondary border border-border rounded px-2 py-1" />
+        </div>
+      </div>
+      <div className="flex flex-wrap gap-2">
+        <ConfirmButton
+          label="Rebuild entity state + journey"
+          disabled={!tenantId.trim() || !entityId.trim()}
+          onConfirm={() => run('Rebuild', () => api.measurement.commsRebuildState({ tenant_id: tenantId.trim(), entity_id: entityId.trim() }))}
+        />
+        <ConfirmButton
+          label="Reproject campaign graph"
+          disabled={!tenantId.trim() || !campaignId.trim()}
+          onConfirm={() => run('Reproject', () => api.measurement.commsReprojectGraph({ tenant_id: tenantId.trim(), campaign_id: campaignId.trim() }))}
+        />
+        <ConfirmButton
+          label="DSR erase entity comms"
+          disabled={!tenantId.trim() || !entityId.trim()}
+          onConfirm={() => run('DSR erase', () => api.measurement.commsDsrErase({ tenant_id: tenantId.trim(), entity_id: entityId.trim(), confirm: true }))}
+        />
+      </div>
+      {result && <p className="text-xs font-mono text-text-secondary break-all" role="status">{result}</p>}
+    </div>
   );
 }
 

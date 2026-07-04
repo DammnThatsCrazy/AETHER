@@ -205,6 +205,87 @@ async def comms_health(request: Request) -> dict:
     return APIResponse(data=data).to_dict()
 
 
+# ── Cross-channel initiatives (Phase 10, ADR-C9) ─────────────────────────────
+
+class InitiativeCreateBody(BaseModel):
+    name: str = Field(..., min_length=1, max_length=200)
+    description: Optional[str] = Field(default=None, max_length=2000)
+    campaign_ids: list[str] = Field(default_factory=list, max_length=50)
+
+
+@router.post("/initiatives")
+async def create_initiative(request: Request, body: InitiativeCreateBody) -> dict:
+    """Create a cross-channel initiative and optionally attach member campaigns.
+
+    Members are canonical campaign UUIDs from the existing registry; each
+    keeps its own funnel and reconciliation — the initiative is rollup only.
+    """
+    tenant = request.state.tenant
+    tenant.require_permission(Permissions.WRITE)
+    from services.comms.initiatives import InitiativeRepository
+
+    repo = InitiativeRepository()
+    initiative = await repo.create(
+        tenant.tenant_id, body.name, description=body.description,
+    )
+    for campaign_id in body.campaign_ids:
+        await repo.add_member(
+            tenant.tenant_id, initiative["initiative_id"], campaign_id,
+        )
+    return APIResponse(data={
+        "initiative": initiative, "members_added": len(body.campaign_ids),
+    }).to_dict()
+
+
+@router.get("/initiatives")
+async def list_initiatives(request: Request, limit: int = 50) -> dict:
+    tenant = request.state.tenant
+    tenant.require_permission("read")
+    from services.comms.initiatives import InitiativeRepository
+
+    items = await InitiativeRepository().list_for_tenant(
+        tenant.tenant_id, limit=min(max(limit, 1), 100),
+    )
+    return APIResponse(data={"items": [
+        {k: (str(v) if hasattr(v, "isoformat") else v) for k, v in i.items()}
+        for i in items
+    ]}).to_dict()
+
+
+class InitiativeMemberBody(BaseModel):
+    campaign_id: str
+
+
+@router.post("/initiatives/{initiative_id}/members")
+async def add_initiative_member(
+    initiative_id: str, request: Request, body: InitiativeMemberBody,
+) -> dict:
+    tenant = request.state.tenant
+    tenant.require_permission(Permissions.WRITE)
+    from services.comms.initiatives import InitiativeRepository
+
+    repo = InitiativeRepository()
+    if await repo.get(tenant.tenant_id, initiative_id) is None:
+        raise BadRequestError(f"initiative {initiative_id} not found")
+    added = await repo.add_member(tenant.tenant_id, initiative_id, body.campaign_id)
+    return APIResponse(data={"added": added}).to_dict()
+
+
+@router.get("/initiatives/{initiative_id}/rollup")
+async def initiative_rollup(initiative_id: str, request: Request) -> dict:
+    """Macro rollup across member campaigns: per-member comms funnels and
+    summed totals. Cross-channel identity overlap is not deduplicated at
+    the initiative level (stated in the response notes)."""
+    tenant = request.state.tenant
+    tenant.require_permission("read")
+    from services.comms.initiatives import InitiativeRollupService
+
+    rollup = await InitiativeRollupService().rollup(tenant.tenant_id, initiative_id)
+    if rollup is None:
+        raise BadRequestError(f"initiative {initiative_id} not found")
+    return APIResponse(data=rollup).to_dict()
+
+
 admin_router = APIRouter(prefix="/v1/comms/admin", tags=["Kyber Communications"])
 
 
@@ -215,6 +296,127 @@ async def comms_admin_health(request: Request, tenant_id: Optional[str] = None) 
     require_kyber_operator(request)
     data = await _health_snapshot(tenant_id) if tenant_id else await _fleet_snapshot()
     return APIResponse(data=data).to_dict()
+
+
+# ── Operator actions (Phase 21F) — permission-gated and audited ─────────────
+
+async def _audit_operator_action(
+    request: Request, *, action: str, tenant_id: str,
+    resource_id: Optional[str], outcome: str, metadata: dict[str, Any],
+) -> None:
+    try:
+        from services.security.audit_ledger import AuditLedger
+        actor = getattr(getattr(request.state, "tenant", None), "tenant_id", "operator")
+        await AuditLedger().record(
+            actor_id=str(actor),
+            actor_type="olympus_operator",
+            event_type="comms_operator_action",
+            resource_type="communications",
+            action=action,
+            outcome=outcome,  # type: ignore[arg-type]
+            tenant_id=tenant_id,
+            resource_id=resource_id,
+            metadata=metadata,
+        )
+    except Exception as exc:  # pragma: no cover — audit must not block remediation
+        logger.warning("comms_operator_audit_failed action=%s: %s", action, exc)
+
+
+class OperatorStateRebuildBody(BaseModel):
+    tenant_id: str
+    entity_id: str
+    channel: str = "email"
+
+
+@admin_router.post("/state/rebuild")
+async def operator_rebuild_state(request: Request, body: OperatorStateRebuildBody) -> dict:
+    """Rebuild one entity's communication state and journey from facts."""
+    from services.security.request_context import require_kyber_operator
+    require_kyber_operator(request)
+    from services.comms.rebuild_coalescer import get_rebuild_coalescer
+
+    coalescer = get_rebuild_coalescer()
+    await coalescer.request_rebuild(
+        body.tenant_id, body.entity_id, channel=body.channel, reason="operator",
+    )
+    outcome = await coalescer.flush_key((body.tenant_id, body.entity_id))
+    await _audit_operator_action(
+        request, action="rebuild_state", tenant_id=body.tenant_id,
+        resource_id=body.entity_id, outcome="allowed",
+        metadata=outcome or {},
+    )
+    return APIResponse(data=outcome or {}).to_dict()
+
+
+class OperatorGraphReprojectBody(BaseModel):
+    tenant_id: str
+    campaign_id: Optional[str] = None
+    limit: int = Field(default=500, ge=1, le=5000)
+
+
+@admin_router.post("/graph/reproject")
+async def operator_reproject_graph(request: Request, body: OperatorGraphReprojectBody) -> dict:
+    """Re-fold communication facts into the aggregated relationship graph.
+
+    Idempotent: aggregates upsert in place, edges emit only on first
+    observation / promotion transitions (ADR-C6), so repeated reprojection
+    never explodes graph cardinality.
+    """
+    from services.security.request_context import require_kyber_operator
+    require_kyber_operator(request)
+    from services.comms.graph_projection import CommsGraphProjector
+    from services.comms.repository import CommsFactsRepository
+
+    if not body.campaign_id:
+        raise BadRequestError("campaign_id is required for graph reprojection")
+    facts_repo = CommsFactsRepository()
+    rows, _ = await facts_repo.list_for_campaign(
+        body.tenant_id, body.campaign_id, limit=body.limit,
+    )
+
+    projector = CommsGraphProjector()
+    projected = 0
+    for row in rows:
+        if await projector.project_fact(row) is not None:
+            projected += 1
+    await _audit_operator_action(
+        request, action="reproject_graph", tenant_id=body.tenant_id,
+        resource_id=body.campaign_id, outcome="allowed",
+        metadata={"facts_scanned": len(rows), "relationships_updated": projected},
+    )
+    return APIResponse(data={
+        "facts_scanned": len(rows), "relationships_updated": projected,
+    }).to_dict()
+
+
+class OperatorDsrEraseBody(BaseModel):
+    tenant_id: str
+    entity_id: str
+    confirm: bool = False
+
+
+@admin_router.post("/dsr/erase")
+async def operator_dsr_erase(request: Request, body: OperatorDsrEraseBody) -> dict:
+    """DSR erasure for one entity's communications (ADR-C10).
+
+    Deletes communication facts and derived state; active suppression
+    records are retained so opt-outs stay honored. Requires ``confirm=true``.
+    """
+    from services.security.request_context import require_kyber_operator
+    require_kyber_operator(request)
+    if not body.confirm:
+        raise BadRequestError("set confirm=true to execute DSR erasure")
+    from services.comms.repository import CommsFactsRepository
+
+    removed = await CommsFactsRepository().tombstone_by_profile(
+        body.tenant_id, body.entity_id,
+    )
+    await _audit_operator_action(
+        request, action="dsr_erase", tenant_id=body.tenant_id,
+        resource_id=body.entity_id, outcome="allowed",
+        metadata={"facts_removed": removed},
+    )
+    return APIResponse(data={"facts_removed": removed}).to_dict()
 
 
 async def _health_snapshot(tenant_id: str) -> dict[str, Any]:

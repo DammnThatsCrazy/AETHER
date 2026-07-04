@@ -182,20 +182,24 @@ async def silver_fact_projector(event: Event) -> None:
         )
         return
 
-    # Communication events keep the per-entity state projection fresh.
+    # Communication events keep the per-entity state and journey fresh.
+    # Rebuilds are coalesced: an event burst for one profile inside the
+    # debounce window produces exactly one state recompute and one journey
+    # recompile (Phase 15) instead of one per event.
     if event_type in COMMUNICATION_EVENT_TYPES:
         entity_id = payload.get("user_id") or payload.get("anonymous_id")
         props = payload.get("properties") or {}
         entity_id = props.get("recipient_entity_id") or props.get("profile_id") or entity_id
         if entity_id:
             try:
-                from services.comms.state import CommunicationStateService
-                await CommunicationStateService().rebuild_for_entity(
+                from services.comms.rebuild_coalescer import get_rebuild_coalescer
+                await get_rebuild_coalescer().request_rebuild(
                     tenant_id, str(entity_id),
                     channel=props.get("channel") or "email",
+                    reason=event_type,
                 )
             except Exception as exc:
-                logger.warning("comms_state_rebuild_failed entity=%s: %s", entity_id, exc)
+                logger.warning("comms_rebuild_request_failed entity=%s: %s", entity_id, exc)
 
 
 def _comms_ingestion_enabled() -> bool:
