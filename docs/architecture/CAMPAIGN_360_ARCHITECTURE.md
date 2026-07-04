@@ -14,7 +14,7 @@ source_files:
   - Backend Architecture/aether-backend/services/measurement/repositories/touchpoint_repo.py
   - Backend Architecture/aether-backend/services/measurement/repositories/conversion_repo.py
   - Backend Architecture/aether-backend/services/measurement/repositories/attribution_run_repo.py
-last_synced_commit: 4d76caf
+last_synced_commit: 93378fe
 ---
 
 # Campaign 360 Architecture
@@ -61,6 +61,12 @@ Every entity can only belong to one stage at a time (the highest it has reached)
 | `engaged` | Resolved entities with at least one interaction touchpoint (click, open, reply, visit — not impression-only). Email engagement touchpoints (`email_open`, `email_click`, `email_reply`) are created only for human-qualified activity: suspected machine events and automated replies never become engagement touchpoints (ADR-C8) | `silver_campaign_touchpoint_facts` WHERE touchpoint_type NOT IN ('impression', 'viewable_impression', 'ad_exposure', 'email_delivery', 'push_presentation') |
 | `converted` | Entities with at least one canonical conversion linked to this campaign | `canonical_conversions` (reverse lookup via touchpoint profile match) |
 | `attributed` | Entities with at least one active attribution credit for this campaign | `attribution_credits` JOIN `attribution_runs` WHERE is_active=TRUE |
+
+The touchpoint-based populations above are complemented by the comms-specific
+recipient population (`GET /{campaign_id}/comms-population`): alias-keyed
+recipients with the highest reached communication stage
+(attempted → delivered → engaged → replied) and delivery flags, derived from
+`silver_comms_facts` — machine-classified engagement never advances a stage.
 
 ### Reconciliation invariants
 
