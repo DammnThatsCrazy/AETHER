@@ -3838,20 +3838,6 @@
       "since_version": "8.11.0"
     },
     {
-      "path": "docs/derivatives/INGESTION.md",
-      "title": "Derivatives Ingestion",
-      "slug": "derivatives/ingestion",
-      "section": "data",
-      "visibility": "I",
-      "audience": [
-        "architect",
-        "dev-senior",
-        "ops"
-      ],
-      "status": "experimental",
-      "since_version": "8.11.0"
-    },
-    {
       "path": "docs/derivatives/MARKET_RESOLUTION.md",
       "title": "Derivatives Market Resolution",
       "slug": "derivatives/market-resolution",
