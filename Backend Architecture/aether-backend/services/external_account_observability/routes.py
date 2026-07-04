@@ -10,8 +10,7 @@ import uuid
 from datetime import datetime, timezone
 from typing import Any, Literal, Optional
 
-from fastapi import APIRouter, HTTPException, Request, status
-from shared.graph.graph import Vertex, Edge
+from fastapi import APIRouter, Request
 from pydantic import BaseModel, Field
 
 from repositories.agentic_observability_repos import (
@@ -25,6 +24,13 @@ from services.external_account_observability.brokerage_models import (
     TradeOrderObservedRecord, PortfolioSnapshotObservedRecord,
 )
 from services.external_account_observability.budget_models import AgentBudgetObservedRecord
+from services.agentic_observability.foundation import (
+    active_tenant_id as _tenant_id,
+    check_no_execution as _check_no_execution,
+    persist_mutations as _persist_mutations,
+    require_permission as _require_perm,
+    validate_payload_tenant,
+)
 from services.external_account_observability.graph_mutations import (
     build_account_mutations, build_brokerage_mutations,
     build_trade_intent_mutations, build_order_mutations, build_portfolio_mutations,
@@ -39,50 +45,6 @@ def _utc_now() -> str:
 
 def _new_id() -> str:
     return str(uuid.uuid4())
-
-
-def _tenant_id(request: Request) -> str:
-    tenant = getattr(request.state, "tenant", None)
-    if not tenant:
-        raise HTTPException(status_code=401, detail="Missing tenant context")
-    return tenant.tenant_id
-
-
-def _require_perm(request: Request, perm: str) -> None:
-    tenant = getattr(request.state, "tenant", None)
-    if not tenant:
-        raise HTTPException(status_code=401, detail="Missing tenant context")
-    if hasattr(tenant, "require_permission"):
-        try:
-            tenant.require_permission(perm)
-            return
-        except Exception as e:
-            raise HTTPException(status_code=403, detail=str(e))
-    if hasattr(tenant, "has_permission") and not tenant.has_permission(perm):
-        raise HTTPException(status_code=403, detail=f"Permission denied: {perm}")
-
-
-def _check_no_execution(data: dict) -> None:
-    if data.get("execution_by_aether") is True:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail="execution_by_aether must be false. AETHER does not execute.",
-        )
-
-
-async def _persist_mutations(mutations: list) -> None:
-    if not mutations:
-        return
-    try:
-        from dependencies.providers import get_graph
-        graph = get_graph()
-        for m in mutations:
-            if isinstance(m, Vertex):
-                await graph.add_vertex(m)
-            elif isinstance(m, Edge):
-                await graph.add_edge(m)
-    except Exception:
-        pass
 
 
 class ExtAccountRequest(BaseModel):
@@ -155,6 +117,7 @@ async def observe_external_account(req: ExtAccountRequest, request: Request) -> 
     """Observe an external agentic account linkage."""
     _require_perm(request, "write")
     tenant_id = _tenant_id(request)
+    validate_payload_tenant(req, tenant_id)
     _check_no_execution(req.model_dump())
     obs_id = _new_id()
     record = ExternalAgenticAccountObservedRecord(
@@ -169,10 +132,10 @@ async def observe_external_account(req: ExtAccountRequest, request: Request) -> 
     repo = ExternalAccountRepository()
     await repo.insert(obs_id, record.model_dump(mode="json"))
     mutations = build_account_mutations(tenant_id, obs_id, req.agent_id)
-    await _persist_mutations(mutations)
+    projection = await _persist_mutations(mutations, tenant_id=tenant_id, trace_id=obs_id)
     return ExtAccountResponse(
         observation_id=obs_id, received_at=_utc_now(),
-        graph_mutations_queued=len(mutations), tenant_id=tenant_id,
+        graph_mutations_queued=projection.graph_mutations_persisted, tenant_id=tenant_id,
     )
 
 
@@ -181,6 +144,7 @@ async def observe_brokerage_account(req: BrokerageRequest, request: Request) -> 
     """Observe an external brokerage account."""
     _require_perm(request, "write")
     tenant_id = _tenant_id(request)
+    validate_payload_tenant(req, tenant_id)
     _check_no_execution(req.model_dump())
     obs_id = _new_id()
     record = ExternalBrokerageAccountObservedRecord(
@@ -194,10 +158,10 @@ async def observe_brokerage_account(req: BrokerageRequest, request: Request) -> 
     repo = ExternalBrokerageRepository()
     await repo.insert(obs_id, record.model_dump(mode="json"))
     mutations = build_brokerage_mutations(tenant_id, obs_id, req.agent_id)
-    await _persist_mutations(mutations)
+    projection = await _persist_mutations(mutations, tenant_id=tenant_id, trace_id=obs_id)
     return ExtAccountResponse(
         observation_id=obs_id, received_at=_utc_now(),
-        graph_mutations_queued=len(mutations), tenant_id=tenant_id,
+        graph_mutations_queued=projection.graph_mutations_persisted, tenant_id=tenant_id,
     )
 
 
@@ -206,6 +170,7 @@ async def observe_portfolio_snapshot(req: PortfolioSnapshotRequest, request: Req
     """Observe a portfolio snapshot from an external brokerage."""
     _require_perm(request, "write")
     tenant_id = _tenant_id(request)
+    validate_payload_tenant(req, tenant_id)
     _check_no_execution(req.model_dump())
     obs_id = _new_id()
     record = PortfolioSnapshotObservedRecord(
@@ -219,10 +184,10 @@ async def observe_portfolio_snapshot(req: PortfolioSnapshotRequest, request: Req
     repo = PortfolioSnapshotRepository()
     await repo.insert(obs_id, record.model_dump(mode="json"))
     mutations = build_portfolio_mutations(tenant_id, obs_id, req.brokerage_obs_id)
-    await _persist_mutations(mutations)
+    projection = await _persist_mutations(mutations, tenant_id=tenant_id, trace_id=obs_id)
     return ExtAccountResponse(
         observation_id=obs_id, received_at=_utc_now(),
-        graph_mutations_queued=len(mutations), tenant_id=tenant_id,
+        graph_mutations_queued=projection.graph_mutations_persisted, tenant_id=tenant_id,
     )
 
 
@@ -231,6 +196,7 @@ async def observe_trade_order(req: OrderObsRequest, request: Request) -> ExtAcco
     """Observe a trade order (executed externally, not by AETHER)."""
     _require_perm(request, "write")
     tenant_id = _tenant_id(request)
+    validate_payload_tenant(req, tenant_id)
     _check_no_execution(req.model_dump())
     obs_id = _new_id()
     record = TradeOrderObservedRecord(
@@ -248,10 +214,10 @@ async def observe_trade_order(req: OrderObsRequest, request: Request) -> ExtAcco
     repo = TradeObservationRepository()
     await repo.insert(obs_id, record.model_dump(mode="json"))
     mutations = build_order_mutations(tenant_id, obs_id, req.brokerage_obs_id)
-    await _persist_mutations(mutations)
+    projection = await _persist_mutations(mutations, tenant_id=tenant_id, trace_id=obs_id)
     return ExtAccountResponse(
         observation_id=obs_id, received_at=_utc_now(),
-        graph_mutations_queued=len(mutations), tenant_id=tenant_id,
+        graph_mutations_queued=projection.graph_mutations_persisted, tenant_id=tenant_id,
     )
 
 
@@ -260,6 +226,7 @@ async def observe_agent_budget(req: BudgetObsRequest, request: Request) -> ExtAc
     """Observe an agent budget state from an external platform."""
     _require_perm(request, "write")
     tenant_id = _tenant_id(request)
+    validate_payload_tenant(req, tenant_id)
     _check_no_execution(req.model_dump())
     obs_id = _new_id()
     record = AgentBudgetObservedRecord(
@@ -284,4 +251,6 @@ async def observe_agent_budget(req: BudgetObsRequest, request: Request) -> ExtAc
 async def kyber_external_accounts(request: Request) -> dict:
     """Kyber operator: external account observability overview."""
     _require_perm(request, "admin")
-    return {"status": "ok", "external_accounts": []}
+    repo = ExternalAccountRepository()
+    items = await repo.find_many(limit=100)
+    return {"status": "ok", "external_accounts": items, "count": len(items)}
