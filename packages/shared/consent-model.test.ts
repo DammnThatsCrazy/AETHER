@@ -85,6 +85,20 @@ describe('consent-model', () => {
     }
   });
 
+
+  it('financial_activity gates sensitive agent trading observations', () => {
+    const financialActivityGated: string[] = [
+      'agent_trade_order_observed',
+      'agent_trade_fill_observed',
+      'agent_position_observed',
+      'agent_portfolio_snapshot_observed',
+      'agent_performance_snapshot_observed',
+    ];
+    for (const eventType of financialActivityGated) {
+      expect(EVENT_CONSENT_PURPOSE[eventType as keyof typeof EVENT_CONSENT_PURPOSE]).toBe('financial_activity');
+    }
+  });
+
   it('agent purpose gates agent lifecycle events', () => {
     const agentGated: string[] = ['agent_task', 'agent_decision', 'agent_registered'];
     for (const eventType of agentGated) {

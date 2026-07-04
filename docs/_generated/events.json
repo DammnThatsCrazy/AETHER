@@ -29,6 +29,7 @@
     "analytics",
     "commerce",
     "credit",
+    "financial_activity",
     "location",
     "marketing",
     "web3"
@@ -427,13 +428,13 @@
     {
       "name": "agent_trade_order_observed",
       "family": "agent",
-      "consent_purpose": "agent",
+      "consent_purpose": "financial_activity",
       "section_comment": "agent"
     },
     {
       "name": "agent_trade_fill_observed",
       "family": "agent",
-      "consent_purpose": "agent",
+      "consent_purpose": "financial_activity",
       "section_comment": "agent"
     },
     {
@@ -445,19 +446,19 @@
     {
       "name": "agent_position_observed",
       "family": "agent",
-      "consent_purpose": "agent",
+      "consent_purpose": "financial_activity",
       "section_comment": "agent"
     },
     {
       "name": "agent_portfolio_snapshot_observed",
       "family": "agent",
-      "consent_purpose": "agent",
+      "consent_purpose": "financial_activity",
       "section_comment": "agent"
     },
     {
       "name": "agent_performance_snapshot_observed",
       "family": "agent",
-      "consent_purpose": "agent",
+      "consent_purpose": "financial_activity",
       "section_comment": "agent"
     },
     {
