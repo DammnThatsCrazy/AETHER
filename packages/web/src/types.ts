@@ -1268,6 +1268,8 @@ export interface ConsentState {
   agent: boolean;
   commerce: boolean;
   /** Always requires explicit opt-in — never granted by accept-all. */
+  financial_activity: boolean;
+  /** Always requires explicit opt-in — never granted by accept-all. */
   credit: boolean;
   /** Always requires explicit opt-in — never granted by accept-all. */
   location: boolean;
@@ -1282,6 +1284,7 @@ export type ConsentPurpose =
   | 'web3'
   | 'agent'
   | 'commerce'
+  | 'financial_activity'
   | 'credit'
   | 'location';
 
