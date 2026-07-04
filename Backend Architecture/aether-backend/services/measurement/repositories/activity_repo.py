@@ -498,6 +498,104 @@ class ActivityRepository:
             )
 
 
+    async def find_by_source_event(
+        self, tenant_id: str, source_event_id: str
+    ) -> list[dict[str, Any]]:
+        """Find canonical activities by their originating source event id."""
+        pool = await self._pool()
+        if pool is None:
+            return [
+                r for r in _local_store.values()
+                if r.get("tenant_id") == tenant_id
+                and r.get("source_event_id") == source_event_id
+            ]
+        async with pool.acquire() as conn:
+            rows = await conn.fetch(
+                "SELECT * FROM canonical_activity WHERE tenant_id=$1 AND source_event_id=$2",
+                tenant_id, source_event_id,
+            )
+        return [dict(r) for r in rows]
+
+    async def count_by_source(self, tenant_id: str, source_system: str) -> int:
+        """Count canonical activities by source_system."""
+        pool = await self._pool()
+        if pool is None:
+            return sum(
+                1 for r in _local_store.values()
+                if r.get("tenant_id") == tenant_id
+                and r.get("source_system") == source_system
+            )
+        async with pool.acquire() as conn:
+            row = await conn.fetchrow(
+                "SELECT COUNT(*) AS cnt FROM canonical_activity WHERE tenant_id=$1 AND source_system=$2",
+                tenant_id, source_system,
+            )
+        return row["cnt"] if row else 0
+
+    async def list_agentic_steps(
+        self, tenant_id: str, agent_id: Optional[str] = None, limit: int = 200
+    ) -> list[dict[str, Any]]:
+        """List agentic observation steps from canonical_activity."""
+        pool = await self._pool()
+        if pool is None:
+            rows = [
+                r for r in _local_store.values()
+                if r.get("tenant_id") == tenant_id
+                and r.get("source_system") == "agentic_observability"
+                and (agent_id is None or r.get("agent_id") == agent_id)
+            ]
+            rows.sort(key=lambda r: r.get("occurred_at", ""), reverse=True)
+            return rows[:limit]
+        conditions = ["tenant_id = $1", "source_system = 'agentic_observability'"]
+        params: list[Any] = [tenant_id]
+        p = 2
+        if agent_id:
+            conditions.append(f"agent_id = ${p}")
+            params.append(agent_id)
+            p += 1
+        params.append(limit)
+        sql = f"""
+            SELECT * FROM canonical_activity
+            WHERE {' AND '.join(conditions)}
+            ORDER BY occurred_at DESC
+            LIMIT ${p}
+        """
+        async with pool.acquire() as conn:
+            rows = await conn.fetch(sql, *params)
+        return [dict(r) for r in rows]
+
+    async def list_agentic_by_agent(
+        self, tenant_id: str, agent_id: str, limit: int = 200
+    ) -> list[dict[str, Any]]:
+        """List agentic steps for a specific agent."""
+        return await self.list_agentic_steps(tenant_id, agent_id=agent_id, limit=limit)
+
+    async def list_agentic_by_campaign(
+        self, tenant_id: str, campaign_id: str, limit: int = 200
+    ) -> list[dict[str, Any]]:
+        """List agentic canonical activities attributed to a campaign."""
+        pool = await self._pool()
+        if pool is None:
+            rows = [
+                r for r in _local_store.values()
+                if r.get("tenant_id") == tenant_id
+                and r.get("source_system") == "agentic_observability"
+                and r.get("campaign_id") == campaign_id
+            ]
+            rows.sort(key=lambda r: r.get("occurred_at", ""), reverse=True)
+            return rows[:limit]
+        async with pool.acquire() as conn:
+            rows = await conn.fetch(
+                """
+                SELECT * FROM canonical_activity
+                WHERE tenant_id=$1 AND source_system='agentic_observability' AND campaign_id=$2
+                ORDER BY occurred_at DESC LIMIT $3
+                """,
+                tenant_id, campaign_id, limit,
+            )
+        return [dict(r) for r in rows]
+
+
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
 def _parse_ts(value: Any) -> Optional[datetime]:
