@@ -3838,34 +3838,6 @@
       "since_version": "8.11.0"
     },
     {
-      "path": "docs/derivatives/INGESTION.md",
-      "title": "Derivatives Ingestion",
-      "slug": "derivatives/ingestion",
-      "section": "data",
-      "visibility": "I",
-      "audience": [
-        "architect",
-        "dev-senior",
-        "ops"
-      ],
-      "status": "experimental",
-      "since_version": "8.11.0"
-    },
-    {
-      "path": "docs/derivatives/INTELLIGENCE.md",
-      "title": "Derivatives Intelligence",
-      "slug": "derivatives/intelligence",
-      "section": "concepts",
-      "visibility": "I",
-      "audience": [
-        "architect",
-        "dev-senior",
-        "ops"
-      ],
-      "status": "experimental",
-      "since_version": "8.11.0"
-    },
-    {
       "path": "docs/derivatives/MARKET_RESOLUTION.md",
       "title": "Derivatives Market Resolution",
       "slug": "derivatives/market-resolution",
@@ -3903,47 +3875,6 @@
         "architect",
         "dev-senior",
         "ops"
-      ],
-      "status": "experimental",
-      "since_version": "8.11.0"
-    },
-    {
-      "path": "docs/derivatives/PRODUCT_OPERATIONS.md",
-      "title": "Derivatives Product Operations",
-      "slug": "derivatives/product-operations",
-      "section": "operations",
-      "visibility": "I",
-      "audience": [
-        "architect",
-        "dev-senior",
-        "ops"
-      ],
-      "status": "experimental",
-      "since_version": "8.11.0"
-    },
-    {
-      "path": "docs/derivatives/RELEASE_READINESS.md",
-      "title": "Derivatives Release Readiness",
-      "slug": "derivatives/release-readiness",
-      "section": "operations",
-      "visibility": "I",
-      "audience": [
-        "architect",
-        "dev-senior",
-        "ops"
-      ],
-      "status": "experimental",
-      "since_version": "8.11.0"
-    },
-    {
-      "path": "docs/derivatives/RUNBOOKS.md",
-      "title": "Derivatives Runbooks",
-      "slug": "derivatives/runbooks",
-      "section": "operations",
-      "visibility": "I",
-      "audience": [
-        "ops",
-        "dev-senior"
       ],
       "status": "experimental",
       "since_version": "8.11.0"
