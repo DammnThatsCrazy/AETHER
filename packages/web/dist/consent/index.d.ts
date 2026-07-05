@@ -16,8 +16,8 @@ export declare class ConsentModule {
     /** Revoke consent for specified purposes. Revoking personalization deletes cached fingerprint. */
     revoke(purposes: ConsentPurpose[]): void;
     /**
-     * Grant all purposes that do NOT require explicit opt-in (credit and location are excluded).
-     * To grant credit or location, call grant(['credit']) or grant(['location']) explicitly.
+     * Grant all purposes that do NOT require explicit opt-in (financial_activity, credit, and location are excluded).
+     * To grant credit or location, call grant(['financial_activity']), grant(['credit']), or grant(['location']) explicitly.
      */
     grantAll(): void;
     /** Revoke all purposes */

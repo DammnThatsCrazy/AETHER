@@ -1,5 +1,5 @@
 {
-  "_comment": "Canonical Aether consent registry. DO NOT manually edit — this is the source of truth for packages/shared/consent.ts and Backend Architecture/aether-backend/services/ingestion/generated_registry.py",
+  "_comment": "Canonical Aether consent registry. DO NOT manually edit \u2014 this is the source of truth for packages/shared/consent.ts and Backend Architecture/aether-backend/services/ingestion/generated_registry.py",
   "schemaVersion": "2.0.0",
   "contractVersion": "8.10.0",
   "purposes": [
@@ -7,12 +7,27 @@
       "key": "analytics",
       "label": "Analytics",
       "description": "Basic product usage and operational analytics. Required for core platform function.",
-      "dataCategories": ["behavioral", "session", "navigation", "performance", "error"],
+      "dataCategories": [
+        "behavioral",
+        "session",
+        "navigation",
+        "performance",
+        "error"
+      ],
       "defaultEnabled": true,
       "explicitOptInRequired": false,
-      "allowedFamilies": ["core", "journey", "identity", "consent"],
+      "allowedFamilies": [
+        "core",
+        "journey",
+        "identity",
+        "consent"
+      ],
       "retentionDays": 90,
-      "dsrDeleteScope": ["events", "sessions", "profiles"],
+      "dsrDeleteScope": [
+        "events",
+        "sessions",
+        "profiles"
+      ],
       "revocationBehavior": "stop_new_collection",
       "blockLocalCollection": false,
       "allowBackendEnrichment": true,
@@ -24,12 +39,23 @@
       "key": "marketing",
       "label": "Marketing",
       "description": "Attribution, experiments, conversion tracking, and advertising attribution.",
-      "dataCategories": ["attribution", "conversion", "experiment", "advertising"],
+      "dataCategories": [
+        "attribution",
+        "conversion",
+        "experiment",
+        "advertising"
+      ],
       "defaultEnabled": false,
       "explicitOptInRequired": false,
-      "allowedFamilies": ["commerce"],
+      "allowedFamilies": [
+        "commerce"
+      ],
       "retentionDays": 180,
-      "dsrDeleteScope": ["events", "attribution", "experiments"],
+      "dsrDeleteScope": [
+        "events",
+        "attribution",
+        "experiments"
+      ],
       "revocationBehavior": "stop_new_collection",
       "blockLocalCollection": false,
       "allowBackendEnrichment": true,
@@ -41,12 +67,26 @@
       "key": "personalization",
       "label": "Personalization",
       "description": "Cross-device fingerprinting, recommendations, and personalised content. Required for device fingerprint generation.",
-      "dataCategories": ["fingerprint", "device_fingerprint", "cross_device", "recommendations", "exposure"],
+      "dataCategories": [
+        "fingerprint",
+        "device_fingerprint",
+        "cross_device",
+        "recommendations",
+        "exposure"
+      ],
       "defaultEnabled": false,
       "explicitOptInRequired": false,
-      "allowedFamilies": ["exposure", "outcome"],
+      "allowedFamilies": [
+        "exposure",
+        "outcome"
+      ],
       "retentionDays": 180,
-      "dsrDeleteScope": ["events", "fingerprints", "identity_aliases", "recommendation_facts"],
+      "dsrDeleteScope": [
+        "events",
+        "fingerprints",
+        "identity_aliases",
+        "recommendation_facts"
+      ],
       "revocationBehavior": "stop_and_delete_local_fingerprint",
       "blockLocalCollection": true,
       "allowBackendEnrichment": true,
@@ -59,12 +99,26 @@
       "key": "web3",
       "label": "Web3",
       "description": "Wallet connections, on-chain transactions, and decentralised protocol observations.",
-      "dataCategories": ["wallet", "onchain", "defi", "nft", "token"],
+      "dataCategories": [
+        "wallet",
+        "onchain",
+        "defi",
+        "nft",
+        "token"
+      ],
       "defaultEnabled": false,
       "explicitOptInRequired": false,
-      "allowedFamilies": ["wallet", "x402", "web3_lc"],
+      "allowedFamilies": [
+        "wallet",
+        "x402",
+        "web3_lc"
+      ],
       "retentionDays": 365,
-      "dsrDeleteScope": ["events", "wallet_facts", "graph_edges"],
+      "dsrDeleteScope": [
+        "events",
+        "wallet_facts",
+        "graph_edges"
+      ],
       "revocationBehavior": "stop_new_collection",
       "blockLocalCollection": false,
       "allowBackendEnrichment": true,
@@ -76,12 +130,24 @@
       "key": "agent",
       "label": "Agent",
       "description": "Agentic workflow observations, AI task lifecycle, delegation, and tool usage.",
-      "dataCategories": ["agent_lifecycle", "ai_task", "delegation", "tool_usage", "mcp"],
+      "dataCategories": [
+        "agent_lifecycle",
+        "ai_task",
+        "delegation",
+        "tool_usage",
+        "mcp"
+      ],
       "defaultEnabled": false,
       "explicitOptInRequired": false,
-      "allowedFamilies": ["agent"],
+      "allowedFamilies": [
+        "agent"
+      ],
       "retentionDays": 90,
-      "dsrDeleteScope": ["events", "agent_facts", "graph_edges"],
+      "dsrDeleteScope": [
+        "events",
+        "agent_facts",
+        "graph_edges"
+      ],
       "revocationBehavior": "stop_new_collection",
       "blockLocalCollection": false,
       "allowBackendEnrichment": true,
@@ -93,12 +159,26 @@
       "key": "commerce",
       "label": "Commerce",
       "description": "Payments, approvals, entitlements, subscriptions, orders, and access control events.",
-      "dataCategories": ["payment", "subscription", "order", "entitlement", "access", "invoice"],
+      "dataCategories": [
+        "payment",
+        "subscription",
+        "order",
+        "entitlement",
+        "access",
+        "invoice"
+      ],
       "defaultEnabled": false,
       "explicitOptInRequired": false,
-      "allowedFamilies": ["commerce", "ecommerce", "b2b", "x402"],
+      "allowedFamilies": [
+        "commerce",
+        "ecommerce",
+        "b2b",
+        "x402"
+      ],
       "retentionDays": 2555,
-      "dsrDeleteScope": ["events"],
+      "dsrDeleteScope": [
+        "events"
+      ],
       "dsrDeleteNote": "Financial records may be subject to legal-hold and cannot always be deleted.",
       "revocationBehavior": "stop_new_collection",
       "blockLocalCollection": false,
@@ -108,15 +188,70 @@
       "allowModelTraining": true
     },
     {
+      "key": "financial_activity",
+      "label": "Financial Activity",
+      "description": "Read-only derivatives trading analytics: account connections, orders, fills, positions, collateral, margin, funding, fees, PnL, risk profiling, agent trading activity, campaign linkage, and governed model training.",
+      "dataCategories": [
+        "trading_account",
+        "order",
+        "fill",
+        "position",
+        "collateral",
+        "margin",
+        "funding",
+        "fee",
+        "pnl",
+        "risk_profile",
+        "agent_trading_activity"
+      ],
+      "defaultEnabled": false,
+      "explicitOptInRequired": true,
+      "allowedFamilies": [
+        "derivatives",
+        "trading",
+        "agent",
+        "commerce"
+      ],
+      "retentionDays": 2555,
+      "dsrDeleteScope": [
+        "events",
+        "derivatives_facts",
+        "graph_edges",
+        "profiles",
+        "model_features"
+      ],
+      "dsrDeleteNote": "Financial records may be subject to statutory retention or legal hold; revocation stops new collection and suppresses activation/model training where deletion is restricted.",
+      "revocationBehavior": "stop_new_collection_and_suppress_projections",
+      "blockLocalCollection": false,
+      "allowBackendEnrichment": true,
+      "allowIdentityLinking": true,
+      "allowGraphProjection": true,
+      "allowModelTraining": false,
+      "legalHoldBehavior": "preserve_minimum_required_records",
+      "identityLinkingPermission": "explicit_tenant_purpose_grant",
+      "graphProjectionPermission": "purpose_grant_required",
+      "modelTrainingPermission": "separate_opt_in_required"
+    },
+    {
       "key": "credit",
       "label": "Credit",
       "description": "Credit signals, account observations, and credit decisions. Always requires explicit opt-in.",
-      "dataCategories": ["credit_score", "credit_account", "credit_decision", "bureau_signal"],
+      "dataCategories": [
+        "credit_score",
+        "credit_account",
+        "credit_decision",
+        "bureau_signal"
+      ],
       "defaultEnabled": false,
       "explicitOptInRequired": true,
-      "allowedFamilies": ["credit"],
+      "allowedFamilies": [
+        "credit"
+      ],
       "retentionDays": 730,
-      "dsrDeleteScope": ["events", "credit_facts"],
+      "dsrDeleteScope": [
+        "events",
+        "credit_facts"
+      ],
       "revocationBehavior": "stop_new_collection",
       "blockLocalCollection": false,
       "allowBackendEnrichment": false,
@@ -128,12 +263,21 @@
       "key": "location",
       "label": "Location",
       "description": "Precise or coarse location observations and geofence transitions. Always requires explicit opt-in.",
-      "dataCategories": ["precise_location", "coarse_location", "geofence"],
+      "dataCategories": [
+        "precise_location",
+        "coarse_location",
+        "geofence"
+      ],
       "defaultEnabled": false,
       "explicitOptInRequired": true,
-      "allowedFamilies": ["location"],
+      "allowedFamilies": [
+        "location"
+      ],
       "retentionDays": 30,
-      "dsrDeleteScope": ["events", "location_facts"],
+      "dsrDeleteScope": [
+        "events",
+        "location_facts"
+      ],
       "revocationBehavior": "stop_and_delete_cached",
       "blockLocalCollection": true,
       "allowBackendEnrichment": false,

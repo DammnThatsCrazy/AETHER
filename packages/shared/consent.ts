@@ -14,6 +14,7 @@
 * - web3: Wallet connections, on-chain transactions, and decentralised protocol observations.
 * - agent: Agentic workflow observations, AI task lifecycle, delegation, and tool usage.
 * - commerce: Payments, approvals, entitlements, subscriptions, orders, and access control events.
+* - financial_activity: Read-only derivatives trading analytics: account connections, orders, fills, positions, collateral, margin, funding, fees, PnL, risk profiling, agent trading activity, campaign linkage, and governed model training. Always requires explicit opt-in.
 * - credit: Credit signals, account observations, and credit decisions. Always requires explicit opt-in. Always requires explicit opt-in.
 * - location: Precise or coarse location observations and geofence transitions. Always requires explicit opt-in. Always requires explicit opt-in.
         */
@@ -24,6 +25,7 @@
  | 'web3'
  | 'agent'
  | 'commerce'
+ | 'financial_activity'
  | 'credit'
  | 'location';
 
@@ -34,13 +36,15 @@
  'web3',
  'agent',
  'commerce',
+ 'financial_activity',
  'credit',
  'location',
        ] as const;
 
        /** Purposes that ALWAYS require explicit opt-in (never granted by accept-all). */
        export const EXPLICIT_OPT_IN_PURPOSES: readonly ConsentPurpose[] = [
-         'credit',
+         'financial_activity',
+ 'credit',
  'location',
        ] as const;
 
@@ -52,6 +56,7 @@
  web3: boolean;
  agent: boolean;
  commerce: boolean;
+ financial_activity: boolean;
  credit: boolean;
  location: boolean;
          updatedAt: string;
@@ -75,6 +80,7 @@
  web3: false,
  agent: false,
  commerce: false,
+ financial_activity: false,
  credit: false,
  location: false,
        };

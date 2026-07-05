@@ -13,7 +13,7 @@ source_files:
 canonical_owner: sdk@aether
 estimated_read_minutes: 12
 toc_depth: 3
-last_synced_commit: 4d76caf
+last_synced_commit: cb00c2e3
 ---
 
 # Aether Web SDK v8.11.0 — Integration Guide
