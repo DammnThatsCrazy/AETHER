@@ -265,6 +265,7 @@ from services.resolution.routes import router as resolution_router
 from services.signals.routes import router as signals_router
 from services.social.routes import router as social_router
 from services.geo.routes import router as geo_router
+from services.derivatives.routes import router as derivatives_router, kyber_router as derivatives_kyber_router
 
 # Profile 360 (additive — multi-entity identity, delegation, flows, behavior, realtime)
 from services.entities.routes import router as entities_router
@@ -655,6 +656,8 @@ def create_app() -> FastAPI:
     app.include_router(resolution_router)
     app.include_router(signals_router)
     app.include_router(geo_router)
+    app.include_router(derivatives_router)
+    app.include_router(derivatives_kyber_router)
 
     # ── Profile 360 (additive) ─────────────────────────────────────────
     app.include_router(entities_router)
