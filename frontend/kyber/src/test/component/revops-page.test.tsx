@@ -25,8 +25,8 @@ vi.mock('@kyber/lib/api', () => mockApi());
 describe('Kyber Revenue Operations page', () => {
   it('renders the revops overview and billing table', async () => {
     render(<MemoryRouter><RevenueOperationsPage /></MemoryRouter>);
-    await waitFor(() => expect(screen.getByText('Revenue Operations')).toBeInTheDocument());
-    expect(screen.getByText('Active contracts')).toBeInTheDocument();
+    await waitFor(() => expect(screen.getByText('Active contracts')).toBeInTheDocument());
+    expect(screen.getByText('Revenue Operations')).toBeInTheDocument();
     expect(screen.getByText('Tenant Billing Table')).toBeInTheDocument();
   });
 });
