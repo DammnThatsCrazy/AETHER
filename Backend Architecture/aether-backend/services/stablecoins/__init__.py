@@ -54,6 +54,8 @@ __all__ = [
     "StablecoinProviderIngestionRunner",
     "StablecoinEVMReceiptVerifier",
     "StablecoinRPCVerificationResult",
+    "StablecoinSolanaTransactionVerifier",
+    "StablecoinSolanaVerificationResult",
 ]
 
 from .operations import RemediationAction, RemediationRequest, StablecoinOperationsService
@@ -66,3 +68,4 @@ from .profile360 import StablecoinProfile360Composer
 
 from .providers import StablecoinProviderExecutionReport, StablecoinProviderIngestionRunner
 from .rpc_observer import StablecoinEVMReceiptVerifier, StablecoinRPCVerificationResult
+from .solana_observer import StablecoinSolanaTransactionVerifier, StablecoinSolanaVerificationResult
