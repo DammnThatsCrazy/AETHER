@@ -52,6 +52,8 @@ __all__ = [
     "StablecoinAlertType",
     "StablecoinProviderExecutionReport",
     "StablecoinProviderIngestionRunner",
+    "StablecoinEVMReceiptVerifier",
+    "StablecoinRPCVerificationResult",
 ]
 
 from .operations import RemediationAction, RemediationRequest, StablecoinOperationsService
@@ -63,3 +65,4 @@ from .graph_projector import StablecoinGraphProjector, StablecoinGraphProjection
 from .profile360 import StablecoinProfile360Composer
 
 from .providers import StablecoinProviderExecutionReport, StablecoinProviderIngestionRunner
+from .rpc_observer import StablecoinEVMReceiptVerifier, StablecoinRPCVerificationResult
