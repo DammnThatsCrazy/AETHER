@@ -67,3 +67,11 @@ class StablecoinRemediationAuditRepository(BaseRepository):
 class StablecoinMarketBenchmarkRepository(BaseRepository):
     def __init__(self) -> None:
         super().__init__("stablecoin_market_benchmarks")
+
+class StablecoinIdentityLinkRepository(BaseRepository):
+    def __init__(self) -> None:
+        super().__init__("stablecoin_identity_links")
+
+class StablecoinGraphProjectionRepository(BaseRepository):
+    def __init__(self) -> None:
+        super().__init__("stablecoin_graph_projection_outbox")

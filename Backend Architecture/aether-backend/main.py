@@ -289,6 +289,7 @@ from services.sdk_config.routes import router as sdk_config_router
 from services.noesis.routes import router as noesis_router
 from services.onboarding.routes import router as onboarding_router, admin_router as onboarding_admin_router
 from services.reliability import admin_router as reliability_admin_router, tenant_router as reliability_status_router
+from services.stablecoins.routes import router as stablecoin_router
 from services.data_quality import (
     admin_router as data_quality_admin_router,
     tenant_router as data_quality_tenant_router,
@@ -694,6 +695,7 @@ def create_app() -> FastAPI:
     app.include_router(onboarding_admin_router) # Kyber implementation lifecycle
     app.include_router(reliability_admin_router)  # Kyber reliability command center
     app.include_router(reliability_status_router) # Tenant-safe system status
+    app.include_router(stablecoin_router)      # Stablecoin Intelligence tenant routes (feature-flagged)
 
     # ── ML serving inline (E2 consolidated image) ───────────────────────
     # When ML_SERVING_INLINE=true the predict routes are handled in-process

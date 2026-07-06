@@ -44,3 +44,18 @@ Boundaries:
 
 - PR3 tenant-facing surfaces are still absent on this branch.
 - PR4 does not implement operator UI, remediation workers, live Olympus market feeds, billing enforcement, staging validation, backup/restore, load, chaos, or GA readiness.
+
+## PR3 identity/graph/Profile360 slice
+
+Delivered:
+
+- `services/stablecoins/identity.py`: tenant-scoped wallet identity links with evidence, confidence, consent context, and unresolved wallet responses.
+- `services/stablecoins/graph_projector.py`: deterministic, tenant-scoped graph projection outbox records without direct Neptune mutation.
+- `services/stablecoins/profile360.py`: backend Profile360 composer that surfaces finalized payment summaries, unresolved wallets, unattributed activity, provenance, and drill links.
+- `services/stablecoins/routes.py`: feature-flagged tenant APIs for `/v1/profile/{profile_id}/stablecoins` and `/v1/stablecoins/observations`.
+- Additive identity-link and graph-projection-outbox tables.
+
+Boundaries:
+
+- Frontend Stablecoin Intelligence product surfaces are not implemented in this slice.
+- Webhook/export delivery and graph projection workers remain deferred.

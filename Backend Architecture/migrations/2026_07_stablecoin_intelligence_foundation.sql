@@ -10,3 +10,8 @@ CREATE TABLE IF NOT EXISTS stablecoin_remediation_audit (id TEXT PRIMARY KEY, da
 CREATE INDEX IF NOT EXISTS idx_stablecoin_remediation_audit_tenant ON stablecoin_remediation_audit (tenant_id);
 CREATE TABLE IF NOT EXISTS stablecoin_market_benchmarks (id TEXT PRIMARY KEY, data JSONB NOT NULL DEFAULT '{}', tenant_id TEXT, created_at TIMESTAMPTZ DEFAULT NOW(), updated_at TIMESTAMPTZ DEFAULT NOW());
 CREATE INDEX IF NOT EXISTS idx_stablecoin_market_benchmarks_data_class ON stablecoin_market_benchmarks ((data->>'data_class'));
+
+CREATE TABLE IF NOT EXISTS stablecoin_identity_links (id TEXT PRIMARY KEY, data JSONB NOT NULL DEFAULT '{}', tenant_id TEXT, created_at TIMESTAMPTZ DEFAULT NOW(), updated_at TIMESTAMPTZ DEFAULT NOW());
+CREATE INDEX IF NOT EXISTS idx_stablecoin_identity_links_tenant_wallet ON stablecoin_identity_links (tenant_id, ((data->>'chain_id')), ((data->>'wallet_address')));
+CREATE TABLE IF NOT EXISTS stablecoin_graph_projection_outbox (id TEXT PRIMARY KEY, data JSONB NOT NULL DEFAULT '{}', tenant_id TEXT, created_at TIMESTAMPTZ DEFAULT NOW(), updated_at TIMESTAMPTZ DEFAULT NOW());
+CREATE INDEX IF NOT EXISTS idx_stablecoin_graph_projection_outbox_tenant_status ON stablecoin_graph_projection_outbox (tenant_id, ((data->>'status')));
