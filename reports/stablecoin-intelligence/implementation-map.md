@@ -26,9 +26,18 @@
 - Alert evaluator: `Backend Architecture/aether-backend/services/stablecoins/alerts.py`
 - PR2 tests: `tests/unit/test_stablecoin_intelligence_pr2_pipeline.py`
 
+## PR2 provider-execution layer
+
+Delivered after the PR2 foundation:
+
+- `services/stablecoins/providers.py`: tenant-scoped provider execution runner with dry-run, explicit provider failure health, checkpoints, and execution-scoped rollback.
+- `scripts/stablecoin_backfill.py`: connector-neutral JSON backfill CLI supporting the required dry-run, tenant, asset, deployment, chain, source, window, limit, resume, verify-only, and rollback-tag arguments.
+- `stablecoin_provider_health` and `stablecoin_ingestion_checkpoints` additive tables.
+- Tests: `tests/unit/test_stablecoin_intelligence_provider_execution.py`.
+
 ## PR2 boundaries
 
-PR2 introduces deterministic service foundations and tests for ingestion, finality, reconciliation, Gold accounting, support, and alert evaluation. External RPC/Solana/Dune connector scheduling, graph projection, Profile360, tenant UI, Kyber UI, Olympus benchmarks, webhook delivery, export delivery, and commercial metering remain later workstreams.
+PR2 now includes deterministic service foundations and a first provider-execution layer for connector-supplied rows. External network polling for EVM RPC, Solana RPC, Dune scheduling, explorer APIs, Moralis, CoinGecko, DeFiLlama, graph projection workers, Profile360 product UI, Kyber UI, webhook delivery, export delivery, and commercial metering remain later workstreams.
 
 ## PR4 operations/governance slice
 

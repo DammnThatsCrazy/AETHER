@@ -26,3 +26,8 @@ Commit: PR2 implementation commit
 ## Verification
 
 Targeted PR2 tests cover ingestion, unknown deployment rejection, finality reorg correction, reconciliation states, Gold accounting exclusions, support evidence gates, and alert dedupe.
+## First provider-execution layer
+
+Implemented a connector-neutral provider execution runner and JSON backfill CLI. The runner records tenant-scoped health and checkpoints, rejects unknown deployments before Silver promotion, supports dry-run without writes, records provider failures as failed health instead of healthy empty datasets, and provides tenant/provider/source-execution scoped rollback.
+
+Remaining PR2 blockers: live EVM/Solana/Dune/explorer provider polling, provider credential configuration, finality polling workers, replay queues, production backfill scheduling, and staging provider evidence are still not complete.

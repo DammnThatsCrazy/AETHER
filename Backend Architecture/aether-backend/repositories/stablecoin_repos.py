@@ -75,3 +75,11 @@ class StablecoinIdentityLinkRepository(BaseRepository):
 class StablecoinGraphProjectionRepository(BaseRepository):
     def __init__(self) -> None:
         super().__init__("stablecoin_graph_projection_outbox")
+class StablecoinProviderHealthRepository(BaseRepository):
+    def __init__(self) -> None:
+        super().__init__("stablecoin_provider_health")
+
+class StablecoinIngestionCheckpointRepository(BaseRepository):
+    def __init__(self) -> None:
+        super().__init__("stablecoin_ingestion_checkpoints")
+

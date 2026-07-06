@@ -137,6 +137,8 @@ class StablecoinIngestionPipeline:
                 "canonical_asset_id": fact.observation.canonical_asset_id,
                 "finality_status": fact.observation.finality_status.value,
                 "event_type": fact.observation.event_type.value,
+                "source_execution_id": fact.observation.source_execution_id,
+                "source_record_id": fact.observation.source_record_id,
                 "data_quality_status": fact.data_quality_status,
                 "evidence": dict(fact.evidence),
             },

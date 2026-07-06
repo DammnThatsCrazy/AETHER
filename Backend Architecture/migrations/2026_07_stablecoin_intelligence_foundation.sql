@@ -15,3 +15,7 @@ CREATE TABLE IF NOT EXISTS stablecoin_identity_links (id TEXT PRIMARY KEY, data 
 CREATE INDEX IF NOT EXISTS idx_stablecoin_identity_links_tenant_wallet ON stablecoin_identity_links (tenant_id, ((data->>'chain_id')), ((data->>'wallet_address')));
 CREATE TABLE IF NOT EXISTS stablecoin_graph_projection_outbox (id TEXT PRIMARY KEY, data JSONB NOT NULL DEFAULT '{}', tenant_id TEXT, created_at TIMESTAMPTZ DEFAULT NOW(), updated_at TIMESTAMPTZ DEFAULT NOW());
 CREATE INDEX IF NOT EXISTS idx_stablecoin_graph_projection_outbox_tenant_status ON stablecoin_graph_projection_outbox (tenant_id, ((data->>'status')));
+CREATE TABLE IF NOT EXISTS stablecoin_provider_health (id TEXT PRIMARY KEY, data JSONB NOT NULL DEFAULT '{}', tenant_id TEXT, created_at TIMESTAMPTZ DEFAULT NOW(), updated_at TIMESTAMPTZ DEFAULT NOW());
+CREATE INDEX IF NOT EXISTS idx_stablecoin_provider_health_tenant_provider ON stablecoin_provider_health (tenant_id, ((data->>'provider')), ((data->>'status')));
+CREATE TABLE IF NOT EXISTS stablecoin_ingestion_checkpoints (id TEXT PRIMARY KEY, data JSONB NOT NULL DEFAULT '{}', tenant_id TEXT, created_at TIMESTAMPTZ DEFAULT NOW(), updated_at TIMESTAMPTZ DEFAULT NOW());
+CREATE INDEX IF NOT EXISTS idx_stablecoin_ingestion_checkpoints_tenant_provider_execution ON stablecoin_ingestion_checkpoints (tenant_id, ((data->>'provider')), ((data->>'source_execution_id')));
