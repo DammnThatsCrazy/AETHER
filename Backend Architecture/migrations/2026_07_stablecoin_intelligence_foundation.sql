@@ -19,3 +19,6 @@ CREATE TABLE IF NOT EXISTS stablecoin_provider_health (id TEXT PRIMARY KEY, data
 CREATE INDEX IF NOT EXISTS idx_stablecoin_provider_health_tenant_provider ON stablecoin_provider_health (tenant_id, ((data->>'provider')), ((data->>'status')));
 CREATE TABLE IF NOT EXISTS stablecoin_ingestion_checkpoints (id TEXT PRIMARY KEY, data JSONB NOT NULL DEFAULT '{}', tenant_id TEXT, created_at TIMESTAMPTZ DEFAULT NOW(), updated_at TIMESTAMPTZ DEFAULT NOW());
 CREATE INDEX IF NOT EXISTS idx_stablecoin_ingestion_checkpoints_tenant_provider_execution ON stablecoin_ingestion_checkpoints (tenant_id, ((data->>'provider')), ((data->>'source_execution_id')));
+
+CREATE TABLE IF NOT EXISTS stablecoin_polling_checkpoints (id TEXT PRIMARY KEY, data JSONB NOT NULL DEFAULT '{}', tenant_id TEXT, created_at TIMESTAMPTZ DEFAULT NOW(), updated_at TIMESTAMPTZ DEFAULT NOW());
+CREATE INDEX IF NOT EXISTS idx_stablecoin_polling_checkpoints_tenant_type_provider ON stablecoin_polling_checkpoints (tenant_id, ((data->>'poll_type')), ((data->>'provider')), ((data->>'status')));

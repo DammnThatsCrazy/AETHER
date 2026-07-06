@@ -33,13 +33,14 @@ Delivered after the PR2 foundation:
 - `services/stablecoins/providers.py`: tenant-scoped provider execution runner with dry-run, explicit provider failure health, checkpoints, and execution-scoped rollback.
 - `services/stablecoins/rpc_observer.py`: read-only EVM receipt verification with tenant scope, deployment/log matching, receipt status handling, and threshold-based finality updates.
 - `services/stablecoins/solana_observer.py`: read-only Solana transaction verification with tenant scope, SPL mint matching, transaction-error handling, and slot-threshold finality updates.
+- `services/stablecoins/polling.py`: connector-neutral provider/finality polling scheduler with durable checkpoints and failed-provider health records.
 - `scripts/stablecoin_backfill.py`: connector-neutral JSON backfill CLI supporting the required dry-run, tenant, asset, deployment, chain, source, window, limit, resume, verify-only, and rollback-tag arguments.
-- `stablecoin_provider_health` and `stablecoin_ingestion_checkpoints` additive tables.
-- Tests: `tests/unit/test_stablecoin_intelligence_provider_execution.py`, `tests/unit/test_stablecoin_intelligence_rpc_verification.py`, and `tests/unit/test_stablecoin_intelligence_solana_verification.py`.
+- `stablecoin_provider_health`, `stablecoin_ingestion_checkpoints`, and `stablecoin_polling_checkpoints` additive tables.
+- Tests: `tests/unit/test_stablecoin_intelligence_provider_execution.py`, `tests/unit/test_stablecoin_intelligence_rpc_verification.py`, and `tests/unit/test_stablecoin_intelligence_solana_verification.py`, and `tests/unit/test_stablecoin_intelligence_polling_scheduler.py`.
 
 ## PR2 boundaries
 
-PR2 now includes deterministic service foundations and a first provider-execution layer for connector-supplied rows. Live polling schedules, real provider credential rollout, explorer/RPC disagreement comparison, Dune scheduling, Moralis, CoinGecko, DeFiLlama, graph projection workers, Profile360 product UI, Kyber UI, webhook delivery, export delivery, and commercial metering remain later workstreams.
+PR2 now includes deterministic service foundations and a first provider-execution layer for connector-supplied rows. Concrete external connector implementations, production scheduler runtime wiring, real provider credential rollout, explorer/RPC disagreement comparison, Dune scheduling, Moralis, CoinGecko, DeFiLlama, graph projection workers, Profile360 product UI, Kyber UI, webhook delivery, export delivery, and commercial metering remain later workstreams.
 
 ## PR4 operations/governance slice
 

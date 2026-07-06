@@ -43,3 +43,9 @@ Remaining blockers after this slice: live polling schedules, provider credential
 Implemented a read-only Solana transaction verification layer for stored observations. It enforces tenant scope, registered SPL mint evidence, transaction error handling, current-slot confirmation counts, missing-transaction pending behavior, and reverted-transaction correction through the canonical finality service.
 
 Remaining blockers after this slice: live polling schedules, provider credential rollout, explorer/RPC disagreement comparison, production replay queues, graph/Profile360 rebuild queues, webhook delivery, export delivery, and staging provider evidence.
+
+## Provider and finality polling scheduler layer
+
+Implemented a connector-neutral `StablecoinPollingScheduler` that runs read-only provider connectors through the canonical ingestion runner, records durable polling checkpoints, records provider failures as failed health/checkpoints, and rechecks tenant-scoped EVM/Solana observations through the existing verification layers for finality progression.
+
+Remaining blockers after this slice: concrete external connector implementations, production scheduler runtime wiring, credential rotation, explorer/RPC disagreement comparison, replay queue workers, staging provider credentials, graph/Profile360 rebuild workers, webhook delivery, export delivery, and staging evidence.

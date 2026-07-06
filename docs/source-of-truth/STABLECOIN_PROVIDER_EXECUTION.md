@@ -17,3 +17,9 @@ Rollback is scoped by tenant, provider, and source execution. It deletes only ma
 ## Provider failures
 
 Provider failures are recorded as failed health records. A timeout, credential error, or provider exception must not be represented as a healthy empty dataset.
+
+## Polling scheduler
+
+`StablecoinPollingScheduler` is the connector-neutral worker boundary for PR2 live-ingestion rollout. It invokes read-only provider connectors, persists provider runs through `StablecoinProviderIngestionRunner`, records `stablecoin_polling_checkpoints`, and rechecks existing observations through the EVM or Solana verifier. The scheduler is tenant-scoped and observation-first: connectors may return rows, but they may not write directly to Bronze, Silver, Gold, graph, or Profile360 state.
+
+Provider poll failures are recorded as failed health and failed polling checkpoints, never as healthy empty datasets. Finality polls only scan recheckable states (`observed`, `pending`, `confirmed`, `disputed`, `unknown`) and record verification errors per observation without crossing tenant boundaries.
