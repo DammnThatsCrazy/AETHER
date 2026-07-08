@@ -1,5 +1,5 @@
 {
-  "version": "8.11.0",
+  "version": "8.12.0",
   "generated_from": "packages/shared/events.ts",
   "schema_version": "1.0.0",
   "families": [
@@ -10,16 +10,19 @@
     "consent",
     "core",
     "credit",
+    "derivatives",
     "ecommerce",
     "exposure",
     "friction",
     "identity",
     "identity_lc",
+    "interop",
     "journey",
     "location",
     "outcome",
     "reward",
     "server",
+    "stablecoin",
     "wallet",
     "web3_lc",
     "x402"
@@ -29,6 +32,9 @@
     "analytics",
     "commerce",
     "credit",
+    "cross_chain_observability",
+    "economic_observability",
+    "financial_activity",
     "location",
     "marketing",
     "web3"
@@ -1569,6 +1575,666 @@
       "family": "location",
       "consent_purpose": "location",
       "section_comment": "location"
+    },
+    {
+      "name": "stablecoin_transfer_observed",
+      "family": "stablecoin",
+      "consent_purpose": "economic_observability",
+      "section_comment": "stablecoin"
+    },
+    {
+      "name": "stablecoin_payment_observed",
+      "family": "stablecoin",
+      "consent_purpose": "economic_observability",
+      "section_comment": "stablecoin"
+    },
+    {
+      "name": "stablecoin_mint_observed",
+      "family": "stablecoin",
+      "consent_purpose": "economic_observability",
+      "section_comment": "stablecoin"
+    },
+    {
+      "name": "stablecoin_burn_observed",
+      "family": "stablecoin",
+      "consent_purpose": "economic_observability",
+      "section_comment": "stablecoin"
+    },
+    {
+      "name": "stablecoin_bridge_outbound_observed",
+      "family": "stablecoin",
+      "consent_purpose": "economic_observability",
+      "section_comment": "stablecoin"
+    },
+    {
+      "name": "stablecoin_bridge_inbound_observed",
+      "family": "stablecoin",
+      "consent_purpose": "economic_observability",
+      "section_comment": "stablecoin"
+    },
+    {
+      "name": "stablecoin_swap_observed",
+      "family": "stablecoin",
+      "consent_purpose": "economic_observability",
+      "section_comment": "stablecoin"
+    },
+    {
+      "name": "stablecoin_x402_settlement_observed",
+      "family": "stablecoin",
+      "consent_purpose": "economic_observability",
+      "section_comment": "stablecoin"
+    },
+    {
+      "name": "stablecoin_treasury_movement_observed",
+      "family": "stablecoin",
+      "consent_purpose": "economic_observability",
+      "section_comment": "stablecoin"
+    },
+    {
+      "name": "stablecoin_payout_observed",
+      "family": "stablecoin",
+      "consent_purpose": "economic_observability",
+      "section_comment": "stablecoin"
+    },
+    {
+      "name": "stablecoin_venue_deposit_observed",
+      "family": "stablecoin",
+      "consent_purpose": "economic_observability",
+      "section_comment": "stablecoin"
+    },
+    {
+      "name": "stablecoin_venue_withdrawal_observed",
+      "family": "stablecoin",
+      "consent_purpose": "economic_observability",
+      "section_comment": "stablecoin"
+    },
+    {
+      "name": "stablecoin_balance_snapshot_observed",
+      "family": "stablecoin",
+      "consent_purpose": "economic_observability",
+      "section_comment": "stablecoin"
+    },
+    {
+      "name": "stablecoin_supply_snapshot_observed",
+      "family": "stablecoin",
+      "consent_purpose": "economic_observability",
+      "section_comment": "stablecoin"
+    },
+    {
+      "name": "stablecoin_holder_concentration_observed",
+      "family": "stablecoin",
+      "consent_purpose": "economic_observability",
+      "section_comment": "stablecoin"
+    },
+    {
+      "name": "stablecoin_valuation_observed",
+      "family": "stablecoin",
+      "consent_purpose": "economic_observability",
+      "section_comment": "stablecoin"
+    },
+    {
+      "name": "stablecoin_depeg_detected",
+      "family": "stablecoin",
+      "consent_purpose": "economic_observability",
+      "section_comment": "stablecoin"
+    },
+    {
+      "name": "stablecoin_depeg_resolved",
+      "family": "stablecoin",
+      "consent_purpose": "economic_observability",
+      "section_comment": "stablecoin"
+    },
+    {
+      "name": "stablecoin_finality_confirmed",
+      "family": "stablecoin",
+      "consent_purpose": "economic_observability",
+      "section_comment": "stablecoin"
+    },
+    {
+      "name": "stablecoin_reorg_detected",
+      "family": "stablecoin",
+      "consent_purpose": "economic_observability",
+      "section_comment": "stablecoin"
+    },
+    {
+      "name": "stablecoin_observation_corrected",
+      "family": "stablecoin",
+      "consent_purpose": "economic_observability",
+      "section_comment": "stablecoin"
+    },
+    {
+      "name": "stablecoin_reconciliation_run_completed",
+      "family": "stablecoin",
+      "consent_purpose": "economic_observability",
+      "section_comment": "stablecoin"
+    },
+    {
+      "name": "stablecoin_reconciliation_variance_detected",
+      "family": "stablecoin",
+      "consent_purpose": "economic_observability",
+      "section_comment": "stablecoin"
+    },
+    {
+      "name": "stablecoin_reconciliation_variance_resolved",
+      "family": "stablecoin",
+      "consent_purpose": "economic_observability",
+      "section_comment": "stablecoin"
+    },
+    {
+      "name": "stablecoin_asset_registered",
+      "family": "stablecoin",
+      "consent_purpose": "economic_observability",
+      "section_comment": "stablecoin"
+    },
+    {
+      "name": "stablecoin_deployment_registered",
+      "family": "stablecoin",
+      "consent_purpose": "economic_observability",
+      "section_comment": "stablecoin"
+    },
+    {
+      "name": "stablecoin_support_asserted",
+      "family": "stablecoin",
+      "consent_purpose": "economic_observability",
+      "section_comment": "stablecoin"
+    },
+    {
+      "name": "stablecoin_support_revoked",
+      "family": "stablecoin",
+      "consent_purpose": "economic_observability",
+      "section_comment": "stablecoin"
+    },
+    {
+      "name": "stablecoin_flow_aggregate_materialized",
+      "family": "stablecoin",
+      "consent_purpose": "economic_observability",
+      "section_comment": "stablecoin"
+    },
+    {
+      "name": "stablecoin_checkpoint_advanced",
+      "family": "stablecoin",
+      "consent_purpose": "economic_observability",
+      "section_comment": "stablecoin"
+    },
+    {
+      "name": "derivatives_venue_registered",
+      "family": "derivatives",
+      "consent_purpose": "financial_activity",
+      "section_comment": "derivatives"
+    },
+    {
+      "name": "derivatives_venue_deployment_registered",
+      "family": "derivatives",
+      "consent_purpose": "financial_activity",
+      "section_comment": "derivatives"
+    },
+    {
+      "name": "derivatives_instrument_registered",
+      "family": "derivatives",
+      "consent_purpose": "financial_activity",
+      "section_comment": "derivatives"
+    },
+    {
+      "name": "derivatives_market_registered",
+      "family": "derivatives",
+      "consent_purpose": "financial_activity",
+      "section_comment": "derivatives"
+    },
+    {
+      "name": "derivatives_strategy_registered",
+      "family": "derivatives",
+      "consent_purpose": "financial_activity",
+      "section_comment": "derivatives"
+    },
+    {
+      "name": "derivatives_strategy_version_registered",
+      "family": "derivatives",
+      "consent_purpose": "financial_activity",
+      "section_comment": "derivatives"
+    },
+    {
+      "name": "derivatives_risk_policy_registered",
+      "family": "derivatives",
+      "consent_purpose": "financial_activity",
+      "section_comment": "derivatives"
+    },
+    {
+      "name": "derivatives_account_linked",
+      "family": "derivatives",
+      "consent_purpose": "financial_activity",
+      "section_comment": "derivatives"
+    },
+    {
+      "name": "derivatives_account_link_revoked",
+      "family": "derivatives",
+      "consent_purpose": "financial_activity",
+      "section_comment": "derivatives"
+    },
+    {
+      "name": "derivatives_balance_snapshot_observed",
+      "family": "derivatives",
+      "consent_purpose": "financial_activity",
+      "section_comment": "derivatives"
+    },
+    {
+      "name": "derivatives_collateral_change_observed",
+      "family": "derivatives",
+      "consent_purpose": "financial_activity",
+      "section_comment": "derivatives"
+    },
+    {
+      "name": "derivatives_margin_snapshot_observed",
+      "family": "derivatives",
+      "consent_purpose": "financial_activity",
+      "section_comment": "derivatives"
+    },
+    {
+      "name": "derivatives_order_observed",
+      "family": "derivatives",
+      "consent_purpose": "financial_activity",
+      "section_comment": "derivatives"
+    },
+    {
+      "name": "derivatives_order_updated_observed",
+      "family": "derivatives",
+      "consent_purpose": "financial_activity",
+      "section_comment": "derivatives"
+    },
+    {
+      "name": "derivatives_order_cancelled_observed",
+      "family": "derivatives",
+      "consent_purpose": "financial_activity",
+      "section_comment": "derivatives"
+    },
+    {
+      "name": "derivatives_order_rejected_observed",
+      "family": "derivatives",
+      "consent_purpose": "financial_activity",
+      "section_comment": "derivatives"
+    },
+    {
+      "name": "derivatives_order_expired_observed",
+      "family": "derivatives",
+      "consent_purpose": "financial_activity",
+      "section_comment": "derivatives"
+    },
+    {
+      "name": "derivatives_fill_observed",
+      "family": "derivatives",
+      "consent_purpose": "financial_activity",
+      "section_comment": "derivatives"
+    },
+    {
+      "name": "derivatives_fill_corrected",
+      "family": "derivatives",
+      "consent_purpose": "financial_activity",
+      "section_comment": "derivatives"
+    },
+    {
+      "name": "derivatives_position_opened_observed",
+      "family": "derivatives",
+      "consent_purpose": "financial_activity",
+      "section_comment": "derivatives"
+    },
+    {
+      "name": "derivatives_position_increased_observed",
+      "family": "derivatives",
+      "consent_purpose": "financial_activity",
+      "section_comment": "derivatives"
+    },
+    {
+      "name": "derivatives_position_reduced_observed",
+      "family": "derivatives",
+      "consent_purpose": "financial_activity",
+      "section_comment": "derivatives"
+    },
+    {
+      "name": "derivatives_position_closed_observed",
+      "family": "derivatives",
+      "consent_purpose": "financial_activity",
+      "section_comment": "derivatives"
+    },
+    {
+      "name": "derivatives_position_liquidated_observed",
+      "family": "derivatives",
+      "consent_purpose": "financial_activity",
+      "section_comment": "derivatives"
+    },
+    {
+      "name": "derivatives_position_adl_observed",
+      "family": "derivatives",
+      "consent_purpose": "financial_activity",
+      "section_comment": "derivatives"
+    },
+    {
+      "name": "derivatives_position_settled_observed",
+      "family": "derivatives",
+      "consent_purpose": "financial_activity",
+      "section_comment": "derivatives"
+    },
+    {
+      "name": "derivatives_position_corrected",
+      "family": "derivatives",
+      "consent_purpose": "financial_activity",
+      "section_comment": "derivatives"
+    },
+    {
+      "name": "derivatives_funding_payment_observed",
+      "family": "derivatives",
+      "consent_purpose": "financial_activity",
+      "section_comment": "derivatives"
+    },
+    {
+      "name": "derivatives_fee_observed",
+      "family": "derivatives",
+      "consent_purpose": "financial_activity",
+      "section_comment": "derivatives"
+    },
+    {
+      "name": "derivatives_pnl_snapshot_materialized",
+      "family": "derivatives",
+      "consent_purpose": "financial_activity",
+      "section_comment": "derivatives"
+    },
+    {
+      "name": "derivatives_exposure_snapshot_materialized",
+      "family": "derivatives",
+      "consent_purpose": "financial_activity",
+      "section_comment": "derivatives"
+    },
+    {
+      "name": "derivatives_price_observation_recorded",
+      "family": "derivatives",
+      "consent_purpose": "financial_activity",
+      "section_comment": "derivatives"
+    },
+    {
+      "name": "derivatives_market_status_changed",
+      "family": "derivatives",
+      "consent_purpose": "financial_activity",
+      "section_comment": "derivatives"
+    },
+    {
+      "name": "derivatives_stream_gap_detected",
+      "family": "derivatives",
+      "consent_purpose": "financial_activity",
+      "section_comment": "derivatives"
+    },
+    {
+      "name": "derivatives_stream_gap_recovered",
+      "family": "derivatives",
+      "consent_purpose": "financial_activity",
+      "section_comment": "derivatives"
+    },
+    {
+      "name": "derivatives_stream_checkpoint_advanced",
+      "family": "derivatives",
+      "consent_purpose": "financial_activity",
+      "section_comment": "derivatives"
+    },
+    {
+      "name": "derivatives_adapter_conformance_run",
+      "family": "derivatives",
+      "consent_purpose": "financial_activity",
+      "section_comment": "derivatives"
+    },
+    {
+      "name": "derivatives_reconciliation_run_completed",
+      "family": "derivatives",
+      "consent_purpose": "financial_activity",
+      "section_comment": "derivatives"
+    },
+    {
+      "name": "derivatives_reconciliation_variance_detected",
+      "family": "derivatives",
+      "consent_purpose": "financial_activity",
+      "section_comment": "derivatives"
+    },
+    {
+      "name": "derivatives_reconciliation_variance_resolved",
+      "family": "derivatives",
+      "consent_purpose": "financial_activity",
+      "section_comment": "derivatives"
+    },
+    {
+      "name": "derivatives_risk_threshold_breached",
+      "family": "derivatives",
+      "consent_purpose": "financial_activity",
+      "section_comment": "derivatives"
+    },
+    {
+      "name": "interop_provider_registered",
+      "family": "interop",
+      "consent_purpose": "cross_chain_observability",
+      "section_comment": "interop"
+    },
+    {
+      "name": "interop_gateway_registered",
+      "family": "interop",
+      "consent_purpose": "cross_chain_observability",
+      "section_comment": "interop"
+    },
+    {
+      "name": "interop_path_registered",
+      "family": "interop",
+      "consent_purpose": "cross_chain_observability",
+      "section_comment": "interop"
+    },
+    {
+      "name": "interop_application_registered",
+      "family": "interop",
+      "consent_purpose": "cross_chain_observability",
+      "section_comment": "interop"
+    },
+    {
+      "name": "interop_verification_actor_registered",
+      "family": "interop",
+      "consent_purpose": "cross_chain_observability",
+      "section_comment": "interop"
+    },
+    {
+      "name": "interop_message_discovered",
+      "family": "interop",
+      "consent_purpose": "cross_chain_observability",
+      "section_comment": "interop"
+    },
+    {
+      "name": "interop_message_sent_observed",
+      "family": "interop",
+      "consent_purpose": "cross_chain_observability",
+      "section_comment": "interop"
+    },
+    {
+      "name": "interop_message_source_confirmed",
+      "family": "interop",
+      "consent_purpose": "cross_chain_observability",
+      "section_comment": "interop"
+    },
+    {
+      "name": "interop_message_verification_observed",
+      "family": "interop",
+      "consent_purpose": "cross_chain_observability",
+      "section_comment": "interop"
+    },
+    {
+      "name": "interop_message_verified",
+      "family": "interop",
+      "consent_purpose": "cross_chain_observability",
+      "section_comment": "interop"
+    },
+    {
+      "name": "interop_message_delivery_attempt_observed",
+      "family": "interop",
+      "consent_purpose": "cross_chain_observability",
+      "section_comment": "interop"
+    },
+    {
+      "name": "interop_message_delivered",
+      "family": "interop",
+      "consent_purpose": "cross_chain_observability",
+      "section_comment": "interop"
+    },
+    {
+      "name": "interop_message_executed_observed",
+      "family": "interop",
+      "consent_purpose": "cross_chain_observability",
+      "section_comment": "interop"
+    },
+    {
+      "name": "interop_message_settled",
+      "family": "interop",
+      "consent_purpose": "cross_chain_observability",
+      "section_comment": "interop"
+    },
+    {
+      "name": "interop_message_failed",
+      "family": "interop",
+      "consent_purpose": "cross_chain_observability",
+      "section_comment": "interop"
+    },
+    {
+      "name": "interop_message_timeout",
+      "family": "interop",
+      "consent_purpose": "cross_chain_observability",
+      "section_comment": "interop"
+    },
+    {
+      "name": "interop_message_expired",
+      "family": "interop",
+      "consent_purpose": "cross_chain_observability",
+      "section_comment": "interop"
+    },
+    {
+      "name": "interop_message_cancelled",
+      "family": "interop",
+      "consent_purpose": "cross_chain_observability",
+      "section_comment": "interop"
+    },
+    {
+      "name": "interop_message_refunded_observed",
+      "family": "interop",
+      "consent_purpose": "cross_chain_observability",
+      "section_comment": "interop"
+    },
+    {
+      "name": "interop_message_recovered",
+      "family": "interop",
+      "consent_purpose": "cross_chain_observability",
+      "section_comment": "interop"
+    },
+    {
+      "name": "interop_message_reorged",
+      "family": "interop",
+      "consent_purpose": "cross_chain_observability",
+      "section_comment": "interop"
+    },
+    {
+      "name": "interop_message_corrected",
+      "family": "interop",
+      "consent_purpose": "cross_chain_observability",
+      "section_comment": "interop"
+    },
+    {
+      "name": "interop_message_correlated",
+      "family": "interop",
+      "consent_purpose": "cross_chain_observability",
+      "section_comment": "interop"
+    },
+    {
+      "name": "interop_intent_observed",
+      "family": "interop",
+      "consent_purpose": "cross_chain_observability",
+      "section_comment": "interop"
+    },
+    {
+      "name": "interop_intent_fulfilled_observed",
+      "family": "interop",
+      "consent_purpose": "cross_chain_observability",
+      "section_comment": "interop"
+    },
+    {
+      "name": "interop_asset_leg_locked_observed",
+      "family": "interop",
+      "consent_purpose": "cross_chain_observability",
+      "section_comment": "interop"
+    },
+    {
+      "name": "interop_asset_leg_burned_observed",
+      "family": "interop",
+      "consent_purpose": "cross_chain_observability",
+      "section_comment": "interop"
+    },
+    {
+      "name": "interop_asset_leg_minted_observed",
+      "family": "interop",
+      "consent_purpose": "cross_chain_observability",
+      "section_comment": "interop"
+    },
+    {
+      "name": "interop_asset_leg_released_observed",
+      "family": "interop",
+      "consent_purpose": "cross_chain_observability",
+      "section_comment": "interop"
+    },
+    {
+      "name": "interop_fee_observed",
+      "family": "interop",
+      "consent_purpose": "cross_chain_observability",
+      "section_comment": "interop"
+    },
+    {
+      "name": "interop_security_policy_snapshot_recorded",
+      "family": "interop",
+      "consent_purpose": "cross_chain_observability",
+      "section_comment": "interop"
+    },
+    {
+      "name": "interop_security_policy_changed",
+      "family": "interop",
+      "consent_purpose": "cross_chain_observability",
+      "section_comment": "interop"
+    },
+    {
+      "name": "interop_verification_quorum_observed",
+      "family": "interop",
+      "consent_purpose": "cross_chain_observability",
+      "section_comment": "interop"
+    },
+    {
+      "name": "interop_provider_checkpoint_advanced",
+      "family": "interop",
+      "consent_purpose": "cross_chain_observability",
+      "section_comment": "interop"
+    },
+    {
+      "name": "interop_stream_gap_detected",
+      "family": "interop",
+      "consent_purpose": "cross_chain_observability",
+      "section_comment": "interop"
+    },
+    {
+      "name": "interop_stream_gap_recovered",
+      "family": "interop",
+      "consent_purpose": "cross_chain_observability",
+      "section_comment": "interop"
+    },
+    {
+      "name": "interop_reconciliation_run_completed",
+      "family": "interop",
+      "consent_purpose": "cross_chain_observability",
+      "section_comment": "interop"
+    },
+    {
+      "name": "interop_reconciliation_variance_detected",
+      "family": "interop",
+      "consent_purpose": "cross_chain_observability",
+      "section_comment": "interop"
+    },
+    {
+      "name": "interop_reconciliation_variance_resolved",
+      "family": "interop",
+      "consent_purpose": "cross_chain_observability",
+      "section_comment": "interop"
     }
   ]
 }

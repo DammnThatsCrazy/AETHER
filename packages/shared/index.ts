@@ -42,3 +42,5 @@ export * from './acquisition-evidence';
 
 export * from './semantic-sentiment';
 export * from './derivatives';
+export * from './stablecoin';
+export * from './interoperability';

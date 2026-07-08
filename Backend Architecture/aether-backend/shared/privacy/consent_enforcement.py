@@ -4,28 +4,55 @@ Aether Privacy — Consent Enforcement at Processing Time
 Enforces consent state at actual processing points, not just storage.
 Called by middleware, async jobs, enrichment pipelines, and export paths.
 
-Consent purposes: analytics, marketing, web3, agent, commerce, personalization, credit, location
+Purposes derive from the canonical consent registry
+(packages/shared/contracts/consent-registry.json) so this module can never
+drift from the source of truth again. The registry loader fails closed to
+the pre-registry purpose set only if the file is unreadable.
 Enforcement behavior: fail-closed — disallowed processing is blocked.
 """
 
 from __future__ import annotations
 
+import json
+import pathlib
 
 from shared.logger.logger import get_logger
 
 logger = get_logger("aether.privacy.consent")
 
+_REGISTRY_PATH = (
+    pathlib.Path(__file__).resolve().parents[4]
+    / "packages" / "shared" / "contracts" / "consent-registry.json"
+)
 
-# Valid consent purposes that can be checked
-CONSENT_PURPOSES = {
-    "analytics",
-    "marketing",
-    "web3",
-    "agent",
-    "commerce",
-    "personalization",
-    "credit",    # gates credit bureau + income + brokerage data
-    "location",  # gates GPS/precise location (IP-level GeoIP does not require this)
+# Fallback only for environments where the registry file is unavailable.
+_FALLBACK_PURPOSES = {
+    "analytics", "marketing", "web3", "agent", "commerce",
+    "personalization", "credit", "location",
+}
+
+
+def _load_registry_purposes() -> list[dict]:
+    try:
+        data = json.loads(_REGISTRY_PATH.read_text())
+        purposes = data.get("purposes", [])
+        if purposes:
+            return purposes
+    except Exception:  # pragma: no cover - registry file always ships with the repo
+        logger.warning("consent registry unreadable; using fallback purpose set")
+    return [{"key": key, "explicitOptInRequired": key in {"credit", "location"}}
+            for key in sorted(_FALLBACK_PURPOSES)]
+
+
+_REGISTRY_PURPOSES: list[dict] = _load_registry_purposes()
+
+# Valid consent purposes that can be checked (registry-derived)
+CONSENT_PURPOSES: set[str] = {p["key"] for p in _REGISTRY_PURPOSES}
+
+# Purposes that require explicit consent rather than legitimate interest:
+# every non-default-enabled purpose in the registry.
+_CONSENT_REQUIRED_PURPOSES: set[str] = {
+    p["key"] for p in _REGISTRY_PURPOSES if not p.get("defaultEnabled", False)
 }
 
 
@@ -127,13 +154,4 @@ async def filter_by_consent(
 
 def is_consent_required_purpose(purpose: str) -> bool:
     """Check if a purpose requires explicit consent (vs. legitimate interest)."""
-    consent_required = {
-        "marketing",
-        "personalization",
-        "web3",
-        "agent",
-        "commerce",
-        "credit",    # requires explicit opt-in: credit bureau + income + brokerage
-        "location",  # requires explicit opt-in: GPS/precise location data
-    }
-    return purpose in consent_required
+    return purpose in _CONSENT_REQUIRED_PURPOSES

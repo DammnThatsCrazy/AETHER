@@ -1,5 +1,5 @@
 {
-  "version": "8.11.0",
+  "version": "8.12.0",
   "generated_from": "packages/shared/consent.ts",
   "purposes": [
     {
@@ -37,6 +37,14 @@
     {
       "name": "location",
       "description": "Precise or coarse location observations and geofence transitions. Always requires explicit opt-in. Always requires explicit opt-in."
+    },
+    {
+      "name": "economic_observability",
+      "description": "Read-only stablecoin economic intelligence: canonical asset and deployment identity, transfer/payment/mint/burn/bridge/swap observations, valuation and peg monitoring, support assertions, finality, flow aggregates, and reconciliation. Always requires explicit opt-in."
+    },
+    {
+      "name": "cross_chain_observability",
+      "description": "Read-only interoperability intelligence: cross-network message lifecycle, paths, gateways, applications, intents, asset legs, security policy snapshots, verification and delivery actors, and reconciliation. Aether never relays or routes. Always requires explicit opt-in."
     }
   ],
   "state_fields": [
@@ -49,6 +57,8 @@
     "financial_activity",
     "credit",
     "location",
+    "economic_observability",
+    "cross_chain_observability",
     "updatedAt",
     "policyVersion"
   ]
