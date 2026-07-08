@@ -650,6 +650,27 @@ class AgenticObservabilityConfig:
     protocol_enabled: bool = _env_bool("AGENTIC_PROTOCOL_OBSERVABILITY_ENABLED", True)
     kyber_enabled: bool = _env_bool("KYBER_AGENTIC_OBSERVABILITY_ENABLED", True)
 
+
+@dataclass(frozen=True)
+class StablecoinIntelligenceConfig:
+    """Safe rollout flags for Stablecoin Intelligence.
+
+    Defaults are OFF until PR2-PR4 provide verified ingestion, Profile360,
+    product surfaces, Kyber operations, Olympus benchmarks, and release evidence.
+    """
+    enabled: bool = _env_bool("AETHER_STABLECOIN_INTELLIGENCE_ENABLED", False)
+    profile360_enabled: bool = _env_bool("AETHER_STABLECOIN_PROFILE360_ENABLED", False)
+    attribution_enabled: bool = _env_bool("AETHER_STABLECOIN_ATTRIBUTION_ENABLED", False)
+    support_enabled: bool = _env_bool("AETHER_STABLECOIN_SUPPORT_ENABLED", False)
+    market_enabled: bool = _env_bool("AETHER_STABLECOIN_MARKET_ENABLED", False)
+    alerts_enabled: bool = _env_bool("AETHER_STABLECOIN_ALERTS_ENABLED", False)
+    realtime_enabled: bool = _env_bool("AETHER_STABLECOIN_REALTIME_ENABLED", False)
+    kyber_operations_enabled: bool = _env_bool("KYBER_STABLECOIN_OPERATIONS_ENABLED", False)
+    olympus_benchmarks_enabled: bool = _env_bool("OLYMPUS_STABLECOIN_BENCHMARKS_ENABLED", False)
+    kill_switch: bool = _env_bool("AETHER_STABLECOIN_KILL_SWITCH", False)
+    shadow_mode: bool = _env_bool("AETHER_STABLECOIN_SHADOW_MODE", True)
+
+
 @dataclass
 class Settings:
     env: Environment = Environment(_env("AETHER_ENV", "local"))
@@ -734,6 +755,9 @@ class Settings:
 
     # Agentic Intelligence observability rollout flags
     agentic_observability: AgenticObservabilityConfig = field(default_factory=AgenticObservabilityConfig)
+
+    # Stablecoin Intelligence rollout flags
+    stablecoin_intelligence: StablecoinIntelligenceConfig = field(default_factory=StablecoinIntelligenceConfig)
 
     def __post_init__(self):
         _is_non_local = self.env != Environment.LOCAL

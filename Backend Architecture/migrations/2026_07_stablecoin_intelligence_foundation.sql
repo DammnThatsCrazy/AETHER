@@ -1,0 +1,160 @@
+-- Stablecoin Intelligence PR1 foundation (additive; rollback by DROP TABLE in reverse order).
+
+CREATE TABLE IF NOT EXISTS stablecoin_deployments (
+    deployment_id TEXT PRIMARY KEY,
+    canonical_asset_id TEXT NOT NULL,
+    chain_id TEXT NOT NULL,
+    network TEXT NOT NULL,
+    token_standard TEXT NOT NULL,
+    contract_or_mint TEXT NOT NULL,
+    decimals INTEGER NOT NULL,
+    issuer_verified BOOLEAN DEFAULT FALSE,
+    active BOOLEAN DEFAULT TRUE,
+    metadata JSONB DEFAULT '{}'::jsonb,
+    created_at TIMESTAMPTZ DEFAULT now(),
+    updated_at TIMESTAMPTZ DEFAULT now()
+);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_stablecoin_deployment_chain_contract
+    ON stablecoin_deployments(chain_id, network, lower(contract_or_mint));
+
+CREATE TABLE IF NOT EXISTS stablecoin_observations (
+    observation_id TEXT PRIMARY KEY,
+    tenant_id TEXT NOT NULL,
+    schema_version TEXT NOT NULL,
+    source TEXT NOT NULL,
+    source_record_id TEXT NOT NULL,
+    source_execution_id TEXT NOT NULL,
+    source_manifest_id TEXT,
+    evidence_id TEXT,
+    observed_at TIMESTAMPTZ NOT NULL,
+    ingested_at TIMESTAMPTZ DEFAULT now(),
+    chain_id TEXT NOT NULL,
+    network TEXT NOT NULL,
+    transaction_hash TEXT NOT NULL,
+    log_or_instruction_index INTEGER,
+    finality_status TEXT NOT NULL,
+    event_type TEXT NOT NULL,
+    deployment_id TEXT NOT NULL,
+    canonical_asset_id TEXT NOT NULL,
+    amount_atomic NUMERIC(78,0) NOT NULL,
+    amount_decimal TEXT,
+    from_address TEXT,
+    to_address TEXT,
+    metadata JSONB DEFAULT '{}'::jsonb,
+    created_at TIMESTAMPTZ DEFAULT now(),
+    updated_at TIMESTAMPTZ DEFAULT now()
+);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_stablecoin_obs_tenant_tx_log
+    ON stablecoin_observations(tenant_id, chain_id, network, deployment_id, transaction_hash, COALESCE(log_or_instruction_index, -1));
+
+CREATE TABLE IF NOT EXISTS stablecoin_support_assertions (
+    assertion_id TEXT PRIMARY KEY,
+    tenant_id TEXT NOT NULL,
+    subject_entity_id TEXT NOT NULL,
+    deployment_id TEXT NOT NULL,
+    capability TEXT NOT NULL,
+    support_state TEXT NOT NULL,
+    evidence_type TEXT NOT NULL,
+    evidence_reference TEXT NOT NULL,
+    evidence_timestamp TIMESTAMPTZ NOT NULL,
+    confidence NUMERIC(8,6) DEFAULT 0,
+    metadata JSONB DEFAULT '{}'::jsonb
+);
+
+CREATE TABLE IF NOT EXISTS stablecoin_reconciliation_results (
+    reconciliation_id TEXT PRIMARY KEY,
+    tenant_id TEXT NOT NULL,
+    observation_id TEXT,
+    state TEXT NOT NULL,
+    evidence JSONB DEFAULT '{}'::jsonb,
+    created_at TIMESTAMPTZ DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS gold_stablecoin_metrics (
+    gold_id TEXT PRIMARY KEY,
+    tenant_id TEXT NOT NULL,
+    metric_name TEXT NOT NULL,
+    metric_version TEXT NOT NULL,
+    entity_id TEXT NOT NULL,
+    entity_type TEXT NOT NULL,
+    canonical_asset_id TEXT NOT NULL,
+    deployment_id TEXT NOT NULL,
+    chain_id TEXT NOT NULL,
+    window_start TIMESTAMPTZ NOT NULL,
+    window_end TIMESTAMPTZ NOT NULL,
+    dimensions JSONB DEFAULT '{}'::jsonb,
+    source TEXT NOT NULL,
+    value JSONB NOT NULL,
+    lineage JSONB DEFAULT '{}'::jsonb,
+    materialized_at TIMESTAMPTZ NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS stablecoin_remediation_audit (
+    id TEXT PRIMARY KEY,
+    data JSONB NOT NULL DEFAULT '{}',
+    tenant_id TEXT,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_stablecoin_remediation_audit_tenant
+    ON stablecoin_remediation_audit (tenant_id);
+
+CREATE TABLE IF NOT EXISTS stablecoin_market_benchmarks (
+    id TEXT PRIMARY KEY,
+    data JSONB NOT NULL DEFAULT '{}',
+    tenant_id TEXT,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_stablecoin_market_benchmarks_data_class
+    ON stablecoin_market_benchmarks ((data->>'data_class'));
+
+CREATE TABLE IF NOT EXISTS stablecoin_identity_links (
+    id TEXT PRIMARY KEY,
+    data JSONB NOT NULL DEFAULT '{}',
+    tenant_id TEXT,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_stablecoin_identity_links_tenant_wallet
+    ON stablecoin_identity_links (tenant_id, ((data->>'chain_id')), ((data->>'wallet_address')));
+
+CREATE TABLE IF NOT EXISTS stablecoin_graph_projection_outbox (
+    id TEXT PRIMARY KEY,
+    data JSONB NOT NULL DEFAULT '{}',
+    tenant_id TEXT,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_stablecoin_graph_projection_outbox_tenant_status
+    ON stablecoin_graph_projection_outbox (tenant_id, ((data->>'status')));
+
+CREATE TABLE IF NOT EXISTS stablecoin_provider_health (
+    id TEXT PRIMARY KEY,
+    data JSONB NOT NULL DEFAULT '{}',
+    tenant_id TEXT,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_stablecoin_provider_health_tenant_provider
+    ON stablecoin_provider_health (tenant_id, ((data->>'provider')), ((data->>'status')));
+
+CREATE TABLE IF NOT EXISTS stablecoin_ingestion_checkpoints (
+    id TEXT PRIMARY KEY,
+    data JSONB NOT NULL DEFAULT '{}',
+    tenant_id TEXT,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_stablecoin_ingestion_checkpoints_tenant_provider_execution
+    ON stablecoin_ingestion_checkpoints (tenant_id, ((data->>'provider')), ((data->>'source_execution_id')));
+
+CREATE TABLE IF NOT EXISTS stablecoin_polling_checkpoints (
+    id TEXT PRIMARY KEY,
+    data JSONB NOT NULL DEFAULT '{}',
+    tenant_id TEXT,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_stablecoin_polling_checkpoints_tenant_type_provider
+    ON stablecoin_polling_checkpoints (tenant_id, ((data->>'poll_type')), ((data->>'provider')), ((data->>'status')));
