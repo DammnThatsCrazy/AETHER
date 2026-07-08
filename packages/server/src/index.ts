@@ -175,6 +175,7 @@ export class AetherServerSDK {
       commerce: false,
       credit: false,
       location: false,
+      financial_activity: false,
       ...partial,
     };
   }
