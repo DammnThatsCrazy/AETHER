@@ -3838,6 +3838,34 @@
       "since_version": "8.11.0"
     },
     {
+      "path": "docs/derivatives/INGESTION.md",
+      "title": "Derivatives Ingestion",
+      "slug": "derivatives/ingestion",
+      "section": "data",
+      "visibility": "I",
+      "audience": [
+        "architect",
+        "dev-senior",
+        "ops"
+      ],
+      "status": "experimental",
+      "since_version": "8.11.0"
+    },
+    {
+      "path": "docs/derivatives/INTELLIGENCE.md",
+      "title": "Derivatives Intelligence",
+      "slug": "derivatives/intelligence",
+      "section": "concepts",
+      "visibility": "I",
+      "audience": [
+        "architect",
+        "dev-senior",
+        "ops"
+      ],
+      "status": "experimental",
+      "since_version": "8.11.0"
+    },
+    {
       "path": "docs/derivatives/MARKET_RESOLUTION.md",
       "title": "Derivatives Market Resolution",
       "slug": "derivatives/market-resolution",
@@ -4508,6 +4536,11 @@
       "status": "draft",
       "estimated_read_minutes": 7,
       "canonical_owner": "compliance@aether"
+    },
+    {
+      "path": "docs/source-of-truth/DERIVATIVES_INTELLIGENCE_ALIGNMENT.md",
+      "title": "Derivatives Intelligence Alignment",
+      "status": "draft"
     },
     {
       "path": "docs/source-of-truth/DUNE_ACCESS_MODES.md",

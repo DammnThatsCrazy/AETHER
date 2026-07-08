@@ -94,9 +94,9 @@ const CONSENT_MAP: Record<string, string> = {
   agent_risk_signal_observed: 'agent', agent_notification_observed: 'agent',
   // Agentic observability — Robinhood-style trading observation
   agent_strategy_observed: 'agent', agent_trade_intent_observed: 'agent',
-  agent_trade_order_observed: 'agent', agent_trade_fill_observed: 'agent',
-  agent_trade_rejection_observed: 'agent', agent_position_observed: 'agent',
-  agent_portfolio_snapshot_observed: 'agent', agent_performance_snapshot_observed: 'agent',
+  agent_trade_order_observed: 'financial_activity', agent_trade_fill_observed: 'financial_activity',
+  agent_trade_rejection_observed: 'agent', agent_position_observed: 'financial_activity',
+  agent_portfolio_snapshot_observed: 'financial_activity', agent_performance_snapshot_observed: 'financial_activity',
   agent_disconnect_observed: 'agent',
   // Agentic observability — AgentMail-style communication observation
   agent_inbox_observed: 'agent', agent_email_address_observed: 'agent',
