@@ -650,7 +650,6 @@ export const EVENT_CONSENT_PURPOSE: Record<EventType, string> = {
   x402_access_denied: 'commerce',
   x402_refund_or_reversal: 'commerce',
   agentic_account_observed: 'agent',
-
   agentic_account_connected_observed: 'agent',
   agentic_account_disconnected_observed: 'agent',
   agent_budget_observed: 'agent',
