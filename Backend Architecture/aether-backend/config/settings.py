@@ -694,6 +694,7 @@ class Settings:
     decision_outcome: DecisionOutcomeIntelligenceConfig = field(default_factory=DecisionOutcomeIntelligenceConfig)
     security_governance: SecurityGovernanceConfig = field(default_factory=SecurityGovernanceConfig)
     quicknode: QuickNodeConfig = field(default_factory=QuickNodeConfig)
+    stablecoin_intelligence: StablecoinIntelligenceConfig = field(default_factory=StablecoinIntelligenceConfig)
 
     # Communications Intelligence
     comms: CommsConfig = field(default_factory=CommsConfig)

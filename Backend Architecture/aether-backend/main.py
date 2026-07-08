@@ -890,10 +890,15 @@ def create_app() -> FastAPI:
 
     # ── Stablecoin Intelligence (feature-flagged, all surfaces off by default) ──
     try:
-        from services.stablecoins.routes import router as stablecoin_router, kyber_router as stablecoin_kyber_router
+        from services.stablecoins.routes import (
+            router as stablecoin_router,
+            kyber_router as stablecoin_kyber_router,
+            profile_router as stablecoin_profile_router,
+        )
         app.include_router(stablecoin_router)
         app.include_router(stablecoin_kyber_router)
-        logger.info("Stablecoin Intelligence: routes mounted (/v1/stablecoin + /v1/admin/kyber/stablecoin)")
+        app.include_router(stablecoin_profile_router)
+        logger.info("Stablecoin Intelligence: routes mounted (/v1/stablecoin + /v1/admin/kyber/stablecoin + profile360)")
     except Exception as e:  # pragma: no cover — defensive
         logger.warning(f"Stablecoin Intelligence routes mount skipped: {e}")
 
