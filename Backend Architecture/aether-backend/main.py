@@ -897,6 +897,15 @@ def create_app() -> FastAPI:
     except Exception as e:  # pragma: no cover — defensive
         logger.warning(f"Stablecoin Intelligence routes mount skipped: {e}")
 
+    # ── Derivatives Intelligence (observation-only product surfaces) ──
+    try:
+        from services.derivatives.routes import router as derivatives_router, kyber_router as derivatives_kyber_router
+        app.include_router(derivatives_router)
+        app.include_router(derivatives_kyber_router)
+        logger.info("Derivatives Intelligence: routes mounted (/v1/derivatives + /v1/admin/kyber/derivatives)")
+    except Exception as e:  # pragma: no cover — defensive
+        logger.warning(f"Derivatives Intelligence routes mount skipped: {e}")
+
     return app
 
 

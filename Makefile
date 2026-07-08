@@ -395,6 +395,24 @@ campaign-release-check: ## Run full Campaign Intelligence release gate
 campaign-release-check-strict: ## Run Campaign Intelligence release gate with test suites
 	python scripts/campaign/check_campaign_release_gate.py --strict
 
+
+# ---------------------------------------------------------------------------
+# Derivatives Intelligence
+# ---------------------------------------------------------------------------
+
+derivatives-test: ## Run derivatives ingestion/accounting foundation tests
+	python -m pytest tests/unit/test_derivatives_ingestion.py -v
+
+derivatives-connector-test: derivatives-test ## Validate derivatives connector normalization and credential gates
+
+derivatives-position-test: derivatives-test ## Validate deterministic derivatives position reconstruction
+
+derivatives-reconciliation-test: derivatives-test ## Validate derivatives reconciliation variance detection
+
+derivatives-replay: derivatives-test ## Validate deterministic derivatives replay fixtures
+
+derivatives-ingestion-release-check: derivatives-test ## PR2 derivatives ingestion release gate
+
 # ---------------------------------------------------------------------------
 # Derivatives Intelligence
 # ---------------------------------------------------------------------------
@@ -442,3 +460,51 @@ help: ## Show this help message
 	@echo ""
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | \
 		awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-18s\033[0m %s\n", $$1, $$2}'
+
+.PHONY: derivatives-graph-check derivatives-profile-check derivatives-intelligence-release-check
+derivatives-graph-check:
+	python -m pytest tests/unit/test_derivatives_intelligence.py -v
+
+derivatives-profile-check:
+	python -m pytest tests/unit/test_derivatives_intelligence.py -v
+
+derivatives-intelligence-release-check: derivatives-graph-check derivatives-profile-check
+	python -m pytest tests/unit/test_derivatives_ingestion.py tests/unit/test_derivatives_intelligence.py -v
+
+.PHONY: derivatives-product-check derivatives-ops-check derivatives-pr4-release-check
+derivatives-product-check:
+	python -m pytest tests/unit/test_derivatives_product.py -v
+
+derivatives-ops-check:
+	python -m pytest tests/unit/test_derivatives_product.py -v
+
+derivatives-pr4-release-check: derivatives-product-check derivatives-ops-check derivatives-intelligence-release-check
+	python -m pytest tests/unit/test_derivatives_ingestion.py tests/unit/test_derivatives_intelligence.py tests/unit/test_derivatives_product.py -v
+
+.PHONY: derivatives-contracts-check derivatives-migration-check derivatives-accounting-test derivatives-security-check derivatives-privacy-check derivatives-load-test derivatives-docs-check derivatives-release-check derivatives-release-check-strict
+
+derivatives-contracts-check:
+	python -m pytest tests/unit/test_derivatives_release.py -v
+
+derivatives-migration-check:
+	python -m pytest tests/unit/test_derivatives_ingestion.py -v
+
+derivatives-accounting-test: derivatives-position-test
+
+derivatives-security-check:
+	python -m pytest tests/unit/test_derivatives_product.py tests/unit/test_derivatives_release.py -v
+
+derivatives-privacy-check:
+	python -m pytest tests/unit/test_derivatives_intelligence.py tests/unit/test_derivatives_release.py -v
+
+derivatives-load-test:
+	python -m pytest tests/unit/test_derivatives_release.py -v
+
+derivatives-docs-check:
+	python scripts/validate_frontmatter.py
+	python scripts/docs_drift.py --strict
+
+derivatives-release-check: derivatives-pr4-release-check derivatives-contracts-check derivatives-security-check derivatives-privacy-check derivatives-docs-check
+
+derivatives-release-check-strict: derivatives-release-check derivatives-load-test
+	python -m pytest tests/unit/test_derivatives_ingestion.py tests/unit/test_derivatives_intelligence.py tests/unit/test_derivatives_product.py tests/unit/test_derivatives_release.py -v
