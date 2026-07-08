@@ -35,7 +35,7 @@ export class RNSemanticContextCollector {
     return {
       eventId: generateId(),
       timestamp: new Date().toISOString(),
-      sdk: { name: 'aether-react-native', version: '8.11.0' },
+      sdk: { name: 'aether-react-native', version: '8.12.0' },
       platform: Platform.OS,
       device: {
         os: Platform.OS,

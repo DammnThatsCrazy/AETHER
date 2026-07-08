@@ -1,6 +1,6 @@
 {
   "name": "@aether/ingestion",
-  "version": "8.11.0",
+  "version": "8.12.0",
   "private": true,
   "type": "module",
   "description": "Aether event ingestion service \u2014 high-throughput HTTP ingest with multi-sink routing",

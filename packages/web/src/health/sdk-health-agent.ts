@@ -11,7 +11,7 @@
 
 import type { EventQueue } from '../core/event-queue';
 
-const SDK_VERSION = '8.11.0'; // synchronized by scripts/bump-sdk-version.sh and scripts/validate_sdk_release_alignment.py
+const SDK_VERSION = '8.12.0'; // synchronized by scripts/bump-sdk-version.sh and scripts/validate_sdk_release_alignment.py
 const DEFAULT_HEARTBEAT_INTERVAL_MS = 60_000;
 const DEFAULT_MANIFEST_REFRESH_MS   = 300_000; // 5 min
 const MAX_HEARTBEAT_RETRIES         = 3;
