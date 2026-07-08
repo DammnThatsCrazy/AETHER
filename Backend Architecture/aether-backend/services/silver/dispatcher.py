@@ -44,6 +44,9 @@ from .projectors import (
     X402FlowProjector,
     TouchpointProjector,
     ConversionProjector,
+    StablecoinProjector,
+    DerivativesProjector,
+    InteropProjector,
 )
 from .projectors.silver_graph_projector import SilverGraphProjector
 from services.comms.projector import CommsProjector, COMMS_TABLE
@@ -66,6 +69,9 @@ _ALL_PROJECTORS: list[BaseProjector] = [
     AgentExecutionProjector(),
     Web3TransactionProjector(),
     X402FlowProjector(),
+    StablecoinProjector(),      # stablecoin economic observation facts
+    DerivativesProjector(),     # derivatives observation facts
+    InteropProjector(),         # cross-network message facts
     ConversionProjector(),
 ]
 

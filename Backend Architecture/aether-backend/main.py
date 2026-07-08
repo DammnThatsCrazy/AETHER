@@ -885,6 +885,49 @@ def create_app() -> FastAPI:
     except Exception as e:  # pragma: no cover — defensive
         logger.warning(f"Delivery routes mount skipped: {e}")
 
+    # ── Stablecoin Intelligence — observation-only; AETHER never executes ──
+    if settings.stablecoin.api_enabled:
+        from services.stablecoin.routes import router as stablecoin_router
+        app.include_router(stablecoin_router, tags=["Stablecoin Intelligence"])
+        logger.info("Stablecoin Intelligence API mounted (/v1/stablecoins)")
+    else:
+        logger.info("Stablecoin Intelligence API disabled (AETHER_STABLECOIN_API_ENABLED=false)")
+    if settings.stablecoin.kyber_enabled:
+        from services.stablecoin.admin_routes import admin_router as stablecoin_admin_router
+        app.include_router(stablecoin_admin_router, tags=["Kyber Stablecoin Ops"])
+        logger.info("Kyber Stablecoin Ops mounted (/v1/admin/kyber/stablecoins)")
+    else:
+        logger.info("Kyber Stablecoin Ops disabled (KYBER_STABLECOIN_OPS_ENABLED=false)")
+
+    # ── Derivatives Intelligence — observation-only; no execution exists ───
+    if settings.derivatives.api_enabled:
+        from services.derivatives.routes import router as derivatives_router
+        app.include_router(derivatives_router, tags=["Derivatives Intelligence"])
+        logger.info("Derivatives Intelligence API mounted (/v1/derivatives)")
+    else:
+        logger.info("Derivatives Intelligence API disabled (AETHER_DERIVATIVES_API_ENABLED=false)")
+    if settings.derivatives.kyber_enabled:
+        from services.derivatives.admin_routes import admin_router as derivatives_admin_router
+        app.include_router(derivatives_admin_router, tags=["Kyber Derivatives Ops"])
+        logger.info("Kyber Derivatives Ops mounted (/v1/admin/kyber/derivatives)")
+    else:
+        logger.info("Kyber Derivatives Ops disabled (KYBER_DERIVATIVES_OPS_ENABLED=false)")
+
+    # ── Interoperability Intelligence — observation-only; AETHER never
+    #    relays, routes, or recovers cross-network messages ─────────────────
+    if settings.interop.api_enabled:
+        from services.interop.routes import router as interop_router
+        app.include_router(interop_router, tags=["Interoperability Intelligence"])
+        logger.info("Interoperability Intelligence API mounted (/v1/interoperability)")
+    else:
+        logger.info("Interoperability Intelligence API disabled (AETHER_INTEROP_API_ENABLED=false)")
+    if settings.interop.kyber_enabled:
+        from services.interop.admin_routes import admin_router as interop_admin_router
+        app.include_router(interop_admin_router, tags=["Kyber Interop Ops"])
+        logger.info("Kyber Interop Ops mounted (/v1/admin/kyber/interop)")
+    else:
+        logger.info("Kyber Interop Ops disabled (KYBER_INTEROP_OPS_ENABLED=false)")
+
     return app
 
 
