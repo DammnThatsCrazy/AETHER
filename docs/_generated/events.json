@@ -10,6 +10,7 @@
     "consent",
     "core",
     "credit",
+    "derivatives",
     "ecommerce",
     "exposure",
     "friction",
@@ -1570,6 +1571,72 @@
       "family": "location",
       "consent_purpose": "location",
       "section_comment": "location"
+    },
+    {
+      "name": "trading_account_connected",
+      "family": "derivatives",
+      "consent_purpose": "financial_activity",
+      "section_comment": "derivatives"
+    },
+    {
+      "name": "trading_account_disconnected",
+      "family": "derivatives",
+      "consent_purpose": "financial_activity",
+      "section_comment": "derivatives"
+    },
+    {
+      "name": "trading_account_authorized",
+      "family": "derivatives",
+      "consent_purpose": "financial_activity",
+      "section_comment": "derivatives"
+    },
+    {
+      "name": "trading_account_deauthorized",
+      "family": "derivatives",
+      "consent_purpose": "financial_activity",
+      "section_comment": "derivatives"
+    },
+    {
+      "name": "trading_agent_enabled",
+      "family": "derivatives",
+      "consent_purpose": "financial_activity",
+      "section_comment": "derivatives"
+    },
+    {
+      "name": "trading_agent_disabled",
+      "family": "derivatives",
+      "consent_purpose": "financial_activity",
+      "section_comment": "derivatives"
+    },
+    {
+      "name": "trade_intent_created",
+      "family": "derivatives",
+      "consent_purpose": "financial_activity",
+      "section_comment": "derivatives"
+    },
+    {
+      "name": "trade_approval_requested",
+      "family": "derivatives",
+      "consent_purpose": "financial_activity",
+      "section_comment": "derivatives"
+    },
+    {
+      "name": "trade_approval_resolved",
+      "family": "derivatives",
+      "consent_purpose": "financial_activity",
+      "section_comment": "derivatives"
+    },
+    {
+      "name": "risk_policy_updated",
+      "family": "derivatives",
+      "consent_purpose": "financial_activity",
+      "section_comment": "derivatives"
+    },
+    {
+      "name": "human_trade_override_recorded",
+      "family": "derivatives",
+      "consent_purpose": "financial_activity",
+      "section_comment": "derivatives"
     }
   ]
 }

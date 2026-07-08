@@ -5,6 +5,8 @@ INVARIANT: Pipeline writes observations. It never executes provider actions.
 """
 from __future__ import annotations
 
+import hashlib
+import re
 import uuid
 from dataclasses import dataclass, field
 from typing import Any, Optional
@@ -26,20 +28,34 @@ from shared.logger.logger import get_logger
 
 logger = get_logger("aether.agentic_observability.pipeline")
 
-_SENSITIVE_KEYS = frozenset({
-    "password", "secret", "token", "api_key", "private_key",
-    "ssn", "dob", "credit_card", "card_number", "cvv", "pin",
-    "authorization", "x-api-key", "x-auth-token",
+_SENSITIVE_BARE = frozenset({
+    "password", "secret", "token", "apikey", "privatekey",
+    "ssn", "dob", "creditcard", "cardnumber", "cvv", "pin",
+    "authorization", "xapikey", "xauthtoken", "accesstoken",
+    "clientsecret", "refreshtoken",
 })
+
+_NORMALIZE_RE = re.compile(r"[^a-z0-9]")
+
+
+def _bare_key(k: str) -> str:
+    """Normalize a key to bare lowercase alphanumeric for matching.
+
+    Collapses camelCase, underscores, and hyphens so accessToken, access_token,
+    and access-token all map to accesstoken before comparison.
+    """
+    # Insert _ before uppercase transitions (camelCase → snake_case) then strip all non-alnum
+    snake = re.sub(r"([A-Z])", r"_\1", k).lower()
+    return _NORMALIZE_RE.sub("", snake)
 
 
 def _sanitize(data: Any, depth: int = 0) -> Any:
-    """Redact sensitive keys from nested dicts."""
+    """Redact sensitive keys from nested dicts (handles camelCase and snake_case)."""
     if depth > 10:
         return data
     if isinstance(data, dict):
         return {
-            k: "[REDACTED]" if k.lower() in _SENSITIVE_KEYS else _sanitize(v, depth + 1)
+            k: "[REDACTED]" if _bare_key(k) in _SENSITIVE_BARE else _sanitize(v, depth + 1)
             for k, v in data.items()
         }
     if isinstance(data, list):
@@ -113,9 +129,17 @@ class AgenticIngestionPipeline:
         result = AgenticPipelineResult(observation_id=record.observation_id)
         sanitized = _sanitize(raw_payload)
 
+        # Derive a stable Bronze ID from the provider's event id so retries are idempotent.
+        provider_event_id = (
+            (record.source.provider_event_id or record.observation_id)
+            if record.source else record.observation_id
+        )
+        bronze_id = hashlib.sha256(
+            f"{record.tenant_id}:{provider_event_id}".encode()
+        ).hexdigest()[:36]
+
         # Bronze write
         try:
-            bronze_id = str(uuid.uuid4())
             await self._bronze.insert(bronze_id, {
                 "id": bronze_id,
                 "observation_id": record.observation_id,
@@ -183,7 +207,7 @@ class AgenticIngestionPipeline:
                     payload = mutation.model_dump(mode="json")
                 else:
                     payload = vars(mutation)
-                mutation_type = "vertex" if payload.get("vertex_id") or payload.get("label") else "edge"
+                mutation_type = "vertex" if "vertex_type" in payload else "edge"
                 await self._outbox.insert(outbox_id, {
                     "outbox_id": outbox_id,
                     "tenant_id": record.tenant_id,
