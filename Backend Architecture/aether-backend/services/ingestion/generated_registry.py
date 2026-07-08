@@ -259,6 +259,17 @@ CANONICAL_EVENT_TYPES: frozenset[str] = frozenset({
     "credit_decision_observed",
     "location_observed",
     "geofence_transition_observed",
+    "trading_account_connected",
+    "trading_account_disconnected",
+    "trading_account_authorized",
+    "trading_account_deauthorized",
+    "trading_agent_enabled",
+    "trading_agent_disabled",
+    "trade_intent_created",
+    "trade_approval_requested",
+    "trade_approval_resolved",
+    "risk_policy_updated",
+    "human_trade_override_recorded",
 })
 
 # Canonical consent purposes — generated from consent-registry.json.
@@ -533,6 +544,17 @@ EVENT_CONSENT_PURPOSE: dict[str, str] = {
     "credit_decision_observed": "credit",
     "location_observed": "location",
     "geofence_transition_observed": "location",
+    "trading_account_connected": "financial_activity",
+    "trading_account_disconnected": "financial_activity",
+    "trading_account_authorized": "financial_activity",
+    "trading_account_deauthorized": "financial_activity",
+    "trading_agent_enabled": "financial_activity",
+    "trading_agent_disabled": "financial_activity",
+    "trade_intent_created": "financial_activity",
+    "trade_approval_requested": "financial_activity",
+    "trade_approval_resolved": "financial_activity",
+    "risk_policy_updated": "financial_activity",
+    "human_trade_override_recorded": "financial_activity",
 }
 
 EVENT_FAMILY: dict[str, str] = {
@@ -792,4 +814,15 @@ EVENT_FAMILY: dict[str, str] = {
     "credit_decision_observed": "credit",
     "location_observed": "location",
     "geofence_transition_observed": "location",
+    "trading_account_connected": "derivatives",
+    "trading_account_disconnected": "derivatives",
+    "trading_account_authorized": "derivatives",
+    "trading_account_deauthorized": "derivatives",
+    "trading_agent_enabled": "derivatives",
+    "trading_agent_disabled": "derivatives",
+    "trade_intent_created": "derivatives",
+    "trade_approval_requested": "derivatives",
+    "trade_approval_resolved": "derivatives",
+    "risk_policy_updated": "derivatives",
+    "human_trade_override_recorded": "derivatives",
 }

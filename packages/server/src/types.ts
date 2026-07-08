@@ -8,7 +8,8 @@ export type ConsentPurpose =
   | 'agent'
   | 'commerce'
   | 'credit'
-  | 'location';
+  | 'location'
+  | 'financial_activity';
 
 export interface ServerConsentState {
   analytics: boolean;
@@ -21,6 +22,8 @@ export interface ServerConsentState {
   credit: boolean;
   /** Always requires explicit opt-in — never granted by grantAll(). */
   location: boolean;
+  /** Always requires explicit opt-in — gates agent trading orders, fills, positions, portfolio, and performance snapshots. */
+  financial_activity: boolean;
 }
 
 export interface ServerEvent {

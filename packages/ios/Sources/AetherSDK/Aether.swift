@@ -171,6 +171,12 @@ public enum AetherEventType: String, Codable, CaseIterable {
     case credit_signal_observed, credit_account_observed, credit_decision_observed
     // Location family (explicit opt-in)
     case location_observed, geofence_transition_observed
+    // Derivatives family (explicit financial_activity opt-in)
+    case trading_account_connected, trading_account_disconnected
+    case trading_account_authorized, trading_account_deauthorized
+    case trading_agent_enabled, trading_agent_disabled
+    case trade_intent_created, trade_approval_requested, trade_approval_resolved
+    case risk_policy_updated, human_trade_override_recorded
 }
 
 public struct AetherEvent: Codable {
@@ -453,7 +459,14 @@ public final class Aether: NSObject {
         .credit_signal_observed: "credit", .credit_account_observed: "credit",
         .credit_decision_observed: "credit",
         // Location family (explicit opt-in)
-        .location_observed: "location", .geofence_transition_observed: "location"
+        .location_observed: "location", .geofence_transition_observed: "location",
+        // Derivatives family (explicit financial_activity opt-in)
+        .trading_account_connected: "financial_activity", .trading_account_disconnected: "financial_activity",
+        .trading_account_authorized: "financial_activity", .trading_account_deauthorized: "financial_activity",
+        .trading_agent_enabled: "financial_activity", .trading_agent_disabled: "financial_activity",
+        .trade_intent_created: "financial_activity", .trade_approval_requested: "financial_activity",
+        .trade_approval_resolved: "financial_activity", .risk_policy_updated: "financial_activity",
+        .human_trade_override_recorded: "financial_activity"
     ]
 
     static let sensitiveKeys: Set<String> = [

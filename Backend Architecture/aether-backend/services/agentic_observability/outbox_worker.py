@@ -12,6 +12,7 @@ from __future__ import annotations
 import argparse
 import asyncio
 from dataclasses import dataclass, field
+from datetime import datetime, timezone
 from typing import Any
 
 from repositories.agentic_observability_repos import AgenticProjectionOutboxRepository
@@ -55,7 +56,14 @@ class AgenticGraphOutboxWorker:
         failed = await self._outbox.find_many(
             filters={"tenant_id": tenant_id, "status": "failed"}, limit=limit
         )
-        rows = queued + failed
+        now = datetime.now(timezone.utc)
+        # Only retry failed rows whose next_attempt_at window has elapsed.
+        eligible_failed = [
+            r for r in failed
+            if not r.get("next_attempt_at")
+            or datetime.fromisoformat(r["next_attempt_at"].replace("Z", "+00:00")) <= now
+        ]
+        rows = queued + eligible_failed
 
         for row in rows:
             result.processed += 1
@@ -72,17 +80,16 @@ class AgenticGraphOutboxWorker:
             try:
                 if mutation_type == "vertex":
                     v = Vertex(
+                        vertex_type=payload.get("vertex_type", "AgentObservation"),
                         vertex_id=payload.get("vertex_id", outbox_id),
-                        label=payload.get("label", "AgentObservation"),
                         properties=payload.get("properties", {}),
                     )
                     await self._graph.add_vertex(v)
                 else:
                     e = Edge(
-                        edge_id=payload.get("edge_id", outbox_id),
-                        from_vertex=payload.get("from_vertex", ""),
-                        to_vertex=payload.get("to_vertex", ""),
-                        label=payload.get("label", "observed"),
+                        edge_type=payload.get("edge_type", "observed"),
+                        from_vertex_id=payload.get("from_vertex_id", ""),
+                        to_vertex_id=payload.get("to_vertex_id", ""),
                         properties=payload.get("properties", {}),
                     )
                     await self._graph.add_edge(e)
@@ -101,7 +108,17 @@ class AgenticGraphOutboxWorker:
                         "error": str(exc),
                     },
                 )
-                await self._mark(outbox_id, row, "failed", attempts + 1)
+                from shared.common.common import utc_now
+                next_attempt = (
+                    datetime.now(timezone.utc).replace(microsecond=0).isoformat()
+                    .replace("+00:00", "Z")
+                )
+                # Compute next_attempt_at so the worker skips this row until the window elapses.
+                import datetime as _dt
+                next_ts = (
+                    datetime.now(timezone.utc) + _dt.timedelta(seconds=backoff)
+                ).isoformat().replace("+00:00", "Z")
+                await self._mark(outbox_id, {**row, "next_attempt_at": next_ts}, "failed", attempts + 1)
                 result.failed += 1
                 result.errors.append(f"{outbox_id}:{type(exc).__name__}")
 

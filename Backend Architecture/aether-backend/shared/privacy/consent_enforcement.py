@@ -24,8 +24,9 @@ CONSENT_PURPOSES = {
     "agent",
     "commerce",
     "personalization",
-    "credit",    # gates credit bureau + income + brokerage data
-    "location",  # gates GPS/precise location (IP-level GeoIP does not require this)
+    "credit",             # gates credit bureau + income + brokerage data
+    "location",           # gates GPS/precise location (IP-level GeoIP does not require this)
+    "financial_activity", # gates agent trading orders/fills/positions/portfolio/performance
 }
 
 

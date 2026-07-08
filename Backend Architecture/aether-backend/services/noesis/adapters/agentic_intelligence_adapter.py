@@ -116,26 +116,43 @@ class AgenticIntelligenceAdapter:
             )
 
         if intent == "authorization_lookup":
-            rows = await self._account_repo.find_many(
+            # Contract v2 events (agent_permission_observed, agentic_account_observed) land in
+            # obs_agent_activities, not obs_external_accounts. Merge both sources so
+            # authorization evidence sent through either SDK path is visible.
+            account_rows = await self._account_repo.find_many(
                 filters={"tenant_id": tenant_id}, limit=limit
             )
-            filtered = [r for r in rows if not target or r.get("agent_id") == target]
+            activity_rows = await self._activity_repo.find_many(
+                filters={"tenant_id": tenant_id, "event_name": "agent_permission_observed"},
+                limit=limit,
+            )
+            agentic_account_rows = await self._activity_repo.find_many(
+                filters={"tenant_id": tenant_id, "event_name": "agentic_account_observed"},
+                limit=limit,
+            )
+            all_rows = account_rows + activity_rows + agentic_account_rows
+            filtered = [r for r in all_rows if not target or r.get("agent_id") == target]
             return AgenticNoesisAnswer(
                 intent=intent,
                 answer=f"Found {len(filtered)} authorization records",
                 results=filtered,
                 claims=[_claim(f"{len(filtered)} account/authorization observations", "observed_fact")],
-                sources=["obs_external_accounts"],
+                sources=["obs_external_accounts", "obs_agent_activities"],
             )
 
         if intent == "provider_verification_lookup":
+            # Scan with a wider window before filtering on nested risk fields,
+            # then truncate to the requested limit so older matching rows are not missed.
+            scan_limit = max(limit * 10, 500)
             rows = await self._activity_repo.find_many(
-                filters={"tenant_id": tenant_id}, limit=limit
+                filters={"tenant_id": tenant_id}, limit=scan_limit
             )
+            if target:
+                rows = [r for r in rows if r.get("agent_id") == target]
             verified = [
                 r for r in rows
                 if isinstance(r.get("risk"), dict) and r["risk"].get("requires_review") is False
-            ]
+            ][:limit]
             return AgenticNoesisAnswer(
                 intent=intent,
                 answer=f"Found {len(verified)} provider-verified observations",
@@ -145,13 +162,16 @@ class AgenticIntelligenceAdapter:
             )
 
         if intent == "verification_mismatch_lookup":
+            scan_limit = max(limit * 10, 500)
             rows = await self._activity_repo.find_many(
-                filters={"tenant_id": tenant_id}, limit=limit
+                filters={"tenant_id": tenant_id}, limit=scan_limit
             )
+            if target:
+                rows = [r for r in rows if r.get("agent_id") == target]
             mismatches = [
                 r for r in rows
                 if isinstance(r.get("risk"), dict) and r["risk"].get("requires_review") is True
-            ]
+            ][:limit]
             return AgenticNoesisAnswer(
                 intent=intent,
                 answer=f"Found {len(mismatches)} verification mismatches requiring review",

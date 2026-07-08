@@ -193,6 +193,13 @@ const CONSENT_MAP: Record<string, string> = {
   credit_decision_observed: 'credit',
   // Location family (explicit opt-in)
   location_observed: 'location', geofence_transition_observed: 'location',
+  // Derivatives family (explicit financial_activity opt-in)
+  trading_account_connected: 'financial_activity', trading_account_disconnected: 'financial_activity',
+  trading_account_authorized: 'financial_activity', trading_account_deauthorized: 'financial_activity',
+  trading_agent_enabled: 'financial_activity', trading_agent_disabled: 'financial_activity',
+  trade_intent_created: 'financial_activity', trade_approval_requested: 'financial_activity',
+  trade_approval_resolved: 'financial_activity', risk_policy_updated: 'financial_activity',
+  human_trade_override_recorded: 'financial_activity',
 };
 
 function scrubSensitiveFields(props: Record<string, unknown>): Record<string, unknown> {

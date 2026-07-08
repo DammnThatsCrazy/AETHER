@@ -3,8 +3,30 @@ from __future__ import annotations
 
 from typing import Optional
 
+from shared.graph.edge_properties import build_edge_properties
 from shared.graph.graph import Edge, EdgeType, Vertex, VertexType
 from services.agentic_observability.models import AgenticObservationRecord
+
+
+def _edge_props(
+    record: AgenticObservationRecord,
+    edge_type: str,
+    from_vertex_id: str,
+    to_vertex_id: str,
+) -> dict:
+    actor_id = record.actor.actor_id or (record.agent.agent_id if record.agent else "unknown")
+    return build_edge_properties(
+        tenant_id=record.tenant_id,
+        edge_type=edge_type,
+        from_vertex_id=from_vertex_id,
+        to_vertex_id=to_vertex_id,
+        actor_kind="agent",
+        actor_id=actor_id,
+        provenance="agentic_observability",
+        valid_from=record.observed_at,
+        confidence=0.9,
+        source_event_id=record.observation_id,
+    )
 
 
 def build_mutations(record: AgenticObservationRecord) -> list:
@@ -23,7 +45,7 @@ def build_mutations(record: AgenticObservationRecord) -> list:
             edge_type=EdgeType.AGENT_CONNECTED_VIA_MCP,
             from_vertex_id=agent_id,
             to_vertex_id=obj_id,
-            properties={"tenant_id": record.tenant_id},
+            properties=_edge_props(record, EdgeType.AGENT_CONNECTED_VIA_MCP, agent_id, obj_id),
         ))
 
     elif record.event_name in ("agent_tool_observed", "agent_tool_invocation_observed") and agent_id and obj_id:
@@ -36,7 +58,7 @@ def build_mutations(record: AgenticObservationRecord) -> list:
             edge_type=EdgeType.AGENT_USED_TOOL_OBS,
             from_vertex_id=agent_id,
             to_vertex_id=obj_id,
-            properties={"tenant_id": record.tenant_id},
+            properties=_edge_props(record, EdgeType.AGENT_USED_TOOL_OBS, agent_id, obj_id),
         ))
 
     elif record.event_name in ("agent_activity_observed", "agent_task_observed") and agent_id and obj_id:
@@ -49,7 +71,7 @@ def build_mutations(record: AgenticObservationRecord) -> list:
             edge_type=EdgeType.AGENT_TRIGGERED_ACTIVITY,
             from_vertex_id=agent_id,
             to_vertex_id=obj_id,
-            properties={"tenant_id": record.tenant_id},
+            properties=_edge_props(record, EdgeType.AGENT_TRIGGERED_ACTIVITY, agent_id, obj_id),
         ))
 
     elif record.event_name == "agent_risk_signal_observed" and agent_id and obj_id:
@@ -65,7 +87,7 @@ def build_mutations(record: AgenticObservationRecord) -> list:
             edge_type=EdgeType.AGENT_PRODUCED_RISK_SIGNAL,
             from_vertex_id=agent_id,
             to_vertex_id=obj_id,
-            properties={"tenant_id": record.tenant_id},
+            properties=_edge_props(record, EdgeType.AGENT_PRODUCED_RISK_SIGNAL, agent_id, obj_id),
         ))
 
     return mutations
@@ -79,10 +101,22 @@ def build_account_mutations(tenant_id: str, agent_id: Optional[str], account_id:
         properties={"tenant_id": tenant_id},
     ))
     if agent_id:
+        from datetime import datetime, timezone
+        from shared.graph.edge_properties import make_edge_idempotency_key, SCHEMA_VERSION
+        et = EdgeType.AGENT_LINKED_TO_EXTERNAL_ACCOUNT
         mutations.append(Edge(
-            edge_type=EdgeType.AGENT_LINKED_TO_EXTERNAL_ACCOUNT,
+            edge_type=et,
             from_vertex_id=agent_id,
             to_vertex_id=account_id,
-            properties={"tenant_id": tenant_id},
+            properties={
+                "tenant_id": tenant_id,
+                "idempotency_key": make_edge_idempotency_key(tenant_id, et, agent_id, account_id),
+                "actor_kind": "agent",
+                "actor_id": agent_id,
+                "schema_version": SCHEMA_VERSION,
+                "provenance": "agentic_observability",
+                "valid_from": datetime.now(timezone.utc).isoformat(),
+                "confidence": "0.9",
+            },
         ))
     return mutations

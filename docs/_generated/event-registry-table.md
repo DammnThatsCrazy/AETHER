@@ -1,7 +1,7 @@
 <!-- DO NOT EDIT — generated from packages/shared/contracts/event-registry.json -->
 <!-- Run: python scripts/generate_contracts.py -->
 
-# Aether Event Registry (256 types, contract v8.11.0)
+# Aether Event Registry (267 types, contract v8.11.0)
 
 | Event Type | Family | Required Purposes | Privacy Class | Description |
 |---|---|---|---|---|
@@ -261,3 +261,14 @@
 | `credit_decision_observed` | `credit` | credit | sensitive_financial | Credit decision observed — requires explicit credit opt-in. Host-observed only; Aether does not make credit decisions. |
 | `location_observed` | `location` | location | sensitive_location | Location observation — requires explicit location opt-in |
 | `geofence_transition_observed` | `location` | location | sensitive_location | Geofence entry/exit — requires explicit location opt-in |
+| `trading_account_connected` | `derivatives` | financial_activity | sensitive_financial | Trading account connected to Aether observation — requires financial_activity opt-in |
+| `trading_account_disconnected` | `derivatives` | financial_activity | sensitive_financial | Trading account disconnected from Aether observation — requires financial_activity opt-in |
+| `trading_account_authorized` | `derivatives` | financial_activity | sensitive_financial | Trading account explicitly authorized for read-only observation — requires financial_activity opt-in |
+| `trading_account_deauthorized` | `derivatives` | financial_activity | sensitive_financial | Trading account deauthorized; observation ceases — requires financial_activity opt-in |
+| `trading_agent_enabled` | `derivatives` | financial_activity, agent | sensitive_financial | Agent enabled for a trading account — requires financial_activity and agent opt-in |
+| `trading_agent_disabled` | `derivatives` | financial_activity, agent | sensitive_financial | Agent disabled on a trading account — requires financial_activity and agent opt-in |
+| `trade_intent_created` | `derivatives` | financial_activity | sensitive_financial | Trade intent created by agent or human — observation only; execution_by_aether is always false |
+| `trade_approval_requested` | `derivatives` | financial_activity | sensitive_financial | Human approval requested before trade execution — observation only |
+| `trade_approval_resolved` | `derivatives` | financial_activity | sensitive_financial | Human trade approval approved or rejected — observation only |
+| `risk_policy_updated` | `derivatives` | financial_activity | governance | Risk policy updated for a trading account — requires financial_activity opt-in |
+| `human_trade_override_recorded` | `derivatives` | financial_activity | sensitive_financial | Human manually overrode an agent trade decision — observation only; execution_by_aether is always false |

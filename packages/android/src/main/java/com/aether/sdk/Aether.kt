@@ -269,7 +269,14 @@ object Aether : DefaultLifecycleObserver {
         "credit_signal_observed" to "credit", "credit_account_observed" to "credit",
         "credit_decision_observed" to "credit",
         // Location family (explicit opt-in)
-        "location_observed" to "location", "geofence_transition_observed" to "location"
+        "location_observed" to "location", "geofence_transition_observed" to "location",
+        // Derivatives family (explicit financial_activity opt-in)
+        "trading_account_connected" to "financial_activity", "trading_account_disconnected" to "financial_activity",
+        "trading_account_authorized" to "financial_activity", "trading_account_deauthorized" to "financial_activity",
+        "trading_agent_enabled" to "financial_activity", "trading_agent_disabled" to "financial_activity",
+        "trade_intent_created" to "financial_activity", "trade_approval_requested" to "financial_activity",
+        "trade_approval_resolved" to "financial_activity", "risk_policy_updated" to "financial_activity",
+        "human_trade_override_recorded" to "financial_activity"
     )
     private val CANONICAL_EVENT_TYPES = EVENT_CONSENT_PURPOSE.keys
     private val dateFormat = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", Locale.US).apply {

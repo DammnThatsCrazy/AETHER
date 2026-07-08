@@ -863,6 +863,9 @@ def create_app() -> FastAPI:
     if agentic_flags.enabled:
         from services.agentic_observability.routes import router as agentic_obs_router
         app.include_router(agentic_obs_router, tags=["Agentic Observability"])
+        if agentic_flags.mcp_enabled:
+            from services.agentic_observability.routes import mcp_router as agentic_mcp_router
+            app.include_router(agentic_mcp_router, tags=["Agentic MCP Observability"])
         if agentic_flags.protocol_enabled:
             from services.protocol_observability.routes import router as protocol_obs_router
             app.include_router(protocol_obs_router, tags=["Protocol Observability"])
