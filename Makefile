@@ -396,6 +396,34 @@ campaign-release-check-strict: ## Run Campaign Intelligence release gate with te
 	python scripts/campaign/check_campaign_release_gate.py --strict
 
 # ---------------------------------------------------------------------------
+# Derivatives Intelligence
+# ---------------------------------------------------------------------------
+
+.PHONY: derivatives-test derivatives-connector-test derivatives-position-test derivatives-reconciliation-test derivatives-replay derivatives-ingestion-release-check derivatives-graph-check derivatives-profile-check derivatives-intelligence-release-check
+
+derivatives-test: ## Run derivatives ingestion, accounting, reconciliation, and replay tests
+	python -m pytest tests/unit/test_derivatives_ingestion.py -v
+
+derivatives-connector-test: derivatives-test ## Run derivatives connector tests
+
+derivatives-position-test: derivatives-test ## Run derivatives position engine tests
+
+derivatives-reconciliation-test: derivatives-test ## Run derivatives reconciliation tests
+
+derivatives-replay: derivatives-test ## Run derivatives replay tests
+
+derivatives-ingestion-release-check: derivatives-test ## Run full derivatives ingestion release gate
+
+derivatives-graph-check: ## Run derivatives intelligence graph projection tests
+	python -m pytest tests/unit/test_derivatives_intelligence.py -v
+
+derivatives-profile-check: ## Run derivatives Profile360 and campaign tests
+	python -m pytest tests/unit/test_derivatives_intelligence.py -v
+
+derivatives-intelligence-release-check: derivatives-graph-check derivatives-profile-check ## Run full derivatives intelligence release gate
+	python -m pytest tests/unit/test_derivatives_ingestion.py tests/unit/test_derivatives_intelligence.py -v
+
+# ---------------------------------------------------------------------------
 # Cleanup
 # ---------------------------------------------------------------------------
 

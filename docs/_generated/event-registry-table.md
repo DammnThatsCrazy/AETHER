@@ -89,12 +89,12 @@
 | `agent_notification_observed` | `agent` | agent | behavioral | Agent notification observed |
 | `agent_strategy_observed` | `agent` | agent | behavioral | Agent strategy state observed |
 | `agent_trade_intent_observed` | `agent` | agent | behavioral | Agent trade intent observed |
-| `agent_trade_order_observed` | `agent` | agent | behavioral | Agent trade order observed |
-| `agent_trade_fill_observed` | `agent` | agent | behavioral | Agent trade fill observed |
+| `agent_trade_order_observed` | `agent` | financial_activity | behavioral | Agent trade order observed |
+| `agent_trade_fill_observed` | `agent` | financial_activity | behavioral | Agent trade fill observed |
 | `agent_trade_rejection_observed` | `agent` | agent | behavioral | Agent trade rejection observed |
-| `agent_position_observed` | `agent` | agent | behavioral | Agent position snapshot observed |
-| `agent_portfolio_snapshot_observed` | `agent` | agent | behavioral | Agent portfolio snapshot observed |
-| `agent_performance_snapshot_observed` | `agent` | agent | behavioral | Agent performance snapshot observed |
+| `agent_position_observed` | `agent` | financial_activity | behavioral | Agent position snapshot observed |
+| `agent_portfolio_snapshot_observed` | `agent` | financial_activity | behavioral | Agent portfolio snapshot observed |
+| `agent_performance_snapshot_observed` | `agent` | financial_activity | behavioral | Agent performance snapshot observed |
 | `agent_disconnect_observed` | `agent` | agent | behavioral | Agent disconnected |
 | `agent_inbox_observed` | `agent` | agent | behavioral | Agent inbox state observed |
 | `agent_email_address_observed` | `agent` | agent | behavioral | Agent email address observed |
