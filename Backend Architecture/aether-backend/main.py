@@ -933,6 +933,19 @@ def create_app() -> FastAPI:
     if not (rails_flags.enabled or rails_flags.kyber_enabled):
         logger.info("Payment Rails: disabled (AETHER_PAYMENT_RAILS_ENABLED=false)")
 
+    # ── AI Outcome Efficiency / AI Economics (observe + recommend; never executes changes) ──
+    ai_econ_flags = settings.ai_economics
+    if ai_econ_flags.enabled:
+        from services.economic.ai_routes import ai_router as ai_economics_router
+        app.include_router(ai_economics_router)
+        logger.info("AI Economics: routes mounted (/v1/economic/ai)")
+    if ai_econ_flags.enabled or ai_econ_flags.kyber_enabled:
+        from services.economic.ai_routes import kyber_router as ai_efficiency_kyber_router
+        app.include_router(ai_efficiency_kyber_router)
+        logger.info("AI Economics: Kyber health mounted (/v1/admin/kyber/ai-efficiency)")
+    if not (ai_econ_flags.enabled or ai_econ_flags.kyber_enabled):
+        logger.info("AI Economics: disabled (AETHER_AI_OUTCOME_EFFICIENCY_ENABLED=false)")
+
     # ── External Agent Telemetry Plane (observation-only; no marketplace, no execution) ──
     telemetry_flags = settings.external_agent_telemetry
     if telemetry_flags.registry_enabled:

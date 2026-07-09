@@ -1602,6 +1602,12 @@ export const api = {
       paymentRailsTenant: (tenantId: string) =>
         restClient.get(`/v1/admin/kyber/payment-rails/${encodeURIComponent(tenantId)}`, wrap(unknownSchema)).then(r => r.data),
 
+      // ── AI outcome efficiency (fleet health, aggregate-only) ──────────────
+      aiEfficiencyHealth: () =>
+        restClient.get('/v1/admin/kyber/ai-efficiency/health', wrap(unknownSchema)).then(r => r.data),
+      aiEfficiencyTenant: (tenantId: string) =>
+        restClient.get(`/v1/admin/kyber/ai-efficiency/${encodeURIComponent(tenantId)}`, wrap(unknownSchema)).then(r => r.data),
+
       // ── Dune feeder health ────────────────────────────────────────────────
       duneFeederHealth: () =>
         restClient.get('/v1/admin/dune-feeder/health', wrap(unknownSchema)).then(r => r.data),

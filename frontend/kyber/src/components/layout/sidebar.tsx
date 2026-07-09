@@ -32,6 +32,9 @@ const NAV_ITEMS: NavItem[] = [
   ...(isFeatureEnabled('enablePaymentRails')
     ? [{ path: '/payment-rails', label: 'Payment Rails', glyph: '¤' }]
     : []),
+  ...(isFeatureEnabled('enableAiEfficiency')
+    ? [{ path: '/ai-efficiency', label: 'AI Efficiency', glyph: '∴' }]
+    : []),
   { path: '/dune-feeder', label: 'Dune Feeder', glyph: '⬡' },
   { path: '/revops',          label: 'RevOps',          glyph: '₿' },
   { path: '/sales-readiness', label: 'Sales Ready', glyph: '$' },

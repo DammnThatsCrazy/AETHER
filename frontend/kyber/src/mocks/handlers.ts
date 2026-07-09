@@ -405,6 +405,117 @@ const MOCK_PAYMENT_RAILS_TENANTS: Record<string, unknown> = {
   },
 };
 
+// ── AI outcome efficiency — fleet health ───────────────────────────────────────
+// Deterministic fixtures: cross-tenant aggregates only. Unknown costs stay
+// unknown (they are a coverage gap, never zero), and raw prompt/completion
+// content is never present.
+const MOCK_AI_EFFICIENCY_FLEET = {
+  fact_count: 48210,
+  cost_coverage: 0.91,
+  unknown_cost_share: 0.09,
+  tenants_observed: 3,
+  detector_counts: {
+    retry_waste: 4,
+    model_overqualification: 2,
+    deterministic_replacement_candidate: 1,
+    cache_opportunity: 3,
+    failed_workflow_concentration: 1,
+  },
+  tenants: [
+    {
+      tenant_id: 'tenant_001',
+      fact_count: 26410,
+      cost_coverage: 0.97,
+      unknown_cost_share: 0.03,
+      open_findings: 2,
+      status: 'healthy',
+    },
+    {
+      tenant_id: 'tenant_002',
+      fact_count: 14580,
+      cost_coverage: 0.72,
+      unknown_cost_share: 0.28,
+      open_findings: 6,
+      status: 'degraded',
+    },
+    {
+      tenant_id: 'tenant_003',
+      fact_count: 7220,
+      cost_coverage: 0.99,
+      unknown_cost_share: 0.01,
+      open_findings: 3,
+      status: 'healthy',
+    },
+  ],
+};
+
+const MOCK_AI_EFFICIENCY_TENANTS: Record<string, unknown> = {
+  tenant_001: {
+    tenant_id: 'tenant_001',
+    fact_count: 26410,
+    cost_coverage: 0.97,
+    unknown_cost_share: 0.03,
+    workflow_count: 812,
+    detector_counts: {
+      retry_waste: 0,
+      model_overqualification: 1,
+      deterministic_replacement_candidate: 0,
+      cache_opportunity: 1,
+      failed_workflow_concentration: 0,
+    },
+    models: [
+      { provider: 'openai', model: 'gpt-4o-mini', invocations: 18204 },
+      { provider: 'anthropic', model: 'claude-sonnet-4', invocations: 8206 },
+    ],
+    findings: [
+      { detector: 'model_overqualification', severity: 'medium', title: 'gpt-4o used for template filling' },
+      { detector: 'cache_opportunity', severity: 'low', title: 'Repeated identical planning prompt prefix' },
+    ],
+  },
+  tenant_002: {
+    tenant_id: 'tenant_002',
+    fact_count: 14580,
+    cost_coverage: 0.72,
+    unknown_cost_share: 0.28,
+    workflow_count: 340,
+    detector_counts: {
+      retry_waste: 4,
+      model_overqualification: 1,
+      deterministic_replacement_candidate: 0,
+      cache_opportunity: 0,
+      failed_workflow_concentration: 1,
+    },
+    models: [
+      { provider: 'openai', model: 'gpt-4o', invocations: 14580 },
+    ],
+    findings: [
+      { detector: 'retry_waste', severity: 'high', title: 'Retry storms on gpt-4o support replies' },
+      { detector: 'failed_workflow_concentration', severity: 'high', title: 'Failed-execution cost concentrated in one workflow' },
+    ],
+  },
+  tenant_003: {
+    tenant_id: 'tenant_003',
+    fact_count: 7220,
+    cost_coverage: 0.99,
+    unknown_cost_share: 0.01,
+    workflow_count: 96,
+    detector_counts: {
+      retry_waste: 0,
+      model_overqualification: 0,
+      deterministic_replacement_candidate: 1,
+      cache_opportunity: 2,
+      failed_workflow_concentration: 0,
+    },
+    models: [
+      { provider: 'mistral', model: 'mistral-embed', invocations: 7220 },
+    ],
+    findings: [
+      { detector: 'deterministic_replacement_candidate', severity: 'medium', title: 'Currency formatting handled by LLM' },
+      { detector: 'cache_opportunity', severity: 'low', title: 'Repeated identical catalog embedding prompts' },
+    ],
+  },
+};
+
 // ── Handlers ───────────────────────────────────────────────────────────────────
 
 export const handlers = [
@@ -641,5 +752,15 @@ export const handlers = [
       return HttpResponse.json({ message: 'Tenant not found', code: 'NOT_FOUND' }, { status: 404 });
     }
     return ok(diagnostics);
+  }),
+
+  // AI outcome efficiency — fleet health (deterministic fixtures)
+  http.get(`${API}/v1/admin/kyber/ai-efficiency/health`, () => ok(MOCK_AI_EFFICIENCY_FLEET)),
+  http.get(`${API}/v1/admin/kyber/ai-efficiency/:tenantId`, ({ params }) => {
+    const drilldown = MOCK_AI_EFFICIENCY_TENANTS[String(params.tenantId)];
+    if (!drilldown) {
+      return HttpResponse.json({ message: 'Tenant not found', code: 'NOT_FOUND' }, { status: 404 });
+    }
+    return ok(drilldown);
   }),
 ];
