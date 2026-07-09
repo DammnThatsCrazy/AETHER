@@ -109,6 +109,7 @@ export function AppShell({ children }: AppShellProps) {
           <NavItem to="/integrations" label="Integrations" glyph="[i]" />
           <NavItem to="/deployments" label="Deployments" glyph="[d]" />
           <NavItem to="/payment-rails" label="Payment Rails" glyph="[p]" />
+          <NavItem to="/ai-efficiency" label="AI Efficiency" glyph="[ai]" />
         </nav>
 
         {/* Footer */}

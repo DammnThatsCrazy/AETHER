@@ -42,6 +42,7 @@ const DeliveryHistoryPage = lazy(() => import('@aether-app/pages/connectors').th
 const DeploymentsPage = lazy(() => import('@aether-app/pages/deployments').then(m => ({ default: m.DeploymentsPage })));
 const DeploymentDetailPage = lazy(() => import('@aether-app/pages/deployments').then(m => ({ default: m.DeploymentDetailPage })));
 const PaymentRailsPage = lazy(() => import('@aether-app/pages/payment-rails').then(m => ({ default: m.PaymentRailsPage })));
+const AIEfficiencyPage = lazy(() => import('@aether-app/pages/ai-efficiency').then(m => ({ default: m.AIEfficiencyPage })));
 
 function PageSuspense({ children }: { readonly children: React.ReactNode }) {
   return (
@@ -119,6 +120,7 @@ export function AppRouter() {
                 <Route path="/deployments" element={<PageSuspense><DeploymentsPage /></PageSuspense>} />
                 <Route path="/deployments/:id" element={<PageSuspense><DeploymentDetailPage /></PageSuspense>} />
                 <Route path="/payment-rails" element={<PageSuspense><PaymentRailsPage /></PageSuspense>} />
+                <Route path="/ai-efficiency" element={<PageSuspense><AIEfficiencyPage /></PageSuspense>} />
                 <Route path="*" element={<Navigate to="/settings" replace />} />
               </Routes>
             </AppShell>

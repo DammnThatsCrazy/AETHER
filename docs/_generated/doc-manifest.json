@@ -4504,6 +4504,9 @@
       "canonical_owner": "platform-intelligence@aether"
     },
     {
+      "path": "docs/source-of-truth/AI_OUTCOME_EFFICIENCY.md"
+    },
+    {
       "path": "docs/source-of-truth/API_ANTI_DISTILLATION.md",
       "title": "API Anti-Distillation Controls",
       "slug": "security/api-anti-distillation",

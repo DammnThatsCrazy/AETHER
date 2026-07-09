@@ -13,7 +13,7 @@ source_files:
 canonical_owner: frontend@aether
 estimated_read_minutes: 35
 toc_depth: 4
-last_synced_commit: ea4f778
+last_synced_commit: c328184
 ---
 
 # Aether Frontend Architecture & Designer Handoff
@@ -126,11 +126,13 @@ The intelligence graph is the primary surface. Entity profiles are drilldowns fr
 /geo/{level}/{geo_id}            → geographic drill-down at country/state/metro/city
 /deployments                     → external agent deployments (flag-gated, observation-only)
 /payment-rails                   → payment rail observability (flag-gated, observation-only)
+/ai-efficiency                   → AI efficiency dashboard (flag-gated; proposals only)
 ```
 
 Kyber additionally exposes `/agent-telemetry` (external agent telemetry fleet
-diagnostics; gated by the `enableExternalAgentTelemetry` feature flag) and
-`/payment-rails` (payment rail fleet health; gated by `enablePaymentRails`).
+diagnostics; gated by the `enableExternalAgentTelemetry` feature flag),
+`/payment-rails` (payment rail fleet health; gated by `enablePaymentRails`),
+and `/ai-efficiency` (AI efficiency fleet health; gated by `enableAiEfficiency`).
 
 - **Desktop (≥1280px):** Graph canvas + side panel (40% width) visible simultaneously
 - **Tablet (768–1279px):** Panel overlays graph as a drawer

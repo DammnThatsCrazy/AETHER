@@ -12,6 +12,7 @@ interface FeatureFlags {
   readonly enableWebhookSinks: boolean;
   readonly enableExternalAgentTelemetry: boolean;
   readonly enablePaymentRails: boolean;
+  readonly enableAiEfficiency: boolean;
 }
 
 const DEFAULT_FLAGS: FeatureFlags = {
@@ -26,6 +27,7 @@ const DEFAULT_FLAGS: FeatureFlags = {
   enableWebhookSinks: false,
   enableExternalAgentTelemetry: false,
   enablePaymentRails: false,
+  enableAiEfficiency: false,
 };
 
 function loadFlags(): FeatureFlags {
