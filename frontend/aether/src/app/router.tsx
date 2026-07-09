@@ -39,6 +39,8 @@ const CampaignBuilderPage = lazy(() => import('@aether-app/pages/rewards').then(
 const SuggestionsPage = lazy(() => import('@aether-app/pages/suggestions').then(m => ({ default: m.SuggestionsPage })));
 const Cluster360Page = lazy(() => import('@aether-app/pages/cluster360').then(m => ({ default: m.Cluster360Page })));
 const DeliveryHistoryPage = lazy(() => import('@aether-app/pages/connectors').then(m => ({ default: m.DeliveryHistoryPage })));
+const DeploymentsPage = lazy(() => import('@aether-app/pages/deployments').then(m => ({ default: m.DeploymentsPage })));
+const DeploymentDetailPage = lazy(() => import('@aether-app/pages/deployments').then(m => ({ default: m.DeploymentDetailPage })));
 
 function PageSuspense({ children }: { readonly children: React.ReactNode }) {
   return (
@@ -113,6 +115,8 @@ export function AppRouter() {
                 <Route path="/suggestions" element={<PageSuspense><SuggestionsPage /></PageSuspense>} />
                 <Route path="/clusters/:clusterId" element={<PageSuspense><Cluster360Page /></PageSuspense>} />
                 <Route path="/delivery" element={<PageSuspense><DeliveryHistoryPage /></PageSuspense>} />
+                <Route path="/deployments" element={<PageSuspense><DeploymentsPage /></PageSuspense>} />
+                <Route path="/deployments/:id" element={<PageSuspense><DeploymentDetailPage /></PageSuspense>} />
                 <Route path="*" element={<Navigate to="/settings" replace />} />
               </Routes>
             </AppShell>

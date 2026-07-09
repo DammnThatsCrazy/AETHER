@@ -1,5 +1,6 @@
 import { NavLink } from 'react-router-dom';
 import { cn } from '@kyber/lib/utils';
+import { isFeatureEnabled } from '@kyber/lib/featureFlags';
 
 interface NavItem {
   readonly path: string;
@@ -25,6 +26,9 @@ const NAV_ITEMS: NavItem[] = [
   { path: '/intelligence-quality', label: 'Intel Quality', glyph: '◉' },
   { path: '/intelligence/suggestions', label: 'Suggestions',   glyph: '◈' },
   { path: '/connectors', label: 'Connectors', glyph: '⇄' },
+  ...(isFeatureEnabled('enableExternalAgentTelemetry')
+    ? [{ path: '/agent-telemetry', label: 'Agent Telemetry', glyph: '⌁' }]
+    : []),
   { path: '/dune-feeder', label: 'Dune Feeder', glyph: '⬡' },
   { path: '/revops',          label: 'RevOps',          glyph: '₿' },
   { path: '/sales-readiness', label: 'Sales Ready', glyph: '$' },

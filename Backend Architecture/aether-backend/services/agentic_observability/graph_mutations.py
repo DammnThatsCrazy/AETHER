@@ -3,6 +3,7 @@ from __future__ import annotations
 
 from typing import Optional
 
+from config.settings import settings
 from shared.graph.edge_properties import build_edge_properties
 from shared.graph.graph import Edge, EdgeType, Vertex, VertexType
 from services.agentic_observability.models import AgenticObservationRecord
@@ -90,6 +91,17 @@ def build_mutations(record: AgenticObservationRecord) -> list:
             properties=_edge_props(record, EdgeType.AGENT_PRODUCED_RISK_SIGNAL, agent_id, obj_id),
         ))
 
+    # External Agent Telemetry Plane V1: aggregate deployment projection.
+    # One DEPLOYMENT vertex per registry deployment, never per-event vertices.
+    if (
+        settings.external_agent_telemetry.graph_enabled
+        and record.deployment_id
+        and agent_id
+    ):
+        mutations.extend(
+            build_deployment_mutations(record.tenant_id, agent_id, record.deployment_id)
+        )
+
     return mutations
 
 
@@ -117,6 +129,43 @@ def build_account_mutations(tenant_id: str, agent_id: Optional[str], account_id:
                 "provenance": "agentic_observability",
                 "valid_from": datetime.now(timezone.utc).isoformat(),
                 "confidence": "0.9",
+            },
+        ))
+    return mutations
+
+
+def build_deployment_mutations(tenant_id: str, agent_id: Optional[str], deployment_id: str) -> list:
+    """Aggregate deployment → agent projection (External Agent Telemetry V1).
+
+    Reuses the ExternalAgenticAccount vertex / AGENT_LINKED_TO_EXTERNAL_ACCOUNT
+    edge with kind="agent_deployment" rather than adding new graph types. The
+    idempotency key excludes any source event so repeated observations converge
+    on a single vertex and edge per (agent, deployment) pair.
+    """
+    mutations: list = []
+    mutations.append(Vertex(
+        vertex_type=VertexType.EXTERNAL_AGENTIC_ACCOUNT,
+        vertex_id=deployment_id,
+        properties={"tenant_id": tenant_id, "kind": "agent_deployment"},
+    ))
+    if agent_id:
+        from datetime import datetime, timezone
+        from shared.graph.edge_properties import make_edge_idempotency_key, SCHEMA_VERSION
+        et = EdgeType.AGENT_LINKED_TO_EXTERNAL_ACCOUNT
+        mutations.append(Edge(
+            edge_type=et,
+            from_vertex_id=agent_id,
+            to_vertex_id=deployment_id,
+            properties={
+                "tenant_id": tenant_id,
+                "idempotency_key": make_edge_idempotency_key(tenant_id, et, agent_id, deployment_id),
+                "actor_kind": "agent",
+                "actor_id": agent_id,
+                "schema_version": SCHEMA_VERSION,
+                "provenance": "agentic_observability",
+                "valid_from": datetime.now(timezone.utc).isoformat(),
+                "confidence": "0.9",
+                "kind": "agent_deployment",
             },
         ))
     return mutations
