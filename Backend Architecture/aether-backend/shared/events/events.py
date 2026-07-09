@@ -322,6 +322,13 @@ class Topic(str, Enum):
     CANONICAL_ACTIVITY_INGESTED = "aether.canonical.activity.ingested"
     CANONICAL_ACTIVITY_RISK_UPDATED = "aether.canonical.activity.risk_updated"
 
+    # Economic & Interoperability Intelligence (observation-only alerts)
+    STABLECOIN_DEPEG_DETECTED         = "aether.stablecoin.depeg.detected"
+    DERIVATIVES_VARIANCE_DETECTED     = "aether.derivatives.reconciliation.variance"
+    DERIVATIVES_STREAM_GAP_STALLED    = "aether.derivatives.stream.gap.stalled"
+    INTEROP_MESSAGE_STUCK             = "aether.interop.message.stuck"
+    INTEROP_SECURITY_POLICY_CHANGED   = "aether.interop.security.policy.changed"
+
     # Dead letter
     DEAD_LETTER = "aether.dlq"
 

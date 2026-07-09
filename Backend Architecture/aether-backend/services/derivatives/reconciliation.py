@@ -87,6 +87,11 @@ class DerivativesReconciliation:
                 "variance_count": len(variances),
             },
         ))
+        try:
+            from shared.logger.logger import metrics
+            metrics.increment("derivatives_reconciliation_run")
+        except Exception:
+            pass
         return {
             "variance_count": len(variances),
             "variances": [v["reconciliation_variance_id"] for v in variances],

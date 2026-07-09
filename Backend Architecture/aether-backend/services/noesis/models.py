@@ -54,6 +54,12 @@ SUPPORTED_INTENTS: frozenset[str] = frozenset({
     "sentiment_explain",
     "narrative_analysis",
     "semantic_profile_explain",
+    # Economic & Interoperability Intelligence (read-only, flag-gated)
+    "stablecoin_flow_lookup",
+    "derivatives_exposure_lookup",
+    "derivatives_reconciliation_lookup",
+    "interop_message_trace",
+    "interop_path_reliability",
 })
 
 SUPPORTED_ENTITY_TYPES: frozenset[str] = frozenset({
@@ -193,6 +199,11 @@ class QueryPlan(BaseModel):
         "sentiment_explain",
         "narrative_analysis",
         "semantic_profile_explain",
+        "stablecoin_flow_lookup",
+        "derivatives_exposure_lookup",
+        "derivatives_reconciliation_lookup",
+        "interop_message_trace",
+        "interop_path_reliability",
         "unsupported",
     ]
     target: Optional[str] = None

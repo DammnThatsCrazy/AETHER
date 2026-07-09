@@ -582,6 +582,10 @@ class SuggestionsConfig:
     data_quality_adapter_enabled: bool = _env_bool("AETHER_SUGGESTIONS_DATA_QUALITY_ADAPTER_ENABLED", True)
     sdk_health_adapter_enabled: bool = _env_bool("AETHER_SUGGESTIONS_SDK_HEALTH_ADAPTER_ENABLED", True)
     graph_adapter_enabled: bool = _env_bool("AETHER_SUGGESTIONS_GRAPH_ADAPTER_ENABLED", True)
+    # Economic/interoperability adapters default OFF (fail-closed with their domains)
+    stablecoin_adapter_enabled: bool = _env_bool("AETHER_SUGGESTIONS_STABLECOIN_ADAPTER_ENABLED", False)
+    derivatives_adapter_enabled: bool = _env_bool("AETHER_SUGGESTIONS_DERIVATIVES_ADAPTER_ENABLED", False)
+    interop_adapter_enabled: bool = _env_bool("AETHER_SUGGESTIONS_INTEROP_ADAPTER_ENABLED", False)
     kyber_enabled: bool = _env_bool("KYBER_SUGGESTIONS_ENABLED", True)
     tenant_enabled: bool = _env_bool("AETHER_TENANT_SUGGESTIONS_ENABLED", True)
 

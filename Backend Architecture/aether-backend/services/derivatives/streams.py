@@ -98,6 +98,11 @@ class SequenceTracker:
             self.emitted_events.append(make_event(
                 "derivatives_stream_gap_detected", self.tenant_id, gap_record,
             ))
+            try:
+                from shared.logger.logger import metrics
+                metrics.increment("derivatives_stream_gap_detected")
+            except Exception:
+                pass
         return result
 
     def _drain(self, result: SequenceResult) -> None:

@@ -153,6 +153,11 @@ async def run_scan(provider_id: str, request: Request):
             {"tenant_id": tenant.tenant_id, "provider_id": provider_id, "network_id": "*"},
             {"evidence": new_checkpoint, "advanced_at": utc_now_iso()},
         )
+    try:
+        from shared.logger.logger import metrics
+        metrics.increment("interop_reconciliation_run")
+    except Exception:
+        pass
     return {
         "observations": len(observations),
         "ingested": sum(1 for r in results if r.get("accepted")),
