@@ -293,6 +293,7 @@ Resolution Consumer (real-time)
 | `/v1/resolution/audit/{id}` | GET | Audit trail for a decision |
 | `/v1/resolution/config` | GET/PUT | Resolution thresholds |
 | `/v1/resolution/batch` | POST | Trigger batch matching job |
+| `/v1/agent/deployments` | POST/GET/PATCH | External agent deployment registry (flag-gated, observation-only) |
 | `/v1/providers/keys` | POST/GET/DELETE | BYOK key management (encrypted at rest) |
 | `/v1/providers/usage` | GET | Per-tenant provider usage stats |
 | `/v1/providers/health` | GET | Provider health + circuit breaker states |

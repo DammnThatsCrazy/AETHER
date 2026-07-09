@@ -4658,6 +4658,9 @@
       "canonical_owner": "platform@aether"
     },
     {
+      "path": "docs/source-of-truth/EXTERNAL_AGENT_TELEMETRY_PLANE.md"
+    },
+    {
       "path": "docs/source-of-truth/FIRST_RELEASE_INTELLIGENCE_TELEMETRY_OPERATIONS.md"
     },
     {
