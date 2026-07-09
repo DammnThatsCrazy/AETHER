@@ -571,6 +571,12 @@
       "section_comment": "agent"
     },
     {
+      "name": "ai_invocation_observed",
+      "family": "agent",
+      "consent_purpose": "agent",
+      "section_comment": "agent"
+    },
+    {
       "name": "agent_grounding_observed",
       "family": "agent",
       "consent_purpose": "agent",

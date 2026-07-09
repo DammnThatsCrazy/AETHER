@@ -671,6 +671,84 @@ class StablecoinIntelligenceConfig:
     shadow_mode: bool = _env_bool("AETHER_STABLECOIN_SHADOW_MODE", True)
 
 
+@dataclass(frozen=True)
+class ExternalAgentTelemetryConfig:
+    """External Agent Telemetry Plane V1 rollout flags (default OFF).
+
+    Aether observes telemetry from tenant-owned agents deployed on external
+    surfaces. No marketplace, no agent hosting, no execution.
+    """
+    enabled: bool = _env_bool("AETHER_EXTERNAL_AGENT_TELEMETRY_ENABLED", False)
+    kyber_enabled: bool = _env_bool("KYBER_EXTERNAL_AGENT_TELEMETRY_ENABLED", False)
+    registry_enabled: bool = _env_bool("AETHER_AGENT_DEPLOYMENT_REGISTRY_ENABLED", False)
+    sdk_enabled: bool = _env_bool("AETHER_AGENT_TELEMETRY_SDK_ENABLED", False)
+    graph_enabled: bool = _env_bool("AETHER_AGENT_DEPLOYMENT_GRAPH_ENABLED", False)
+    profile360_enabled: bool = _env_bool("AETHER_AGENT_DEPLOYMENT_PROFILE360_ENABLED", False)
+
+
+@dataclass(frozen=True)
+class PaymentRailsConfig:
+    """Payment Rail Observability V1 rollout flags (default OFF).
+
+    Named providers only — Privy, Stripe crypto onramp, Coinbase, MoonPay,
+    Bridge. No generic webhook fallback. Aether observes and reconciles;
+    it never executes or settles payments or custodies funds.
+    """
+    enabled: bool = _env_bool("AETHER_PAYMENT_RAILS_ENABLED", False)
+    privy_enabled: bool = _env_bool("AETHER_PROVIDER_PRIVY_ENABLED", False)
+    stripe_enabled: bool = _env_bool("AETHER_PROVIDER_STRIPE_ENABLED", False)
+    coinbase_enabled: bool = _env_bool("AETHER_PROVIDER_COINBASE_ENABLED", False)
+    moonpay_enabled: bool = _env_bool("AETHER_PROVIDER_MOONPAY_ENABLED", False)
+    bridge_enabled: bool = _env_bool("AETHER_PROVIDER_BRIDGE_ENABLED", False)
+    kyber_enabled: bool = _env_bool("KYBER_PAYMENT_RAILS_ENABLED", False)
+
+
+@dataclass(frozen=True)
+class AIEconomicsConfig:
+    """AI Outcome Efficiency / AI Economics rollout flags (default OFF).
+
+    Observes AI execution facts, prices cost from effective-dated price
+    cards, aggregates workflow/outcome economics, and generates governed
+    efficiency recommendations. Never changes production models, prompts,
+    or routing.
+    """
+    enabled: bool = _env_bool("AETHER_AI_OUTCOME_EFFICIENCY_ENABLED", False)
+    execution_facts_enabled: bool = _env_bool("AETHER_AI_EXECUTION_FACTS_ENABLED", False)
+    economics_enabled: bool = _env_bool("AETHER_AI_ECONOMICS_ENABLED", False)
+    recommendations_enabled: bool = _env_bool("AETHER_AI_EFFICIENCY_RECOMMENDATIONS_ENABLED", False)
+    kyber_enabled: bool = _env_bool("KYBER_AI_EFFICIENCY_HEALTH_ENABLED", False)
+
+
+@dataclass(frozen=True)
+class TargetingIntelligenceConfig:
+    """Cluster Targeting Intelligence rollout flags (default OFF).
+
+    Observation-first: Aether observes targeting, leakage, holdouts, and
+    journey deltas and generates OODA suggestions/export packages. It never
+    executes campaigns or targets inside external platforms.
+    """
+    enabled: bool = _env_bool("AETHER_CLUSTER_TARGETING_INTELLIGENCE_ENABLED", False)
+    exports_enabled: bool = _env_bool("AETHER_TARGETING_EXPORTS_ENABLED", False)
+    ooda_suggestions_enabled: bool = _env_bool("AETHER_TARGETING_OODA_SUGGESTIONS_ENABLED", False)
+    kyber_enabled: bool = _env_bool("KYBER_TARGETING_INTELLIGENCE_ENABLED", False)
+
+
+@dataclass(frozen=True)
+class OnePersonOpsConfig:
+    """Aether/Kyber one-person operations rollout flags (default OFF).
+
+    Worker execution bridge, durable runtime, staged graph mutation
+    review-to-commit, Catalyst/Cycle automation, and the Kyber agent
+    command center. Human approval gates are never removed by these flags.
+    """
+    runtime_durable_enabled: bool = _env_bool("AETHER_AGENT_RUNTIME_DURABLE_ENABLED", False)
+    worker_bridge_enabled: bool = _env_bool("AETHER_AGENT_WORKER_BRIDGE_ENABLED", False)
+    staged_mutation_review_enabled: bool = _env_bool("AETHER_STAGED_GRAPH_MUTATION_REVIEW_ENABLED", False)
+    catalyst_cycle_enabled: bool = _env_bool("AETHER_CATALYST_CYCLE_AUTOMATION_ENABLED", False)
+    command_center_enabled: bool = _env_bool("KYBER_AGENT_COMMAND_CENTER_ENABLED", False)
+    one_person_ops_enabled: bool = _env_bool("KYBER_ONE_PERSON_OPS_ENABLED", False)
+
+
 @dataclass
 class Settings:
     env: Environment = Environment(_env("AETHER_ENV", "local"))
@@ -759,6 +837,21 @@ class Settings:
 
     # Stablecoin Intelligence rollout flags
     stablecoin_intelligence: StablecoinIntelligenceConfig = field(default_factory=StablecoinIntelligenceConfig)
+
+    # External Agent Telemetry Plane rollout flags
+    external_agent_telemetry: ExternalAgentTelemetryConfig = field(default_factory=ExternalAgentTelemetryConfig)
+
+    # Payment Rail Observability rollout flags
+    payment_rails: PaymentRailsConfig = field(default_factory=PaymentRailsConfig)
+
+    # AI Outcome Efficiency / AI Economics rollout flags
+    ai_economics: AIEconomicsConfig = field(default_factory=AIEconomicsConfig)
+
+    # Cluster Targeting Intelligence rollout flags
+    targeting_intelligence: TargetingIntelligenceConfig = field(default_factory=TargetingIntelligenceConfig)
+
+    # One-person operations rollout flags
+    one_person_ops: OnePersonOpsConfig = field(default_factory=OnePersonOpsConfig)
 
     def __post_init__(self):
         _is_non_local = self.env != Environment.LOCAL

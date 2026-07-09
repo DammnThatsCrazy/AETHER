@@ -170,7 +170,7 @@ const CONSENT_MAP: Record<string, string> = {
   // Agent evaluation family
   agent_evaluation_observed: 'agent', agent_cost_observed: 'agent',
   agent_grounding_observed: 'agent', agent_guardrail_observed: 'agent',
-  agent_human_override_observed: 'agent',
+  agent_human_override_observed: 'agent', ai_invocation_observed: 'agent',
   // Web3 lifecycle extensions
   transaction_pending_observed: 'web3', transaction_confirmed_observed: 'web3',
   transaction_reverted_observed: 'web3', transaction_reorged_observed: 'web3',

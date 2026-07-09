@@ -4658,6 +4658,9 @@
       "canonical_owner": "platform@aether"
     },
     {
+      "path": "docs/source-of-truth/FIRST_RELEASE_INTELLIGENCE_TELEMETRY_OPERATIONS.md"
+    },
+    {
       "path": "docs/source-of-truth/GRAPH_ALIGNMENT.md",
       "canonical_owner": "graph@aether"
     },

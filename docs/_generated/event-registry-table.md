@@ -1,7 +1,7 @@
 <!-- DO NOT EDIT — generated from packages/shared/contracts/event-registry.json -->
 <!-- Run: python scripts/generate_contracts.py -->
 
-# Aether Event Registry (267 types, contract v8.11.0)
+# Aether Event Registry (268 types, contract v8.12.0)
 
 | Event Type | Family | Required Purposes | Privacy Class | Description |
 |---|---|---|---|---|
@@ -222,6 +222,7 @@
 | `device_revoked` | `identity_lc` | analytics | identity | Device revoked |
 | `agent_evaluation_observed` | `agent` | agent | behavioral | Agent evaluation result observed |
 | `agent_cost_observed` | `agent` | agent | behavioral | Agent inference or tool cost observed |
+| `ai_invocation_observed` | `agent` | agent | behavioral | AI model invocation observed — identity, usage, cost, latency, quality, and outcome correlation; no raw prompt or completion content |
 | `agent_grounding_observed` | `agent` | agent | behavioral | Agent grounding evidence observed |
 | `agent_guardrail_observed` | `agent` | agent | behavioral | Agent guardrail evaluation observed |
 | `agent_human_override_observed` | `agent` | agent | behavioral | Human override of agent action observed |

@@ -43,3 +43,9 @@ export * from './acquisition-evidence';
 export * from './semantic-sentiment';
 export * from './derivatives';
 export * from './stablecoin';
+
+// First-release intelligence/telemetry/payments contracts (8.12.0)
+export * from './agent-deployment';
+export * from './ai-execution';
+export * from './payment-rails';
+export * from './targeting-intelligence';
