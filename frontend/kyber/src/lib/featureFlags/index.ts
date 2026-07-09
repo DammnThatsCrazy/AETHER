@@ -10,6 +10,7 @@ interface FeatureFlags {
   readonly enableMobilePush: boolean;
   readonly enablePagerDuty: boolean;
   readonly enableWebhookSinks: boolean;
+  readonly enableExternalAgentTelemetry: boolean;
 }
 
 const DEFAULT_FLAGS: FeatureFlags = {
@@ -22,6 +23,7 @@ const DEFAULT_FLAGS: FeatureFlags = {
   enableMobilePush: false,
   enablePagerDuty: false,
   enableWebhookSinks: false,
+  enableExternalAgentTelemetry: false,
 };
 
 function loadFlags(): FeatureFlags {

@@ -140,6 +140,57 @@ const mockPendingDecisions = {
   total: 3,
 };
 
+// ── External agent telemetry (fleet) ───────────────────────────────────────────
+// Deterministic fixtures: fixed ISO timestamps, no Date.now()-derived values.
+
+const MOCK_AGENT_TELEMETRY_DEPLOYMENTS = [
+  {
+    tenant_id: 'tenant_001',
+    id: 'dep_discord_support_001',
+    display_name: 'Support Bot — Discord',
+    external_platform: 'discord_bot',
+    environment: 'production',
+    status: 'active',
+    event_count_24h: 4210,
+    accepted_count_24h: 4102,
+    rejected_count_24h: 61,
+    error_count_24h: 12,
+    consent_blocked_count_24h: 35,
+    health_score: 0.97,
+    last_event_at: '2026-07-08T21:42:00.000Z',
+  },
+  {
+    tenant_id: 'tenant_001',
+    id: 'dep_shopify_concierge_002',
+    display_name: 'Shopping Concierge — Shopify',
+    external_platform: 'shopify_app',
+    environment: 'production',
+    status: 'paused',
+    event_count_24h: 0,
+    accepted_count_24h: 0,
+    rejected_count_24h: 0,
+    error_count_24h: 0,
+    consent_blocked_count_24h: 0,
+    health_score: null,
+    last_event_at: '2026-07-06T16:05:00.000Z',
+  },
+  {
+    tenant_id: 'tenant_002',
+    id: 'dep_mcp_research_003',
+    display_name: 'Research Assistant — MCP',
+    external_platform: 'mcp_server',
+    environment: 'staging',
+    status: 'error',
+    event_count_24h: 812,
+    accepted_count_24h: 640,
+    rejected_count_24h: 118,
+    error_count_24h: 54,
+    consent_blocked_count_24h: 0,
+    health_score: 0.62,
+    last_event_at: '2026-07-08T19:10:00.000Z',
+  },
+];
+
 // ── Handlers ───────────────────────────────────────────────────────────────────
 
 export const handlers = [
@@ -320,4 +371,51 @@ export const handlers = [
   http.post(`${API}/v1/investigations/:caseId/annotations`, ({ params }) =>
     ok({ case_id: params.caseId, annotation_id: `ann_${Date.now()}`, created: true }),
   ),
+
+  // External agent telemetry — fleet observability (deterministic fixtures)
+  http.get(`${API}/v1/admin/kyber/agent-telemetry/deployments`, () =>
+    ok({
+      total_deployments: MOCK_AGENT_TELEMETRY_DEPLOYMENTS.length,
+      active_deployments: MOCK_AGENT_TELEMETRY_DEPLOYMENTS.filter(d => d.status === 'active').length,
+      tenants_with_deployments: 2,
+      events_24h: 5022,
+      counts_by_status: { active: 1, paused: 1, error: 1 },
+      counts_by_platform: { discord_bot: 1, shopify_app: 1, mcp_server: 1 },
+      deployments: MOCK_AGENT_TELEMETRY_DEPLOYMENTS,
+    }),
+  ),
+  http.get(`${API}/v1/admin/kyber/agent-telemetry/deployments/:tenantId/:deploymentId`, ({ params }) => {
+    const deployment = MOCK_AGENT_TELEMETRY_DEPLOYMENTS.find(
+      d => d.tenant_id === params.tenantId && d.id === params.deploymentId,
+    );
+    if (!deployment) {
+      return HttpResponse.json({ message: 'Deployment not found', code: 'NOT_FOUND' }, { status: 404 });
+    }
+    return ok({
+      deployment: {
+        ...deployment,
+        environment: 'production',
+        consent_mode: 'platform_managed',
+        last_event_at: '2026-07-08T21:42:00.000Z',
+      },
+      health: {
+        event_count_24h: deployment.event_count_24h,
+        accepted_count_24h: deployment.accepted_count_24h,
+        rejected_count_24h: deployment.rejected_count_24h,
+        error_count_24h: deployment.error_count_24h,
+        consent_blocked_count_24h: deployment.consent_blocked_count_24h,
+        health_score: deployment.health_score,
+      },
+      diagnostics: {
+        rejection_reasons: { schema_validation_failed: 42, unknown_event_family: 19 },
+        consent_block_rate: 0.008,
+        ingest_lag_ms: 240,
+        last_error: deployment.status === 'error' ? 'capability scope mismatch: observe:payments not granted' : null,
+      },
+      recent_activity: [
+        { id: 'act_001', action: 'created', actor: 'tenant-admin', occurred_at: '2026-05-01T14:00:00.000Z' },
+        { id: 'act_002', action: 'updated', actor: 'tenant-admin', occurred_at: '2026-07-01T10:30:00.000Z' },
+      ],
+    });
+  }),
 ];

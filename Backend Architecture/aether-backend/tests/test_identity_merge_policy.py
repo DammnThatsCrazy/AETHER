@@ -214,3 +214,81 @@ def test_all_decisions_have_reason_codes():
     for ctx in cases:
         result = evaluate(ctx)
         assert result.reason_codes, f"No reason codes for decision {result.decision}"
+
+
+# ── External agent telemetry signals are never merge-eligible ─────────────────
+#
+# Deployment / agent / external-platform signals identify where agent software
+# runs, not a human. They must never produce a MERGE or LINK on their own, and
+# must not raise confidence when combined with real identity evidence.
+
+from services.identity.merge_policy import (  # noqa: E402
+    NON_MERGE_ELIGIBLE_SIGNAL_NAMES,
+    REASON_NON_MERGE_ELIGIBLE_SIGNAL,
+)
+
+_NEVER_MERGE = (MergeDecision.MERGE, MergeDecision.LINK, MergeDecision.CANDIDATE)
+
+
+def test_agent_id_signal_alone_never_merges():
+    ctx = _ctx(
+        matching_signal_types=[IdentitySignalType.AGENT_ID],
+        existing_entity_ids=["entity_1"],
+    )
+    result = evaluate(ctx)
+    assert result.decision not in _NEVER_MERGE
+    assert result.decision == MergeDecision.BLOCKED
+    assert result.merge_target_entity_id is None
+    assert REASON_NON_MERGE_ELIGIBLE_SIGNAL in result.reason_codes
+
+
+def test_deployment_signal_names_never_merge():
+    for name in sorted(NON_MERGE_ELIGIBLE_SIGNAL_NAMES):
+        ctx = _ctx(
+            matching_signal_types=[name],
+            existing_entity_ids=["entity_1"],
+        )
+        result = evaluate(ctx)
+        assert result.decision not in _NEVER_MERGE, f"{name} must never be merge-eligible"
+        assert result.merge_target_entity_id is None
+
+
+def test_denylist_covers_all_deployment_signal_names():
+    assert NON_MERGE_ELIGIBLE_SIGNAL_NAMES == frozenset({
+        "deployment_id",
+        "agent_id",
+        "external_platform",
+        "external_channel_id",
+        "external_workspace_id",
+    })
+
+
+def test_deployment_signals_do_not_boost_real_evidence():
+    with_deployment = _ctx(
+        matching_signal_types=[IdentitySignalType.USER_ID, IdentitySignalType.AGENT_ID],
+        existing_entity_ids=["entity_1"],
+    )
+    without_deployment = _ctx(
+        matching_signal_types=[IdentitySignalType.USER_ID],
+        existing_entity_ids=["entity_1"],
+    )
+    boosted = evaluate(with_deployment)
+    baseline = evaluate(without_deployment)
+    # Real deterministic evidence still merges…
+    assert boosted.decision == MergeDecision.MERGE
+    # …but the excluded signal contributes zero confidence.
+    assert boosted.confidence == baseline.confidence
+    assert REASON_NON_MERGE_ELIGIBLE_SIGNAL in boosted.reason_codes
+
+
+def test_mixed_deployment_string_signals_are_filtered():
+    ctx = _ctx(
+        matching_signal_types=[
+            "deployment_id", "external_platform", IdentitySignalType.SESSION_ID,
+        ],
+        existing_entity_ids=["entity_1"],
+    )
+    result = evaluate(ctx)
+    # Session-only evidence remains WEAK → REJECT; deployment names never help.
+    assert result.decision == MergeDecision.REJECT
+    assert REASON_NON_MERGE_ELIGIBLE_SIGNAL in result.reason_codes

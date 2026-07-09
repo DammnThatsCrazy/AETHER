@@ -185,6 +185,9 @@ class AgenticObservationRecord(BaseModel):
     source: ObservationSource = Field(default_factory=ObservationSource)
     actor: ObservationActor
     agent: Optional[AgentRef] = None
+    # External Agent Telemetry Plane V1: registry deployment this observation
+    # was emitted from (additive; optional).
+    deployment_id: Optional[str] = None
     object: ObservationObject
     action: ObservationAction
     economics: Optional[ObservationEconomics] = None

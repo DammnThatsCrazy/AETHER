@@ -84,6 +84,112 @@ const mockInvoices = {
   timestamp: new Date().toISOString(),
 };
 
+// ── External agent telemetry — deployments ──────────────────────────────────
+// Deterministic fixtures: fixed ISO timestamps, no Date.now()-derived values.
+const MOCK_AGENT_DEPLOYMENTS = [
+  {
+    id: 'dep_discord_support_001',
+    tenant_id: 'tenant_demo_001',
+    agent_id: 'agent_support_v2',
+    display_name: 'Support Bot — Discord',
+    description: 'Customer support agent deployed to the community Discord server.',
+    external_platform: 'discord_bot',
+    environment: 'production',
+    status: 'active',
+    consent_mode: 'platform_managed',
+    allowed_event_families: ['agent.message', 'agent.session', 'agent.feedback'],
+    required_consent_purposes: ['analytics'],
+    capability_scopes: ['observe:conversations', 'observe:reactions'],
+    event_count_24h: 4210,
+    accepted_count_24h: 4102,
+    rejected_count_24h: 61,
+    error_count_24h: 12,
+    consent_blocked_count_24h: 35,
+    health_score: 0.97,
+    first_seen_at: '2026-05-02T09:15:00.000Z',
+    last_seen_at: '2026-07-08T21:42:00.000Z',
+    last_event_at: '2026-07-08T21:42:00.000Z',
+    created_at: '2026-05-01T14:00:00.000Z',
+    updated_at: '2026-07-01T10:30:00.000Z',
+  },
+  {
+    id: 'dep_shopify_concierge_002',
+    tenant_id: 'tenant_demo_001',
+    agent_id: 'agent_concierge_v1',
+    display_name: 'Shopping Concierge — Shopify',
+    description: 'Product recommendation agent embedded in the storefront.',
+    external_platform: 'shopify_app',
+    environment: 'production',
+    status: 'paused',
+    consent_mode: 'tenant_managed',
+    allowed_event_families: ['agent.recommendation', 'agent.session'],
+    required_consent_purposes: ['analytics', 'personalization'],
+    capability_scopes: ['observe:recommendations'],
+    event_count_24h: 0,
+    accepted_count_24h: 0,
+    rejected_count_24h: 0,
+    error_count_24h: 0,
+    consent_blocked_count_24h: 0,
+    health_score: null,
+    first_seen_at: '2026-04-11T08:00:00.000Z',
+    last_seen_at: '2026-07-06T16:05:00.000Z',
+    last_event_at: '2026-07-06T16:05:00.000Z',
+    created_at: '2026-04-10T12:00:00.000Z',
+    updated_at: '2026-07-07T09:00:00.000Z',
+  },
+  {
+    id: 'dep_mcp_research_003',
+    tenant_id: 'tenant_demo_001',
+    agent_id: 'agent_research_v3',
+    display_name: 'Research Assistant — MCP',
+    description: 'Internal research agent exposed via an MCP server.',
+    external_platform: 'mcp_server',
+    environment: 'staging',
+    status: 'error',
+    consent_mode: 'aether_managed',
+    allowed_event_families: ['agent.tool_call', 'agent.session'],
+    required_consent_purposes: [],
+    capability_scopes: ['observe:tool_calls'],
+    event_count_24h: 812,
+    accepted_count_24h: 640,
+    rejected_count_24h: 118,
+    error_count_24h: 54,
+    consent_blocked_count_24h: 0,
+    health_score: 0.62,
+    first_seen_at: '2026-06-20T11:30:00.000Z',
+    last_seen_at: '2026-07-08T19:10:00.000Z',
+    last_event_at: '2026-07-08T19:10:00.000Z',
+    created_at: '2026-06-20T11:00:00.000Z',
+    updated_at: '2026-07-08T19:10:00.000Z',
+  },
+];
+
+const MOCK_DEPLOYMENT_ACTIVITY: Record<string, unknown[]> = {
+  dep_discord_support_001: [
+    { id: 'act_001', deployment_id: 'dep_discord_support_001', action: 'created', actor: 'alex@acme.io', request_id: 'req_a1', occurred_at: '2026-05-01T14:00:00.000Z' },
+    { id: 'act_002', deployment_id: 'dep_discord_support_001', action: 'updated', actor: 'alex@acme.io', request_id: 'req_a2', occurred_at: '2026-07-01T10:30:00.000Z' },
+  ],
+  dep_shopify_concierge_002: [
+    { id: 'act_003', deployment_id: 'dep_shopify_concierge_002', action: 'created', actor: 'alex@acme.io', request_id: 'req_b1', occurred_at: '2026-04-10T12:00:00.000Z' },
+    { id: 'act_004', deployment_id: 'dep_shopify_concierge_002', action: 'paused', actor: 'alex@acme.io', request_id: 'req_b2', occurred_at: '2026-07-07T09:00:00.000Z' },
+  ],
+  dep_mcp_research_003: [
+    { id: 'act_005', deployment_id: 'dep_mcp_research_003', action: 'created', actor: 'alex@acme.io', request_id: 'req_c1', occurred_at: '2026-06-20T11:00:00.000Z' },
+    { id: 'act_006', deployment_id: 'dep_mcp_research_003', action: 'errored', actor: 'system', request_id: 'req_c2', occurred_at: '2026-07-08T19:10:00.000Z' },
+  ],
+};
+
+const LIFECYCLE_STATUS: Record<string, string> = {
+  pause: 'paused',
+  reactivate: 'active',
+  revoke: 'revoked',
+  archive: 'archived',
+};
+
+function findDeployment(id: string | readonly string[] | undefined) {
+  return MOCK_AGENT_DEPLOYMENTS.find(d => d.id === String(id));
+}
+
 export const handlers = [
   http.get(`${API}/v1/me`, () => HttpResponse.json(mockProfile)),
   http.get(`${API}/v1/me/usage`, () => HttpResponse.json(mockUsage)),
@@ -399,5 +505,97 @@ export const handlers = [
   ),
   http.post(`${API}/v1/integrations/connectors/:connectorType/test`, () =>
     HttpResponse.json({ data: { ok: true, message: 'Connection test passed.' }, status: 'ok', timestamp: new Date().toISOString() }),
+  ),
+
+  // ── External agent telemetry — deployments ───────────────────────────────────
+  http.get(`${API}/v1/agent/deployments`, ({ request }) => {
+    const url = new URL(request.url);
+    const status = url.searchParams.get('status');
+    const platform = url.searchParams.get('platform');
+    let deployments = MOCK_AGENT_DEPLOYMENTS;
+    if (status) deployments = deployments.filter(d => d.status === status);
+    if (platform) deployments = deployments.filter(d => d.external_platform === platform);
+    return HttpResponse.json({ data: { deployments }, status: 'ok', timestamp: new Date().toISOString() });
+  }),
+  http.post(`${API}/v1/agent/deployments`, async ({ request }) => {
+    const body = await request.json() as Record<string, unknown>;
+    const created = {
+      id: `dep_new_${String(MOCK_AGENT_DEPLOYMENTS.length + 1).padStart(3, '0')}`,
+      tenant_id: 'tenant_demo_001',
+      agent_id: String(body.agent_id ?? 'agent_new'),
+      display_name: String(body.display_name ?? 'New deployment'),
+      description: body.description ? String(body.description) : null,
+      external_platform: String(body.external_platform ?? 'unknown'),
+      environment: String(body.environment ?? 'production'),
+      status: 'active',
+      consent_mode: String(body.consent_mode ?? 'tenant_managed'),
+      allowed_event_families: (body.allowed_event_families as string[] | undefined) ?? [],
+      required_consent_purposes: (body.required_consent_purposes as string[] | undefined) ?? [],
+      capability_scopes: (body.capability_scopes as string[] | undefined) ?? [],
+      event_count_24h: 0,
+      accepted_count_24h: 0,
+      rejected_count_24h: 0,
+      error_count_24h: 0,
+      consent_blocked_count_24h: 0,
+      health_score: null,
+      first_seen_at: null,
+      last_seen_at: null,
+      last_event_at: null,
+      created_at: '2026-07-09T00:00:00.000Z',
+      updated_at: '2026-07-09T00:00:00.000Z',
+    };
+    MOCK_AGENT_DEPLOYMENTS.push(created as unknown as typeof MOCK_AGENT_DEPLOYMENTS[number]);
+    return HttpResponse.json({ data: created, status: 'ok', timestamp: new Date().toISOString() });
+  }),
+  http.get(`${API}/v1/agent/deployments/:id`, ({ params }) => {
+    const deployment = findDeployment(params.id);
+    if (!deployment) {
+      return HttpResponse.json({ message: 'Deployment not found', code: 'NOT_FOUND' }, { status: 404 });
+    }
+    return HttpResponse.json({ data: deployment, status: 'ok', timestamp: new Date().toISOString() });
+  }),
+  http.patch(`${API}/v1/agent/deployments/:id`, async ({ params, request }) => {
+    const deployment = findDeployment(params.id);
+    if (!deployment) {
+      return HttpResponse.json({ message: 'Deployment not found', code: 'NOT_FOUND' }, { status: 404 });
+    }
+    const body = await request.json() as Record<string, unknown>;
+    Object.assign(deployment, body, { updated_at: '2026-07-09T00:00:00.000Z' });
+    return HttpResponse.json({ data: deployment, status: 'ok', timestamp: new Date().toISOString() });
+  }),
+  http.post(`${API}/v1/agent/deployments/:id/:action`, ({ params }) => {
+    const nextStatus = LIFECYCLE_STATUS[String(params.action)];
+    const deployment = findDeployment(params.id);
+    if (!deployment || !nextStatus) {
+      return HttpResponse.json({ message: 'Deployment or action not found', code: 'NOT_FOUND' }, { status: 404 });
+    }
+    deployment.status = nextStatus;
+    deployment.updated_at = '2026-07-09T00:00:00.000Z';
+    return HttpResponse.json({ data: deployment, status: 'ok', timestamp: new Date().toISOString() });
+  }),
+  http.get(`${API}/v1/agent/deployments/:id/health`, ({ params }) => {
+    const deployment = findDeployment(params.id);
+    if (!deployment) {
+      return HttpResponse.json({ message: 'Deployment not found', code: 'NOT_FOUND' }, { status: 404 });
+    }
+    return HttpResponse.json({
+      data: {
+        event_count_24h: deployment.event_count_24h,
+        accepted_count_24h: deployment.accepted_count_24h,
+        rejected_count_24h: deployment.rejected_count_24h,
+        error_count_24h: deployment.error_count_24h,
+        consent_blocked_count_24h: deployment.consent_blocked_count_24h,
+        health_score: deployment.health_score,
+      },
+      status: 'ok',
+      timestamp: new Date().toISOString(),
+    });
+  }),
+  http.get(`${API}/v1/agent/deployments/:id/activity`, ({ params }) =>
+    HttpResponse.json({
+      data: { entries: MOCK_DEPLOYMENT_ACTIVITY[String(params.id)] ?? [] },
+      status: 'ok',
+      timestamp: new Date().toISOString(),
+    }),
   ),
 ];

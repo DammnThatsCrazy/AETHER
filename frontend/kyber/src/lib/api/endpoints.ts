@@ -1590,6 +1590,12 @@ export const api = {
       connectorsOverview: () =>
         restClient.get('/v1/admin/kyber/connectors/overview', wrap(unknownSchema)).then(r => r.data),
 
+      // ── External agent telemetry (fleet observability) ────────────────────
+      agentTelemetryDeployments: () =>
+        restClient.get('/v1/admin/kyber/agent-telemetry/deployments', wrap(unknownSchema)).then(r => r.data),
+      agentTelemetryDeployment: (tenantId: string, deploymentId: string) =>
+        restClient.get(`/v1/admin/kyber/agent-telemetry/deployments/${encodeURIComponent(tenantId)}/${encodeURIComponent(deploymentId)}`, wrap(unknownSchema)).then(r => r.data),
+
       // ── Dune feeder health ────────────────────────────────────────────────
       duneFeederHealth: () =>
         restClient.get('/v1/admin/dune-feeder/health', wrap(unknownSchema)).then(r => r.data),
