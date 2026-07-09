@@ -1,6 +1,6 @@
 # DO NOT EDIT — generated from packages/shared/contracts/event-registry.json
 # Run: python scripts/generate_contracts.py
-# Contract version: 8.11.0
+# Contract version: 8.12.0
 
 CANONICAL_EVENT_TYPES: frozenset[str] = frozenset({
     "track",
@@ -220,6 +220,7 @@ CANONICAL_EVENT_TYPES: frozenset[str] = frozenset({
     "device_revoked",
     "agent_evaluation_observed",
     "agent_cost_observed",
+    "ai_invocation_observed",
     "agent_grounding_observed",
     "agent_guardrail_observed",
     "agent_human_override_observed",
@@ -505,6 +506,7 @@ EVENT_CONSENT_PURPOSE: dict[str, str] = {
     "device_revoked": "analytics",
     "agent_evaluation_observed": "agent",
     "agent_cost_observed": "agent",
+    "ai_invocation_observed": "agent",
     "agent_grounding_observed": "agent",
     "agent_guardrail_observed": "agent",
     "agent_human_override_observed": "agent",
@@ -775,6 +777,7 @@ EVENT_FAMILY: dict[str, str] = {
     "device_revoked": "identity_lc",
     "agent_evaluation_observed": "agent",
     "agent_cost_observed": "agent",
+    "ai_invocation_observed": "agent",
     "agent_grounding_observed": "agent",
     "agent_guardrail_observed": "agent",
     "agent_human_override_observed": "agent",

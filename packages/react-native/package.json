@@ -1,7 +1,7 @@
 {
   "name": "@aether/react-native",
-  "version": "8.11.0",
-  "description": "Aether SDK for React Native \u2014 Unified bridge to native iOS/Android analytics",
+  "version": "8.12.0",
+  "description": "Aether SDK for React Native — Unified bridge to native iOS/Android analytics",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "react-native": "src/index.tsx",
@@ -15,12 +15,12 @@
     "lint": "tsc --noEmit"
   },
   "dependencies": {
-    "@aether/shared": "^8.11.0"
+    "@aether/shared": "^8.12.0"
   },
   "peerDependencies": {
+    "@react-native-async-storage/async-storage": ">=1.0.0",
     "react": ">=18.0.0",
-    "react-native": ">=0.72.0",
-    "@react-native-async-storage/async-storage": ">=1.0.0"
+    "react-native": ">=0.72.0"
   },
   "peerDependenciesMeta": {
     "@react-native-async-storage/async-storage": {

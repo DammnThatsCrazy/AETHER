@@ -188,3 +188,9 @@ export class AetherServerSDK {
     if (this.flushTimer.unref) this.flushTimer.unref();
   }
 }
+
+// External Agent Telemetry Plane V1 — re-exported after the class definition
+// because agent-telemetry extends AetherServerSDK from this module.
+export { AgentTelemetryClient, validateAgentDeploymentContext } from './agent-telemetry';
+export type { AgentTelemetryConfig } from './agent-telemetry';
+export type { AgentDeploymentContext } from '@aether/shared';

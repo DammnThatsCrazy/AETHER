@@ -1,7 +1,7 @@
 {
   "_comment": "Canonical Aether event registry — DO NOT manually edit. Source of truth for packages/shared/events.ts and generated_registry.py. Edit here, then run: python scripts/generate_contracts.py",
   "schemaVersion": "2.0.0",
-  "contractVersion": "8.11.0",
+  "contractVersion": "8.12.0",
   "events": [
     {"type":"track","family":"core","requiredPurposes":["analytics"],"privacyClass":"behavioral","retentionClass":"standard_90d","silverProjection":"","graphProjection":"","status":"active","introducedVersion":"1.0.0","description":"Custom application event via aether.track()"},
     {"type":"page","family":"core","requiredPurposes":["analytics"],"privacyClass":"behavioral","retentionClass":"standard_90d","silverProjection":"","graphProjection":"","status":"active","introducedVersion":"1.0.0","description":"Page/screen view from aether.pageView() + SPA hooks"},
@@ -220,6 +220,7 @@
     {"type":"device_revoked","family":"identity_lc","requiredPurposes":["analytics"],"privacyClass":"identity","retentionClass":"standard_90d","silverProjection":"identity_evidence_facts","graphProjection":"","status":"active","introducedVersion":"8.10.0","description":"Device revoked"},
     {"type":"agent_evaluation_observed","family":"agent","requiredPurposes":["agent"],"privacyClass":"behavioral","retentionClass":"standard_90d","silverProjection":"agent_execution_facts","graphProjection":"","status":"active","introducedVersion":"8.10.0","description":"Agent evaluation result observed"},
     {"type":"agent_cost_observed","family":"agent","requiredPurposes":["agent"],"privacyClass":"behavioral","retentionClass":"standard_90d","silverProjection":"agent_cost_facts","graphProjection":"","status":"active","introducedVersion":"8.10.0","description":"Agent inference or tool cost observed"},
+    {"type":"ai_invocation_observed","family":"agent","requiredPurposes":["agent"],"privacyClass":"behavioral","retentionClass":"standard_90d","silverProjection":"ai_execution_facts","graphProjection":"USED_MODEL","status":"active","introducedVersion":"8.12.0","description":"AI model invocation observed — identity, usage, cost, latency, quality, and outcome correlation; no raw prompt or completion content"},
     {"type":"agent_grounding_observed","family":"agent","requiredPurposes":["agent"],"privacyClass":"behavioral","retentionClass":"standard_90d","silverProjection":"agent_execution_facts","graphProjection":"","status":"active","introducedVersion":"8.10.0","description":"Agent grounding evidence observed"},
     {"type":"agent_guardrail_observed","family":"agent","requiredPurposes":["agent"],"privacyClass":"behavioral","retentionClass":"standard_90d","silverProjection":"agent_execution_facts","graphProjection":"","status":"active","introducedVersion":"8.10.0","description":"Agent guardrail evaluation observed"},
     {"type":"agent_human_override_observed","family":"agent","requiredPurposes":["agent"],"privacyClass":"behavioral","retentionClass":"standard_90d","silverProjection":"agent_execution_facts","graphProjection":"OVERRIDDEN_BY","status":"active","introducedVersion":"8.10.0","description":"Human override of agent action observed"},

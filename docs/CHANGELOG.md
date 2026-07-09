@@ -108,6 +108,29 @@ last_synced_commit: 48fb9d4
 
 ---
 
+## v8.12.0 — First-Release Intelligence, Telemetry, Payments, AI Economics, and Kyber Operations (2026-07-09)
+
+- **External Agent Telemetry Plane V1** — durable tenant-scoped agent deployment
+  registry, deployment-aware telemetry context, `/v1/batch` deployment validation,
+  server-side Agent Telemetry SDK, graph/Profile360 projections, Kyber diagnostics.
+- **Payment Rail Observability V1** — named adapters for Privy, Stripe crypto
+  onramp, Coinbase onramp/offramp, MoonPay buy/sell, and Bridge virtual accounts;
+  canonical `FundingSession` with reconciliation; no generic webhook fallback.
+- **AI Outcome Efficiency / AI Economics** — `ai_invocation_observed` event,
+  `ai_execution_facts` read model, effective-dated price cards, cost selection
+  hierarchy, workflow economics, Noesis instrumentation, `ai_outcome_efficiency`
+  recommendation family. No raw prompt/completion content persisted.
+- **Cluster Targeting Intelligence** — targeting intents, eligibility snapshots,
+  exclusion-leakage detection, holdouts, journey deltas, export packages, and
+  OODA suggestion integration. Aether observes; it does not execute campaigns.
+- **Aether/Kyber One-Person Operations** — worker execution bridge, durable
+  runtime stores, approval-to-commit staged graph mutation pipeline, durable
+  briefings, alert compression, release readiness gates.
+
+All new surfaces are feature-flagged and default OFF.
+
+---
+
 ## v8.11.0 — Noesis 5/5 Production Release (2026-06-26)
 
 ### Added

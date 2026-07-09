@@ -1,5 +1,5 @@
 {
-  "version": "8.11.0",
+  "version": "8.12.0",
   "generated_from": "docs/**/*.{md,mdx}",
   "docs": [
     {
@@ -4656,6 +4656,12 @@
       "status": "draft",
       "estimated_read_minutes": 5,
       "canonical_owner": "platform@aether"
+    },
+    {
+      "path": "docs/source-of-truth/EXTERNAL_AGENT_TELEMETRY_PLANE.md"
+    },
+    {
+      "path": "docs/source-of-truth/FIRST_RELEASE_INTELLIGENCE_TELEMETRY_OPERATIONS.md"
     },
     {
       "path": "docs/source-of-truth/GRAPH_ALIGNMENT.md",

@@ -155,6 +155,7 @@ public enum AetherEventType: String, Codable, CaseIterable {
     // Agent evaluation family
     case agent_evaluation_observed, agent_cost_observed
     case agent_grounding_observed, agent_guardrail_observed, agent_human_override_observed
+    case ai_invocation_observed
     // Web3 lifecycle extensions
     case transaction_pending_observed, transaction_confirmed_observed
     case transaction_reverted_observed, transaction_reorged_observed
@@ -333,7 +334,7 @@ public final class Aether: NSObject {
     private static let eventConsentPurpose: [AetherEventType: String] = [
         .track: "analytics", .page: "analytics", .screen: "analytics", .heartbeat: "analytics", .error: "analytics", .performance: "analytics",
         .journey_started: "analytics", .journey_paused: "analytics", .journey_resumed: "analytics", .journey_continued: "analytics", .journey_completed: "analytics", .journey_abandoned: "analytics", .journey_checkpoint: "analytics", .identify: "analytics",
-        .experiment: "marketing", .conversion: "marketing", .consent: "analytics",
+        .experiment: "marketing", .conversion: "8.12.0", .consent: "analytics",
         .payment_initiated: "commerce", .payment_completed: "commerce", .payment_failed: "commerce", .approval_requested: "commerce", .approval_resolved: "commerce", .entitlement_granted: "commerce", .entitlement_revoked: "commerce", .access_granted: "commerce", .access_denied: "commerce",
         // x402 — legacy + lifecycle
         .x402_payment: "commerce",
@@ -437,7 +438,7 @@ public final class Aether: NSObject {
         // Agent evaluation family
         .agent_evaluation_observed: "agent", .agent_cost_observed: "agent",
         .agent_grounding_observed: "agent", .agent_guardrail_observed: "agent",
-        .agent_human_override_observed: "agent",
+        .agent_human_override_observed: "agent", .ai_invocation_observed: "agent",
         // Web3 lifecycle extensions
         .transaction_pending_observed: "web3", .transaction_confirmed_observed: "web3",
         .transaction_reverted_observed: "web3", .transaction_reorged_observed: "web3",
@@ -528,7 +529,7 @@ public final class Aether: NSObject {
         #endif
 
         isInitialized = true
-        log("Aether iOS SDK initialized (v8.11.0)")
+        log("Aether iOS SDK initialized (v8.12.0)")
 
         loadPersistedQueue()
 
@@ -1182,7 +1183,7 @@ public final class Aether: NSObject {
         #endif
 
         return EventContext(
-            library: .init(name: "aether-ios", version: "8.11.0"),
+            library: .init(name: "aether-ios", version: "8.12.0"),
             device: .init(
                 osName: osName,
                 osVersion: osVersion,

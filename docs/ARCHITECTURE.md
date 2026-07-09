@@ -293,6 +293,7 @@ Resolution Consumer (real-time)
 | `/v1/resolution/audit/{id}` | GET | Audit trail for a decision |
 | `/v1/resolution/config` | GET/PUT | Resolution thresholds |
 | `/v1/resolution/batch` | POST | Trigger batch matching job |
+| `/v1/agent/deployments` | POST/GET/PATCH | External agent deployment registry (flag-gated, observation-only) |
 | `/v1/providers/keys` | POST/GET/DELETE | BYOK key management (encrypted at rest) |
 | `/v1/providers/usage` | GET | Per-tenant provider usage stats |
 | `/v1/providers/health` | GET | Provider health + circuit breaker states |
@@ -391,7 +392,7 @@ All four SDKs expose the same core public API surface:
 | **Undo capability** | `RESOLVED_AS` edges store full signal snapshots. Merges can be reversed by restoring the secondary profile. |
 | **Privacy** | All PII (email, phone, IP) stored as SHA-256 hashes only. Raw values never persisted in graph or audit trail. |
 
-## Model Extraction Defense (v8.11.0)
+## Model Extraction Defense (v8.12.0)
 
 The ML serving pipeline is wrapped with a modular defense layer that protects against model extraction and knowledge distillation attacks.
 

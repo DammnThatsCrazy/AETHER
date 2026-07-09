@@ -9,7 +9,7 @@ import type { ActorKind, Provenance } from './provenance';
 
 // @generated-start
 // @generated — DO NOT EDIT. Source: packages/shared/contracts/event-registry.json
-// Contract version: 8.11.0 — Run: python scripts/generate_contracts.py
+// Contract version: 8.12.0 — Run: python scripts/generate_contracts.py
 
 /** The canonical event-type string union the backend validates. */
 export type EventType =
@@ -109,6 +109,7 @@ export type EventType =
   | 'agent_data_extraction_observed'
   | 'agent_evaluation_observed'
   | 'agent_cost_observed'
+  | 'ai_invocation_observed'
   | 'agent_grounding_observed'
   | 'agent_guardrail_observed'
   | 'agent_human_override_observed'
@@ -546,6 +547,7 @@ export const EVENT_FAMILY: Record<EventType, EventFamily> = {
   device_revoked: 'identity_lc',
   agent_evaluation_observed: 'agent',
   agent_cost_observed: 'agent',
+  ai_invocation_observed: 'agent',
   agent_grounding_observed: 'agent',
   agent_guardrail_observed: 'agent',
   agent_human_override_observed: 'agent',
@@ -820,6 +822,7 @@ export const EVENT_CONSENT_PURPOSE: Record<EventType, string> = {
   device_revoked: 'analytics',
   agent_evaluation_observed: 'agent',
   agent_cost_observed: 'agent',
+  ai_invocation_observed: 'agent',
   agent_grounding_observed: 'agent',
   agent_guardrail_observed: 'agent',
   agent_human_override_observed: 'agent',

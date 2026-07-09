@@ -86,7 +86,7 @@ data class IdentityData(
 
 object Aether : DefaultLifecycleObserver {
     private const val TAG = "AetherSDK"
-    private const val VERSION = "8.11.0"
+    private const val VERSION = "8.12.0"
     private const val PREFS_NAME = "com.aether.sdk"
 
     private var config: AetherConfig? = null
@@ -248,7 +248,7 @@ object Aether : DefaultLifecycleObserver {
         // Agent evaluation family
         "agent_evaluation_observed" to "agent", "agent_cost_observed" to "agent",
         "agent_grounding_observed" to "agent", "agent_guardrail_observed" to "agent",
-        "agent_human_override_observed" to "agent",
+        "agent_human_override_observed" to "agent", "ai_invocation_observed" to "agent",
         // Web3 lifecycle extensions
         "transaction_pending_observed" to "web3", "transaction_confirmed_observed" to "web3",
         "transaction_reverted_observed" to "web3", "transaction_reorged_observed" to "web3",

@@ -14,7 +14,7 @@ estimated_read_minutes: 15
 toc_depth: 3
 last_synced_commit: e8d95a8
 ---
-# Unified On-Chain Intelligence Graph v8.11.0
+# Unified On-Chain Intelligence Graph v8.12.0
 
 ## Overview
 

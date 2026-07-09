@@ -9,7 +9,7 @@
 
 import { Platform } from 'react-native';
 
-const SDK_VERSION = '8.11.0';
+const SDK_VERSION = '8.12.0';
 const DEFAULT_HEARTBEAT_INTERVAL_MS = 60_000;
 const SDK_ID_KEY = 'aether_sdk_instance_id';
 

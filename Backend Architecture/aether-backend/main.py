@@ -911,6 +911,19 @@ def create_app() -> FastAPI:
     except Exception as e:  # pragma: no cover — defensive
         logger.warning(f"Derivatives Intelligence routes mount skipped: {e}")
 
+    # ── External Agent Telemetry Plane (observation-only; no marketplace, no execution) ──
+    telemetry_flags = settings.external_agent_telemetry
+    if telemetry_flags.registry_enabled:
+        from services.agent.deployment_routes import deployments_router
+        app.include_router(deployments_router)
+        logger.info("External Agent Telemetry: deployment registry mounted (/v1/agent/deployments)")
+    if telemetry_flags.kyber_enabled:
+        from services.agent.deployment_routes import kyber_router as agent_telemetry_kyber_router
+        app.include_router(agent_telemetry_kyber_router)
+        logger.info("External Agent Telemetry: Kyber diagnostics mounted (/v1/admin/kyber/agent-telemetry)")
+    if not (telemetry_flags.registry_enabled or telemetry_flags.kyber_enabled):
+        logger.info("External Agent Telemetry: disabled (AETHER_AGENT_DEPLOYMENT_REGISTRY_ENABLED=false)")
+
     return app
 
 
