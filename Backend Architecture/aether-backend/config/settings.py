@@ -999,3 +999,8 @@ class Settings:
 
 # Singleton
 settings = Settings()
+
+
+def get_settings() -> Settings:
+    """Accessor for the settings singleton (used by dependency-style imports)."""
+    return settings

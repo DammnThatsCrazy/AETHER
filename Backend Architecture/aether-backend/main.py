@@ -911,6 +911,28 @@ def create_app() -> FastAPI:
     except Exception as e:  # pragma: no cover — defensive
         logger.warning(f"Derivatives Intelligence routes mount skipped: {e}")
 
+    # ── Payment Rail Observability (named providers only; observation-only) ──
+    rails_flags = settings.payment_rails
+    if rails_flags.enabled:
+        from services.integrations.providers.payment_rails.routes import (
+            router as payment_rails_router,
+            webhook_router as payment_rails_webhook_router,
+        )
+        app.include_router(payment_rails_router)
+        app.include_router(payment_rails_webhook_router)
+        logger.info(
+            "Payment Rails: routes mounted (/v1/integrations/providers + "
+            "/v1/integrations/webhooks/payment-rails)"
+        )
+    if rails_flags.enabled or rails_flags.kyber_enabled:
+        from services.integrations.providers.payment_rails.kyber_routes import (
+            kyber_router as payment_rails_kyber_router,
+        )
+        app.include_router(payment_rails_kyber_router)
+        logger.info("Payment Rails: Kyber diagnostics mounted (/v1/admin/kyber/payment-rails)")
+    if not (rails_flags.enabled or rails_flags.kyber_enabled):
+        logger.info("Payment Rails: disabled (AETHER_PAYMENT_RAILS_ENABLED=false)")
+
     # ── External Agent Telemetry Plane (observation-only; no marketplace, no execution) ──
     telemetry_flags = settings.external_agent_telemetry
     if telemetry_flags.registry_enabled:

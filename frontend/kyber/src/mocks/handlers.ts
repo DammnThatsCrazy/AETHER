@@ -191,6 +191,220 @@ const MOCK_AGENT_TELEMETRY_DEPLOYMENTS = [
   },
 ];
 
+// ── Payment rail observability (fleet) ─────────────────────────────────────────
+// Deterministic fixtures: fixed ISO timestamps, no Date.now()-derived values.
+
+const MOCK_PAYMENT_RAILS_FLEET = {
+  totals: {
+    configured_tenants: 3,
+    sessions_observed_24h: 1287,
+    sessions_unresolved: 14,
+    reconciliation_conflicts: 5,
+  },
+  providers: [
+    {
+      provider: 'privy',
+      status: 'healthy',
+      configured_tenants: 3,
+      webhook_verified_24h: 640,
+      webhook_rejected_24h: 2,
+      sessions_observed_24h: 512,
+      sessions_completed_24h: 488,
+      sessions_failed_24h: 9,
+      sessions_unresolved: 4,
+      reconciliation_matched_rate: 0.982,
+      reconciliation_conflicts: 0,
+    },
+    {
+      provider: 'stripe',
+      status: 'healthy',
+      configured_tenants: 2,
+      webhook_verified_24h: 410,
+      webhook_rejected_24h: 6,
+      sessions_observed_24h: 388,
+      sessions_completed_24h: 351,
+      sessions_failed_24h: 12,
+      sessions_unresolved: 5,
+      reconciliation_matched_rate: 0.941,
+      reconciliation_conflicts: 1,
+    },
+    {
+      provider: 'coinbase',
+      status: 'degraded',
+      configured_tenants: 2,
+      webhook_verified_24h: 188,
+      webhook_rejected_24h: 41,
+      sessions_observed_24h: 244,
+      sessions_completed_24h: 190,
+      sessions_failed_24h: 28,
+      sessions_unresolved: 5,
+      reconciliation_matched_rate: 0.706,
+      reconciliation_conflicts: 4,
+    },
+    {
+      provider: 'moonpay',
+      status: 'not_configured',
+      configured_tenants: 0,
+      webhook_verified_24h: 0,
+      webhook_rejected_24h: 0,
+      sessions_observed_24h: 0,
+      sessions_completed_24h: 0,
+      sessions_failed_24h: 0,
+      sessions_unresolved: 0,
+      reconciliation_matched_rate: null,
+      reconciliation_conflicts: 0,
+    },
+    {
+      provider: 'bridge',
+      status: 'healthy',
+      configured_tenants: 1,
+      webhook_verified_24h: 58,
+      webhook_rejected_24h: 0,
+      sessions_observed_24h: 143,
+      sessions_completed_24h: 143,
+      sessions_failed_24h: 0,
+      sessions_unresolved: 0,
+      reconciliation_matched_rate: 1,
+      reconciliation_conflicts: 0,
+    },
+  ],
+  tenants: [
+    {
+      tenant_id: 'tenant_001',
+      providers_configured: 3,
+      providers_degraded: 0,
+      sessions_observed_24h: 733,
+      sessions_unresolved: 4,
+      reconciliation_conflicts: 0,
+      status: 'healthy',
+    },
+    {
+      tenant_id: 'tenant_002',
+      providers_configured: 2,
+      providers_degraded: 1,
+      sessions_observed_24h: 411,
+      sessions_unresolved: 8,
+      reconciliation_conflicts: 4,
+      status: 'degraded',
+    },
+    {
+      tenant_id: 'tenant_003',
+      providers_configured: 1,
+      providers_degraded: 0,
+      sessions_observed_24h: 143,
+      sessions_unresolved: 2,
+      reconciliation_conflicts: 1,
+      status: 'healthy',
+    },
+  ],
+};
+
+const MOCK_PAYMENT_RAILS_TENANTS: Record<string, unknown> = {
+  tenant_001: {
+    tenant_id: 'tenant_001',
+    providers: [
+      {
+        provider: 'privy',
+        adapter: {
+          status: 'configured',
+          environment: 'production',
+          webhook_configured: true,
+          polling_configured: true,
+          last_synced_at: '2026-07-08T23:45:00.000Z',
+        },
+        health: {
+          status: 'healthy',
+          webhook_verified_24h: 320,
+          webhook_rejected_24h: 1,
+          sessions_observed_24h: 256,
+          sessions_completed_24h: 244,
+          sessions_failed_24h: 4,
+          sessions_unresolved: 2,
+          reconciliation_matched_rate: 0.982,
+          reconciliation_conflicts: 0,
+          last_event_at: '2026-07-08T21:42:00.000Z',
+        },
+      },
+      {
+        provider: 'stripe',
+        adapter: {
+          status: 'configured',
+          environment: 'production',
+          webhook_configured: true,
+          polling_configured: false,
+          last_synced_at: '2026-07-08T23:40:00.000Z',
+        },
+        health: {
+          status: 'healthy',
+          webhook_verified_24h: 210,
+          webhook_rejected_24h: 3,
+          sessions_observed_24h: 194,
+          sessions_completed_24h: 176,
+          sessions_failed_24h: 6,
+          sessions_unresolved: 2,
+          reconciliation_matched_rate: 0.941,
+          reconciliation_conflicts: 0,
+          last_event_at: '2026-07-08T18:22:02.000Z',
+        },
+      },
+    ],
+  },
+  tenant_002: {
+    tenant_id: 'tenant_002',
+    providers: [
+      {
+        provider: 'coinbase',
+        adapter: {
+          status: 'error',
+          environment: 'production',
+          webhook_configured: true,
+          polling_configured: true,
+          last_synced_at: '2026-07-08T22:10:00.000Z',
+        },
+        health: {
+          status: 'degraded',
+          webhook_verified_24h: 96,
+          webhook_rejected_24h: 38,
+          sessions_observed_24h: 131,
+          sessions_completed_24h: 98,
+          sessions_failed_24h: 22,
+          sessions_unresolved: 5,
+          reconciliation_matched_rate: 0.706,
+          reconciliation_conflicts: 4,
+          last_event_at: '2026-07-08T06:15:40.000Z',
+        },
+      },
+    ],
+  },
+  tenant_003: {
+    tenant_id: 'tenant_003',
+    providers: [
+      {
+        provider: 'bridge',
+        adapter: {
+          status: 'configured',
+          environment: 'production',
+          webhook_configured: true,
+          polling_configured: true,
+          last_synced_at: '2026-07-08T23:00:00.000Z',
+        },
+        health: {
+          status: 'healthy',
+          webhook_verified_24h: 58,
+          webhook_rejected_24h: 0,
+          sessions_observed_24h: 143,
+          sessions_completed_24h: 143,
+          sessions_failed_24h: 0,
+          sessions_unresolved: 2,
+          reconciliation_matched_rate: 1,
+          reconciliation_conflicts: 1,
+          last_event_at: '2026-07-08T08:01:12.000Z',
+        },
+      },
+    ],
+  },
+};
+
 // ── Handlers ───────────────────────────────────────────────────────────────────
 
 export const handlers = [
@@ -417,5 +631,15 @@ export const handlers = [
         { id: 'act_002', action: 'updated', actor: 'tenant-admin', occurred_at: '2026-07-01T10:30:00.000Z' },
       ],
     });
+  }),
+
+  // Payment rail observability — fleet health (deterministic fixtures)
+  http.get(`${API}/v1/admin/kyber/payment-rails/health`, () => ok(MOCK_PAYMENT_RAILS_FLEET)),
+  http.get(`${API}/v1/admin/kyber/payment-rails/:tenantId`, ({ params }) => {
+    const diagnostics = MOCK_PAYMENT_RAILS_TENANTS[String(params.tenantId)];
+    if (!diagnostics) {
+      return HttpResponse.json({ message: 'Tenant not found', code: 'NOT_FOUND' }, { status: 404 });
+    }
+    return ok(diagnostics);
   }),
 ];

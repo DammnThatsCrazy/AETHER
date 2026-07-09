@@ -32,6 +32,13 @@ CANONICAL_NAMES: frozenset[str] = frozenset({
     "ingestion_validation_failed_total",
     "ingestion_consent_blocked_total",
     "ingestion_sensitive_scrub_total",
+    # Payment Rail Observability (services/integrations/providers/payment_rails)
+    "payment_rail_event_duplicate_total",
+    "payment_rail_event_rejected_total",
+    "payment_rail_sessions_upserted_total",
+    "payment_rail_status_downgrade_blocked_total",
+    "payment_rail_webhook_handled_total",
+    "payment_rail_webhook_rejected_total",
     "identity_resolve_error_total",
     "ingestion_bronze_write_failed_total",
     "ingestion_publish_failed_total",

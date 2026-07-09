@@ -41,6 +41,7 @@ const Cluster360Page = lazy(() => import('@aether-app/pages/cluster360').then(m 
 const DeliveryHistoryPage = lazy(() => import('@aether-app/pages/connectors').then(m => ({ default: m.DeliveryHistoryPage })));
 const DeploymentsPage = lazy(() => import('@aether-app/pages/deployments').then(m => ({ default: m.DeploymentsPage })));
 const DeploymentDetailPage = lazy(() => import('@aether-app/pages/deployments').then(m => ({ default: m.DeploymentDetailPage })));
+const PaymentRailsPage = lazy(() => import('@aether-app/pages/payment-rails').then(m => ({ default: m.PaymentRailsPage })));
 
 function PageSuspense({ children }: { readonly children: React.ReactNode }) {
   return (
@@ -117,6 +118,7 @@ export function AppRouter() {
                 <Route path="/delivery" element={<PageSuspense><DeliveryHistoryPage /></PageSuspense>} />
                 <Route path="/deployments" element={<PageSuspense><DeploymentsPage /></PageSuspense>} />
                 <Route path="/deployments/:id" element={<PageSuspense><DeploymentDetailPage /></PageSuspense>} />
+                <Route path="/payment-rails" element={<PageSuspense><PaymentRailsPage /></PageSuspense>} />
                 <Route path="*" element={<Navigate to="/settings" replace />} />
               </Routes>
             </AppShell>

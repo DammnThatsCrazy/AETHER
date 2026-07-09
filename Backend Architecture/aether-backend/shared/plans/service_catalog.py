@@ -1,6 +1,6 @@
 """Aether Plans — Service Catalog
 
-Canonical registry of all 34 Aether services. Translates the Rate Limiting
+Canonical registry of all 37 Aether services. Translates the Rate Limiting
 tab into code: per-service pricing across the 3 pricing options and the
 plan-gating matrix.
 
@@ -34,7 +34,7 @@ def _pricing(cost: str, opt_a: str, opt_b: str, opt_c: str) -> ServicePricing:
     )
 
 
-# 35-service registry. Numeric values match the Rate Limiting tab exactly.
+# 37-service registry. Numeric values match the Rate Limiting tab exactly.
 SERVICE_CATALOG: list[ServiceDefinition] = [
     # 1. Omni-Capture (Ingestion)
     ServiceDefinition(
@@ -323,6 +323,14 @@ SERVICE_CATALOG: list[ServiceDefinition] = [
         endpoint_pattern="/v1/semantic/*",
         pricing=_pricing("0.10", "0.25", "0.40", "0.60"),
         plan_access={_P1: None, _P2: None, _P3: "Advanced", _P4: "Core Feature"},
+    ),
+    # 36. Rail-Watch (Payment Rail Observability)
+    ServiceDefinition(
+        name="Rail-Watch",
+        pillar="Integrations",
+        endpoint_pattern="/v1/integrations/providers/*",
+        pricing=_pricing("0.05", "0.13", "0.20", "0.30"),
+        plan_access={_P1: "Included", _P2: "Included", _P3: "Included", _P4: "Included"},
     ),
 ]
 
