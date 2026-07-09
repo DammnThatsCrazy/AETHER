@@ -333,7 +333,7 @@ public final class Aether: NSObject {
     private static let eventConsentPurpose: [AetherEventType: String] = [
         .track: "analytics", .page: "analytics", .screen: "analytics", .heartbeat: "analytics", .error: "analytics", .performance: "analytics",
         .journey_started: "analytics", .journey_paused: "analytics", .journey_resumed: "analytics", .journey_continued: "analytics", .journey_completed: "analytics", .journey_abandoned: "analytics", .journey_checkpoint: "analytics", .identify: "analytics",
-        .experiment: "marketing", .conversion: "marketing", .consent: "analytics",
+        .experiment: "marketing", .conversion: "8.12.0", .consent: "analytics",
         .payment_initiated: "commerce", .payment_completed: "commerce", .payment_failed: "commerce", .approval_requested: "commerce", .approval_resolved: "commerce", .entitlement_granted: "commerce", .entitlement_revoked: "commerce", .access_granted: "commerce", .access_denied: "commerce",
         // x402 — legacy + lifecycle
         .x402_payment: "commerce",
@@ -528,7 +528,7 @@ public final class Aether: NSObject {
         #endif
 
         isInitialized = true
-        log("Aether iOS SDK initialized (v8.11.0)")
+        log("Aether iOS SDK initialized (v8.12.0)")
 
         loadPersistedQueue()
 
@@ -1182,7 +1182,7 @@ public final class Aether: NSObject {
         #endif
 
         return EventContext(
-            library: .init(name: "aether-ios", version: "8.11.0"),
+            library: .init(name: "aether-ios", version: "8.12.0"),
             device: .init(
                 osName: osName,
                 osVersion: osVersion,

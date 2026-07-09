@@ -13,7 +13,7 @@ estimated_read_minutes: 8
 toc_depth: 3
 last_synced_commit: 48fb9d4
 ---
-# Model Extraction Defense v8.11.0
+# Model Extraction Defense v8.12.0
 
 Modular defense layer against model extraction and knowledge distillation attacks on the Aether ML serving pipeline.
 
