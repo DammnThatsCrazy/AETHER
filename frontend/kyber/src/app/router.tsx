@@ -52,6 +52,7 @@ const KyberMeasurementOpsPage = lazy(() => import('@kyber/pages/measurement/kybe
 const Campaign360Page = lazy(() => import('@kyber/pages/measurement/campaign-360-page').then(m => ({ default: m.Campaign360Page })));
 const DeliveryOpsPage = lazy(() => import('@kyber/pages/delivery').then(m => ({ default: m.DeliveryOpsPage })));
 const AgentTelemetryPage = lazy(() => import('@kyber/pages/agent-telemetry').then(m => ({ default: m.AgentTelemetryPage })));
+const PaymentRailsPage = lazy(() => import('@kyber/pages/payment-rails').then(m => ({ default: m.PaymentRailsPage })));
 
 function PageSuspense({ children }: { readonly children: React.ReactNode }) {
   return (
@@ -132,6 +133,7 @@ export function AppRouter() {
                 <Route path="/measurement/ops" element={<PageSuspense><KyberMeasurementOpsPage /></PageSuspense>} />
                 <Route path="/delivery" element={<PageSuspense><DeliveryOpsPage /></PageSuspense>} />
                 <Route path="/agent-telemetry" element={<PageSuspense><AgentTelemetryPage /></PageSuspense>} />
+                <Route path="/payment-rails" element={<PageSuspense><PaymentRailsPage /></PageSuspense>} />
                 <Route path="*" element={<Navigate to="/mission" replace />} />
               </Routes>
             </AppShell>

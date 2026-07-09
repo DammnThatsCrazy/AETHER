@@ -4743,6 +4743,9 @@
       "canonical_owner": "data@aether"
     },
     {
+      "path": "docs/source-of-truth/PAYMENT_RAIL_OBSERVABILITY.md"
+    },
+    {
       "path": "docs/source-of-truth/REPO_CONSISTENCY_OWNERSHIP.md",
       "title": "Repo Consistency Ownership",
       "slug": "source-of-truth/repo-consistency-ownership",

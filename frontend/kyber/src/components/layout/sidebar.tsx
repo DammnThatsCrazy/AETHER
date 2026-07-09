@@ -29,6 +29,9 @@ const NAV_ITEMS: NavItem[] = [
   ...(isFeatureEnabled('enableExternalAgentTelemetry')
     ? [{ path: '/agent-telemetry', label: 'Agent Telemetry', glyph: '⌁' }]
     : []),
+  ...(isFeatureEnabled('enablePaymentRails')
+    ? [{ path: '/payment-rails', label: 'Payment Rails', glyph: '¤' }]
+    : []),
   { path: '/dune-feeder', label: 'Dune Feeder', glyph: '⬡' },
   { path: '/revops',          label: 'RevOps',          glyph: '₿' },
   { path: '/sales-readiness', label: 'Sales Ready', glyph: '$' },

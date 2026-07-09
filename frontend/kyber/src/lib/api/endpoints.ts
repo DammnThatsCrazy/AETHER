@@ -1596,6 +1596,12 @@ export const api = {
       agentTelemetryDeployment: (tenantId: string, deploymentId: string) =>
         restClient.get(`/v1/admin/kyber/agent-telemetry/deployments/${encodeURIComponent(tenantId)}/${encodeURIComponent(deploymentId)}`, wrap(unknownSchema)).then(r => r.data),
 
+      // ── Payment rail observability (fleet health, aggregate-only) ─────────
+      paymentRailsHealth: () =>
+        restClient.get('/v1/admin/kyber/payment-rails/health', wrap(unknownSchema)).then(r => r.data),
+      paymentRailsTenant: (tenantId: string) =>
+        restClient.get(`/v1/admin/kyber/payment-rails/${encodeURIComponent(tenantId)}`, wrap(unknownSchema)).then(r => r.data),
+
       // ── Dune feeder health ────────────────────────────────────────────────
       duneFeederHealth: () =>
         restClient.get('/v1/admin/dune-feeder/health', wrap(unknownSchema)).then(r => r.data),

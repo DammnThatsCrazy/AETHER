@@ -11,6 +11,7 @@ interface FeatureFlags {
   readonly enablePagerDuty: boolean;
   readonly enableWebhookSinks: boolean;
   readonly enableExternalAgentTelemetry: boolean;
+  readonly enablePaymentRails: boolean;
 }
 
 const DEFAULT_FLAGS: FeatureFlags = {
@@ -24,6 +25,7 @@ const DEFAULT_FLAGS: FeatureFlags = {
   enablePagerDuty: false,
   enableWebhookSinks: false,
   enableExternalAgentTelemetry: false,
+  enablePaymentRails: false,
 };
 
 function loadFlags(): FeatureFlags {
