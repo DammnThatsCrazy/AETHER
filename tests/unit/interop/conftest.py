@@ -1,4 +1,4 @@
-"""Shared fixtures for derivatives intelligence tests."""
+"""Shared fixtures for interoperability intelligence tests."""
 
 from __future__ import annotations
 
