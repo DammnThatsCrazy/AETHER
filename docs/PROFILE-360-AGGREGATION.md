@@ -13,7 +13,7 @@ source_files:
 canonical_owner: backend@aether
 estimated_read_minutes: 8
 toc_depth: 3
-last_synced_commit: 4d76caf
+last_synced_commit: a50afc7
 ---
 
 # Profile 360 Aggregation Layer
@@ -106,6 +106,7 @@ is what is documented below.
 | GET    | `/v1/profile/{id}/sessions`                                | Sessions with rollups                              |
 | GET    | `/v1/profile/{id}/financials`                              | Inflow/outflow/settlement summary                  |
 | GET    | `/v1/profile/{id}/delegations`                             | Granted / received delegations                     |
+| GET    | `/v1/profile/{id}/external-deployments`                    | External agent deployment activity (flag-gated: `AETHER_AGENT_DEPLOYMENT_PROFILE360_ENABLED`) |
 | GET    | `/v1/profile/{id}/relationships`                           | Typed normalized relationships                     |
 | GET    | `/v1/profile/{id}/drill/{object_type}/{object_id}`         | Generic deep drill                                 |
 | GET    | `/v1/profile/{id}/identifiers`                             | All linked identifiers                             |
