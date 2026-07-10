@@ -11,12 +11,12 @@ source_files:
   - frontend/kyber/src/pages/derivatives/kyber-derivatives-ops-page.tsx
   - frontend/kyber/src/pages/interop/kyber-interop-ops-page.tsx
 canonical_owner: platform@aether
-last_synced_commit: 1f19190
+last_synced_commit: "03ab3a6"
 ---
 
 # Kyber Operator Surfaces
 
-Three ops pages against `/v1/admin/kyber/{stablecoins,derivatives,interop}`
+Three ops pages against `/v1/admin/kyber/{stablecoins,derivatives/runtime,interop}`
 (operator-gated backend; audited actions), flag-gated client-side by
 `kyberStablecoinOps` / `kyberDerivativesOps` / `kyberInteropOps`
 (default OFF; `FlagGate` renders an honest disabled state):

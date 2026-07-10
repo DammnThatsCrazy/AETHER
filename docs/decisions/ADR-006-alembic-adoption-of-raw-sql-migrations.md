@@ -9,7 +9,7 @@ since_version: "8.12.0"
 source_files:
   - Backend Architecture/aether-backend/alembic/versions/20260708_derivatives_foundation_adoption.py
 canonical_owner: platform@aether
-last_synced_commit: 1f19190
+last_synced_commit: "03ab3a6"
 ---
 
 # ADR-006: Alembic Adoption of Raw-SQL Migrations

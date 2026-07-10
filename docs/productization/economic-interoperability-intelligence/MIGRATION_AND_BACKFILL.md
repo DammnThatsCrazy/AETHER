@@ -12,12 +12,12 @@ source_files:
   - Backend Architecture/aether-backend/alembic/versions/20260708_stablecoin_intelligence.py
   - Backend Architecture/aether-backend/alembic/versions/20260708_interop_intelligence.py
 canonical_owner: platform@aether
-last_synced_commit: 1f19190
+last_synced_commit: "03ab3a6"
 ---
 
 # Migration and Backfill
 
-## Migrations (linear from `20260703_agentic_obs`)
+## Migrations (chained from main's head `20260712_ops_runtime` after the #404–#416 merge)
 
 1. `20260708_derivatives_foundation_adoption` — replays PR1's raw-SQL
    tables as idempotent `CREATE TABLE IF NOT EXISTS`; Alembic owns them

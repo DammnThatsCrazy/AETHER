@@ -8,10 +8,10 @@ status: stable
 since_version: "8.12.0"
 source_files:
   - packages/shared/derivatives.ts
-  - Backend Architecture/aether-backend/services/derivatives/models.py
+  - Backend Architecture/aether-backend/services/derivatives/runtime_models.py
   - Backend Architecture/aether-backend/repositories/derivatives_repos.py
 canonical_owner: platform@aether
-last_synced_commit: 1f19190
+last_synced_commit: "03ab3a6"
 ---
 # Derivatives Entity Model
 

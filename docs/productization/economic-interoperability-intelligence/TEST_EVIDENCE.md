@@ -12,16 +12,16 @@ source_files:
   - tests/unit/interop/
   - tests/unit/test_economic_noesis_ooda_wiring.py
 canonical_owner: platform@aether
-last_synced_commit: 1f19190
+last_synced_commit: "03ab3a6"
 ---
 
 # Test Evidence
 
 ## Gated suites (all green at release commit)
 
-- Root `pytest tests/` — 1876 passed; the single failure
-  (`test_agent_web_crawler_wrapper`) is pre-existing on the baseline
-  (recorded in the current-state audit before any 8.12.0 change).
+- Root `pytest tests/` — 1954 passed, 0 failed at the post-merge head
+  (both this branch's suites and the #404–#416 suites). The baseline
+  crawler failure was root-caused to a missing sandbox dependency (bs4).
 - `npm test` (packages/shared + workspaces) — passing, including
   `stablecoin.test.ts`, `interoperability.test.ts`, and updated
   `events-registry.test.ts` / `consent-model.test.ts` counts.

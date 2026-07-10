@@ -10,13 +10,17 @@ source_files:
   - Backend Architecture/aether-backend/main.py
   - Backend Architecture/aether-backend/config/settings.py
 canonical_owner: platform@aether
-last_synced_commit: 1f19190
+last_synced_commit: "03ab3a6"
 ---
 
 # Target Architecture
 
 Three observation-only domains wired through EXISTING platform systems —
-no parallel infrastructure was introduced.
+no parallel infrastructure was introduced. (Post-merge note: the
+independently merged observer-stack implementations — `services/stablecoins`
+at `/v1/stablecoin` and the derivatives ingestion/accounting layer at
+`/v1/derivatives` — coexist with these domains; this branch's derivatives
+runtime is namespaced under `/v1/derivatives/runtime`.)
 
 ```
 provider evidence (RPC logs / venue snapshots / simulator fixtures)

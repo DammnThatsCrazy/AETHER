@@ -10,7 +10,7 @@ source_files:
   - Backend Architecture/aether-backend/shared/plans/service_catalog.py
   - Backend Architecture/aether-backend/services/billing/revops.py
 canonical_owner: platform@aether
-last_synced_commit: 1f19190
+last_synced_commit: "03ab3a6"
 ---
 
 # Data Licensing and Entitlements

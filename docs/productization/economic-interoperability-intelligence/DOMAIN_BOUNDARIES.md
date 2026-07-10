@@ -11,7 +11,7 @@ source_files:
   - packages/shared/derivatives.ts
   - packages/shared/interoperability.ts
 canonical_owner: platform@aether
-last_synced_commit: 1f19190
+last_synced_commit: "03ab3a6"
 ---
 
 # Domain Boundaries

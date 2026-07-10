@@ -11,7 +11,7 @@ source_files:
   - Backend Architecture/aether-backend/services/stablecoins/models.py
   - Backend Architecture/aether-backend/services/silver/projectors/stablecoin_projector.py
 canonical_owner: platform@aether
-last_synced_commit: 1f19190
+last_synced_commit: "03ab3a6"
 ---
 
 # Stablecoin Event Registry

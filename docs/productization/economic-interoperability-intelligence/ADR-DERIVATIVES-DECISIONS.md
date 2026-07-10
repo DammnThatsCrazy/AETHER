@@ -9,9 +9,9 @@ since_version: "8.12.0"
 source_files:
   - Backend Architecture/aether-backend/services/derivatives/state_machines.py
   - Backend Architecture/aether-backend/services/derivatives/streams.py
-  - Backend Architecture/aether-backend/services/derivatives/reconciliation.py
+  - Backend Architecture/aether-backend/services/derivatives/runtime_reconciliation.py
 canonical_owner: platform@aether
-last_synced_commit: 1f19190
+last_synced_commit: "03ab3a6"
 ---
 
 # Derivatives Intelligence — Domain Decisions

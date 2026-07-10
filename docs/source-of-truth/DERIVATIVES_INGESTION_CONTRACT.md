@@ -7,11 +7,11 @@ audience: [architect, dev-senior, ai]
 status: stable
 since_version: "8.12.0"
 source_files:
-  - Backend Architecture/aether-backend/services/derivatives/routes.py
+  - Backend Architecture/aether-backend/services/derivatives/runtime_routes.py
   - Backend Architecture/aether-backend/services/derivatives/adapters/base.py
   - Backend Architecture/aether-backend/services/derivatives/streams.py
 canonical_owner: platform@aether
-last_synced_commit: 1f19190
+last_synced_commit: "03ab3a6"
 ---
 # Derivatives Ingestion Contract
 

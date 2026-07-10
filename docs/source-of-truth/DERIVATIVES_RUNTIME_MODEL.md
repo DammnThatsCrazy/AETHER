@@ -9,13 +9,13 @@ since_version: "8.12.0"
 source_files:
   - Backend Architecture/aether-backend/services/derivatives/state_machines.py
   - Backend Architecture/aether-backend/services/derivatives/streams.py
-  - Backend Architecture/aether-backend/services/derivatives/reconciliation.py
+  - Backend Architecture/aether-backend/services/derivatives/runtime_reconciliation.py
   - Backend Architecture/aether-backend/services/derivatives/pnl.py
   - Backend Architecture/aether-backend/services/derivatives/adapters/base.py
   - Backend Architecture/aether-backend/services/derivatives/adapters/simulator.py
   - Backend Architecture/aether-backend/services/derivatives/adapters/conformance.py
 canonical_owner: platform@aether
-last_synced_commit: 1f19190
+last_synced_commit: "03ab3a6"
 ---
 
 # Derivatives Runtime Model
@@ -49,7 +49,7 @@ provisioning is deferred; the local transport is asyncio.
 
 ## Reconciliation & P&L
 
-`reconciliation.py` compares venue-reported snapshots against projected
+`runtime_reconciliation.py` compares venue-reported snapshots against projected
 state (size, realized/unrealized P&L, balance) and appends variances —
 fills are never re-derived, so double counting is structurally
 impossible. `pnl.py` computes Decimal realized/unrealized and exposure

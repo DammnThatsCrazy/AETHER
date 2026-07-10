@@ -13,7 +13,7 @@ source_files:
   - Data Lake Architecture/schemas/gold_derivatives_exposure.py
   - Data Lake Architecture/schemas/gold_interop_paths.py
 canonical_owner: platform@aether
-last_synced_commit: 1f19190
+last_synced_commit: "03ab3a6"
 ---
 
 # Data Storage and Projection
