@@ -16,6 +16,7 @@ from .derivatives_projector import DerivativesProjector
 from .interop_projector import InteropProjector
 from .touchpoint_projector import TouchpointProjector
 from .conversion_projector import ConversionProjector
+from .card_linked_projector import CardLinkedProjector
 
 __all__ = [
     "BaseProjector",
@@ -36,4 +37,5 @@ __all__ = [
     "InteropProjector",
     "TouchpointProjector",
     "ConversionProjector",
+    "CardLinkedProjector",
 ]

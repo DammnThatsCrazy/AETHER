@@ -44,6 +44,7 @@ from .projectors import (
     Web3TransactionProjector,
     X402FlowProjector,
     TouchpointProjector,
+    CardLinkedProjector,
     ConversionProjector,
     StablecoinProjector,
     DerivativesProjector,
@@ -75,6 +76,7 @@ _ALL_PROJECTORS: list[BaseProjector] = [
     DerivativesProjector(),     # derivatives observation facts
     InteropProjector(),         # cross-network message facts
     ConversionProjector(),
+    CardLinkedProjector(),    # card-linked context on payment/commerce events (never activity owner)
 ]
 
 # event_type → ordered list of projectors (order == _ALL_PROJECTORS order)
