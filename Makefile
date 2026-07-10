@@ -21,7 +21,7 @@
         smoke byok-reencrypt \
         clean validate-docs validate-frontmatter validate-ml-registry extract-docs docs-drift docs-stamp docs bump-version \
         repo-doctor repo-doctor-fix docs-check ci-check docs-fix \
-        production-status release-gate help
+        production-status release-gate ops-readiness help
 
 # Centralized subsystem paths — single place to rename if directories move.
 BACKEND_DIR := Backend Architecture/aether-backend
@@ -326,9 +326,13 @@ production-status: ## Readiness scorecard + blockers + live consistency checks (
 audit-prep: ## Smart contract pre-audit checklist (exit 1 if blockers found with --check)
 	python scripts/smart_contract_audit_prep.py
 
-release-gate: ## Full release gate: repo consistency (CI mode) + strict production status
+ops-readiness: ## One-person ops readiness gate (flags, stores, bridge fail-closed, approval gating)
+	python scripts/ops_readiness.py
+
+release-gate: ## Full release gate: repo consistency (CI mode) + strict production status + ops readiness
 	python scripts/repo_doctor.py --ci
 	python scripts/production_status.py --strict
+	python scripts/ops_readiness.py
 
 load-baselines: ## Record staging load baselines via Locust (requires STAGING_URL and running backend)
 	mkdir -p tests/load/results

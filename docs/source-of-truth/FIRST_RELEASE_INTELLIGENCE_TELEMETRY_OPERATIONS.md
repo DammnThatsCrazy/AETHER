@@ -171,8 +171,29 @@ verbatim — no mapping layer was needed.
   `ai_invocation_observed` registered (268 events); four shared contract
   files added and exported; five backend settings sections added (28 flags,
   default OFF); `.env.example` documented.
-- Slice 2: External Agent Telemetry Plane — see `EXTERNAL_AGENT_TELEMETRY_PLANE.md`.
-- Slice 3: Payment Rail Observability — see `PAYMENT_RAIL_OBSERVABILITY.md`.
-- Slice 4: AI Outcome Efficiency — see `AI_OUTCOME_EFFICIENCY.md`.
-- Slice 5: Cluster Targeting Intelligence — see `CLUSTER_TARGETING_INTELLIGENCE.md`.
-- Slice 6: One-Person Operations — see `KYBER_ONE_PERSON_OPERATIONS.md`.
+- **Slice 2 (merged, PR #411):** External Agent Telemetry Plane — durable
+  AgentDeployment registry + lifecycle routes, /v1/batch deployment-context
+  validation + canonical_entity_id stripping, identity non-merge denylist,
+  Profile360 subresource, server/python telemetry SDKs, Aether/Kyber UI.
+  See `EXTERNAL_AGENT_TELEMETRY_PLANE.md`.
+- **Slice 3 (merged, PR #412):** Payment Rail Observability — five named
+  adapters (Privy/Stripe onramp/Coinbase/MoonPay/Bridge), FundingSession
+  with final-state non-regression, reconciliation, public HMAC webhooks,
+  Kyber fleet health, Profile360 rollup. Includes the get_settings() app
+  startup fix. See `PAYMENT_RAIL_OBSERVABILITY.md`.
+- **Slice 4 (merged, PR #413):** AI Outcome Efficiency — ai_execution_facts
+  projector, effective-dated price cards with Noesis seeds, cost hierarchy
+  (unknown never zero), workflow economics, five efficiency detectors as
+  recommendation family + suggestion adapter, Noesis instrumentation,
+  Aether/Kyber dashboards. See `AI_OUTCOME_EFFICIENCY.md`.
+- **Slice 5 (PR #414):** Cluster Targeting Intelligence — 15-module
+  targeting package (policy precedence, snapshots, leakage, exports,
+  suggestion/noesis adapters, recompute, readiness), Campaign360/Cluster360
+  tabs, suggestion targeting cards, Kyber targeting console.
+  See `CLUSTER_TARGETING_INTELLIGENCE.md`.
+- **Slice 6:** One-Person Operations — worker execution bridge with hosted
+  fail-closed dispatch, service-credentialed run callbacks, stuck-run
+  detection/replay, approval-to-commit staged mutation pipeline with CIS
+  quarantine, durable briefings, compressed ops alerts, Kyber command
+  center live wiring, `make ops-readiness` release gate.
+  See `KYBER_ONE_PERSON_OPERATIONS.md`.
