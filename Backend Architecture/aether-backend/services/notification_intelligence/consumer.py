@@ -77,6 +77,31 @@ _TOPIC_MAP: dict[str, tuple[str, str, str, str]] = {
         "New Suggestion Available",
         "A new Aether suggestion has been created for tenant review",
     ),
+    Topic.STABLECOIN_DEPEG_DETECTED.value: (
+        "P1", "alert",
+        "Stablecoin Depeg Detected",
+        "A tracked stablecoin's observed price crossed its depeg threshold",
+    ),
+    Topic.DERIVATIVES_VARIANCE_DETECTED.value: (
+        "P2", "alert",
+        "Derivatives Reconciliation Variance",
+        "Venue-reported derivatives state diverged from Aether's projected state",
+    ),
+    Topic.DERIVATIVES_STREAM_GAP_STALLED.value: (
+        "P2", "alert",
+        "Derivatives Stream Gap Unrecovered",
+        "A market-data stream gap has remained open beyond the recovery window",
+    ),
+    Topic.INTEROP_MESSAGE_STUCK.value: (
+        "P2", "alert",
+        "Cross-Chain Message Stuck",
+        "A cross-chain message exceeded its lifecycle-phase SLA without new evidence",
+    ),
+    Topic.INTEROP_SECURITY_POLICY_CHANGED.value: (
+        "P1", "alert",
+        "Interop Security Policy Changed",
+        "The verification/security configuration of a cross-chain path has changed",
+    ),
 }
 
 
@@ -358,6 +383,11 @@ def attach_notification_consumers(
         Topic.CIS_REASONING_CONTRADICTION_DETECTED,
         Topic.SUGGESTION_APPROVED,
         Topic.SUGGESTION_CREATED,
+        Topic.STABLECOIN_DEPEG_DETECTED,
+        Topic.DERIVATIVES_VARIANCE_DETECTED,
+        Topic.DERIVATIVES_STREAM_GAP_STALLED,
+        Topic.INTEROP_MESSAGE_STUCK,
+        Topic.INTEROP_SECURITY_POLICY_CHANGED,
     ]:
         consumer.subscribe(topic, _handle)
 

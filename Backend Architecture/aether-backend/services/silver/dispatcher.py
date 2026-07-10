@@ -44,7 +44,11 @@ from .projectors import (
     Web3TransactionProjector,
     X402FlowProjector,
     TouchpointProjector,
+    CardLinkedProjector,
     ConversionProjector,
+    StablecoinProjector,
+    DerivativesProjector,
+    InteropProjector,
 )
 from .projectors.silver_graph_projector import SilverGraphProjector
 from services.comms.projector import CommsProjector, COMMS_TABLE
@@ -68,7 +72,11 @@ _ALL_PROJECTORS: list[BaseProjector] = [
     AIInvocationProjector(),
     Web3TransactionProjector(),
     X402FlowProjector(),
+    StablecoinProjector(),      # stablecoin economic observation facts
+    DerivativesProjector(),     # derivatives observation facts
+    InteropProjector(),         # cross-network message facts
     ConversionProjector(),
+    CardLinkedProjector(),    # card-linked context on payment/commerce events (never activity owner)
 ]
 
 # event_type → ordered list of projectors (order == _ALL_PROJECTORS order)

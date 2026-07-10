@@ -159,6 +159,12 @@ async def get_capabilities(request: Request):
         "suggestions_execution_enabled": sug.execution_enabled,
         "connectors_enabled": settings.connectors.enabled,
         "data_quality_enabled": settings.data_quality.enabled,
+        "stablecoin_intelligence_enabled": settings.stablecoin.api_enabled,
+        "stablecoin_profile360_enabled": settings.stablecoin.profile360_enabled,
+        "derivatives_intelligence_enabled": settings.derivatives.api_enabled,
+        "derivatives_profile360_enabled": settings.derivatives.profile360_enabled,
+        "interoperability_intelligence_enabled": settings.interop.api_enabled,
+        "interoperability_profile360_enabled": settings.interop.profile360_enabled,
     }
 
     return {

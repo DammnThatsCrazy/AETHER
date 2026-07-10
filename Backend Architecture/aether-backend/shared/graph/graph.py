@@ -254,6 +254,32 @@ class VertexType:
     FLOW_TRACE    = "FlowTrace"
     RISK_OVERLAY  = "RiskOverlay"
 
+    # ── Derivatives Intelligence — canonical registries (observation-only) ──
+    # Orders/fills/positions stay silver facts, not vertices (cardinality).
+    # Venues reuse MARKET_VENUE; instruments reuse INSTRUMENT; markets reuse
+    # MARKET; strategies reuse STRATEGY. Only the account is new.
+    TRADING_ACCOUNT = "TradingAccount"
+
+    # ── Stablecoin Intelligence — deployment identity (asset reuses
+    # STABLECOIN_ASSET; chains reuse CHAIN; bridges reuse BRIDGE_ROUTE) ──────
+    STABLECOIN_DEPLOYMENT = "StablecoinDeployment"
+
+    # ── Card-linked payment rails (V1: catalog dims + flow facts) ──
+    CARD_PROGRAM = "CardProgram"
+    CARD_ISSUER = "CardIssuer"
+    PAYMENT_NETWORK = "PaymentNetwork"
+    CARD_LINKED_FLOW = "CardLinkedFlow"
+    CARD_BENCHMARK = "CardBenchmark"
+
+    # ── Interoperability Intelligence — protocol-neutral topology ──────────
+    # Messages stay silver facts, not vertices (cardinality).
+    INTEROP_PROVIDER = "InteropProvider"
+    INTEROP_GATEWAY = "InteropGateway"
+    INTEROP_PATH = "InteropPath"
+    INTEROP_APPLICATION = "InteropApplication"
+    VERIFICATION_ACTOR = "VerificationActor"
+    DELIVERY_ACTOR = "DeliveryActor"
+
 
 class EdgeType:
     HAS_SESSION = "HAS_SESSION"
@@ -620,6 +646,117 @@ class EdgeType:
     BRIDGES                  = "BRIDGES"                   # Entity → Cluster (bridge node)
     MERGED_INTO              = "MERGED_INTO"               # Cluster → Cluster (merge event)
     SPLIT_FROM               = "SPLIT_FROM"                # Cluster → Cluster (split event)
+
+    # ── Derivatives Intelligence — actor edges (TS parity:
+    #    DERIVATIVES_ACTOR_EDGE_LAYER_MAP in packages/shared/derivatives.ts;
+    #    REQUESTS_APPROVAL_FROM already exists above) ───────────────────────
+    REFERRED_TO_VENUE           = "REFERRED_TO_VENUE"            # Human → Human (H2H)
+    FUNDED                      = "FUNDED"                       # Human → Human (H2H)
+    SHARES_TRADING_ACCOUNT_WITH = "SHARES_TRADING_ACCOUNT_WITH"  # Human → Human (H2H)
+    AUTHORIZED                  = "AUTHORIZED"                   # Human → Human (H2H)
+    COPIES_STRATEGY_FROM        = "COPIES_STRATEGY_FROM"         # Human → Human (H2H)
+    PARTICIPATES_IN_VAULT_WITH  = "PARTICIPATES_IN_VAULT_WITH"   # Human → Human (H2H)
+    MEMBER_OF_TRADING_ORG_WITH  = "MEMBER_OF_TRADING_ORG_WITH"   # Human → Human (H2H)
+    POSSIBLY_COORDINATED_WITH   = "POSSIBLY_COORDINATED_WITH"    # Human → Human (H2H, inferred)
+    POSSIBLY_MIRRORS            = "POSSIBLY_MIRRORS"             # Human → Human (H2H, inferred)
+    DELEGATES_TRADING_TO        = "DELEGATES_TRADING_TO"         # Human → Agent (H2A)
+    AUTHORIZES_MARKETS_FOR      = "AUTHORIZES_MARKETS_FOR"       # Human → Agent (H2A)
+    SETS_RISK_POLICY_FOR        = "SETS_RISK_POLICY_FOR"         # Human → Agent (H2A)
+    APPROVES_TRADE_FROM         = "APPROVES_TRADE_FROM"          # Human → Agent (H2A)
+    FUNDS_AGENT                 = "FUNDS_AGENT"                  # Human → Agent (H2A)
+    OVERRIDES_AGENT             = "OVERRIDES_AGENT"              # Human → Agent (H2A)
+    REVOKES_TRADING_AUTHORITY   = "REVOKES_TRADING_AUTHORITY"    # Human → Agent (H2A)
+    RECOMMENDS_TRADE_TO         = "RECOMMENDS_TRADE_TO"          # Agent → Human (A2H)
+    WARNS                       = "WARNS"                        # Agent → Human (A2H)
+    REQUESTS_MARGIN_FROM        = "REQUESTS_MARGIN_FROM"         # Agent → Human (A2H)
+    REPORTS_PNL_TO              = "REPORTS_PNL_TO"               # Agent → Human (A2H)
+    ESCALATES_RISK_TO           = "ESCALATES_RISK_TO"            # Agent → Human (A2H)
+    EXPLAINS_DECISION_TO        = "EXPLAINS_DECISION_TO"         # Agent → Human (A2H)
+    PROPOSES_TRADE_TO           = "PROPOSES_TRADE_TO"            # Agent → Agent (A2A)
+    REQUESTS_RISK_REVIEW_FROM   = "REQUESTS_RISK_REVIEW_FROM"    # Agent → Agent (A2A)
+    APPROVES_EXECUTION_FOR      = "APPROVES_EXECUTION_FOR"       # Agent → Agent (A2A)
+    VETOES_EXECUTION_FOR        = "VETOES_EXECUTION_FOR"         # Agent → Agent (A2A)
+    ROUTES_ORDER_TO             = "ROUTES_ORDER_TO"              # Agent → Agent (A2A)
+    VERIFIES_FILL_FROM          = "VERIFIES_FILL_FROM"           # Agent → Agent (A2A)
+    RECONCILES_POSITION_FOR     = "RECONCILES_POSITION_FOR"      # Agent → Agent (A2A)
+
+    # ── Derivatives Intelligence — domain edges (EXCLUDED from actor layers;
+    #    CONTROLS / HOLDS_POSITION / EXECUTED_ON / LISTED_ON /
+    #    GOVERNED_BY_POLICY / ATTRIBUTED_TO_CAMPAIGN reuse existing edges) ───
+    AUTHENTICATES         = "AUTHENTICATES"          # Account → Venue
+    HAS_SUBACCOUNT        = "HAS_SUBACCOUNT"         # Account → Subaccount
+    PARTICIPATES_IN_VAULT = "PARTICIPATES_IN_VAULT"  # Entity → Vault
+    CREATED_ORDER         = "CREATED_ORDER"          # Account → Order fact
+    CONTAINS_FILL         = "CONTAINS_FILL"          # Order fact → Fill fact
+    ON_MARKET             = "ON_MARKET"              # Position → Market
+    SETTLES_IN            = "SETTLES_IN"             # Market → Asset
+    MARGINED_BY           = "MARGINED_BY"            # Position → MarginState
+    BACKED_BY             = "BACKED_BY"              # Position → Collateral
+    PRICED_BY             = "PRICED_BY"              # Market → PriceObservation
+    INCURRED_FEE          = "INCURRED_FEE"           # Position → Fee
+    PAID_FUNDING          = "PAID_FUNDING"           # Position → FundingPayment
+    RECEIVED_FUNDING      = "RECEIVED_FUNDING"       # Position → FundingPayment
+    LIQUIDATED_BY         = "LIQUIDATED_BY"          # Position → LiquidationEvent
+    GENERATED_PNL         = "GENERATED_PNL"          # Position → PnlSnapshot
+    PART_OF_JOURNEY       = "PART_OF_JOURNEY"        # Fact → Journey
+    DERIVED_FROM_EVENT    = "DERIVED_FROM_EVENT"     # Projection → source event
+
+    # ── Stablecoin Intelligence — actor edges ───────────────────────────────
+    SENT_STABLECOIN_TO           = "SENT_STABLECOIN_TO"            # Human → Human (H2H)
+    PAID_MERCHANT                = "PAID_MERCHANT"                 # Human → Human (H2H)
+    SHARES_TREASURY_WITH         = "SHARES_TREASURY_WITH"          # Human → Human (H2H)
+    AUTHORIZED_STABLECOIN_SPEND  = "AUTHORIZED_STABLECOIN_SPEND"   # Human → Agent (H2A)
+    FUNDS_AGENT_WALLET           = "FUNDS_AGENT_WALLET"            # Human → Agent (H2A)
+    REQUESTED_STABLECOIN_PAYMENT = "REQUESTED_STABLECOIN_PAYMENT"  # Agent → Human (A2H)
+    REPORTS_FLOW_TO              = "REPORTS_FLOW_TO"               # Agent → Human (A2H)
+    SETTLES_WITH_AGENT           = "SETTLES_WITH_AGENT"            # Agent → Agent (A2A)
+    ROUTES_PAYMENT_TO            = "ROUTES_PAYMENT_TO"             # Agent → Agent (A2A)
+
+    # ── Stablecoin Intelligence — domain edges (EXCLUDED; ISSUED_BY reuses
+    #    the existing edge) ─────────────────────────────────────────────────
+    TRANSFERRED_STABLECOIN = "TRANSFERRED_STABLECOIN"  # Wallet → Wallet (fact link)
+
+    # ── Card-linked payment rails (evidence-backed, observation-only) ──
+    CAME_FROM               = "CAME_FROM"                # User → Campaign (acquisition evidence)
+    PARTICIPATED_IN         = "PARTICIPATED_IN"          # User → Journey
+    USED_PROVIDER           = "USED_PROVIDER"            # User → CardProgram
+    FUNDED                  = "FUNDED"                   # Wallet → CardLinkedFlow
+    OCCURRED_ON             = "OCCURRED_ON"              # CardLinkedFlow → Chain
+    USED_ASSET              = "USED_ASSET"               # CardLinkedFlow → Token
+    RUNS_ON                 = "RUNS_ON"                  # CardProgram → PaymentNetwork
+    FOLLOWED_BY             = "FOLLOWED_BY"              # CardLinkedFlow → CardLinkedFlow
+    INITIATED_OR_INFLUENCED = "INITIATED_OR_INFLUENCED"  # Agent → CardLinkedFlow
+    BRIDGED_STABLECOIN     = "BRIDGED_STABLECOIN"      # Deployment → Deployment
+    SWAPPED_STABLECOIN     = "SWAPPED_STABLECOIN"      # Wallet → Deployment
+    DEPLOYED_ON_CHAIN      = "DEPLOYED_ON_CHAIN"       # Deployment → Chain
+    SUPPORTS_ASSET         = "SUPPORTS_ASSET"          # Org/App → Deployment
+    PEGGED_TO              = "PEGGED_TO"               # Asset → reference currency
+    VALUED_AT              = "VALUED_AT"               # Deployment → Valuation
+    RECONCILED_WITH        = "RECONCILED_WITH"         # Observation → Reconciliation
+
+    # ── Interoperability Intelligence — actor edges ─────────────────────────
+    INITIATED_CROSS_CHAIN_WITH = "INITIATED_CROSS_CHAIN_WITH"  # Human → Human (H2H)
+    SHARES_APPLICATION_WITH    = "SHARES_APPLICATION_WITH"     # Human → Human (H2H)
+    REQUESTED_DELIVERY_FROM    = "REQUESTED_DELIVERY_FROM"     # Human → Agent (H2A)
+    AUTHORIZED_INTEROP_SPEND   = "AUTHORIZED_INTEROP_SPEND"    # Human → Agent (H2A)
+    RELAYED_FOR                = "RELAYED_FOR"                 # Agent → Human (A2H)
+    REPORTS_DELIVERY_TO        = "REPORTS_DELIVERY_TO"         # Agent → Human (A2H)
+    COORDINATES_INTENT_WITH    = "COORDINATES_INTENT_WITH"     # Agent → Agent (A2A)
+    VERIFIES_FOR               = "VERIFIES_FOR"                # Agent → Agent (A2A)
+
+    # ── Interoperability Intelligence — domain edges (EXCLUDED; VERIFIED_BY
+    #    reuses the existing edge) ──────────────────────────────────────────
+    SENT_VIA_PATH         = "SENT_VIA_PATH"          # Message fact → Path
+    DELIVERED_VIA_GATEWAY = "DELIVERED_VIA_GATEWAY"  # Message fact → Gateway
+    ROUTES_THROUGH        = "ROUTES_THROUGH"         # Path → Gateway
+    CONNECTS_CHAIN        = "CONNECTS_CHAIN"         # Gateway → Chain
+    SECURED_BY_POLICY     = "SECURED_BY_POLICY"      # Path → SecurityPolicySnapshot
+    USES_PROVIDER         = "USES_PROVIDER"          # Application → Provider
+    ORIGINATES_FROM_APP   = "ORIGINATES_FROM_APP"    # Message fact → Application
+    DELIVERS_TO_APP       = "DELIVERS_TO_APP"        # Message fact → Application
+    HAS_ASSET_LEG         = "HAS_ASSET_LEG"          # Message fact → AssetLeg fact
+    HAS_SECURITY_SNAPSHOT = "HAS_SECURITY_SNAPSHOT"  # Message fact → Snapshot
+    FULFILLED_INTENT      = "FULFILLED_INTENT"       # Message fact → Intent
 
 
 # ═══════════════════════════════════════════════════════════════════════════

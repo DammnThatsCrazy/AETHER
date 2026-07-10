@@ -1,6 +1,12 @@
 ---
 title: Card-Linked Payment Rails Source of Truth
-status: draft
+status: stable
+source_files:
+  - packages/shared/card-linked-payments.ts
+  - Backend Architecture/aether-backend/services/card_linked_payments/models.py
+  - Backend Architecture/aether-backend/services/card_linked_payments/ingestion.py
+  - Backend Architecture/aether-backend/services/card_linked_payments/gold.py
+  - Backend Architecture/aether-backend/services/card_linked_payments/governance.py
 last_synced_commit: pending
 ---
 
@@ -59,6 +65,76 @@ All V1 surfaces are default-off except safety restrictions:
 - `AETHER_CARD_LINKED_EU_RESTRICTED_MODE=true`
 - `AETHER_CARD_LINKED_APAC_RESTRICTED_MODE=true`
 - `AETHER_CARD_LINKED_PROVIDER_PII_BLOCK=true`
+
+## V1 pipeline (Bronze → Silver → Gold → Graph)
+
+All modules live in `Backend Architecture/aether-backend/services/card_linked_payments/`.
+
+1. **Ingestion** (`ingestion.py`, `normalizer.py`, `paymentscan.py`) — four
+   sources with deterministic idempotency keys and per-source basis
+   enforcement: provider webhooks (spend/settlement/refund/reversal only),
+   on-chain observations (topup/funding/settlement only), SDK events
+   (six card-context event types; SDK spend claims are downgraded to
+   `unknown` and audited as `basis_warning`), and tenant imports.
+   Blocked-PII fields raise at ingestion and are audited; region policy
+   (`EU_RESTRICTED`/`UK_RESTRICTED`/`APAC_RESTRICTED`) and missing consent
+   strip user-level attribution fields, also audited.
+2. **Storage** (`repositories.py`, Alembic `20260713_card_linked_payments`) —
+   durable stores for flows (UNIQUE `(tenant_id, idempotency_key)`),
+   benchmarks, provider health, reconciliation records, and privacy audits.
+3. **Silver** (`services/silver/projectors/card_linked_projector.py`) —
+   registered LAST in the dispatcher chain; never the canonical-activity
+   owner; writes `card_linked_flow_facts`.
+4. **Gold** (`gold.py`) — entity economic activity (top-up and spend counted
+   and summed separately, `basis="mixed"` when both are present), campaign
+   outcomes, program/issuer benchmarks, and cluster features. Benchmark rows
+   are excluded from every user-level rollup; nothing is model-training
+   eligible.
+5. **Reconciliation** (`ingestion.py::_try_reconcile`) — an on-chain top-up
+   and a provider spend that share `wallet_address_hash` + card program link
+   as `matched`; matching upgrades `reconciliation_state` only and never
+   rewrites `basis`.
+6. **Graph** (`graph_projector.py`) — vertices CardProgram/CardIssuer/
+   PaymentNetwork/CardLinkedFlow/CardBenchmark; edges USED_PROVIDER, FUNDED,
+   ATTRIBUTED_TO, CAME_FROM, PARTICIPATED_IN, OCCURRED_ON, USED_ASSET,
+   RUNS_ON, ISSUED_BY, FOLLOWED_BY, INITIATED_OR_INFLUENCED. Every
+   card-linked edge maps to `RelationshipLayer.EXCLUDED`: card-linked
+   behavior is never deterministic identity-merge evidence. Benchmark rows
+   are never projected.
+
+## Surfaces
+
+- Tenant API: `/v1/integrations/providers/payment-rails/card-linked/*`
+  (catalog, flows, benchmarks, summary, campaign outcomes) — `routes.py`.
+- Profile360: `/v1/profile/{id}/card-linked-activity`,
+  `/v1/profile/{id}/economic/card-linked`, and
+  `/v1/profile/{id}/drill/card-linked/{object_id}` — `profile_summary.py`
+  builds the summary, filtered flows, entity story
+  (campaign → provider → top-up → spends), provenance, and warnings.
+- Campaign360: outcomes carry an explicit `attribution_basis`
+  (`direct`/`temporal`/`probabilistic`/`benchmark_only`/`insufficient_evidence`);
+  correlation is never presented as causality.
+- Clusters (`clusters.py`) — review/intelligence cohorts only (program,
+  top-up asset, funding chain, high-volume, repeat-spend,
+  campaign-converted, issuer exposure, refund-loop-suspect,
+  agent-influenced). Every cluster carries `enforcement: "never"`; the
+  suspicious cohort's advisory says "stage for human investigation; never
+  auto-deny."
+- Kyber diagnostics (`diagnostics.py`, `kyber_routes.py`) —
+  `/v1/admin/kyber/payment-rails/card-linked/{diagnostics,clusters,release-gate}`,
+  operator-gated via `require_kyber_operator`: PaymentScan freshness,
+  coverage by source/basis, basis-support-by-source, unmatched evidence,
+  reconciliation conflicts, region/consent suppression counts, blocked-PII
+  attempts, and basis-mislabeling warnings.
+
+## Release gate
+
+`governance.py::run_release_gate()` runs eleven fail-closed structural
+checks (catalog seeded, basis validation, top-up/spend non-conflation,
+blocked-PII rejection, flags default off, PaymentScan benchmark-only
+handling, graph projection honesty, Profile360/Campaign360/Kyber surface
+presence, source-of-truth docs present). The gated test suite fails the
+build on any violation, and Kyber exposes the same results read-only.
 
 ## Canonical implementation points
 

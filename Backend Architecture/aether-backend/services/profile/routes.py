@@ -35,6 +35,7 @@ Endpoints:
 
 from __future__ import annotations
 
+from datetime import datetime, timezone
 from typing import Optional
 
 from dependencies.providers import get_cache, get_graph
@@ -741,6 +742,60 @@ async def get_profile_campaigns(
     tenant = request.state.tenant
     tenant.require_permission("read")
     return APIResponse(data=await agg.campaigns(user_id, tenant.tenant_id, limit=limit)).to_dict()
+
+
+# ── Card-linked payment rail activity (Economic Activity → Payment Rails) ──
+
+def _card_linked_filters(request: Request) -> dict:
+    """Extract card-linked filters from query params (shared filter set)."""
+    from services.card_linked_payments.profile_summary import FILTERABLE_FIELDS
+    params = request.query_params
+    filters = {name: params.get(name) for name in FILTERABLE_FIELDS}
+    for extra in ("volume_min", "volume_max", "since", "until"):
+        filters[extra] = params.get(extra)
+    return filters
+
+
+@router.get("/{user_id}/card-linked-activity")
+async def get_card_linked_activity(user_id: str, request: Request):
+    """Card-linked activity for an entity — story, flows, filters, provenance.
+
+    Flag-gated (404 when Card-Linked Payment Rails or its Profile360
+    surface is disabled). Bases stay separated: top-up is never spend.
+    """
+    from config.settings import settings as _settings
+    flags = _settings.card_linked_payment_rails
+    if not (flags.enabled and flags.profile360_enabled):
+        raise NotFoundError("Card-linked payment rails Profile360 surface is not enabled")
+    tenant = request.state.tenant
+    tenant.require_permission("read")
+    from services.card_linked_payments.profile_summary import get_card_linked_profile_summary
+    data = await get_card_linked_profile_summary(
+        tenant.tenant_id, user_id, _card_linked_filters(request),
+    )
+    return APIResponse(data=data).to_dict()
+
+
+@router.get("/{user_id}/economic/card-linked")
+async def get_economic_card_linked(user_id: str, request: Request):
+    """Economic-activity alias for the card-linked summary."""
+    return await get_card_linked_activity(user_id, request)
+
+
+@router.get("/{user_id}/drill/card-linked/{object_id}")
+async def drill_card_linked(user_id: str, object_id: str, request: Request):
+    """Evidence/provenance drill into one card-linked flow."""
+    from config.settings import settings as _settings
+    flags = _settings.card_linked_payment_rails
+    if not (flags.enabled and flags.profile360_enabled):
+        raise NotFoundError("Card-linked payment rails Profile360 surface is not enabled")
+    tenant = request.state.tenant
+    tenant.require_permission("read")
+    from services.card_linked_payments.profile_summary import get_card_linked_drilldown
+    data = await get_card_linked_drilldown(tenant.tenant_id, user_id, object_id)
+    if data is None:
+        raise NotFoundError(f"card-linked/{object_id} not found in tenant scope")
+    return APIResponse(data=data).to_dict()
 
 
 @router.get("/{user_id}/drill/{object_type}/{object_id}")
@@ -1912,3 +1967,167 @@ async def get_entity_data_quality(
     except Exception:
         items = []
     return _silver_response(user_id, items)
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Economic + cross-chain intelligence sub-resources (v8.12.0)
+# Observation-only domains; each gate is the domain's profile360 flag so a
+# disabled domain is indistinguishable from an absent one.
+# ═══════════════════════════════════════════════════════════════════════════
+
+@router.get("/{user_id}/stablecoin")
+async def get_entity_stablecoin_activity(
+    user_id: str,
+    request: Request,
+    limit: int = Query(default=50, ge=1, le=200),
+):
+    """Stablecoin observations attributed to this entity (as sender or
+    recipient via resolved entity refs or wallet ids)."""
+    from config.settings import settings as _settings
+    if not _settings.stablecoin.profile360_enabled:
+        raise HTTPException(status_code=404, detail="Stablecoin Intelligence is not enabled")
+    tenant = request.state.tenant
+    tenant.require_permission("read")
+
+    from decimal import Decimal as _Decimal
+
+    from repositories.stablecoin_repos import StablecoinObservationRepo
+
+    rows = await StablecoinObservationRepo().find_many(
+        {"tenant_id": tenant.tenant_id}, limit=2000,
+    )
+    items = []
+    for row in rows:
+        from_ref = row.get("from_entity_ref") or {}
+        to_ref = row.get("to_entity_ref") or {}
+        if user_id not in (
+            from_ref.get("id"), to_ref.get("id"),
+            row.get("from_wallet_id"), row.get("to_wallet_id"),
+        ):
+            continue
+        items.append({
+            key: str(value) if isinstance(value, _Decimal) else value
+            for key, value in row.items()
+        })
+        if len(items) >= limit:
+            break
+    finalized = [i for i in items if i.get("finality_status") == "finalized"]
+    return {
+        "entity_id": user_id,
+        "items": items,
+        "summary": {
+            "observation_count": len(items),
+            "finalized_count": len(finalized),
+            "assets": sorted({i.get("canonical_asset_id") for i in items if i.get("canonical_asset_id")}),
+        },
+        "count": len(items),
+        "computed_at": datetime.now(timezone.utc).isoformat(),
+        "provenance": {"source": "stablecoin_observations", "surface": "profile360"},
+    }
+
+
+@router.get("/{user_id}/derivatives")
+async def get_entity_derivatives_trading(
+    user_id: str,
+    request: Request,
+    limit: int = Query(default=50, ge=1, le=200),
+):
+    """Derivatives facts for trading accounts owned by this entity."""
+    from config.settings import settings as _settings
+    if not _settings.derivatives.profile360_enabled:
+        raise HTTPException(status_code=404, detail="Derivatives Intelligence is not enabled")
+    tenant = request.state.tenant
+    tenant.require_permission("read")
+
+    from decimal import Decimal as _Decimal
+
+    from repositories.derivatives_repos import FillRepo, PositionRepo, TradingAccountRepo
+
+    accounts = await TradingAccountRepo().find_many(
+        {"tenant_id": tenant.tenant_id, "owner_entity_id": user_id}, limit=200,
+    )
+    account_ids = {a["trading_account_id"] for a in accounts}
+    items: list[dict] = []
+    markets: set[str] = set()
+    for repo in (PositionRepo(), FillRepo()):
+        rows = await repo.find_many({"tenant_id": tenant.tenant_id}, limit=2000)
+        for row in rows:
+            if row.get("trading_account_id") not in account_ids:
+                continue
+            markets.add(row.get("canonical_market_id") or "")
+            items.append({
+                key: str(value) if isinstance(value, _Decimal) else value
+                for key, value in row.items()
+            })
+            if len(items) >= limit:
+                break
+    return {
+        "entity_id": user_id,
+        "items": items[:limit],
+        "summary": {
+            "fact_count": len(items),
+            "accounts": sorted(account_ids),
+            "markets": sorted(m for m in markets if m),
+        },
+        "count": len(items[:limit]),
+        "computed_at": datetime.now(timezone.utc).isoformat(),
+        "provenance": {"source": "derivatives_facts", "surface": "profile360"},
+    }
+
+
+@router.get("/{user_id}/interoperability")
+async def get_entity_interop_activity(
+    user_id: str,
+    request: Request,
+    limit: int = Query(default=50, ge=1, le=200),
+):
+    """Cross-network activity attributed to this entity via intents it
+    initiated and asset legs touching its wallet addresses."""
+    from config.settings import settings as _settings
+    if not _settings.interop.profile360_enabled:
+        raise HTTPException(status_code=404, detail="Interoperability Intelligence is not enabled")
+    tenant = request.state.tenant
+    tenant.require_permission("read")
+
+    from decimal import Decimal as _Decimal
+
+    from repositories.interop_repos import InteropAssetLegRepo, InteropIntentRepo
+
+    items: list[dict] = []
+    providers: set[str] = set()
+    paths: set[str] = set()
+
+    intents = await InteropIntentRepo().find_many({"tenant_id": tenant.tenant_id}, limit=2000)
+    for intent in intents:
+        initiator = intent.get("initiator_entity_ref") or {}
+        if initiator.get("id") != user_id and intent.get("initiator_address") != user_id:
+            continue
+        providers.add(intent.get("provider_id") or "")
+        items.append({
+            key: str(value) if isinstance(value, _Decimal) else value
+            for key, value in intent.items()
+        })
+
+    legs = await InteropAssetLegRepo().find_many({"tenant_id": tenant.tenant_id}, limit=2000)
+    for leg in legs:
+        if user_id not in (leg.get("from_address"), leg.get("to_address")):
+            continue
+        items.append({
+            key: str(value) if isinstance(value, _Decimal) else value
+            for key, value in leg.items()
+        })
+        if len(items) >= limit:
+            break
+
+    return {
+        "entity_id": user_id,
+        "items": items[:limit],
+        "summary": {
+            "fact_count": len(items),
+            "providers": sorted(p for p in providers if p),
+            "paths": sorted(p for p in paths if p),
+        },
+        "count": len(items[:limit]),
+        "computed_at": datetime.now(timezone.utc).isoformat(),
+        "provenance": {"source": "interop_facts", "surface": "profile360"},
+    }

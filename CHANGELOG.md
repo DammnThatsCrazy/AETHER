@@ -8,6 +8,19 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+### Card-Linked Payment Rail Observability V1
+
+#### Added — card-linked economic observability (flag-gated, default off)
+
+- PaymentScan catalog + benchmark ingestion (`services/card_linked_payments/paymentscan.py`): 23 card programs, 6 issuers, alias resolution; every benchmark lands `source=paymentscan`, `reconciliation_state=benchmark_only` — never user-level card spend.
+- Card-linked ingestion service (`ingestion.py`): provider webhooks (spend/settlement/refund/reversal only), on-chain observations (topup/funding/settlement only), SDK events (spend claims downgraded to `unknown` + audited), tenant imports; deterministic idempotency keys; blocked-PII rejection (PAN/CVV/KYC/bank/secrets) with audit; region-policy (EU/UK/APAC restricted) and consent suppression of user-level fields.
+- Durable stores + Alembic migration `20260713_card_linked_payments` (flows with UNIQUE `(tenant_id, idempotency_key)`, benchmarks, provider health, reconciliation, privacy audits) and silver projector `card_linked_projector.py` (registered last; never the canonical-activity owner).
+- Gold rollups (`gold.py`): entity economic activity with top-up and spend never conflated, Campaign360 outcomes with explicit `attribution_basis` (`direct`/`temporal`/`probabilistic`/`benchmark_only`/`insufficient_evidence`), program/issuer benchmarks, cluster features.
+- Graph projection (`graph_projector.py`): CardProgram/CardIssuer/PaymentNetwork/CardLinkedFlow/CardBenchmark vertices; all card-linked edges in `RelationshipLayer.EXCLUDED` (never identity-merge evidence); benchmark rows never projected.
+- Profile360 card-linked activity + drilldown routes; tenant API under `/v1/integrations/providers/payment-rails/card-linked`; Aether UI Card-linked Activity section and Campaign360 Card-linked Outcomes tab.
+- Cluster cohorts (`clusters.py`) — review-only (`enforcement: "never"`), including refund-loop-suspect staged for human investigation, never auto-deny.
+- Kyber diagnostics + release gate (`diagnostics.py`, `governance.py`, `kyber_routes.py`): catalog freshness, coverage/basis-support by source, reconciliation conflicts, region/consent suppression + blocked-PII counts, basis-mislabeling warnings, and 11 fail-closed release-gate checks; Kyber UI diagnostics section (`enableCardLinkedPaymentRails`).
+
 ### SDK Productization Alignment
 
 #### Added — SDK productization pass
@@ -284,7 +297,24 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ---
 
-## [8.12.0] — 2026-07-09
+## [8.12.0] — 2026-07-10
+
+### Added — Stablecoin, Derivatives & Interoperability Intelligence (observation-only)
+
+- **Stablecoin Intelligence** (`services/stablecoin/`): canonical asset/deployment registry seeded from verified x402 contracts, deterministic observation intake (sha256 chain/tx/log/kind identity), peg valuation snapshots with depeg classification (25/100 bps thresholds), support assertions, per-chain finality checkpoints with reorg demotion (finalized rows never touched), windowed flow aggregates, reconciliation records. Tables via Alembic `20260708_stablecoin_intelligence`.
+- **Derivatives Intelligence runtime** (`services/derivatives/`): runtime for the PR1 (#395) contract foundation — venue/instrument/market/account registries, read-only adapter framework with deterministic simulator (`MOCKED_LOCAL`) and conformance suite, order/position state machines with out-of-order tolerance and corrections-as-new-rows, bounded market-stream sequence tracking with gap detection/recovery, snapshot-vs-projection reconciliation, Decimal-only P&L/exposure. Alembic adoption of the PR1 raw-SQL DDL (`20260708_derivatives_foundation_adoption`) + runtime tables (`20260708_derivatives_runtime`).
+- **Interoperability Intelligence** (`services/interop/`): protocol-neutral cross-chain message lifecycle (22-state FSM mirrored TS↔Python with parity test), GUID-keyed correlation joining source/verify/deliver evidence in any order, content-hashed security-policy snapshots, provider adapter framework with **LayerZero V2 reference adapter** (pure-Python ABI decode of PacketSent/PacketVerified/PacketDelivered, GUID recompute, confirmation-horizon scanning, parent-hash reorg rollback; `CREDENTIAL_GATED`) and six honestly-`SCAFFOLDED` providers (Wormhole, Axelar, CCIP, Hyperlane, IBC, deBridge). Alembic `20260708_interop_intelligence`.
+- **Platform wiring**: 110 registry events across `stablecoin`/`derivatives`/`interop` families; `economic_observability` + `cross_chain_observability` consent purposes (explicit opt-in, 7y retention, no model training); 18 permissions; 3 feature-flag blocks (all default OFF); 8 canonical meters; DSR scopes; plan catalog rows; graph contract extensions (8 vertex types, 82 edges, TS↔Python A2H parity); 3 silver projectors + 3 gold ClickHouse schemas; Profile360 sub-resources (`/stablecoin`, `/derivatives`, `/interoperability`); 5 Noesis intents with read-only adapters; 3 OODA suggestion adapters; 5 alert topics with severity-routed policies.
+- **Frontends**: Aether tenant surfaces (stablecoins/derivatives/interoperability overview + detail pages, honest "not enabled" empty states); Kyber operator ops pages (adapter fleets with honest `ImplementationStatus`, checkpoints, stream gaps, variances, policy drift, audited conformance/scan triggers) behind `kyber*Ops` flags.
+
+### Fixed
+
+- `shared/privacy/consent_enforcement.py` now derives its purpose set from the canonical consent registry instead of a hardcoded stale copy that was missing `financial_activity`.
+- Derivatives stream gap recovery no longer fires on the first in-order message after a gap opens; recovery requires progression past the revealing sequence.
+
+### Security / Invariants
+
+- Every new table carries `CHECK (execution_by_aether = FALSE)` where applicable, `UNIQUE(tenant_id, idempotency_key)`, and NUMERIC(38,18) amounts; canonical models pin `execution_by_aether: Literal[False]`. No custody, execution, trading, bridge relay, or automated recovery exists behind any flag.
 
 ### Added — First-Release Intelligence, Telemetry, Payments, AI Economics, and Kyber Operations
 

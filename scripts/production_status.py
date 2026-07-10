@@ -464,6 +464,57 @@ AREAS: list[Area] = [
         "unproven at scale.",
         ["tests/load/", "scripts/load_smoke.py", "docs/LOAD-BASELINES.md", "Data Lake Architecture/"],
     ),
+    Area(
+        "stablecoin intelligence",
+        3,
+        "Observation-only domain: canonical asset/deployment registry (seeded from "
+        "verified x402 contracts), deterministic observation intake, peg valuation "
+        "with depeg classification, finality checkpoints with reorg demotion, flow "
+        "aggregates, reconciliation. Typed Decimal repos, Alembic-owned tables, "
+        "flag-gated routes/projections/graph/Profile360, tested end to end in-memory. "
+        "Not production: live chain finality tracking and price feeds are "
+        "CREDENTIAL_GATED; no staging validation has run.",
+        [
+            "Backend Architecture/aether-backend/services/stablecoin/",
+            "packages/shared/stablecoin.ts",
+            "tests/unit/stablecoin/",
+            "docs/productization/economic-interoperability-intelligence/RELEASE_READINESS.md",
+        ],
+    ),
+    Area(
+        "derivatives intelligence",
+        3,
+        "Runtime for the PR1 contract foundation: read-only adapter framework with "
+        "deterministic simulator (MOCKED_LOCAL) + conformance suite, order/position "
+        "FSMs with out-of-order tolerance and append-only corrections, bounded "
+        "stream sequence tracking with gap detection/recovery, snapshot-vs-projection "
+        "reconciliation, Decimal-only P&L. Alembic adoption of the PR1 raw-SQL DDL. "
+        "Not production: zero PROVIDER_LIVE venue adapters (credentials required); "
+        "Kafka streams deferred to local transport; no staging validation.",
+        [
+            "Backend Architecture/aether-backend/services/derivatives/",
+            "Backend Architecture/aether-backend/repositories/typed_repo.py",
+            "tests/unit/derivatives/",
+            "docs/source-of-truth/DERIVATIVES_RUNTIME_MODEL.md",
+        ],
+    ),
+    Area(
+        "interoperability intelligence",
+        3,
+        "Protocol-neutral cross-chain message lifecycle (22-state FSM, TS↔Python "
+        "parity-tested), GUID-keyed correlation joining evidence in any order, "
+        "content-hashed security-policy snapshots, checkpointed scanning with "
+        "parent-hash reorg rollback. LayerZero V2 reference adapter is "
+        "CREDENTIAL_GATED (fixture-proven decode; live scanning needs RPC "
+        "credentials); the other six providers are honest scaffolds. "
+        "Not production: no live provider, no staging validation.",
+        [
+            "Backend Architecture/aether-backend/services/interop/",
+            "packages/shared/interoperability.ts",
+            "tests/unit/interop/",
+            "docs/productization/economic-interoperability-intelligence/ADAPTER_CAPABILITY_MATRIX.md",
+        ],
+    ),
 ]
 
 
@@ -511,6 +562,26 @@ BLOCKERS: list[Blocker] = [
         "Neptune relationships (H2H/H2A/A2H/A2A)",
         "Provision staging Neptune; replay synthetic merge workload; record limits",
     ),
+    Blocker(
+        "release-blocker",
+        "Economic domains have zero live providers: LayerZero scanning, chain finality, "
+        "price feeds, and venue adapters are CREDENTIAL_GATED/SCAFFOLDED",
+        "stablecoin intelligence",
+        "Provision per-chain RPC + Chainlink + venue read-only credentials; validate in "
+        "controlled staging per docs/productization/economic-interoperability-intelligence/RELEASE_READINESS.md",
+    ),
+    Blocker(
+        "pre-production-blocker",
+        "Derivatives market streams run on the local transport; Kafka topics not provisioned",
+        "derivatives intelligence",
+        "Provision Kafka topics in staging; re-run stream gap/recovery validation against the real transport",
+    ),
+    Blocker(
+        "pre-production-blocker",
+        "Gold ClickHouse DDL for economic domains unexecuted (no ClickHouse in CI)",
+        "interoperability intelligence",
+        "Apply gold_{stablecoin_flows,derivatives_exposure,interop_paths} DDL in staging ClickHouse and validate materialization",
+    ),
 ]
 
 
@@ -533,6 +604,10 @@ LIVE_CHECKS: list[LiveCheck] = [
     LiveCheck(
         "Agentic x402 lifecycle consent map",
         ["python", "-m", "pytest", "tests/unit/test_event_registry_agentic_x402.py", "-q", "--tb=short"],
+    ),
+    LiveCheck(
+        "Economic domain registry integrity",
+        ["python", "-m", "pytest", "tests/unit/test_event_registry_economic_domains.py", "-q", "--tb=short"],
     ),
 ]
 

@@ -400,6 +400,113 @@ _EDGE_LAYER_MAP: dict[str, RelationshipLayer] = {
     EdgeType.BRIDGES:                RelationshipLayer.H2H,  # Entity → Cluster (bridge)
     EdgeType.MERGED_INTO:            RelationshipLayer.H2H,  # Cluster → Cluster (merge)
     EdgeType.SPLIT_FROM:             RelationshipLayer.H2H,  # Cluster → Cluster (split)
+
+    # ── Derivatives Intelligence — actor edges (parity with
+    #    DERIVATIVES_ACTOR_EDGE_LAYER_MAP in packages/shared/derivatives.ts) ─
+    EdgeType.REFERRED_TO_VENUE:           RelationshipLayer.H2H,
+    EdgeType.FUNDED:                      RelationshipLayer.H2H,
+    EdgeType.SHARES_TRADING_ACCOUNT_WITH: RelationshipLayer.H2H,
+    EdgeType.AUTHORIZED:                  RelationshipLayer.H2H,
+    EdgeType.COPIES_STRATEGY_FROM:        RelationshipLayer.H2H,
+    EdgeType.PARTICIPATES_IN_VAULT_WITH:  RelationshipLayer.H2H,
+    EdgeType.MEMBER_OF_TRADING_ORG_WITH:  RelationshipLayer.H2H,
+    EdgeType.POSSIBLY_COORDINATED_WITH:   RelationshipLayer.H2H,
+    EdgeType.POSSIBLY_MIRRORS:            RelationshipLayer.H2H,
+    EdgeType.DELEGATES_TRADING_TO:        RelationshipLayer.H2A,
+    EdgeType.AUTHORIZES_MARKETS_FOR:      RelationshipLayer.H2A,
+    EdgeType.SETS_RISK_POLICY_FOR:        RelationshipLayer.H2A,
+    EdgeType.APPROVES_TRADE_FROM:         RelationshipLayer.H2A,
+    EdgeType.FUNDS_AGENT:                 RelationshipLayer.H2A,
+    EdgeType.OVERRIDES_AGENT:             RelationshipLayer.H2A,
+    EdgeType.REVOKES_TRADING_AUTHORITY:   RelationshipLayer.H2A,
+    EdgeType.RECOMMENDS_TRADE_TO:         RelationshipLayer.A2H,  # Agent → User
+    EdgeType.WARNS:                       RelationshipLayer.A2H,  # Agent → User
+    EdgeType.REQUESTS_MARGIN_FROM:        RelationshipLayer.A2H,  # Agent → User
+    EdgeType.REPORTS_PNL_TO:              RelationshipLayer.A2H,  # Agent → User
+    EdgeType.ESCALATES_RISK_TO:           RelationshipLayer.A2H,  # Agent → User
+    EdgeType.EXPLAINS_DECISION_TO:        RelationshipLayer.A2H,  # Agent → User
+    EdgeType.PROPOSES_TRADE_TO:           RelationshipLayer.A2A,
+    EdgeType.REQUESTS_RISK_REVIEW_FROM:   RelationshipLayer.A2A,
+    EdgeType.APPROVES_EXECUTION_FOR:      RelationshipLayer.A2A,
+    EdgeType.VETOES_EXECUTION_FOR:        RelationshipLayer.A2A,
+    EdgeType.ROUTES_ORDER_TO:             RelationshipLayer.A2A,
+    EdgeType.VERIFIES_FILL_FROM:          RelationshipLayer.A2A,
+    EdgeType.RECONCILES_POSITION_FOR:     RelationshipLayer.A2A,
+
+    # ── Derivatives Intelligence — domain edges (outside actor layers) ────
+    EdgeType.AUTHENTICATES:         RelationshipLayer.EXCLUDED,
+    # Card-linked payment rails — behavioral/economic evidence, never
+    # identity-merge evidence (identity rule: card-linked activity alone
+    # may not merge humans).
+    EdgeType.CAME_FROM:             RelationshipLayer.EXCLUDED,
+    EdgeType.PARTICIPATED_IN:       RelationshipLayer.EXCLUDED,
+    EdgeType.USED_PROVIDER:         RelationshipLayer.EXCLUDED,
+    EdgeType.FUNDED:                RelationshipLayer.EXCLUDED,
+    EdgeType.OCCURRED_ON:           RelationshipLayer.EXCLUDED,
+    EdgeType.USED_ASSET:            RelationshipLayer.EXCLUDED,
+    EdgeType.RUNS_ON:               RelationshipLayer.EXCLUDED,
+    EdgeType.FOLLOWED_BY:           RelationshipLayer.EXCLUDED,
+    EdgeType.INITIATED_OR_INFLUENCED: RelationshipLayer.EXCLUDED,
+    EdgeType.HAS_SUBACCOUNT:        RelationshipLayer.EXCLUDED,
+    EdgeType.PARTICIPATES_IN_VAULT: RelationshipLayer.EXCLUDED,
+    EdgeType.CREATED_ORDER:         RelationshipLayer.EXCLUDED,
+    EdgeType.CONTAINS_FILL:         RelationshipLayer.EXCLUDED,
+    EdgeType.ON_MARKET:             RelationshipLayer.EXCLUDED,
+    EdgeType.SETTLES_IN:            RelationshipLayer.EXCLUDED,
+    EdgeType.MARGINED_BY:           RelationshipLayer.EXCLUDED,
+    EdgeType.BACKED_BY:             RelationshipLayer.EXCLUDED,
+    EdgeType.PRICED_BY:             RelationshipLayer.EXCLUDED,
+    EdgeType.INCURRED_FEE:          RelationshipLayer.EXCLUDED,
+    EdgeType.PAID_FUNDING:          RelationshipLayer.EXCLUDED,
+    EdgeType.RECEIVED_FUNDING:      RelationshipLayer.EXCLUDED,
+    EdgeType.LIQUIDATED_BY:         RelationshipLayer.EXCLUDED,
+    EdgeType.GENERATED_PNL:         RelationshipLayer.EXCLUDED,
+    EdgeType.PART_OF_JOURNEY:       RelationshipLayer.EXCLUDED,
+    EdgeType.DERIVED_FROM_EVENT:    RelationshipLayer.EXCLUDED,
+
+    # ── Stablecoin Intelligence — actor edges ─────────────────────────────
+    EdgeType.SENT_STABLECOIN_TO:           RelationshipLayer.H2H,
+    EdgeType.PAID_MERCHANT:                RelationshipLayer.H2H,
+    EdgeType.SHARES_TREASURY_WITH:         RelationshipLayer.H2H,
+    EdgeType.AUTHORIZED_STABLECOIN_SPEND:  RelationshipLayer.H2A,
+    EdgeType.FUNDS_AGENT_WALLET:           RelationshipLayer.H2A,
+    EdgeType.REQUESTED_STABLECOIN_PAYMENT: RelationshipLayer.A2H,  # Agent → User
+    EdgeType.REPORTS_FLOW_TO:              RelationshipLayer.A2H,  # Agent → User
+    EdgeType.SETTLES_WITH_AGENT:           RelationshipLayer.A2A,
+    EdgeType.ROUTES_PAYMENT_TO:            RelationshipLayer.A2A,
+
+    # ── Stablecoin Intelligence — domain edges (outside actor layers) ─────
+    EdgeType.TRANSFERRED_STABLECOIN: RelationshipLayer.EXCLUDED,
+    EdgeType.BRIDGED_STABLECOIN:     RelationshipLayer.EXCLUDED,
+    EdgeType.SWAPPED_STABLECOIN:     RelationshipLayer.EXCLUDED,
+    EdgeType.DEPLOYED_ON_CHAIN:      RelationshipLayer.EXCLUDED,
+    EdgeType.SUPPORTS_ASSET:         RelationshipLayer.EXCLUDED,
+    EdgeType.PEGGED_TO:              RelationshipLayer.EXCLUDED,
+    EdgeType.VALUED_AT:              RelationshipLayer.EXCLUDED,
+    EdgeType.RECONCILED_WITH:        RelationshipLayer.EXCLUDED,
+
+    # ── Interoperability Intelligence — actor edges ────────────────────────
+    EdgeType.INITIATED_CROSS_CHAIN_WITH: RelationshipLayer.H2H,
+    EdgeType.SHARES_APPLICATION_WITH:    RelationshipLayer.H2H,
+    EdgeType.REQUESTED_DELIVERY_FROM:    RelationshipLayer.H2A,
+    EdgeType.AUTHORIZED_INTEROP_SPEND:   RelationshipLayer.H2A,
+    EdgeType.RELAYED_FOR:                RelationshipLayer.A2H,  # DeliveryActor → User
+    EdgeType.REPORTS_DELIVERY_TO:        RelationshipLayer.A2H,  # Agent → User
+    EdgeType.COORDINATES_INTENT_WITH:    RelationshipLayer.A2A,
+    EdgeType.VERIFIES_FOR:               RelationshipLayer.A2A,
+
+    # ── Interoperability Intelligence — domain edges (outside actor layers) ─
+    EdgeType.SENT_VIA_PATH:         RelationshipLayer.EXCLUDED,
+    EdgeType.DELIVERED_VIA_GATEWAY: RelationshipLayer.EXCLUDED,
+    EdgeType.ROUTES_THROUGH:        RelationshipLayer.EXCLUDED,
+    EdgeType.CONNECTS_CHAIN:        RelationshipLayer.EXCLUDED,
+    EdgeType.SECURED_BY_POLICY:     RelationshipLayer.EXCLUDED,
+    EdgeType.USES_PROVIDER:         RelationshipLayer.EXCLUDED,
+    EdgeType.ORIGINATES_FROM_APP:   RelationshipLayer.EXCLUDED,
+    EdgeType.DELIVERS_TO_APP:       RelationshipLayer.EXCLUDED,
+    EdgeType.HAS_ASSET_LEG:         RelationshipLayer.EXCLUDED,
+    EdgeType.HAS_SECURITY_SNAPSHOT: RelationshipLayer.EXCLUDED,
+    EdgeType.FULFILLED_INTENT:      RelationshipLayer.EXCLUDED,
 }
 
 
@@ -453,20 +560,23 @@ H2H_VERTEX_TYPES = frozenset({
     VertexType.EMAIL, VertexType.PHONE, VertexType.WALLET,
     VertexType.DEVICE_FINGERPRINT, VertexType.IP_ADDRESS,
     VertexType.LOCATION, VertexType.IDENTITY_CLUSTER,
+    VertexType.TRADING_ACCOUNT,
 })
 
 H2A_VERTEX_TYPES = frozenset({
     VertexType.USER, VertexType.AGENT, VertexType.SERVICE,
-    VertexType.CAMPAIGN,
+    VertexType.CAMPAIGN, VertexType.TRADING_ACCOUNT,
 })
 
 A2H_VERTEX_TYPES = frozenset({
     VertexType.AGENT, VertexType.USER, VertexType.SERVICE,
+    VertexType.DELIVERY_ACTOR,
 })
 
 A2A_VERTEX_TYPES = frozenset({
     VertexType.AGENT, VertexType.SERVICE, VertexType.CONTRACT,
     VertexType.PROTOCOL, VertexType.PAYMENT, VertexType.ACTION_RECORD,
+    VertexType.VERIFICATION_ACTOR, VertexType.DELIVERY_ACTOR,
 })
 
 

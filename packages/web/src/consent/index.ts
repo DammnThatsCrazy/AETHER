@@ -9,11 +9,15 @@ const CONSENT_KEY = 'consent';
 const CONSENT_RECORDED_KEY = 'consent_recorded';
 const FP_STORAGE_KEY = '_aether_fp';
 
-// financial_activity, credit, and location always require explicit opt-in — never granted by accept-all.
-const EXPLICIT_OPT_IN_PURPOSES: readonly ConsentPurpose[] = ['financial_activity', 'credit', 'location'];
+// financial_activity, credit, location, economic_observability, and cross_chain_observability
+// always require explicit opt-in — never granted by accept-all.
+const EXPLICIT_OPT_IN_PURPOSES: readonly ConsentPurpose[] = [
+  'financial_activity', 'credit', 'location', 'economic_observability', 'cross_chain_observability',
+];
 
 const ALL_PURPOSES: readonly ConsentPurpose[] = [
   'analytics', 'marketing', 'personalization', 'web3', 'agent', 'commerce', 'financial_activity', 'credit', 'location',
+  'economic_observability', 'cross_chain_observability',
 ];
 
 export class ConsentModule {
@@ -205,6 +209,8 @@ export class ConsentModule {
       financial_activity: false,
       credit: false,
       location: false,
+      economic_observability: false,
+      cross_chain_observability: false,
       updatedAt: now(),
       policyVersion: this.config.policyVersion,
     };

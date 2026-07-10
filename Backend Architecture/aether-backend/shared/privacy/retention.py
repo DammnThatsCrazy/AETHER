@@ -53,6 +53,9 @@ _DSR_SCOPE_TO_SILVER_TABLE: dict[str, str] = {
     "recommendation_facts": "silver_exposure_facts",
     "agent_facts": "silver_agent_execution_facts",
     "wallet_facts": "silver_web3_transaction_facts",
+    "stablecoin_facts": "silver_stablecoin_facts",
+    "derivatives_facts": "silver_derivatives_facts",
+    "interop_facts": "silver_interop_facts",
 }
 
 

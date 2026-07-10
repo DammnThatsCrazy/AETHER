@@ -59,7 +59,11 @@ export type SuggestionClass =
   | 'agent_operations'
   | 'notification'
   | 'investigation'
-  | 'general_intelligence';
+  | 'general_intelligence'
+  | 'stablecoin_depeg'
+  | 'derivatives_reconciliation'
+  | 'derivatives_risk'
+  | 'interop_delivery_health';
 
 export type SuggestionSource =
   | 'noesis'

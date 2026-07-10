@@ -559,6 +559,27 @@ class Permissions:
     NOTIFICATIONS_APPROVE        = "notifications:approve"
     NOTIFICATIONS_MANAGE         = "notifications:manage"
     NOTIFICATIONS_CHANNELS_WRITE = "notifications:channels:write"
+    # Stablecoin Intelligence scopes (observation-only)
+    STABLECOINS_READ           = "stablecoins:read"
+    STABLECOINS_EXPORT         = "stablecoins:export"
+    STABLECOINS_INVESTIGATE    = "stablecoins:investigate"
+    STABLECOINS_OPERATOR       = "stablecoins:operator"
+    STABLECOINS_MANAGE_SUPPORT = "stablecoins:manage_support"
+    STABLECOINS_MANAGE_POLICY  = "stablecoins:manage_policy"
+    # Derivatives Intelligence scopes (observation-only; no execution scopes exist)
+    DERIVATIVES_READ          = "derivatives:read"
+    DERIVATIVES_CONNECT       = "derivatives:connect"
+    DERIVATIVES_EXPORT        = "derivatives:export"
+    DERIVATIVES_INVESTIGATE   = "derivatives:investigate"
+    DERIVATIVES_MANAGE_POLICY = "derivatives:manage_policy"
+    DERIVATIVES_OPERATOR      = "derivatives:operator"
+    # Interoperability Intelligence scopes (observation-only; no relay scopes exist)
+    INTEROP_READ          = "interoperability:read"
+    INTEROP_CONNECT       = "interoperability:connect"
+    INTEROP_EXPORT        = "interoperability:export"
+    INTEROP_INVESTIGATE   = "interoperability:investigate"
+    INTEROP_MANAGE_POLICY = "interoperability:manage_policy"
+    INTEROP_OPERATOR      = "interoperability:operator"
 
 
 class KyberRole(str, Enum):
@@ -575,6 +596,9 @@ KYBER_ROLE_PERMISSIONS: dict[KyberRole, list[str]] = {
         Permissions.COMMERCE_READ,
         Permissions.APPROVALS_READ,
         Permissions.ENTITLEMENTS_READ,
+        Permissions.STABLECOINS_READ,
+        Permissions.DERIVATIVES_READ,
+        Permissions.INTEROP_READ,
     ],
     KyberRole.OPERATOR: [
         Permissions.COMMERCE_READ,
@@ -583,6 +607,15 @@ KYBER_ROLE_PERMISSIONS: dict[KyberRole, list[str]] = {
         Permissions.COMMERCE_REVIEW,
         Permissions.APPROVALS_READ,
         Permissions.ENTITLEMENTS_READ,
+        Permissions.STABLECOINS_READ,
+        Permissions.STABLECOINS_INVESTIGATE,
+        Permissions.STABLECOINS_OPERATOR,
+        Permissions.DERIVATIVES_READ,
+        Permissions.DERIVATIVES_INVESTIGATE,
+        Permissions.DERIVATIVES_OPERATOR,
+        Permissions.INTEROP_READ,
+        Permissions.INTEROP_INVESTIGATE,
+        Permissions.INTEROP_OPERATOR,
     ],
     KyberRole.APPROVER: [
         Permissions.COMMERCE_READ,

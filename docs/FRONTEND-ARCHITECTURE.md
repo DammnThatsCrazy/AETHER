@@ -134,10 +134,29 @@ Campaign360 gains a **Targeting Intelligence** tab and Cluster360 a
 execute this campaign"); the suggestion feed renders targeting cards with an
 implementation-package export action.
 
+Card-linked (crypto-card) observability nests inside existing surfaces
+rather than adding a route: `/payment-rails` renders a **Card-linked
+Activity** section (`pages/payment-rails/card-linked-section.tsx` —
+program/basis/source/network filters, basis badges that keep top-up and
+spend visually distinct, a "never processes card payments" boundary
+notice) and Campaign360 gains a **Card-linked Outcomes** tab
+(`pages/campaigns/card-linked-outcomes-tab.tsx` — top-up users/volume
+separated from spend users/volume, an attribution-basis badge
+`direct`/`temporal`/`probabilistic`/`benchmark_only`/`insufficient_evidence`,
+and a "correlation-based labels are never causal claims" caption). Both
+render a not-enabled EmptyState when the backend flags are off.
+
 Kyber additionally exposes `/agent-telemetry` (external agent telemetry fleet
 diagnostics; gated by the `enableExternalAgentTelemetry` feature flag),
 `/payment-rails` (payment rail fleet health; gated by `enablePaymentRails`),
 and `/ai-efficiency` (AI efficiency fleet health; gated by `enableAiEfficiency`), and `/targeting` (targeting fleet health, leakage queue, recompute controls; gated by `enableTargetingIntelligence`).
+
+Kyber's `/payment-rails` page also hosts a **Card-linked Payment Rails**
+diagnostics section (`pages/payment-rails/card-linked-diagnostics-section.tsx`;
+gated by `enableCardLinkedPaymentRails`): PaymentScan catalog freshness,
+coverage by source/basis, basis-support-by-source, reconciliation state and
+conflicts, privacy gates (region/consent suppressions, blocked-PII attempts),
+basis-mislabeling warnings, and the card-linked release-gate check list.
 
 - **Desktop (≥1280px):** Graph canvas + side panel (40% width) visible simultaneously
 - **Tablet (768–1279px):** Panel overlays graph as a drawer
@@ -761,3 +780,39 @@ The `api.delivery` namespace in `frontend/aether/src/lib/api/endpoints.ts` and `
 - `getReceipt(jobId)` → `GET /v1/delivery/jobs/{id}/receipt`
 - `listAttempts(jobId)` → `GET /v1/delivery/jobs/{id}/attempts`
 - `listLinks(params)` → `GET /v1/delivery/links`
+
+## Economic & Interoperability Intelligence Pages (v8.12.0)
+
+Observation-only surfaces for the stablecoin, derivatives, and
+interoperability domains. Feature-flagged-off backends return 404, which
+both apps render as an honest "not enabled" empty state rather than an
+error. Every page states its no-execution boundary in the header copy.
+
+### Aether (tenant) — `frontend/aether/src/pages/{stablecoins,derivatives,interop}/`
+
+| Route | Page |
+|-------|------|
+| `/stablecoins` | Assets, peg valuations with depeg badges, flow aggregates |
+| `/stablecoins/:assetId` | Deployments + recent observations with finality status |
+| `/derivatives` | Linked accounts, positions, P&L snapshots, reconciliation variances |
+| `/derivatives/accounts/:accountId` | Orders, fills, positions for one read-only account |
+| `/interoperability` | Cross-chain messages, paths, providers with honest `ImplementationStatus` |
+| `/interoperability/messages/:messageId` | Lifecycle timeline, delivery attempts, asset legs |
+
+Hooks live in `features/{stablecoins,derivatives,interop}/`; endpoint
+groups in `lib/api/endpoints.ts` parse the raw `{items, count}` responses
+(these backend routes do not use the APIResponse envelope). Shared
+helpers (`components/domain-intelligence.tsx`) provide the
+`NotEnabledOrError` state, stat tiles, and status badge variants.
+
+### Kyber (operator) — `frontend/kyber/src/pages/{stablecoins,derivatives,interop}/`
+
+| Route | Page |
+|-------|------|
+| `/stablecoins/ops` | Registry status + seed action, finality checkpoints, reconciliation review |
+| `/derivatives/ops` | Adapter fleet (honest `ImplementationStatus`), checkpoints, stream gaps, variances, conformance trigger |
+| `/interoperability/ops` | Provider health, correlation health, security-policy drift, governed-scan trigger |
+
+Gated client-side by the `kyberStablecoinOps` / `kyberDerivativesOps` /
+`kyberInteropOps` feature flags (default OFF) via a shared `FlagGate`;
+Zod schemas in `lib/schemas/economic-ops.ts` parse the raw admin payloads.

@@ -10,10 +10,11 @@ source_files:
   - Backend Architecture/aether-backend/services/profile/aggregator.py
   - Backend Architecture/aether-backend/services/profile/routes.py
   - Backend Architecture/aether-backend/services/profile/intelligence.py
+  - Backend Architecture/aether-backend/services/card_linked_payments/profile_summary.py
 canonical_owner: backend@aether
 estimated_read_minutes: 8
 toc_depth: 3
-last_synced_commit: ea4f778
+last_synced_commit: 1f19190
 ---
 
 # Profile 360 Aggregation Layer
@@ -430,6 +431,20 @@ list when Silver data is unavailable.  All require the `read` permission on the 
 | GET    | `/v1/profile/{id}/integrations`   | `silver_server_operation_facts` | Integration and server operation facts     |
 | GET    | `/v1/profile/{id}/data-quality`   | `silver_data_quality_facts`     | Data quality and schema completeness       |
 
+### Economic intelligence sub-resource endpoints (v8.12.0+)
+
+Observation-only economic sub-resources backed by the typed domain
+repositories. Each is flag-gated by its domain's `profile360_enabled`
+setting (`404` when the domain is disabled), requires the `read`
+permission, is tenant-scoped, and serializes Decimals as strings. All
+return `{entity_id, items, summary, count, computed_at, provenance}`.
+
+| Method | Path                                   | Backing data                          | Attribution                                    |
+|--------|----------------------------------------|---------------------------------------|------------------------------------------------|
+| GET    | `/v1/profile/{id}/stablecoin`          | stablecoin observations               | entity refs / wallet ids on observations       |
+| GET    | `/v1/profile/{id}/derivatives`         | derivatives positions + fills         | trading accounts with `owner_entity_id == id`  |
+| GET    | `/v1/profile/{id}/interoperability`    | interop intents + asset legs          | initiator refs and from/to addresses           |
+
 Silver fact tables are populated asynchronously by the `SilverDispatcher` projector chain
 (`services/silver/dispatcher.py`), attached to `SDK_EVENTS_VALIDATED` via the
 `silver_fact_projector` ingestion worker. One event may fan out to several projectors
@@ -440,6 +455,29 @@ endpoint returns `source_status: "empty"` — this is correct behavior, not an e
 Communication items never contain raw addresses (tenant-scoped alias hashes with
 redacted displays only) and carry machine-activity classification so reported
 engagement and human-qualified engagement are always distinguishable.
+
+### Card-linked activity sub-resource endpoints (v8.12.0+)
+
+Card-linked (crypto-card) economic observability surfaces under
+`Profile360 → Economic Activity → Payment Rails → Card-linked Activity`.
+Gated by **both** `AETHER_CARD_LINKED_PAYMENT_RAILS_ENABLED` and
+`AETHER_CARD_LINKED_PROFILE360_ENABLED` (`404` when either is off);
+backed by `services/card_linked_payments/profile_summary.py`.
+
+| Method | Path                                              | Purpose                                                            |
+|--------|---------------------------------------------------|--------------------------------------------------------------------|
+| GET    | `/v1/profile/{id}/card-linked-activity`           | Summary, filtered flows, and the entity story (campaign → provider → top-up → spends) |
+| GET    | `/v1/profile/{id}/economic/card-linked`           | Alias of the above under the economic sub-tree                     |
+| GET    | `/v1/profile/{id}/drill/card-linked/{object_id}`  | Single-flow drilldown with evidence refs, provenance, reconciliation records |
+
+Every row carries `basis` (`topup`/`funding`/`spend`/`settlement`/`clearing`/
+`refund`/`reversal`/`mixed`/`benchmark_only`/`unknown`), `source`, and
+`confidence`; top-up and spend are never merged, and a top-up-only entity
+response includes an explicit "top-up volume is not card spend" warning.
+Filters: program/issuer/network/basis/source/confidence/chain/asset/
+campaign/journey plus `volume_min`/`volume_max`/`since`/`until`. The
+card-linked drill route is registered before the generic
+`/drill/{object_type}/{object_id}` route so it wins path matching.
 
 ---
 
