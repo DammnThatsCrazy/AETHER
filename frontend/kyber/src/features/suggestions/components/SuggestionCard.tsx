@@ -1,4 +1,6 @@
+import { useState } from 'react';
 import { Badge, Button, Card, CardContent, CardHeader, CardTitle } from '@aether/ui';
+import { TargetingEvidenceDrawer, isTargetingSuggestion } from './TargetingEvidenceDrawer';
 
 type AnyRecord = Record<string, any>;
 
@@ -28,6 +30,8 @@ export interface SuggestionCardProps {
 
 export function SuggestionCard({ suggestion, onApprove, onReject, onSuppress }: SuggestionCardProps) {
   const isActionable = suggestion.status === 'review_required';
+  const isTargeting = isTargetingSuggestion(suggestion);
+  const [evidenceOpen, setEvidenceOpen] = useState(false);
 
   return (
     <Card>
@@ -62,6 +66,14 @@ export function SuggestionCard({ suggestion, onApprove, onReject, onSuppress }: 
           <div className="text-xs text-text-muted">
             Confidence: {pct(suggestion.confidence_score)}
           </div>
+          {isTargeting && (
+            <div className="flex items-center gap-2">
+              <Badge variant="accent" size="sm">targeting</Badge>
+              <Button size="sm" variant="ghost" onClick={() => setEvidenceOpen(true)}>
+                Targeting evidence
+              </Button>
+            </div>
+          )}
           {isActionable && (onApprove || onReject || onSuppress) && (
             <div className="flex items-center gap-2 pt-1">
               {onApprove && (
@@ -77,6 +89,9 @@ export function SuggestionCard({ suggestion, onApprove, onReject, onSuppress }: 
           )}
         </div>
       </CardContent>
+      {evidenceOpen && (
+        <TargetingEvidenceDrawer suggestion={suggestion} onClose={() => setEvidenceOpen(false)} />
+      )}
     </Card>
   );
 }

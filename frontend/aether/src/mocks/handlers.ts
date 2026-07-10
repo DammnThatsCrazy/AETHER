@@ -940,6 +940,208 @@ const MOCK_AI_RECOMMENDATIONS = [
 
 const AI_INVOCATION_FILTER_KEYS = ['provider', 'model', 'status', 'task_type', 'workflow_run_id'] as const;
 
+// ── Cluster Targeting Intelligence (deterministic full evidence chain) ─────────
+// One intent → one eligibility snapshot → one observation (with exclusion
+// leakage) → cluster impacts → one export package. camelCase per the
+// @aether/shared targeting-intelligence contracts. Aether observes targeting;
+// it never executes campaigns.
+
+const MOCK_TARGETING_INTENT = {
+  id: 'ti_intent_001',
+  tenantId: 'tenant_demo_001',
+  campaignId: 'camp_spring_launch_001',
+  source: 'tenant_declared',
+  executionBoundary: 'external_execution_required',
+  executionByAether: false,
+  externalExecutionRequired: true,
+  includeClusters: ['cluster_a', 'cluster_b'],
+  referenceClusters: ['cluster_c', 'cluster_d'],
+  excludeClusters: ['cluster_z'],
+  holdoutClusters: ['cluster_h'],
+  rules: [
+    { clusterId: 'cluster_a', ruleType: 'include', evidenceRefs: [] },
+    { clusterId: 'cluster_z', ruleType: 'exclude', reasonCode: 'fraud_risk', evidenceRefs: [] },
+    { clusterId: 'cluster_h', ruleType: 'holdout', reasonCode: 'measurement_control', evidenceRefs: [] },
+  ],
+  maxHopDepth: 2,
+  graphMode: 'multi_source',
+  minIdentityConfidence: 0.7,
+  minClusterMembershipScore: 0.6,
+  minPathConfidence: 0.5,
+  minEvidenceCoverage: 0.5,
+  createdAt: '2026-07-01T09:00:00.000Z',
+  updatedAt: '2026-07-01T09:00:00.000Z',
+  evidenceRefs: [{ id: 'ev_intent_001', type: 'annotation', source: 'tenant_declared' }],
+};
+
+const MOCK_TARGETING_SNAPSHOT = {
+  snapshotId: 'ti_snap_001',
+  tenantId: 'tenant_demo_001',
+  campaignId: 'camp_spring_launch_001',
+  targetingIntentId: 'ti_intent_001',
+  asOf: '2026-07-02T00:00:00.000Z',
+  graphWatermark: 'gw_2026_07_02',
+  eligibleClusters: ['cluster_a', 'cluster_b'],
+  eligibleEntities: [],
+  excludedClusters: ['cluster_z'],
+  suppressedEntities: [],
+  holdoutClusters: ['cluster_h'],
+  identityConfidenceThreshold: 0.7,
+  clusterMembershipThreshold: 0.6,
+  pathConfidenceThreshold: 0.5,
+  evidenceCoverageThreshold: 0.5,
+  clusterMemberCounts: { cluster_a: 1240, cluster_b: 860, cluster_z: 410, cluster_h: 300 },
+  evidenceRefs: [{ id: 'ev_snap_001', type: 'annotation', source: 'eligibility_snapshot' }],
+  createdAt: '2026-07-02T00:00:00.000Z',
+};
+
+const MOCK_TARGETING_MAPPING_QUALITY = {
+  campaignId: 'camp_spring_launch_001',
+  provider: 'meta_ads',
+  mappingRate: 0.92,
+  providerSyncFreshness: 'recent',
+  unresolvedAliasCount: 14,
+  touchpointResolutionRate: 0.88,
+  identityResolutionRate: 0.81,
+  clusterAssignmentRate: 0.86,
+  qualityScore: 0.87,
+  blocksSuggestions: false,
+  reasons: [],
+  computedAt: '2026-07-08T12:00:00.000Z',
+};
+
+const MOCK_TARGETING_OBSERVATION = {
+  observationId: 'ti_obs_001',
+  tenantId: 'tenant_demo_001',
+  campaignId: 'camp_spring_launch_001',
+  targetingIntentId: 'ti_intent_001',
+  eligibilitySnapshotId: 'ti_snap_001',
+  sourceProvider: 'meta_ads',
+  sourceCampaignRef: 'meta_23851234',
+  reachedClusters: ['cluster_a', 'cluster_c', 'cluster_z'],
+  reachedEntities: [],
+  reachedIncludedClusters: ['cluster_a'],
+  reachedReferenceClusters: ['cluster_c'],
+  reachedExcludedClusters: ['cluster_z'],
+  reachedHoldoutClusters: [],
+  providerMappingQuality: MOCK_TARGETING_MAPPING_QUALITY,
+  observedAt: '2026-07-08T11:00:00.000Z',
+  computedAt: '2026-07-08T12:00:00.000Z',
+  evidenceRefs: [{ id: 'ev_obs_001', type: 'event', source: 'targeting_observation' }],
+};
+
+const MOCK_TARGETING_LEAKAGE = [
+  {
+    findingId: 'ti_leak_001',
+    tenantId: 'tenant_demo_001',
+    campaignId: 'camp_spring_launch_001',
+    targetingIntentId: 'ti_intent_001',
+    clusterId: 'cluster_z',
+    reasonCode: 'fraud_risk',
+    excludedEntityCount: 410,
+    reachedEntityCount: 37,
+    leakageRate: 0.09,
+    likelyCauses: ['provider_ignored_exclusion', 'lookalike_expansion'],
+    severity: 'high',
+    evidenceRefs: [
+      { id: 'ev_obs_001', type: 'event', source: 'targeting_observation' },
+      { id: 'ev_leak_001', type: 'annotation', source: 'exclusion_leakage_finding' },
+    ],
+    computedAt: '2026-07-08T12:00:00.000Z',
+  },
+];
+
+const MOCK_TARGETING_HOLDOUTS = [
+  {
+    holdoutId: 'ti_hold_001',
+    tenantId: 'tenant_demo_001',
+    campaignId: 'camp_spring_launch_001',
+    targetingIntentId: 'ti_intent_001',
+    clusterIds: ['cluster_h'],
+    reason: 'measurement_control',
+    contaminated: false,
+    contaminationRate: 0,
+    startAt: '2026-07-01T09:00:00.000Z',
+    evidenceRefs: [],
+  },
+];
+
+const MOCK_TARGETING_JOURNEY_DELTAS = [
+  {
+    deltaId: 'ti_delta_001',
+    tenantId: 'tenant_demo_001',
+    campaignId: 'camp_spring_launch_001',
+    clusterId: 'cluster_a',
+    comparedToClusterIds: ['cluster_c', 'cluster_d'],
+    holdoutClusterIds: ['cluster_h'],
+    beforeWindow: { start: '2026-06-24T00:00:00.000Z', end: '2026-07-01T00:00:00.000Z' },
+    afterWindow: { start: '2026-07-02T00:00:00.000Z', end: '2026-07-09T00:00:00.000Z' },
+    populationStageDeltas: { engaged: 0.12, converted: 0.04 },
+    reachedCount: 980,
+    engagedCount: 410,
+    convertedCount: 96,
+    attributedCount: 74,
+    nonProgressedCount: 570,
+    progressedElsewhereCount: 22,
+    evidenceRefs: [{ id: 'ev_delta_001', type: 'annotation', source: 'journey_delta' }],
+    computedAt: '2026-07-09T00:00:00.000Z',
+  },
+];
+
+const MOCK_TARGETING_IMPACTS = [
+  {
+    tenantId: 'tenant_demo_001',
+    campaignId: 'camp_spring_launch_001',
+    clusterId: 'cluster_a',
+    memberCount: 1240,
+    eligibleCount: 1100,
+    reachedCount: 980,
+    engagedCount: 410,
+    convertedCount: 96,
+    attributedCount: 74,
+    spendUsd: 5400.5,
+    revenueUsd: 12800.75,
+    roas: 2.37,
+    ltvDelta: 41.2,
+    complaintRate: 0.004,
+    unsubscribeRate: 0.011,
+    churnSignalRate: 0.008,
+    fraudSignalRate: 0.001,
+    overexposureScore: 0.32,
+    identityConfidence: 0.82,
+    clusterMembershipConfidence: 0.77,
+    evidenceCoverage: 0.9,
+    computedAt: '2026-07-09T00:00:00.000Z',
+    evidenceRefs: [{ id: 'ev_obs_001', type: 'event', source: 'targeting_observation' }],
+  },
+];
+
+const MOCK_TARGETING_EXPORT = {
+  exportId: 'ti_export_001',
+  tenantId: 'tenant_demo_001',
+  suggestionId: 'sugg_targeting_001',
+  targetingIntentId: 'ti_intent_001',
+  campaignId: 'camp_spring_launch_001',
+  includeClusterIds: ['cluster_a', 'cluster_b'],
+  referenceClusterIds: ['cluster_c', 'cluster_d'],
+  excludeClusterIds: ['cluster_z'],
+  holdoutClusterIds: ['cluster_h'],
+  implementationNotes: [
+    'Re-apply the exclusion list for cluster_z in your external campaign platform.',
+    'Keep cluster_h out of all audiences to preserve holdout measurement.',
+  ],
+  externalExecutionRequired: true,
+  executionByAether: false,
+  evidenceRefs: [
+    { id: 'ev_intent_001', type: 'annotation', source: 'tenant_declared' },
+    { id: 'ev_snap_001', type: 'annotation', source: 'eligibility_snapshot' },
+    { id: 'ev_obs_001', type: 'event', source: 'targeting_observation' },
+  ],
+  generatedAt: '2026-07-09T08:00:00.000Z',
+};
+
+const MOCK_TARGETING_EXPORTS = [MOCK_TARGETING_EXPORT];
+
 export const handlers = [
   http.get(`${API}/v1/me`, () => HttpResponse.json(mockProfile)),
   http.get(`${API}/v1/me/usage`, () => HttpResponse.json(mockUsage)),
@@ -1416,4 +1618,95 @@ export const handlers = [
   http.get(`${API}/v1/economic/ai/recommendations`, () =>
     HttpResponse.json({ data: { recommendations: MOCK_AI_RECOMMENDATIONS }, status: 'ok', timestamp: new Date().toISOString() }),
   ),
+
+  // ── Cluster Targeting Intelligence ────────────────────────────────────────────
+  http.get(`${API}/v1/targeting-intelligence/intents`, () =>
+    HttpResponse.json({ data: { intents: [MOCK_TARGETING_INTENT] }, status: 'ok', timestamp: new Date().toISOString() }),
+  ),
+  http.post(`${API}/v1/targeting-intelligence/intents`, async ({ request }) => {
+    const body = await request.json() as Record<string, unknown>;
+    const intent = {
+      ...MOCK_TARGETING_INTENT,
+      ...body,
+      id: 'ti_intent_new_001',
+      executionByAether: false,
+      externalExecutionRequired: true,
+    };
+    return HttpResponse.json({ data: { intent }, status: 'ok', timestamp: new Date().toISOString() });
+  }),
+  http.get(`${API}/v1/targeting-intelligence/intents/:intentId`, ({ params }) => {
+    if (params.intentId !== MOCK_TARGETING_INTENT.id) {
+      return HttpResponse.json({ message: 'Targeting intent not found', code: 'NOT_FOUND' }, { status: 404 });
+    }
+    return HttpResponse.json({ data: { intent: MOCK_TARGETING_INTENT }, status: 'ok', timestamp: new Date().toISOString() });
+  }),
+  http.post(`${API}/v1/targeting-intelligence/intents/:intentId/eligibility-snapshot`, ({ params }) =>
+    HttpResponse.json({
+      data: { snapshot: { ...MOCK_TARGETING_SNAPSHOT, targetingIntentId: String(params.intentId) } },
+      status: 'ok',
+      timestamp: new Date().toISOString(),
+    }),
+  ),
+  http.get(`${API}/v1/targeting-intelligence/snapshots`, ({ request }) => {
+    const intentId = new URL(request.url).searchParams.get('intent_id');
+    const snapshots = intentId && intentId !== MOCK_TARGETING_SNAPSHOT.targetingIntentId ? [] : [MOCK_TARGETING_SNAPSHOT];
+    return HttpResponse.json({ data: { snapshots }, status: 'ok', timestamp: new Date().toISOString() });
+  }),
+  http.get(`${API}/v1/targeting-intelligence/observations`, ({ request }) => {
+    const campaignId = new URL(request.url).searchParams.get('campaign_id');
+    const observations = campaignId && campaignId !== MOCK_TARGETING_OBSERVATION.campaignId ? [] : [MOCK_TARGETING_OBSERVATION];
+    return HttpResponse.json({ data: { observations }, status: 'ok', timestamp: new Date().toISOString() });
+  }),
+  http.get(`${API}/v1/targeting-intelligence/leakage`, ({ request }) => {
+    const campaignId = new URL(request.url).searchParams.get('campaign_id');
+    const findings = MOCK_TARGETING_LEAKAGE.filter(f => !campaignId || f.campaignId === campaignId);
+    return HttpResponse.json({ data: { findings }, status: 'ok', timestamp: new Date().toISOString() });
+  }),
+  http.get(`${API}/v1/targeting-intelligence/holdouts`, () =>
+    HttpResponse.json({ data: { holdouts: MOCK_TARGETING_HOLDOUTS }, status: 'ok', timestamp: new Date().toISOString() }),
+  ),
+  http.get(`${API}/v1/targeting-intelligence/journey-deltas`, ({ request }) => {
+    const campaignId = new URL(request.url).searchParams.get('campaign_id');
+    const journeyDeltas = MOCK_TARGETING_JOURNEY_DELTAS.filter(d => !campaignId || d.campaignId === campaignId);
+    return HttpResponse.json({ data: { journeyDeltas }, status: 'ok', timestamp: new Date().toISOString() });
+  }),
+  http.post(`${API}/v1/targeting-intelligence/exports`, async ({ request }) => {
+    const body = await request.json() as { suggestionId?: string; targetingIntentId?: string };
+    const record = {
+      ...MOCK_TARGETING_EXPORT,
+      exportId: 'ti_export_new_001',
+      suggestionId: body.suggestionId ?? null,
+      targetingIntentId: body.targetingIntentId ?? MOCK_TARGETING_EXPORT.targetingIntentId,
+    };
+    return HttpResponse.json({ data: { export: record }, status: 'ok', timestamp: new Date().toISOString() });
+  }),
+  http.get(`${API}/v1/targeting-intelligence/exports`, () =>
+    HttpResponse.json({ data: { exports: MOCK_TARGETING_EXPORTS }, status: 'ok', timestamp: new Date().toISOString() }),
+  ),
+  http.get(`${API}/v1/campaigns/:campaignId/targeting-intelligence`, ({ params }) => {
+    const matches = params.campaignId === MOCK_TARGETING_INTENT.campaignId;
+    return HttpResponse.json({
+      data: {
+        campaignId: params.campaignId,
+        intents: matches ? [MOCK_TARGETING_INTENT] : [],
+        latestSnapshots: matches ? [MOCK_TARGETING_SNAPSHOT] : [],
+        observations: matches ? [MOCK_TARGETING_OBSERVATION] : [],
+        leakageFindings: matches ? MOCK_TARGETING_LEAKAGE : [],
+        mappingQuality: matches ? MOCK_TARGETING_MAPPING_QUALITY : null,
+        executionByAether: false,
+        externalExecutionRequired: true,
+      },
+      status: 'ok',
+      timestamp: new Date().toISOString(),
+    });
+  }),
+  http.get(`${API}/v1/clusters/:clusterId/targeting-impact`, ({ params }) => {
+    const impact = MOCK_TARGETING_IMPACTS.find(i => i.clusterId === params.clusterId) ?? null;
+    const journeyDeltas = MOCK_TARGETING_JOURNEY_DELTAS.filter(d => d.clusterId === params.clusterId);
+    return HttpResponse.json({
+      data: { clusterId: params.clusterId, impact, journeyDeltas },
+      status: 'ok',
+      timestamp: new Date().toISOString(),
+    });
+  }),
 ];

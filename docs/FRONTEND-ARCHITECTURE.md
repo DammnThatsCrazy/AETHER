@@ -13,7 +13,7 @@ source_files:
 canonical_owner: frontend@aether
 estimated_read_minutes: 35
 toc_depth: 4
-last_synced_commit: c328184
+last_synced_commit: ac040fa
 ---
 
 # Aether Frontend Architecture & Designer Handoff
@@ -129,10 +129,15 @@ The intelligence graph is the primary surface. Entity profiles are drilldowns fr
 /ai-efficiency                   → AI efficiency dashboard (flag-gated; proposals only)
 ```
 
+Campaign360 gains a **Targeting Intelligence** tab and Cluster360 a
+**Targeting Impact** tab (flag-gated; observation-only — "Aether does not
+execute this campaign"); the suggestion feed renders targeting cards with an
+implementation-package export action.
+
 Kyber additionally exposes `/agent-telemetry` (external agent telemetry fleet
 diagnostics; gated by the `enableExternalAgentTelemetry` feature flag),
 `/payment-rails` (payment rail fleet health; gated by `enablePaymentRails`),
-and `/ai-efficiency` (AI efficiency fleet health; gated by `enableAiEfficiency`).
+and `/ai-efficiency` (AI efficiency fleet health; gated by `enableAiEfficiency`), and `/targeting` (targeting fleet health, leakage queue, recompute controls; gated by `enableTargetingIntelligence`).
 
 - **Desktop (≥1280px):** Graph canvas + side panel (40% width) visible simultaneously
 - **Tablet (768–1279px):** Panel overlays graph as a drawer

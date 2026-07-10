@@ -516,6 +516,101 @@ const MOCK_AI_EFFICIENCY_TENANTS: Record<string, unknown> = {
   },
 };
 
+// ── Cluster Targeting Intelligence (fleet diagnostics, deterministic) ─────────
+// camelCase per the targeting-intelligence contracts. Aether observes cluster
+// targeting; recompute never mutates external campaign platforms.
+
+const MOCK_TARGETING_FLEET_HEALTH = {
+  tenantsObserved: 2,
+  intentCount: 3,
+  snapshotCount: 5,
+  leakageBySeverity: { critical: 1, high: 2, medium: 1 },
+  intentsBySource: { tenant_declared: 2, suggestion_generated: 1 },
+};
+
+const MOCK_TARGETING_LEAKAGE_QUEUE = [
+  {
+    findingId: 'ti_leak_001',
+    tenantId: 'tenant_001',
+    campaignId: 'camp_spring_launch_001',
+    clusterId: 'cluster_z',
+    severity: 'critical',
+    leakageRate: 0.21,
+    reasonCode: 'fraud_risk',
+    likelyCauses: ['provider_ignored_exclusion', 'lookalike_expansion'],
+    computedAt: '2026-07-08T12:00:00.000Z',
+  },
+  {
+    findingId: 'ti_leak_002',
+    tenantId: 'tenant_002',
+    campaignId: 'camp_renewal_005',
+    clusterId: 'cluster_t',
+    severity: 'high',
+    leakageRate: 0.09,
+    reasonCode: 'consent_blocked',
+    likelyCauses: ['identity_resolved_after_launch'],
+    computedAt: '2026-07-07T09:00:00.000Z',
+  },
+];
+
+const MOCK_TARGETING_MAPPING_QUALITY = [
+  {
+    tenantId: 'tenant_002',
+    campaignId: 'camp_renewal_005',
+    provider: 'google_ads',
+    qualityScore: 0.34,
+    blocksSuggestions: true,
+    providerSyncFreshness: 'stale',
+    reasons: ['unresolved provider aliases above threshold'],
+    computedAt: '2026-07-07T09:00:00.000Z',
+  },
+  {
+    tenantId: 'tenant_001',
+    campaignId: 'camp_spring_launch_001',
+    provider: 'meta_ads',
+    qualityScore: 0.87,
+    blocksSuggestions: false,
+    providerSyncFreshness: 'recent',
+    reasons: [],
+    computedAt: '2026-07-08T12:00:00.000Z',
+  },
+];
+
+const MOCK_TARGETING_RELEASE_READINESS = {
+  ready: false,
+  checks: [
+    { name: 'contracts_importable', passed: true, detail: '' },
+    { name: 'non_execution_invariant', passed: true, detail: '' },
+    { name: 'policy_deterministic_consent_wins', passed: true, detail: '' },
+    { name: 'stores_reachable', passed: false, detail: 'targeting_audit store unreachable' },
+  ],
+  flags: {
+    enabled: true,
+    exports_enabled: true,
+    ooda_suggestions_enabled: false,
+    kyber_enabled: true,
+  },
+};
+
+const MOCK_TARGETING_AUDIT = [
+  {
+    id: 'aud_ti_001',
+    tenantId: 'tenant_001',
+    action: 'snapshot_recomputed',
+    actor: 'kyber-operator',
+    detail: { intentId: 'ti_intent_001', asOf: '2026-07-02T00:00:00.000Z' },
+    occurredAt: '2026-07-09T10:00:00.000Z',
+  },
+  {
+    id: 'aud_ti_002',
+    tenantId: 'tenant_002',
+    action: 'leakage_recomputed',
+    actor: 'kyber-operator',
+    detail: { observationId: 'ti_obs_005' },
+    occurredAt: '2026-07-08T16:00:00.000Z',
+  },
+];
+
 // ── Handlers ───────────────────────────────────────────────────────────────────
 
 export const handlers = [
@@ -763,4 +858,41 @@ export const handlers = [
     }
     return ok(drilldown);
   }),
+
+  // Cluster Targeting Intelligence — fleet diagnostics (deterministic fixtures)
+  http.get(`${API}/v1/admin/kyber/targeting/health`, () => ok(MOCK_TARGETING_FLEET_HEALTH)),
+  http.get(`${API}/v1/admin/kyber/targeting/leakage-queue`, ({ request }) => {
+    const severity = new URL(request.url).searchParams.get('severity');
+    const queue = severity
+      ? MOCK_TARGETING_LEAKAGE_QUEUE.filter(f => f.severity === severity)
+      : MOCK_TARGETING_LEAKAGE_QUEUE;
+    return ok({ queue });
+  }),
+  http.get(`${API}/v1/admin/kyber/targeting/mapping-quality`, () =>
+    ok({ diagnostics: MOCK_TARGETING_MAPPING_QUALITY }),
+  ),
+  http.post(`${API}/v1/admin/kyber/targeting/recompute`, async ({ request }) => {
+    const body = await request.json() as { tenantId?: string; intentId?: string; asOf?: string; observationId?: string };
+    if (body.intentId && body.asOf) {
+      return ok({
+        recomputed: 'snapshot',
+        snapshot: {
+          snapshotId: 'ti_snap_recomputed_001',
+          tenantId: body.tenantId,
+          targetingIntentId: body.intentId,
+          asOf: body.asOf,
+          createdAt: '2026-07-09T10:00:00.000Z',
+        },
+      });
+    }
+    if (body.observationId) {
+      return ok({ recomputed: 'leakage', findings: MOCK_TARGETING_LEAKAGE_QUEUE.slice(0, 1) });
+    }
+    return HttpResponse.json(
+      { message: 'Provide intentId+asOf (snapshot) or observationId (leakage)', code: 'BAD_REQUEST' },
+      { status: 400 },
+    );
+  }),
+  http.get(`${API}/v1/admin/kyber/targeting/release-readiness`, () => ok(MOCK_TARGETING_RELEASE_READINESS)),
+  http.get(`${API}/v1/admin/kyber/targeting/audit`, () => ok({ audit: MOCK_TARGETING_AUDIT })),
 ];

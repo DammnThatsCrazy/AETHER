@@ -35,6 +35,9 @@ const NAV_ITEMS: NavItem[] = [
   ...(isFeatureEnabled('enableAiEfficiency')
     ? [{ path: '/ai-efficiency', label: 'AI Efficiency', glyph: '∴' }]
     : []),
+  ...(isFeatureEnabled('enableTargetingIntelligence')
+    ? [{ path: '/targeting', label: 'Targeting', glyph: '⊙' }]
+    : []),
   { path: '/dune-feeder', label: 'Dune Feeder', glyph: '⬡' },
   { path: '/revops',          label: 'RevOps',          glyph: '₿' },
   { path: '/sales-readiness', label: 'Sales Ready', glyph: '$' },

@@ -4537,6 +4537,9 @@
       "canonical_owner": "platform@aether"
     },
     {
+      "path": "docs/source-of-truth/CLUSTER_TARGETING_INTELLIGENCE.md"
+    },
+    {
       "path": "docs/source-of-truth/CONNECTOR_LAKE_POLICY.md",
       "title": "Connector Lake Policy",
       "slug": "architecture/connector-lake-policy",
@@ -4729,6 +4732,9 @@
       "status": "stable",
       "since_version": "9.0.0",
       "canonical_owner": "identity@aether"
+    },
+    {
+      "path": "docs/source-of-truth/KYBER_ONE_PERSON_OPERATIONS.md"
     },
     {
       "path": "docs/source-of-truth/OLYMPUS_PROVIDER_SOURCE_CATALOG.md",

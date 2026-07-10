@@ -946,6 +946,31 @@ def create_app() -> FastAPI:
     if not (ai_econ_flags.enabled or ai_econ_flags.kyber_enabled):
         logger.info("AI Economics: disabled (AETHER_AI_OUTCOME_EFFICIENCY_ENABLED=false)")
 
+    # ── Cluster Targeting Intelligence (observation-first; never executes campaigns) ──
+    targeting_flags = settings.targeting_intelligence
+    if targeting_flags.enabled:
+        from services.targeting_intelligence.routes import (
+            router as targeting_router,
+            scoped_router as targeting_scoped_router,
+        )
+        app.include_router(targeting_router)
+        app.include_router(targeting_scoped_router)
+        logger.info(
+            "Targeting Intelligence: routes mounted (/v1/targeting-intelligence + "
+            "campaign/cluster scoped reads)"
+        )
+    if targeting_flags.enabled or targeting_flags.kyber_enabled:
+        from services.targeting_intelligence.kyber_routes import (
+            kyber_router as targeting_kyber_router,
+        )
+        app.include_router(targeting_kyber_router)
+        logger.info("Targeting Intelligence: Kyber routes mounted (/v1/admin/kyber/targeting)")
+    if not (targeting_flags.enabled or targeting_flags.kyber_enabled):
+        logger.info(
+            "Targeting Intelligence: disabled "
+            "(AETHER_CLUSTER_TARGETING_INTELLIGENCE_ENABLED=false)"
+        )
+
     # ── External Agent Telemetry Plane (observation-only; no marketplace, no execution) ──
     telemetry_flags = settings.external_agent_telemetry
     if telemetry_flags.registry_enabled:
