@@ -4734,6 +4734,9 @@
       "canonical_owner": "identity@aether"
     },
     {
+      "path": "docs/source-of-truth/KYBER_ONE_PERSON_OPERATIONS.md"
+    },
+    {
       "path": "docs/source-of-truth/OLYMPUS_PROVIDER_SOURCE_CATALOG.md",
       "title": "Olympus Provider Source Catalog",
       "slug": "architecture/olympus-provider-source-catalog",
