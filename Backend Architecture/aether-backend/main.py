@@ -218,6 +218,8 @@ from services.consent.routes import router as consent_router
 from services.notification_intelligence.routes import router as notification_router
 from services.jobs.routes import router as jobs_router
 from services.jobs.kyber_routes import router as jobs_kyber_router
+from services.export import register_export_handlers
+from services.export.routes import router as exports_router
 from services.admin.routes import router as admin_router
 from services.traffic.routes import router as traffic_router
 from services.fraud.routes import router as fraud_router
@@ -423,6 +425,10 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     except ImportError:
         pass  # Noesis module not present in this build
 
+    # Job handlers must be registered before the supervised job worker starts
+    # claiming, or already-enqueued export jobs would fail as unknown types.
+    register_export_handlers()
+
     # Supervised long-running loop workers: event replay, billing overage
     # cron, notification SLA expiry, Dune polling (canonical scheduler only —
     # the legacy services.integrations.dune_feeder loop is no longer started),
@@ -511,6 +517,7 @@ def create_app() -> FastAPI:
     app.include_router(notification_router)
     app.include_router(jobs_router)          # /v1/jobs — durable job control plane
     app.include_router(jobs_kyber_router)    # /v1/kyber/jobs — operator job timeline
+    app.include_router(exports_router)       # /v1/exports — durable artifact exports
     app.include_router(admin_router)
     app.include_router(traffic_router)
     app.include_router(fraud_router)
