@@ -1,3 +1,17 @@
+---
+title: Derivatives Event Registry
+slug: source-of-truth/derivatives-event-registry
+section: source-of-truth
+visibility: I
+audience: [architect, dev-senior, ai]
+status: stable
+since_version: "8.12.0"
+source_files:
+  - packages/shared/contracts/event-registry.json
+  - Backend Architecture/aether-backend/services/silver/projectors/derivatives_projector.py
+canonical_owner: platform@aether
+last_synced_commit: 1f19190
+---
 # Derivatives Event Registry
 
 Derivatives uses two event layers.

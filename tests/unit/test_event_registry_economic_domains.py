@@ -1,0 +1,107 @@
+"""Cross-cutting registry integrity for the 8.12.0 economic domains.
+
+Guards the wiring between the event registry (single source of truth),
+the consent registry, the silver projector layer, and the web SDK
+consent map — the four places an event must agree for capture,
+enforcement, and projection to work end to end.
+"""
+
+from __future__ import annotations
+
+import json
+import pathlib
+import sys
+
+REPO_ROOT = pathlib.Path(__file__).resolve().parents[2]
+BACKEND = REPO_ROOT / "Backend Architecture" / "aether-backend"
+if str(BACKEND) not in sys.path:
+    sys.path.insert(0, str(BACKEND))
+
+EVENT_REGISTRY = REPO_ROOT / "packages" / "shared" / "contracts" / "event-registry.json"
+CONSENT_REGISTRY = REPO_ROOT / "packages" / "shared" / "contracts" / "consent-registry.json"
+WEB_CONSENT_MAP = REPO_ROOT / "packages" / "web" / "src" / "core" / "event-queue.ts"
+
+ECONOMIC_FAMILIES = {"stablecoin", "derivatives", "interop"}
+
+FAMILY_TO_SILVER = {
+    "stablecoin": "stablecoin_facts",
+    "derivatives": "derivatives_facts",
+    "interop": "interop_facts",
+}
+
+FAMILY_TO_PURPOSE = {
+    "stablecoin": "economic_observability",
+    "derivatives": "financial_activity",
+    "interop": "cross_chain_observability",
+}
+
+
+def _events() -> list[dict]:
+    registry = json.loads(EVENT_REGISTRY.read_text())
+    events = registry["events"] if isinstance(registry, dict) else registry
+    return [e for e in events if e.get("family") in ECONOMIC_FAMILIES]
+
+
+def _new_events() -> list[dict]:
+    return [e for e in _events() if e.get("introducedVersion") == "8.12.0"]
+
+
+def test_economic_event_count_and_families():
+    new = _new_events()
+    assert len(new) == 110, f"expected 110 new economic events, found {len(new)}"
+    by_family: dict[str, int] = {}
+    for event in new:
+        by_family[event["family"]] = by_family.get(event["family"], 0) + 1
+    assert by_family == {"stablecoin": 30, "derivatives": 41, "interop": 39}, by_family
+
+
+def test_economic_events_are_well_formed():
+    for event in _new_events():
+        name = event["type"]
+        assert event.get("status") == "active", name
+        assert event.get("privacyClass"), name
+        assert event.get("retentionClass"), name
+        assert event.get("description"), name
+        assert event.get("requiredPurposes"), name
+
+
+def test_required_purposes_exist_in_consent_registry():
+    consent = json.loads(CONSENT_REGISTRY.read_text())
+    purposes = consent["purposes"] if isinstance(consent, dict) else consent
+    known = {p["key"] if isinstance(p, dict) else p for p in purposes}
+    for event in _new_events():
+        for purpose in event["requiredPurposes"]:
+            assert purpose in known, f"{event['type']} requires unknown purpose {purpose}"
+
+
+def test_family_purposes_match_domain_contracts():
+    for event in _new_events():
+        expected = FAMILY_TO_PURPOSE[event["family"]]
+        assert expected in event["requiredPurposes"], (
+            f"{event['type']} ({event['family']}) missing {expected}"
+        )
+
+
+def test_silver_projection_tokens_map_to_registered_projectors():
+    from services.silver.dispatcher import _ALL_PROJECTORS
+
+    handled: set[str] = set()
+    for projector in _ALL_PROJECTORS:
+        handled.update(projector.handles)
+
+    for event in _new_events():
+        token = event.get("silverProjection")
+        if not token:
+            continue
+        assert token == FAMILY_TO_SILVER[event["family"]], event["type"]
+        assert event["type"] in handled, (
+            f"{event['type']} declares silverProjection={token} but no "
+            f"registered projector handles it"
+        )
+
+
+def test_web_sdk_consent_map_covers_all_economic_events():
+    content = WEB_CONSENT_MAP.read_text()
+    # Map entries are unquoted identifier keys: `event_name: 'purpose',`
+    missing = [e["type"] for e in _new_events() if f"{e['type']}:" not in content]
+    assert not missing, f"events missing from web SDK consent map: {missing[:10]}"

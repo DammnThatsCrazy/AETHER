@@ -1,7 +1,7 @@
 <!-- DO NOT EDIT — generated from packages/shared/contracts/event-registry.json -->
 <!-- Run: python scripts/generate_contracts.py -->
 
-# Aether Event Registry (268 types, contract v8.12.0)
+# Aether Event Registry (378 types, contract v8.12.0)
 
 | Event Type | Family | Required Purposes | Privacy Class | Description |
 |---|---|---|---|---|
@@ -273,3 +273,113 @@
 | `trade_approval_resolved` | `derivatives` | financial_activity | sensitive_financial | Human trade approval approved or rejected — observation only |
 | `risk_policy_updated` | `derivatives` | financial_activity | governance | Risk policy updated for a trading account — requires financial_activity opt-in |
 | `human_trade_override_recorded` | `derivatives` | financial_activity | sensitive_financial | Human manually overrode an agent trade decision — observation only; execution_by_aether is always false |
+| `stablecoin_transfer_observed` | `stablecoin` | economic_observability | financial | Stablecoin transfer observed on-chain or via provider evidence |
+| `stablecoin_payment_observed` | `stablecoin` | economic_observability | financial | Stablecoin payment observed (transfer classified as payment) |
+| `stablecoin_mint_observed` | `stablecoin` | economic_observability | financial | Stablecoin mint observed |
+| `stablecoin_burn_observed` | `stablecoin` | economic_observability | financial | Stablecoin burn observed |
+| `stablecoin_bridge_outbound_observed` | `stablecoin` | economic_observability | financial | Stablecoin bridge departure leg observed |
+| `stablecoin_bridge_inbound_observed` | `stablecoin` | economic_observability | financial | Stablecoin bridge arrival leg observed |
+| `stablecoin_swap_observed` | `stablecoin` | economic_observability | financial | Stablecoin swap observed |
+| `stablecoin_x402_settlement_observed` | `stablecoin` | economic_observability | financial | x402 settlement observed in stablecoin |
+| `stablecoin_treasury_movement_observed` | `stablecoin` | economic_observability | financial | Treasury stablecoin movement observed |
+| `stablecoin_payout_observed` | `stablecoin` | economic_observability | financial | Stablecoin payout observed |
+| `stablecoin_venue_deposit_observed` | `stablecoin` | economic_observability | financial | Stablecoin deposit to a venue observed |
+| `stablecoin_venue_withdrawal_observed` | `stablecoin` | economic_observability | financial | Stablecoin withdrawal from a venue observed |
+| `stablecoin_balance_snapshot_observed` | `stablecoin` | economic_observability | financial | Wallet or account stablecoin balance snapshot observed |
+| `stablecoin_supply_snapshot_observed` | `stablecoin` | economic_observability | governance | Deployment supply snapshot observed |
+| `stablecoin_holder_concentration_observed` | `stablecoin` | economic_observability | governance | Holder concentration metric observed for a deployment |
+| `stablecoin_valuation_observed` | `stablecoin` | economic_observability | governance | Stablecoin USD valuation and peg deviation observed |
+| `stablecoin_depeg_detected` | `stablecoin` | economic_observability | governance | Peg deviation beyond threshold detected |
+| `stablecoin_depeg_resolved` | `stablecoin` | economic_observability | governance | Previously detected peg deviation resolved |
+| `stablecoin_finality_confirmed` | `stablecoin` | economic_observability | financial | Observation crossed the chain confirmation horizon |
+| `stablecoin_reorg_detected` | `stablecoin` | economic_observability | financial | Chain reorganization invalidated provisional observations |
+| `stablecoin_observation_corrected` | `stablecoin` | economic_observability | financial | Correction row appended for a prior observation |
+| `stablecoin_reconciliation_run_completed` | `stablecoin` | economic_observability | governance | Stablecoin reconciliation run completed |
+| `stablecoin_reconciliation_variance_detected` | `stablecoin` | economic_observability | financial | Reconciliation variance detected between sources |
+| `stablecoin_reconciliation_variance_resolved` | `stablecoin` | economic_observability | financial | Reconciliation variance resolved |
+| `stablecoin_asset_registered` | `stablecoin` | economic_observability | governance | Canonical stablecoin asset registered |
+| `stablecoin_deployment_registered` | `stablecoin` | economic_observability | governance | Stablecoin deployment registered for a chain |
+| `stablecoin_support_asserted` | `stablecoin` | economic_observability | governance | Entity support capability asserted for a deployment |
+| `stablecoin_support_revoked` | `stablecoin` | economic_observability | governance | Entity support capability revoked or degraded |
+| `stablecoin_flow_aggregate_materialized` | `stablecoin` | economic_observability | governance | Windowed stablecoin flow aggregate materialized |
+| `stablecoin_checkpoint_advanced` | `stablecoin` | economic_observability | governance | Stablecoin finality checkpoint advanced |
+| `derivatives_venue_registered` | `derivatives` | financial_activity | governance | Trading venue registered in the canonical registry |
+| `derivatives_venue_deployment_registered` | `derivatives` | financial_activity | governance | Venue deployment registered |
+| `derivatives_instrument_registered` | `derivatives` | financial_activity | governance | Canonical derivative instrument registered |
+| `derivatives_market_registered` | `derivatives` | financial_activity | governance | Venue market registered and resolved to an instrument |
+| `derivatives_strategy_registered` | `derivatives` | financial_activity | financial | Trading strategy registered |
+| `derivatives_strategy_version_registered` | `derivatives` | financial_activity | financial | Trading strategy version registered (versions never overwrite) |
+| `derivatives_risk_policy_registered` | `derivatives` | financial_activity | governance | Risk policy registered or revised |
+| `derivatives_account_linked` | `derivatives` | financial_activity | financial | Read-only trading account link observed |
+| `derivatives_account_link_revoked` | `derivatives` | financial_activity | financial | Trading account link revoked |
+| `derivatives_balance_snapshot_observed` | `derivatives` | financial_activity | financial | Account balance snapshot observed |
+| `derivatives_collateral_change_observed` | `derivatives` | financial_activity | financial | Collateral change observed |
+| `derivatives_margin_snapshot_observed` | `derivatives` | financial_activity | financial | Margin state snapshot observed |
+| `derivatives_order_observed` | `derivatives` | financial_activity | financial | Order observed from venue or tenant evidence |
+| `derivatives_order_updated_observed` | `derivatives` | financial_activity | financial | Order state update observed |
+| `derivatives_order_cancelled_observed` | `derivatives` | financial_activity | financial | Order cancellation observed |
+| `derivatives_order_rejected_observed` | `derivatives` | financial_activity | financial | Order rejection observed |
+| `derivatives_order_expired_observed` | `derivatives` | financial_activity | financial | Order expiry observed |
+| `derivatives_fill_observed` | `derivatives` | financial_activity | financial | Trade fill observed |
+| `derivatives_fill_corrected` | `derivatives` | financial_activity | financial | Correction row appended for a prior fill |
+| `derivatives_position_opened_observed` | `derivatives` | financial_activity | sensitive_financial | Position opening observed |
+| `derivatives_position_increased_observed` | `derivatives` | financial_activity | sensitive_financial | Position increase observed |
+| `derivatives_position_reduced_observed` | `derivatives` | financial_activity | sensitive_financial | Position reduction observed |
+| `derivatives_position_closed_observed` | `derivatives` | financial_activity | sensitive_financial | Position close observed |
+| `derivatives_position_liquidated_observed` | `derivatives` | financial_activity | sensitive_financial | Position liquidation observed |
+| `derivatives_position_adl_observed` | `derivatives` | financial_activity | sensitive_financial | Auto-deleveraging event observed |
+| `derivatives_position_settled_observed` | `derivatives` | financial_activity | sensitive_financial | Position settlement observed |
+| `derivatives_position_corrected` | `derivatives` | financial_activity | sensitive_financial | Correction row appended for a prior position fact |
+| `derivatives_funding_payment_observed` | `derivatives` | financial_activity | financial | Funding payment observed |
+| `derivatives_fee_observed` | `derivatives` | financial_activity | financial | Trading fee observed |
+| `derivatives_pnl_snapshot_materialized` | `derivatives` | financial_activity | sensitive_financial | Realized/unrealized P&L snapshot materialized |
+| `derivatives_exposure_snapshot_materialized` | `derivatives` | financial_activity | sensitive_financial | Cross-venue exposure snapshot materialized |
+| `derivatives_price_observation_recorded` | `derivatives` | financial_activity | governance | Mark/index/oracle price observation recorded |
+| `derivatives_market_status_changed` | `derivatives` | financial_activity | governance | Market status change observed |
+| `derivatives_stream_gap_detected` | `derivatives` | financial_activity | governance | Market stream sequence gap detected |
+| `derivatives_stream_gap_recovered` | `derivatives` | financial_activity | governance | Market stream sequence gap recovered |
+| `derivatives_stream_checkpoint_advanced` | `derivatives` | financial_activity | governance | Stream/connector checkpoint advanced |
+| `derivatives_adapter_conformance_run` | `derivatives` | financial_activity | governance | Adapter conformance suite executed |
+| `derivatives_reconciliation_run_completed` | `derivatives` | financial_activity | governance | Derivatives reconciliation run completed |
+| `derivatives_reconciliation_variance_detected` | `derivatives` | financial_activity | financial | Reconciliation variance detected |
+| `derivatives_reconciliation_variance_resolved` | `derivatives` | financial_activity | financial | Reconciliation variance resolved |
+| `derivatives_risk_threshold_breached` | `derivatives` | financial_activity | sensitive_financial | Configured risk threshold breached (observation only) |
+| `interop_provider_registered` | `interop` | cross_chain_observability | governance | Interoperability provider registered |
+| `interop_gateway_registered` | `interop` | cross_chain_observability | governance | Provider gateway registered on a network |
+| `interop_path_registered` | `interop` | cross_chain_observability | governance | Cross-network path registered |
+| `interop_application_registered` | `interop` | cross_chain_observability | governance | Cross-network application registered |
+| `interop_verification_actor_registered` | `interop` | cross_chain_observability | governance | Verification actor registered |
+| `interop_message_discovered` | `interop` | cross_chain_observability | financial | Cross-network message discovered |
+| `interop_message_sent_observed` | `interop` | cross_chain_observability | financial | Message dispatch observed on source network |
+| `interop_message_source_confirmed` | `interop` | cross_chain_observability | financial | Source transaction crossed the confirmation horizon |
+| `interop_message_verification_observed` | `interop` | cross_chain_observability | financial | Verification observation recorded |
+| `interop_message_verified` | `interop` | cross_chain_observability | financial | Message verification completed |
+| `interop_message_delivery_attempt_observed` | `interop` | cross_chain_observability | financial | Delivery attempt observed |
+| `interop_message_delivered` | `interop` | cross_chain_observability | financial | Message delivery observed on destination network |
+| `interop_message_executed_observed` | `interop` | cross_chain_observability | financial | Destination application execution observed |
+| `interop_message_settled` | `interop` | cross_chain_observability | financial | Message reached settled terminal state |
+| `interop_message_failed` | `interop` | cross_chain_observability | financial | Message failed |
+| `interop_message_timeout` | `interop` | cross_chain_observability | financial | Message timed out |
+| `interop_message_expired` | `interop` | cross_chain_observability | financial | Message expired |
+| `interop_message_cancelled` | `interop` | cross_chain_observability | financial | Message cancelled |
+| `interop_message_refunded_observed` | `interop` | cross_chain_observability | financial | Refund observed for a failed or expired message |
+| `interop_message_recovered` | `interop` | cross_chain_observability | financial | Previously failed message recovered |
+| `interop_message_reorged` | `interop` | cross_chain_observability | financial | Chain reorganization invalidated message evidence |
+| `interop_message_corrected` | `interop` | cross_chain_observability | financial | Correction row appended for a prior message fact |
+| `interop_message_correlated` | `interop` | cross_chain_observability | governance | Source and destination legs correlated by canonical reference |
+| `interop_intent_observed` | `interop` | cross_chain_observability | financial | Cross-network intent observed |
+| `interop_intent_fulfilled_observed` | `interop` | cross_chain_observability | financial | Intent fulfillment observed |
+| `interop_asset_leg_locked_observed` | `interop` | cross_chain_observability | financial | Asset lock leg observed |
+| `interop_asset_leg_burned_observed` | `interop` | cross_chain_observability | financial | Asset burn leg observed |
+| `interop_asset_leg_minted_observed` | `interop` | cross_chain_observability | financial | Asset mint leg observed |
+| `interop_asset_leg_released_observed` | `interop` | cross_chain_observability | financial | Asset release leg observed |
+| `interop_fee_observed` | `interop` | cross_chain_observability | financial | Cross-network fee observed |
+| `interop_security_policy_snapshot_recorded` | `interop` | cross_chain_observability | governance | Security policy snapshot captured for a path |
+| `interop_security_policy_changed` | `interop` | cross_chain_observability | governance | Security policy drift detected between snapshots |
+| `interop_verification_quorum_observed` | `interop` | cross_chain_observability | governance | Verification quorum composition observed |
+| `interop_provider_checkpoint_advanced` | `interop` | cross_chain_observability | governance | Provider scan checkpoint advanced |
+| `interop_stream_gap_detected` | `interop` | cross_chain_observability | governance | Provider observation gap detected |
+| `interop_stream_gap_recovered` | `interop` | cross_chain_observability | governance | Provider observation gap recovered |
+| `interop_reconciliation_run_completed` | `interop` | cross_chain_observability | governance | Interop reconciliation run completed |
+| `interop_reconciliation_variance_detected` | `interop` | cross_chain_observability | financial | Reconciliation variance detected (incl. provider disagreement) |
+| `interop_reconciliation_variance_resolved` | `interop` | cross_chain_observability | financial | Reconciliation variance resolved |

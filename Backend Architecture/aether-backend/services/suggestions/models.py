@@ -60,6 +60,10 @@ class SuggestionClass(str, Enum):
     NOTIFICATION        = "notification"
     INVESTIGATION       = "investigation"
     GENERAL_INTELLIGENCE = "general_intelligence"
+    STABLECOIN_DEPEG    = "stablecoin_depeg"
+    DERIVATIVES_RECONCILIATION = "derivatives_reconciliation"
+    DERIVATIVES_RISK    = "derivatives_risk"
+    INTEROP_DELIVERY_HEALTH = "interop_delivery_health"
 
 
 class SuggestionSource(str, Enum):

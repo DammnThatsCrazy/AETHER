@@ -1,3 +1,4 @@
+-- SUPERSEDED: adopted into Alembic as revision 20260708_deriv_adopt (alembic/versions/20260708_derivatives_foundation_adoption.py). Do not apply directly.
 -- Aether Derivatives Intelligence PR1 foundation.
 -- Read-only observational bounded domain: execution_by_aether is fail-closed false.
 

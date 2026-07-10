@@ -259,6 +259,56 @@ export interface Profile360SubResources {
   readonly integrations?: SilverIntegrationsResponse;
   /** Data quality and schema completeness from silver_data_quality_facts */
   readonly data_quality?: DataQualityResponse;
+
+  // ── Economic + cross-chain intelligence dimensions (v8.12.0+) ─────────────
+  /** Stablecoin observation facts (GET /v1/profile/{id}/stablecoin) */
+  readonly stablecoin_activity?: StablecoinActivityResponse;
+  /** Derivatives observation facts (GET /v1/profile/{id}/derivatives) */
+  readonly derivatives_trading?: DerivativesTradingResponse;
+  /** Cross-network message facts (GET /v1/profile/{id}/interoperability) */
+  readonly interop_activity?: InteropActivityResponse;
+}
+
+/** Stablecoin sub-resource envelope: observation items + flow summary. */
+export interface StablecoinActivityResponse {
+  readonly entity_id: string;
+  readonly items: readonly Record<string, unknown>[];
+  readonly summary: {
+    readonly observation_count: number;
+    readonly finalized_count: number;
+    readonly assets: readonly string[];
+  };
+  readonly next_cursor?: string | null;
+  readonly count: number;
+  readonly computed_at?: string;
+}
+
+/** Derivatives sub-resource envelope: observation items + exposure summary. */
+export interface DerivativesTradingResponse {
+  readonly entity_id: string;
+  readonly items: readonly Record<string, unknown>[];
+  readonly summary: {
+    readonly fact_count: number;
+    readonly accounts: readonly string[];
+    readonly markets: readonly string[];
+  };
+  readonly next_cursor?: string | null;
+  readonly count: number;
+  readonly computed_at?: string;
+}
+
+/** Interoperability sub-resource envelope: message facts + delivery summary. */
+export interface InteropActivityResponse {
+  readonly entity_id: string;
+  readonly items: readonly Record<string, unknown>[];
+  readonly summary: {
+    readonly fact_count: number;
+    readonly providers: readonly string[];
+    readonly paths: readonly string[];
+  };
+  readonly next_cursor?: string | null;
+  readonly count: number;
+  readonly computed_at?: string;
 }
 
 // ── Canonical response ────────────────────────────────────────────────────────

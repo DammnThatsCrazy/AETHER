@@ -178,6 +178,46 @@ public enum AetherEventType: String, Codable, CaseIterable {
     case trading_agent_enabled, trading_agent_disabled
     case trade_intent_created, trade_approval_requested, trade_approval_resolved
     case risk_policy_updated, human_trade_override_recorded
+    // Stablecoin intelligence family (explicit opt-in)
+    case stablecoin_transfer_observed, stablecoin_payment_observed, stablecoin_mint_observed
+    case stablecoin_burn_observed, stablecoin_bridge_outbound_observed, stablecoin_bridge_inbound_observed
+    case stablecoin_swap_observed, stablecoin_x402_settlement_observed, stablecoin_treasury_movement_observed
+    case stablecoin_payout_observed, stablecoin_venue_deposit_observed, stablecoin_venue_withdrawal_observed
+    case stablecoin_balance_snapshot_observed, stablecoin_supply_snapshot_observed, stablecoin_holder_concentration_observed
+    case stablecoin_valuation_observed, stablecoin_depeg_detected, stablecoin_depeg_resolved
+    case stablecoin_finality_confirmed, stablecoin_reorg_detected, stablecoin_observation_corrected
+    case stablecoin_reconciliation_run_completed, stablecoin_reconciliation_variance_detected, stablecoin_reconciliation_variance_resolved
+    case stablecoin_asset_registered, stablecoin_deployment_registered, stablecoin_support_asserted
+    case stablecoin_support_revoked, stablecoin_flow_aggregate_materialized, stablecoin_checkpoint_advanced
+    // Derivatives intelligence family (explicit opt-in)
+    case derivatives_venue_registered, derivatives_venue_deployment_registered, derivatives_instrument_registered
+    case derivatives_market_registered, derivatives_strategy_registered, derivatives_strategy_version_registered
+    case derivatives_risk_policy_registered, derivatives_account_linked, derivatives_account_link_revoked
+    case derivatives_balance_snapshot_observed, derivatives_collateral_change_observed, derivatives_margin_snapshot_observed
+    case derivatives_order_observed, derivatives_order_updated_observed, derivatives_order_cancelled_observed
+    case derivatives_order_rejected_observed, derivatives_order_expired_observed, derivatives_fill_observed
+    case derivatives_fill_corrected, derivatives_position_opened_observed, derivatives_position_increased_observed
+    case derivatives_position_reduced_observed, derivatives_position_closed_observed, derivatives_position_liquidated_observed
+    case derivatives_position_adl_observed, derivatives_position_settled_observed, derivatives_position_corrected
+    case derivatives_funding_payment_observed, derivatives_fee_observed, derivatives_pnl_snapshot_materialized
+    case derivatives_exposure_snapshot_materialized, derivatives_price_observation_recorded, derivatives_market_status_changed
+    case derivatives_stream_gap_detected, derivatives_stream_gap_recovered, derivatives_stream_checkpoint_advanced
+    case derivatives_adapter_conformance_run, derivatives_reconciliation_run_completed, derivatives_reconciliation_variance_detected
+    case derivatives_reconciliation_variance_resolved, derivatives_risk_threshold_breached
+    // Interoperability intelligence family (explicit opt-in)
+    case interop_provider_registered, interop_gateway_registered, interop_path_registered
+    case interop_application_registered, interop_verification_actor_registered, interop_message_discovered
+    case interop_message_sent_observed, interop_message_source_confirmed, interop_message_verification_observed
+    case interop_message_verified, interop_message_delivery_attempt_observed, interop_message_delivered
+    case interop_message_executed_observed, interop_message_settled, interop_message_failed
+    case interop_message_timeout, interop_message_expired, interop_message_cancelled
+    case interop_message_refunded_observed, interop_message_recovered, interop_message_reorged
+    case interop_message_corrected, interop_message_correlated, interop_intent_observed
+    case interop_intent_fulfilled_observed, interop_asset_leg_locked_observed, interop_asset_leg_burned_observed
+    case interop_asset_leg_minted_observed, interop_asset_leg_released_observed, interop_fee_observed
+    case interop_security_policy_snapshot_recorded, interop_security_policy_changed, interop_verification_quorum_observed
+    case interop_provider_checkpoint_advanced, interop_stream_gap_detected, interop_stream_gap_recovered
+    case interop_reconciliation_run_completed, interop_reconciliation_variance_detected, interop_reconciliation_variance_resolved
 }
 
 public struct AetherEvent: Codable {
@@ -468,6 +508,65 @@ public final class Aether: NSObject {
         .trade_intent_created: "financial_activity", .trade_approval_requested: "financial_activity",
         .trade_approval_resolved: "financial_activity", .risk_policy_updated: "financial_activity",
         .human_trade_override_recorded: "financial_activity"
+        // Stablecoin intelligence family (explicit opt-in)
+        .stablecoin_transfer_observed: "economic_observability", .stablecoin_payment_observed: "economic_observability",
+        .stablecoin_mint_observed: "economic_observability", .stablecoin_burn_observed: "economic_observability",
+        .stablecoin_bridge_outbound_observed: "economic_observability", .stablecoin_bridge_inbound_observed: "economic_observability",
+        .stablecoin_swap_observed: "economic_observability", .stablecoin_x402_settlement_observed: "economic_observability",
+        .stablecoin_treasury_movement_observed: "economic_observability", .stablecoin_payout_observed: "economic_observability",
+        .stablecoin_venue_deposit_observed: "economic_observability", .stablecoin_venue_withdrawal_observed: "economic_observability",
+        .stablecoin_balance_snapshot_observed: "economic_observability", .stablecoin_supply_snapshot_observed: "economic_observability",
+        .stablecoin_holder_concentration_observed: "economic_observability", .stablecoin_valuation_observed: "economic_observability",
+        .stablecoin_depeg_detected: "economic_observability", .stablecoin_depeg_resolved: "economic_observability",
+        .stablecoin_finality_confirmed: "economic_observability", .stablecoin_reorg_detected: "economic_observability",
+        .stablecoin_observation_corrected: "economic_observability", .stablecoin_reconciliation_run_completed: "economic_observability",
+        .stablecoin_reconciliation_variance_detected: "economic_observability", .stablecoin_reconciliation_variance_resolved: "economic_observability",
+        .stablecoin_asset_registered: "economic_observability", .stablecoin_deployment_registered: "economic_observability",
+        .stablecoin_support_asserted: "economic_observability", .stablecoin_support_revoked: "economic_observability",
+        .stablecoin_flow_aggregate_materialized: "economic_observability", .stablecoin_checkpoint_advanced: "economic_observability",
+        // Derivatives intelligence family (explicit opt-in)
+        .derivatives_venue_registered: "financial_activity", .derivatives_venue_deployment_registered: "financial_activity",
+        .derivatives_instrument_registered: "financial_activity", .derivatives_market_registered: "financial_activity",
+        .derivatives_strategy_registered: "financial_activity", .derivatives_strategy_version_registered: "financial_activity",
+        .derivatives_risk_policy_registered: "financial_activity", .derivatives_account_linked: "financial_activity",
+        .derivatives_account_link_revoked: "financial_activity", .derivatives_balance_snapshot_observed: "financial_activity",
+        .derivatives_collateral_change_observed: "financial_activity", .derivatives_margin_snapshot_observed: "financial_activity",
+        .derivatives_order_observed: "financial_activity", .derivatives_order_updated_observed: "financial_activity",
+        .derivatives_order_cancelled_observed: "financial_activity", .derivatives_order_rejected_observed: "financial_activity",
+        .derivatives_order_expired_observed: "financial_activity", .derivatives_fill_observed: "financial_activity",
+        .derivatives_fill_corrected: "financial_activity", .derivatives_position_opened_observed: "financial_activity",
+        .derivatives_position_increased_observed: "financial_activity", .derivatives_position_reduced_observed: "financial_activity",
+        .derivatives_position_closed_observed: "financial_activity", .derivatives_position_liquidated_observed: "financial_activity",
+        .derivatives_position_adl_observed: "financial_activity", .derivatives_position_settled_observed: "financial_activity",
+        .derivatives_position_corrected: "financial_activity", .derivatives_funding_payment_observed: "financial_activity",
+        .derivatives_fee_observed: "financial_activity", .derivatives_pnl_snapshot_materialized: "financial_activity",
+        .derivatives_exposure_snapshot_materialized: "financial_activity", .derivatives_price_observation_recorded: "financial_activity",
+        .derivatives_market_status_changed: "financial_activity", .derivatives_stream_gap_detected: "financial_activity",
+        .derivatives_stream_gap_recovered: "financial_activity", .derivatives_stream_checkpoint_advanced: "financial_activity",
+        .derivatives_adapter_conformance_run: "financial_activity", .derivatives_reconciliation_run_completed: "financial_activity",
+        .derivatives_reconciliation_variance_detected: "financial_activity", .derivatives_reconciliation_variance_resolved: "financial_activity",
+        .derivatives_risk_threshold_breached: "financial_activity",
+        // Interoperability intelligence family (explicit opt-in)
+        .interop_provider_registered: "cross_chain_observability", .interop_gateway_registered: "cross_chain_observability",
+        .interop_path_registered: "cross_chain_observability", .interop_application_registered: "cross_chain_observability",
+        .interop_verification_actor_registered: "cross_chain_observability", .interop_message_discovered: "cross_chain_observability",
+        .interop_message_sent_observed: "cross_chain_observability", .interop_message_source_confirmed: "cross_chain_observability",
+        .interop_message_verification_observed: "cross_chain_observability", .interop_message_verified: "cross_chain_observability",
+        .interop_message_delivery_attempt_observed: "cross_chain_observability", .interop_message_delivered: "cross_chain_observability",
+        .interop_message_executed_observed: "cross_chain_observability", .interop_message_settled: "cross_chain_observability",
+        .interop_message_failed: "cross_chain_observability", .interop_message_timeout: "cross_chain_observability",
+        .interop_message_expired: "cross_chain_observability", .interop_message_cancelled: "cross_chain_observability",
+        .interop_message_refunded_observed: "cross_chain_observability", .interop_message_recovered: "cross_chain_observability",
+        .interop_message_reorged: "cross_chain_observability", .interop_message_corrected: "cross_chain_observability",
+        .interop_message_correlated: "cross_chain_observability", .interop_intent_observed: "cross_chain_observability",
+        .interop_intent_fulfilled_observed: "cross_chain_observability", .interop_asset_leg_locked_observed: "cross_chain_observability",
+        .interop_asset_leg_burned_observed: "cross_chain_observability", .interop_asset_leg_minted_observed: "cross_chain_observability",
+        .interop_asset_leg_released_observed: "cross_chain_observability", .interop_fee_observed: "cross_chain_observability",
+        .interop_security_policy_snapshot_recorded: "cross_chain_observability", .interop_security_policy_changed: "cross_chain_observability",
+        .interop_verification_quorum_observed: "cross_chain_observability", .interop_provider_checkpoint_advanced: "cross_chain_observability",
+        .interop_stream_gap_detected: "cross_chain_observability", .interop_stream_gap_recovered: "cross_chain_observability",
+        .interop_reconciliation_run_completed: "cross_chain_observability", .interop_reconciliation_variance_detected: "cross_chain_observability",
+        .interop_reconciliation_variance_resolved: "cross_chain_observability"
     ]
 
     static let sensitiveKeys: Set<String> = [

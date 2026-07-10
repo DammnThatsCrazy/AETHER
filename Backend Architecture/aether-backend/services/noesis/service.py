@@ -39,6 +39,7 @@ from .models import (
     EvidenceSource,
     NoesisAction,
     NoesisAuditEntry,
+    NoesisError,
     NoesisGraph,
     NoesisQueryRequest,
     NoesisResponse,
@@ -455,6 +456,18 @@ class NoesisService:
             candidates.append(("narrative_analysis", 0.85))
         if any(k in low for k in ("semantic profile", "semantic state", "semantic summary", "semantic observations", "semantic stance")):
             candidates.append(("semantic_profile_explain", 0.87))
+        if any(k in low for k in ("stablecoin", "depeg", "peg status", "on peg", "off peg")):
+            candidates.append(("stablecoin_flow_lookup", 0.84))
+        if any(k in low for k in ("derivative", "perp", "perpetual", "futures", "exposure", "open positions")):
+            if any(k in low for k in ("reconcil", "variance", "stream gap", "gaps")):
+                candidates.append(("derivatives_reconciliation_lookup", 0.86))
+            else:
+                candidates.append(("derivatives_exposure_lookup", 0.82))
+        if any(k in low for k in ("cross-chain", "cross chain", "interop", "layerzero", "wormhole", "axelar", "bridge message", "guid")):
+            if any(k in low for k in ("path", "paths", "lane", "lanes", "reliability", "route")):
+                candidates.append(("interop_path_reliability", 0.84))
+            else:
+                candidates.append(("interop_message_trace", 0.85))
 
         if not candidates:
             # If conversation history provides a prior intent, carry it forward with low confidence
@@ -571,6 +584,14 @@ class NoesisService:
             return await self._suggestion_dispatch(plan, scope)
         if plan.intent in ("sentiment_explain", "narrative_analysis", "semantic_profile_explain"):
             return await self._semantic_dispatch(plan, scope)
+        if plan.intent in (
+            "stablecoin_flow_lookup",
+            "derivatives_exposure_lookup",
+            "derivatives_reconciliation_lookup",
+            "interop_message_trace",
+            "interop_path_reliability",
+        ):
+            return await self._economic_dispatch(plan, scope)
         return self._unsupported_response(body, [])
 
     def _tenant_filter(self, scope: Scope) -> Optional[dict[str, Any]]:
@@ -945,6 +966,66 @@ class NoesisService:
             actions=result.get("actions", []),
             warnings=result.get("warnings", []),
             query_debug={"plan": plan.model_dump(), "read_only": True, "suggestion_dispatch": True},
+        )
+
+    async def _economic_dispatch(self, plan: QueryPlan, scope: Scope) -> NoesisResponse:
+        """Read-only delegation to the economic-intelligence adapters
+        (stablecoin / derivatives / interop). Each domain is gated on its
+        own noesis flag; disabled domains answer honestly instead of 404ing
+        so the conversation surface stays coherent."""
+        from config.settings import settings as app_settings
+
+        domain_flags = {
+            "stablecoin_flow_lookup": (app_settings.stablecoin.noesis_enabled, "Stablecoin Intelligence"),
+            "derivatives_exposure_lookup": (app_settings.derivatives.noesis_enabled, "Derivatives Intelligence"),
+            "derivatives_reconciliation_lookup": (app_settings.derivatives.noesis_enabled, "Derivatives Intelligence"),
+            "interop_message_trace": (app_settings.interop.noesis_enabled, "Interoperability Intelligence"),
+            "interop_path_reliability": (app_settings.interop.noesis_enabled, "Interoperability Intelligence"),
+        }
+        enabled, domain_label = domain_flags[plan.intent]
+        if not enabled:
+            return NoesisResponse(
+                answer=f"{domain_label} is not enabled for this deployment.",
+                mode="deterministic",
+                intent=plan.intent,
+                confidence=plan.confidence,
+                warnings=[f"{domain_label} Noesis surface is disabled"],
+                error=NoesisError(
+                    code="service_disabled",
+                    message=f"{domain_label} Noesis queries are feature-flagged off.",
+                ),
+                query_debug={"plan": plan.model_dump(), "read_only": True},
+            )
+
+        tenant_id = scope.effective_tenant_id
+        if plan.intent == "stablecoin_flow_lookup":
+            from .adapters.stablecoin_adapter import StablecoinNoesisAdapter
+            result = await StablecoinNoesisAdapter().flow_summary(tenant_id, plan.target, plan.limit)
+        elif plan.intent == "derivatives_exposure_lookup":
+            from .adapters.derivatives_adapter import DerivativesNoesisAdapter
+            result = await DerivativesNoesisAdapter().position_exposure(tenant_id, plan.target, plan.limit)
+        elif plan.intent == "derivatives_reconciliation_lookup":
+            from .adapters.derivatives_adapter import DerivativesNoesisAdapter
+            result = await DerivativesNoesisAdapter().reconciliation_status(tenant_id, plan.target, plan.limit)
+        elif plan.intent == "interop_message_trace":
+            from .adapters.interop_adapter import InteropNoesisAdapter
+            result = await InteropNoesisAdapter().message_trace(tenant_id, plan.target, plan.limit)
+        else:
+            from .adapters.interop_adapter import InteropNoesisAdapter
+            result = await InteropNoesisAdapter().path_reliability(tenant_id, plan.target, plan.limit)
+
+        fetched_at = utc_now()
+        evidence = EvidenceEnvelope(
+            sources=[
+                EvidenceSource(service="economic_intelligence", resource_type=source, fetched_at=fetched_at)
+                for source in result.get("sources", [])
+            ],
+            sufficient=bool(result.get("sufficient", True)),
+            insufficient_reason=None if result.get("sufficient", True) else "No matching observations in tenant scope",
+        )
+        return self._response(
+            plan, result.get("answer", ""), result.get("results", []), [],
+            evidence=evidence, scope=scope,
         )
 
     def _response(

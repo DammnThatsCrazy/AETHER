@@ -256,6 +256,87 @@ CAPABILITY_REGISTRY: list[NoesisCapability] = [
         ],
         data_sources=["comms_facts_repository"],
     ),
+    NoesisCapability(
+        intent="stablecoin_flow_lookup",
+        label="Stablecoin Flow Summary",
+        description=(
+            "Summarize observed stablecoin flow aggregates and peg status "
+            "for the tenant, including depeg signals. Read-only; requires "
+            "Stablecoin Intelligence to be enabled."
+        ),
+        surfaces=["aether", "kyber"],
+        requires_target=False,
+        example_prompts=[
+            "Summarize stablecoin flows this week",
+            "Is USDC on peg?",
+            "Show depeg signals for tracked stablecoins",
+        ],
+        data_sources=["stablecoin_flow_aggregates", "stablecoin_valuation_snapshots"],
+    ),
+    NoesisCapability(
+        intent="derivatives_exposure_lookup",
+        label="Derivatives Position Exposure",
+        description=(
+            "Report observed derivatives positions and P&L snapshots for "
+            "linked read-only trading accounts. Observation-only — Aether "
+            "never places or recommends orders."
+        ),
+        surfaces=["aether", "kyber"],
+        requires_target=False,
+        example_prompts=[
+            "What derivatives exposure do we have?",
+            "Show open perp positions for account acct_1",
+            "Summarize derivatives P&L snapshots",
+        ],
+        data_sources=["derivatives_positions", "derivatives_pnl_snapshots"],
+    ),
+    NoesisCapability(
+        intent="derivatives_reconciliation_lookup",
+        label="Derivatives Reconciliation Status",
+        description=(
+            "Show reconciliation variances between venue-reported and "
+            "projected derivatives state, plus unrecovered stream gaps."
+        ),
+        surfaces=["aether", "kyber"],
+        requires_target=False,
+        example_prompts=[
+            "Are there derivatives reconciliation variances?",
+            "Show unrecovered derivatives stream gaps",
+        ],
+        data_sources=["derivatives_reconciliation_variances", "derivatives_stream_gaps"],
+    ),
+    NoesisCapability(
+        intent="interop_message_trace",
+        label="Cross-Chain Message Trace",
+        description=(
+            "Trace a cross-chain message's observed lifecycle timeline by "
+            "correlation key or message id. Observation-only — Aether never "
+            "relays or recovers messages."
+        ),
+        surfaces=["aether", "kyber"],
+        requires_target=False,
+        example_prompts=[
+            "Trace cross-chain message lz2:0xabc",
+            "What is the status of interop message msg_123?",
+            "Show recent cross-chain messages",
+        ],
+        data_sources=["interop_messages", "interop_message_events"],
+    ),
+    NoesisCapability(
+        intent="interop_path_reliability",
+        label="Interop Path Reliability",
+        description=(
+            "Summarize delivery outcomes per cross-chain path: delivered, "
+            "failed, and in-flight message counts."
+        ),
+        surfaces=["aether", "kyber"],
+        requires_target=False,
+        example_prompts=[
+            "Which cross-chain paths are unreliable?",
+            "Show path reliability for LayerZero lanes",
+        ],
+        data_sources=["interop_messages"],
+    ),
 ]
 
 # Fast lookup by intent name

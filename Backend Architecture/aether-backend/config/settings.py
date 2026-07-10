@@ -582,6 +582,10 @@ class SuggestionsConfig:
     data_quality_adapter_enabled: bool = _env_bool("AETHER_SUGGESTIONS_DATA_QUALITY_ADAPTER_ENABLED", True)
     sdk_health_adapter_enabled: bool = _env_bool("AETHER_SUGGESTIONS_SDK_HEALTH_ADAPTER_ENABLED", True)
     graph_adapter_enabled: bool = _env_bool("AETHER_SUGGESTIONS_GRAPH_ADAPTER_ENABLED", True)
+    # Economic/interoperability adapters default OFF (fail-closed with their domains)
+    stablecoin_adapter_enabled: bool = _env_bool("AETHER_SUGGESTIONS_STABLECOIN_ADAPTER_ENABLED", False)
+    derivatives_adapter_enabled: bool = _env_bool("AETHER_SUGGESTIONS_DERIVATIVES_ADAPTER_ENABLED", False)
+    interop_adapter_enabled: bool = _env_bool("AETHER_SUGGESTIONS_INTEROP_ADAPTER_ENABLED", False)
     kyber_enabled: bool = _env_bool("KYBER_SUGGESTIONS_ENABLED", True)
     tenant_enabled: bool = _env_bool("AETHER_TENANT_SUGGESTIONS_ENABLED", True)
 
@@ -769,6 +773,52 @@ class OnePersonOpsConfig:
     one_person_ops_enabled: bool = _env_bool("KYBER_ONE_PERSON_OPS_ENABLED", False)
 
 
+@dataclass(frozen=True)
+class StablecoinDomainConfig:
+    """Stablecoin economic-intelligence domain rollout flags
+    (services/stablecoin — coexists with the observer-stack
+    StablecoinIntelligenceConfig above). Observation-only domain —
+    all flags default False (fail-closed) until staging validation."""
+    ingestion_enabled: bool = _env_bool("AETHER_STABLECOIN_INGESTION_ENABLED", False)
+    valuation_enabled: bool = _env_bool("AETHER_STABLECOIN_VALUATION_ENABLED", False)
+    flows_enabled: bool = _env_bool("AETHER_STABLECOIN_FLOWS_ENABLED", False)
+    graph_enabled: bool = _env_bool("AETHER_STABLECOIN_GRAPH_ENABLED", False)
+    profile360_enabled: bool = _env_bool("AETHER_STABLECOIN_PROFILE360_ENABLED", False)
+    api_enabled: bool = _env_bool("AETHER_STABLECOIN_API_ENABLED", False)
+    noesis_enabled: bool = _env_bool("AETHER_STABLECOIN_NOESIS_ENABLED", False)
+    kyber_enabled: bool = _env_bool("KYBER_STABLECOIN_OPS_ENABLED", False)
+
+
+@dataclass(frozen=True)
+class DerivativesIntelligenceConfig:
+    """Derivatives Intelligence rollout flags. Observation-only domain —
+    no execution capability exists behind any flag. All default False."""
+    runtime_enabled: bool = _env_bool("AETHER_DERIVATIVES_RUNTIME_ENABLED", False)
+    adapters_enabled: bool = _env_bool("AETHER_DERIVATIVES_ADAPTERS_ENABLED", False)
+    streams_enabled: bool = _env_bool("AETHER_DERIVATIVES_STREAMS_ENABLED", False)
+    reconciliation_enabled: bool = _env_bool("AETHER_DERIVATIVES_RECONCILIATION_ENABLED", False)
+    pnl_enabled: bool = _env_bool("AETHER_DERIVATIVES_PNL_ENABLED", False)
+    graph_enabled: bool = _env_bool("AETHER_DERIVATIVES_GRAPH_ENABLED", False)
+    profile360_enabled: bool = _env_bool("AETHER_DERIVATIVES_PROFILE360_ENABLED", False)
+    api_enabled: bool = _env_bool("AETHER_DERIVATIVES_API_ENABLED", False)
+    noesis_enabled: bool = _env_bool("AETHER_DERIVATIVES_NOESIS_ENABLED", False)
+    kyber_enabled: bool = _env_bool("KYBER_DERIVATIVES_OPS_ENABLED", False)
+
+
+@dataclass(frozen=True)
+class InteropIntelligenceConfig:
+    """Interoperability Intelligence rollout flags. Observation-only domain —
+    Aether never relays, routes, or recovers messages. All default False."""
+    ingestion_enabled: bool = _env_bool("AETHER_INTEROP_INGESTION_ENABLED", False)
+    lifecycle_enabled: bool = _env_bool("AETHER_INTEROP_LIFECYCLE_ENABLED", False)
+    adapters_enabled: bool = _env_bool("AETHER_INTEROP_ADAPTERS_ENABLED", False)
+    layerzero_enabled: bool = _env_bool("AETHER_INTEROP_LAYERZERO_ENABLED", False)
+    graph_enabled: bool = _env_bool("AETHER_INTEROP_GRAPH_ENABLED", False)
+    profile360_enabled: bool = _env_bool("AETHER_INTEROP_PROFILE360_ENABLED", False)
+    api_enabled: bool = _env_bool("AETHER_INTEROP_API_ENABLED", False)
+    noesis_enabled: bool = _env_bool("AETHER_INTEROP_NOESIS_ENABLED", False)
+    kyber_enabled: bool = _env_bool("KYBER_INTEROP_OPS_ENABLED", False)
+
 @dataclass
 class Settings:
     env: Environment = Environment(_env("AETHER_ENV", "local"))
@@ -874,6 +924,11 @@ class Settings:
     # One-person operations rollout flags
     one_person_ops: OnePersonOpsConfig = field(default_factory=OnePersonOpsConfig)
 
+    # Stablecoin / Derivatives / Interoperability economic-intelligence domains
+    stablecoin: StablecoinDomainConfig = field(default_factory=StablecoinDomainConfig)
+    derivatives: DerivativesIntelligenceConfig = field(default_factory=DerivativesIntelligenceConfig)
+    interop: InteropIntelligenceConfig = field(default_factory=InteropIntelligenceConfig)
+
     def __post_init__(self):
         _is_non_local = self.env != Environment.LOCAL
         _is_prod = self.env == Environment.PRODUCTION
@@ -883,6 +938,15 @@ class Settings:
             raise RuntimeError(
                 f"PRICING_OPTION must be one of A, B, C "
                 f"(got: {self.rate_limit.pricing_option!r})"
+            )
+
+        # ── Interop flag coherence ────────────────────────────────────────────
+        # A provider-specific adapter flag without the adapter framework flag is
+        # a misconfiguration: the adapter could never be mounted.
+        if self.interop.layerzero_enabled and not self.interop.adapters_enabled:
+            raise RuntimeError(
+                "AETHER_INTEROP_LAYERZERO_ENABLED requires "
+                "AETHER_INTEROP_ADAPTERS_ENABLED=true"
             )
 
         # ── JWT secret ────────────────────────────────────────────────────────

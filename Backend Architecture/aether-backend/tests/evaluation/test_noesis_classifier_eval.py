@@ -159,6 +159,36 @@ EVAL_CASES: list[tuple[str, str]] = [
     ("What is our email bounce rate?", "communications_insight"),
     ("How many unsubscribes happened this month?", "communications_insight"),
     ("Show comms open rate and click rate", "communications_insight"),
+
+    # stablecoin_flow_lookup (4 examples)
+    ("Is USDC showing any depeg signals?", "stablecoin_flow_lookup"),
+    ("Summarize stablecoin flows this week", "stablecoin_flow_lookup"),
+    ("What is the peg status of tracked stablecoins?", "stablecoin_flow_lookup"),
+    ("Show stablecoin transfer volume", "stablecoin_flow_lookup"),
+
+    # derivatives_exposure_lookup (4 examples)
+    ("Summarize our derivatives exposure", "derivatives_exposure_lookup"),
+    ("Show open positions on perp markets", "derivatives_exposure_lookup"),
+    ("What futures exposure do we have?", "derivatives_exposure_lookup"),
+    ("List perpetual positions for account acct_1", "derivatives_exposure_lookup"),
+
+    # derivatives_reconciliation_lookup (4 examples)
+    ("Any derivatives reconciliation variance this week?", "derivatives_reconciliation_lookup"),
+    ("Show unrecovered derivatives stream gaps", "derivatives_reconciliation_lookup"),
+    ("Are venue-reported derivatives numbers reconciled?", "derivatives_reconciliation_lookup"),
+    ("Show derivatives variances needing attention", "derivatives_reconciliation_lookup"),
+
+    # interop_message_trace (4 examples)
+    ("Trace cross-chain message lz2:0xabc", "interop_message_trace"),
+    ("What is the status of interop message msg_123?", "interop_message_trace"),
+    ("Show recent cross-chain messages", "interop_message_trace"),
+    ("Look up LayerZero GUID 0xdeadbeef", "interop_message_trace"),
+
+    # interop_path_reliability (4 examples)
+    ("Which cross-chain paths have poor reliability?", "interop_path_reliability"),
+    ("Show interop path reliability", "interop_path_reliability"),
+    ("Which LayerZero lanes are degraded?", "interop_path_reliability"),
+    ("Compare reliability across bridge message routes", "interop_path_reliability"),
 ]
 
 

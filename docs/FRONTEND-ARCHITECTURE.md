@@ -13,7 +13,7 @@ source_files:
 canonical_owner: frontend@aether
 estimated_read_minutes: 35
 toc_depth: 4
-last_synced_commit: d8dc8ce
+last_synced_commit: 1f19190
 ---
 
 # Aether Frontend Architecture & Designer Handoff
@@ -744,3 +744,39 @@ The `api.delivery` namespace in `frontend/aether/src/lib/api/endpoints.ts` and `
 - `getReceipt(jobId)` → `GET /v1/delivery/jobs/{id}/receipt`
 - `listAttempts(jobId)` → `GET /v1/delivery/jobs/{id}/attempts`
 - `listLinks(params)` → `GET /v1/delivery/links`
+
+## Economic & Interoperability Intelligence Pages (v8.12.0)
+
+Observation-only surfaces for the stablecoin, derivatives, and
+interoperability domains. Feature-flagged-off backends return 404, which
+both apps render as an honest "not enabled" empty state rather than an
+error. Every page states its no-execution boundary in the header copy.
+
+### Aether (tenant) — `frontend/aether/src/pages/{stablecoins,derivatives,interop}/`
+
+| Route | Page |
+|-------|------|
+| `/stablecoins` | Assets, peg valuations with depeg badges, flow aggregates |
+| `/stablecoins/:assetId` | Deployments + recent observations with finality status |
+| `/derivatives` | Linked accounts, positions, P&L snapshots, reconciliation variances |
+| `/derivatives/accounts/:accountId` | Orders, fills, positions for one read-only account |
+| `/interoperability` | Cross-chain messages, paths, providers with honest `ImplementationStatus` |
+| `/interoperability/messages/:messageId` | Lifecycle timeline, delivery attempts, asset legs |
+
+Hooks live in `features/{stablecoins,derivatives,interop}/`; endpoint
+groups in `lib/api/endpoints.ts` parse the raw `{items, count}` responses
+(these backend routes do not use the APIResponse envelope). Shared
+helpers (`components/domain-intelligence.tsx`) provide the
+`NotEnabledOrError` state, stat tiles, and status badge variants.
+
+### Kyber (operator) — `frontend/kyber/src/pages/{stablecoins,derivatives,interop}/`
+
+| Route | Page |
+|-------|------|
+| `/stablecoins/ops` | Registry status + seed action, finality checkpoints, reconciliation review |
+| `/derivatives/ops` | Adapter fleet (honest `ImplementationStatus`), checkpoints, stream gaps, variances, conformance trigger |
+| `/interoperability/ops` | Provider health, correlation health, security-policy drift, governed-scan trigger |
+
+Gated client-side by the `kyberStablecoinOps` / `kyberDerivativesOps` /
+`kyberInteropOps` feature flags (default OFF) via a shared `FlagGate`;
+Zod schemas in `lib/schemas/economic-ops.ts` parse the raw admin payloads.

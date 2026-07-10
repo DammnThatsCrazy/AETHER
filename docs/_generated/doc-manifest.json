@@ -3824,6 +3824,48 @@
       "canonical_owner": "platform@aether"
     },
     {
+      "path": "docs/decisions/ADR-005-typed-financial-repositories.md",
+      "title": "ADR-005: Typed Financial Repositories over JSONB",
+      "slug": "decisions/adr-005-typed-financial-repositories",
+      "section": "reference",
+      "visibility": "I",
+      "audience": [
+        "architect",
+        "dev-senior"
+      ],
+      "status": "stable",
+      "since_version": "8.12.0",
+      "canonical_owner": "platform@aether"
+    },
+    {
+      "path": "docs/decisions/ADR-006-alembic-adoption-of-raw-sql-migrations.md",
+      "title": "ADR-006: Alembic Adoption of Raw-SQL Migrations",
+      "slug": "decisions/adr-006-alembic-adoption-of-raw-sql-migrations",
+      "section": "reference",
+      "visibility": "I",
+      "audience": [
+        "architect",
+        "dev-senior"
+      ],
+      "status": "stable",
+      "since_version": "8.12.0",
+      "canonical_owner": "platform@aether"
+    },
+    {
+      "path": "docs/decisions/ADR-007-observation-only-execution-invariant.md",
+      "title": "ADR-007: Observation-Only Execution Invariant",
+      "slug": "decisions/adr-007-observation-only-execution-invariant",
+      "section": "reference",
+      "visibility": "I",
+      "audience": [
+        "architect",
+        "dev-senior"
+      ],
+      "status": "stable",
+      "since_version": "8.12.0",
+      "canonical_owner": "platform@aether"
+    },
+    {
       "path": "docs/derivatives/ARCHITECTURE.md",
       "title": "Derivatives Architecture",
       "slug": "derivatives/architecture",
@@ -4158,6 +4200,381 @@
       "canonical_owner": "platform@aether"
     },
     {
+      "path": "docs/productization/economic-interoperability-intelligence/ADAPTER_CAPABILITY_MATRIX.md",
+      "title": "Adapter Capability Matrix",
+      "slug": "productization/economic-interoperability-intelligence/adapter-capability-matrix",
+      "section": "operations",
+      "visibility": "I",
+      "audience": [
+        "architect",
+        "ops",
+        "exec"
+      ],
+      "status": "stable",
+      "since_version": "8.12.0",
+      "canonical_owner": "platform@aether"
+    },
+    {
+      "path": "docs/productization/economic-interoperability-intelligence/ADR-DERIVATIVES-DECISIONS.md",
+      "title": "Derivatives Intelligence — Domain Decisions",
+      "slug": "productization/economic-interoperability-intelligence/adr-derivatives-decisions",
+      "section": "operations",
+      "visibility": "I",
+      "audience": [
+        "architect",
+        "dev-senior",
+        "ops"
+      ],
+      "status": "stable",
+      "since_version": "8.12.0",
+      "canonical_owner": "platform@aether"
+    },
+    {
+      "path": "docs/productization/economic-interoperability-intelligence/ADR-INTEROP-DECISIONS.md",
+      "title": "Interoperability Intelligence — Domain Decisions",
+      "slug": "productization/economic-interoperability-intelligence/adr-interop-decisions",
+      "section": "operations",
+      "visibility": "I",
+      "audience": [
+        "architect",
+        "dev-senior",
+        "ops"
+      ],
+      "status": "stable",
+      "since_version": "8.12.0",
+      "canonical_owner": "platform@aether"
+    },
+    {
+      "path": "docs/productization/economic-interoperability-intelligence/ADR-STABLECOIN-DECISIONS.md",
+      "title": "Stablecoin Intelligence — Domain Decisions",
+      "slug": "productization/economic-interoperability-intelligence/adr-stablecoin-decisions",
+      "section": "operations",
+      "visibility": "I",
+      "audience": [
+        "architect",
+        "dev-senior",
+        "ops"
+      ],
+      "status": "stable",
+      "since_version": "8.12.0",
+      "canonical_owner": "platform@aether"
+    },
+    {
+      "path": "docs/productization/economic-interoperability-intelligence/AETHER_FRONTEND_SURFACES.md",
+      "title": "Aether Frontend Surfaces",
+      "slug": "productization/economic-interoperability-intelligence/aether-frontend-surfaces",
+      "section": "operations",
+      "visibility": "I",
+      "audience": [
+        "architect",
+        "ops",
+        "exec"
+      ],
+      "status": "stable",
+      "since_version": "8.12.0",
+      "canonical_owner": "platform@aether"
+    },
+    {
+      "path": "docs/productization/economic-interoperability-intelligence/CANONICAL_ENTITY_MODEL.md",
+      "title": "Canonical Entity Model (cross-domain)",
+      "slug": "productization/economic-interoperability-intelligence/canonical-entity-model",
+      "section": "operations",
+      "visibility": "I",
+      "audience": [
+        "architect",
+        "ops",
+        "exec"
+      ],
+      "status": "stable",
+      "since_version": "8.12.0",
+      "canonical_owner": "platform@aether"
+    },
+    {
+      "path": "docs/productization/economic-interoperability-intelligence/CANONICAL_EVENT_MODEL.md",
+      "title": "Canonical Event Model (cross-domain)",
+      "slug": "productization/economic-interoperability-intelligence/canonical-event-model",
+      "section": "operations",
+      "visibility": "I",
+      "audience": [
+        "architect",
+        "ops",
+        "exec"
+      ],
+      "status": "stable",
+      "since_version": "8.12.0",
+      "canonical_owner": "platform@aether"
+    },
+    {
+      "path": "docs/productization/economic-interoperability-intelligence/DATA_LICENSING_AND_ENTITLEMENTS.md",
+      "title": "Data Licensing and Entitlements",
+      "slug": "productization/economic-interoperability-intelligence/data-licensing-and-entitlements",
+      "section": "operations",
+      "visibility": "I",
+      "audience": [
+        "architect",
+        "ops",
+        "exec"
+      ],
+      "status": "stable",
+      "since_version": "8.12.0",
+      "canonical_owner": "platform@aether"
+    },
+    {
+      "path": "docs/productization/economic-interoperability-intelligence/DATA_STORAGE_AND_PROJECTION.md",
+      "title": "Data Storage and Projection",
+      "slug": "productization/economic-interoperability-intelligence/data-storage-and-projection",
+      "section": "operations",
+      "visibility": "I",
+      "audience": [
+        "architect",
+        "ops",
+        "exec"
+      ],
+      "status": "stable",
+      "since_version": "8.12.0",
+      "canonical_owner": "platform@aether"
+    },
+    {
+      "path": "docs/productization/economic-interoperability-intelligence/DEPLOYMENT_PROFILE_MATRIX.md",
+      "title": "Deployment Profile Matrix",
+      "slug": "productization/economic-interoperability-intelligence/deployment-profile-matrix",
+      "section": "operations",
+      "visibility": "I",
+      "audience": [
+        "architect",
+        "ops",
+        "exec"
+      ],
+      "status": "stable",
+      "since_version": "8.12.0",
+      "canonical_owner": "platform@aether"
+    },
+    {
+      "path": "docs/productization/economic-interoperability-intelligence/DOMAIN_BOUNDARIES.md",
+      "title": "Domain Boundaries",
+      "slug": "productization/economic-interoperability-intelligence/domain-boundaries",
+      "section": "operations",
+      "visibility": "I",
+      "audience": [
+        "architect",
+        "ops",
+        "exec"
+      ],
+      "status": "stable",
+      "since_version": "8.12.0",
+      "canonical_owner": "platform@aether"
+    },
+    {
+      "path": "docs/productization/economic-interoperability-intelligence/EXECUTION_STATE.md",
+      "title": "Execution State — Economic & Interoperability Intelligence",
+      "slug": "productization/economic-interoperability-intelligence/execution-state",
+      "section": "operations",
+      "visibility": "I",
+      "audience": [
+        "architect",
+        "ops",
+        "exec"
+      ],
+      "status": "beta",
+      "since_version": "8.12.0",
+      "canonical_owner": "platform@aether"
+    },
+    {
+      "path": "docs/productization/economic-interoperability-intelligence/GOVERNANCE_AND_CONSENT.md",
+      "title": "Governance and Consent",
+      "slug": "productization/economic-interoperability-intelligence/governance-and-consent",
+      "section": "operations",
+      "visibility": "I",
+      "audience": [
+        "architect",
+        "ops",
+        "exec"
+      ],
+      "status": "stable",
+      "since_version": "8.12.0",
+      "canonical_owner": "platform@aether"
+    },
+    {
+      "path": "docs/productization/economic-interoperability-intelligence/GRAPH_PROJECTION_MODEL.md",
+      "title": "Graph Projection Model",
+      "slug": "productization/economic-interoperability-intelligence/graph-projection-model",
+      "section": "operations",
+      "visibility": "I",
+      "audience": [
+        "architect",
+        "ops",
+        "exec"
+      ],
+      "status": "stable",
+      "since_version": "8.12.0",
+      "canonical_owner": "platform@aether"
+    },
+    {
+      "path": "docs/productization/economic-interoperability-intelligence/KYBER_OPERATOR_SURFACES.md",
+      "title": "Kyber Operator Surfaces",
+      "slug": "productization/economic-interoperability-intelligence/kyber-operator-surfaces",
+      "section": "operations",
+      "visibility": "I",
+      "audience": [
+        "architect",
+        "ops",
+        "exec"
+      ],
+      "status": "stable",
+      "since_version": "8.12.0",
+      "canonical_owner": "platform@aether"
+    },
+    {
+      "path": "docs/productization/economic-interoperability-intelligence/MIGRATION_AND_BACKFILL.md",
+      "title": "Migration and Backfill",
+      "slug": "productization/economic-interoperability-intelligence/migration-and-backfill",
+      "section": "operations",
+      "visibility": "I",
+      "audience": [
+        "architect",
+        "ops",
+        "exec"
+      ],
+      "status": "stable",
+      "since_version": "8.12.0",
+      "canonical_owner": "platform@aether"
+    },
+    {
+      "path": "docs/productization/economic-interoperability-intelligence/NOESIS_AND_OODA_INTEGRATION.md",
+      "title": "Noesis and OODA Integration",
+      "slug": "productization/economic-interoperability-intelligence/noesis-and-ooda-integration",
+      "section": "operations",
+      "visibility": "I",
+      "audience": [
+        "architect",
+        "ops",
+        "exec"
+      ],
+      "status": "stable",
+      "since_version": "8.12.0",
+      "canonical_owner": "platform@aether"
+    },
+    {
+      "path": "docs/productization/economic-interoperability-intelligence/OBSERVABILITY_AND_SLOS.md",
+      "title": "Observability and SLOs",
+      "slug": "productization/economic-interoperability-intelligence/observability-and-slos",
+      "section": "operations",
+      "visibility": "I",
+      "audience": [
+        "architect",
+        "ops",
+        "exec"
+      ],
+      "status": "beta",
+      "since_version": "8.12.0",
+      "canonical_owner": "platform@aether"
+    },
+    {
+      "path": "docs/productization/economic-interoperability-intelligence/OLYMPUS_INTELLIGENCE_SURFACES.md",
+      "title": "Olympus Intelligence Surfaces",
+      "slug": "productization/economic-interoperability-intelligence/olympus-intelligence-surfaces",
+      "section": "operations",
+      "visibility": "I",
+      "audience": [
+        "architect",
+        "ops",
+        "exec"
+      ],
+      "status": "beta",
+      "since_version": "8.12.0",
+      "canonical_owner": "platform@aether"
+    },
+    {
+      "path": "docs/productization/economic-interoperability-intelligence/PROFILE360_SURFACES.md",
+      "title": "Profile360 Surfaces",
+      "slug": "productization/economic-interoperability-intelligence/profile360-surfaces",
+      "section": "operations",
+      "visibility": "I",
+      "audience": [
+        "architect",
+        "ops",
+        "exec"
+      ],
+      "status": "stable",
+      "since_version": "8.12.0",
+      "canonical_owner": "platform@aether"
+    },
+    {
+      "path": "docs/productization/economic-interoperability-intelligence/RECONCILIATION_AND_FINANCIAL_CORRECTNESS.md",
+      "title": "Reconciliation and Financial Correctness",
+      "slug": "productization/economic-interoperability-intelligence/reconciliation-and-financial-correctness",
+      "section": "operations",
+      "visibility": "I",
+      "audience": [
+        "architect",
+        "ops",
+        "exec"
+      ],
+      "status": "stable",
+      "since_version": "8.12.0",
+      "canonical_owner": "platform@aether"
+    },
+    {
+      "path": "docs/productization/economic-interoperability-intelligence/RELEASE_READINESS.md",
+      "title": "Release Readiness — Economic & Interoperability Intelligence",
+      "slug": "productization/economic-interoperability-intelligence/release-readiness",
+      "section": "operations",
+      "visibility": "I",
+      "audience": [
+        "architect",
+        "ops",
+        "exec"
+      ],
+      "status": "beta",
+      "since_version": "8.12.0",
+      "canonical_owner": "platform@aether"
+    },
+    {
+      "path": "docs/productization/economic-interoperability-intelligence/REPO_TRUTH_AND_GAP_MATRIX.md",
+      "title": "Repo Truth and Gap Matrix — Economic & Interoperability Intelligence",
+      "slug": "productization/economic-interoperability-intelligence/repo-truth-and-gap-matrix",
+      "section": "operations",
+      "visibility": "I",
+      "audience": [
+        "architect",
+        "ops",
+        "exec"
+      ],
+      "status": "stable",
+      "since_version": "8.12.0",
+      "canonical_owner": "platform@aether"
+    },
+    {
+      "path": "docs/productization/economic-interoperability-intelligence/TARGET_ARCHITECTURE.md",
+      "title": "Target Architecture — Economic & Interoperability Intelligence",
+      "slug": "productization/economic-interoperability-intelligence/target-architecture",
+      "section": "operations",
+      "visibility": "I",
+      "audience": [
+        "architect",
+        "ops",
+        "exec"
+      ],
+      "status": "stable",
+      "since_version": "8.12.0",
+      "canonical_owner": "platform@aether"
+    },
+    {
+      "path": "docs/productization/economic-interoperability-intelligence/TEST_EVIDENCE.md",
+      "title": "Test Evidence",
+      "slug": "productization/economic-interoperability-intelligence/test-evidence",
+      "section": "operations",
+      "visibility": "I",
+      "audience": [
+        "architect",
+        "ops",
+        "exec"
+      ],
+      "status": "stable",
+      "since_version": "8.12.0",
+      "canonical_owner": "platform@aether"
+    },
+    {
       "path": "docs/productization/unified-canonical-journey/DATA_AND_IDENTITY_CONTRACT.md",
       "title": "Data and Identity Contract — Unified Canonical Journey",
       "slug": "productization/unified-canonical-journey/data-and-identity-contract",
@@ -4425,6 +4842,34 @@
       "canonical_owner": "platform@aether"
     },
     {
+      "path": "docs/runbooks/DERIVATIVES_RECONCILIATION_RUNBOOK.md",
+      "title": "Derivatives Reconciliation Runbook",
+      "slug": "runbooks/derivatives-reconciliation",
+      "section": "operations",
+      "visibility": "I",
+      "audience": [
+        "ops",
+        "dev-senior"
+      ],
+      "status": "stable",
+      "since_version": "8.12.0",
+      "canonical_owner": "platform@aether"
+    },
+    {
+      "path": "docs/runbooks/INTEROP_PROVIDER_OPERATIONS_RUNBOOK.md",
+      "title": "Interop Provider Operations Runbook",
+      "slug": "runbooks/interop-provider-operations",
+      "section": "operations",
+      "visibility": "I",
+      "audience": [
+        "ops",
+        "dev-senior"
+      ],
+      "status": "stable",
+      "since_version": "8.12.0",
+      "canonical_owner": "platform@aether"
+    },
+    {
       "path": "docs/runbooks/ML-INCIDENT-RUNBOOK.md",
       "title": "ML Incident Runbook",
       "slug": "ai/ml-incident-runbook",
@@ -4454,6 +4899,20 @@
       "status": "stable",
       "since_version": "9.0.0",
       "estimated_read_minutes": 5,
+      "canonical_owner": "platform@aether"
+    },
+    {
+      "path": "docs/runbooks/STABLECOIN_OPERATIONS_RUNBOOK.md",
+      "title": "Stablecoin Operations Runbook",
+      "slug": "runbooks/stablecoin-operations",
+      "section": "operations",
+      "visibility": "I",
+      "audience": [
+        "ops",
+        "dev-senior"
+      ],
+      "status": "stable",
+      "since_version": "8.12.0",
       "canonical_owner": "platform@aether"
     },
     {
@@ -4590,6 +5049,81 @@
       "canonical_owner": "compliance@aether"
     },
     {
+      "path": "docs/source-of-truth/DERIVATIVES_CONSENT_MODEL.md",
+      "title": "Derivatives Consent Model",
+      "slug": "source-of-truth/derivatives-consent-model",
+      "section": "source-of-truth",
+      "visibility": "I",
+      "audience": [
+        "architect",
+        "dev-senior",
+        "ai"
+      ],
+      "status": "stable",
+      "since_version": "8.12.0",
+      "canonical_owner": "platform@aether"
+    },
+    {
+      "path": "docs/source-of-truth/DERIVATIVES_ENTITY_MODEL.md",
+      "title": "Derivatives Entity Model",
+      "slug": "source-of-truth/derivatives-entity-model",
+      "section": "source-of-truth",
+      "visibility": "I",
+      "audience": [
+        "architect",
+        "dev-senior",
+        "ai"
+      ],
+      "status": "stable",
+      "since_version": "8.12.0",
+      "canonical_owner": "platform@aether"
+    },
+    {
+      "path": "docs/source-of-truth/DERIVATIVES_EVENT_REGISTRY.md",
+      "title": "Derivatives Event Registry",
+      "slug": "source-of-truth/derivatives-event-registry",
+      "section": "source-of-truth",
+      "visibility": "I",
+      "audience": [
+        "architect",
+        "dev-senior",
+        "ai"
+      ],
+      "status": "stable",
+      "since_version": "8.12.0",
+      "canonical_owner": "platform@aether"
+    },
+    {
+      "path": "docs/source-of-truth/DERIVATIVES_GRAPH_ALIGNMENT.md",
+      "title": "Derivatives Graph Alignment",
+      "slug": "source-of-truth/derivatives-graph-alignment",
+      "section": "source-of-truth",
+      "visibility": "I",
+      "audience": [
+        "architect",
+        "dev-senior",
+        "ai"
+      ],
+      "status": "stable",
+      "since_version": "8.12.0",
+      "canonical_owner": "platform@aether"
+    },
+    {
+      "path": "docs/source-of-truth/DERIVATIVES_INGESTION_CONTRACT.md",
+      "title": "Derivatives Ingestion Contract",
+      "slug": "source-of-truth/derivatives-ingestion-contract",
+      "section": "source-of-truth",
+      "visibility": "I",
+      "audience": [
+        "architect",
+        "dev-senior",
+        "ai"
+      ],
+      "status": "stable",
+      "since_version": "8.12.0",
+      "canonical_owner": "platform@aether"
+    },
+    {
       "path": "docs/source-of-truth/DERIVATIVES_INTELLIGENCE_ALIGNMENT.md",
       "title": "Derivatives Intelligence Alignment",
       "status": "draft"
@@ -4607,6 +5141,21 @@
       ],
       "status": "experimental",
       "since_version": "8.11.0"
+    },
+    {
+      "path": "docs/source-of-truth/DERIVATIVES_RUNTIME_MODEL.md",
+      "title": "Derivatives Runtime Model",
+      "slug": "source-of-truth/derivatives-runtime-model",
+      "section": "source-of-truth",
+      "visibility": "I",
+      "audience": [
+        "architect",
+        "dev-senior",
+        "ai"
+      ],
+      "status": "stable",
+      "since_version": "8.12.0",
+      "canonical_owner": "platform@aether"
     },
     {
       "path": "docs/source-of-truth/DUNE_ACCESS_MODES.md",
@@ -4739,6 +5288,81 @@
       "canonical_owner": "identity@aether"
     },
     {
+      "path": "docs/source-of-truth/INTEROP_CONSENT_MODEL.md",
+      "title": "Interoperability Consent Model",
+      "slug": "source-of-truth/interop-consent-model",
+      "section": "source-of-truth",
+      "visibility": "I",
+      "audience": [
+        "architect",
+        "dev-senior",
+        "ai"
+      ],
+      "status": "stable",
+      "since_version": "8.12.0",
+      "canonical_owner": "platform@aether"
+    },
+    {
+      "path": "docs/source-of-truth/INTEROP_ENTITY_MODEL.md",
+      "title": "Interoperability Entity Model",
+      "slug": "source-of-truth/interop-entity-model",
+      "section": "source-of-truth",
+      "visibility": "I",
+      "audience": [
+        "architect",
+        "dev-senior",
+        "ai"
+      ],
+      "status": "stable",
+      "since_version": "8.12.0",
+      "canonical_owner": "platform@aether"
+    },
+    {
+      "path": "docs/source-of-truth/INTEROP_EVENT_REGISTRY.md",
+      "title": "Interoperability Event Registry",
+      "slug": "source-of-truth/interop-event-registry",
+      "section": "source-of-truth",
+      "visibility": "I",
+      "audience": [
+        "architect",
+        "dev-senior",
+        "ai"
+      ],
+      "status": "stable",
+      "since_version": "8.12.0",
+      "canonical_owner": "platform@aether"
+    },
+    {
+      "path": "docs/source-of-truth/INTEROP_GRAPH_ALIGNMENT.md",
+      "title": "Interoperability Graph Alignment",
+      "slug": "source-of-truth/interop-graph-alignment",
+      "section": "source-of-truth",
+      "visibility": "I",
+      "audience": [
+        "architect",
+        "dev-senior",
+        "ai"
+      ],
+      "status": "stable",
+      "since_version": "8.12.0",
+      "canonical_owner": "platform@aether"
+    },
+    {
+      "path": "docs/source-of-truth/INTEROP_INGESTION_CONTRACT.md",
+      "title": "Interoperability Ingestion Contract",
+      "slug": "source-of-truth/interop-ingestion-contract",
+      "section": "source-of-truth",
+      "visibility": "I",
+      "audience": [
+        "architect",
+        "dev-senior",
+        "ai"
+      ],
+      "status": "stable",
+      "since_version": "8.12.0",
+      "canonical_owner": "platform@aether"
+    },
+    {
       "path": "docs/source-of-truth/KYBER_ONE_PERSON_OPERATIONS.md"
     },
     {
@@ -4795,6 +5419,81 @@
       "status": "draft",
       "estimated_read_minutes": 6,
       "canonical_owner": "ml@aether"
+    },
+    {
+      "path": "docs/source-of-truth/STABLECOIN_CONSENT_MODEL.md",
+      "title": "Stablecoin Consent Model",
+      "slug": "source-of-truth/stablecoin-consent-model",
+      "section": "source-of-truth",
+      "visibility": "I",
+      "audience": [
+        "architect",
+        "dev-senior",
+        "ai"
+      ],
+      "status": "stable",
+      "since_version": "8.12.0",
+      "canonical_owner": "platform@aether"
+    },
+    {
+      "path": "docs/source-of-truth/STABLECOIN_ENTITY_MODEL.md",
+      "title": "Stablecoin Entity Model",
+      "slug": "source-of-truth/stablecoin-entity-model",
+      "section": "source-of-truth",
+      "visibility": "I",
+      "audience": [
+        "architect",
+        "dev-senior",
+        "ai"
+      ],
+      "status": "stable",
+      "since_version": "8.12.0",
+      "canonical_owner": "platform@aether"
+    },
+    {
+      "path": "docs/source-of-truth/STABLECOIN_EVENT_REGISTRY.md",
+      "title": "Stablecoin Event Registry",
+      "slug": "source-of-truth/stablecoin-event-registry",
+      "section": "source-of-truth",
+      "visibility": "I",
+      "audience": [
+        "architect",
+        "dev-senior",
+        "ai"
+      ],
+      "status": "stable",
+      "since_version": "8.12.0",
+      "canonical_owner": "platform@aether"
+    },
+    {
+      "path": "docs/source-of-truth/STABLECOIN_GRAPH_ALIGNMENT.md",
+      "title": "Stablecoin Graph Alignment",
+      "slug": "source-of-truth/stablecoin-graph-alignment",
+      "section": "source-of-truth",
+      "visibility": "I",
+      "audience": [
+        "architect",
+        "dev-senior",
+        "ai"
+      ],
+      "status": "stable",
+      "since_version": "8.12.0",
+      "canonical_owner": "platform@aether"
+    },
+    {
+      "path": "docs/source-of-truth/STABLECOIN_INGESTION_CONTRACT.md",
+      "title": "Stablecoin Ingestion Contract",
+      "slug": "source-of-truth/stablecoin-ingestion-contract",
+      "section": "source-of-truth",
+      "visibility": "I",
+      "audience": [
+        "architect",
+        "dev-senior",
+        "ai"
+      ],
+      "status": "stable",
+      "since_version": "8.12.0",
+      "canonical_owner": "platform@aether"
     },
     {
       "path": "docs/source-of-truth/SUGGESTION_INTELLIGENCE.md"

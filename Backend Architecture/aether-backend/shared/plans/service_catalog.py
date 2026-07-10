@@ -340,6 +340,27 @@ SERVICE_CATALOG: list[ServiceDefinition] = [
         pricing=_pricing("0.10", "0.25", "0.40", "0.60"),
         plan_access={_P1: None, _P2: "Included", _P3: "Advanced", _P4: "Core Feature"},
     ),
+    ServiceDefinition(
+        name="Stablecoin Intelligence",
+        pillar="Intelligence",
+        endpoint_pattern="/v1/stablecoins/*",
+        pricing=_pricing("0.10", "0.25", "0.40", "0.60"),
+        plan_access={_P1: None, _P2: None, _P3: "Advanced", _P4: "Core Feature"},
+    ),
+    ServiceDefinition(
+        name="Derivatives Intelligence",
+        pillar="Intelligence",
+        endpoint_pattern="/v1/derivatives/runtime/*",
+        pricing=_pricing("0.10", "0.25", "0.40", "0.60"),
+        plan_access={_P1: None, _P2: None, _P3: "Advanced", _P4: "Core Feature"},
+    ),
+    ServiceDefinition(
+        name="Interoperability Intelligence",
+        pillar="Intelligence",
+        endpoint_pattern="/v1/interoperability/*",
+        pricing=_pricing("0.10", "0.25", "0.40", "0.60"),
+        plan_access={_P1: None, _P2: None, _P3: "Advanced", _P4: "Core Feature"},
+    ),
 ]
 
 

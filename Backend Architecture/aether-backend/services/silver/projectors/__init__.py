@@ -11,6 +11,9 @@ from .agent_execution_projector import AgentExecutionProjector
 from .ai_invocation_projector import AIInvocationProjector
 from .web3_transaction_projector import Web3TransactionProjector
 from .x402_flow_projector import X402FlowProjector
+from .stablecoin_projector import StablecoinProjector
+from .derivatives_projector import DerivativesProjector
+from .interop_projector import InteropProjector
 from .touchpoint_projector import TouchpointProjector
 from .conversion_projector import ConversionProjector
 
@@ -28,6 +31,9 @@ __all__ = [
     "AIInvocationProjector",
     "Web3TransactionProjector",
     "X402FlowProjector",
+    "StablecoinProjector",
+    "DerivativesProjector",
+    "InteropProjector",
     "TouchpointProjector",
     "ConversionProjector",
 ]

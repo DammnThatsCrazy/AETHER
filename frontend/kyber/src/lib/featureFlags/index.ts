@@ -15,6 +15,9 @@ interface FeatureFlags {
   readonly enableAiEfficiency: boolean;
   readonly enableTargetingIntelligence: boolean;
   readonly enableAgentCommandCenter: boolean;
+  readonly kyberStablecoinOps: boolean;
+  readonly kyberDerivativesOps: boolean;
+  readonly kyberInteropOps: boolean;
 }
 
 const DEFAULT_FLAGS: FeatureFlags = {
@@ -32,6 +35,10 @@ const DEFAULT_FLAGS: FeatureFlags = {
   enableAiEfficiency: false,
   enableTargetingIntelligence: false,
   enableAgentCommandCenter: false,
+  // Economic & interoperability ops surfaces default OFF with their domains
+  kyberStablecoinOps: false,
+  kyberDerivativesOps: false,
+  kyberInteropOps: false,
 };
 
 function loadFlags(): FeatureFlags {

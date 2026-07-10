@@ -1,5 +1,5 @@
        // =============================================================================
-       // Aether SDK — Shared Consent Contract (v8.10.0)
+       // Aether SDK — Shared Consent Contract (v8.12.0)
        // DO NOT EDIT — generated from packages/shared/contracts/consent-registry.json
        // Run: python scripts/generate_contracts.py
        // =============================================================================
@@ -17,6 +17,8 @@
 * - financial_activity: Read-only derivatives trading analytics: account connections, orders, fills, positions, collateral, margin, funding, fees, PnL, risk profiling, agent trading activity, campaign linkage, and governed model training. Always requires explicit opt-in.
 * - credit: Credit signals, account observations, and credit decisions. Always requires explicit opt-in. Always requires explicit opt-in.
 * - location: Precise or coarse location observations and geofence transitions. Always requires explicit opt-in. Always requires explicit opt-in.
+* - economic_observability: Read-only stablecoin economic intelligence: canonical asset and deployment identity, transfer/payment/mint/burn/bridge/swap observations, valuation and peg monitoring, support assertions, finality, flow aggregates, and reconciliation. Always requires explicit opt-in.
+* - cross_chain_observability: Read-only interoperability intelligence: cross-network message lifecycle, paths, gateways, applications, intents, asset legs, security policy snapshots, verification and delivery actors, and reconciliation. Aether never relays or routes. Always requires explicit opt-in.
         */
        export type ConsentPurpose =
          | 'analytics'
@@ -27,7 +29,9 @@
  | 'commerce'
  | 'financial_activity'
  | 'credit'
- | 'location';
+ | 'location'
+ | 'economic_observability'
+ | 'cross_chain_observability';
 
        export const CONSENT_PURPOSES: readonly ConsentPurpose[] = [
          'analytics',
@@ -39,6 +43,8 @@
  'financial_activity',
  'credit',
  'location',
+ 'economic_observability',
+ 'cross_chain_observability',
        ] as const;
 
        /** Purposes that ALWAYS require explicit opt-in (never granted by accept-all). */
@@ -46,6 +52,8 @@
          'financial_activity',
  'credit',
  'location',
+ 'economic_observability',
+ 'cross_chain_observability',
        ] as const;
 
        /** Consent state stored locally by each SDK and stamped onto every event. */
@@ -59,6 +67,8 @@
  financial_activity: boolean;
  credit: boolean;
  location: boolean;
+ economic_observability: boolean;
+ cross_chain_observability: boolean;
          updatedAt: string;
          policyVersion: string;
        }
@@ -83,4 +93,6 @@
  financial_activity: false,
  credit: false,
  location: false,
+ economic_observability: false,
+ cross_chain_observability: false,
        };

@@ -1,3 +1,18 @@
+---
+title: Derivatives Entity Model
+slug: source-of-truth/derivatives-entity-model
+section: source-of-truth
+visibility: I
+audience: [architect, dev-senior, ai]
+status: stable
+since_version: "8.12.0"
+source_files:
+  - packages/shared/derivatives.ts
+  - Backend Architecture/aether-backend/services/derivatives/runtime_models.py
+  - Backend Architecture/aether-backend/repositories/derivatives_repos.py
+canonical_owner: platform@aether
+last_synced_commit: "03ab3a6"
+---
 # Derivatives Entity Model
 
 Derivatives Intelligence extends existing observed-trading foundations such as `TradeOrderObserved`, `TradeFillObserved`, `PositionSnapshotObserved`, and `PortfolioSnapshotObserved` with canonical stateful domain entities. Observed entities remain provider observations; canonical entities in `packages/shared/derivatives.ts` are Aether-resolved objects with tenant scope, idempotency, evidence, fixed-precision decimal strings, and `execution_by_aether: false`.

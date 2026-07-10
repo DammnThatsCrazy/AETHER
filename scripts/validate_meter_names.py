@@ -42,6 +42,15 @@ CANONICAL_NAMES: frozenset[str] = frozenset({
     "identity_resolve_error_total",
     "ingestion_bronze_write_failed_total",
     "ingestion_publish_failed_total",
+    # Stablecoin / Derivatives / Interoperability intelligence
+    "stablecoin_observation_ingested",
+    "stablecoin_flow_materialized",
+    "derivatives_event_ingested",
+    "derivatives_reconciliation_run",
+    "derivatives_stream_gap_detected",
+    "interop_observation_ingested",
+    "interop_message_correlated",
+    "interop_reconciliation_run",
     # Feeds / Dune
     "api_feeds_ingested",
     "api_feeds_duplicate",
