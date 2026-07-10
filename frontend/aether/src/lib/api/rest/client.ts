@@ -75,7 +75,7 @@ async function request<T>(
       });
       const serverCorrelationId =
         problem.correlation_id ??
-        response.headers.get('X-Correlation-ID') ??
+        response.headers?.get('X-Correlation-ID') ??
         correlationId;
       log.warn(`[REST] ${method} ${path} -> ${response.status} (${duration}ms)`, {
         correlationId: serverCorrelationId,

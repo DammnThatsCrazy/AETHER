@@ -108,7 +108,7 @@ async function request<T>(
         response.status,
         problem.code,
         problem.correlation_id ??
-          response.headers.get('X-Correlation-ID') ??
+          response.headers?.get('X-Correlation-ID') ??
           correlationId,
         problem.retryable ?? false,
         problem,

@@ -118,17 +118,24 @@ export function parseProblemDetails(
       };
     }
 
-    // Object with a top-level message but no canonical members.
+    // Object with a top-level message but no canonical members. Honor a
+    // server-provided `code`/`status`/`request_id` when present; otherwise
+    // fall back to the HTTP status and an UNKNOWN code.
     if (typeof candidate.message === 'string') {
-      const objStatus = status || 500;
+      const objStatus =
+        typeof candidate.status === 'number' ? candidate.status : status || 500;
       return {
         type: 'about:blank',
         title: httpTitle(objStatus),
         status: objStatus,
-        code: httpTitle(objStatus).toUpperCase().replace(/ /g, '_'),
+        code:
+          typeof candidate.code === 'string' ? candidate.code : 'UNKNOWN',
         detail: candidate.message,
         message: candidate.message,
         retryable: RETRYABLE_STATUSES.has(objStatus),
+        ...(typeof candidate.request_id === 'string'
+          ? { request_id: candidate.request_id }
+          : {}),
       };
     }
   }
