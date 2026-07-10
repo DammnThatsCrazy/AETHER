@@ -216,6 +216,8 @@ from services.comms.routes import router as comms_router, admin_router as comms_
 from services.economic.routes import router as economic_router
 from services.consent.routes import router as consent_router
 from services.notification_intelligence.routes import router as notification_router
+from services.jobs.routes import router as jobs_router
+from services.jobs.kyber_routes import router as jobs_kyber_router
 from services.admin.routes import router as admin_router
 from services.traffic.routes import router as traffic_router
 from services.fraud.routes import router as fraud_router
@@ -327,9 +329,13 @@ except ImportError:
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     """
     Manages the full lifecycle of shared resources:
-      - startup:  connect cache, graph DB, event producer
-      - shutdown: gracefully close all connections
+      - startup:  connect cache, graph DB, event producer; wire consumer
+                  attachments; start supervised background workers
+      - shutdown: stop all supervised workers, gracefully close connections
     """
+    from config.settings import Environment
+    from services.runtime import WorkerSupervisor, build_worker_specs
+
     registry = get_registry()
     await registry.startup()
 
@@ -337,35 +343,41 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     if _ml_startup_fn is not None:
         _ml_startup_fn()
 
-    from services.events.worker import start_replay_worker
-    replay_worker_task = asyncio.create_task(start_replay_worker())
+    # Consumer-attach wiring is fail-closed in staging/production: a broken
+    # attachment means silently dropped events, so abort startup there.
+    # Local/dev keep the historical warn-and-continue behaviour.
+    _attach_fail_closed = settings.env in (Environment.STAGING, Environment.PRODUCTION)
 
-    # Monthly overage invoice cron (end-of-month billing cycle)
-    from services.billing.cron import run_monthly_overage_cron
-    overage_cron_task = asyncio.create_task(run_monthly_overage_cron())
+    def _attach_step(label: str, attach_fn) -> None:
+        try:
+            attach_fn()
+        except Exception as e:
+            if _attach_fail_closed:
+                logger.error(f"{label} wiring failed: {e}")
+                raise RuntimeError(
+                    f"{label} wiring failed in {settings.env.value}"
+                ) from e
+            logger.warning(f"{label} wiring skipped: {e}")
 
     # Ingestion workers — sdk_bronze_writer, silver_normalizer, identity_signal_emitter
-    try:
+    def _attach_ingestion() -> None:
         from services.ingestion.workers import attach_ingestion_workers
         attach_ingestion_workers(registry.consumer, registry.producer)
-    except Exception as e:  # pragma: no cover — defensive
-        logger.warning(f"Ingestion worker wiring skipped: {e}")
+    _attach_step("Ingestion worker", _attach_ingestion)
 
     # Profile 360 — attach derived workers to the shared consumer.
     # Strictly additive: workers consume new topics + a few existing ones,
     # write to new tables only, and never mutate existing service state.
-    try:
-        attach_profile360_workers(registry.consumer, registry.graph)
-    except Exception as e:  # pragma: no cover — defensive
-        logger.warning(f"Profile 360 worker wiring skipped: {e}")
+    _attach_step(
+        "Profile 360 worker",
+        lambda: attach_profile360_workers(registry.consumer, registry.graph),
+    )
 
     # Measurement — identity change → journey rebuild → attribution recompute
-    try:
+    def _attach_measurement_identity() -> None:
         from services.measurement.identity_consumer import MeasurementIdentityConsumer
-        _measurement_identity_consumer = MeasurementIdentityConsumer(producer=registry.producer)
-        _measurement_identity_consumer.register(registry.consumer)
-    except Exception as e:  # pragma: no cover — defensive
-        logger.warning(f"Measurement identity consumer wiring skipped: {e}")
+        MeasurementIdentityConsumer(producer=registry.producer).register(registry.consumer)
+    _attach_step("Measurement identity consumer", _attach_measurement_identity)
 
     # Measurement — register algorithmic attribution models (markov, shapley_heuristic)
     try:
@@ -377,44 +389,20 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     except Exception as e:  # pragma: no cover — defensive
         logger.warning(f"Algorithmic attribution model registration skipped: {e}")
 
-    # Notification Intelligence — attach Kafka consumers and SLA expiry worker.
-    _sla_worker_fn = None
-    try:
+    # Notification Intelligence — attach Kafka consumers.
+    def _attach_notification_intelligence() -> None:
         from services.notification_intelligence.consumer import attach_notification_consumers
-        from services.notification_intelligence.lifecycle import start_sla_worker as _sla_worker_fn
         attach_notification_consumers(
             registry.consumer,
             producer=registry.producer,
             cache=registry.cache,
         )
-    except Exception as e:  # pragma: no cover — defensive
-        logger.warning(f"Notification intelligence consumer wiring skipped: {e}")
+    _attach_step("Notification intelligence consumer", _attach_notification_intelligence)
 
     try:
         await registry.consumer.start()
     except Exception as e:  # pragma: no cover — defensive
         logger.warning(f"Kafka consumer start skipped: {e}")
-
-    if _sla_worker_fn is not None:
-        sla_worker_task = asyncio.create_task(_sla_worker_fn(producer=registry.producer))
-    else:
-        sla_worker_task = asyncio.create_task(asyncio.sleep(0))
-
-    # Dune polling worker — periodic Bronze ingest + Bronze→Silver promotion.
-    dune_poll_task = asyncio.create_task(asyncio.sleep(0))  # placeholder
-    try:
-        from services.integrations.dune_feeder.worker import dune_poll_loop
-        dune_poll_task = asyncio.create_task(dune_poll_loop())
-    except Exception as e:  # pragma: no cover — defensive
-        logger.warning(f"Dune poll worker failed to start: {e}")
-
-    # Retention sweep worker — daily expiry enforcement per tenant policy.
-    retention_sweep_task = asyncio.create_task(asyncio.sleep(0))  # placeholder
-    try:
-        from services.security.retention_worker import retention_sweep_loop
-        retention_sweep_task = asyncio.create_task(retention_sweep_loop())
-    except Exception as e:  # pragma: no cover — defensive
-        logger.warning(f"Retention sweep worker failed to start: {e}")
 
     # Provider Gateway (feature-flagged)
     from dependencies.providers import _init_provider_gateway
@@ -423,15 +411,6 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         await provider_gateway.startup()
         app.state.provider_gateway = provider_gateway
         logger.info("Provider Gateway initialised")
-
-    # Dune Analytics — scheduled polling worker (asyncio loop, no external deps)
-    dune_poll_task = asyncio.create_task(asyncio.sleep(0))
-    try:
-        from services.dune_feeder.scheduler import start_dune_polling_worker
-        dune_poll_task = asyncio.create_task(start_dune_polling_worker())
-        logger.info("Dune polling worker started")
-    except Exception as e:  # pragma: no cover — defensive
-        logger.warning(f"Dune polling worker skipped: {e}")
 
     # Noesis startup validation
     try:
@@ -444,51 +423,17 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     except ImportError:
         pass  # Noesis module not present in this build
 
-    # Delivery Worker — durable provider dispatch + outcome tracking
-    delivery_worker_task = asyncio.create_task(asyncio.sleep(0))  # placeholder
-    try:
-        if settings.delivery.enabled:
-            from services.delivery.worker import DeliveryWorker as _DeliveryWorkerCls
-            _delivery_worker = _DeliveryWorkerCls(
-                batch_size=getattr(settings.delivery, "batch_size", 10),
-                poll_interval_seconds=getattr(settings.delivery, "poll_interval_seconds", 5),
-            )
-            await _delivery_worker.start()
-            delivery_worker_task = _delivery_worker._task or asyncio.create_task(asyncio.sleep(0))
-            logger.info("DeliveryWorker started")
-        else:
-            logger.info("DeliveryWorker disabled (AETHER_DELIVERY_WORKER_ENABLED=false)")
-    except Exception as e:  # pragma: no cover — defensive
-        logger.warning(f"DeliveryWorker failed to start: {e}")
-
-    # WebhookInboxProcessor — async closed-loop outcome processing
-    webhook_inbox_task = asyncio.create_task(asyncio.sleep(0))  # placeholder
-    try:
-        if settings.delivery.enabled:
-            from repositories.delivery_repos import (
-                WebhookInboxRepository as _InboxRepo,
-                ExternalOutcomeEventRepository as _OutcomeRepo,
-                ExternalResourceLinkRepository as _LinkRepo,
-            )
-            from services.delivery.outcome_processor import WebhookInboxProcessor, OutcomeRouter
-            from repositories.repos import SuggestionsRepository as _SuggestRepo, NotificationIntelligenceRepository as _NotifRepo
-            _inbox_proc = WebhookInboxProcessor(
-                inbox_repo=_InboxRepo(),
-                outcome_repo=_OutcomeRepo(),
-                link_repo=_LinkRepo(),
-                router=OutcomeRouter(
-                    outcome_repo=_OutcomeRepo(),
-                    link_repo=_LinkRepo(),
-                    suggestion_repo=_SuggestRepo(),
-                    notification_repo=_NotifRepo(),
-                ),
-            )
-            webhook_inbox_task = asyncio.create_task(_inbox_proc.run())
-            logger.info("WebhookInboxProcessor started")
-        else:
-            logger.info("WebhookInboxProcessor disabled (AETHER_DELIVERY_WORKER_ENABLED=false)")
-    except Exception as e:  # pragma: no cover — defensive
-        logger.warning(f"WebhookInboxProcessor failed to start: {e}")
+    # Supervised long-running loop workers: event replay, billing overage
+    # cron, notification SLA expiry, Dune polling (canonical scheduler only —
+    # the legacy services.integrations.dune_feeder loop is no longer started),
+    # retention sweep, delivery worker, and webhook inbox processor.
+    # Crash → log + metric + exponential-backoff restart; required workers
+    # abort startup in staging/production if their first start fails.
+    supervisor = WorkerSupervisor()
+    for spec in build_worker_specs(registry=registry, settings=settings):
+        supervisor.register(spec)
+    app.state.worker_supervisor = supervisor
+    await supervisor.start_all()
 
     logger.info(
         f"Aether Backend started | env={settings.env.value} "
@@ -497,44 +442,9 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
 
     yield  # --- app runs here ---
 
-    # Graceful shutdown: drain connections and close backends
+    # Graceful shutdown: stop workers, drain connections, close backends
     logger.info("Initiating graceful shutdown...")
-    replay_worker_task.cancel()
-    overage_cron_task.cancel()
-    sla_worker_task.cancel()
-    dune_poll_task.cancel()
-    delivery_worker_task.cancel()
-    webhook_inbox_task.cancel()
-    try:
-        await replay_worker_task
-    except asyncio.CancelledError:
-        pass
-    try:
-        await overage_cron_task
-    except asyncio.CancelledError:
-        pass
-    try:
-        await sla_worker_task
-    except asyncio.CancelledError:
-        pass
-    try:
-        await dune_poll_task
-    except asyncio.CancelledError:
-        pass
-    try:
-        await delivery_worker_task
-    except asyncio.CancelledError:
-        pass
-    try:
-        await webhook_inbox_task
-    except asyncio.CancelledError:
-        pass
-    try:
-        if settings.delivery.enabled:
-            from services.delivery.worker import delivery_worker as _delivery_worker
-            await _delivery_worker.stop()
-    except Exception as e:
-        logger.warning(f"DeliveryWorker stop failed: {e}")
+    await supervisor.stop_all()
     if provider_gateway:
         await provider_gateway.shutdown()
     await registry.shutdown()
@@ -599,6 +509,8 @@ def create_app() -> FastAPI:
     app.include_router(economic_router)
     app.include_router(consent_router)
     app.include_router(notification_router)
+    app.include_router(jobs_router)          # /v1/jobs — durable job control plane
+    app.include_router(jobs_kyber_router)    # /v1/kyber/jobs — operator job timeline
     app.include_router(admin_router)
     app.include_router(traffic_router)
     app.include_router(fraud_router)

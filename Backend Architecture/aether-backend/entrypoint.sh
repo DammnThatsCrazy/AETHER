@@ -28,4 +28,13 @@ PYEOF
   )
 fi
 
+# Opt-in migration step: /v1/ready requires alembic current == head, but
+# nothing else in the deploy path applies migrations. Set RUN_MIGRATIONS=1 in
+# the task environment to upgrade before the app starts. Failures abort the
+# container (set -e) rather than booting an unready service.
+if [ "$RUN_MIGRATIONS" = "1" ]; then
+  echo "RUN_MIGRATIONS=1 — applying alembic migrations to head..."
+  alembic upgrade head
+fi
+
 exec "$@"

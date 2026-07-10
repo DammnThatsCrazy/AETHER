@@ -13,7 +13,7 @@ source_files:
 canonical_owner: frontend@aether
 estimated_read_minutes: 35
 toc_depth: 4
-last_synced_commit: 1f19190
+last_synced_commit: "07916cc"
 ---
 
 # Aether Frontend Architecture & Designer Handoff
@@ -451,6 +451,23 @@ Every Profile360 panel maps to a backend sub-resource endpoint. The frontend bin
 | Link snapshot to investigation | `POST /v1/investigations/{case_id}/snapshot` | No |
 
 All window-aware endpoints accept `?window=30d|60d|90d|lifetime`. The time window selector updates all window-aware panels on the active tab simultaneously.
+
+### API error contract and correlation
+
+Both REST clients (`frontend/aether/src/lib/api/rest/client.ts`,
+`frontend/kyber/src/lib/api/rest/client.ts`) parse backend failures through
+`parseProblemDetails` from `@aether/ui` (`frontend/shared/src/problem-details.ts`),
+which normalizes the canonical RFC-7807-compatible body and both legacy error
+shapes into one structure. The canonical `ProblemDetails` **type** stays in
+`@aether/shared` (`packages/shared/problem-details.ts`) and is imported type-only;
+the runtime parser lives in `@aether/ui` because that ESM library is bundled from
+source by the app builds, whereas `@aether/shared` compiles to CommonJS and only
+its types are resolvable by the app rollup builds. `RestClientError` therefore
+carries a stable machine `code`, a `retryable` flag, the full parsed `problem`,
+and the server-echoed correlation ID. Clients send `X-Correlation-ID` on every request; the backend
+honors it and echoes both `X-Correlation-ID` and `X-Request-ID` on responses,
+so one ID traces a request across frontend logs, backend logs, jobs, and audit
+records.
 
 ---
 

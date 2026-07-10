@@ -129,12 +129,41 @@ jobs:
           cache-to:   type=gha,scope=kyber-ui,mode=max
 
   # ─────────────────────────────────────────────────────────────────────────
-  # 2. Force new ECS deployments and wait for stability
+  # 2. Staging preflight — fail-closed gate before any deployment
+  # ─────────────────────────────────────────────────────────────────────────
+  preflight:
+    name: Staging preflight (${{ github.event.inputs.environment || 'production' }})
+    runs-on: ubuntu-latest
+    needs: build-and-push
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+          cache-dependency-path: 'pyproject.toml'
+
+      - name: Install Python dependencies
+        run: |
+          pip install uv
+          uv pip install --system -e ".[dev,security,backend,agent]" alembic
+
+      # CI does not hold live staging credentials; the dry-run proves the
+      # gate's fail-closed logic, and the post-deploy /v1/ready gate performs
+      # the authoritative in-environment readiness check (DB, migrations
+      # head, cache, event bus, auth config).
+      - name: Staging preflight (dry-run self-test)
+        run: python scripts/staging_preflight.py --dry-run
+
+  # ─────────────────────────────────────────────────────────────────────────
+  # 3. Force new ECS deployments and wait for stability
   # ─────────────────────────────────────────────────────────────────────────
   deploy:
     name: Deploy to ECS (${{ github.event.inputs.environment || 'production' }})
     runs-on: ubuntu-latest
-    needs: build-and-push
+    needs: [build-and-push, preflight]
     environment: ${{ github.event.inputs.environment || 'production' }}
     permissions:
       id-token: write   # OIDC auth with AWS
@@ -199,8 +228,28 @@ jobs:
           echo "::error::Health check failed after 3 attempts"
           exit 1
 
+      - name: Readiness check (deployable gate)
+        # /v1/ready is the authoritative in-environment gate: DB connectivity,
+        # migrations current == head (set RUN_MIGRATIONS=1 in the task env to
+        # auto-apply), cache, event bus, and auth config. A live service that
+        # is not READY must not be treated as a successful deploy.
+        run: |
+          for i in 1 2 3 4 5; do
+            STATUS=$(curl -sf -o /dev/null -w "%{http_code}" \
+              "https://${{ vars.ALB_DNS_NAME }}/v1/ready" 2>/dev/null || echo "000")
+            if [ "$STATUS" = "200" ]; then
+              echo "Readiness check passed (attempt $i)"
+              exit 0
+            fi
+            echo "Readiness returned HTTP $STATUS (attempt $i), retrying in 15s..."
+            curl -s "https://${{ vars.ALB_DNS_NAME }}/v1/ready" | head -c 2000 || true
+            sleep 15
+          done
+          echo "::error::Readiness check failed after 5 attempts — service is alive but not deployable-ready"
+          exit 1
+
   # ─────────────────────────────────────────────────────────────────────────
-  # 3. Golden-path smoke test — runs after ECS stabilises
+  # 4. Golden-path smoke test — runs after ECS stabilises
   # ─────────────────────────────────────────────────────────────────────────
   smoke-test:
     name: Smoke test (${{ github.event.inputs.environment || 'production' }})

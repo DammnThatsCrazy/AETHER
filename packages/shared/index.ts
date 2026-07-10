@@ -53,3 +53,7 @@ export * from './payment-catalog';
 export * from './card-linked-payments';
 export * from './targeting-intelligence';
 export * from './interoperability';
+
+// Production-readiness platform contracts
+export * from './ingestion-contract';
+export * from './problem-details';

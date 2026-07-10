@@ -22,6 +22,8 @@ PUBLIC_PATHS: frozenset[str] = frozenset({
     "/",
     "/health",
     "/v1/health",
+    "/ready",
+    "/v1/ready",
     "/v1/metrics",
     "/docs",
     "/openapi.json",

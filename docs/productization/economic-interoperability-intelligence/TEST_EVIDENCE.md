@@ -12,7 +12,7 @@ source_files:
   - tests/unit/interop/
   - tests/unit/test_economic_noesis_ooda_wiring.py
 canonical_owner: platform@aether
-last_synced_commit: "03ab3a6"
+last_synced_commit: "94102da"
 ---
 
 # Test Evidence

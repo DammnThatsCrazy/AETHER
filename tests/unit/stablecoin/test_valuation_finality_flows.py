@@ -102,8 +102,12 @@ async def test_non_usd_peg_is_honestly_unsupported():
     })
     # The repo drops unknown columns; peg lookup falls back to USD when the
     # deployment row lacks pegged_to — so this asserts the guard path when
-    # the column is present in the row dict.
-    service = ValuationService()
+    # the column is present in the row dict. Inject the same repo the row was
+    # written to: under the full-suite run, contract tests do sys.modules
+    # surgery that can leave a fresh ValuationService().deployments bound to a
+    # different in-memory store, making the deployment lookup miss (xdist
+    # worker-distribution dependent). Sharing the repo makes this hermetic.
+    service = ValuationService(deployment_repo=repo)
     deployment = await repo.find_one({"deployment_id": "eurs:eip155:1"})
     if deployment.get("pegged_to") == "EUR":
         with pytest.raises(NotImplementedError):

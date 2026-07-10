@@ -56,6 +56,13 @@ from services.notification_intelligence.channel_gateway import (
     get_gateway,
     SlackChannelGateway,
 )
+from services.notification_intelligence.inbox import (
+    archive_notification as _inbox_archive,
+    list_inbox_notifications as _inbox_list,
+    mark_all_notifications_read as _inbox_mark_all_read,
+    mark_notification_read as _inbox_mark_read,
+    unread_notification_count as _inbox_unread_count,
+)
 
 logger = get_logger("aether.service.notification_intelligence")
 
@@ -430,6 +437,63 @@ async def replay_notification(notification_id: str, request: Request, tenantId: 
     # instead of fire-and-forget DeliveryRouter instantiated without providers_repo.
     jobs_queued = await _create_delivery_jobs_for_replay(notif)
     return APIResponse(data={"replayed": True, "jobs_queued": jobs_queued}, status_code=202).to_dict()
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# TENANT IN-APP NOTIFICATION INBOX
+# ═══════════════════════════════════════════════════════════════════════════
+# Tenant identity comes exclusively from the authenticated request context —
+# no tenantId query parameter is accepted on inbox endpoints.
+
+@router.get("/inbox")
+async def list_inbox(
+    request: Request,
+    unread: bool = Query(default=False),
+    limit: int = Query(default=50, ge=1, le=200),
+    offset: int = Query(default=0, ge=0),
+):
+    """List in-app inbox notifications for the authenticated tenant
+    (newest first; ``unread=true`` filters to unread rows)."""
+    request.state.tenant.require_permission("read")
+    tenant_id = request.state.tenant.tenant_id
+    rows = await _inbox_list(tenant_id, unread_only=unread, limit=limit, offset=offset)
+    return APIResponse(data=rows).to_dict()
+
+
+@router.get("/inbox/unread-count")
+async def inbox_unread_count(request: Request):
+    """Unread (non-archived) inbox notification count for the tenant."""
+    request.state.tenant.require_permission("read")
+    tenant_id = request.state.tenant.tenant_id
+    count = await _inbox_unread_count(tenant_id)
+    return APIResponse(data={"unread": count}).to_dict()
+
+
+@router.post("/inbox/read-all")
+async def inbox_read_all(request: Request):
+    """Mark every unread inbox notification read for the tenant."""
+    request.state.tenant.require_permission("write")
+    tenant_id = request.state.tenant.tenant_id
+    count = await _inbox_mark_all_read(tenant_id)
+    return APIResponse(data={"read": count}).to_dict()
+
+
+@router.post("/inbox/{notification_id}/read")
+async def inbox_mark_read(notification_id: str, request: Request):
+    """Mark one inbox notification read (tenant-scoped, idempotent)."""
+    request.state.tenant.require_permission("write")
+    tenant_id = request.state.tenant.tenant_id
+    row = await _inbox_mark_read(tenant_id, notification_id)
+    return APIResponse(data=row).to_dict()
+
+
+@router.post("/inbox/{notification_id}/archive")
+async def inbox_archive(notification_id: str, request: Request):
+    """Archive one inbox notification (tenant-scoped, idempotent)."""
+    request.state.tenant.require_permission("write")
+    tenant_id = request.state.tenant.tenant_id
+    row = await _inbox_archive(tenant_id, notification_id)
+    return APIResponse(data=row).to_dict()
 
 
 # ═══════════════════════════════════════════════════════════════════════════

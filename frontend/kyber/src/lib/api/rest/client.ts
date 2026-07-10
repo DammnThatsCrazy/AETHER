@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { parseProblemDetails, type ProblemDetails } from '@aether/ui';
 import { getAccessToken } from '@kyber/features/auth';
 import { env, getEnvironment, getRuntimeMode } from '@kyber/lib/env';
 import { log } from '@kyber/lib/logging';
@@ -9,6 +10,8 @@ export class RestClientError extends Error {
     public readonly status: number,
     public readonly code: string,
     public readonly correlationId?: string | undefined,
+    public readonly retryable: boolean = false,
+    public readonly problem?: ProblemDetails | undefined,
   ) {
     super(message);
     this.name = 'RestClientError';
@@ -95,12 +98,20 @@ async function request<T>(
     log.info(`[REST] ${method} ${path} -> ${response.status} (${duration}ms)`, { correlationId });
 
     if (!response.ok) {
-      const errorBody = await response.json().catch(() => ({})) as Record<string, unknown>;
+      const errorBody: unknown = await response.json().catch(() => null);
+      const problem = parseProblemDetails(errorBody, {
+        status: response.status,
+        statusText: response.statusText,
+      });
       throw new RestClientError(
-        String(errorBody['message'] ?? response.statusText),
+        problem.detail || problem.title || response.statusText,
         response.status,
-        String(errorBody['code'] ?? 'UNKNOWN'),
-        correlationId,
+        problem.code,
+        problem.correlation_id ??
+          response.headers?.get('X-Correlation-ID') ??
+          correlationId,
+        problem.retryable ?? false,
+        problem,
       );
     }
 
