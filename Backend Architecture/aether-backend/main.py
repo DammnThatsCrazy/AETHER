@@ -942,7 +942,14 @@ def create_app() -> FastAPI:
             "Card-Linked Payment Rails: routes mounted "
             "(/v1/integrations/providers/payment-rails/card-linked)"
         )
-    else:
+    if card_linked_flags.enabled or card_linked_flags.kyber_enabled:
+        from services.card_linked_payments.kyber_routes import card_linked_kyber_router
+        app.include_router(card_linked_kyber_router)
+        logger.info(
+            "Card-Linked Payment Rails: Kyber diagnostics mounted "
+            "(/v1/admin/kyber/payment-rails/card-linked)"
+        )
+    if not (card_linked_flags.enabled or card_linked_flags.kyber_enabled):
         logger.info(
             "Card-Linked Payment Rails: disabled "
             "(AETHER_CARD_LINKED_PAYMENT_RAILS_ENABLED=false)"

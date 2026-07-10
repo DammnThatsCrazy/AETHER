@@ -1670,6 +1670,14 @@ export const api = {
       paymentRailsTenant: (tenantId: string) =>
         restClient.get(`/v1/admin/kyber/payment-rails/${encodeURIComponent(tenantId)}`, wrap(unknownSchema)).then(r => r.data),
 
+      // ── Card-linked payment rail observability (diagnostics, aggregate-only) ──
+      cardLinkedDiagnostics: (tenantId: string) =>
+        restClient.get(`/v1/admin/kyber/payment-rails/card-linked/diagnostics${buildQS({ tenant_id: tenantId })}`, wrap(unknownSchema)).then(r => r.data),
+      cardLinkedClusters: (tenantId: string) =>
+        restClient.get(`/v1/admin/kyber/payment-rails/card-linked/clusters${buildQS({ tenant_id: tenantId })}`, wrap(unknownSchema)).then(r => r.data),
+      cardLinkedReleaseGate: () =>
+        restClient.get('/v1/admin/kyber/payment-rails/card-linked/release-gate', wrap(unknownSchema)).then(r => r.data),
+
       // ── AI outcome efficiency (fleet health, aggregate-only) ──────────────
       aiEfficiencyHealth: () =>
         restClient.get('/v1/admin/kyber/ai-efficiency/health', wrap(unknownSchema)).then(r => r.data),

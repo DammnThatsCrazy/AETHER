@@ -3,6 +3,7 @@ import { Badge, Button, Card, CardContent, CardHeader, CardTitle, EmptyState, Lo
 import { PageWrapper } from '@kyber/components/layout';
 import { api } from '@kyber/lib/api';
 import { isFeatureEnabled } from '@kyber/lib/featureFlags';
+import { CardLinkedDiagnosticsSection } from './card-linked-diagnostics-section';
 
 type AnyRecord = Record<string, unknown>;
 
@@ -323,6 +324,8 @@ export function PaymentRailsPage() {
           )}
         </CardContent>
       </Card>
+
+      <CardLinkedDiagnosticsSection />
 
       {selectedTenantId && (
         <TenantDiagnosticsDrawer tenantId={selectedTenantId} onClose={() => setSelectedTenantId(null)} />

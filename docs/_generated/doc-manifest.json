@@ -4998,7 +4998,7 @@
     {
       "path": "docs/source-of-truth/CARD_LINKED_PAYMENT_RAILS.md",
       "title": "Card-Linked Payment Rails Source of Truth",
-      "status": "draft"
+      "status": "stable"
     },
     {
       "path": "docs/source-of-truth/CLUSTER_TARGETING_INTELLIGENCE.md"
@@ -5383,7 +5383,7 @@
     {
       "path": "docs/source-of-truth/PAYMENTSCAN_CATALOG.md",
       "title": "PaymentScan Catalog Source of Truth",
-      "status": "draft"
+      "status": "stable"
     },
     {
       "path": "docs/source-of-truth/PAYMENT_RAIL_OBSERVABILITY.md"

@@ -35,3 +35,13 @@ Cross-domain rules:
 - All mutations flow through `build_edge_properties` (tenant, actor,
   provenance, valid_from, source_event_id, idempotency key) and
   `persist_mutations`, gated per domain by `*_graph_enabled` flags.
+
+The card-linked payment rail slice adds 5 vertex types (`CARD_PROGRAM`,
+`CARD_ISSUER`, `PAYMENT_NETWORK`, `CARD_LINKED_FLOW`, `CARD_BENCHMARK`)
+and 9 edge types (`CAME_FROM`, `PARTICIPATED_IN`, `USED_PROVIDER`,
+`FUNDED`, `OCCURRED_ON`, `USED_ASSET`, `RUNS_ON`, `FOLLOWED_BY`,
+`INITIATED_OR_INFLUENCED`), every one mapped to
+`RelationshipLayer.EXCLUDED` — card-linked behavior is intentionally
+never usable as deterministic identity-merge evidence. PaymentScan
+benchmark rows are never projected to the graph at all
+(`services/card_linked_payments/graph_projector.py`).
