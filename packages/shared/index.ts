@@ -48,4 +48,6 @@ export * from './stablecoin';
 export * from './agent-deployment';
 export * from './ai-execution';
 export * from './payment-rails';
+export * from './payment-catalog';
+export * from './card-linked-payments';
 export * from './targeting-intelligence';
