@@ -6,11 +6,14 @@ In production: AWS API Gateway + Lambda authorizer.
 
 from __future__ import annotations
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Request
+from fastapi.responses import JSONResponse
 
+from config.settings import settings
 from shared.common.common import APIResponse, utc_now
 from shared.logger.logger import metrics
 from dependencies.providers import get_registry
+from services.gateway.readiness import readiness_report
 
 router = APIRouter(tags=["Gateway"])
 
@@ -39,6 +42,19 @@ async def health_check():
             "admin": "ok",
         },
     }
+
+
+@router.get("/ready")
+@router.get("/v1/ready")
+async def readiness_check(request: Request):
+    """Readiness probe — infra + migration alignment + worker health (advisory).
+
+    Returns 200 when ready, 503 with the full check map when not.
+    """
+    registry = get_registry()
+    supervisor = getattr(request.app.state, "worker_supervisor", None)
+    ready, report = await readiness_report(registry, supervisor, settings)
+    return JSONResponse(status_code=200 if ready else 503, content=report)
 
 
 @router.get("/v1/metrics")
