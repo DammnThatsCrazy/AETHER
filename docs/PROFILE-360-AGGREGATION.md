@@ -13,7 +13,7 @@ source_files:
 canonical_owner: backend@aether
 estimated_read_minutes: 8
 toc_depth: 3
-last_synced_commit: 4d76caf
+last_synced_commit: 1f19190
 ---
 
 # Profile 360 Aggregation Layer
@@ -427,6 +427,20 @@ list when Silver data is unavailable.  All require the `read` permission on the 
 | GET    | `/v1/profile/{id}/communication-state` | `communication_state`      | Rebuildable per-channel state: subscription, deliverability, engagement counters, suppression scopes |
 | GET    | `/v1/profile/{id}/integrations`   | `silver_server_operation_facts` | Integration and server operation facts     |
 | GET    | `/v1/profile/{id}/data-quality`   | `silver_data_quality_facts`     | Data quality and schema completeness       |
+
+### Economic intelligence sub-resource endpoints (v8.12.0+)
+
+Observation-only economic sub-resources backed by the typed domain
+repositories. Each is flag-gated by its domain's `profile360_enabled`
+setting (`404` when the domain is disabled), requires the `read`
+permission, is tenant-scoped, and serializes Decimals as strings. All
+return `{entity_id, items, summary, count, computed_at, provenance}`.
+
+| Method | Path                                   | Backing data                          | Attribution                                    |
+|--------|----------------------------------------|---------------------------------------|------------------------------------------------|
+| GET    | `/v1/profile/{id}/stablecoin`          | stablecoin observations               | entity refs / wallet ids on observations       |
+| GET    | `/v1/profile/{id}/derivatives`         | derivatives positions + fills         | trading accounts with `owner_entity_id == id`  |
+| GET    | `/v1/profile/{id}/interoperability`    | interop intents + asset legs          | initiator refs and from/to addresses           |
 
 Silver fact tables are populated asynchronously by the `SilverDispatcher` projector chain
 (`services/silver/dispatcher.py`), attached to `SDK_EVENTS_VALIDATED` via the

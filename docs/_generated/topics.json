@@ -926,6 +926,31 @@
       ]
     },
     {
+      "name": "Economic & Interoperability Intelligence (observation-only alerts)",
+      "topics": [
+        {
+          "member": "STABLECOIN_DEPEG_DETECTED",
+          "value": "aether.stablecoin.depeg.detected"
+        },
+        {
+          "member": "DERIVATIVES_VARIANCE_DETECTED",
+          "value": "aether.derivatives.reconciliation.variance"
+        },
+        {
+          "member": "DERIVATIVES_STREAM_GAP_STALLED",
+          "value": "aether.derivatives.stream.gap.stalled"
+        },
+        {
+          "member": "INTEROP_MESSAGE_STUCK",
+          "value": "aether.interop.message.stuck"
+        },
+        {
+          "member": "INTEROP_SECURITY_POLICY_CHANGED",
+          "value": "aether.interop.security.policy.changed"
+        }
+      ]
+    },
+    {
       "name": "Dead letter",
       "topics": [
         {
@@ -1703,6 +1728,26 @@
     {
       "member": "CANONICAL_ACTIVITY_RISK_UPDATED",
       "value": "aether.canonical.activity.risk_updated"
+    },
+    {
+      "member": "STABLECOIN_DEPEG_DETECTED",
+      "value": "aether.stablecoin.depeg.detected"
+    },
+    {
+      "member": "DERIVATIVES_VARIANCE_DETECTED",
+      "value": "aether.derivatives.reconciliation.variance"
+    },
+    {
+      "member": "DERIVATIVES_STREAM_GAP_STALLED",
+      "value": "aether.derivatives.stream.gap.stalled"
+    },
+    {
+      "member": "INTEROP_MESSAGE_STUCK",
+      "value": "aether.interop.message.stuck"
+    },
+    {
+      "member": "INTEROP_SECURITY_POLICY_CHANGED",
+      "value": "aether.interop.security.policy.changed"
     },
     {
       "member": "DEAD_LETTER",

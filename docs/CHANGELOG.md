@@ -108,6 +108,21 @@ last_synced_commit: 48fb9d4
 
 ---
 
+## v8.12.0 — Stablecoin, Derivatives & Interoperability Intelligence (2026-07-10)
+
+Observation-only economic intelligence release: Stablecoin Intelligence
+(canonical registry, peg/depeg valuation, finality/reorg handling, flow
+aggregates), the Derivatives Intelligence runtime (read-only adapters +
+simulator + conformance, order/position FSMs, stream gap handling,
+Decimal-only P&L, reconciliation), and Interoperability Intelligence
+(22-state message lifecycle FSM with TS↔Python parity, GUID correlation,
+security-policy snapshots, LayerZero V2 reference adapter, six scaffolded
+providers). Wired through the event/consent registries (110 events, 2
+purposes), permissions, default-off feature flags, metering, silver/gold
+projections, Profile360, Noesis/OODA, alerts, both frontends, and the
+Kyber admin routers. `execution_by_aether = false` everywhere — Aether
+never executes, relays, or recovers.
+
 ## v8.11.0 — Noesis 5/5 Production Release (2026-06-26)
 
 ### Added
