@@ -186,7 +186,7 @@ verbatim — no mapping layer was needed.
   (unknown never zero), workflow economics, five efficiency detectors as
   recommendation family + suggestion adapter, Noesis instrumentation,
   Aether/Kyber dashboards. See `AI_OUTCOME_EFFICIENCY.md`.
-- **Slice 5 (PR #414):** Cluster Targeting Intelligence — 15-module
+- **Slice 5 (merged, PR #414):** Cluster Targeting Intelligence — 15-module
   targeting package (policy precedence, snapshots, leakage, exports,
   suggestion/noesis adapters, recompute, readiness), Campaign360/Cluster360
   tabs, suggestion targeting cards, Kyber targeting console.

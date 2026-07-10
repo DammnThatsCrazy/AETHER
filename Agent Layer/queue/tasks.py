@@ -10,6 +10,7 @@ directly (bypassing Celery) via execute_task_sync() for testing.
 from __future__ import annotations
 
 import logging
+import os
 from typing import Any, Optional
 
 from config.settings import TaskPriority, WorkerType
@@ -139,6 +140,101 @@ if _app is not None:
         task = _dict_to_task(task_data)
         result = _run_with_worker(task)
         return _result_to_dict(result)
+
+    @_app.task(
+        name="aether.agent.execute_objective_step",
+        bind=True,
+        max_retries=3,
+        default_retry_delay=30,
+        acks_late=True,
+    )
+    def execute_objective_step(self, envelope: dict[str, Any]) -> dict[str, Any]:
+        """Backend worker-bridge task (dispatched BY NAME from the backend).
+
+        The backend's services/agent/worker_bridge.py send_task()s this name
+        with the canonical execution envelope and routes it to the queue named
+        in the envelope. Retries report ``retry`` back to the backend so the
+        durable run record tracks attempts; the final failure reports
+        ``failed``.
+        """
+        will_retry = self.request.retries < (self.max_retries or 0)
+        try:
+            return execute_objective_step_impl(envelope, will_retry=will_retry)
+        except Exception as exc:
+            if will_retry:
+                raise self.retry(exc=exc)
+            raise
+
+
+# ---------------------------------------------------------------------------
+# Backend worker-bridge step execution
+# ---------------------------------------------------------------------------
+
+
+def execute_objective_step_impl(
+    envelope: dict[str, Any], will_retry: bool = False
+) -> dict[str, Any]:
+    """Execute one backend dispatch envelope and report status callbacks.
+
+    Envelope contract (backend services/agent/worker_bridge.py): tenant_id,
+    objective_id, run_id, controller, queue, idempotency_key, attempt,
+    payload, created_at, request_id (+ optional plan_id/step_id).
+
+    Lifecycle: mark the run ``running`` via the backend callback client,
+    execute the step, then report ``completed`` — or ``retry``/``failed`` on
+    exception (``retry`` while Celery retries remain, ``failed`` on the last
+    attempt). Callable directly (without Celery) for tests and in-memory mode.
+    """
+    from agent_controller.runtime.backend_client import get_backend_client
+
+    run_id = str(envelope.get("run_id", ""))
+    tenant_id = str(envelope.get("tenant_id", ""))
+    if not run_id or not tenant_id:
+        raise ValueError("Envelope requires run_id and tenant_id")
+
+    client = get_backend_client()
+    worker_id = os.getenv("AETHER_WORKER_ID", "agent-layer-worker")
+    client.post_run_status(run_id, "running", tenant_id=tenant_id, worker_id=worker_id)
+    try:
+        output = _execute_envelope_step(envelope)
+    except Exception as exc:
+        client.post_run_status(
+            run_id,
+            "retry" if will_retry else "failed",
+            error=f"{type(exc).__name__}: {exc}"[:2000],
+            tenant_id=tenant_id,
+            worker_id=worker_id,
+        )
+        raise
+    client.post_run_status(
+        run_id, "completed", output=output, tenant_id=tenant_id, worker_id=worker_id
+    )
+    return {"run_id": run_id, "success": True, "output": output}
+
+
+def _execute_envelope_step(envelope: dict[str, Any]) -> dict[str, Any]:
+    """Execute the controller step described by the envelope.
+
+    DOCUMENTED NO-OP ECHO STEP: the durable objective/plan state for hosted
+    dispatch lives in the backend's AgentRuntimeRepository, not in this
+    process — the in-memory ObjectiveRuntime here has no record of the
+    objective referenced by the envelope, and the controller hierarchy
+    (controller.py) is constructed per-process with its own registries, so
+    there is no cleanly callable "execute one objective step" seam to invoke
+    from a bare envelope today. The release-critical deliverable is the
+    bridge contract itself (dispatch → running → completed/failed with
+    durable state), so this step echoes the envelope payload as its output.
+    When a controller-side step executor becomes callable from an envelope,
+    replace only this function — the task lifecycle around it stays intact.
+    """
+    return {
+        "step": "echo",
+        "controller": envelope.get("controller", ""),
+        "queue": envelope.get("queue", ""),
+        "objective_id": envelope.get("objective_id", ""),
+        "attempt": envelope.get("attempt", 1),
+        "payload": envelope.get("payload") or {},
+    }
 
 
 # ---------------------------------------------------------------------------

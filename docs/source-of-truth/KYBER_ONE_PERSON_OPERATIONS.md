@@ -1,6 +1,11 @@
 ---
 source_files:
   - Backend Architecture/aether-backend/services/agent/runtime_repository.py
+  - Backend Architecture/aether-backend/services/agent/worker_bridge.py
+  - Backend Architecture/aether-backend/services/agent/worker_routes.py
+  - Backend Architecture/aether-backend/services/agent/mutation_commit.py
+  - Backend Architecture/aether-backend/services/agent/briefings.py
+  - Backend Architecture/aether-backend/services/agent/ops_alerts.py
   - scripts/ops_readiness.py
 last_synced_commit: HEAD
 ---

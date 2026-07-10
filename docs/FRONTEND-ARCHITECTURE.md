@@ -13,7 +13,7 @@ source_files:
 canonical_owner: frontend@aether
 estimated_read_minutes: 35
 toc_depth: 4
-last_synced_commit: ac040fa
+last_synced_commit: d8dc8ce
 ---
 
 # Aether Frontend Architecture & Designer Handoff
@@ -51,9 +51,9 @@ There are two separate frontend applications. **Do not mix them up.**
 - **Fleet Graph** (`/noesis/fleet`) — tenant portfolio comparison table showing per-tenant operational envelope (graph node count, fraud network count, SDK health score, status); privileged operator tenant-entry modal with access reason, purpose enum, and duration; active operator session banner with exit action; all actions immutably audited via `POST /v1/kyber/operator/tenant-entry`
 - Live event stream — raw event firehose for debugging
 - Entity admin — manage any entity across any tenant
-- Command center — controller management
+- Command center — controller management; behind `enableAgentCommandCenter`, one-person-ops live panels: worker/runtime health strip (queue depth, workers, stale, active/failed/stuck runs), run history with stuck highlighting, briefings feed with on-demand generation, compressed ops alerts, and a confirm-gated kill switch (`/v1/agent/health`, `/v1/agent/runs`, `/v1/agent/briefings`, `/v1/agent/ops/alerts`)
 - Diagnostics — circuit breakers, error tracking, dependency health
-- Review / approval workflows — human-in-the-loop agent approvals
+- Review / approval workflows — human-in-the-loop agent approvals; approval commits staged graph mutations when staged-mutation review is enabled (badge + submitting/error modal states)
 - **OODA Suggestion Command Center** — cross-tenant suggestion feed with evidence drawer, policy panel, and outcome tracker
 - **Suggestion review queue** — approve, reject, or suppress suggestions with reason capture
 - **ML Operations** — model fleet health, artifact status, and extraction defense monitoring
