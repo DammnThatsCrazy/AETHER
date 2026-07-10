@@ -933,6 +933,189 @@
           "value": "aether.dlq"
         }
       ]
+    },
+    {
+      "name": "\u2500\u2500 Platform Control Plane (jobs / exports / notifications / schedules /",
+      "topics": [
+        {
+          "member": "JOB_ACCEPTED",
+          "value": "aether.job.accepted"
+        },
+        {
+          "member": "JOB_QUEUED",
+          "value": "aether.job.queued"
+        },
+        {
+          "member": "JOB_STARTED",
+          "value": "aether.job.started"
+        },
+        {
+          "member": "JOB_RETRYING",
+          "value": "aether.job.retrying"
+        },
+        {
+          "member": "JOB_SUCCEEDED",
+          "value": "aether.job.succeeded"
+        },
+        {
+          "member": "JOB_PARTIALLY_SUCCEEDED",
+          "value": "aether.job.partially_succeeded"
+        },
+        {
+          "member": "JOB_FAILED",
+          "value": "aether.job.failed"
+        },
+        {
+          "member": "JOB_CANCELLED",
+          "value": "aether.job.cancelled"
+        },
+        {
+          "member": "JOB_EXPIRED",
+          "value": "aether.job.expired"
+        },
+        {
+          "member": "JOB_DEAD_LETTERED",
+          "value": "aether.job.dead_lettered"
+        }
+      ]
+    },
+    {
+      "name": "Export artifacts lifecycle",
+      "topics": [
+        {
+          "member": "EXPORT_REQUESTED",
+          "value": "aether.export.requested"
+        },
+        {
+          "member": "EXPORT_READY",
+          "value": "aether.export.ready"
+        },
+        {
+          "member": "EXPORT_FAILED",
+          "value": "aether.export.failed"
+        },
+        {
+          "member": "EXPORT_DOWNLOADED",
+          "value": "aether.export.downloaded"
+        },
+        {
+          "member": "EXPORT_EXPIRED",
+          "value": "aether.export.expired"
+        }
+      ]
+    },
+    {
+      "name": "Tenant notification inbox/outbox lifecycle",
+      "topics": [
+        {
+          "member": "NOTIFICATION_CREATED",
+          "value": "aether.notification.created"
+        },
+        {
+          "member": "NOTIFICATION_READ",
+          "value": "aether.notification.read"
+        },
+        {
+          "member": "NOTIFICATION_DELIVERY_QUEUED",
+          "value": "aether.notification.delivery_queued"
+        },
+        {
+          "member": "NOTIFICATION_DELIVERED",
+          "value": "aether.notification.delivered"
+        },
+        {
+          "member": "NOTIFICATION_DELIVERY_FAILED",
+          "value": "aether.notification.delivery_failed"
+        },
+        {
+          "member": "NOTIFICATION_DEAD_LETTERED",
+          "value": "aether.notification.dead_lettered"
+        }
+      ]
+    },
+    {
+      "name": "Job schedules (cron control plane)",
+      "topics": [
+        {
+          "member": "SCHEDULE_FIRED",
+          "value": "aether.schedule.fired"
+        },
+        {
+          "member": "SCHEDULE_MISFIRED",
+          "value": "aether.schedule.misfired"
+        },
+        {
+          "member": "SCHEDULE_SKIPPED",
+          "value": "aether.schedule.skipped"
+        },
+        {
+          "member": "SCHEDULE_DISABLED",
+          "value": "aether.schedule.disabled"
+        }
+      ]
+    },
+    {
+      "name": "Bulk import lifecycle",
+      "topics": [
+        {
+          "member": "IMPORT_CREATED",
+          "value": "aether.import.created"
+        },
+        {
+          "member": "IMPORT_UPLOADED",
+          "value": "aether.import.uploaded"
+        },
+        {
+          "member": "IMPORT_ANALYZED",
+          "value": "aether.import.analyzed"
+        },
+        {
+          "member": "IMPORT_VALIDATED",
+          "value": "aether.import.validated"
+        },
+        {
+          "member": "IMPORT_COMMITTED",
+          "value": "aether.import.committed"
+        },
+        {
+          "member": "IMPORT_REPLAYED",
+          "value": "aether.import.replayed"
+        },
+        {
+          "member": "IMPORT_ROLLED_BACK",
+          "value": "aether.import.rolled_back"
+        },
+        {
+          "member": "IMPORT_FAILED",
+          "value": "aether.import.failed"
+        }
+      ]
+    },
+    {
+      "name": "Measurement restatement (complements aether.measurement.* above)",
+      "topics": [
+        {
+          "member": "MEASUREMENT_RESTATED",
+          "value": "aether.measurement.restated"
+        }
+      ]
+    },
+    {
+      "name": "Reconciliation runs",
+      "topics": [
+        {
+          "member": "RECONCILIATION_STARTED",
+          "value": "aether.reconciliation.started"
+        },
+        {
+          "member": "RECONCILIATION_COMPLETED",
+          "value": "aether.reconciliation.completed"
+        },
+        {
+          "member": "RECONCILIATION_DRIFT_DETECTED",
+          "value": "aether.reconciliation.drift_detected"
+        }
+      ]
     }
   ],
   "all_topics": [
@@ -1707,6 +1890,154 @@
     {
       "member": "DEAD_LETTER",
       "value": "aether.dlq"
+    },
+    {
+      "member": "JOB_ACCEPTED",
+      "value": "aether.job.accepted"
+    },
+    {
+      "member": "JOB_QUEUED",
+      "value": "aether.job.queued"
+    },
+    {
+      "member": "JOB_STARTED",
+      "value": "aether.job.started"
+    },
+    {
+      "member": "JOB_RETRYING",
+      "value": "aether.job.retrying"
+    },
+    {
+      "member": "JOB_SUCCEEDED",
+      "value": "aether.job.succeeded"
+    },
+    {
+      "member": "JOB_PARTIALLY_SUCCEEDED",
+      "value": "aether.job.partially_succeeded"
+    },
+    {
+      "member": "JOB_FAILED",
+      "value": "aether.job.failed"
+    },
+    {
+      "member": "JOB_CANCELLED",
+      "value": "aether.job.cancelled"
+    },
+    {
+      "member": "JOB_EXPIRED",
+      "value": "aether.job.expired"
+    },
+    {
+      "member": "JOB_DEAD_LETTERED",
+      "value": "aether.job.dead_lettered"
+    },
+    {
+      "member": "EXPORT_REQUESTED",
+      "value": "aether.export.requested"
+    },
+    {
+      "member": "EXPORT_READY",
+      "value": "aether.export.ready"
+    },
+    {
+      "member": "EXPORT_FAILED",
+      "value": "aether.export.failed"
+    },
+    {
+      "member": "EXPORT_DOWNLOADED",
+      "value": "aether.export.downloaded"
+    },
+    {
+      "member": "EXPORT_EXPIRED",
+      "value": "aether.export.expired"
+    },
+    {
+      "member": "NOTIFICATION_CREATED",
+      "value": "aether.notification.created"
+    },
+    {
+      "member": "NOTIFICATION_READ",
+      "value": "aether.notification.read"
+    },
+    {
+      "member": "NOTIFICATION_DELIVERY_QUEUED",
+      "value": "aether.notification.delivery_queued"
+    },
+    {
+      "member": "NOTIFICATION_DELIVERED",
+      "value": "aether.notification.delivered"
+    },
+    {
+      "member": "NOTIFICATION_DELIVERY_FAILED",
+      "value": "aether.notification.delivery_failed"
+    },
+    {
+      "member": "NOTIFICATION_DEAD_LETTERED",
+      "value": "aether.notification.dead_lettered"
+    },
+    {
+      "member": "SCHEDULE_FIRED",
+      "value": "aether.schedule.fired"
+    },
+    {
+      "member": "SCHEDULE_MISFIRED",
+      "value": "aether.schedule.misfired"
+    },
+    {
+      "member": "SCHEDULE_SKIPPED",
+      "value": "aether.schedule.skipped"
+    },
+    {
+      "member": "SCHEDULE_DISABLED",
+      "value": "aether.schedule.disabled"
+    },
+    {
+      "member": "IMPORT_CREATED",
+      "value": "aether.import.created"
+    },
+    {
+      "member": "IMPORT_UPLOADED",
+      "value": "aether.import.uploaded"
+    },
+    {
+      "member": "IMPORT_ANALYZED",
+      "value": "aether.import.analyzed"
+    },
+    {
+      "member": "IMPORT_VALIDATED",
+      "value": "aether.import.validated"
+    },
+    {
+      "member": "IMPORT_COMMITTED",
+      "value": "aether.import.committed"
+    },
+    {
+      "member": "IMPORT_REPLAYED",
+      "value": "aether.import.replayed"
+    },
+    {
+      "member": "IMPORT_ROLLED_BACK",
+      "value": "aether.import.rolled_back"
+    },
+    {
+      "member": "IMPORT_FAILED",
+      "value": "aether.import.failed"
+    },
+    {
+      "member": "MEASUREMENT_RESTATED",
+      "value": "aether.measurement.restated"
+    },
+    {
+      "member": "RECONCILIATION_STARTED",
+      "value": "aether.reconciliation.started"
+    },
+    {
+      "member": "RECONCILIATION_COMPLETED",
+      "value": "aether.reconciliation.completed"
+    },
+    {
+      "member": "RECONCILIATION_DRIFT_DETECTED",
+      "value": "aether.reconciliation.drift_detected"
     }
   ]
 }
