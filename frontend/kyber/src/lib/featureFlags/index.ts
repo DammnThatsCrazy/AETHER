@@ -10,6 +10,9 @@ interface FeatureFlags {
   readonly enableMobilePush: boolean;
   readonly enablePagerDuty: boolean;
   readonly enableWebhookSinks: boolean;
+  readonly kyberStablecoinOps: boolean;
+  readonly kyberDerivativesOps: boolean;
+  readonly kyberInteropOps: boolean;
 }
 
 const DEFAULT_FLAGS: FeatureFlags = {
@@ -22,6 +25,10 @@ const DEFAULT_FLAGS: FeatureFlags = {
   enableMobilePush: false,
   enablePagerDuty: false,
   enableWebhookSinks: false,
+  // Economic & interoperability ops surfaces default OFF with their domains
+  kyberStablecoinOps: false,
+  kyberDerivativesOps: false,
+  kyberInteropOps: false,
 };
 
 function loadFlags(): FeatureFlags {

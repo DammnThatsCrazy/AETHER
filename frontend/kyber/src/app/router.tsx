@@ -49,6 +49,9 @@ const JourneyExplorerPage = lazy(() => import('@kyber/pages/measurement/journey-
 const ConversionExplorerPage = lazy(() => import('@kyber/pages/measurement/conversion-explorer-page').then(m => ({ default: m.ConversionExplorerPage })));
 const CampaignIntelligencePage = lazy(() => import('@kyber/pages/measurement/campaign-intelligence-page').then(m => ({ default: m.CampaignIntelligencePage })));
 const KyberMeasurementOpsPage = lazy(() => import('@kyber/pages/measurement/kyber-measurement-ops-page').then(m => ({ default: m.KyberMeasurementOpsPage })));
+const KyberStablecoinsOpsPage = lazy(() => import('@kyber/pages/stablecoins/kyber-stablecoins-ops-page').then(m => ({ default: m.KyberStablecoinsOpsPage })));
+const KyberDerivativesOpsPage = lazy(() => import('@kyber/pages/derivatives/kyber-derivatives-ops-page').then(m => ({ default: m.KyberDerivativesOpsPage })));
+const KyberInteropOpsPage = lazy(() => import('@kyber/pages/interop/kyber-interop-ops-page').then(m => ({ default: m.KyberInteropOpsPage })));
 const Campaign360Page = lazy(() => import('@kyber/pages/measurement/campaign-360-page').then(m => ({ default: m.Campaign360Page })));
 const DeliveryOpsPage = lazy(() => import('@kyber/pages/delivery').then(m => ({ default: m.DeliveryOpsPage })));
 
@@ -129,6 +132,9 @@ export function AppRouter() {
                 <Route path="/measurement/campaigns" element={<PageSuspense><CampaignIntelligencePage /></PageSuspense>} />
                 <Route path="/measurement/campaigns/:campaignId" element={<PageSuspense><Campaign360Page /></PageSuspense>} />
                 <Route path="/measurement/ops" element={<PageSuspense><KyberMeasurementOpsPage /></PageSuspense>} />
+                <Route path="/stablecoins/ops" element={<PageSuspense><KyberStablecoinsOpsPage /></PageSuspense>} />
+                <Route path="/derivatives/ops" element={<PageSuspense><KyberDerivativesOpsPage /></PageSuspense>} />
+                <Route path="/interoperability/ops" element={<PageSuspense><KyberInteropOpsPage /></PageSuspense>} />
                 <Route path="/delivery" element={<PageSuspense><DeliveryOpsPage /></PageSuspense>} />
                 <Route path="*" element={<Navigate to="/mission" replace />} />
               </Routes>
