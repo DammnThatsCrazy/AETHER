@@ -22,6 +22,11 @@ Intelligence, and Interoperability Intelligence expansion.
 FAILED tests/unit/test_agent_web_crawler_wrapper.py::test_top_level_web_crawler_wraps_canonical_worker
 ```
 
+**Resolution (post-baseline)**: root-caused during final gates to a missing sandbox
+dependency — `ModuleNotFoundError: No module named 'bs4'` (beautifulsoup4 was not
+installed by the baseline `pip install -e ".[dev,backend]"`). Installing
+beautifulsoup4 makes the test pass unchanged; no code fix was needed and none was made.
+
 **Environment note**: pytest requires `httpx2` (starlette 1.3.x test client) and `pytest-asyncio`,
 which are not pulled in by `pip install -e ".[dev,backend]"` on a fresh container; a debian-packaged
 `PyJWT` also blocks editable install without `--ignore-installed PyJWT`.
