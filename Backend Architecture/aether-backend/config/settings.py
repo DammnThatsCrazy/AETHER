@@ -704,6 +704,26 @@ class PaymentRailsConfig:
 
 
 @dataclass(frozen=True)
+class CardLinkedPaymentRailsConfig:
+    """Card-linked payment rail observability V1 rollout and safety flags.
+
+    Default-off observation surfaces for card-linked activity. PaymentScan is
+    catalog/benchmark-only unless tenant-authorized provider evidence exists.
+    EU/APAC restricted modes and provider PII blocking default on.
+    """
+    enabled: bool = _env_bool("AETHER_CARD_LINKED_PAYMENT_RAILS_ENABLED", False)
+    paymentscan_catalog_enabled: bool = _env_bool("AETHER_PAYMENTSCAN_CATALOG_ENABLED", False)
+    paymentscan_benchmarks_enabled: bool = _env_bool("AETHER_PAYMENTSCAN_BENCHMARKS_ENABLED", False)
+    profile360_enabled: bool = _env_bool("AETHER_CARD_LINKED_PROFILE360_ENABLED", False)
+    campaign_attribution_enabled: bool = _env_bool("AETHER_CARD_LINKED_CAMPAIGN_ATTRIBUTION_ENABLED", False)
+    clustering_enabled: bool = _env_bool("AETHER_CARD_LINKED_CLUSTERING_ENABLED", False)
+    kyber_enabled: bool = _env_bool("KYBER_CARD_LINKED_PAYMENT_RAILS_ENABLED", False)
+    eu_restricted_mode: bool = _env_bool("AETHER_CARD_LINKED_EU_RESTRICTED_MODE", True)
+    apac_restricted_mode: bool = _env_bool("AETHER_CARD_LINKED_APAC_RESTRICTED_MODE", True)
+    provider_pii_block: bool = _env_bool("AETHER_CARD_LINKED_PROVIDER_PII_BLOCK", True)
+
+
+@dataclass(frozen=True)
 class AIEconomicsConfig:
     """AI Outcome Efficiency / AI Economics rollout flags (default OFF).
 
@@ -843,6 +863,7 @@ class Settings:
 
     # Payment Rail Observability rollout flags
     payment_rails: PaymentRailsConfig = field(default_factory=PaymentRailsConfig)
+    card_linked_payment_rails: CardLinkedPaymentRailsConfig = field(default_factory=CardLinkedPaymentRailsConfig)
 
     # AI Outcome Efficiency / AI Economics rollout flags
     ai_economics: AIEconomicsConfig = field(default_factory=AIEconomicsConfig)

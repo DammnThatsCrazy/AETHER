@@ -13,7 +13,7 @@ source_files:
 canonical_owner: frontend@aether
 estimated_read_minutes: 35
 toc_depth: 4
-last_synced_commit: d8dc8ce
+last_synced_commit: "29ff678"
 ---
 
 # Aether Frontend Architecture & Designer Handoff
@@ -37,11 +37,13 @@ There are two separate frontend applications. **Do not mix them up.**
 - **Cluster360** (`/clusters/:clusterId`) — 7-tab cluster surface: Overview (type, state, formation reason, confidence, risk score, properties), Members (paginated DataTable with confidence + join date), Timeline (merge/split/growth events), Economic (revenue, spend, LTV, value tier, top-member breakdown), Campaigns (attributed campaigns, top channel, conversion rate), Risk (aggregate score, fraud network link, alert count, evidence refs, high-risk members), Geography (country distribution bars, concentration score)
 - **Semantic zoom** — graph canvas supports server-backed macro→cluster→entity zoom: macro level uses a `depth: 1` query scoped to cluster node types (the backend minimum depth is 1; depth-0 is rejected); clicking a cluster fetches depth-1 member expansion via `useGraphZoom(tenantId?)`
 - **Entity Profile360** panels — what tenants drill into when they click a graph node
+- **Profile360 Card-linked Activity** — in-place economic/payment-rails tab that renders card-linked activity with basis labels, top-up/funding vs spend separation, campaign/journey story steps, provider/card program/issuer/network fields, source/confidence, and provenance-safe warnings
 - **Geographic Intelligence** view — their users by location
 - **Social Intelligence** panels — their users' social platform presence
 - **Recommendation cards** — pending retargeting / campaign actions for the tenant to approve
 - **Suggestion feed** — OODA-driven prioritised recommendations with helpful/not helpful/dismiss feedback
 - Campaign management, attribution dashboards, Campaign 360 (`/campaigns/:id`) — per-campaign overview, population, clusters, conversions, attribution
+- Campaign 360 card-linked outcomes — campaign-scoped card top-up/spend users, top-up/spend volume, programs/issuers observed, attribution basis, and basis breakdown without claiming benchmark-only or top-up data as spend
 - API key management, plan management, usage metering
 - Webhook endpoint management — add/test/delete outbound delivery endpoints
 
@@ -69,6 +71,7 @@ There are two separate frontend applications. **Do not mix them up.**
 - **Campaign Quality** (v8.11.0+) — measurement mapping rate gauges and quality metrics (`/campaign-intelligence/quality`)
 - **Custom Campaign** (v8.11.0+) — creation form for custom (non-platform) campaigns (`/campaign-intelligence/new`)
 - **Measurement Operations** — connector health grid, tenant drill-down, operator action buttons (restart/backfill/recompute) (`/kyber/measurement`)
+- **Payment Rails Diagnostics** — Kyber payment rails health includes Card-linked Observability when enabled: PaymentScan catalog coverage, provider freshness, top-up/spend support, reconciliation conflicts, graph projection/privacy suppression state, and basis-mislabeling warnings (`/payment-rails`)
 - Lab — test fixtures and replay
 
 **Shared (`frontend/shared/` — npm package `@aether/ui`):**

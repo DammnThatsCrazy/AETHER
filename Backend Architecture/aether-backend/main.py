@@ -933,6 +933,22 @@ def create_app() -> FastAPI:
     if not (rails_flags.enabled or rails_flags.kyber_enabled):
         logger.info("Payment Rails: disabled (AETHER_PAYMENT_RAILS_ENABLED=false)")
 
+    # ── Card-linked payment rail observability (observation-only, default-off) ──
+    card_flags = settings.card_linked_payment_rails
+    if card_flags.enabled or card_flags.profile360_enabled or card_flags.campaign_attribution_enabled or card_flags.clustering_enabled or card_flags.kyber_enabled:
+        from services.card_linked_payments.routes import (
+            router as card_linked_router,
+            profile_router as card_linked_profile_router,
+            kyber_router as card_linked_kyber_router,
+        )
+        app.include_router(card_linked_router)
+        app.include_router(card_linked_profile_router)
+        app.include_router(card_linked_kyber_router)
+        logger.info("Card-linked Payment Rails: routes mounted (/v1/card-linked-payment-rails + Profile360 + Kyber diagnostics)")
+    else:
+        logger.info("Card-linked Payment Rails: disabled (AETHER_CARD_LINKED_PAYMENT_RAILS_ENABLED=false)")
+
+
     # ── AI Outcome Efficiency / AI Economics (observe + recommend; never executes changes) ──
     ai_econ_flags = settings.ai_economics
     if ai_econ_flags.enabled:

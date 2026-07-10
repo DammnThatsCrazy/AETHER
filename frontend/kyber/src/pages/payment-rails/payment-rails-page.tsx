@@ -190,6 +190,7 @@ export function PaymentRailsPage() {
   const [loading, setLoading] = useState(enabled);
   const [error, setError] = useState<string | null>(null);
   const [selectedTenantId, setSelectedTenantId] = useState<string | null>(null);
+  const [cardLinked, setCardLinked] = useState<AnyRecord | null>(null);
 
   useEffect(() => {
     if (!enabled) return;
@@ -197,6 +198,9 @@ export function PaymentRailsPage() {
       .then((d) => setData(d as AnyRecord))
       .catch((e: unknown) => setError(e instanceof Error ? e.message : String(e)))
       .finally(() => setLoading(false));
+    api.admin.kyber.cardLinkedPaymentRailsDiagnostics?.()
+      .then((d) => setCardLinked(d as AnyRecord))
+      .catch(() => setCardLinked(null));
   }, [enabled]);
 
   if (!enabled) {
@@ -229,6 +233,38 @@ export function PaymentRailsPage() {
         <Metric label="Unresolved sessions" value={totals.sessions_unresolved} />
         <Metric label="Reconciliation conflicts" value={totals.reconciliation_conflicts} />
       </div>
+
+
+      <Card>
+        <CardHeader><CardTitle>Card-linked Observability</CardTitle></CardHeader>
+        <CardContent className="space-y-3">
+          {!cardLinked ? (
+            <EmptyState
+              title="Card-linked diagnostics unavailable"
+              description="Enable KYBER_CARD_LINKED_PAYMENT_RAILS_ENABLED to view catalog coverage, PaymentScan status, source quality, reconciliation, and privacy gates."
+            />
+          ) : (
+            <>
+              <div className="grid gap-3 md:grid-cols-4">
+                <Metric label="Card programs" value={cardLinked.card_program_count} />
+                <Metric label="Issuers" value={cardLinked.issuer_count} />
+                <Metric label="Card-linked flows" value={cardLinked.flow_count} />
+                <Metric label="Region restricted" value={cardLinked.region_restricted_records} />
+              </div>
+              <div className="grid gap-3 md:grid-cols-3 text-xs font-mono">
+                <Card><CardContent className="space-y-1"><DiagnosticsRow label="PaymentScan" value={String(cardLinked.paymentscan_status ?? 'catalog_and_benchmarks_only')} /><DiagnosticsRow label="Top-up support" value={String(cardLinked.topup_support ?? 0)} /><DiagnosticsRow label="Spend support" value={String(cardLinked.spend_support ?? 0)} /></CardContent></Card>
+                <Card><CardContent className="space-y-1"><DiagnosticsRow label="Unmatched events" value={String(cardLinked.unmatched_events ?? 0)} /><DiagnosticsRow label="Reconciliation conflicts" value={String(cardLinked.reconciliation_conflicts ?? 0)} /><DiagnosticsRow label="Consent blocked" value={String(cardLinked.consent_blocked_records ?? 0)} /></CardContent></Card>
+                <Card><CardContent className="space-y-1"><DiagnosticsRow label="Blocked PII attempts" value={String(cardLinked.blocked_pii_attempts ?? 0)} /><DiagnosticsRow label="Payment networks" value={String(cardLinked.payment_network_count ?? 0)} /><DiagnosticsRow label="Chain/currency coverage" value={`${String(cardLinked.chain_count ?? 0)} / ${String(cardLinked.currency_count ?? 0)}`} /></CardContent></Card>
+              </div>
+              {Array.isArray(cardLinked.basis_mislabeling_warnings) && cardLinked.basis_mislabeling_warnings.length > 0 && (
+                <div className="space-y-1">
+                  {cardLinked.basis_mislabeling_warnings.map((w, i) => <Badge key={i} variant="warning">{String(w)}</Badge>)}
+                </div>
+              )}
+            </>
+          )}
+        </CardContent>
+      </Card>
 
       <Card>
         <CardHeader><CardTitle>Per-provider fleet health (24h)</CardTitle></CardHeader>

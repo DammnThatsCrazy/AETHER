@@ -79,6 +79,15 @@ export function useUserFinancials(userId: string) {
   });
 }
 
+export function useUserCardLinkedActivity(userId: string) {
+  return useQuery({
+    key: key(userId, 'economic:card-linked'),
+    fetcher: () => api.profile.cardLinkedActivity(userId),
+    staleTime: STALE,
+    enabled: !!userId,
+  });
+}
+
 export function useUserRewards(userId: string) {
   return useQuery({
     key: key(userId, 'rewards'),

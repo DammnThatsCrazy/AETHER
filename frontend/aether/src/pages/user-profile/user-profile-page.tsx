@@ -17,7 +17,7 @@ import {
   useUserTier, useUserAssetComposition, useUserPnl, useUserTradingProfile,
   useUserFunnel, useUserTimeToConvert, useUserJourneyEconomics, useUserDevicePerformance,
   useUserProtocolMetrics, useUserGovernanceActivity,
-  useUserQuality, useUserDataFreshness, useUserWeb2Profile,
+  useUserQuality, useUserDataFreshness, useUserWeb2Profile, useUserCardLinkedActivity,
 } from '@aether-app/features/users/use-user-profile';
 import { api } from '@aether-app/lib/api/endpoints';
 import { OutcomeLedgerPanel } from '@aether-app/components/outcome-ledger-panel';
@@ -618,6 +618,81 @@ function FinancialsTab({ userId }: { userId: string }) {
         </>
       )}
     </Section>
+  );
+}
+
+// ── Economic Activity → Payment Rails → Card-linked Activity ─────────────────
+
+function CardLinkedActivityTab({ userId }: { userId: string }) {
+  const { data, isLoading, error } = useUserCardLinkedActivity(userId);
+  const payload = asRecord(data);
+  const rollup = asRecord(payload.rollup);
+  const flows = asList(payload.flows) as SimpleRow[];
+  const story = asList(payload.story) as SimpleRow[];
+  const warnings = asList(rollup.warnings) as string[];
+
+  return (
+    <div className="space-y-6">
+      <Section title="Economic Activity → Payment Rails → Card-linked Activity" loading={isLoading} error={error}>
+        <p className="text-xs text-text-secondary">
+          Observation-only card-linked activity. Top-up/funding, spend, settlement, refund/reversal, and PaymentScan benchmark-only records remain separated by basis.
+        </p>
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+          <Stat label="Card-linked volume" value={fmt(rollup.card_linked_volume)} />
+          <Stat label="Top-up/funding volume" value={fmt(rollup.card_topup_volume)} />
+          <Stat label="Spend volume" value={fmt(rollup.card_spend_volume)} />
+          <Stat label="Active card wallets" value={fmt(rollup.active_card_wallets)} />
+        </div>
+        {warnings.length > 0 && (
+          <div className="flex flex-wrap gap-2">
+            {warnings.map((w, i) => <Badge key={`${w}-${i}`} variant="warning" size="sm">{w}</Badge>)}
+          </div>
+        )}
+      </Section>
+
+      <Section title="Campaign → provider → wallet → top-up/spend journey">
+        {story.length === 0 ? <EmptyState title="No card-linked journey story" /> : (
+          <div className="space-y-2">
+            {story.map((step, i) => (
+              <Card key={`${fmt(step.flow_id)}-${i}`}>
+                <CardContent className="text-xs font-mono space-y-1">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Badge size="sm">{fmt(step.basis, 'unknown basis')}</Badge>
+                    <span className="font-semibold text-text-primary">{fmt(step.card_program_id, 'unknown program')}</span>
+                    <span className="text-text-secondary">via {fmt(step.source)}</span>
+                    <span className="text-text-secondary">{fmt(step.chain)} / {fmt(step.asset)}</span>
+                  </div>
+                  <div className="text-text-muted">
+                    Campaign {fmt(step.campaign_id)} → Journey {fmt(step.journey_id)} → Amount ${fmt(step.amount_usd, '0')}
+                  </div>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        )}
+      </Section>
+
+      <Section title="Card-linked flow facts">
+        {flows.length === 0 ? <EmptyState title="No card-linked payment rail activity" /> : (
+          <DataTable<SimpleRow>
+            keyExtractor={r => fmt(r.id)}
+            data={flows}
+            emptyMessage="No card-linked flow facts"
+            columns={[
+              { key: 'basis', header: 'Basis', render: r => <Badge variant={r.basis === 'unknown' ? 'warning' : 'default'} size="sm">{fmt(r.basis)}</Badge> },
+              { key: 'card_program_id', header: 'Card program', render: r => fmt(r.card_program_id, 'unknown') },
+              { key: 'issuer_id', header: 'Issuer', render: r => fmt(r.issuer_id, 'unknown') },
+              { key: 'payment_network', header: 'Network', render: r => fmt(r.payment_network, 'unknown') },
+              { key: 'amount_usd', header: 'Volume USD', render: r => fmt(r.amount_usd, '0') },
+              { key: 'chain', header: 'Chain', render: r => fmt(r.chain, 'unknown') },
+              { key: 'asset', header: 'Asset', render: r => fmt(r.asset, 'unknown') },
+              { key: 'confidence', header: 'Confidence', render: r => fmt(r.confidence) },
+              { key: 'source', header: 'Source', render: r => fmt(r.source) },
+            ]}
+          />
+        )}
+      </Section>
+    </div>
   );
 }
 
@@ -1460,6 +1535,7 @@ export function UserProfilePage() {
           <TabsTrigger value="social">Social</TabsTrigger>
           <TabsTrigger value="wallets">Web3 Wallets</TabsTrigger>
           <TabsTrigger value="financials">Financials</TabsTrigger>
+          <TabsTrigger value="card-linked">Card-linked Activity</TabsTrigger>
           <TabsTrigger value="behavioral">Behavior</TabsTrigger>
           <TabsTrigger value="attribution">Attribution</TabsTrigger>
           <TabsTrigger value="relationships">Graph</TabsTrigger>
@@ -1480,6 +1556,7 @@ export function UserProfilePage() {
         <TabsContent value="social"><SocialTab userId={userId} window={window} /></TabsContent>
         <TabsContent value="wallets"><WalletsTab userId={userId} /></TabsContent>
         <TabsContent value="financials"><FinancialsTab userId={userId} /></TabsContent>
+        <TabsContent value="card-linked"><CardLinkedActivityTab userId={userId} /></TabsContent>
         <TabsContent value="behavioral"><BehavioralTab userId={userId} /></TabsContent>
         <TabsContent value="attribution"><AttributionTab userId={userId} /></TabsContent>
         <TabsContent value="relationships"><RelationshipsTab userId={userId} /></TabsContent>

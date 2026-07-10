@@ -66,3 +66,10 @@ export function useCampaign360Attribution(campaignId: string, params?: { model?:
     [campaignId, params?.model, params?.start_date, params?.end_date],
   );
 }
+
+export function useCampaign360CardLinkedOutcomes(campaignId: string) {
+  return useQuery<AnyRecord>(
+    () => (api.campaigns.cardLinkedOutcomes(campaignId) as Promise<AnyRecord>),
+    [campaignId],
+  );
+}

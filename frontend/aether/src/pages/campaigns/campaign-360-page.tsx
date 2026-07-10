@@ -8,6 +8,7 @@ import {
   useCampaign360Clusters,
   useCampaign360Conversions,
   useCampaign360Attribution,
+  useCampaign360CardLinkedOutcomes,
 } from '@aether-app/features/campaigns/use-campaign-360';
 import { CampaignTargetingIntelligenceTab } from '@aether-app/features/targeting-intelligence';
 
@@ -551,6 +552,55 @@ function AttributionTab({ campaignId }: { campaignId: string }) {
   );
 }
 
+function CardLinkedOutcomesTab({ campaignId }: { campaignId: string }) {
+  const { data, loading, error } = useCampaign360CardLinkedOutcomes(campaignId);
+  if (loading) return <LoadingState lines={6} />;
+  if (error) return <ErrorState title="Card-linked outcomes unavailable" message={error} />;
+  const d = (data ?? {}) as AnyRecord;
+  const rollup = ((d.rollup ?? d) as AnyRecord);
+  const breakdown = (rollup.basis_breakdown ?? {}) as AnyRecord;
+  const warnings = Array.isArray(d.warnings) ? d.warnings as string[] : Array.isArray(rollup.warnings) ? rollup.warnings as string[] : [];
+
+  return (
+    <div className="space-y-4">
+      <Card>
+        <CardHeader><CardTitle className="text-sm">Card-linked outcomes</CardTitle></CardHeader>
+        <CardContent className="space-y-4">
+          <p className="text-xs text-text-secondary">
+            Attribution is observational and basis-labeled. Top-up/funding records are not displayed as card spend unless provider spend evidence exists.
+          </p>
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+            <Metric label="Top-up users" value={String(rollup.card_topup_users ?? 0)} />
+            <Metric label="Spend users" value={String(rollup.card_spend_users ?? 0)} />
+            <Metric label="Top-up volume" value={fmtUSD(Number(rollup.card_topup_volume ?? 0))} />
+            <Metric label="Spend volume" value={fmtUSD(Number(rollup.card_spend_volume ?? 0))} />
+            <Metric label="Programs" value={Array.isArray(rollup.programs_observed) ? rollup.programs_observed.length : 0} />
+            <Metric label="Issuers" value={Array.isArray(rollup.issuers_observed) ? rollup.issuers_observed.length : 0} />
+            <Metric label="Attribution basis" value={String(d.attribution_basis ?? 'insufficient_evidence')} />
+            <Metric label="Time to first event" value={d.time_to_first_card_event ? String(d.time_to_first_card_event) : '—'} />
+          </div>
+          {warnings.length > 0 && <div className="flex flex-wrap gap-2">{warnings.map((w, i) => <Badge key={`${w}-${i}`} variant="warning">{w}</Badge>)}</div>}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader><CardTitle className="text-sm">Basis breakdown</CardTitle></CardHeader>
+        <CardContent>
+          <DataTable<AnyRecord>
+            keyExtractor={r => String(r.basis)}
+            data={Object.entries(breakdown).map(([basis, count]) => ({ basis, count }))}
+            emptyMessage="No card-linked basis records"
+            columns={[
+              { key: 'basis', header: 'Basis', render: r => <Badge variant={r.basis === 'unknown' ? 'warning' : 'default'}>{String(r.basis)}</Badge> },
+              { key: 'count', header: 'Records', render: r => String(r.count ?? 0) },
+            ]}
+          />
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
 // ── Page ──────────────────────────────────────────────────────────────────────
 
 const TABS = [
@@ -560,6 +610,7 @@ const TABS = [
   { value: 'clusters', label: 'Clusters' },
   { value: 'conversions', label: 'Conversions' },
   { value: 'attribution', label: 'Attribution' },
+  { value: 'card-linked', label: 'Card-linked Outcomes' },
   { value: 'targeting', label: 'Targeting Intelligence' },
 ];
 
@@ -648,6 +699,10 @@ export function Campaign360Page() {
 
         <TabsContent value="attribution">
           <AttributionTab campaignId={campaignId} />
+        </TabsContent>
+
+        <TabsContent value="card-linked">
+          <CardLinkedOutcomesTab campaignId={campaignId} />
         </TabsContent>
 
         <TabsContent value="targeting">

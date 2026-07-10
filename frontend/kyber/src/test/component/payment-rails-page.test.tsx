@@ -8,6 +8,7 @@ const mocks = vi.hoisted(() => ({
   isFeatureEnabled: vi.fn(() => true),
   paymentRailsHealth: vi.fn(),
   paymentRailsTenant: vi.fn(),
+  cardLinkedPaymentRailsDiagnostics: vi.fn(),
 }));
 
 vi.mock('@kyber/lib/featureFlags', () => ({
@@ -19,6 +20,7 @@ vi.mock('@kyber/lib/api', () => ({
   api: { admin: { kyber: {
     paymentRailsHealth: mocks.paymentRailsHealth,
     paymentRailsTenant: mocks.paymentRailsTenant,
+    cardLinkedPaymentRailsDiagnostics: mocks.cardLinkedPaymentRailsDiagnostics,
   } } },
 }));
 
@@ -125,6 +127,23 @@ beforeEach(() => {
   mocks.isFeatureEnabled.mockReturnValue(true);
   mocks.paymentRailsHealth.mockResolvedValue(FLEET_FIXTURE);
   mocks.paymentRailsTenant.mockResolvedValue(TENANT_FIXTURE);
+  mocks.cardLinkedPaymentRailsDiagnostics.mockResolvedValue({
+    paymentscan_status: 'catalog_and_benchmarks_only',
+    card_program_count: 23,
+    issuer_count: 6,
+    flow_count: 3,
+    region_restricted_records: 1,
+    topup_support: 1,
+    spend_support: 2,
+    unmatched_events: 1,
+    reconciliation_conflicts: 0,
+    consent_blocked_records: 0,
+    blocked_pii_attempts: 0,
+    payment_network_count: 3,
+    chain_count: 9,
+    currency_count: 8,
+    basis_mislabeling_warnings: ['Top-up/funding records exist without provider spend coverage; do not report them as card spend.'],
+  });
 });
 
 describe('Kyber Payment Rails page', () => {
@@ -133,6 +152,8 @@ describe('Kyber Payment Rails page', () => {
     await waitFor(() => expect(screen.getByText('Payment Rails')).toBeInTheDocument());
     expect(screen.getByText('Configured tenants')).toBeInTheDocument();
     expect(screen.getByText('Per-provider fleet health (24h)')).toBeInTheDocument();
+    await waitFor(() => expect(screen.getByText('Card-linked Observability')).toBeInTheDocument());
+    expect(screen.getByText('Card programs')).toBeInTheDocument();
     expect(screen.getByText('Privy')).toBeInTheDocument();
     expect(screen.getByText('Coinbase')).toBeInTheDocument();
     expect(screen.getByText('MoonPay')).toBeInTheDocument();

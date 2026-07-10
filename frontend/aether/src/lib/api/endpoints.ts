@@ -236,6 +236,8 @@ export const api = {
       restClient.get(`/v1/profile/${userId}/data-freshness`, wrap(unknownSchema)).then(r => r.data),
     dataQuality: (entityId: string) =>
       restClient.get(`/v1/profile/${entityId}/data-quality`, wrap(unknownSchema)).then(r => r.data),
+    cardLinkedActivity: (userId: string, params?: { basis?: string; card_program?: string; issuer?: string; payment_network?: string; source?: string; chain?: string; asset?: string; campaign?: string; journey?: string; confidence?: string; volume_min?: number; volume_max?: number }) =>
+      restClient.get(`/v1/profile/${userId}/economic/card-linked${buildQS({ ...params })}`, wrap(unknownSchema)).then(r => r.data),
   },
 
   // ── Profile360 normalized surfaces ─────────────────────────────────────────
@@ -437,6 +439,9 @@ export const api = {
 
     conversions: (campaignId: string, params?: { cluster_id?: string; conversion_type?: string; status?: string; after?: string; before?: string; include_unattributed?: boolean; limit?: number; cursor?: string }) =>
       restClient.get(`/v1/campaigns/${campaignId}/conversions${buildQS({ ...params })}`, wrap(unknownSchema)).then(r => r.data),
+
+    cardLinkedOutcomes: (campaignId: string) =>
+      restClient.get(`/v1/card-linked-payment-rails/campaigns/${campaignId}/outcomes`, wrap(unknownSchema)).then(r => r.data),
 
     // ── Communications Intelligence (Campaign 360 Messages surface) ──────────
 
