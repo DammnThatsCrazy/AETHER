@@ -28,6 +28,22 @@ const statusVariant: Record<ReviewStatus, 'default' | 'accent' | 'success' | 'wa
   reverted: 'accent',
 };
 
+/** A batch stages graph mutations when any item carries a non-empty graph diff —
+ *  approving such a batch commits those mutations to the canonical graph. */
+function batchHasStagedGraphMutations(batch: ReviewBatch): boolean {
+  return batch.items.some(item => {
+    const d = item.graphDiff;
+    if (!d) return false;
+    return (
+      d.addedNodes.length > 0 ||
+      d.removedNodes.length > 0 ||
+      d.addedEdges.length > 0 ||
+      d.removedEdges.length > 0 ||
+      d.modifiedNodes.length > 0
+    );
+  });
+}
+
 const mutationClassLabels: Record<ActionClass, { label: string; variant: 'default' | 'accent' | 'success' | 'warning' | 'danger' | 'info' }> = {
   0: { label: 'Class 0 - Observe', variant: 'default' },
   1: { label: 'Class 1 - Annotate', variant: 'info' },
@@ -276,6 +292,9 @@ export function ReviewPage() {
     batchId: '',
   });
   const [actionReason, setActionReason] = useState('');
+  const [actionSubmitting, setActionSubmitting] = useState(false);
+  const [actionError, setActionError] = useState<string | null>(null);
+  const [actionNotice, setActionNotice] = useState<string | null>(null);
 
   const selectedItem = selectedBatch?.items.find(i => i.id === selectedItemId) ?? null;
   const batchAuditEntries = useMemo(
@@ -286,15 +305,18 @@ export function ReviewPage() {
   const openActionModal = useCallback((actionType: ActionType, itemId: string, batchId: string) => {
     setActionModal({ open: true, actionType, itemId, batchId });
     setActionReason('');
+    setActionError(null);
+    setActionNotice(null);
   }, []);
 
   const closeActionModal = useCallback(() => {
     setActionModal(prev => ({ ...prev, open: false }));
     setActionReason('');
+    setActionError(null);
   }, []);
 
   const executeAction = useCallback(() => {
-    if (!actionReason.trim()) return;
+    if (!actionReason.trim() || actionSubmitting) return;
 
     const { actionType, itemId } = actionModal;
     const config = actionConfig[actionType];
@@ -311,9 +333,19 @@ export function ReviewPage() {
       correlationId: `corr-${actionType}-${Date.now()}`,
     };
 
-    resolveItem(itemId, config.newStatus, actionReason, attribution);
-    closeActionModal();
-  }, [actionModal, actionReason, user, resolveItem, closeActionModal]);
+    setActionSubmitting(true);
+    setActionError(null);
+    Promise.resolve(resolveItem(itemId, config.newStatus, actionReason, attribution))
+      .then(() => {
+        setActionNotice(`${config.label} recorded for item ${itemId}`);
+        closeActionModal();
+      })
+      .catch((err: unknown) => {
+        // Preserve the API error message safely — shown inside the modal, no page takeover.
+        setActionError(err instanceof Error ? err.message : 'Failed to submit review decision');
+      })
+      .finally(() => setActionSubmitting(false));
+  }, [actionModal, actionReason, actionSubmitting, user, resolveItem, closeActionModal]);
 
   if (isLoading) {
     return (
@@ -401,18 +433,32 @@ export function ReviewPage() {
             </Card>
           ) : (
             <div className="space-y-4">
+              {actionNotice && (
+                <p role="status" className="text-xs text-success font-mono">{actionNotice}</p>
+              )}
+
               {/* Batch Header */}
               <Card>
                 <CardHeader>
                   <CardTitle>
                     <div className="flex items-center justify-between">
                       <span>{selectedBatch.title}</span>
-                      <Badge variant={statusVariant[selectedBatch.status]}>{selectedBatch.status}</Badge>
+                      <div className="flex items-center gap-2">
+                        {batchHasStagedGraphMutations(selectedBatch) && (
+                          <Badge variant="warning">commits on approval</Badge>
+                        )}
+                        <Badge variant={statusVariant[selectedBatch.status]}>{selectedBatch.status}</Badge>
+                      </div>
                     </div>
                   </CardTitle>
                 </CardHeader>
                 <CardContent>
                   <p className="text-xs text-text-secondary mb-2">{selectedBatch.description}</p>
+                  {batchHasStagedGraphMutations(selectedBatch) && (
+                    <p className="text-[10px] text-warning font-mono mb-2">
+                      This batch contains staged graph mutations — approving commits them to the canonical graph.
+                    </p>
+                  )}
                   <div className="flex gap-4 text-xs text-text-muted">
                     <span>Submitted by: <span className="text-text-primary">{selectedBatch.submittedBy}</span></span>
                     <span>Controller: <span className="text-text-primary">{selectedBatch.controller}</span></span>
@@ -650,19 +696,24 @@ export function ReviewPage() {
             <div className="text-xs text-text-muted">
               Action by: <span className="text-text-primary">{user?.displayName ?? 'Unknown'}</span> ({user?.role ?? 'unknown'})
             </div>
+            {actionError && (
+              <p className="text-xs text-danger font-mono">
+                {actionConfig[actionModal.actionType].label} failed: {actionError}
+              </p>
+            )}
           </div>
         </ModalBody>
         <ModalFooter>
-          <Button variant="ghost" size="sm" onClick={closeActionModal}>
+          <Button variant="ghost" size="sm" disabled={actionSubmitting} onClick={closeActionModal}>
             Cancel
           </Button>
           <Button
             variant={actionConfig[actionModal.actionType].buttonVariant}
             size="sm"
-            disabled={!actionReason.trim()}
+            disabled={!actionReason.trim() || actionSubmitting}
             onClick={executeAction}
           >
-            {actionConfig[actionModal.actionType].label}
+            {actionSubmitting ? 'Submitting…' : actionConfig[actionModal.actionType].label}
           </Button>
         </ModalFooter>
       </Modal>

@@ -14,6 +14,7 @@ interface FeatureFlags {
   readonly enablePaymentRails: boolean;
   readonly enableAiEfficiency: boolean;
   readonly enableTargetingIntelligence: boolean;
+  readonly enableAgentCommandCenter: boolean;
 }
 
 const DEFAULT_FLAGS: FeatureFlags = {
@@ -30,6 +31,7 @@ const DEFAULT_FLAGS: FeatureFlags = {
   enablePaymentRails: false,
   enableAiEfficiency: false,
   enableTargetingIntelligence: false,
+  enableAgentCommandCenter: false,
 };
 
 function loadFlags(): FeatureFlags {
