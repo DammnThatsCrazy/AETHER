@@ -23,6 +23,7 @@ import {
   ScheduleTable,
 } from '@kyber/components/controllers';
 import { useCommandData } from '@kyber/features/command';
+import { CommandCenterOpsPanels } from './command-center-ops';
 import type { ControllerDisplayMode, Controller, ControllerObjective, CHARStatus } from '@kyber/types';
 import {
   CONTROLLER_FUNCTIONAL_NAMES,
@@ -141,6 +142,9 @@ export function CommandPage() {
     >
       {/* CHAR Status — prominent at top */}
       <CHARStatusPanel status={charStatus} />
+
+      {/* One-Person Ops — live agent command center panels (flag-gated, renders nothing when off) */}
+      <CommandCenterOpsPanels />
 
       <Tabs defaultValue="roster">
         <TabsList>

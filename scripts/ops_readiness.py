@@ -82,7 +82,7 @@ async def run_checks() -> dict:
         from services.agent.runtime_repository import get_agent_runtime_repository
         repo = get_agent_runtime_repository()
         status = await repo.controller_status("__readiness__")
-        _check(checks, "runtime_stores_reachable", isinstance(status, dict))
+        _check(checks, "runtime_stores_reachable", isinstance(status, (list, dict)))
     except Exception as exc:
         _check(checks, "runtime_stores_reachable", False, str(exc))
 
@@ -94,12 +94,14 @@ async def run_checks() -> dict:
         try:
             failed_closed = False
             try:
-                await worker_bridge.dispatch_to_worker({
+                result = worker_bridge.dispatch_to_worker({
                     "tenant_id": "__readiness__", "objective_id": "o", "run_id": "r",
                     "controller": "discovery", "queue": "default",
                     "idempotency_key": "k", "attempt": 1, "payload": {},
                     "created_at": "", "request_id": "",
                 })
+                if asyncio.iscoroutine(result):
+                    await result
             except worker_bridge.BridgeUnavailableError:
                 failed_closed = True
             except Exception:

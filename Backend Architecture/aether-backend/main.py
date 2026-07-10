@@ -984,6 +984,25 @@ def create_app() -> FastAPI:
     if not (telemetry_flags.registry_enabled or telemetry_flags.kyber_enabled):
         logger.info("External Agent Telemetry: disabled (AETHER_AGENT_DEPLOYMENT_REGISTRY_ENABLED=false)")
 
+    # ── One-Person Ops runtime (worker bridge, briefings, ops alerts; approval gates never removed) ──
+    ops_flags = settings.one_person_ops
+    if ops_flags.worker_bridge_enabled:
+        from services.agent.worker_routes import worker_router
+        app.include_router(worker_router)
+        logger.info("One-Person Ops: worker run routes mounted (/v1/agent/runs)")
+    if ops_flags.one_person_ops_enabled or ops_flags.command_center_enabled:
+        from services.agent.briefings import briefings_router
+        from services.agent.ops_alerts import ops_router as agent_ops_router
+        app.include_router(briefings_router)
+        app.include_router(agent_ops_router)
+        logger.info("One-Person Ops: briefings + ops alerts mounted (/v1/agent/briefings, /v1/agent/ops)")
+    if not (
+        ops_flags.worker_bridge_enabled
+        or ops_flags.one_person_ops_enabled
+        or ops_flags.command_center_enabled
+    ):
+        logger.info("One-Person Ops: disabled (KYBER_ONE_PERSON_OPS_ENABLED=false)")
+
     return app
 
 

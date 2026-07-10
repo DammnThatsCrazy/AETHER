@@ -11,7 +11,7 @@ source_files:
   - Backend Architecture/aether-backend/services/agent/
   - packages/shared/events.ts
   - packages/shared/agentic-observability.ts
-last_synced_commit: a50afc7
+last_synced_commit: "1757948"
 ---
 
 # Agentic Observability Audit
@@ -35,6 +35,10 @@ last_synced_commit: a50afc7
 | `services/x402/economic_graph.py` | Graph mutations for lifecycle stages. Observational. |
 | `services/agent/economic.py` | Agent economic views: budget aggregation. Read-only. |
 | `services/agent/lifecycle_mapper.py` | Routes agent events to repositories and graph. Observational. |
+| `services/agent/worker_bridge.py` (2026-07-10) | Publishes internal objective-step envelopes to AETHER's own Agent Layer Celery broker by task name. Internal work dispatch only — no external execution, no payments, no trades. Hosted modes fail closed when the broker is unreachable. |
+| `services/agent/worker_routes.py` (2026-07-10) | Worker status callbacks (`agent:run_update` service credential). Records run state; executes nothing. |
+| `services/agent/mutation_commit.py` (2026-07-10) | Commits staged graph mutations ONLY after explicit human approval of a review batch; GraphWriteValidator + CIS quarantine gate every write. Mutates AETHER's internal graph, never external systems. |
+| `services/agent/briefings.py`, `services/agent/ops_alerts.py` (2026-07-10) | Durable operator briefings and compressed ops alerts generated from internal runtime state. Read/aggregate only. |
 | `Agent Layer/workers/discovery/` | Web crawling, chain monitoring, social listening. All observational. |
 | `Agent Layer/workers/enrichment/` | Entity resolution, profile enrichment, semantic tagging. Data transformation only. |
 | `packages/shared/trading-profile.ts` | Aggregated trading/financial profile data model. Observational. |

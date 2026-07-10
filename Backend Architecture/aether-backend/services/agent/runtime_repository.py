@@ -23,13 +23,22 @@ from shared.store import DurableStore, get_store
 # A controller heartbeat older than this is treated as stale (worker likely dead)
 # so a one-off "healthy" beat can't mark a controller healthy forever.
 HEARTBEAT_STALE_SECONDS = int(os.getenv("AGENT_HEARTBEAT_STALE_SECONDS", "90"))
+# A worker run stuck in queued/running without a heartbeat for this long is
+# considered stuck; sweep_stale_runs() marks it stale for operator recovery.
+RUN_STALE_SECONDS = int(os.getenv("AGENT_RUN_STALE_SECONDS", "900"))
 # Objective statuses from which a dispatch / resume must not silently revive work.
 TERMINAL_OBJECTIVE_STATUSES = {"completed", "failed", "cancelled"}
 
 
 OBJECTIVE_STATUSES = {"queued", "active", "paused", "blocked", "awaiting_review", "completed", "failed", "cancelled"}
 REVIEW_STATUSES = {"pending", "approved", "rejected", "committed", "quarantined", "rolled_back"}
-MUTATION_STATUSES = {"staged", "approved", "rejected", "committed", "quarantined", "rolled_back"}
+MUTATION_STATUSES = {"staged", "approved", "rejected", "committed", "quarantined", "rolled_back", "failed_commit"}
+# Worker run lifecycle: queued → running → completed | failed | retry.
+# dispatch_failed marks runs whose queue publish failed (hosted fail-closed);
+# stale marks runs swept after exceeding RUN_STALE_SECONDS without progress.
+RUN_STATUSES = {"queued", "running", "completed", "failed", "retry", "stale", "dispatch_failed"}
+# Runs in these states still occupy a worker slot / block idempotent re-dispatch.
+ACTIVE_RUN_STATUSES = {"queued", "running"}
 MUTATION_CLASSES = {1, 2, 3, 4, 5}
 CONTROLLERS = [
     "governance",
@@ -87,6 +96,24 @@ def sanitize_payload(value: Any) -> Any:
     if isinstance(value, list):
         return [sanitize_payload(item) for item in value]
     return value
+
+
+_ERROR_MAX_LENGTH = 2000
+
+
+def sanitize_error(error: Any) -> str:
+    """Bound and sanitize a worker-supplied error before persisting it.
+
+    Workers report free-form strings; cap the length so a runaway traceback
+    can't bloat the store, and run dict/list errors through sanitize_payload
+    so secret-shaped keys are redacted.
+    """
+    if error is None:
+        return ""
+    if isinstance(error, (dict, list)):
+        error = json.dumps(sanitize_payload(error), default=str)
+    text = str(error)
+    return text[:_ERROR_MAX_LENGTH]
 
 
 class AgentRuntimeRepository:
@@ -279,6 +306,249 @@ class AgentRuntimeRepository:
         await self.worker_runs.set(run["run_id"], run)
         await self.append_event(tenant_id, "step.dispatched", controller, run, objective_id, actor_id, request_id)
         return {"run": run, "created": True}
+
+    # ── Worker run lifecycle (execution bridge) ──────────────────────────
+
+    async def get_run(self, tenant_id: str, run_id: str) -> dict[str, Any] | None:
+        run = await self.worker_runs.get(run_id)
+        if not run or run.get("tenant_id") != tenant_id:
+            return None
+        return run
+
+    async def list_runs(
+        self,
+        tenant_id: str,
+        status: str | None = None,
+        objective_id: str | None = None,
+        limit: int = 100,
+    ) -> list[dict[str, Any]]:
+        filters: dict[str, Any] = {"tenant_id": tenant_id}
+        if status:
+            filters["status"] = status
+        if objective_id:
+            filters["objective_id"] = objective_id
+        rows = await self.worker_runs.find(**filters)
+        rows.sort(key=lambda row: row.get("created_at", ""), reverse=True)
+        return rows[:limit]
+
+    async def count_runs(self, tenant_id: str, status: str | None = None) -> int:
+        if status:
+            return await self.worker_runs.count(tenant_id=tenant_id, status=status)
+        return await self.worker_runs.count(tenant_id=tenant_id)
+
+    async def start_run(
+        self, tenant_id: str, run_id: str, worker_id: str = "", request_id: str = ""
+    ) -> dict[str, Any] | None:
+        run = await self.get_run(tenant_id, run_id)
+        if run is None:
+            return None
+        current = run.get("status")
+        if current == "running":
+            # Idempotent re-start (worker retry after acks_late redelivery):
+            # refresh the heartbeat instead of failing the callback.
+            run["heartbeat_at"] = utc_now()
+            run["updated_at"] = run["heartbeat_at"]
+            await self.worker_runs.set(run_id, run)
+            return run
+        if current not in {"queued", "retry"}:
+            raise ConflictError(f"Cannot start run in status '{current}'")
+        now = utc_now()
+        run["status"] = "running"
+        run["started_at"] = now
+        run["heartbeat_at"] = now
+        run["updated_at"] = now
+        if worker_id:
+            run["worker_id"] = worker_id
+        await self.worker_runs.set(run_id, run)
+        await self.append_event(
+            tenant_id, "run.started", run.get("controller", "worker"),
+            {"run_id": run_id, "status": "running", "worker_id": worker_id},
+            run.get("objective_id", ""), worker_id or "worker", request_id,
+        )
+        return run
+
+    async def complete_run(
+        self,
+        tenant_id: str,
+        run_id: str,
+        output: dict[str, Any] | None = None,
+        actor_id: str = "worker",
+        request_id: str = "",
+    ) -> dict[str, Any] | None:
+        run = await self.get_run(tenant_id, run_id)
+        if run is None:
+            return None
+        current = run.get("status")
+        if current == "completed":
+            return run  # idempotent duplicate completion callback
+        if current not in {"queued", "running", "retry"}:
+            raise ConflictError(f"Cannot complete run in status '{current}'")
+        now = utc_now()
+        run["status"] = "completed"
+        run["completed_at"] = now
+        run["heartbeat_at"] = now
+        run["updated_at"] = now
+        run["output"] = sanitize_payload(output or {})
+        run["error"] = None
+        await self.worker_runs.set(run_id, run)
+        await self.append_event(
+            tenant_id, "run.completed", run.get("controller", "worker"),
+            {"run_id": run_id, "status": "completed", "output": run["output"]},
+            run.get("objective_id", ""), actor_id, request_id,
+        )
+        return run
+
+    async def fail_run(
+        self,
+        tenant_id: str,
+        run_id: str,
+        error: Any = "",
+        retry: bool = False,
+        actor_id: str = "worker",
+        request_id: str = "",
+    ) -> dict[str, Any] | None:
+        run = await self.get_run(tenant_id, run_id)
+        if run is None:
+            return None
+        current = run.get("status")
+        if current in {"completed", "failed"} and not retry:
+            return run  # idempotent duplicate failure callback
+        if current not in {"queued", "running", "retry", "failed"}:
+            raise ConflictError(f"Cannot fail run in status '{current}'")
+        now = utc_now()
+        run["status"] = "retry" if retry else "failed"
+        run["error"] = sanitize_error(error)
+        run["heartbeat_at"] = now
+        run["updated_at"] = now
+        if retry:
+            run["attempt"] = int(run.get("attempt", 1) or 1) + 1
+        else:
+            run["failed_at"] = now
+        await self.worker_runs.set(run_id, run)
+        await self.append_event(
+            tenant_id, "run.retry" if retry else "run.failed", run.get("controller", "worker"),
+            {"run_id": run_id, "status": run["status"], "error": run["error"], "attempt": run["attempt"]},
+            run.get("objective_id", ""), actor_id, request_id,
+        )
+        return run
+
+    async def mark_run_dispatch_failed(
+        self, tenant_id: str, run_id: str, reason: str, actor_id: str = "system", request_id: str = ""
+    ) -> dict[str, Any] | None:
+        """Record that the queue publish for a freshly created run failed."""
+        run = await self.get_run(tenant_id, run_id)
+        if run is None:
+            return None
+        now = utc_now()
+        run["status"] = "dispatch_failed"
+        run["error"] = sanitize_error(reason)
+        run["updated_at"] = now
+        await self.worker_runs.set(run_id, run)
+        await self.append_event(
+            tenant_id, "run.dispatch_failed", run.get("controller", "worker"),
+            {"run_id": run_id, "status": "dispatch_failed", "error": run["error"]},
+            run.get("objective_id", ""), actor_id, request_id,
+        )
+        return run
+
+    async def list_stuck_runs(
+        self, tenant_id: str, stale_seconds: int | None = None
+    ) -> list[dict[str, Any]]:
+        """Runs still queued/running whose last progress signal is too old."""
+        threshold = RUN_STALE_SECONDS if stale_seconds is None else stale_seconds
+        stuck: list[dict[str, Any]] = []
+        for status in sorted(ACTIVE_RUN_STATUSES):
+            for run in await self.worker_runs.find(tenant_id=tenant_id, status=status):
+                reference = run.get("heartbeat_at") or run.get("updated_at") or run.get("created_at")
+                if _age_seconds(reference) > threshold:
+                    stuck.append(run)
+        stuck.sort(key=lambda row: row.get("created_at", ""))
+        return stuck
+
+    async def sweep_stale_runs(
+        self, tenant_id: str, actor_id: str = "system", request_id: str = ""
+    ) -> list[dict[str, Any]]:
+        """Mark stuck runs stale so operators (or recovery) can replay them."""
+        swept: list[dict[str, Any]] = []
+        for run in await self.list_stuck_runs(tenant_id):
+            now = utc_now()
+            run["status"] = "stale"
+            run["stale_at"] = now
+            run["updated_at"] = now
+            await self.worker_runs.set(run["run_id"], run)
+            await self.append_event(
+                tenant_id, "run.stale", run.get("controller", "worker"),
+                {"run_id": run["run_id"], "status": "stale"},
+                run.get("objective_id", ""), actor_id, request_id,
+            )
+            swept.append(run)
+        return swept
+
+    async def replay_run(
+        self, tenant_id: str, run_id: str, actor_id: str = "operator", request_id: str = ""
+    ) -> dict[str, Any] | None:
+        """Create a fresh queued run carrying the same envelope as run_id.
+
+        The new run reuses objective/controller/queue but gets a fresh
+        idempotency-key suffix so record_dispatch-style dedupe does not
+        collapse it back onto the dead run.
+        """
+        source = await self.get_run(tenant_id, run_id)
+        if source is None:
+            return None
+        if source.get("status") in ACTIVE_RUN_STATUSES:
+            raise ConflictError("Cannot replay a run that is still queued/running")
+        objective = await self.get_objective(tenant_id, source.get("objective_id", ""))
+        if objective is None or objective.get("status") not in {"queued", "active"}:
+            raise ConflictError("Cannot replay a run whose objective is not runnable")
+        now = utc_now()
+        replay = {
+            "run_id": new_id("run"),
+            "tenant_id": tenant_id,
+            "objective_id": source.get("objective_id"),
+            "controller": source.get("controller"),
+            "queue": source.get("queue", "default"),
+            "status": "queued",
+            "attempt": 1,
+            "idempotency_key": f"{source.get('idempotency_key', '')}:replay:{uuid.uuid4().hex[:8]}",
+            "replay_of": run_id,
+            "created_at": now,
+            "updated_at": now,
+            "heartbeat_at": now,
+            "error": None,
+        }
+        await self.worker_runs.set(replay["run_id"], replay)
+        await self.append_event(
+            tenant_id, "run.replayed", replay.get("controller", "worker"),
+            {"run_id": replay["run_id"], "replay_of": run_id},
+            replay.get("objective_id", ""), actor_id, request_id,
+        )
+        return replay
+
+    async def prune_runs(self, tenant_id: str, keep_days: int = 30) -> int:
+        """Retention: delete terminal runs older than keep_days.
+
+        Timeline/audit events are never touched — only the run rows themselves.
+        Active (queued/running) runs are always kept.
+        """
+        cutoff_seconds = max(0, keep_days) * 86400
+        pruned = 0
+        for run in await self.worker_runs.find(tenant_id=tenant_id):
+            if run.get("status") in ACTIVE_RUN_STATUSES:
+                continue
+            if _age_seconds(run.get("created_at")) > cutoff_seconds:
+                await self.worker_runs.delete(run["run_id"])
+                pruned += 1
+        return pruned
+
+    async def run_counts(self, tenant_id: str) -> dict[str, int]:
+        """Point-in-time run counts for health snapshots (uncapped)."""
+        counts = {
+            status: await self.worker_runs.count(tenant_id=tenant_id, status=status)
+            for status in sorted(RUN_STATUSES)
+        }
+        counts["stuck"] = len(await self.list_stuck_runs(tenant_id))
+        return counts
 
     async def heartbeat(self, tenant_id: str, controller: str, status: str, queue_depth: int, worker_id: str, metadata: dict[str, Any], request_id: str) -> dict[str, Any]:
         heartbeat = {

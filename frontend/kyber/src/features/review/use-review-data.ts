@@ -140,7 +140,7 @@ export function useReviewData() {
 
   const selectedBatch = batches.find(b => b.id === selectedBatchId) ?? null;
 
-  const resolveItem = useCallback((itemId: string, status: ReviewStatus, reason: string, attribution: ActionAttribution) => {
+  const resolveItem = useCallback((itemId: string, status: ReviewStatus, reason: string, attribution: ActionAttribution): Promise<void> => {
     if (isLocalMocked()) {
       // Local mock: just update state
       setBatches(prev => prev.map(batch => ({
@@ -162,11 +162,13 @@ export function useReviewData() {
         reason,
       };
       setAuditTrail(prev => [newEntry, ...prev]);
-      return;
+      return Promise.resolve();
     }
 
-    // Live mode: submit decision to backend, then update local state
-    api.agent.submitTask('review', 'high', {
+    // Live mode: submit decision to backend, then update local state.
+    // Failures reject to the caller so the confirmation modal can surface the
+    // API error message without replacing the whole page.
+    return api.agent.submitTask('review', 'high', {
       item_id: itemId,
       decision: status,
       reason,
@@ -193,9 +195,6 @@ export function useReviewData() {
           reason,
         };
         setAuditTrail(prev => [newEntry, ...prev]);
-      })
-      .catch((err) => {
-        setError(err instanceof Error ? err.message : 'Failed to submit review decision');
       });
   }, [selectedBatchId]);
 

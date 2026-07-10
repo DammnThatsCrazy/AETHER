@@ -60,6 +60,10 @@ try:
             "queue.tasks.execute_commit_task": {"queue": "commit"},
             "queue.tasks.execute_recovery_task": {"queue": "recovery"},
             "queue.tasks.execute_task": {"queue": "default"},
+            # Backend worker bridge dispatches this by name with an explicit
+            # per-envelope queue; this entry is the fallback when no queue is
+            # given (e.g. manual/apply_async without routing).
+            "aether.agent.execute_objective_step": {"queue": "default"},
         },
 
         # Default queue

@@ -126,6 +126,157 @@ const mockAgentStatus = {
   kill_switch: false,
 };
 
+// ── Agent ops — live command center (deterministic fixtures) ───────────────────
+
+const mockAgentOpsHealth = {
+  status: 'degraded',
+  kill_switch: false,
+  queue_depth: 12,
+  worker_count: 4,
+  stale_workers: 1,
+  active_runs: 3,
+  failed_runs: 2,
+  stuck_runs: 1,
+  computed_at: '2026-07-09T12:00:00.000Z',
+};
+
+const mockAgentControllersStatus = {
+  controllers: [
+    { name: 'nous', status: 'healthy', queue_depth: 4, last_heartbeat_at: '2026-07-09T11:59:30.000Z' },
+    { name: 'catalyst', status: 'healthy', queue_depth: 6, last_heartbeat_at: '2026-07-09T11:59:10.000Z' },
+    { name: 'intake', status: 'stale', queue_depth: 2, last_heartbeat_at: '2026-07-09T10:12:00.000Z' },
+  ],
+  count: 3,
+};
+
+const MOCK_AGENT_RUNS = [
+  {
+    run_id: 'run_001',
+    tenant_id: 'tenant_001',
+    objective_id: 'obj_001',
+    controller: 'nous',
+    queue: 'agent:runs:default',
+    status: 'running',
+    attempt: 1,
+    created_at: '2026-07-09T11:40:00.000Z',
+    updated_at: '2026-07-09T11:58:00.000Z',
+    error: null,
+  },
+  {
+    run_id: 'run_002',
+    tenant_id: 'tenant_001',
+    objective_id: 'obj_001',
+    controller: 'catalyst',
+    queue: 'agent:runs:default',
+    status: 'completed',
+    attempt: 1,
+    created_at: '2026-07-09T10:00:00.000Z',
+    updated_at: '2026-07-09T10:12:00.000Z',
+    error: null,
+  },
+  {
+    run_id: 'run_003',
+    tenant_id: 'tenant_002',
+    objective_id: 'obj_002',
+    controller: 'intake',
+    queue: 'agent:runs:priority',
+    status: 'failed',
+    attempt: 2,
+    created_at: '2026-07-09T09:30:00.000Z',
+    updated_at: '2026-07-09T09:45:00.000Z',
+    error: 'worker crashed: out of memory during graph projection',
+  },
+  {
+    run_id: 'run_004',
+    tenant_id: 'tenant_001',
+    objective_id: 'obj_003',
+    controller: 'nous',
+    queue: 'agent:runs:default',
+    status: 'stale',
+    attempt: 3,
+    created_at: '2026-07-09T08:00:00.000Z',
+    updated_at: '2026-07-09T08:20:00.000Z',
+    error: 'heartbeat lost — no worker update for 45m',
+  },
+  {
+    run_id: 'run_005',
+    tenant_id: 'tenant_002',
+    objective_id: 'obj_002',
+    controller: 'catalyst',
+    queue: 'agent:runs:default',
+    status: 'queued',
+    attempt: 1,
+    created_at: '2026-07-09T11:55:00.000Z',
+    updated_at: '2026-07-09T11:55:00.000Z',
+    error: null,
+  },
+];
+
+const MOCK_AGENT_BRIEFINGS = [
+  {
+    id: 'brief_001',
+    tenant_id: 'tenant_001',
+    type: 'run_complete',
+    title: 'Objective obj_001 step completed',
+    body: 'Catalyst finished enrichment pass: 42 entities updated, 0 staged mutations pending review.',
+    created_at: '2026-07-09T10:12:30.000Z',
+  },
+  {
+    id: 'brief_002',
+    tenant_id: 'tenant_001',
+    type: 'daily',
+    title: 'Daily operator briefing',
+    body: '3 active runs, 2 failed runs need triage, 1 stuck run awaiting recovery. Kill switch clear.',
+    created_at: '2026-07-09T06:00:00.000Z',
+  },
+];
+
+const MOCK_AGENT_OPS_ALERTS = [
+  {
+    id: 'ops_alert_001',
+    severity: 'critical',
+    kind: 'worker_stale',
+    message: 'Worker heartbeat missing on queue agent:runs:default',
+    count: 5,
+    dedupe_key: 'worker_stale:agent:runs:default',
+    first_seen_at: '2026-07-09T08:20:00.000Z',
+    last_seen_at: '2026-07-09T11:50:00.000Z',
+  },
+  {
+    id: 'ops_alert_002',
+    severity: 'medium',
+    kind: 'run_failed',
+    message: 'Run run_003 failed after 2 attempts',
+    count: 1,
+    dedupe_key: 'run_failed:run_003',
+    first_seen_at: '2026-07-09T09:45:00.000Z',
+    last_seen_at: '2026-07-09T09:45:00.000Z',
+  },
+];
+
+const MOCK_AGENT_REVIEW_BATCHES = [
+  {
+    batch_id: 'rb_001',
+    tenant_id: 'tenant_001',
+    objective_id: 'obj_001',
+    controller: 'catalyst',
+    status: 'pending',
+    staged_mutation_count: 3,
+    created_at: '2026-07-09T10:12:00.000Z',
+    updated_at: '2026-07-09T10:12:00.000Z',
+  },
+  {
+    batch_id: 'rb_002',
+    tenant_id: 'tenant_002',
+    objective_id: 'obj_002',
+    controller: 'nous',
+    status: 'approved',
+    staged_mutation_count: 0,
+    created_at: '2026-07-08T15:00:00.000Z',
+    updated_at: '2026-07-08T16:30:00.000Z',
+  },
+];
+
 // ── Resolution / Review ────────────────────────────────────────────────────────
 
 const mockPendingDecisions = {
@@ -638,7 +789,39 @@ export const handlers = [
   http.get(`${API}/v1/agent/status`, () => ok(mockAgentStatus)),
   http.get(`${API}/v1/agent/audit`, () => ok({ tasks: [], count: 0 })),
   http.post(`${API}/v1/agent/tasks`, () => ok({ task_id: 'task_mock', status: 'queued' })),
-  http.post(`${API}/v1/agent/kill-switch`, () => ok({ kill_switch: true })),
+  http.post(`${API}/v1/agent/kill-switch`, async ({ request }) => {
+    const body = await request.json() as { action?: string };
+    const action = body?.action ?? 'engage';
+    return ok({ kill_switch: action === 'engage', action });
+  }),
+
+  // Agent ops — live command center
+  http.get(`${API}/v1/agent/health`, () => ok(mockAgentOpsHealth)),
+  http.get(`${API}/v1/agent/controllers/status`, () => ok(mockAgentControllersStatus)),
+  http.get(`${API}/v1/agent/runs`, ({ request }) => {
+    const url = new URL(request.url);
+    const status = url.searchParams.get('status');
+    const objectiveId = url.searchParams.get('objective_id');
+    let runs = MOCK_AGENT_RUNS;
+    if (status) runs = runs.filter(r => r.status === status);
+    if (objectiveId) runs = runs.filter(r => r.objective_id === objectiveId);
+    return ok({ runs });
+  }),
+  http.get(`${API}/v1/agent/runs/stuck`, () =>
+    ok({ runs: MOCK_AGENT_RUNS.filter(r => r.status === 'stale') }),
+  ),
+  http.get(`${API}/v1/agent/briefings`, () => ok({ briefings: MOCK_AGENT_BRIEFINGS })),
+  http.post(`${API}/v1/agent/briefings/generate`, () =>
+    ok({ briefing: { ...MOCK_AGENT_BRIEFINGS[1], id: 'brief_generated_001', type: 'handoff', title: 'Operator handoff briefing' }, generated: true }),
+  ),
+  http.get(`${API}/v1/agent/ops/alerts`, () => ok({ alerts: MOCK_AGENT_OPS_ALERTS })),
+  http.get(`${API}/v1/agent/review-batches`, () => ok({ batches: MOCK_AGENT_REVIEW_BATCHES, count: MOCK_AGENT_REVIEW_BATCHES.length })),
+  http.post(`${API}/v1/agent/review-batches/:batchId/approve`, ({ params }) =>
+    ok({ batch_id: params.batchId, status: 'approved' }),
+  ),
+  http.post(`${API}/v1/agent/review-batches/:batchId/reject`, ({ params }) =>
+    ok({ batch_id: params.batchId, status: 'rejected' }),
+  ),
 
   // Automation
   http.get(`${API}/v1/automation/insights`, () => ok({ insights: [], count: 0 })),
