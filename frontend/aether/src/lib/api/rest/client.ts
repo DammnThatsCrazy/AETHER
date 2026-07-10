@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { parseProblemDetails, type ProblemDetails } from '@aether/shared';
+import { parseProblemDetails, type ProblemDetails } from '@aether/ui';
 import { getAccessToken } from '@aether-app/features/auth';
 import { env, getEnvironment } from '@aether-app/lib/env';
 import { log } from '@aether-app/lib/logging';

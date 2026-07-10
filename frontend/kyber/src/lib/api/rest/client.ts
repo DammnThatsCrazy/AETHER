@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { parseProblemDetails, type ProblemDetails } from '@aether/shared';
+import { parseProblemDetails, type ProblemDetails } from '@aether/ui';
 import { getAccessToken } from '@kyber/features/auth';
 import { env, getEnvironment, getRuntimeMode } from '@kyber/lib/env';
 import { log } from '@kyber/lib/logging';

@@ -83,3 +83,6 @@ export {
   classifyEdgeType,
   countEdgesByLayer,
 } from './types/graph-layers';
+
+export { parseProblemDetails, isProblemDetails } from './problem-details';
+export type { ProblemDetails } from './problem-details';
