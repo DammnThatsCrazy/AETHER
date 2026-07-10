@@ -15,6 +15,7 @@ from __future__ import annotations
 import asyncio
 import json
 import os
+import time
 from typing import Protocol
 
 from shared.logger.logger import get_logger, metrics
@@ -36,6 +37,15 @@ _UNSAFE_PATTERNS = frozenset({"sql", "graphql", "gremlin", "cypher", "mutation",
 
 # Conservative token estimate for a single Noesis request (prompt + completion)
 _ESTIMATED_REQUEST_TOKENS = 800
+
+
+async def _record_ai_invocation(**kwargs) -> None:
+    """Fail-open AI economics telemetry — NEVER lets telemetry break planning."""
+    try:
+        from services.noesis.ai_telemetry import record_noesis_invocation
+        await record_noesis_invocation(**kwargs)
+    except Exception:  # noqa: BLE001 — observability only
+        pass
 
 
 class NoesisPlanProvider(Protocol):
@@ -178,11 +188,13 @@ class AnthropicNoesisPlanProvider:
         )
 
         for attempt in range(1, self.max_retries + 2):
+            started = time.monotonic()
             try:
                 result = await asyncio.wait_for(
                     self._call_api(user_message),
                     timeout=self.timeout_s,
                 )
+                latency_ms = (time.monotonic() - started) * 1000
                 plan = _parse_plan_json(result["text"], effective_tenant_id)
                 tokens = result.get("tokens_used", _ESTIMATED_REQUEST_TOKENS)
                 # Adjust reservation to match actual spend
@@ -197,12 +209,25 @@ class AnthropicNoesisPlanProvider:
                         extra={"intent": plan.intent, "confidence": plan.confidence,
                                "tokens": tokens, "model": self.model, "prompt_version": PROMPT_VERSION},
                     )
+                await _record_ai_invocation(
+                    tenant_id=effective_tenant_id, provider=self.provider_name,
+                    model=self.model, status="succeeded",
+                    input_tokens=result.get("input_tokens"),
+                    output_tokens=result.get("output_tokens"),
+                    latency_ms=latency_ms, retry_count=attempt - 1,
+                )
                 return plan
             except asyncio.TimeoutError:
                 logger.warning(f"Noesis Anthropic provider timeout (attempt {attempt})", extra={"timeout_s": self.timeout_s})
                 metrics.increment("noesis_provider_timeout", labels={"provider": self.provider_name})
                 if attempt > self.max_retries:
                     await self._budget.release(effective_tenant_id, _ESTIMATED_REQUEST_TOKENS)
+                    await _record_ai_invocation(
+                        tenant_id=effective_tenant_id, provider=self.provider_name,
+                        model=self.model, status="timeout",
+                        latency_ms=(time.monotonic() - started) * 1000,
+                        retry_count=attempt - 1, error_code="timeout",
+                    )
                     return None
                 await asyncio.sleep(0.5 * attempt)
             except Exception as exc:  # noqa: BLE001
@@ -210,6 +235,12 @@ class AnthropicNoesisPlanProvider:
                 metrics.increment("noesis_provider_error", labels={"provider": self.provider_name})
                 if attempt > self.max_retries:
                     await self._budget.release(effective_tenant_id, _ESTIMATED_REQUEST_TOKENS)
+                    await _record_ai_invocation(
+                        tenant_id=effective_tenant_id, provider=self.provider_name,
+                        model=self.model, status="failed",
+                        latency_ms=(time.monotonic() - started) * 1000,
+                        retry_count=attempt - 1, error_code=type(exc).__name__,
+                    )
                     return None
                 await asyncio.sleep(0.5 * attempt)
         return None
@@ -225,7 +256,12 @@ class AnthropicNoesisPlanProvider:
         )
         text = response.content[0].text if response.content else ""
         tokens_used = (response.usage.input_tokens + response.usage.output_tokens) if response.usage else _ESTIMATED_REQUEST_TOKENS
-        return {"text": text, "tokens_used": tokens_used}
+        return {
+            "text": text,
+            "tokens_used": tokens_used,
+            "input_tokens": response.usage.input_tokens if response.usage else None,
+            "output_tokens": response.usage.output_tokens if response.usage else None,
+        }
 
 
 # ─── OpenAI provider ──────────────────────────────────────────────────────────
@@ -278,11 +314,13 @@ class OpenAINoesisPlanProvider:
         )
 
         for attempt in range(1, self.max_retries + 2):
+            started = time.monotonic()
             try:
                 result = await asyncio.wait_for(
                     self._call_api(user_message),
                     timeout=self.timeout_s,
                 )
+                latency_ms = (time.monotonic() - started) * 1000
                 plan = _parse_plan_json(result["text"], effective_tenant_id)
                 tokens = result.get("tokens_used", _ESTIMATED_REQUEST_TOKENS)
                 if tokens < _ESTIMATED_REQUEST_TOKENS:
@@ -294,12 +332,25 @@ class OpenAINoesisPlanProvider:
                         extra={"intent": plan.intent, "confidence": plan.confidence,
                                "tokens": tokens, "model": self.model, "prompt_version": PROMPT_VERSION},
                     )
+                await _record_ai_invocation(
+                    tenant_id=effective_tenant_id, provider=self.provider_name,
+                    model=self.model, status="succeeded",
+                    input_tokens=result.get("input_tokens"),
+                    output_tokens=result.get("output_tokens"),
+                    latency_ms=latency_ms, retry_count=attempt - 1,
+                )
                 return plan
             except asyncio.TimeoutError:
                 logger.warning(f"Noesis OpenAI provider timeout (attempt {attempt})")
                 metrics.increment("noesis_provider_timeout", labels={"provider": self.provider_name})
                 if attempt > self.max_retries:
                     await self._budget.release(effective_tenant_id, _ESTIMATED_REQUEST_TOKENS)
+                    await _record_ai_invocation(
+                        tenant_id=effective_tenant_id, provider=self.provider_name,
+                        model=self.model, status="timeout",
+                        latency_ms=(time.monotonic() - started) * 1000,
+                        retry_count=attempt - 1, error_code="timeout",
+                    )
                     return None
                 await asyncio.sleep(0.5 * attempt)
             except Exception as exc:  # noqa: BLE001
@@ -307,6 +358,12 @@ class OpenAINoesisPlanProvider:
                 metrics.increment("noesis_provider_error", labels={"provider": self.provider_name})
                 if attempt > self.max_retries:
                     await self._budget.release(effective_tenant_id, _ESTIMATED_REQUEST_TOKENS)
+                    await _record_ai_invocation(
+                        tenant_id=effective_tenant_id, provider=self.provider_name,
+                        model=self.model, status="failed",
+                        latency_ms=(time.monotonic() - started) * 1000,
+                        retry_count=attempt - 1, error_code=type(exc).__name__,
+                    )
                     return None
                 await asyncio.sleep(0.5 * attempt)
         return None
@@ -331,8 +388,14 @@ class OpenAINoesisPlanProvider:
             resp.raise_for_status()
             body = resp.json()
         text = body["choices"][0]["message"]["content"]
-        tokens_used = body.get("usage", {}).get("total_tokens", _ESTIMATED_REQUEST_TOKENS)
-        return {"text": text, "tokens_used": tokens_used}
+        usage = body.get("usage", {})
+        tokens_used = usage.get("total_tokens", _ESTIMATED_REQUEST_TOKENS)
+        return {
+            "text": text,
+            "tokens_used": tokens_used,
+            "input_tokens": usage.get("prompt_tokens"),
+            "output_tokens": usage.get("completion_tokens"),
+        }
 
 
 # ─── Production provider factory ─────────────────────────────────────────────

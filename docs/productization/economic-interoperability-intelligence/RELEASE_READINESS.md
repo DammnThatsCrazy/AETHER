@@ -25,7 +25,7 @@ environment.
 
 | Area | Score | Evidence |
 |---|---|---|
-| Canonical contracts (3 domains) | 5/5 | stablecoin.ts / derivatives.ts (PR1) / interoperability.ts + TS↔Py parity tests |
+| Canonical contracts (3 domains) | 5/5 | stablecoin-intelligence.ts / derivatives.ts (PR1) / interoperability.ts + TS↔Py parity tests |
 | Registries & governance | 5/5 | 110 events, 2 purposes, 18 permissions, 8 meters, DSR scopes, plans |
 | Storage & migrations | 5/5 | 4 Alembic revisions, typed Decimal repos, constraints |
 | Domain runtimes | 5/5 | FSMs, correlation, finality, reconciliation, P&L — fully tested |

@@ -15,7 +15,7 @@ last_synced_commit: 1f19190
 
 # Derivatives Reconciliation Runbook
 
-Operator surface: `/derivatives/ops` (Kyber) → `/v1/admin/kyber/derivatives`.
+Operator surface: `/derivatives/ops` (Kyber) → `/v1/admin/kyber/derivatives/runtime`.
 Requires `DERIVATIVES_OPERATOR`; all actions audited. Aether never
 places, modifies, or cancels orders — remediation is always evidence
 review, never trading.

@@ -39,6 +39,10 @@ const CampaignBuilderPage = lazy(() => import('@aether-app/pages/rewards').then(
 const SuggestionsPage = lazy(() => import('@aether-app/pages/suggestions').then(m => ({ default: m.SuggestionsPage })));
 const Cluster360Page = lazy(() => import('@aether-app/pages/cluster360').then(m => ({ default: m.Cluster360Page })));
 const DeliveryHistoryPage = lazy(() => import('@aether-app/pages/connectors').then(m => ({ default: m.DeliveryHistoryPage })));
+const DeploymentsPage = lazy(() => import('@aether-app/pages/deployments').then(m => ({ default: m.DeploymentsPage })));
+const DeploymentDetailPage = lazy(() => import('@aether-app/pages/deployments').then(m => ({ default: m.DeploymentDetailPage })));
+const PaymentRailsPage = lazy(() => import('@aether-app/pages/payment-rails').then(m => ({ default: m.PaymentRailsPage })));
+const AIEfficiencyPage = lazy(() => import('@aether-app/pages/ai-efficiency').then(m => ({ default: m.AIEfficiencyPage })));
 const StablecoinsPage = lazy(() => import('@aether-app/pages/stablecoins').then(m => ({ default: m.StablecoinsPage })));
 const StablecoinAssetPage = lazy(() => import('@aether-app/pages/stablecoins').then(m => ({ default: m.StablecoinAssetPage })));
 const DerivativesPage = lazy(() => import('@aether-app/pages/derivatives').then(m => ({ default: m.DerivativesPage })));
@@ -119,6 +123,10 @@ export function AppRouter() {
                 <Route path="/suggestions" element={<PageSuspense><SuggestionsPage /></PageSuspense>} />
                 <Route path="/clusters/:clusterId" element={<PageSuspense><Cluster360Page /></PageSuspense>} />
                 <Route path="/delivery" element={<PageSuspense><DeliveryHistoryPage /></PageSuspense>} />
+                <Route path="/deployments" element={<PageSuspense><DeploymentsPage /></PageSuspense>} />
+                <Route path="/deployments/:id" element={<PageSuspense><DeploymentDetailPage /></PageSuspense>} />
+                <Route path="/payment-rails" element={<PageSuspense><PaymentRailsPage /></PageSuspense>} />
+                <Route path="/ai-efficiency" element={<PageSuspense><AIEfficiencyPage /></PageSuspense>} />
                 <Route path="/stablecoins" element={<PageSuspense><StablecoinsPage /></PageSuspense>} />
                 <Route path="/stablecoins/:assetId" element={<PageSuspense><StablecoinAssetPage /></PageSuspense>} />
                 <Route path="/derivatives" element={<PageSuspense><DerivativesPage /></PageSuspense>} />

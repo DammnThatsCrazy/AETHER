@@ -36,6 +36,33 @@ from .models import (
 )
 
 
+# External agent telemetry signals are observational context, never identity
+# evidence: a deployment / platform / channel binding identifies where agent
+# software runs, not a human. Signals with these names are excluded before
+# any signal-strength evaluation, so they can never contribute to a merge.
+NON_MERGE_ELIGIBLE_SIGNAL_NAMES: frozenset[str] = frozenset({
+    "deployment_id",
+    "agent_id",
+    "external_platform",
+    "external_channel_id",
+    "external_workspace_id",
+})
+
+REASON_NON_MERGE_ELIGIBLE_SIGNAL = "non_merge_eligible_signal_excluded"
+
+
+def _filter_merge_eligible(signal_types: list) -> list:
+    """Drop signals whose name is on the non-merge-eligible denylist.
+
+    Compares by string value so both IdentitySignalType members and raw
+    string signal names are covered.
+    """
+    return [
+        st for st in signal_types
+        if str(getattr(st, "value", st)) not in NON_MERGE_ELIGIBLE_SIGNAL_NAMES
+    ]
+
+
 @dataclass
 class MergePolicyContext:
     """All inputs the policy engine needs to make a decision."""
@@ -81,14 +108,23 @@ def evaluate(ctx: MergePolicyContext) -> MergePolicyResult:
             reason_codes=[REASON_CROSS_TENANT_BLOCKED],
         )
 
+    # ── 1b. Non-merge-eligible signal guard ──────────────────────────────
+    # Deployment / agent / external-platform signals never count as identity
+    # evidence — filter them out before any strength evaluation.
+    matching_signal_types = _filter_merge_eligible(ctx.matching_signal_types)
+    revoked_signal_types = _filter_merge_eligible(ctx.revoked_signal_types)
+    excluded_signals = len(matching_signal_types) != len(ctx.matching_signal_types)
+
     # ── 2 & 3. Score signals (handles consent + fingerprint blocking) ─────
     score, tier, reason_codes = score_signals(
-        matching_signal_types=ctx.matching_signal_types,
+        matching_signal_types=matching_signal_types,
         consent_snapshot=ctx.consent_snapshot,
         source_tenant_id=ctx.source_tenant_id,
         target_tenant_id=ctx.tenant_id,
-        revoked_types=ctx.revoked_signal_types,
+        revoked_types=revoked_signal_types,
     )
+    if excluded_signals and REASON_NON_MERGE_ELIGIBLE_SIGNAL not in reason_codes:
+        reason_codes = reason_codes + [REASON_NON_MERGE_ELIGIBLE_SIGNAL]
 
     if tier == ConfidenceTier.BLOCKED:
         return MergePolicyResult(

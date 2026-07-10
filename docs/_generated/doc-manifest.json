@@ -3880,6 +3880,34 @@
       "since_version": "8.11.0"
     },
     {
+      "path": "docs/derivatives/INGESTION.md",
+      "title": "Derivatives Ingestion",
+      "slug": "derivatives/ingestion",
+      "section": "data",
+      "visibility": "I",
+      "audience": [
+        "architect",
+        "dev-senior",
+        "ops"
+      ],
+      "status": "experimental",
+      "since_version": "8.11.0"
+    },
+    {
+      "path": "docs/derivatives/INTELLIGENCE.md",
+      "title": "Derivatives Intelligence",
+      "slug": "derivatives/intelligence",
+      "section": "concepts",
+      "visibility": "I",
+      "audience": [
+        "architect",
+        "dev-senior",
+        "ops"
+      ],
+      "status": "experimental",
+      "since_version": "8.11.0"
+    },
+    {
       "path": "docs/derivatives/MARKET_RESOLUTION.md",
       "title": "Derivatives Market Resolution",
       "slug": "derivatives/market-resolution",
@@ -3917,6 +3945,47 @@
         "architect",
         "dev-senior",
         "ops"
+      ],
+      "status": "experimental",
+      "since_version": "8.11.0"
+    },
+    {
+      "path": "docs/derivatives/PRODUCT_OPERATIONS.md",
+      "title": "Derivatives Product Operations",
+      "slug": "derivatives/product-operations",
+      "section": "operations",
+      "visibility": "I",
+      "audience": [
+        "architect",
+        "dev-senior",
+        "ops"
+      ],
+      "status": "experimental",
+      "since_version": "8.11.0"
+    },
+    {
+      "path": "docs/derivatives/RELEASE_READINESS.md",
+      "title": "Derivatives Release Readiness",
+      "slug": "derivatives/release-readiness",
+      "section": "operations",
+      "visibility": "I",
+      "audience": [
+        "architect",
+        "dev-senior",
+        "ops"
+      ],
+      "status": "experimental",
+      "since_version": "8.11.0"
+    },
+    {
+      "path": "docs/derivatives/RUNBOOKS.md",
+      "title": "Derivatives Runbooks",
+      "slug": "derivatives/runbooks",
+      "section": "operations",
+      "visibility": "I",
+      "audience": [
+        "ops",
+        "dev-senior"
       ],
       "status": "experimental",
       "since_version": "8.11.0"
@@ -4894,6 +4963,9 @@
       "canonical_owner": "platform-intelligence@aether"
     },
     {
+      "path": "docs/source-of-truth/AI_OUTCOME_EFFICIENCY.md"
+    },
+    {
       "path": "docs/source-of-truth/API_ANTI_DISTILLATION.md",
       "title": "API Anti-Distillation Controls",
       "slug": "security/api-anti-distillation",
@@ -4922,6 +4994,14 @@
       "status": "draft",
       "estimated_read_minutes": 5,
       "canonical_owner": "platform@aether"
+    },
+    {
+      "path": "docs/source-of-truth/CARD_LINKED_PAYMENT_RAILS.md",
+      "title": "Card-Linked Payment Rails Source of Truth",
+      "status": "draft"
+    },
+    {
+      "path": "docs/source-of-truth/CLUSTER_TARGETING_INTELLIGENCE.md"
     },
     {
       "path": "docs/source-of-truth/CONNECTOR_LAKE_POLICY.md",
@@ -5044,6 +5124,25 @@
       "canonical_owner": "platform@aether"
     },
     {
+      "path": "docs/source-of-truth/DERIVATIVES_INTELLIGENCE_ALIGNMENT.md",
+      "title": "Derivatives Intelligence Alignment",
+      "status": "draft"
+    },
+    {
+      "path": "docs/source-of-truth/DERIVATIVES_RELEASE_READINESS.md",
+      "title": "Derivatives Release Readiness Source of Truth",
+      "slug": "source-of-truth/derivatives-release-readiness",
+      "section": "operations",
+      "visibility": "I",
+      "audience": [
+        "architect",
+        "dev-senior",
+        "ops"
+      ],
+      "status": "experimental",
+      "since_version": "8.11.0"
+    },
+    {
       "path": "docs/source-of-truth/DERIVATIVES_RUNTIME_MODEL.md",
       "title": "Derivatives Runtime Model",
       "slug": "source-of-truth/derivatives-runtime-model",
@@ -5117,6 +5216,12 @@
       "status": "draft",
       "estimated_read_minutes": 5,
       "canonical_owner": "platform@aether"
+    },
+    {
+      "path": "docs/source-of-truth/EXTERNAL_AGENT_TELEMETRY_PLANE.md"
+    },
+    {
+      "path": "docs/source-of-truth/FIRST_RELEASE_INTELLIGENCE_TELEMETRY_OPERATIONS.md"
     },
     {
       "path": "docs/source-of-truth/GRAPH_ALIGNMENT.md",
@@ -5258,6 +5363,9 @@
       "canonical_owner": "platform@aether"
     },
     {
+      "path": "docs/source-of-truth/KYBER_ONE_PERSON_OPERATIONS.md"
+    },
+    {
       "path": "docs/source-of-truth/OLYMPUS_PROVIDER_SOURCE_CATALOG.md",
       "title": "Olympus Provider Source Catalog",
       "slug": "architecture/olympus-provider-source-catalog",
@@ -5271,6 +5379,14 @@
       "status": "draft",
       "estimated_read_minutes": 8,
       "canonical_owner": "data@aether"
+    },
+    {
+      "path": "docs/source-of-truth/PAYMENTSCAN_CATALOG.md",
+      "title": "PaymentScan Catalog Source of Truth",
+      "status": "draft"
+    },
+    {
+      "path": "docs/source-of-truth/PAYMENT_RAIL_OBSERVABILITY.md"
     },
     {
       "path": "docs/source-of-truth/REPO_CONSISTENCY_OWNERSHIP.md",

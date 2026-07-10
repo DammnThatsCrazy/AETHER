@@ -1,253 +1,148 @@
-"""Derivatives Intelligence tenant API — /v1/derivatives.
-
-Read-only intelligence plus canonical observation intake. INVARIANT: no
-endpoint places, amends, cancels, or closes anything; account links carry
-read-only credential authority only.
-"""
-
+"""Tenant and Kyber routes for Derivatives Intelligence PR4 product surfaces."""
 from __future__ import annotations
 
 from decimal import Decimal
-from typing import Optional
+from typing import Any
 
-from fastapi import APIRouter, HTTPException, Query, Request
+from fastapi import APIRouter, Query, Request
+from pydantic import BaseModel, Field
 
-from config.settings import settings
-from repositories.derivatives_repos import (
-    FillRepo,
-    InstrumentRepo,
-    MarketRepo,
-    OrderRepo,
-    PnlSnapshotRepo,
-    PositionRepo,
-    ReconciliationVarianceRepo,
-    TradingAccountRepo,
-    VenueRepo,
-)
-from shared.auth.auth import Permissions
-from services.derivatives.foundation import (
-    active_tenant_id as _tenant_id,
-    check_no_execution as _check_no_execution,
-    deterministic_idempotency_key,
-    require_flag,
-    require_permission as _require_perm,
-    require_read_only_authority,
-    utc_now_iso,
-    validate_payload_tenant,
-)
-from services.derivatives.models import AccountLinkRequest, DerivativesObservationIn
+from shared.common.common import APIResponse, ForbiddenError, NotFoundError
+from services.derivatives.product import product_service
 
-router = APIRouter(prefix="/v1/derivatives", tags=["derivatives"])
-
-# Event intake routing: canonical event name -> (repo factory, id field)
-_FACT_ROUTES = {
-    "derivatives_order_observed": (OrderRepo, "order_id"),
-    "derivatives_order_updated_observed": (OrderRepo, "order_id"),
-    "derivatives_order_cancelled_observed": (OrderRepo, "order_id"),
-    "derivatives_order_rejected_observed": (OrderRepo, "order_id"),
-    "derivatives_order_expired_observed": (OrderRepo, "order_id"),
-    "derivatives_fill_observed": (FillRepo, "fill_id"),
-    "derivatives_position_opened_observed": (PositionRepo, "position_id"),
-    "derivatives_position_increased_observed": (PositionRepo, "position_id"),
-    "derivatives_position_reduced_observed": (PositionRepo, "position_id"),
-    "derivatives_position_closed_observed": (PositionRepo, "position_id"),
-    "derivatives_position_liquidated_observed": (PositionRepo, "position_id"),
-}
+router = APIRouter(prefix="/v1/derivatives", tags=["Derivatives"])
+kyber_router = APIRouter(prefix="/v1/admin/kyber/derivatives", tags=["Kyber Derivatives"])
 
 
-def _gate(request: Request, permission: str = Permissions.DERIVATIVES_READ) -> str:
-    require_flag(settings.derivatives.api_enabled, "Derivatives Intelligence")
-    _require_perm(request, permission)
-    return _tenant_id(request)
+class MeterUsageRequest(BaseModel):
+    meter: str
+    quantity: str = Field(..., description="Fixed-precision decimal quantity")
 
 
-def _meter(name: str) -> None:
-    try:
-        from shared.logger.logger import metrics
-        metrics.increment(name)
-    except Exception:
-        pass
+class OperatorActionRequest(BaseModel):
+    tenant_id: str
+    action: str
+    scope: dict[str, Any] = Field(default_factory=dict)
 
 
-def _stringify(rows: list[dict]) -> list[dict]:
-    out = []
-    for row in rows:
-        out.append({
-            key: str(value) if isinstance(value, Decimal) else value
-            for key, value in row.items()
-        })
-    return out
+def _tenant_id(request: Request) -> str:
+    return request.state.tenant.tenant_id
 
 
-async def _tenant_list(
-    repo_cls, request: Request, filters: Optional[dict], limit: int, offset: int,
-):
-    tenant_id = _gate(request)
-    merged = {"tenant_id": tenant_id, **(filters or {})}
-    rows = await repo_cls().find_many(merged, limit=limit, offset=offset)
-    return {"items": _stringify(rows), "count": len(rows)}
+def _require_derivatives_read(request: Request) -> None:
+    tenant = request.state.tenant
+    if hasattr(tenant, "require_permission"):
+        tenant.require_permission("derivatives:read")
 
 
-# ── Global reference reads ───────────────────────────────────────────────────
-
-@router.get("/venues")
-async def list_venues(request: Request, limit: int = Query(default=50, ge=1, le=200), offset: int = 0):
-    _gate(request)
-    rows = await VenueRepo().find_many(limit=limit, offset=offset)
-    return {"items": _stringify(rows), "count": len(rows)}
+def _require_derivatives_export(request: Request) -> None:
+    tenant = request.state.tenant
+    if hasattr(tenant, "require_permission"):
+        tenant.require_permission("derivatives:export")
 
 
-@router.get("/instruments")
-async def list_instruments(request: Request, limit: int = Query(default=50, ge=1, le=200), offset: int = 0):
-    _gate(request)
-    rows = await InstrumentRepo().find_many(limit=limit, offset=offset)
-    return {"items": _stringify(rows), "count": len(rows)}
+def _require_kyber_operator(request: Request) -> None:
+    tenant = request.state.tenant
+    if hasattr(tenant, "require_permission"):
+        tenant.require_permission("derivatives:connector:admin")
+    if not getattr(tenant, "is_platform_admin", False):
+        raise ForbiddenError("Kyber derivatives operator permission required")
 
 
-@router.get("/markets")
-async def list_markets(
-    request: Request, venue_id: Optional[str] = None,
-    limit: int = Query(default=50, ge=1, le=200), offset: int = 0,
-):
-    _gate(request)
-    filters = {"venue_id": venue_id} if venue_id else None
-    rows = await MarketRepo().find_many(filters, limit=limit, offset=offset)
-    return {"items": _stringify(rows), "count": len(rows)}
+@router.get("/overview")
+async def derivatives_overview(request: Request) -> dict:
+    _require_derivatives_read(request)
+    return APIResponse(data=product_service.overview(_tenant_id(request))).to_dict()
 
-
-# ── Tenant-scoped reads ──────────────────────────────────────────────────────
 
 @router.get("/accounts")
-async def list_accounts(request: Request, limit: int = Query(default=50, ge=1, le=200), offset: int = 0):
-    return await _tenant_list(TradingAccountRepo, request, None, limit, offset)
-
-
-@router.get("/orders")
-async def list_orders(
-    request: Request, trading_account_id: Optional[str] = None,
-    order_status: Optional[str] = None,
-    limit: int = Query(default=50, ge=1, le=200), offset: int = 0,
-):
-    filters: dict = {}
-    if trading_account_id:
-        filters["trading_account_id"] = trading_account_id
-    if order_status:
-        filters["order_status"] = order_status
-    return await _tenant_list(OrderRepo, request, filters, limit, offset)
-
-
-@router.get("/fills")
-async def list_fills(
-    request: Request, trading_account_id: Optional[str] = None,
-    limit: int = Query(default=50, ge=1, le=200), offset: int = 0,
-):
-    filters = {"trading_account_id": trading_account_id} if trading_account_id else None
-    return await _tenant_list(FillRepo, request, filters, limit, offset)
+async def derivatives_accounts(request: Request) -> dict:
+    _require_derivatives_read(request)
+    return APIResponse(data={"items": product_service.accounts(_tenant_id(request))}).to_dict()
 
 
 @router.get("/positions")
-async def list_positions(
-    request: Request, trading_account_id: Optional[str] = None,
-    status: Optional[str] = None,
-    limit: int = Query(default=50, ge=1, le=200), offset: int = 0,
-):
-    filters: dict = {}
-    if trading_account_id:
-        filters["trading_account_id"] = trading_account_id
-    if status:
-        filters["status"] = status
-    return await _tenant_list(PositionRepo, request, filters, limit, offset)
+async def derivatives_positions(request: Request, status: str | None = Query(default=None)) -> dict:
+    _require_derivatives_read(request)
+    return APIResponse(data={"items": product_service.positions(_tenant_id(request), status=status)}).to_dict()
 
 
-@router.get("/pnl")
-async def list_pnl_snapshots(
-    request: Request, trading_account_id: Optional[str] = None,
-    limit: int = Query(default=50, ge=1, le=200), offset: int = 0,
-):
-    require_flag(settings.derivatives.pnl_enabled, "Derivatives P&L")
-    filters = {"trading_account_id": trading_account_id} if trading_account_id else None
-    return await _tenant_list(PnlSnapshotRepo, request, filters, limit, offset)
+@router.get("/positions/{position_epoch_id}")
+async def derivatives_position_detail(position_epoch_id: str, request: Request) -> dict:
+    _require_derivatives_read(request)
+    detail = product_service.position_detail(_tenant_id(request), position_epoch_id)
+    if detail is None:
+        raise NotFoundError("Derivatives position")
+    return APIResponse(data=detail).to_dict()
 
 
-@router.get("/reconciliation/variances")
-async def list_variances(
-    request: Request, status: Optional[str] = None,
-    limit: int = Query(default=50, ge=1, le=200), offset: int = 0,
-):
-    filters = {"status": status} if status else None
-    return await _tenant_list(ReconciliationVarianceRepo, request, filters, limit, offset)
+@router.get("/behavior")
+async def derivatives_behavior(request: Request, window: str = Query(default="lifetime")) -> dict:
+    _require_derivatives_read(request)
+    return APIResponse(data=product_service.behavior(_tenant_id(request), window=window)).to_dict()
 
 
-# ── Intake ───────────────────────────────────────────────────────────────────
+@router.get("/realtime/topics")
+async def derivatives_realtime_topics(request: Request) -> dict:
+    _require_derivatives_read(request)
+    return APIResponse(data=product_service.realtime_catalog(_tenant_id(request))).to_dict()
 
-@router.post("/accounts/link", status_code=201)
-async def link_account(payload: AccountLinkRequest, request: Request):
-    """Observe a read-only account link. Aether stores a credential
-    REFERENCE at most — never a secret, never trade/withdraw authority."""
-    tenant_id = _gate(request, Permissions.DERIVATIVES_CONNECT)
-    validate_payload_tenant(payload, tenant_id)
-    _check_no_execution(payload)
-    require_read_only_authority(payload.authority_type)
 
-    basis = f"{tenant_id}|{payload.venue_id}|{payload.external_account_ref}"
-    record = {
+@router.get("/alerts/rules")
+async def derivatives_alert_rules(request: Request) -> dict:
+    _require_derivatives_read(request)
+    return APIResponse(data=product_service.alert_catalog(_tenant_id(request))).to_dict()
+
+
+@router.post("/usage")
+async def derivatives_meter_usage(body: MeterUsageRequest, request: Request) -> dict:
+    _require_derivatives_read(request)
+    return APIResponse(data=product_service.meter_usage(_tenant_id(request), body.meter, Decimal(body.quantity))).to_dict()
+
+
+@router.get("/export/evidence")
+async def derivatives_export_evidence(request: Request) -> dict:
+    _require_derivatives_export(request)
+    tenant_id = _tenant_id(request)
+    return APIResponse(data={
         "tenant_id": tenant_id,
-        "trading_account_id": f"dacct_{deterministic_idempotency_key(basis)[:24]}",
-        "venue_id": payload.venue_id,
-        "venue_deployment_id": payload.venue_deployment_id,
-        "external_account_ref": payload.external_account_ref,
-        "owner_entity_kind": payload.owner_entity_kind,
-        "owner_entity_id": payload.owner_entity_id,
-        "credential_reference_id": payload.credential_reference_id,
-        "connector_state": "configured",
-        "data_quality_state": "complete",
-        "idempotency_key": deterministic_idempotency_key(basis),
-        "execution_by_aether": False,
-        "created_at": utc_now_iso(),
-    }
-    inserted = await TradingAccountRepo().insert(record)
-    _meter("derivatives_event_ingested")
-    return {
-        "inserted": inserted,
-        "trading_account_id": record["trading_account_id"],
-        "authority_type": "read_only",
-    }
+        "export_type": "derivatives_evidence",
+        "credential_material_included": False,
+        "items": product_service.positions(tenant_id),
+    }).to_dict()
 
 
-@router.post("/observations", status_code=201)
-async def ingest_observation(payload: DerivativesObservationIn, request: Request):
-    """Canonical derivatives event intake (order/fill/position facts)."""
-    tenant_id = _gate(request)
-    require_flag(settings.derivatives.runtime_enabled, "Derivatives runtime")
-    validate_payload_tenant(payload, tenant_id)
-    _check_no_execution(payload)
-    _check_no_execution(payload.payload)
+@kyber_router.get("/fleet")
+async def kyber_derivatives_fleet(request: Request) -> dict:
+    _require_kyber_operator(request)
+    return APIResponse(data=product_service.kyber_fleet(_tenant_id(request))).to_dict()
 
-    from services.ingestion.generated_registry import CANONICAL_EVENT_TYPES
 
-    if payload.event_name not in CANONICAL_EVENT_TYPES:
-        raise HTTPException(status_code=422, detail=f"unknown event type: {payload.event_name}")
-    route = _FACT_ROUTES.get(payload.event_name)
-    if route is None:
-        raise HTTPException(
-            status_code=422,
-            detail=f"{payload.event_name} is not ingestable via /observations",
-        )
-    repo_cls, id_field = route
-    entity_id = payload.payload.get(id_field)
-    if not entity_id:
-        raise HTTPException(status_code=422, detail=f"payload missing {id_field}")
+@kyber_router.get("/data-quality")
+async def kyber_derivatives_data_quality(request: Request) -> dict:
+    _require_kyber_operator(request)
+    return APIResponse(data=product_service.kyber_data_quality(_tenant_id(request))).to_dict()
 
-    basis = f"{tenant_id}|{payload.event_name}|{entity_id}|{payload.payload.get('order_status') or payload.payload.get('status') or ''}"
-    record = {
-        "tenant_id": tenant_id,
-        "idempotency_key": deterministic_idempotency_key(basis),
-        "execution_by_aether": False,
-        **{k: v for k, v in payload.payload.items() if k != "execution_by_aether"},
-    }
-    repo = repo_cls()
-    record = {k: v for k, v in record.items() if k in repo.columns}
-    record.setdefault(id_field, entity_id)
-    inserted = await repo.insert(record)
-    _meter("derivatives_event_ingested")
-    return {"inserted": inserted, id_field: entity_id, "event_name": payload.event_name}
+
+@kyber_router.get("/reconciliation")
+async def kyber_derivatives_reconciliation(request: Request, tenant_id: str | None = Query(default=None)) -> dict:
+    _require_kyber_operator(request)
+    return APIResponse(data=product_service.kyber_reconciliation(_tenant_id(request), tenant_id=tenant_id)).to_dict()
+
+
+@kyber_router.get("/graph-quality")
+async def kyber_derivatives_graph_quality(request: Request) -> dict:
+    _require_kyber_operator(request)
+    return APIResponse(data=product_service.kyber_graph_quality(_tenant_id(request))).to_dict()
+
+
+@kyber_router.get("/intelligence-quality")
+async def kyber_derivatives_intelligence_quality(request: Request) -> dict:
+    _require_kyber_operator(request)
+    return APIResponse(data=product_service.kyber_intelligence_quality(_tenant_id(request))).to_dict()
+
+
+@kyber_router.post("/operator-actions")
+async def kyber_derivatives_operator_action(body: OperatorActionRequest, request: Request) -> dict:
+    _require_kyber_operator(request)
+    return APIResponse(data=product_service.record_operator_action(_tenant_id(request), body.tenant_id, body.action, body.scope)).to_dict()

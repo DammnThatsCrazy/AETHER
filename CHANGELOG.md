@@ -303,6 +303,16 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 - Every new table carries `CHECK (execution_by_aether = FALSE)` where applicable, `UNIQUE(tenant_id, idempotency_key)`, and NUMERIC(38,18) amounts; canonical models pin `execution_by_aether: Literal[False]`. No custody, execution, trading, bridge relay, or automated recovery exists behind any flag.
 
+### Added — First-Release Intelligence, Telemetry, Payments, AI Economics, and Kyber Operations
+
+- **External Agent Telemetry Plane V1** — durable tenant-scoped `AgentDeployment` registry with lifecycle state machine (`active|paused|revoked|error|archived`), deployment-aware telemetry context in shared contracts (`AgentDeploymentContext`, `ExternalPlatform`), `/v1/batch` deployment-context validation, server-side Agent Telemetry SDK (`packages/server`), graph/Profile360 deployment projections, and Kyber telemetry diagnostics. Feature-flagged, default OFF.
+- **Payment Rail Observability V1** — first-class named adapters for Privy, Stripe crypto onramp, Coinbase onramp/offramp, MoonPay buy/sell, and Bridge virtual accounts (no generic webhook fallback); canonical `FundingSession` model with reconciliation states (`sdk_only|provider_only|matched|stale|conflict|ignored_duplicate`), final-state non-regression, tenant-scoped BYOK provider secrets, and Aether/Kyber payment-rail surfaces. Feature-flagged, default OFF.
+- **AI Outcome Efficiency / AI Economics** — canonical `ai_invocation_observed` event, `ai_execution_facts` read model, effective-dated AI price cards, cost selection hierarchy (`billed → provider_reported → calculated → estimated → unknown`), workflow economics, Noesis instrumentation as first complete workload, and the `ai_outcome_efficiency` recommendation family (retry waste, model overqualification, deterministic replacement, cache opportunity, failed-workflow concentration). No raw prompt/completion content persisted. Feature-flagged, default OFF.
+- **Cluster Targeting Intelligence** — observation-first targeting intents, eligibility snapshots with strictest-safe conflict precedence, targeting observations, exclusion-leakage detection, holdouts, journey deltas, frequency pressure, negative outcome attribution, evidence-backed export packages, and OODA suggestion integration across Campaign360/Cluster360/Kyber. Aether does not execute campaigns. Feature-flagged, default OFF.
+- **Aether/Kyber One-Person Operations** — backend-to-worker Celery dispatch bridge with idempotent enqueue, service-credentialed worker run callbacks, stuck-run detection, approval-to-commit staged graph mutation pipeline with rollback/quarantine, durable operator briefings, alert compression, and one-person-ops release readiness gates. Feature-flagged, default OFF.
+
+---
+
 ## [8.11.0] — 2026-06-26
 
 ### Added — Noesis 5/5 Production Release

@@ -7,7 +7,7 @@ audience: [architect, dev-senior, ai]
 status: stable
 since_version: "8.12.0"
 source_files:
-  - packages/shared/stablecoin.ts
+  - packages/shared/stablecoin-intelligence.ts
   - Backend Architecture/aether-backend/services/stablecoin/models.py
   - Backend Architecture/aether-backend/repositories/stablecoin_repos.py
 canonical_owner: platform@aether
@@ -16,7 +16,7 @@ last_synced_commit: 1f19190
 
 # Stablecoin Entity Model
 
-Canonical contracts live in `packages/shared/stablecoin.ts`; the Python
+Canonical contracts live in `packages/shared/stablecoin-intelligence.ts`; the Python
 mirrors in `services/stablecoin/models.py` are Pydantic v2 models with
 Decimal fields serialized as strings and `execution_by_aether: Literal[False]`.
 

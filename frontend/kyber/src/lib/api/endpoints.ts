@@ -90,6 +90,57 @@ const taskSchema = z.object({
   error: z.string().optional().nullable(),
 }).passthrough();
 
+/** /v1/agent/health — additive runtime keys; every field optional + passthrough so the
+ *  backend can grow the payload without breaking Kyber. */
+const agentOpsHealthSchema = z.object({
+  status: z.string().optional(),
+  kill_switch: z.boolean().optional(),
+  queue_depth: z.number().optional(),
+  worker_count: z.number().optional(),
+  stale_workers: z.number().optional(),
+  active_runs: z.number().optional(),
+  failed_runs: z.number().optional(),
+  stuck_runs: z.number().optional(),
+}).passthrough();
+
+/** /v1/agent/runs — durable worker run records (snake_case per agent routes). */
+const agentRunSchema = z.object({
+  run_id: z.string(),
+  tenant_id: z.string().optional(),
+  objective_id: z.string().optional().nullable(),
+  controller: z.string().optional(),
+  queue: z.string().optional(),
+  status: z.string(),
+  attempt: z.number().optional(),
+  created_at: z.string().optional(),
+  updated_at: z.string().optional(),
+  error: z.string().optional().nullable(),
+}).passthrough();
+
+const agentRunsResponseSchema = z.object({ runs: z.array(agentRunSchema) }).passthrough();
+
+/** /v1/agent/briefings — operator briefings feed. */
+const agentBriefingSchema = z.object({
+  id: z.string(),
+  tenant_id: z.string().optional(),
+  type: z.string(),
+  title: z.string(),
+  body: z.string(),
+  created_at: z.string(),
+}).passthrough();
+
+/** /v1/agent/ops/alerts — compressed operational alerts. */
+const agentOpsAlertSchema = z.object({
+  id: z.string(),
+  severity: z.string(),
+  kind: z.string(),
+  message: z.string(),
+  count: z.number(),
+  dedupe_key: z.string().optional(),
+  first_seen_at: z.string().optional(),
+  last_seen_at: z.string().optional(),
+}).passthrough();
+
 const profileSchema = z.object({
   user_id: z.string().optional(),
   events: z.array(z.unknown()).optional(),
@@ -224,10 +275,27 @@ export const api = {
       restClient.post('/v1/agent/kill-switch', wrap(z.object({ kill_switch: z.boolean(), action: z.string(), state: z.unknown().optional() })), { action, reason }).then(r => r.data),
 
     health: () =>
-      restClient.get('/v1/agent/health', wrap(unknownSchema)).then(r => r.data),
+      restClient.get('/v1/agent/health', wrap(agentOpsHealthSchema)).then(r => r.data),
 
     controllersStatus: () =>
       restClient.get('/v1/agent/controllers/status', wrap(unknownSchema)).then(r => r.data),
+
+    /** Run history — filterable by status (queued|running|completed|failed|retry|stale) and objective. */
+    runs: (params?: { status?: string; objectiveId?: string; limit?: number }) =>
+      restClient.get(`/v1/agent/runs${buildQS({ status: params?.status, objective_id: params?.objectiveId, limit: params?.limit })}`, wrap(agentRunsResponseSchema)).then(r => r.data),
+
+    /** Stuck/recoverable runs. NOTE: POST /v1/agent/runs/{run_id}/status is worker-only — never called from the UI. */
+    stuckRuns: () =>
+      restClient.get('/v1/agent/runs/stuck', wrap(agentRunsResponseSchema)).then(r => r.data),
+
+    briefings: (limit = 50) =>
+      restClient.get(`/v1/agent/briefings${buildQS({ limit })}`, wrap(z.object({ briefings: z.array(agentBriefingSchema) }).passthrough())).then(r => r.data),
+
+    generateBriefing: () =>
+      restClient.post('/v1/agent/briefings/generate', wrap(unknownSchema), {}).then(r => r.data),
+
+    opsAlerts: () =>
+      restClient.get('/v1/agent/ops/alerts', wrap(z.object({ alerts: z.array(agentOpsAlertSchema) }).passthrough())).then(r => r.data),
 
     submitObjective: (goal: string, payload: Record<string, unknown> = {}, options?: { objectiveType?: string; severity?: string; priority?: number; idempotencyKey?: string }) =>
       restClient.post('/v1/agent/objectives', wrap(unknownSchema), {
@@ -1589,6 +1657,40 @@ export const api = {
       // ── Connector health (aggregate-only) ─────────────────────────────────
       connectorsOverview: () =>
         restClient.get('/v1/admin/kyber/connectors/overview', wrap(unknownSchema)).then(r => r.data),
+
+      // ── External agent telemetry (fleet observability) ────────────────────
+      agentTelemetryDeployments: () =>
+        restClient.get('/v1/admin/kyber/agent-telemetry/deployments', wrap(unknownSchema)).then(r => r.data),
+      agentTelemetryDeployment: (tenantId: string, deploymentId: string) =>
+        restClient.get(`/v1/admin/kyber/agent-telemetry/deployments/${encodeURIComponent(tenantId)}/${encodeURIComponent(deploymentId)}`, wrap(unknownSchema)).then(r => r.data),
+
+      // ── Payment rail observability (fleet health, aggregate-only) ─────────
+      paymentRailsHealth: () =>
+        restClient.get('/v1/admin/kyber/payment-rails/health', wrap(unknownSchema)).then(r => r.data),
+      paymentRailsTenant: (tenantId: string) =>
+        restClient.get(`/v1/admin/kyber/payment-rails/${encodeURIComponent(tenantId)}`, wrap(unknownSchema)).then(r => r.data),
+
+      // ── AI outcome efficiency (fleet health, aggregate-only) ──────────────
+      aiEfficiencyHealth: () =>
+        restClient.get('/v1/admin/kyber/ai-efficiency/health', wrap(unknownSchema)).then(r => r.data),
+      aiEfficiencyTenant: (tenantId: string) =>
+        restClient.get(`/v1/admin/kyber/ai-efficiency/${encodeURIComponent(tenantId)}`, wrap(unknownSchema)).then(r => r.data),
+
+      // ── Cluster Targeting Intelligence (fleet diagnostics, aggregate-only) ─
+      // Recompute is audited and idempotent; it never mutates external
+      // campaign platforms and never executes campaigns.
+      targetingHealth: () =>
+        restClient.get('/v1/admin/kyber/targeting/health', wrap(unknownSchema)).then(r => r.data),
+      targetingLeakageQueue: (severity?: string) =>
+        restClient.get(`/v1/admin/kyber/targeting/leakage-queue${buildQS({ severity })}`, wrap(unknownSchema)).then(r => r.data),
+      targetingMappingQuality: () =>
+        restClient.get('/v1/admin/kyber/targeting/mapping-quality', wrap(unknownSchema)).then(r => r.data),
+      targetingRecompute: (body: { tenantId: string; intentId?: string; asOf?: string; observationId?: string }) =>
+        restClient.post('/v1/admin/kyber/targeting/recompute', wrap(unknownSchema), body).then(r => r.data),
+      targetingReleaseReadiness: () =>
+        restClient.get('/v1/admin/kyber/targeting/release-readiness', wrap(unknownSchema)).then(r => r.data),
+      targetingAudit: (limit = 100) =>
+        restClient.get(`/v1/admin/kyber/targeting/audit${buildQS({ limit })}`, wrap(unknownSchema)).then(r => r.data),
 
       // ── Dune feeder health ────────────────────────────────────────────────
       duneFeederHealth: () =>

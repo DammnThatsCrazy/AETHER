@@ -38,6 +38,7 @@ from services.agentic_observability.foundation import (
 )
 
 router = APIRouter()
+mcp_router = APIRouter()
 
 _SCHEMA_VERSION = "1.0"
 
@@ -143,7 +144,7 @@ async def observe_agent_tool(req: AgentToolRequest, request: Request) -> Observa
     )
 
 
-@router.post("/v1/observability/agent/mcp", response_model=ObservationResponse, status_code=201)
+@mcp_router.post("/v1/observability/agent/mcp", response_model=ObservationResponse, status_code=201)
 async def observe_mcp_connection(req: AgentMCPRequest, request: Request) -> ObservationResponse:
     """Observe an MCP server connection."""
     _require_perm(request, "write")
@@ -198,6 +199,7 @@ async def observe_risk_signal(req: AgentRiskSignalRequest, request: Request) -> 
 async def kyber_agentic_overview(request: Request) -> dict:
     """Kyber operator: agentic observability overview."""
     _require_perm(request, "admin")
+    tenant_id = _tenant_id(request)
     activity_repo = AgentActivityRepository()
     tool_repo = AgentToolRepository()
     connection_repo = AgentConnectionRepository()
@@ -205,12 +207,13 @@ async def kyber_agentic_overview(request: Request) -> dict:
     risk_repo = AgentRiskSignalRepository()
     return {
         "status": "ok",
+        "tenant_id": tenant_id,
         "counts": {
-            "activities": await activity_repo.count(),
-            "tools": await tool_repo.count(),
-            "mcp_connections": await connection_repo.count(),
-            "external_accounts": await account_repo.count(),
-            "risk_signals": await risk_repo.count(),
+            "activities": await activity_repo.count({"tenant_id": tenant_id}),
+            "tools": await tool_repo.count({"tenant_id": tenant_id}),
+            "mcp_connections": await connection_repo.count({"tenant_id": tenant_id}),
+            "external_accounts": await account_repo.count({"tenant_id": tenant_id}),
+            "risk_signals": await risk_repo.count({"tenant_id": tenant_id}),
         },
     }
 
@@ -219,16 +222,18 @@ async def kyber_agentic_overview(request: Request) -> dict:
 async def kyber_agentic_agent(agent_id: str, request: Request) -> dict:
     """Kyber operator: single agent observability view."""
     _require_perm(request, "admin")
+    tenant_id = _tenant_id(request)
     activity_repo = AgentActivityRepository()
     tool_repo = AgentToolRepository()
     connection_repo = AgentConnectionRepository()
     return {
         "agent_id": agent_id,
+        "tenant_id": tenant_id,
         "status": "ok",
         "counts": {
-            "activities": await activity_repo.count({"agent_id": agent_id}),
-            "tools": await tool_repo.count({"agent_id": agent_id}),
-            "mcp_connections": await connection_repo.count({"agent_id": agent_id}),
+            "activities": await activity_repo.count({"tenant_id": tenant_id, "agent_id": agent_id}),
+            "tools": await tool_repo.count({"tenant_id": tenant_id, "agent_id": agent_id}),
+            "mcp_connections": await connection_repo.count({"tenant_id": tenant_id, "agent_id": agent_id}),
         },
     }
 
@@ -237,6 +242,7 @@ async def kyber_agentic_agent(agent_id: str, request: Request) -> dict:
 async def kyber_agentic_risk(request: Request) -> dict:
     """Kyber operator: risk signals overview."""
     _require_perm(request, "admin")
+    tenant_id = _tenant_id(request)
     repo = AgentRiskSignalRepository()
-    items = await repo.find_many(limit=100)
-    return {"status": "ok", "risk_signals": items, "count": len(items)}
+    items = await repo.find_many(filters={"tenant_id": tenant_id}, limit=100)
+    return {"status": "ok", "tenant_id": tenant_id, "risk_signals": items, "count": len(items)}

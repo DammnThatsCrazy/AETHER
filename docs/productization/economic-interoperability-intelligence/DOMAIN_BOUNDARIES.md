@@ -7,7 +7,7 @@ audience: [architect, ops, exec]
 status: stable
 since_version: "8.12.0"
 source_files:
-  - packages/shared/stablecoin.ts
+  - packages/shared/stablecoin-intelligence.ts
   - packages/shared/derivatives.ts
   - packages/shared/interoperability.ts
 canonical_owner: platform@aether

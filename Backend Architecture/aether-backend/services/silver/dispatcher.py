@@ -40,6 +40,7 @@ from .projectors import (
     ServerOperationProjector,
     IdentityEvidenceProjector,
     AgentExecutionProjector,
+    AIInvocationProjector,
     Web3TransactionProjector,
     X402FlowProjector,
     TouchpointProjector,
@@ -67,6 +68,7 @@ _ALL_PROJECTORS: list[BaseProjector] = [
     AccountActivityProjector(),
     ServerOperationProjector(),
     AgentExecutionProjector(),
+    AIInvocationProjector(),
     Web3TransactionProjector(),
     X402FlowProjector(),
     StablecoinProjector(),      # stablecoin economic observation facts

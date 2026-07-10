@@ -27,6 +27,7 @@ from typing import Any, Literal, Optional
 from fastapi import APIRouter, Depends, Request
 from pydantic import BaseModel, Field, field_validator
 
+from config.settings import settings
 from repositories.lake import BronzeRepository
 from shared.auth.auth import Permissions
 from shared.cache.cache import CacheClient, CacheKey, TTL
@@ -80,6 +81,12 @@ REJECT_UNKNOWN_TYPE = "unknown_event_type"
 REJECT_CONSENT_DENIED = "consent_denied"
 REJECT_CONSENT_REQUIRED = "consent_required"
 REJECT_EXECUTION_CLAIM = "execution_by_aether_must_be_false"
+REJECT_DEPLOYMENT_CONTEXT = "deployment_context_invalid"
+
+# SDK-supplied canonical IDs are never trusted — identity resolution is
+# backend-owned (see packages/shared/agent-deployment.ts). Keys matching
+# these names (case/format-insensitive) are stripped from properties/context.
+_CANONICAL_ENTITY_KEYS = frozenset({"canonical_entity_id", "canonicalentityid"})
 
 SCHEMA_VERSION = "1.0.0"
 
@@ -154,6 +161,12 @@ class EventContext(BaseModel):
     correlationId: Optional[str] = None
     causationId: Optional[str] = None
     traceId: Optional[str] = None
+
+    # External Agent Telemetry Plane V1 — AgentDeploymentContext
+    # (packages/shared/agent-deployment.ts). Validated flag-gated in
+    # _process_single_event; both key styles accepted from SDKs.
+    agentDeployment: Optional[dict[str, Any]] = None
+    agent_deployment: Optional[dict[str, Any]] = None
 
 
 class BaseEvent(BaseModel):
@@ -478,6 +491,37 @@ async def _process_single_event(
                 reason=f"{REJECT_CONSENT_REQUIRED}:{required_consent}",
             )
 
+    # 4c. Deployment-context validation (External Agent Telemetry Plane V1).
+    #     Flag-gated: only when the plane is enabled AND the event carries an
+    #     agent deployment context with a deployment id.
+    deployment_id: Optional[str] = None
+    if settings.external_agent_telemetry.enabled:
+        deployment_ctx = sdk_event.context.agentDeployment or sdk_event.context.agent_deployment
+        if isinstance(deployment_ctx, dict):
+            deployment_id = (
+                deployment_ctx.get("deploymentId") or deployment_ctx.get("deployment_id")
+            )
+        if deployment_id:
+            from services.agent.deployments import (
+                record_event_outcome,
+                validate_deployment_context,
+            )
+            ok, reason = await validate_deployment_context(
+                tenant_id, deployment_ctx,
+                event_family=_get_event_family(sdk_event.type),
+            )
+            if not ok:
+                await record_event_outcome(tenant_id, str(deployment_id), "rejected")
+                metrics.increment(
+                    "ingestion_validation_failed_total",
+                    labels={"reason": "deployment_context"},
+                )
+                return EventResult(
+                    id=sdk_event.id,
+                    status="rejected",
+                    reason=f"{REJECT_DEPLOYMENT_CONTEXT}:{reason}",
+                )
+
     # 4. Tenant-scoped idempotency check
     idempotency_key = _make_idempotency_key(tenant_id, sdk_event.id, SCHEMA_VERSION)
     cache_key = f"aether:idempotency:{idempotency_key}"
@@ -486,6 +530,10 @@ async def _process_single_event(
     if is_duplicate:
         metrics.increment("ingestion_event_duplicate_total")
         return EventResult(id=sdk_event.id, status="duplicate")
+
+    if deployment_id:
+        from services.agent.deployments import record_event_outcome
+        await record_event_outcome(tenant_id, str(deployment_id), "accepted")
 
     return EventResult(id=sdk_event.id, status="accepted")
 
@@ -526,8 +574,8 @@ def _build_normalized_payload(
         "session_id": sdk_event.sessionId,
         "anonymous_id": sdk_event.anonymousId,
         "user_id": sdk_event.userId,
-        "properties": sdk_event.properties or {},
-        "context": sdk_event.context.model_dump(exclude_none=True),
+        "properties": _strip_canonical_entity_id(sdk_event.properties or {}),
+        "context": _strip_canonical_entity_id(sdk_event.context.model_dump(exclude_none=True)),
         "timestamp": sdk_event.timestamp,
         "received_at": received_at,
         "ingested_at": utc_now().isoformat(),
@@ -540,6 +588,23 @@ def _build_normalized_payload(
 def _get_event_family(event_type: str) -> str:
     """Map event type to family using the generated registry."""
     return EVENT_FAMILY.get(event_type, "core")
+
+
+def _strip_canonical_entity_id(obj: Any) -> Any:
+    """Recursively drop SDK-supplied canonical entity IDs from a payload.
+
+    Identity resolution is backend-owned; a client-asserted canonical ID is
+    never trusted (regardless of feature flags).
+    """
+    if isinstance(obj, dict):
+        return {
+            k: _strip_canonical_entity_id(v)
+            for k, v in obj.items()
+            if k.lower().replace("-", "_") not in _CANONICAL_ENTITY_KEYS
+        }
+    if isinstance(obj, list):
+        return [_strip_canonical_entity_id(item) for item in obj]
+    return obj
 
 
 async def _resolve_identity_safe(resolver, normalized: dict, tenant_id: str) -> None:

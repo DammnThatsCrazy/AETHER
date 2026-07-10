@@ -13,7 +13,7 @@ from fastapi.testclient import TestClient
 from services.derivatives.adapters.base import DerivativesAdapter
 from services.derivatives.adapters.conformance import run_conformance
 from services.derivatives.adapters.simulator import SimulatorAdapter
-from services.derivatives.reconciliation import DerivativesReconciliation
+from services.derivatives.runtime_reconciliation import DerivativesReconciliation
 
 TENANT = "t-deriv-a"
 OTHER_TENANT = "t-deriv-b"
@@ -124,7 +124,7 @@ class _FakeTenant:
 
 
 def _build_app(tenant_id: str) -> TestClient:
-    from services.derivatives.routes import router
+    from services.derivatives.runtime_routes import router
 
     app = FastAPI()
 
@@ -147,7 +147,7 @@ def test_flag_off_returns_404(monkeypatch):
 
     monkeypatch.setattr(settings, "derivatives", _FLAGS_OFF)
     client = _build_app(TENANT)
-    assert client.get("/v1/derivatives/venues").status_code == 404
+    assert client.get("/v1/derivatives/runtime/venues").status_code == 404
 
 
 def test_account_link_and_observation_intake(monkeypatch):
@@ -156,19 +156,19 @@ def test_account_link_and_observation_intake(monkeypatch):
     monkeypatch.setattr(settings, "derivatives", _FLAGS_ON)
     client = _build_app(TENANT)
 
-    linked = client.post("/v1/derivatives/accounts/link", json={
+    linked = client.post("/v1/derivatives/runtime/accounts/link", json={
         "venue_id": "venue:simulated",
         "external_account_ref": "acct-xyz",
     })
     assert linked.status_code == 201, linked.text
     assert linked.json()["authority_type"] == "read_only"
-    replay = client.post("/v1/derivatives/accounts/link", json={
+    replay = client.post("/v1/derivatives/runtime/accounts/link", json={
         "venue_id": "venue:simulated",
         "external_account_ref": "acct-xyz",
     })
     assert replay.json()["inserted"] is False
 
-    fill = client.post("/v1/derivatives/observations", json={
+    fill = client.post("/v1/derivatives/runtime/observations", json={
         "event_name": "derivatives_fill_observed",
         "payload": {
             "fill_id": "f-100", "trading_account_id": "acct-xyz",
@@ -178,10 +178,10 @@ def test_account_link_and_observation_intake(monkeypatch):
     })
     assert fill.status_code == 201, fill.text
 
-    listed = client.get("/v1/derivatives/fills")
+    listed = client.get("/v1/derivatives/runtime/fills")
     assert listed.json()["count"] == 1
 
-    other = _build_app(OTHER_TENANT).get("/v1/derivatives/fills")
+    other = _build_app(OTHER_TENANT).get("/v1/derivatives/runtime/fills")
     assert other.json()["count"] == 0  # tenant isolation
 
 
@@ -190,11 +190,11 @@ def test_unknown_and_non_ingestable_events_rejected(monkeypatch):
 
     monkeypatch.setattr(settings, "derivatives", _FLAGS_ON)
     client = _build_app(TENANT)
-    unknown = client.post("/v1/derivatives/observations", json={
+    unknown = client.post("/v1/derivatives/runtime/observations", json={
         "event_name": "derivatives_teleport_observed", "payload": {"order_id": "x"},
     })
     assert unknown.status_code == 422
-    registry_only = client.post("/v1/derivatives/observations", json={
+    registry_only = client.post("/v1/derivatives/runtime/observations", json={
         "event_name": "derivatives_venue_registered", "payload": {"order_id": "x"},
     })
     assert registry_only.status_code == 422
@@ -205,7 +205,7 @@ def test_execution_claims_rejected(monkeypatch):
 
     monkeypatch.setattr(settings, "derivatives", _FLAGS_ON)
     client = _build_app(TENANT)
-    response = client.post("/v1/derivatives/observations", json={
+    response = client.post("/v1/derivatives/runtime/observations", json={
         "event_name": "derivatives_fill_observed",
         "payload": {"fill_id": "f-2", "execution_by_aether": True},
     })

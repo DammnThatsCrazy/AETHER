@@ -18,7 +18,7 @@ last_synced_commit: 1f19190
 ## Plans
 
 Three `ServiceDefinition` rows in `shared/plans/service_catalog.py` cover
-`/v1/stablecoins/*`, `/v1/derivatives/*`, `/v1/interoperability/*` with
+`/v1/stablecoins/*`, `/v1/derivatives/runtime/*`, `/v1/interoperability/*` with
 plan access mirroring the existing premium-vertical pattern.
 
 ## Metering

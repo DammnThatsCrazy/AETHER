@@ -1,154 +1,165 @@
-"""Derivatives canonical Pydantic models (API + persistence boundary).
+"""Canonical derivatives ingestion models.
 
-Mirrors of the packages/shared/derivatives.ts contracts that the runtime
-persists. Every monetary/quantity field is Decimal (floats raise), JSON
-serialization is string, and execution_by_aether is the Literal False —
-constructing an "executed by Aether" record is a type error.
+These models are intentionally independent from venue SDKs. They carry only
+read-only observations and normalized facts; any attempt to model Aether as the
+executor remains fail-closed with ``execution_by_aether = False``.
 """
-
 from __future__ import annotations
 
+from dataclasses import dataclass, field
 from decimal import Decimal
-from typing import Any, Literal, Optional
-
-from pydantic import BaseModel, ConfigDict, Field, field_serializer, field_validator
-
-from repositories.typed_repo import as_decimal
-
-OrderStatus = Literal[
-    "pending", "open", "partially_filled", "filled", "cancelled", "rejected", "expired", "unknown",
-]
-OrderSide = Literal["buy", "sell", "unknown"]
-OrderType = Literal[
-    "market", "limit", "stop_market", "stop_limit", "take_profit_market",
-    "take_profit_limit", "twap", "unknown",
-]
-TimeInForce = Literal["gtc", "ioc", "fok", "post_only", "reduce_only", "unknown"]
-PositionSide = Literal["long", "short", "flat", "unknown"]
-PositionStatus = Literal[
-    "absent", "opening", "open", "increasing", "reducing", "closing", "closed",
-    "liquidating", "liquidated", "auto_deleveraged", "settlement_pending", "settled",
-    "reconciliation_required", "source_stale", "unknown",
-]
-DecisionOrigin = Literal["human", "agent", "service", "venue", "import", "unknown"]
-AccountingMethod = Literal[
-    "average_entry", "venue_reported", "linear_contract", "inverse_contract",
-    "manual_review", "unknown",
-]
-ConnectorState = Literal[
-    "configured", "testing", "active", "paused", "backfilling", "stale", "error",
-    "revoked", "unknown",
-]
+from enum import StrEnum
+from typing import Any, Mapping
 
 
-def _decimal_or_error(value: Any) -> Decimal:
-    return as_decimal(value)
+class DerivativesValidationError(ValueError):
+    """Raised when provider data cannot be safely normalized."""
 
 
-def _optional_decimal(value: Any) -> Optional[Decimal]:
-    if value is None:
-        return None
-    return as_decimal(value)
+class ReadOnlyCredentialError(DerivativesValidationError):
+    """Raised when a credential grants trading, transfer, withdrawal, or mutation scope."""
 
 
-class DerivativesTenantScoped(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+class OrderSide(StrEnum):
+    BUY = "buy"
+    SELL = "sell"
 
+
+class PositionSide(StrEnum):
+    LONG = "long"
+    SHORT = "short"
+    FLAT = "flat"
+
+
+class LiquidityRole(StrEnum):
+    MAKER = "maker"
+    TAKER = "taker"
+    UNKNOWN = "unknown"
+
+
+class PositionStatus(StrEnum):
+    ABSENT = "absent"
+    OPEN = "open"
+    CLOSED = "closed"
+    RECONCILIATION_REQUIRED = "reconciliation_required"
+
+
+@dataclass(frozen=True)
+class SourceRef:
+    provider: str
+    source_record_id: str
+    observed_at: str
+    finality: str = "authoritative"
+
+    @property
+    def idempotency_component(self) -> str:
+        return f"{self.provider}:{self.source_record_id}"
+
+
+@dataclass(frozen=True)
+class BronzeObservation:
     tenant_id: str
+    provider: str
+    deployment: str
+    record_type: str
+    source_record_id: str
+    raw_payload: Mapping[str, Any]
+    observed_at: str
     idempotency_key: str
-    execution_by_aether: Literal[False] = False
+    execution_by_aether: bool = False
 
 
-class DerivativesOrder(DerivativesTenantScoped):
-    order_id: str
+@dataclass(frozen=True)
+class NormalizedFillFact:
+    tenant_id: str
+    provider: str
+    deployment: str
     trading_account_id: str
     canonical_market_id: str
-    order_type: OrderType = "unknown"
-    order_side: OrderSide
-    order_status: OrderStatus
-    time_in_force: TimeInForce = "unknown"
-    quantity: Decimal
-    limit_price: Optional[Decimal] = None
-    origin: DecisionOrigin = "unknown"
-    source_refs: list[str] = Field(default_factory=list)
-    recorded_at: str = ""
-
-    _qty = field_validator("quantity", mode="before")(_decimal_or_error)
-    _px = field_validator("limit_price", mode="before")(_optional_decimal)
-
-    @field_serializer("quantity", "limit_price")
-    def _ser(self, value: Optional[Decimal]) -> Optional[str]:
-        return None if value is None else str(value)
-
-
-class TradeFill(DerivativesTenantScoped):
     fill_id: str
-    order_id: Optional[str] = None
-    trading_account_id: str
-    canonical_market_id: str
     side: OrderSide
-    liquidity_role: Literal["maker", "taker", "auction", "unknown"] = "unknown"
     price: Decimal
     quantity: Decimal
-    fee_amount: Optional[Decimal] = None
-    fee_asset_id: Optional[str] = None
     executed_at: str
-    source_refs: list[str] = Field(default_factory=list)
+    liquidity_role: LiquidityRole = LiquidityRole.UNKNOWN
+    fee_amount: Decimal = Decimal("0")
+    fee_asset_id: str | None = None
+    source_ref: SourceRef | None = None
+    execution_by_aether: bool = False
 
-    _amounts = field_validator("price", "quantity", mode="before")(_decimal_or_error)
-    _fee = field_validator("fee_amount", mode="before")(_optional_decimal)
+    def __post_init__(self) -> None:
+        _reject_float(self.price, "price")
+        _reject_float(self.quantity, "quantity")
+        _reject_float(self.fee_amount, "fee_amount")
+        if self.quantity <= 0:
+            raise DerivativesValidationError("fill quantity must be positive")
+        if self.price <= 0:
+            raise DerivativesValidationError("fill price must be positive")
+        if self.execution_by_aether:
+            raise DerivativesValidationError("Aether must not be marked as execution venue")
 
-    @field_serializer("price", "quantity", "fee_amount")
-    def _ser(self, value: Optional[Decimal]) -> Optional[str]:
-        return None if value is None else str(value)
+    @property
+    def idempotency_key(self) -> str:
+        source = self.source_ref.idempotency_component if self.source_ref else self.fill_id
+        return ":".join([self.tenant_id, self.provider, self.deployment, self.trading_account_id, source])
 
 
-class Position(DerivativesTenantScoped):
-    position_id: str
-    position_epoch_id: str
+@dataclass
+class PositionEpochState:
+    tenant_id: str
     trading_account_id: str
     canonical_market_id: str
-    side: PositionSide
-    status: PositionStatus
-    size: Decimal
-    entry_price: Optional[Decimal] = None
-    realized_pnl: Optional[Decimal] = None
-    unrealized_pnl: Optional[Decimal] = None
-    accounting_method: AccountingMethod = "average_entry"
-    updated_at: str = ""
+    epoch_id: str
+    side: PositionSide = PositionSide.FLAT
+    status: PositionStatus = PositionStatus.ABSENT
+    size: Decimal = Decimal("0")
+    entry_notional: Decimal = Decimal("0")
+    realized_pnl: Decimal = Decimal("0")
+    fees: Decimal = Decimal("0")
+    opened_at: str | None = None
+    closed_at: str | None = None
+    source_fill_ids: list[str] = field(default_factory=list)
 
-    _size = field_validator("size", mode="before")(_decimal_or_error)
-    _optional = field_validator(
-        "entry_price", "realized_pnl", "unrealized_pnl", mode="before",
-    )(_optional_decimal)
+    @property
+    def entry_price(self) -> Decimal | None:
+        if self.size == 0:
+            return None
+        return abs(self.entry_notional / self.size)
 
-    @field_serializer("size", "entry_price", "realized_pnl", "unrealized_pnl")
-    def _ser(self, value: Optional[Decimal]) -> Optional[str]:
-        return None if value is None else str(value)
-
-
-class AccountLinkRequest(BaseModel):
-    """POST /v1/derivatives/accounts/link — read-only account link intake."""
-
-    model_config = ConfigDict(extra="forbid")
-
-    venue_id: str
-    external_account_ref: str
-    venue_deployment_id: Optional[str] = None
-    owner_entity_kind: Optional[str] = None
-    owner_entity_id: Optional[str] = None
-    credential_reference_id: Optional[str] = None
-    authority_type: Literal["read_only"] = "read_only"
-    tenant_id: Optional[str] = None
-    execution_by_aether: Literal[False] = False
+    @property
+    def net_realized_pnl(self) -> Decimal:
+        return self.realized_pnl - self.fees
 
 
-class DerivativesObservationIn(BaseModel):
-    """POST /v1/derivatives/observations — canonical event intake."""
+def decimal_from_provider(value: Any, field_name: str) -> Decimal:
+    """Parse provider numerics without accepting binary floating point."""
+    if isinstance(value, float):
+        raise DerivativesValidationError(f"{field_name} must not be a binary float")
+    if isinstance(value, Decimal):
+        return value
+    if isinstance(value, int):
+        return Decimal(value)
+    if isinstance(value, str):
+        stripped = value.strip()
+        if not stripped:
+            raise DerivativesValidationError(f"{field_name} is empty")
+        return Decimal(stripped)
+    raise DerivativesValidationError(f"{field_name} has unsupported type {type(value).__name__}")
 
-    model_config = ConfigDict(extra="forbid")
 
-    event_name: str
-    payload: dict[str, Any] = Field(default_factory=dict)
-    tenant_id: Optional[str] = None
-    execution_by_aether: Literal[False] = False
+def _reject_float(value: Any, field_name: str) -> None:
+    if isinstance(value, float):
+        raise DerivativesValidationError(f"{field_name} must not be a binary float")
+
+
+_MUTATING_SCOPE_TOKENS = {
+    "trade", "trading", "order", "orders:write", "withdraw", "withdrawal", "transfer",
+    "transfers", "key", "key_management", "account:write", "wallet:write", "admin", "write",
+}
+
+
+def validate_read_only_scopes(scopes: list[str] | tuple[str, ...] | set[str]) -> None:
+    normalized = {scope.strip().lower().replace("-", "_") for scope in scopes}
+    mutating = sorted(scope for scope in normalized if scope in _MUTATING_SCOPE_TOKENS or scope.endswith(":write"))
+    if mutating:
+        raise ReadOnlyCredentialError(f"credential grants mutating scopes: {', '.join(mutating)}")

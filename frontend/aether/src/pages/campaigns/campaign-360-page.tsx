@@ -9,6 +9,7 @@ import {
   useCampaign360Conversions,
   useCampaign360Attribution,
 } from '@aether-app/features/campaigns/use-campaign-360';
+import { CampaignTargetingIntelligenceTab } from '@aether-app/features/targeting-intelligence';
 
 type AnyRecord = Record<string, unknown>;
 
@@ -559,6 +560,7 @@ const TABS = [
   { value: 'clusters', label: 'Clusters' },
   { value: 'conversions', label: 'Conversions' },
   { value: 'attribution', label: 'Attribution' },
+  { value: 'targeting', label: 'Targeting Intelligence' },
 ];
 
 export function Campaign360Page() {
@@ -646,6 +648,10 @@ export function Campaign360Page() {
 
         <TabsContent value="attribution">
           <AttributionTab campaignId={campaignId} />
+        </TabsContent>
+
+        <TabsContent value="targeting">
+          <CampaignTargetingIntelligenceTab campaignId={campaignId} />
         </TabsContent>
       </Tabs>
     </div>

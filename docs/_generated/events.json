@@ -433,13 +433,13 @@
     {
       "name": "agent_trade_order_observed",
       "family": "agent",
-      "consent_purpose": "agent",
+      "consent_purpose": "financial_activity",
       "section_comment": "agent"
     },
     {
       "name": "agent_trade_fill_observed",
       "family": "agent",
-      "consent_purpose": "agent",
+      "consent_purpose": "financial_activity",
       "section_comment": "agent"
     },
     {
@@ -451,19 +451,19 @@
     {
       "name": "agent_position_observed",
       "family": "agent",
-      "consent_purpose": "agent",
+      "consent_purpose": "financial_activity",
       "section_comment": "agent"
     },
     {
       "name": "agent_portfolio_snapshot_observed",
       "family": "agent",
-      "consent_purpose": "agent",
+      "consent_purpose": "financial_activity",
       "section_comment": "agent"
     },
     {
       "name": "agent_performance_snapshot_observed",
       "family": "agent",
-      "consent_purpose": "agent",
+      "consent_purpose": "financial_activity",
       "section_comment": "agent"
     },
     {
@@ -570,6 +570,12 @@
     },
     {
       "name": "agent_cost_observed",
+      "family": "agent",
+      "consent_purpose": "agent",
+      "section_comment": "agent"
+    },
+    {
+      "name": "ai_invocation_observed",
       "family": "agent",
       "consent_purpose": "agent",
       "section_comment": "agent"
@@ -1577,184 +1583,70 @@
       "section_comment": "location"
     },
     {
-      "name": "stablecoin_transfer_observed",
-      "family": "stablecoin",
-      "consent_purpose": "economic_observability",
-      "section_comment": "stablecoin"
+      "name": "trading_account_connected",
+      "family": "derivatives",
+      "consent_purpose": "financial_activity",
+      "section_comment": "derivatives"
     },
     {
-      "name": "stablecoin_payment_observed",
-      "family": "stablecoin",
-      "consent_purpose": "economic_observability",
-      "section_comment": "stablecoin"
+      "name": "trading_account_disconnected",
+      "family": "derivatives",
+      "consent_purpose": "financial_activity",
+      "section_comment": "derivatives"
     },
     {
-      "name": "stablecoin_mint_observed",
-      "family": "stablecoin",
-      "consent_purpose": "economic_observability",
-      "section_comment": "stablecoin"
+      "name": "trading_account_authorized",
+      "family": "derivatives",
+      "consent_purpose": "financial_activity",
+      "section_comment": "derivatives"
     },
     {
-      "name": "stablecoin_burn_observed",
-      "family": "stablecoin",
-      "consent_purpose": "economic_observability",
-      "section_comment": "stablecoin"
+      "name": "trading_account_deauthorized",
+      "family": "derivatives",
+      "consent_purpose": "financial_activity",
+      "section_comment": "derivatives"
     },
     {
-      "name": "stablecoin_bridge_outbound_observed",
-      "family": "stablecoin",
-      "consent_purpose": "economic_observability",
-      "section_comment": "stablecoin"
+      "name": "trading_agent_enabled",
+      "family": "derivatives",
+      "consent_purpose": "financial_activity",
+      "section_comment": "derivatives"
     },
     {
-      "name": "stablecoin_bridge_inbound_observed",
-      "family": "stablecoin",
-      "consent_purpose": "economic_observability",
-      "section_comment": "stablecoin"
+      "name": "trading_agent_disabled",
+      "family": "derivatives",
+      "consent_purpose": "financial_activity",
+      "section_comment": "derivatives"
     },
     {
-      "name": "stablecoin_swap_observed",
-      "family": "stablecoin",
-      "consent_purpose": "economic_observability",
-      "section_comment": "stablecoin"
+      "name": "trade_intent_created",
+      "family": "derivatives",
+      "consent_purpose": "financial_activity",
+      "section_comment": "derivatives"
     },
     {
-      "name": "stablecoin_x402_settlement_observed",
-      "family": "stablecoin",
-      "consent_purpose": "economic_observability",
-      "section_comment": "stablecoin"
+      "name": "trade_approval_requested",
+      "family": "derivatives",
+      "consent_purpose": "financial_activity",
+      "section_comment": "derivatives"
     },
     {
-      "name": "stablecoin_treasury_movement_observed",
-      "family": "stablecoin",
-      "consent_purpose": "economic_observability",
-      "section_comment": "stablecoin"
+      "name": "trade_approval_resolved",
+      "family": "derivatives",
+      "consent_purpose": "financial_activity",
+      "section_comment": "derivatives"
     },
     {
-      "name": "stablecoin_payout_observed",
-      "family": "stablecoin",
-      "consent_purpose": "economic_observability",
-      "section_comment": "stablecoin"
+      "name": "risk_policy_updated",
+      "family": "derivatives",
+      "consent_purpose": "financial_activity",
+      "section_comment": "derivatives"
     },
     {
-      "name": "stablecoin_venue_deposit_observed",
-      "family": "stablecoin",
-      "consent_purpose": "economic_observability",
-      "section_comment": "stablecoin"
-    },
-    {
-      "name": "stablecoin_venue_withdrawal_observed",
-      "family": "stablecoin",
-      "consent_purpose": "economic_observability",
-      "section_comment": "stablecoin"
-    },
-    {
-      "name": "stablecoin_balance_snapshot_observed",
-      "family": "stablecoin",
-      "consent_purpose": "economic_observability",
-      "section_comment": "stablecoin"
-    },
-    {
-      "name": "stablecoin_supply_snapshot_observed",
-      "family": "stablecoin",
-      "consent_purpose": "economic_observability",
-      "section_comment": "stablecoin"
-    },
-    {
-      "name": "stablecoin_holder_concentration_observed",
-      "family": "stablecoin",
-      "consent_purpose": "economic_observability",
-      "section_comment": "stablecoin"
-    },
-    {
-      "name": "stablecoin_valuation_observed",
-      "family": "stablecoin",
-      "consent_purpose": "economic_observability",
-      "section_comment": "stablecoin"
-    },
-    {
-      "name": "stablecoin_depeg_detected",
-      "family": "stablecoin",
-      "consent_purpose": "economic_observability",
-      "section_comment": "stablecoin"
-    },
-    {
-      "name": "stablecoin_depeg_resolved",
-      "family": "stablecoin",
-      "consent_purpose": "economic_observability",
-      "section_comment": "stablecoin"
-    },
-    {
-      "name": "stablecoin_finality_confirmed",
-      "family": "stablecoin",
-      "consent_purpose": "economic_observability",
-      "section_comment": "stablecoin"
-    },
-    {
-      "name": "stablecoin_reorg_detected",
-      "family": "stablecoin",
-      "consent_purpose": "economic_observability",
-      "section_comment": "stablecoin"
-    },
-    {
-      "name": "stablecoin_observation_corrected",
-      "family": "stablecoin",
-      "consent_purpose": "economic_observability",
-      "section_comment": "stablecoin"
-    },
-    {
-      "name": "stablecoin_reconciliation_run_completed",
-      "family": "stablecoin",
-      "consent_purpose": "economic_observability",
-      "section_comment": "stablecoin"
-    },
-    {
-      "name": "stablecoin_reconciliation_variance_detected",
-      "family": "stablecoin",
-      "consent_purpose": "economic_observability",
-      "section_comment": "stablecoin"
-    },
-    {
-      "name": "stablecoin_reconciliation_variance_resolved",
-      "family": "stablecoin",
-      "consent_purpose": "economic_observability",
-      "section_comment": "stablecoin"
-    },
-    {
-      "name": "stablecoin_asset_registered",
-      "family": "stablecoin",
-      "consent_purpose": "economic_observability",
-      "section_comment": "stablecoin"
-    },
-    {
-      "name": "stablecoin_deployment_registered",
-      "family": "stablecoin",
-      "consent_purpose": "economic_observability",
-      "section_comment": "stablecoin"
-    },
-    {
-      "name": "stablecoin_support_asserted",
-      "family": "stablecoin",
-      "consent_purpose": "economic_observability",
-      "section_comment": "stablecoin"
-    },
-    {
-      "name": "stablecoin_support_revoked",
-      "family": "stablecoin",
-      "consent_purpose": "economic_observability",
-      "section_comment": "stablecoin"
-    },
-    {
-      "name": "stablecoin_flow_aggregate_materialized",
-      "family": "stablecoin",
-      "consent_purpose": "economic_observability",
-      "section_comment": "stablecoin"
-    },
-    {
-      "name": "stablecoin_checkpoint_advanced",
-      "family": "stablecoin",
-      "consent_purpose": "economic_observability",
-      "section_comment": "stablecoin"
+      "name": "human_trade_override_recorded",
+      "family": "derivatives",
+      "consent_purpose": "financial_activity",
+      "section_comment": "derivatives"
     },
     {
       "name": "derivatives_venue_registered",
@@ -2001,6 +1893,186 @@
       "family": "derivatives",
       "consent_purpose": "financial_activity",
       "section_comment": "derivatives"
+    },
+    {
+      "name": "stablecoin_transfer_observed",
+      "family": "stablecoin",
+      "consent_purpose": "economic_observability",
+      "section_comment": "stablecoin"
+    },
+    {
+      "name": "stablecoin_payment_observed",
+      "family": "stablecoin",
+      "consent_purpose": "economic_observability",
+      "section_comment": "stablecoin"
+    },
+    {
+      "name": "stablecoin_mint_observed",
+      "family": "stablecoin",
+      "consent_purpose": "economic_observability",
+      "section_comment": "stablecoin"
+    },
+    {
+      "name": "stablecoin_burn_observed",
+      "family": "stablecoin",
+      "consent_purpose": "economic_observability",
+      "section_comment": "stablecoin"
+    },
+    {
+      "name": "stablecoin_bridge_outbound_observed",
+      "family": "stablecoin",
+      "consent_purpose": "economic_observability",
+      "section_comment": "stablecoin"
+    },
+    {
+      "name": "stablecoin_bridge_inbound_observed",
+      "family": "stablecoin",
+      "consent_purpose": "economic_observability",
+      "section_comment": "stablecoin"
+    },
+    {
+      "name": "stablecoin_swap_observed",
+      "family": "stablecoin",
+      "consent_purpose": "economic_observability",
+      "section_comment": "stablecoin"
+    },
+    {
+      "name": "stablecoin_x402_settlement_observed",
+      "family": "stablecoin",
+      "consent_purpose": "economic_observability",
+      "section_comment": "stablecoin"
+    },
+    {
+      "name": "stablecoin_treasury_movement_observed",
+      "family": "stablecoin",
+      "consent_purpose": "economic_observability",
+      "section_comment": "stablecoin"
+    },
+    {
+      "name": "stablecoin_payout_observed",
+      "family": "stablecoin",
+      "consent_purpose": "economic_observability",
+      "section_comment": "stablecoin"
+    },
+    {
+      "name": "stablecoin_venue_deposit_observed",
+      "family": "stablecoin",
+      "consent_purpose": "economic_observability",
+      "section_comment": "stablecoin"
+    },
+    {
+      "name": "stablecoin_venue_withdrawal_observed",
+      "family": "stablecoin",
+      "consent_purpose": "economic_observability",
+      "section_comment": "stablecoin"
+    },
+    {
+      "name": "stablecoin_balance_snapshot_observed",
+      "family": "stablecoin",
+      "consent_purpose": "economic_observability",
+      "section_comment": "stablecoin"
+    },
+    {
+      "name": "stablecoin_supply_snapshot_observed",
+      "family": "stablecoin",
+      "consent_purpose": "economic_observability",
+      "section_comment": "stablecoin"
+    },
+    {
+      "name": "stablecoin_holder_concentration_observed",
+      "family": "stablecoin",
+      "consent_purpose": "economic_observability",
+      "section_comment": "stablecoin"
+    },
+    {
+      "name": "stablecoin_valuation_observed",
+      "family": "stablecoin",
+      "consent_purpose": "economic_observability",
+      "section_comment": "stablecoin"
+    },
+    {
+      "name": "stablecoin_depeg_detected",
+      "family": "stablecoin",
+      "consent_purpose": "economic_observability",
+      "section_comment": "stablecoin"
+    },
+    {
+      "name": "stablecoin_depeg_resolved",
+      "family": "stablecoin",
+      "consent_purpose": "economic_observability",
+      "section_comment": "stablecoin"
+    },
+    {
+      "name": "stablecoin_finality_confirmed",
+      "family": "stablecoin",
+      "consent_purpose": "economic_observability",
+      "section_comment": "stablecoin"
+    },
+    {
+      "name": "stablecoin_reorg_detected",
+      "family": "stablecoin",
+      "consent_purpose": "economic_observability",
+      "section_comment": "stablecoin"
+    },
+    {
+      "name": "stablecoin_observation_corrected",
+      "family": "stablecoin",
+      "consent_purpose": "economic_observability",
+      "section_comment": "stablecoin"
+    },
+    {
+      "name": "stablecoin_reconciliation_run_completed",
+      "family": "stablecoin",
+      "consent_purpose": "economic_observability",
+      "section_comment": "stablecoin"
+    },
+    {
+      "name": "stablecoin_reconciliation_variance_detected",
+      "family": "stablecoin",
+      "consent_purpose": "economic_observability",
+      "section_comment": "stablecoin"
+    },
+    {
+      "name": "stablecoin_reconciliation_variance_resolved",
+      "family": "stablecoin",
+      "consent_purpose": "economic_observability",
+      "section_comment": "stablecoin"
+    },
+    {
+      "name": "stablecoin_asset_registered",
+      "family": "stablecoin",
+      "consent_purpose": "economic_observability",
+      "section_comment": "stablecoin"
+    },
+    {
+      "name": "stablecoin_deployment_registered",
+      "family": "stablecoin",
+      "consent_purpose": "economic_observability",
+      "section_comment": "stablecoin"
+    },
+    {
+      "name": "stablecoin_support_asserted",
+      "family": "stablecoin",
+      "consent_purpose": "economic_observability",
+      "section_comment": "stablecoin"
+    },
+    {
+      "name": "stablecoin_support_revoked",
+      "family": "stablecoin",
+      "consent_purpose": "economic_observability",
+      "section_comment": "stablecoin"
+    },
+    {
+      "name": "stablecoin_flow_aggregate_materialized",
+      "family": "stablecoin",
+      "consent_purpose": "economic_observability",
+      "section_comment": "stablecoin"
+    },
+    {
+      "name": "stablecoin_checkpoint_advanced",
+      "family": "stablecoin",
+      "consent_purpose": "economic_observability",
+      "section_comment": "stablecoin"
     },
     {
       "name": "interop_provider_registered",

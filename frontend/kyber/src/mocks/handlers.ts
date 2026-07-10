@@ -126,6 +126,157 @@ const mockAgentStatus = {
   kill_switch: false,
 };
 
+// ── Agent ops — live command center (deterministic fixtures) ───────────────────
+
+const mockAgentOpsHealth = {
+  status: 'degraded',
+  kill_switch: false,
+  queue_depth: 12,
+  worker_count: 4,
+  stale_workers: 1,
+  active_runs: 3,
+  failed_runs: 2,
+  stuck_runs: 1,
+  computed_at: '2026-07-09T12:00:00.000Z',
+};
+
+const mockAgentControllersStatus = {
+  controllers: [
+    { name: 'nous', status: 'healthy', queue_depth: 4, last_heartbeat_at: '2026-07-09T11:59:30.000Z' },
+    { name: 'catalyst', status: 'healthy', queue_depth: 6, last_heartbeat_at: '2026-07-09T11:59:10.000Z' },
+    { name: 'intake', status: 'stale', queue_depth: 2, last_heartbeat_at: '2026-07-09T10:12:00.000Z' },
+  ],
+  count: 3,
+};
+
+const MOCK_AGENT_RUNS = [
+  {
+    run_id: 'run_001',
+    tenant_id: 'tenant_001',
+    objective_id: 'obj_001',
+    controller: 'nous',
+    queue: 'agent:runs:default',
+    status: 'running',
+    attempt: 1,
+    created_at: '2026-07-09T11:40:00.000Z',
+    updated_at: '2026-07-09T11:58:00.000Z',
+    error: null,
+  },
+  {
+    run_id: 'run_002',
+    tenant_id: 'tenant_001',
+    objective_id: 'obj_001',
+    controller: 'catalyst',
+    queue: 'agent:runs:default',
+    status: 'completed',
+    attempt: 1,
+    created_at: '2026-07-09T10:00:00.000Z',
+    updated_at: '2026-07-09T10:12:00.000Z',
+    error: null,
+  },
+  {
+    run_id: 'run_003',
+    tenant_id: 'tenant_002',
+    objective_id: 'obj_002',
+    controller: 'intake',
+    queue: 'agent:runs:priority',
+    status: 'failed',
+    attempt: 2,
+    created_at: '2026-07-09T09:30:00.000Z',
+    updated_at: '2026-07-09T09:45:00.000Z',
+    error: 'worker crashed: out of memory during graph projection',
+  },
+  {
+    run_id: 'run_004',
+    tenant_id: 'tenant_001',
+    objective_id: 'obj_003',
+    controller: 'nous',
+    queue: 'agent:runs:default',
+    status: 'stale',
+    attempt: 3,
+    created_at: '2026-07-09T08:00:00.000Z',
+    updated_at: '2026-07-09T08:20:00.000Z',
+    error: 'heartbeat lost — no worker update for 45m',
+  },
+  {
+    run_id: 'run_005',
+    tenant_id: 'tenant_002',
+    objective_id: 'obj_002',
+    controller: 'catalyst',
+    queue: 'agent:runs:default',
+    status: 'queued',
+    attempt: 1,
+    created_at: '2026-07-09T11:55:00.000Z',
+    updated_at: '2026-07-09T11:55:00.000Z',
+    error: null,
+  },
+];
+
+const MOCK_AGENT_BRIEFINGS = [
+  {
+    id: 'brief_001',
+    tenant_id: 'tenant_001',
+    type: 'run_complete',
+    title: 'Objective obj_001 step completed',
+    body: 'Catalyst finished enrichment pass: 42 entities updated, 0 staged mutations pending review.',
+    created_at: '2026-07-09T10:12:30.000Z',
+  },
+  {
+    id: 'brief_002',
+    tenant_id: 'tenant_001',
+    type: 'daily',
+    title: 'Daily operator briefing',
+    body: '3 active runs, 2 failed runs need triage, 1 stuck run awaiting recovery. Kill switch clear.',
+    created_at: '2026-07-09T06:00:00.000Z',
+  },
+];
+
+const MOCK_AGENT_OPS_ALERTS = [
+  {
+    id: 'ops_alert_001',
+    severity: 'critical',
+    kind: 'worker_stale',
+    message: 'Worker heartbeat missing on queue agent:runs:default',
+    count: 5,
+    dedupe_key: 'worker_stale:agent:runs:default',
+    first_seen_at: '2026-07-09T08:20:00.000Z',
+    last_seen_at: '2026-07-09T11:50:00.000Z',
+  },
+  {
+    id: 'ops_alert_002',
+    severity: 'medium',
+    kind: 'run_failed',
+    message: 'Run run_003 failed after 2 attempts',
+    count: 1,
+    dedupe_key: 'run_failed:run_003',
+    first_seen_at: '2026-07-09T09:45:00.000Z',
+    last_seen_at: '2026-07-09T09:45:00.000Z',
+  },
+];
+
+const MOCK_AGENT_REVIEW_BATCHES = [
+  {
+    batch_id: 'rb_001',
+    tenant_id: 'tenant_001',
+    objective_id: 'obj_001',
+    controller: 'catalyst',
+    status: 'pending',
+    staged_mutation_count: 3,
+    created_at: '2026-07-09T10:12:00.000Z',
+    updated_at: '2026-07-09T10:12:00.000Z',
+  },
+  {
+    batch_id: 'rb_002',
+    tenant_id: 'tenant_002',
+    objective_id: 'obj_002',
+    controller: 'nous',
+    status: 'approved',
+    staged_mutation_count: 0,
+    created_at: '2026-07-08T15:00:00.000Z',
+    updated_at: '2026-07-08T16:30:00.000Z',
+  },
+];
+
 // ── Resolution / Review ────────────────────────────────────────────────────────
 
 const mockPendingDecisions = {
@@ -139,6 +290,477 @@ const mockPendingDecisions = {
   })),
   total: 3,
 };
+
+// ── External agent telemetry (fleet) ───────────────────────────────────────────
+// Deterministic fixtures: fixed ISO timestamps, no Date.now()-derived values.
+
+const MOCK_AGENT_TELEMETRY_DEPLOYMENTS = [
+  {
+    tenant_id: 'tenant_001',
+    id: 'dep_discord_support_001',
+    display_name: 'Support Bot — Discord',
+    external_platform: 'discord_bot',
+    environment: 'production',
+    status: 'active',
+    event_count_24h: 4210,
+    accepted_count_24h: 4102,
+    rejected_count_24h: 61,
+    error_count_24h: 12,
+    consent_blocked_count_24h: 35,
+    health_score: 0.97,
+    last_event_at: '2026-07-08T21:42:00.000Z',
+  },
+  {
+    tenant_id: 'tenant_001',
+    id: 'dep_shopify_concierge_002',
+    display_name: 'Shopping Concierge — Shopify',
+    external_platform: 'shopify_app',
+    environment: 'production',
+    status: 'paused',
+    event_count_24h: 0,
+    accepted_count_24h: 0,
+    rejected_count_24h: 0,
+    error_count_24h: 0,
+    consent_blocked_count_24h: 0,
+    health_score: null,
+    last_event_at: '2026-07-06T16:05:00.000Z',
+  },
+  {
+    tenant_id: 'tenant_002',
+    id: 'dep_mcp_research_003',
+    display_name: 'Research Assistant — MCP',
+    external_platform: 'mcp_server',
+    environment: 'staging',
+    status: 'error',
+    event_count_24h: 812,
+    accepted_count_24h: 640,
+    rejected_count_24h: 118,
+    error_count_24h: 54,
+    consent_blocked_count_24h: 0,
+    health_score: 0.62,
+    last_event_at: '2026-07-08T19:10:00.000Z',
+  },
+];
+
+// ── Payment rail observability (fleet) ─────────────────────────────────────────
+// Deterministic fixtures: fixed ISO timestamps, no Date.now()-derived values.
+
+const MOCK_PAYMENT_RAILS_FLEET = {
+  totals: {
+    configured_tenants: 3,
+    sessions_observed_24h: 1287,
+    sessions_unresolved: 14,
+    reconciliation_conflicts: 5,
+  },
+  providers: [
+    {
+      provider: 'privy',
+      status: 'healthy',
+      configured_tenants: 3,
+      webhook_verified_24h: 640,
+      webhook_rejected_24h: 2,
+      sessions_observed_24h: 512,
+      sessions_completed_24h: 488,
+      sessions_failed_24h: 9,
+      sessions_unresolved: 4,
+      reconciliation_matched_rate: 0.982,
+      reconciliation_conflicts: 0,
+    },
+    {
+      provider: 'stripe',
+      status: 'healthy',
+      configured_tenants: 2,
+      webhook_verified_24h: 410,
+      webhook_rejected_24h: 6,
+      sessions_observed_24h: 388,
+      sessions_completed_24h: 351,
+      sessions_failed_24h: 12,
+      sessions_unresolved: 5,
+      reconciliation_matched_rate: 0.941,
+      reconciliation_conflicts: 1,
+    },
+    {
+      provider: 'coinbase',
+      status: 'degraded',
+      configured_tenants: 2,
+      webhook_verified_24h: 188,
+      webhook_rejected_24h: 41,
+      sessions_observed_24h: 244,
+      sessions_completed_24h: 190,
+      sessions_failed_24h: 28,
+      sessions_unresolved: 5,
+      reconciliation_matched_rate: 0.706,
+      reconciliation_conflicts: 4,
+    },
+    {
+      provider: 'moonpay',
+      status: 'not_configured',
+      configured_tenants: 0,
+      webhook_verified_24h: 0,
+      webhook_rejected_24h: 0,
+      sessions_observed_24h: 0,
+      sessions_completed_24h: 0,
+      sessions_failed_24h: 0,
+      sessions_unresolved: 0,
+      reconciliation_matched_rate: null,
+      reconciliation_conflicts: 0,
+    },
+    {
+      provider: 'bridge',
+      status: 'healthy',
+      configured_tenants: 1,
+      webhook_verified_24h: 58,
+      webhook_rejected_24h: 0,
+      sessions_observed_24h: 143,
+      sessions_completed_24h: 143,
+      sessions_failed_24h: 0,
+      sessions_unresolved: 0,
+      reconciliation_matched_rate: 1,
+      reconciliation_conflicts: 0,
+    },
+  ],
+  tenants: [
+    {
+      tenant_id: 'tenant_001',
+      providers_configured: 3,
+      providers_degraded: 0,
+      sessions_observed_24h: 733,
+      sessions_unresolved: 4,
+      reconciliation_conflicts: 0,
+      status: 'healthy',
+    },
+    {
+      tenant_id: 'tenant_002',
+      providers_configured: 2,
+      providers_degraded: 1,
+      sessions_observed_24h: 411,
+      sessions_unresolved: 8,
+      reconciliation_conflicts: 4,
+      status: 'degraded',
+    },
+    {
+      tenant_id: 'tenant_003',
+      providers_configured: 1,
+      providers_degraded: 0,
+      sessions_observed_24h: 143,
+      sessions_unresolved: 2,
+      reconciliation_conflicts: 1,
+      status: 'healthy',
+    },
+  ],
+};
+
+const MOCK_PAYMENT_RAILS_TENANTS: Record<string, unknown> = {
+  tenant_001: {
+    tenant_id: 'tenant_001',
+    providers: [
+      {
+        provider: 'privy',
+        adapter: {
+          status: 'configured',
+          environment: 'production',
+          webhook_configured: true,
+          polling_configured: true,
+          last_synced_at: '2026-07-08T23:45:00.000Z',
+        },
+        health: {
+          status: 'healthy',
+          webhook_verified_24h: 320,
+          webhook_rejected_24h: 1,
+          sessions_observed_24h: 256,
+          sessions_completed_24h: 244,
+          sessions_failed_24h: 4,
+          sessions_unresolved: 2,
+          reconciliation_matched_rate: 0.982,
+          reconciliation_conflicts: 0,
+          last_event_at: '2026-07-08T21:42:00.000Z',
+        },
+      },
+      {
+        provider: 'stripe',
+        adapter: {
+          status: 'configured',
+          environment: 'production',
+          webhook_configured: true,
+          polling_configured: false,
+          last_synced_at: '2026-07-08T23:40:00.000Z',
+        },
+        health: {
+          status: 'healthy',
+          webhook_verified_24h: 210,
+          webhook_rejected_24h: 3,
+          sessions_observed_24h: 194,
+          sessions_completed_24h: 176,
+          sessions_failed_24h: 6,
+          sessions_unresolved: 2,
+          reconciliation_matched_rate: 0.941,
+          reconciliation_conflicts: 0,
+          last_event_at: '2026-07-08T18:22:02.000Z',
+        },
+      },
+    ],
+  },
+  tenant_002: {
+    tenant_id: 'tenant_002',
+    providers: [
+      {
+        provider: 'coinbase',
+        adapter: {
+          status: 'error',
+          environment: 'production',
+          webhook_configured: true,
+          polling_configured: true,
+          last_synced_at: '2026-07-08T22:10:00.000Z',
+        },
+        health: {
+          status: 'degraded',
+          webhook_verified_24h: 96,
+          webhook_rejected_24h: 38,
+          sessions_observed_24h: 131,
+          sessions_completed_24h: 98,
+          sessions_failed_24h: 22,
+          sessions_unresolved: 5,
+          reconciliation_matched_rate: 0.706,
+          reconciliation_conflicts: 4,
+          last_event_at: '2026-07-08T06:15:40.000Z',
+        },
+      },
+    ],
+  },
+  tenant_003: {
+    tenant_id: 'tenant_003',
+    providers: [
+      {
+        provider: 'bridge',
+        adapter: {
+          status: 'configured',
+          environment: 'production',
+          webhook_configured: true,
+          polling_configured: true,
+          last_synced_at: '2026-07-08T23:00:00.000Z',
+        },
+        health: {
+          status: 'healthy',
+          webhook_verified_24h: 58,
+          webhook_rejected_24h: 0,
+          sessions_observed_24h: 143,
+          sessions_completed_24h: 143,
+          sessions_failed_24h: 0,
+          sessions_unresolved: 2,
+          reconciliation_matched_rate: 1,
+          reconciliation_conflicts: 1,
+          last_event_at: '2026-07-08T08:01:12.000Z',
+        },
+      },
+    ],
+  },
+};
+
+// ── AI outcome efficiency — fleet health ───────────────────────────────────────
+// Deterministic fixtures: cross-tenant aggregates only. Unknown costs stay
+// unknown (they are a coverage gap, never zero), and raw prompt/completion
+// content is never present.
+const MOCK_AI_EFFICIENCY_FLEET = {
+  fact_count: 48210,
+  cost_coverage: 0.91,
+  unknown_cost_share: 0.09,
+  tenants_observed: 3,
+  detector_counts: {
+    retry_waste: 4,
+    model_overqualification: 2,
+    deterministic_replacement_candidate: 1,
+    cache_opportunity: 3,
+    failed_workflow_concentration: 1,
+  },
+  tenants: [
+    {
+      tenant_id: 'tenant_001',
+      fact_count: 26410,
+      cost_coverage: 0.97,
+      unknown_cost_share: 0.03,
+      open_findings: 2,
+      status: 'healthy',
+    },
+    {
+      tenant_id: 'tenant_002',
+      fact_count: 14580,
+      cost_coverage: 0.72,
+      unknown_cost_share: 0.28,
+      open_findings: 6,
+      status: 'degraded',
+    },
+    {
+      tenant_id: 'tenant_003',
+      fact_count: 7220,
+      cost_coverage: 0.99,
+      unknown_cost_share: 0.01,
+      open_findings: 3,
+      status: 'healthy',
+    },
+  ],
+};
+
+const MOCK_AI_EFFICIENCY_TENANTS: Record<string, unknown> = {
+  tenant_001: {
+    tenant_id: 'tenant_001',
+    fact_count: 26410,
+    cost_coverage: 0.97,
+    unknown_cost_share: 0.03,
+    workflow_count: 812,
+    detector_counts: {
+      retry_waste: 0,
+      model_overqualification: 1,
+      deterministic_replacement_candidate: 0,
+      cache_opportunity: 1,
+      failed_workflow_concentration: 0,
+    },
+    models: [
+      { provider: 'openai', model: 'gpt-4o-mini', invocations: 18204 },
+      { provider: 'anthropic', model: 'claude-sonnet-4', invocations: 8206 },
+    ],
+    findings: [
+      { detector: 'model_overqualification', severity: 'medium', title: 'gpt-4o used for template filling' },
+      { detector: 'cache_opportunity', severity: 'low', title: 'Repeated identical planning prompt prefix' },
+    ],
+  },
+  tenant_002: {
+    tenant_id: 'tenant_002',
+    fact_count: 14580,
+    cost_coverage: 0.72,
+    unknown_cost_share: 0.28,
+    workflow_count: 340,
+    detector_counts: {
+      retry_waste: 4,
+      model_overqualification: 1,
+      deterministic_replacement_candidate: 0,
+      cache_opportunity: 0,
+      failed_workflow_concentration: 1,
+    },
+    models: [
+      { provider: 'openai', model: 'gpt-4o', invocations: 14580 },
+    ],
+    findings: [
+      { detector: 'retry_waste', severity: 'high', title: 'Retry storms on gpt-4o support replies' },
+      { detector: 'failed_workflow_concentration', severity: 'high', title: 'Failed-execution cost concentrated in one workflow' },
+    ],
+  },
+  tenant_003: {
+    tenant_id: 'tenant_003',
+    fact_count: 7220,
+    cost_coverage: 0.99,
+    unknown_cost_share: 0.01,
+    workflow_count: 96,
+    detector_counts: {
+      retry_waste: 0,
+      model_overqualification: 0,
+      deterministic_replacement_candidate: 1,
+      cache_opportunity: 2,
+      failed_workflow_concentration: 0,
+    },
+    models: [
+      { provider: 'mistral', model: 'mistral-embed', invocations: 7220 },
+    ],
+    findings: [
+      { detector: 'deterministic_replacement_candidate', severity: 'medium', title: 'Currency formatting handled by LLM' },
+      { detector: 'cache_opportunity', severity: 'low', title: 'Repeated identical catalog embedding prompts' },
+    ],
+  },
+};
+
+// ── Cluster Targeting Intelligence (fleet diagnostics, deterministic) ─────────
+// camelCase per the targeting-intelligence contracts. Aether observes cluster
+// targeting; recompute never mutates external campaign platforms.
+
+const MOCK_TARGETING_FLEET_HEALTH = {
+  tenantsObserved: 2,
+  intentCount: 3,
+  snapshotCount: 5,
+  leakageBySeverity: { critical: 1, high: 2, medium: 1 },
+  intentsBySource: { tenant_declared: 2, suggestion_generated: 1 },
+};
+
+const MOCK_TARGETING_LEAKAGE_QUEUE = [
+  {
+    findingId: 'ti_leak_001',
+    tenantId: 'tenant_001',
+    campaignId: 'camp_spring_launch_001',
+    clusterId: 'cluster_z',
+    severity: 'critical',
+    leakageRate: 0.21,
+    reasonCode: 'fraud_risk',
+    likelyCauses: ['provider_ignored_exclusion', 'lookalike_expansion'],
+    computedAt: '2026-07-08T12:00:00.000Z',
+  },
+  {
+    findingId: 'ti_leak_002',
+    tenantId: 'tenant_002',
+    campaignId: 'camp_renewal_005',
+    clusterId: 'cluster_t',
+    severity: 'high',
+    leakageRate: 0.09,
+    reasonCode: 'consent_blocked',
+    likelyCauses: ['identity_resolved_after_launch'],
+    computedAt: '2026-07-07T09:00:00.000Z',
+  },
+];
+
+const MOCK_TARGETING_MAPPING_QUALITY = [
+  {
+    tenantId: 'tenant_002',
+    campaignId: 'camp_renewal_005',
+    provider: 'google_ads',
+    qualityScore: 0.34,
+    blocksSuggestions: true,
+    providerSyncFreshness: 'stale',
+    reasons: ['unresolved provider aliases above threshold'],
+    computedAt: '2026-07-07T09:00:00.000Z',
+  },
+  {
+    tenantId: 'tenant_001',
+    campaignId: 'camp_spring_launch_001',
+    provider: 'meta_ads',
+    qualityScore: 0.87,
+    blocksSuggestions: false,
+    providerSyncFreshness: 'recent',
+    reasons: [],
+    computedAt: '2026-07-08T12:00:00.000Z',
+  },
+];
+
+const MOCK_TARGETING_RELEASE_READINESS = {
+  ready: false,
+  checks: [
+    { name: 'contracts_importable', passed: true, detail: '' },
+    { name: 'non_execution_invariant', passed: true, detail: '' },
+    { name: 'policy_deterministic_consent_wins', passed: true, detail: '' },
+    { name: 'stores_reachable', passed: false, detail: 'targeting_audit store unreachable' },
+  ],
+  flags: {
+    enabled: true,
+    exports_enabled: true,
+    ooda_suggestions_enabled: false,
+    kyber_enabled: true,
+  },
+};
+
+const MOCK_TARGETING_AUDIT = [
+  {
+    id: 'aud_ti_001',
+    tenantId: 'tenant_001',
+    action: 'snapshot_recomputed',
+    actor: 'kyber-operator',
+    detail: { intentId: 'ti_intent_001', asOf: '2026-07-02T00:00:00.000Z' },
+    occurredAt: '2026-07-09T10:00:00.000Z',
+  },
+  {
+    id: 'aud_ti_002',
+    tenantId: 'tenant_002',
+    action: 'leakage_recomputed',
+    actor: 'kyber-operator',
+    detail: { observationId: 'ti_obs_005' },
+    occurredAt: '2026-07-08T16:00:00.000Z',
+  },
+];
 
 // ── Handlers ───────────────────────────────────────────────────────────────────
 
@@ -167,7 +789,39 @@ export const handlers = [
   http.get(`${API}/v1/agent/status`, () => ok(mockAgentStatus)),
   http.get(`${API}/v1/agent/audit`, () => ok({ tasks: [], count: 0 })),
   http.post(`${API}/v1/agent/tasks`, () => ok({ task_id: 'task_mock', status: 'queued' })),
-  http.post(`${API}/v1/agent/kill-switch`, () => ok({ kill_switch: true })),
+  http.post(`${API}/v1/agent/kill-switch`, async ({ request }) => {
+    const body = await request.json() as { action?: string };
+    const action = body?.action ?? 'engage';
+    return ok({ kill_switch: action === 'engage', action });
+  }),
+
+  // Agent ops — live command center
+  http.get(`${API}/v1/agent/health`, () => ok(mockAgentOpsHealth)),
+  http.get(`${API}/v1/agent/controllers/status`, () => ok(mockAgentControllersStatus)),
+  http.get(`${API}/v1/agent/runs`, ({ request }) => {
+    const url = new URL(request.url);
+    const status = url.searchParams.get('status');
+    const objectiveId = url.searchParams.get('objective_id');
+    let runs = MOCK_AGENT_RUNS;
+    if (status) runs = runs.filter(r => r.status === status);
+    if (objectiveId) runs = runs.filter(r => r.objective_id === objectiveId);
+    return ok({ runs });
+  }),
+  http.get(`${API}/v1/agent/runs/stuck`, () =>
+    ok({ runs: MOCK_AGENT_RUNS.filter(r => r.status === 'stale') }),
+  ),
+  http.get(`${API}/v1/agent/briefings`, () => ok({ briefings: MOCK_AGENT_BRIEFINGS })),
+  http.post(`${API}/v1/agent/briefings/generate`, () =>
+    ok({ briefing: { ...MOCK_AGENT_BRIEFINGS[1], id: 'brief_generated_001', type: 'handoff', title: 'Operator handoff briefing' }, generated: true }),
+  ),
+  http.get(`${API}/v1/agent/ops/alerts`, () => ok({ alerts: MOCK_AGENT_OPS_ALERTS })),
+  http.get(`${API}/v1/agent/review-batches`, () => ok({ batches: MOCK_AGENT_REVIEW_BATCHES, count: MOCK_AGENT_REVIEW_BATCHES.length })),
+  http.post(`${API}/v1/agent/review-batches/:batchId/approve`, ({ params }) =>
+    ok({ batch_id: params.batchId, status: 'approved' }),
+  ),
+  http.post(`${API}/v1/agent/review-batches/:batchId/reject`, ({ params }) =>
+    ok({ batch_id: params.batchId, status: 'rejected' }),
+  ),
 
   // Automation
   http.get(`${API}/v1/automation/insights`, () => ok({ insights: [], count: 0 })),
@@ -320,4 +974,108 @@ export const handlers = [
   http.post(`${API}/v1/investigations/:caseId/annotations`, ({ params }) =>
     ok({ case_id: params.caseId, annotation_id: `ann_${Date.now()}`, created: true }),
   ),
+
+  // External agent telemetry — fleet observability (deterministic fixtures)
+  http.get(`${API}/v1/admin/kyber/agent-telemetry/deployments`, () =>
+    ok({
+      total_deployments: MOCK_AGENT_TELEMETRY_DEPLOYMENTS.length,
+      active_deployments: MOCK_AGENT_TELEMETRY_DEPLOYMENTS.filter(d => d.status === 'active').length,
+      tenants_with_deployments: 2,
+      events_24h: 5022,
+      counts_by_status: { active: 1, paused: 1, error: 1 },
+      counts_by_platform: { discord_bot: 1, shopify_app: 1, mcp_server: 1 },
+      deployments: MOCK_AGENT_TELEMETRY_DEPLOYMENTS,
+    }),
+  ),
+  http.get(`${API}/v1/admin/kyber/agent-telemetry/deployments/:tenantId/:deploymentId`, ({ params }) => {
+    const deployment = MOCK_AGENT_TELEMETRY_DEPLOYMENTS.find(
+      d => d.tenant_id === params.tenantId && d.id === params.deploymentId,
+    );
+    if (!deployment) {
+      return HttpResponse.json({ message: 'Deployment not found', code: 'NOT_FOUND' }, { status: 404 });
+    }
+    return ok({
+      deployment: {
+        ...deployment,
+        environment: 'production',
+        consent_mode: 'platform_managed',
+        last_event_at: '2026-07-08T21:42:00.000Z',
+      },
+      health: {
+        event_count_24h: deployment.event_count_24h,
+        accepted_count_24h: deployment.accepted_count_24h,
+        rejected_count_24h: deployment.rejected_count_24h,
+        error_count_24h: deployment.error_count_24h,
+        consent_blocked_count_24h: deployment.consent_blocked_count_24h,
+        health_score: deployment.health_score,
+      },
+      diagnostics: {
+        rejection_reasons: { schema_validation_failed: 42, unknown_event_family: 19 },
+        consent_block_rate: 0.008,
+        ingest_lag_ms: 240,
+        last_error: deployment.status === 'error' ? 'capability scope mismatch: observe:payments not granted' : null,
+      },
+      recent_activity: [
+        { id: 'act_001', action: 'created', actor: 'tenant-admin', occurred_at: '2026-05-01T14:00:00.000Z' },
+        { id: 'act_002', action: 'updated', actor: 'tenant-admin', occurred_at: '2026-07-01T10:30:00.000Z' },
+      ],
+    });
+  }),
+
+  // Payment rail observability — fleet health (deterministic fixtures)
+  http.get(`${API}/v1/admin/kyber/payment-rails/health`, () => ok(MOCK_PAYMENT_RAILS_FLEET)),
+  http.get(`${API}/v1/admin/kyber/payment-rails/:tenantId`, ({ params }) => {
+    const diagnostics = MOCK_PAYMENT_RAILS_TENANTS[String(params.tenantId)];
+    if (!diagnostics) {
+      return HttpResponse.json({ message: 'Tenant not found', code: 'NOT_FOUND' }, { status: 404 });
+    }
+    return ok(diagnostics);
+  }),
+
+  // AI outcome efficiency — fleet health (deterministic fixtures)
+  http.get(`${API}/v1/admin/kyber/ai-efficiency/health`, () => ok(MOCK_AI_EFFICIENCY_FLEET)),
+  http.get(`${API}/v1/admin/kyber/ai-efficiency/:tenantId`, ({ params }) => {
+    const drilldown = MOCK_AI_EFFICIENCY_TENANTS[String(params.tenantId)];
+    if (!drilldown) {
+      return HttpResponse.json({ message: 'Tenant not found', code: 'NOT_FOUND' }, { status: 404 });
+    }
+    return ok(drilldown);
+  }),
+
+  // Cluster Targeting Intelligence — fleet diagnostics (deterministic fixtures)
+  http.get(`${API}/v1/admin/kyber/targeting/health`, () => ok(MOCK_TARGETING_FLEET_HEALTH)),
+  http.get(`${API}/v1/admin/kyber/targeting/leakage-queue`, ({ request }) => {
+    const severity = new URL(request.url).searchParams.get('severity');
+    const queue = severity
+      ? MOCK_TARGETING_LEAKAGE_QUEUE.filter(f => f.severity === severity)
+      : MOCK_TARGETING_LEAKAGE_QUEUE;
+    return ok({ queue });
+  }),
+  http.get(`${API}/v1/admin/kyber/targeting/mapping-quality`, () =>
+    ok({ diagnostics: MOCK_TARGETING_MAPPING_QUALITY }),
+  ),
+  http.post(`${API}/v1/admin/kyber/targeting/recompute`, async ({ request }) => {
+    const body = await request.json() as { tenantId?: string; intentId?: string; asOf?: string; observationId?: string };
+    if (body.intentId && body.asOf) {
+      return ok({
+        recomputed: 'snapshot',
+        snapshot: {
+          snapshotId: 'ti_snap_recomputed_001',
+          tenantId: body.tenantId,
+          targetingIntentId: body.intentId,
+          asOf: body.asOf,
+          createdAt: '2026-07-09T10:00:00.000Z',
+        },
+      });
+    }
+    if (body.observationId) {
+      return ok({ recomputed: 'leakage', findings: MOCK_TARGETING_LEAKAGE_QUEUE.slice(0, 1) });
+    }
+    return HttpResponse.json(
+      { message: 'Provide intentId+asOf (snapshot) or observationId (leakage)', code: 'BAD_REQUEST' },
+      { status: 400 },
+    );
+  }),
+  http.get(`${API}/v1/admin/kyber/targeting/release-readiness`, () => ok(MOCK_TARGETING_RELEASE_READINESS)),
+  http.get(`${API}/v1/admin/kyber/targeting/audit`, () => ok({ audit: MOCK_TARGETING_AUDIT })),
 ];

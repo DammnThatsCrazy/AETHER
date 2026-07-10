@@ -32,9 +32,10 @@ export {
 } from './agentic';
 export type { AgentEventEnvelope } from './agentic';
 
-const EXPLICIT_OPT_IN_PURPOSES: readonly ConsentPurpose[] = ['credit', 'location'];
+const EXPLICIT_OPT_IN_PURPOSES: readonly ConsentPurpose[] = ['credit', 'location', 'financial_activity'];
 const ALL_PURPOSES: readonly ConsentPurpose[] = [
-  'analytics', 'marketing', 'personalization', 'web3', 'agent', 'commerce', 'credit', 'location',
+  'analytics', 'marketing', 'personalization', 'web3', 'agent', 'commerce',
+  'credit', 'location', 'financial_activity',
 ];
 const DEFAULT_ENDPOINT = 'https://ingest.aether.so/v1/batch';
 
@@ -174,6 +175,7 @@ export class AetherServerSDK {
       commerce: false,
       credit: false,
       location: false,
+      financial_activity: false,
       ...partial,
     };
   }
@@ -186,3 +188,9 @@ export class AetherServerSDK {
     if (this.flushTimer.unref) this.flushTimer.unref();
   }
 }
+
+// External Agent Telemetry Plane V1 — re-exported after the class definition
+// because agent-telemetry extends AetherServerSDK from this module.
+export { AgentTelemetryClient, validateAgentDeploymentContext } from './agent-telemetry';
+export type { AgentTelemetryConfig } from './agent-telemetry';
+export type { AgentDeploymentContext } from '@aether/shared';

@@ -1,4 +1,8 @@
 import { Badge, Button } from '@aether/ui';
+import {
+  TargetingSuggestionSection,
+  isTargetingSuggestion,
+} from '@aether-app/features/targeting-intelligence';
 
 type AnyRecord = Record<string, any>;
 
@@ -106,6 +110,10 @@ export function TenantSuggestionCard({
           </div>
         )}
       </div>
+
+      {isTargetingSuggestion(safe) && (
+        <TargetingSuggestionSection suggestion={safe} />
+      )}
 
       <div className="flex items-center justify-between pt-1">
         <div className="flex items-center gap-3 text-xs text-text-muted">

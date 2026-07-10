@@ -109,6 +109,7 @@ export type EventType =
   | 'agent_data_extraction_observed'
   | 'agent_evaluation_observed'
   | 'agent_cost_observed'
+  | 'ai_invocation_observed'
   | 'agent_grounding_observed'
   | 'agent_guardrail_observed'
   | 'agent_human_override_observed'
@@ -289,38 +290,18 @@ export type EventType =
   // location
   | 'location_observed'
   | 'geofence_transition_observed'
-  // stablecoin
-  | 'stablecoin_transfer_observed'
-  | 'stablecoin_payment_observed'
-  | 'stablecoin_mint_observed'
-  | 'stablecoin_burn_observed'
-  | 'stablecoin_bridge_outbound_observed'
-  | 'stablecoin_bridge_inbound_observed'
-  | 'stablecoin_swap_observed'
-  | 'stablecoin_x402_settlement_observed'
-  | 'stablecoin_treasury_movement_observed'
-  | 'stablecoin_payout_observed'
-  | 'stablecoin_venue_deposit_observed'
-  | 'stablecoin_venue_withdrawal_observed'
-  | 'stablecoin_balance_snapshot_observed'
-  | 'stablecoin_supply_snapshot_observed'
-  | 'stablecoin_holder_concentration_observed'
-  | 'stablecoin_valuation_observed'
-  | 'stablecoin_depeg_detected'
-  | 'stablecoin_depeg_resolved'
-  | 'stablecoin_finality_confirmed'
-  | 'stablecoin_reorg_detected'
-  | 'stablecoin_observation_corrected'
-  | 'stablecoin_reconciliation_run_completed'
-  | 'stablecoin_reconciliation_variance_detected'
-  | 'stablecoin_reconciliation_variance_resolved'
-  | 'stablecoin_asset_registered'
-  | 'stablecoin_deployment_registered'
-  | 'stablecoin_support_asserted'
-  | 'stablecoin_support_revoked'
-  | 'stablecoin_flow_aggregate_materialized'
-  | 'stablecoin_checkpoint_advanced'
   // derivatives
+  | 'trading_account_connected'
+  | 'trading_account_disconnected'
+  | 'trading_account_authorized'
+  | 'trading_account_deauthorized'
+  | 'trading_agent_enabled'
+  | 'trading_agent_disabled'
+  | 'trade_intent_created'
+  | 'trade_approval_requested'
+  | 'trade_approval_resolved'
+  | 'risk_policy_updated'
+  | 'human_trade_override_recorded'
   | 'derivatives_venue_registered'
   | 'derivatives_venue_deployment_registered'
   | 'derivatives_instrument_registered'
@@ -362,6 +343,37 @@ export type EventType =
   | 'derivatives_reconciliation_variance_detected'
   | 'derivatives_reconciliation_variance_resolved'
   | 'derivatives_risk_threshold_breached'
+  // stablecoin
+  | 'stablecoin_transfer_observed'
+  | 'stablecoin_payment_observed'
+  | 'stablecoin_mint_observed'
+  | 'stablecoin_burn_observed'
+  | 'stablecoin_bridge_outbound_observed'
+  | 'stablecoin_bridge_inbound_observed'
+  | 'stablecoin_swap_observed'
+  | 'stablecoin_x402_settlement_observed'
+  | 'stablecoin_treasury_movement_observed'
+  | 'stablecoin_payout_observed'
+  | 'stablecoin_venue_deposit_observed'
+  | 'stablecoin_venue_withdrawal_observed'
+  | 'stablecoin_balance_snapshot_observed'
+  | 'stablecoin_supply_snapshot_observed'
+  | 'stablecoin_holder_concentration_observed'
+  | 'stablecoin_valuation_observed'
+  | 'stablecoin_depeg_detected'
+  | 'stablecoin_depeg_resolved'
+  | 'stablecoin_finality_confirmed'
+  | 'stablecoin_reorg_detected'
+  | 'stablecoin_observation_corrected'
+  | 'stablecoin_reconciliation_run_completed'
+  | 'stablecoin_reconciliation_variance_detected'
+  | 'stablecoin_reconciliation_variance_resolved'
+  | 'stablecoin_asset_registered'
+  | 'stablecoin_deployment_registered'
+  | 'stablecoin_support_asserted'
+  | 'stablecoin_support_revoked'
+  | 'stablecoin_flow_aggregate_materialized'
+  | 'stablecoin_checkpoint_advanced'
   // interop
   | 'interop_provider_registered'
   | 'interop_gateway_registered'
@@ -649,6 +661,7 @@ export const EVENT_FAMILY: Record<EventType, EventFamily> = {
   device_revoked: 'identity_lc',
   agent_evaluation_observed: 'agent',
   agent_cost_observed: 'agent',
+  ai_invocation_observed: 'agent',
   agent_grounding_observed: 'agent',
   agent_guardrail_observed: 'agent',
   agent_human_override_observed: 'agent',
@@ -688,6 +701,17 @@ export const EVENT_FAMILY: Record<EventType, EventFamily> = {
   credit_decision_observed: 'credit',
   location_observed: 'location',
   geofence_transition_observed: 'location',
+  trading_account_connected: 'derivatives',
+  trading_account_disconnected: 'derivatives',
+  trading_account_authorized: 'derivatives',
+  trading_account_deauthorized: 'derivatives',
+  trading_agent_enabled: 'derivatives',
+  trading_agent_disabled: 'derivatives',
+  trade_intent_created: 'derivatives',
+  trade_approval_requested: 'derivatives',
+  trade_approval_resolved: 'derivatives',
+  risk_policy_updated: 'derivatives',
+  human_trade_override_recorded: 'derivatives',
   stablecoin_transfer_observed: 'stablecoin',
   stablecoin_payment_observed: 'stablecoin',
   stablecoin_mint_observed: 'stablecoin',
@@ -889,12 +913,12 @@ export const EVENT_CONSENT_PURPOSE: Record<EventType, string> = {
   agent_notification_observed: 'agent',
   agent_strategy_observed: 'agent',
   agent_trade_intent_observed: 'agent',
-  agent_trade_order_observed: 'agent',
-  agent_trade_fill_observed: 'agent',
+  agent_trade_order_observed: 'financial_activity',
+  agent_trade_fill_observed: 'financial_activity',
   agent_trade_rejection_observed: 'agent',
-  agent_position_observed: 'agent',
-  agent_portfolio_snapshot_observed: 'agent',
-  agent_performance_snapshot_observed: 'agent',
+  agent_position_observed: 'financial_activity',
+  agent_portfolio_snapshot_observed: 'financial_activity',
+  agent_performance_snapshot_observed: 'financial_activity',
   agent_disconnect_observed: 'agent',
   agent_inbox_observed: 'agent',
   agent_email_address_observed: 'agent',
@@ -1022,6 +1046,7 @@ export const EVENT_CONSENT_PURPOSE: Record<EventType, string> = {
   device_revoked: 'analytics',
   agent_evaluation_observed: 'agent',
   agent_cost_observed: 'agent',
+  ai_invocation_observed: 'agent',
   agent_grounding_observed: 'agent',
   agent_guardrail_observed: 'agent',
   agent_human_override_observed: 'agent',
@@ -1061,6 +1086,17 @@ export const EVENT_CONSENT_PURPOSE: Record<EventType, string> = {
   credit_decision_observed: 'credit',
   location_observed: 'location',
   geofence_transition_observed: 'location',
+  trading_account_connected: 'financial_activity',
+  trading_account_disconnected: 'financial_activity',
+  trading_account_authorized: 'financial_activity',
+  trading_account_deauthorized: 'financial_activity',
+  trading_agent_enabled: 'financial_activity',
+  trading_agent_disabled: 'financial_activity',
+  trade_intent_created: 'financial_activity',
+  trade_approval_requested: 'financial_activity',
+  trade_approval_resolved: 'financial_activity',
+  risk_policy_updated: 'financial_activity',
+  human_trade_override_recorded: 'financial_activity',
   stablecoin_transfer_observed: 'economic_observability',
   stablecoin_payment_observed: 'economic_observability',
   stablecoin_mint_observed: 'economic_observability',

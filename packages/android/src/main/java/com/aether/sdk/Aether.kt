@@ -248,7 +248,7 @@ object Aether : DefaultLifecycleObserver {
         // Agent evaluation family
         "agent_evaluation_observed" to "agent", "agent_cost_observed" to "agent",
         "agent_grounding_observed" to "agent", "agent_guardrail_observed" to "agent",
-        "agent_human_override_observed" to "agent",
+        "agent_human_override_observed" to "agent", "ai_invocation_observed" to "agent",
         // Web3 lifecycle extensions
         "transaction_pending_observed" to "web3", "transaction_confirmed_observed" to "web3",
         "transaction_reverted_observed" to "web3", "transaction_reorged_observed" to "web3",
@@ -270,6 +270,13 @@ object Aether : DefaultLifecycleObserver {
         "credit_decision_observed" to "credit",
         // Location family (explicit opt-in)
         "location_observed" to "location", "geofence_transition_observed" to "location",
+        // Derivatives family (explicit financial_activity opt-in)
+        "trading_account_connected" to "financial_activity", "trading_account_disconnected" to "financial_activity",
+        "trading_account_authorized" to "financial_activity", "trading_account_deauthorized" to "financial_activity",
+        "trading_agent_enabled" to "financial_activity", "trading_agent_disabled" to "financial_activity",
+        "trade_intent_created" to "financial_activity", "trade_approval_requested" to "financial_activity",
+        "trade_approval_resolved" to "financial_activity", "risk_policy_updated" to "financial_activity",
+        "human_trade_override_recorded" to "financial_activity"
         // Stablecoin intelligence family (explicit opt-in)
         "stablecoin_transfer_observed" to "economic_observability", "stablecoin_payment_observed" to "economic_observability",
         "stablecoin_mint_observed" to "economic_observability", "stablecoin_burn_observed" to "economic_observability",

@@ -204,6 +204,18 @@ class QueryPlan(BaseModel):
         "derivatives_reconciliation_lookup",
         "interop_message_trace",
         "interop_path_reliability",
+        # Agentic intelligence intents (must mirror _agentic_dispatch keys)
+        "agent_inventory_lookup",
+        "agent_activity_lookup",
+        "agent_path_lookup",
+        "mcp_topology_lookup",
+        "authorization_lookup",
+        "provider_verification_lookup",
+        "verification_mismatch_lookup",
+        "permission_risk_lookup",
+        "agent_profile360_lookup",
+        "journey_agentic_steps_lookup",
+        "campaign_agentic_influence_lookup",
         "unsupported",
     ]
     target: Optional[str] = None

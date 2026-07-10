@@ -8,6 +8,7 @@ status: stable
 since_version: "8.12.0"
 source_files:
   - packages/shared/contracts/event-registry.json
+  - Backend Architecture/aether-backend/services/stablecoins/models.py
   - Backend Architecture/aether-backend/services/silver/projectors/stablecoin_projector.py
 canonical_owner: platform@aether
 last_synced_commit: 1f19190
@@ -40,3 +41,9 @@ Backend emission happens in `services/stablecoin/` (service intake,
 valuation, finality, flows) via `foundation.make_event`; usage metering
 uses the canonical meters `stablecoin_observation_ingested` and
 `stablecoin_flow_materialized` only.
+
+## Observer-stack taxonomy (services/stablecoins domain)
+
+Stablecoin events preserve raw observation facts separately from derived classification. PR1 defines the canonical event taxonomy in `services/stablecoins/models.py` and the SDK parity contract in `packages/shared/stablecoin.ts`.
+
+Finalized payment volume may only include `finalized` observations. Pending, failed, dropped, disputed, unknown, and reverted observations are excluded from finalized metrics. Reverted observations must be retained as corrections rather than deleted from history.

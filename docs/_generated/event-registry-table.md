@@ -1,7 +1,7 @@
 <!-- DO NOT EDIT — generated from packages/shared/contracts/event-registry.json -->
 <!-- Run: python scripts/generate_contracts.py -->
 
-# Aether Event Registry (366 types, contract v8.12.0)
+# Aether Event Registry (378 types, contract v8.12.0)
 
 | Event Type | Family | Required Purposes | Privacy Class | Description |
 |---|---|---|---|---|
@@ -89,12 +89,12 @@
 | `agent_notification_observed` | `agent` | agent | behavioral | Agent notification observed |
 | `agent_strategy_observed` | `agent` | agent | behavioral | Agent strategy state observed |
 | `agent_trade_intent_observed` | `agent` | agent | behavioral | Agent trade intent observed |
-| `agent_trade_order_observed` | `agent` | agent | behavioral | Agent trade order observed |
-| `agent_trade_fill_observed` | `agent` | agent | behavioral | Agent trade fill observed |
+| `agent_trade_order_observed` | `agent` | financial_activity | behavioral | Agent trade order observed |
+| `agent_trade_fill_observed` | `agent` | financial_activity | behavioral | Agent trade fill observed |
 | `agent_trade_rejection_observed` | `agent` | agent | behavioral | Agent trade rejection observed |
-| `agent_position_observed` | `agent` | agent | behavioral | Agent position snapshot observed |
-| `agent_portfolio_snapshot_observed` | `agent` | agent | behavioral | Agent portfolio snapshot observed |
-| `agent_performance_snapshot_observed` | `agent` | agent | behavioral | Agent performance snapshot observed |
+| `agent_position_observed` | `agent` | financial_activity | behavioral | Agent position snapshot observed |
+| `agent_portfolio_snapshot_observed` | `agent` | financial_activity | behavioral | Agent portfolio snapshot observed |
+| `agent_performance_snapshot_observed` | `agent` | financial_activity | behavioral | Agent performance snapshot observed |
 | `agent_disconnect_observed` | `agent` | agent | behavioral | Agent disconnected |
 | `agent_inbox_observed` | `agent` | agent | behavioral | Agent inbox state observed |
 | `agent_email_address_observed` | `agent` | agent | behavioral | Agent email address observed |
@@ -222,6 +222,7 @@
 | `device_revoked` | `identity_lc` | analytics | identity | Device revoked |
 | `agent_evaluation_observed` | `agent` | agent | behavioral | Agent evaluation result observed |
 | `agent_cost_observed` | `agent` | agent | behavioral | Agent inference or tool cost observed |
+| `ai_invocation_observed` | `agent` | agent | behavioral | AI model invocation observed — identity, usage, cost, latency, quality, and outcome correlation; no raw prompt or completion content |
 | `agent_grounding_observed` | `agent` | agent | behavioral | Agent grounding evidence observed |
 | `agent_guardrail_observed` | `agent` | agent | behavioral | Agent guardrail evaluation observed |
 | `agent_human_override_observed` | `agent` | agent | behavioral | Human override of agent action observed |
@@ -261,6 +262,17 @@
 | `credit_decision_observed` | `credit` | credit | sensitive_financial | Credit decision observed — requires explicit credit opt-in. Host-observed only; Aether does not make credit decisions. |
 | `location_observed` | `location` | location | sensitive_location | Location observation — requires explicit location opt-in |
 | `geofence_transition_observed` | `location` | location | sensitive_location | Geofence entry/exit — requires explicit location opt-in |
+| `trading_account_connected` | `derivatives` | financial_activity | sensitive_financial | Trading account connected to Aether observation — requires financial_activity opt-in |
+| `trading_account_disconnected` | `derivatives` | financial_activity | sensitive_financial | Trading account disconnected from Aether observation — requires financial_activity opt-in |
+| `trading_account_authorized` | `derivatives` | financial_activity | sensitive_financial | Trading account explicitly authorized for read-only observation — requires financial_activity opt-in |
+| `trading_account_deauthorized` | `derivatives` | financial_activity | sensitive_financial | Trading account deauthorized; observation ceases — requires financial_activity opt-in |
+| `trading_agent_enabled` | `derivatives` | financial_activity, agent | sensitive_financial | Agent enabled for a trading account — requires financial_activity and agent opt-in |
+| `trading_agent_disabled` | `derivatives` | financial_activity, agent | sensitive_financial | Agent disabled on a trading account — requires financial_activity and agent opt-in |
+| `trade_intent_created` | `derivatives` | financial_activity | sensitive_financial | Trade intent created by agent or human — observation only; execution_by_aether is always false |
+| `trade_approval_requested` | `derivatives` | financial_activity | sensitive_financial | Human approval requested before trade execution — observation only |
+| `trade_approval_resolved` | `derivatives` | financial_activity | sensitive_financial | Human trade approval approved or rejected — observation only |
+| `risk_policy_updated` | `derivatives` | financial_activity | governance | Risk policy updated for a trading account — requires financial_activity opt-in |
+| `human_trade_override_recorded` | `derivatives` | financial_activity | sensitive_financial | Human manually overrode an agent trade decision — observation only; execution_by_aether is always false |
 | `stablecoin_transfer_observed` | `stablecoin` | economic_observability | financial | Stablecoin transfer observed on-chain or via provider evidence |
 | `stablecoin_payment_observed` | `stablecoin` | economic_observability | financial | Stablecoin payment observed (transfer classified as payment) |
 | `stablecoin_mint_observed` | `stablecoin` | economic_observability | financial | Stablecoin mint observed |

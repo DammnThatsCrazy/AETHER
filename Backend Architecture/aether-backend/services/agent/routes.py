@@ -30,10 +30,12 @@ from shared.graph.relationship_layers import get_cross_layer_paths, get_layer_su
 from shared.logger.logger import get_logger, metrics
 from shared.scoring.trust_score import TrustScoreComposite
 from shared.store import get_store
+from services.agent import worker_bridge
 from services.agent.runtime_repository import (
     CONTROLLERS, QUEUES, REVIEW_STATUSES, OBJECTIVE_STATUSES, MUTATION_CLASSES,
-    get_agent_runtime_repository, stable_idempotency_key, utc_now,
+    HEARTBEAT_STALE_SECONDS, get_agent_runtime_repository, stable_idempotency_key, utc_now,
 )
+from services.agent.worker_bridge import BridgeUnavailableError
 
 
 def _queue_for_controller(name: str) -> str:
@@ -155,12 +157,21 @@ async def controller_health(request: Request):
     failed = await _runtime_repo.count_objectives(tenant.tenant_id, status="failed")
     total_objectives = await _runtime_repo.count_objectives(tenant.tenant_id)
     awaiting_review = await _runtime_repo.count_review_batches(tenant.tenant_id, status="pending")
+    # Worker execution bridge visibility (additive keys): durable run counts,
+    # queue depth (queued runs waiting for a worker) and worker freshness.
+    run_counts = await _runtime_repo.run_counts(tenant.tenant_id)
+    all_workers = [w for c in controllers for w in c.get("workers", [])]
+    stale_workers = [w for w in all_workers if w.get("stale")]
     for name, value in {
         "agent_active_objectives": active,
         "agent_blocked_objectives": blocked,
         "agent_failed_objectives": failed,
         "agent_awaiting_review": awaiting_review,
         "agent_kill_switch_state": int(bool(kill_switch.get("enabled"))),
+        "agent_worker_runs_queue_depth": run_counts.get("queued", 0),
+        "agent_worker_runs_running": run_counts.get("running", 0),
+        "agent_worker_runs_stuck": run_counts.get("stuck", 0),
+        "agent_workers_stale": len(stale_workers),
     }.items():
         # These are point-in-time snapshots; observe them (gauge semantics) so a
         # 10s Kyber health poll doesn't inflate the counts into the thousands.
@@ -178,6 +189,23 @@ async def controller_health(request: Request):
         ],
         "objectives": {"active": active, "blocked": blocked, "failed": failed, "total": total_objectives},
         "review": {"awaiting_review": awaiting_review},
+        # Additive one-person-ops keys — existing consumers keep their shape.
+        "queue_depth": run_counts.get("queued", 0),
+        "runs": {
+            "queued": run_counts.get("queued", 0),
+            "running": run_counts.get("running", 0),
+            "completed": run_counts.get("completed", 0),
+            "failed": run_counts.get("failed", 0),
+            "retry": run_counts.get("retry", 0),
+            "stale": run_counts.get("stale", 0),
+            "dispatch_failed": run_counts.get("dispatch_failed", 0),
+            "stuck": run_counts.get("stuck", 0),
+        },
+        "workers": {
+            "count": len(all_workers),
+            "stale": len(stale_workers),
+            "stale_after_seconds": HEARTBEAT_STALE_SECONDS,
+        },
     }, request)
 
 
@@ -298,6 +326,29 @@ async def dispatch_step(body: DispatchRequest, request: Request):
             },
         ))
         metrics.increment("agent_worker_runs_queued", labels={"controller": body.controller, "queue": run["queue"]})
+        # Worker execution bridge (one-person ops): publish the run to the Agent
+        # Layer Celery broker by task name. Only when a NEW run was created — an
+        # idempotent retry reuses the in-flight run and must not enqueue twice.
+        if settings.one_person_ops.worker_bridge_enabled:
+            objective = await _runtime_repo.get_objective(tenant.tenant_id, body.objective_id) or {}
+            envelope = worker_bridge.build_dispatch_envelope(
+                run,
+                request_id=_request_id(request),
+                payload=objective.get("payload") or {},
+            )
+            try:
+                bridge_result = worker_bridge.dispatch_to_worker(envelope)
+            except BridgeUnavailableError as exc:
+                # Hosted fail-closed: the run row must not sit "queued" forever
+                # when no worker will ever see it. Mark it and surface a 503.
+                await _runtime_repo.mark_run_dispatch_failed(
+                    tenant.tenant_id, run["run_id"], exc.reason,
+                    _actor_id(request), _request_id(request),
+                )
+                metrics.increment("agent_worker_bridge_dispatch_failed", labels={"queue": run["queue"]})
+                raise
+            run = dict(run)
+            run["bridge"] = bridge_result
     return _envelope(run, request)
 
 
@@ -319,7 +370,19 @@ async def approve_review_batch(batch_id: str, body: ReviewDecision, request: Req
     if batch is None:
         raise NotFoundError("Review batch")
     metrics.increment("agent_mutation_approvals")
-    return _envelope(batch, request)
+    # One-person ops: an explicit human approval triggers the controlled
+    # commit pipeline. Flag-gated; with the flag off the batch stays
+    # approved-but-uncommitted exactly as before. Commit never runs without
+    # this approval — rejection above never reaches this branch.
+    commit_summary = None
+    if settings.one_person_ops.staged_mutation_review_enabled and batch.get("status") == "approved":
+        from services.agent.mutation_commit import commit_approved_mutations
+        commit_summary = await commit_approved_mutations(
+            tenant.tenant_id, batch_id, _actor_id(request), _request_id(request)
+        )
+        batch = await _runtime_repo.review_batches.get(batch_id) or batch
+    meta = {"commit": commit_summary} if commit_summary is not None else None
+    return _envelope(batch, request, meta=meta)
 
 
 @router.post("/review-batches/{batch_id}/reject")

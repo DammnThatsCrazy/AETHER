@@ -863,6 +863,9 @@ def create_app() -> FastAPI:
     if agentic_flags.enabled:
         from services.agentic_observability.routes import router as agentic_obs_router
         app.include_router(agentic_obs_router, tags=["Agentic Observability"])
+        if agentic_flags.mcp_enabled:
+            from services.agentic_observability.routes import mcp_router as agentic_mcp_router
+            app.include_router(agentic_mcp_router, tags=["Agentic MCP Observability"])
         if agentic_flags.protocol_enabled:
             from services.protocol_observability.routes import router as protocol_obs_router
             app.include_router(protocol_obs_router, tags=["Protocol Observability"])
@@ -885,6 +888,120 @@ def create_app() -> FastAPI:
     except Exception as e:  # pragma: no cover — defensive
         logger.warning(f"Delivery routes mount skipped: {e}")
 
+    # ── Stablecoin Intelligence (feature-flagged, all surfaces off by default) ──
+    try:
+        from services.stablecoins.routes import (
+            router as stablecoin_router,
+            kyber_router as stablecoin_kyber_router,
+            profile_router as stablecoin_profile_router,
+        )
+        app.include_router(stablecoin_router)
+        app.include_router(stablecoin_kyber_router)
+        app.include_router(stablecoin_profile_router)
+        logger.info("Stablecoin Intelligence: routes mounted (/v1/stablecoin + /v1/admin/kyber/stablecoin + profile360)")
+    except Exception as e:  # pragma: no cover — defensive
+        logger.warning(f"Stablecoin Intelligence routes mount skipped: {e}")
+
+    # ── Derivatives Intelligence (observation-only product surfaces) ──
+    try:
+        from services.derivatives.routes import router as derivatives_router, kyber_router as derivatives_kyber_router
+        app.include_router(derivatives_router)
+        app.include_router(derivatives_kyber_router)
+        logger.info("Derivatives Intelligence: routes mounted (/v1/derivatives + /v1/admin/kyber/derivatives)")
+    except Exception as e:  # pragma: no cover — defensive
+        logger.warning(f"Derivatives Intelligence routes mount skipped: {e}")
+
+    # ── Payment Rail Observability (named providers only; observation-only) ──
+    rails_flags = settings.payment_rails
+    if rails_flags.enabled:
+        from services.integrations.providers.payment_rails.routes import (
+            router as payment_rails_router,
+            webhook_router as payment_rails_webhook_router,
+        )
+        app.include_router(payment_rails_router)
+        app.include_router(payment_rails_webhook_router)
+        logger.info(
+            "Payment Rails: routes mounted (/v1/integrations/providers + "
+            "/v1/integrations/webhooks/payment-rails)"
+        )
+    if rails_flags.enabled or rails_flags.kyber_enabled:
+        from services.integrations.providers.payment_rails.kyber_routes import (
+            kyber_router as payment_rails_kyber_router,
+        )
+        app.include_router(payment_rails_kyber_router)
+        logger.info("Payment Rails: Kyber diagnostics mounted (/v1/admin/kyber/payment-rails)")
+    if not (rails_flags.enabled or rails_flags.kyber_enabled):
+        logger.info("Payment Rails: disabled (AETHER_PAYMENT_RAILS_ENABLED=false)")
+
+    # ── AI Outcome Efficiency / AI Economics (observe + recommend; never executes changes) ──
+    ai_econ_flags = settings.ai_economics
+    if ai_econ_flags.enabled:
+        from services.economic.ai_routes import ai_router as ai_economics_router
+        app.include_router(ai_economics_router)
+        logger.info("AI Economics: routes mounted (/v1/economic/ai)")
+    if ai_econ_flags.enabled or ai_econ_flags.kyber_enabled:
+        from services.economic.ai_routes import kyber_router as ai_efficiency_kyber_router
+        app.include_router(ai_efficiency_kyber_router)
+        logger.info("AI Economics: Kyber health mounted (/v1/admin/kyber/ai-efficiency)")
+    if not (ai_econ_flags.enabled or ai_econ_flags.kyber_enabled):
+        logger.info("AI Economics: disabled (AETHER_AI_OUTCOME_EFFICIENCY_ENABLED=false)")
+
+    # ── Cluster Targeting Intelligence (observation-first; never executes campaigns) ──
+    targeting_flags = settings.targeting_intelligence
+    if targeting_flags.enabled:
+        from services.targeting_intelligence.routes import (
+            router as targeting_router,
+            scoped_router as targeting_scoped_router,
+        )
+        app.include_router(targeting_router)
+        app.include_router(targeting_scoped_router)
+        logger.info(
+            "Targeting Intelligence: routes mounted (/v1/targeting-intelligence + "
+            "campaign/cluster scoped reads)"
+        )
+    if targeting_flags.enabled or targeting_flags.kyber_enabled:
+        from services.targeting_intelligence.kyber_routes import (
+            kyber_router as targeting_kyber_router,
+        )
+        app.include_router(targeting_kyber_router)
+        logger.info("Targeting Intelligence: Kyber routes mounted (/v1/admin/kyber/targeting)")
+    if not (targeting_flags.enabled or targeting_flags.kyber_enabled):
+        logger.info(
+            "Targeting Intelligence: disabled "
+            "(AETHER_CLUSTER_TARGETING_INTELLIGENCE_ENABLED=false)"
+        )
+
+    # ── External Agent Telemetry Plane (observation-only; no marketplace, no execution) ──
+    telemetry_flags = settings.external_agent_telemetry
+    if telemetry_flags.registry_enabled:
+        from services.agent.deployment_routes import deployments_router
+        app.include_router(deployments_router)
+        logger.info("External Agent Telemetry: deployment registry mounted (/v1/agent/deployments)")
+    if telemetry_flags.kyber_enabled:
+        from services.agent.deployment_routes import kyber_router as agent_telemetry_kyber_router
+        app.include_router(agent_telemetry_kyber_router)
+        logger.info("External Agent Telemetry: Kyber diagnostics mounted (/v1/admin/kyber/agent-telemetry)")
+    if not (telemetry_flags.registry_enabled or telemetry_flags.kyber_enabled):
+        logger.info("External Agent Telemetry: disabled (AETHER_AGENT_DEPLOYMENT_REGISTRY_ENABLED=false)")
+
+    # ── One-Person Ops runtime (worker bridge, briefings, ops alerts; approval gates never removed) ──
+    ops_flags = settings.one_person_ops
+    if ops_flags.worker_bridge_enabled:
+        from services.agent.worker_routes import worker_router
+        app.include_router(worker_router)
+        logger.info("One-Person Ops: worker run routes mounted (/v1/agent/runs)")
+    if ops_flags.one_person_ops_enabled or ops_flags.command_center_enabled:
+        from services.agent.briefings import briefings_router
+        from services.agent.ops_alerts import ops_router as agent_ops_router
+        app.include_router(briefings_router)
+        app.include_router(agent_ops_router)
+        logger.info("One-Person Ops: briefings + ops alerts mounted (/v1/agent/briefings, /v1/agent/ops)")
+    if not (
+        ops_flags.worker_bridge_enabled
+        or ops_flags.one_person_ops_enabled
+        or ops_flags.command_center_enabled
+    ):
+        logger.info("One-Person Ops: disabled (KYBER_ONE_PERSON_OPS_ENABLED=false)")
     # ── Stablecoin Intelligence — observation-only; AETHER never executes ──
     if settings.stablecoin.api_enabled:
         from services.stablecoin.routes import router as stablecoin_router
@@ -901,15 +1018,15 @@ def create_app() -> FastAPI:
 
     # ── Derivatives Intelligence — observation-only; no execution exists ───
     if settings.derivatives.api_enabled:
-        from services.derivatives.routes import router as derivatives_router
+        from services.derivatives.runtime_routes import router as derivatives_router
         app.include_router(derivatives_router, tags=["Derivatives Intelligence"])
-        logger.info("Derivatives Intelligence API mounted (/v1/derivatives)")
+        logger.info("Derivatives Intelligence runtime API mounted (/v1/derivatives/runtime)")
     else:
         logger.info("Derivatives Intelligence API disabled (AETHER_DERIVATIVES_API_ENABLED=false)")
     if settings.derivatives.kyber_enabled:
         from services.derivatives.admin_routes import admin_router as derivatives_admin_router
         app.include_router(derivatives_admin_router, tags=["Kyber Derivatives Ops"])
-        logger.info("Kyber Derivatives Ops mounted (/v1/admin/kyber/derivatives)")
+        logger.info("Kyber Derivatives runtime Ops mounted (/v1/admin/kyber/derivatives/runtime)")
     else:
         logger.info("Kyber Derivatives Ops disabled (KYBER_DERIVATIVES_OPS_ENABLED=false)")
 

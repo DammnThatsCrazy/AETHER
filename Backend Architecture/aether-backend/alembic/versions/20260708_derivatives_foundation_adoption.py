@@ -16,7 +16,7 @@ Revises: 20260703_agentic_obs
 from alembic import op
 
 revision = "20260708_deriv_adopt"
-down_revision = "20260703_agentic_obs"
+down_revision = "20260712_ops_runtime"
 branch_labels = None
 depends_on = None
 

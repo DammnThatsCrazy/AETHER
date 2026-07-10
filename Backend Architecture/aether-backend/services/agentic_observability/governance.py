@@ -11,8 +11,13 @@ from repositories.agentic_observability_repos import (
     AgentConnectionRepository,
     AgentRiskSignalRepository,
     AgentToolRepository,
+    AgenticBronzeObservationRepository,
     AgenticProjectionOutboxRepository,
     ExternalAccountRepository,
+    SilverAgentActivityFactRepository,
+    SilverAgentToolInvocationFactRepository,
+    SilverMCPConnectionFactRepository,
+    SilverAgentRiskFactRepository,
 )
 from services.agentic_observability.product_surfaces import AgenticProductSurfacesService
 from services.agentic_observability.reconciliation import AgenticReconciliationService
@@ -26,6 +31,13 @@ _AGENTIC_TABLES = (
     ("obs_agent_tools", AgentToolRepository),
     ("obs_agent_risk_signals", AgentRiskSignalRepository),
     ("obs_external_accounts", ExternalAccountRepository),
+    # Bronze/Silver repos must be scanned so DSR catches all observation records
+    # including generic events stored only in bronze_agentic_observations or Silver facts.
+    ("bronze_agentic_observations", AgenticBronzeObservationRepository),
+    ("silver_agent_activity_facts", SilverAgentActivityFactRepository),
+    ("silver_agent_tool_invocation_facts", SilverAgentToolInvocationFactRepository),
+    ("silver_mcp_connection_facts", SilverMCPConnectionFactRepository),
+    ("silver_agent_risk_facts", SilverAgentRiskFactRepository),
 )
 
 _PERSON_FIELDS = frozenset({"actor_id", "external_actor_id", "profile_id", "anonymous_id"})

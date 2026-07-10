@@ -94,9 +94,9 @@ const CONSENT_MAP: Record<string, string> = {
   agent_risk_signal_observed: 'agent', agent_notification_observed: 'agent',
   // Agentic observability — Robinhood-style trading observation
   agent_strategy_observed: 'agent', agent_trade_intent_observed: 'agent',
-  agent_trade_order_observed: 'agent', agent_trade_fill_observed: 'agent',
-  agent_trade_rejection_observed: 'agent', agent_position_observed: 'agent',
-  agent_portfolio_snapshot_observed: 'agent', agent_performance_snapshot_observed: 'agent',
+  agent_trade_order_observed: 'financial_activity', agent_trade_fill_observed: 'financial_activity',
+  agent_trade_rejection_observed: 'agent', agent_position_observed: 'financial_activity',
+  agent_portfolio_snapshot_observed: 'financial_activity', agent_performance_snapshot_observed: 'financial_activity',
   agent_disconnect_observed: 'agent',
   // Agentic observability — AgentMail-style communication observation
   agent_inbox_observed: 'agent', agent_email_address_observed: 'agent',
@@ -170,7 +170,7 @@ const CONSENT_MAP: Record<string, string> = {
   // Agent evaluation family
   agent_evaluation_observed: 'agent', agent_cost_observed: 'agent',
   agent_grounding_observed: 'agent', agent_guardrail_observed: 'agent',
-  agent_human_override_observed: 'agent',
+  agent_human_override_observed: 'agent', ai_invocation_observed: 'agent',
   // Web3 lifecycle extensions
   transaction_pending_observed: 'web3', transaction_confirmed_observed: 'web3',
   transaction_reverted_observed: 'web3', transaction_reorged_observed: 'web3',
@@ -193,6 +193,13 @@ const CONSENT_MAP: Record<string, string> = {
   credit_decision_observed: 'credit',
   // Location family (explicit opt-in)
   location_observed: 'location', geofence_transition_observed: 'location',
+  // Derivatives family (explicit financial_activity opt-in)
+  trading_account_connected: 'financial_activity', trading_account_disconnected: 'financial_activity',
+  trading_account_authorized: 'financial_activity', trading_account_deauthorized: 'financial_activity',
+  trading_agent_enabled: 'financial_activity', trading_agent_disabled: 'financial_activity',
+  trade_intent_created: 'financial_activity', trade_approval_requested: 'financial_activity',
+  trade_approval_resolved: 'financial_activity', risk_policy_updated: 'financial_activity',
+  human_trade_override_recorded: 'financial_activity',
   // Stablecoin intelligence family (explicit opt-in)
   stablecoin_transfer_observed: 'economic_observability', stablecoin_payment_observed: 'economic_observability',
   stablecoin_mint_observed: 'economic_observability', stablecoin_burn_observed: 'economic_observability',

@@ -18,9 +18,11 @@ CREATE TABLE IF NOT EXISTS derivatives_venue_deployments (
   chain_id TEXT,
   region TEXT,
   global_reference BOOLEAN NOT NULL DEFAULT TRUE,
-  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-  UNIQUE (venue_id, deployment, COALESCE(chain_id, ''), COALESCE(region, ''))
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+
+CREATE UNIQUE INDEX IF NOT EXISTS derivatives_venue_deployments_unique_normalized
+  ON derivatives_venue_deployments (venue_id, deployment, COALESCE(chain_id, ''), COALESCE(region, ''));
 
 CREATE TABLE IF NOT EXISTS derivatives_instruments (
   canonical_instrument_id TEXT PRIMARY KEY,

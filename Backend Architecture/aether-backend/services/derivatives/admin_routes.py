@@ -19,7 +19,7 @@ from services.derivatives.adapters import DERIVATIVES_ADAPTERS, get_adapter
 from services.derivatives.adapters.conformance import run_conformance
 from services.derivatives.foundation import require_flag
 
-admin_router = APIRouter(prefix="/v1/admin/kyber/derivatives", tags=["kyber-derivatives"])
+admin_router = APIRouter(prefix="/v1/admin/kyber/derivatives/runtime", tags=["kyber-derivatives"])
 
 
 def _gate(request: Request) -> None:

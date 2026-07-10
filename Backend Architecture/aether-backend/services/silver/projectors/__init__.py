@@ -8,6 +8,7 @@ from .account_activity_projector import AccountActivityProjector
 from .server_operation_projector import ServerOperationProjector
 from .identity_evidence_projector import IdentityEvidenceProjector
 from .agent_execution_projector import AgentExecutionProjector
+from .ai_invocation_projector import AIInvocationProjector
 from .web3_transaction_projector import Web3TransactionProjector
 from .x402_flow_projector import X402FlowProjector
 from .stablecoin_projector import StablecoinProjector
@@ -27,6 +28,7 @@ __all__ = [
     "ServerOperationProjector",
     "IdentityEvidenceProjector",
     "AgentExecutionProjector",
+    "AIInvocationProjector",
     "Web3TransactionProjector",
     "X402FlowProjector",
     "StablecoinProjector",

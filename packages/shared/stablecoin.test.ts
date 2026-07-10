@@ -14,7 +14,7 @@ import {
   validateStablecoinDeployment,
   validateStablecoinObservation,
   validateStablecoinSupportAssertion,
-} from './stablecoin';
+} from './stablecoin-intelligence';
 
 const VALID_EVIDENCE = {
   evidence_class: 'fact',

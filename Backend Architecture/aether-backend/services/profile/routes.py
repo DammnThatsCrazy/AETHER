@@ -381,6 +381,43 @@ async def get_owned_agents(user_id: str, request: Request):
     return APIResponse(data={"user_id": user_id, "agents": rows, "count": len(rows)}).to_dict()
 
 
+@router.get("/{entity_id}/external-deployments")
+async def get_external_deployments(entity_id: str, request: Request):
+    """External agent deployments operated by this (agent) entity.
+
+    Sourced from the External Agent Telemetry deployment registry; hidden
+    (not-found) unless the profile360 rollout flag is enabled.
+    """
+    tenant = request.state.tenant
+    tenant.require_permission("read")
+    from config.settings import settings
+    if not settings.external_agent_telemetry.profile360_enabled:
+        raise NotFoundError("External deployment activity")
+    from services.profile.deployment_activity import get_external_deployment_activity
+    data = await get_external_deployment_activity(tenant.tenant_id, entity_id)
+    return APIResponse(data=data).to_dict()
+
+
+@router.get("/{entity_id}/payment-rails")
+async def get_payment_rails_summary(entity_id: str, request: Request):
+    """Observed funding-session rollup for this entity (user/agent/org).
+
+    Counts per provider/rail/status/reconciliation state and per-currency
+    native totals — mixed currencies are never merged into one scalar.
+    Hidden (not-found) unless payment rails are enabled.
+    """
+    tenant = request.state.tenant
+    tenant.require_permission("read")
+    from config.settings import settings
+    if not settings.payment_rails.enabled:
+        raise NotFoundError("Payment rail activity")
+    from services.integrations.providers.payment_rails.profile_summary import (
+        get_payment_rails_profile_summary,
+    )
+    data = await get_payment_rails_profile_summary(tenant.tenant_id, entity_id)
+    return APIResponse(data=data).to_dict()
+
+
 @router.get("/{user_id}/delegations")
 async def get_delegations(
     user_id: str,

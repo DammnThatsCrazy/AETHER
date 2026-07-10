@@ -32,6 +32,13 @@ CANONICAL_NAMES: frozenset[str] = frozenset({
     "ingestion_validation_failed_total",
     "ingestion_consent_blocked_total",
     "ingestion_sensitive_scrub_total",
+    # Payment Rail Observability (services/integrations/providers/payment_rails)
+    "payment_rail_event_duplicate_total",
+    "payment_rail_event_rejected_total",
+    "payment_rail_sessions_upserted_total",
+    "payment_rail_status_downgrade_blocked_total",
+    "payment_rail_webhook_handled_total",
+    "payment_rail_webhook_rejected_total",
     "identity_resolve_error_total",
     "ingestion_bronze_write_failed_total",
     "ingestion_publish_failed_total",
@@ -68,6 +75,12 @@ CANONICAL_NAMES: frozenset[str] = frozenset({
     # Silver fact projection (multi-projector dispatch — ADR-C3)
     "silver_facts_written_total",
     "silver_projection_dead_letters_total",
+    # AI Outcome Efficiency / AI Economics (ai_invocation_observed → ai_execution_facts)
+    "ai_execution_fact_written_total",
+    "ai_execution_fact_duplicate_total",
+    "ai_execution_fact_conflict_total",
+    "ai_execution_fact_rejected_total",
+    "ai_price_card_created_total",
     # Dune feeder
     "dune_feeder_promoted",
     "dune_feeder_rejected",

@@ -1492,23 +1492,23 @@ export const api = {
   // ─── Derivatives Intelligence (observation-only; raw {items,count}) ──────────
   derivatives: {
     venues: (params?: { limit?: number; offset?: number }) =>
-      restClient.get(`/v1/derivatives/venues${buildQS({ ...params })}`, listSchema),
+      restClient.get(`/v1/derivatives/runtime/venues${buildQS({ ...params })}`, listSchema),
     instruments: (params?: { limit?: number; offset?: number }) =>
-      restClient.get(`/v1/derivatives/instruments${buildQS({ ...params })}`, listSchema),
+      restClient.get(`/v1/derivatives/runtime/instruments${buildQS({ ...params })}`, listSchema),
     markets: (params?: { venue_id?: string; limit?: number; offset?: number }) =>
-      restClient.get(`/v1/derivatives/markets${buildQS({ ...params })}`, listSchema),
+      restClient.get(`/v1/derivatives/runtime/markets${buildQS({ ...params })}`, listSchema),
     accounts: (params?: { limit?: number; offset?: number }) =>
-      restClient.get(`/v1/derivatives/accounts${buildQS({ ...params })}`, listSchema),
+      restClient.get(`/v1/derivatives/runtime/accounts${buildQS({ ...params })}`, listSchema),
     orders: (params?: { trading_account_id?: string; status?: string; limit?: number; offset?: number }) =>
-      restClient.get(`/v1/derivatives/orders${buildQS({ ...params })}`, listSchema),
+      restClient.get(`/v1/derivatives/runtime/orders${buildQS({ ...params })}`, listSchema),
     fills: (params?: { trading_account_id?: string; limit?: number; offset?: number }) =>
-      restClient.get(`/v1/derivatives/fills${buildQS({ ...params })}`, listSchema),
+      restClient.get(`/v1/derivatives/runtime/fills${buildQS({ ...params })}`, listSchema),
     positions: (params?: { trading_account_id?: string; status?: string; limit?: number; offset?: number }) =>
-      restClient.get(`/v1/derivatives/positions${buildQS({ ...params })}`, listSchema),
+      restClient.get(`/v1/derivatives/runtime/positions${buildQS({ ...params })}`, listSchema),
     pnl: (params?: { trading_account_id?: string; limit?: number; offset?: number }) =>
-      restClient.get(`/v1/derivatives/pnl${buildQS({ ...params })}`, listSchema),
+      restClient.get(`/v1/derivatives/runtime/pnl${buildQS({ ...params })}`, listSchema),
     reconciliationVariances: (params?: { severity?: string; limit?: number; offset?: number }) =>
-      restClient.get(`/v1/derivatives/reconciliation/variances${buildQS({ ...params })}`, listSchema),
+      restClient.get(`/v1/derivatives/runtime/reconciliation/variances${buildQS({ ...params })}`, listSchema),
   },
 
   // ─── Interoperability Intelligence (observation-only; raw {items,count}) ─────

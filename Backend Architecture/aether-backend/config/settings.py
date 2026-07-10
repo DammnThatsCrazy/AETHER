@@ -657,7 +657,127 @@ class AgenticObservabilityConfig:
 
 @dataclass(frozen=True)
 class StablecoinIntelligenceConfig:
-    """Stablecoin Intelligence rollout flags. Observation-only domain —
+    """Safe rollout flags for Stablecoin Intelligence.
+
+    Defaults are OFF until PR2-PR4 provide verified ingestion, Profile360,
+    product surfaces, Kyber operations, Olympus benchmarks, and release evidence.
+    """
+    enabled: bool = _env_bool("AETHER_STABLECOIN_INTELLIGENCE_ENABLED", False)
+    profile360_enabled: bool = _env_bool("AETHER_STABLECOIN_PROFILE360_ENABLED", False)
+    attribution_enabled: bool = _env_bool("AETHER_STABLECOIN_ATTRIBUTION_ENABLED", False)
+    support_enabled: bool = _env_bool("AETHER_STABLECOIN_SUPPORT_ENABLED", False)
+    market_enabled: bool = _env_bool("AETHER_STABLECOIN_MARKET_ENABLED", False)
+    alerts_enabled: bool = _env_bool("AETHER_STABLECOIN_ALERTS_ENABLED", False)
+    realtime_enabled: bool = _env_bool("AETHER_STABLECOIN_REALTIME_ENABLED", False)
+    kyber_operations_enabled: bool = _env_bool("KYBER_STABLECOIN_OPERATIONS_ENABLED", False)
+    olympus_benchmarks_enabled: bool = _env_bool("OLYMPUS_STABLECOIN_BENCHMARKS_ENABLED", False)
+    kill_switch: bool = _env_bool("AETHER_STABLECOIN_KILL_SWITCH", False)
+    shadow_mode: bool = _env_bool("AETHER_STABLECOIN_SHADOW_MODE", True)
+
+
+@dataclass(frozen=True)
+class ExternalAgentTelemetryConfig:
+    """External Agent Telemetry Plane V1 rollout flags (default OFF).
+
+    Aether observes telemetry from tenant-owned agents deployed on external
+    surfaces. No marketplace, no agent hosting, no execution.
+    """
+    enabled: bool = _env_bool("AETHER_EXTERNAL_AGENT_TELEMETRY_ENABLED", False)
+    kyber_enabled: bool = _env_bool("KYBER_EXTERNAL_AGENT_TELEMETRY_ENABLED", False)
+    registry_enabled: bool = _env_bool("AETHER_AGENT_DEPLOYMENT_REGISTRY_ENABLED", False)
+    sdk_enabled: bool = _env_bool("AETHER_AGENT_TELEMETRY_SDK_ENABLED", False)
+    graph_enabled: bool = _env_bool("AETHER_AGENT_DEPLOYMENT_GRAPH_ENABLED", False)
+    profile360_enabled: bool = _env_bool("AETHER_AGENT_DEPLOYMENT_PROFILE360_ENABLED", False)
+
+
+@dataclass(frozen=True)
+class PaymentRailsConfig:
+    """Payment Rail Observability V1 rollout flags (default OFF).
+
+    Named providers only — Privy, Stripe crypto onramp, Coinbase, MoonPay,
+    Bridge. No generic webhook fallback. Aether observes and reconciles;
+    it never executes or settles payments or custodies funds.
+    """
+    enabled: bool = _env_bool("AETHER_PAYMENT_RAILS_ENABLED", False)
+    privy_enabled: bool = _env_bool("AETHER_PROVIDER_PRIVY_ENABLED", False)
+    stripe_enabled: bool = _env_bool("AETHER_PROVIDER_STRIPE_ENABLED", False)
+    coinbase_enabled: bool = _env_bool("AETHER_PROVIDER_COINBASE_ENABLED", False)
+    moonpay_enabled: bool = _env_bool("AETHER_PROVIDER_MOONPAY_ENABLED", False)
+    bridge_enabled: bool = _env_bool("AETHER_PROVIDER_BRIDGE_ENABLED", False)
+    kyber_enabled: bool = _env_bool("KYBER_PAYMENT_RAILS_ENABLED", False)
+
+
+@dataclass(frozen=True)
+class CardLinkedPaymentRailsConfig:
+    """Card-linked payment rail observability V1 rollout and safety flags.
+
+    Default-off observation surfaces for card-linked activity. PaymentScan is
+    catalog/benchmark-only unless tenant-authorized provider evidence exists.
+    EU/APAC restricted modes and provider PII blocking default on.
+    """
+    enabled: bool = _env_bool("AETHER_CARD_LINKED_PAYMENT_RAILS_ENABLED", False)
+    paymentscan_catalog_enabled: bool = _env_bool("AETHER_PAYMENTSCAN_CATALOG_ENABLED", False)
+    paymentscan_benchmarks_enabled: bool = _env_bool("AETHER_PAYMENTSCAN_BENCHMARKS_ENABLED", False)
+    profile360_enabled: bool = _env_bool("AETHER_CARD_LINKED_PROFILE360_ENABLED", False)
+    campaign_attribution_enabled: bool = _env_bool("AETHER_CARD_LINKED_CAMPAIGN_ATTRIBUTION_ENABLED", False)
+    clustering_enabled: bool = _env_bool("AETHER_CARD_LINKED_CLUSTERING_ENABLED", False)
+    kyber_enabled: bool = _env_bool("KYBER_CARD_LINKED_PAYMENT_RAILS_ENABLED", False)
+    eu_restricted_mode: bool = _env_bool("AETHER_CARD_LINKED_EU_RESTRICTED_MODE", True)
+    apac_restricted_mode: bool = _env_bool("AETHER_CARD_LINKED_APAC_RESTRICTED_MODE", True)
+    provider_pii_block: bool = _env_bool("AETHER_CARD_LINKED_PROVIDER_PII_BLOCK", True)
+
+
+@dataclass(frozen=True)
+class AIEconomicsConfig:
+    """AI Outcome Efficiency / AI Economics rollout flags (default OFF).
+
+    Observes AI execution facts, prices cost from effective-dated price
+    cards, aggregates workflow/outcome economics, and generates governed
+    efficiency recommendations. Never changes production models, prompts,
+    or routing.
+    """
+    enabled: bool = _env_bool("AETHER_AI_OUTCOME_EFFICIENCY_ENABLED", False)
+    execution_facts_enabled: bool = _env_bool("AETHER_AI_EXECUTION_FACTS_ENABLED", False)
+    economics_enabled: bool = _env_bool("AETHER_AI_ECONOMICS_ENABLED", False)
+    recommendations_enabled: bool = _env_bool("AETHER_AI_EFFICIENCY_RECOMMENDATIONS_ENABLED", False)
+    kyber_enabled: bool = _env_bool("KYBER_AI_EFFICIENCY_HEALTH_ENABLED", False)
+
+
+@dataclass(frozen=True)
+class TargetingIntelligenceConfig:
+    """Cluster Targeting Intelligence rollout flags (default OFF).
+
+    Observation-first: Aether observes targeting, leakage, holdouts, and
+    journey deltas and generates OODA suggestions/export packages. It never
+    executes campaigns or targets inside external platforms.
+    """
+    enabled: bool = _env_bool("AETHER_CLUSTER_TARGETING_INTELLIGENCE_ENABLED", False)
+    exports_enabled: bool = _env_bool("AETHER_TARGETING_EXPORTS_ENABLED", False)
+    ooda_suggestions_enabled: bool = _env_bool("AETHER_TARGETING_OODA_SUGGESTIONS_ENABLED", False)
+    kyber_enabled: bool = _env_bool("KYBER_TARGETING_INTELLIGENCE_ENABLED", False)
+
+
+@dataclass(frozen=True)
+class OnePersonOpsConfig:
+    """Aether/Kyber one-person operations rollout flags (default OFF).
+
+    Worker execution bridge, durable runtime, staged graph mutation
+    review-to-commit, Catalyst/Cycle automation, and the Kyber agent
+    command center. Human approval gates are never removed by these flags.
+    """
+    runtime_durable_enabled: bool = _env_bool("AETHER_AGENT_RUNTIME_DURABLE_ENABLED", False)
+    worker_bridge_enabled: bool = _env_bool("AETHER_AGENT_WORKER_BRIDGE_ENABLED", False)
+    staged_mutation_review_enabled: bool = _env_bool("AETHER_STAGED_GRAPH_MUTATION_REVIEW_ENABLED", False)
+    catalyst_cycle_enabled: bool = _env_bool("AETHER_CATALYST_CYCLE_AUTOMATION_ENABLED", False)
+    command_center_enabled: bool = _env_bool("KYBER_AGENT_COMMAND_CENTER_ENABLED", False)
+    one_person_ops_enabled: bool = _env_bool("KYBER_ONE_PERSON_OPS_ENABLED", False)
+
+
+@dataclass(frozen=True)
+class StablecoinDomainConfig:
+    """Stablecoin economic-intelligence domain rollout flags
+    (services/stablecoin — coexists with the observer-stack
+    StablecoinIntelligenceConfig above). Observation-only domain —
     all flags default False (fail-closed) until staging validation."""
     ingestion_enabled: bool = _env_bool("AETHER_STABLECOIN_INGESTION_ENABLED", False)
     valuation_enabled: bool = _env_bool("AETHER_STABLECOIN_VALUATION_ENABLED", False)
@@ -722,6 +842,7 @@ class Settings:
     decision_outcome: DecisionOutcomeIntelligenceConfig = field(default_factory=DecisionOutcomeIntelligenceConfig)
     security_governance: SecurityGovernanceConfig = field(default_factory=SecurityGovernanceConfig)
     quicknode: QuickNodeConfig = field(default_factory=QuickNodeConfig)
+    stablecoin_intelligence: StablecoinIntelligenceConfig = field(default_factory=StablecoinIntelligenceConfig)
 
     # Communications Intelligence
     comms: CommsConfig = field(default_factory=CommsConfig)
@@ -784,8 +905,27 @@ class Settings:
     # Agentic Intelligence observability rollout flags
     agentic_observability: AgenticObservabilityConfig = field(default_factory=AgenticObservabilityConfig)
 
-    # Stablecoin / Derivatives / Interoperability Intelligence rollout flags
-    stablecoin: StablecoinIntelligenceConfig = field(default_factory=StablecoinIntelligenceConfig)
+    # Stablecoin Intelligence rollout flags
+    stablecoin_intelligence: StablecoinIntelligenceConfig = field(default_factory=StablecoinIntelligenceConfig)
+
+    # External Agent Telemetry Plane rollout flags
+    external_agent_telemetry: ExternalAgentTelemetryConfig = field(default_factory=ExternalAgentTelemetryConfig)
+
+    # Payment Rail Observability rollout flags
+    payment_rails: PaymentRailsConfig = field(default_factory=PaymentRailsConfig)
+    card_linked_payment_rails: CardLinkedPaymentRailsConfig = field(default_factory=CardLinkedPaymentRailsConfig)
+
+    # AI Outcome Efficiency / AI Economics rollout flags
+    ai_economics: AIEconomicsConfig = field(default_factory=AIEconomicsConfig)
+
+    # Cluster Targeting Intelligence rollout flags
+    targeting_intelligence: TargetingIntelligenceConfig = field(default_factory=TargetingIntelligenceConfig)
+
+    # One-person operations rollout flags
+    one_person_ops: OnePersonOpsConfig = field(default_factory=OnePersonOpsConfig)
+
+    # Stablecoin / Derivatives / Interoperability economic-intelligence domains
+    stablecoin: StablecoinDomainConfig = field(default_factory=StablecoinDomainConfig)
     derivatives: DerivativesIntelligenceConfig = field(default_factory=DerivativesIntelligenceConfig)
     interop: InteropIntelligenceConfig = field(default_factory=InteropIntelligenceConfig)
 
@@ -944,3 +1084,8 @@ class Settings:
 
 # Singleton
 settings = Settings()
+
+
+def get_settings() -> Settings:
+    """Accessor for the settings singleton (used by dependency-style imports)."""
+    return settings

@@ -454,3 +454,20 @@ When enabled, check network build latency via Prometheus counter `fraud_network_
 ### Disabling
 
 Set the flag to `false` and restart. Existing stored artifacts are preserved in their respective stores and become accessible again if the flag is re-enabled. No data is deleted on disable.
+
+---
+
+## External Agent Telemetry Plane
+
+Two additional routers mount conditionally in `main.py` (all default OFF):
+
+```
+AETHER_AGENT_DEPLOYMENT_REGISTRY_ENABLED=true  → mounts services/agent/deployment_routes at /v1/agent/deployments
+KYBER_EXTERNAL_AGENT_TELEMETRY_ENABLED=true    → mounts Kyber diagnostics at /v1/admin/kyber/agent-telemetry
+```
+
+Enable by setting the flags and restarting; the deployment registry persists
+via the shared durable store (`agent_deployments` / `agent_deployment_audit`
+tables — run Alembic migrations first in hosted modes). Disable by clearing
+the flags and restarting; registry data is preserved. See
+`docs/source-of-truth/EXTERNAL_AGENT_TELEMETRY_PLANE.md` for the full runbook.

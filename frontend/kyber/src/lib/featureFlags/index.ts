@@ -10,6 +10,11 @@ interface FeatureFlags {
   readonly enableMobilePush: boolean;
   readonly enablePagerDuty: boolean;
   readonly enableWebhookSinks: boolean;
+  readonly enableExternalAgentTelemetry: boolean;
+  readonly enablePaymentRails: boolean;
+  readonly enableAiEfficiency: boolean;
+  readonly enableTargetingIntelligence: boolean;
+  readonly enableAgentCommandCenter: boolean;
   readonly kyberStablecoinOps: boolean;
   readonly kyberDerivativesOps: boolean;
   readonly kyberInteropOps: boolean;
@@ -25,6 +30,11 @@ const DEFAULT_FLAGS: FeatureFlags = {
   enableMobilePush: false,
   enablePagerDuty: false,
   enableWebhookSinks: false,
+  enableExternalAgentTelemetry: false,
+  enablePaymentRails: false,
+  enableAiEfficiency: false,
+  enableTargetingIntelligence: false,
+  enableAgentCommandCenter: false,
   // Economic & interoperability ops surfaces default OFF with their domains
   kyberStablecoinOps: false,
   kyberDerivativesOps: false,

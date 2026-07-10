@@ -5,6 +5,7 @@ from typing import Any
 
 from services.intelligence.decision_models import Recommendation
 from services.intelligence.recommendation_families.agent_governance import AgentGovernanceRecommendationFamily
+from services.intelligence.recommendation_families.ai_outcome_efficiency import AIOutcomeEfficiencyRecommendationFamily
 from services.intelligence.recommendation_families.attribution_optimization import AttributionOptimizationRecommendationFamily
 from services.intelligence.recommendation_families.base import BaseRecommendationFamily, RecommendationGenerationContext
 from services.intelligence.recommendation_families.expansion import ExpansionRecommendationFamily
@@ -27,6 +28,7 @@ class RecommendationFamilyRegistry:
             AgentGovernanceRecommendationFamily(),
             RewardsOptimizationRecommendationFamily(),
             OperationalFailureRecommendationFamily(),
+            AIOutcomeEfficiencyRecommendationFamily(),
         ]
 
     @property
