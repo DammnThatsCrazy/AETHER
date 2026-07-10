@@ -14,12 +14,11 @@ from services.notification_intelligence import inbox as inbox_mod  # noqa: E402
 
 @pytest.fixture(autouse=True)
 def _clear_store():
-    # BaseRepository shares an in-memory dict per table across instances in local mode.
-    from repositories.repos import _IN_MEMORY_STORES
-
-    _IN_MEMORY_STORES.get("notification_inbox", {}).clear()
+    # Clear the exact store the singleton repo uses (all inbox functions go
+    # through get_inbox_repository()), so each test starts from empty.
+    inbox_mod.get_inbox_repository()._store.clear()
     yield
-    _IN_MEMORY_STORES.get("notification_inbox", {}).clear()
+    inbox_mod.get_inbox_repository()._store.clear()
 
 
 async def test_create_and_list():
