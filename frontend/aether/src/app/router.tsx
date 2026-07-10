@@ -39,6 +39,12 @@ const CampaignBuilderPage = lazy(() => import('@aether-app/pages/rewards').then(
 const SuggestionsPage = lazy(() => import('@aether-app/pages/suggestions').then(m => ({ default: m.SuggestionsPage })));
 const Cluster360Page = lazy(() => import('@aether-app/pages/cluster360').then(m => ({ default: m.Cluster360Page })));
 const DeliveryHistoryPage = lazy(() => import('@aether-app/pages/connectors').then(m => ({ default: m.DeliveryHistoryPage })));
+const StablecoinsPage = lazy(() => import('@aether-app/pages/stablecoins').then(m => ({ default: m.StablecoinsPage })));
+const StablecoinAssetPage = lazy(() => import('@aether-app/pages/stablecoins').then(m => ({ default: m.StablecoinAssetPage })));
+const DerivativesPage = lazy(() => import('@aether-app/pages/derivatives').then(m => ({ default: m.DerivativesPage })));
+const DerivativesAccountPage = lazy(() => import('@aether-app/pages/derivatives').then(m => ({ default: m.DerivativesAccountPage })));
+const InteropPage = lazy(() => import('@aether-app/pages/interop').then(m => ({ default: m.InteropPage })));
+const InteropMessagePage = lazy(() => import('@aether-app/pages/interop').then(m => ({ default: m.InteropMessagePage })));
 
 function PageSuspense({ children }: { readonly children: React.ReactNode }) {
   return (
@@ -113,6 +119,12 @@ export function AppRouter() {
                 <Route path="/suggestions" element={<PageSuspense><SuggestionsPage /></PageSuspense>} />
                 <Route path="/clusters/:clusterId" element={<PageSuspense><Cluster360Page /></PageSuspense>} />
                 <Route path="/delivery" element={<PageSuspense><DeliveryHistoryPage /></PageSuspense>} />
+                <Route path="/stablecoins" element={<PageSuspense><StablecoinsPage /></PageSuspense>} />
+                <Route path="/stablecoins/:assetId" element={<PageSuspense><StablecoinAssetPage /></PageSuspense>} />
+                <Route path="/derivatives" element={<PageSuspense><DerivativesPage /></PageSuspense>} />
+                <Route path="/derivatives/accounts/:accountId" element={<PageSuspense><DerivativesAccountPage /></PageSuspense>} />
+                <Route path="/interoperability" element={<PageSuspense><InteropPage /></PageSuspense>} />
+                <Route path="/interoperability/messages/:messageId" element={<PageSuspense><InteropMessagePage /></PageSuspense>} />
                 <Route path="*" element={<Navigate to="/settings" replace />} />
               </Routes>
             </AppShell>

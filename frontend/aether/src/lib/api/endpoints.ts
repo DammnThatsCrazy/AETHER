@@ -32,6 +32,9 @@ const wrap = <T extends z.ZodType>(dataSchema: T) =>
 
 const unknownSchema = z.unknown();
 
+// Economic-domain routes return raw {items, count} (no APIResponse envelope)
+const listSchema = z.object({ items: z.array(z.unknown()), count: z.number() });
+
 const buildQS = (params: Record<string, string | number | boolean | undefined>) => {
   const qs = new URLSearchParams();
   for (const [k, v] of Object.entries(params)) {
@@ -1466,6 +1469,75 @@ export const api = {
     // GET /v1/delivery/intents/{id}/receipts — receipts + external links for an intent
     getIntentReceipts: (intentId: string, tenantId: string) =>
       restClient.get(`/v1/delivery/intents/${encodeURIComponent(intentId)}/receipts?tenantId=${encodeURIComponent(tenantId)}`, wrap(unknownSchema)).then(r => r.data),
+  },
+
+  // ─── Stablecoin Intelligence (observation-only; raw {items,count} — no envelope) ──
+  stablecoins: {
+    assets: (params?: { limit?: number; offset?: number }) =>
+      restClient.get(`/v1/stablecoins/assets${buildQS({ ...params })}`, listSchema),
+    deployments: (params?: { canonical_asset_id?: string; chain_id?: string; limit?: number; offset?: number }) =>
+      restClient.get(`/v1/stablecoins/deployments${buildQS({ ...params })}`, listSchema),
+    observations: (params?: { canonical_asset_id?: string; observation_kind?: string; finality_status?: string; limit?: number; offset?: number }) =>
+      restClient.get(`/v1/stablecoins/observations${buildQS({ ...params })}`, listSchema),
+    valuations: (params?: { deployment_id?: string; peg_status?: string; limit?: number; offset?: number }) =>
+      restClient.get(`/v1/stablecoins/valuations${buildQS({ ...params })}`, listSchema),
+    support: (params?: { canonical_asset_id?: string; limit?: number; offset?: number }) =>
+      restClient.get(`/v1/stablecoins/support${buildQS({ ...params })}`, listSchema),
+    flows: (params?: { canonical_asset_id?: string; limit?: number; offset?: number }) =>
+      restClient.get(`/v1/stablecoins/flows${buildQS({ ...params })}`, listSchema),
+    reconciliation: (params?: { limit?: number; offset?: number }) =>
+      restClient.get(`/v1/stablecoins/reconciliation${buildQS({ ...params })}`, listSchema),
+  },
+
+  // ─── Derivatives Intelligence (observation-only; raw {items,count}) ──────────
+  derivatives: {
+    venues: (params?: { limit?: number; offset?: number }) =>
+      restClient.get(`/v1/derivatives/venues${buildQS({ ...params })}`, listSchema),
+    instruments: (params?: { limit?: number; offset?: number }) =>
+      restClient.get(`/v1/derivatives/instruments${buildQS({ ...params })}`, listSchema),
+    markets: (params?: { venue_id?: string; limit?: number; offset?: number }) =>
+      restClient.get(`/v1/derivatives/markets${buildQS({ ...params })}`, listSchema),
+    accounts: (params?: { limit?: number; offset?: number }) =>
+      restClient.get(`/v1/derivatives/accounts${buildQS({ ...params })}`, listSchema),
+    orders: (params?: { trading_account_id?: string; status?: string; limit?: number; offset?: number }) =>
+      restClient.get(`/v1/derivatives/orders${buildQS({ ...params })}`, listSchema),
+    fills: (params?: { trading_account_id?: string; limit?: number; offset?: number }) =>
+      restClient.get(`/v1/derivatives/fills${buildQS({ ...params })}`, listSchema),
+    positions: (params?: { trading_account_id?: string; status?: string; limit?: number; offset?: number }) =>
+      restClient.get(`/v1/derivatives/positions${buildQS({ ...params })}`, listSchema),
+    pnl: (params?: { trading_account_id?: string; limit?: number; offset?: number }) =>
+      restClient.get(`/v1/derivatives/pnl${buildQS({ ...params })}`, listSchema),
+    reconciliationVariances: (params?: { severity?: string; limit?: number; offset?: number }) =>
+      restClient.get(`/v1/derivatives/reconciliation/variances${buildQS({ ...params })}`, listSchema),
+  },
+
+  // ─── Interoperability Intelligence (observation-only; raw {items,count}) ─────
+  interop: {
+    providers: () =>
+      restClient.get('/v1/interoperability/providers', listSchema),
+    messages: (params?: { status?: string; provider_id?: string; path_id?: string; limit?: number; offset?: number }) =>
+      restClient.get(`/v1/interoperability/messages${buildQS({ ...params })}`, listSchema),
+    messageDetail: (interopMessageId: string) =>
+      restClient.get(`/v1/interoperability/messages/${encodeURIComponent(interopMessageId)}`, z.object({
+        message: z.unknown(),
+        transitions: z.array(z.unknown()),
+        delivery_attempts: z.array(z.unknown()),
+        asset_legs: z.array(z.unknown()),
+      })),
+    paths: (params?: { limit?: number; offset?: number }) =>
+      restClient.get(`/v1/interoperability/paths${buildQS({ ...params })}`, listSchema),
+    gateways: (params?: { limit?: number; offset?: number }) =>
+      restClient.get(`/v1/interoperability/gateways${buildQS({ ...params })}`, listSchema),
+    applications: (params?: { limit?: number; offset?: number }) =>
+      restClient.get(`/v1/interoperability/applications${buildQS({ ...params })}`, listSchema),
+    intents: (params?: { limit?: number; offset?: number }) =>
+      restClient.get(`/v1/interoperability/intents${buildQS({ ...params })}`, listSchema),
+    assetLegs: (params?: { interop_message_id?: string; limit?: number; offset?: number }) =>
+      restClient.get(`/v1/interoperability/asset-legs${buildQS({ ...params })}`, listSchema),
+    securityPolicies: (params?: { path_id?: string; limit?: number; offset?: number }) =>
+      restClient.get(`/v1/interoperability/security-policies${buildQS({ ...params })}`, listSchema),
+    reconciliation: (params?: { limit?: number; offset?: number }) =>
+      restClient.get(`/v1/interoperability/reconciliation${buildQS({ ...params })}`, listSchema),
   },
 };
 
