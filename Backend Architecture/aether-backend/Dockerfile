@@ -7,9 +7,11 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     gcc libpq-dev && \
     rm -rf /var/lib/apt/lists/*
 
-# Install Python dependencies (full production stack including noesis/anthropic)
+# Install Python dependencies (full production stack including noesis/anthropic).
+# alembic is required at runtime for the /v1/ready migrations-head check and
+# the RUN_MIGRATIONS=1 entrypoint opt-in.
 COPY pyproject.toml .
-RUN pip install --no-cache-dir ".[all,noesis]"
+RUN pip install --no-cache-dir ".[all,noesis]" "alembic>=1.13" "croniter>=2" tzdata
 
 # ---------------------------------------------------------------------------
 # Optional: install onnxruntime for ML_SERVING_INLINE=true.
@@ -50,6 +52,8 @@ COPY ["Backend Architecture/aether-backend/repositories/", "./repositories/"]
 COPY ["Backend Architecture/aether-backend/services/", "./services/"]
 COPY ["Backend Architecture/aether-backend/shared/", "./shared/"]
 COPY ["Backend Architecture/aether-backend/main.py", "./main.py"]
+COPY ["Backend Architecture/aether-backend/alembic/", "./alembic/"]
+COPY ["Backend Architecture/aether-backend/alembic.ini", "./alembic.ini"]
 COPY security/ ./security/
 
 # ML serving source tree (required when ML_SERVING_INLINE=true, E2).

@@ -334,6 +334,13 @@ release-gate: ## Full release gate: repo consistency (CI mode) + strict producti
 	python scripts/production_status.py --strict
 	python scripts/ops_readiness.py
 
+.PHONY: staging-preflight staging-preflight-dry-run
+staging-preflight: ## Staging preflight gate: env/Settings, DB migrations + table shape, Redis, HTTP health, contracts (fail-closed)
+	python scripts/staging_preflight.py
+
+staging-preflight-dry-run: ## Staging preflight self-test against committed fixtures (no live services; does not certify an environment)
+	python scripts/staging_preflight.py --dry-run
+
 load-baselines: ## Record staging load baselines via Locust (requires STAGING_URL and running backend)
 	mkdir -p tests/load/results
 	locust -f tests/load/locustfile.py --headless -u 50 -r 10 \

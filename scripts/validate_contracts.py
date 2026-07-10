@@ -180,11 +180,18 @@ def check_sdk_endpoint_not_ingest_events(events: dict) -> list[str]:
                 capture_output=True, text=True,
             )
             if result.stdout.strip():
-                files = result.stdout.strip().split("\n")
-                errors.append(
-                    f"SDK source files reference deprecated endpoint {pattern!r}: "
-                    f"{files}. SDKs must use /v1/batch."
-                )
+                # ingestion-contract.* declares FORBIDDEN_SDK_INGESTION_ROUTES —
+                # it names the deprecated route precisely to ban it, and dist/
+                # holds its compiled output. Neither is an SDK transport target.
+                files = [
+                    f for f in result.stdout.strip().split("\n")
+                    if "ingestion-contract" not in _Path(f).name
+                ]
+                if files:
+                    errors.append(
+                        f"SDK source files reference deprecated endpoint {pattern!r}: "
+                        f"{files}. SDKs must use /v1/batch."
+                    )
         except FileNotFoundError:
             pass  # grep not available — skip
 

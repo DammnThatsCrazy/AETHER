@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { parseProblemDetails, type ProblemDetails } from '@aether/shared';
 import { getAccessToken } from '@aether-app/features/auth';
 import { env, getEnvironment } from '@aether-app/lib/env';
 import { log } from '@aether-app/lib/logging';
@@ -9,6 +10,8 @@ export class RestClientError extends Error {
     public readonly status: number,
     public readonly code: string,
     public readonly correlationId?: string | undefined,
+    public readonly retryable: boolean = false,
+    public readonly problem?: ProblemDetails | undefined,
   ) {
     super(message);
     this.name = 'RestClientError';
@@ -65,13 +68,25 @@ async function request<T>(
     const duration = Math.round(performance.now() - startTime);
 
     if (!response.ok) {
-      const errorBody = await response.json().catch(() => ({})) as Record<string, unknown>;
-      log.warn(`[REST] ${method} ${path} -> ${response.status} (${duration}ms)`, { correlationId });
+      const errorBody: unknown = await response.json().catch(() => null);
+      const problem = parseProblemDetails(errorBody, {
+        status: response.status,
+        statusText: response.statusText,
+      });
+      const serverCorrelationId =
+        problem.correlation_id ??
+        response.headers.get('X-Correlation-ID') ??
+        correlationId;
+      log.warn(`[REST] ${method} ${path} -> ${response.status} (${duration}ms)`, {
+        correlationId: serverCorrelationId,
+      });
       throw new RestClientError(
-        String(errorBody['message'] ?? response.statusText),
+        problem.detail || problem.title || response.statusText,
         response.status,
-        String(errorBody['code'] ?? 'UNKNOWN'),
-        correlationId,
+        problem.code,
+        serverCorrelationId,
+        problem.retryable ?? false,
+        problem,
       );
     }
 

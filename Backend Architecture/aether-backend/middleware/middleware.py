@@ -26,7 +26,12 @@ from typing import Callable, Optional
 from fastapi import FastAPI, Request, Response
 from fastapi.responses import JSONResponse
 
-from shared.common.common import AetherError, UnauthorizedError
+from shared.common.common import AetherError, UnauthorizedError, problem_dict, problem_response
+from shared.context.request_context import (
+    CORRELATION_HEADER,
+    LEGACY_REQUEST_ID_HEADER,
+    context_from_request,
+)
 from shared.auth.auth import (
     APIKeyTier, APIKeyValidator, JWTHandler, PlanTier, Role, TenantContext,
     legacy_tier_to_plan,
@@ -172,22 +177,27 @@ def register_middleware(app: FastAPI) -> None:
         logger.error(f"Unhandled exception: {exc}", exc_info=True)
         return JSONResponse(
             status_code=500,
-            content={
-                "error": {
-                    "code": 500,
-                    "message": "Internal server error",
-                    "details": {},
-                    "request_id": getattr(request.state, "request_id", ""),
-                }
-            },
+            content=problem_dict(
+                500,
+                "Internal Server Error",
+                "Internal server error",
+                code="INTERNAL",
+                retryable=True,
+                request_id=getattr(request.state, "request_id", ""),
+            ),
         )
 
     # ── Request lifecycle middleware ──────────────────────────────────
     @app.middleware("http")
     async def request_lifecycle(request: Request, call_next: Callable) -> Response:
         # --- Correlation ID & tracing ---
-        request_id = request.headers.get("X-Request-ID", str(uuid.uuid4()))
+        # Canonical inbound header is X-Correlation-ID (what the frontends
+        # send); X-Request-ID stays accepted for older clients. One ID per
+        # operation — request.state.request_id remains the compat alias.
+        req_context = context_from_request(request)
+        request_id = req_context.correlation_id
         request.state.request_id = request_id
+        request.state.context = req_context
         set_request_context(correlation_id=request_id)
 
         start = time.perf_counter()
@@ -202,28 +212,22 @@ def register_middleware(app: FastAPI) -> None:
                 try:
                     cl = int(content_length)
                 except (ValueError, TypeError):
-                    return JSONResponse(
-                        status_code=400,
-                        content={
-                            "error": {
-                                "code": 400,
-                                "message": "Invalid Content-Length header",
-                                "request_id": request_id,
-                            }
-                        },
+                    return problem_response(
+                        400,
+                        "Bad Request",
+                        "Invalid Content-Length header",
+                        code="INVALID_CONTENT_LENGTH",
+                        request_id=request_id,
                     )
                 if cl > settings.api.max_request_body_bytes:
-                    return JSONResponse(
-                        status_code=413,
-                        content={
-                            "error": {
-                                "code": 413,
-                                "message": "Request body too large",
-                                "details": {
-                                    "max_bytes": settings.api.max_request_body_bytes,
-                                },
-                                "request_id": request_id,
-                            }
+                    return problem_response(
+                        413,
+                        "Payload Too Large",
+                        "Request body too large",
+                        code="REQUEST_BODY_TOO_LARGE",
+                        request_id=request_id,
+                        extensions={
+                            "max_bytes": settings.api.max_request_body_bytes,
                         },
                     )
 
@@ -246,6 +250,11 @@ def register_middleware(app: FastAPI) -> None:
             request.state.tenant_id = context.tenant_id
             plan_tier = _resolve_plan_tier(context)
             request.state.plan_tier = plan_tier
+            request.state.context = req_context.with_tenant(
+                context.tenant_id,
+                actor_id=getattr(context, "user_id", None),
+                plan_tier=plan_tier.value,
+            )
             set_request_context(
                 correlation_id=request_id,
                 tenant_id=context.tenant_id,
@@ -279,18 +288,20 @@ def register_middleware(app: FastAPI) -> None:
                         if rl_result.retry_after is not None
                         else max(1, int(rl_result.reset_at - time.time()))
                     )
-                    return JSONResponse(
-                        status_code=429,
-                        content={
-                            "error": "rate_limit_exceeded",
-                            "message": (
-                                f"Burst rate limit exceeded. "
-                                f"Limit: {rl_result.limit} RPM."
-                            ),
+                    return problem_response(
+                        429,
+                        "Rate Limit Exceeded",
+                        (
+                            f"Burst rate limit exceeded. "
+                            f"Limit: {rl_result.limit} RPM."
+                        ),
+                        code="RATE_LIMIT_EXCEEDED",
+                        retryable=True,
+                        request_id=request_id,
+                        extensions={
                             "retry_after_seconds": retry_after,
                             "plan_tier": plan_tier.value,
                             "upgrade_url": "/v1/admin/billing/upgrade",
-                            "request_id": request_id,
                         },
                         headers={
                             **rate_headers,
@@ -318,15 +329,18 @@ def register_middleware(app: FastAPI) -> None:
                     )
                     min_plan = PLAN_CATALOG[min_plan_tier]
                     current_plan = PLAN_CATALOG[plan_tier]
-                    return JSONResponse(
-                        status_code=403,
-                        content={
-                            "error": "service_not_available",
-                            "message": (
-                                f"The {gate_result.service_name} service "
-                                f"requires {min_plan.display_name} "
-                                f"({min_plan.plan_id}) or higher."
-                            ),
+                    return problem_response(
+                        403,
+                        "Service Not Available On Plan",
+                        (
+                            f"The {gate_result.service_name} service "
+                            f"requires {min_plan.display_name} "
+                            f"({min_plan.plan_id}) or higher."
+                        ),
+                        code="SERVICE_NOT_AVAILABLE",
+                        type_slug="entitlement/service-not-available",
+                        request_id=request_id,
+                        extensions={
                             "current_plan": (
                                 f"{current_plan.plan_id}: "
                                 f"{current_plan.display_name}"
@@ -337,7 +351,6 @@ def register_middleware(app: FastAPI) -> None:
                             "upgrade_url": "/v1/admin/billing/upgrade",
                             "service": gate_result.service_name,
                             "endpoint": request.url.path,
-                            "request_id": request_id,
                         },
                         headers=rate_headers,
                     )
@@ -431,15 +444,13 @@ def register_middleware(app: FastAPI) -> None:
                             headers["Retry-After"] = str(
                                 pre_result.retry_after_seconds
                             )
-                        return JSONResponse(
-                            status_code=status,
-                            content={
-                                "error": {
-                                    "code": status,
-                                    "message": pre_result.block_reason,
-                                    "request_id": request_id,
-                                }
-                            },
+                        return problem_response(
+                            status,
+                            "Request Blocked",
+                            pre_result.block_reason,
+                            code="EXTRACTION_DEFENSE_BLOCKED",
+                            retryable=status == 429,
+                            request_id=request_id,
                             headers=headers,
                         )
                     request.state.extraction_risk = (
@@ -453,7 +464,8 @@ def register_middleware(app: FastAPI) -> None:
 
         # --- Response headers ---
         elapsed_ms = (time.perf_counter() - start) * 1000
-        response.headers["X-Request-ID"] = request_id
+        response.headers[LEGACY_REQUEST_ID_HEADER] = request_id
+        response.headers[CORRELATION_HEADER] = request_id
         response.headers["X-Response-Time"] = f"{elapsed_ms:.1f}ms"
         for name, value in rate_headers.items():
             response.headers[name] = value

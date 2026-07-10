@@ -325,6 +325,59 @@ class Topic(str, Enum):
     # Dead letter
     DEAD_LETTER = "aether.dlq"
 
+    # ── Platform Control Plane (jobs / exports / notifications / schedules /
+    #    imports / reconciliation) — appended block, do not reorder above ────
+    # Durable job lifecycle (services/jobs)
+    JOB_ACCEPTED = "aether.job.accepted"
+    JOB_QUEUED = "aether.job.queued"
+    JOB_STARTED = "aether.job.started"
+    JOB_RETRYING = "aether.job.retrying"
+    JOB_SUCCEEDED = "aether.job.succeeded"
+    JOB_PARTIALLY_SUCCEEDED = "aether.job.partially_succeeded"
+    JOB_FAILED = "aether.job.failed"
+    JOB_CANCELLED = "aether.job.cancelled"
+    JOB_EXPIRED = "aether.job.expired"
+    JOB_DEAD_LETTERED = "aether.job.dead_lettered"
+
+    # Export artifacts lifecycle
+    EXPORT_REQUESTED = "aether.export.requested"
+    EXPORT_READY = "aether.export.ready"
+    EXPORT_FAILED = "aether.export.failed"
+    EXPORT_DOWNLOADED = "aether.export.downloaded"
+    EXPORT_EXPIRED = "aether.export.expired"
+
+    # Tenant notification inbox/outbox lifecycle
+    NOTIFICATION_CREATED = "aether.notification.created"
+    NOTIFICATION_READ = "aether.notification.read"
+    NOTIFICATION_DELIVERY_QUEUED = "aether.notification.delivery_queued"
+    NOTIFICATION_DELIVERED = "aether.notification.delivered"
+    NOTIFICATION_DELIVERY_FAILED = "aether.notification.delivery_failed"
+    NOTIFICATION_DEAD_LETTERED = "aether.notification.dead_lettered"
+
+    # Job schedules (cron control plane)
+    SCHEDULE_FIRED = "aether.schedule.fired"
+    SCHEDULE_MISFIRED = "aether.schedule.misfired"
+    SCHEDULE_SKIPPED = "aether.schedule.skipped"
+    SCHEDULE_DISABLED = "aether.schedule.disabled"
+
+    # Bulk import lifecycle
+    IMPORT_CREATED = "aether.import.created"
+    IMPORT_UPLOADED = "aether.import.uploaded"
+    IMPORT_ANALYZED = "aether.import.analyzed"
+    IMPORT_VALIDATED = "aether.import.validated"
+    IMPORT_COMMITTED = "aether.import.committed"
+    IMPORT_REPLAYED = "aether.import.replayed"
+    IMPORT_ROLLED_BACK = "aether.import.rolled_back"
+    IMPORT_FAILED = "aether.import.failed"
+
+    # Measurement restatement (complements aether.measurement.* above)
+    MEASUREMENT_RESTATED = "aether.measurement.restated"
+
+    # Reconciliation runs
+    RECONCILIATION_STARTED = "aether.reconciliation.started"
+    RECONCILIATION_COMPLETED = "aether.reconciliation.completed"
+    RECONCILIATION_DRIFT_DETECTED = "aether.reconciliation.drift_detected"
+
 
 # ═══════════════════════════════════════════════════════════════════════════
 # EVENT SCHEMA

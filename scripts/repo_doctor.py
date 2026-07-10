@@ -320,6 +320,20 @@ def main(argv: Sequence[str] | None = None) -> None:
         stop_on_failure=stop,
         remediation="rename non-canonical metrics.increment() names or add them to CANONICAL_NAMES in scripts/validate_meter_names.py",
     )
+    run(
+        ["python", "scripts/validate_sdk_contracts.py"],
+        name="SDK ingestion contract (shared TS ↔ backend /v1/batch)",
+        results=results,
+        stop_on_failure=stop,
+        remediation="align packages/shared/ingestion-contract.ts with services/ingestion/batch.py (endpoint, idempotency key, batch bounds)",
+    )
+    run(
+        ["python", "scripts/check_version_consistency.py"],
+        name="Version/workspace consistency aggregate",
+        results=results,
+        stop_on_failure=stop,
+        remediation="run python scripts/bump_version.py <version> or fix root package.json workspaces coverage",
+    )
 
     if not args.docs_only:
         if (ROOT / "package-lock.json").exists():

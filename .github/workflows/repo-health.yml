@@ -319,11 +319,31 @@ jobs:
         env:
           CI: true
 
+  staging-preflight-dry-run:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+          cache-dependency-path: 'pyproject.toml'
+
+      - name: Install Python dependencies
+        run: |
+          pip install uv
+          uv pip install --system -e ".[dev,security,backend,agent]" alembic
+
+      - name: Staging preflight logic self-test (dry-run)
+        run: python scripts/staging_preflight.py --dry-run
+
   validate:
     # Aggregate gate: required-status check for branch protection rules.
     # Passes only when all dependent jobs pass (or skip via path filter).
     # pr-size is advisory only — it runs independently and never blocks this gate.
-    needs: [lint-docs, python-tests, noesis-backend-tests, ml-tests, typescript, e2e-tenant]
+    needs: [lint-docs, python-tests, noesis-backend-tests, ml-tests, typescript, e2e-tenant, staging-preflight-dry-run]
     if: always()
     runs-on: ubuntu-latest
     env:
@@ -333,6 +353,7 @@ jobs:
       TYPESCRIPT_RESULT:         ${{ needs.typescript.result }}
       ML_TESTS_RESULT:           ${{ needs.ml-tests.result }}
       E2E_TENANT_RESULT:         ${{ needs.e2e-tenant.result }}
+      PREFLIGHT_DRY_RUN_RESULT:  ${{ needs.staging-preflight-dry-run.result }}
     steps:
       - name: Check job results
         run: |
@@ -345,7 +366,8 @@ jobs:
             "$NOESIS_TESTS_RESULT" \
             "$TYPESCRIPT_RESULT" \
             "$ML_TESTS_RESULT" \
-            "$E2E_TENANT_RESULT"; do
+            "$E2E_TENANT_RESULT" \
+            "$PREFLIGHT_DRY_RUN_RESULT"; do
             if [ "$result" = "cancelled" ]; then
               echo "Jobs cancelled — superseded by a newer run. Skipping."; exit 0
             fi
@@ -368,5 +390,8 @@ jobs:
           fi
           if [ "$E2E_TENANT_RESULT" != "success" ]; then
             echo "e2e-tenant failed: $E2E_TENANT_RESULT"; exit 1
+          fi
+          if [ "$PREFLIGHT_DRY_RUN_RESULT" != "success" ]; then
+            echo "staging-preflight-dry-run failed: $PREFLIGHT_DRY_RUN_RESULT"; exit 1
           fi
           echo "All required jobs passed."

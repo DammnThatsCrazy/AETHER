@@ -29,8 +29,35 @@ class ErrorCode(IntEnum):
     SERVICE_UNAVAILABLE = 503
 
 
+# Base URI for Problem-Details `type` members. Slugs are stable API contract;
+# the URIs are identifiers, not required to dereference.
+PROBLEM_TYPE_BASE = "https://errors.aether.dev/"
+
+# Statuses that are safe to retry by default. 4xx (except 429) means the
+# request itself is wrong and retrying is pointless.
+_RETRYABLE_STATUSES = {429, 500, 502, 503, 504}
+
+
+def _stable_code(cls_name: str) -> str:
+    """BadRequestError -> BAD_REQUEST (stable machine-readable string code)."""
+    import re as _re
+
+    base = cls_name.removesuffix("Error") or "Aether"
+    return _re.sub(r"(?<!^)(?=[A-Z])", "_", base).upper()
+
+
+def _title_from_code(code: str) -> str:
+    return code.replace("_", " ").title()
+
+
 class AetherError(Exception):
-    """Base error — all service errors inherit from this."""
+    """Base error — all service errors inherit from this.
+
+    ``to_dict()`` emits an RFC-7807-compatible Problem Details body
+    (``type``/``title``/``status``/``code``/``detail``/``retryable`` plus
+    correlation members) while retaining the legacy nested ``error`` object
+    that existing clients read.
+    """
 
     def __init__(
         self,
@@ -38,22 +65,102 @@ class AetherError(Exception):
         message: str,
         details: Optional[dict] = None,
         request_id: Optional[str] = None,
+        retryable: Optional[bool] = None,
     ):
         self.code = code
         self.message = message
         self.details = details or {}
         self.request_id = request_id or str(uuid.uuid4())
+        self.retryable = (
+            retryable if retryable is not None else code.value in _RETRYABLE_STATUSES
+        )
         super().__init__(message)
 
     def to_dict(self) -> dict:
-        return {
+        stable = _stable_code(type(self).__name__)
+        body = {
+            "type": f"{PROBLEM_TYPE_BASE}{stable.lower().replace('_', '-')}",
+            "title": _title_from_code(stable),
+            "status": self.code.value,
+            "code": stable,
+            "detail": self.message,
+            "message": self.message,
+            "request_id": self.request_id,
+            "correlation_id": self.request_id,
+            "retryable": self.retryable,
+            # Legacy nested envelope — existing clients read error.code/message.
             "error": {
                 "code": self.code.value,
                 "message": self.message,
                 "details": self.details,
                 "request_id": self.request_id,
-            }
+            },
         }
+        if self.details:
+            body["errors"] = [self.details] if not isinstance(self.details, list) else self.details
+        return body
+
+
+def problem_dict(
+    status: int,
+    title: str,
+    detail: str,
+    *,
+    code: str,
+    type_slug: Optional[str] = None,
+    retryable: Optional[bool] = None,
+    request_id: str = "",
+    extensions: Optional[dict] = None,
+) -> dict:
+    """Build a canonical Problem-Details JSON body (pure dict, no framework)."""
+    rid = request_id or str(uuid.uuid4())
+    slug = type_slug or code.lower().replace("_", "-")
+    body = {
+        "type": f"{PROBLEM_TYPE_BASE}{slug}",
+        "title": title,
+        "status": status,
+        "code": code,
+        "detail": detail,
+        "message": detail,
+        "request_id": rid,
+        "correlation_id": rid,
+        "retryable": retryable if retryable is not None else status in _RETRYABLE_STATUSES,
+        "error": {"code": status, "message": detail, "details": extensions or {}, "request_id": rid},
+    }
+    if extensions:
+        body.update(extensions)
+    return body
+
+
+def problem_response(
+    status: int,
+    title: str,
+    detail: str,
+    *,
+    code: str,
+    type_slug: Optional[str] = None,
+    retryable: Optional[bool] = None,
+    request_id: str = "",
+    extensions: Optional[dict] = None,
+    headers: Optional[dict] = None,
+):
+    """Canonical Problem-Details JSONResponse for middleware/route early exits."""
+    from starlette.responses import JSONResponse  # local import: keep module framework-free
+
+    return JSONResponse(
+        status_code=status,
+        content=problem_dict(
+            status,
+            title,
+            detail,
+            code=code,
+            type_slug=type_slug,
+            retryable=retryable,
+            request_id=request_id,
+            extensions=extensions,
+        ),
+        headers=headers,
+    )
 
 
 class BadRequestError(AetherError):
