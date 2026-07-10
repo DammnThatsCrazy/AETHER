@@ -22,6 +22,16 @@ at `/v1/stablecoin` and the derivatives ingestion/accounting layer at
 `/v1/derivatives` — coexist with these domains; this branch's derivatives
 runtime is namespaced under `/v1/derivatives/runtime`.)
 
+A fourth observation-only slice, card-linked payment rails, follows the
+same wiring pattern: `main.py` mounts
+`services/card_linked_payments/routes.py` under
+`/v1/integrations/providers/payment-rails/card-linked` when
+`AETHER_CARD_LINKED_PAYMENT_RAILS_ENABLED` is on, and
+`services/card_linked_payments/kyber_routes.py` under
+`/v1/admin/kyber/payment-rails/card-linked` when either the master or
+`KYBER_CARD_LINKED_PAYMENT_RAILS_ENABLED` flag is on. Its source of
+truth is `docs/source-of-truth/CARD_LINKED_PAYMENT_RAILS.md`.
+
 ```
 provider evidence (RPC logs / venue snapshots / simulator fixtures)
         │ read-only adapters (honest ImplementationStatus)

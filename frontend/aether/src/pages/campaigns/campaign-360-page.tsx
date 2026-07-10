@@ -1,6 +1,7 @@
 import { useParams, useSearchParams, useNavigate } from 'react-router-dom';
 import { useEffect, useState } from 'react';
 import { Badge, Card, CardContent, CardHeader, CardTitle, DataTable, EmptyState, ErrorState, LoadingState, Tabs, TabsContent, TabsList, TabsTrigger } from '@aether/ui';
+import { CardLinkedOutcomesTab } from './card-linked-outcomes-tab';
 import { api } from '@aether-app/lib/api/endpoints';
 import {
   useCampaign360Overview,
@@ -561,6 +562,7 @@ const TABS = [
   { value: 'conversions', label: 'Conversions' },
   { value: 'attribution', label: 'Attribution' },
   { value: 'targeting', label: 'Targeting Intelligence' },
+  { value: 'card-linked', label: 'Card-linked Outcomes' },
 ];
 
 export function Campaign360Page() {
@@ -652,6 +654,10 @@ export function Campaign360Page() {
 
         <TabsContent value="targeting">
           <CampaignTargetingIntelligenceTab campaignId={campaignId} />
+        </TabsContent>
+
+        <TabsContent value="card-linked">
+          <CardLinkedOutcomesTab campaignId={campaignId} />
         </TabsContent>
       </Tabs>
     </div>

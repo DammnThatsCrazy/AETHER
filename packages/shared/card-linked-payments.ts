@@ -123,10 +123,18 @@ export const cardLinkedFieldClassification: Record<string, CardLinkedFieldClassi
   journey_id: 'behavioral_metadata',
   pan: 'blocked',
   cvv: 'blocked',
+  full_card_number: 'blocked',
   raw_kyc_document: 'blocked',
   full_bank_account: 'blocked',
   routing_number: 'blocked',
   provider_secret: 'blocked',
+  authorization: 'blocked',
+  authorization_header: 'blocked',
+  private_api_key: 'blocked',
+  passport_image: 'blocked',
+  driver_license_image: 'blocked',
+  national_id_image: 'blocked',
+  raw_cardholder_identity_documents: 'blocked',
 };
 
 export const blockedCardLinkedFields = Object.entries(cardLinkedFieldClassification)

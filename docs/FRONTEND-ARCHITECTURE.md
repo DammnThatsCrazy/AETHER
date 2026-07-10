@@ -134,10 +134,29 @@ Campaign360 gains a **Targeting Intelligence** tab and Cluster360 a
 execute this campaign"); the suggestion feed renders targeting cards with an
 implementation-package export action.
 
+Card-linked (crypto-card) observability nests inside existing surfaces
+rather than adding a route: `/payment-rails` renders a **Card-linked
+Activity** section (`pages/payment-rails/card-linked-section.tsx` —
+program/basis/source/network filters, basis badges that keep top-up and
+spend visually distinct, a "never processes card payments" boundary
+notice) and Campaign360 gains a **Card-linked Outcomes** tab
+(`pages/campaigns/card-linked-outcomes-tab.tsx` — top-up users/volume
+separated from spend users/volume, an attribution-basis badge
+`direct`/`temporal`/`probabilistic`/`benchmark_only`/`insufficient_evidence`,
+and a "correlation-based labels are never causal claims" caption). Both
+render a not-enabled EmptyState when the backend flags are off.
+
 Kyber additionally exposes `/agent-telemetry` (external agent telemetry fleet
 diagnostics; gated by the `enableExternalAgentTelemetry` feature flag),
 `/payment-rails` (payment rail fleet health; gated by `enablePaymentRails`),
 and `/ai-efficiency` (AI efficiency fleet health; gated by `enableAiEfficiency`), and `/targeting` (targeting fleet health, leakage queue, recompute controls; gated by `enableTargetingIntelligence`).
+
+Kyber's `/payment-rails` page also hosts a **Card-linked Payment Rails**
+diagnostics section (`pages/payment-rails/card-linked-diagnostics-section.tsx`;
+gated by `enableCardLinkedPaymentRails`): PaymentScan catalog freshness,
+coverage by source/basis, basis-support-by-source, reconciliation state and
+conflicts, privacy gates (region/consent suppressions, blocked-PII attempts),
+basis-mislabeling warnings, and the card-linked release-gate check list.
 
 - **Desktop (≥1280px):** Graph canvas + side panel (40% width) visible simultaneously
 - **Tablet (768–1279px):** Panel overlays graph as a drawer

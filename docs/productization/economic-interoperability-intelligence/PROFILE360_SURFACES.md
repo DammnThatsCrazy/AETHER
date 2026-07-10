@@ -31,3 +31,17 @@ Every response returns `{entity_id, items, summary, count, computed_at,
 provenance}` with Decimals serialized as strings. Sub-resources are
 additive: entities with no economic activity return empty envelopes,
 not errors.
+
+The card-linked payment rail slice adds three more routes to
+`services/profile/routes.py` (gated by BOTH
+`AETHER_CARD_LINKED_PAYMENT_RAILS_ENABLED` and
+`AETHER_CARD_LINKED_PROFILE360_ENABLED`):
+`GET /v1/profile/{id}/card-linked-activity`, its alias
+`GET /v1/profile/{id}/economic/card-linked`, and
+`GET /v1/profile/{id}/drill/card-linked/{object_id}` (registered before
+the generic drill route). Responses carry `basis`/`source`/`confidence`
+on every flow, the entity story (campaign → provider → top-up → spends),
+and a warning when an entity has top-up volume but no observed spend —
+top-up is never presented as card spend. See
+`docs/PROFILE-360-AGGREGATION.md` and
+`docs/source-of-truth/CARD_LINKED_PAYMENT_RAILS.md`.

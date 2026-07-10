@@ -10,6 +10,7 @@ source_files:
   - Backend Architecture/aether-backend/services/profile/aggregator.py
   - Backend Architecture/aether-backend/services/profile/routes.py
   - Backend Architecture/aether-backend/services/profile/intelligence.py
+  - Backend Architecture/aether-backend/services/card_linked_payments/profile_summary.py
 canonical_owner: backend@aether
 estimated_read_minutes: 8
 toc_depth: 3
@@ -454,6 +455,29 @@ endpoint returns `source_status: "empty"` — this is correct behavior, not an e
 Communication items never contain raw addresses (tenant-scoped alias hashes with
 redacted displays only) and carry machine-activity classification so reported
 engagement and human-qualified engagement are always distinguishable.
+
+### Card-linked activity sub-resource endpoints (v8.12.0+)
+
+Card-linked (crypto-card) economic observability surfaces under
+`Profile360 → Economic Activity → Payment Rails → Card-linked Activity`.
+Gated by **both** `AETHER_CARD_LINKED_PAYMENT_RAILS_ENABLED` and
+`AETHER_CARD_LINKED_PROFILE360_ENABLED` (`404` when either is off);
+backed by `services/card_linked_payments/profile_summary.py`.
+
+| Method | Path                                              | Purpose                                                            |
+|--------|---------------------------------------------------|--------------------------------------------------------------------|
+| GET    | `/v1/profile/{id}/card-linked-activity`           | Summary, filtered flows, and the entity story (campaign → provider → top-up → spends) |
+| GET    | `/v1/profile/{id}/economic/card-linked`           | Alias of the above under the economic sub-tree                     |
+| GET    | `/v1/profile/{id}/drill/card-linked/{object_id}`  | Single-flow drilldown with evidence refs, provenance, reconciliation records |
+
+Every row carries `basis` (`topup`/`funding`/`spend`/`settlement`/`clearing`/
+`refund`/`reversal`/`mixed`/`benchmark_only`/`unknown`), `source`, and
+`confidence`; top-up and spend are never merged, and a top-up-only entity
+response includes an explicit "top-up volume is not card spend" warning.
+Filters: program/issuer/network/basis/source/confidence/chain/asset/
+campaign/journey plus `volume_min`/`volume_max`/`since`/`until`. The
+card-linked drill route is registered before the generic
+`/drill/{object_type}/{object_id}` route so it wins path matching.
 
 ---
 

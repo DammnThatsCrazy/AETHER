@@ -12,6 +12,7 @@ interface FeatureFlags {
   readonly enableWebhookSinks: boolean;
   readonly enableExternalAgentTelemetry: boolean;
   readonly enablePaymentRails: boolean;
+  readonly enableCardLinkedPaymentRails: boolean;
   readonly enableAiEfficiency: boolean;
   readonly enableTargetingIntelligence: boolean;
   readonly enableAgentCommandCenter: boolean;
@@ -32,6 +33,7 @@ const DEFAULT_FLAGS: FeatureFlags = {
   enableWebhookSinks: false,
   enableExternalAgentTelemetry: false,
   enablePaymentRails: false,
+  enableCardLinkedPaymentRails: false,
   enableAiEfficiency: false,
   enableTargetingIntelligence: false,
   enableAgentCommandCenter: false,

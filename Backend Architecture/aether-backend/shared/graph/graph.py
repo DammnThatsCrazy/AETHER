@@ -264,6 +264,13 @@ class VertexType:
     # STABLECOIN_ASSET; chains reuse CHAIN; bridges reuse BRIDGE_ROUTE) ──────
     STABLECOIN_DEPLOYMENT = "StablecoinDeployment"
 
+    # ── Card-linked payment rails (V1: catalog dims + flow facts) ──
+    CARD_PROGRAM = "CardProgram"
+    CARD_ISSUER = "CardIssuer"
+    PAYMENT_NETWORK = "PaymentNetwork"
+    CARD_LINKED_FLOW = "CardLinkedFlow"
+    CARD_BENCHMARK = "CardBenchmark"
+
     # ── Interoperability Intelligence — protocol-neutral topology ──────────
     # Messages stay silver facts, not vertices (cardinality).
     INTEROP_PROVIDER = "InteropProvider"
@@ -708,6 +715,17 @@ class EdgeType:
     # ── Stablecoin Intelligence — domain edges (EXCLUDED; ISSUED_BY reuses
     #    the existing edge) ─────────────────────────────────────────────────
     TRANSFERRED_STABLECOIN = "TRANSFERRED_STABLECOIN"  # Wallet → Wallet (fact link)
+
+    # ── Card-linked payment rails (evidence-backed, observation-only) ──
+    CAME_FROM               = "CAME_FROM"                # User → Campaign (acquisition evidence)
+    PARTICIPATED_IN         = "PARTICIPATED_IN"          # User → Journey
+    USED_PROVIDER           = "USED_PROVIDER"            # User → CardProgram
+    FUNDED                  = "FUNDED"                   # Wallet → CardLinkedFlow
+    OCCURRED_ON             = "OCCURRED_ON"              # CardLinkedFlow → Chain
+    USED_ASSET              = "USED_ASSET"               # CardLinkedFlow → Token
+    RUNS_ON                 = "RUNS_ON"                  # CardProgram → PaymentNetwork
+    FOLLOWED_BY             = "FOLLOWED_BY"              # CardLinkedFlow → CardLinkedFlow
+    INITIATED_OR_INFLUENCED = "INITIATED_OR_INFLUENCED"  # Agent → CardLinkedFlow
     BRIDGED_STABLECOIN     = "BRIDGED_STABLECOIN"      # Deployment → Deployment
     SWAPPED_STABLECOIN     = "SWAPPED_STABLECOIN"      # Wallet → Deployment
     DEPLOYED_ON_CHAIN      = "DEPLOYED_ON_CHAIN"       # Deployment → Chain

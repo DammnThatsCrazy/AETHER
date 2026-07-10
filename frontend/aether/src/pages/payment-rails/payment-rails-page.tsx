@@ -27,6 +27,7 @@ import {
   useSyncProvider,
 } from '@aether-app/features/payment-rails';
 import type { FundingSessionRecord, PaymentRailHealthRecord } from '@aether-app/features/payment-rails';
+import { CardLinkedActivitySection } from './card-linked-section';
 import {
   OBSERVABILITY_COPY,
   ProviderBadge,
@@ -556,6 +557,8 @@ export function PaymentRailsPage() {
           />
         )}
       </div>
+
+      <CardLinkedActivitySection />
 
       {selectedSessionId && (
         <SessionDetailDrawer sessionId={selectedSessionId} onClose={() => setSelectedSessionId(null)} />

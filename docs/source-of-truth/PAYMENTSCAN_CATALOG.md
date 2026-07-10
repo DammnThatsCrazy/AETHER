@@ -1,6 +1,10 @@
 ---
 title: PaymentScan Catalog Source of Truth
-status: draft
+status: stable
+source_files:
+  - packages/shared/payment-catalog.ts
+  - Backend Architecture/aether-backend/services/payment_catalog/catalog.py
+  - Backend Architecture/aether-backend/services/card_linked_payments/paymentscan.py
 last_synced_commit: pending
 ---
 
@@ -60,3 +64,27 @@ Canonical slugs:
 ## Currency/asset dimensions
 
 `usdc`, `usdt`, `eure`, `gbpe`, `usd24`, `liquidusd`, `other`, and `unknown`.
+
+## V1 ingestion and freshness
+
+`Backend Architecture/aether-backend/services/card_linked_payments/paymentscan.py`
+implements the catalog/benchmark pipeline:
+
+- `sync_catalog(tenant_id)` refreshes freshness state from the seed and
+  records a `paymentscan` provider-health sync so Kyber can surface catalog
+  staleness.
+- `ingest_benchmark(...)` persists one benchmark observation. `entity_ref`
+  resolves display names/aliases through the catalog (`Red.Pay` → `redotpay`);
+  unknown refs are kept under slug `unknown` so coverage gaps stay visible.
+  Basis defaults to `benchmark_only`; a source-reported basis (e.g. a top-up
+  volume metric) is kept exactly, but `reconciliation_state` is ALWAYS
+  `benchmark_only` — PaymentScan data never becomes user-level truth.
+  Confidence is `probable` only for methodology-backed metric types
+  (`program_count`, `issuer_count`, `network_share`); everything else is `weak`.
+- `catalog_freshness(tenant_id)` reports last sync, staleness, and per-type
+  entity counts for Kyber diagnostics.
+
+Benchmark rows are excluded from user-level flow listings, gold rollups,
+cluster cohorts, and graph projection. The tenant benchmarks endpoint
+carries the notice "PaymentScan benchmarks are catalog/market
+intelligence — not user-level card spend."

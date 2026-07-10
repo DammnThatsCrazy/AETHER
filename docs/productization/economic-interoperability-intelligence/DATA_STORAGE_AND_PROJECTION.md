@@ -34,6 +34,11 @@ Three projectors (`stablecoin`, `derivatives`, `interop`) subclass
 dispatcher after `X402FlowProjector` and before `SilverGraphProjector`;
 `SilverFactWriter` provides idempotent writes and drops unknown columns.
 
+The card-linked payment rail slice adds `CardLinkedProjector`
+(`card_linked_flow_facts`), registered LAST in `_ALL_PROJECTORS` — it
+observes card-context SDK events after every canonical projector has run
+and is never the canonical-activity owner for an event.
+
 ## Gold
 
 ClickHouse `ReplacingMergeTree` DDL modules:

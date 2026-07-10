@@ -8,6 +8,19 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+### Card-Linked Payment Rail Observability V1
+
+#### Added — card-linked economic observability (flag-gated, default off)
+
+- PaymentScan catalog + benchmark ingestion (`services/card_linked_payments/paymentscan.py`): 23 card programs, 6 issuers, alias resolution; every benchmark lands `source=paymentscan`, `reconciliation_state=benchmark_only` — never user-level card spend.
+- Card-linked ingestion service (`ingestion.py`): provider webhooks (spend/settlement/refund/reversal only), on-chain observations (topup/funding/settlement only), SDK events (spend claims downgraded to `unknown` + audited), tenant imports; deterministic idempotency keys; blocked-PII rejection (PAN/CVV/KYC/bank/secrets) with audit; region-policy (EU/UK/APAC restricted) and consent suppression of user-level fields.
+- Durable stores + Alembic migration `20260713_card_linked_payments` (flows with UNIQUE `(tenant_id, idempotency_key)`, benchmarks, provider health, reconciliation, privacy audits) and silver projector `card_linked_projector.py` (registered last; never the canonical-activity owner).
+- Gold rollups (`gold.py`): entity economic activity with top-up and spend never conflated, Campaign360 outcomes with explicit `attribution_basis` (`direct`/`temporal`/`probabilistic`/`benchmark_only`/`insufficient_evidence`), program/issuer benchmarks, cluster features.
+- Graph projection (`graph_projector.py`): CardProgram/CardIssuer/PaymentNetwork/CardLinkedFlow/CardBenchmark vertices; all card-linked edges in `RelationshipLayer.EXCLUDED` (never identity-merge evidence); benchmark rows never projected.
+- Profile360 card-linked activity + drilldown routes; tenant API under `/v1/integrations/providers/payment-rails/card-linked`; Aether UI Card-linked Activity section and Campaign360 Card-linked Outcomes tab.
+- Cluster cohorts (`clusters.py`) — review-only (`enforcement: "never"`), including refund-loop-suspect staged for human investigation, never auto-deny.
+- Kyber diagnostics + release gate (`diagnostics.py`, `governance.py`, `kyber_routes.py`): catalog freshness, coverage/basis-support by source, reconciliation conflicts, region/consent suppression + blocked-PII counts, basis-mislabeling warnings, and 11 fail-closed release-gate checks; Kyber UI diagnostics section (`enableCardLinkedPaymentRails`).
+
 ### SDK Productization Alignment
 
 #### Added — SDK productization pass

@@ -435,6 +435,18 @@ _EDGE_LAYER_MAP: dict[str, RelationshipLayer] = {
 
     # ── Derivatives Intelligence — domain edges (outside actor layers) ────
     EdgeType.AUTHENTICATES:         RelationshipLayer.EXCLUDED,
+    # Card-linked payment rails — behavioral/economic evidence, never
+    # identity-merge evidence (identity rule: card-linked activity alone
+    # may not merge humans).
+    EdgeType.CAME_FROM:             RelationshipLayer.EXCLUDED,
+    EdgeType.PARTICIPATED_IN:       RelationshipLayer.EXCLUDED,
+    EdgeType.USED_PROVIDER:         RelationshipLayer.EXCLUDED,
+    EdgeType.FUNDED:                RelationshipLayer.EXCLUDED,
+    EdgeType.OCCURRED_ON:           RelationshipLayer.EXCLUDED,
+    EdgeType.USED_ASSET:            RelationshipLayer.EXCLUDED,
+    EdgeType.RUNS_ON:               RelationshipLayer.EXCLUDED,
+    EdgeType.FOLLOWED_BY:           RelationshipLayer.EXCLUDED,
+    EdgeType.INITIATED_OR_INFLUENCED: RelationshipLayer.EXCLUDED,
     EdgeType.HAS_SUBACCOUNT:        RelationshipLayer.EXCLUDED,
     EdgeType.PARTICIPATES_IN_VAULT: RelationshipLayer.EXCLUDED,
     EdgeType.CREATED_ORDER:         RelationshipLayer.EXCLUDED,

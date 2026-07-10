@@ -744,6 +744,60 @@ async def get_profile_campaigns(
     return APIResponse(data=await agg.campaigns(user_id, tenant.tenant_id, limit=limit)).to_dict()
 
 
+# ── Card-linked payment rail activity (Economic Activity → Payment Rails) ──
+
+def _card_linked_filters(request: Request) -> dict:
+    """Extract card-linked filters from query params (shared filter set)."""
+    from services.card_linked_payments.profile_summary import FILTERABLE_FIELDS
+    params = request.query_params
+    filters = {name: params.get(name) for name in FILTERABLE_FIELDS}
+    for extra in ("volume_min", "volume_max", "since", "until"):
+        filters[extra] = params.get(extra)
+    return filters
+
+
+@router.get("/{user_id}/card-linked-activity")
+async def get_card_linked_activity(user_id: str, request: Request):
+    """Card-linked activity for an entity — story, flows, filters, provenance.
+
+    Flag-gated (404 when Card-Linked Payment Rails or its Profile360
+    surface is disabled). Bases stay separated: top-up is never spend.
+    """
+    from config.settings import settings as _settings
+    flags = _settings.card_linked_payment_rails
+    if not (flags.enabled and flags.profile360_enabled):
+        raise NotFoundError("Card-linked payment rails Profile360 surface is not enabled")
+    tenant = request.state.tenant
+    tenant.require_permission("read")
+    from services.card_linked_payments.profile_summary import get_card_linked_profile_summary
+    data = await get_card_linked_profile_summary(
+        tenant.tenant_id, user_id, _card_linked_filters(request),
+    )
+    return APIResponse(data=data).to_dict()
+
+
+@router.get("/{user_id}/economic/card-linked")
+async def get_economic_card_linked(user_id: str, request: Request):
+    """Economic-activity alias for the card-linked summary."""
+    return await get_card_linked_activity(user_id, request)
+
+
+@router.get("/{user_id}/drill/card-linked/{object_id}")
+async def drill_card_linked(user_id: str, object_id: str, request: Request):
+    """Evidence/provenance drill into one card-linked flow."""
+    from config.settings import settings as _settings
+    flags = _settings.card_linked_payment_rails
+    if not (flags.enabled and flags.profile360_enabled):
+        raise NotFoundError("Card-linked payment rails Profile360 surface is not enabled")
+    tenant = request.state.tenant
+    tenant.require_permission("read")
+    from services.card_linked_payments.profile_summary import get_card_linked_drilldown
+    data = await get_card_linked_drilldown(tenant.tenant_id, user_id, object_id)
+    if data is None:
+        raise NotFoundError(f"card-linked/{object_id} not found in tenant scope")
+    return APIResponse(data=data).to_dict()
+
+
 @router.get("/{user_id}/drill/{object_type}/{object_id}")
 async def drill_into_object(
     user_id: str,
