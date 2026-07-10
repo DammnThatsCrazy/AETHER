@@ -248,7 +248,9 @@ def stamp_doc(path: Path, sha: str) -> bool:
     fm_text = text[4:end]
     rest = text[end:]  # starts with the trailing `\n---`
 
-    new_line = f"last_synced_commit: {sha}"
+    # Quote the sha: an all-digit abbreviated hash (e.g. 1757948) would
+    # otherwise YAML-parse as an int and fail frontmatter validation.
+    new_line = f'last_synced_commit: "{sha}"'
     if "last_synced_commit:" in fm_text:
         # Replace the existing line.
         import re as _re
