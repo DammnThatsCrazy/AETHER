@@ -4537,6 +4537,9 @@
       "canonical_owner": "platform@aether"
     },
     {
+      "path": "docs/source-of-truth/CLUSTER_TARGETING_INTELLIGENCE.md"
+    },
+    {
       "path": "docs/source-of-truth/CONNECTOR_LAKE_POLICY.md",
       "title": "Connector Lake Policy",
       "slug": "architecture/connector-lake-policy",

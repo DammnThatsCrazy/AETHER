@@ -13,6 +13,7 @@ interface FeatureFlags {
   readonly enableExternalAgentTelemetry: boolean;
   readonly enablePaymentRails: boolean;
   readonly enableAiEfficiency: boolean;
+  readonly enableTargetingIntelligence: boolean;
 }
 
 const DEFAULT_FLAGS: FeatureFlags = {
@@ -28,6 +29,7 @@ const DEFAULT_FLAGS: FeatureFlags = {
   enableExternalAgentTelemetry: false,
   enablePaymentRails: false,
   enableAiEfficiency: false,
+  enableTargetingIntelligence: false,
 };
 
 function loadFlags(): FeatureFlags {

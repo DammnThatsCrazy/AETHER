@@ -9,6 +9,7 @@ import type {
   ClusterMember, ClusterTimelineEvent, ClusterEconomicSummary,
   ClusterCampaignSummary, ClusterRiskSummary, ClusterGeographySummary,
 } from '@aether-app/features/cluster360/use-cluster360';
+import { ClusterTargetingImpactTab } from '@aether-app/features/targeting-intelligence';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -395,6 +396,7 @@ export function Cluster360Page() {
               <TabsTrigger value="timeline">Timeline</TabsTrigger>
               <TabsTrigger value="economic">Economic</TabsTrigger>
               <TabsTrigger value="campaigns">Campaigns</TabsTrigger>
+              <TabsTrigger value="targeting-impact">Targeting Impact</TabsTrigger>
               <TabsTrigger value="risk">Risk</TabsTrigger>
               <TabsTrigger value="geography">Geography</TabsTrigger>
             </TabsList>
@@ -419,6 +421,10 @@ export function Cluster360Page() {
 
             <TabsContent value="campaigns" className="mt-4">
               <CampaignTab campaigns={campaigns} />
+            </TabsContent>
+
+            <TabsContent value="targeting-impact" className="mt-4">
+              <ClusterTargetingImpactTab clusterId={cluster.cluster_id} />
             </TabsContent>
 
             <TabsContent value="risk" className="mt-4">

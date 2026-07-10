@@ -1608,6 +1608,22 @@ export const api = {
       aiEfficiencyTenant: (tenantId: string) =>
         restClient.get(`/v1/admin/kyber/ai-efficiency/${encodeURIComponent(tenantId)}`, wrap(unknownSchema)).then(r => r.data),
 
+      // ── Cluster Targeting Intelligence (fleet diagnostics, aggregate-only) ─
+      // Recompute is audited and idempotent; it never mutates external
+      // campaign platforms and never executes campaigns.
+      targetingHealth: () =>
+        restClient.get('/v1/admin/kyber/targeting/health', wrap(unknownSchema)).then(r => r.data),
+      targetingLeakageQueue: (severity?: string) =>
+        restClient.get(`/v1/admin/kyber/targeting/leakage-queue${buildQS({ severity })}`, wrap(unknownSchema)).then(r => r.data),
+      targetingMappingQuality: () =>
+        restClient.get('/v1/admin/kyber/targeting/mapping-quality', wrap(unknownSchema)).then(r => r.data),
+      targetingRecompute: (body: { tenantId: string; intentId?: string; asOf?: string; observationId?: string }) =>
+        restClient.post('/v1/admin/kyber/targeting/recompute', wrap(unknownSchema), body).then(r => r.data),
+      targetingReleaseReadiness: () =>
+        restClient.get('/v1/admin/kyber/targeting/release-readiness', wrap(unknownSchema)).then(r => r.data),
+      targetingAudit: (limit = 100) =>
+        restClient.get(`/v1/admin/kyber/targeting/audit${buildQS({ limit })}`, wrap(unknownSchema)).then(r => r.data),
+
       // ── Dune feeder health ────────────────────────────────────────────────
       duneFeederHealth: () =>
         restClient.get('/v1/admin/dune-feeder/health', wrap(unknownSchema)).then(r => r.data),
