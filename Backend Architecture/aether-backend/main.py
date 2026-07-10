@@ -216,6 +216,8 @@ from services.comms.routes import router as comms_router, admin_router as comms_
 from services.economic.routes import router as economic_router
 from services.consent.routes import router as consent_router
 from services.notification_intelligence.routes import router as notification_router
+from services.jobs.routes import router as jobs_router
+from services.jobs.kyber_routes import router as jobs_kyber_router
 from services.admin.routes import router as admin_router
 from services.traffic.routes import router as traffic_router
 from services.fraud.routes import router as fraud_router
@@ -507,6 +509,8 @@ def create_app() -> FastAPI:
     app.include_router(economic_router)
     app.include_router(consent_router)
     app.include_router(notification_router)
+    app.include_router(jobs_router)          # /v1/jobs — durable job control plane
+    app.include_router(jobs_kyber_router)    # /v1/kyber/jobs — operator job timeline
     app.include_router(admin_router)
     app.include_router(traffic_router)
     app.include_router(fraud_router)

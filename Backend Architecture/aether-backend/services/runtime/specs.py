@@ -118,6 +118,29 @@ def build_worker_specs(*, registry: Any, settings: Any) -> list[WorkerSpec]:
         )
         return processor.run()
 
+    # ── Durable job control plane (services/jobs) ────────────────────────
+    def _job_worker() -> Coroutine[Any, Any, None]:
+        from services.jobs.worker import build_job_worker_coro
+
+        return build_job_worker_coro()
+
+    def _job_lease_sweeper() -> Coroutine[Any, Any, None]:
+        from services.jobs.worker import build_lease_sweeper_coro
+
+        return build_lease_sweeper_coro()
+
+    def _job_scheduler() -> Coroutine[Any, Any, None]:
+        from services.jobs.scheduler import build_schedule_tick_coro
+
+        return build_schedule_tick_coro()
+
+    def _notification_outbox() -> Coroutine[Any, Any, None]:
+        from services.notification_intelligence.delivery_outbox import (
+            build_notification_outbox_worker,
+        )
+
+        return build_notification_outbox_worker()
+
     # ── specs (registration order mirrors the old lifespan start order) ───
 
     return [
@@ -153,5 +176,28 @@ def build_worker_specs(*, registry: Any, settings: Any) -> list[WorkerSpec]:
             name="webhook_inbox",
             factory=_webhook_inbox,
             enabled=lambda: bool(settings.delivery.enabled),
+        ),
+        # Durable job control plane: worker leases + runs jobs, sweeper recovers
+        # expired leases/expired jobs, scheduler fires cron schedules. Required
+        # in staging/prod — a durable job platform with no worker silently never
+        # runs submitted work.
+        WorkerSpec(
+            name="job_worker",
+            factory=_job_worker,
+            required=True,
+        ),
+        WorkerSpec(
+            name="job_lease_sweeper",
+            factory=_job_lease_sweeper,
+            required=True,
+        ),
+        WorkerSpec(
+            name="job_scheduler",
+            factory=_job_scheduler,
+            required=True,
+        ),
+        WorkerSpec(
+            name="notification_outbox",
+            factory=_notification_outbox,
         ),
     ]
