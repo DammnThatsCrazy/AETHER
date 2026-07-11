@@ -40,8 +40,11 @@ from collections import Counter, defaultdict
 from datetime import datetime, timezone
 from typing import Any, Optional
 
+from decimal import Decimal
+
 from shared.common.common import utc_now
 from shared.logger.logger import get_logger, metrics
+from services.value import safe_rollup, value_of
 
 logger = get_logger("aether.profile.aggregator")
 
@@ -861,24 +864,15 @@ class Profile360Aggregator:
         intents = intents[:limit]
         settlements = settlements[:limit]
 
-        inflow = 0.0
-        outflow = 0.0
-        for t in transfers:
-            try:
-                amount = float(t.get("amount") or 0)
-            except (TypeError, ValueError):
-                amount = 0.0
-            if t.get("to_entity_id") == entity_id:
-                inflow += amount
-            if t.get("from_entity_id") == entity_id:
-                outflow += amount
-
-        settled = 0.0
-        for s in settlements:
-            try:
-                settled += float(s.get("amount") or 0)
-            except (TypeError, ValueError):
-                pass
+        # Canonical, currency-safe rollups. Mixed native currencies are NEVER
+        # summed into one scalar; unknown/unpriced values are never coerced to 0.
+        inflow_rollup = safe_rollup(
+            [t for t in transfers if t.get("to_entity_id") == entity_id]
+        )
+        outflow_rollup = safe_rollup(
+            [t for t in transfers if t.get("from_entity_id") == entity_id]
+        )
+        settled_rollup = safe_rollup(settlements)
 
         recent_items = [
             {
@@ -888,21 +882,20 @@ class Profile360Aggregator:
                 "amount": t.get("amount"),
                 "assetId": t.get("asset_id"),
                 "direction": "in" if t.get("to_entity_id") == entity_id else "out",
+                # Canonical value envelope (native + USD valuation + rollup status).
+                "value": value_of(t),
                 "timestamps": {"occurredAt": t.get("occurred_at")},
                 "metadata": t,
                 "links": {"asset": f"/v1/flows/assets/{t.get('asset_id')}" if t.get("asset_id") else None},
             }
             for t in transfers[:limit]
         ]
-        summary = {
-            "inflow_total": inflow,
-            "outflow_total": outflow,
-            "net": inflow - outflow,
-            "transfer_count": len(transfers),
-            "payment_intent_count": len(intents),
-            "settlement_count": len(settlements),
-            "settled_total": settled,
-        }
+        summary = _financials_summary(
+            inflow_rollup, outflow_rollup, settled_rollup,
+            transfer_count=len(transfers),
+            payment_intent_count=len(intents),
+            settlement_count=len(settlements),
+        )
         return _envelope(
             entity_id, tenant_id, "financials", recent_items, summary, limit,
             ["transfers", "payment_intents", "settlement_events"],
@@ -1104,8 +1097,9 @@ class Profile360Aggregator:
         chains = _tenant_filter(chains or [], tenant_id)
         execs = _tenant_filter(execs or [], tenant_id)
 
-        inflow = sum(_safe_float(t.get("amount")) for t in transfers if t.get("to_entity_id") == entity_id)
-        outflow = sum(_safe_float(t.get("amount")) for t in transfers if t.get("from_entity_id") == entity_id)
+        # Currency-safe rollups — never sum mixed native currencies into one scalar.
+        summary_inflow_rollup = safe_rollup([t for t in transfers if t.get("to_entity_id") == entity_id])
+        summary_outflow_rollup = safe_rollup([t for t in transfers if t.get("from_entity_id") == entity_id])
         # Match DelegationRepository.active_for: a delegation is active iff it
         # is not revoked AND starts_at has passed AND ends_at is unset or in
         # the future. Without the time-window predicate, /summary inflated
@@ -1142,11 +1136,7 @@ class Profile360Aggregator:
                 "journey_chains": len(chains),
                 "agent_executions": len(execs),
             },
-            "financials": {
-                "inflow_total": inflow,
-                "outflow_total": outflow,
-                "net": inflow - outflow,
-            },
+            "financials": _summary_financials(summary_inflow_rollup, summary_outflow_rollup),
             "behavior": {
                 "automation_ratio": (bx or {}).get("automation_ratio"),
                 "decision_latency_ms": (bx or {}).get("decision_latency_ms"),
@@ -1651,6 +1641,146 @@ def _safe_float(v: Any) -> float:
         return float(v or 0)
     except (TypeError, ValueError):
         return 0.0
+
+
+def _combine_rollup_status(*rollups: dict) -> str:
+    """Worst-wins across NON-EMPTY section rollups (unavailable is worst).
+
+    An empty section (no value records at all) carries no signal and is skipped,
+    so e.g. an inflow-only profile is 'partial'/'complete' rather than being
+    dragged to 'unavailable' by an empty outflow section.
+    """
+    statuses = [
+        r["rollup_status"]
+        for r in rollups
+        if sum(b["count"] for b in r["by_native_currency"].values()) > 0
+        or r["excluded_count"] > 0
+    ]
+    if not statuses:
+        return "unavailable"
+    for s in ("unavailable", "conflicted", "stale", "partial"):
+        if s in statuses:
+            return s
+    return "complete"
+
+
+def _summary_financials(inflow_rollup: dict, outflow_rollup: dict) -> dict:
+    """Currency-safe financials block for /summary (transfers only)."""
+    def _num(s: Optional[str]) -> Optional[float]:
+        return float(s) if s is not None else None
+
+    inflow_total = _num(inflow_rollup["native_total"])
+    outflow_total = _num(outflow_rollup["native_total"])
+    same_currency = (
+        inflow_rollup["native_currency"] is not None
+        and inflow_rollup["native_currency"] == outflow_rollup["native_currency"]
+    )
+    net = (
+        inflow_total - outflow_total
+        if same_currency and inflow_total is not None and outflow_total is not None
+        else None
+    )
+    inflow_usd = inflow_rollup["total_usd"]
+    outflow_usd = outflow_rollup["total_usd"]
+    net_usd = (
+        format(Decimal(inflow_usd) - Decimal(outflow_usd), "f")
+        if inflow_usd is not None and outflow_usd is not None
+        else None
+    )
+    return {
+        # Deprecated single-currency raw sums (None when currencies are mixed).
+        "inflow_total": inflow_total,
+        "outflow_total": outflow_total,
+        "net": net,
+        # Canonical USD-first values (decimal strings or None; unknown != 0).
+        "inflow_usd": inflow_usd,
+        "outflow_usd": outflow_usd,
+        "net_usd": net_usd,
+        "rollup_status": _combine_rollup_status(inflow_rollup, outflow_rollup),
+    }
+
+
+def _financials_summary(
+    inflow_rollup: dict,
+    outflow_rollup: dict,
+    settled_rollup: dict,
+    *,
+    transfer_count: int,
+    payment_intent_count: int,
+    settlement_count: int,
+) -> dict:
+    """Build the financials summary from currency-safe rollups.
+
+    Legacy scalar fields (inflow_total/outflow_total/net/settled_total) are kept
+    for backward compatibility but are populated ONLY when the values share a
+    single native currency (unambiguous); they are None when currencies are
+    mixed — a mixed-currency scalar is never produced. Canonical USD-first values
+    live in the *_usd fields (decimal strings or None; unknown is never 0).
+    """
+    def _num(s: Optional[str]) -> Optional[float]:
+        return float(s) if s is not None else None
+
+    inflow_total = _num(inflow_rollup["native_total"])
+    outflow_total = _num(outflow_rollup["native_total"])
+    same_currency = (
+        inflow_rollup["native_currency"] is not None
+        and inflow_rollup["native_currency"] == outflow_rollup["native_currency"]
+    )
+    net = (
+        inflow_total - outflow_total
+        if same_currency and inflow_total is not None and outflow_total is not None
+        else None
+    )
+    settled_total = _num(settled_rollup["native_total"])
+
+    inflow_usd = inflow_rollup["total_usd"]
+    outflow_usd = outflow_rollup["total_usd"]
+    net_usd = (
+        format(Decimal(inflow_usd) - Decimal(outflow_usd), "f")
+        if inflow_usd is not None and outflow_usd is not None
+        else None
+    )
+
+    merged: dict[str, dict] = {}
+    for cur in set(inflow_rollup["by_native_currency"]) | set(outflow_rollup["by_native_currency"]):
+        merged[cur] = {
+            "inflow": inflow_rollup["by_native_currency"].get(cur, {}).get("amount"),
+            "outflow": outflow_rollup["by_native_currency"].get(cur, {}).get("amount"),
+        }
+
+    return {
+        # Deprecated single-currency raw sums (None when currencies are mixed).
+        "inflow_total": inflow_total,
+        "outflow_total": outflow_total,
+        "net": net,
+        "settled_total": settled_total,
+        # Canonical USD-first values (decimal strings or None; unknown != 0).
+        "inflow_usd": inflow_usd,
+        "outflow_usd": outflow_usd,
+        "net_usd": net_usd,
+        "settled_usd": settled_rollup["total_usd"],
+        "rollup_status": _combine_rollup_status(inflow_rollup, outflow_rollup),
+        "by_native_currency": merged,
+        "unpriced_count": (
+            inflow_rollup["unpriced_count"]
+            + outflow_rollup["unpriced_count"]
+            + settled_rollup["unpriced_count"]
+        ),
+        "stale_count": 0,
+        "excluded_count": (
+            inflow_rollup["excluded_count"]
+            + outflow_rollup["excluded_count"]
+            + settled_rollup["excluded_count"]
+        ),
+        "transfer_count": transfer_count,
+        "payment_intent_count": payment_intent_count,
+        "settlement_count": settlement_count,
+        "valuation": {
+            "inflow": inflow_rollup,
+            "outflow": outflow_rollup,
+            "settled": settled_rollup,
+        },
+    }
 
 
 def _drill_ref(row: dict, type_label: str, id_key: str) -> dict:

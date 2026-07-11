@@ -308,6 +308,20 @@ def main(argv: Sequence[str] | None = None) -> None:
         remediation="export public declaration types from package barrels and fix package.json exports",
     )
     run(
+        ["python", "scripts/validate_financial_value_semantics.py"],
+        name="Financial value semantics (USD-first contract + no cross-currency sums)",
+        results=results,
+        stop_on_failure=stop,
+        remediation="use services.value.safe_rollup and the canonical value contract; see docs/source-of-truth/FINANCIAL_VALUE_SEMANTICS.md",
+    )
+    run(
+        ["python", "scripts/validate_frontend_value_display.py"],
+        name="Frontend value-display guardrail (canonical ValueDisplay/formatUSD)",
+        results=results,
+        stop_on_failure=stop,
+        remediation="render financial values via frontend/shared ValueDisplay/formatUSD; update the allowlist in scripts/validate_frontend_value_display.py",
+    )
+    run(
         ["python", "scripts/validate_event_schema_parity.py"],
         name="EventType parity (TypeScript ↔ Python CANONICAL_EVENT_TYPES)",
         results=results,

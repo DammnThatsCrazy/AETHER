@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Badge, Card, CardContent, CardHeader, CardTitle, EmptyState, EvidenceDrawer, GlyphIcon, ScrollArea } from '@aether/ui';
+import { Badge, Card, CardContent, CardHeader, CardTitle, EmptyState, EvidenceDrawer, formatUSD, GlyphIcon, ScrollArea } from '@aether/ui';
 import type { EvidenceRef } from '@aether/ui';
 import { cn } from '@kyber/lib/utils';
 import type { Profile360Section } from '@kyber/types';
@@ -17,10 +17,11 @@ function fmtDur(secs: unknown): string {
   return `${Math.floor(s / 3600)}h ${Math.floor((s % 3600) / 60)}m`;
 }
 
-function fmtUsd(val: unknown): string {
-  const n = typeof val === 'number' ? val : parseFloat(String(val ?? ''));
-  if (!n || isNaN(n)) return '—';
-  return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', notation: 'compact', maximumFractionDigits: 2 }).format(n);
+// Narrow an arbitrary record field to a canonical USD input (decimal string or
+// number). Anything else becomes null so the shared formatUSD renders
+// "Value unavailable" rather than a misleading "$0.00".
+function usdInput(val: unknown): string | number | null {
+  return typeof val === 'number' || typeof val === 'string' ? val : null;
 }
 
 // ── Sessions ──────────────────────────────────────────────────────────────────
@@ -233,7 +234,7 @@ export function Profile360JourneysPanel({ sections }: { readonly sections: reado
 function WalletCard({ w }: { w: Record<string, unknown> }) {
   const addr = String(w.wallet_address ?? w.address ?? w.id ?? '—');
   const chain = String(w.chain ?? w.network ?? '');
-  const totalUsd = fmtUsd(w.total_usd ?? w.balance_usd ?? w.total_balance_usd);
+  const totalUsd = formatUSD(usdInput(w.total_usd ?? w.balance_usd ?? w.total_balance_usd), { compact: true });
   const riskScore = typeof w.risk_score === 'number' ? w.risk_score : null;
   const loyaltyTier = String(w.loyalty_tier ?? w.tier ?? '');
   const txs: unknown[] = Array.isArray(w.recent_transactions) ? w.recent_transactions : Array.isArray(w.transactions) ? w.transactions : [];
@@ -270,11 +271,11 @@ function WalletCard({ w }: { w: Record<string, unknown> }) {
               {tokens.slice(0, 8).map((t, i) => {
                 const tr = asRec(t);
                 const sym = String(tr.symbol ?? tr.token_symbol ?? tr.token ?? '');
-                const usd = fmtUsd(tr.value_usd ?? tr.balance_usd);
+                const usd = formatUSD(usdInput(tr.value_usd ?? tr.balance_usd), { compact: true, fallback: '' });
                 return (
                   <span key={i} className="inline-flex items-center gap-1 px-2 py-0.5 rounded border border-border-subtle bg-surface-overlay text-[10px]">
                     <span className="font-mono text-text-primary">{sym}</span>
-                    {usd !== '—' && <span className="text-text-muted">{usd}</span>}
+                    {usd && <span className="text-text-muted">{usd}</span>}
                   </span>
                 );
               })}
@@ -289,7 +290,7 @@ function WalletCard({ w }: { w: Record<string, unknown> }) {
               {txs.slice(0, 5).map((tx, i) => {
                 const txr = asRec(tx);
                 const type = String(txr.type ?? txr.tx_type ?? txr.interaction_type ?? 'transfer');
-                const amt = fmtUsd(txr.amount_usd ?? txr.value_usd);
+                const amt = formatUSD(usdInput(txr.amount_usd ?? txr.value_usd), { compact: true });
                 const hash = String(txr.hash ?? txr.tx_hash ?? '');
                 return (
                   <div key={i} className="flex items-center justify-between text-[10px] py-1 border-b border-border-subtle last:border-0">
@@ -507,13 +508,13 @@ export function Profile360AttributionPanel({ sections, profileId }: { readonly s
                 {attributedRevenue != null && (
                   <div className="rounded border border-border-subtle bg-surface-raised p-2 text-center">
                     <div className="text-[10px] uppercase tracking-wide text-text-muted">Attributed revenue (gross)</div>
-                    <div className="mt-1 text-base font-semibold font-mono text-text-primary">{fmtUsd(attributedRevenue)}</div>
+                    <div className="mt-1 text-base font-semibold font-mono text-text-primary">{formatUSD(attributedRevenue, { compact: true })}</div>
                   </div>
                 )}
                 {attributedRevenueNet != null && (
                   <div className="rounded border border-border-subtle bg-surface-raised p-2 text-center">
                     <div className="text-[10px] uppercase tracking-wide text-text-muted">Attributed revenue (net)</div>
-                    <div className="mt-1 text-base font-semibold font-mono text-text-primary">{fmtUsd(attributedRevenueNet)}</div>
+                    <div className="mt-1 text-base font-semibold font-mono text-text-primary">{formatUSD(attributedRevenueNet, { compact: true })}</div>
                   </div>
                 )}
               </div>
@@ -546,7 +547,7 @@ export function Profile360AttributionPanel({ sections, profileId }: { readonly s
                           <span className="font-mono text-text-muted">{cid.slice(0, 10) || '—'}…</span>
                           {!!c.name && <span className="text-text-secondary truncate max-w-[120px]">{String(c.name)}</span>}
                           {!!c.channel && <Badge size="sm">{String(c.channel)}</Badge>}
-                          {c.attributed_revenue != null && <span className="font-mono text-text-primary">{fmtUsd(c.attributed_revenue)}</span>}
+                          {c.attributed_revenue != null && <span className="font-mono text-text-primary">{formatUSD(usdInput(c.attributed_revenue), { compact: true })}</span>}
                           {campaignPath && (
                             <Link to={campaignPath} className="ml-auto text-[10px] text-accent hover:underline shrink-0">
                               Campaign 360 →
@@ -568,7 +569,7 @@ export function Profile360AttributionPanel({ sections, profileId }: { readonly s
                       <div key={String(cv.conversion_id ?? i)} className="flex flex-wrap items-center gap-2 px-2 py-1.5 rounded border border-border-subtle bg-surface-raised text-xs">
                         <span className="font-mono text-text-muted">{String(cv.conversion_id ?? '—').slice(0, 8)}…</span>
                         {!!cv.conversion_type && <Badge size="sm">{String(cv.conversion_type)}</Badge>}
-                        {cv.gross_value != null && <span className="font-mono text-text-primary">{fmtUsd(cv.gross_value)}</span>}
+                        {cv.gross_value != null && <span className="font-mono text-text-primary">{formatUSD(usdInput(cv.gross_value), { compact: true })}</span>}
                         {!!cv.occurred_at && <span className="font-mono text-text-muted ml-auto">{new Date(String(cv.occurred_at)).toLocaleDateString()}</span>}
                       </div>
                     ))}

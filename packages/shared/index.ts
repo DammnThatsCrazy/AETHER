@@ -55,6 +55,9 @@ export * from './card-linked-payments';
 export * from './targeting-intelligence';
 export * from './interoperability';
 
+// Canonical financial value semantics (USD-first, native-preserving)
+export * from './value';
+
 // Production-readiness platform contracts
 export * from './ingestion-contract';
 export * from './problem-details';

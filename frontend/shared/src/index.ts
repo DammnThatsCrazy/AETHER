@@ -86,3 +86,27 @@ export {
 
 export { parseProblemDetails, isProblemDetails } from './problem-details';
 export type { ProblemDetails } from './problem-details';
+
+// Canonical USD-first value formatting + presentation.
+export {
+  formatUSD,
+  formatNativeValue,
+  formatAetherValue,
+  VALUE_UNAVAILABLE,
+  ValueDisplay,
+  USDValue,
+  NativeValueBreakdown,
+  ValuationWarning,
+} from './value/index';
+export type {
+  FormatUSDOptions,
+  FormatNativeOptions,
+  FormatAetherValueOptions,
+  FormattedAetherValue,
+  AetherValueLike,
+  NativeValueLike,
+  USDValuationLike,
+  DisplayValueLike,
+  ValueFreshness,
+  ValueConfidence,
+} from './value/index';

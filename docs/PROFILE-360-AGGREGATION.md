@@ -268,7 +268,12 @@ returns a single `snapshot` object with:
 - `entity` — the normalized canonical entity record
 - `canonical_entity_id` — stable backend-assigned UUID from `services/identity/resolver.py`; falls back to `entity_id` if the identity system has not yet resolved this entity
 - `counts` — pre-computed counts for every Profile 360 dimension
-- `financials` — inflow / outflow / net totals
+- `financials` — currency-safe inflow / outflow / net values. USD-first fields
+  (`inflow_usd`, `outflow_usd`, `net_usd`, `settled_usd`, `rollup_status`,
+  `by_native_currency`, `unpriced_count`) are canonical; legacy scalar fields
+  (`inflow_total`, etc.) are deprecated and populated only for a single native
+  currency (null when mixed — see
+  [`FINANCIAL_VALUE_SEMANTICS.md`](source-of-truth/FINANCIAL_VALUE_SEMANTICS.md))
 - `behavior` — latest behavior signals
 - `links` — drill URLs for every other dimension
 
