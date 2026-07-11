@@ -33,7 +33,7 @@ def raises_named(*names: str):
 
 
 @pytest.fixture()
-def clean():
+def clean(monkeypatch):
     from repositories.import_files import get_import_file_repository
     from repositories.imports_repo import get_imports_repository
 
@@ -42,6 +42,11 @@ def clean():
                  "row_errors", "commits", "rollbacks"):
         getattr(r, attr)._store.clear()
     get_import_file_repository()._store.clear()
+    # Pin the repo accessor in every module this test drives, so seeding (svc)
+    # and the operator action (kr) share one instance regardless of the suite's
+    # sys.modules churn (which can otherwise hand them distinct singletons).
+    monkeypatch.setattr(svc, "get_imports_repository", lambda: r)
+    monkeypatch.setattr(kr, "get_imports_repository", lambda: r)
     return r
 
 

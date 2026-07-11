@@ -64,7 +64,7 @@ MAPPING = [
 
 
 @pytest.fixture()
-def clean():
+def clean(monkeypatch):
     """Clear the in-memory stores the singletons share, per test."""
     from repositories.import_files import get_import_file_repository
     from repositories.imports_repo import get_imports_repository
@@ -73,6 +73,9 @@ def clean():
     for attr in ("sessions", "schemas", "mappings", "templates", "validations", "row_errors"):
         getattr(r, attr)._store.clear()
     get_import_file_repository()._store.clear()
+    # Pin the repo accessor so the service and route handlers this test drives
+    # share one instance regardless of the suite's sys.modules churn.
+    monkeypatch.setattr(svc, "get_imports_repository", lambda: r)
     return r
 
 
