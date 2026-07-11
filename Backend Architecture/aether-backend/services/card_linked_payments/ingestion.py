@@ -77,6 +77,60 @@ class CardLinkedIngestionService:
     def __init__(self, settings: Any) -> None:
         self._settings = settings
         self._repos = get_card_linked_repositories()
+        # Catalog vertices already mirrored to the graph this process, keyed
+        # by program slug — projected lazily so flow edges always have their
+        # CardProgram endpoint without bulk-seeding the whole catalog.
+        self._projected_programs: set[str] = set()
+
+    # ── graph projection (best-effort mirror; the flow store is truth) ──
+
+    async def _project_to_graph(self, tenant_id: str, result: tuple[dict, str]) -> None:
+        """Mirror a newly-created flow into the graph (vertex + evidence edges).
+
+        Same contract as the identity graph_writer: the durable repository is
+        the source of truth and the graph write is best-effort — a graph
+        failure never fails ingestion. Duplicate dispositions are skipped.
+        """
+        record, disposition = result
+        if disposition != "created":
+            return
+        try:
+            from dependencies.providers import get_graph
+            from services.card_linked_payments.graph_projector import (
+                build_catalog_mutations,
+                build_flow_mutations,
+            )
+            from services.payment_catalog.catalog import PAYMENTSCAN_CARD_PROGRAMS
+
+            graph = get_graph()
+            program_slug = record.get("card_program_id")
+            if program_slug and program_slug not in self._projected_programs:
+                self._projected_programs.add(program_slug)
+                entity = next(
+                    (e for e in PAYMENTSCAN_CARD_PROGRAMS if e.slug == program_slug),
+                    None,
+                )
+                if entity is not None:
+                    cat_vertices, cat_edges = build_catalog_mutations(
+                        tenant_id,
+                        {
+                            "slug": entity.slug,
+                            "display_name": entity.display_name,
+                            "source": entity.source,
+                            "status": entity.status,
+                        },
+                    )
+                    for vertex in cat_vertices:
+                        await graph.upsert_vertex(vertex)
+                    for edge in cat_edges:
+                        await graph.add_edge(edge)
+            vertices, edges = build_flow_mutations(record)
+            for vertex in vertices:
+                await graph.upsert_vertex(vertex)
+            for edge in edges:
+                await graph.add_edge(edge)
+        except Exception as exc:  # pragma: no cover — best-effort mirror
+            logger.debug("card-linked graph projection skipped: %s", exc)
 
     # ── guards ──────────────────────────────────────────────────────────
 
@@ -152,6 +206,7 @@ class CardLinkedIngestionService:
         await self._check_consent(tenant_id, record, consent_snapshot, ("commerce",))
         result = await self._repos.flows.insert_idempotent(tenant_id, record)
         await self._repos.provider_health.record_event(tenant_id, "provider_webhook")
+        await self._project_to_graph(tenant_id, result)
         await self._try_reconcile(tenant_id, result[0])
         return result
 
@@ -172,6 +227,7 @@ class CardLinkedIngestionService:
         await self._check_consent(tenant_id, record, consent_snapshot, ("web3",))
         result = await self._repos.flows.insert_idempotent(tenant_id, record)
         await self._repos.provider_health.record_event(tenant_id, "onchain_observer")
+        await self._project_to_graph(tenant_id, result)
         await self._try_reconcile(tenant_id, result[0])
         return result
 
@@ -248,6 +304,7 @@ class CardLinkedIngestionService:
         await self._check_consent(tenant_id, record, consent_snapshot, required)
         result = await self._repos.flows.insert_idempotent(tenant_id, record)
         await self._repos.provider_health.record_event(tenant_id, "sdk")
+        await self._project_to_graph(tenant_id, result)
         await self._try_reconcile(tenant_id, result[0])
         return result
 
@@ -290,7 +347,9 @@ class CardLinkedIngestionService:
                 ),
             }
             record = await self._apply_region_policy(tenant_id, record, region_hint)
-            results.append(await self._repos.flows.insert_idempotent(tenant_id, record))
+            result = await self._repos.flows.insert_idempotent(tenant_id, record)
+            await self._project_to_graph(tenant_id, result)
+            results.append(result)
         return results
 
     # ── reconciliation ──────────────────────────────────────────────────
@@ -326,3 +385,16 @@ class CardLinkedIngestionService:
                 if sibling.get("reconciliation_state") in ("sdk_only", "provider_only", "onchain_only"):
                     sibling["reconciliation_state"] = "matched"
                     await self._repos.flows.save(tenant_id, sibling)
+
+
+_service: CardLinkedIngestionService | None = None
+
+
+def get_ingestion_service() -> CardLinkedIngestionService:
+    """Process-wide ingestion service (routes + SDK pipeline hook share it)."""
+    global _service
+    if _service is None:
+        from config.settings import get_settings
+
+        _service = CardLinkedIngestionService(get_settings())
+    return _service

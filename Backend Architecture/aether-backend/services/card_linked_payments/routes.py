@@ -117,3 +117,87 @@ async def campaign_outcomes(campaign_id: str, request: Request):
         raise HTTPException(status_code=404, detail="Card-linked campaign attribution is not enabled")
     data = await campaign_card_linked_outcomes(tenant_id, campaign_id)
     return APIResponse(data=data).to_dict()
+
+
+# ── ingestion (write paths — previously the pipeline had no runtime entry) ──
+
+
+def _write_gate(request: Request) -> str:
+    if not settings.card_linked_payment_rails.enabled:
+        raise HTTPException(status_code=404, detail="Card-linked payment rails is not enabled")
+    tenant = request.state.tenant
+    tenant.require_permission("write")
+    return tenant.tenant_id
+
+
+@router.post("/ingest/provider-webhook")
+async def ingest_provider_webhook(request: Request):
+    """Issuer/provider card-spend evidence (server-to-server, tenant-authenticated).
+
+    Body: the provider payload, optionally wrapped with ``region_hint`` and
+    ``consent_snapshot``. All fail-closed guards (PII rejection, basis
+    enforcement, region policy, consent) run inside the ingestion service.
+    """
+    from services.card_linked_payments.ingestion import get_ingestion_service
+
+    tenant_id = _write_gate(request)
+    body = await request.json()
+    payload = body.get("payload", body)
+    try:
+        record, disposition = await get_ingestion_service().ingest_provider_webhook(
+            tenant_id,
+            payload,
+            region_hint=body.get("region_hint"),
+            consent_snapshot=body.get("consent_snapshot"),
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc))
+    return APIResponse(data={"flow_id": record.get("id"), "disposition": disposition}).to_dict()
+
+
+@router.post("/ingest/onchain")
+async def ingest_onchain(request: Request):
+    """Wallet/on-chain top-up, funding, or settlement evidence."""
+    from services.card_linked_payments.ingestion import get_ingestion_service
+
+    tenant_id = _write_gate(request)
+    body = await request.json()
+    payload = body.get("payload", body)
+    try:
+        record, disposition = await get_ingestion_service().ingest_onchain_observation(
+            tenant_id, payload
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc))
+    return APIResponse(data={"flow_id": record.get("id"), "disposition": disposition}).to_dict()
+
+
+@router.post("/import")
+async def ingest_import(request: Request):
+    """Tenant bulk import of card-linked activity rows.
+
+    Body: ``{"rows": [...], "region_hint": "..."}`` — each row must carry a
+    supported ``basis``; unsupported bases fail the whole batch (422) before
+    any row is persisted.
+    """
+    from services.card_linked_payments.ingestion import get_ingestion_service
+
+    tenant_id = _write_gate(request)
+    body = await request.json()
+    rows = body.get("rows")
+    if not isinstance(rows, list) or not rows:
+        raise HTTPException(status_code=422, detail="body.rows must be a non-empty list")
+    try:
+        results = await get_ingestion_service().ingest_tenant_import(
+            tenant_id, rows, region_hint=body.get("region_hint")
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc))
+    created = sum(1 for _, disposition in results if disposition == "created")
+    return APIResponse(
+        data={
+            "accepted": created,
+            "duplicates": len(results) - created,
+            "flow_ids": [record.get("id") for record, _ in results],
+        }
+    ).to_dict()
