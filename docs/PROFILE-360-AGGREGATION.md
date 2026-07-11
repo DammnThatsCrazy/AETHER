@@ -14,7 +14,7 @@ source_files:
 canonical_owner: backend@aether
 estimated_read_minutes: 8
 toc_depth: 3
-last_synced_commit: "a69ed1e"
+last_synced_commit: "b88e796"
 ---
 
 # Profile 360 Aggregation Layer
@@ -296,7 +296,20 @@ returns an empty list with the matching summary set to zero — the rest
 of the response still succeeds. This keeps Profile 360 surfaces useful
 during partial outages rather than 500-ing whole pages.
 
-This is verified by `test_aggregator_degrades_on_repo_failure_without_raising`.
+The composer (`get_full_profile`) applies the same principle across its
+dimensions: each is assembled under `asyncio.gather(return_exceptions=True)`,
+so a single subsystem raising degrades only its own dimension to a typed
+default. Rather than erasing the failure, the response carries an additive
+`readiness` block — `{state: "ready" | "degraded", degraded_dimensions: [...]}`
+— so callers can see which dimensions degraded and why.
+
+The `/quality` and `/data-freshness` surfaces compute freshness for real: a
+present dimension whose newest record exceeds the 24h freshness SLA is
+reported stale (`stale_dimensions` / per-dimension `stale`), and
+`contradiction_count` reflects the detected anomaly-flag count.
+
+This is verified by `test_aggregator_degrades_on_repo_failure_without_raising`
+and `tests/unit/test_profile_360_truth.py`.
 
 ---
 

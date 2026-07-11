@@ -7,6 +7,7 @@ It calls existing repositories and services to compose a unified view.
 
 from __future__ import annotations
 
+import asyncio
 from typing import Any, Optional
 
 from shared.common.common import utc_now
@@ -112,63 +113,84 @@ class ProfileComposer:
         timeline_limit: int = 50,
         graph_depth: int = 1,
     ) -> dict:
-        """Assemble a complete profile view from all subsystems."""
+        """Assemble a complete profile view from all subsystems.
+
+        Each dimension is composed under isolation: a single subsystem raising
+        degrades only its own dimension (to a typed default) instead of 500-ing
+        the whole profile, and the failure is surfaced in an additive
+        ``readiness`` block rather than silently erased.
+        """
         now = utc_now().isoformat()
 
-        # 1. Core identity
-        profile = await self._identity.get_profile(tenant_id, user_id)
-        if not profile:
-            profile = {"user_id": user_id, "tenant_id": tenant_id, "status": "unknown"}
+        async def _core() -> dict:
+            profile = await self._identity.get_profile(tenant_id, user_id)
+            return profile or {"user_id": user_id, "tenant_id": tenant_id, "status": "unknown"}
 
-        # 2. All linked identifiers
-        identifiers = await self._resolver.get_all_identifiers(user_id, tenant_id=tenant_id)
+        unknown_core = {"user_id": user_id, "tenant_id": tenant_id, "status": "unknown"}
+        # (key, coroutine factory, default-on-error, enabled)
+        specs: list[tuple[str, Any, Any, bool]] = [
+            ("core", _core, unknown_core, True),
+            ("identifiers",
+             lambda: self._resolver.get_all_identifiers(user_id, tenant_id=tenant_id), [], True),
+            ("consent", lambda: self._consent.get_consent(tenant_id, user_id), None, True),
+            ("timeline",
+             lambda: self._compose_timeline(tenant_id, user_id, limit=timeline_limit),
+             [], include_timeline),
+            ("graph",
+             lambda: self._compose_graph(user_id, tenant_id=tenant_id, depth=graph_depth),
+             {}, include_graph),
+            ("intelligence",
+             lambda: self._compose_intelligence(user_id, tenant_id), {}, include_intelligence),
+            ("lake", lambda: self._compose_lake_data(user_id), {}, include_lake),
+            # Agent economic Profile360 telemetry (opt-in/additive) — human/user
+            # profile responses are unchanged unless an agent route enables it.
+            ("agent_economic",
+             lambda: self._agent_economic.compose(
+                 agent_id=user_id, tenant_id=tenant_id, limit=timeline_limit),
+             {}, include_agent_economic),
+        ]
 
-        # 3. Consent status
-        consent = await self._consent.get_consent(tenant_id, user_id)
+        active = [(k, f, d) for (k, f, d, en) in specs if en]
+        results = await asyncio.gather(
+            *[factory() for (_k, factory, _d) in active], return_exceptions=True
+        )
 
-        # 4. Timeline (events + actions)
-        timeline = []
-        if include_timeline:
-            timeline = await self._compose_timeline(tenant_id, user_id, limit=timeline_limit)
-
-        # 5. Graph context
-        graph_context = {}
-        if include_graph:
-            graph_context = await self._compose_graph(user_id, tenant_id=tenant_id, depth=graph_depth)
-
-        # 6. Intelligence (risk, features, model outputs)
-        intelligence = {}
-        if include_intelligence:
-            intelligence = await self._compose_intelligence(user_id, tenant_id)
-
-        # 7. Lake data (Gold-tier features and metrics)
-        lake_data = {}
-        if include_lake:
-            lake_data = await self._compose_lake_data(user_id)
-
-        # 8. Agent economic Profile360 telemetry (opt-in/additive).
-        # Uses the same profile_id value as agent_id when callers are composing
-        # an agent profile; human/user profile responses remain unchanged unless
-        # this flag is enabled by an agent route.
-        agent_economic = {}
-        if include_agent_economic:
-            agent_economic = await self._agent_economic.compose(
-                agent_id=user_id, tenant_id=tenant_id, limit=timeline_limit
-            )
+        values: dict[str, Any] = {}
+        degraded: list[dict] = []
+        for (key, _factory, default), res in zip(active, results):
+            if isinstance(res, Exception):
+                logger.warning(
+                    "profile360_dimension_failed",
+                    extra={"dimension": key, "error": str(res)},
+                )
+                metrics.increment("profile_360_dimension_failed", labels={"dimension": key})
+                values[key] = default
+                degraded.append(
+                    {"dimension": key, "state": "error", "reason": type(res).__name__}
+                )
+            else:
+                values[key] = res
+        # Disabled dimensions carry their default (not queried, not degraded).
+        for (key, _factory, default, enabled) in specs:
+            values.setdefault(key, default)
 
         metrics.increment("profile_360_composed")
         return {
             "profile_id": user_id,
             "tenant_id": tenant_id,
-            "core": profile,
-            "identifiers": identifiers,
-            "consent": consent or {"status": "no_record"},
-            "timeline": timeline,
-            "graph": graph_context,
-            "intelligence": intelligence,
-            "lake": lake_data,
-            "agent_economic": agent_economic,
+            "core": values["core"],
+            "identifiers": values["identifiers"],
+            "consent": values["consent"] or {"status": "no_record"},
+            "timeline": values["timeline"],
+            "graph": values["graph"],
+            "intelligence": values["intelligence"],
+            "lake": values["lake"],
+            "agent_economic": values["agent_economic"],
             "computed_at": now,
+            "readiness": {
+                "state": "degraded" if degraded else "ready",
+                "degraded_dimensions": degraded,
+            },
             "provenance": {
                 "source": "profile_360_composer",
                 "subsystems_queried": [
