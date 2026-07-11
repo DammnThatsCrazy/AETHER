@@ -12,6 +12,7 @@ ESTIMATED); every other state carries ``value is None`` and an honest reason.
 
 from __future__ import annotations
 
+from shared.measurement.compute import build_result, rate_result, record_rate
 from shared.measurement.context import MeasurementContext
 from shared.measurement.contracts import MeasurementResult, Uncertainty
 from shared.measurement.registry import (
@@ -64,4 +65,8 @@ __all__ = [
     "REGISTRY_VERSION",
     # restatement
     "build_restatement",
+    # computation bridge (engine → plane)
+    "rate_result",
+    "build_result",
+    "record_rate",
 ]

@@ -8,6 +8,7 @@ source_files:
   - Backend Architecture/aether-backend/shared/measurement/validators.py
   - Backend Architecture/aether-backend/shared/measurement/uncertainty.py
   - Backend Architecture/aether-backend/shared/measurement/registry.py
+  - Backend Architecture/aether-backend/shared/measurement/compute.py
   - Backend Architecture/aether-backend/repositories/measurement_results_repo.py
   - Backend Architecture/aether-backend/services/measurement/routes/integrity.py
 last_synced_commit: pending
@@ -87,11 +88,33 @@ migration keeps a single alembic head.
 All reads are tenant-scoped (`read` permission); cross-tenant lookups return
 `None` / 404.
 
+## Engine bridge (Campaign360 → plane)
+
+`compute.py` is the honest-computation bridge the engine calculators use:
+`rate_result(numerator, denominator, metric_name=…)` returns
+`(value | None, ValueState, Uncertainty | None, sufficiency)` — a value below the
+metric's sample floor is `insufficient_data` with `value=None` (never a bare 0),
+no sample at all is `missing_inputs`, and a sufficient bounded proportion is
+`observed` with a Wilson interval. `record_rate(repo, context, …)` persists the
+result into the plane, idempotently (an active result for the same context is
+returned unchanged, not re-inserted).
+
+The Campaign360 gold materializer
+(`services/measurement/engine/gold_materializer.py`) uses this to record the
+tenant-day `conversion_rate` into the plane on every materialization. The gold
+ClickHouse row keeps its typed float column for analytical compatibility; the
+plane is the **integrity source of truth** — a `0.0` in gold is legacy
+denormalization, while the plane reports `insufficient_data` when there are too
+few clicks to trust a rate.
+
 ## Non-goals / limitations
 
-- The registry is in-code (`registry.py`); a generated `metric-registry.json`
-  contract (TS twin) and threading `MeasurementContext` through the Campaign360
-  calculators (so gold emits `ValueState` + Wilson intervals end-to-end) are the
-  next increment — the plane and its persistence land first.
+- The metric registry is generated from `packages/shared/contracts/metric-registry.json`
+  (`measurement-contract.ts` + `generated_registry.py` + a docs table, parity-tested
+  against the hand-authored `registry.py`). Threading `MeasurementContext` through
+  the remaining Campaign360 calculators (attribution credits, journey economics)
+  beyond the tenant-day conversion rate is the next increment.
+- `MeasurementContext` grain is tenant-window (no per-campaign dimension), so the
+  engine records the tenant-day aggregate conversion rate, not one per campaign.
 - `bootstrap_ci` is seeded for determinism; it is not a substitute for a
   calibrated model where one is required.
