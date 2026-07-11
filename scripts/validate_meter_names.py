@@ -39,6 +39,16 @@ CANONICAL_NAMES: frozenset[str] = frozenset({
     "payment_rail_status_downgrade_blocked_total",
     "payment_rail_webhook_handled_total",
     "payment_rail_webhook_rejected_total",
+    # Payment Rail sync/staleness worker (services/.../payment_rails/sync_worker.py)
+    "payment_rail_sync_cycle_total",
+    "payment_rail_sync_session_scanned_total",
+    "payment_rail_sync_provider_pulled_total",
+    "payment_rail_sync_transitioned_total",
+    "payment_rail_sync_error_total",
+    # Card-linked payment rails (services/card_linked_payments)
+    "card_linked_flows_upserted_total",
+    "card_linked_audit_total",
+    "card_linked_gold_materialized_total",
     "identity_resolve_error_total",
     "ingestion_bronze_write_failed_total",
     "ingestion_publish_failed_total",

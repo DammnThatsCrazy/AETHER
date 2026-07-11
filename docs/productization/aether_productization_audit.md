@@ -134,13 +134,18 @@ Rubric: 0 absent · 1 stub/scaffold · 2 partial/pilot · 3 pre-production ·
 | docs | 4 |
 | deployment / cloud readiness | 3 |
 | scale readiness | 3 |
+| payment rail observability | 3 |
+| card-linked payment rails | 2 |
 
-**Overall: ~3.95/5 — pre-production.** Profile 360 and customer frontend are
-now 5/5. Security / compliance advanced to 4/5 with VM dependency-audit and
-secret-scan controls CI-gated. Customer frontend reached 5/5 with Playwright
-E2E suite (5 scenarios, CI-gated via e2e-tenant job). Dune feeder AETHER_ENV
-guard replaced with config-driven DUNE_BACKEND flag. All other areas with minor
-gaps remain at 4 until they carry production traffic at scale.
+**Overall: ~3.81/5 — pre-production** (canonical live figure from
+`make production-status`; this table is a dated excerpt of the full scorecard).
+Profile 360 and customer frontend are now 5/5. Security / compliance advanced to
+4/5 with VM dependency-audit and secret-scan controls CI-gated. Customer
+frontend reached 5/5 with Playwright E2E suite (5 scenarios, CI-gated via
+e2e-tenant job). Dune feeder AETHER_ENV guard replaced with config-driven
+DUNE_BACKEND flag. Payment rail observability (3) and card-linked payment rails
+(2) are wired and tested but flag-off with no live provider validated. All other
+areas with minor gaps remain at 4 until they carry production traffic at scale.
 
 ## 4. Release Blockers (ordered)
 

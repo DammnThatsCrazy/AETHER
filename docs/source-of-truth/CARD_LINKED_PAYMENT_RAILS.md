@@ -89,7 +89,11 @@ All modules live in `Backend Architecture/aether-backend/services/card_linked_pa
    and summed separately, `basis="mixed"` when both are present), campaign
    outcomes, program/issuer benchmarks, and cluster features. Benchmark rows
    are excluded from every user-level rollup; nothing is model-training
-   eligible.
+   eligible. `materialize_gold` is invoked on demand and, when
+   `AETHER_CARD_LINKED_PAYMENT_RAILS_ENABLED` is on, periodically per tenant by
+   the supervised payment-rail sync worker (`services/integrations/providers/
+   payment_rails/sync_worker.py`) — the periodic hook the plane previously
+   lacked (`card_linked_gold_materialized_total`).
 5. **Reconciliation** (`ingestion.py::_try_reconcile`) — an on-chain top-up
    and a provider spend that share `wallet_address_hash` + card program link
    as `matched`; matching upgrades `reconciliation_state` only and never

@@ -86,8 +86,17 @@ async def test_duplicate_ingest_does_not_reproject(service, monkeypatch):
 
 
 def _force_flag(request, enabled: bool) -> None:
-    """Flip the frozen card-linked flag for one test (restored afterwards)."""
-    cfg = get_settings().card_linked_payment_rails
+    """Flip the frozen card-linked flag for one test (restored afterwards).
+
+    Imports ``get_settings`` fresh so the flag is set on the SAME
+    ``config.settings`` module identity the worker reads at runtime — under the
+    full suite's sys.modules churn (pop-and-reimport in many suites) the
+    module-level import can bind to a stale identity, leaving the worker to see
+    the default (flag off) and silently no-op.
+    """
+    from config.settings import get_settings as _get_settings
+
+    cfg = _get_settings().card_linked_payment_rails
     original = cfg.enabled
     object.__setattr__(cfg, "enabled", enabled)
     request.addfinalizer(lambda: object.__setattr__(cfg, "enabled", original))
@@ -110,9 +119,13 @@ async def test_sdk_pipeline_hook_feeds_flow_store(request, monkeypatch):
         "properties": {"card_program": "coinbase-card", "basis": "topup"},
     }
     await _ingest_card_linked_context("tenant-sdk-wire", payload)
-    flows = await ingestion_mod.get_ingestion_service()._repos.flows.list_for_tenant(
-        "tenant-sdk-wire"
-    )
+    # Read through a fresh import so we query the SAME ingestion-service
+    # identity the worker wrote to (module-identity churn can otherwise split
+    # writer and reader across two `services.card_linked_payments.ingestion`
+    # modules, making the store look empty).
+    from services.card_linked_payments.ingestion import get_ingestion_service
+
+    flows = await get_ingestion_service()._repos.flows.list_for_tenant("tenant-sdk-wire")
     assert flows, "SDK hook did not persist a card-linked flow"
     assert flows[0].get("source") == "sdk"
 
