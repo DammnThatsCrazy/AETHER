@@ -1142,6 +1142,141 @@ const MOCK_TARGETING_EXPORT = {
 
 const MOCK_TARGETING_EXPORTS = [MOCK_TARGETING_EXPORT];
 
+// ── Tenant Import Engine ──────────────────────────────────────────────────────
+// Deterministic fixtures: fixed ISO timestamps, no Date.now()-derived record
+// values. A tenant uploads a file, Aether analyzes its schema, the tenant maps
+// columns onto primitives, a dry-run validates, then a commit stages the rows.
+const IMPORT_STAMP = '2026-07-09T12:00:00.000Z';
+
+const MOCK_IMPORT_SCHEMA = {
+  file_id: 'file_imp_001',
+  format: 'csv',
+  row_count: 1240,
+  sampled_rows: 500,
+  columns: [
+    { name: 'email', inferred_type: 'email', nullable: false, null_count: 0, distinct_count: 1240, sample_values: ['alex@acme.io', 'sam@acme.io'], sensitivity: 'pii' },
+    { name: 'wallet', inferred_type: 'wallet_address', nullable: true, null_count: 12, distinct_count: 1180, sample_values: ['0xa1b2c3', '0xd4e5f6'], sensitivity: 'identifier' },
+    { name: 'signup_at', inferred_type: 'datetime', nullable: false, null_count: 0, distinct_count: 1240, sample_values: ['2026-01-04T09:00:00.000Z'], sensitivity: 'none' },
+    { name: 'display_name', inferred_type: 'string', nullable: true, null_count: 30, distinct_count: 1200, sample_values: ['Alex', 'Sam'], sensitivity: 'none' },
+  ],
+  delimiter: ',',
+  has_header: true,
+};
+
+const MOCK_IMPORT_MAPPING_FIELDS = [
+  { source_column: 'email', primitive: 'identifier', target_field: 'value', transform: 'lowercase', required: true },
+  { source_column: 'wallet', primitive: 'identifier', target_field: 'value', transform: 'none', required: false },
+  { source_column: 'signup_at', primitive: 'action', target_field: 'occurred_at', transform: 'to_timestamp', required: false },
+  { source_column: 'display_name', primitive: 'entity', target_field: 'display_name', transform: 'trim', required: false },
+];
+
+interface MockImportSession {
+  id: string;
+  tenant_id: string;
+  status: string;
+  source_kind: string;
+  file_count: number;
+  row_count: number | null;
+  created_by: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+const MOCK_IMPORT_SESSIONS: MockImportSession[] = [
+  {
+    id: 'imp_customers_001',
+    tenant_id: 'tenant_demo_001',
+    status: 'analyzed',
+    source_kind: 'file_upload',
+    file_count: 1,
+    row_count: 1240,
+    created_by: 'alex@acme.io',
+    created_at: '2026-07-08T12:00:00.000Z',
+    updated_at: '2026-07-08T12:05:00.000Z',
+  },
+  {
+    id: 'imp_events_002',
+    tenant_id: 'tenant_demo_001',
+    status: 'committed',
+    source_kind: 'file_upload',
+    file_count: 2,
+    row_count: 8800,
+    created_by: 'alex@acme.io',
+    created_at: '2026-07-06T09:00:00.000Z',
+    updated_at: '2026-07-06T09:40:00.000Z',
+  },
+  {
+    id: 'imp_draft_003',
+    tenant_id: 'tenant_demo_001',
+    status: 'created',
+    source_kind: 'file_upload',
+    file_count: 0,
+    row_count: null,
+    created_by: 'alex@acme.io',
+    created_at: '2026-07-09T08:00:00.000Z',
+    updated_at: '2026-07-09T08:00:00.000Z',
+  },
+];
+
+const MOCK_IMPORT_FILES: Record<string, unknown[]> = {
+  imp_customers_001: [
+    { id: 'file_imp_001', import_id: 'imp_customers_001', filename: 'customers.csv', content_type: 'text/csv', size_bytes: 184320, sha256: 'a'.repeat(64), status: 'stored', created_at: '2026-07-08T12:01:00.000Z' },
+  ],
+  imp_events_002: [
+    { id: 'file_imp_002', import_id: 'imp_events_002', filename: 'events_jan.csv', content_type: 'text/csv', size_bytes: 921600, sha256: 'b'.repeat(64), status: 'stored', created_at: '2026-07-06T09:02:00.000Z' },
+    { id: 'file_imp_003', import_id: 'imp_events_002', filename: 'events_feb.csv', content_type: 'text/csv', size_bytes: 870400, sha256: 'c'.repeat(64), status: 'stored', created_at: '2026-07-06T09:03:00.000Z' },
+  ],
+  imp_draft_003: [],
+};
+
+const MOCK_IMPORT_SCHEMAS: Record<string, unknown[]> = {
+  imp_customers_001: [MOCK_IMPORT_SCHEMA],
+  imp_events_002: [{ ...MOCK_IMPORT_SCHEMA, file_id: 'file_imp_002', row_count: 8800 }],
+  imp_draft_003: [],
+};
+
+const MOCK_IMPORT_MAPPINGS: Record<string, unknown> = {
+  imp_customers_001: { id: 'map_001', import_id: 'imp_customers_001', version: 1, fields: MOCK_IMPORT_MAPPING_FIELDS, created_at: '2026-07-08T12:06:00.000Z' },
+};
+
+const MOCK_IMPORT_VALIDATIONS: Record<string, unknown> = {
+  imp_customers_001: {
+    import_id: 'imp_customers_001',
+    mapping_version: 1,
+    ok: true,
+    rows_total: 1240,
+    rows_valid: 1238,
+    rows_invalid: 2,
+    errors: [
+      { row: 41, source_column: 'wallet', primitive: 'identifier', code: 'invalid_wallet_address', message: 'Value is not a valid wallet address.' },
+      { row: 902, source_column: 'email', primitive: 'identifier', code: 'invalid_email', message: 'Value is not a valid email.' },
+    ],
+    errors_truncated: false,
+    governance_review_required: true,
+    governance_reasons: ['pii_detected:email', 'identifier_detected:wallet'],
+  },
+};
+
+const MOCK_IMPORT_COMMITS: Record<string, unknown[]> = {
+  imp_events_002: [
+    { id: 'cmt_001', import_id: 'imp_events_002', status: 'committed', row_count: 8800, vertices_count: 8800, edges_count: 4200, created_at: '2026-07-06T09:40:00.000Z', created_by: 'alex@acme.io' },
+  ],
+};
+
+const MOCK_IMPORT_TEMPLATES = [
+  { id: 'tpl_customers', tenant_id: 'tenant_demo_001', name: 'Customer CSV', header_signature: 'sig_email_wallet_signup', fields: MOCK_IMPORT_MAPPING_FIELDS, created_at: '2026-06-01T00:00:00.000Z', updated_at: '2026-06-20T00:00:00.000Z' },
+];
+
+let importIdCounter = MOCK_IMPORT_SESSIONS.length;
+
+function findImportSession(id: string | readonly string[] | undefined): MockImportSession | undefined {
+  return MOCK_IMPORT_SESSIONS.find(s => s.id === String(id));
+}
+
+function importEnvelope(data: unknown) {
+  return HttpResponse.json({ data, status: 'ok', timestamp: new Date().toISOString() });
+}
+
 export const handlers = [
   http.get(`${API}/v1/me`, () => HttpResponse.json(mockProfile)),
   http.get(`${API}/v1/me/usage`, () => HttpResponse.json(mockUsage)),
@@ -1707,6 +1842,197 @@ export const handlers = [
       data: { clusterId: params.clusterId, impact, journeyDeltas },
       status: 'ok',
       timestamp: new Date().toISOString(),
+    });
+  }),
+
+  // ── Tenant Import Engine ──────────────────────────────────────────────────────
+  http.post(`${API}/v1/imports`, () => {
+    importIdCounter += 1;
+    const id = `imp_new_${String(importIdCounter).padStart(3, '0')}`;
+    const session: MockImportSession = {
+      id,
+      tenant_id: 'tenant_demo_001',
+      status: 'created',
+      source_kind: 'file_upload',
+      file_count: 0,
+      row_count: null,
+      created_by: 'alex@acme.io',
+      created_at: IMPORT_STAMP,
+      updated_at: IMPORT_STAMP,
+    };
+    MOCK_IMPORT_SESSIONS.unshift(session);
+    MOCK_IMPORT_FILES[id] = [];
+    MOCK_IMPORT_SCHEMAS[id] = [];
+    return importEnvelope(session);
+  }),
+  // Specific /templates route must precede the /:id route.
+  http.get(`${API}/v1/imports/templates`, () =>
+    importEnvelope({ templates: MOCK_IMPORT_TEMPLATES, count: MOCK_IMPORT_TEMPLATES.length }),
+  ),
+  http.get(`${API}/v1/imports`, ({ request }) => {
+    const url = new URL(request.url);
+    const limit = Number(url.searchParams.get('limit') ?? '50');
+    const offset = Number(url.searchParams.get('offset') ?? '0');
+    const page = MOCK_IMPORT_SESSIONS.slice(offset, offset + limit);
+    return importEnvelope({ imports: page, count: MOCK_IMPORT_SESSIONS.length });
+  }),
+  http.get(`${API}/v1/imports/:id/commits`, ({ params }) => {
+    const commits = MOCK_IMPORT_COMMITS[String(params.id)] ?? [];
+    return importEnvelope({ commits, count: commits.length });
+  }),
+  http.get(`${API}/v1/imports/:id/templates/suggest`, () =>
+    importEnvelope({ matched: MOCK_IMPORT_TEMPLATES[0] ?? null, candidates: MOCK_IMPORT_TEMPLATES }),
+  ),
+  http.post(`${API}/v1/imports/:id/files`, async ({ params, request }) => {
+    const session = findImportSession(params.id);
+    if (!session) return HttpResponse.json({ message: 'Import not found', code: 'NOT_FOUND' }, { status: 404 });
+    const url = new URL(request.url);
+    const filename = url.searchParams.get('filename') ?? 'upload.csv';
+    const body = await request.text();
+    const files = MOCK_IMPORT_FILES[session.id] ?? (MOCK_IMPORT_FILES[session.id] = []);
+    const file = {
+      id: `file_up_${files.length + 1}`,
+      import_id: session.id,
+      filename,
+      content_type: 'application/octet-stream',
+      size_bytes: body.length,
+      sha256: 'd'.repeat(64),
+      status: 'stored',
+      created_at: IMPORT_STAMP,
+    };
+    files.push(file);
+    session.file_count = files.length;
+    session.status = 'uploaded';
+    session.updated_at = IMPORT_STAMP;
+    return importEnvelope(file);
+  }),
+  http.post(`${API}/v1/imports/:id/analyze`, ({ params }) => {
+    const session = findImportSession(params.id);
+    if (!session) return HttpResponse.json({ message: 'Import not found', code: 'NOT_FOUND' }, { status: 404 });
+    const schema = { ...MOCK_IMPORT_SCHEMA, file_id: `file_${session.id}` };
+    MOCK_IMPORT_SCHEMAS[session.id] = [schema];
+    session.status = 'analyzed';
+    session.row_count = schema.row_count;
+    session.updated_at = IMPORT_STAMP;
+    return importEnvelope({ import_id: session.id, schemas: [schema], row_count: schema.row_count });
+  }),
+  http.put(`${API}/v1/imports/:id/mapping`, async ({ params, request }) => {
+    const session = findImportSession(params.id);
+    if (!session) return HttpResponse.json({ message: 'Import not found', code: 'NOT_FOUND' }, { status: 404 });
+    const body = await request.json() as { fields?: unknown[] };
+    const mapping = {
+      id: `map_${session.id}`,
+      import_id: session.id,
+      version: 1,
+      fields: body.fields ?? [],
+      created_at: IMPORT_STAMP,
+    };
+    MOCK_IMPORT_MAPPINGS[session.id] = mapping;
+    session.status = 'mapped';
+    session.updated_at = IMPORT_STAMP;
+    return importEnvelope(mapping);
+  }),
+  http.post(`${API}/v1/imports/:id/validate`, ({ params }) => {
+    const session = findImportSession(params.id);
+    if (!session) return HttpResponse.json({ message: 'Import not found', code: 'NOT_FOUND' }, { status: 404 });
+    const validation = MOCK_IMPORT_VALIDATIONS[session.id] ?? {
+      import_id: session.id,
+      mapping_version: 1,
+      ok: true,
+      rows_total: session.row_count ?? 0,
+      rows_valid: session.row_count ?? 0,
+      rows_invalid: 0,
+      errors: [],
+      errors_truncated: false,
+      governance_review_required: false,
+      governance_reasons: [],
+    };
+    MOCK_IMPORT_VALIDATIONS[session.id] = validation;
+    const reviewRequired = (validation as { governance_review_required: boolean }).governance_review_required;
+    session.status = reviewRequired ? 'review_required' : 'validated';
+    session.updated_at = IMPORT_STAMP;
+    return importEnvelope({
+      status: session.status,
+      validation,
+      review_reasons: (validation as { governance_reasons: string[] }).governance_reasons,
+    });
+  }),
+  http.post(`${API}/v1/imports/:id/approve`, ({ params }) => {
+    const session = findImportSession(params.id);
+    if (!session) return HttpResponse.json({ message: 'Import not found', code: 'NOT_FOUND' }, { status: 404 });
+    session.status = 'approved';
+    session.updated_at = IMPORT_STAMP;
+    return importEnvelope(session);
+  }),
+  http.post(`${API}/v1/imports/:id/cancel`, ({ params }) => {
+    const session = findImportSession(params.id);
+    if (!session) return HttpResponse.json({ message: 'Import not found', code: 'NOT_FOUND' }, { status: 404 });
+    session.status = 'cancelled';
+    session.updated_at = IMPORT_STAMP;
+    return importEnvelope(session);
+  }),
+  http.post(`${API}/v1/imports/:id/apply-template`, ({ params }) => {
+    const session = findImportSession(params.id);
+    if (!session) return HttpResponse.json({ message: 'Import not found', code: 'NOT_FOUND' }, { status: 404 });
+    const mapping = {
+      id: `map_${session.id}`,
+      import_id: session.id,
+      version: 1,
+      fields: MOCK_IMPORT_MAPPING_FIELDS,
+      created_at: IMPORT_STAMP,
+    };
+    MOCK_IMPORT_MAPPINGS[session.id] = mapping;
+    session.status = 'mapped';
+    session.updated_at = IMPORT_STAMP;
+    return importEnvelope(mapping);
+  }),
+  http.post(`${API}/v1/imports/:id/graph-preview`, ({ params }) => {
+    const session = findImportSession(params.id);
+    if (!session) return HttpResponse.json({ message: 'Import not found', code: 'NOT_FOUND' }, { status: 404 });
+    return importEnvelope({
+      vertices: [{ id: 'v1', kind: 'entity' }, { id: 'v2', kind: 'identifier' }],
+      edges: [{ from: 'v1', to: 'v2', kind: 'has_identifier' }],
+      counts: { vertices: 2, edges: 1 },
+    });
+  }),
+  http.post(`${API}/v1/imports/:id/commit`, ({ params }) => {
+    const session = findImportSession(params.id);
+    if (!session) return HttpResponse.json({ message: 'Import not found', code: 'NOT_FOUND' }, { status: 404 });
+    session.status = 'committed';
+    session.updated_at = IMPORT_STAMP;
+    const commits = MOCK_IMPORT_COMMITS[session.id] ?? (MOCK_IMPORT_COMMITS[session.id] = []);
+    commits.push({ id: `cmt_${session.id}_${commits.length + 1}`, import_id: session.id, status: 'committed', row_count: session.row_count ?? 0, vertices_count: session.row_count ?? 0, edges_count: 0, created_at: IMPORT_STAMP, created_by: 'alex@acme.io' });
+    return importEnvelope({ import_id: session.id, job: { id: `job_commit_${session.id}`, status: 'queued' } });
+  }),
+  http.post(`${API}/v1/imports/:id/replay`, ({ params }) => {
+    const session = findImportSession(params.id);
+    if (!session) return HttpResponse.json({ message: 'Import not found', code: 'NOT_FOUND' }, { status: 404 });
+    return importEnvelope({ import_id: session.id, job: { id: `job_replay_${session.id}`, status: 'queued' } });
+  }),
+  http.post(`${API}/v1/imports/:id/rollback`, async ({ params, request }) => {
+    const session = findImportSession(params.id);
+    if (!session) return HttpResponse.json({ message: 'Import not found', code: 'NOT_FOUND' }, { status: 404 });
+    const body = await request.json().catch(() => ({})) as { commit_id?: string; reason?: string };
+    session.status = 'rolled_back';
+    session.updated_at = IMPORT_STAMP;
+    return importEnvelope({
+      import_id: session.id,
+      status: 'rolled_back',
+      commit_id: body.commit_id ?? null,
+      reason: body.reason ?? null,
+      rolled_back: true,
+    });
+  }),
+  // Bare /:id route registered last so specific sub-routes match first.
+  http.get(`${API}/v1/imports/:id`, ({ params }) => {
+    const session = findImportSession(params.id);
+    if (!session) return HttpResponse.json({ message: 'Import not found', code: 'NOT_FOUND' }, { status: 404 });
+    return importEnvelope({
+      session,
+      files: MOCK_IMPORT_FILES[session.id] ?? [],
+      schemas: MOCK_IMPORT_SCHEMAS[session.id] ?? [],
+      mapping: MOCK_IMPORT_MAPPINGS[session.id] ?? null,
+      validation: MOCK_IMPORT_VALIDATIONS[session.id] ?? null,
     });
   }),
 ];

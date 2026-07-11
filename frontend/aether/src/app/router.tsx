@@ -41,6 +41,8 @@ const Cluster360Page = lazy(() => import('@aether-app/pages/cluster360').then(m 
 const DeliveryHistoryPage = lazy(() => import('@aether-app/pages/connectors').then(m => ({ default: m.DeliveryHistoryPage })));
 const DeploymentsPage = lazy(() => import('@aether-app/pages/deployments').then(m => ({ default: m.DeploymentsPage })));
 const DeploymentDetailPage = lazy(() => import('@aether-app/pages/deployments').then(m => ({ default: m.DeploymentDetailPage })));
+const ImportsPage = lazy(() => import('@aether-app/pages/imports').then(m => ({ default: m.ImportsPage })));
+const ImportDetailPage = lazy(() => import('@aether-app/pages/imports').then(m => ({ default: m.ImportDetailPage })));
 const PaymentRailsPage = lazy(() => import('@aether-app/pages/payment-rails').then(m => ({ default: m.PaymentRailsPage })));
 const AIEfficiencyPage = lazy(() => import('@aether-app/pages/ai-efficiency').then(m => ({ default: m.AIEfficiencyPage })));
 const StablecoinsPage = lazy(() => import('@aether-app/pages/stablecoins').then(m => ({ default: m.StablecoinsPage })));
@@ -125,6 +127,8 @@ export function AppRouter() {
                 <Route path="/delivery" element={<PageSuspense><DeliveryHistoryPage /></PageSuspense>} />
                 <Route path="/deployments" element={<PageSuspense><DeploymentsPage /></PageSuspense>} />
                 <Route path="/deployments/:id" element={<PageSuspense><DeploymentDetailPage /></PageSuspense>} />
+                <Route path="/imports" element={<PageSuspense><ImportsPage /></PageSuspense>} />
+                <Route path="/imports/:id" element={<PageSuspense><ImportDetailPage /></PageSuspense>} />
                 <Route path="/payment-rails" element={<PageSuspense><PaymentRailsPage /></PageSuspense>} />
                 <Route path="/ai-efficiency" element={<PageSuspense><AIEfficiencyPage /></PageSuspense>} />
                 <Route path="/stablecoins" element={<PageSuspense><StablecoinsPage /></PageSuspense>} />

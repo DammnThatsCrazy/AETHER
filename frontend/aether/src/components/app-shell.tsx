@@ -107,6 +107,7 @@ export function AppShell({ children }: AppShellProps) {
           <NavItem to="/system-status" label="System Status" glyph="[s]" />
           <NavItem to="/data-quality" label="Data Quality" glyph="[q]" />
           <NavItem to="/integrations" label="Integrations" glyph="[i]" />
+          <NavItem to="/imports" label="Imports" glyph="[im]" />
           <NavItem to="/deployments" label="Deployments" glyph="[d]" />
           <NavItem to="/payment-rails" label="Payment Rails" glyph="[p]" />
           <NavItem to="/ai-efficiency" label="AI Efficiency" glyph="[ai]" />
