@@ -374,7 +374,7 @@ public final class Aether: NSObject {
     private static let eventConsentPurpose: [AetherEventType: String] = [
         .track: "analytics", .page: "analytics", .screen: "analytics", .heartbeat: "analytics", .error: "analytics", .performance: "analytics",
         .journey_started: "analytics", .journey_paused: "analytics", .journey_resumed: "analytics", .journey_continued: "analytics", .journey_completed: "analytics", .journey_abandoned: "analytics", .journey_checkpoint: "analytics", .identify: "analytics",
-        .experiment: "marketing", .conversion: "8.12.0", .consent: "analytics",
+        .experiment: "marketing", .conversion: "marketing", .consent: "analytics",
         .payment_initiated: "commerce", .payment_completed: "commerce", .payment_failed: "commerce", .approval_requested: "commerce", .approval_resolved: "commerce", .entitlement_granted: "commerce", .entitlement_revoked: "commerce", .access_granted: "commerce", .access_denied: "commerce",
         // x402 — legacy + lifecycle
         .x402_payment: "commerce",
@@ -1039,7 +1039,7 @@ public final class Aether: NSObject {
 
     public func trackAddToCart(_ item: [String: AnyCodable]) {
         enqueueEvent(type: .track, properties: [
-            "event": AnyCodable("product_added"),
+            "event": AnyCodable("cart_item_added"),
             "item": AnyCodable(item)
         ])
     }
@@ -1137,7 +1137,7 @@ public final class Aether: NSObject {
 
     // MARK: - Ecommerce Additions
 
-    public func trackRemoveFromCart(_ item: [String: AnyCodable]) { enqueueEvent(type: .track, properties: ["event": AnyCodable("product_removed"), "item": AnyCodable(item)]) }
+    public func trackRemoveFromCart(_ item: [String: AnyCodable]) { enqueueEvent(type: .track, properties: ["event": AnyCodable("cart_item_removed"), "item": AnyCodable(item)]) }
     public func trackApplyCoupon(_ couponCode: String, properties: [String: AnyCodable] = [:]) { var p = properties; p["event"] = AnyCodable("coupon_applied"); p["couponCode"] = AnyCodable(couponCode); enqueueEvent(type: .track, properties: p) }
     public func trackBeginCheckout(cartValue: Double, currency: String = "USD", properties: [String: AnyCodable] = [:]) { var p = properties; p["event"] = AnyCodable("checkout_started"); p["cartValue"] = AnyCodable(cartValue); p["currency"] = AnyCodable(currency); enqueueEvent(type: .conversion, properties: p) }
 
@@ -1259,8 +1259,10 @@ public final class Aether: NSObject {
     }
 
     private func fetchConfig() {
-        guard let url = URL(string: "\(config?.endpoint ?? "")/v1/config?apiKey=\(config?.apiKey ?? "")") else { return }
-        URLSession.shared.dataTask(with: url) { [weak self] data, _, _ in
+        guard let url = URL(string: "\(config?.endpoint ?? "")/v1/config/sdk/manifest") else { return }
+        var request = URLRequest(url: url)
+        request.setValue("Bearer \(config?.apiKey ?? "")", forHTTPHeaderField: "Authorization")
+        URLSession.shared.dataTask(with: request) { [weak self] data, _, _ in
             guard let data = data,
                   let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { return }
             self?.serialQueue.async {

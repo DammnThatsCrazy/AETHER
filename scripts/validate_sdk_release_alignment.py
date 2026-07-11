@@ -17,7 +17,7 @@ def text(path: str) -> str:
     return (ROOT / path).read_text(encoding='utf-8')
 
 # Version drift
-package_paths = ['package.json','packages/shared/package.json','packages/web/package.json','packages/react-native/package.json']
+package_paths = ['package.json','packages/shared/package.json','packages/web/package.json','packages/react-native/package.json','packages/server/package.json']
 for rel in package_paths:
     version = json.loads(text(rel))['version']
     if version != VERSION:
@@ -68,7 +68,10 @@ events_ts = text('packages/shared/events.ts')
 registry = set(re.findall(r"\| '([^']+)'", events_ts.split('export type EventFamily')[0]))
 if not registry:
     fail('could not parse shared EventType registry')
-for rel in ['packages/web/src/core/event-queue.ts','packages/android/src/main/java/com/aether/sdk/Aether.kt','packages/ios/Sources/AetherSDK/Aether.swift']:
+# The web consent map is registry-derived and lives in the generated file
+# (packages/web/src/core/generated-consent-map.ts, produced by
+# scripts/generate_contracts.py). Native SDKs still carry hand-maintained maps.
+for rel in ['packages/web/src/core/generated-consent-map.ts','packages/android/src/main/java/com/aether/sdk/Aether.kt','packages/ios/Sources/AetherSDK/Aether.swift']:
     body = text(rel)
     for name in registry:
         if name not in body:
@@ -86,6 +89,44 @@ for rel in [
         ev = m.group(1)
         if ev not in registry:
             fail(f'{rel} emits non-canonical raw event type {ev}; use track with properties.event')
+
+# Runtime behavior: no stale health routes and no API keys in query strings.
+# Canonical health = /v1/diagnostics/sdk/heartbeat ; manifest = /v1/config/sdk/manifest.
+runtime_files = [
+    'packages/web/src/health/sdk-health-agent.ts',
+    'packages/web/src/index.ts',
+    'packages/react-native/src/modules/HealthAgent.ts',
+    'packages/react-native/src/index.tsx',
+    'packages/ios/Sources/AetherSDK/AetherHealthAgent.swift',
+    'packages/ios/Sources/AetherSDK/Aether.swift',
+    'packages/android/src/main/java/com/aether/sdk/AetherHealthAgent.kt',
+    'packages/android/src/main/java/com/aether/sdk/Aether.kt',
+]
+for rel in runtime_files:
+    body = text(rel)
+    if '/v1/sdk/health' in body:
+        fail(f'{rel} uses the retired /v1/sdk/health route (use /v1/diagnostics/sdk/heartbeat)')
+    if re.search(r'[?&]apiKey=', body):
+        fail(f'{rel} passes an API key in the query string (use the Authorization: Bearer header)')
+
+# Official ecommerce helpers must emit canonical top-level types, never the
+# retired legacy names on the wire.
+ecommerce_files = [
+    'packages/web/src/modules/ecommerce.ts',
+    'packages/react-native/src/bridge.ts',
+]
+for rel in ecommerce_files:
+    p = ROOT / rel
+    if not p.exists():
+        continue
+    body = p.read_text(encoding='utf-8')
+    for legacy in ("'product_added'", '"product_added"', "'product_removed'", '"product_removed"'):
+        if legacy in body:
+            fail(f'{rel} emits legacy ecommerce event {legacy}; emit canonical cart_item_added/cart_item_removed')
+
+# The canonical low-level observe() API must exist on the web SDK.
+if 'observe(' not in text('packages/web/src/index.ts'):
+    fail('packages/web/src/index.ts is missing the canonical observe() API')
 
 # Publish workflow must include every target and artifact checks.
 workflow = text('.github/workflows/publish-sdk.yml')

@@ -78,6 +78,21 @@ export class DeviceFingerprintCollector {
     return this.components;
   }
 
+  /**
+   * Clear the in-memory fingerprint AND the cached storage. Called when
+   * `personalization` consent is revoked so no further events can be stamped
+   * with a device fingerprint until consent is granted again.
+   */
+  reset(): void {
+    this.fingerprintId = null;
+    this.components = null;
+    try {
+      localStorage.removeItem(FP_STORAGE_KEY);
+    } catch {
+      // Silent fail — best-effort cleanup
+    }
+  }
+
   // --- Signal Collectors ---
 
   private async collectCanvas(): Promise<string> {

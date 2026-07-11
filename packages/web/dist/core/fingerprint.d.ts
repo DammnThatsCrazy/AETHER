@@ -26,6 +26,12 @@ export declare class DeviceFingerprintCollector {
     }>;
     getFingerprintId(): string | null;
     getComponents(): FingerprintComponents | null;
+    /**
+     * Clear the in-memory fingerprint AND the cached storage. Called when
+     * `personalization` consent is revoked so no further events can be stamped
+     * with a device fingerprint until consent is granted again.
+     */
+    reset(): void;
     private collectCanvas;
     private collectWebGL;
     private collectAudio;

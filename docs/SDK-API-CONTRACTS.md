@@ -19,11 +19,31 @@ event, consent, identity, wallet, and commerce contracts so payloads round-trip.
 ## Ingestion contract
 
 SDKs batch canonical event envelopes and POST to `POST /v1/batch` (1–500
-events). Each event carries an SDK-generated `id` for idempotency. The backend
-validates against `packages/shared/events.ts`, enriches server-side, and publishes
-to the event store. `/v1/ingest/events` and `/v1/ingest/events/batch` are reserved
-for server-side ingestion/connectors and must not appear in SDK quickstarts. See
+events). The batch body is the canonical envelope `{ batch: [...], sentAt, consents? }`
+(the field is `batch`, not `events`). Each event carries an SDK-generated `id`
+for idempotency. API keys are sent in the `Authorization: Bearer <key>` header —
+never in a query string. The backend validates against `packages/shared/events.ts`,
+enriches server-side, and publishes to the event store. `/v1/ingest/events` and
+`/v1/ingest/events/batch` are reserved for server-side ingestion/connectors and
+must not appear in SDK quickstarts. See
 [Source of Truth: Ingestion Contract](source-of-truth/INGESTION_CONTRACT.md).
+
+**Emission API.** Official helpers emit **canonical top-level event types** via
+the low-level `observe(type, properties)` API (available on Web, Server, and —
+bridged — the native SDKs). `track(event, properties)` is reserved for custom
+application events (top-level type `track`, name in `properties.event`) and must
+not be used for canonical events. Canonical types and their required consent
+purposes are registry-derived from `packages/shared/contracts/event-registry.json`.
+
+**Health / manifest endpoints.** Canonical SDK health is
+`POST /v1/diagnostics/sdk/heartbeat`; canonical manifest is
+`GET /v1/config/sdk/manifest`. The retired `/v1/sdk/health` route and any
+`?apiKey=` query-string form must not be used.
+
+**Server SDK.** `@aether/server` is release-supported and version-aligned with
+the monorepo. It sends the same canonical `{ batch, sentAt, consents }` envelope
+with the write key in the `Authorization` header, with retry/backoff and safe
+shutdown flush.
 
 ## Config contract
 
