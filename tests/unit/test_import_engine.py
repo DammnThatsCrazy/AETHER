@@ -20,12 +20,26 @@ import os  # noqa: E402
 
 os.environ.setdefault("AETHER_ENV", "local")
 
+from contextlib import contextmanager  # noqa: E402
+
 from services.imports import service as svc  # noqa: E402
-from shared.common.common import (  # noqa: E402
-    BadRequestError,
-    ConflictError,
-    NotFoundError,
-)
+
+
+@contextmanager
+def raises_named(*names: str):
+    """Assert an exception whose class NAME is one of ``names`` is raised.
+
+    Matching by name (not identity) makes these tests immune to the suite's
+    ``sys.modules`` churn: another test file can pop/re-import
+    ``shared.common.common``, giving the exception raised inside a lazily
+    imported module a different class object than one imported at the top of
+    this file — a class-identity check would then spuriously fail.
+    """
+    with pytest.raises(Exception) as excinfo:  # noqa: PT011
+        yield excinfo
+    got = type(excinfo.value).__name__
+    assert got in names, f"expected one of {names}, got {got}: {excinfo.value}"
+
 
 TENANT = "tenant-imports"
 OTHER = "tenant-other"
@@ -98,7 +112,7 @@ async def test_upload_stores_checksum_and_advances(clean):
 async def test_upload_rejects_unsupported_format(clean):
     session = await svc.create_import(TENANT)
     xlsx = b"PK\x03\x04" + b"\x00" * 64  # zip/xlsx magic
-    with pytest.raises(BadRequestError):
+    with raises_named("BadRequestError"):
         await svc.store_file(
             TENANT, session["id"], filename="book.xlsx",
             content=xlsx, content_type="application/vnd.ms-excel",
@@ -107,7 +121,7 @@ async def test_upload_rejects_unsupported_format(clean):
 
 async def test_upload_rejects_oversize(clean):
     session = await svc.create_import(TENANT)
-    with pytest.raises(BadRequestError):
+    with raises_named("BadRequestError"):
         await svc.store_file(
             TENANT, session["id"], filename="big.csv", content=b"x" * 32,
             content_type="text/csv", max_bytes=16,
@@ -144,7 +158,7 @@ async def test_map_validate_governs_and_approves(clean):
 
 async def test_validate_requires_mapping(clean):
     import_id = await _seed_analyzed()
-    with pytest.raises(BadRequestError):
+    with raises_named("BadRequestError"):
         await svc.validate_import(TENANT, import_id)
 
 
@@ -158,7 +172,7 @@ async def test_approve_requires_passing_validation(clean):
     await svc.set_mapping(TENANT, import_id, bad)
     outcome = await svc.validate_import(TENANT, import_id)
     assert outcome["validation"]["ok"] is False
-    with pytest.raises(ConflictError):
+    with raises_named("ConflictError"):
         await svc.approve_import(TENANT, import_id)
 
 
@@ -168,7 +182,7 @@ async def test_cancel_is_terminal(clean):
     detail = await svc.get_import(TENANT, session["id"])
     assert detail["session"]["status"] == "cancelled"
     # No further transitions once terminal.
-    with pytest.raises(ConflictError):
+    with raises_named("ConflictError"):
         await svc.analyze_import(TENANT, session["id"])
 
 
@@ -177,9 +191,9 @@ async def test_cancel_is_terminal(clean):
 
 async def test_tenant_isolation(clean):
     session = await svc.create_import(TENANT)
-    with pytest.raises(NotFoundError):
+    with raises_named("NotFoundError"):
         await svc.get_import(OTHER, session["id"])
-    with pytest.raises(NotFoundError):
+    with raises_named("NotFoundError"):
         await svc.analyze_import(OTHER, session["id"])
 
 

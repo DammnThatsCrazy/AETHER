@@ -20,15 +20,26 @@ import os  # noqa: E402
 
 os.environ.setdefault("AETHER_ENV", "local")
 
+from contextlib import contextmanager  # noqa: E402
+
 from repositories.import_files import (  # noqa: E402
     IMPORT_FILES_DDL,
     get_import_file_repository,
 )
-from shared.common.common import BadRequestError, NotFoundError  # noqa: E402
 
 MIGRATION_PATH = BACKEND / "alembic" / "versions" / "20260718_import_engine.py"
 
 TENANT = "t-files"
+
+
+@contextmanager
+def raises_named(*names: str):
+    """Assert an exception whose class NAME is in ``names`` (identity-agnostic,
+    so the suite's ``sys.modules`` churn can't spuriously fail the match)."""
+    with pytest.raises(Exception) as excinfo:  # noqa: PT011
+        yield excinfo
+    got = type(excinfo.value).__name__
+    assert got in names, f"expected one of {names}, got {got}: {excinfo.value}"
 
 
 @pytest.fixture()
@@ -69,16 +80,16 @@ async def test_tenant_isolation(repo):
     stored = await repo.put(
         TENANT, import_id="imp1", filename="d.csv", content=b"x", content_type="text/csv"
     )
-    with pytest.raises(NotFoundError):
+    with raises_named("NotFoundError"):
         await repo.get_meta("other", stored["id"])
-    with pytest.raises(NotFoundError):
+    with raises_named("NotFoundError"):
         await repo.get_content("other", stored["id"])
 
 
 async def test_oversize_rejected(repo):
     from repositories.import_files import MAX_IMPORT_FILE_BYTES
 
-    with pytest.raises(BadRequestError):
+    with raises_named("BadRequestError"):
         await repo.put(
             TENANT, import_id="imp1", filename="big",
             content=b"x" * (MAX_IMPORT_FILE_BYTES + 1), content_type="text/csv",
