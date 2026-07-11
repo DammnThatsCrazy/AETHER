@@ -4856,6 +4856,21 @@
       "canonical_owner": "platform@aether"
     },
     {
+      "path": "docs/runbooks/IMPORT_FAILURES.md",
+      "title": "Runbook — Tenant Import Failures",
+      "slug": "runbooks/import-failures",
+      "section": "operations",
+      "visibility": "I",
+      "audience": [
+        "ops",
+        "dev-senior"
+      ],
+      "status": "stable",
+      "estimated_read_minutes": 6,
+      "toc_depth": 2,
+      "canonical_owner": "platform@aether"
+    },
+    {
       "path": "docs/runbooks/INTEROP_PROVIDER_OPERATIONS_RUNBOOK.md",
       "title": "Interop Provider Operations Runbook",
       "slug": "runbooks/interop-provider-operations",
