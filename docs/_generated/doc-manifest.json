@@ -5288,6 +5288,11 @@
       "canonical_owner": "identity@aether"
     },
     {
+      "path": "docs/source-of-truth/IMPORTS.md",
+      "title": "Tenant Import Engine Source of Truth",
+      "status": "stable"
+    },
+    {
       "path": "docs/source-of-truth/INTEROP_CONSENT_MODEL.md",
       "title": "Interoperability Consent Model",
       "slug": "source-of-truth/interop-consent-model",
@@ -5364,6 +5369,11 @@
     },
     {
       "path": "docs/source-of-truth/KYBER_ONE_PERSON_OPERATIONS.md"
+    },
+    {
+      "path": "docs/source-of-truth/MEASUREMENT_INTEGRITY.md",
+      "title": "Measurement Integrity Plane Source of Truth",
+      "status": "stable"
     },
     {
       "path": "docs/source-of-truth/OLYMPUS_PROVIDER_SOURCE_CATALOG.md",
