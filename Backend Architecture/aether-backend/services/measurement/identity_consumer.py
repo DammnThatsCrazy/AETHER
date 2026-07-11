@@ -29,15 +29,26 @@ class MeasurementIdentityConsumer:
     async def on_identity_merged(self, event: Event) -> None:
         """Handle an IDENTITY_MERGED event.
 
-        Expected payload fields:
-          - tenant_id (str)
-          - surviving_profile_id (str): the profile that persists after merge
-          - merged_profile_id (str, optional): the profile that was consumed
+        The identity service emits ``primary_entity_id`` (survivor) and
+        ``secondary_entity_id`` (consumed). Those are read first; the legacy
+        ``surviving_profile_id``/``merged_profile_id`` (and ``profile_id_a/b``)
+        names are honored as fallbacks so older/replayed events still process.
+        Before this fix the consumer read only the legacy names, so every real
+        merge event failed the required-fields guard and never recomputed
+        journeys or attribution.
         """
         payload = event.payload or {}
         tenant_id = event.tenant_id or payload.get("tenant_id", "")
-        surviving_id = payload.get("surviving_profile_id") or payload.get("profile_id_a")
-        merged_id = payload.get("merged_profile_id") or payload.get("profile_id_b")
+        surviving_id = (
+            payload.get("primary_entity_id")
+            or payload.get("surviving_profile_id")
+            or payload.get("profile_id_a")
+        )
+        merged_id = (
+            payload.get("secondary_entity_id")
+            or payload.get("merged_profile_id")
+            or payload.get("profile_id_b")
+        )
 
         if not tenant_id or not surviving_id:
             logger.warning(

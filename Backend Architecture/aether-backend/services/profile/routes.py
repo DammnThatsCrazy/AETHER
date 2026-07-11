@@ -1302,26 +1302,44 @@ async def get_identity_confidence(
 async def get_merge_history(
     user_id: str,
     request: Request,
-    graph: GraphClient = Depends(get_graph),
     limit: int = Query(default=50, ge=1, le=200),
 ):
-    """Identity merge history: entities that were merged INTO this entity (RESOLVED_AS edges in)."""
+    """Identity merge history from the event-sourced ``identity_merge_events``
+    store — every merge this entity was a party to (survivor-redirected).
+
+    Reads the same append-only events identity resolution writes, not graph
+    ``RESOLVED_AS`` edges (identity writes ``SAME_AS`` edges + event rows, so
+    the old graph read was always empty).
+    """
     tenant = request.state.tenant
     tenant.require_permission("read")
-    try:
-        from shared.graph.graph import EdgeType
-        neighbors = await graph.get_neighbors(user_id, edge_type=EdgeType.RESOLVED_AS, direction="in")
-        items = [
-            {"merged_entity_id": v.vertex_id, "merged_at": v.properties.get("merged_at"), "properties": v.properties}
-            for v in neighbors[:limit]
-        ]
-    except Exception:
-        items = []
+    from services.identity.redirects import resolve_entity_redirect
+    from services.identity.repository import IdentityResolutionRepository
+
+    repo = IdentityResolutionRepository()
+    resolved_id, redirected = await resolve_entity_redirect(repo, tenant.tenant_id, user_id)
+    events = await repo.get_merge_history(tenant.tenant_id, resolved_id, limit=limit)
+    items = [
+        {
+            "merge_event_id": e.get("id"),
+            "from_entity_id": e.get("from_entity_id"),
+            "into_entity_id": e.get("into_entity_id"),
+            "resulting_entity_id": e.get("resulting_entity_id"),
+            "confidence": e.get("confidence"),
+            "confidence_tier": e.get("confidence_tier"),
+            "reason_codes": e.get("reason_codes") or [],
+            "actor_type": e.get("actor_type"),
+            "merged_at": e.get("created_at"),
+        }
+        for e in events
+    ]
     return APIResponse(data={
         "entity_id": user_id,
+        "resolved_entity_id": resolved_id,
+        "redirected": redirected,
         "items": items,
         "count": len(items),
-        "source_status": "available" if items else "missing",
+        "source_status": "available" if items else "empty",
     }).to_dict()
 
 
@@ -1329,26 +1347,37 @@ async def get_merge_history(
 async def get_split_history(
     user_id: str,
     request: Request,
-    graph: GraphClient = Depends(get_graph),
     limit: int = Query(default=50, ge=1, le=200),
 ):
-    """Identity split history: entities this entity was resolved into (RESOLVED_AS edges out)."""
+    """Identity split history from the event-sourced ``identity_split_events``
+    store — every split originating from this entity (survivor-redirected)."""
     tenant = request.state.tenant
     tenant.require_permission("read")
-    try:
-        from shared.graph.graph import EdgeType
-        neighbors = await graph.get_neighbors(user_id, edge_type=EdgeType.RESOLVED_AS, direction="out")
-        items = [
-            {"resolved_into_id": v.vertex_id, "resolved_at": v.properties.get("merged_at"), "properties": v.properties}
-            for v in neighbors[:limit]
-        ]
-    except Exception:
-        items = []
+    from services.identity.redirects import resolve_entity_redirect
+    from services.identity.repository import IdentityResolutionRepository
+
+    repo = IdentityResolutionRepository()
+    resolved_id, redirected = await resolve_entity_redirect(repo, tenant.tenant_id, user_id)
+    events = await repo.get_split_history(tenant.tenant_id, resolved_id, limit=limit)
+    items = [
+        {
+            "split_event_id": e.get("id"),
+            "original_entity_id": e.get("original_entity_id"),
+            "resulting_entity_ids": e.get("resulting_entity_ids") or [],
+            "reason": e.get("reason"),
+            "actor_type": e.get("actor_type"),
+            "source_merge_event_id": e.get("source_merge_event_id"),
+            "split_at": e.get("created_at"),
+        }
+        for e in events
+    ]
     return APIResponse(data={
         "entity_id": user_id,
+        "resolved_entity_id": resolved_id,
+        "redirected": redirected,
         "items": items,
         "count": len(items),
-        "source_status": "available" if items else "missing",
+        "source_status": "available" if items else "empty",
     }).to_dict()
 
 
