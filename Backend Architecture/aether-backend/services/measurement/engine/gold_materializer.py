@@ -131,6 +131,42 @@ async def materialize_campaign_performance_daily(
             "Materialized gold_ad_spend: tenant=%s date=%s rows=%d",
             tenant_id, target_date, len(gold_rows),
         )
+        # Feed the Measurement Integrity Plane with the tenant-day conversion
+        # rate: an honest value_state (never a bare 0 when there are no clicks —
+        # insufficient_data below the sample floor) plus a Wilson interval. The
+        # gold ClickHouse row keeps its float for compatibility; the plane
+        # (/v1/measurement) is the integrity source of truth. Best-effort — the
+        # gold materialization must never fail on this telemetry.
+        try:
+            from repositories.measurement_results_repo import (
+                get_measurement_results_repository,
+            )
+            from shared.measurement.compute import record_rate
+            from shared.measurement.context import MeasurementContext
+            from shared.measurement.registry import REGISTRY_VERSION
+
+            total_clicks = sum(int(r["clicks"]) for r in gold_rows)
+            total_conversions = sum(int(r["conversions"]) for r in gold_rows)
+            ctx = MeasurementContext(
+                tenant_id=tenant_id,
+                window_start=period_start.isoformat(),
+                window_end=period_end.isoformat(),
+                registry_version=REGISTRY_VERSION,
+            )
+            await record_rate(
+                get_measurement_results_repository(),
+                ctx,
+                metric_name="conversion_rate",
+                numerator=total_conversions,
+                denominator=total_clicks,
+                lineage={
+                    "source": "gold_ad_spend",
+                    "date": target_date.isoformat(),
+                    "campaigns": len(gold_rows),
+                },
+            )
+        except Exception as exc:  # pragma: no cover — telemetry must not break materialization
+            logger.debug("measurement plane conversion_rate record skipped: %s", exc)
 
     return len(gold_rows)
 

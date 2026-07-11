@@ -5,13 +5,17 @@ Generate TypeScript and Python contract artifacts from JSON canonical registries
 Sources (read-only — canonical source of truth):
   packages/shared/contracts/event-registry.json
   packages/shared/contracts/consent-registry.json
+  packages/shared/contracts/metric-registry.json
 
 Generated outputs:
   packages/shared/consent.ts
   packages/shared/events.ts                 (generated section only, between markers)
+  packages/shared/measurement-contract.ts
   Backend Architecture/aether-backend/services/ingestion/generated_registry.py
+  Backend Architecture/aether-backend/shared/measurement/generated_registry.py
   docs/_generated/event-registry-table.md
   docs/_generated/consent-registry-table.md
+  docs/_generated/metric-registry-table.md
 
 Usage:
   python scripts/generate_contracts.py           # write all outputs in-place
@@ -34,14 +38,20 @@ from pathlib import Path
 ROOT = Path(__file__).parent.parent
 EVENT_REGISTRY = ROOT / "packages" / "shared" / "contracts" / "event-registry.json"
 CONSENT_REGISTRY = ROOT / "packages" / "shared" / "contracts" / "consent-registry.json"
+METRIC_REGISTRY_JSON = ROOT / "packages" / "shared" / "contracts" / "metric-registry.json"
 
 CONSENT_TS = ROOT / "packages" / "shared" / "consent.ts"
 EVENTS_TS = ROOT / "packages" / "shared" / "events.ts"
+MEASUREMENT_TS = ROOT / "packages" / "shared" / "measurement-contract.ts"
 GENERATED_REGISTRY_PY = (
     ROOT / "Backend Architecture" / "aether-backend" / "services" / "ingestion" / "generated_registry.py"
 )
+GENERATED_METRIC_REGISTRY_PY = (
+    ROOT / "Backend Architecture" / "aether-backend" / "shared" / "measurement" / "generated_registry.py"
+)
 EVENT_TABLE_MD = ROOT / "docs" / "_generated" / "event-registry-table.md"
 CONSENT_TABLE_MD = ROOT / "docs" / "_generated" / "consent-registry-table.md"
+METRIC_TABLE_MD = ROOT / "docs" / "_generated" / "metric-registry-table.md"
 
 # Markers used in events.ts to delimit the generated section
 GENERATED_START = "// @generated-start"
@@ -57,10 +67,35 @@ GENERATED_PY_HEADER = """\
 # Registry loading and validation
 # ---------------------------------------------------------------------------
 
-def load_registries() -> tuple[dict, dict]:
+def load_registries() -> tuple[dict, dict, dict]:
     event_reg = json.loads(EVENT_REGISTRY.read_text())
     consent_reg = json.loads(CONSENT_REGISTRY.read_text())
-    return event_reg, consent_reg
+    metric_reg = json.loads(METRIC_REGISTRY_JSON.read_text())
+    return event_reg, consent_reg, metric_reg
+
+
+def validate_metrics(metric_reg: dict) -> None:
+    metrics = metric_reg["metrics"]
+
+    # No duplicate metric names
+    names_seen: set[str] = set()
+    for m in metrics:
+        name = m["name"]
+        if name in names_seen:
+            print(f"ERROR: duplicate metric name {name!r}", file=sys.stderr)
+            sys.exit(1)
+        names_seen.add(name)
+
+    # Every metric carries the required fields
+    required = ("name", "version", "unit", "allowsProbability", "minSample")
+    for m in metrics:
+        for field in required:
+            if field not in m:
+                print(
+                    f"ERROR: metric {m.get('name')!r} missing field {field!r}",
+                    file=sys.stderr,
+                )
+                sys.exit(1)
 
 
 def validate(event_reg: dict, consent_reg: dict) -> None:
@@ -317,6 +352,123 @@ def gen_python_registry(event_reg: dict, consent_reg: dict) -> str:
 
 
 # ---------------------------------------------------------------------------
+# measurement-contract.ts + generated_registry.py (metric) generators
+# ---------------------------------------------------------------------------
+
+def _ts_number(value) -> str:
+    """Render a JSON number/None as a TypeScript numeric-or-null literal."""
+    if value is None:
+        return "null"
+    if isinstance(value, bool):  # bool is a subclass of int — guard first
+        return "true" if value else "false"
+    if isinstance(value, float):
+        return repr(value)
+    return str(value)
+
+
+def _py_value(value) -> str:
+    """Render a JSON scalar as a Python literal (None/bool/int/float/str)."""
+    if value is None:
+        return "None"
+    if isinstance(value, bool):  # bool is a subclass of int — guard first
+        return "True" if value else "False"
+    if isinstance(value, (int, float)):
+        return repr(value)
+    return repr(str(value))
+
+
+def gen_measurement_ts(metric_reg: dict) -> str:
+    metrics = metric_reg["metrics"]
+    version = metric_reg["contractVersion"]
+
+    name_union = "\n".join(f"  | '{m['name']}'" for m in metrics)
+
+    def_objects: list[str] = []
+    for m in metrics:
+        def_objects.append(
+            "  {\n"
+            f"    name: '{m['name']}',\n"
+            f"    version: '{m['version']}',\n"
+            f"    unit: '{m['unit']}',\n"
+            f"    description: '{m.get('description', '')}',\n"
+            f"    lower: {_ts_number(m.get('lower'))},\n"
+            f"    upper: {_ts_number(m.get('upper'))},\n"
+            f"    allowsProbability: {_ts_number(m['allowsProbability'])},\n"
+            f"    minSample: {_ts_number(m['minSample'])},\n"
+            "  },"
+        )
+    defs_str = "\n".join(def_objects)
+
+    return textwrap.dedent(f"""\
+        // =============================================================================
+        // Aether SDK — Shared Metric Registry Contract (v{version})
+        // DO NOT EDIT — generated from packages/shared/contracts/metric-registry.json
+        // Run: python scripts/generate_contracts.py
+        // =============================================================================
+
+        /** Contract version of the canonical metric registry. */
+        export const metricRegistryVersion = '{version}';
+
+        /** Canonical metric names the measurement plane knows how to report. */
+        export type MetricName =
+        {name_union}
+          ;
+
+        /** Definition of a single measurable metric. */
+        export interface MetricDefinition {{
+          name: MetricName;
+          version: string;
+          unit: string;
+          description: string;
+          lower: number | null;
+          upper: number | null;
+          allowsProbability: boolean;
+          minSample: number;
+        }}
+
+        /** Every registered metric definition, keyed positionally by MetricName. */
+        export const metricDefinitions: readonly MetricDefinition[] = [
+        {defs_str}
+        ] as const;
+        """)
+
+
+def gen_metric_registry_py(metric_reg: dict) -> str:
+    metrics = metric_reg["metrics"]
+    version = metric_reg["contractVersion"]
+
+    entries: list[str] = []
+    for m in metrics:
+        entries.append(
+            f'    "{m["name"]}": {{\n'
+            f'        "name": {_py_value(m["name"])},\n'
+            f'        "version": {_py_value(m["version"])},\n'
+            f'        "unit": {_py_value(m["unit"])},\n'
+            f'        "description": {_py_value(m.get("description", ""))},\n'
+            f'        "lower": {_py_value(m.get("lower"))},\n'
+            f'        "upper": {_py_value(m.get("upper"))},\n'
+            f'        "allows_probability": {_py_value(m["allowsProbability"])},\n'
+            f'        "min_sample": {_py_value(m["minSample"])},\n'
+            f'    }},'
+        )
+    entries_str = "\n".join(entries)
+
+    return (
+        f"{GENERATED_PY_HEADER}"
+        f"# Source: packages/shared/contracts/metric-registry.json\n"
+        f"# Contract version: {version}\n"
+        f"\n"
+        f'GENERATED_METRIC_REGISTRY_VERSION = "{version}"\n'
+        f"\n"
+        f"# Metric name -> field dict. Field names mirror shared/measurement/registry.py's\n"
+        f"# MetricDefinition so the parity test can compare the two source by source.\n"
+        f"GENERATED_METRICS: dict[str, dict] = {{\n"
+        f"{entries_str}\n"
+        f"}}\n"
+    )
+
+
+# ---------------------------------------------------------------------------
 # Markdown docs generators
 # ---------------------------------------------------------------------------
 
@@ -375,6 +527,36 @@ def gen_consent_table_md(consent_reg: dict) -> str:
     )
 
 
+def gen_metric_table_md(metric_reg: dict) -> str:
+    metrics = metric_reg["metrics"]
+    version = metric_reg["contractVersion"]
+
+    rows: list[str] = []
+    for m in metrics:
+        lower = m.get("lower")
+        upper = m.get("upper")
+        lo = "-∞" if lower is None else repr(lower)
+        hi = "∞" if upper is None else repr(upper)
+        bounds = f"[{lo}, {hi}]"
+        allows = "yes" if m["allowsProbability"] else "no"
+        rows.append(
+            f"| `{m['name']}` | {m['version']} | {m['unit']} | {bounds} | "
+            f"{allows} | {m['minSample']} | {m.get('description', '')} |"
+        )
+
+    rows_str = "\n".join(rows)
+    return (
+        f"<!-- DO NOT EDIT — generated from packages/shared/contracts/metric-registry.json -->\n"
+        f"<!-- Run: python scripts/generate_contracts.py -->\n"
+        f"\n"
+        f"# Aether Metric Registry ({len(metrics)} metrics, contract v{version})\n"
+        f"\n"
+        f"| Metric | Version | Unit | Bounds | Allows Probability | Min Sample | Description |\n"
+        f"|---|---|---|---|---|---|---|\n"
+        f"{rows_str}\n"
+    )
+
+
 # ---------------------------------------------------------------------------
 # Write / check helpers
 # ---------------------------------------------------------------------------
@@ -421,16 +603,20 @@ def main() -> int:
     )
     args = parser.parse_args()
 
-    event_reg, consent_reg = load_registries()
+    event_reg, consent_reg, metric_reg = load_registries()
     validate(event_reg, consent_reg)
+    validate_metrics(metric_reg)
 
     diffs: list[str] = []
 
     _apply(CONSENT_TS, gen_consent_ts(consent_reg), args.check, diffs)
     _apply_events_ts(event_reg, args.check, diffs)
     _apply(GENERATED_REGISTRY_PY, gen_python_registry(event_reg, consent_reg), args.check, diffs)
+    _apply(MEASUREMENT_TS, gen_measurement_ts(metric_reg), args.check, diffs)
+    _apply(GENERATED_METRIC_REGISTRY_PY, gen_metric_registry_py(metric_reg), args.check, diffs)
     _apply(EVENT_TABLE_MD, gen_event_table_md(event_reg), args.check, diffs)
     _apply(CONSENT_TABLE_MD, gen_consent_table_md(consent_reg), args.check, diffs)
+    _apply(METRIC_TABLE_MD, gen_metric_table_md(metric_reg), args.check, diffs)
 
     if diffs:
         print("DRIFT: generated files differ from committed versions:", file=sys.stderr)
@@ -441,7 +627,11 @@ def main() -> int:
 
     n = len(event_reg["events"])
     np = len(consent_reg["purposes"])
-    print(f"OK: {n} event types, {np} consent purposes — all artifacts up-to-date")
+    nm = len(metric_reg["metrics"])
+    print(
+        f"OK: {n} event types, {np} consent purposes, {nm} metrics "
+        f"— all artifacts up-to-date"
+    )
     return 0
 
 

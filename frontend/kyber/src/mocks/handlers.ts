@@ -762,6 +762,65 @@ const MOCK_TARGETING_AUDIT = [
   },
 ];
 
+// ── Tenant Import Engine ops ─────────────────────────────────────────────────
+
+const MOCK_IMPORT_SESSIONS = [
+  {
+    id: 'imp_20260711_0007', tenant_id: 'tenant_003', status: 'failed', source_kind: 'file_upload',
+    file_count: 2, row_count: 48210, created_by: 'ingest@tenant3.io',
+    created_at: '2026-07-11T09:12:00.000Z', updated_at: '2026-07-11T09:18:44.000Z',
+  },
+  {
+    id: 'imp_20260711_0006', tenant_id: 'tenant_001', status: 'committed', source_kind: 'file_upload',
+    file_count: 1, row_count: 12904, created_by: 'ops@tenant1.io',
+    created_at: '2026-07-11T08:40:00.000Z', updated_at: '2026-07-11T08:52:10.000Z',
+  },
+  {
+    id: 'imp_20260710_0005', tenant_id: 'tenant_007', status: 'review_required', source_kind: 'file_upload',
+    file_count: 3, row_count: 90311, created_by: 'data@tenant7.io',
+    created_at: '2026-07-10T22:05:00.000Z', updated_at: '2026-07-10T22:31:02.000Z',
+  },
+  {
+    id: 'imp_20260710_0004', tenant_id: 'tenant_002', status: 'committing', source_kind: 'file_upload',
+    file_count: 1, row_count: null, created_by: null,
+    created_at: '2026-07-10T19:44:00.000Z', updated_at: '2026-07-10T19:45:12.000Z',
+  },
+  {
+    id: 'imp_20260709_0003', tenant_id: 'tenant_005', status: 'partially_committed', source_kind: 'file_upload',
+    file_count: 4, row_count: 210044, created_by: 'admin@tenant5.io',
+    created_at: '2026-07-09T14:00:00.000Z', updated_at: '2026-07-09T14:39:55.000Z',
+  },
+];
+
+const MOCK_IMPORT_COMMITS: Record<string, Array<Record<string, unknown>>> = {
+  imp_20260711_0007: [
+    {
+      id: 'cmt_0007_a', commit_id: 'cmt_0007_a', import_id: 'imp_20260711_0007', status: 'failed',
+      row_count: 48210, vertices_count: 0, edges_count: 0, rolled_back: true,
+      created_at: '2026-07-11T09:18:40.000Z', created_by: 'ingest@tenant3.io',
+    },
+  ],
+  imp_20260711_0006: [
+    {
+      id: 'cmt_0006_a', commit_id: 'cmt_0006_a', import_id: 'imp_20260711_0006', status: 'committed',
+      row_count: 12904, vertices_count: 12904, edges_count: 25808, rolled_back: false,
+      created_at: '2026-07-11T08:52:05.000Z', created_by: 'ops@tenant1.io',
+    },
+  ],
+  imp_20260709_0003: [
+    {
+      id: 'cmt_0003_a', commit_id: 'cmt_0003_a', import_id: 'imp_20260709_0003', status: 'committed',
+      row_count: 140000, vertices_count: 140000, edges_count: 280000, rolled_back: false,
+      created_at: '2026-07-09T14:30:00.000Z', created_by: 'admin@tenant5.io',
+    },
+    {
+      id: 'cmt_0003_b', commit_id: 'cmt_0003_b', import_id: 'imp_20260709_0003', status: 'failed',
+      row_count: 70044, vertices_count: 0, edges_count: 0, rolled_back: true,
+      created_at: '2026-07-09T14:39:50.000Z', created_by: 'admin@tenant5.io',
+    },
+  ],
+};
+
 // ── Handlers ───────────────────────────────────────────────────────────────────
 
 export const handlers = [
@@ -1078,4 +1137,25 @@ export const handlers = [
   }),
   http.get(`${API}/v1/admin/kyber/targeting/release-readiness`, () => ok(MOCK_TARGETING_RELEASE_READINESS)),
   http.get(`${API}/v1/admin/kyber/targeting/audit`, () => ok({ audit: MOCK_TARGETING_AUDIT })),
+
+  // ── Tenant Import Engine ops (cross-tenant) ──────────────────────────────────
+  http.get(`${API}/v1/kyber/imports/timeline`, ({ request }) => {
+    const url = new URL(request.url);
+    const limit = Number(url.searchParams.get('limit') ?? '0');
+    const sessions = limit > 0 ? MOCK_IMPORT_SESSIONS.slice(0, limit) : MOCK_IMPORT_SESSIONS;
+    return ok({ count: sessions.length, sessions });
+  }),
+  http.get(`${API}/v1/kyber/imports/:importId`, ({ params }) => {
+    const importId = String(params.importId);
+    const session = MOCK_IMPORT_SESSIONS.find(s => s.id === importId) ?? {
+      ...MOCK_IMPORT_SESSIONS[0],
+      id: importId,
+    };
+    const commits = MOCK_IMPORT_COMMITS[importId] ?? [];
+    return ok({ session, commits, commit_count: commits.length });
+  }),
+  http.post(`${API}/v1/kyber/imports/:importId/requeue`, ({ params }) => {
+    const importId = String(params.importId);
+    return ok({ import_id: importId, job: { id: `job_${importId}`, status: 'queued' } });
+  }),
 ];

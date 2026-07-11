@@ -200,6 +200,8 @@ async def _stage_and_mutate(
         fmt = detect_format(meta["filename"], meta.get("content_type", ""), content)
         rows, _info = read_rows(content, fmt)
         records, errors = build_primitive_records(fields, rows)
+        for rec in records:
+            rec["file_id"] = file_id  # lineage for the Silver projection
         all_records.extend(records)
         row_errors.extend(errors)
         for idx, row in enumerate(rows):
@@ -218,6 +220,13 @@ async def _stage_and_mutate(
     vertices, edges = plan_graph(tenant_id, all_records)
     created_edges = await _apply_graph(tenant_id, commit_id, vertices, edges)
 
+    # Project the committed records into Silver (silver_import_facts) for the
+    # analytical layer. Best-effort — Bronze is the durable source of truth and a
+    # replay re-derives the facts, so a Silver hiccup must never fail the commit.
+    silver_rows = await _project_silver(
+        tenant_id, import_id, commit_id, int(mapping.get("version", 1)), all_records
+    )
+
     status = "partially_committed" if row_errors else "committed"
     return {
         "commit_id": commit_id,
@@ -228,6 +237,7 @@ async def _stage_and_mutate(
             "records": len(all_records),
             "vertices": len(vertices),
             "edges": len(created_edges),
+            "silver_rows": silver_rows,
             "row_errors": len(row_errors),
         },
         "created_edges": created_edges,
@@ -265,6 +275,38 @@ async def _apply_graph(
         )
         created.append(e)
     return created
+
+
+async def _project_silver(
+    tenant_id: str,
+    import_id: str,
+    commit_id: str,
+    mapping_version: int,
+    records: list[dict],
+) -> int:
+    """Best-effort Silver projection of the committed records into
+    ``silver_import_facts``. Returns the number of rows written (0 on any
+    failure — never raises, so a Silver hiccup cannot fail a durable commit)."""
+    if not records:
+        return 0
+    try:
+        from datetime import datetime, timezone
+
+        from services.silver.projectors.import_projector import get_import_projector
+        from services.silver.writer import SilverFactWriter
+
+        result = get_import_projector().project_records(
+            tenant_id=tenant_id,
+            commit_id=commit_id,
+            import_id=import_id,
+            mapping_version=mapping_version,
+            occurred_at=datetime.now(timezone.utc).isoformat(),
+            records=records,
+        )
+        return await SilverFactWriter().persist([result])
+    except Exception as exc:  # pragma: no cover — Silver hiccup must not fail a commit
+        logger.debug("import silver projection skipped: %s", exc)
+        return 0
 
 
 # ── public API ───────────────────────────────────────────────────────────────
