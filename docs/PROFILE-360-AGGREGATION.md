@@ -14,7 +14,7 @@ source_files:
 canonical_owner: backend@aether
 estimated_read_minutes: 8
 toc_depth: 3
-last_synced_commit: "337ba2b"
+last_synced_commit: "640548e"
 ---
 
 # Profile 360 Aggregation Layer
@@ -156,6 +156,12 @@ All economic sub-routes accept `?window=30d|60d|90d|lifetime`:
 | GET    | `/v1/profile/{id}/economic/agentic`                 | Agentic economy breakdown (fees, x402 payments, rewards)  |
 | GET    | `/v1/profile/{id}/economic/campaigns`               | Campaign-level economic attribution                       |
 | GET    | `/v1/profile/{id}/economic/warnings`                | Economic risk flags for this entity                       |
+
+Sensitive economic surfaces are consent-gated. The web2/credit surface
+(`economic/web2`) evaluates a central consent `PolicyDecision`
+(`services/policy`): its envelope summary carries a `policy_decision_id`, and on
+missing `credit` consent it returns `{consent_required: true, granted: false,
+policy_decision_id, redacted_fields}` rather than the data.
 
 ### Kyber Profile360 surface
 
