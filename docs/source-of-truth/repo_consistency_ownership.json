@@ -83,6 +83,30 @@
       "remediation": "Validate frontmatter and stamp source-linked docs only after review."
     },
     {
+      "id": "jobs_platform",
+      "name": "durable jobs platform changed",
+      "source_globs": ["Backend Architecture/**/services/jobs/**", "Backend Architecture/**/jobs_repo.py"],
+      "required_changed_globs": ["docs/source-of-truth/JOBS_PLATFORM.md", "docs/_generated/**", "docs/REPO-INDEX.md", "tests/**"],
+      "required_commands": ["python scripts/docs_extract/run_all.py", "python scripts/docs_drift.py --strict", "python -m pytest tests/ -v --tb=short"],
+      "remediation": "Review/restamp JOBS_PLATFORM.md (source-linked) and jobs-platform tests, then regenerate docs. Do not move agent-runtime execution onto this platform — the boundary is deliberate."
+    },
+    {
+      "id": "import_engine",
+      "name": "tenant import engine changed",
+      "source_globs": ["Backend Architecture/**/services/imports/**", "Backend Architecture/**/imports_repo.py", "Backend Architecture/**/import_files.py", "Backend Architecture/**/import_projector.py"],
+      "required_changed_globs": ["packages/shared/imports.ts", "docs/runbooks/IMPORT_FAILURES.md", "docs/_generated/**", "tests/**"],
+      "required_commands": ["python scripts/validate_contracts.py", "python scripts/docs_drift.py --strict", "python -m pytest tests/ -v --tb=short"],
+      "remediation": "Keep the imports contract twin (packages/shared/imports.ts ↔ services/imports/contracts.py) in sync, review the IMPORT_FAILURES runbook, and update import tests; regenerate docs."
+    },
+    {
+      "id": "measurement_integrity",
+      "name": "measurement integrity plane changed",
+      "source_globs": ["Backend Architecture/**/shared/measurement/**", "Backend Architecture/**/measurement_results_repo.py"],
+      "required_changed_globs": ["packages/shared/contracts/metric-registry.json", "packages/shared/measurement-contract.ts", "docs/_generated/metric-registry-table.md", "docs/runbooks/MEASUREMENT_RESTATEMENT.md", "tests/**"],
+      "required_commands": ["python scripts/generate_contracts.py --check", "python scripts/docs_drift.py --strict", "python -m pytest tests/ -v --tb=short"],
+      "remediation": "Regenerate the metric registry contract (make generate-contracts) so the TS/Py/doc mirrors match, review MEASUREMENT_RESTATEMENT, and update measurement tests."
+    },
+    {
       "id": "workflow_check_command",
       "name": "workflow/check command changed",
       "source_globs": [".github/workflows/**", "Makefile", "scripts/repo_doctor.py", "scripts/validate_consistency_ownership.py", "scripts/validate_ts_public_exports.py"],

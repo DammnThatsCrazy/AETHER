@@ -35,6 +35,9 @@ The machine-readable owner map is `docs/source-of-truth/repo_consistency_ownersh
 | Kyber operator route/model changed | docs, frontend types, tests, operator docs |
 | generated docs source changed | `docs/_generated/`, `docs/REPO-INDEX.md`, `docs/AUTOMATION.md` |
 | docs source-linked content changed | frontmatter validation, drift validation, reviewed sync stamp |
+| durable jobs platform changed | `JOBS_PLATFORM.md` review/restamp, generated docs, jobs tests |
+| tenant import engine changed | imports contract twin, `IMPORT_FAILURES.md`, generated docs, import tests |
+| measurement integrity plane changed | metric registry contract (TS/Py/doc mirrors), `MEASUREMENT_RESTATEMENT.md`, measurement tests |
 | workflow/check command changed | Makefile, docs, repo_doctor tests |
 
 ## Single-owner generated docs rule

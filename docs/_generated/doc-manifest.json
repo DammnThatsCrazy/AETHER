@@ -4856,6 +4856,36 @@
       "canonical_owner": "platform@aether"
     },
     {
+      "path": "docs/runbooks/EXPORT_FAILURES.md",
+      "title": "Runbook — Export Failures",
+      "slug": "runbooks/export-failures",
+      "section": "operations",
+      "visibility": "I",
+      "audience": [
+        "ops",
+        "dev-senior"
+      ],
+      "status": "stable",
+      "estimated_read_minutes": 6,
+      "toc_depth": 2,
+      "canonical_owner": "platform@aether"
+    },
+    {
+      "path": "docs/runbooks/IDENTITY_REPAIR.md",
+      "title": "Runbook — Identity Repair",
+      "slug": "runbooks/identity-repair",
+      "section": "operations",
+      "visibility": "I",
+      "audience": [
+        "ops",
+        "dev-senior"
+      ],
+      "status": "stable",
+      "estimated_read_minutes": 8,
+      "toc_depth": 2,
+      "canonical_owner": "platform@aether"
+    },
+    {
       "path": "docs/runbooks/IMPORT_FAILURES.md",
       "title": "Runbook — Tenant Import Failures",
       "slug": "runbooks/import-failures",
@@ -4943,6 +4973,21 @@
       ],
       "status": "stable",
       "since_version": "8.12.0",
+      "canonical_owner": "platform@aether"
+    },
+    {
+      "path": "docs/runbooks/STAGING_PREFLIGHT.md",
+      "title": "Runbook — Staging Preflight & Readiness",
+      "slug": "runbooks/staging-preflight",
+      "section": "operations",
+      "visibility": "I",
+      "audience": [
+        "ops",
+        "dev-senior"
+      ],
+      "status": "stable",
+      "estimated_read_minutes": 7,
+      "toc_depth": 2,
       "canonical_owner": "platform@aether"
     },
     {
@@ -5396,6 +5441,11 @@
       "status": "stable",
       "since_version": "8.12.0",
       "canonical_owner": "platform@aether"
+    },
+    {
+      "path": "docs/source-of-truth/JOBS_PLATFORM.md",
+      "title": "Durable Jobs Platform Source of Truth",
+      "status": "stable"
     },
     {
       "path": "docs/source-of-truth/KYBER_ONE_PERSON_OPERATIONS.md"
