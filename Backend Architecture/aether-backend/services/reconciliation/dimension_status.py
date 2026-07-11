@@ -22,9 +22,11 @@ from shared.dimension_state import (
 )
 from shared.logger.logger import get_logger
 
+from services.reconciliation.expectations import EXPECTATION_REGISTRY, get_expectation
+
 logger = get_logger("aether.reconciliation.dimension_status")
 
-# Freshness SLA shared with the Profile360 quality/freshness surfaces.
+# Default freshness SLA when a dimension has no registered expectation.
 FRESHNESS_SLA_SECONDS = 24 * 60 * 60
 
 # Timestamp fields tried per item, newest-first-wins.
@@ -60,36 +62,28 @@ def _newest_watermark(items: list[dict]) -> Optional[datetime]:
     return newest
 
 
-def _freshness(watermark: Optional[datetime], *, now: datetime) -> Optional[DimensionFreshness]:
+def _freshness(
+    watermark: Optional[datetime], *, now: datetime, sla_seconds: int
+) -> Optional[DimensionFreshness]:
     if watermark is None:
         return None
     age = (now - watermark).total_seconds()
     return DimensionFreshness(
         watermark=watermark.isoformat(),
         age_seconds=age,
-        sla_seconds=float(FRESHNESS_SLA_SECONDS),
-        is_stale=age > FRESHNESS_SLA_SECONDS,
+        sla_seconds=float(sla_seconds),
+        is_stale=age > sla_seconds,
     )
 
 
-# Dimensions reported by data-status → (aggregator method name, min_items).
-_DIMENSION_SPECS: tuple[tuple[str, str, int], ...] = (
-    ("wallets", "wallets", 1),
-    ("sessions", "sessions", 1),
-    ("campaigns", "campaigns", 1),
-    ("journeys", "journeys", 1),
-    ("financials", "financials", 1),
-    ("relationships", "relationships", 1),
-)
-
-
-async def _dimension_envelope(
-    aggregator: Any, method_name: str, dimension: str, min_items: int,
-    entity_id: str, tenant_id: str, *, now: datetime,
+async def _dimension_reading(
+    aggregator: Any, dimension: str, entity_id: str, tenant_id: str, *, now: datetime,
 ) -> DimensionEnvelope:
-    method = getattr(aggregator, method_name, None)
+    """Read one dimension and map it to an envelope using its expectation."""
+    exp = get_expectation(dimension)
+    method = getattr(aggregator, exp.source_method or dimension, None)
     if method is None:  # pragma: no cover — defensive
-        return envelope_for_error(dimension, message=f"no aggregator method {method_name!r}")
+        return envelope_for_error(dimension, message=f"no aggregator method for {dimension!r}")
     try:
         result = await method(entity_id, tenant_id)
     except Exception as exc:  # noqa: BLE001 — a failed dimension is surfaced, not fatal
@@ -106,8 +100,8 @@ async def _dimension_envelope(
     return envelope_for_items(
         dimension,
         count=len(items),
-        freshness=_freshness(watermark, now=now),
-        min_items=min_items,
+        freshness=_freshness(watermark, now=now, sla_seconds=exp.freshness_sla_seconds),
+        min_items=exp.min_events,
     )
 
 
@@ -118,16 +112,14 @@ async def compute_data_status(
 
     Returns ``{entity_id, tenant_id, overall_state, dimensions: [...], ...}``
     where each dimension is a serialized :class:`DimensionEnvelope` and
-    ``overall_state`` is the worst dimension state.
+    ``overall_state`` is the worst dimension state. Per-dimension freshness SLAs
+    and minimum volumes come from the expectation registry.
     """
     now = now or datetime.now(timezone.utc)
     envelopes: list[DimensionEnvelope] = []
-    for dimension, method_name, min_items in _DIMENSION_SPECS:
+    for dimension in EXPECTATION_REGISTRY:
         envelopes.append(
-            await _dimension_envelope(
-                aggregator, method_name, dimension, min_items,
-                entity_id, tenant_id, now=now,
-            )
+            await _dimension_reading(aggregator, dimension, entity_id, tenant_id, now=now)
         )
     overall = rollup_state(envelopes)
     return {
@@ -138,6 +130,51 @@ async def compute_data_status(
         "dimensions": [e.model_dump(mode="json") for e in envelopes],
         "dimension_count": len(envelopes),
         "ready": overall == "ready",
-        "freshness_sla_seconds": FRESHNESS_SLA_SECONDS,
+        "computed_at": utc_now().isoformat(),
+    }
+
+
+async def compute_reconciliation(
+    aggregator: Any, entity_id: str, tenant_id: str, *, now: Optional[datetime] = None
+) -> dict:
+    """Per-dimension expectation-vs-actual reconciliation for an entity.
+
+    For every registered dimension, report the declared expectation
+    (min_events, freshness SLA) alongside the actual reading (count, watermark,
+    state) and whether the expectation is met. ``unmet`` dimensions are the ones
+    a surface should flag.
+    """
+    now = now or datetime.now(timezone.utc)
+    rows: list[dict] = []
+    for dimension, exp in EXPECTATION_REGISTRY.items():
+        env = await _dimension_reading(aggregator, dimension, entity_id, tenant_id, now=now)
+        met = env.state in ("ready", "not_applicable")
+        rows.append({
+            "dimension": dimension,
+            "state": env.state,
+            "reason_code": env.reason_code,
+            "met": met,
+            "expected": {
+                "min_events": exp.min_events,
+                "freshness_sla_seconds": exp.freshness_sla_seconds,
+                "depends_on": list(exp.depends_on),
+            },
+            "actual": {
+                "count": env.count,
+                "watermark": env.freshness.watermark if env.freshness else None,
+                "is_stale": env.freshness.is_stale if env.freshness else None,
+            },
+        })
+    unmet = [r["dimension"] for r in rows if not r["met"]]
+    return {
+        "entity_id": entity_id,
+        "tenant_id": tenant_id,
+        "kind": "reconciliation",
+        "overall_state": rollup_state(
+            [DimensionEnvelope(dimension=r["dimension"], state=r["state"]) for r in rows]
+        ),
+        "dimensions": rows,
+        "unmet_dimensions": unmet,
+        "met": not unmet,
         "computed_at": utc_now().isoformat(),
     }
