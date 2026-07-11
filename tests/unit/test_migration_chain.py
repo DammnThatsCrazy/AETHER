@@ -9,8 +9,12 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from alembic.config import Config
-from alembic.script import ScriptDirectory
+import pytest
+
+pytest.importorskip("alembic", reason="alembic required for migration-graph checks")
+
+from alembic.config import Config  # noqa: E402
+from alembic.script import ScriptDirectory  # noqa: E402
 
 BACKEND = Path(__file__).resolve().parents[2] / "Backend Architecture" / "aether-backend"
 
