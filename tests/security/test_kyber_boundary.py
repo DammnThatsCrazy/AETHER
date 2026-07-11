@@ -92,15 +92,21 @@ def test_tenant_admin_context_is_rejected_by_guard():
 
     from services.security.request_context import require_kyber_operator
     from shared.auth.auth import Role, TenantContext
-    from shared.common.common import ForbiddenError
 
     tenant_admin = TenantContext(
         tenant_id="tenant-a",
         role=Role.ADMIN,
         permissions=["read", "write", "admin"],
     )
-    with pytest.raises(ForbiddenError):
+    # Match on the exception class NAME, not identity: the full suite's
+    # sys.modules surgery (pop-and-reimport in many suites) can leave two
+    # `shared.common.common` modules loaded → two distinct ForbiddenError
+    # classes, so `pytest.raises(ForbiddenError)` can miss the raised one even
+    # though the guard fired correctly. The behavior under test (a role-admin
+    # tenant is rejected) is exactly what a raised ForbiddenError proves.
+    with pytest.raises(Exception) as exc_info:
         require_kyber_operator(_Req(tenant_admin))
+    assert type(exc_info.value).__name__ == "ForbiddenError"
 
 
 def test_operator_permission_passes_guard():

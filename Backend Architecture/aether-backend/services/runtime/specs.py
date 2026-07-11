@@ -146,6 +146,13 @@ def build_worker_specs(*, registry: Any, settings: Any) -> list[WorkerSpec]:
 
         return build_export_expiry_sweep_coro()
 
+    def _payment_rail_sync() -> Coroutine[Any, Any, None]:
+        from services.integrations.providers.payment_rails.sync_worker import (
+            build_payment_rail_sync_coro,
+        )
+
+        return build_payment_rail_sync_coro()
+
     # ── specs (registration order mirrors the old lifespan start order) ───
 
     return [
@@ -209,5 +216,13 @@ def build_worker_specs(*, registry: Any, settings: Any) -> list[WorkerSpec]:
         WorkerSpec(
             name="export_expiry_sweep",
             factory=_export_expiry_sweep,
+        ),
+        # Payment Rail Observability: periodic provider-truth pull + staleness
+        # reconciliation + card-linked Gold materialization. Gated on the
+        # payment-rails flag so it never runs when the plane is off.
+        WorkerSpec(
+            name="payment_rail_sync",
+            factory=_payment_rail_sync,
+            enabled=lambda: bool(settings.payment_rails.enabled),
         ),
     ]

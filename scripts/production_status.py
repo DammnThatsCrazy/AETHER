@@ -515,6 +515,47 @@ AREAS: list[Area] = [
             "docs/productization/economic-interoperability-intelligence/ADAPTER_CAPABILITY_MATRIX.md",
         ],
     ),
+    Area(
+        "payment rail observability",
+        3,
+        "Five named adapters (Privy, Stripe crypto onramp, Coinbase, MoonPay, Bridge) "
+        "with real HMAC webhook verification (per-provider scheme, constant-time), "
+        "recursive sensitive-field stripping, status-ordered non-regressing session "
+        "upsert, SDK-vs-provider reconciliation, and at-most-once canonical payment_* "
+        "emission onto the validated-events bus. A supervised sync worker sweeps open "
+        "sessions per cycle: it ages SDK-only sessions into 'stale' (the only producer "
+        "of that transition), pulls provider truth for configured polling-capable "
+        "providers, and materializes card-linked Gold. Tenant + Kyber routes, "
+        "Profile360 integration, and health surfaces are wired and tested. "
+        "Not production: all rollout flags default OFF; live provider polling fetch "
+        "(_fetch_poll_records) is a documented per-provider seam returning no records "
+        "until a verified provider endpoint + credential exists — observability is "
+        "webhook-primary + staleness reconciliation + operator/records-driven sync; "
+        "no live provider has been validated in staging.",
+        [
+            "Backend Architecture/aether-backend/services/integrations/providers/payment_rails/",
+            "Backend Architecture/aether-backend/services/integrations/providers/payment_rails/sync_worker.py",
+            "docs/source-of-truth/PAYMENT_RAIL_OBSERVABILITY.md",
+            "tests/payment_rails/test_sync_worker.py",
+        ],
+    ),
+    Area(
+        "card-linked payment rails",
+        2,
+        "Card-linked observation plane: a seeded program catalog, an ingestion service "
+        "with PII/region/consent gates and idempotent flow upserts, a registered Silver "
+        "projector, best-effort graph projection, Kyber + Profile360 read surfaces, and "
+        "periodic Gold materialization via the payment-rail sync worker. Wired end-to-end "
+        "at runtime this cycle (POST ingest routes + SDK-pipeline hook + graph mirror) "
+        "after previously having zero runtime callers. Not production: every rollout flag "
+        "defaults OFF, PaymentScan stays catalog/benchmark-only without tenant-authorized "
+        "provider evidence, and no live provider data has ever flowed through the plane.",
+        [
+            "Backend Architecture/aether-backend/services/card_linked_payments/",
+            "docs/source-of-truth/CARD_LINKED_PAYMENT_RAILS.md",
+            "tests/unit/card_linked/test_ingestion_wiring.py",
+        ],
+    ),
 ]
 
 
@@ -581,6 +622,16 @@ BLOCKERS: list[Blocker] = [
         "Gold ClickHouse DDL for economic domains unexecuted (no ClickHouse in CI)",
         "interoperability intelligence",
         "Apply gold_{stablecoin_flows,derivatives_exposure,interop_paths} DDL in staging ClickHouse and validate materialization",
+    ),
+    Blocker(
+        "pre-production-blocker",
+        "Payment rail observability has no live provider polling fetch and no live "
+        "provider validated in staging; the plane is webhook-primary + staleness "
+        "reconciliation + records-driven sync with all rollout flags default OFF",
+        "payment rail observability",
+        "Supply a verified per-provider polling endpoint + credential, implement "
+        "_fetch_poll_records for a configured provider, and validate one provider "
+        "end-to-end in staging before enabling AETHER_PAYMENT_RAILS_ENABLED",
     ),
 ]
 

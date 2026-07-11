@@ -6,6 +6,7 @@ source_files:
   - Backend Architecture/aether-backend/services/integrations/providers/payment_rails/reconciliation.py
   - Backend Architecture/aether-backend/services/integrations/providers/payment_rails/service.py
   - Backend Architecture/aether-backend/services/integrations/providers/payment_rails/routes.py
+  - Backend Architecture/aether-backend/services/integrations/providers/payment_rails/sync_worker.py
 last_synced_commit: HEAD
 ---
 
@@ -66,7 +67,10 @@ Shared contract `packages/shared/payment-rails.ts`, Pydantic mirrors in
   different hash → `rejected` + audited.
 - **ReconciliationRecord** — states `sdk_only | provider_only | matched |
   stale | conflict | ignored_duplicate`, with sanitized field-level
-  discrepancies; stale after 24h without provider confirmation.
+  discrepancies; stale after 24h without provider confirmation. The
+  `sdk_only → stale` transition is produced only by the periodic sync worker
+  (below) — provider-driven reconciliation always has a provider view and can
+  never yield it, so without the worker an unconfirmed session would never age.
 - **PaymentRailHealth** — per-provider configured/enabled state, webhook
   verified/rejected 24h, session counts, reconciliation matched rate,
   conflicts, `healthy|degraded|not_configured|error`.
@@ -80,6 +84,35 @@ emitted at most once per session (tracked in `metadata.emitted_canonical`)
 onto the validated-events bus (`SDK_EVENTS_VALIDATED`) with
 rail/provider/session properties — the same pipeline `/v1/batch` feeds; no
 parallel ingestion API.
+
+## Background sync worker
+
+`sync_worker.py` registers a supervised `payment_rail_sync` worker
+(`services/runtime/specs.py`, gated on `AETHER_PAYMENT_RAILS_ENABLED`). Webhook
+handling never runs on a timer, so two open sessions would otherwise never
+resolve: one whose provider sends no terminal webhook, and one SDK-only session
+no provider confirms. Each cycle (default 15 min) the worker sweeps all open
+(non-final) funding sessions, tenant-scoped and best-effort:
+
+1. **Provider-truth pull** — for each configured, polling-capable provider
+   present among a tenant's open sessions, calls
+   `PaymentRailsService.status_sync`. This is offline-safe by construction: an
+   unconfigured tenant, a local process, or a provider with no live polling
+   endpoint performs no network IO and processes no records — the pull is a
+   no-op, never a fabricated advance.
+2. **Staleness reconciliation** — re-runs reconciliation for every still-open
+   session, reusing the stored record's `last_source` so the view selection is
+   identical to its origin. This is the only producer of the
+   `sdk_only → stale` transition.
+3. **Card-linked Gold** — when `AETHER_CARD_LINKED_PAYMENT_RAILS_ENABLED` is on,
+   materializes card-linked Gold rollups per tenant (the periodic hook the
+   card-linked plane otherwise lacked).
+
+Counters: `payment_rail_sync_cycle_total`,
+`payment_rail_sync_session_scanned_total`,
+`payment_rail_sync_provider_pulled_total`,
+`payment_rail_sync_transitioned_total`, `payment_rail_sync_error_total`,
+`card_linked_gold_materialized_total`.
 
 ## Routes
 
@@ -155,8 +188,14 @@ Frontend: aether payment-rails tests (93-suite green), kyber component tests
 
 ## Known limitations / non-goals
 
-- Live provider polling requires tenant credentials (BYOK) and is disabled in
-  local mode; tests use provider-shaped fixtures (`records=` injection).
+- **Observability is webhook-primary.** Live provider polling *fetch*
+  (`_fetch_poll_records`) is an intentional per-provider seam: the base returns
+  no records and no adapter implements a live HTTP fetch yet, so `status_sync`
+  advances sessions only from operator/test-supplied provider records
+  (`records=` injection) or when a verified provider polling endpoint +
+  credential is later wired. The sync worker, staleness reconciliation, and the
+  `records=` sync path are complete and tested; live polling fetch is not
+  fabricated against unverified provider APIs.
 - Reconciliation against SDK-side signals activates as SDK payment events
   arrive; provider-only sessions report `provider_only` until then.
 - No payment execution, settlement, custody, refund initiation, or
