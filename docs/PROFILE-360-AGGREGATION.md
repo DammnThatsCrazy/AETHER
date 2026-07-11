@@ -14,7 +14,7 @@ source_files:
 canonical_owner: backend@aether
 estimated_read_minutes: 8
 toc_depth: 3
-last_synced_commit: "f4a529a"
+last_synced_commit: "337ba2b"
 ---
 
 # Profile 360 Aggregation Layer
@@ -136,6 +136,7 @@ Added after v8.8.0 (`services/profile/routes.py`):
 | GET    | `/v1/profile/{id}/quality`                          | Profile completeness, freshness, and confidence scores    |
 | GET    | `/v1/profile/{id}/data-freshness`                   | Per-dimension freshness timestamps                        |
 | GET    | `/v1/profile/{id}/data-status`                      | Canonical per-dimension `DimensionEnvelope` (state + reason + freshness) with a worst-wins `overall_state` |
+| GET    | `/v1/profile/{id}/reconciliation`                   | Per-dimension expectation-vs-actual (declared min-events + freshness SLA against the actual reading), with `met` / `unmet_dimensions` |
 | GET    | `/v1/profile/{id}/recommendations`                  | Active intelligence recommendations                       |
 | GET    | `/v1/profile/{id}/outcomes`                         | Observed outcomes from executed recommendations           |
 | GET    | `/v1/profile/{id}/outcome-ledger`                   | Paginated outcome ledger with attribution                 |
@@ -318,6 +319,14 @@ parity-tested): each dimension is a `DimensionEnvelope`
 worst-wins `overall_state`. A dimension that fails to compute degrades to an
 `error` envelope rather than 500-ing or silently reading empty
 (`services/reconciliation/dimension_status.py`).
+
+Staleness and sufficiency are judged **per dimension** from an expectation
+registry (`services/reconciliation/expectations.py`): each dimension declares
+its minimum volume and freshness SLA (sessions go stale in a day, a wallet link
+stays fresh a week, campaign attribution a month). `/reconciliation` reports
+that expectation against the actual reading per dimension — `met` /
+`unmet_dimensions` — so an operator sees exactly which slices fall short and
+why.
 
 This is verified by `test_aggregator_degrades_on_repo_failure_without_raising`,
 `tests/unit/test_profile_360_truth.py`, `tests/unit/test_dimension_status.py`,

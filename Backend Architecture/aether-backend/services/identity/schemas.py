@@ -134,6 +134,75 @@ class IdentitySplitResponse(BaseModel):
     error: Optional[str] = None
 
 
+# ── Fragment-aware identity repair (split preview + execute) ──────────────────
+
+# Split modes for fragment-aware repair:
+#   create_new_entity        — split the fragment onto a brand-new canonical id
+#   restore_pre_merge_entity — restore the pre-merge id from a merge event's
+#                              from_entity_id (requires source_merge_event_id)
+#   move_to_existing_entity  — move the fragment onto an existing, active,
+#                              same-tenant entity (requires target_entity_id)
+FragmentSplitMode = Literal[
+    "create_new_entity",
+    "restore_pre_merge_entity",
+    "move_to_existing_entity",
+]
+
+
+class IdentityFragmentSelector(BaseModel):
+    """The alias/observation ids that make up the fragment being split off."""
+    alias_ids: list[str] = Field(default_factory=list)
+    observation_ids: list[str] = Field(default_factory=list)
+
+
+class IdentitySplitPreviewRequest(BaseModel):
+    entity_id: str = Field(..., min_length=1)
+    fragments: IdentityFragmentSelector = Field(default_factory=IdentityFragmentSelector)
+    mode: FragmentSplitMode = "create_new_entity"
+    target_entity_id: Optional[str] = None
+    source_merge_event_id: Optional[str] = None
+    reason: str = Field(..., min_length=1)
+
+
+class IdentitySplitPreviewResponse(BaseModel):
+    allowed: bool
+    entity_id: str
+    mode: str
+    target_entity_id: Optional[str] = None
+    aliases_to_reassign: list[str] = Field(default_factory=list)
+    observations_to_relink: list[str] = Field(default_factory=list)
+    edges_to_revoke: list[str] = Field(default_factory=list)
+    risk_notes: list[str] = Field(default_factory=list)
+    reason_codes: list[str] = Field(default_factory=list)
+    # Populated when allowed is False — the typed, machine-readable rejection.
+    rejection_reason: Optional[str] = None
+    error: Optional[str] = None
+
+
+class IdentityFragmentSplitRequest(BaseModel):
+    entity_id: str = Field(..., min_length=1)
+    fragments: IdentityFragmentSelector = Field(default_factory=IdentityFragmentSelector)
+    mode: FragmentSplitMode = "create_new_entity"
+    target_entity_id: Optional[str] = None
+    source_merge_event_id: Optional[str] = None
+    reason: str = Field(..., min_length=1)
+
+
+class IdentityFragmentSplitResponse(BaseModel):
+    allowed: bool
+    entity_id: str
+    mode: str
+    split_event_id: Optional[str] = None
+    # The new / restored / target canonical entity the fragment now lives on.
+    resulting_entity_id: Optional[str] = None
+    moved_alias_ids: list[str] = Field(default_factory=list)
+    moved_observation_ids: list[str] = Field(default_factory=list)
+    revoked_edge_ids: list[str] = Field(default_factory=list)
+    reason_codes: list[str] = Field(default_factory=list)
+    rejection_reason: Optional[str] = None
+    error: Optional[str] = None
+
+
 # ── Recompute ─────────────────────────────────────────────────────────────────
 
 class IdentityRecomputeRequest(BaseModel):

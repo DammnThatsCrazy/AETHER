@@ -48,6 +48,8 @@ from .repository import IdentityResolutionRepository
 from .resolver import IdentityResolutionService
 from .schemas import (
     IdentityConflictResponse,
+    IdentityFragmentSplitRequest,
+    IdentityFragmentSplitResponse,
     IdentityGraphResponse,
     IdentityHealthResponse,
     IdentityMergeRequest,
@@ -56,6 +58,8 @@ from .schemas import (
     IdentityRecomputeResponse,
     IdentityResolveRequest,
     IdentityResolveResponse,
+    IdentitySplitPreviewRequest,
+    IdentitySplitPreviewResponse,
     IdentitySplitRequest,
     IdentitySplitResponse,
     IdentitySuppressRequest,
@@ -364,6 +368,72 @@ async def split_identity(
     )
 
     return APIResponse(data=IdentitySplitResponse(**result).model_dump()).to_dict()
+
+
+@router.post("/split/preview", response_model=IdentitySplitPreviewResponse)
+async def preview_fragment_split(
+    body: IdentitySplitPreviewRequest,
+    request: Request,
+) -> dict:
+    """
+    NON-MUTATING impact analysis for a fragment-aware identity split.
+
+    Reports which aliases would be reassigned, observations relinked, and
+    SAME_AS edges revoked, plus risk notes. When the split is not permitted
+    (cross-tenant fragment, identity cycle, campaign-only sameness, …) the
+    response carries ``allowed=False`` and a typed ``rejection_reason`` — it
+    never mutates state and never surfaces a raw 500.
+    """
+    tenant = request.state.tenant
+    tenant.require_permission("read")
+
+    resolver = _get_resolver()
+    result = await resolver.preview_fragment_split(
+        tenant_id=tenant.tenant_id,
+        entity_id=body.entity_id,
+        fragments=body.fragments.model_dump(),
+        mode=body.mode,
+        actor_id=getattr(tenant, "user_id", "operator") or "operator",
+        actor_type="operator",
+        reason=body.reason,
+        target_entity_id=body.target_entity_id,
+        source_merge_event_id=body.source_merge_event_id,
+    )
+    return APIResponse(data=IdentitySplitPreviewResponse(**result).model_dump()).to_dict()
+
+
+@router.post("/split/execute", response_model=IdentityFragmentSplitResponse)
+async def execute_fragment_split(
+    body: IdentityFragmentSplitRequest,
+    request: Request,
+) -> dict:
+    """
+    Execute a fragment-aware identity split (operator-gated, audited).
+
+    Reassigns the named aliases/observations onto a new / restored / existing
+    entity and revokes the SAME_AS edges tying the fragment to the original.
+    The immutable split event (``create_split_event``) is the durable audit
+    record — mirroring the existing ``/split`` route. A blocked split returns
+    ``allowed=False`` + a typed ``rejection_reason`` rather than raising, so
+    callers never see a raw 500.
+    """
+    tenant = request.state.tenant
+    tenant.require_permission("write")
+
+    resolver = _get_resolver()
+    result = await resolver.fragment_split(
+        tenant_id=tenant.tenant_id,
+        entity_id=body.entity_id,
+        fragments=body.fragments.model_dump(),
+        mode=body.mode,
+        actor_id=getattr(tenant, "user_id", "operator") or "operator",
+        actor_type="operator",
+        reason=body.reason,
+        target_entity_id=body.target_entity_id,
+        source_merge_event_id=body.source_merge_event_id,
+    )
+
+    return APIResponse(data=IdentityFragmentSplitResponse(**result).model_dump()).to_dict()
 
 
 @router.post("/recompute", response_model=IdentityRecomputeResponse)

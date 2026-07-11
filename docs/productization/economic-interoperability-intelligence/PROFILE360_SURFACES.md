@@ -10,7 +10,7 @@ source_files:
   - packages/shared/profile360-contract.ts
   - Backend Architecture/aether-backend/services/profile/routes.py
 canonical_owner: platform@aether
-last_synced_commit: "f4a529a"
+last_synced_commit: "337ba2b"
 ---
 
 # Profile360 Surfaces

@@ -1520,6 +1520,26 @@ async def get_data_status(
     return APIResponse(data=data).to_dict()
 
 
+@router.get("/{user_id}/reconciliation")
+async def get_profile_reconciliation(
+    user_id: str,
+    request: Request,
+    agg: Profile360Aggregator = Depends(_get_aggregator),
+):
+    """Per-dimension expectation-vs-actual reconciliation.
+
+    For each registered dimension, reports the declared expectation (minimum
+    volume, freshness SLA) against the actual reading and whether it is met, so
+    an operator can see exactly which dimensions fall short and why.
+    """
+    tenant = request.state.tenant
+    tenant.require_permission("read")
+    from services.reconciliation.dimension_status import compute_reconciliation
+
+    data = await compute_reconciliation(agg, user_id, tenant.tenant_id)
+    return APIResponse(data=data).to_dict()
+
+
 # ── Economic Sub-Routes ────────────────────────────────────────────
 
 @router.get("/{user_id}/economic")

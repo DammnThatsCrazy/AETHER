@@ -24,6 +24,7 @@ graph edges, or merge records. The repository layer enforces this.
 from __future__ import annotations
 
 import uuid
+from dataclasses import dataclass, field
 from typing import Any, Optional
 
 from shared.common.common import utc_now
@@ -41,7 +42,12 @@ from .hashing import (
     hash_wallet,
     redact_display,
 )
-from .merge_policy import MergePolicyContext, evaluate, evaluate_operator_merge
+from .merge_policy import (
+    MergePolicyContext,
+    NON_MERGE_ELIGIBLE_SIGNAL_NAMES,
+    evaluate,
+    evaluate_operator_merge,
+)
 from .metrics import IdentityMetrics
 from .models import (
     ConfidenceTier,
@@ -50,6 +56,11 @@ from .models import (
     IdentityResolutionDecision,
     IdentitySignalType,
     MergeDecision,
+    SubjectStatus,
+    REASON_CAMPAIGN_ONLY_SAMENESS_BLOCKED,
+    REASON_CROSS_TENANT_FRAGMENT_BLOCKED,
+    REASON_FRAGMENT_SPLIT,
+    REASON_IDENTITY_CYCLE_BLOCKED,
     REASON_NEW_ENTITY,
 )
 from .repository import IdentityResolutionRepository
@@ -70,6 +81,57 @@ _ATTRIBUTION_ONLY: frozenset[IdentitySignalType] = frozenset({
     IdentitySignalType.CAMPAIGN_ID,
     IdentitySignalType.JOURNEY_ID,
 })
+
+# Signal *values* that never constitute identity sameness. A fragment made up
+# solely of these carries no real identity evidence, so splitting it onto its
+# own / another entity would assert sameness on campaign/attribution grounds
+# alone — which is exactly what must be blocked. Combines the resolver's
+# attribution-only set with merge_policy's non-merge-eligible telemetry denylist.
+_NON_IDENTITY_SIGNAL_VALUES: frozenset[str] = frozenset(
+    {t.value for t in _ATTRIBUTION_ONLY} | set(NON_MERGE_ELIGIBLE_SIGNAL_NAMES)
+)
+
+
+def _is_merge_eligible_signal(signal_value: str) -> bool:
+    """True if a signal value can carry identity evidence (not campaign-only)."""
+    return bool(signal_value) and signal_value not in _NON_IDENTITY_SIGNAL_VALUES
+
+
+def _dedupe_preserve(items: list[str]) -> list[str]:
+    seen: set[str] = set()
+    out: list[str] = []
+    for it in items:
+        if it not in seen:
+            seen.add(it)
+            out.append(it)
+    return out
+
+
+@dataclass
+class _FragmentSplitPlan:
+    """Result of analysing a fragment split (shared by preview + execute).
+
+    A plan is either a rejection (``allowed=False`` + ``rejection_reason``) or
+    an approved, fully-resolved plan describing exactly what execution will
+    move/revoke. Analysis is strictly read-only, so the same plan powers the
+    non-mutating preview and the mutating execute path.
+    """
+    allowed: bool
+    entity_id: str
+    mode: str
+    reason: str
+    actor_type: str
+    actor_id: str
+    source_merge_event_id: Optional[str]
+    target_entity_id: Optional[str]        # resolved dest (None → mint new at execute)
+    alias_rows: list[dict] = field(default_factory=list)
+    observation_ids: list[str] = field(default_factory=list)
+    edges_to_revoke: list[str] = field(default_factory=list)
+    risk_notes: list[str] = field(default_factory=list)
+    reason_codes: list[str] = field(default_factory=list)
+    source_entity_type: Optional[str] = None
+    rejection_reason: Optional[str] = None
+    error: Optional[str] = None
 
 
 class IdentityResolutionService:
@@ -576,6 +638,453 @@ class IdentityResolutionService:
             "new_entity_id": new_entity_id,
             "revoked_edge_ids": revoked_edges,
             "reason_codes": split_policy.reason_codes,
+        }
+
+    # ── Fragment-aware identity repair (PR5 slice) ────────────────────────
+
+    async def _same_as_edges_between(
+        self, tenant_id: str, entity_a: str, entity_b: str
+    ) -> list[str]:
+        """Active SAME_AS edge ids incident to entity_a whose other end is entity_b."""
+        edges = await self._repo.get_entity_graph(tenant_id, entity_a)
+        result: list[str] = []
+        for e in edges:
+            if e.get("edge_type") != EdgeType.SAME_AS.value or e.get("revoked_at"):
+                continue
+            endpoints = {e.get("source_entity_id"), e.get("target_entity_id")}
+            if entity_b in endpoints:
+                result.append(e["id"])
+        return result
+
+    async def _analyze_fragment_split(
+        self,
+        tenant_id: str,
+        entity_id: str,
+        alias_ids: list[str],
+        observation_ids: list[str],
+        mode: str,
+        actor_id: str,
+        actor_type: str,
+        reason: str,
+        target_entity_id: Optional[str],
+        source_merge_event_id: Optional[str],
+    ) -> _FragmentSplitPlan:
+        """Read-only validation + impact analysis for a fragment split.
+
+        Enforces: operator/admin split policy, per-fragment tenant match (no
+        cross-tenant), fragment ownership by the source entity, campaign-only
+        sameness blocking, and identity-cycle prevention. Performs NO writes —
+        it is safe to call from the non-mutating preview endpoint.
+        """
+        risk_notes: list[str] = []
+        base_codes: list[str] = []
+
+        def reject(
+            rejection_reason: str, error: str, codes: Optional[list[str]] = None
+        ) -> _FragmentSplitPlan:
+            return _FragmentSplitPlan(
+                allowed=False,
+                entity_id=entity_id,
+                mode=mode,
+                reason=reason,
+                actor_type=actor_type,
+                actor_id=actor_id,
+                source_merge_event_id=source_merge_event_id,
+                target_entity_id=None,
+                risk_notes=risk_notes,
+                reason_codes=_dedupe_preserve(base_codes + (codes or [])),
+                rejection_reason=rejection_reason,
+                error=error,
+            )
+
+        # 1. Operator/admin split policy gate (actor, entity, reason).
+        policy = evaluate_split(SplitPolicyContext(
+            tenant_id=tenant_id,
+            original_entity_id=entity_id,
+            actor_type=actor_type,
+            actor_id=actor_id,
+            reason=reason,
+            source_merge_event_id=source_merge_event_id,
+            proposed_entity_ids=[target_entity_id] if target_entity_id else [],
+        ))
+        if not policy.allowed:
+            return reject("split_policy_denied", policy.error or "split not permitted", policy.reason_codes)
+        base_codes = list(policy.reason_codes)  # includes REASON_MANUAL_OPERATOR_SPLIT
+
+        # 2. A fragment must name at least one member.
+        if not alias_ids and not observation_ids:
+            return reject(
+                "empty_fragment",
+                "fragment must include at least one alias_id or observation_id",
+            )
+
+        # 3. Source entity (subject may be absent if it only owns aliases).
+        source_subject = await self._repo.get_subject_by_canonical_entity_id(
+            tenant_id, entity_id
+        )
+        source_entity_type = (
+            source_subject.get("entity_type") if source_subject else None
+        )
+
+        # 4. Validate alias fragments: tenant + ownership; collect signal values.
+        alias_rows: list[dict] = []
+        fragment_signal_values: list[str] = []
+        for alias_id in alias_ids:
+            row = await self._repo.get_alias_by_id(alias_id)
+            if row is None:
+                return reject("fragment_alias_not_found", f"alias {alias_id!r} not found")
+            if row.get("tenant_id") != tenant_id:
+                return reject(
+                    REASON_CROSS_TENANT_FRAGMENT_BLOCKED,
+                    f"alias {alias_id!r} belongs to another tenant",
+                    [REASON_CROSS_TENANT_FRAGMENT_BLOCKED],
+                )
+            if row.get("canonical_entity_id") != entity_id:
+                return reject(
+                    "fragment_not_owned_by_entity",
+                    f"alias {alias_id!r} is not owned by entity {entity_id!r}",
+                )
+            fragment_signal_values.append(str(row.get("alias_type", "")))
+            if row.get("revoked_at"):
+                risk_notes.append(
+                    f"alias {alias_id} already revoked — skipped (idempotent)"
+                )
+                continue
+            alias_rows.append(row)
+
+        # 5. Validate observation fragments: tenant + ownership.
+        valid_observation_ids: list[str] = []
+        for obs_id in observation_ids:
+            row = await self._repo.get_observation_by_id(obs_id)
+            if row is None:
+                return reject(
+                    "fragment_observation_not_found", f"observation {obs_id!r} not found"
+                )
+            if row.get("tenant_id") != tenant_id:
+                return reject(
+                    REASON_CROSS_TENANT_FRAGMENT_BLOCKED,
+                    f"observation {obs_id!r} belongs to another tenant",
+                    [REASON_CROSS_TENANT_FRAGMENT_BLOCKED],
+                )
+            obs_entity = row.get("canonical_entity_id")
+            if obs_entity not in (None, "", entity_id):
+                return reject(
+                    "fragment_not_owned_by_entity",
+                    f"observation {obs_id!r} is not owned by entity {entity_id!r}",
+                )
+            fragment_signal_values.append(str(row.get("signal_type", "")))
+            valid_observation_ids.append(obs_id)
+
+        # 6. Campaign-only sameness guard (merge_policy signal classes).
+        if fragment_signal_values and not any(
+            _is_merge_eligible_signal(v) for v in fragment_signal_values
+        ):
+            return reject(
+                REASON_CAMPAIGN_ONLY_SAMENESS_BLOCKED,
+                "fragment carries only campaign/attribution signals — campaign "
+                "attribution never establishes identity sameness",
+                [REASON_CAMPAIGN_ONLY_SAMENESS_BLOCKED],
+            )
+
+        # 7. Resolve the destination entity per mode + identity-cycle guards.
+        resolved_target: Optional[str] = None
+        if mode == "create_new_entity":
+            resolved_target = None  # brand-new id minted at execution time
+            risk_notes.append(
+                "create_new_entity: a brand-new canonical entity will be minted"
+            )
+        elif mode == "restore_pre_merge_entity":
+            if not source_merge_event_id:
+                return reject(
+                    "source_merge_event_required",
+                    "restore_pre_merge_entity requires source_merge_event_id",
+                )
+            merge_event = await self._repo.get_merge_event_by_id(
+                tenant_id, source_merge_event_id
+            )
+            if merge_event is None:
+                return reject(
+                    "merge_event_not_found",
+                    f"merge event {source_merge_event_id!r} not found for tenant",
+                )
+            pre_merge_id = merge_event.get("from_entity_id") or ""
+            if not pre_merge_id:
+                return reject(
+                    "merge_event_missing_from_entity",
+                    "merge event has no from_entity_id to restore",
+                )
+            survivors = {
+                merge_event.get("into_entity_id"),
+                merge_event.get("resulting_entity_id"),
+            }
+            if entity_id not in survivors:
+                risk_notes.append(
+                    f"entity {entity_id} is not the recorded survivor of merge "
+                    f"{source_merge_event_id}"
+                )
+            if pre_merge_id == entity_id:
+                return reject(
+                    REASON_IDENTITY_CYCLE_BLOCKED,
+                    "pre-merge entity equals the entity being split",
+                    [REASON_IDENTITY_CYCLE_BLOCKED],
+                )
+            resolved_target = pre_merge_id
+        elif mode == "move_to_existing_entity":
+            if not target_entity_id:
+                return reject(
+                    "target_entity_required",
+                    "move_to_existing_entity requires target_entity_id",
+                )
+            if target_entity_id == entity_id:
+                return reject(
+                    REASON_IDENTITY_CYCLE_BLOCKED,
+                    "cannot move a fragment onto the same entity",
+                    [REASON_IDENTITY_CYCLE_BLOCKED],
+                )
+            target_subject = await self._repo.get_subject_by_canonical_entity_id(
+                tenant_id, target_entity_id
+            )
+            if target_subject is None:
+                return reject(
+                    "target_entity_not_found",
+                    f"target entity {target_entity_id!r} not found for tenant",
+                )
+            if target_subject.get("status") != SubjectStatus.ACTIVE.value:
+                return reject(
+                    "target_entity_not_active",
+                    f"target entity {target_entity_id!r} is not active",
+                )
+            # Cycle guard: target must not redirect back to the source entity.
+            target_survivor = await self._repo.resolve_surviving_canonical_entity_id(
+                tenant_id, target_entity_id
+            )
+            if target_survivor == entity_id:
+                return reject(
+                    REASON_IDENTITY_CYCLE_BLOCKED,
+                    "target entity's survivor chain resolves back to the source entity",
+                    [REASON_IDENTITY_CYCLE_BLOCKED],
+                )
+            resolved_target = target_entity_id
+        else:
+            return reject("unknown_split_mode", f"unknown split mode {mode!r}")
+
+        # 8. SAME_AS edges to revoke between source and the resolved target.
+        edges_to_revoke: list[str] = []
+        if resolved_target:
+            edges_to_revoke = await self._same_as_edges_between(
+                tenant_id, entity_id, resolved_target
+            )
+            if not edges_to_revoke:
+                risk_notes.append(
+                    "no active SAME_AS edges between source and target to revoke"
+                )
+        else:
+            risk_notes.append("create_new_entity: no pre-existing SAME_AS edges to revoke")
+
+        if not alias_rows and not valid_observation_ids:
+            risk_notes.append(
+                "all fragment members already moved/revoked — split will be a no-op"
+            )
+
+        return _FragmentSplitPlan(
+            allowed=True,
+            entity_id=entity_id,
+            mode=mode,
+            reason=reason,
+            actor_type=actor_type,
+            actor_id=actor_id,
+            source_merge_event_id=source_merge_event_id,
+            target_entity_id=resolved_target,
+            alias_rows=alias_rows,
+            observation_ids=valid_observation_ids,
+            edges_to_revoke=edges_to_revoke,
+            risk_notes=risk_notes,
+            reason_codes=_dedupe_preserve(base_codes + [REASON_FRAGMENT_SPLIT]),
+            source_entity_type=source_entity_type,
+        )
+
+    async def preview_fragment_split(
+        self,
+        tenant_id: str,
+        entity_id: str,
+        fragments: dict,
+        mode: str,
+        actor_id: str,
+        actor_type: str = "operator",
+        reason: str = "fragment_repair",
+        target_entity_id: Optional[str] = None,
+        source_merge_event_id: Optional[str] = None,
+    ) -> dict:
+        """NON-MUTATING impact analysis for splitting a fragment off an entity.
+
+        Reports what execution WOULD move/revoke plus risk notes. When the
+        split is not permitted, returns ``allowed=False`` with a typed
+        ``rejection_reason`` (e.g. ``campaign_only_sameness_blocked``) rather
+        than raising — the operator still gets the full analysis.
+        """
+        plan = await self._analyze_fragment_split(
+            tenant_id=tenant_id,
+            entity_id=entity_id,
+            alias_ids=list((fragments or {}).get("alias_ids") or []),
+            observation_ids=list((fragments or {}).get("observation_ids") or []),
+            mode=mode,
+            actor_id=actor_id,
+            actor_type=actor_type,
+            reason=reason,
+            target_entity_id=target_entity_id,
+            source_merge_event_id=source_merge_event_id,
+        )
+        return {
+            "allowed": plan.allowed,
+            "entity_id": entity_id,
+            "mode": mode,
+            "target_entity_id": plan.target_entity_id,
+            "aliases_to_reassign": [r["id"] for r in plan.alias_rows],
+            "observations_to_relink": list(plan.observation_ids),
+            "edges_to_revoke": list(plan.edges_to_revoke),
+            "risk_notes": plan.risk_notes,
+            "reason_codes": plan.reason_codes,
+            "rejection_reason": plan.rejection_reason,
+            "error": plan.error,
+        }
+
+    async def fragment_split(
+        self,
+        tenant_id: str,
+        entity_id: str,
+        fragments: dict,
+        mode: str,
+        actor_id: str,
+        actor_type: str = "operator",
+        reason: str = "fragment_repair",
+        target_entity_id: Optional[str] = None,
+        source_merge_event_id: Optional[str] = None,
+    ) -> dict:
+        """Execute a fragment-aware identity split.
+
+        Modes:
+          * ``create_new_entity`` — mint a new canonical entity for the fragment.
+          * ``restore_pre_merge_entity`` — restore the pre-merge id recovered
+            from ``source_merge_event_id`` (a merge event's ``from_entity_id``).
+          * ``move_to_existing_entity`` — move the fragment onto an existing,
+            active, same-tenant entity.
+
+        Reassigns the named aliases (lineage-preserving: recreate on target,
+        revoke on source — never leaving duplicate active aliases), relinks the
+        named observations, appends an immutable split event carrying the exact
+        fragment payload, and selectively revokes SAME_AS edges between the
+        fragment and the original. Returns a structured result; failures surface
+        as ``allowed=False`` with a typed ``rejection_reason``.
+        """
+        alias_ids = list((fragments or {}).get("alias_ids") or [])
+        observation_ids = list((fragments or {}).get("observation_ids") or [])
+
+        plan = await self._analyze_fragment_split(
+            tenant_id=tenant_id,
+            entity_id=entity_id,
+            alias_ids=alias_ids,
+            observation_ids=observation_ids,
+            mode=mode,
+            actor_id=actor_id,
+            actor_type=actor_type,
+            reason=reason,
+            target_entity_id=target_entity_id,
+            source_merge_event_id=source_merge_event_id,
+        )
+        if not plan.allowed:
+            return {
+                "allowed": False,
+                "entity_id": entity_id,
+                "mode": mode,
+                "split_event_id": None,
+                "resulting_entity_id": None,
+                "moved_alias_ids": [],
+                "moved_observation_ids": [],
+                "revoked_edge_ids": [],
+                "reason_codes": plan.reason_codes,
+                "rejection_reason": plan.rejection_reason,
+                "error": plan.error,
+            }
+
+        entity_type = plan.source_entity_type or EntityType.HUMAN.value
+
+        # ── Resolve / create the destination entity ───────────────────────
+        if mode == "create_new_entity":
+            resulting_entity_id = str(uuid.uuid4())
+            await self._repo.create_subject(tenant_id, resulting_entity_id, entity_type)
+        elif mode == "restore_pre_merge_entity":
+            resulting_entity_id = plan.target_entity_id or str(uuid.uuid4())
+            # Reactivate (or recreate) the pre-merge subject as a live identity.
+            await self._repo.restore_subject(tenant_id, resulting_entity_id, entity_type)
+        else:  # move_to_existing_entity — target already validated active
+            resulting_entity_id = plan.target_entity_id  # type: ignore[assignment]
+
+        # ── Reassign aliases (lineage-preserving) ─────────────────────────
+        moved_alias_ids: list[str] = []
+        for alias in plan.alias_rows:
+            new_alias = await self._repo.upsert_alias(
+                tenant_id=tenant_id,
+                canonical_entity_id=resulting_entity_id,
+                alias_type=alias.get("alias_type"),
+                alias_value_hash=alias.get("alias_value_hash", ""),
+                alias_display_value_redacted=alias.get("alias_display_value_redacted", ""),
+                source="fragment_split",
+                source_event_id=alias.get("source_event_id", ""),
+                source_platform=alias.get("source_platform", ""),
+                confidence=alias.get("confidence", 1.0),
+                confidence_tier=alias.get("confidence_tier", ConfidenceTier.DETERMINISTIC),
+                consent_snapshot=alias.get("consent_snapshot"),
+            )
+            # Revoke the original on the source so no duplicate active alias exists.
+            await self._repo.revoke_alias(alias["id"])
+            moved_alias_ids.append(new_alias["id"])
+
+        # ── Relink the named observations ─────────────────────────────────
+        moved_observation_ids = await self._repo.relink_observations_to_entity(
+            tenant_id, plan.observation_ids, resulting_entity_id
+        )
+
+        # ── Selectively revoke SAME_AS edges between fragment and original ─
+        # These are the repo-backed (source-of-truth) identity edges. The
+        # Neptune-side SAME_AS revoke is wired separately in shared/graph
+        # (GraphClient.revoke_edge is intentionally out of scope for this slice).
+        revoked_edge_ids: list[str] = []
+        for edge_id in plan.edges_to_revoke:
+            revoked = await self._repo.revoke_identity_edge(edge_id)
+            if revoked and revoked.get("revoked_at"):
+                revoked_edge_ids.append(edge_id)
+
+        # ── Append the immutable split event with the fragment payload ────
+        split_event = await self._repo.create_split_event(
+            tenant_id=tenant_id,
+            original_entity_id=entity_id,
+            resulting_entity_ids=[entity_id, resulting_entity_id],
+            reason=reason,
+            actor_type=actor_type,
+            actor_id=actor_id,
+            source_merge_event_id=source_merge_event_id,
+            fragment={
+                "alias_ids": alias_ids,
+                "observation_ids": observation_ids,
+                "moved_alias_ids": moved_alias_ids,
+                "moved_observation_ids": moved_observation_ids,
+            },
+            mode=mode,
+        )
+        self._metrics.record_split(tenant_id=tenant_id)
+
+        return {
+            "allowed": True,
+            "entity_id": entity_id,
+            "mode": mode,
+            "split_event_id": split_event["id"],
+            "resulting_entity_id": resulting_entity_id,
+            "moved_alias_ids": moved_alias_ids,
+            "moved_observation_ids": moved_observation_ids,
+            "revoked_edge_ids": revoked_edge_ids,
+            "reason_codes": plan.reason_codes,
+            "rejection_reason": None,
+            "error": None,
         }
 
     async def suppress_identifier(
