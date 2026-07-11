@@ -327,3 +327,72 @@ async def _audit_log_exporter(tenant_id: str, params: dict) -> ExportPayload:
         rows.extend(records)
     rows.sort(key=_sort_key)
     return ExportPayload(rows=rows, per_source=per_source)
+
+
+# ── cross-surface exporters: targeting packages + evidence packs ─────────────
+#
+# Registered by decorator on module import (like audit_log above) so every
+# fresh module identity in the test suite's sys.modules churn carries all
+# exporters — an explicit registration call would populate one identity's
+# EXPORTERS while a test reads another's. Both are strictly READ-ONLY over
+# already-persisted, tenant-scoped records — they never build or mutate.
+# Producing a new package/pack stays on its originating route (which persists +
+# audits); this path turns an existing record into a durable, verified artifact.
+# Tenant isolation is absolute: every read is scoped to the requesting tenant,
+# so a durable export can never cross tenants (operator cross-tenant views stay
+# on their admin routes).
+
+
+@register_exporter("targeting_package")
+async def _targeting_package_exporter(tenant_id: str, params: dict) -> ExportPayload:
+    """Export persisted targeting recommendation packages as a durable artifact.
+
+    ``params.export_id`` selects a single package (404 if it does not belong to
+    the tenant); otherwise the tenant's recent packages are exported (bounded by
+    ``params.limit``, default 100).
+    """
+    from services.targeting_intelligence.repository import get_targeting_repositories
+
+    repos = get_targeting_repositories()
+    export_id = params.get("export_id") or params.get("exportId")
+    if export_id:
+        # ``get`` is tenant-scoped and raises NotFoundError for a missing record
+        # or one owned by another tenant — no cross-tenant read is possible.
+        rows = [await repos.exports.get(tenant_id, export_id)]
+    else:
+        limit = int(params.get("limit", 100))
+        rows = await repos.exports.list_for_tenant(tenant_id, limit=limit)
+    return ExportPayload(rows=rows, per_source={"targeting_export_packages": len(rows)})
+
+
+@register_exporter("governance_evidence_pack")
+async def _governance_evidence_pack_exporter(tenant_id: str, params: dict) -> ExportPayload:
+    """Export a tenant's own governance evidence packs as a durable artifact.
+
+    Only the requesting tenant's packs are ever read. ``params.evidence_pack_id``
+    selects one (404 if absent for the tenant); ``params.pack_type`` filters by
+    control area. Platform-wide (tenant-less) packs and the operator cross-tenant
+    listing stay on the admin route — never exposed through this tenant-scoped
+    durable export.
+    """
+    from shared.common.common import NotFoundError
+
+    from services.security.evidence_packs import evidence_pack_service
+
+    limit = int(params.get("limit", 100))
+    packs = await evidence_pack_service.list_packs(tenant_id, limit=limit)
+
+    pack_id = params.get("evidence_pack_id") or params.get("packId")
+    if pack_id:
+        packs = [
+            p for p in packs
+            if p.get("evidence_pack_id") == pack_id or p.get("id") == pack_id
+        ]
+        if not packs:
+            raise NotFoundError("Governance evidence pack")
+
+    pack_type = params.get("pack_type")
+    if pack_type:
+        packs = [p for p in packs if p.get("pack_type") == pack_type]
+
+    return ExportPayload(rows=packs, per_source={"governance_evidence_packs": len(packs)})
