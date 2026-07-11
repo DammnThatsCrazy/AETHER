@@ -296,6 +296,15 @@ class IdentityResolutionService:
                     entity_type=entity_type,
                 )
 
+        # ── 8b. Link this event's observations to the resolved entity ─────
+        # Observations are persisted at step 4 before the canonical entity is
+        # known; link them now so get_observations_for_entity (and entity-scoped
+        # recompute) can actually find them.
+        if canonical_entity_id and event_id:
+            await self._repo.set_observations_canonical_entity(
+                tenant_id, event_id, canonical_entity_id
+            )
+
         # ── 9. Link aliases ───────────────────────────────────────────────
         linked_aliases: list[str] = []
         if policy_result.decision not in (MergeDecision.BLOCKED, MergeDecision.REJECT):
@@ -354,7 +363,9 @@ class IdentityResolutionService:
                     reason_codes=policy_result.reason_codes,
                     source_event_ids=[event_id] if event_id else [],
                 )
-                await self._repo.mark_subject_merged(from_id, canonical_entity_id)
+                await self._repo.mark_subject_merged_by_canonical_id(
+                    tenant_id, from_id, canonical_entity_id
+                )
                 self._metrics.record_merge(tenant_id=tenant_id)
 
         # ── 11. Create conflict if ambiguous ──────────────────────────────
@@ -481,7 +492,9 @@ class IdentityResolutionService:
             actor_type=actor_type,
             actor_id=actor_id,
         )
-        await self._repo.mark_subject_merged(secondary_entity_id, primary_entity_id)
+        await self._repo.mark_subject_merged_by_canonical_id(
+            tenant_id, secondary_entity_id, primary_entity_id
+        )
         self._metrics.record_merge(tenant_id=tenant_id)
 
         decision_obj = IdentityResolutionDecision(

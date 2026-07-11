@@ -175,13 +175,23 @@ async def resolve_identity(
 
 @router.get("/entities/{entity_id}")
 async def get_entity(entity_id: str, request: Request) -> dict:
-    """Get a canonical identity entity by ID."""
+    """Get a canonical identity entity by ID.
+
+    A merged (secondary) entity id follows its merge tombstone to the surviving
+    entity instead of returning a stale frozen record; the response carries
+    additive ``resolved_entity_id`` + ``redirected``.
+    """
     tenant = request.state.tenant
     repo = _get_resolution_repo()
-    subject = await repo.get_subject_by_canonical_entity_id(tenant.tenant_id, entity_id)
+    from services.identity.redirects import resolve_entity_redirect
+
+    resolved_id, redirected = await resolve_entity_redirect(repo, tenant.tenant_id, entity_id)
+    subject = await repo.get_subject_by_canonical_entity_id(tenant.tenant_id, resolved_id)
     if not subject:
         raise NotFoundError("IdentityEntity")
-    return APIResponse(data=subject).to_dict()
+    return APIResponse(
+        data={**subject, "resolved_entity_id": resolved_id, "redirected": redirected}
+    ).to_dict()
 
 
 @router.get("/entities/{entity_id}/aliases")

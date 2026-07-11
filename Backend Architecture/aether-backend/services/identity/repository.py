@@ -143,11 +143,57 @@ class IdentityResolutionRepository:
             await self._subjects.update(subject_id, row)
 
     async def mark_subject_merged(self, subject_id: str, into_entity_id: str) -> None:
+        """Tombstone a subject by ROW id. Deprecated for merge flows — callers
+        merge by canonical entity id and must use
+        :meth:`mark_subject_merged_by_canonical_id` instead (both resolver
+        paths pass canonical ids, so a row-id lookup silently no-ops)."""
         row = await self._subjects.find_by_id(subject_id)
         if row:
             row["status"] = SubjectStatus.MERGED.value
             row["merged_into_entity_id"] = into_entity_id
             await self._subjects.update(subject_id, row)
+
+    async def mark_subject_merged_by_canonical_id(
+        self, tenant_id: str, canonical_entity_id: str, into_entity_id: str
+    ) -> dict:
+        """Tombstone the subject for a CANONICAL entity id (idempotent).
+
+        This is what merge flows must call: both resolver call sites operate on
+        canonical entity ids, not subject row ids. If no subject row exists for
+        the merged entity (e.g. it was only ever an alias owner), a tombstone
+        row is created so the merge is durably recorded and survivor-redirect
+        can follow it.
+        """
+        row = await self.get_subject_by_canonical_entity_id(tenant_id, canonical_entity_id)
+        if row is None:
+            row = await self.create_subject(tenant_id, canonical_entity_id)
+        row["status"] = SubjectStatus.MERGED.value
+        row["merged_into_entity_id"] = into_entity_id
+        return await self._subjects.update(row["id"], row)
+
+    async def resolve_surviving_canonical_entity_id(
+        self, tenant_id: str, canonical_entity_id: str, max_hops: int = 10
+    ) -> str:
+        """Follow merge tombstones to the surviving canonical entity id.
+
+        Tenant-scoped, with a visited-set cycle guard and a hop bound so a
+        corrupted chain can never loop forever. Returns the input id unchanged
+        when the subject is active, missing, or has no ``merged_into_entity_id``.
+        """
+        current = canonical_entity_id
+        visited: set[str] = set()
+        for _ in range(max(1, max_hops)):
+            if current in visited:
+                break  # cycle — stop at the last safe id
+            visited.add(current)
+            row = await self.get_subject_by_canonical_entity_id(tenant_id, current)
+            if row is None or row.get("status") != SubjectStatus.MERGED.value:
+                return current
+            nxt = row.get("merged_into_entity_id")
+            if not nxt or nxt == current:
+                return current
+            current = nxt
+        return current
 
     # ── Aliases ───────────────────────────────────────────────────────────
 
@@ -286,22 +332,51 @@ class IdentityResolutionRepository:
         observed_at: str = "",
         consent_snapshot: Optional[dict] = None,
         context: Optional[dict] = None,
+        canonical_entity_id: Optional[str] = None,
     ) -> dict:
         obs_id = str(uuid.uuid4())
         now = utc_now().isoformat()
         return await self._observations.insert(obs_id, {
             "id": obs_id,
             "tenant_id": tenant_id,
+            "canonical_entity_id": canonical_entity_id,
             "source_event_id": source_event_id,
             "source_platform": source_platform,
             "source_sdk": source_sdk,
             "signal_type": signal_type.value,
+            # Written under both keys: `signal_hash` is the migration column name;
+            # `signal_value_hash` preserves the historical JSONB key readers use.
+            "signal_hash": signal_value_hash,
             "signal_value_hash": signal_value_hash,
             "raw_value_redacted": raw_value_redacted,
             "observed_at": observed_at or now,
             "consent_snapshot": consent_snapshot,
             "context": context or {},
         })
+
+    async def set_observations_canonical_entity(
+        self, tenant_id: str, source_event_id: str, canonical_entity_id: str
+    ) -> int:
+        """Link an event's persisted observations to the entity it resolved to.
+
+        Observations are written before the canonical entity is known (signals
+        are persisted at step 4, resolution happens at step 8), so the resolver
+        calls this once the entity id is known. Without it,
+        ``get_observations_for_entity`` (which filters on ``canonical_entity_id``)
+        can never match and entity-scoped recompute is broken.
+        """
+        rows = await self._observations.find_many(
+            filters={"tenant_id": tenant_id, "source_event_id": source_event_id},
+            limit=500,
+        )
+        updated = 0
+        for row in rows:
+            if row.get("canonical_entity_id") == canonical_entity_id:
+                continue
+            row["canonical_entity_id"] = canonical_entity_id
+            await self._observations.update(row["id"], row)
+            updated += 1
+        return updated
 
     # ── Clusters ──────────────────────────────────────────────────────────
 

@@ -138,6 +138,10 @@ class IdentitySubject:
     canonical_entity_id: str
     entity_type: EntityType
     status: SubjectStatus = SubjectStatus.ACTIVE
+    # When status == MERGED, the surviving canonical entity this subject was
+    # merged into. Read by the survivor-redirect resolver so a lookup of a
+    # merged (secondary) entity id follows the tombstone to the survivor.
+    merged_into_entity_id: Optional[str] = None
     created_at: str = ""
     updated_at: str = ""
     first_seen_at: str = ""
