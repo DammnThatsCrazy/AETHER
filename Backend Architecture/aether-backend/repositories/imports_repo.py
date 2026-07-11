@@ -40,6 +40,8 @@ class ImportsRepository:
         self.templates = BaseRepository("import_templates")
         self.validations = BaseRepository("import_validations")
         self.row_errors = BaseRepository("import_row_errors")
+        self.commits = BaseRepository("import_commits")
+        self.rollbacks = BaseRepository("import_rollbacks")
 
     # ── sessions ───────────────────────────────────────────────────────────
 
@@ -241,6 +243,59 @@ class ImportsRepository:
         if not rows:
             return []
         return rows[0].get("errors", [])
+
+    # ── commits ──────────────────────────────────────────────────────────────
+
+    async def create_commit(self, tenant_id: str, import_id: str, record: dict) -> dict:
+        commit_id = record.get("commit_id") or f"impc_{uuid.uuid4().hex}"
+        return await self.commits.insert(
+            commit_id,
+            {"tenant_id": tenant_id, "import_id": import_id, "commit_id": commit_id, **record},
+        )
+
+    async def get_commit(self, tenant_id: str, commit_id: str) -> dict:
+        row = await self.commits.find_by_id(commit_id)
+        if row is None or row.get("tenant_id") != tenant_id:
+            raise NotFoundError("import commit")
+        return row
+
+    async def update_commit(self, tenant_id: str, commit_id: str, **patch: Any) -> dict:
+        await self.get_commit(tenant_id, commit_id)  # tenant guard
+        return await self.commits.update(commit_id, patch)
+
+    async def list_commits(self, tenant_id: str, import_id: str) -> list[dict]:
+        rows = await self.commits.find_many(
+            filters={"tenant_id": tenant_id, "import_id": import_id},
+            limit=1000,
+            sort_by="created_at",
+            sort_order="desc",
+        )
+        return rows
+
+    async def latest_commit(self, tenant_id: str, import_id: str) -> Optional[dict]:
+        rows = await self.list_commits(tenant_id, import_id)
+        return rows[0] if rows else None
+
+    # ── rollbacks ────────────────────────────────────────────────────────────
+
+    async def create_rollback(
+        self, tenant_id: str, import_id: str, commit_id: str, manifest: dict
+    ) -> dict:
+        rollback_id = f"impr_{uuid.uuid4().hex}"
+        return await self.rollbacks.insert(
+            rollback_id,
+            {
+                "tenant_id": tenant_id,
+                "import_id": import_id,
+                "commit_id": commit_id,
+                **manifest,
+            },
+        )
+
+    async def list_rollbacks(self, tenant_id: str, import_id: str) -> list[dict]:
+        return await self.rollbacks.find_many(
+            filters={"tenant_id": tenant_id, "import_id": import_id}, limit=1000
+        )
 
 
 _repo: Optional[ImportsRepository] = None

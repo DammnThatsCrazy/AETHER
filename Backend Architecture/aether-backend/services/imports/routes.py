@@ -9,6 +9,8 @@ class is refused outright) so a hostile file never buffers to the byte ceiling.
 
 from __future__ import annotations
 
+from typing import Optional
+
 from fastapi import APIRouter, Query, Request
 from pydantic import BaseModel, Field
 
@@ -62,6 +64,11 @@ class TemplateBody(BaseModel):
 
 class ApplyTemplateBody(BaseModel):
     template_id: str
+
+
+class RollbackBody(BaseModel):
+    commit_id: Optional[str] = None
+    reason: str = "operator rollback"
 
 
 # ── templates (declared before /{import_id} so the literal wins) ─────────────
@@ -185,3 +192,75 @@ async def approve_import(import_id: str, request: Request):
 async def cancel_import(import_id: str, request: Request):
     tenant = _tenant(request, "write")
     return await svc.cancel_import(tenant.tenant_id, import_id)
+
+
+# ── commit / preview / replay / rollback ─────────────────────────────────────
+
+
+@router.post("/{import_id}/graph-preview")
+async def graph_preview(import_id: str, request: Request):
+    from services.imports.commit import graph_preview as _preview
+
+    tenant = _tenant(request, "read")
+    return await _preview(tenant.tenant_id, import_id)
+
+
+@router.post("/{import_id}/commit")
+async def commit_import(import_id: str, request: Request):
+    """Enqueue a durable commit job (Bronze + graph). The import must be approved."""
+    from services.jobs.service import get_jobs_service
+
+    tenant = _tenant(request, "write")
+    # Fail fast if not approved, rather than enqueueing a job doomed to fail.
+    session = await svc.get_import(tenant.tenant_id, import_id)
+    status = session["session"].get("status")
+    if status != "approved":
+        from shared.common.common import ConflictError
+
+        raise ConflictError(f"import must be approved before commit (current: {status!r})")
+    job = await get_jobs_service().enqueue(
+        tenant.tenant_id,
+        "import.commit",
+        {"import_id": import_id},
+        idempotency_key=f"import-commit:{import_id}",
+        correlation_id=_correlation_id(request),
+        requested_by=getattr(tenant, "user_id", None),
+    )
+    return {"import_id": import_id, "job": job}
+
+
+@router.post("/{import_id}/replay")
+async def replay_import(import_id: str, request: Request):
+    from services.jobs.service import get_jobs_service
+
+    tenant = _tenant(request, "write")
+    job = await get_jobs_service().enqueue(
+        tenant.tenant_id,
+        "import.replay",
+        {"import_id": import_id},
+        correlation_id=_correlation_id(request),
+        requested_by=getattr(tenant, "user_id", None),
+    )
+    return {"import_id": import_id, "job": job}
+
+
+@router.post("/{import_id}/rollback")
+async def rollback_import(import_id: str, body: RollbackBody, request: Request):
+    # Rollback is an elevated, destructive-to-graph action → admin.
+    from services.imports.commit import rollback_import as _rollback
+
+    tenant = _tenant(request, "admin")
+    return await _rollback(
+        tenant.tenant_id, import_id, commit_id=body.commit_id, reason=body.reason
+    )
+
+
+@router.get("/{import_id}/commits")
+async def list_commits(import_id: str, request: Request):
+    tenant = _tenant(request, "read")
+    from repositories.imports_repo import get_imports_repository
+
+    repo = get_imports_repository()
+    await repo.get_session(tenant.tenant_id, import_id)  # tenant guard
+    commits = await repo.list_commits(tenant.tenant_id, import_id)
+    return {"commits": commits, "count": len(commits)}

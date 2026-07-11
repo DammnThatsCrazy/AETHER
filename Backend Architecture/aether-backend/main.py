@@ -432,6 +432,9 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     # Job handlers must be registered before the supervised job worker starts
     # claiming, or already-enqueued export jobs would fail as unknown types.
     register_export_handlers()
+    from services.imports.commit import register_import_handlers
+
+    register_import_handlers()  # import.commit / import.replay
 
     # Supervised long-running loop workers: event replay, billing overage
     # cron, notification SLA expiry, Dune polling (canonical scheduler only —
