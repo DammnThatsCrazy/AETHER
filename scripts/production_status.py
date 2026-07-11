@@ -387,6 +387,66 @@ AREAS: list[Area] = [
         ],
     ),
     Area(
+        "measurement integrity plane",
+        4,  # 5 only once it carries production traffic at scale
+        "Immutable measurement-results store: every result carries a value_state "
+        "(observed/estimated/insufficient_data/not_applicable/missing_inputs/degraded) "
+        "so a metric is never a bare 0 on missing/insufficient data — calculators "
+        "return (value|None, state). A frozen MeasurementContext with a deterministic "
+        "context_hash keys each result; a partial unique index guarantees one active "
+        "result per context, and supersession (stamp superseded_by + insert new + "
+        "restatement record, atomic under Postgres) is the ONLY sanctioned mutation. "
+        "Hand-authored metric registry (MetricDefinition: unit, bounds, min_sample, "
+        "allows_probability) validated by a value/value_state contract that rejects "
+        "NaN/inf/out-of-bounds/negative counts; Wilson + seeded bootstrap uncertainty. "
+        "Read surfaces at /v1/measurement/{definitions,results,results/{id}/explain} "
+        "(lineage + sufficiency + uncertainty + restatement chain), tenant-scoped. "
+        "attributed credit is never relabeled causal; an index is never a probability "
+        "unless allows_probability=True. DDL parity-tested; single alembic head. "
+        "Gaps: registry is in-code (no generated metric-registry.json TS twin yet); "
+        "Campaign360 calculators do not yet thread MeasurementContext end-to-end; "
+        "no production traffic at scale.",
+        [
+            "Backend Architecture/aether-backend/shared/measurement/",
+            "Backend Architecture/aether-backend/shared/measurement/value_states.py",
+            "Backend Architecture/aether-backend/shared/measurement/registry.py",
+            "Backend Architecture/aether-backend/repositories/measurement_results_repo.py",
+            "Backend Architecture/aether-backend/services/measurement/routes/integrity.py",
+            "Backend Architecture/aether-backend/alembic/versions/20260716_measurement_integrity.py",
+            "docs/source-of-truth/MEASUREMENT_INTEGRITY.md",
+        ],
+    ),
+    Area(
+        "tenant import engine",
+        4,  # 5 only once it carries production traffic at scale
+        "Tenant self-serve import pipeline with no fake-success paths: create → "
+        "upload (size-capped mid-stream; xlsx/parquet/zip rejected, zip-bomb class "
+        "eliminated) → analyze (CSV/JSON/JSONL schema + PII/secret/identifier/"
+        "governance detection) → map (source columns → 9 canonical primitives, "
+        "structural + governance validation) → validate (dry-run, capped row errors, "
+        "governance review gate) → approve → commit. Commit stages every row to "
+        "Bronze (BronzeRepository, tagged by commit id) and upserts entity/identifier/"
+        "resource vertices + relationship edges into the graph with import_commit_id "
+        "lineage, idempotently, on the durable jobs platform (import.commit/replay). "
+        "Reversible: rollback revokes exactly the commit's edges + deletes its Bronze "
+        "rows (source bytes untouched); replay re-stages under a fresh commit. "
+        "TS⇄Python contract parity; direct-SQL BYTEA file store (DDL parity-tested); "
+        "tenant-isolated at the repo boundary; per-tenant concurrency cap; Kyber "
+        "operator console (/v1/kyber/imports) + IMPORT_FAILURES runbook. "
+        "Gaps: Silver import projector deferred; tenant-facing UI is a follow-on; "
+        "no production traffic at scale.",
+        [
+            "Backend Architecture/aether-backend/services/imports/",
+            "Backend Architecture/aether-backend/services/imports/service.py",
+            "Backend Architecture/aether-backend/services/imports/commit.py",
+            "Backend Architecture/aether-backend/services/imports/kyber_routes.py",
+            "Backend Architecture/aether-backend/repositories/import_files.py",
+            "packages/shared/imports.ts",
+            "docs/source-of-truth/IMPORTS.md",
+            "docs/runbooks/IMPORT_FAILURES.md",
+        ],
+    ),
+    Area(
         "campaign intelligence",
         5,
         "Canonical Campaign Registry with deterministic 7-step resolution (confidence 1.00→0.85). "

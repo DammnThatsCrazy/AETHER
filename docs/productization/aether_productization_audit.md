@@ -16,7 +16,7 @@ last_synced_commit: c198b6b
 
 # AETHER Productization Audit
 
-**Audit date:** 2026-06-10 (platform v8.9.0)
+**Audit date:** 2026-07-11 (platform v8.12.0)
 **Live counterpart:** `make production-status` (`scripts/production_status.py`) is the
 machine-checkable version of this audit. This document is the dated narrative
 snapshot; the script is the routine. If they disagree, re-run the routine and
@@ -130,6 +130,8 @@ Rubric: 0 absent · 1 stub/scaffold · 2 partial/pilot · 3 pre-production ·
 | security / compliance | 4 |
 | agentic_x402_productization | 4 |
 | measurement / attribution | 4 |
+| measurement integrity plane | 4 |
+| tenant import engine | 4 |
 | CI / tests | 4 |
 | docs | 4 |
 | deployment / cloud readiness | 3 |
@@ -137,13 +139,22 @@ Rubric: 0 absent · 1 stub/scaffold · 2 partial/pilot · 3 pre-production ·
 | payment rail observability | 3 |
 | card-linked payment rails | 2 |
 
-**Overall: ~3.81/5 — pre-production** (canonical live figure from
+**Overall: ~3.82/5 — pre-production** (canonical live figure from
 `make production-status`; this table is a dated excerpt of the full scorecard).
 Profile 360 and customer frontend are now 5/5. Security / compliance advanced to
 4/5 with VM dependency-audit and secret-scan controls CI-gated. Customer
 frontend reached 5/5 with Playwright E2E suite (5 scenarios, CI-gated via
 e2e-tenant job). Dune feeder AETHER_ENV guard replaced with config-driven
-DUNE_BACKEND flag. Payment rail observability (3) and card-linked payment rails
+DUNE_BACKEND flag. Two subsystems land this cycle at 4/5: the **Measurement
+Integrity Plane** (immutable results with value_state so a metric is never a bare
+0 on missing data, supersession-only mutation + restatement chain, in-code metric
+registry, Wilson/bootstrap uncertainty, `/v1/measurement/*` read surfaces — held
+at 4 pending an end-to-end Campaign360 threading and production traffic) and the
+**Tenant Import Engine** (create → analyze → map → validate → approve → commit to
+Bronze + graph with `import_commit_id` lineage on the durable jobs platform, with
+reversible rollback/replay, a Kyber operator console, and an IMPORT_FAILURES
+runbook — held at 4 pending a tenant UI, a Silver import projector, and
+production traffic). Payment rail observability (3) and card-linked payment rails
 (2) are wired and tested but flag-off with no live provider validated. All other
 areas with minor gaps remain at 4 until they carry production traffic at scale.
 
