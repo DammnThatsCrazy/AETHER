@@ -36,6 +36,10 @@ DEFAULT_MAX_UPLOAD_BYTES = 25 * 1024 * 1024
 # in-memory pass is honest and cheap; this bounds pathological wide files.
 MAX_VALIDATION_ROWS = 100_000
 
+# Per-tenant cap on concurrently in-flight (non-terminal) imports — bounds
+# resource use and makes a runaway client fail closed rather than pile up work.
+MAX_CONCURRENT_IMPORTS = 25
+
 
 async def _emit(topic_name: str, tenant_id: str, payload: dict) -> None:
     """Best-effort bus publish; the import flow never fails on telemetry."""
@@ -71,6 +75,12 @@ def _ensure_not_terminal(session: dict) -> None:
 
 async def create_import(tenant_id: str, *, created_by: Optional[str] = None) -> dict:
     repo = get_imports_repository()
+    active = await repo.count_active_sessions(tenant_id)
+    if active >= MAX_CONCURRENT_IMPORTS:
+        raise ConflictError(
+            f"tenant has {active} imports in flight (max {MAX_CONCURRENT_IMPORTS}); "
+            "finish, cancel, or roll back an existing import first"
+        )
     session = await repo.create_session(tenant_id, created_by=created_by)
     metrics.increment("import_sessions_created_total")
     await _emit("IMPORT_CREATED", tenant_id, {"import_id": session["id"]})

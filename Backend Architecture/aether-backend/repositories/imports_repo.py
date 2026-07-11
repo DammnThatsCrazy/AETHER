@@ -85,6 +85,30 @@ class ImportsRepository:
             filters={"tenant_id": tenant_id}, limit=limit, offset=offset
         )
 
+    async def count_active_sessions(self, tenant_id: str) -> int:
+        """Count the tenant's in-flight (non-terminal) import sessions."""
+        from services.imports.contracts import IMPORT_TERMINAL_STATUSES
+
+        rows = await self.sessions.find_many(filters={"tenant_id": tenant_id}, limit=1000)
+        return sum(1 for r in rows if r.get("status") not in IMPORT_TERMINAL_STATUSES)
+
+    # ── operator (cross-tenant) reads ────────────────────────────────────────
+
+    async def list_all_sessions(self, *, limit: int = 100) -> list[dict]:
+        """All tenants' sessions, newest first (Kyber operator surface only)."""
+        return await self.sessions.find_many(
+            filters=None, limit=limit, sort_by="created_at", sort_order="desc"
+        )
+
+    async def get_session_any(self, import_id: str) -> Optional[dict]:
+        """Fetch a session by id regardless of tenant (operator surface only)."""
+        return await self.sessions.find_by_id(import_id)
+
+    async def list_all_commits(self, *, limit: int = 100) -> list[dict]:
+        return await self.commits.find_many(
+            filters=None, limit=limit, sort_by="created_at", sort_order="desc"
+        )
+
     # ── schemas ────────────────────────────────────────────────────────────
 
     async def save_schema(
