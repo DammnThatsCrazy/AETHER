@@ -312,6 +312,7 @@ from services.measurement.routes.quality import router as measurement_quality_ro
 from services.measurement.routes.kyber import router as measurement_kyber_router
 from services.measurement.routes.integrity import router as measurement_integrity_router
 from services.measurement.routes.experiments import router as measurement_experiments_router
+from services.imports.routes import router as imports_router
 
 # ML predict routes — imported from the ML serving package when available.
 # When ML_SERVING_INLINE=true (E2 consolidated image) the predict routes are
@@ -611,6 +612,7 @@ def create_app() -> FastAPI:
     app.include_router(measurement_kyber_router)         # GET/POST /v1/kyber/measurement/*
     app.include_router(measurement_experiments_router)   # GET/POST /v1/experiments
     logger.info("Canonical Measurement: 6 routers mounted")
+    app.include_router(imports_router)                   # /v1/imports: upload/analyze/map/validate/templates
     app.include_router(sdk_health_router)   # SDK health monitoring: heartbeats + fleet status
     app.include_router(sdk_drift_router)    # SDK drift detection: schema, stale, replay storm
     app.include_router(sdk_config_router)   # SDK remote config: signed manifests + rollouts
