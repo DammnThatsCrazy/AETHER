@@ -19,7 +19,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from typing import Optional
 
-from fastapi import APIRouter, Query, Request
+from fastapi import APIRouter, Depends, Query, Request
 from pydantic import BaseModel
 
 from config.settings import settings
@@ -28,11 +28,17 @@ from shared.billing import stripe_client, stripe_repository
 from shared.common.common import APIResponse, BadRequestError, NotFoundError
 from shared.logger.logger import get_logger, metrics
 
+from services.security.request_context import require_kyber_operator
+
 logger = get_logger("aether.service.billing")
 
 router = APIRouter(prefix="/v1/billing", tags=["Billing"])
 admin_overage_router = APIRouter(prefix="/v1/admin/billing", tags=["Admin — Billing"])
-kyber_revops_router = APIRouter(prefix="/v1/admin/kyber/revops", tags=["Admin — Kyber Revenue Operations"])
+kyber_revops_router = APIRouter(
+    prefix="/v1/admin/kyber/revops",
+    tags=["Admin — Kyber Revenue Operations"],
+    dependencies=[Depends(require_kyber_operator)],
+)
 
 
 # ---------------------------------------------------------------------------

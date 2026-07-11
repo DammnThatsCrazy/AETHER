@@ -10,7 +10,7 @@ import uuid
 from datetime import datetime, timezone
 from typing import Any, Literal, Optional
 
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, Depends, Request
 from pydantic import BaseModel, Field
 
 from repositories.agentic_observability_repos import (
@@ -35,6 +35,7 @@ from services.external_account_observability.graph_mutations import (
     build_account_mutations, build_brokerage_mutations,
     build_trade_intent_mutations, build_order_mutations, build_portfolio_mutations,
 )
+from services.security.request_context import require_kyber_operator
 
 router = APIRouter()
 
@@ -247,7 +248,7 @@ async def observe_agent_budget(req: BudgetObsRequest, request: Request) -> ExtAc
     )
 
 
-@router.get("/v1/admin/kyber/agentic-observability/external-accounts")
+@router.get("/v1/admin/kyber/agentic-observability/external-accounts", dependencies=[Depends(require_kyber_operator)])
 async def kyber_external_accounts(request: Request) -> dict:
     """Kyber operator: external account observability overview."""
     _require_perm(request, "admin")

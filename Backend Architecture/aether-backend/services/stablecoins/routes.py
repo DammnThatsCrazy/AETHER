@@ -6,15 +6,20 @@ feature flag can be checked per-request without a restart.
 """
 from __future__ import annotations
 
-from fastapi import APIRouter, HTTPException, Query, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 
 from repositories.stablecoin_repos import StablecoinObservationRepository
 from services.agentic_observability.foundation import active_tenant_id, require_permission
+from services.security.request_context import require_kyber_operator
 from services.stablecoins.profile360 import StablecoinProfile360Composer
 from shared.common.common import APIResponse
 
 router = APIRouter(prefix="/v1/stablecoin", tags=["stablecoin-intelligence"])
-kyber_router = APIRouter(prefix="/v1/admin/kyber/stablecoin", tags=["kyber-stablecoin"])
+kyber_router = APIRouter(
+    prefix="/v1/admin/kyber/stablecoin",
+    tags=["kyber-stablecoin"],
+    dependencies=[Depends(require_kyber_operator)],
+)
 # Unprefixed: profile-360 composition lives under the platform /v1/profile family.
 profile_router = APIRouter(tags=["stablecoin-intelligence"])
 

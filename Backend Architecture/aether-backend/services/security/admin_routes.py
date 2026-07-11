@@ -27,7 +27,7 @@ from __future__ import annotations
 from collections import Counter
 from typing import Any, Optional
 
-from fastapi import APIRouter, Query, Request
+from fastapi import APIRouter, Depends, Query, Request
 from pydantic import BaseModel
 
 from shared.common.common import APIResponse
@@ -49,7 +49,11 @@ from .request_context import require_kyber_operator
 from .retention import data_retention_service
 
 logger = get_logger("aether.security.admin_routes")
-admin_router = APIRouter(prefix="/v1/admin/kyber/security", tags=["Admin — Kyber Security & Governance"])
+admin_router = APIRouter(
+    prefix="/v1/admin/kyber/security",
+    tags=["Admin — Kyber Security & Governance"],
+    dependencies=[Depends(require_kyber_operator)],
+)
 
 _audit_repo = SecurityAuditEventRepository()
 

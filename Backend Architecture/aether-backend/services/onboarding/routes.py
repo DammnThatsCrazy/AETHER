@@ -5,10 +5,11 @@ import uuid
 from collections import Counter, defaultdict
 from typing import Any
 
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel
 
 from shared.common.common import APIResponse, utc_now
+from services.security.request_context import require_kyber_operator
 from .models import (
     BlockerStatus,
     CustomerSuccessTrigger,
@@ -35,7 +36,11 @@ from .scoring import (
 from .templates import ONBOARDING_TEMPLATES
 
 router = APIRouter(prefix="/v1/onboarding", tags=["Customer Onboarding"])
-admin_router = APIRouter(prefix="/v1/admin/kyber/onboarding", tags=["Admin — Kyber Customer Implementation"])
+admin_router = APIRouter(
+    prefix="/v1/admin/kyber/onboarding",
+    tags=["Admin — Kyber Customer Implementation"],
+    dependencies=[Depends(require_kyber_operator)],
+)
 
 _plans = TenantImplementationPlanRepository()
 _steps = ImplementationStepRepository()

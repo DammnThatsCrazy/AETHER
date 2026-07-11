@@ -1,14 +1,19 @@
 from __future__ import annotations
 
 from typing import Any
-from fastapi import APIRouter, HTTPException, Request, Query
+from fastapi import APIRouter, Depends, HTTPException, Request, Query
 from pydantic import BaseModel, Field
 
 from shared.common.common import APIResponse, NotFoundError, ForbiddenError
+from services.security.request_context import require_kyber_operator
 from .engine import cascades_for_tenant, classify_event, entity_state, get_store
 
 router = APIRouter(prefix="/v1/semantic", tags=["Semantic Sentiment Intelligence"])
-kyber_router = APIRouter(prefix="/v1/kyber/semantic", tags=["Kyber Semantic Operations"])
+kyber_router = APIRouter(
+    prefix="/v1/kyber/semantic",
+    tags=["Kyber Semantic Operations"],
+    dependencies=[Depends(require_kyber_operator)],
+)
 campaign_router = APIRouter(prefix="/v1/campaigns", tags=["Campaign Semantic Intelligence"])
 graph_router = APIRouter(prefix="/v1/graph", tags=["Graph Semantic Overlays"])
 population_router = APIRouter(prefix="/v1/population", tags=["Population Semantic Intelligence"])

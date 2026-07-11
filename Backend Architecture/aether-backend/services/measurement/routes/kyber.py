@@ -5,11 +5,12 @@ from __future__ import annotations
 from datetime import date, datetime
 from typing import Optional
 
-from fastapi import APIRouter, Query, Request
+from fastapi import APIRouter, Depends, Query, Request
 from pydantic import BaseModel, Field
 
 from shared.common.common import APIResponse, NotFoundError, BadRequestError
 from shared.logger.logger import get_logger
+from services.security.request_context import require_kyber_operator
 from services.measurement.repositories.connector_repo import ConnectorRepository
 from services.measurement.repositories.conversion_repo import ConversionRepository
 from services.measurement.repositories.attribution_run_repo import AttributionRunRepository
@@ -19,7 +20,11 @@ from services.measurement.engine.journey_compiler import JourneyCompiler
 from services.measurement.engine.gold_materializer import backfill_tenant
 
 logger = get_logger("aether.measurement.routes.kyber")
-router = APIRouter(prefix="/v1/kyber/measurement", tags=["Kyber Measurement Ops"])
+router = APIRouter(
+    prefix="/v1/kyber/measurement",
+    tags=["Kyber Measurement Ops"],
+    dependencies=[Depends(require_kyber_operator)],
+)
 
 _connector_repo = ConnectorRepository()
 _conversion_repo = ConversionRepository()

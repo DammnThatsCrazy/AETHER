@@ -10,11 +10,12 @@ from collections import Counter
 from datetime import datetime, timezone
 from typing import Any, Literal
 
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, Depends, Request
 from pydantic import BaseModel, Field
 
 from repositories.repos import AdminRepository
 from shared.common.common import APIResponse, ForbiddenError, NotFoundError, utc_now
+from services.security.request_context import require_kyber_operator
 from services.intelligence.repositories import (
     AccountPlanRepository,
     ActionDispatchRepository,
@@ -405,7 +406,11 @@ def current_tenant_id(request: Request) -> str:
     return tenant_id
 
 
-admin_router = APIRouter(prefix="/v1/admin/kyber/customer-success", tags=["Admin — Customer Success"])
+admin_router = APIRouter(
+    prefix="/v1/admin/kyber/customer-success",
+    tags=["Admin — Customer Success"],
+    dependencies=[Depends(require_kyber_operator)],
+)
 tenant_router = APIRouter(prefix="/v1/value-review", tags=["Value Review"])
 
 
