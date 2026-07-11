@@ -227,7 +227,7 @@ Technical controls enforced at the infrastructure level before any data reaches 
 
 #### Consent Management (Art. 7)
 
-- **5 consent purposes:** `analytics`, `marketing`, `web3`, `agent` (Intelligence Graph behavioral tracking), `commerce` (payment processing)
+- **Registry-derived consent purposes:** canonical set in `packages/shared/contracts/consent-registry.json` — base purposes (`analytics`, `marketing`, `personalization`, `web3`, `agent`, `commerce`) plus explicit opt-in purposes (`financial_activity`, `credit`, `location`, `economic_observability`, `cross_chain_observability`)
 - **Immutable audit trail:** DynamoDB append-only log recording user_id, tenant_id, purpose, granted status, timestamp, IP address hash, user agent hash, policy version, and source
 - **Do Not Track (DNT) support:** SDK respects DNT headers before collection
 - **Consent sources:** cookie banner, privacy settings, API, DNT signal

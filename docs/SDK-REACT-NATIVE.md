@@ -209,24 +209,28 @@ Aether.wallet.transaction('0xabc123...', {
 
 ## Consent Management
 
-Eight canonical purposes: `analytics`, `marketing`, `personalization`, `web3`, `agent`, `commerce`,
-`credit`, `location`. `credit` and `location` **always require explicit opt-in** — they are never
-granted by `grantAll()` and must be presented as separate consent choices in your UI.
+Consent purposes are **registry-derived** — the canonical set lives in
+`packages/shared/contracts/consent-registry.json`. Base purposes (`analytics`,
+`marketing`, `personalization`, `web3`, `agent`, `commerce`) can be granted together;
+explicit opt-in purposes (`financial_activity`, `credit`, `location`,
+`economic_observability`, `cross_chain_observability`) **always require separate
+opt-in** and are never granted by `grantAll()`. Present each explicit opt-in purpose
+as a separate consent choice in your UI.
 
 ```typescript
 // Grant specific purposes
 Aether.consent.grant(['analytics', 'marketing']);
 
-// Grant all non-sensitive purposes (excludes credit and location)
+// Grant all base purposes (excludes every explicit opt-in purpose)
 Aether.consent.grantAll();
 
-// Explicitly grant credit after showing separate consent UI
+// Explicitly grant an explicit opt-in purpose after showing separate consent UI
 Aether.consent.grant(['credit']);
 
 // Revoke consent
 Aether.consent.revoke(['marketing']);
 
-// Get state (all 8 purposes with boolean values)
+// Get state (all registry purposes with boolean values)
 const state = await Aether.consent.getState();
 // { analytics: true, marketing: false, personalization: false, web3: false,
 //   agent: false, commerce: false, credit: false, location: false, ... }

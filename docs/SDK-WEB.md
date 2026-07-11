@@ -131,9 +131,13 @@ The SDK automatically generates a SHA-256 device fingerprint on initialization f
 
 ### Consent Management (GDPR/CCPA)
 
-Eight canonical purposes: `analytics`, `marketing`, `personalization`, `web3`, `agent`, `commerce`,
-`credit`, `location`. `credit` and `location` **always require explicit opt-in** — `grantAll()` never
-grants them. Present them as separate choices in your consent UI.
+Consent purposes are **registry-derived** — the canonical set lives in
+`packages/shared/contracts/consent-registry.json`. Base purposes (`analytics`,
+`marketing`, `personalization`, `web3`, `agent`, `commerce`) can be granted together;
+explicit opt-in purposes (`financial_activity`, `credit`, `location`,
+`economic_observability`, `cross_chain_observability`) **always require separate
+opt-in** and are never granted by `grantAll()`. Present each explicit opt-in purpose
+as a separate choice in your consent UI.
 
 `personalization` gates device fingerprinting: revoking it automatically deletes the cached fingerprint.
 

@@ -43,16 +43,25 @@ Seven data-protection controls are applied at ingestion and storage:
 
 ### Consent purposes
 
-Aether recognises five consent purposes aligned with GDPR Article 6 and the
-platform's event schema:
+Aether's consent purposes are **registry-derived** and aligned with GDPR
+Article 6. The canonical set lives in
+`packages/shared/contracts/consent-registry.json`; the always-current enumeration
+is the generated table `docs/_generated/consent-registry-table.md`. The base
+(non-explicit-opt-in) purposes are:
 
 | Purpose key | Description | Default |
 |-------------|-------------|---------|
 | `analytics` | Behavioural analytics and product telemetry | opt-in |
 | `marketing` | Marketing communications and retargeting | opt-in |
+| `personalization` | Recommendations + device fingerprinting (fingerprint-gated) | opt-in |
 | `web3` | On-chain activity tracking and wallet analytics | opt-in |
 | `agent` | AI agent interaction logging | opt-in |
 | `commerce` | Transaction processing and payment telemetry | required for commerce features |
+
+Explicit opt-in purposes (`financial_activity`, `credit`, `location`,
+`economic_observability`, `cross_chain_observability`) always require separate
+opt-in and are never granted by accept-all. See the registry for the full set and
+per-purpose retention / DSR scope.
 
 Consent state is stored per-user, per-purpose in DynamoDB with a full audit log
 of changes. A consent withdrawal immediately suppresses the relevant event types

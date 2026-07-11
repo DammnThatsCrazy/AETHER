@@ -44,7 +44,8 @@ deliver observations.
 - **One batch endpoint**: every platform POSTs `POST /v1/batch`.
 - **One event envelope**: every event conforms to `BaseEvent` in
   `packages/shared/events.ts`.
-- **One consent model**: every SDK recognises the same 5 purposes.
+- **One consent model**: every SDK recognises the same registry-derived purposes
+  (canonical set in `packages/shared/contracts/consent-registry.json`).
 - **No backend duplication**: workflow logic never lives in the client.
 - **Optional tiers are optional**: commerce, agent, wallet, x402 surfaces
   only activate when the host app calls them.

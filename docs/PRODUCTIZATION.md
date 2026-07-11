@@ -71,7 +71,7 @@ The following subsystems are implemented, tested, and CI-verified:
 - ✅ Feature-flagged (`AETHER_SUGGESTIONS_ENABLED=false`); execution disabled by default (`AETHER_SUGGESTIONS_EXECUTION_ENABLED=false`)
 
 ### Security + Compliance
-- ✅ Consent enforcement: 8 consent purposes (analytics, marketing, web3, agent, commerce, personalization, credit, location)
+- ✅ Consent enforcement: registry-derived consent purposes (canonical set in `packages/shared/contracts/consent-registry.json`; base + explicit opt-in categories)
 - ✅ PII masking: 3 analyst role tiers (readonly, standard, compliance) with field-level masking rules
 - ✅ Tenant isolation (JWT-based, all queries scoped by tenant_id)
 - ✅ GDPR/SOC2 architecture (consent audit log, data deletion hooks, PII-safe export)

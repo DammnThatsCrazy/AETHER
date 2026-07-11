@@ -252,6 +252,7 @@ def main(argv: Sequence[str] | None = None) -> None:
     docs_gates = [
         (["python", "scripts/validate_docs.py"], "Docs version drift validation", "python scripts/bump_version.py <canonical-version>"),
         (["python", "scripts/validate_frontmatter.py"], "Docs frontmatter validity", "fix the reported frontmatter errors"),
+        (["python", "scripts/validate_consent_registry_docs.py"], "Consent-purpose docs are registry-derived (no hardcoded count)", "use registry-derived language; canonical source is packages/shared/contracts/consent-registry.json"),
     ]
     for cmd, name, remediation in docs_gates:
         run(cmd, name=name, results=results, stop_on_failure=stop, remediation=remediation)
