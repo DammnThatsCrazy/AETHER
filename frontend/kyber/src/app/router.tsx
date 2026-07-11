@@ -58,6 +58,8 @@ const AgentTelemetryPage = lazy(() => import('@kyber/pages/agent-telemetry').the
 const PaymentRailsPage = lazy(() => import('@kyber/pages/payment-rails').then(m => ({ default: m.PaymentRailsPage })));
 const AiEfficiencyPage = lazy(() => import('@kyber/pages/ai-efficiency').then(m => ({ default: m.AiEfficiencyPage })));
 const TargetingIntelligencePage = lazy(() => import('@kyber/pages/targeting').then(m => ({ default: m.TargetingIntelligencePage })));
+const ImportsOpsPage = lazy(() => import('@kyber/pages/imports-ops').then(m => ({ default: m.ImportsOpsPage })));
+const ImportOpsDetailPage = lazy(() => import('@kyber/pages/imports-ops').then(m => ({ default: m.ImportOpsDetailPage })));
 
 function PageSuspense({ children }: { readonly children: React.ReactNode }) {
   return (
@@ -98,6 +100,8 @@ export function AppRouter() {
                 <Route path="/lab" element={<PageSuspense><LabPage /></PageSuspense>} />
                 <Route path="/tenants" element={<PageSuspense><TenantsPage /></PageSuspense>} />
                 <Route path="/tenants/:tenantId" element={<PageSuspense><TenantsPage /></PageSuspense>} />
+                <Route path="/imports" element={<PageSuspense><ImportsOpsPage /></PageSuspense>} />
+                <Route path="/imports/:importId" element={<PageSuspense><ImportOpsDetailPage /></PageSuspense>} />
                 <Route path="/implementation" element={<PageSuspense><ImplementationPage /></PageSuspense>} />
                 <Route path="/implementation/:tenantId" element={<PageSuspense><ImplementationPage /></PageSuspense>} />
                 <Route path="/cis" element={<PageSuspense><CisPage /></PageSuspense>} />
