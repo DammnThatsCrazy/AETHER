@@ -1499,6 +1499,27 @@ async def get_data_freshness(
     return APIResponse(data=data).to_dict()
 
 
+@router.get("/{user_id}/data-status")
+async def get_data_status(
+    user_id: str,
+    request: Request,
+    agg: Profile360Aggregator = Depends(_get_aggregator),
+):
+    """Canonical per-dimension data-status (dimension-state contract).
+
+    Each dimension reports a `DimensionEnvelope` — state (ready / empty / stale /
+    insufficient_data / degraded / error), reason code, freshness, and count —
+    plus a worst-wins `overall_state`, so a surface can say why a slice is empty
+    or degraded instead of rendering a blank that reads as no activity.
+    """
+    tenant = request.state.tenant
+    tenant.require_permission("read")
+    from services.reconciliation.dimension_status import compute_data_status
+
+    data = await compute_data_status(agg, user_id, tenant.tenant_id)
+    return APIResponse(data=data).to_dict()
+
+
 # ── Economic Sub-Routes ────────────────────────────────────────────
 
 @router.get("/{user_id}/economic")

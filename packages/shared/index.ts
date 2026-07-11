@@ -57,3 +57,4 @@ export * from './interoperability';
 // Production-readiness platform contracts
 export * from './ingestion-contract';
 export * from './problem-details';
+export * from './dimension-state';
