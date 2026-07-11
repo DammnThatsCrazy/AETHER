@@ -9,6 +9,7 @@ source_files:
   - Backend Architecture/aether-backend/services/imports/service.py
   - Backend Architecture/aether-backend/services/imports/routes.py
   - Backend Architecture/aether-backend/services/imports/storage.py
+  - Backend Architecture/aether-backend/services/imports/commit.py
   - Backend Architecture/aether-backend/repositories/import_files.py
   - Backend Architecture/aether-backend/repositories/imports_repo.py
 last_synced_commit: pending
@@ -88,6 +89,37 @@ Governance: when a mapping targets a governance-sensitive primitive
 requires the `admin` permission **and** a passing validation — a
 governance-sensitive import cannot slip to `approved` without both.
 
+## Commit / replay / rollback
+
+`services/imports/commit.py` — the mutation half. An **approved** import is
+staged, with lineage, into two durable places:
+
+- **Bronze** (`BronzeRepository("tenant_import")`): every source row is ingested
+  immutably, tagged with the commit id (the Bronze `source_tag`). The source
+  file bytes are never mutated.
+- **The graph**: `entity` / `resource` / `identifier` primitives become upserted
+  vertices (idempotent); `relationship` and identifier→entity become edges, each
+  carrying `import_commit_id` as a lineage property. Every edge created is
+  recorded on the commit row, and edge creation is existence-checked so a
+  re-stage adds no duplicates.
+
+| Route | Purpose |
+|---|---|
+| `POST /v1/imports/{id}/graph-preview` | non-mutating: the vertices/edges a commit would produce |
+| `POST /v1/imports/{id}/commit` | enqueue the durable `import.commit` job (must be approved) |
+| `POST /v1/imports/{id}/replay` | re-stage under a fresh commit (revokes the prior live commit first) |
+| `POST /v1/imports/{id}/rollback` | revoke the commit's edges + delete its Bronze rows (admin) |
+| `GET /v1/imports/{id}/commits` | the import's commit history |
+
+- The commit runs on the **durable jobs platform** (`import.commit` /
+  `import.replay` handlers) — retryable, leased, audited — and records real
+  counts; a partial failure yields `partially_committed`, never a silent success.
+- **Rollback** soft-revokes the commit's graph edges (`GraphClient.revoke_edge`)
+  and deletes its Bronze rows (`rollback_by_source_tag`). Upserted vertices
+  persist — the graph client exposes no vertex delete and a vertex may be shared;
+  revoking the edges disconnects the import's contribution. The source file is
+  untouched, so a rolled-back import is fully re-committable via **replay**.
+
 ## Persistence
 
 - `repositories/import_files.py` (migration `20260718_import_engine`) — the
@@ -121,15 +153,19 @@ governance-sensitive import cannot slip to `approved` without both.
 
 ## Non-goals / limitations
 
-- **Commit / replay / rollback land separately.** This change deliberately stops
-  at `approved`: the Bronze (`BronzeRepository("tenant_import")`) staging, the
-  Silver import projector, the idempotent graph mutation with `import_commit_id`
-  lineage, and the reversible rollback (Bronze source-tag delete + graph
-  edge-revoke) are the next increment.
+- **Silver projection is deferred.** A commit stages Bronze (the immutable
+  source) and the graph (the product surface) directly. A dedicated Silver
+  `import_projector` (the analytical Bronze→Silver fan-out) is the next
+  increment; the import's data is fully queryable in the graph today.
+- **Vertices are not deleted on rollback** — the graph client exposes no vertex
+  delete and a vertex may be shared across sources. Rollback revokes the import's
+  edges (disconnecting its contribution) and deletes its Bronze rows.
 - **No object store.** Files live in Postgres BYTEA (no shared object store
   exists); the `ImportStorageAdapter` Protocol is the seam an S3 implementation
   slots into without touching the service.
 - **Validation is inline** (files are size-capped, so a full in-memory pass is
-  honest and cheap). The commit step will run on the durable jobs platform.
+  honest and cheap); the commit runs on the durable jobs platform.
 - **Archives / spreadsheets are rejected**, not parsed (`unsupported_format`) —
   no XLSX/Parquet/zip dependencies, and the zip-bomb class is eliminated.
+- **A tenant-facing UI** (upload wizard, mapping editor, commit/rollback console)
+  and Kyber cross-tenant import ops are a follow-on frontend PR.
