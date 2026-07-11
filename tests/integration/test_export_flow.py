@@ -11,11 +11,11 @@ sys.path.insert(0, str(BACKEND))
 
 from repositories import artifacts as artifacts_mod  # noqa: E402
 from services.export import service as export_service  # noqa: E402
-from services.jobs.handlers import (  # noqa: E402
-    HANDLER_REGISTRY,
-    JobContext,
-    unregister_handler,
+from services.export.service import (  # noqa: E402
+    expire_export_artifacts,
+    generate_export_artifact,
 )
+from services.jobs.handlers import JobContext  # noqa: E402
 from shared.common.common import BadRequestError  # noqa: E402
 
 TENANT = "tenant-export-flow"
@@ -23,14 +23,12 @@ TENANT = "tenant-export-flow"
 
 @pytest.fixture(autouse=True)
 def _fresh_state(monkeypatch):
-    # Fresh artifact store per test and freshly-registered handlers.
+    # Fresh artifact store per test. The job handlers are called directly
+    # (module-level functions) so the test never depends on the global
+    # HANDLER_REGISTRY, which can be split across module reloads in the full
+    # suite (sys.modules surgery in contract tests).
     monkeypatch.setattr(artifacts_mod, "_repo", artifacts_mod.ArtifactRepository())
-    unregister_handler("export.generate")
-    unregister_handler("export.expire_sweep")
-    export_service.register_export_handlers()
     yield
-    unregister_handler("export.generate")
-    unregister_handler("export.expire_sweep")
 
 
 def _ctx(job_id="job-1", tenant=TENANT):
@@ -82,7 +80,7 @@ async def test_unknown_export_type_rejected():
 
 
 async def test_generate_handler_produces_verified_artifact():
-    handler = HANDLER_REGISTRY["export.generate"]
+    handler = generate_export_artifact
     ctx, events = _ctx()
     outcome = await handler({"export_type": "audit_log", "params": {"format": "csv"}}, ctx)
     assert outcome.status == "succeeded", outcome.error
@@ -102,7 +100,7 @@ async def test_generate_handler_produces_verified_artifact():
 
 
 async def test_generate_handler_fails_on_unknown_exporter():
-    handler = HANDLER_REGISTRY["export.generate"]
+    handler = generate_export_artifact
     ctx, _ = _ctx()
     outcome = await handler({"export_type": "ghost", "params": {}}, ctx)
     assert outcome.status == "failed"
@@ -110,7 +108,7 @@ async def test_generate_handler_fails_on_unknown_exporter():
 
 
 async def test_expire_sweep_handler_reports_counts():
-    handler = HANDLER_REGISTRY["export.expire_sweep"]
+    handler = expire_export_artifacts
     ctx, _ = _ctx()
     outcome = await handler({}, ctx)
     assert outcome.status == "succeeded"
@@ -118,12 +116,14 @@ async def test_expire_sweep_handler_reports_counts():
 
 
 async def test_artifact_not_visible_cross_tenant():
-    handler = HANDLER_REGISTRY["export.generate"]
+    handler = generate_export_artifact
     ctx, _ = _ctx()
     outcome = await handler({"export_type": "audit_log", "params": {"format": "json"}}, ctx)
     artifact_id = outcome.result["artifact_id"]
     repo = artifacts_mod.get_artifact_repository()
-    from shared.common.common import NotFoundError
-
-    with pytest.raises(NotFoundError):
+    # Match on class name, not identity: the full suite's sys.modules surgery
+    # (contract tests) can leave two shared.common.common modules → two
+    # distinct NotFoundError classes that pytest.raises can't match.
+    with pytest.raises(Exception) as exc_info:
         await repo.get_content("tenant-other", artifact_id)
+    assert type(exc_info.value).__name__ == "NotFoundError"

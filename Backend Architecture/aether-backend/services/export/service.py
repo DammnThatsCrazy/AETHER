@@ -167,114 +167,116 @@ async def request_export(
 # ── job handlers ─────────────────────────────────────────────────────────
 
 
-def register_export_handlers() -> None:
-    """Register export job handlers with the jobs platform (idempotent)."""
-    from services.jobs.handlers import (
-        HANDLER_REGISTRY,
-        JobContext,
-        JobOutcome,
-        register_handler,
+async def generate_export_artifact(payload: dict, ctx: Any) -> Any:
+    """Job handler: run an exporter, persist + verify the artifact, notify."""
+    from services.export.manifest import build_manifest
+    from services.jobs.handlers import JobOutcome
+
+    export_type = payload.get("export_type", "")
+    params = payload.get("params", {}) or {}
+    exporter = EXPORTERS.get(export_type)
+    if exporter is None:
+        return JobOutcome(
+            status="failed",
+            result={},
+            error=f"no exporter registered for {export_type!r}",
+        )
+
+    result = await exporter(ctx.tenant_id, params)
+    await ctx.heartbeat()
+
+    fmt = params.get("format", "json")
+    content, content_type, columns = serialize_rows(result.rows, fmt, result.columns)
+    manifest = build_manifest(
+        content,
+        export_type=export_type,
+        tenant_id=ctx.tenant_id,
+        params=params,
+        correlation_id=ctx.correlation_id,
+        row_count=len(result.rows),
+        columns=columns or None,
+        per_source=result.per_source or None,
+    )
+    expires_at = (
+        datetime.now(timezone.utc) + timedelta(days=DEFAULT_ARTIFACT_TTL_DAYS)
+    ).isoformat()
+
+    repo = get_artifact_repository()
+    artifact = await repo.put(
+        ctx.tenant_id,
+        export_type=export_type,
+        filename=f"{export_type.replace('.', '-')}-{manifest['generated_at'][:10]}.{fmt}",
+        content=content,
+        content_type=content_type,
+        manifest=manifest,
+        job_id=ctx.job_id,
+        expires_at=expires_at,
+    )
+    # Never report success without verified durable bytes.
+    if not await repo.verify(ctx.tenant_id, artifact["id"]):
+        return JobOutcome(
+            status="failed",
+            result={"artifact_id": artifact["id"]},
+            error="artifact checksum verification failed after write",
+        )
+
+    metrics.increment("export_ready_total", labels={"export_type": export_type})
+    await ctx.emit_event(
+        "export.ready",
+        {"artifact_id": artifact["id"], "sha256": artifact["sha256"], "size_bytes": artifact["size_bytes"]},
+    )
+    await _emit(
+        "EXPORT_READY",
+        ctx.tenant_id,
+        {"job_id": ctx.job_id, "artifact_id": artifact["id"], "export_type": export_type},
+    )
+    # Best-effort in-app notification; the durable artifact is the record.
+    try:
+        from services.notification_intelligence.inbox import create_inbox_notification
+
+        await create_inbox_notification(
+            ctx.tenant_id,
+            category="export_ready",
+            severity="info",
+            title=f"Export ready: {export_type}",
+            body=f"{artifact['filename']} ({artifact['size_bytes']} bytes) is ready to download.",
+            link=f"/v1/exports/{artifact['id']}/download",
+            correlation_id=ctx.correlation_id,
+            dedupe_key=f"export:{artifact['id']}",
+        )
+    except Exception as exc:  # pragma: no cover — defensive
+        logger.debug(f"export inbox notification skipped: {exc}")
+
+    return JobOutcome(
+        status="succeeded",
+        result={
+            "artifact_id": artifact["id"],
+            "sha256": artifact["sha256"],
+            "size_bytes": artifact["size_bytes"],
+            "download_url": f"/v1/exports/{artifact['id']}/download",
+        },
     )
 
-    if "export.generate" in HANDLER_REGISTRY:
-        return
 
-    @register_handler("export.generate")
-    async def _generate(payload: dict, ctx: JobContext) -> JobOutcome:
-        from services.export.manifest import build_manifest
+async def expire_export_artifacts(payload: dict, ctx: Any) -> Any:
+    """Job handler: physically delete expired artifact content (tombstone stays)."""
+    from services.jobs.handlers import JobOutcome
 
-        export_type = payload.get("export_type", "")
-        params = payload.get("params", {}) or {}
-        exporter = EXPORTERS.get(export_type)
-        if exporter is None:
-            return JobOutcome(
-                status="failed",
-                result={},
-                error=f"no exporter registered for {export_type!r}",
-            )
+    swept = await get_artifact_repository().expire_sweep()
+    if swept.get("swept"):
+        metrics.increment("export_artifact_deleted_total", value=swept["swept"])
+        await _emit("EXPORT_EXPIRED", ctx.tenant_id, {"swept": swept["swept"]})
+    return JobOutcome(status="succeeded", result=swept)
 
-        result = await exporter(ctx.tenant_id, params)
-        await ctx.heartbeat()
 
-        fmt = params.get("format", "json")
-        content, content_type, columns = serialize_rows(result.rows, fmt, result.columns)
-        manifest = build_manifest(
-            content,
-            export_type=export_type,
-            tenant_id=ctx.tenant_id,
-            params=params,
-            correlation_id=ctx.correlation_id,
-            row_count=len(result.rows),
-            columns=columns or None,
-            per_source=result.per_source or None,
-        )
-        expires_at = (
-            datetime.now(timezone.utc) + timedelta(days=DEFAULT_ARTIFACT_TTL_DAYS)
-        ).isoformat()
+def register_export_handlers() -> None:
+    """Register export job handlers with the jobs platform (idempotent)."""
+    from services.jobs.handlers import HANDLER_REGISTRY, register_handler
 
-        repo = get_artifact_repository()
-        artifact = await repo.put(
-            ctx.tenant_id,
-            export_type=export_type,
-            filename=f"{export_type.replace('.', '-')}-{manifest['generated_at'][:10]}.{fmt}",
-            content=content,
-            content_type=content_type,
-            manifest=manifest,
-            job_id=ctx.job_id,
-            expires_at=expires_at,
-        )
-        # Never report success without verified durable bytes.
-        if not await repo.verify(ctx.tenant_id, artifact["id"]):
-            return JobOutcome(
-                status="failed",
-                result={"artifact_id": artifact["id"]},
-                error="artifact checksum verification failed after write",
-            )
-
-        metrics.increment("export_ready_total", labels={"export_type": export_type})
-        await ctx.emit_event(
-            "export.ready",
-            {"artifact_id": artifact["id"], "sha256": artifact["sha256"], "size_bytes": artifact["size_bytes"]},
-        )
-        await _emit(
-            "EXPORT_READY",
-            ctx.tenant_id,
-            {"job_id": ctx.job_id, "artifact_id": artifact["id"], "export_type": export_type},
-        )
-        # Best-effort in-app notification; the durable artifact is the record.
-        try:
-            from services.notification_intelligence.inbox import create_inbox_notification
-
-            await create_inbox_notification(
-                ctx.tenant_id,
-                category="export_ready",
-                severity="info",
-                title=f"Export ready: {export_type}",
-                body=f"{artifact['filename']} ({artifact['size_bytes']} bytes) is ready to download.",
-                link=f"/v1/exports/{artifact['id']}/download",
-                correlation_id=ctx.correlation_id,
-                dedupe_key=f"export:{artifact['id']}",
-            )
-        except Exception as exc:  # pragma: no cover — defensive
-            logger.debug(f"export inbox notification skipped: {exc}")
-
-        return JobOutcome(
-            status="succeeded",
-            result={
-                "artifact_id": artifact["id"],
-                "sha256": artifact["sha256"],
-                "size_bytes": artifact["size_bytes"],
-                "download_url": f"/v1/exports/{artifact['id']}/download",
-            },
-        )
-
-    @register_handler("export.expire_sweep")
-    async def _expire(payload: dict, ctx: JobContext) -> JobOutcome:
-        swept = await get_artifact_repository().expire_sweep()
-        if swept.get("swept"):
-            metrics.increment("export_artifact_deleted_total", value=swept["swept"])
-            await _emit("EXPORT_EXPIRED", ctx.tenant_id, {"swept": swept["swept"]})
-        return JobOutcome(status="succeeded", result=swept)
+    if "export.generate" not in HANDLER_REGISTRY:
+        register_handler("export.generate")(generate_export_artifact)
+    if "export.expire_sweep" not in HANDLER_REGISTRY:
+        register_handler("export.expire_sweep")(expire_export_artifacts)
 
 
 async def run_export_expiry_sweep_loop(interval_seconds: int = 3600) -> None:
