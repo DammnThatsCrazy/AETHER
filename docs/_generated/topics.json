@@ -31,6 +31,10 @@
           "value": "aether.identity.merged"
         },
         {
+          "member": "IDENTITY_SPLIT",
+          "value": "aether.identity.split"
+        },
+        {
           "member": "PROFILE_UPDATED",
           "value": "aether.profile.updated"
         }
@@ -1163,6 +1167,10 @@
     {
       "member": "IDENTITY_MERGED",
       "value": "aether.identity.merged"
+    },
+    {
+      "member": "IDENTITY_SPLIT",
+      "value": "aether.identity.split"
     },
     {
       "member": "PROFILE_UPDATED",

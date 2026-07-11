@@ -558,6 +558,24 @@ class IdentityResolutionRepository:
                 revoked_ids.append(e["id"])
         return revoked_ids
 
+    async def list_identity_edges(
+        self, tenant_id: str, limit: int = 500, include_revoked: bool = True
+    ) -> list[dict]:
+        """List identity edges for a tenant (read-only, tenant-scoped).
+
+        Used by the repo↔graph reconciliation job to enumerate a tenant's
+        edges in a single bounded pass rather than per-entity. Returns raw edge
+        rows; revoked edges are included unless ``include_revoked`` is False so
+        callers can diff active-vs-revoked state themselves. Never cross-tenant:
+        the underlying store is filtered on ``tenant_id``.
+        """
+        rows = await self._edges.find_many(
+            filters={"tenant_id": tenant_id}, limit=limit
+        )
+        if not include_revoked:
+            rows = [r for r in rows if not r.get("revoked_at")]
+        return rows
+
     # ── Merge events (append-only) ────────────────────────────────────────
 
     async def create_merge_event(

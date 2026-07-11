@@ -208,6 +208,7 @@ from services.gateway.routes import router as gateway_router
 from services.ingestion.routes import router as ingestion_router
 from services.ingestion.batch import router as batch_router
 from services.identity.routes import router as identity_router
+from services.identity.reconciliation_routes import router as identity_reconciliation_router
 from services.analytics.routes import router as analytics_router
 from services.ml_serving.routes import router as ml_router
 from services.ml_serving.kyber_ml_admin import router as kyber_ml_admin_router
@@ -235,6 +236,7 @@ from services.intelligence.routes import kyber_admin_router, router as intellige
 from services.intelligence.customer_success import admin_router as customer_success_admin_router, tenant_router as value_review_router
 from services.intelligence.extraction_intel import router as extraction_intel_router
 from services.profile.routes import router as profile_router, profile360_router
+from services.reconciliation.coverage_routes import router as sdk_coverage_router
 from services.population.routes import router as population_router
 from services.semantic_intelligence.routes import (
     campaign_router as campaign_semantic_router,
@@ -503,6 +505,7 @@ def create_app() -> FastAPI:
     app.include_router(batch_router)      # POST /v1/batch — canonical SDK ingestion
     app.include_router(ingestion_router)  # POST /v1/ingest/feed (server-side feed)
     app.include_router(identity_router)
+    app.include_router(identity_reconciliation_router)
     app.include_router(analytics_router)
     app.include_router(ml_router)
     app.include_router(kyber_ml_admin_router)  # Kyber ML command center admin hooks
@@ -543,6 +546,7 @@ def create_app() -> FastAPI:
     app.include_router(social_router)
     app.include_router(profile_router)
     app.include_router(profile360_router)
+    app.include_router(sdk_coverage_router)
     app.include_router(population_router)
     app.include_router(semantic_intelligence_router)
     app.include_router(kyber_semantic_router)
