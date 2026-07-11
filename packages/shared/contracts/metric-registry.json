@@ -1,0 +1,56 @@
+{
+  "_comment": "Canonical Aether metric registry — DO NOT manually edit. Source of truth for packages/shared/measurement-contract.ts, Backend Architecture/aether-backend/shared/measurement/generated_registry.py, and docs/_generated/metric-registry-table.md. Mirrors the hand-authored shared/measurement/registry.py; keep the two in lockstep (tests/unit/test_metric_registry_contract.py enforces parity). Edit here, then run: python scripts/generate_contracts.py",
+  "contractVersion": "1",
+  "metrics": [
+    {
+      "name": "conversion_rate",
+      "version": "1",
+      "unit": "ratio",
+      "description": "Share of journeys that reached a conversion.",
+      "lower": 0.0,
+      "upper": 1.0,
+      "allowsProbability": false,
+      "minSample": 30
+    },
+    {
+      "name": "attributed_conversions",
+      "version": "1",
+      "unit": "count",
+      "description": "Conversions credited under the active attribution model.",
+      "lower": 0.0,
+      "upper": null,
+      "allowsProbability": false,
+      "minSample": 1
+    },
+    {
+      "name": "revenue",
+      "version": "1",
+      "unit": "currency",
+      "description": "Attributed revenue over the measurement window.",
+      "lower": 0.0,
+      "upper": null,
+      "allowsProbability": false,
+      "minSample": 1
+    },
+    {
+      "name": "touchpoints",
+      "version": "1",
+      "unit": "count",
+      "description": "Distinct marketing touchpoints observed in the window.",
+      "lower": 0.0,
+      "upper": null,
+      "allowsProbability": false,
+      "minSample": 1
+    },
+    {
+      "name": "journey_completion_rate",
+      "version": "1",
+      "unit": "ratio",
+      "description": "Share of started journeys that completed.",
+      "lower": 0.0,
+      "upper": 1.0,
+      "allowsProbability": false,
+      "minSample": 20
+    }
+  ]
+}
