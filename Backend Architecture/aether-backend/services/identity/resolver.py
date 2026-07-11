@@ -23,6 +23,7 @@ graph edges, or merge records. The repository layer enforces this.
 
 from __future__ import annotations
 
+import os
 import uuid
 from dataclasses import dataclass, field
 from typing import Any, Optional
@@ -68,6 +69,24 @@ from .signals import extract_signals
 from .split_policy import SplitPolicyContext, evaluate_split
 
 logger = get_logger("aether.identity.resolver")
+
+# Environments where strong (probabilistic) auto-linking is OFF by default.
+_STRONG_AUTOLINK_DISABLED_ENVS = frozenset({"staging", "production", "prod"})
+
+
+def _strong_autolink_enabled() -> bool:
+    """Whether STRONG (probabilistic) auto-linking may merge automatically.
+
+    Off by default in staging/production so probable-but-not-deterministic
+    matches go to candidate/conflict review; deterministic auto-linking is
+    unaffected. Explicit policy approval via a truthy
+    ``AETHER_IDENTITY_STRONG_AUTOLINK`` re-enables it.
+    """
+    env = os.getenv("AETHER_ENV", "local").strip().lower()
+    if env in _STRONG_AUTOLINK_DISABLED_ENVS:
+        flag = os.getenv("AETHER_IDENTITY_STRONG_AUTOLINK", "")
+        return flag.strip().lower() in {"1", "true", "yes", "on"}
+    return True
 
 # Signals that must be hashed before persistence
 _HASH_ON_INGEST: dict[IdentitySignalType, str] = {
@@ -313,6 +332,11 @@ class IdentityResolutionService:
         has_conflict = len(existing_entity_ids) > 1 and _has_strong_signal(matching_types)
 
         # ── 7. Apply merge policy ─────────────────────────────────────────
+        # Strong (probabilistic) auto-linking is OFF by default in staging/
+        # production — those signals go to candidate/conflict review instead of
+        # silently merging. Deterministic auto-linking (verified user_id/
+        # external_id/wallet) stays enabled. Explicit policy approval via
+        # AETHER_IDENTITY_STRONG_AUTOLINK re-enables strong auto-link.
         policy_ctx = MergePolicyContext(
             tenant_id=tenant_id,
             source_tenant_id=tenant_id,
@@ -321,6 +345,7 @@ class IdentityResolutionService:
             revoked_signal_types=revoked_types,
             has_conflict=has_conflict,
             existing_entity_ids=existing_entity_ids,
+            auto_link_strong=_strong_autolink_enabled(),
         )
         policy_result = evaluate(policy_ctx)
 
