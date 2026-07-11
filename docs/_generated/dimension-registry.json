@@ -1,0 +1,89 @@
+{
+  "version": "8.12.0",
+  "generated_from": [
+    "packages/shared/dimension-state.ts",
+    "Backend Architecture/aether-backend/services/reconciliation/expectations.py"
+  ],
+  "states": [
+    "ready",
+    "empty",
+    "partial",
+    "stale",
+    "insufficient_data",
+    "degraded",
+    "suppressed",
+    "not_applicable",
+    "pending",
+    "error"
+  ],
+  "precedence": [
+    "ready",
+    "not_applicable",
+    "empty",
+    "pending",
+    "partial",
+    "insufficient_data",
+    "stale",
+    "suppressed",
+    "degraded",
+    "error"
+  ],
+  "reason_codes": [
+    "ok",
+    "no_data",
+    "below_min_events",
+    "past_freshness_sla",
+    "partial_inputs",
+    "dependency_failed",
+    "consent_withheld",
+    "entity_type_mismatch",
+    "awaiting_reconciliation",
+    "computation_error"
+  ],
+  "expectations": [
+    {
+      "dimension": "wallets",
+      "min_events": 1,
+      "freshness_sla_seconds": 604800,
+      "source_method": "wallets",
+      "depends_on": []
+    },
+    {
+      "dimension": "sessions",
+      "min_events": 1,
+      "freshness_sla_seconds": 86400,
+      "source_method": "sessions",
+      "depends_on": []
+    },
+    {
+      "dimension": "campaigns",
+      "min_events": 1,
+      "freshness_sla_seconds": 2592000,
+      "source_method": "campaigns",
+      "depends_on": []
+    },
+    {
+      "dimension": "journeys",
+      "min_events": 1,
+      "freshness_sla_seconds": 604800,
+      "source_method": "journeys",
+      "depends_on": [
+        "sessions"
+      ]
+    },
+    {
+      "dimension": "financials",
+      "min_events": 1,
+      "freshness_sla_seconds": 604800,
+      "source_method": "financials",
+      "depends_on": []
+    },
+    {
+      "dimension": "relationships",
+      "min_events": 1,
+      "freshness_sla_seconds": 2592000,
+      "source_method": "relationships",
+      "depends_on": []
+    }
+  ]
+}
