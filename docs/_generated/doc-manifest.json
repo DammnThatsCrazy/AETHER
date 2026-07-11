@@ -4885,6 +4885,21 @@
       "canonical_owner": "platform@aether"
     },
     {
+      "path": "docs/runbooks/MEASUREMENT_RESTATEMENT.md",
+      "title": "Runbook — Measurement Restatement",
+      "slug": "runbooks/measurement-restatement",
+      "section": "operations",
+      "visibility": "I",
+      "audience": [
+        "ops",
+        "dev-senior"
+      ],
+      "status": "stable",
+      "estimated_read_minutes": 5,
+      "toc_depth": 2,
+      "canonical_owner": "platform@aether"
+    },
+    {
       "path": "docs/runbooks/ML-INCIDENT-RUNBOOK.md",
       "title": "ML Incident Runbook",
       "slug": "ai/ml-incident-runbook",
