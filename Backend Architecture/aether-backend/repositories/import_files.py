@@ -60,8 +60,22 @@ class ImportFileRepository:
     def __init__(self) -> None:
         self._pool: Optional[Any] = None
         self._table_ensured = False
-        # Local fallback: id -> row dict (content held as bytes).
-        self._store: dict[str, dict] = {}
+
+    @property
+    def _store(self) -> dict[str, dict]:
+        """The process-wide in-memory byte store, resolved *lazily* from the
+        current ``repositories.repos`` module.
+
+        Anchoring in ``_IN_MEMORY_STORES`` (as BaseRepository does) makes every
+        instance share one store. Resolving it per access — rather than binding
+        it at import time — also survives the test suite's ``sys.modules`` churn:
+        a write via one module identity and a read via another both resolve the
+        *current* ``repos`` module, so they never miss each other. In production
+        (single module identity) this is simply the one shared dict.
+        """
+        from repositories.repos import _IN_MEMORY_STORES
+
+        return _IN_MEMORY_STORES.setdefault("import_files_bytea", {})
 
     async def _ensure(self) -> Optional[Any]:
         if self._pool is None:

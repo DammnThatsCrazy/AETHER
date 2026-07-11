@@ -397,21 +397,32 @@ async def replay_import(tenant_id: str, import_id: str) -> dict:
 # ── jobs platform registration ───────────────────────────────────────────────
 
 
+def _outcome_status(record: dict) -> str:
+    return "succeeded" if record["status"] == "committed" else "partially_succeeded"
+
+
+async def commit_job_handler(payload: dict, ctx: Any):
+    """``import.commit`` job handler — module-level (not a closure) so it resolves
+    the same module identity as its caller and stays testable directly."""
+    from services.jobs.handlers import JobOutcome
+
+    record = await commit_import(ctx.tenant_id, payload["import_id"])
+    return JobOutcome(status=_outcome_status(record), result=record)
+
+
+async def replay_job_handler(payload: dict, ctx: Any):
+    """``import.replay`` job handler (module-level, directly testable)."""
+    from services.jobs.handlers import JobOutcome
+
+    record = await replay_import(ctx.tenant_id, payload["import_id"])
+    return JobOutcome(status=_outcome_status(record), result=record)
+
+
 def register_import_handlers() -> None:
     """Register the import.commit / import.replay job handlers (idempotent)."""
-    from services.jobs.handlers import HANDLER_REGISTRY, JobContext, JobOutcome, register_handler
+    from services.jobs.handlers import HANDLER_REGISTRY, register_handler
 
     if "import.commit" in HANDLER_REGISTRY:
         return
-
-    @register_handler("import.commit")
-    async def _commit_handler(payload: dict, ctx: JobContext) -> JobOutcome:  # noqa: ANN001
-        record = await commit_import(ctx.tenant_id, payload["import_id"])
-        status = "succeeded" if record["status"] == "committed" else "partially_succeeded"
-        return JobOutcome(status=status, result=record)
-
-    @register_handler("import.replay")
-    async def _replay_handler(payload: dict, ctx: JobContext) -> JobOutcome:  # noqa: ANN001
-        record = await replay_import(ctx.tenant_id, payload["import_id"])
-        status = "succeeded" if record["status"] == "committed" else "partially_succeeded"
-        return JobOutcome(status=status, result=record)
+    register_handler("import.commit")(commit_job_handler)
+    register_handler("import.replay")(replay_job_handler)

@@ -251,10 +251,11 @@ async def test_tenant_isolation(clean):
 
 
 async def test_commit_job_handler(clean):
-    from services.imports.commit import register_import_handlers
-    from services.jobs.handlers import HANDLER_REGISTRY, JobContext
+    from services.jobs.handlers import JobContext
 
-    register_import_handlers()
+    # Call the module-level handler directly (via this test's own `cm`), not the
+    # global HANDLER_REGISTRY — a registry closure may be bound to a different
+    # module identity under suite churn and miss the seeded session.
     import_id = await _seed_approved()
 
     async def _noop(*_a, **_k):
@@ -262,6 +263,14 @@ async def test_commit_job_handler(clean):
 
     ctx = JobContext(job_id="j1", tenant_id=TENANT, correlation_id="c1",
                      heartbeat=_noop, emit_event=_noop)
-    outcome = await HANDLER_REGISTRY["import.commit"]({"import_id": import_id}, ctx)
+    outcome = await cm.commit_job_handler({"import_id": import_id}, ctx)
     assert outcome.status == "succeeded"
     assert outcome.result["counts"]["edges"] == 4
+
+
+def test_handlers_are_registered():
+    from services.imports.commit import register_import_handlers
+    from services.jobs.handlers import HANDLER_REGISTRY
+
+    register_import_handlers()
+    assert "import.commit" in HANDLER_REGISTRY and "import.replay" in HANDLER_REGISTRY
