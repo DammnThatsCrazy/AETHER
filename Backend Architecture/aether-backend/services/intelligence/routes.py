@@ -21,7 +21,7 @@ from typing import Any, Literal
 
 from config.settings import settings
 from dependencies.providers import get_registry
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, Depends, Request
 from pydantic import BaseModel, Field
 from repositories.lake import gold_identity, gold_market
 from shared.common.common import APIResponse, BadRequestError, utc_now
@@ -78,6 +78,7 @@ from services.intelligence.repositories import (
     AuditExportRepository,
 )
 from services.lake.features import materialize_wallet_features
+from services.security.request_context import require_kyber_operator
 
 from services.intelligence.solution_packages import (
     AUDIT_EXPORT_TYPES,
@@ -100,7 +101,11 @@ from services.intelligence.solution_packages import (
 
 logger = get_logger("aether.service.intelligence")
 router = APIRouter(prefix="/v1/intelligence", tags=["Intelligence"])
-kyber_admin_router = APIRouter(prefix="/v1/admin/kyber", tags=["Admin — Kyber Strategic Observability"])
+kyber_admin_router = APIRouter(
+    prefix="/v1/admin/kyber",
+    tags=["Admin — Kyber Strategic Observability"],
+    dependencies=[Depends(require_kyber_operator)],
+)
 
 # Anti-distillation: imported lazily at use site to avoid circular init
 _anti_distillation_service = None

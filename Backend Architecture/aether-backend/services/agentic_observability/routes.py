@@ -10,7 +10,7 @@ import uuid
 from datetime import datetime, timezone
 from typing import Any
 
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, Depends, Request
 
 from repositories.agentic_observability_repos import (
     AgentActivityRepository, AgentConnectionRepository,
@@ -36,6 +36,7 @@ from services.agentic_observability.foundation import (
     validate_event_name,
     validate_payload_tenant,
 )
+from services.security.request_context import require_kyber_operator
 
 router = APIRouter()
 mcp_router = APIRouter()
@@ -195,7 +196,7 @@ async def observe_risk_signal(req: AgentRiskSignalRequest, request: Request) -> 
 # Kyber admin read routes
 # ---------------------------------------------------------------------------
 
-@router.get("/v1/admin/kyber/agentic-observability/overview")
+@router.get("/v1/admin/kyber/agentic-observability/overview", dependencies=[Depends(require_kyber_operator)])
 async def kyber_agentic_overview(request: Request) -> dict:
     """Kyber operator: agentic observability overview."""
     _require_perm(request, "admin")
@@ -218,7 +219,7 @@ async def kyber_agentic_overview(request: Request) -> dict:
     }
 
 
-@router.get("/v1/admin/kyber/agentic-observability/agents/{agent_id}")
+@router.get("/v1/admin/kyber/agentic-observability/agents/{agent_id}", dependencies=[Depends(require_kyber_operator)])
 async def kyber_agentic_agent(agent_id: str, request: Request) -> dict:
     """Kyber operator: single agent observability view."""
     _require_perm(request, "admin")
@@ -238,7 +239,7 @@ async def kyber_agentic_agent(agent_id: str, request: Request) -> dict:
     }
 
 
-@router.get("/v1/admin/kyber/agentic-observability/risk")
+@router.get("/v1/admin/kyber/agentic-observability/risk", dependencies=[Depends(require_kyber_operator)])
 async def kyber_agentic_risk(request: Request) -> dict:
     """Kyber operator: risk signals overview."""
     _require_perm(request, "admin")

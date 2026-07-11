@@ -9,8 +9,10 @@ from __future__ import annotations
 import uuid
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, HTTPException, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from shared.graph.graph import Vertex, Edge
+
+from services.security.request_context import require_kyber_operator
 
 from repositories.agentic_observability_repos import (
     X402InteractionRepository, X402ChallengeRepository,
@@ -235,14 +237,14 @@ async def observe_x402_resource_access(req: X402ResourceAccessRequest, request: 
     )
 
 
-@router.get("/v1/admin/kyber/agentic-observability/x402")
+@router.get("/v1/admin/kyber/agentic-observability/x402", dependencies=[Depends(require_kyber_operator)])
 async def kyber_x402_overview(request: Request) -> dict:
     """Kyber operator: x402 observability overview."""
     _require_perm(request, "admin")
     return {"status": "ok", "message": "x402 observability overview"}
 
 
-@router.get("/v1/admin/kyber/agentic-observability/replay")
+@router.get("/v1/admin/kyber/agentic-observability/replay", dependencies=[Depends(require_kyber_operator)])
 async def kyber_x402_replay(request: Request) -> dict:
     """Kyber operator: replay risk signals."""
     _require_perm(request, "admin")

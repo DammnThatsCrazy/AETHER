@@ -182,6 +182,13 @@ async def silver_fact_projector(event: Event) -> None:
         )
         return
 
+    # Card-linked context on payment/commerce SDK events also lands in the
+    # durable card_linked_flows store — the source of truth every card-linked
+    # read surface queries. The Silver CardLinkedProjector above only writes
+    # the analytical card_linked_flow_facts projection. Best-effort: Bronze is
+    # durable and a replay recovers missed flows.
+    await _ingest_card_linked_context(tenant_id, payload)
+
     # Communication events keep the per-entity state and journey fresh.
     # Rebuilds are coalesced: an event burst for one profile inside the
     # debounce window produces exactly one state recompute and one journey
@@ -200,6 +207,36 @@ async def silver_fact_projector(event: Event) -> None:
                 )
             except Exception as exc:
                 logger.warning("comms_rebuild_request_failed entity=%s: %s", entity_id, exc)
+
+
+async def _ingest_card_linked_context(tenant_id: str, payload: dict) -> None:
+    """Feed card-linked SDK context into the durable flow store (flag-gated)."""
+    try:
+        from config.settings import get_settings
+
+        if not get_settings().card_linked_payment_rails.enabled:
+            return
+        from services.card_linked_payments.ingestion import (
+            CARD_LINKED_SDK_EVENT_TYPES,
+            get_ingestion_service,
+        )
+
+        event_type = payload.get("event_type", "")
+        if event_type not in CARD_LINKED_SDK_EVENT_TYPES:
+            return
+        event = {
+            "type": event_type,
+            "event_id": payload.get("event_id"),
+            "timestamp": payload.get("timestamp"),
+            "user_id": payload.get("user_id"),
+            "agent_id": payload.get("agent_id"),
+            "canonical_entity_id": payload.get("canonical_entity_id"),
+            "org_id": payload.get("org_id"),
+            "properties": payload.get("properties") or {},
+        }
+        await get_ingestion_service().ingest_sdk_event(tenant_id, event)
+    except Exception as exc:  # pragma: no cover — best-effort side channel
+        logger.debug("card-linked SDK ingestion skipped: %s", exc)
 
 
 def _comms_ingestion_enabled() -> bool:

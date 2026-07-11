@@ -141,6 +141,11 @@ def build_worker_specs(*, registry: Any, settings: Any) -> list[WorkerSpec]:
 
         return build_notification_outbox_worker()
 
+    def _export_expiry_sweep() -> Coroutine[Any, Any, None]:
+        from services.export import build_export_expiry_sweep_coro
+
+        return build_export_expiry_sweep_coro()
+
     # ── specs (registration order mirrors the old lifespan start order) ───
 
     return [
@@ -199,5 +204,10 @@ def build_worker_specs(*, registry: Any, settings: Any) -> list[WorkerSpec]:
         WorkerSpec(
             name="notification_outbox",
             factory=_notification_outbox,
+        ),
+        # Physical deletion of expired export artifacts (tombstones remain).
+        WorkerSpec(
+            name="export_expiry_sweep",
+            factory=_export_expiry_sweep,
         ),
     ]

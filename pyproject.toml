@@ -65,6 +65,7 @@ backend = [
     "anthropic>=0.25",
     "croniter>=2",   # jobs platform cron schedules (services/jobs/scheduler.py)
     "tzdata",        # IANA tz database for zoneinfo on slim images
+    "alembic>=1.13", # migrations + /v1/ready migrations-head check + RUN_MIGRATIONS
 ]
 
 # Backend with Stripe Billing integration

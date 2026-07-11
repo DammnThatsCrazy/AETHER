@@ -7,7 +7,7 @@ audience: [ops]
 source_files:
   - Backend Architecture/aether-backend/services/measurement/routes/kyber.py
   - frontend/kyber/src/pages/measurement/campaign-registry-health-page.tsx
-last_synced_commit: 64f12e3
+last_synced_commit: "a681289"
 ---
 
 # Campaign Intelligence — Kyber Operator Guide

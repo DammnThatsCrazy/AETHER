@@ -9,7 +9,7 @@ from __future__ import annotations
 import uuid
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, Depends, Request
 from pydantic import BaseModel, Field
 from typing import Literal, Optional
 
@@ -31,6 +31,7 @@ from services.agent_comm_observability.inbox_models import AgentInboxObservedRec
 from services.agent_comm_observability.message_models import AgentMessageObservedRecord, AgentAttachmentObservedRecord
 from services.agent_comm_observability.extraction_models import ExtractedEntityObservedRecord, ExtractedEntityType
 from services.agent_comm_observability.provider_events import normalize_agentmail_message
+from services.security.request_context import require_kyber_operator
 
 router = APIRouter()
 
@@ -215,7 +216,7 @@ async def observe_agent_extraction(req: ExtractionObsRequest, request: Request) 
     )
 
 
-@router.get("/v1/admin/kyber/agentic-observability/inboxes")
+@router.get("/v1/admin/kyber/agentic-observability/inboxes", dependencies=[Depends(require_kyber_operator)])
 async def kyber_inboxes_overview(request: Request) -> dict:
     """Kyber operator: agent inbox observability overview."""
     _require_perm(request, "admin")
