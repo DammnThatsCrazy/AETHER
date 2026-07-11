@@ -202,11 +202,47 @@ class IdentityGraphWriter:
         tenant_id: str,
         original_entity_id: str,
     ) -> list[str]:
-        """Revoke all same_as edges involving the split entity."""
+        """Revoke all same_as edges involving the split entity.
+
+        The repository is the source of truth; the Neptune graph mirror is
+        revoked best-effort afterwards (soft-revoke: the edge is marked
+        revoked, not deleted), so the graph and repo agree on which SAME_AS
+        edges a split severed.
+        """
+        # Capture the outgoing SAME_AS edge targets BEFORE revoking, so the
+        # graph mirror can revoke the same edges.
+        same_as_targets: list[str] = []
+        try:
+            edges = await self._repo.get_entity_graph(tenant_id, original_entity_id)
+            same_as_targets = [
+                e.get("target_entity_id")
+                for e in edges
+                if e.get("edge_type") == EdgeType.SAME_AS.value
+                and e.get("source_entity_id") == original_entity_id
+                and not e.get("revoked_at")
+                and e.get("target_entity_id")
+            ]
+        except Exception as exc:  # pragma: no cover — defensive
+            logger.debug("split edge enumeration for graph mirror skipped: %s", exc)
+
         revoked = await self._repo.revoke_edges_for_merge(
             tenant_id, original_entity_id, EdgeType.SAME_AS
         )
         self._metrics.record_graph_edge_writes(-len(revoked))
+
+        # Mirror the revoke onto the graph backend (best-effort).
+        if self._graph is not None:
+            for target in same_as_targets:
+                try:
+                    await self._graph.revoke_edge(
+                        from_vertex_id=original_entity_id,
+                        to_vertex_id=target,
+                        edge_type=EdgeType.SAME_AS.value,
+                        reason="fragment_split",
+                        tenant_id=tenant_id,
+                    )
+                except Exception as exc:  # pragma: no cover — graph is a mirror
+                    logger.debug("graph edge revoke mirror skipped: %s", exc)
         return revoked
 
     # ── Internal helpers ──────────────────────────────────────────────────

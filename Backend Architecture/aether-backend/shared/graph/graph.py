@@ -854,14 +854,54 @@ class _InMemoryGraphBackend:
     async def add_edge(self, edge: Edge) -> None:
         self._edges.append(edge)
 
+    async def revoke_edge(
+        self,
+        from_vertex_id: str,
+        to_vertex_id: str,
+        edge_type: str,
+        reason: str,
+        tenant_id: Optional[str] = None,
+    ) -> int:
+        """Soft-revoke matching edge(s); return the count of matching edges.
+
+        Sets ``revoked``/``revoked_at``/``revoke_reason`` on every stored edge
+        matching ``(from, to, edge_type[, tenant_id])``. Does not hard-delete.
+        Idempotent: already-revoked edges keep their original ``revoked_at`` and
+        are still counted, so re-revoking is a safe no-op-ish success.
+        """
+        revoked_at = datetime.now(timezone.utc).isoformat()
+        count = 0
+        for edge in self._edges:
+            if (
+                edge.from_vertex_id == from_vertex_id
+                and edge.to_vertex_id == to_vertex_id
+                and edge.edge_type == edge_type
+            ):
+                if tenant_id is not None and str(
+                    edge.properties.get("tenant_id")
+                ) != str(tenant_id):
+                    continue
+                if not edge.properties.get("revoked"):
+                    edge.properties["revoked"] = True
+                    edge.properties["revoked_at"] = revoked_at
+                    edge.properties["revoke_reason"] = reason
+                count += 1
+        return count
+
     async def get_vertex(self, vertex_id: str) -> Optional[Vertex]:
         return self._vertices.get(vertex_id)
 
     async def get_neighbors(
-        self, vertex_id: str, edge_type: Optional[str] = None, direction: str = "out",
+        self,
+        vertex_id: str,
+        edge_type: Optional[str] = None,
+        direction: str = "out",
+        include_revoked: bool = False,
     ) -> list[Vertex]:
         results: list[Vertex] = []
         for edge in self._edges:
+            if not include_revoked and edge.properties.get("revoked"):
+                continue
             if direction in ("out", "both") and edge.from_vertex_id == vertex_id:
                 if edge_type is None or edge.edge_type == edge_type:
                     target = self._vertices.get(edge.to_vertex_id)
@@ -875,10 +915,16 @@ class _InMemoryGraphBackend:
         return results
 
     async def get_edges(
-        self, vertex_id: str, edge_type: Optional[str] = None, direction: str = "out",
+        self,
+        vertex_id: str,
+        edge_type: Optional[str] = None,
+        direction: str = "out",
+        include_revoked: bool = False,
     ) -> list["Edge"]:
         results: list[Edge] = []
         for edge in self._edges:
+            if not include_revoked and edge.properties.get("revoked"):
+                continue
             touches = False
             if direction == "out" and edge.from_vertex_id == vertex_id:
                 touches = True
@@ -961,6 +1007,58 @@ class _NeptuneGraphBackend:
             f"{edge.from_vertex_id} -> {edge.to_vertex_id}"
         )
 
+    async def revoke_edge(
+        self,
+        from_vertex_id: str,
+        to_vertex_id: str,
+        edge_type: str,
+        reason: str,
+        tenant_id: Optional[str] = None,
+    ) -> int:
+        """Soft-revoke matching edge(s) via a Gremlin property-set traversal.
+
+        Selects edges by ``(from, to, edge_type[, tenant_id])`` and sets
+        ``revoked``/``revoked_at``/``revoke_reason`` — it does not drop the
+        edge. Idempotent: only not-yet-revoked edges are written (so
+        ``revoked_at`` stays stable), while all matching edges are counted.
+        Returns the number of matching edges.
+        """
+        g = await self._ensure_connected()
+        revoked_at = datetime.now(timezone.utc).isoformat()
+
+        def _match() -> Any:
+            trav = (
+                g.V(from_vertex_id)
+                .outE()
+                .hasLabel(edge_type)
+                .where(__.inV().hasId(to_vertex_id))
+            )
+            if tenant_id is not None:
+                trav = trav.has("tenant_id", str(tenant_id))
+            return trav
+
+        count = 0
+        try:
+            count = int(_match().count().next())
+            if count:
+                (
+                    _match()
+                    .hasNot("revoked")
+                    .property("revoked", True)
+                    .property("revoked_at", revoked_at)
+                    .property("revoke_reason", reason)
+                    .toList()
+                )
+            logger.info(
+                f"Neptune REVOKE_E {edge_type} "
+                f"{from_vertex_id} -> {to_vertex_id} count={count}"
+            )
+        except Exception as e:
+            logger.error(
+                f"Neptune revoke_edge error {from_vertex_id}->{to_vertex_id}: {e}"
+            )
+        return count
+
     async def get_vertex(self, vertex_id: str) -> Optional[Vertex]:
         g = await self._ensure_connected()
         try:
@@ -981,7 +1079,11 @@ class _NeptuneGraphBackend:
             return None
 
     async def get_neighbors(
-        self, vertex_id: str, edge_type: Optional[str] = None, direction: str = "out",
+        self,
+        vertex_id: str,
+        edge_type: Optional[str] = None,
+        direction: str = "out",
+        include_revoked: bool = False,
     ) -> list[Vertex]:
         g = await self._ensure_connected()
         results: list[Vertex] = []
@@ -995,6 +1097,10 @@ class _NeptuneGraphBackend:
 
             if edge_type:
                 t = t.hasLabel(edge_type)
+
+            # Soft-revoked edges carry a `revoked` property; exclude by default.
+            if not include_revoked:
+                t = t.hasNot("revoked")
 
             if direction == "out":
                 t = t.inV()
@@ -1054,7 +1160,11 @@ class _NeptuneGraphBackend:
         return results
 
     async def get_edges(
-        self, vertex_id: str, edge_type: Optional[str] = None, direction: str = "out",
+        self,
+        vertex_id: str,
+        edge_type: Optional[str] = None,
+        direction: str = "out",
+        include_revoked: bool = False,
     ) -> list["Edge"]:
         g = await self._ensure_connected()
         results: list[Edge] = []
@@ -1067,6 +1177,9 @@ class _NeptuneGraphBackend:
             for _dir, trav in dirs:
                 if edge_type:
                     trav = trav.hasLabel(edge_type)
+                # Soft-revoked edges carry a `revoked` property; exclude by default.
+                if not include_revoked:
+                    trav = trav.hasNot("revoked")
                 edge_maps = (
                     trav.project("lbl", "props", "from_id", "to_id")
                     .by(T.label)
@@ -1223,6 +1336,31 @@ class GraphClient:
             raise GraphWriteValidationError(result.violations)
         await self._backend.add_edge(edge)  # type: ignore[union-attr]
 
+    async def revoke_edge(
+        self,
+        from_vertex_id: str,
+        to_vertex_id: str,
+        edge_type: str,
+        reason: str,
+        tenant_id: Optional[str] = None,
+    ) -> int:
+        """Soft-revoke matching edge(s): mark them revoked without deleting.
+
+        Sets ``revoked=True``, ``revoked_at=<iso8601>`` and
+        ``revoke_reason=<reason>`` on every edge matching
+        ``(from_vertex_id, to_vertex_id, edge_type)``. When ``tenant_id`` is
+        provided, only edges carrying that tenant are touched. Revoking a
+        non-existent edge is a safe no-op (returns 0); re-revoking is
+        idempotent and preserves the original ``revoked_at``. Returns the
+        number of matching edges. Revoked edges are excluded from
+        ``get_edges``/``get_neighbors`` unless ``include_revoked=True``.
+        """
+        if self._backend is None:
+            await self.connect()
+        return await self._backend.revoke_edge(  # type: ignore[union-attr]
+            from_vertex_id, to_vertex_id, edge_type, reason, tenant_id
+        )
+
     async def get_vertex(self, vertex_id: str) -> Optional[Vertex]:
         if self._backend is None:
             await self.connect()
@@ -1233,10 +1371,13 @@ class GraphClient:
         vertex_id: str,
         edge_type: Optional[str] = None,
         direction: str = "out",
+        include_revoked: bool = False,
     ) -> list[Vertex]:
         if self._backend is None:
             await self.connect()
-        return await self._backend.get_neighbors(vertex_id, edge_type, direction)  # type: ignore[union-attr]
+        return await self._backend.get_neighbors(  # type: ignore[union-attr]
+            vertex_id, edge_type, direction, include_revoked
+        )
 
     async def k_hop_neighbors(
         self,
@@ -1289,10 +1430,13 @@ class GraphClient:
         vertex_id: str,
         edge_type: Optional[str] = None,
         direction: str = "out",
+        include_revoked: bool = False,
     ) -> list[Edge]:
         if self._backend is None:
             await self.connect()
-        return await self._backend.get_edges(vertex_id, edge_type, direction)  # type: ignore[union-attr]
+        return await self._backend.get_edges(  # type: ignore[union-attr]
+            vertex_id, edge_type, direction, include_revoked
+        )
 
     async def get_all_vertices(self, limit: int = 1000) -> list[Vertex]:
         if self._backend is None:
