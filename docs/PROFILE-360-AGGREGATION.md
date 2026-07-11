@@ -14,7 +14,7 @@ source_files:
 canonical_owner: backend@aether
 estimated_read_minutes: 8
 toc_depth: 3
-last_synced_commit: "b88e796"
+last_synced_commit: "f4a529a"
 ---
 
 # Profile 360 Aggregation Layer
@@ -135,6 +135,7 @@ Added after v8.8.0 (`services/profile/routes.py`):
 | GET    | `/v1/profile/{id}/activation-eligibility`           | Whether the entity may be activated for a given use case  |
 | GET    | `/v1/profile/{id}/quality`                          | Profile completeness, freshness, and confidence scores    |
 | GET    | `/v1/profile/{id}/data-freshness`                   | Per-dimension freshness timestamps                        |
+| GET    | `/v1/profile/{id}/data-status`                      | Canonical per-dimension `DimensionEnvelope` (state + reason + freshness) with a worst-wins `overall_state` |
 | GET    | `/v1/profile/{id}/recommendations`                  | Active intelligence recommendations                       |
 | GET    | `/v1/profile/{id}/outcomes`                         | Observed outcomes from executed recommendations           |
 | GET    | `/v1/profile/{id}/outcome-ledger`                   | Paginated outcome ledger with attribution                 |
@@ -308,8 +309,19 @@ present dimension whose newest record exceeds the 24h freshness SLA is
 reported stale (`stale_dimensions` / per-dimension `stale`), and
 `contradiction_count` reflects the detected anomaly-flag count.
 
-This is verified by `test_aggregator_degrades_on_repo_failure_without_raising`
-and `tests/unit/test_profile_360_truth.py`.
+`/data-status` reports the same slices in the canonical **dimension-state**
+vocabulary (`packages/shared/dimension-state.ts` ↔ `shared/dimension_state.py`,
+parity-tested): each dimension is a `DimensionEnvelope`
+(`{state, reason_code, freshness, count}`) whose state is one of `ready`,
+`empty`, `partial`, `stale`, `insufficient_data`, `degraded`, `suppressed`,
+`not_applicable`, `pending`, or `error`, and the surface rolls them into a
+worst-wins `overall_state`. A dimension that fails to compute degrades to an
+`error` envelope rather than 500-ing or silently reading empty
+(`services/reconciliation/dimension_status.py`).
+
+This is verified by `test_aggregator_degrades_on_repo_failure_without_raising`,
+`tests/unit/test_profile_360_truth.py`, `tests/unit/test_dimension_status.py`,
+and `tests/contracts/test_dimension_state_parity.py`.
 
 ---
 
