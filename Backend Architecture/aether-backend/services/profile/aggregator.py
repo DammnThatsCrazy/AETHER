@@ -37,7 +37,7 @@ from __future__ import annotations
 
 import asyncio
 from collections import Counter, defaultdict
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, Optional
 
 from shared.common.common import utc_now
@@ -202,6 +202,27 @@ def _parse_optional_ts(value: Optional[str]) -> Optional[datetime]:
         return datetime.fromisoformat(value.replace("Z", "+00:00"))
     except (ValueError, AttributeError):
         return None
+
+
+# A dimension whose newest record is older than this is reported stale.
+_FRESHNESS_SLA_HOURS = 24.0
+
+
+def _is_stale(ts_iso: Optional[str], sla_hours: float = _FRESHNESS_SLA_HOURS) -> bool:
+    """True when a dimension's last-updated timestamp exceeds the freshness SLA.
+
+    A missing/unparseable timestamp is treated as NOT stale (freshness is
+    unknown, not necessarily stale). The point of this helper is that a
+    dimension carrying a real, old timestamp is correctly flagged instead of
+    the previous hardcoded ``stale = False`` on every dimension.
+    """
+    parsed = _parse_optional_ts(ts_iso)
+    if parsed is None:
+        return False
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=timezone.utc)
+    age_hours = (datetime.now(timezone.utc) - parsed).total_seconds() / 3600.0
+    return age_hours > sla_hours
 
 
 # ───────────────────────────────────────────────────────────────────────
@@ -1389,6 +1410,31 @@ class Profile360Aggregator:
         risk_score = (behavior or {}).get("risk_score")
         anomaly_flags = (behavior or {}).get("anomaly_flags") or []
 
+        # Real freshness — a present dimension whose newest record is past the
+        # SLA is stale (was previously hardcoded to []).
+        stale_dimensions: list[str] = []
+        if entity and _is_stale(_ts(entity, "updated_at", "created_at")):
+            stale_dimensions.append("entity")
+        if behavior and _is_stale(_ts(behavior, "computed_at", "updated_at", "created_at")):
+            stale_dimensions.append("behavior")
+        if wallets and _is_stale(_ts(wallets[0], "linked_at", "created_at")):
+            stale_dimensions.append("wallets")
+        if transfers and _is_stale(_ts(transfers[0], "occurred_at", "created_at")):
+            stale_dimensions.append("transfers")
+
+        # Detected behavior anomaly flags are the concrete data-consistency
+        # signal available here; report their real count instead of a hardcoded
+        # 0 so /economic/warnings can surface data_contradiction warnings.
+        contradiction_count = len(anomaly_flags)
+
+        # Staleness degrades readiness even when all dimensions are present.
+        if completeness >= 0.75 and not stale_dimensions:
+            readiness_status = "ready"
+        elif completeness >= 0.75 and stale_dimensions:
+            readiness_status = "stale"
+        else:
+            readiness_status = "incomplete"
+
         return {
             "entity_id": entity_id,
             "tenant_id": tenant_id,
@@ -1396,11 +1442,12 @@ class Profile360Aggregator:
             "completeness": completeness,
             "present_dimensions": present,
             "missing_dimensions": missing,
-            "stale_dimensions": [],
-            "contradiction_count": 0,
+            "stale_dimensions": stale_dimensions,
+            "contradiction_count": contradiction_count,
             "risk_score": risk_score,
             "anomaly_flags": anomaly_flags,
-            "readiness_status": "ready" if completeness >= 0.75 else "incomplete",
+            "readiness_status": readiness_status,
+            "freshness_sla_hours": _FRESHNESS_SLA_HOURS,
             "computed_at": utc_now().isoformat(),
             "provenance": {"sources": ["entities", "behavior_profiles", "entity_wallets", "transfers"]},
         }
@@ -1422,31 +1469,35 @@ class Profile360Aggregator:
 
         dims = []
         if entity:
+            _u = _ts(entity, "updated_at", "created_at")
             dims.append({
                 "dimension": "entity",
-                "last_updated": _ts(entity, "updated_at", "created_at"),
-                "stale": False,
+                "last_updated": _u,
+                "stale": _is_stale(_u),
                 "source": "entities",
             })
         if behavior:
+            _u = _ts(behavior, "computed_at", "updated_at", "created_at")
             dims.append({
                 "dimension": "behavior",
-                "last_updated": _ts(behavior, "computed_at", "updated_at", "created_at"),
-                "stale": False,
+                "last_updated": _u,
+                "stale": _is_stale(_u),
                 "source": "behavior_profiles",
             })
         if wallets:
+            _u = _ts(wallets[0], "linked_at", "created_at")
             dims.append({
                 "dimension": "wallets",
-                "last_updated": _ts(wallets[0], "linked_at", "created_at") if wallets else None,
-                "stale": False,
+                "last_updated": _u,
+                "stale": _is_stale(_u),
                 "source": "entity_wallets",
             })
         if transfers:
+            _u = _ts(transfers[0], "occurred_at", "created_at")
             dims.append({
                 "dimension": "transfers",
-                "last_updated": _ts(transfers[0], "occurred_at", "created_at") if transfers else None,
-                "stale": False,
+                "last_updated": _u,
+                "stale": _is_stale(_u),
                 "source": "transfers",
             })
 
@@ -1457,6 +1508,7 @@ class Profile360Aggregator:
             "dimensions": dims,
             "dimension_count": len(dims),
             "stale_count": sum(1 for d in dims if d.get("stale")),
+            "freshness_sla_hours": _FRESHNESS_SLA_HOURS,
             "computed_at": utc_now().isoformat(),
             "provenance": {"sources": ["entities", "behavior_profiles", "entity_wallets", "transfers"]},
         }
