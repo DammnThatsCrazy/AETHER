@@ -235,6 +235,7 @@ from services.intelligence.routes import kyber_admin_router, router as intellige
 from services.intelligence.customer_success import admin_router as customer_success_admin_router, tenant_router as value_review_router
 from services.intelligence.extraction_intel import router as extraction_intel_router
 from services.profile.routes import router as profile_router, profile360_router
+from services.reconciliation.coverage_routes import router as sdk_coverage_router
 from services.population.routes import router as population_router
 from services.semantic_intelligence.routes import (
     campaign_router as campaign_semantic_router,
@@ -543,6 +544,7 @@ def create_app() -> FastAPI:
     app.include_router(social_router)
     app.include_router(profile_router)
     app.include_router(profile360_router)
+    app.include_router(sdk_coverage_router)
     app.include_router(population_router)
     app.include_router(semantic_intelligence_router)
     app.include_router(kyber_semantic_router)
