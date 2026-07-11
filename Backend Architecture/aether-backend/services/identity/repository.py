@@ -171,6 +171,28 @@ class IdentityResolutionRepository:
         row["merged_into_entity_id"] = into_entity_id
         return await self._subjects.update(row["id"], row)
 
+    async def restore_subject(
+        self,
+        tenant_id: str,
+        canonical_entity_id: str,
+        entity_type: "EntityType | str" = EntityType.HUMAN,
+    ) -> dict:
+        """Reactivate (or create) an ACTIVE subject for a canonical entity.
+
+        Used by fragment-aware identity repair when a split restores a
+        pre-merge entity: the pre-merge subject may currently be tombstoned
+        (``status == MERGED`` with ``merged_into_entity_id`` set). Restoring
+        clears the tombstone so the entity is a live identity again. If no row
+        exists yet, an active one is created. Tenant-scoped and idempotent.
+        """
+        row = await self.get_subject_by_canonical_entity_id(tenant_id, canonical_entity_id)
+        if row is None:
+            return await self.create_subject(tenant_id, canonical_entity_id, entity_type)
+        row["status"] = SubjectStatus.ACTIVE.value
+        row["merged_into_entity_id"] = None
+        row["last_seen_at"] = utc_now().isoformat()
+        return await self._subjects.update(row["id"], row)
+
     async def resolve_surviving_canonical_entity_id(
         self, tenant_id: str, canonical_entity_id: str, max_hops: int = 10
     ) -> str:
@@ -288,6 +310,15 @@ class IdentityResolutionRepository:
             "revoked_at": None,
         })
 
+    async def get_alias_by_id(self, alias_id: str) -> Optional[dict]:
+        """Fetch a single alias row by its id (raw, includes revoked).
+
+        Returns the row unfiltered so callers (e.g. fragment-split validation)
+        can inspect ``tenant_id`` / ``canonical_entity_id`` / ``revoked_at``
+        directly and enforce their own tenant + ownership checks.
+        """
+        return await self._aliases.find_by_id(alias_id)
+
     async def revoke_alias(self, alias_id: str) -> Optional[dict]:
         row = await self._aliases.find_by_id(alias_id)
         if row is None or row.get("revoked_at"):
@@ -377,6 +408,34 @@ class IdentityResolutionRepository:
             await self._observations.update(row["id"], row)
             updated += 1
         return updated
+
+    async def get_observation_by_id(self, observation_id: str) -> Optional[dict]:
+        """Fetch a single signal observation by its id (raw row)."""
+        return await self._observations.find_by_id(observation_id)
+
+    async def relink_observations_to_entity(
+        self, tenant_id: str, observation_ids: list[str], canonical_entity_id: str
+    ) -> list[str]:
+        """Relink specific observations (by id) to a canonical entity.
+
+        Unlike :meth:`set_observations_canonical_entity` (which relinks every
+        observation of an *event*), this targets an explicit list of observation
+        ids — the primitive fragment-aware identity repair needs to move only the
+        observations named in a split fragment. Tenant-scoped and idempotent:
+        rows already pointing at ``canonical_entity_id``, of another tenant, or
+        not found are skipped. Returns the ids actually moved.
+        """
+        moved: list[str] = []
+        for obs_id in observation_ids:
+            row = await self._observations.find_by_id(obs_id)
+            if row is None or row.get("tenant_id") != tenant_id:
+                continue
+            if row.get("canonical_entity_id") == canonical_entity_id:
+                continue
+            row["canonical_entity_id"] = canonical_entity_id
+            await self._observations.update(obs_id, row)
+            moved.append(obs_id)
+        return moved
 
     # ── Clusters ──────────────────────────────────────────────────────────
 
@@ -529,6 +588,21 @@ class IdentityResolutionRepository:
             "actor_id": actor_id,
         })
 
+    async def get_merge_event_by_id(
+        self, tenant_id: str, merge_event_id: str
+    ) -> Optional[dict]:
+        """Fetch a merge event by id, tenant-scoped.
+
+        Fragment-aware repair's ``restore_pre_merge_entity`` mode reads the
+        merge event's ``from_entity_id`` to recover the pre-merge canonical
+        entity id. Returns None if the event is missing or belongs to another
+        tenant (never leak cross-tenant merge history).
+        """
+        row = await self._merges.find_by_id(merge_event_id)
+        if row is None or row.get("tenant_id") != tenant_id:
+            return None
+        return row
+
     async def get_merge_history(
         self, tenant_id: str, canonical_entity_id: str, limit: int = 50
     ) -> list[dict]:
@@ -561,7 +635,16 @@ class IdentityResolutionRepository:
         actor_type: str,
         actor_id: str,
         source_merge_event_id: Optional[str] = None,
+        fragment: Optional[dict] = None,
+        mode: Optional[str] = None,
     ) -> dict:
+        """Append an immutable split event.
+
+        ``fragment`` and ``mode`` are additive: fragment-aware identity repair
+        records exactly which aliases/observations were moved and under which
+        split mode so the operation is fully auditable and reversible. Both
+        default to None, preserving the original (non-fragment) call sites.
+        """
         split_id = str(uuid.uuid4())
         return await self._splits.insert(split_id, {
             "id": split_id,
@@ -572,6 +655,8 @@ class IdentityResolutionRepository:
             "actor_type": actor_type,
             "actor_id": actor_id,
             "source_merge_event_id": source_merge_event_id,
+            "fragment": fragment or {},
+            "mode": mode,
         })
 
     async def get_split_history(

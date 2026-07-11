@@ -113,6 +113,11 @@ REASON_REVOKED_ALIAS = "revoked_alias"
 REASON_MANUAL_OPERATOR_MERGE = "manual_operator_merge"
 REASON_MANUAL_OPERATOR_SPLIT = "manual_operator_split"
 REASON_NEW_ENTITY = "new_entity"
+# ── Fragment-aware identity repair (typed split rejections + markers) ──────────
+REASON_FRAGMENT_SPLIT = "fragment_split"
+REASON_CAMPAIGN_ONLY_SAMENESS_BLOCKED = "campaign_only_sameness_blocked"
+REASON_CROSS_TENANT_FRAGMENT_BLOCKED = "cross_tenant_fragment_blocked"
+REASON_IDENTITY_CYCLE_BLOCKED = "identity_cycle_detected"
 
 
 # ── Domain model dataclasses ──────────────────────────────────────────────────
