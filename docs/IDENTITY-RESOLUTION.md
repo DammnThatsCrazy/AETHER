@@ -12,7 +12,7 @@ source_files:
 canonical_owner: identity@aether
 estimated_read_minutes: 12
 toc_depth: 3
-last_synced_commit: "794492e"
+last_synced_commit: "d0ee243"
 ---
 # Aether Identity Resolution v8.12.0 — Technical Guide
 
@@ -208,7 +208,9 @@ Production routes are served under `/v1/identity/` by `services/identity/routes.
 | `/v1/identity/merge` | POST | Operator merge (requires operator scope) |
 | `/v1/identity/split` | POST | Operator split / rollback |
 | `/v1/identity/split/preview` | POST | Non-mutating fragment-split impact analysis: aliases to reassign, observations to relink, edges to revoke, risk notes; blocked splits return `allowed:false` + a typed `rejection_reason` (`read`) |
-| `/v1/identity/split/execute` | POST | Execute a fragment split — `create_new_entity` / `restore_pre_merge_entity` / `move_to_existing_entity` — lineage-preserving alias reassignment + observation relink + SAME_AS edge revoke, audited via the append-only split event (`write`) |
+| `/v1/identity/split/execute` | POST | Execute a fragment split — `create_new_entity` / `restore_pre_merge_entity` / `move_to_existing_entity` — lineage-preserving alias reassignment + observation relink + SAME_AS edge revoke, audited via the append-only split event; publishes `IDENTITY_SPLIT` so measurement re-derives journeys/attribution for both entities (`write`) |
+| `/v1/identity/reconciliation` | GET | Repository↔graph identity-edge drift for the tenant (`missing_in_graph` / `missing_in_repo`); `?refresh=true` forces a fresh check, else returns the latest persisted run (`read`) |
+| `/v1/admin/kyber/identity/reconciliation` | POST | Kyber-operator trigger to run edge reconciliation for a given `tenant_id` (`require_kyber_operator`) |
 | `/v1/identity/recompute` | POST | Recompute identity from stored signals |
 | `/v1/identity/health` | GET | Resolver health (DB ping, total entities, open conflicts, queue depth) |
 | `/v1/identity/suppress` | POST | Suppress an identifier hash — revokes matching aliases + blocks future resolution (`write` permission) |
