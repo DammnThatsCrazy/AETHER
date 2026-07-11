@@ -12,13 +12,15 @@ source_files:
 canonical_owner: identity@aether
 estimated_read_minutes: 12
 toc_depth: 3
-last_synced_commit: "d0ee243"
+last_synced_commit: "5a44e9e"
 ---
 # Aether Identity Resolution v8.12.0 — Technical Guide
 
 ## Overview
 
 Aether's Identity Resolution system unifies user profiles across devices, browsers, wallets, and sessions into a single **Identity Cluster**. It uses a hybrid approach: **deterministic signals** (exact identifier matches) auto-merge immediately, while **probabilistic signals** (fingerprint similarity, IP clustering, behavioral patterns) flag candidate merges for review.
+
+> **Staging/production default:** strong (probabilistic) auto-linking is **off by default** in `staging`/`production` — only deterministic signals auto-merge; strong matches go to candidate/conflict review. Set `AETHER_IDENTITY_STRONG_AUTOLINK=1` to re-enable strong auto-link under explicit tenant policy. Fingerprint-only and cross-tenant matches never auto-link in any environment.
 
 ## Architecture
 
