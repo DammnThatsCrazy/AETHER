@@ -1336,6 +1336,7 @@ export interface AetherPlugin {
 export interface AetherSDKInterface {
     init(config: AetherConfig): void;
     track(event: string, properties?: Record<string, unknown>): void;
+    observe(type: string, properties?: Record<string, unknown>): void;
     error(message: string, error?: Error | unknown, properties?: Record<string, unknown>): void;
     pageView(page?: string, properties?: Record<string, unknown>): void;
     conversion(event: string, value?: number, properties?: Record<string, unknown>): void;

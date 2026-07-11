@@ -16,6 +16,7 @@ Generated outputs:
   docs/_generated/event-registry-table.md
   docs/_generated/consent-registry-table.md
   docs/_generated/metric-registry-table.md
+  packages/web/src/core/generated-consent-map.ts
 
 Usage:
   python scripts/generate_contracts.py           # write all outputs in-place
@@ -52,6 +53,9 @@ GENERATED_METRIC_REGISTRY_PY = (
 EVENT_TABLE_MD = ROOT / "docs" / "_generated" / "event-registry-table.md"
 CONSENT_TABLE_MD = ROOT / "docs" / "_generated" / "consent-registry-table.md"
 METRIC_TABLE_MD = ROOT / "docs" / "_generated" / "metric-registry-table.md"
+WEB_CONSENT_MAP_TS = (
+    ROOT / "packages" / "web" / "src" / "core" / "generated-consent-map.ts"
+)
 
 # Markers used in events.ts to delimit the generated section
 GENERATED_START = "// @generated-start"
@@ -352,6 +356,48 @@ def gen_python_registry(event_reg: dict, consent_reg: dict) -> str:
 
 
 # ---------------------------------------------------------------------------
+# Web SDK generated consent map generator
+# ---------------------------------------------------------------------------
+
+def gen_web_consent_map_ts(event_reg: dict) -> str:
+    """Registry-derived event->consent-purpose map + canonical type set for the
+    web SDK. Replaces the previously hand-maintained CONSENT_MAP so the runtime
+    consent gate cannot drift from the canonical registry.
+    """
+    events = event_reg["events"]
+    version = event_reg["contractVersion"]
+
+    rows = sorted(
+        (e["type"], (e.get("requiredPurposes") or ["analytics"])[0]) for e in events
+    )
+    entries = "\n".join(f'  {json.dumps(t)}: {json.dumps(p)},' for t, p in rows)
+
+    return (
+        "// DO NOT EDIT — generated from packages/shared/contracts/event-registry.json\n"
+        "// Run: python scripts/generate_contracts.py\n"
+        f"// Contract version: {version}\n"
+        "//\n"
+        "// Registry-derived event -> primary-consent-purpose map and canonical event\n"
+        "// type set for the web SDK. This replaces the previously hand-maintained\n"
+        "// CONSENT_MAP so the runtime consent gate can never drift from the registry.\n"
+        "\n"
+        "export const EVENT_CONSENT_PURPOSE: Readonly<Record<string, string>> = {\n"
+        f"{entries}\n"
+        "};\n"
+        "\n"
+        "/** Every canonical event type the backend registry recognises. */\n"
+        "export const CANONICAL_EVENT_TYPES: ReadonlySet<string> = new Set(\n"
+        "  Object.keys(EVENT_CONSENT_PURPOSE),\n"
+        ");\n"
+        "\n"
+        "/** True if `type` is a canonical registry event type. */\n"
+        "export function isCanonicalEventType(type: string): boolean {\n"
+        "  return CANONICAL_EVENT_TYPES.has(type);\n"
+        "}\n"
+    )
+
+
+# ---------------------------------------------------------------------------
 # measurement-contract.ts + generated_registry.py (metric) generators
 # ---------------------------------------------------------------------------
 
@@ -617,6 +663,7 @@ def main() -> int:
     _apply(EVENT_TABLE_MD, gen_event_table_md(event_reg), args.check, diffs)
     _apply(CONSENT_TABLE_MD, gen_consent_table_md(consent_reg), args.check, diffs)
     _apply(METRIC_TABLE_MD, gen_metric_table_md(metric_reg), args.check, diffs)
+    _apply(WEB_CONSENT_MAP_TS, gen_web_consent_map_ts(event_reg), args.check, diffs)
 
     if diffs:
         print("DRIFT: generated files differ from committed versions:", file=sys.stderr)

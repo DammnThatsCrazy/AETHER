@@ -39,12 +39,15 @@
     "test:backend": "python -m pytest tests/ -n auto --tb=short",
     "test:frontend": "npm run test --workspace=frontend/aether && npm run test --workspace=frontend/kyber && npm run test:component --workspace=frontend/kyber && npm run test:integration --workspace=frontend/kyber && npm run test --workspace=frontend/demo",
     "test:e2e": "npm run test:e2e --workspace=frontend/kyber",
-    "test:docs": "python scripts/validate_frontmatter.py && python scripts/docs_drift.py --strict && python scripts/validate_contracts.py",
+    "test:docs": "make docs-check",
     "test:sdk": "npm run test --workspace=packages/web",
     "test:connectors": "python -m pytest tests/unit/test_connectors.py -q",
     "test:security": "npm run security:secrets && python -m pytest tests/unit/test_p4_security_billing.py -q",
     "test:load:smoke": "npm run load:smoke",
-    "test:all": "npm run test:docs && npm run test:backend && npm run test:frontend && npm run test:load:smoke",
+    "test:all": "make ci-check",
+    "repo:doctor": "make repo-doctor",
+    "repo:fix": "make repo-doctor-fix",
+    "docs:fix": "make docs-fix",
     "validate:ts-public-exports": "python scripts/validate_ts_public_exports.py"
   },
   "devDependencies": {

@@ -114,7 +114,10 @@ jobs:
     # Separated from lint-docs so that contents:write is never granted to a job
     # that checks out and executes PR-head scripts.
     needs: lint-docs
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    # always() so that a read-only lint-docs failure (e.g. generated drift it can
+    # only report, never fix) does not skip the trusted-main auto-sync that fixes it.
+    # Still strictly gated to pushes to main — never runs on PR-head, never write on PRs.
+    if: always() && github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     permissions:
       contents: write

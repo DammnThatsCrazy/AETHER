@@ -40,6 +40,20 @@ declare class AetherSDK implements AetherSDKInterface {
     init(config: AetherConfig): void;
     track(event: string, properties?: Record<string, unknown>): void;
     /**
+     * Canonical low-level observation API. Emits a first-class backend event
+     * `type` directly (unlike `track`, which is reserved for custom application
+     * events and always ships as top-level type `track` with the name in
+     * `properties.event`).
+     *
+     * - `type` must be a canonical registry event type; unknown types are a
+     *   production-safe no-op (with a debug warning), never a silent mislabel.
+     * - Payloads asserting `execution_by_aether: true` are rejected — Aether
+     *   observes, it never executes.
+     * - Consent gating, sensitive-field scrubbing, and remote-disable all run on
+     *   the shared enqueue path.
+     */
+    observe(type: string, properties?: Record<string, unknown>): void;
+    /**
      * Emit a canonical 'error' event (gated on analytics consent).
      * Automatically extracts message, name, and stack from an Error instance.
      *
@@ -107,6 +121,11 @@ declare class AetherSDK implements AetherSDKInterface {
     private initWeb3;
     private initWeb2;
     private initAnalytics;
+    /**
+     * Fingerprinting is permitted only under `personalization` consent and never
+     * under an honored Do-Not-Track signal.
+     */
+    private canFingerprint;
     private enqueueEvent;
     private updateJourney;
     private emitJourneyEvent;

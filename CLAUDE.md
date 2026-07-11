@@ -1,5 +1,8 @@
 # Aether — Agent Repo Rules
 
+Claude must follow `AGENTS.md`. This file adds Claude-specific emphasis; it does
+not override it.
+
 ## Before making changes
 
 ```bash
@@ -10,12 +13,25 @@ git rebase origin/main
 
 ## Before claiming completion
 
+The canonical completion gate is `make ci-check`.
+
 ```bash
-make repo-doctor
+make docs-fix
+make ci-check
 git status --short
 ```
 
-Both must pass. Do not open a PR until `make repo-doctor` exits 0.
+Do not open a PR until `make ci-check` exits 0. Claude must **not** claim a PR is
+complete based only on `npm test`, `npm run test`, `npm run test:docs`, partial
+pytest runs, TypeScript-only checks, docs-only checks, manual inspection, or
+`make repo-doctor` alone.
+
+If source-linked docs are reported stale, update the actual docs against their
+declared `source_files`, then run `python scripts/docs_drift.py --update`.
+Stamping without review is not allowed.
+
+For release readiness, also run `make release-gate` when the PR claims release
+readiness.
 
 ---
 
@@ -74,9 +90,9 @@ Never blindly stamp stale docs to silence CI.
 | `make repo-doctor` | Full consistency check (no mutations) |
 | `make repo-doctor-fix` | Regenerate generated docs + sync |
 | `make docs-check` | Docs-only fast gate |
-| `make ci-check` | CI-safe full path |
+| `make ci-check` | CI-safe full path (**canonical completion gate**) |
 | `make production-status` | Readiness scorecard + blockers (advisory) |
-| `make release-gate` | ci-check + strict production status |
+| `make release-gate` | ci-check + strict production status + ops readiness |
 | `python scripts/bump_version.py --check` | Version alignment |
 | `python scripts/docs_drift.py --strict` | Source-linked docs drift |
 | `python scripts/validate_contracts.py` | Contract consistency |

@@ -133,13 +133,13 @@ public final class AetherHealthAgent {
     // MARK: - Private
 
     private func sendHeartbeat() {
-        guard let url = URL(string: "\(endpoint)/v1/sdk/health") else { return }
+        guard let url = URL(string: "\(endpoint)/v1/diagnostics/sdk/heartbeat") else { return }
         let state = getDynamicState?() ?? (queueDepth: 0, authValid: true, consentValid: true, walletConnected: false)
         let rate = totalAttempts > 0 ? Double(successfulAttempts) / Double(totalAttempts) : 1.0
 
         let payload = SDKHeartbeatPayload(
             sdk_id: sdkId,
-            sdk_version: "8.9.0",
+            sdk_version: "8.12.0",
             platform: platform,
             app_version: appVersion,
             queue_depth: state.queueDepth,
@@ -169,9 +169,10 @@ public final class AetherHealthAgent {
     }
 
     private func fetchManifest() {
-        guard let url = URL(string: "\(endpoint)/v1/config?apiKey=\(apiKey)") else { return }
+        guard let url = URL(string: "\(endpoint)/v1/config/sdk/manifest") else { return }
         var request = URLRequest(url: url)
         request.httpMethod = "GET"
+        request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
         request.timeoutInterval = 5.0
 
         URLSession.shared.dataTask(with: request) { [weak self] data, _, _ in

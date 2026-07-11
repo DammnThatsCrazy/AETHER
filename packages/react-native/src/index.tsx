@@ -96,7 +96,9 @@ export function AetherProvider({
     // to native.
 
     // Fetch server config (non-blocking, fire-and-forget)
-    fetch(`${endpoint}/v1/config?apiKey=${config.apiKey}`)
+    fetch(`${endpoint}/v1/config/sdk/manifest`, {
+      headers: { Authorization: `Bearer ${config.apiKey}` },
+    })
       .then(r => r.json())
       .then(_cfg => { /* store config */ })
       .catch(() => { /* silent */ });

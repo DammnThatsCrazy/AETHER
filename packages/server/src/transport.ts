@@ -31,7 +31,13 @@ export async function sendBatch(
         'User-Agent': config.userAgent ?? '@aether/server',
         'X-Aether-Source': 'server-sdk',
       },
-      body: JSON.stringify({ events, consents }),
+      // Canonical ingestion envelope — the backend BatchRequest requires
+      // `batch` (not `events`) plus `sentAt`. `consents` is an optional hint.
+      body: JSON.stringify({
+        batch: events,
+        sentAt: new Date().toISOString(),
+        consents,
+      }),
     });
 
     const retryAfterMs = res.status === 429

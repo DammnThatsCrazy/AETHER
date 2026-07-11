@@ -1,24 +1,51 @@
 # Consent Model
 
-Eight canonical purposes. Source of truth: `packages/shared/contracts/consent-registry.json`.
+Consent is **registry-derived**. The source of truth is
+`packages/shared/contracts/consent-registry.json`; the authoritative, always-current
+enumeration of purposes is the generated table
+[`docs/_generated/consent-registry-table.md`](../_generated/consent-registry-table.md).
+Do not hardcode a purpose count in docs or validators — every layer must agree
+with the registry.
+
 Generated artifacts: `packages/shared/consent.ts` (TypeScript) and
 `Backend Architecture/aether-backend/services/ingestion/generated_registry.py` (Python).
 Regenerate with: `python scripts/generate_contracts.py`.
 
-| Purpose | Default | Explicit Opt-in Required | Retention | Gates |
-|---|---|---|---|---|
-| `analytics` | ✓ enabled | no | 90d | track, page, screen, heartbeat, error, performance, identify, journey_* |
-| `marketing` | disabled | no | 180d | experiment, conversion, ad_exposed, email_*, unsubscribe_observed |
-| `personalization` | disabled | no | 180d | content_impression, recommendation_exposed, recommendation_accepted/rejected (personalization fields) |
-| `web3` | disabled | no | 365d | wallet, transaction, contract_action, transaction_*_observed, token_approval_observed, bridge_transfer_observed |
-| `agent` | disabled | no | 90d | agent_*, agentic_* |
-| `commerce` | disabled | no | 7y | payment_*, approval_*, entitlement_*, access_*, x402_*, order_*, subscription_*, invoice_*, ecommerce family |
-| `credit` | disabled | **yes** | 730d | credit_signal_observed, credit_account_observed, credit_decision_observed |
-| `location` | disabled | **yes** | 30d | location_observed, geofence_transition_observed |
+## Purpose categories
+
+The registry groups purposes by whether they require explicit opt-in:
+
+**Base purposes** (`explicitOptInRequired: false`) — may be granted by an accept-all
+operation:
+
+| Purpose | Default | Retention | Notes |
+|---|---|---|---|
+| `analytics` | ✓ enabled | 90d | Core product usage / operational analytics |
+| `marketing` | disabled | 180d | Attribution, experiments, conversion, advertising |
+| `personalization` | disabled | 180d | Fingerprinting + recommendations; `fingerprintGated`, `blockLocalCollection` |
+| `web3` | disabled | 365d | Wallet connections, on-chain observations |
+| `agent` | disabled | 90d | Agentic workflow / AI task lifecycle |
+| `commerce` | disabled | 2555d | Payments, subscriptions, orders, entitlements (may be legal-held) |
+
+**Explicit opt-in purposes** (`explicitOptInRequired: true`) — **never** granted by
+accept-all; the consent UI must present each separately:
+
+| Purpose | Retention | Notes |
+|---|---|---|
+| `financial_activity` | 2555d | Read-only derivatives trading analytics; suppress-on-revocation |
+| `credit` | 730d | Credit signals / decisions; no backend enrichment, no graph, no training |
+| `location` | 30d | Precise/coarse location + geofence; `blockLocalCollection`, delete-on-revoke |
+| `economic_observability` | 2555d | Read-only stablecoin economic intelligence; suppress-on-revocation |
+| `cross_chain_observability` | 2555d | Read-only interoperability intelligence; suppress-on-revocation |
+
+The exact fields, data categories, DSR delete scope, and revocation behavior for
+each purpose live in the registry and the generated table — this doc summarizes;
+the registry governs.
 
 ## Rules
 
-1. `ConsentState` has exactly these eight boolean fields plus `updatedAt` and `policyVersion`.
+1. `ConsentState` has exactly one boolean field per registry purpose (keyed by the
+   canonical purpose key) plus `updatedAt` and `policyVersion`.
 2. The SDK stamps `ConsentState` onto every event's `context.consent`.
 3. Before transport, the SDK **drops** any event whose required purpose is `false`
    (exception: `consent` events are always allowed — `requiredPurposes: []`).
@@ -28,15 +55,21 @@ Regenerate with: `python scripts/generate_contracts.py`.
 
 ## Explicit opt-in purposes
 
-`credit` and `location` always require explicit opt-in. They are **never** granted by
-an accept-all operation. The consent UI must present them separately. The
-`EXPLICIT_OPT_IN_PURPOSES` constant in `consent.ts` enumerates them.
+Explicit opt-in purposes are enumerated by `explicitOptInRequired: true` in the
+registry and by the `EXPLICIT_OPT_IN_PURPOSES` constant in `consent.ts`. They are
+**never** granted by an accept-all / grant-all operation and must be presented
+separately in the consent UI. Several (`financial_activity`,
+`economic_observability`, `cross_chain_observability`) carry additional governance
+permissions (`identityLinkingPermission`, `graphProjectionPermission`,
+`modelTrainingPermission`) and a `stop_new_collection_and_suppress_projections`
+revocation behavior.
 
 ## Fingerprint gating
 
-`personalization` purpose controls access to device fingerprinting.
-On revocation: cached fingerprint must be deleted and a `consent` event emitted.
-`fingerprintGated: true` is set on the `personalization` purpose in the registry.
+`personalization` purpose controls access to device fingerprinting
+(`fingerprintGated: true` in the registry). Fingerprint generation must not run
+before `personalization` is granted. On revocation: the cached fingerprint must be
+deleted, the in-memory collector reset, and a `consent` event emitted.
 
 ## Defaults
 
@@ -47,4 +80,5 @@ The consent UI pre-checks purposes based on `defaultEnabled` in the registry
 ## Native platforms
 
 iOS, Android, and React Native accept `List<String>` / `[String]` of purpose keys.
-Only the canonical eight strings are recognized; others are silently ignored.
+Only the canonical purpose keys from the registry are recognized; others are
+silently ignored.

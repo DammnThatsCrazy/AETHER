@@ -777,7 +777,7 @@ object Aether : DefaultLifecycleObserver {
     }
 
     fun trackAddToCart(item: Map<String, Any>) {
-        enqueueEvent("track", mapOf("event" to "product_added", "item" to item))
+        enqueueEvent("track", mapOf("event" to "cart_item_added", "item" to item))
     }
 
     fun trackPurchase(orderId: String, total: Double, currency: String = "USD", items: List<Map<String, Any>>? = null) {
@@ -885,7 +885,7 @@ object Aether : DefaultLifecycleObserver {
     fun rewardClaimSubmitted(campaignId: String, claimId: String, properties: Map<String, Any?> = emptyMap()) = enqueueEvent("reward_claim_submitted", properties + mapOf("campaignId" to campaignId, "claimId" to claimId))
 
     // Ecommerce Additions
-    fun trackRemoveFromCart(item: Map<String, Any?>) = enqueueEvent("track", item + mapOf("event" to "product_removed"))
+    fun trackRemoveFromCart(item: Map<String, Any?>) = enqueueEvent("track", item + mapOf("event" to "cart_item_removed"))
     fun trackApplyCoupon(couponCode: String, properties: Map<String, Any?> = emptyMap()) = enqueueEvent("track", properties + mapOf("event" to "coupon_applied", "couponCode" to couponCode))
     fun trackBeginCheckout(cartValue: Double, currency: String = "USD", properties: Map<String, Any?> = emptyMap()) = enqueueEvent("conversion", properties + mapOf("event" to "checkout_started", "cartValue" to cartValue, "currency" to currency))
 
@@ -1064,8 +1064,9 @@ object Aether : DefaultLifecycleObserver {
         val endpoint = config?.endpoint ?: return
         scope.launch(Dispatchers.IO) {
             try {
-                val url = URL("$endpoint/v1/config?apiKey=${config?.apiKey ?: ""}")
+                val url = URL("$endpoint/v1/config/sdk/manifest")
                 val conn = url.openConnection() as HttpURLConnection
+                conn.setRequestProperty("Authorization", "Bearer ${config?.apiKey ?: ""}")
                 conn.connectTimeout = 5000
                 conn.readTimeout = 5000
                 val response = conn.inputStream.bufferedReader().readText()

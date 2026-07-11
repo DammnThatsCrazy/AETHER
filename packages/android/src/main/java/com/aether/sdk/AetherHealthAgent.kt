@@ -122,7 +122,7 @@ class AetherHealthAgent(
 
             val payload = JSONObject().apply {
                 put("sdk_id", sdkId)
-                put("sdk_version", "8.9.0")
+                put("sdk_version", "8.12.0")
                 put("platform", platform)
                 put("app_version", appVersion)
                 put("queue_depth", queueDepth)
@@ -138,7 +138,7 @@ class AetherHealthAgent(
                 put("rollout_cohort", "default")
             }
 
-            val url = URL("$endpoint/v1/sdk/health")
+            val url = URL("$endpoint/v1/diagnostics/sdk/heartbeat")
             val conn = url.openConnection() as HttpURLConnection
             conn.requestMethod = "POST"
             conn.setRequestProperty("Content-Type", "application/json")
@@ -155,9 +155,10 @@ class AetherHealthAgent(
 
     private suspend fun fetchManifest() = withContext(Dispatchers.IO) {
         try {
-            val url = URL("$endpoint/v1/config?apiKey=$apiKey")
+            val url = URL("$endpoint/v1/config/sdk/manifest")
             val conn = url.openConnection() as HttpURLConnection
             conn.requestMethod = "GET"
+            conn.setRequestProperty("Authorization", "Bearer $apiKey")
             conn.connectTimeout = 5000
             conn.readTimeout = 5000
             if (conn.responseCode == 200) {

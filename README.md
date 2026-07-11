@@ -15,7 +15,7 @@ humans, organizations, AI agents, and onchain protocols.
 
 - [`docs/source-of-truth/SDK_SCOPE.md`](docs/source-of-truth/SDK_SCOPE.md) — what the SDK is and is not
 - [`docs/source-of-truth/EVENT_REGISTRY.md`](docs/source-of-truth/EVENT_REGISTRY.md) — every event the SDK emits
-- [`docs/source-of-truth/CONSENT_MODEL.md`](docs/source-of-truth/CONSENT_MODEL.md) — 5 canonical consent purposes
+- [`docs/source-of-truth/CONSENT_MODEL.md`](docs/source-of-truth/CONSENT_MODEL.md) — canonical consent purposes (registry-derived from [`packages/shared/contracts/consent-registry.json`](packages/shared/contracts/consent-registry.json))
 - [`docs/source-of-truth/INGESTION_CONTRACT.md`](docs/source-of-truth/INGESTION_CONTRACT.md) — `POST /v1/batch`
 - [`docs/source-of-truth/ENTITY_MODEL.md`](docs/source-of-truth/ENTITY_MODEL.md) — entities shared across Web2 + Web3
 - [`docs/source-of-truth/PLATFORM_PARITY.md`](docs/source-of-truth/PLATFORM_PARITY.md) — tiers A/B/C
@@ -34,10 +34,20 @@ Ingestion works **with or without the SDK** (SDK or connectors/signed webhooks).
 - Readiness: [`docs/PRODUCTIZATION-CHECKLIST.md`](docs/PRODUCTIZATION-CHECKLIST.md), [`docs/SECURITY-READINESS.md`](docs/SECURITY-READINESS.md), [`docs/PREPRODUCTION-READINESS.md`](docs/PREPRODUCTION-READINESS.md)
 
 ```bash
-npm run test:all        # docs + backend + frontend + load smoke
+npm run test:all        # alias for `make ci-check` — the canonical PR completion gate
 npm run security:audit  # secret scan + dependency audit
 npm run compliance:readiness   # readiness inventory (not certification)
 ```
+
+> Repository consistency is owned by `scripts/repo_doctor.py` + the root `Makefile`.
+> `pyproject.toml` is the canonical platform version source;
+> [`docs/source-of-truth/`](docs/source-of-truth/) owns canonical behavior;
+> [`packages/shared/contracts/`](packages/shared/contracts/) owns canonical
+> SDK / event / consent contracts. Generated docs must be regenerated
+> (`make docs-fix`) and committed; source-linked docs must be reviewed before
+> stamping. No PR is merge-ready unless `make ci-check` passes. `npm run test:all`
+> is only an alias for `make ci-check`. Formal certification is not claimed unless
+> actual certification artifacts exist.
 
 ## Architecture
 

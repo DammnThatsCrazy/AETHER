@@ -252,6 +252,7 @@ def main(argv: Sequence[str] | None = None) -> None:
     docs_gates = [
         (["python", "scripts/validate_docs.py"], "Docs version drift validation", "python scripts/bump_version.py <canonical-version>"),
         (["python", "scripts/validate_frontmatter.py"], "Docs frontmatter validity", "fix the reported frontmatter errors"),
+        (["python", "scripts/validate_consent_registry_docs.py"], "Consent-purpose docs are registry-derived (no hardcoded count)", "use registry-derived language; canonical source is packages/shared/contracts/consent-registry.json"),
     ]
     for cmd, name, remediation in docs_gates:
         run(cmd, name=name, results=results, stop_on_failure=stop, remediation=remediation)
@@ -286,6 +287,13 @@ def main(argv: Sequence[str] | None = None) -> None:
         remediation="update contracts, event schemas, consent docs, and SDK surfaces together",
     )
     run(
+        ["python", "scripts/validate_signal_use_matrix.py"],
+        name="Signal-use matrix (exact purpose per signal; no broad-consent fallback)",
+        results=results,
+        stop_on_failure=stop,
+        remediation="align packages/shared/contracts/signal-use-matrix.json with consent-registry.json",
+    )
+    run(
         ["python", "scripts/validate_sdk_release_alignment.py"],
         name="SDK release alignment",
         results=results,
@@ -305,6 +313,20 @@ def main(argv: Sequence[str] | None = None) -> None:
         results=results,
         stop_on_failure=stop,
         remediation="export public declaration types from package barrels and fix package.json exports",
+    )
+    run(
+        ["python", "scripts/validate_financial_value_semantics.py"],
+        name="Financial value semantics (USD-first contract + no cross-currency sums)",
+        results=results,
+        stop_on_failure=stop,
+        remediation="use services.value.safe_rollup and the canonical value contract; see docs/source-of-truth/FINANCIAL_VALUE_SEMANTICS.md",
+    )
+    run(
+        ["python", "scripts/validate_frontend_value_display.py"],
+        name="Frontend value-display guardrail (canonical ValueDisplay/formatUSD)",
+        results=results,
+        stop_on_failure=stop,
+        remediation="render financial values via frontend/shared ValueDisplay/formatUSD; update the allowlist in scripts/validate_frontend_value_display.py",
     )
     run(
         ["python", "scripts/validate_event_schema_parity.py"],

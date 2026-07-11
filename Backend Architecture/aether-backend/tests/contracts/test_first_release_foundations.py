@@ -2,7 +2,8 @@
 
 Covers:
 - `ai_invocation_observed` canonical registration (Python registry, TS
-  EventType, and the three hand-maintained SDK consent maps).
+  EventType, the generated web consent map, and the hand-maintained native
+  SDK consent maps).
 - New shared contract files exist and export their key types.
 - New feature-flag settings sections exist and default OFF.
 """
@@ -58,8 +59,10 @@ class TestAIInvocationObservedRegistration:
         assert "'ai_invocation_observed'" in event_type_block
 
     def test_sdk_consent_maps_contain_event(self):
-        web = _read("packages/web/src/core/event-queue.ts")
-        assert re.search(r"ai_invocation_observed:\s*'agent'", web)
+        # The web consent map is registry-derived and lives in the generated file
+        # (moved out of event-queue.ts); generated keys are JSON-quoted.
+        web = _read("packages/web/src/core/generated-consent-map.ts")
+        assert re.search(r'"ai_invocation_observed":\s*"agent"', web)
 
         android = _read("packages/android/src/main/java/com/aether/sdk/Aether.kt")
         assert '"ai_invocation_observed" to "agent"' in android

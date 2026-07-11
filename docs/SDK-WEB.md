@@ -56,9 +56,21 @@ aether.init({
 
 ### Event Tracking
 
+`track()` is for **custom application events** — it always ships as top-level
+type `track` with the custom name in `properties.event`. To emit a **canonical
+backend event type** directly, use `observe()`. Official helpers (ecommerce,
+etc.) emit canonical types through `observe()`; they never route canonical
+events through `track()`.
+
 ```typescript
-// Custom event
+// Custom event (top-level type 'track', name in properties.event)
 aether.track('button_clicked', { buttonId: 'cta-hero', variant: 'blue' });
+
+// Canonical low-level observation — emits the first-class registry event type.
+// Unknown types are a production-safe no-op (debug warning), never mislabeled.
+// Payloads asserting `execution_by_aether: true` are rejected — Aether observes,
+// it never executes.
+aether.observe('order_completed', { orderId: 'ord_1', total: 42.0, currency: 'USD' });
 
 // Page view (auto-tracked on SPA navigation)
 aether.pageView('/pricing', { referrer: '/home' });
@@ -66,9 +78,14 @@ aether.pageView('/pricing', { referrer: '/home' });
 // Conversion
 aether.conversion('signup_completed', 0, { plan: 'pro' });
 
-// Error event (new in 8.9.0 — extracts message, name, stack from Error instances)
+// Error event (extracts message, name, stack from Error instances)
 aether.error('Payment failed', new Error('Network timeout'), { paymentId: 'pay_1' });
 ```
+
+Canonical event types and their required consent purposes are registry-derived
+(`packages/shared/contracts/event-registry.json`); the web SDK's runtime map is
+generated into `packages/web/src/core/generated-consent-map.ts`, never
+hand-maintained.
 
 ### Identity
 
@@ -123,7 +140,14 @@ React Native and the Web SDK can share types.
 
 ### Device Fingerprint
 
-The SDK automatically generates a SHA-256 device fingerprint on initialization from 17 browser signals (canvas rendering, WebGL, audio context, fonts, screen, timezone, language, platform, hardware). The fingerprint is included in every event's `context.fingerprint.id`.
+Device fingerprinting is **personalization-gated**. The SDK generates a SHA-256
+device fingerprint from browser signals (canvas, WebGL, audio, fonts, screen,
+timezone, language, platform, hardware) **only after `personalization` consent
+is granted** (and never under an honored Do-Not-Track signal). It is included in
+`context.fingerprint.id` only on events emitted while personalization consent is
+active. Revoking `personalization` clears both the cached fingerprint and the
+in-memory collector, so no further events are stamped until consent is granted
+again.
 
 - Only the composite hash is sent to the backend — raw signals never leave the browser
 - Fingerprinting requires `personalization` consent. Revoking `personalization` deletes the cached fingerprint.
@@ -131,9 +155,13 @@ The SDK automatically generates a SHA-256 device fingerprint on initialization f
 
 ### Consent Management (GDPR/CCPA)
 
-Eight canonical purposes: `analytics`, `marketing`, `personalization`, `web3`, `agent`, `commerce`,
-`credit`, `location`. `credit` and `location` **always require explicit opt-in** — `grantAll()` never
-grants them. Present them as separate choices in your consent UI.
+Consent purposes are **registry-derived** — the canonical set lives in
+`packages/shared/contracts/consent-registry.json`. Base purposes (`analytics`,
+`marketing`, `personalization`, `web3`, `agent`, `commerce`) can be granted together;
+explicit opt-in purposes (`financial_activity`, `credit`, `location`,
+`economic_observability`, `cross_chain_observability`) **always require separate
+opt-in** and are never granted by `grantAll()`. Present each explicit opt-in purpose
+as a separate choice in your consent UI.
 
 `personalization` gates device fingerprinting: revoking it automatically deletes the cached fingerprint.
 
@@ -229,8 +257,16 @@ Raw transaction data is shipped to the backend where it gets classified:
 
 ## Ecommerce
 
+Ecommerce helpers emit **canonical top-level event types** via `observe()`
+(`commerce` consent). `trackAddToCart` emits `cart_item_added`,
+`trackRemoveFromCart` emits `cart_item_removed`, `trackProductView` emits
+`product_viewed`, `trackCheckout` emits `checkout_started`, and `trackPurchase`
+emits `order_completed`. The retired legacy names `product_added` /
+`product_removed` are no longer emitted; the deprecated `productAdded()` /
+`productRemoved()` aliases now emit the canonical payloads.
+
 ```typescript
-// Product view
+// Product view — emits canonical product_viewed
 aether.ecommerce.trackProductView({
   id: 'sku-001', name: 'Widget Pro', price: 29.99, category: 'tools'
 });

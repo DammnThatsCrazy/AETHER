@@ -38,6 +38,7 @@ import { SDKHealthAgent } from './health/sdk-health-agent';
 import type { SDKManifest as RemoteSDKManifest } from './health/sdk-health-agent';
 import { generateId, now, getPageContext, getDeviceContext, getCampaignContext } from './utils';
 import { createModuleProxy } from './utils/module-proxy';
+import { isCanonicalEventType } from './core/generated-consent-map';
 
 const SDK_VERSION = '8.12.0'; // synchronized by scripts/bump-sdk-version.sh and scripts/validate_sdk_release_alignment.py
 const DEFAULT_ENDPOINT = 'https://api.aether.io';
@@ -122,11 +123,33 @@ class AetherSDK implements AetherSDKInterface {
     this.startHealthAgent();
 
     this.initialized = true;
-    this.log('info', 'Aether SDK v8.11.0 initialized — Tier 2 thin client');
+    this.log('info', `Aether SDK v${SDK_VERSION} initialized — Tier 2 thin client`);
   }
 
   track(event: string, properties?: Record<string, unknown>): void {
     this.enqueueEvent('track', { event, ...properties });
+    this.sessionManager?.recordEvent();
+  }
+
+  /**
+   * Canonical low-level observation API. Emits a first-class backend event
+   * `type` directly (unlike `track`, which is reserved for custom application
+   * events and always ships as top-level type `track` with the name in
+   * `properties.event`).
+   *
+   * - `type` must be a canonical registry event type; unknown types are a
+   *   production-safe no-op (with a debug warning), never a silent mislabel.
+   * - Payloads asserting `execution_by_aether: true` are rejected — Aether
+   *   observes, it never executes.
+   * - Consent gating, sensitive-field scrubbing, and remote-disable all run on
+   *   the shared enqueue path.
+   */
+  observe(type: string, properties: Record<string, unknown> = {}): void {
+    if (!isCanonicalEventType(type)) {
+      this.log('warn', `observe(): '${type}' is not a canonical event type — ignored`);
+      return;
+    }
+    this.enqueueEvent(type, properties);
     this.sessionManager?.recordEvent();
   }
 
@@ -772,6 +795,13 @@ class AetherSDK implements AetherSDKInterface {
     this.eventQueue.setConsent(this.consentModule.getState());
     this.consentModule.onUpdate((state) => {
       this.eventQueue?.setConsent(state);
+      // Personalization gates device fingerprinting: generate on grant,
+      // reset (clear in-memory id + cached storage) on revoke.
+      if (state.personalization) {
+        if (this.canFingerprint()) this.fingerprintCollector?.generate().catch(() => {});
+      } else {
+        this.fingerprintCollector?.reset();
+      }
       this.enqueueEvent('consent', { consent: state });
     });
 
@@ -786,9 +816,12 @@ class AetherSDK implements AetherSDKInterface {
     this.trafficTracker = new TrafficSourceTracker();
     this.trafficTracker.detect();
 
-    // Device fingerprint (consent-gated)
+    // Device fingerprint — personalization-gated (registry: personalization is
+    // fingerprintGated + blockLocalCollection). Never generate pre-consent.
     this.fingerprintCollector = new DeviceFingerprintCollector();
-    this.fingerprintCollector.generate().catch(() => {});
+    if (this.canFingerprint()) {
+      this.fingerprintCollector.generate().catch(() => {});
+    }
 
     this.sessionManager.start();
 
@@ -855,10 +888,11 @@ class AetherSDK implements AetherSDKInterface {
 
   private initWeb2(config: AetherConfig, modules: NonNullable<AetherConfig['modules']>): void {
     const trackFn = (event: string, props?: Record<string, unknown>) => this.track(event, props);
+    const observeFn = (type: string, props?: Record<string, unknown>) => this.observe(type, props ?? {});
 
-    // E-commerce — thin stub
+    // E-commerce — thin stub emitting canonical commerce event types via observe()
     if (modules.ecommerce !== false) {
-      this.ecommerceModule = new EcommerceModule({ onTrack: trackFn });
+      this.ecommerceModule = new EcommerceModule({ onObserve: observeFn });
     }
 
     // Form analytics — thin field emitter
@@ -911,12 +945,29 @@ class AetherSDK implements AetherSDKInterface {
   // PRIVATE
   // =========================================================================
 
+  /**
+   * Fingerprinting is permitted only under `personalization` consent and never
+   * under an honored Do-Not-Track signal.
+   */
+  private canFingerprint(): boolean {
+    if (this.config?.privacy?.respectDNT && typeof navigator !== 'undefined' && navigator.doNotTrack === '1') {
+      return false;
+    }
+    return this.consentModule?.hasConsent('personalization') === true;
+  }
+
   private enqueueEvent(type: string, properties: Record<string, unknown>): void {
     if (!this.eventQueue || !this.identityManager || !this.sessionManager) return;
 
     // Honor remote-config feature switches published from the tenant fleet UI.
     if (this.isRemotelyDisabled(type)) {
       this.log('debug', `Event suppressed by remote manifest: ${type}`);
+      return;
+    }
+
+    // Aether observes; it never executes. Reject any payload asserting it did.
+    if (properties && (properties as Record<string, unknown>)['execution_by_aether'] === true) {
+      this.log('warn', `Event '${type}' dropped — execution_by_aether must never be true`);
       return;
     }
 
@@ -938,7 +989,9 @@ class AetherSDK implements AetherSDKInterface {
         page: typeof window !== 'undefined' ? getPageContext() : undefined,
         device: typeof window !== 'undefined' ? getDeviceContext() : undefined,
         campaign: typeof window !== 'undefined' ? getCampaignContext() : undefined,
-        fingerprint: this.fingerprintCollector?.getFingerprintId()
+        // Fingerprint is personalization-gated: only stamp when the user has
+        // granted personalization consent (device fingerprinting purpose).
+        fingerprint: (this.consentModule?.hasConsent('personalization') && this.fingerprintCollector?.getFingerprintId())
           ? { id: this.fingerprintCollector.getFingerprintId()! }
           : undefined,
         locale: typeof navigator !== 'undefined' ? navigator.language : undefined,

@@ -123,9 +123,13 @@ Aether.walletTransaction(
 
 ## Consent Management
 
-Eight canonical purposes: `analytics`, `marketing`, `personalization`, `web3`, `agent`, `commerce`,
-`credit`, `location`. `credit` and `location` **always require explicit opt-in** — they are never
-granted by `grantAll()` and must be presented as separate consent choices in your UI.
+Consent purposes are **registry-derived** — the canonical set lives in
+`packages/shared/contracts/consent-registry.json`. Base purposes (`analytics`,
+`marketing`, `personalization`, `web3`, `agent`, `commerce`) can be granted together;
+explicit opt-in purposes (`financial_activity`, `credit`, `location`,
+`economic_observability`, `cross_chain_observability`) **always require separate
+opt-in** and are never granted by `grantAll()`. Present each explicit opt-in purpose
+as a separate consent choice in your UI.
 
 ```kotlin
 // Grant specific purposes
