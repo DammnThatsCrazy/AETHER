@@ -9,7 +9,7 @@ since_version: "8.12.0"
 source_files:
   - scripts/production_status.py
 canonical_owner: platform@aether
-last_synced_commit: "03ab82e"
+last_synced_commit: "44fc4b0"
 ---
 
 # Release Readiness

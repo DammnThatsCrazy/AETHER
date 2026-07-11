@@ -60,6 +60,11 @@ SUPPORTED_INTENTS: frozenset[str] = frozenset({
     "derivatives_reconciliation_lookup",
     "interop_message_trace",
     "interop_path_reliability",
+    # Observability Intelligence (read-only — Noesis never mutates these
+    # subsystems or relabels measurement semantics)
+    "import_status_lookup",
+    "job_status_lookup",
+    "measurement_integrity_lookup",
 })
 
 SUPPORTED_ENTITY_TYPES: frozenset[str] = frozenset({
@@ -204,6 +209,10 @@ class QueryPlan(BaseModel):
         "derivatives_reconciliation_lookup",
         "interop_message_trace",
         "interop_path_reliability",
+        # Observability intelligence intents (read-only)
+        "import_status_lookup",
+        "job_status_lookup",
+        "measurement_integrity_lookup",
         # Agentic intelligence intents (must mirror _agentic_dispatch keys)
         "agent_inventory_lookup",
         "agent_activity_lookup",

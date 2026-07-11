@@ -468,6 +468,13 @@ class NoesisService:
                 candidates.append(("interop_path_reliability", 0.84))
             else:
                 candidates.append(("interop_message_trace", 0.85))
+        # Observability Intelligence (read-only: imports / jobs / measurement)
+        if any(k in low for k in ("import", "imports", "upload", "uploaded")):
+            candidates.append(("import_status_lookup", 0.83))
+        if any(k in low for k in ("job", "jobs", "queue", "queued", "enqueue", "enqueued", "background job")):
+            candidates.append(("job_status_lookup", 0.82))
+        if any(k in low for k in ("metric", "metrics", "measurement", "value_state", "value state", "conversion rate")):
+            candidates.append(("measurement_integrity_lookup", 0.83))
 
         if not candidates:
             # If conversation history provides a prior intent, carry it forward with low confidence
@@ -592,6 +599,12 @@ class NoesisService:
             "interop_path_reliability",
         ):
             return await self._economic_dispatch(plan, scope)
+        if plan.intent in (
+            "import_status_lookup",
+            "job_status_lookup",
+            "measurement_integrity_lookup",
+        ):
+            return await self._observability_dispatch(plan, scope)
         return self._unsupported_response(body, [])
 
     def _tenant_filter(self, scope: Scope) -> Optional[dict[str, Any]]:
@@ -1018,6 +1031,36 @@ class NoesisService:
         evidence = EvidenceEnvelope(
             sources=[
                 EvidenceSource(service="economic_intelligence", resource_type=source, fetched_at=fetched_at)
+                for source in result.get("sources", [])
+            ],
+            sufficient=bool(result.get("sufficient", True)),
+            insufficient_reason=None if result.get("sufficient", True) else "No matching observations in tenant scope",
+        )
+        return self._response(
+            plan, result.get("answer", ""), result.get("results", []), [],
+            evidence=evidence, scope=scope,
+        )
+
+    async def _observability_dispatch(self, plan: QueryPlan, scope: Scope) -> NoesisResponse:
+        """Read-only delegation to the observability adapter (imports / jobs /
+        measurement integrity). Observation-only — Noesis never mutates these
+        subsystems and never relabels measurement semantics. Mirrors the
+        envelope handling of ``_economic_dispatch``."""
+        from .adapters.observability_adapter import ObservabilityNoesisAdapter
+
+        adapter = ObservabilityNoesisAdapter()
+        tenant_id = scope.effective_tenant_id
+        if plan.intent == "import_status_lookup":
+            result = await adapter.import_status(tenant_id, plan.target)
+        elif plan.intent == "job_status_lookup":
+            result = await adapter.job_status(tenant_id, plan.target)
+        else:
+            result = await adapter.measurement_integrity(tenant_id, plan.target)
+
+        fetched_at = utc_now()
+        evidence = EvidenceEnvelope(
+            sources=[
+                EvidenceSource(service="observability_intelligence", resource_type=source, fetched_at=fetched_at)
                 for source in result.get("sources", [])
             ],
             sufficient=bool(result.get("sufficient", True)),

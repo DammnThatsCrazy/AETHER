@@ -60,11 +60,10 @@ def raises_named(*names: str):
 
 
 @pytest.fixture()
-def clean():
+def clean(monkeypatch):
     from repositories.import_files import get_import_file_repository
     from repositories.imports_repo import get_imports_repository
     from repositories.lake import BronzeRepository
-    from shared.graph.graph import get_graph_client
 
     r = get_imports_repository()
     for attr in ("sessions", "schemas", "mappings", "templates", "validations",
@@ -73,6 +72,10 @@ def clean():
     get_import_file_repository()._store.clear()
     BronzeRepository(cm.BRONZE_DOMAIN)._store.clear()
     _reset_graph()
+    # Pin the repo accessor so seeding (svc) and the commit path (cm) share one
+    # instance regardless of the suite's sys.modules churn.
+    monkeypatch.setattr(svc, "get_imports_repository", lambda: r)
+    monkeypatch.setattr(cm, "get_imports_repository", lambda: r)
     return r
 
 

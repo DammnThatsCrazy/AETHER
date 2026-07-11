@@ -337,6 +337,58 @@ CAPABILITY_REGISTRY: list[NoesisCapability] = [
         ],
         data_sources=["interop_messages"],
     ),
+    NoesisCapability(
+        intent="import_status_lookup",
+        label="Tenant Import Status",
+        description=(
+            "Report observed tenant import sessions and their lifecycle "
+            "status. Read-only — Noesis never creates, commits, cancels, or "
+            "mutates an import."
+        ),
+        surfaces=["aether", "kyber"],
+        requires_target=False,
+        example_prompts=[
+            "What is the status of our data imports?",
+            "Show recent import sessions",
+            "Look up import session imp_123",
+        ],
+        data_sources=["imports_repository"],
+    ),
+    NoesisCapability(
+        intent="job_status_lookup",
+        label="Background Job Status",
+        description=(
+            "Summarize observed background jobs and their status "
+            "distribution. Observation-only — Noesis never enqueues, "
+            "cancels, retries, or runs jobs."
+        ),
+        surfaces=["aether", "kyber"],
+        requires_target=False,
+        example_prompts=[
+            "Show recent background jobs",
+            "What jobs are queued?",
+            "Look up job job_123",
+        ],
+        data_sources=["jobs_repository"],
+    ),
+    NoesisCapability(
+        intent="measurement_integrity_lookup",
+        label="Measurement Integrity",
+        description=(
+            "Report observed measurement results and their value_state "
+            "distribution for a tenant. Read-only — never recomputes, "
+            "restates, or relabels a metric; attributed credit is not causal "
+            "and a missing value is never reported as zero."
+        ),
+        surfaces=["aether", "kyber"],
+        requires_target=True,
+        example_prompts=[
+            "What is the value_state of our conversion rate metric?",
+            "Show measurement integrity for our metrics",
+            "Which measurements have insufficient data?",
+        ],
+        data_sources=["measurement_results_store", "metric_registry"],
+    ),
 ]
 
 # Fast lookup by intent name

@@ -189,6 +189,24 @@ EVAL_CASES: list[tuple[str, str]] = [
     ("Show interop path reliability", "interop_path_reliability"),
     ("Which LayerZero lanes are degraded?", "interop_path_reliability"),
     ("Compare reliability across bridge message routes", "interop_path_reliability"),
+
+    # import_status_lookup (4 examples)
+    ("What is the status of our data imports?", "import_status_lookup"),
+    ("Show recent imports", "import_status_lookup"),
+    ("Did my file upload finish importing?", "import_status_lookup"),
+    ("Which imports are still running?", "import_status_lookup"),
+
+    # job_status_lookup (4 examples)
+    ("Are any background jobs failing?", "job_status_lookup"),
+    ("Show background job status", "job_status_lookup"),
+    ("What jobs are enqueued right now?", "job_status_lookup"),
+    ("List failed jobs", "job_status_lookup"),
+
+    # measurement_integrity_lookup (4 examples)
+    ("What is the value_state of our conversion rate metric?", "measurement_integrity_lookup"),
+    ("Explain this measurement result", "measurement_integrity_lookup"),
+    ("Why is this metric insufficient_data?", "measurement_integrity_lookup"),
+    ("Show the value_state and lineage for this measurement", "measurement_integrity_lookup"),
 ]
 
 
