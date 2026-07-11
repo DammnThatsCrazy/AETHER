@@ -76,6 +76,40 @@ class MeasurementIdentityConsumer:
                     merged_id, exc,
                 )
 
+    async def on_identity_split(self, event: Event) -> None:
+        """Handle an IDENTITY_SPLIT event.
+
+        A fragment split reassigns touchpoints between entities just as a merge
+        stitches them together, so measurement must re-derive journeys and
+        attribution for BOTH the original entity (touchpoints removed) and the
+        fragment's new home (touchpoints added). The identity service emits
+        ``original_entity_id`` and ``resulting_entity_id``.
+        """
+        payload = event.payload or {}
+        tenant_id = event.tenant_id or payload.get("tenant_id", "")
+        original_id = payload.get("original_entity_id")
+        resulting_id = payload.get("resulting_entity_id")
+
+        if not tenant_id or not original_id:
+            logger.warning(
+                "identity_split event missing required fields: tenant_id=%s original_id=%s event_id=%s",
+                tenant_id, original_id, event.event_id,
+            )
+            return
+
+        targets: list[tuple[str, str]] = [(str(original_id), "identity_split_origin")]
+        if resulting_id and str(resulting_id) != str(original_id):
+            targets.append((str(resulting_id), "identity_split_fragment"))
+
+        for entity_id, reason in targets:
+            try:
+                await self._rebuild_and_reattribute(tenant_id, entity_id, reason=reason)
+            except Exception as exc:
+                logger.warning(
+                    "measurement identity_split rebuild for entity=%s failed: %s",
+                    entity_id, exc,
+                )
+
     async def _rebuild_and_reattribute(self, tenant_id: str, profile_id: str, reason: str) -> None:
         from services.measurement.engine.journey_compiler import JourneyCompiler
         from services.measurement.engine.attribution_engine import AttributionEngine
@@ -108,4 +142,5 @@ class MeasurementIdentityConsumer:
     def register(self, consumer: Any) -> None:
         """Register this handler with an EventConsumer instance."""
         consumer.subscribe(Topic.IDENTITY_MERGED, self.on_identity_merged)
-        logger.info("MeasurementIdentityConsumer registered for IDENTITY_MERGED")
+        consumer.subscribe(Topic.IDENTITY_SPLIT, self.on_identity_split)
+        logger.info("MeasurementIdentityConsumer registered for IDENTITY_MERGED + IDENTITY_SPLIT")

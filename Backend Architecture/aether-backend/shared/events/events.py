@@ -73,6 +73,7 @@ class Topic(str, Enum):
     # Identity
     IDENTITY_RESOLVED = "aether.identity.resolved"
     IDENTITY_MERGED = "aether.identity.merged"
+    IDENTITY_SPLIT = "aether.identity.split"
     PROFILE_UPDATED = "aether.profile.updated"
 
     # Analytics

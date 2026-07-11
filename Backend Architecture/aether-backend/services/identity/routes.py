@@ -406,6 +406,7 @@ async def preview_fragment_split(
 async def execute_fragment_split(
     body: IdentityFragmentSplitRequest,
     request: Request,
+    producer: EventProducer = Depends(get_producer),
 ) -> dict:
     """
     Execute a fragment-aware identity split (operator-gated, audited).
@@ -416,6 +417,11 @@ async def execute_fragment_split(
     record — mirroring the existing ``/split`` route. A blocked split returns
     ``allowed=False`` + a typed ``rejection_reason`` rather than raising, so
     callers never see a raw 500.
+
+    On an applied split we publish ``IDENTITY_SPLIT`` so the measurement plane
+    re-derives journeys/attribution for BOTH the original and the fragment's
+    new home — a split reassigns touchpoints between entities exactly as a
+    merge does, so it must trigger the same recompute.
     """
     tenant = request.state.tenant
     tenant.require_permission("write")
@@ -432,6 +438,20 @@ async def execute_fragment_split(
         target_entity_id=body.target_entity_id,
         source_merge_event_id=body.source_merge_event_id,
     )
+
+    if result.get("allowed"):
+        await producer.publish(Event(
+            topic=Topic.IDENTITY_SPLIT,
+            tenant_id=tenant.tenant_id,
+            source_service="identity",
+            payload={
+                "original_entity_id": body.entity_id,
+                "resulting_entity_id": result.get("resulting_entity_id"),
+                "split_event_id": result.get("split_event_id"),
+                "mode": body.mode,
+                "reason": body.reason,
+            },
+        ))
 
     return APIResponse(data=IdentityFragmentSplitResponse(**result).model_dump()).to_dict()
 
