@@ -1,68 +1,148 @@
 # =============================================================================
-# Aether — Route Policy Registry (seed)
+# Aether — Route Policy Registry (PR 2)
 #
-# Seed of the route policy registry. This session ships the canonical SCHEMA and
-# a representative set of entries so downstream work (ledger FT-2) has a stable
-# target. Full mounted-route coverage + default-deny enforcement is a follow-up
-# release-train PR — `enforcement_status: seed` states that plainly.
+# Authorization is a protocol, not scattered route logic. `classify(path)` in
+# services/security/route_registry.py derives a RoutePolicy for every mounted
+# route from this catalog:
+#   - longest matching entry in `known_prefixes` → the route's domain;
+#   - policy fields are derived from the domain sets below;
+#   - ANY path containing `/kyber` is a Kyber operator route
+#     (kyber_operator_required + audit_required + high risk), regardless of prefix
+#     (this covers `/v1/admin/kyber/*` as well as `/v1/kyber/*`);
+#   - public paths come from shared/rate_limit/feature_gate.py.
 #
-# Validated by scripts/release/check_route_registry.py (schema + coherence).
+# default_decision is `deny`: a mounted route whose 2-segment prefix is NOT in
+# `known_prefixes` is UNCLASSIFIED and fails tests/unit/test_route_registry_coverage.py
+# (the default-deny ratchet — a new route prefix must be classified here before it
+# can ship). Validated for well-formedness by scripts/release/check_route_registry.py.
 # =============================================================================
 
-schema_version: 1
+schema_version: 2
 canonical_source: config/route_registry.yaml
-enforcement_status: seed          # seed | enforced — full coverage lands in FT-2
-default_decision: deny            # unknown production routes must default-deny
+enforcement_status: enforced
+default_decision: deny
+public_paths_source: shared/rate_limit/feature_gate.py
 
-routes:
+# Domains whose routes are sensitive (decisions should be audited).
+sensitive_domains:
+  - admin
+  - kyber
+  - security
+  - audit
+  - dsr
+  - exports
+  - governance
+  - consent
+  - delegations
+  - auth
+  - billing
+  - me
+  - tenant
+  - tenants
+  - oracle
 
-  - route_id: auth.login
-    method: POST
-    path: /v1/auth/login
-    domain: auth
-    action: authenticate
-    resource_type: session
-    public: true
-    requires_auth: false
-    allowed_principal_types: [anonymous]
-    allowed_credential_classes: [none]
-    tenant_scoped: false
-    kyber_operator_required: false
-    sensitive: true
-    audit_required: true
-    required_capabilities: []
-    risk_class: medium
+# Domains classified high risk.
+high_risk_domains:
+  - admin
+  - kyber
+  - security
+  - auth
+  - billing
+  - dsr
 
-  - route_id: ingestion.batch
-    method: POST
-    path: /v1/batch
-    domain: ingestion
-    action: ingest
-    resource_type: event
-    public: false
-    requires_auth: true
-    allowed_principal_types: [service, public_ingest]
-    allowed_credential_classes: [service_credential, public_ingest_identifier]
-    tenant_scoped: true
-    kyber_operator_required: false
-    sensitive: false
-    audit_required: false
-    required_capabilities: [ingest]
-    risk_class: low
+# Infrastructure/liveness domains that are not tenant-scoped.
+infra_domains:
+  - health
+  - ready
+  - metrics
 
-  - route_id: kyber.operator.tenant_entry
-    method: POST
-    path: /v1/kyber/operator/tenant-entry
-    domain: kyber
-    action: operator_tenant_access
-    resource_type: tenant
-    public: false
-    requires_auth: true
-    allowed_principal_types: [operator]
-    allowed_credential_classes: [human_session, service_credential]
-    tenant_scoped: false
-    kyber_operator_required: true
-    sensitive: true
-    audit_required: true
-    required_capabilities: [kyber:operator]
-    risk_class: high
+# Every mounted route's 2-segment path prefix must appear here. Adding a new
+# route under a NEW prefix requires classifying it here first (default-deny).
+known_prefixes:
+  - "/"
+  - /health
+  - /ready
+  - /sdk/identity
+  - /v1/admin
+  - /v1/agents
+  - /v1/analytics
+  - /v1/attribution
+  - /v1/audit
+  - /v1/auth
+  - /v1/automation
+  - /v1/batch
+  - /v1/behavior
+  - /v1/behavioral
+  - /v1/billing
+  - /v1/campaign-quality
+  - /v1/campaign-sources
+  - /v1/campaigns
+  - /v1/capabilities
+  - /v1/clusters
+  - /v1/comms
+  - /v1/config
+  - /v1/consent
+  - /v1/contact
+  - /v1/conversions
+  - /v1/crossdomain
+  - /v1/delegations
+  - /v1/delivery
+  - /v1/derivatives
+  - /v1/diagnostics
+  - /v1/dsr
+  - /v1/economic
+  - /v1/entities
+  - /v1/events
+  - /v1/expectations
+  - /v1/experiments
+  - /v1/exports
+  - /v1/flows
+  - /v1/fraud
+  - /v1/geo
+  - /v1/governance
+  - /v1/graph
+  - /v1/guardrails
+  - /v1/health
+  - /v1/identity
+  - /v1/imports
+  - /v1/ingest
+  - /v1/intelligence
+  - /v1/investigations
+  - /v1/jobs
+  - /v1/journeys
+  - /v1/kyber
+  - /v1/lake
+  - /v1/mapping-review
+  - /v1/me
+  - /v1/measurement
+  - /v1/metering
+  - /v1/metrics
+  - /v1/ml
+  - /v1/noesis
+  - /v1/notifications
+  - /v1/observability
+  - /v1/onboarding
+  - /v1/oracle
+  - /v1/policy
+  - /v1/population
+  - /v1/profile
+  - /v1/profile360
+  - /v1/providers
+  - /v1/ready
+  - /v1/realtime
+  - /v1/recommendations
+  - /v1/resolution
+  - /v1/rewards
+  - /v1/rwa
+  - /v1/security
+  - /v1/semantic
+  - /v1/signals
+  - /v1/spend
+  - /v1/stablecoin
+  - /v1/stablecoins
+  - /v1/status
+  - /v1/tenant
+  - /v1/tenants
+  - /v1/track
+  - /v1/value-review
+  - /v1/web3
