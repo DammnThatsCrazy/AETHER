@@ -23,6 +23,7 @@ from typing import Any, Optional
 
 from shared.common.common import utc_now
 from shared.logger.logger import get_logger
+from services.policy import consent_policy_engine
 
 # Lazy type alias — avoid module-level lake/repos imports so tests can import
 # this module without needing FastAPI installed.
@@ -513,13 +514,33 @@ class IntelligenceAggregator:
     async def web2(self, entity_id: str, tenant_id: str, window: str = "30d") -> dict:
         """TradFi portfolio, bank accounts, credit signals (requires 'credit' consent)."""
         consent = await _safe("web2.consent", self._consent.get_consent(tenant_id, entity_id))
-        has_consent = False
+        grants: list[str] = []
+        snapshot_id = None
         if isinstance(consent, dict):
-            grants = consent.get("granted_purposes") or consent.get("purposes") or []
-            has_consent = "credit" in grants or consent.get("credit_consent") is True
-        no_consent_summary = {"consent_required": True, "granted": False}
+            grants = list(consent.get("granted_purposes") or consent.get("purposes") or [])
+            if consent.get("credit_consent") is True and "credit" not in grants:
+                grants.append("credit")
+            snapshot_id = consent.get("snapshot_id")
+
+        # Central consent PolicyDecision — records explainable evidence
+        # (policy_decision_id) for this sensitive credit-surface access. The gate
+        # behavior is unchanged; the decision is additive.
+        decision = await _safe("web2.policy", consent_policy_engine.decide(
+            tenant_id=tenant_id, actor_id=tenant_id, action="render_profile360",
+            resource_type="profile360.web2", resource_id=entity_id, subject_ref=entity_id,
+            purpose="credit", granted_purposes=grants, consent_snapshot_id=snapshot_id,
+            redactable_fields=["credit_signals", "tradfi_portfolio", "bank_accounts"],
+        ))
+        policy_decision_id = getattr(decision, "policy_decision_id", None)
+        has_consent = bool(getattr(decision, "allowed", "credit" in grants))
         if not has_consent:
-            return _envelope(entity_id, tenant_id, "web2", window, [], no_consent_summary, ["plaid", "gold_credit_signals", "gold_tradfi_portfolio"])
+            return _envelope(
+                entity_id, tenant_id, "web2", window, [],
+                {"consent_required": True, "granted": False,
+                 "policy_decision_id": policy_decision_id,
+                 "redacted_fields": getattr(decision, "redacted_fields", [])},
+                ["plaid", "gold_credit_signals", "gold_tradfi_portfolio"],
+            )
 
         cutoff = _window_cutoff(window)
         tradfi_rows, credit_rows = await asyncio.gather(
@@ -545,6 +566,7 @@ class IntelligenceAggregator:
             "tradfi_accounts": sum(1 for i in items if i.get("data_type") == "tradfi"),
             "credit_signals": sum(1 for i in items if i.get("data_type") == "credit"),
             "consent_granted": True,
+            "policy_decision_id": policy_decision_id,
         }
         return _envelope(entity_id, tenant_id, "web2", window, items, summary, ["plaid", "gold_credit_signals", "gold_tradfi_portfolio"])
 

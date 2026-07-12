@@ -294,6 +294,13 @@ def main(argv: Sequence[str] | None = None) -> None:
         remediation="align packages/shared/contracts/signal-use-matrix.json with consent-registry.json",
     )
     run(
+        ["python", "scripts/validate_policy_decisions.py"],
+        name="Consent PolicyDecision evidence service (present, matrix-driven, wired)",
+        results=results,
+        stop_on_failure=stop,
+        remediation="keep services/policy/ decision fields + signal-use-matrix wiring intact",
+    )
+    run(
         ["python", "scripts/validate_sdk_release_alignment.py"],
         name="SDK release alignment",
         results=results,
