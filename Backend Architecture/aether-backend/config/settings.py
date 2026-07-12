@@ -458,6 +458,45 @@ class SecurityGovernanceConfig:
 
 
 # ---------------------------------------------------------------------------
+# Trust Plane — staged-activation flags (PR 1: sessions, credentials, legacy
+# auth containment). Under the founding-tenant posture these are ON in
+# staging/production and OFF in local/dev, so existing frontends and the
+# current test suite keep the legacy API-key path. Each flag may be explicitly
+# overridden by its env var. See config/posture/founding_tenant_production.yaml
+# and docs/FOUNDING-TENANT-PRODUCTION.md.
+# ---------------------------------------------------------------------------
+
+# Default-ON for non-local environments; explicit env var always wins.
+_TRUST_DEFAULT_ON = _env("AETHER_ENV", "local") not in ("local", "dev")
+
+
+@dataclass(frozen=True)
+class TrustPlaneConfig:
+    """Human sessions vs. service credentials vs. public ingest identifiers."""
+
+    # Master switch for the trust plane.
+    trust_plane_enabled: bool = _env_bool("TRUST_PLANE_ENABLED", _TRUST_DEFAULT_ON)
+    # Human auth paths issue durable sessions, never reusable API keys.
+    human_sessions_enabled: bool = _env_bool("HUMAN_SESSIONS_ENABLED", _TRUST_DEFAULT_ON)
+    # Scoped, rotatable, revocable machine credentials.
+    service_credentials_enabled: bool = _env_bool("SERVICE_CREDENTIALS_ENABLED", _TRUST_DEFAULT_ON)
+    # Non-secret, ingest-only public identifiers.
+    public_ingest_identifier_enabled: bool = _env_bool(
+        "PUBLIC_INGEST_IDENTIFIER_ENABLED", _TRUST_DEFAULT_ON
+    )
+    # Legacy broad tenant registration is CONTAINED in staging/production and
+    # preserved in local/dev (so existing local flows keep working). Explicit
+    # env var always wins.
+    legacy_tenant_registration_enabled: bool = _env_bool(
+        "LEGACY_TENANT_REGISTRATION_ENABLED", not _TRUST_DEFAULT_ON
+    )
+
+    # Session lifetimes (minutes). Conservative defaults; override per env.
+    session_idle_minutes: int = _env_int("SESSION_IDLE_MINUTES", 60)
+    session_absolute_minutes: int = _env_int("SESSION_ABSOLUTE_MINUTES", 12 * 60)
+
+
+# ---------------------------------------------------------------------------
 # Data Quality, Drift Detection & Graph Intelligence Reliability
 # ---------------------------------------------------------------------------
 
@@ -841,6 +880,7 @@ class Settings:
     intelligence_graph: IntelligenceGraphConfig = field(default_factory=IntelligenceGraphConfig)
     decision_outcome: DecisionOutcomeIntelligenceConfig = field(default_factory=DecisionOutcomeIntelligenceConfig)
     security_governance: SecurityGovernanceConfig = field(default_factory=SecurityGovernanceConfig)
+    trust_plane: TrustPlaneConfig = field(default_factory=TrustPlaneConfig)
     quicknode: QuickNodeConfig = field(default_factory=QuickNodeConfig)
     stablecoin_intelligence: StablecoinIntelligenceConfig = field(default_factory=StablecoinIntelligenceConfig)
 

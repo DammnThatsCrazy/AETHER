@@ -26,7 +26,7 @@ import hashlib
 import uuid
 from typing import Optional
 
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, Request, Response
 from pydantic import BaseModel, Field
 
 from config.settings import settings
@@ -88,6 +88,53 @@ async def _issue_api_key(tenant_id: str, plan_tier_value: str, label: str) -> st
     except Exception as e:
         logger.warning(f"Auth cache registration failed: tenant={tenant_id} error={e}")
     return raw_key
+
+
+def _set_session_cookie(response: Optional[Response], issue) -> None:
+    """Set the HttpOnly session cookie when a Response is available."""
+    if response is None:
+        return
+    secure = settings.env.value not in ("local", "dev")
+    response.set_cookie(
+        key=issue.cookie_name,
+        value=issue.token,
+        max_age=issue.cookie_max_age,
+        httponly=True,
+        secure=secure,
+        samesite="lax",
+        path="/",
+    )
+
+
+async def _issue_human_session(
+    response: Optional[Response],
+    tenant_id: str,
+    principal_id: Optional[str],
+    message: str,
+    extra: Optional[dict] = None,
+) -> dict:
+    """Create a durable human session and return a session response.
+
+    This replaces reusable-API-key issuance for human auth under the
+    founding-tenant posture: the response carries a session (cookie + token),
+    never an `api_key`.
+    """
+    from services.auth.sessions import session_service
+    issue = await session_service.create_session(
+        tenant_id,
+        principal_id=principal_id,
+        idle_minutes=settings.trust_plane.session_idle_minutes,
+        absolute_minutes=settings.trust_plane.session_absolute_minutes,
+    )
+    _set_session_cookie(response, issue)
+    data = {
+        "tenant_id": tenant_id,
+        "session": issue.public_dict(),
+        "message": message,
+    }
+    if extra:
+        data.update(extra)
+    return APIResponse(data=data).to_dict()
 
 
 async def _send_otp_email(email: str, otp: str, name: str = "") -> None:
@@ -260,9 +307,16 @@ class VerifyEmailRequest(BaseModel):
 
 
 @router.post("/v1/auth/verify-email")
-async def verify_email(body: VerifyEmailRequest):
-    """Step 2 of email sign-up: verify OTP, create tenant + first API key."""
+async def verify_email(body: VerifyEmailRequest, response: Response = None):
+    """Step 2 of email sign-up: verify OTP, create tenant.
+
+    Under the founding-tenant posture (`HUMAN_SESSIONS_ENABLED`) this starts a
+    durable session instead of returning a reusable API key. Legacy behavior is
+    preserved when the flag is off.
+    """
     from shared.auth.verification import verify_otp
+
+    verified_user_id: Optional[str] = None
 
     email = body.email.lower()
     redis = _get_redis()
@@ -316,6 +370,7 @@ async def verify_email(body: VerifyEmailRequest):
             "email_verified": True,
             "auth_method": "password",
         })
+        verified_user_id = user_id
         await user_repo.delete(f"pending:{email}")
     except Exception as e:
         logger.warning(f"User record creation failed: tenant={tenant_id} error={e}")
@@ -331,9 +386,20 @@ async def verify_email(body: VerifyEmailRequest):
     except Exception as e:
         logger.warning(f"Billing account creation failed: tenant={tenant_id} error={e}")
 
-    raw_key = await _issue_api_key(tenant_id, plan_tier.value, "Default key")
+    metrics.increment("tenant_registrations", labels={"plan_tier": plan_tier.value, "method": "password"})
+    logger.info(f"Email-verified tenant created: id={tenant_id} email={email!r}")
 
-    # Welcome email (fire-and-forget)
+    if settings.trust_plane.human_sessions_enabled:
+        # Founding-tenant posture: start a session, do NOT issue a reusable key.
+        # The welcome email is skipped here (it historically carried the key).
+        return await _issue_human_session(
+            response, tenant_id, verified_user_id,
+            "Account created! A secure session has been started.",
+            extra={"name": name or email, "plan_tier": plan_tier.value},
+        )
+
+    # Legacy path (flag off) — reusable API key + key-bearing welcome email.
+    raw_key = await _issue_api_key(tenant_id, plan_tier.value, "Default key")
     try:
         import asyncio
         from shared.email import email_service, templates
@@ -343,9 +409,6 @@ async def verify_email(body: VerifyEmailRequest):
         )
     except Exception as e:
         logger.debug(f"Welcome email skipped: {e}")
-
-    metrics.increment("tenant_registrations", labels={"plan_tier": plan_tier.value, "method": "password"})
-    logger.info(f"Email-verified tenant created: id={tenant_id} email={email!r}")
 
     return APIResponse(data={
         "tenant_id": tenant_id,
@@ -406,8 +469,13 @@ _LOGIN_ERROR = "Invalid email or password."
 
 
 @router.post("/v1/auth/login")
-async def login(body: LoginRequest):
-    """Authenticate with email + password. Issues a new session API key on success."""
+async def login(body: LoginRequest, response: Response = None):
+    """Authenticate with email + password.
+
+    Under the founding-tenant posture (`HUMAN_SESSIONS_ENABLED`) this issues a
+    durable, revocable session — never a reusable API key. When the flag is off
+    (local/dev by default) the legacy API-key response is preserved.
+    """
     from shared.auth.password import verify_password
 
     email = body.email.lower()
@@ -444,11 +512,17 @@ async def login(body: LoginRequest):
     except Exception:
         pass
 
-    raw_key = await _issue_api_key(tenant_id, plan_tier_value, "Login session")
-
     metrics.increment("auth_logins", labels={"method": "password"})
     logger.info(f"Login: tenant={tenant_id}")
 
+    if settings.trust_plane.human_sessions_enabled:
+        return await _issue_human_session(
+            response, tenant_id, user_rec.get("user_id"),
+            "Authenticated. A secure session has been created.",
+        )
+
+    # Legacy path (flag off) — reusable API key.
+    raw_key = await _issue_api_key(tenant_id, plan_tier_value, "Login session")
     return APIResponse(data={
         "tenant_id": tenant_id,
         "api_key": raw_key,
@@ -466,11 +540,13 @@ class SSOCallbackRequest(BaseModel):
 
 
 @router.post("/v1/auth/sso/callback")
-async def sso_callback(body: SSOCallbackRequest):
-    """Exchange an Auth0 access token for an AETHER API key.
+async def sso_callback(body: SSOCallbackRequest, response: Response = None):
+    """Exchange an Auth0 access token for an AETHER session.
 
-    On first login, provisions a new tenant automatically. Subsequent logins
-    return a fresh session key for the existing tenant.
+    Under the founding-tenant posture (`HUMAN_SESSIONS_ENABLED`) this starts a
+    durable session — never a reusable API key — and provisions a first-login
+    tenant as `active_limited` rather than auto-activating a claimed domain.
+    Legacy behavior is preserved when the flag is off.
     Supported providers: Google, Apple, Microsoft, Twitter/X, Slack — any
     Auth0 social connection. The `sub` claim is the stable identifier.
     """
@@ -516,12 +592,17 @@ async def sso_callback(body: SSOCallbackRequest):
         # First SSO login — provision a new tenant
         tenant_id = str(uuid.uuid4())
 
+        # Founding-tenant posture: do not auto-activate a claimed domain — a
+        # first SSO login provisions an active_limited tenant pending review.
+        first_login_status = (
+            "active_limited" if settings.trust_plane.human_sessions_enabled else "active"
+        )
         await _repo.insert(tenant_id, {
             "name": name,
             "contact_email": email,
             "plan": plan_tier.value,
             "plan_tier": plan_tier.value,
-            "status": "active",
+            "status": first_login_status,
             "auth_method": "sso",
             "settings": {},
         })
@@ -567,10 +648,16 @@ async def sso_callback(body: SSOCallbackRequest):
     else:
         logger.info(f"SSO login: tenant={tenant_id} sub={sub!r}")
 
-    raw_key = await _issue_api_key(tenant_id, plan_tier_value, "SSO session")
-
     metrics.increment("auth_logins", labels={"method": "sso"})
 
+    if settings.trust_plane.human_sessions_enabled:
+        return await _issue_human_session(
+            response, tenant_id, sub,
+            "Authenticated via SSO. A secure session has been created.",
+        )
+
+    # Legacy path (flag off) — reusable API key.
+    raw_key = await _issue_api_key(tenant_id, plan_tier_value, "SSO session")
     return APIResponse(data={
         "tenant_id": tenant_id,
         "api_key": raw_key,

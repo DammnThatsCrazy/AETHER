@@ -18,6 +18,7 @@ from typing import Optional
 from fastapi import APIRouter, Request
 from pydantic import BaseModel, Field
 
+from config.settings import settings
 from shared.auth.auth import PlanTier
 from shared.billing import stripe_client, stripe_repository
 from shared.common.common import APIResponse, BadRequestError, RateLimitedError
@@ -76,6 +77,43 @@ def _client_ip(request: Request) -> str:
     return forwarded.split(",")[0].strip() or request.client.host if request.client else "unknown"
 
 
+async def _contained_registration(body: "TenantRegistration") -> dict:
+    """Contained legacy registration (founding-tenant posture).
+
+    Does NOT create a broad active tenant or a reusable analytics API key.
+    Creates a `pending` tenant awaiting operator activation and provisions a
+    non-secret, ingest-only public identifier. No API key is issued.
+    """
+    from services.auth.sessions import public_ingest_service
+
+    tenant_id = str(uuid.uuid4())
+    await _repo.insert(tenant_id, {
+        "name": body.name,
+        "contact_email": body.contact_email,
+        "plan": body.plan_tier,
+        "plan_tier": body.plan_tier,
+        "status": "pending",           # operator approval required to activate
+        "settings": body.settings,
+        "onboarding": "contained",
+    })
+    identifier = await public_ingest_service.issue_identifier(
+        tenant_id, label="onboarding ingest"
+    )
+    metrics.increment(
+        "tenant_registrations", labels={"plan_tier": body.plan_tier, "method": "contained"}
+    )
+    logger.info(f"Legacy tenant registration contained: tenant={tenant_id}")
+    return APIResponse(data={
+        "tenant_id": tenant_id,
+        "status": "pending",
+        "public_ingest_identifier": identifier["identifier"],
+        "message": (
+            "Registration received. Your tenant is pending activation; a public, "
+            "ingest-only identifier has been provisioned. No API key is issued."
+        ),
+    }).to_dict()
+
+
 class TenantRegistration(BaseModel):
     name: str = Field(..., min_length=2, max_length=200)
     contact_email: str = Field(..., min_length=5, max_length=254)
@@ -98,6 +136,10 @@ async def register_tenant(body: TenantRegistration, request: Request):
 
     if not body.contact_email or "@" not in body.contact_email:
         raise BadRequestError("contact_email must be a valid email address")
+
+    # Founding-tenant posture: the legacy broad-registration path is contained.
+    if not settings.trust_plane.legacy_tenant_registration_enabled:
+        return await _contained_registration(body)
 
     try:
         plan_tier = PlanTier(body.plan_tier)
@@ -203,6 +245,13 @@ async def recover_api_key(body: RecoverRequest, request: Request):
     }).to_dict()
 
     if not body.contact_email or "@" not in body.contact_email:
+        return _SAFE_RESPONSE
+
+    # Founding-tenant posture: recovery never creates or emails an API key. The
+    # recovery path is a session-based verify → reset flow; here we return the
+    # anti-enumeration response without minting any credential.
+    if settings.trust_plane.human_sessions_enabled:
+        metrics.increment("recovery_attempts_contained")
         return _SAFE_RESPONSE
 
     # Find tenant by contact_email in billing accounts (most reliable source)

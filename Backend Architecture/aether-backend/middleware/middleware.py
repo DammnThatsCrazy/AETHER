@@ -674,10 +674,21 @@ async def _authenticate_async(
     jwt_handler: JWTHandler,
     api_key_validator: APIKeyValidator,
 ) -> TenantContext:
-    """Try API key first (async Redis lookup in production), then JWT bearer token."""
+    """Resolve a request principal.
+
+    Order: X-API-Key → trust-plane credentials (session cookie / X-Session-Token,
+    public ingest identifier, service credential) → Bearer (API key, then session
+    token, then JWT). The trust-plane resolution is purely additive and gated on
+    the trust-plane flags, so API-key and JWT callers are unaffected.
+    """
     api_key = request.headers.get("X-API-Key")
     if api_key:
         return await api_key_validator.validate_async(api_key)
+
+    # Additive: trust-plane credential classes (sessions / ingest / service).
+    trust_ctx = await _resolve_trust_plane_context(request)
+    if trust_ctx is not None:
+        return trust_ctx
 
     auth_header = request.headers.get("Authorization", "")
     if auth_header.startswith("Bearer "):
@@ -687,7 +698,90 @@ async def _authenticate_async(
             return await api_key_validator.validate_async(token)
         except Exception:
             pass
+        # A session token may also arrive via Bearer.
+        sess_ctx = await _resolve_session_token(token)
+        if sess_ctx is not None:
+            return sess_ctx
         payload = jwt_handler.decode(token)
         return jwt_handler.extract_context(payload)
 
     raise UnauthorizedError("Missing API key or Bearer token")
+
+
+async def _resolve_trust_plane_context(request: Request) -> Optional[TenantContext]:
+    """Resolve a session cookie / header, public ingest identifier, or service
+    credential into a TenantContext. Returns None when nothing matches or the
+    relevant trust-plane flag is off. Never raises — falls through to legacy."""
+    try:
+        from config.settings import settings as _settings
+        tp = _settings.trust_plane
+    except Exception:
+        return None
+
+    headers = request.headers
+    cookies = getattr(request, "cookies", {}) or {}
+
+    if getattr(tp, "human_sessions_enabled", False):
+        token = cookies.get("aether_session") or headers.get("X-Session-Token")
+        if token:
+            ctx = await _resolve_session_token(token)
+            if ctx is not None:
+                return ctx
+
+    if getattr(tp, "public_ingest_identifier_enabled", False):
+        ident = headers.get("X-Ingest-Key")
+        if ident:
+            ctx = await _resolve_public_ingest(ident)
+            if ctx is not None:
+                return ctx
+
+    if getattr(tp, "service_credentials_enabled", False):
+        cred = headers.get("X-Service-Credential")
+        if cred:
+            ctx = await _resolve_service_credential(cred)
+            if ctx is not None:
+                return ctx
+
+    return None
+
+
+async def _resolve_session_token(token: str) -> Optional[TenantContext]:
+    try:
+        from services.auth.sessions import session_service
+        rec = await session_service.validate_session(token)
+    except Exception:
+        return None
+    return TenantContext(
+        tenant_id=rec.get("tenant_id", ""),
+        user_id=rec.get("principal_id"),
+        role=Role.EDITOR,
+        permissions=list(rec.get("permissions", ["read", "write", "ingest", "analytics"])),
+    )
+
+
+async def _resolve_public_ingest(identifier: str) -> Optional[TenantContext]:
+    try:
+        from services.auth.sessions import public_ingest_service
+        rec = await public_ingest_service.validate_identifier(identifier)
+    except Exception:
+        return None
+    # Ingest-only: viewer role, ingest permission only — cannot read analytics
+    # or call admin routes.
+    return TenantContext(
+        tenant_id=rec.get("tenant_id", ""),
+        role=Role.VIEWER,
+        permissions=["ingest"],
+    )
+
+
+async def _resolve_service_credential(cred: str) -> Optional[TenantContext]:
+    try:
+        from services.auth.sessions import service_credential_service
+        rec = await service_credential_service.validate_credential(cred)
+    except Exception:
+        return None
+    return TenantContext(
+        tenant_id=rec.get("tenant_id", ""),
+        role=Role.EDITOR,
+        permissions=list(rec.get("permissions", [])),
+    )
