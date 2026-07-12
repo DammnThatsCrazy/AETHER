@@ -151,14 +151,26 @@ items:
     required_behavior: Ingestion loads server consent receipts + tenant compliance profile, enforces lawful processing with stable rejection codes.
     affected_paths:
       - Backend Architecture/aether-backend/services/ingestion/batch.py
+      - Backend Architecture/aether-backend/services/consent/authority.py
       - Backend Architecture/aether-backend/shared/privacy/consent_enforcement.py
-    tests_required: [consent enforcement tests]
-    evidence_required: [privacy test output]
+      - Backend Architecture/aether-backend/alembic/versions/20260723_consent_authority.py
+      - Backend Architecture/aether-backend/config/settings.py
+    tests_required: [tests/unit/test_consent_authority.py]
+    evidence_required: [pytest consent-authority output, alembic upgrade/downgrade/upgrade]
     docs_required: [docs/CONSENT.md, docs/PRIVACY.md]
     owner: privacy
-    status: not_started
-    blocked_by: [FT-2-ROUTE-REGISTRY]
-    exception: null
+    status: implemented
+    blocked_by: []
+    exception: >
+      Deferred to follow-ups (see services/consent/authority.py DEFERRED note):
+      request-time DNT/GPC header suppression and per-event fingerprint-signal
+      detection. GPC/DNT and fingerprinting authorization ARE enforced from the
+      recorded consent-receipt / tenant-compliance-profile state; wiring the live
+      Sec-GPC / DNT request headers and request-time fingerprint payload
+      detection into the decision functions is the remaining work. The
+      ingestion hot-path enforcement ships behind
+      AUTHORITATIVE_CONSENT_ENFORCEMENT_ENABLED (default ON in staging/prod, OFF
+      in local/dev).
     last_verified_commit: null
 
   - id: FT-4-RUNTIME-ROLES
@@ -171,15 +183,25 @@ items:
     required_behavior: AETHER_ROLE + explicit backend selectors; role-specific entrypoints; production rejects role=all and memory backends.
     affected_paths:
       - Backend Architecture/aether-backend/main.py
-      - Backend Architecture/aether-backend/services/runtime/
+      - Backend Architecture/aether-backend/services/runtime/roles.py
+      - Backend Architecture/aether-backend/services/runtime/run_role.py
       - Backend Architecture/aether-backend/config/settings.py
-    tests_required: [worker role split tests]
-    evidence_required: [role startup tests]
+    tests_required: [tests/unit/test_runtime_roles.py]
+    evidence_required: [pytest tests/unit/test_runtime_roles.py output, Settings() production role=all + memory-backend rejection]
     docs_required: [docs/BACKEND-EXECUTION-MODEL.md]
     owner: platform
-    status: not_started
-    blocked_by: [FT-1-SESSIONS-CREDENTIALS]
-    exception: null
+    status: implemented
+    blocked_by: []
+    exception: >
+      Deferred to follow-ups: dedicated supervised worker loops + stream-consumer
+      attachment for the identity/graph/measurement worker roles (they currently
+      ride the shared consumer, and run_role starts an empty supervisor for them);
+      full per-worker-role process fan-out beyond the fully-wired api role. The
+      lifespan worker/consumer split is gated behind WORKER_ROLES_ENABLED
+      (default-on non-local, off = byte-identical to before); the "all" role and
+      the flag-off path are unchanged. Production fail-closed rejection of
+      AETHER_ROLE=all and in-memory cache/database backends is enforced in
+      Settings.__post_init__.
     last_verified_commit: null
 
   - id: FT-5-INGESTION-V2
@@ -192,15 +214,25 @@ items:
     required_behavior: Bulk typed Bronze + transactional outbox in one transaction; DB uniqueness is correctness; feature-flagged V2 with canary.
     affected_paths:
       - Backend Architecture/aether-backend/services/ingestion/batch.py
-      - Backend Architecture/aether-backend/repositories/lake.py
-      - Backend Architecture/aether-backend/alembic/versions/
-    tests_required: [bulk bronze + outbox transaction tests]
-    evidence_required: [ingestion roundtrip output]
-    docs_required: [docs/INGESTION_CONTRACT relatives]
+      - Backend Architecture/aether-backend/services/ingestion/bronze_bulk.py
+      - Backend Architecture/aether-backend/config/settings.py
+      - Backend Architecture/aether-backend/alembic/versions/20260724_ingestion_v2.py
+    tests_required: [tests/unit/test_ingestion_v2.py]
+    evidence_required: [pytest ingestion v2 output, alembic upgrade/downgrade/upgrade round-trip]
+    docs_required: [docs/source-of-truth/INGESTION_CONTRACT.md]
     owner: ingestion
-    status: not_started
-    blocked_by: [FT-4-RUNTIME-ROLES]
-    exception: null
+    status: implemented
+    blocked_by: []
+    exception: >
+      Additive and flag-gated OFF by default (INGESTION_V2_ENABLED /
+      INGESTION_V2_CANARY_TENANTS) — the V1 /v1/batch path is unchanged. The V2
+      path writes typed Bronze + the transactional outbox atomically; DB
+      uniqueness (tenant_id,event_id,schema_version) is the idempotency source of
+      truth (Redis is not consulted). Deferred to PR 6: the outbox RELAY worker
+      that drains event_outbox to the bus and the worker-side stream processing
+      (identity resolution + downstream fan-out) that V1 currently runs in-request.
+      Deployment-context validation (External Agent Telemetry Plane, flag-gated
+      OFF) is not re-run on the V2 branch.
     last_verified_commit: null
 
   - id: FT-6-OUTBOX-RELAY

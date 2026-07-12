@@ -125,6 +125,7 @@ class TestStripeSettings:
         _set_env(
             monkeypatch,
             AETHER_ENV="staging",
+            AETHER_ROLE="api",  # PR 4: staging rejects role=all
             JWT_SECRET="set",
             DATABASE_URL="postgresql://aether:test@localhost:5432/aether",
             WATERMARK_SECRET_KEY="test-watermark-secret-key-for-tests",

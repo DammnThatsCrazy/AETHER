@@ -127,6 +127,7 @@ class TestAuthMiddlewareIntegration:
     def test_stub_key_rejected_outside_local(self, monkeypatch):
         """Stub keys are forbidden in staging/production — fail-closed."""
         monkeypatch.setenv("AETHER_ENV", "staging")
+        monkeypatch.setenv("AETHER_ROLE", "api")  # PR 4: staging rejects role=all
         monkeypatch.setenv("JWT_SECRET", "staging-secret-that-is-long-32ch!!")
         monkeypatch.setenv("DATABASE_URL", "postgresql://fake:fake@localhost/fake")
         monkeypatch.setenv("WATERMARK_SECRET_KEY", "test-watermark-secret-key-for-tests")

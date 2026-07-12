@@ -520,6 +520,124 @@ class RouteRegistryConfig:
 
 
 # ---------------------------------------------------------------------------
+# Runtime roles, deployment profile & backend selectors (PR 4 / FT-4).
+#
+# AETHER_ROLE selects which slice of the process runs: the HTTP API server, a
+# specific class of background worker, or (default) EVERYTHING in one process.
+# The single-process "all" role is the local/dev default and stays behaviourally
+# identical to today. Non-local deployments run explicit roles so the API
+# process no longer starts every worker, consumer, and cron in-request.
+#
+# Backend selectors declare which concrete backend each subsystem binds to;
+# PRODUCTION rejects in-memory backends (a memory cache/database is never a
+# correctness source in production). See services/runtime/roles.py for the
+# role → worker mapping and docs/BACKEND-EXECUTION-MODEL.md.
+# ---------------------------------------------------------------------------
+
+# Canonical set of runtime roles accepted by AETHER_ROLE / run_role. "all" is
+# the single-process default (local/dev); "api" is the pure HTTP server; the
+# remainder are worker classes split out of the request lifecycle.
+RUNTIME_ROLES: frozenset[str] = frozenset(
+    {
+        "api",
+        "outbox-relay",
+        "stream-worker",
+        "identity-worker",
+        "graph-writer",
+        "measurement-worker",
+        "materializer",
+        "maintenance",
+        "all",
+    }
+)
+
+
+@dataclass(frozen=True)
+class RuntimeConfig:
+    """Runtime role selection, deployment profile, and backend selectors."""
+
+    # Which slice of the process to run. "all" (default) = single-process;
+    # explicit roles required in staging/production (see __post_init__).
+    aether_role: str = _env("AETHER_ROLE", "all")
+    # Deployment profile label — drives compose/helm wiring & ops tooling.
+    deployment_profile: str = _env("DEPLOYMENT_PROFILE", "local-live")
+
+    # Backend selectors — the concrete backend each subsystem binds to.
+    database_backend: str = _env("DATABASE_BACKEND", "postgres")
+    cache_backend: str = _env("CACHE_BACKEND", "memory")
+    event_backend: str = _env("EVENT_BACKEND", "sns_sqs")
+    graph_backend: str = _env("GRAPH_BACKEND", "postgres")
+    analytics_backend: str = _env("ANALYTICS_BACKEND", "postgres")
+    object_backend: str = _env("OBJECT_BACKEND", "s3")
+    ml_mode: str = _env("ML_MODE", "inline")
+
+    # Master switch for the role-aware worker/consumer gating in the FastAPI
+    # lifespan. Default-ON for non-local so the API process stops starting every
+    # worker; OFF keeps the historical single-process lifespan byte-identical.
+    worker_roles_enabled: bool = _env_bool("WORKER_ROLES_ENABLED", _TRUST_DEFAULT_ON)
+
+    @property
+    def allowed_roles(self) -> frozenset[str]:
+        """The validated set of role tokens AETHER_ROLE may take."""
+        return RUNTIME_ROLES
+
+    @property
+    def is_api_role(self) -> bool:
+        return self.aether_role == "api"
+
+    @property
+    def is_all_role(self) -> bool:
+        return self.aether_role == "all"
+
+
+# ---------------------------------------------------------------------------
+# Server-authoritative consent enforcement (PR 3) — consent as authority.
+#
+# Under the founding-tenant posture the SERVER consent-receipt store, not the
+# SDK per-event `context.consent` snapshot, is the source of truth for whether
+# ingestion may process an event. Absence of a server receipt is NOT permission
+# (fail-closed). These flags follow the trust-plane default: ON in
+# staging/production and OFF in local/dev, so existing local ingestion tests
+# keep the legacy SDK-snapshot behavior. Explicit env var always wins.
+#   - authoritative_consent_enforcement_enabled: /v1/batch consults the server
+#     ConsentReceipt store via services.consent.authority.evaluate_consent and
+#     rejects events with a stable rejection code when not allowed.
+#   - tenant_compliance_policy_enabled: evaluate_data_policy consults the
+#     tenant compliance profile and rejects prohibited data classes.
+# ---------------------------------------------------------------------------
+
+@dataclass(frozen=True)
+class ConsentAuthorityConfig:
+    authoritative_consent_enforcement_enabled: bool = _env_bool(
+        "AUTHORITATIVE_CONSENT_ENFORCEMENT_ENABLED", _TRUST_DEFAULT_ON
+    )
+    tenant_compliance_policy_enabled: bool = _env_bool(
+        "TENANT_COMPLIANCE_POLICY_ENABLED", _TRUST_DEFAULT_ON
+    )
+
+
+# ---------------------------------------------------------------------------
+# Ingestion V2 (PR 5) — typed Bronze + transactional outbox for /v1/batch.
+#
+# Canary rollout, default OFF. When `enabled` is True (or the request's tenant
+# is listed in `canary_tenants`), POST /v1/batch routes to the V2 path:
+# bulk-insert typed Bronze + the transactional outbox in ONE transaction, with
+# DB uniqueness (not Redis) as the idempotency source of truth. The existing V1
+# path is unchanged and used for every other tenant. `outbox_relay_enabled` is
+# config-only here; the relay WORKER that drains event_outbox to the bus is a
+# later PR (PR 6).
+# ---------------------------------------------------------------------------
+
+@dataclass(frozen=True)
+class IngestionV2Config:
+    enabled: bool = _env_bool("INGESTION_V2_ENABLED", False)
+    canary_tenants: list[str] = field(
+        default_factory=lambda: _env_list("INGESTION_V2_CANARY_TENANTS", "")
+    )
+    outbox_relay_enabled: bool = _env_bool("OUTBOX_RELAY_ENABLED", False)
+
+
+# ---------------------------------------------------------------------------
 # Data Quality, Drift Detection & Graph Intelligence Reliability
 # ---------------------------------------------------------------------------
 
@@ -905,6 +1023,9 @@ class Settings:
     security_governance: SecurityGovernanceConfig = field(default_factory=SecurityGovernanceConfig)
     trust_plane: TrustPlaneConfig = field(default_factory=TrustPlaneConfig)
     route_registry: RouteRegistryConfig = field(default_factory=RouteRegistryConfig)
+    runtime: RuntimeConfig = field(default_factory=RuntimeConfig)
+    consent_authority: ConsentAuthorityConfig = field(default_factory=ConsentAuthorityConfig)
+    ingestion_v2: IngestionV2Config = field(default_factory=IngestionV2Config)
     quicknode: QuickNodeConfig = field(default_factory=QuickNodeConfig)
     stablecoin_intelligence: StablecoinIntelligenceConfig = field(default_factory=StablecoinIntelligenceConfig)
 
@@ -1130,6 +1251,45 @@ class Settings:
                 raise RuntimeError(
                     "Stripe Billing is enabled but required env vars are missing "
                     f"in non-local environment: {', '.join(missing)}"
+                )
+
+        # ── Runtime role (PR 4) ───────────────────────────────────────────────
+        # AETHER_ROLE must name a known role in every environment. In
+        # staging/production the single-process "all" role is rejected: those
+        # deployments must run an explicit role so the API process does not start
+        # every worker/consumer/cron in-request. Local/dev keep "all" as the
+        # default single-process convenience.
+        if self.runtime.aether_role not in RUNTIME_ROLES:
+            raise RuntimeError(
+                f"AETHER_ROLE={self.runtime.aether_role!r} is not a valid role. "
+                f"Valid roles: {', '.join(sorted(RUNTIME_ROLES))}"
+            )
+        if _is_non_local and self.runtime.aether_role == "all":
+            raise RuntimeError(
+                "AETHER_ROLE=all is not allowed in staging/production. Run an "
+                "explicit role (api or a worker role) so the API process no "
+                "longer starts every worker. See docs/BACKEND-EXECUTION-MODEL.md."
+            )
+
+        # ── Backend selectors (PR 4) ──────────────────────────────────────────
+        # In-memory cache/database backends are a local-only convenience; a
+        # memory backend is never a correctness source in production. Reject
+        # them there so a mis-scaled deployment fails fast at startup.
+        if _is_prod:
+            _memory_backends = [
+                name
+                for name, value in (
+                    ("CACHE_BACKEND", self.runtime.cache_backend),
+                    ("DATABASE_BACKEND", self.runtime.database_backend),
+                )
+                if value == "memory"
+            ]
+            if _memory_backends:
+                raise RuntimeError(
+                    "In-memory backends are not allowed in production: "
+                    f"{', '.join(_memory_backends)}=memory. Configure a durable "
+                    "backend (e.g. redis/postgres). See "
+                    "docs/BACKEND-EXECUTION-MODEL.md."
                 )
 
     @property

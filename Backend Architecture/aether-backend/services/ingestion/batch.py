@@ -47,6 +47,11 @@ from services.ingestion.generated_registry import (
     EVENT_CONSENT_PURPOSE,
     EVENT_FAMILY,
 )
+from services.ingestion.bronze_bulk import (
+    BronzeSDKEvent,
+    OutboxEvent,
+    ingest_many,
+)
 
 logger = get_logger("aether.service.ingestion.batch")
 router = APIRouter(prefix="/v1", tags=["Ingestion"])
@@ -246,6 +251,14 @@ async def ingest_batch(
     tenant = request.state.tenant
     tenant.require_permission(Permissions.WRITE)
 
+    # ── V2 canary dispatch (PR 5 / FT-5-INGESTION-V2) ─────────────────────────
+    # Flag-gated, default OFF. When enabled globally, or when this tenant is in
+    # the canary list, route to the transactional typed-Bronze + outbox path.
+    # The V1 path below is left entirely unchanged for every other tenant.
+    iv2 = settings.ingestion_v2
+    if iv2.enabled or tenant.tenant_id in iv2.canary_tenants:
+        return await _ingest_batch_v2(body=body, tenant=tenant)
+
     received_at = utc_now().isoformat()
     batch_id = str(uuid.uuid4())
     registry = get_registry()
@@ -417,6 +430,190 @@ async def ingest_batch(
     ).model_dump()
 
 
+# ── V2 path (PR 5): transactional typed Bronze + outbox ───────────────────────
+
+async def _ingest_batch_v2(body: BatchRequest, tenant) -> dict:
+    """Transactional /v1/batch path.
+
+    Authenticate/validate/scrub/consent are handled exactly as V1 (reusing the
+    same registry + scrub + consent helpers), then all accepted events are
+    written — typed Bronze rows plus their transactional-outbox rows — in ONE
+    transaction via ``ingest_many``. Database uniqueness is the idempotency
+    source of truth (no Redis, no per-event create_task, no in-request publish;
+    the outbox relay worker that drains ``event_outbox`` is PR 6). The response
+    is the exact ``BatchResponse`` schema V1 returns, so V1/V2 are interchangeable.
+    """
+    received_at = utc_now().isoformat()
+    batch_id = str(uuid.uuid4())
+
+    metrics.increment("ingestion_batch_received_total", labels={"tenant_id": tenant.tenant_id})
+    metrics.increment("ingestion_v2_batch_received_total", labels={"tenant_id": tenant.tenant_id})
+
+    granted_consents: frozenset[str] = frozenset(body.consents or [])
+
+    results: list[EventResult] = []
+    candidates: list[BronzeSDKEvent] = []
+    candidate_outbox: list[OutboxEvent] = []
+    candidate_positions: list[int] = []  # results index for each candidate
+
+    for sdk_event in body.batch:
+        rejection = _classify_event_v2(sdk_event, tenant.tenant_id, granted_consents)
+        if rejection is not None:
+            results.append(rejection)
+            continue
+
+        # Placeholder — final accepted/duplicate resolved by the bulk ingest.
+        results.append(EventResult(id=sdk_event.id, status="accepted"))
+
+        normalized = _build_normalized_payload(
+            sdk_event=sdk_event,
+            tenant_id=tenant.tenant_id,
+            batch_id=batch_id,
+            received_at=received_at,
+        )
+        entity_id = normalized.get("user_id") or normalized.get("anonymous_id", "")
+        candidates.append(BronzeSDKEvent(
+            tenant_id=tenant.tenant_id,
+            event_id=sdk_event.id,
+            schema_version=SCHEMA_VERSION,
+            batch_id=batch_id,
+            event_type=sdk_event.type,
+            event_family=_get_event_family(sdk_event.type),
+            event_timestamp=sdk_event.timestamp,
+            received_at=received_at,
+            session_id=sdk_event.sessionId,
+            anonymous_id=sdk_event.anonymousId,
+            user_id=sdk_event.userId,
+            entity_id=entity_id,
+            payload=normalized,
+            source="sdk",
+            source_tag=f"batch:{batch_id}",
+        ))
+        candidate_outbox.append(OutboxEvent(
+            tenant_id=tenant.tenant_id,
+            event_id=sdk_event.id,
+            topic=Topic.SDK_EVENTS_VALIDATED.value,
+            partition_key=(entity_id or sdk_event.sessionId),
+            payload=normalized,
+        ))
+        candidate_positions.append(len(results) - 1)
+
+    if candidates:
+        try:
+            bulk = await ingest_many(candidates, candidate_outbox)
+        except Exception as exc:
+            logger.error(
+                "V2 bulk ingest failed for batch %s: %s", batch_id, exc, exc_info=True
+            )
+            metrics.increment("ingestion_bronze_write_failed_total")
+            raise ServiceUnavailableError(
+                "Ingestion temporarily unavailable — please retry"
+            )
+        # bulk.statuses is aligned to candidate input order; map back to results.
+        for pos, status in zip(candidate_positions, bulk.statuses):
+            results[pos] = EventResult(
+                id=results[pos].id,
+                status="accepted" if status == "accepted" else "duplicate",
+            )
+
+    n_accepted = sum(1 for r in results if r.status == "accepted")
+    n_duplicates = sum(1 for r in results if r.status == "duplicate")
+    n_rejected = sum(1 for r in results if r.status == "rejected")
+
+    metrics.increment(
+        "ingestion_event_accepted_total",
+        value=n_accepted,
+        labels={"tenant_id": tenant.tenant_id},
+    )
+    metrics.increment("ingestion_event_duplicate_total", value=n_duplicates)
+    metrics.increment("ingestion_event_rejected_total", value=n_rejected)
+
+    logger.info(
+        "Batch %s processed (v2): accepted=%d duplicates=%d rejected=%d tenant=%s",
+        batch_id, n_accepted, n_duplicates, n_rejected, tenant.tenant_id,
+    )
+
+    return BatchResponse(
+        accepted=n_accepted,
+        duplicates=n_duplicates,
+        rejected=n_rejected,
+        events=results,
+        batchId=batch_id,
+        receivedAt=received_at,
+    ).model_dump()
+
+
+def _classify_event_v2(
+    sdk_event: BaseEvent,
+    tenant_id: str,
+    granted_consents: frozenset[str],
+) -> Optional[EventResult]:
+    """Validate + scrub + consent-gate a single event for the V2 path.
+
+    Mirrors steps 1–4b of ``_process_single_event`` (type validation, observe-only
+    invariant, sensitive-field scrubbing, per-event + batch consent) but performs
+    NO cache idempotency check — in V2 the database's composite-unique index is
+    the idempotency source of truth. Returns a rejection ``EventResult`` when the
+    event must be rejected, or ``None`` when it passes and should be persisted.
+    """
+    # 1. Event type validation
+    if sdk_event.type not in CANONICAL_EVENT_TYPES:
+        metrics.increment("ingestion_validation_failed_total", labels={"reason": "unknown_type"})
+        return EventResult(
+            id=sdk_event.id,
+            status="rejected",
+            reason=f"{REJECT_UNKNOWN_TYPE}:{sdk_event.type}",
+        )
+
+    # 2. Observe-only invariant: reject any event claiming Aether executed
+    if sdk_event.properties and sdk_event.properties.get("execution_by_aether") is True:
+        metrics.increment("ingestion_validation_failed_total", labels={"reason": "execution_by_aether"})
+        return EventResult(id=sdk_event.id, status="rejected", reason=REJECT_EXECUTION_CLAIM)
+
+    # 3. Sensitive field scrubbing (recursive backend defense)
+    if sdk_event.properties:
+        scrubbed, had_sensitive = _scrub_sensitive_fields(sdk_event.properties)
+        if had_sensitive:
+            logger.warning(
+                "Sensitive fields scrubbed in event %s (tenant=%s type=%s)",
+                sdk_event.id, tenant_id, sdk_event.type,
+            )
+            metrics.increment("ingestion_sensitive_scrub_total")
+            sdk_event.properties = scrubbed
+
+    # 4a. Per-event consent snapshot (authoritative) — block only on explicit False.
+    if sdk_event.type != "consent":
+        required_purpose = EVENT_CONSENT_PURPOSE.get(sdk_event.type)
+        if required_purpose and sdk_event.context:
+            consent_obj = sdk_event.context.consent
+            if isinstance(consent_obj, dict) and consent_obj.get(required_purpose) is False:
+                metrics.increment(
+                    "ingestion_consent_blocked_total",
+                    labels={"purpose": required_purpose},
+                )
+                return EventResult(
+                    id=sdk_event.id,
+                    status="rejected",
+                    reason=f"{REJECT_CONSENT_DENIED}:{required_purpose}",
+                )
+
+    # 4b. Batch-level consent fallback when no per-event snapshot is present.
+    if sdk_event.type != "consent" and granted_consents:
+        required_consent = EVENT_CONSENT_PURPOSE.get(sdk_event.type)
+        if required_consent and required_consent not in granted_consents:
+            metrics.increment(
+                "ingestion_validation_failed_total",
+                labels={"reason": "consent_missing"},
+            )
+            return EventResult(
+                id=sdk_event.id,
+                status="rejected",
+                reason=f"{REJECT_CONSENT_REQUIRED}:{required_consent}",
+            )
+
+    return None
+
+
 # ── Per-event processing helpers ──────────────────────────────────────────────
 
 async def _process_single_event(
@@ -490,6 +687,38 @@ async def _process_single_event(
                 status="rejected",
                 reason=f"{REJECT_CONSENT_REQUIRED}:{required_consent}",
             )
+
+    # 4b-authority. Server-authoritative consent enforcement (PR 3, flag-gated).
+    #     The SERVER consent-receipt store — not the SDK context.consent snapshot
+    #     validated in 4a — decides. Absence of a server receipt is NOT
+    #     permission (fail-closed): a granted SDK snapshot with no server receipt
+    #     is still rejected. Default OFF in local so legacy ingestion tests keep
+    #     the SDK-snapshot behavior; ON in staging/production. This is the single
+    #     additive block for FT-3-AUTHORITATIVE-CONSENT (PR 5 also edits this file
+    #     — keep the surface minimal).
+    if (
+        settings.consent_authority.authoritative_consent_enforcement_enabled
+        and sdk_event.type != "consent"
+    ):
+        authoritative_purpose = EVENT_CONSENT_PURPOSE.get(sdk_event.type)
+        if authoritative_purpose:
+            from services.consent.authority import evaluate_consent
+            allowed, reason_code = await evaluate_consent(
+                tenant_id=tenant_id,
+                subject_id=sdk_event.userId,
+                anonymous_id=sdk_event.anonymousId,
+                purpose=authoritative_purpose,
+            )
+            if not allowed:
+                metrics.increment(
+                    "ingestion_consent_authority_blocked_total",
+                    labels={"purpose": authoritative_purpose, "reason": reason_code or "unknown"},
+                )
+                return EventResult(
+                    id=sdk_event.id,
+                    status="rejected",
+                    reason=f"{reason_code}:{authoritative_purpose}",
+                )
 
     # 4c. Deployment-context validation (External Agent Telemetry Plane V1).
     #     Flag-gated: only when the plane is enabled AND the event carries an
