@@ -77,6 +77,7 @@ The following authored docs are expected to stay aligned with code changes:
 - `AUDIT-EVENT-LEDGER.md`
 - `AUDIT-EXPORTS.md`
 - `AWS-DEPLOYMENT.md`
+- `BACKEND-EXECUTION-MODEL.md`
 - `BACKFILL-JOBS.md`
 - `BACKUP-RESTORE.md`
 - `BILLING-PROVIDER-INTERFACE.md`
