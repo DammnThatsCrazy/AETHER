@@ -136,16 +136,79 @@ DATA_PROTECTION_CONTROLS = [
 # ═══════════════════════════════════════════════════════════════════════════
 
 class ConsentPurpose(str, Enum):
+    """Granular consent purposes.
+
+    The canonical set is the 11-purpose consent registry at
+    ``packages/shared/contracts/consent-registry.json`` (the single source of
+    truth). Every member's value MUST equal a canonical registry ``key``; drift
+    is caught by ``config.consent_registry_sync.assert_consent_registry_in_sync``.
+
+    Legacy purpose keys that are no longer first-class are declared in
+    ``LEGACY_PURPOSE_ALIASES`` and resolved via ``ConsentPurpose.from_key`` — they
+    are never enumerated as canonical members. There are none today (every member
+    below maps 1:1 to a registry key), but the mechanism keeps historic keys
+    resolvable if the registry ever renames a purpose.
+    """
+
+    # ── Implicit purposes (registry explicitOptInRequired = false) ───────────
     ANALYTICS = "analytics"
     MARKETING = "marketing"
+    PERSONALIZATION = "personalization"  # cross-device fingerprint / recommendations
     WEB3 = "web3"
-    AGENT = "agent"        # Intelligence Graph — agent behavioral tracking
-    COMMERCE = "commerce"  # Intelligence Graph — commerce/payment processing
+    AGENT = "agent"                      # Intelligence Graph — agent behavioral tracking
+    COMMERCE = "commerce"                # Intelligence Graph — commerce/payment processing
+
+    # ── Explicit opt-in purposes (registry explicitOptInRequired = true) ─────
+    FINANCIAL_ACTIVITY = "financial_activity"          # derivatives trading analytics
+    CREDIT = "credit"                                  # credit signals / decisions
+    LOCATION = "location"                              # precise / coarse location
+    ECONOMIC_OBSERVABILITY = "economic_observability"  # stablecoin economic intelligence
+    CROSS_CHAIN_OBSERVABILITY = "cross_chain_observability"  # interop / cross-network
+
+    @property
+    def requires_explicit_opt_in(self) -> bool:
+        """True when the canonical registry marks this purpose explicitOptInRequired."""
+        return self in EXPLICIT_OPT_IN_PURPOSES
+
+    @classmethod
+    def from_key(cls, key: str) -> "ConsentPurpose":
+        """Resolve a purpose key (canonical or legacy alias) to a canonical member.
+
+        Raises ``ValueError`` for keys that are neither canonical nor aliased.
+        """
+        if key in LEGACY_PURPOSE_ALIASES:
+            return LEGACY_PURPOSE_ALIASES[key]
+        return cls(key)
+
+
+# Purposes requiring explicit, affirmative opt-in — mirrors the registry
+# ``explicitOptInRequired: true`` flag. Implicit purposes rely on legitimate
+# interest / defaultEnabled semantics and are intentionally NOT listed here.
+EXPLICIT_OPT_IN_PURPOSES: frozenset = frozenset({
+    ConsentPurpose.FINANCIAL_ACTIVITY,
+    ConsentPurpose.CREDIT,
+    ConsentPurpose.LOCATION,
+    ConsentPurpose.ECONOMIC_OBSERVABILITY,
+    ConsentPurpose.CROSS_CHAIN_OBSERVABILITY,
+})
+
+# Legacy → canonical purpose aliases for back-compat. Maps a historical purpose
+# key (as previously stored on consent records) to its canonical ConsentPurpose,
+# so old keys resolve via ``ConsentPurpose.from_key`` without being treated as
+# first-class purposes. Empty today — every current member is canonical.
+LEGACY_PURPOSE_ALIASES: dict = {
+    # "legacy_key": ConsentPurpose.CANONICAL_MEMBER,
+}
 
 
 @dataclass(frozen=True)
 class ConsentConfig:
-    purposes: list = field(default_factory=lambda: ["analytics", "marketing", "web3", "agent", "commerce"])
+    # Derived from ConsentPurpose so the config never drifts from the enum
+    # (which is itself reconciled against the canonical registry).
+    purposes: list = field(default_factory=lambda: [p.value for p in ConsentPurpose])
+    explicit_opt_in_purposes: list = field(
+        default_factory=lambda: [p.value for p in ConsentPurpose if p.requires_explicit_opt_in]
+    )
     storage: str = "DynamoDB with immutable audit trail"
     audit_fields: list = field(default_factory=lambda: [
         "user_id", "tenant_id", "purpose", "granted", "timestamp",

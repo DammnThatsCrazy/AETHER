@@ -333,3 +333,22 @@ v8.0 extends the identity graph to autonomous AI agents and smart contracts.
 **Cross-layer resolution (H2A edges)** — Human-to-Agent (`H2A`) edges trace attribution from agent actions back to the human users who launched them. When an agent performs an on-chain action or records a decision, the resolution consumer follows the `LAUNCHED_BY` edge to attribute the activity to the owning `IdentityCluster`. This enables end-to-end auditability across the human-agent boundary.
 
 **CONTRACT vertex** — Smart contracts deployed by agents receive a `CONTRACT` vertex linked to the deploying agent via a `DEPLOYED` edge (`AGENT → CONTRACT`). Contract vertices store `address`, `chain_id`, `bytecode_hash`, and `deployer_agent_id`, enabling full provenance from contract back to human owner through the agent layer.
+
+## Decision evidence & source precedence
+
+Identity resolution now emits **additive, fail-closed decision evidence** without
+changing any resolution outcome:
+
+- **IdentityDecision evidence** (`services/identity/decision_evidence.py`) — the
+  resolver records an `IdentityDecisionEvidence` row (decision type — `auto_link`,
+  `candidate_link`, `merge`, `split`, `suppress`, `reject`, `conflict`, …, the
+  matched signals, confidence, and a hashed consent snapshot) for each resolution.
+  Recording is wrapped so a failure can never break resolution; evidence is
+  tenant-scoped.
+- **Source Precedence Engine** (`services/identity/source_precedence.py`) — a
+  machine-readable precedence matrix ranks conflicting sources per field
+  (identity, revenue, wallet/account/payment linkage, financial value, reward
+  status, attribution basis, …). When candidate sources disagree and none clears
+  the field's manual-review threshold, the engine returns a **conflict record**
+  (`requires_manual_review=True`) rather than silently choosing between two
+  authoritative-level sources.

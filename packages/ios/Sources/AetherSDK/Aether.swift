@@ -36,6 +36,10 @@ public struct AetherConfig {
     public var privacy: PrivacyConfig = PrivacyConfig()
     public var batchSize: Int = 10
     public var flushInterval: TimeInterval = 5.0
+    /// Optional HMAC-SHA256 secret to verify the remote SDK manifest signature
+    /// before applying it (Truth Kernel §2.9). When set, unsigned/invalid
+    /// manifests are rejected and the last-known-good config is kept.
+    public var manifestVerificationKey: String? = nil
     public var autoResumeJourney: Bool = true
     public var onJourneyResumed: ((_ resolvedAnonymousId: String, _ resolvedUserId: String?) -> Void)? = nil
 
@@ -336,13 +340,34 @@ struct DeviceFingerprint {
     }
 }
 
+// MARK: - Batch Health
+
+/// Per-batch ingestion health counters (Truth Kernel §2.8).
+///
+/// `accepted` / `duplicate` / `rejected` are parsed from the backend
+/// BatchResponse (packages/shared/ingestion-contract.ts). `droppedByConsent`
+/// and `queueDepth` are SDK-side truths: consent gating removes events before
+/// they leave the device, and queueDepth reflects the local backlog after send.
+public struct BatchHealth {
+    public let accepted: Int
+    public let duplicate: Int
+    public let rejected: Int
+    public let droppedByConsent: Int
+    public let queueDepth: Int
+}
+
 // MARK: - Main SDK Class
 
 public final class Aether: NSObject {
     public static let shared = Aether()
 
+    /// Invoked after each processed batch with per-batch ingestion health (§2.8).
+    public var onBatchResult: ((BatchHealth) -> Void)?
+
     private var config: AetherConfig?
     private var eventQueue: [AetherEvent] = []
+    /// Consent-dropped events accumulated since the last batch send (§2.8).
+    private var pendingConsentDrops: Int = 0
     private var sessionId: String = UUID().uuidString
     private var currentJourneyId: String? = nil
     private var currentJourneyName: String? = nil
@@ -507,7 +532,7 @@ public final class Aether: NSObject {
         .trading_agent_enabled: "financial_activity", .trading_agent_disabled: "financial_activity",
         .trade_intent_created: "financial_activity", .trade_approval_requested: "financial_activity",
         .trade_approval_resolved: "financial_activity", .risk_policy_updated: "financial_activity",
-        .human_trade_override_recorded: "financial_activity"
+        .human_trade_override_recorded: "financial_activity",
         // Stablecoin intelligence family (explicit opt-in)
         .stablecoin_transfer_observed: "economic_observability", .stablecoin_payment_observed: "economic_observability",
         .stablecoin_mint_observed: "economic_observability", .stablecoin_burn_observed: "economic_observability",
@@ -637,7 +662,8 @@ public final class Aether: NSObject {
             endpoint: config.endpoint,
             apiKey: config.apiKey,
             platform: "ios",
-            appVersion: Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? ""
+            appVersion: Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "",
+            manifestVerificationKey: config.manifestVerificationKey
         )
         hAgent.getDynamicState = { [weak self] in
             guard let self = self else { return (0, false, false, false) }
@@ -673,6 +699,32 @@ public final class Aether: NSObject {
         enqueueEvent(type: .track, properties: ["event": AnyCodable(event)].merging(properties) { _, new in new })
     }
 
+    /// Canonical low-level observation API (Truth Kernel §2.6). Emits a
+    /// first-class backend event `type` directly. Semantics mirror the web SDK:
+    ///
+    /// - `type` must be a canonical registry event type; unknown types are a
+    ///   production-safe no-op (with a debug log), never a silent mislabel.
+    /// - Payloads asserting `execution_by_aether == true` are rejected — Aether
+    ///   observes, it never executes.
+    /// - Consent gating, sensitive-field scrubbing, batching, and the max
+    ///   queue-size bound all run on the shared `enqueueEvent` path.
+    public func observe(_ type: String, properties: [String: AnyCodable] = [:]) {
+        guard let eventType = AetherEventType(rawValue: type),
+              Self.eventConsentPurpose[eventType] != nil else {
+            log("observe(): '\(type)' is not a canonical event type — ignored")
+            return
+        }
+        if let flag = properties["execution_by_aether"]?.value as? Bool, flag {
+            log("observe(): event '\(type)' dropped — execution_by_aether must never be true")
+            return
+        }
+        enqueueEvent(type: eventType, properties: properties)
+    }
+
+    /// Current event-queue depth (Truth Kernel §2.6 queue-depth awareness).
+    public func queueDepth() -> Int {
+        serialQueue.sync { eventQueue.count }
+    }
 
     public func startJourney(_ nameOrType: String, properties: [String: AnyCodable] = [:]) {
         currentJourneyId = properties["journeyId"]?.value as? String ?? UUID().uuidString
@@ -1165,6 +1217,10 @@ public final class Aether: NSObject {
         let gdprMode = config?.privacy.gdprMode ?? false
         if type != .consent && gdprMode && !consentState.contains(purpose) {
             log("Dropping \(type.rawValue) before enqueue because \(purpose) consent is not granted")
+            // Consent gating is intentional, not a delivery failure — it is
+            // surfaced as the BatchHealth.droppedByConsent counter (§2.8).
+            serialQueue.async { [weak self] in self?.pendingConsentDrops += 1 }
+            healthAgent?.recordDroppedEvents(1)
             return
         }
 
@@ -1218,7 +1274,7 @@ public final class Aether: NSObject {
         let payload: [String: Any] = ["batch": encodedBatch, "sentAt": ISO8601DateFormatter().string(from: Date())]
         request.httpBody = try? JSONSerialization.data(withJSONObject: payload)
 
-        URLSession.shared.dataTask(with: request) { [weak self] _, response, error in
+        URLSession.shared.dataTask(with: request) { [weak self] data, response, error in
             guard let self = self else { return }
             let statusCode = (response as? HTTPURLResponse)?.statusCode ?? 0
 
@@ -1254,8 +1310,41 @@ public final class Aether: NSObject {
             } else {
                 // 2xx success — remove persisted snapshot so next launch does not re-deliver
                 self.clearPersistedQueue()
+                self.emitBatchHealth(sentCount: batch.count, responseBody: data)
             }
         }.resume()
+    }
+
+    /// Parse per-batch acceptance counters from the /v1/batch response body and
+    /// surface a BatchHealth via `onBatchResult` (Truth Kernel §2.8). The backend
+    /// BatchResponse uses `accepted` / `duplicates` / `rejected`; the singular
+    /// `duplicate` is also accepted. Falls back to treating the whole batch as
+    /// accepted when the body is absent or unparseable.
+    private func emitBatchHealth(sentCount: Int, responseBody: Data?) {
+        guard onBatchResult != nil else { return }
+        var accepted = sentCount
+        var duplicate = 0
+        var rejected = 0
+        if let data = responseBody,
+           let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
+            if let a = (json["accepted"] as? NSNumber)?.intValue { accepted = a }
+            if let d = (json["duplicate"] as? NSNumber)?.intValue ?? (json["duplicates"] as? NSNumber)?.intValue { duplicate = d }
+            if let r = (json["rejected"] as? NSNumber)?.intValue { rejected = r }
+        }
+        serialQueue.async { [weak self] in
+            guard let self = self else { return }
+            let drops = self.pendingConsentDrops
+            self.pendingConsentDrops = 0
+            let depth = self.eventQueue.count
+            let health = BatchHealth(
+                accepted: accepted,
+                duplicate: duplicate,
+                rejected: rejected,
+                droppedByConsent: drops,
+                queueDepth: depth
+            )
+            DispatchQueue.main.async { self.onBatchResult?(health) }
+        }
     }
 
     private func fetchConfig() {

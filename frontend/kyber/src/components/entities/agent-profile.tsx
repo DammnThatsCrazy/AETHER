@@ -12,6 +12,7 @@ import {
   TabsList,
   TabsTrigger,
   TerminalSeparator,
+  formatUSD,
 } from '@aether/ui';
 import { useQuery } from '@aether/ui';
 import { api } from '@kyber/lib/api/endpoints';
@@ -21,10 +22,10 @@ function asRec(v: unknown): Record<string, unknown> {
   return v !== null && typeof v === 'object' ? (v as Record<string, unknown>) : {};
 }
 
-function fmtUsd(val: unknown): string {
-  const n = typeof val === 'number' ? val : parseFloat(String(val ?? ''));
-  if (!n || isNaN(n)) return '—';
-  return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', notation: 'compact', maximumFractionDigits: 2 }).format(n);
+// Delegates to the canonical shared USD formatter; keeps the dense "—" sentinel
+// for absent values (never "$0" on absence).
+function usdText(val: unknown): string {
+  return formatUSD(val as string | number | null | undefined, { compact: true, fallback: '—' });
 }
 
 function fmtPct(v: unknown): string {
@@ -124,7 +125,7 @@ function ExecutionTab({ agentId }: { agentId: string }) {
     { label: 'Run count', value: String(runCount) },
     { label: 'Success rate', value: fmtPct(successRate) },
     { label: 'Error rate', value: fmtPct(errorRate) },
-    { label: 'Spend to date', value: fmtUsd(spendingToDate) },
+    { label: 'Spend to date', value: usdText(spendingToDate) },
   ];
 
   return (
@@ -179,7 +180,7 @@ function PolicyTab({ agentId }: { agentId: string }) {
               {Object.entries(spendingLimits).map(([period, limit]) => (
                 <div key={period} className="flex items-center justify-between text-xs font-mono">
                   <span className="text-text-muted capitalize">{period}</span>
-                  <span className="text-text-primary">{fmtUsd(limit)}</span>
+                  <span className="text-text-primary">{usdText(limit)}</span>
                 </div>
               ))}
             </div>
@@ -235,13 +236,13 @@ function EconomicTab({ agentId }: { agentId: string }) {
         <Card>
           <CardContent className="p-4 text-center">
             <div className="text-[10px] uppercase text-text-muted font-mono">Revenue attributed</div>
-            <div className="text-xl font-semibold font-mono text-success mt-1">{fmtUsd(attributed)}</div>
+            <div className="text-xl font-semibold font-mono text-success mt-1">{usdText(attributed)}</div>
           </CardContent>
         </Card>
         <Card>
           <CardContent className="p-4 text-center">
             <div className="text-[10px] uppercase text-text-muted font-mono">Total costs</div>
-            <div className="text-xl font-semibold font-mono text-warning mt-1">{fmtUsd(costs)}</div>
+            <div className="text-xl font-semibold font-mono text-warning mt-1">{usdText(costs)}</div>
           </CardContent>
         </Card>
       </div>
@@ -256,7 +257,7 @@ function EconomicTab({ agentId }: { agentId: string }) {
                 <div key={i} className="text-xs font-mono flex items-center gap-3 border border-border-subtle rounded px-2 py-1.5">
                   <Badge size="sm" variant="success">PAYS</Badge>
                   <span className="text-text-secondary">{String(pr.to ?? pr.target ?? pr.recipient ?? '—')}</span>
-                  <span className="text-text-muted ml-auto">{fmtUsd(pr.amount)}</span>
+                  <span className="text-text-muted ml-auto">{usdText(pr.amount)}</span>
                 </div>
               );
             })}

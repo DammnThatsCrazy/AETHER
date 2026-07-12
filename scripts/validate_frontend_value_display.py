@@ -30,9 +30,6 @@ CANONICAL_PREFIXES = ("frontend/shared/",)
 ALLOWLIST = {
     "frontend/aether/src/pages/billing/billing-page.tsx",
     "frontend/aether/src/pages/campaigns/campaign-360-page.tsx",
-    "frontend/aether/src/pages/campaigns/campaigns-page.tsx",
-    "frontend/kyber/src/components/economics/cluster-economics-view.tsx",
-    "frontend/kyber/src/components/entities/agent-profile.tsx",
     "frontend/kyber/src/features/measurement/campaign360/campaign-360-overview.tsx",
 }
 

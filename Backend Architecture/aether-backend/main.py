@@ -287,6 +287,9 @@ from services.governance.routes import router as governance_router
 from services.security.routes import router as security_router
 from services.security.admin_routes import admin_router as security_admin_router
 from services.policy.routes import router as policy_router
+from services.dsr_propagation.routes import router as dsr_propagation_router
+from services.tenant_readiness.routes import router as tenant_readiness_router
+from services.metering_evidence.routes import router as metering_evidence_router
 from services.events.routes import router as events_router
 from services.sdk.routes import router as sdk_router
 from services.journeys.routes import router as journeys_router, admin_router as journey_health_router
@@ -600,6 +603,9 @@ def create_app() -> FastAPI:
     app.include_router(security_router)
     app.include_router(security_admin_router)
     app.include_router(policy_router)
+    app.include_router(dsr_propagation_router)     # /v1/dsr — DSR propagation records + impact indexes
+    app.include_router(tenant_readiness_router)    # /v1/tenant/readiness — launch readiness + trust states
+    app.include_router(metering_evidence_router)   # /v1/metering/evidence — usage metering evidence
     app.include_router(events_router)
     app.include_router(user_agents_router)  # Profile 360: user/org-owned agents (always-on)
     app.include_router(sdk_router)          # SDK utilities: cross-device identity resolution

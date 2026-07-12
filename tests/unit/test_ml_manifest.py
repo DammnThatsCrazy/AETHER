@@ -65,6 +65,31 @@ class TestMLManifest:
         ids = [m["model_id"] for m in data["models"]]
         assert len(ids) == len(set(ids)), f"Duplicate model IDs in manifest: {ids}"
 
+    def test_manifest_includes_governance_block(self):
+        """Each model surfaces its governance metadata in the manifest."""
+        data = json.loads(MANIFEST_PATH.read_text())
+        governance_keys = {
+            "allowed_training_purposes",
+            "forbidden_feature_tags",
+            "requires_privacy_review",
+            "requires_bias_audit",
+            "requires_model_card",
+            "requires_dataset_card",
+            "requires_training_manifest",
+            "requires_human_review",
+            "requires_dsr_invalidation",
+            "production_promotion_allowed",
+            "governance_notes",
+        }
+        for model in data["models"]:
+            assert "governance" in model, (
+                f"Model {model.get('model_id', '?')} missing governance block"
+            )
+            missing = governance_keys - model["governance"].keys()
+            assert not missing, (
+                f"Model {model['model_id']} governance missing: {missing}"
+            )
+
     def test_manifest_matches_current_registry(self):
         """Manifest on disk must match what the registry would generate today."""
         result = subprocess.run(

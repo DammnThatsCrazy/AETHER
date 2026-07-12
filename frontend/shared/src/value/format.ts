@@ -25,6 +25,33 @@ export type ValueFreshness = 'live' | 'recent' | 'stale' | 'expired' | 'unavaila
 /** Mirror of `ValueConfidence` in the canonical contract. */
 export type ValueConfidence = 'high' | 'medium' | 'low' | 'unknown';
 
+/** Mirror of `RollupStatus` in the canonical contract. */
+export type RollupStatus = 'complete' | 'partial' | 'stale' | 'unavailable' | 'conflicted';
+
+/** Mirror of `ValueReconciliationState` in the canonical contract. */
+export type ValueReconciliationState =
+  | 'sdk_only'
+  | 'provider_only'
+  | 'matched'
+  | 'stale'
+  | 'conflict'
+  | 'ignored_duplicate'
+  | 'unreconciled'
+  | 'not_applicable';
+
+/** Mirror of `OwnershipRelationship` in the canonical contract. */
+export type OwnershipRelationship =
+  | 'owned'
+  | 'linked'
+  | 'controlled'
+  | 'custodied'
+  | 'delegated'
+  | 'counterparty'
+  | 'observed'
+  | 'inferred'
+  | 'external'
+  | 'unknown';
+
 /** Structural mirror of the canonical `NativeValue` (subset). */
 export interface NativeValueLike {
   /** Decimal string, e.g. "1.84". */

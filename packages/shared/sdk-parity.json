@@ -1,0 +1,118 @@
+{
+  "note": "Machine-checkable SDK runtime parity matrix (Truth Kernel §2.6/§2.8/§2.9). Each cell status reflects behavior that is actually implemented in the referenced file/symbol — never aspirational. A validator MUST fail if a cell claims 'supported' but the evidence file/symbol is absent.",
+  "version": "8.12.0",
+  "sdks": ["web", "server", "react-native", "ios", "android", "python"],
+  "statusLegend": {
+    "supported": "Capability is implemented and exercised by tests in this SDK.",
+    "partial": "Implemented with a documented limitation (see note).",
+    "delegated_native": "Surfaced by this SDK but enforced in the native iOS/Android layer it bridges to.",
+    "not_applicable": "Out of scope for this SDK's role (e.g. an envelope builder with no client/queue)."
+  },
+  "capabilities": [
+    {
+      "id": "observe",
+      "title": "Canonical observe(event) entry point",
+      "spec": "2.6",
+      "matrix": {
+        "web": { "status": "supported", "evidence": "packages/web/src/index.ts#observe" },
+        "server": { "status": "supported", "evidence": "packages/server/src/index.ts#track", "note": "Low-level track() emits a canonical ServerEvent type directly; observe object provides typed helpers." },
+        "react-native": { "status": "supported", "evidence": "packages/react-native/src/bridge.ts#observe" },
+        "ios": { "status": "supported", "evidence": "packages/ios/Sources/AetherSDK/Aether.swift#observe" },
+        "android": { "status": "supported", "evidence": "packages/android/src/main/java/com/aether/sdk/Aether.kt#observe" },
+        "python": { "status": "not_applicable", "note": "Observation-envelope builder — no client-side emit pipeline." }
+      }
+    },
+    {
+      "id": "consent_gating",
+      "title": "Consent-gated enqueue",
+      "spec": "2.6",
+      "matrix": {
+        "web": { "status": "supported", "evidence": "packages/web/src/core/event-queue.ts#filterByConsent" },
+        "server": { "status": "partial", "evidence": "packages/server/src/index.ts#buildConsentState", "note": "Consent tracked and sent as an ingestion hint; server does not drop locally, so dropped_by_consent is 0." },
+        "react-native": { "status": "delegated_native", "evidence": "packages/react-native/src/bridge.ts#consent" },
+        "ios": { "status": "supported", "evidence": "packages/ios/Sources/AetherSDK/Aether.swift#enqueueEvent", "note": "Consent-gated enqueue in GDPR mode." },
+        "android": { "status": "supported", "evidence": "packages/android/src/main/java/com/aether/sdk/Aether.kt#enqueueEvent", "note": "Consent-gated enqueue in GDPR mode." },
+        "python": { "status": "not_applicable" }
+      }
+    },
+    {
+      "id": "batching",
+      "title": "Batched flush to /v1/batch",
+      "spec": "2.6",
+      "matrix": {
+        "web": { "status": "supported", "evidence": "packages/web/src/core/event-queue.ts#flush" },
+        "server": { "status": "supported", "evidence": "packages/server/src/index.ts#flush" },
+        "react-native": { "status": "delegated_native", "evidence": "packages/react-native/src/bridge.ts#flush" },
+        "ios": { "status": "supported", "evidence": "packages/ios/Sources/AetherSDK/Aether.swift#sendBatch" },
+        "android": { "status": "supported", "evidence": "packages/android/src/main/java/com/aether/sdk/Aether.kt#sendBatch" },
+        "python": { "status": "not_applicable" }
+      }
+    },
+    {
+      "id": "manifest_fetch",
+      "title": "Remote SDK config manifest fetch",
+      "spec": "2.9",
+      "matrix": {
+        "web": { "status": "supported", "evidence": "packages/web/src/health/sdk-health-agent.ts#fetchManifest" },
+        "server": { "status": "not_applicable", "note": "Server ingest client does not consume the mobile SDK manifest." },
+        "react-native": { "status": "supported", "evidence": "packages/react-native/src/modules/HealthAgent.ts#fetchManifest" },
+        "ios": { "status": "supported", "evidence": "packages/ios/Sources/AetherSDK/AetherHealthAgent.swift#fetchManifest" },
+        "android": { "status": "supported", "evidence": "packages/android/src/main/java/com/aether/sdk/AetherHealthAgent.kt#fetchManifest" },
+        "python": { "status": "not_applicable" }
+      }
+    },
+    {
+      "id": "manifest_signature_verify",
+      "title": "Manifest signature verification (fail-closed)",
+      "spec": "2.9",
+      "algorithm": "HMAC-SHA256 over canonical manifest serialization, hex signature, constant-time compare",
+      "matrix": {
+        "web": { "status": "supported", "evidence": "packages/web/src/health/sdk-health-agent.ts#verifyManifestSignature" },
+        "server": { "status": "not_applicable" },
+        "react-native": { "status": "delegated_native", "evidence": "packages/react-native/src/bridge.ts#capabilities.manifestSignatureVerification", "note": "Enforced in the native iOS/Android AetherHealthAgent the bridge delegates to." },
+        "ios": { "status": "supported", "evidence": "packages/ios/Sources/AetherSDK/AetherHealthAgent.swift#verifyManifestSignature" },
+        "android": { "status": "supported", "evidence": "packages/android/src/main/java/com/aether/sdk/AetherHealthAgent.kt#verifyManifestSignature" },
+        "python": { "status": "not_applicable" }
+      }
+    },
+    {
+      "id": "batch_health_metrics",
+      "title": "Per-batch health counters (accepted/duplicate/rejected/dropped_by_consent/queue_depth)",
+      "spec": "2.8",
+      "matrix": {
+        "web": { "status": "supported", "evidence": "packages/web/src/core/event-queue.ts#BatchHealth" },
+        "server": { "status": "supported", "evidence": "packages/server/src/transport.ts#parseIngestCounters" },
+        "react-native": { "status": "supported", "evidence": "packages/react-native/src/bridge.ts#onBatchResult" },
+        "ios": { "status": "supported", "evidence": "packages/ios/Sources/AetherSDK/Aether.swift#emitBatchHealth" },
+        "android": { "status": "supported", "evidence": "packages/android/src/main/java/com/aether/sdk/Aether.kt#emitBatchHealth" },
+        "python": { "status": "supported", "evidence": "packages/python/aether_agentic/ingestion.py#parse_batch_health", "note": "Parse-only: Python has no local queue; dropped_by_consent/queue_depth are caller-supplied." }
+      }
+    },
+    {
+      "id": "retry_backoff",
+      "title": "Retry with exponential backoff",
+      "spec": "2.6",
+      "matrix": {
+        "web": { "status": "supported", "evidence": "packages/web/src/core/event-queue.ts#sendBatch" },
+        "server": { "status": "supported", "evidence": "packages/server/src/queue.ts#requeue" },
+        "react-native": { "status": "delegated_native", "evidence": "packages/react-native/src/bridge.ts#flush" },
+        "ios": { "status": "supported", "evidence": "packages/ios/Sources/AetherSDK/Aether.swift#sendBatchWithRetry" },
+        "android": { "status": "supported", "evidence": "packages/android/src/main/java/com/aether/sdk/Aether.kt#sendBatchWithRetry" },
+        "python": { "status": "not_applicable" }
+      }
+    },
+    {
+      "id": "offline_queue",
+      "title": "Durable offline event queue",
+      "spec": "2.6",
+      "matrix": {
+        "web": { "status": "supported", "evidence": "packages/web/src/core/event-queue.ts#persistQueue" },
+        "server": { "status": "partial", "evidence": "packages/server/src/queue.ts#EventQueue", "note": "Bounded in-process queue with retry; no cross-restart disk persistence." },
+        "react-native": { "status": "delegated_native", "evidence": "packages/react-native/src/bridge.ts#capabilities.nativeOfflinePersistence" },
+        "ios": { "status": "supported", "evidence": "packages/ios/Sources/AetherSDK/Aether.swift#persistQueue" },
+        "android": { "status": "supported", "evidence": "packages/android/src/main/java/com/aether/sdk/Aether.kt#persistQueue" },
+        "python": { "status": "not_applicable" }
+      }
+    }
+  ]
+}

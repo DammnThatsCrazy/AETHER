@@ -35,6 +35,25 @@ logger = logging.getLogger("aether.ml.artifact_registry")
 
 PROMOTION_STATE_ORDER = ["local", "trained", "candidate", "staged", "promoted"]
 
+# Promotion states at/above which governance artifacts must be present.
+_GOVERNED_PROMOTION_STATES = ("staged", "promoted")
+
+# Maps a ModelEntry governance flag -> the artifact filename it requires.
+GOVERNANCE_ARTIFACT_FILES: dict[str, str] = {
+    "requires_model_card": "model_card.json",
+    "requires_dataset_card": "dataset_card.json",
+    "requires_bias_audit": "bias_audit.json",
+    "requires_privacy_review": "privacy_review.json",
+    "requires_training_manifest": "training_manifest.json",
+}
+
+# A required artifact may be satisfied by any of these on-disk filenames.
+# ``dataset_manifest.json`` is written by train.py and satisfies the training
+# manifest requirement.
+_ARTIFACT_FILE_ALIASES: dict[str, list[str]] = {
+    "training_manifest.json": ["training_manifest.json", "dataset_manifest.json"],
+}
+
 
 # ---------------------------------------------------------------------------
 # Artifact metadata schema
@@ -311,6 +330,153 @@ def list_artifacts(model_root: Path, model_id: str) -> list[ArtifactMetadata]:
     return artifacts
 
 
+def required_promotion_artifacts(model_id: str) -> list[str]:
+    """Return the governance artifact filenames required to promote ``model_id``.
+
+    Derived from the model's ``ModelEntry`` governance flags in
+    ``common.model_registry``. Returns an empty list for unknown models or
+    models with no governance requirements. Model-registry import failures are
+    swallowed so this stays usable in lightweight environments.
+    """
+    try:
+        from common.model_registry import get_model, resolve_model_id
+    except Exception:  # pragma: no cover - registry always importable in practice
+        return []
+
+    canonical = resolve_model_id(model_id) or model_id
+    entry = get_model(canonical)
+    if entry is None:
+        return []
+
+    required: list[str] = []
+    for flag, filename in GOVERNANCE_ARTIFACT_FILES.items():
+        if getattr(entry, flag, False):
+            required.append(filename)
+    return required
+
+
+def _missing_governance_artifacts(artifact_dir: Path, model_id: str) -> list[str]:
+    """Return required governance artifacts that are absent from ``artifact_dir``."""
+    missing: list[str] = []
+    for filename in required_promotion_artifacts(model_id):
+        candidates = _ARTIFACT_FILE_ALIASES.get(filename, [filename])
+        if not any((artifact_dir / candidate).exists() for candidate in candidates):
+            missing.append(filename)
+    return missing
+
+
+def _production_promotion_allowed(model_id: str) -> bool:
+    """Return whether the registry permits promoting ``model_id`` to production."""
+    try:
+        from common.model_registry import get_model, resolve_model_id
+    except Exception:  # pragma: no cover
+        return True
+    canonical = resolve_model_id(model_id) or model_id
+    entry = get_model(canonical)
+    if entry is None:
+        return True
+    return getattr(entry, "production_promotion_allowed", True)
+
+
+def write_promotion_artifacts(
+    artifact_dir: Path,
+    model_id: str,
+    *,
+    model: Any = None,
+    X: Any = None,
+    y: Any = None,
+    sensitive_features: list[str] | None = None,
+    model_card: dict[str, Any] | None = None,
+    dataset_card: dict[str, Any] | None = None,
+    privacy_review: dict[str, Any] | None = None,
+    training_manifest: dict[str, Any] | None = None,
+    bias_audit_result: dict[str, Any] | None = None,
+    created_by: str = "training-pipeline",
+) -> dict[str, Path]:
+    """Write the governance artifacts required to promote ``model_id``.
+
+    Only the artifacts the model actually requires (per its registry governance
+    flags) are written, unless an explicit payload is supplied for one. Each
+    artifact is written atomically as ``<name>.json`` into ``artifact_dir``.
+
+    For the bias audit: if ``bias_audit_result`` is not supplied but a fitted
+    ``model`` plus ``X``, ``y`` and ``sensitive_features`` are, this runs
+    ``training.pipelines.evaluation.ModelEvaluator.bias_audit`` (imported lazily
+    so this module stays importable without the ML runtime) to produce it.
+
+    Returns a mapping of ``{filename: written_path}`` for the artifacts written.
+    """
+    artifact_dir = Path(artifact_dir)
+    artifact_dir.mkdir(parents=True, exist_ok=True)
+    required = set(required_promotion_artifacts(model_id))
+    written: dict[str, Path] = {}
+    now = datetime.now(timezone.utc).isoformat()
+
+    def _write(filename: str, payload: dict[str, Any]) -> None:
+        path = artifact_dir / filename
+        tmp = path.with_suffix(path.suffix + ".tmp")
+        tmp.write_text(json.dumps(payload, indent=2, default=str))
+        os.replace(tmp, path)
+        written[filename] = path
+
+    if "model_card.json" in required:
+        payload = model_card or {
+            "model_id": model_id,
+            "created_at": now,
+            "created_by": created_by,
+            "summary": "Auto-generated placeholder model card. Review before promotion.",
+        }
+        _write("model_card.json", payload)
+
+    if "dataset_card.json" in required:
+        payload = dataset_card or {
+            "model_id": model_id,
+            "created_at": now,
+            "created_by": created_by,
+            "summary": "Auto-generated placeholder dataset card. Review before promotion.",
+        }
+        _write("dataset_card.json", payload)
+
+    if "privacy_review.json" in required:
+        payload = privacy_review or {
+            "model_id": model_id,
+            "created_at": now,
+            "created_by": created_by,
+            "status": "pending_review",
+            "summary": "Auto-generated placeholder privacy review. Review before promotion.",
+        }
+        _write("privacy_review.json", payload)
+
+    if "training_manifest.json" in required and training_manifest is not None:
+        _write("training_manifest.json", training_manifest)
+
+    if "bias_audit.json" in required:
+        payload = bias_audit_result
+        if payload is None and model is not None and X is not None and y is not None:
+            from training.pipelines.evaluation import ModelEvaluator
+
+            evaluator = ModelEvaluator()
+            payload = evaluator.bias_audit(
+                model, X, y, sensitive_features or []
+            )
+        if payload is None:
+            payload = {
+                "model_id": model_id,
+                "created_at": now,
+                "created_by": created_by,
+                "overall_fairness_pass": None,
+                "summary": (
+                    "Auto-generated placeholder bias audit. Provide a fitted "
+                    "model plus data or an explicit bias_audit_result."
+                ),
+            }
+        else:
+            payload = {"model_id": model_id, "created_at": now, **payload}
+        _write("bias_audit.json", payload)
+
+    return written
+
+
 def promote_artifact(
     artifact_dir: Path,
     new_state: str,
@@ -323,6 +489,9 @@ def promote_artifact(
     - Cannot promote disabled artifacts.
     - Cannot promote synthetic_data=True artifacts to production.
     - States must advance (no downgrade except via rollback).
+    - Promoting to ``staged``/``promoted`` requires the model's governance
+      artifacts (model card, dataset card, bias audit, privacy review, training
+      manifest) to be present per its registry governance flags.
     """
     meta_path = artifact_dir / "metadata.json"
     if not meta_path.exists():
@@ -347,6 +516,21 @@ def promote_artifact(
             f"Cannot promote artifact that did not pass metric thresholds: "
             f"{metadata.model_id} version={metadata.artifact_version}"
         )
+
+    if new_state == "promoted" and not _production_promotion_allowed(metadata.model_id):
+        raise ArtifactPromotionError(
+            f"Model '{metadata.model_id}' is not permitted to be promoted to "
+            "production (production_promotion_allowed=False in the model registry)."
+        )
+
+    if new_state in _GOVERNED_PROMOTION_STATES:
+        missing = _missing_governance_artifacts(artifact_dir, metadata.model_id)
+        if missing:
+            raise ArtifactPromotionError(
+                f"Cannot promote {metadata.model_id} version={metadata.artifact_version} "
+                f"to '{new_state}': missing required governance artifacts: {missing}. "
+                "Generate them (see write_promotion_artifacts) before promotion."
+            )
 
     current_idx = PROMOTION_STATE_ORDER.index(metadata.promotion_state) if metadata.promotion_state in PROMOTION_STATE_ORDER else -1
     new_idx = PROMOTION_STATE_ORDER.index(new_state) if new_state in PROMOTION_STATE_ORDER else -1

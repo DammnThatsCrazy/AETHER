@@ -11,6 +11,7 @@ from aether_agentic.agentic import (
     build_risk_signal,
     build_tool_invocation,
 )
+from aether_agentic.ingestion import BatchHealth, parse_batch_health
 
 __all__ = [
     "build_agent_event",
@@ -22,4 +23,6 @@ __all__ = [
     "EXTERNAL_PLATFORMS",
     "AGENT_DEPLOYMENT_ENVIRONMENTS",
     "AGENT_DEPLOYMENT_CONSENT_MODES",
+    "BatchHealth",
+    "parse_batch_health",
 ]

@@ -785,6 +785,10 @@ class AetherSDK implements AetherSDKInterface {
       onError: (err) => this.log('error', 'Event send failed:', err.message),
       // Feed real ingestion metrics into the fleet-health heartbeat.
       onAttempt: (latencyMs, success) => this.healthAgent?.recordAttempt(latencyMs, success),
+      // Per-batch ingestion health counters (Truth Kernel §2.8). Consent drops
+      // are surfaced as their own counter here — deliberately NOT folded into the
+      // heartbeat's dropped_events, which tracks delivery failures only.
+      onBatchResult: (health) => config.onBatchResult?.(health),
     });
 
     this.consentModule = new ConsentModule({

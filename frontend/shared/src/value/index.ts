@@ -16,6 +16,9 @@ export type {
   DisplayValueLike,
   ValueFreshness,
   ValueConfidence,
+  RollupStatus,
+  ValueReconciliationState,
+  OwnershipRelationship,
 } from './format';
 
 export {
@@ -24,3 +27,10 @@ export {
   NativeValueBreakdown,
   ValuationWarning,
 } from './value-display';
+
+export {
+  RollupStatusBadge,
+  FreshnessBadge,
+  ReconciliationBadge,
+  OwnershipConfidenceBadge,
+} from './value-badges';

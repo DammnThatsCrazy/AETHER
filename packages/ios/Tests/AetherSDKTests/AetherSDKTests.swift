@@ -1,4 +1,5 @@
 import XCTest
+import CryptoKit
 @testable import AetherSDK
 
 final class AetherSDKTests: XCTestCase {
@@ -275,5 +276,78 @@ final class AetherSDKTests: XCTestCase {
         XCTAssertTrue(purposes.contains("web3"))
         XCTAssertTrue(purposes.contains("agent"))
         XCTAssertTrue(purposes.contains("commerce"))
+    }
+
+    // MARK: - Manifest Signature Verification (§2.9)
+
+    private func makeManifest(signature: String) -> SDKManifest {
+        SDKManifest(
+            manifest_version: "2026.07.12-1",
+            min_sdk_version: "8.0.0",
+            schema_version: "8.12.0",
+            rollout_percentage: 100,
+            features: ["heatmaps": true, "funnels": false],
+            published_at: "2026-07-12T00:00:00Z",
+            signature: signature
+        )
+    }
+
+    private func sign(_ manifest: SDKManifest, key: String) -> String {
+        let canonical = AetherHealthAgent.canonicalManifestString(manifest)
+        let mac = HMAC<SHA256>.authenticationCode(
+            for: Data(canonical.utf8),
+            using: SymmetricKey(data: Data(key.utf8))
+        )
+        return mac.map { String(format: "%02x", $0) }.joined()
+    }
+
+    func testManifestSignatureAcceptsValidSignature() {
+        let agent = AetherHealthAgent(endpoint: "https://api.test", apiKey: "k")
+        let key = "sdk-config-secret"
+        let unsigned = makeManifest(signature: "")
+        let signed = makeManifest(signature: sign(unsigned, key: key))
+        XCTAssertTrue(agent.verifyManifestSignature(signed, key: key))
+    }
+
+    func testManifestSignatureRejectsTamperedSignature() {
+        let agent = AetherHealthAgent(endpoint: "https://api.test", apiKey: "k")
+        let key = "sdk-config-secret"
+        // Signature computed with a different key must be rejected.
+        let unsigned = makeManifest(signature: "")
+        let wrong = makeManifest(signature: sign(unsigned, key: "attacker-key"))
+        XCTAssertFalse(agent.verifyManifestSignature(wrong, key: key))
+    }
+
+    func testManifestSignatureRejectsUnsignedManifest() {
+        let agent = AetherHealthAgent(endpoint: "https://api.test", apiKey: "k")
+        XCTAssertFalse(agent.verifyManifestSignature(makeManifest(signature: ""), key: "k"))
+    }
+
+    func testCanonicalManifestStringIsDeterministicAndFeatureOrderIndependent() {
+        let a = SDKManifest(manifest_version: "1", min_sdk_version: "8.0.0", schema_version: "8.12.0",
+                            rollout_percentage: 50, features: ["a": true, "b": false],
+                            published_at: "2026-07-12T00:00:00Z", signature: "x")
+        let b = SDKManifest(manifest_version: "1", min_sdk_version: "8.0.0", schema_version: "8.12.0",
+                            rollout_percentage: 50, features: ["b": false, "a": true],
+                            published_at: "2026-07-12T00:00:00Z", signature: "y")
+        XCTAssertEqual(AetherHealthAgent.canonicalManifestString(a),
+                       AetherHealthAgent.canonicalManifestString(b))
+    }
+
+    // MARK: - observe() + BatchHealth (§2.6 / §2.8)
+
+    func testObserveNonCanonicalTypeIsNoOp() {
+        // observe() must never enqueue an unknown type. Before init the queue is
+        // empty and stays empty.
+        Aether.shared.observe("not_a_real_event_type", properties: ["x": AnyCodable(1)])
+        XCTAssertEqual(Aether.shared.queueDepth(), 0)
+    }
+
+    func testBatchHealthStructHoldsCounters() {
+        let h = BatchHealth(accepted: 3, duplicate: 1, rejected: 0, droppedByConsent: 2, queueDepth: 5)
+        XCTAssertEqual(h.accepted, 3)
+        XCTAssertEqual(h.duplicate, 1)
+        XCTAssertEqual(h.droppedByConsent, 2)
+        XCTAssertEqual(h.queueDepth, 5)
     }
 }

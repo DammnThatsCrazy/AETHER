@@ -118,6 +118,23 @@ class ModelEntry:
     tenant_visible: bool = True
     fail_closed_required: bool = False
 
+    # ---- Model-governance metadata (additive, backward-compatible) --------
+    # Purpose/consent scoping for training data.
+    allowed_training_purposes: list[str] = field(default_factory=list)
+    forbidden_feature_tags: list[str] = field(default_factory=list)
+    # Governance gates that must be satisfied before promotion.
+    requires_privacy_review: bool = False
+    requires_bias_audit: bool = False
+    requires_model_card: bool = True
+    requires_dataset_card: bool = True
+    requires_training_manifest: bool = True
+    requires_human_review: bool = False
+    requires_dsr_invalidation: bool = False
+    # Whether this model may ever be promoted to production.
+    production_promotion_allowed: bool = True
+    # Free-text reason a sensitive model omits a governance gate (audited).
+    governance_notes: str = ""
+
 
 # ---------------------------------------------------------------------------
 # Canonical registry — ALL 11 intelligence outputs
@@ -156,9 +173,12 @@ _REGISTRY: dict[str, ModelEntry] = {
             "threshold_pass",
             "artifact_metadata",
             "feature_schema_hash",
+            "privacy_review",
         ],
         docs_slug="intent-prediction",
         fail_closed_required=False,
+        allowed_training_purposes=["behavioral_analytics", "personalization"],
+        requires_privacy_review=True,
     ),
 
     "bot_detection": ModelEntry(
@@ -188,9 +208,14 @@ _REGISTRY: dict[str, ModelEntry] = {
             "threshold_pass",
             "artifact_metadata",
             "feature_schema_hash",
+            "privacy_review",
+            "bias_audit",
         ],
         docs_slug="bot-detection",
         fail_closed_required=True,
+        allowed_training_purposes=["security_analytics", "fraud_prevention"],
+        requires_privacy_review=True,
+        requires_bias_audit=True,
     ),
 
     "session_scorer": ModelEntry(
@@ -222,6 +247,7 @@ _REGISTRY: dict[str, ModelEntry] = {
         ],
         docs_slug="session-scorer",
         fail_closed_required=False,
+        allowed_training_purposes=["behavioral_analytics"],
     ),
 
     # ── SERVER TIER — Trainable ML ────────────────────────────────────── #
@@ -255,9 +281,18 @@ _REGISTRY: dict[str, ModelEntry] = {
             "threshold_pass",
             "artifact_metadata",
             "feature_schema_hash",
+            "privacy_review",
+            "bias_audit",
+            "human_review",
         ],
         docs_slug="identity-resolution",
         fail_closed_required=False,
+        allowed_training_purposes=["identity_resolution", "fraud_prevention"],
+        forbidden_feature_tags=["raw_pii"],
+        requires_privacy_review=True,
+        requires_bias_audit=True,
+        requires_human_review=True,
+        requires_dsr_invalidation=True,
     ),
 
     "journey_prediction": ModelEntry(
@@ -289,9 +324,12 @@ _REGISTRY: dict[str, ModelEntry] = {
             "threshold_pass",
             "artifact_metadata",
             "feature_schema_hash",
+            "privacy_review",
         ],
         docs_slug="journey-prediction",
         fail_closed_required=False,
+        allowed_training_purposes=["behavioral_analytics"],
+        requires_privacy_review=True,
     ),
 
     "churn_prediction": ModelEntry(
@@ -325,6 +363,9 @@ _REGISTRY: dict[str, ModelEntry] = {
         ],
         docs_slug="churn-prediction",
         fail_closed_required=True,
+        allowed_training_purposes=["retention_analytics"],
+        requires_privacy_review=True,
+        requires_dsr_invalidation=True,
     ),
 
     "ltv_prediction": ModelEntry(
@@ -358,6 +399,9 @@ _REGISTRY: dict[str, ModelEntry] = {
         ],
         docs_slug="ltv-prediction",
         fail_closed_required=True,
+        allowed_training_purposes=["revenue_analytics"],
+        requires_privacy_review=True,
+        requires_dsr_invalidation=True,
     ),
 
     "anomaly_detection": ModelEntry(
@@ -386,9 +430,14 @@ _REGISTRY: dict[str, ModelEntry] = {
             "real_data_only",
             "threshold_pass",
             "artifact_metadata",
+            "privacy_review",
+            "bias_audit",
         ],
         docs_slug="anomaly-detection",
         fail_closed_required=True,
+        allowed_training_purposes=["infrastructure_analytics", "security_analytics"],
+        requires_privacy_review=True,
+        requires_bias_audit=True,
     ),
 
     "campaign_attribution": ModelEntry(
@@ -419,9 +468,12 @@ _REGISTRY: dict[str, ModelEntry] = {
             "real_data_only",
             "threshold_pass",
             "artifact_metadata",
+            "privacy_review",
         ],
         docs_slug="campaign-attribution",
         fail_closed_required=False,
+        allowed_training_purposes=["marketing_analytics"],
+        requires_privacy_review=True,
     ),
 
     # ── SECURITY / DETERMINISTIC outputs ─────────────────────────────── #
@@ -451,6 +503,14 @@ _REGISTRY: dict[str, ModelEntry] = {
         promotion_requirements=[],
         docs_slug="bytecode-risk",
         fail_closed_required=True,
+        requires_model_card=False,
+        requires_dataset_card=False,
+        requires_training_manifest=False,
+        governance_notes=(
+            "Deterministic rule-based scorer: no trained artifact, model card, "
+            "or dataset card applies. Operates on submitted bytecode only; no "
+            "personal data is used, so no privacy review is required."
+        ),
     ),
 
     "trust_score": ModelEntry(
@@ -480,6 +540,15 @@ _REGISTRY: dict[str, ModelEntry] = {
         kyber_visible=True,
         tenant_visible=True,
         fail_closed_required=True,
+        requires_model_card=False,
+        requires_dataset_card=False,
+        requires_training_manifest=False,
+        governance_notes=(
+            "Composite weighted scorer over already-governed upstream model "
+            "outputs and deterministic signals: no independently trained "
+            "artifact, model card, or dataset card applies. Inherits the "
+            "privacy posture of its upstream inputs."
+        ),
     ),
 }
 

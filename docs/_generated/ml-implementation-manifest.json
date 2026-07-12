@@ -38,14 +38,31 @@
         "real_data_only",
         "threshold_pass",
         "artifact_metadata",
-        "feature_schema_hash"
+        "feature_schema_hash",
+        "privacy_review"
       ],
       "kyber_visible": true,
       "tenant_visible": true,
       "fail_closed_required": false,
       "owner": "ml-platform",
       "docs_slug": "intent-prediction",
-      "deprecated_aliases": []
+      "deprecated_aliases": [],
+      "governance": {
+        "allowed_training_purposes": [
+          "behavioral_analytics",
+          "personalization"
+        ],
+        "forbidden_feature_tags": [],
+        "requires_privacy_review": true,
+        "requires_bias_audit": false,
+        "requires_model_card": true,
+        "requires_dataset_card": true,
+        "requires_training_manifest": true,
+        "requires_human_review": false,
+        "requires_dsr_invalidation": false,
+        "production_promotion_allowed": true,
+        "governance_notes": ""
+      }
     },
     {
       "model_id": "bot_detection",
@@ -80,14 +97,32 @@
         "real_data_only",
         "threshold_pass",
         "artifact_metadata",
-        "feature_schema_hash"
+        "feature_schema_hash",
+        "privacy_review",
+        "bias_audit"
       ],
       "kyber_visible": true,
       "tenant_visible": true,
       "fail_closed_required": true,
       "owner": "ml-platform",
       "docs_slug": "bot-detection",
-      "deprecated_aliases": []
+      "deprecated_aliases": [],
+      "governance": {
+        "allowed_training_purposes": [
+          "security_analytics",
+          "fraud_prevention"
+        ],
+        "forbidden_feature_tags": [],
+        "requires_privacy_review": true,
+        "requires_bias_audit": true,
+        "requires_model_card": true,
+        "requires_dataset_card": true,
+        "requires_training_manifest": true,
+        "requires_human_review": false,
+        "requires_dsr_invalidation": false,
+        "production_promotion_allowed": true,
+        "governance_notes": ""
+      }
     },
     {
       "model_id": "session_scorer",
@@ -128,7 +163,22 @@
       "fail_closed_required": false,
       "owner": "ml-platform",
       "docs_slug": "session-scorer",
-      "deprecated_aliases": []
+      "deprecated_aliases": [],
+      "governance": {
+        "allowed_training_purposes": [
+          "behavioral_analytics"
+        ],
+        "forbidden_feature_tags": [],
+        "requires_privacy_review": false,
+        "requires_bias_audit": false,
+        "requires_model_card": true,
+        "requires_dataset_card": true,
+        "requires_training_manifest": true,
+        "requires_human_review": false,
+        "requires_dsr_invalidation": false,
+        "production_promotion_allowed": true,
+        "governance_notes": ""
+      }
     },
     {
       "model_id": "identity_resolution",
@@ -163,7 +213,10 @@
         "real_data_only",
         "threshold_pass",
         "artifact_metadata",
-        "feature_schema_hash"
+        "feature_schema_hash",
+        "privacy_review",
+        "bias_audit",
+        "human_review"
       ],
       "kyber_visible": true,
       "tenant_visible": true,
@@ -172,7 +225,25 @@
       "docs_slug": "identity-resolution",
       "deprecated_aliases": [
         "identity_gnn"
-      ]
+      ],
+      "governance": {
+        "allowed_training_purposes": [
+          "identity_resolution",
+          "fraud_prevention"
+        ],
+        "forbidden_feature_tags": [
+          "raw_pii"
+        ],
+        "requires_privacy_review": true,
+        "requires_bias_audit": true,
+        "requires_model_card": true,
+        "requires_dataset_card": true,
+        "requires_training_manifest": true,
+        "requires_human_review": true,
+        "requires_dsr_invalidation": true,
+        "production_promotion_allowed": true,
+        "governance_notes": ""
+      }
     },
     {
       "model_id": "journey_prediction",
@@ -207,7 +278,8 @@
         "real_data_only",
         "threshold_pass",
         "artifact_metadata",
-        "feature_schema_hash"
+        "feature_schema_hash",
+        "privacy_review"
       ],
       "kyber_visible": true,
       "tenant_visible": true,
@@ -216,7 +288,22 @@
       "docs_slug": "journey-prediction",
       "deprecated_aliases": [
         "journey_tft"
-      ]
+      ],
+      "governance": {
+        "allowed_training_purposes": [
+          "behavioral_analytics"
+        ],
+        "forbidden_feature_tags": [],
+        "requires_privacy_review": true,
+        "requires_bias_audit": false,
+        "requires_model_card": true,
+        "requires_dataset_card": true,
+        "requires_training_manifest": true,
+        "requires_human_review": false,
+        "requires_dsr_invalidation": false,
+        "production_promotion_allowed": true,
+        "governance_notes": ""
+      }
     },
     {
       "model_id": "churn_prediction",
@@ -259,7 +346,22 @@
       "fail_closed_required": true,
       "owner": "ml-platform",
       "docs_slug": "churn-prediction",
-      "deprecated_aliases": []
+      "deprecated_aliases": [],
+      "governance": {
+        "allowed_training_purposes": [
+          "retention_analytics"
+        ],
+        "forbidden_feature_tags": [],
+        "requires_privacy_review": true,
+        "requires_bias_audit": false,
+        "requires_model_card": true,
+        "requires_dataset_card": true,
+        "requires_training_manifest": true,
+        "requires_human_review": false,
+        "requires_dsr_invalidation": true,
+        "production_promotion_allowed": true,
+        "governance_notes": ""
+      }
     },
     {
       "model_id": "ltv_prediction",
@@ -302,7 +404,22 @@
       "fail_closed_required": true,
       "owner": "ml-platform",
       "docs_slug": "ltv-prediction",
-      "deprecated_aliases": []
+      "deprecated_aliases": [],
+      "governance": {
+        "allowed_training_purposes": [
+          "revenue_analytics"
+        ],
+        "forbidden_feature_tags": [],
+        "requires_privacy_review": true,
+        "requires_bias_audit": false,
+        "requires_model_card": true,
+        "requires_dataset_card": true,
+        "requires_training_manifest": true,
+        "requires_human_review": false,
+        "requires_dsr_invalidation": true,
+        "production_promotion_allowed": true,
+        "governance_notes": ""
+      }
     },
     {
       "model_id": "anomaly_detection",
@@ -335,14 +452,32 @@
       "promotion_requirements": [
         "real_data_only",
         "threshold_pass",
-        "artifact_metadata"
+        "artifact_metadata",
+        "privacy_review",
+        "bias_audit"
       ],
       "kyber_visible": true,
       "tenant_visible": true,
       "fail_closed_required": true,
       "owner": "ml-platform",
       "docs_slug": "anomaly-detection",
-      "deprecated_aliases": []
+      "deprecated_aliases": [],
+      "governance": {
+        "allowed_training_purposes": [
+          "infrastructure_analytics",
+          "security_analytics"
+        ],
+        "forbidden_feature_tags": [],
+        "requires_privacy_review": true,
+        "requires_bias_audit": true,
+        "requires_model_card": true,
+        "requires_dataset_card": true,
+        "requires_training_manifest": true,
+        "requires_human_review": false,
+        "requires_dsr_invalidation": false,
+        "production_promotion_allowed": true,
+        "governance_notes": ""
+      }
     },
     {
       "model_id": "campaign_attribution",
@@ -375,14 +510,30 @@
       "promotion_requirements": [
         "real_data_only",
         "threshold_pass",
-        "artifact_metadata"
+        "artifact_metadata",
+        "privacy_review"
       ],
       "kyber_visible": true,
       "tenant_visible": true,
       "fail_closed_required": false,
       "owner": "ml-platform",
       "docs_slug": "campaign-attribution",
-      "deprecated_aliases": []
+      "deprecated_aliases": [],
+      "governance": {
+        "allowed_training_purposes": [
+          "marketing_analytics"
+        ],
+        "forbidden_feature_tags": [],
+        "requires_privacy_review": true,
+        "requires_bias_audit": false,
+        "requires_model_card": true,
+        "requires_dataset_card": true,
+        "requires_training_manifest": true,
+        "requires_human_review": false,
+        "requires_dsr_invalidation": false,
+        "production_promotion_allowed": true,
+        "governance_notes": ""
+      }
     },
     {
       "model_id": "bytecode_risk",
@@ -416,7 +567,20 @@
       "fail_closed_required": true,
       "owner": "ml-platform",
       "docs_slug": "bytecode-risk",
-      "deprecated_aliases": []
+      "deprecated_aliases": [],
+      "governance": {
+        "allowed_training_purposes": [],
+        "forbidden_feature_tags": [],
+        "requires_privacy_review": false,
+        "requires_bias_audit": false,
+        "requires_model_card": false,
+        "requires_dataset_card": false,
+        "requires_training_manifest": false,
+        "requires_human_review": false,
+        "requires_dsr_invalidation": false,
+        "production_promotion_allowed": true,
+        "governance_notes": "Deterministic rule-based scorer: no trained artifact, model card, or dataset card applies. Operates on submitted bytecode only; no personal data is used, so no privacy review is required."
+      }
     },
     {
       "model_id": "trust_score",
@@ -450,7 +614,20 @@
       "fail_closed_required": true,
       "owner": "ml-platform",
       "docs_slug": "trust-score",
-      "deprecated_aliases": []
+      "deprecated_aliases": [],
+      "governance": {
+        "allowed_training_purposes": [],
+        "forbidden_feature_tags": [],
+        "requires_privacy_review": false,
+        "requires_bias_audit": false,
+        "requires_model_card": false,
+        "requires_dataset_card": false,
+        "requires_training_manifest": false,
+        "requires_human_review": false,
+        "requires_dsr_invalidation": false,
+        "production_promotion_allowed": true,
+        "governance_notes": "Composite weighted scorer over already-governed upstream model outputs and deterministic signals: no independently trained artifact, model card, or dataset card applies. Inherits the privacy posture of its upstream inputs."
+      }
     }
   ]
 }

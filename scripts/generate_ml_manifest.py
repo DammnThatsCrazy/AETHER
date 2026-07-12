@@ -93,6 +93,19 @@ def build_manifest() -> dict:
             "owner": entry.owner,
             "docs_slug": entry.docs_slug,
             "deprecated_aliases": _safe(entry.deprecated_aliases),
+            "governance": {
+                "allowed_training_purposes": _safe(entry.allowed_training_purposes),
+                "forbidden_feature_tags": _safe(entry.forbidden_feature_tags),
+                "requires_privacy_review": entry.requires_privacy_review,
+                "requires_bias_audit": entry.requires_bias_audit,
+                "requires_model_card": entry.requires_model_card,
+                "requires_dataset_card": entry.requires_dataset_card,
+                "requires_training_manifest": entry.requires_training_manifest,
+                "requires_human_review": entry.requires_human_review,
+                "requires_dsr_invalidation": entry.requires_dsr_invalidation,
+                "production_promotion_allowed": entry.production_promotion_allowed,
+                "governance_notes": entry.governance_notes,
+            },
         })
 
     return {

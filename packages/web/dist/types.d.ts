@@ -42,6 +42,27 @@ export interface AetherConfig {
     onJourneyResumed?: (identity: ResolvedIdentity) => void;
     /** Client-side inactivity window before an incomplete journey is considered abandoned. */
     journeyTimeoutMs?: number;
+    /**
+     * Called after each processed batch with per-batch ingestion health counters
+     * (Truth Kernel §2.8). Surfaces accepted / duplicate / rejected (from the
+     * backend BatchResponse) plus SDK-side dropped_by_consent and queue_depth.
+     */
+    onBatchResult?: (health: BatchHealth) => void;
+}
+/**
+ * Per-batch ingestion health counters (Truth Kernel §2.8).
+ *
+ * `accepted` / `duplicate` / `rejected` are parsed from the backend
+ * BatchResponse (see packages/shared/ingestion-contract.ts). `dropped_by_consent`
+ * and `queue_depth` are SDK-side truths: consent filtering removes events before
+ * they leave the client, and queue_depth reflects the local backlog at send time.
+ */
+export interface BatchHealth {
+    accepted: number;
+    duplicate: number;
+    rejected: number;
+    dropped_by_consent: number;
+    queue_depth: number;
 }
 /**
  * Module toggles read by AetherSDK.init().
