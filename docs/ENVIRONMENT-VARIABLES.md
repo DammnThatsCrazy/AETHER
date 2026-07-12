@@ -34,6 +34,21 @@ optional is required for local startup unless its feature flag is enabled.
   missing), plus `BYOK_ENCRYPTION_KEY`, `ORACLE_SIGNER_PRIVATE_KEY`,
   `GRAFANA_ADMIN_PASSWORD` where those features are used.
 
+## Runtime roles & backend selectors (PR 4 / FT-4)
+
+Each process runs one role via `AETHER_ROLE` (default `all` locally). Staging and
+production reject `AETHER_ROLE=all` and, in production, in-memory `CACHE_BACKEND`
+/ `DATABASE_BACKEND`. See [Backend Execution Model](architecture/backend-execution-model).
+
+- `AETHER_ROLE` — `api | outbox-relay | stream-worker | identity-worker |
+  graph-writer | measurement-worker | materializer | maintenance | all`.
+- `WORKER_ROLES_ENABLED` — gate the role-aware lifespan split (default-on
+  non-local; off = single-process, byte-identical to before).
+- `DEPLOYMENT_PROFILE` (default `local-live`), `ML_MODE` (`inline`/`remote`).
+- Backend selectors: `DATABASE_BACKEND` (`postgres`), `CACHE_BACKEND` (`memory`),
+  `EVENT_BACKEND` (`sns_sqs`), `GRAPH_BACKEND` (`postgres`),
+  `ANALYTICS_BACKEND` (`postgres`), `OBJECT_BACKEND` (`s3`).
+
 ## Feature-flagged / optional groups (default off)
 
 Data quality (`AETHER_DATA_QUALITY_ENABLED`, `KYBER_INTELLIGENCE_QUALITY_ENABLED`),

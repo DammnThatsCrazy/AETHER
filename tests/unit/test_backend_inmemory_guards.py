@@ -40,6 +40,10 @@ def test_shared_store_rejects_inmemory_outside_local(monkeypatch):
     monkeypatch.setenv("CANARY_SECRET_SEED", "test-canary-secret-seed-for-tests")
     monkeypatch.setenv("EXTRACTION_CANARY_SEED", "test-extraction-canary-seed-for-tests")
     monkeypatch.setenv("SDK_CONFIG_SECRET", "test-sdk-config-secret-for-tests")
+    # PR 4: production requires an explicit role + non-memory core backends.
+    monkeypatch.setenv("AETHER_ROLE", "api")
+    monkeypatch.setenv("CACHE_BACKEND", "redis")
+    monkeypatch.setenv("DATABASE_BACKEND", "postgres")
     monkeypatch.delenv("REDIS_HOST", raising=False)
     monkeypatch.delenv("AETHER_ALLOW_INMEMORY_STORE", raising=False)
 
@@ -60,6 +64,10 @@ def test_journey_store_rejects_inmemory_outside_local(monkeypatch):
     monkeypatch.setenv("CANARY_SECRET_SEED", "test-canary-secret-seed-for-tests")
     monkeypatch.setenv("EXTRACTION_CANARY_SEED", "test-extraction-canary-seed-for-tests")
     monkeypatch.setenv("SDK_CONFIG_SECRET", "test-sdk-config-secret-for-tests")
+    # PR 4: production requires an explicit role + non-memory core backends.
+    monkeypatch.setenv("AETHER_ROLE", "api")
+    monkeypatch.setenv("CACHE_BACKEND", "redis")
+    monkeypatch.setenv("DATABASE_BACKEND", "postgres")
     monkeypatch.delenv("AETHER_ALLOW_INMEMORY_JOURNEY_STORE", raising=False)
 
     with backend_module_path():

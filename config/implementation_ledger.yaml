@@ -171,15 +171,25 @@ items:
     required_behavior: AETHER_ROLE + explicit backend selectors; role-specific entrypoints; production rejects role=all and memory backends.
     affected_paths:
       - Backend Architecture/aether-backend/main.py
-      - Backend Architecture/aether-backend/services/runtime/
+      - Backend Architecture/aether-backend/services/runtime/roles.py
+      - Backend Architecture/aether-backend/services/runtime/run_role.py
       - Backend Architecture/aether-backend/config/settings.py
-    tests_required: [worker role split tests]
-    evidence_required: [role startup tests]
+    tests_required: [tests/unit/test_runtime_roles.py]
+    evidence_required: [pytest tests/unit/test_runtime_roles.py output, Settings() production role=all + memory-backend rejection]
     docs_required: [docs/BACKEND-EXECUTION-MODEL.md]
     owner: platform
-    status: not_started
-    blocked_by: [FT-1-SESSIONS-CREDENTIALS]
-    exception: null
+    status: implemented
+    blocked_by: []
+    exception: >
+      Deferred to follow-ups: dedicated supervised worker loops + stream-consumer
+      attachment for the identity/graph/measurement worker roles (they currently
+      ride the shared consumer, and run_role starts an empty supervisor for them);
+      full per-worker-role process fan-out beyond the fully-wired api role. The
+      lifespan worker/consumer split is gated behind WORKER_ROLES_ENABLED
+      (default-on non-local, off = byte-identical to before); the "all" role and
+      the flag-off path are unchanged. Production fail-closed rejection of
+      AETHER_ROLE=all and in-memory cache/database backends is enforced in
+      Settings.__post_init__.
     last_verified_commit: null
 
   - id: FT-5-INGESTION-V2

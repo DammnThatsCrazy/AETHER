@@ -346,6 +346,18 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     """
     from config.settings import Environment
     from services.runtime import WorkerSupervisor, build_worker_specs
+    from services.runtime.roles import should_start_consumers, should_start_workers
+
+    # Runtime-role gating (PR 4 / FT-4). With WORKER_ROLES_ENABLED off, both
+    # gates are True → this lifespan is byte-identical to before. With it on, a
+    # pure "api" process starts neither the stream consumers nor the supervised
+    # workers — those run in dedicated role processes via
+    # `python -m services.runtime.run_role <role>`; the "all" role still starts
+    # everything.
+    _role = settings.runtime.aether_role
+    _roles_gated = settings.runtime.worker_roles_enabled
+    _start_consumers = (not _roles_gated) or should_start_consumers(_role)
+    _start_workers = (not _roles_gated) or should_start_workers(_role)
 
     registry = get_registry()
     await registry.startup()
@@ -370,27 +382,34 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
                 ) from e
             logger.warning(f"{label} wiring skipped: {e}")
 
-    # Ingestion workers — sdk_bronze_writer, silver_normalizer, identity_signal_emitter
-    def _attach_ingestion() -> None:
-        from services.ingestion.workers import attach_ingestion_workers
-        attach_ingestion_workers(registry.consumer, registry.producer)
-    _attach_step("Ingestion worker", _attach_ingestion)
+    # Consumer-attach wiring + stream-consumer start. Gated by runtime role:
+    # skipped entirely for a pure "api" process (whose events are produced and
+    # handled by dedicated worker-role processes). Flag off → _start_consumers
+    # True → identical to before.
+    if _start_consumers:
+        # Ingestion workers — sdk_bronze_writer, silver_normalizer, identity_signal_emitter
+        def _attach_ingestion() -> None:
+            from services.ingestion.workers import attach_ingestion_workers
+            attach_ingestion_workers(registry.consumer, registry.producer)
+        _attach_step("Ingestion worker", _attach_ingestion)
 
-    # Profile 360 — attach derived workers to the shared consumer.
-    # Strictly additive: workers consume new topics + a few existing ones,
-    # write to new tables only, and never mutate existing service state.
-    _attach_step(
-        "Profile 360 worker",
-        lambda: attach_profile360_workers(registry.consumer, registry.graph),
-    )
+        # Profile 360 — attach derived workers to the shared consumer.
+        # Strictly additive: workers consume new topics + a few existing ones,
+        # write to new tables only, and never mutate existing service state.
+        _attach_step(
+            "Profile 360 worker",
+            lambda: attach_profile360_workers(registry.consumer, registry.graph),
+        )
 
-    # Measurement — identity change → journey rebuild → attribution recompute
-    def _attach_measurement_identity() -> None:
-        from services.measurement.identity_consumer import MeasurementIdentityConsumer
-        MeasurementIdentityConsumer(producer=registry.producer).register(registry.consumer)
-    _attach_step("Measurement identity consumer", _attach_measurement_identity)
+        # Measurement — identity change → journey rebuild → attribution recompute
+        def _attach_measurement_identity() -> None:
+            from services.measurement.identity_consumer import MeasurementIdentityConsumer
+            MeasurementIdentityConsumer(producer=registry.producer).register(registry.consumer)
+        _attach_step("Measurement identity consumer", _attach_measurement_identity)
 
-    # Measurement — register algorithmic attribution models (markov, shapley_heuristic)
+    # Measurement — register algorithmic attribution models (markov, shapley_heuristic).
+    # Model registration also serves API attribution queries, so it is
+    # unconditional (independent of the stream-consumer role gate).
     try:
         from services.measurement.engine.algorithmic_attribution import register_algorithmic_models
         from services.attribution.resolver import AttributionResolver, AttributionConfig
@@ -400,20 +419,21 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     except Exception as e:  # pragma: no cover — defensive
         logger.warning(f"Algorithmic attribution model registration skipped: {e}")
 
-    # Notification Intelligence — attach Kafka consumers.
-    def _attach_notification_intelligence() -> None:
-        from services.notification_intelligence.consumer import attach_notification_consumers
-        attach_notification_consumers(
-            registry.consumer,
-            producer=registry.producer,
-            cache=registry.cache,
-        )
-    _attach_step("Notification intelligence consumer", _attach_notification_intelligence)
+    if _start_consumers:
+        # Notification Intelligence — attach Kafka consumers.
+        def _attach_notification_intelligence() -> None:
+            from services.notification_intelligence.consumer import attach_notification_consumers
+            attach_notification_consumers(
+                registry.consumer,
+                producer=registry.producer,
+                cache=registry.cache,
+            )
+        _attach_step("Notification intelligence consumer", _attach_notification_intelligence)
 
-    try:
-        await registry.consumer.start()
-    except Exception as e:  # pragma: no cover — defensive
-        logger.warning(f"Kafka consumer start skipped: {e}")
+        try:
+            await registry.consumer.start()
+        except Exception as e:  # pragma: no cover — defensive
+            logger.warning(f"Kafka consumer start skipped: {e}")
 
     # Provider Gateway (feature-flagged)
     from dependencies.providers import _init_provider_gateway
@@ -447,11 +467,16 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     # retention sweep, delivery worker, and webhook inbox processor.
     # Crash → log + metric + exponential-backoff restart; required workers
     # abort startup in staging/production if their first start fails.
-    supervisor = WorkerSupervisor()
-    for spec in build_worker_specs(registry=registry, settings=settings):
-        supervisor.register(spec)
-    app.state.worker_supervisor = supervisor
-    await supervisor.start_all()
+    # Gated by runtime role: a pure "api" process starts no supervised workers
+    # (they run in dedicated role processes via run_role). Flag off →
+    # _start_workers True → identical to before.
+    supervisor: WorkerSupervisor | None = None
+    if _start_workers:
+        supervisor = WorkerSupervisor()
+        for spec in build_worker_specs(registry=registry, settings=settings):
+            supervisor.register(spec)
+        app.state.worker_supervisor = supervisor
+        await supervisor.start_all()
 
     logger.info(
         f"Aether Backend started | env={settings.env.value} "
@@ -462,7 +487,8 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
 
     # Graceful shutdown: stop workers, drain connections, close backends
     logger.info("Initiating graceful shutdown...")
-    await supervisor.stop_all()
+    if supervisor is not None:
+        await supervisor.stop_all()
     if provider_gateway:
         await provider_gateway.shutdown()
     await registry.shutdown()
