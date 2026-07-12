@@ -21,7 +21,9 @@
         smoke byok-reencrypt \
         clean validate-docs validate-frontmatter validate-ml-registry extract-docs docs-drift docs-stamp docs bump-version \
         repo-doctor repo-doctor-fix docs-check ci-check docs-fix \
-        production-status release-gate ops-readiness help
+        production-status release-gate ops-readiness help \
+        validate-profile-config validate-cost-policy validate-route-registry \
+        validate-storage-policies audit-readiness-check founding-tenant-release-gate
 
 # Centralized subsystem paths — single place to rename if directories move.
 BACKEND_DIR := Backend Architecture/aether-backend
@@ -329,10 +331,43 @@ audit-prep: ## Smart contract pre-audit checklist (exit 1 if blockers found with
 ops-readiness: ## One-person ops readiness gate (flags, stores, bridge fail-closed, approval gating)
 	python scripts/ops_readiness.py
 
-release-gate: ## Full release gate: repo consistency (CI mode) + strict production status + ops readiness
+release-gate: ## Full release gate: repo consistency (CI mode) + strict production status + ops readiness + founding-tenant control spine
 	python scripts/repo_doctor.py --ci
 	python scripts/production_status.py --strict
 	python scripts/ops_readiness.py
+	python scripts/release/check_foundation.py
+	python scripts/release/check_profile_config.py
+	python scripts/release/check_cost_policy.py
+	python scripts/release/check_route_registry.py
+	python scripts/release/check_storage_policies.py
+
+# ---------------------------------------------------------------------------
+# Founding-tenant production — control-spine gates (additive; ci-check unchanged)
+# ---------------------------------------------------------------------------
+
+validate-profile-config: ## Validate deployment-profile matrix + founding-tenant posture
+	python scripts/release/check_profile_config.py
+
+validate-cost-policy: ## Validate production-lean cost policy (forbidden/required resources)
+	python scripts/release/check_cost_policy.py
+
+validate-route-registry: ## Validate route policy registry seed schema
+	python scripts/release/check_route_registry.py
+
+validate-storage-policies: ## Validate storage policy registry seed schema
+	python scripts/release/check_storage_policies.py
+
+audit-readiness-check: ## Validate the founding-tenant control spine (ledger + catalog + posture)
+	python scripts/release/check_foundation.py
+
+founding-tenant-release-gate: ## ci-check + control-spine validators + evidence bundle index
+	python scripts/repo_doctor.py --ci
+	python scripts/release/check_foundation.py
+	python scripts/release/check_profile_config.py
+	python scripts/release/check_cost_policy.py
+	python scripts/release/check_route_registry.py
+	python scripts/release/check_storage_policies.py
+	python scripts/release/collect_evidence.py
 
 .PHONY: staging-preflight staging-preflight-dry-run
 staging-preflight: ## Staging preflight gate: env/Settings, DB migrations + table shape, Redis, HTTP health, contracts (fail-closed)

@@ -1,0 +1,164 @@
+# =============================================================================
+# Aether — Control Catalog (founding-tenant production readiness)
+#
+# Internal control catalog with control-family, owner, evidence, and framework
+# mappings. Statuses are honest and internal-only:
+#   not_designed | designed | implemented | operating | evidence_verified
+#   | externally_assessed | not_applicable | accepted_exception
+# `externally_assessed` is NEVER set without an explicit external artifact. The
+# framework mappings (soc2/nist/owasp) are internal readiness references, NOT
+# assertions of certification or external assessment.
+#
+# Validated by scripts/release/check_foundation.py (schema presence).
+# =============================================================================
+
+schema_version: 1
+canonical_source: config/control_catalog.yaml
+attestation_disclaimer: >
+  Framework mappings are internal control-design references for readiness. They
+  do not assert SOC 2 certification, external SOC 2 report coverage, FedRAMP
+  authorization, ATO, or any completed external assessment.
+
+controls:
+
+  - control_id: TRUST-SESSION-01
+    name: Human sessions are durable and revocable, not reusable API keys
+    description: >
+      Human authentication (login, email verification, SSO) issues server-side
+      durable sessions with idle + absolute expiry and revocation. Reusable
+      API keys are never returned from human auth paths under the founding-tenant
+      posture.
+    control_family: identity-and-access
+    owner: trust
+    scope: backend-auth
+    environments: [staging, production-lean]
+    frequency: continuous
+    implementation_type: preventive
+    status: implemented
+    required_evidence: [tests/unit/test_trust_containment.py, config/posture/founding_tenant_production.yaml]
+    validator: pytest tests/unit/test_trust_containment.py
+    failure_severity: P0
+    policy_references: [config/posture/founding_tenant_production.yaml]
+    soc2_mapping: [CC6.1, CC6.2, CC6.3]
+    nist_csf_mapping: [PR.AC-1, PR.AC-7]
+    nist_ssdf_mapping: [PW.4]
+    owasp_asvs_mapping: [V2, V3]
+    owasp_masvs_mapping: [MSTG-AUTH-1]
+    last_executed_at: null
+    last_evidence_at: null
+    evidence_refs: []
+    exceptions: []
+    next_review_at: null
+
+  - control_id: TRUST-CRED-02
+    name: Service credentials and public ingest identifiers are scoped
+    description: >
+      Service credentials are scoped, rotatable, revocable, and last-used
+      tracked. Public ingest identifiers are non-secret, ingest-only, and cannot
+      read analytics or call admin routes.
+    control_family: identity-and-access
+    owner: trust
+    scope: backend-auth
+    environments: [staging, production-lean]
+    frequency: continuous
+    implementation_type: preventive
+    status: implemented
+    required_evidence: [tests/unit/test_trust_containment.py]
+    validator: pytest tests/unit/test_trust_containment.py
+    failure_severity: P0
+    policy_references: [config/posture/founding_tenant_production.yaml]
+    soc2_mapping: [CC6.1, CC6.3]
+    nist_csf_mapping: [PR.AC-4]
+    nist_ssdf_mapping: [PW.4]
+    owasp_asvs_mapping: [V2]
+    owasp_masvs_mapping: []
+    last_executed_at: null
+    last_evidence_at: null
+    evidence_refs: []
+    exceptions: []
+    next_review_at: null
+
+  - control_id: TRUST-LEGACY-03
+    name: Legacy tenant registration is contained in staging/production
+    description: >
+      The legacy POST /v1/tenants path does not create a broad active tenant and
+      reusable analytics API key under the founding-tenant posture; recovery
+      never emails a new API key.
+    control_family: identity-and-access
+    owner: trust
+    scope: backend-auth
+    environments: [staging, production-lean]
+    frequency: continuous
+    implementation_type: preventive
+    status: implemented
+    required_evidence: [tests/unit/test_trust_containment.py]
+    validator: pytest tests/unit/test_trust_containment.py
+    failure_severity: P0
+    policy_references: [config/posture/founding_tenant_production.yaml]
+    soc2_mapping: [CC6.1]
+    nist_csf_mapping: [PR.AC-1]
+    nist_ssdf_mapping: [PW.4]
+    owasp_asvs_mapping: [V2]
+    owasp_masvs_mapping: []
+    last_executed_at: null
+    last_evidence_at: null
+    evidence_refs: []
+    exceptions: []
+    next_review_at: null
+
+  - control_id: COST-LEAN-01
+    name: production-lean excludes expensive scale/enterprise resources
+    description: >
+      The production-lean profile forbids MSK, ElastiCache, Neptune, ClickHouse,
+      dedicated ML, frontend ECS, legacy RDS, and NAT (unless explicitly
+      enabled). The canonical policy is data-validated now; Terraform-plan
+      enforcement lands in the deployment-profile PR (ledger FT-9).
+    control_family: cost-governance
+    owner: platform
+    scope: infrastructure
+    environments: [production-lean]
+    frequency: per-release
+    implementation_type: detective
+    status: designed
+    required_evidence: [config/deployment_profiles.yaml, scripts/release/check_cost_policy.py]
+    validator: make validate-cost-policy
+    failure_severity: P0
+    policy_references: [config/deployment_profiles.yaml]
+    soc2_mapping: []
+    nist_csf_mapping: [ID.AM-1]
+    nist_ssdf_mapping: []
+    owasp_asvs_mapping: []
+    owasp_masvs_mapping: []
+    last_executed_at: null
+    last_evidence_at: null
+    evidence_refs: []
+    exceptions:
+      - Terraform-plan level enforcement deferred to ledger item FT-9-TERRAFORM-PROFILES.
+    next_review_at: null
+
+  - control_id: REL-EVIDENCE-01
+    name: Release evidence is generated through repo tooling
+    description: >
+      Baseline and evidence bundles are produced by scripts/release/ and the
+      founding-tenant release gate, not asserted by hand.
+    control_family: release-governance
+    owner: platform
+    scope: ci-cd
+    environments: [staging, production-lean]
+    frequency: per-release
+    implementation_type: detective
+    status: implemented
+    required_evidence: [scripts/release/collect_baseline.py, scripts/release/collect_evidence.py]
+    validator: make founding-tenant-release-gate
+    failure_severity: P1
+    policy_references: [config/implementation_ledger.yaml]
+    soc2_mapping: [CC7.2]
+    nist_csf_mapping: [DE.CM-1]
+    nist_ssdf_mapping: [PS.3]
+    owasp_asvs_mapping: []
+    owasp_masvs_mapping: []
+    last_executed_at: null
+    last_evidence_at: null
+    evidence_refs: []
+    exceptions: []
+    next_review_at: null

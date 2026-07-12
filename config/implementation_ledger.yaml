@@ -1,0 +1,319 @@
+# =============================================================================
+# Aether — Founding-Tenant Production Implementation Ledger
+#
+# The canonical, honest record of the FOUNDING_TENANT_PRODUCTION release train.
+# Each item maps to a monoprompt PR. This session implements PR 0 (control
+# spine) and PR 1 (trust containment); every other PR is recorded here as a
+# sequenced follow-up with `status: not_started` and its blockers. Nothing is
+# marked complete that is not actually implemented and validated in-repo.
+#
+# Validated by scripts/release/check_foundation.py.
+#
+# severities:      P0 | P1 | P2 | P3
+# release_class:   founding_tenant_release_blocker | general_availability_blocker
+#                  | enterprise_ga_blocker | scale_blocker | audit_readiness_blocker
+#                  | external_action | informational
+# status:          not_started | reproduced | test_added | implementation_in_progress
+#                  | implemented | targeted_tests_pass | subsystem_tests_pass
+#                  | full_gate_pass | externally_blocked | verified_complete
+# =============================================================================
+
+schema_version: 1
+release_train: FOUNDING_TENANT_PRODUCTION
+canonical_source: config/implementation_ledger.yaml
+
+items:
+
+  # ---- PR 0 — Control spine (this session) -------------------------------
+  - id: FT-0-CONTROL-SPINE
+    title: Baseline, ledger, posture, control catalog, and founding-tenant gates
+    domain: release-governance
+    severity: P0
+    release_class: founding_tenant_release_blocker
+    customer_impact: Establishes the auditable control plane every other item reports through.
+    current_behavior: No root config/ ledger, posture, control catalog, deployment-profile data, or founding-tenant gates existed.
+    required_behavior: Canonical ledger + control catalog + posture + deployment-profile matrix + release/validation scripts + Make gates exist and validate.
+    affected_paths:
+      - config/implementation_ledger.yaml
+      - config/control_catalog.yaml
+      - config/posture/founding_tenant_production.yaml
+      - config/deployment_profiles.yaml
+      - scripts/release/
+      - Makefile
+      - docs/FOUNDING-TENANT-PRODUCTION.md
+      - docs/DEPLOYMENT-PROFILES.md
+      - docs/RELEASE-EVIDENCE.md
+    tests_required: [make validate-profile-config, make validate-cost-policy, make audit-readiness-check]
+    evidence_required: [collect_evidence.py bundle index]
+    docs_required: [docs/FOUNDING-TENANT-PRODUCTION.md, docs/DEPLOYMENT-PROFILES.md, docs/RELEASE-EVIDENCE.md]
+    owner: platform
+    status: implemented
+    blocked_by: []
+    exception: null
+    last_verified_commit: null
+
+  - id: FT-COST-POLICY-DATA
+    title: Canonical production-lean cost policy (forbidden expensive resources)
+    domain: cost
+    severity: P0
+    release_class: founding_tenant_release_blocker
+    customer_impact: Fixes the target that production-lean must exclude MSK/Neptune/ElastiCache/ClickHouse/dedicated-ML/frontend-ECS/NAT.
+    current_behavior: Cost levers existed in Terraform but no single canonical forbidden-resource policy.
+    required_behavior: deployment_profiles.yaml declares production-lean forbidden + required resources; a validator enforces well-formedness.
+    affected_paths: [config/deployment_profiles.yaml, scripts/release/check_cost_policy.py]
+    tests_required: [make validate-cost-policy]
+    evidence_required: [cost policy validation output]
+    docs_required: [docs/DEPLOYMENT-PROFILES.md]
+    owner: platform
+    status: implemented
+    blocked_by: []
+    exception: null
+    last_verified_commit: null
+
+  # ---- PR 1 — Trust containment (this session) ---------------------------
+  - id: FT-1-NO-HUMAN-API-KEYS
+    title: Human login / verify / SSO / recovery must not mint reusable API keys
+    domain: trust-security
+    severity: P0
+    release_class: founding_tenant_release_blocker
+    customer_impact: Removes long-lived analytics-scoped keys handed out on every human login — the primary production auth blocker.
+    current_behavior: verify-email, login, sso/callback return an ak_ key; legacy /v1/tenants returns one; recovery emails one.
+    required_behavior: Under the founding-tenant posture, human paths issue durable server-side sessions (no reusable key); legacy registration is contained; recovery never emails a key.
+    affected_paths:
+      - Backend Architecture/aether-backend/services/auth/routes.py
+      - Backend Architecture/aether-backend/services/registration/routes.py
+      - Backend Architecture/aether-backend/services/auth/sessions/
+      - Backend Architecture/aether-backend/middleware/middleware.py
+      - Backend Architecture/aether-backend/config/settings.py
+    tests_required: [tests/unit/test_trust_containment.py]
+    evidence_required: [pytest trust-containment output]
+    docs_required: [docs/FOUNDING-TENANT-PRODUCTION.md]
+    owner: trust
+    status: implemented
+    blocked_by: []
+    exception: null
+    last_verified_commit: null
+
+  - id: FT-1-SESSIONS-CREDENTIALS
+    title: Durable sessions, scoped service credentials, non-secret public ingest identifiers
+    domain: trust-security
+    severity: P0
+    release_class: founding_tenant_release_blocker
+    customer_impact: Separates human sessions from machine credentials and public ingest identifiers.
+    current_behavior: Only reusable API keys existed; no durable session or credential-class separation.
+    required_behavior: Server-side sessions (idle+absolute expiry, revocable) + scoped/rotatable service credentials + ingest-only public identifiers, behind staged-activation flags.
+    affected_paths:
+      - Backend Architecture/aether-backend/services/auth/sessions/
+      - Backend Architecture/aether-backend/alembic/versions/
+    tests_required: [tests/unit/test_trust_containment.py]
+    evidence_required: [pytest trust-containment output, alembic upgrade/downgrade/upgrade]
+    docs_required: [docs/FOUNDING-TENANT-PRODUCTION.md]
+    owner: trust
+    status: implemented
+    blocked_by: []
+    exception: null
+    last_verified_commit: null
+
+  # ---- PR 2..PR 10 — sequenced follow-ups (NOT implemented this session) --
+  - id: FT-2-ROUTE-REGISTRY
+    title: Route policy registry, default-deny, Kyber operator gate, status enforcement
+    domain: trust-security
+    severity: P0
+    release_class: founding_tenant_release_blocker
+    customer_impact: Makes authorization a protocol with default-deny for unknown production routes.
+    current_behavior: Governance is scattered (PolicyEngine, governance decisions, delegation) with no unified mounted-route registry; governance default-allow in one path.
+    required_behavior: Every mounted route declared in a registry; unknown production routes deny; Kyber routes require operator identity; sensitive decisions audited.
+    affected_paths:
+      - Backend Architecture/aether-backend/services/security/
+      - Backend Architecture/aether-backend/services/kyber_operator/
+      - config/route_registry.yaml
+    tests_required: [route registry coverage tests]
+    evidence_required: [route registry validation output]
+    docs_required: [docs/TRUST-ASSURANCE-PLANE.md]
+    owner: trust
+    status: not_started
+    blocked_by: [FT-1-NO-HUMAN-API-KEYS]
+    exception: null
+    last_verified_commit: null
+
+  - id: FT-3-AUTHORITATIVE-CONSENT
+    title: Server-authoritative consent enforcement at ingestion
+    domain: privacy-consent
+    severity: P0
+    release_class: founding_tenant_release_blocker
+    customer_impact: Absence of consent must not be permission; SDK snapshots become evidence, not authority.
+    current_behavior: /v1/batch trusts the SDK per-event consent snapshot; server ConsentRepository is consulted only downstream.
+    required_behavior: Ingestion loads server consent receipts + tenant compliance profile, enforces lawful processing with stable rejection codes.
+    affected_paths:
+      - Backend Architecture/aether-backend/services/ingestion/batch.py
+      - Backend Architecture/aether-backend/shared/privacy/consent_enforcement.py
+    tests_required: [consent enforcement tests]
+    evidence_required: [privacy test output]
+    docs_required: [docs/CONSENT.md, docs/PRIVACY.md]
+    owner: privacy
+    status: not_started
+    blocked_by: [FT-2-ROUTE-REGISTRY]
+    exception: null
+    last_verified_commit: null
+
+  - id: FT-4-RUNTIME-ROLES
+    title: Runtime roles, profile/backend selectors, API/worker separation
+    domain: execution
+    severity: P1
+    release_class: general_availability_blocker
+    customer_impact: The API process must not start every worker/consumer/cron in production.
+    current_behavior: FastAPI lifespan starts consumers, supervised workers, and crons in-process.
+    required_behavior: AETHER_ROLE + explicit backend selectors; role-specific entrypoints; production rejects role=all and memory backends.
+    affected_paths:
+      - Backend Architecture/aether-backend/main.py
+      - Backend Architecture/aether-backend/services/runtime/
+      - Backend Architecture/aether-backend/config/settings.py
+    tests_required: [worker role split tests]
+    evidence_required: [role startup tests]
+    docs_required: [docs/BACKEND-EXECUTION-MODEL.md]
+    owner: platform
+    status: not_started
+    blocked_by: [FT-1-SESSIONS-CREDENTIALS]
+    exception: null
+    last_verified_commit: null
+
+  - id: FT-5-INGESTION-V2
+    title: Typed Bronze + transactional outbox + /v1/batch V2
+    domain: ingestion
+    severity: P0
+    release_class: founding_tenant_release_blocker
+    customer_impact: Durable, bulk, idempotent ingestion; Redis not a correctness source.
+    current_behavior: /v1/batch does per-event Bronze inserts, per-event Redis SET NX, fire-and-forget identity resolution, in-request broker publish.
+    required_behavior: Bulk typed Bronze + transactional outbox in one transaction; DB uniqueness is correctness; feature-flagged V2 with canary.
+    affected_paths:
+      - Backend Architecture/aether-backend/services/ingestion/batch.py
+      - Backend Architecture/aether-backend/repositories/lake.py
+      - Backend Architecture/aether-backend/alembic/versions/
+    tests_required: [bulk bronze + outbox transaction tests]
+    evidence_required: [ingestion roundtrip output]
+    docs_required: [docs/INGESTION_CONTRACT relatives]
+    owner: ingestion
+    status: not_started
+    blocked_by: [FT-4-RUNTIME-ROLES]
+    exception: null
+    last_verified_commit: null
+
+  - id: FT-6-OUTBOX-RELAY
+    title: Outbox relay, stream workers, graph/attribution/materialization batching
+    domain: execution
+    severity: P1
+    release_class: general_availability_blocker
+    customer_impact: Downstream work moves out of the request lifecycle into replayable workers.
+    current_behavior: Identity resolution and downstream work partly ride the request; no dedicated relay for ingestion outbox.
+    required_behavior: FOR UPDATE SKIP LOCKED relay with leases/backoff/dead-letter; idempotent batched workers.
+    affected_paths:
+      - Backend Architecture/aether-backend/services/runtime/
+      - Backend Architecture/aether-backend/shared/outbox.py
+    tests_required: [relay + worker tests]
+    evidence_required: [worker tests]
+    docs_required: [docs/BACKEND-EXECUTION-MODEL.md]
+    owner: platform
+    status: not_started
+    blocked_by: [FT-5-INGESTION-V2]
+    exception: null
+    last_verified_commit: null
+
+  - id: FT-7-STORAGE-DESCRIPTORS
+    title: Storage descriptors, policies, manager, object protocol, reconciler
+    domain: elastic-data-plane
+    severity: P1
+    release_class: general_availability_blocker
+    customer_impact: Foundation for compacting high-volume data with lineage/checksum/retention.
+    current_behavior: No object-storage abstraction, descriptor layer, or storage policy registry; medallion is logical over Postgres.
+    required_behavior: Storage policy per persistent resource type + universal descriptor + manager + reconciler; CI fails if a persistent type lacks a policy.
+    affected_paths:
+      - Backend Architecture/aether-backend/shared/storage/
+      - config/storage_policies.yaml
+    tests_required: [storage descriptor + policy coverage tests]
+    evidence_required: [storage policy validation output]
+    docs_required: [docs/ELASTIC-DATA-PLANE.md]
+    owner: data
+    status: not_started
+    blocked_by: [FT-5-INGESTION-V2]
+    exception: null
+    last_verified_commit: null
+
+  - id: FT-8-OBJECT-BACKED-BRONZE
+    title: Object-backed Bronze, historical routing, retention/deletion/DSR/legal-hold
+    domain: elastic-data-plane
+    severity: P1
+    release_class: general_availability_blocker
+    customer_impact: Compacts raw/historical payloads to S3; lifecycle propagates across stores.
+    current_behavior: All Bronze payloads live close to hot DB paths; no cross-store retention/deletion propagation.
+    required_behavior: Externalized packed objects with hot searchable metadata; hydration with checksum; retention/deletion/legal-hold/DSR across stores.
+    affected_paths:
+      - Backend Architecture/aether-backend/shared/storage/
+      - Backend Architecture/aether-backend/repositories/lake.py
+    tests_required: [object-backed bronze + retention tests]
+    evidence_required: [DSR lifecycle tests]
+    docs_required: [docs/ELASTIC-DATA-PLANE.md]
+    owner: data
+    status: not_started
+    blocked_by: [FT-7-STORAGE-DESCRIPTORS]
+    exception: null
+    last_verified_commit: null
+
+  - id: FT-9-TERRAFORM-PROFILES
+    title: Terraform deployment profiles, static frontends, cost policy enforcement, immutable promotion
+    domain: cost
+    severity: P0
+    release_class: founding_tenant_release_blocker
+    customer_impact: Makes cost reduction real and enforceable; static frontends replace ECS UI services in lean mode.
+    current_behavior: Single flat root Terraform with a single `environment` var; deploy pushes mutable :latest and auto-applies to production on push to main; UI intended as ECS.
+    required_behavior: deployment_profile variable + profiles/*.tfvars; production-lean plan excludes forbidden resources; static S3/CloudFront frontends; immutable artifact promotion.
+    affected_paths:
+      - AWS Deployment/aether-aws/terraform/
+      - .github/workflows/
+    tests_required: [terraform profile validation, cost policy terraform-plan gate]
+    evidence_required: [terraform validation output]
+    docs_required: [docs/DEPLOYMENT-PROFILES.md, docs/PRODUCTION-DEPLOYMENT.md]
+    owner: platform
+    status: not_started
+    blocked_by: [FT-COST-POLICY-DATA]
+    exception: null
+    last_verified_commit: null
+
+  - id: FT-10-SDK-CONFORMANCE-EVIDENCE
+    title: SDK conformance, operator/tenant surfaces, evidence bundle, docs, final hardening
+    domain: release-governance
+    severity: P1
+    release_class: general_availability_blocker
+    customer_impact: Parity across SDKs, operator/tenant surfaces, and a generated evidence bundle.
+    current_behavior: Frontends still expect api_key from login; evidence bundle assembly is partial.
+    required_behavior: SDK parity/conformance; Aether/Kyber surfaces; full evidence bundle; frontends migrated to sessions.
+    affected_paths:
+      - packages/
+      - frontend/
+      - scripts/release/collect_evidence.py
+    tests_required: [SDK parity/conformance suites]
+    evidence_required: [evidence bundle]
+    docs_required: [docs/RELEASE-EVIDENCE.md]
+    owner: sdk
+    status: not_started
+    blocked_by: [FT-1-NO-HUMAN-API-KEYS]
+    exception: null
+    last_verified_commit: null
+
+  # ---- External actions (outside repo-executable completion) --------------
+  - id: FT-EXT-ATTESTATION
+    title: External SOC 2 / penetration test / legal review
+    domain: external
+    severity: P2
+    release_class: external_action
+    customer_impact: Required for certification claims; not part of repo-executable completion.
+    current_behavior: No external assessment performed.
+    required_behavior: Engage external assessors; produce artifacts before any certification claim.
+    affected_paths: []
+    tests_required: []
+    evidence_required: [external assessor artifacts]
+    docs_required: []
+    owner: gtm
+    status: externally_blocked
+    blocked_by: []
+    exception: External action — must never be claimed as complete from within the repo.
+    last_verified_commit: null

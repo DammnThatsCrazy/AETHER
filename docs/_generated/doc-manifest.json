@@ -922,6 +922,21 @@
       "canonical_owner": "platform@aether"
     },
     {
+      "path": "docs/DEPLOYMENT-PROFILES.md",
+      "title": "Deployment Profiles",
+      "slug": "operations/deployment-profiles",
+      "section": "operations",
+      "visibility": "I",
+      "audience": [
+        "ops",
+        "architect"
+      ],
+      "status": "stable",
+      "estimated_read_minutes": 6,
+      "toc_depth": 3,
+      "canonical_owner": "platform@aether"
+    },
+    {
       "path": "docs/DEPLOYMENT-READINESS.md",
       "title": "Deployment Readiness",
       "slug": "enterprise/deployment-readiness",
@@ -1186,6 +1201,22 @@
       ],
       "status": "stable",
       "since_version": "9.0.0"
+    },
+    {
+      "path": "docs/FOUNDING-TENANT-PRODUCTION.md",
+      "title": "Founding-Tenant Production Posture",
+      "slug": "operations/founding-tenant-production",
+      "section": "operations",
+      "visibility": "I",
+      "audience": [
+        "ops",
+        "architect",
+        "security"
+      ],
+      "status": "stable",
+      "estimated_read_minutes": 7,
+      "toc_depth": 3,
+      "canonical_owner": "platform@aether"
     },
     {
       "path": "docs/FRAUD-NETWORK-INTELLIGENCE.md",
@@ -2380,6 +2411,22 @@
         "AETHER_DATA_QUALITY_ENABLED",
         "AETHER_RECOMMENDATIONS_ENABLED"
       ]
+    },
+    {
+      "path": "docs/RELEASE-EVIDENCE.md",
+      "title": "Release Evidence",
+      "slug": "operations/release-evidence",
+      "section": "operations",
+      "visibility": "I",
+      "audience": [
+        "ops",
+        "compliance",
+        "security"
+      ],
+      "status": "stable",
+      "estimated_read_minutes": 4,
+      "toc_depth": 3,
+      "canonical_owner": "platform@aether"
     },
     {
       "path": "docs/RELIABILITY-OPERATIONS.md",
