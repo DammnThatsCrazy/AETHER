@@ -128,9 +128,12 @@ async def test_tenant_routes_enforce_permissions_and_not_found(monkeypatch):
 @pytest.mark.anyio
 async def test_kyber_routes_require_platform_admin_and_record_operator_action():
     body = OperatorActionRequest(tenant_id="tenant-a", action="reconcile_position", scope={"position_epoch_id": "epoch-1"})
-    admin = FakeTenant("operator", permissions={"derivatives:connector:admin"}, is_platform_admin=True)
-    response = await kyber_derivatives_operator_action(body, request(admin))
+    # Operator identity is now the canonical kyber:operator grant (the never-set
+    # is_platform_admin flag was removed); the domain admin permission is the
+    # secondary requirement.
+    operator = FakeTenant("operator", permissions={"kyber:operator", "derivatives:connector:admin"})
+    response = await kyber_derivatives_operator_action(body, request(operator))
     assert response["data"]["audited"] is True
-    non_admin = FakeTenant("operator", permissions={"derivatives:connector:admin"}, is_platform_admin=False)
+    non_operator = FakeTenant("operator", permissions={"derivatives:connector:admin"})
     with pytest.raises(ForbiddenError):
-        await kyber_derivatives_operator_action(body, request(non_admin))
+        await kyber_derivatives_operator_action(body, request(non_operator))

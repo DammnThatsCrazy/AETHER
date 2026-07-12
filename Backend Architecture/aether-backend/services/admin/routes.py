@@ -952,9 +952,19 @@ _kyber_playbook_runs = PlaybookRunRepository()
 _kyber_feedback = RecommendationFeedbackRepository()
 
 
+from services.security.request_context import require_kyber_operator as _canonical_kyber_gate
+
+
 def _require_kyber_operator(request: Request) -> None:
-    """Require Olympus Labs operator/admin access for internal Kyber views."""
-    request.state.tenant.require_permission("admin")
+    """Require Olympus operator access via the canonical fail-closed gate.
+
+    A regular Aether tenant — even one holding the ``admin`` permission — is NOT
+    a Kyber operator (the strategic ``/kyber/*`` views expose cross-tenant
+    intelligence). Only the ``kyber:operator`` grant or the operator tenant-id
+    allowlist passes. (The name is also re-bound to the canonical gate later in
+    this module for the agentic block; both paths resolve to the same gate.)
+    """
+    _canonical_kyber_gate(request)
 
 
 async def _kyber_observability(window: Window = "30d") -> KyberStrategicObservability:

@@ -23,12 +23,17 @@ from services.stablecoin.registry import StablecoinRegistry
 admin_router = APIRouter(prefix="/v1/admin/kyber/stablecoins", tags=["kyber-stablecoins"])
 
 
+from services.security.request_context import is_kyber_operator as _is_kyber_operator
+
+
 def _gate(request: Request) -> None:
     require_flag(settings.stablecoin.kyber_enabled, "Kyber Stablecoin Ops")
     tenant = request.state.tenant
-    tenant.require_permission("read")
-    if not getattr(tenant, "is_platform_admin", False):
-        raise ForbiddenError("Kyber operator permission required")
+    # Canonical fail-closed operator check (replaces the never-set
+    # is_platform_admin flag): only kyber:operator grant or the operator
+    # tenant-id allowlist passes; Aether tenants (incl. Role.ADMIN) are denied.
+    if not _is_kyber_operator(tenant):
+        raise ForbiddenError("Kyber operator access required; Aether tenants may not access Kyber")
     tenant.require_permission(Permissions.STABLECOINS_OPERATOR)
 
 
