@@ -192,15 +192,25 @@ items:
     required_behavior: Bulk typed Bronze + transactional outbox in one transaction; DB uniqueness is correctness; feature-flagged V2 with canary.
     affected_paths:
       - Backend Architecture/aether-backend/services/ingestion/batch.py
-      - Backend Architecture/aether-backend/repositories/lake.py
-      - Backend Architecture/aether-backend/alembic/versions/
-    tests_required: [bulk bronze + outbox transaction tests]
-    evidence_required: [ingestion roundtrip output]
-    docs_required: [docs/INGESTION_CONTRACT relatives]
+      - Backend Architecture/aether-backend/services/ingestion/bronze_bulk.py
+      - Backend Architecture/aether-backend/config/settings.py
+      - Backend Architecture/aether-backend/alembic/versions/20260724_ingestion_v2.py
+    tests_required: [tests/unit/test_ingestion_v2.py]
+    evidence_required: [pytest ingestion v2 output, alembic upgrade/downgrade/upgrade round-trip]
+    docs_required: [docs/source-of-truth/INGESTION_CONTRACT.md]
     owner: ingestion
-    status: not_started
-    blocked_by: [FT-4-RUNTIME-ROLES]
-    exception: null
+    status: implemented
+    blocked_by: []
+    exception: >
+      Additive and flag-gated OFF by default (INGESTION_V2_ENABLED /
+      INGESTION_V2_CANARY_TENANTS) — the V1 /v1/batch path is unchanged. The V2
+      path writes typed Bronze + the transactional outbox atomically; DB
+      uniqueness (tenant_id,event_id,schema_version) is the idempotency source of
+      truth (Redis is not consulted). Deferred to PR 6: the outbox RELAY worker
+      that drains event_outbox to the bus and the worker-side stream processing
+      (identity resolution + downstream fan-out) that V1 currently runs in-request.
+      Deployment-context validation (External Agent Telemetry Plane, flag-gated
+      OFF) is not re-run on the V2 branch.
     last_verified_commit: null
 
   - id: FT-6-OUTBOX-RELAY

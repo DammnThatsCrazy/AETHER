@@ -520,6 +520,27 @@ class RouteRegistryConfig:
 
 
 # ---------------------------------------------------------------------------
+# Ingestion V2 (PR 5) — typed Bronze + transactional outbox for /v1/batch.
+#
+# Canary rollout, default OFF. When `enabled` is True (or the request's tenant
+# is listed in `canary_tenants`), POST /v1/batch routes to the V2 path:
+# bulk-insert typed Bronze + the transactional outbox in ONE transaction, with
+# DB uniqueness (not Redis) as the idempotency source of truth. The existing V1
+# path is unchanged and used for every other tenant. `outbox_relay_enabled` is
+# config-only here; the relay WORKER that drains event_outbox to the bus is a
+# later PR (PR 6).
+# ---------------------------------------------------------------------------
+
+@dataclass(frozen=True)
+class IngestionV2Config:
+    enabled: bool = _env_bool("INGESTION_V2_ENABLED", False)
+    canary_tenants: list[str] = field(
+        default_factory=lambda: _env_list("INGESTION_V2_CANARY_TENANTS", "")
+    )
+    outbox_relay_enabled: bool = _env_bool("OUTBOX_RELAY_ENABLED", False)
+
+
+# ---------------------------------------------------------------------------
 # Data Quality, Drift Detection & Graph Intelligence Reliability
 # ---------------------------------------------------------------------------
 
@@ -905,6 +926,7 @@ class Settings:
     security_governance: SecurityGovernanceConfig = field(default_factory=SecurityGovernanceConfig)
     trust_plane: TrustPlaneConfig = field(default_factory=TrustPlaneConfig)
     route_registry: RouteRegistryConfig = field(default_factory=RouteRegistryConfig)
+    ingestion_v2: IngestionV2Config = field(default_factory=IngestionV2Config)
     quicknode: QuickNodeConfig = field(default_factory=QuickNodeConfig)
     stablecoin_intelligence: StablecoinIntelligenceConfig = field(default_factory=StablecoinIntelligenceConfig)
 
