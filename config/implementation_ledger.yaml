@@ -151,14 +151,26 @@ items:
     required_behavior: Ingestion loads server consent receipts + tenant compliance profile, enforces lawful processing with stable rejection codes.
     affected_paths:
       - Backend Architecture/aether-backend/services/ingestion/batch.py
+      - Backend Architecture/aether-backend/services/consent/authority.py
       - Backend Architecture/aether-backend/shared/privacy/consent_enforcement.py
-    tests_required: [consent enforcement tests]
-    evidence_required: [privacy test output]
+      - Backend Architecture/aether-backend/alembic/versions/20260723_consent_authority.py
+      - Backend Architecture/aether-backend/config/settings.py
+    tests_required: [tests/unit/test_consent_authority.py]
+    evidence_required: [pytest consent-authority output, alembic upgrade/downgrade/upgrade]
     docs_required: [docs/CONSENT.md, docs/PRIVACY.md]
     owner: privacy
-    status: not_started
-    blocked_by: [FT-2-ROUTE-REGISTRY]
-    exception: null
+    status: implemented
+    blocked_by: []
+    exception: >
+      Deferred to follow-ups (see services/consent/authority.py DEFERRED note):
+      request-time DNT/GPC header suppression and per-event fingerprint-signal
+      detection. GPC/DNT and fingerprinting authorization ARE enforced from the
+      recorded consent-receipt / tenant-compliance-profile state; wiring the live
+      Sec-GPC / DNT request headers and request-time fingerprint payload
+      detection into the decision functions is the remaining work. The
+      ingestion hot-path enforcement ships behind
+      AUTHORITATIVE_CONSENT_ENFORCEMENT_ENABLED (default ON in staging/prod, OFF
+      in local/dev).
     last_verified_commit: null
 
   - id: FT-4-RUNTIME-ROLES
