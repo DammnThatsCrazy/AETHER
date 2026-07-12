@@ -50,6 +50,7 @@ class TrainingDataGate:
         model_id: str,
         tenant_id: Optional[str] = None,
         granted_training_opt_ins: Iterable[str] = (),
+        model_allowed_purposes: Optional[Iterable[str]] = None,
     ) -> TrainingDataDecision:
         opt_ins = set(granted_training_opt_ins or [])
         source_purposes = [p for p in (record.get("source_purposes") or []) if p]
@@ -63,7 +64,13 @@ class TrainingDataGate:
             or record.get("event_id")
             or "unknown"
         )
-        model_scope = set(policy.allowed_training_purposes(model_id))
+        # Explicit scope override wins; otherwise resolve from the ML registry.
+        scope_src = (
+            model_allowed_purposes
+            if model_allowed_purposes is not None
+            else policy.allowed_training_purposes(model_id)
+        )
+        model_scope = set(scope_src)
 
         reasons: list[str] = []
         missing_opt_in: list[str] = []
@@ -114,6 +121,7 @@ class TrainingDataGate:
         model_id: str,
         tenant_id: Optional[str] = None,
         granted_training_opt_ins: Iterable[str] = (),
+        model_allowed_purposes: Optional[Iterable[str]] = None,
         persist: bool = True,
     ) -> TrainingDataGateResult:
         result = TrainingDataGateResult(model_id=model_id, tenant_id=tenant_id)
@@ -123,6 +131,7 @@ class TrainingDataGate:
                 model_id=model_id,
                 tenant_id=tenant_id,
                 granted_training_opt_ins=granted_training_opt_ins,
+                model_allowed_purposes=model_allowed_purposes,
             )
             if decision.admitted:
                 result.admitted.append(decision)

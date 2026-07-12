@@ -56,11 +56,17 @@ def test_consent_registry_training_semantics():
 
 
 # --------------------------------------------------------------- training gate
+# A model id NOT in the ML registry, so policy.allowed_training_purposes() is
+# empty and these tests deterministically exercise the consent-registry rules
+# regardless of whether the ML package is importable in the running suite.
+UNSCOPED_MODEL = "gov_unscoped_test_model"
+
+
 def test_training_gate_quarantines_non_trainable_purpose():
     gate = TrainingDataGate()
     d = gate.evaluate_record(
         {"record_ref": "r1", "source_purposes": ["web3"]},
-        model_id="churn_prediction",
+        model_id=UNSCOPED_MODEL,
     )
     assert d.admitted is False
     assert "purpose_forbids_training:web3" in d.quarantine_reasons
@@ -70,7 +76,7 @@ def test_training_gate_requires_separate_opt_in():
     gate = TrainingDataGate()
     without = gate.evaluate_record(
         {"record_ref": "r2", "source_purposes": ["financial_activity"]},
-        model_id="ltv_prediction",
+        model_id=UNSCOPED_MODEL,
     )
     assert without.admitted is False
     assert "separate_opt_in_required:financial_activity" in without.quarantine_reasons
@@ -78,7 +84,7 @@ def test_training_gate_requires_separate_opt_in():
 
     with_opt_in = gate.evaluate_record(
         {"record_ref": "r2", "source_purposes": ["financial_activity"]},
-        model_id="ltv_prediction",
+        model_id=UNSCOPED_MODEL,
         granted_training_opt_ins=["financial_activity"],
     )
     assert with_opt_in.admitted is True
@@ -88,14 +94,34 @@ def test_training_gate_admits_trainable_purpose_and_no_purpose_fails_closed():
     gate = TrainingDataGate()
     ok = gate.evaluate_record(
         {"record_ref": "r3", "source_purposes": ["analytics"]},
-        model_id="intent_prediction",
+        model_id=UNSCOPED_MODEL,
     )
     assert ok.admitted is True
     assert ok.quarantine_reasons == []
 
-    missing = gate.evaluate_record({"record_ref": "r4"}, model_id="intent_prediction")
+    missing = gate.evaluate_record({"record_ref": "r4"}, model_id=UNSCOPED_MODEL)
     assert missing.admitted is False
     assert "no_source_purpose" in missing.quarantine_reasons
+
+
+def test_training_gate_enforces_model_purpose_scope():
+    # A model with an explicit allowed_training_purposes scope quarantines any
+    # source purpose outside that scope (even an otherwise-trainable one).
+    gate = TrainingDataGate()
+    d = gate.evaluate_record(
+        {"record_ref": "r6", "source_purposes": ["marketing"]},  # trainable, but out of scope
+        model_id="scoped_model",
+        model_allowed_purposes=["analytics"],
+    )
+    assert d.admitted is False
+    assert "purpose_not_allowed_for_model:marketing" in d.quarantine_reasons
+    # In-scope purpose is admitted.
+    ok = gate.evaluate_record(
+        {"record_ref": "r7", "source_purposes": ["analytics"]},
+        model_id="scoped_model",
+        model_allowed_purposes=["analytics"],
+    )
+    assert ok.admitted is True
 
 
 def test_identity_derived_label_quarantine():
@@ -103,7 +129,7 @@ def test_identity_derived_label_quarantine():
     bad = gate.evaluate_record(
         {"record_ref": "r5", "label_source": "identity_resolution",
          "source_purposes": ["credit"]},
-        model_id="identity_resolution",
+        model_id=UNSCOPED_MODEL,
     )
     assert bad.admitted is False
     assert bad.identity_derived_label is True
@@ -118,7 +144,7 @@ async def test_training_gate_partition_persists_quarantine():
             {"record_ref": "a", "source_purposes": ["analytics"]},
             {"record_ref": "b", "source_purposes": ["web3"]},
         ],
-        model_id="churn_prediction",
+        model_id=UNSCOPED_MODEL,
         tenant_id="t1",
     )
     assert result.admitted_count == 1
