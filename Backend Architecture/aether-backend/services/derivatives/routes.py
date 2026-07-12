@@ -41,12 +41,18 @@ def _require_derivatives_export(request: Request) -> None:
         tenant.require_permission("derivatives:export")
 
 
+from services.security.request_context import is_kyber_operator as _is_kyber_operator
+
+
 def _require_kyber_operator(request: Request) -> None:
     tenant = request.state.tenant
+    # Canonical fail-closed operator check (replaces the never-set
+    # is_platform_admin flag): only kyber:operator grant or the operator
+    # tenant-id allowlist passes; Aether tenants (incl. Role.ADMIN) are denied.
+    if not _is_kyber_operator(tenant):
+        raise ForbiddenError("Kyber operator access required; Aether tenants may not access Kyber")
     if hasattr(tenant, "require_permission"):
         tenant.require_permission("derivatives:connector:admin")
-    if not getattr(tenant, "is_platform_admin", False):
-        raise ForbiddenError("Kyber derivatives operator permission required")
 
 
 @router.get("/overview")

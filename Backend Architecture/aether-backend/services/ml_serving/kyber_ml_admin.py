@@ -50,9 +50,17 @@ def _get_client() -> httpx.AsyncClient:
     return _http_client
 
 
+from services.security.request_context import require_kyber_operator as _canonical_kyber_gate
+
+
 def _require_kyber_operator(request: Request) -> None:
-    """Require admin/Kyber operator access."""
-    request.state.tenant.require_permission("admin")
+    """Require Olympus operator access via the canonical fail-closed gate.
+
+    A regular Aether tenant — even one holding the ``admin`` permission or
+    ``Role.ADMIN`` — is NOT a Kyber operator. Only the configured
+    ``kyber:operator`` grant or the operator tenant-id allowlist passes.
+    """
+    _canonical_kyber_gate(request)
 
 
 def _get_registry_models() -> list[dict[str, Any]]:

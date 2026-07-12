@@ -248,6 +248,13 @@ def register_middleware(app: FastAPI) -> None:
                 return JSONResponse(status_code=e.code.value, content=e.to_dict())
             request.state.tenant = context
             request.state.tenant_id = context.tenant_id
+            # PR 2 route policy hook (observe by default; enforced mode denies
+            # unclassified / Kyber-mismatch routes). Never raises.
+            _policy_denial = _evaluate_route_policy(request, request.url.path, context)
+            if _policy_denial is not None:
+                return JSONResponse(
+                    status_code=_policy_denial.code.value, content=_policy_denial.to_dict()
+                )
             plan_tier = _resolve_plan_tier(context)
             request.state.plan_tier = plan_tier
             request.state.context = req_context.with_tenant(
@@ -667,6 +674,53 @@ async def _run_extraction_mesh(
 
     metrics.increment("extraction_mesh_processed")
     return None  # Request allowed to proceed
+
+
+def _evaluate_route_policy(request: Request, path: str, context) -> Optional[AetherError]:
+    """PR 2 route policy hook — authorization as protocol.
+
+    Observe-mode by DEFAULT: classifies the request against the route registry
+    and logs/metrics unclassified routes or Kyber routes reached by
+    non-operators, WITHOUT blocking (so the large router surface is not
+    destabilized). When ``route_registry_enforced`` is on, returns an
+    :class:`AetherError` to deny. Returns None to allow. Never raises — a hook
+    failure must not break request handling.
+    """
+    try:
+        from config.settings import settings as _settings
+        rr = getattr(_settings, "route_registry", None)
+        if rr is None or not rr.policy_enforcement_enabled:
+            return None
+        from services.security.route_registry import classify
+        from shared.common.common import ForbiddenError
+
+        pol = classify(path)
+        if pol is None:
+            if rr.route_registry_enforced:
+                return ForbiddenError("route not classified in policy registry")
+            logger.warning(f"route policy: unclassified route {path}")
+            try:
+                metrics.increment("route_policy_unclassified")
+            except Exception:
+                pass
+            return None
+
+        if pol.kyber_operator_required:
+            from services.security.request_context import is_kyber_operator
+            if not is_kyber_operator(context):
+                if rr.route_registry_enforced:
+                    return ForbiddenError(
+                        "Kyber operator access required; Aether tenants may not access Kyber"
+                    )
+                logger.warning(f"route policy: non-operator on kyber route {path}")
+                try:
+                    metrics.increment("route_policy_kyber_observed")
+                except Exception:
+                    pass
+        return None
+    except Exception as e:  # observe hook must never break requests
+        logger.debug(f"route policy hook error on {path}: {e}")
+        return None
 
 
 async def _authenticate_async(

@@ -497,6 +497,29 @@ class TrustPlaneConfig:
 
 
 # ---------------------------------------------------------------------------
+# Route Policy Registry (PR 2) — authorization-as-protocol.
+#
+# The per-route Kyber operator gate (services/security/request_context.py) is
+# always active. These flags govern the OPTIONAL middleware authorization hook
+# that classifies every request against config/route_registry.yaml:
+#   - policy_enforcement_enabled: run the hook at all (observe/log by default).
+#   - route_registry_enforced: when True, the hook DENIES unclassified routes and
+#     Kyber routes reached by non-operators; when False (default) it observes
+#     (logs + metrics) without blocking, so the ~180-router surface is not
+#     destabilized. The CI coverage gate (test_route_registry_coverage) is the
+#     enforced guarantee regardless of this runtime flag.
+#   - kyber_operator_gate_enforced: informational — the canonical per-route gate
+#     is unconditional; documents that operator gating is active.
+# ---------------------------------------------------------------------------
+
+@dataclass(frozen=True)
+class RouteRegistryConfig:
+    policy_enforcement_enabled: bool = _env_bool("POLICY_ENFORCEMENT_ENABLED", True)
+    route_registry_enforced: bool = _env_bool("ROUTE_REGISTRY_ENFORCED", False)
+    kyber_operator_gate_enforced: bool = _env_bool("KYBER_OPERATOR_GATE_ENFORCED", True)
+
+
+# ---------------------------------------------------------------------------
 # Data Quality, Drift Detection & Graph Intelligence Reliability
 # ---------------------------------------------------------------------------
 
@@ -881,6 +904,7 @@ class Settings:
     decision_outcome: DecisionOutcomeIntelligenceConfig = field(default_factory=DecisionOutcomeIntelligenceConfig)
     security_governance: SecurityGovernanceConfig = field(default_factory=SecurityGovernanceConfig)
     trust_plane: TrustPlaneConfig = field(default_factory=TrustPlaneConfig)
+    route_registry: RouteRegistryConfig = field(default_factory=RouteRegistryConfig)
     quicknode: QuickNodeConfig = field(default_factory=QuickNodeConfig)
     stablecoin_intelligence: StablecoinIntelligenceConfig = field(default_factory=StablecoinIntelligenceConfig)
 

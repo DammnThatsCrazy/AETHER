@@ -84,7 +84,40 @@ asserts the guarantees:
 - a revoked session fails and an inactive tenant blocks auth;
 - a public ingest identifier cannot read analytics or call admin routes.
 
+## Route policy registry & Kyber operator gate
+
+Authorization is a protocol, not scattered route logic.
+
+- **One Kyber operator gate.** Every operator/Kyber route uses the canonical
+  fail-closed `is_kyber_operator` gate (`services/security/request_context.py`),
+  which inspects the raw permission list so a `Role.ADMIN` / `admin`-permission
+  tenant is **denied**. This closed a privilege-escalation where several operator
+  routes gated on `require_permission("admin")` (exposing cross-tenant
+  intelligence) and fixed routes locked behind the never-set `is_platform_admin`
+  flag. Proven by `tests/security/test_kyber_gate_consolidation.py` and the
+  existing `tests/security/test_kyber_boundary.py`.
+- **Route policy registry.** `config/route_registry.yaml` +
+  `services/security/route_registry.py::classify(path)` derive a policy
+  (public/authed, tenant-scoped, kyber-operator-required, sensitive,
+  audit-required, risk) for every mounted route. `default_decision: deny` — a
+  route whose prefix is not classified fails
+  `tests/unit/test_route_registry_coverage.py` (the default-deny ratchet), which
+  also asserts every `/kyber` route is operator-required + audited.
+- **Runtime hook.** A middleware step (`POLICY_ENFORCEMENT_ENABLED`) classifies
+  each request; it is **observe-mode by default** (logs unclassified / Kyber
+  mismatches) and denies only when `ROUTE_REGISTRY_ENFORCED` is on, so the large
+  router surface is not destabilized. The CI coverage gate is the enforced
+  guarantee regardless.
+
 ## What is deferred
+
+The release train continues beyond this session. The implementation ledger
+records the following as `not_started` follow-ups: server-authoritative consent
+at ingestion, runtime worker separation, ingestion V2 (typed Bronze +
+transactional outbox), the elastic data plane (storage descriptors +
+object-backed Bronze), and SDK conformance + frontend session migration.
+Terraform deployment-profile enforcement is in progress on a separate branch.
+See `config/implementation_ledger.yaml`.
 
 The release train continues beyond this session. The implementation ledger
 records the following as `not_started` follow-ups: server-authoritative consent

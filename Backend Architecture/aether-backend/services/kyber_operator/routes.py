@@ -41,11 +41,18 @@ def _utc_now() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
+from services.security.request_context import require_kyber_operator as _canonical_kyber_gate
+
+
 def _require_kyber_operator(request: Request) -> None:
-    tenant = request.state.tenant
-    tenant.require_permission("read")
-    if not getattr(tenant, "is_platform_admin", False):
-        raise ForbiddenError("Kyber operator permission required")
+    """Canonical fail-closed Kyber operator gate.
+
+    Replaces the previous ``is_platform_admin`` check (a field never set on any
+    TenantContext, which locked out real operators). Now recognises operators by
+    the configured ``kyber:operator`` grant or the operator tenant-id allowlist,
+    while still denying every Aether tenant (including ``Role.ADMIN``).
+    """
+    _canonical_kyber_gate(request)
 
 
 # ── Models ─────────────────────────────────────────────────────────────────────

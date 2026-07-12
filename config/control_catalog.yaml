@@ -162,3 +162,39 @@ controls:
     evidence_refs: []
     exceptions: []
     next_review_at: null
+
+  - control_id: TRUST-KYBER-04
+    name: Kyber operator routes are gated by one fail-closed operator check
+    description: >
+      Every operator/Kyber route uses the canonical is_kyber_operator gate, which
+      inspects the raw permission list so a Role.ADMIN or admin-permission tenant
+      is denied. Closes the prior privilege-escalation where several operator
+      routes gated on require_permission("admin"), and fixes routes locked behind
+      the never-set is_platform_admin flag. Every mounted route is classified in
+      the route policy registry (default-deny at CI).
+    control_family: identity-and-access
+    owner: trust
+    scope: backend-authz
+    environments: [staging, production-lean]
+    frequency: continuous
+    implementation_type: preventive
+    status: implemented
+    required_evidence:
+      - tests/security/test_kyber_gate_consolidation.py
+      - tests/security/test_kyber_boundary.py
+      - tests/unit/test_route_registry_coverage.py
+      - config/route_registry.yaml
+    validator: make validate-route-registry
+    failure_severity: P0
+    policy_references: [config/route_registry.yaml]
+    soc2_mapping: [CC6.1, CC6.3]
+    nist_csf_mapping: [PR.AC-4, PR.AC-6]
+    nist_ssdf_mapping: [PW.4]
+    owasp_asvs_mapping: [V4]
+    owasp_masvs_mapping: []
+    last_executed_at: null
+    last_evidence_at: null
+    evidence_refs: []
+    exceptions:
+      - Runtime default-deny hook ships observe-mode by default (ROUTE_REGISTRY_ENFORCED opt-in).
+    next_review_at: null
