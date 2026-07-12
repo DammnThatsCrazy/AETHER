@@ -1,0 +1,68 @@
+# =============================================================================
+# Aether — Route Policy Registry (seed)
+#
+# Seed of the route policy registry. This session ships the canonical SCHEMA and
+# a representative set of entries so downstream work (ledger FT-2) has a stable
+# target. Full mounted-route coverage + default-deny enforcement is a follow-up
+# release-train PR — `enforcement_status: seed` states that plainly.
+#
+# Validated by scripts/release/check_route_registry.py (schema + coherence).
+# =============================================================================
+
+schema_version: 1
+canonical_source: config/route_registry.yaml
+enforcement_status: seed          # seed | enforced — full coverage lands in FT-2
+default_decision: deny            # unknown production routes must default-deny
+
+routes:
+
+  - route_id: auth.login
+    method: POST
+    path: /v1/auth/login
+    domain: auth
+    action: authenticate
+    resource_type: session
+    public: true
+    requires_auth: false
+    allowed_principal_types: [anonymous]
+    allowed_credential_classes: [none]
+    tenant_scoped: false
+    kyber_operator_required: false
+    sensitive: true
+    audit_required: true
+    required_capabilities: []
+    risk_class: medium
+
+  - route_id: ingestion.batch
+    method: POST
+    path: /v1/batch
+    domain: ingestion
+    action: ingest
+    resource_type: event
+    public: false
+    requires_auth: true
+    allowed_principal_types: [service, public_ingest]
+    allowed_credential_classes: [service_credential, public_ingest_identifier]
+    tenant_scoped: true
+    kyber_operator_required: false
+    sensitive: false
+    audit_required: false
+    required_capabilities: [ingest]
+    risk_class: low
+
+  - route_id: kyber.operator.tenant_entry
+    method: POST
+    path: /v1/kyber/operator/tenant-entry
+    domain: kyber
+    action: operator_tenant_access
+    resource_type: tenant
+    public: false
+    requires_auth: true
+    allowed_principal_types: [operator]
+    allowed_credential_classes: [human_session, service_credential]
+    tenant_scoped: false
+    kyber_operator_required: true
+    sensitive: true
+    audit_required: true
+    required_capabilities: [kyber:operator]
+    risk_class: high

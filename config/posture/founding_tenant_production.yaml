@@ -1,0 +1,74 @@
+# =============================================================================
+# Aether — Production Posture: FOUNDING_TENANT_PRODUCTION
+#
+# The posture model declares the commercial stage, permitted/prohibited data
+# classes, and which platform capabilities are enabled. It is the authority for
+# WHICH trust-plane feature flags are turned ON for this posture.
+#
+# Boundaries (enforced by policy, never overridden here): Aether targets
+# controlled founding-tenant production and enterprise-GA-COMPATIBLE
+# architecture. This file does NOT — and must never be edited to — claim
+# FedRAMP authorization, ATO, external SOC 2 certification/report coverage,
+# multi-region active-active production, classified-data handling, air-gapped
+# deployment, or completed external assessment. `external_attestation_status`
+# is never set to `report_received` by tooling.
+# =============================================================================
+
+schema_version: 1
+posture_id: founding_tenant_production
+
+# One of: internal | design_partner | founding_tenant | limited_availability |
+#         general_availability | enterprise_ga
+commercial_stage: founding_tenant
+
+# Controlled first-customer production on the cost-optimized lean profile.
+production_mode: controlled
+environment: production
+deployment_profile: production-lean
+
+# One of: not_started | readiness_in_progress | ready_for_external_assessment |
+#         assessment_in_progress | report_received
+# NEVER set to report_received without an explicit external artifact.
+external_attestation_status: not_started
+
+go_live_authority: aether-operator-approval-required
+
+# Customer lanes approved to onboard under this posture.
+approved_customer_lanes:
+  - lane_a_standard
+  - lane_b_sensitive
+
+# Data classes this posture permits for processing.
+permitted_data_classes:
+  - product_analytics
+  - marketing_engagement
+  - personalization_signals
+  - commerce_events
+  - agent_observations
+
+# Data classes explicitly prohibited under the founding-tenant posture.
+prohibited_data_classes:
+  - classified
+  - regulated_health_phi
+  - precise_biometric_identifiers
+  - government_id_numbers
+
+# Feature flags this posture turns ON. These are the PR 1 trust-plane flags:
+# under founding-tenant production the human/session/credential separation is
+# ACTIVE and human auth paths must not mint reusable API keys.
+enabled_features:
+  TRUST_PLANE_ENABLED: true
+  HUMAN_SESSIONS_ENABLED: true
+  SERVICE_CREDENTIALS_ENABLED: true
+  PUBLIC_INGEST_IDENTIFIER_ENABLED: true
+  LEGACY_TENANT_REGISTRATION_ENABLED: false
+
+# Capabilities NOT yet claimed by this posture (tracked in the ledger as
+# follow-up release-train PRs). Listed for honesty, not as enabled features.
+not_yet_enabled:
+  - server_authoritative_consent_at_ingestion   # PR 3
+  - route_policy_registry_default_deny           # PR 2
+  - ingestion_v2_bulk_bronze_outbox              # PR 5
+  - worker_role_separation                       # PR 4
+  - object_backed_bronze                         # PR 8
+  - terraform_deployment_profile_enforcement     # PR 9

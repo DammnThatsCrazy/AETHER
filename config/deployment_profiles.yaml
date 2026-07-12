@@ -1,0 +1,221 @@
+# =============================================================================
+# Aether — Deployment Profile Matrix (canonical policy data)
+#
+# This file is the single source of truth for Aether's deployment profiles and
+# the cost policy that governs each one. It is consumed by:
+#   - scripts/release/check_profile_config.py   (schema + coherence)
+#   - scripts/release/check_cost_policy.py       (forbidden-resource policy)
+#   - docs/DEPLOYMENT-PROFILES.md                (authored narrative)
+#
+# It is DATA, not infrastructure. The Terraform enforcement that asserts a
+# `production-lean` plan actually excludes the forbidden resources is deferred
+# to the release-train PR that introduces the `deployment_profile` Terraform
+# variable (see config/implementation_ledger.yaml → FT-PROFILE-TF). Until then
+# this file fixes the canonical policy so downstream work has a stable target.
+# =============================================================================
+
+schema_version: 1
+canonical_source: config/deployment_profiles.yaml
+
+# Profiles the platform architecture must remain viable through. `max_profile`
+# bounds the supported ceiling — Aether targets founding-tenant production and
+# enterprise-GA-compatible architecture, and does NOT claim anything beyond it.
+max_supported_profile: enterprise-isolated
+
+profiles:
+
+  local-mocked:
+    purpose: Frontend/product work without a backend.
+    class: local
+    cost_capped: false
+    backends:
+      database: none
+      cache: none
+      event: none
+      graph: none
+      analytics: none
+      object: none
+      ml: none
+    runs: [aether-spa, kyber-spa, demo-spa, mock-data-msw]
+    forbids: [backend, postgres, redis, localstack, clickhouse, ml, aws-services]
+
+  local-live:
+    purpose: Normal backend development.
+    class: local
+    cost_capped: false
+    backends:
+      database: postgres
+      cache: memory
+      event: memory
+      graph: postgres
+      analytics: postgres
+      object: memory
+      ml: inline
+    runs: [postgres, single-backend, inline-ml, local-frontends]
+    optional: [localstack, clickhouse, redis-legacy, observability]
+
+  local-full:
+    purpose: Full local integration.
+    class: local
+    cost_capped: false
+    backends:
+      database: postgres
+      cache: redis
+      event: localstack
+      graph: postgres
+      analytics: clickhouse
+      object: localstack-s3
+      ml: inline
+    runs: [all-local-dependencies]
+
+  demo-static:
+    purpose: Zero/near-zero cost sales/investor demo.
+    class: demo
+    cost_capped: true
+    backends:
+      database: none
+      cache: none
+      event: none
+      graph: none
+      analytics: none
+      object: s3
+      ml: none
+    runs: [static-frontend, synthetic-precomputed-data]
+
+  demo-live:
+    purpose: Temporary live demo.
+    class: demo
+    cost_capped: true
+    ttl_cleanup_required: true
+    backends:
+      database: shared-nonprod-postgres
+      cache: dynamodb
+      event: sns_sqs
+      graph: postgres
+      analytics: postgres
+      object: s3
+      ml: inline
+    runs: [shared-nonproduction-backend, synthetic-tenant, ttl-cleanup]
+
+  preview:
+    purpose: PR-specific live environment, only when explicitly requested.
+    class: preview
+    cost_capped: true
+    ttl_cleanup_required: true
+    backends:
+      database: shared-foundation-postgres
+      cache: dynamodb
+      event: sns_sqs
+      graph: postgres
+      analytics: postgres
+      object: s3
+      ml: inline
+    must: [shared-foundation, temporary-tenant-schema-prefix-route, auto-expire]
+    forbids: [dedicated-vpc, dedicated-alb, dedicated-aurora, dedicated-neptune, run-forever]
+
+  staging:
+    purpose: Release rehearsal.
+    class: staging
+    cost_capped: true
+    wake_sleep: true
+    backends:
+      database: aurora_postgres
+      cache: dynamodb
+      event: sns_sqs
+      graph: postgres
+      analytics: postgres
+      object: s3
+      ml: inline
+    behavior: [wake-for-validation, deploy-exact-artifact, run-migrations, smoke-privacy-security-isolation-load, produce-evidence, sleep-after-validation]
+
+  production-lean:
+    purpose: First customer and early controlled production.
+    class: production
+    cost_capped: true
+    founding_tenant_target: true
+    backends:
+      database: aurora_postgres
+      cache: dynamodb
+      event: sns_sqs
+      graph: postgres
+      analytics: postgres
+      object: s3
+      ml: inline
+    cost_policy:
+      # Resources that a production-lean plan MUST provision.
+      required_resources:
+        - cloudfront_s3_frontends
+        - alb
+        - single_ecs_backend
+        - aurora_serverless_v2
+        - sqs_sns
+        - dynamodb
+        - s3_object_lake
+        - secrets_kms
+        - cloudwatch_alarms
+        - inline_ml
+        - postgres_graph
+      # Resources that a production-lean plan MUST NOT provision. The cost-policy
+      # validator asserts every one of these is present in this list; the future
+      # Terraform gate asserts the plan excludes them.
+      forbidden_resources:
+        - msk
+        - elasticache
+        - neptune
+        - clickhouse
+        - dedicated_ml_service
+        - frontend_ecs_services
+        - legacy_rds
+        - nat_gateway_unless_explicit
+        - always_on_staging_compute
+        - prometheus_grafana_servers
+      # Estimated operational posture vs. the heavy default stack. Estimate only.
+      estimated_cost_reduction_vs_heavy: "approximately 75-90% lower monthly infra cost"
+      estimated_cost_reduction_vs_lean_ish: "approximately 50-70% lower monthly infra cost"
+
+  production-scale:
+    purpose: Higher traffic once justified.
+    class: production
+    cost_capped: false
+    backends:
+      database: aurora_postgres
+      cache: redis
+      event: kafka
+      graph: neptune
+      analytics: clickhouse
+      object: s3
+      ml: dedicated
+    may_enable:
+      - multiple_backend_tasks
+      - dedicated_workers
+      - elasticache
+      - neptune
+      - clickhouse
+      - dedicated_ml
+      - private_ecs_subnets
+      - nat_or_controlled_egress
+      - waf
+      - deeper_observability
+
+  enterprise-isolated:
+    purpose: Contractual/regulatory/customer isolation.
+    class: enterprise
+    cost_capped: false
+    backends:
+      database: aurora_postgres
+      cache: redis
+      event: kafka
+      graph: neptune
+      analytics: clickhouse
+      object: s3
+      ml: dedicated
+    may_enable:
+      - dedicated_aws_account
+      - dedicated_vpc
+      - dedicated_aurora
+      - dedicated_s3_kms
+      - dedicated_queues_cache
+      - dedicated_neptune
+      - private_connectivity
+      - customer_specific_retention
+      - region_specific_deployment

@@ -1,0 +1,68 @@
+# =============================================================================
+# Aether — Storage Policy Registry (seed)
+#
+# Seed of the storage policy registry for the Elastic Data Plane. This session
+# ships the canonical SCHEMA and representative policies so downstream work
+# (ledger FT-7) has a stable target. Full per-resource coverage + the object
+# descriptor layer + reconciler are a follow-up PR — `enforcement_status: seed`
+# states that plainly.
+#
+# Validated by scripts/release/check_storage_policies.py (schema + coherence).
+# =============================================================================
+
+schema_version: 1
+canonical_source: config/storage_policies.yaml
+enforcement_status: seed          # seed | enforced — full coverage lands in FT-7
+
+policies:
+
+  - resource_type: bronze_sdk_event
+    authoritative_store: postgres
+    metadata_store: postgres
+    projection_stores: [clickhouse]
+    codec: zstd
+    format: jsonl
+    cache_ttl_seconds: 0
+    materialization_mode: on_demand
+    retention_class: standard
+    delete_behavior: hard_delete
+    legal_hold_supported: true
+    allow_adaptive_materialization: false
+    allow_object_externalization: true
+    allow_historical_table_storage: true
+    requires_consent_invalidation: true
+    requires_permission_hash: false
+
+  - resource_type: consent_record
+    authoritative_store: postgres
+    metadata_store: postgres
+    projection_stores: []
+    codec: none
+    format: row
+    cache_ttl_seconds: 0
+    materialization_mode: none
+    retention_class: legal
+    delete_behavior: tombstone
+    legal_hold_supported: true
+    allow_adaptive_materialization: false
+    allow_object_externalization: false
+    allow_historical_table_storage: true
+    requires_consent_invalidation: false
+    requires_permission_hash: true
+
+  - resource_type: audit_log
+    authoritative_store: postgres
+    metadata_store: postgres
+    projection_stores: []
+    codec: none
+    format: row
+    cache_ttl_seconds: 0
+    materialization_mode: none
+    retention_class: legal
+    delete_behavior: preserve
+    legal_hold_supported: true
+    allow_adaptive_materialization: false
+    allow_object_externalization: false
+    allow_historical_table_storage: true
+    requires_consent_invalidation: false
+    requires_permission_hash: false
