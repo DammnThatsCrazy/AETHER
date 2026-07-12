@@ -127,13 +127,18 @@ items:
       - Backend Architecture/aether-backend/services/security/
       - Backend Architecture/aether-backend/services/kyber_operator/
       - config/route_registry.yaml
-    tests_required: [route registry coverage tests]
-    evidence_required: [route registry validation output]
-    docs_required: [docs/TRUST-ASSURANCE-PLANE.md]
+    tests_required: [tests/unit/test_route_registry_coverage.py, tests/security/test_kyber_gate_consolidation.py, tests/security/test_route_policy_hook.py]
+    evidence_required: [make validate-route-registry, pytest route registry + kyber gate output]
+    docs_required: [docs/FOUNDING-TENANT-PRODUCTION.md]
     owner: trust
-    status: not_started
-    blocked_by: [FT-1-NO-HUMAN-API-KEYS]
-    exception: null
+    status: implemented
+    blocked_by: []
+    exception: >
+      Deferred to follow-ups: runtime default-deny for flag-gated routers (the CI
+      coverage gate covers the default-mounted surface); request-time tenant
+      "suspended"/org/membership status enforcement (PR 1 added no org/membership
+      tables — session/credential revocation and tenant inactive are enforced;
+      the runtime hook ships observe-mode by default).
     last_verified_commit: null
 
   - id: FT-3-AUTHORITATIVE-CONSENT
