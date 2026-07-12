@@ -16,7 +16,7 @@ source_files:
   - Backend Architecture/aether-backend/services/ml_serving/routes.py
 estimated_read_minutes: 8
 toc_depth: 3
-last_synced_commit: b5b278c
+last_synced_commit: "fabddb8"
 ---
 
 # ML Security Threat Model
@@ -229,3 +229,17 @@ artifact completeness gate in CI.
 | mTLS between backend and ML serving | T3 (defense-in-depth) |
 | Real training data (S3 / PostgreSQL) | T6 |
 | Read-only container FS (K8s pod spec) | T7 |
+
+## Model-governance controls (consent-scoped training & inference)
+
+Additive controls that harden the data-provenance surface (see
+`docs/source-of-truth/MODEL_GOVERNANCE.md`):
+
+| Control | Mitigates |
+|---|---|
+| **TrainingDataGate** — consent-scoped admission: quarantines data collected under non-trainable purposes, purposes requiring a separate training opt-in, and unconsented identity-derived labels | T6 Data Poisoning / unlawful training data |
+| **Promotion governance gate** — `artifact_registry.promote_artifact` blocks staging/promotion when a required governance artifact (model card, dataset card, privacy review, training manifest, bias audit) is missing, and honors `production_promotion_allowed` | T2 / T6 (unreviewed model reaching production) |
+| **InferencePolicyGate** — every inference records a `serve_inference` consent PolicyDecision in the shared audit ledger; fail-closed under `ML_INFERENCE_POLICY_ENFORCE` or a `fail_closed_required` model | Unconsented inference / missing audit evidence |
+
+Enforced in CI by `scripts/validate_model_governance.py` and
+`scripts/validate_ml_registry.py`.

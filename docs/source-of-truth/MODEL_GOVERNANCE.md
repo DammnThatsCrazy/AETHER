@@ -7,7 +7,7 @@ source_files:
   - Backend Architecture/aether-backend/services/model_governance/inference_gate.py
   - Backend Architecture/aether-backend/services/model_governance/repositories.py
   - Backend Architecture/aether-backend/services/ml_serving/routes.py
-last_synced_commit: HEAD
+last_synced_commit: "fabddb8"
 ---
 
 # Model Governance — Source of Truth
