@@ -715,8 +715,10 @@ class TestFeaturePolicyMetadata:
         assert f.policy_version == "1.0"
 
     def test_sensitive_features_carry_policy(self):
+        import os
+        import tempfile
+
         from features.registry import FeatureRegistry
-        import tempfile, os
         reg = FeatureRegistry.create_default_registry(
             registry_path=os.path.join(tempfile.mkdtemp(), "registry.json")
         )
