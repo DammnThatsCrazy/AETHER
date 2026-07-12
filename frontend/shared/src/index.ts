@@ -97,6 +97,10 @@ export {
   USDValue,
   NativeValueBreakdown,
   ValuationWarning,
+  RollupStatusBadge,
+  FreshnessBadge,
+  ReconciliationBadge,
+  OwnershipConfidenceBadge,
 } from './value/index';
 export type {
   FormatUSDOptions,
@@ -109,4 +113,7 @@ export type {
   DisplayValueLike,
   ValueFreshness,
   ValueConfidence,
+  RollupStatus,
+  ValueReconciliationState,
+  OwnershipRelationship,
 } from './value/index';

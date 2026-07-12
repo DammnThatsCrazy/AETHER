@@ -33,6 +33,10 @@ from shared.logger.logger import get_logger
 
 from .audit import IdentityAuditWriter
 from .conflicts import IdentityConflictManager
+from .decision_evidence import (
+    IdentityDecisionEvidenceService,
+    decision_type_from_merge_decision,
+)
 from .exceptions import CrossTenantError, IdentityError
 from .graph_writer import IdentityGraphWriter
 from .hashing import (
@@ -166,12 +170,17 @@ class IdentityResolutionService:
         audit_writer: IdentityAuditWriter,
         conflict_manager: IdentityConflictManager,
         metrics: IdentityMetrics,
+        decision_evidence: Optional[IdentityDecisionEvidenceService] = None,
     ) -> None:
         self._repo = repo
         self._graph = graph_writer
         self._audit = audit_writer
         self._conflicts = conflict_manager
         self._metrics = metrics
+        # Additive decision-evidence trail (prompt §3.3). Optional + injectable
+        # so a recording failure can never break resolution; defaults to the
+        # real recorder when not supplied.
+        self._decision_evidence = decision_evidence or IdentityDecisionEvidenceService()
 
     # ── Main entry point ──────────────────────────────────────────────────
 
@@ -521,6 +530,28 @@ class IdentityResolutionService:
         )
         decision_obj.audit_id = audit_id
 
+        # ── 13b. Record identity decision evidence (additive, fail-safe) ──
+        # Captures the decision's provenance (§3.3): matching signal types as
+        # signals_used, suppressed/revoked types as signals_excluded, the
+        # source event, confidence tier, and the audit record as the policy
+        # decision reference. Wrapped so a recorder failure never breaks
+        # resolution — evidence is strictly observational.
+        try:
+            await self._record_decision_evidence(
+                tenant_id=tenant_id,
+                canonical_entity_id=canonical_entity_id,
+                policy_result=policy_result,
+                has_conflict=has_conflict,
+                matching_types=matching_types,
+                excluded_types=[*suppressed_types, *revoked_types],
+                raw_signals=raw_signals,
+                event_id=event_id,
+                consent_snapshot=consent_snapshot,
+                policy_decision_id=audit_id,
+            )
+        except Exception as exc:  # noqa: BLE001 - evidence must never break resolution
+            logger.warning("decision evidence recording failed: %s", exc)
+
         # ── 14. Emit metrics ──────────────────────────────────────────────
         if policy_result.decision == MergeDecision.BLOCKED:
             blocked_reason = _blocked_reason_category(policy_result.reason_codes)
@@ -536,6 +567,51 @@ class IdentityResolutionService:
         )
 
         return decision_obj
+
+    async def _record_decision_evidence(
+        self,
+        *,
+        tenant_id: str,
+        canonical_entity_id: str,
+        policy_result: Any,
+        has_conflict: bool,
+        matching_types: list,
+        excluded_types: list,
+        raw_signals: list,
+        event_id: str,
+        consent_snapshot: Optional[dict],
+        policy_decision_id: Optional[str],
+    ) -> None:
+        """Record an IdentityDecisionEvidence row for this resolution (§3.3).
+
+        Purely observational: maps the policy MergeDecision to a decision_type,
+        captures matching signal types as evidence and suppressed/revoked types
+        as exclusions, and links the audit record as the policy decision id.
+        """
+        decision_type = decision_type_from_merge_decision(
+            policy_result.decision, has_conflict=has_conflict
+        )
+        # Derive connector provenance from the signals observed on this event.
+        source_connectors: list[str] = []
+        for sig in raw_signals or []:
+            for attr in ("source", "source_platform", "source_sdk"):
+                val = getattr(sig, attr, "") or ""
+                if val:
+                    source_connectors.append(val)
+        await self._decision_evidence.record_decision(
+            tenant_id=tenant_id,
+            entity_id=canonical_entity_id,
+            subject_entity_id=canonical_entity_id,
+            decision_type=decision_type,
+            signals_used=[getattr(t, "value", t) for t in matching_types],
+            signals_excluded=[getattr(t, "value", t) for t in excluded_types],
+            source_events=[event_id] if event_id else [],
+            source_connectors=source_connectors,
+            consent_snapshot=consent_snapshot,
+            policy_decision_id=policy_decision_id,
+            confidence_score=policy_result.confidence,
+            confidence_tier=policy_result.confidence_tier,
+        )
 
     # ── Operator actions ──────────────────────────────────────────────────
 

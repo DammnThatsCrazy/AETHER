@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import {
   Badge, Button, Card, CardContent, CardHeader,
   DataTable, EmptyState, ErrorState, LoadingState, Skeleton, Tabs,
-  TabsContent, TabsList, TabsTrigger,
+  TabsContent, TabsList, TabsTrigger, formatUSD,
 } from '@aether/ui';
 import { useCampaigns, usePlatformOverview, useAutomationInsights } from '@aether-app/features/campaigns/use-campaigns';
 import { useCampaignQuality } from '@aether-app/features/campaigns/use-campaign-quality';
@@ -29,9 +29,10 @@ function fmtPct(v: unknown): string {
   return `${(Number(v) * 100).toFixed(1)}%`;
 }
 
-function fmtUsd(v: unknown): string {
-  if (v === null || v === undefined) return '—';
-  return `$${Number(v).toLocaleString(undefined, { maximumFractionDigits: 0 })}`;
+// Delegates to the canonical shared USD formatter; keeps the compact "—"
+// sentinel for absent values (never "$0" on absence).
+function usdText(v: unknown): string {
+  return formatUSD(v as string | number | null | undefined, { maximumFractionDigits: 0, fallback: '—' });
 }
 
 function relTime(iso: string | undefined | null): string {
@@ -192,7 +193,7 @@ function CampaignRow({ campaign }: { campaign: Record<string, unknown> }) {
                       </div>
                       <div className="flex items-center gap-4 text-right">
                         {c.conversions !== undefined && <span className="text-text-primary">{Number(c.conversions).toLocaleString()} conv.</span>}
-                        {c.revenue_usd !== undefined && <span className="text-success">{fmtUsd(c.revenue_usd)}</span>}
+                        {c.revenue_usd !== undefined && <span className="text-success">{usdText(c.revenue_usd)}</span>}
                         {c.conversion_rate !== undefined && <span className="text-text-secondary">{fmtPct(c.conversion_rate)}</span>}
                       </div>
                     </div>
@@ -205,9 +206,9 @@ function CampaignRow({ campaign }: { campaign: Record<string, unknown> }) {
           {/* Revenue */}
           {(campaign.revenue_usd ?? metrics.revenue_usd) !== undefined && (
             <div className="grid grid-cols-3 gap-3">
-              <Stat label="Revenue" value={fmtUsd(campaign.revenue_usd ?? metrics.revenue_usd)} />
+              <Stat label="Revenue" value={usdText(campaign.revenue_usd ?? metrics.revenue_usd)} />
               {(campaign.cost_usd ?? metrics.cost_usd) !== undefined && (
-                <Stat label="Cost" value={fmtUsd(campaign.cost_usd ?? metrics.cost_usd)} />
+                <Stat label="Cost" value={usdText(campaign.cost_usd ?? metrics.cost_usd)} />
               )}
               {(campaign.roas ?? metrics.roas) !== undefined && (
                 <Stat label="ROAS" value={`${Number(campaign.roas ?? metrics.roas).toFixed(2)}x`} />
@@ -266,8 +267,8 @@ function OverviewTab({ hours }: { hours: number }) {
               <CardContent className="grid grid-cols-2 gap-3">
                 <Stat label="Sessions" value={web2.sessions !== undefined ? Number(web2.sessions).toLocaleString() : '—'} />
                 <Stat label="Conv. rate" value={fmtPct(web2.conversion_rate)} />
-                <Stat label="Revenue" value={fmtUsd(web2.revenue_usd)} />
-                <Stat label="Avg. LTV" value={fmtUsd(web2.avg_ltv_usd)} />
+                <Stat label="Revenue" value={usdText(web2.revenue_usd)} />
+                <Stat label="Avg. LTV" value={usdText(web2.avg_ltv_usd)} />
               </CardContent>
             </Card>
             <Card>
@@ -275,7 +276,7 @@ function OverviewTab({ hours }: { hours: number }) {
               <CardContent className="grid grid-cols-2 gap-3">
                 <Stat label="Wallet sessions" value={web3.sessions !== undefined ? Number(web3.sessions).toLocaleString() : '—'} />
                 <Stat label="Conv. rate" value={fmtPct(web3.conversion_rate)} />
-                <Stat label="On-chain vol." value={fmtUsd(web3.volume_usd)} />
+                <Stat label="On-chain vol." value={usdText(web3.volume_usd)} />
                 <Stat label="Wallets active" value={web3.active_wallets !== undefined ? Number(web3.active_wallets).toLocaleString() : '—'} />
               </CardContent>
             </Card>
@@ -394,7 +395,7 @@ function AttributionOverviewTab() {
         { key: 'channel', header: 'Channel', render: r => <Badge variant="default" size="sm">{fmt(r.channel)}</Badge> },
         { key: 'source', header: 'Source', render: r => r.source ? <span className="text-text-secondary">{fmt(r.source)}</span> : <span className="text-text-muted">—</span> },
         { key: 'conversions', header: 'Conversions', render: r => fmt(r.conversions) },
-        { key: 'revenue', header: 'Revenue', render: r => r.revenue_usd !== undefined ? <span className="text-success">{fmtUsd(r.revenue_usd)}</span> : <span className="text-text-muted">—</span> },
+        { key: 'revenue', header: 'Revenue', render: r => r.revenue_usd !== undefined ? <span className="text-success">{usdText(r.revenue_usd)}</span> : <span className="text-text-muted">—</span> },
         { key: 'conv_rate', header: 'Conv. rate', render: r => r.conversion_rate !== undefined ? fmtPct(r.conversion_rate) : <span className="text-text-muted">—</span> },
         { key: 'weight', header: 'Attribution weight', render: r => r.weight !== undefined ? fmtPct(r.weight) : <span className="text-text-muted">—</span> },
       ]}

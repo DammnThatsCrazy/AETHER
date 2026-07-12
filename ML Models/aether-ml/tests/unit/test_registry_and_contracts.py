@@ -621,6 +621,221 @@ class TestArtifactRegistry:
             promote_artifact(model_dir, "promoted")
 
 
+# ---------------------------------------------------------------------------
+# Model Governance Metadata Tests
+# ---------------------------------------------------------------------------
+
+
+class TestModelGovernanceMetadata:
+    """Every ModelEntry carries governance metadata with safe defaults."""
+
+    GOVERNANCE_FIELDS = (
+        "allowed_training_purposes",
+        "forbidden_feature_tags",
+        "requires_privacy_review",
+        "requires_bias_audit",
+        "requires_model_card",
+        "requires_dataset_card",
+        "requires_training_manifest",
+        "requires_human_review",
+        "requires_dsr_invalidation",
+        "production_promotion_allowed",
+        "governance_notes",
+    )
+
+    def test_every_model_has_governance_fields(self):
+        from common.model_registry import list_models
+        for entry in list_models():
+            for field_name in self.GOVERNANCE_FIELDS:
+                assert hasattr(entry, field_name), (
+                    f"{entry.model_id} missing governance field '{field_name}'"
+                )
+
+    def test_governance_defaults_are_safe(self):
+        """Purpose/tag fields are lists; card/promotion flags are bools."""
+        from common.model_registry import list_models
+        for entry in list_models():
+            assert isinstance(entry.allowed_training_purposes, list)
+            assert isinstance(entry.forbidden_feature_tags, list)
+            assert isinstance(entry.requires_model_card, bool)
+            assert isinstance(entry.production_promotion_allowed, bool)
+
+    def test_sensitive_trainable_models_require_privacy_review(self):
+        from common.model_registry import get_model
+        for model_id in (
+            "churn_prediction", "ltv_prediction", "anomaly_detection",
+            "bot_detection", "campaign_attribution", "identity_resolution",
+        ):
+            entry = get_model(model_id)
+            assert entry.requires_privacy_review, (
+                f"{model_id} should require a privacy review"
+            )
+            assert entry.requires_model_card
+            assert entry.requires_training_manifest
+
+    def test_identity_resolution_governance(self):
+        from common.model_registry import get_model
+        entry = get_model("identity_resolution")
+        assert entry.requires_bias_audit
+        assert entry.requires_human_review
+        assert entry.requires_dsr_invalidation
+
+    def test_deterministic_models_not_over_restricted(self):
+        from common.model_registry import get_model
+        for model_id in ("bytecode_risk", "trust_score"):
+            entry = get_model(model_id)
+            # No trained artifact -> no model card / dataset card / manifest.
+            assert not entry.requires_model_card
+            assert not entry.requires_dataset_card
+            assert not entry.requires_training_manifest
+            assert not entry.requires_privacy_review
+            # But the omission must be documented.
+            assert entry.governance_notes.strip()
+
+
+# ---------------------------------------------------------------------------
+# Feature Policy Metadata Tests
+# ---------------------------------------------------------------------------
+
+
+class TestFeaturePolicyMetadata:
+    """FeatureDefinition exposes policy fields that default to a safe posture."""
+
+    def test_feature_policy_fields_default_safely(self):
+        from features.registry import FeatureDefinition
+        f = FeatureDefinition(name="probe_feature", description="test")
+        assert f.data_categories == []
+        assert f.required_consent_purposes == []
+        assert f.explicit_opt_in_required is False
+        assert f.allow_model_training is True
+        assert f.allow_inference is True
+        assert f.allow_profile360 is True
+        assert f.pii_state == "none"
+        assert f.retention_class == "standard"
+        assert f.policy_version == "1.0"
+
+    def test_sensitive_features_carry_policy(self):
+        from features.registry import FeatureRegistry
+        import tempfile, os
+        reg = FeatureRegistry.create_default_registry(
+            registry_path=os.path.join(tempfile.mkdtemp(), "registry.json")
+        )
+        monetary = next(
+            f for f in reg.get_group("identity_features").features
+            if f.name == "monetary_value"
+        )
+        assert monetary.pii_state == "pseudonymous"
+        assert "financial" in monetary.data_categories
+        assert monetary.required_consent_purposes
+
+        tx = next(
+            f for f in reg.get_group("web3_features").features
+            if f.name == "tx_count"
+        )
+        assert tx.pii_state == "pseudonymous"
+        assert tx.explicit_opt_in_required is True
+
+
+# ---------------------------------------------------------------------------
+# Promotion Governance Artifact Tests
+# ---------------------------------------------------------------------------
+
+
+class TestPromotionGovernanceArtifacts:
+    """promote_artifact enforces the model's required governance artifacts."""
+
+    def _make_real_candidate(self, tmp_path, model_id):
+        from common.artifact_registry import save_artifact
+        import joblib
+        model_dir = tmp_path / model_id / "v1_real"
+        model_dir.mkdir(parents=True)
+        artifact_file = model_dir / "model.joblib"
+        joblib.dump({"stub": True}, artifact_file)
+        save_artifact(
+            model_id=model_id,
+            artifact_path=artifact_file,
+            artifact_version="v1_real",
+            promotion_state="candidate",
+            synthetic_data=False,
+            threshold_passed=True,
+        )
+        return model_dir
+
+    def test_required_promotion_artifacts_from_registry(self):
+        from common.artifact_registry import required_promotion_artifacts
+        churn = set(required_promotion_artifacts("churn_prediction"))
+        assert {"model_card.json", "dataset_card.json",
+                "privacy_review.json", "training_manifest.json"} <= churn
+        # Deterministic model has no governance artifact requirements.
+        assert required_promotion_artifacts("bytecode_risk") == []
+
+    def test_promotion_blocked_when_governance_artifact_missing(self, tmp_path):
+        from common.artifact_registry import promote_artifact, ArtifactPromotionError
+        model_dir = self._make_real_candidate(tmp_path, "churn_prediction")
+        with pytest.raises(ArtifactPromotionError, match="governance artifact"):
+            promote_artifact(model_dir, "staged")
+
+    def test_promotion_blocked_when_only_model_card_missing(self, tmp_path):
+        from common.artifact_registry import (
+            promote_artifact, write_promotion_artifacts, ArtifactPromotionError,
+        )
+        model_dir = self._make_real_candidate(tmp_path, "churn_prediction")
+        write_promotion_artifacts(model_dir, "churn_prediction",
+                                  training_manifest={"rows": 10})
+        # Remove one required artifact to prove the gate is per-file.
+        (model_dir / "model_card.json").unlink()
+        with pytest.raises(ArtifactPromotionError, match="model_card.json"):
+            promote_artifact(model_dir, "staged")
+
+    def test_promotion_succeeds_when_governance_artifacts_present(self, tmp_path):
+        from common.artifact_registry import (
+            promote_artifact, write_promotion_artifacts,
+        )
+        model_dir = self._make_real_candidate(tmp_path, "churn_prediction")
+        written = write_promotion_artifacts(model_dir, "churn_prediction",
+                                            training_manifest={"rows": 10})
+        assert "model_card.json" in written
+        staged = promote_artifact(model_dir, "staged")
+        assert staged.promotion_state == "staged"
+        promoted = promote_artifact(model_dir, "promoted")
+        assert promoted.promotion_state == "promoted"
+        assert promoted.production_allowed is True
+
+    def test_dataset_manifest_satisfies_training_manifest(self, tmp_path):
+        """A dataset_manifest.json (written by train.py) satisfies the gate."""
+        import json
+        from common.artifact_registry import (
+            promote_artifact, write_promotion_artifacts,
+        )
+        model_dir = self._make_real_candidate(tmp_path, "churn_prediction")
+        # Write cards + privacy review but NOT training_manifest.json.
+        write_promotion_artifacts(model_dir, "churn_prediction")
+        assert not (model_dir / "training_manifest.json").exists()
+        # dataset_manifest.json stands in for the training manifest.
+        (model_dir / "dataset_manifest.json").write_text(json.dumps({"rows": 5}))
+        staged = promote_artifact(model_dir, "staged")
+        assert staged.promotion_state == "staged"
+
+    def test_model_without_requirements_promotes_freely(self, tmp_path):
+        """Deterministic models have no governance-artifact gate on staging."""
+        from common.artifact_registry import save_artifact, promote_artifact
+        import joblib
+        model_dir = tmp_path / "bytecode_risk" / "v1_real"
+        model_dir.mkdir(parents=True)
+        artifact_file = model_dir / "model.joblib"
+        joblib.dump({"stub": True}, artifact_file)
+        save_artifact(
+            model_id="bytecode_risk",
+            artifact_path=artifact_file,
+            artifact_version="v1_real",
+            promotion_state="candidate",
+            synthetic_data=False,
+            threshold_passed=True,
+        )
+        staged = promote_artifact(model_dir, "staged")
+        assert staged.promotion_state == "staged"
+
+
 class TestServingModelListsDerivedFromRegistry:
     """MODEL_NAMES and MODEL_TYPES in serving/src/api.py must match the registry."""
 

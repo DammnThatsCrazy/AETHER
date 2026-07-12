@@ -327,6 +327,91 @@ def check_model_type_enum() -> list[str]:
     return errors
 
 
+GOVERNANCE_FIELDS = (
+    "allowed_training_purposes",
+    "forbidden_feature_tags",
+    "requires_privacy_review",
+    "requires_bias_audit",
+    "requires_model_card",
+    "requires_dataset_card",
+    "requires_training_manifest",
+    "requires_human_review",
+    "requires_dsr_invalidation",
+    "production_promotion_allowed",
+)
+
+
+def check_model_governance() -> list[str]:
+    """Every model must carry governance metadata; sensitive models must gate.
+
+    - All model entries expose the full governance field set.
+    - Sensitive (CRITICAL/HIGH) *trainable* models must require a model card and
+      a training manifest, and must either require a privacy review or document
+      a reason in ``governance_notes``.
+    - Sensitive non-trainable (deterministic/composite) models are exempt from
+      the training-artifact gates but must document their posture in
+      ``governance_notes`` so the omission is auditable.
+    """
+    errors: list[str] = []
+    sys.path.insert(0, str(ML_ROOT))
+    try:
+        from common.model_registry import (
+            list_models,
+            SensitivityTier,
+            ImplementationType,
+        )
+    except ImportError as e:
+        errors.append(f"Cannot import model_registry for governance check: {e}")
+        return errors
+
+    for entry in list_models():
+        for field_name in GOVERNANCE_FIELDS:
+            if not hasattr(entry, field_name):
+                errors.append(
+                    f"Model '{entry.model_id}' missing governance field '{field_name}'"
+                )
+
+        is_sensitive = entry.sensitivity_tier in (
+            SensitivityTier.CRITICAL,
+            SensitivityTier.HIGH,
+        )
+        if not is_sensitive:
+            continue
+
+        notes = (getattr(entry, "governance_notes", "") or "").strip()
+        is_trainable = entry.implementation_type == ImplementationType.TRAINABLE_ML
+
+        if is_trainable:
+            if not entry.requires_model_card:
+                errors.append(
+                    f"Sensitive trainable model '{entry.model_id}' must set "
+                    "requires_model_card=True"
+                )
+            if not entry.requires_training_manifest:
+                errors.append(
+                    f"Sensitive trainable model '{entry.model_id}' must set "
+                    "requires_training_manifest=True"
+                )
+            if not entry.requires_privacy_review and not notes:
+                errors.append(
+                    f"Sensitive model '{entry.model_id}' must set "
+                    "requires_privacy_review=True or document a reason in "
+                    "governance_notes"
+                )
+        else:
+            # Deterministic / composite sensitive models don't produce training
+            # artifacts — but the omission must be documented.
+            if not notes:
+                errors.append(
+                    f"Sensitive non-trainable model '{entry.model_id}' must "
+                    "document its governance posture in governance_notes"
+                )
+
+    if not errors:
+        ok("All models carry governance metadata; sensitive models satisfy governance gates")
+    return errors
+
+
 def check_no_privilege_header() -> list[str]:
     """Backend routes must not accept X-Batch-Privilege header as proof of privilege."""
     errors: list[str] = []
@@ -383,6 +468,9 @@ def main() -> int:
 
     print("\n--- ModelType Enum ---")
     all_errors.extend(check_model_type_enum())
+
+    print("\n--- Model Governance ---")
+    all_errors.extend(check_model_governance())
 
     print("\n--- Security: Privilege Header ---")
     all_errors.extend(check_no_privilege_header())

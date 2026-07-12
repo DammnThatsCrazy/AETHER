@@ -457,8 +457,10 @@ All framework configuration lives in `config/compliance_config.py`:
 | `DataRole` | Enum | Processor (Aether), Controller (Customer), Sub-Processor (AWS, third-party APIs) |
 | `GDPR_RIGHTS` | List[DataSubjectRight] | 6 data subject rights with articles, SLAs, and API endpoints |
 | `DATA_PROTECTION_CONTROLS` | List[DataProtectionControl] | 7 Art. 25 controls with technical implementation details |
-| `CONSENT_CONFIG` | ConsentConfig | 5 purposes, DynamoDB storage, 9 audit fields, DNT support, withdrawal effect |
-| `ConsentPurpose` | Enum | analytics, marketing, web3, agent, commerce |
+| `CONSENT_CONFIG` | ConsentConfig | 11 registry-aligned purposes (derived from `ConsentPurpose`), DynamoDB storage, 9 audit fields, DNT support, withdrawal effect |
+| `ConsentPurpose` | Enum | Canonical 11-purpose set mirrored from `packages/shared/contracts/consent-registry.json`: analytics, marketing, personalization, web3, agent, commerce, financial_activity, credit, location, economic_observability, cross_chain_observability |
+| `EXPLICIT_OPT_IN_PURPOSES` | frozenset | The 5 purposes with registry `explicitOptInRequired: true` (financial_activity, credit, location, economic_observability, cross_chain_observability) |
+| `config.consent_registry_sync` | Module | `assert_consent_registry_in_sync()` reconciliation guard — verifies `ConsentPurpose` matches the canonical registry |
 | `GDPR_DATA_STORES` | List[GDPRDataStore] | 7 data stores with data types, deletion methods, and retention defaults |
 | `SOC2_TRUST_CRITERIA` | List[TrustCriteria] | 5 criteria with current implementations and certification gaps |
 | `AUDIT_TRAILS` | List[AuditTrailConfig] | 5 trail types with storage backends and retention periods |

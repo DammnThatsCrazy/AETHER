@@ -244,7 +244,7 @@ def _build_controls() -> list:
         SOC2Control("P-1.2", "Privacy", "Consent Management",
                     "Purpose-based consent with audit trail",
                     ControlStatus.IMPLEMENTED,
-                    "5 purposes, immutable DynamoDB audit trail, DNT support, SDK enforcement",
+                    "11 registry-aligned purposes, immutable DynamoDB audit trail, DNT support, SDK enforcement",
                     [{"type": "configuration", "source": "Consent manager", "verified": True}]),
         SOC2Control("P-1.3", "Privacy", "Data Minimization",
                     "Collection limited to necessary data",

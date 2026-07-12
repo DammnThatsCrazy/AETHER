@@ -82,6 +82,22 @@ class FeatureDefinition(BaseModel):
     is_deprecated: bool = False
     deprecation_reason: str = ""
 
+    # ---- Feature-policy metadata (additive, defaults preserve behavior) ----
+    # High-level data categories (e.g. "behavioral", "financial", "onchain").
+    data_categories: list[str] = Field(default_factory=list)
+    # Consent purposes that must be granted before this feature may be used.
+    required_consent_purposes: list[str] = Field(default_factory=list)
+    explicit_opt_in_required: bool = False
+    # Where this feature is permitted to flow.
+    allow_model_training: bool = True
+    allow_inference: bool = True
+    allow_profile360: bool = True
+    # PII posture: none | hashed | pseudonymous | pii
+    pii_state: str = "none"
+    # Retention class governing how long the feature may be stored.
+    retention_class: str = "standard"
+    policy_version: str = "1.0"
+
     def model_post_init(self, __context: Any) -> None:
         if self.value_type is None:
             self.value_type = FeatureValueType(self.dtype) if self.dtype in {item.value for item in FeatureValueType} else FeatureValueType.STRING
@@ -851,6 +867,10 @@ class FeatureRegistry:
                         computation="SUM(conversion_value) per identity",
                         min_value=0.0,
                         tags=["core", "ltv"],
+                        data_categories=["financial", "behavioral"],
+                        required_consent_purposes=["analytics", "personalization"],
+                        pii_state="pseudonymous",
+                        retention_class="extended",
                     ),
                     FeatureDefinition(
                         name="frequency",
@@ -1113,6 +1133,11 @@ class FeatureRegistry:
                         computation="COUNT(*) per wallet_address",
                         min_value=0,
                         tags=["web3", "activity"],
+                        data_categories=["onchain", "financial"],
+                        required_consent_purposes=["analytics"],
+                        explicit_opt_in_required=True,
+                        pii_state="pseudonymous",
+                        retention_class="extended",
                     ),
                     FeatureDefinition(
                         name="unique_chains",
@@ -1131,6 +1156,10 @@ class FeatureRegistry:
                         computation="SUM(gas_used) per wallet_address",
                         min_value=0.0,
                         tags=["web3", "cost"],
+                        data_categories=["onchain", "financial"],
+                        required_consent_purposes=["analytics"],
+                        pii_state="pseudonymous",
+                        retention_class="extended",
                     ),
                     FeatureDefinition(
                         name="unique_interactions",

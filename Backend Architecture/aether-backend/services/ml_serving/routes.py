@@ -195,6 +195,10 @@ class PredictionRequest(BaseModel):
     entity_id: str
     features: dict[str, Any] = Field(default_factory=dict)
     use_cache: bool = True
+    # Consent purposes the subject has granted for this inference (§3.9). Optional
+    # and additive: absent means "unknown", which records evidence and, under
+    # enforcement, fails closed for consent-scoped models.
+    consent_purposes: list[str] = Field(default_factory=list)
 
 
 class BatchPredictionRequest(BaseModel):
@@ -311,6 +315,36 @@ async def predict(
     # Resolve canonical model ID (handles deprecated aliases)
     canonical_id, was_deprecated_alias = _resolve_canonical(body.model_name)
 
+    # 0. Model-governance inference policy gate (§3.9).
+    #    Always records a serve_inference consent evidence decision; blocks only
+    #    under enforcement (ML_INFERENCE_POLICY_ENFORCE or a fail-closed model).
+    try:
+        from services.model_governance import inference_policy_gate
+        actor_id = getattr(tenant, "user_id", None) or tenant.tenant_id
+        gate = await inference_policy_gate.evaluate(
+            tenant_id=tenant.tenant_id,
+            actor_id=actor_id,
+            model_id=canonical_id,
+            granted_purposes=body.consent_purposes,
+            subject_ref=body.entity_id,
+            ip_address=getattr(request.client, "host", None) if request.client else None,
+            user_agent=request.headers.get("user-agent"),
+        )
+        if gate.blocked:
+            metrics.increment(
+                "ml_inference_consent_denied", labels={"model": canonical_id}
+            )
+            logger.warning(
+                "ML inference blocked by consent policy: model=%s missing=%s",
+                canonical_id, gate.missing_purposes,
+            )
+            raise ForbiddenError(gate.reason or "inference denied: missing consent")
+        request.state.inference_policy_decision_id = gate.policy_decision_id
+    except ForbiddenError:
+        raise
+    except Exception as exc:  # governance is additive — never break inference on a gate error
+        logger.debug("Inference policy gate unavailable: %s", exc)
+
     # 1. Pre-request extraction defense
     defense = _get_defense_layer()
     if defense is not None:
@@ -398,6 +432,9 @@ async def predict(
                 "entity_id": body.entity_id,
                 "result": ml_result,
                 "latency_ms": round(latency_ms, 2),
+                "policy_decision_id": getattr(
+                    request.state, "inference_policy_decision_id", None
+                ),
             }
 
             if was_deprecated_alias:

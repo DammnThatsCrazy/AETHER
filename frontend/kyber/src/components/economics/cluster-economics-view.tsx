@@ -5,6 +5,7 @@
  * Adapter: GET /v1/commerce/cluster/{id}/spend
  */
 import { Link } from 'react-router-dom';
+import { formatUSD } from '@aether/ui';
 
 interface ClusterCampaign {
   campaign_id: string;
@@ -31,10 +32,6 @@ interface ClusterEconomicsViewProps {
   readonly economics: ClusterEconomics | null;
   readonly loading?: boolean;
   readonly error?: string | null;
-}
-
-function fmtUsd(val: number): string {
-  return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', notation: 'compact', maximumFractionDigits: 2 }).format(val);
 }
 
 export function ClusterEconomicsView({ economics, loading = false, error = null }: ClusterEconomicsViewProps) {
@@ -64,7 +61,7 @@ export function ClusterEconomicsView({ economics, loading = false, error = null 
       <div className="cluster-economics__stats">
         <div className="cluster-economics__stat">
           <span className="cluster-economics__stat-label">total spend</span>
-          <span className="cluster-economics__stat-value">${economics.total_spend_usd.toFixed(4)}</span>
+          <span className="cluster-economics__stat-value">{formatUSD(economics.total_spend_usd, { minimumFractionDigits: 4, maximumFractionDigits: 4 })}</span>
         </div>
         <div className="cluster-economics__stat">
           <span className="cluster-economics__stat-label">settled</span>
@@ -85,7 +82,7 @@ export function ClusterEconomicsView({ economics, loading = false, error = null 
         {economics.attributed_revenue_usd != null && (
           <div className="cluster-economics__stat">
             <span className="cluster-economics__stat-label">attributed revenue</span>
-            <span className="cluster-economics__stat-value">{fmtUsd(economics.attributed_revenue_usd)}</span>
+            <span className="cluster-economics__stat-value">{formatUSD(economics.attributed_revenue_usd, { compact: true })}</span>
           </div>
         )}
         {economics.attributed_conversions != null && (
@@ -117,7 +114,7 @@ export function ClusterEconomicsView({ economics, loading = false, error = null 
                 <span className="cluster-economics__campaign-stat">{c.attributed_conversions} conv</span>
               )}
               {c.attributed_revenue_usd != null && (
-                <span className="cluster-economics__campaign-stat">{fmtUsd(c.attributed_revenue_usd)}</span>
+                <span className="cluster-economics__campaign-stat">{formatUSD(c.attributed_revenue_usd, { compact: true })}</span>
               )}
               {c.roas != null && (
                 <span className="cluster-economics__campaign-stat">{c.roas.toFixed(2)}x ROAS</span>

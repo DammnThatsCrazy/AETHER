@@ -357,6 +357,20 @@ def main(argv: Sequence[str] | None = None) -> None:
         remediation="align packages/shared/ingestion-contract.ts with services/ingestion/batch.py (endpoint, idempotency key, batch bounds)",
     )
     run(
+        ["python", "scripts/validate_model_governance.py"],
+        name="Model governance (consent-scoped training + inference gates)",
+        results=results,
+        stop_on_failure=stop,
+        remediation="ensure services/model_governance gates exist, reuse the consent engine, and are wired into ml_serving/routes.py; see docs/source-of-truth/MODEL_GOVERNANCE.md",
+    )
+    run(
+        ["python", "scripts/validate_consent_purpose_reconciliation.py"],
+        name="Consent-purpose reconciliation (compliance enum ↔ 11-purpose registry)",
+        results=results,
+        stop_on_failure=stop,
+        remediation="reconcile ConsentPurpose in GDPR & SOC2/aether-compliance/config/compliance_config.py with packages/shared/contracts/consent-registry.json",
+    )
+    run(
         ["python", "scripts/check_version_consistency.py"],
         name="Version/workspace consistency aggregate",
         results=results,
