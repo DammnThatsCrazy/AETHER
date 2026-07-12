@@ -5,9 +5,12 @@
 # ============================================================================
 
 # Core
-environment = "production"
-aws_region  = "us-east-1"
-project     = "AETHER"
+# deployment_profile drives cost/resource toggles (see profiles/*.tfvars).
+# One of: staging | production-lean | production-scale | enterprise-isolated.
+deployment_profile = "production-lean"
+environment        = "production"
+aws_region         = "us-east-1"
+project            = "AETHER"
 
 # Domain & TLS  — fill in your ACM cert ARN
 domain_name         = "api.aether.io"

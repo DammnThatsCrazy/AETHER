@@ -51,10 +51,9 @@ always_on_staging_compute    prometheus_grafana_servers
 ```
 
 `make validate-cost-policy` asserts this forbidden set is declared in the
-canonical policy data. The **Terraform-plan** gate that asserts a real
-`production-lean` plan excludes these resources — via a `deployment_profile`
-variable and `profiles/*.tfvars` — is a follow-up recorded in the ledger as
-`FT-9-TERRAFORM-PROFILES`.
+canonical policy data. `make validate-cost-policy-terraform` extends this to the
+infrastructure layer — see [Terraform enforcement](#terraform-enforcement-deployment_profile)
+below (ledger item `FT-9-TERRAFORM-PROFILES`).
 
 ### Cost posture (estimates only)
 
@@ -62,6 +61,45 @@ Relative to the heavy default stack, `production-lean` targets approximately
 **75–90% lower** monthly infra cost; relative to a lean-ish stack, approximately
 **50–70% lower**. These are estimates; the enforceable guarantee is the
 forbidden-resource policy, not a dollar figure.
+
+## Terraform enforcement (deployment_profile)
+
+The infrastructure at `AWS Deployment/aether-aws/terraform/` selects a profile
+through the `deployment_profile` variable (validated to one of `staging`,
+`production-lean`, `production-scale`, `enterprise-isolated`; default
+`production-lean`). Ready-made variable files live under `profiles/`:
+
+```bash
+terraform apply -var-file=profiles/production-lean.tfvars
+terraform apply -var-file=profiles/production-scale.tfvars
+```
+
+`profiles.tf` derives a set of `enable_*` resource toggles from the profile. For
+`production-lean` every toggle for a forbidden resource is false by derivation —
+each is `local.scale || local.enterprise` (false when lean) or literal `false`:
+
+| Forbidden resource | Terraform local |
+|---|---|
+| `msk` | `enable_msk` |
+| `elasticache` | `enable_elasticache` |
+| `neptune` | `enable_neptune` |
+| `clickhouse` | `enable_clickhouse` |
+| `dedicated_ml_service` | `enable_dedicated_ml` |
+| `frontend_ecs_services` | `enable_frontend_ecs` |
+| `legacy_rds` | `enable_legacy_rds` (literal `false`) |
+| `nat_gateway_unless_explicit` | `enable_nat_gateway` |
+| `prometheus_grafana_servers` | `enable_prometheus_grafana` |
+
+`make validate-cost-policy-terraform`
+(`scripts/release/check_cost_policy_terraform.py`) statically asserts that these
+locals resolve to false for `production-lean`, that the `deployment_profile`
+variable and its validation exist, and that each `profiles/*.tfvars` sets a valid
+profile matching its filename. It runs in `release-gate` and
+`founding-tenant-release-gate` (not in `ci-check`).
+
+Wiring these locals into module `count`/configuration so the plan physically
+omits the resources is deferred (see the `TODO(FT-9-TERRAFORM-PROFILES)` note in
+`profiles.tf`); until then the static validator is the enforceable guarantee.
 
 ## Backend selectors
 

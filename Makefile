@@ -22,7 +22,8 @@
         clean validate-docs validate-frontmatter validate-ml-registry extract-docs docs-drift docs-stamp docs bump-version \
         repo-doctor repo-doctor-fix docs-check ci-check docs-fix \
         production-status release-gate ops-readiness help \
-        validate-profile-config validate-cost-policy validate-route-registry \
+        validate-profile-config validate-cost-policy validate-cost-policy-terraform \
+        validate-route-registry \
         validate-storage-policies audit-readiness-check founding-tenant-release-gate
 
 # Centralized subsystem paths — single place to rename if directories move.
@@ -338,6 +339,7 @@ release-gate: ## Full release gate: repo consistency (CI mode) + strict producti
 	python scripts/release/check_foundation.py
 	python scripts/release/check_profile_config.py
 	python scripts/release/check_cost_policy.py
+	python scripts/release/check_cost_policy_terraform.py
 	python scripts/release/check_route_registry.py
 	python scripts/release/check_storage_policies.py
 
@@ -350,6 +352,9 @@ validate-profile-config: ## Validate deployment-profile matrix + founding-tenant
 
 validate-cost-policy: ## Validate production-lean cost policy (forbidden/required resources)
 	python scripts/release/check_cost_policy.py
+
+validate-cost-policy-terraform: ## Validate Terraform locals/profiles honor the production-lean cost policy
+	python scripts/release/check_cost_policy_terraform.py
 
 validate-route-registry: ## Validate route policy registry seed schema
 	python scripts/release/check_route_registry.py
@@ -365,6 +370,7 @@ founding-tenant-release-gate: ## ci-check + control-spine validators + evidence 
 	python scripts/release/check_foundation.py
 	python scripts/release/check_profile_config.py
 	python scripts/release/check_cost_policy.py
+	python scripts/release/check_cost_policy_terraform.py
 	python scripts/release/check_route_registry.py
 	python scripts/release/check_storage_policies.py
 	python scripts/release/collect_evidence.py
