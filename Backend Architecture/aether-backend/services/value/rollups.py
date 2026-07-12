@@ -28,8 +28,9 @@ def safe_rollup(records: Iterable[dict], *, metric_kind: str = "flow") -> dict:
     """
     by_currency: dict[str, dict] = {}
     included = 0          # records with a parseable native amount
-    priced = 0           # records with a trustworthy USD value
-    excluded = 0         # records with no parseable amount
+    priced = 0           # records counted into the USD total (priced + eligible)
+    unpriced = 0         # records with an amount but no trusted USD value
+    excluded = 0         # records with no amount, or priced-but-rollup-ineligible
     total_usd = Decimal(0)
     any_usd = False
 
@@ -42,28 +43,33 @@ def safe_rollup(records: Iterable[dict], *, metric_kind: str = "flow") -> dict:
         included += 1
         currency = v["native"]["currency"] or "unknown"
         usd = to_decimal(v["valuation"]["usd_value"])
+        eligible = v["status"].get("include_in_rollups", usd is not None)
 
         bucket = by_currency.setdefault(
             currency, {"amount": Decimal(0), "usd": Decimal(0), "count": 0, "priced": True}
         )
         bucket["amount"] += amount
         bucket["count"] += 1
-        if usd is None:
-            bucket["priced"] = False
-        else:
+        if usd is not None and eligible:
             bucket["usd"] += usd
             total_usd += usd
             any_usd = True
             priced += 1
+        elif usd is None:
+            bucket["priced"] = False
+            unpriced += 1
+        else:
+            # Priced but ownership/policy-excluded (testnet / spam / liability /
+            # counterparty) — never enters the trusted USD total.
+            bucket["priced"] = False
+            excluded += 1
 
-    unpriced = included - priced
-
-    if included == 0:
+    if included == 0 and excluded == 0:
         rollup_status = "unavailable"
-    elif unpriced == 0:
-        rollup_status = "complete"
     elif priced == 0:
         rollup_status = "unavailable"
+    elif unpriced == 0 and priced == included:
+        rollup_status = "complete"
     else:
         rollup_status = "partial"
 
