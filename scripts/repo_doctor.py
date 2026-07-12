@@ -371,6 +371,13 @@ def main(argv: Sequence[str] | None = None) -> None:
         remediation="reconcile ConsentPurpose in GDPR & SOC2/aether-compliance/config/compliance_config.py with packages/shared/contracts/consent-registry.json",
     )
     run(
+        ["python", "scripts/validate_sdk_parity.py"],
+        name="SDK runtime parity (observe / manifest-verify / batch-health across SDKs)",
+        results=results,
+        stop_on_failure=stop,
+        remediation="expose canonical observe(), iOS/Android manifest signature verification, and batch health metrics; see docs/source-of-truth/SDK_RUNTIME_PARITY.md",
+    )
+    run(
         ["python", "scripts/check_version_consistency.py"],
         name="Version/workspace consistency aggregate",
         results=results,

@@ -13,6 +13,8 @@ import java.net.HttpURLConnection
 import java.net.URL
 import java.security.MessageDigest
 import java.util.UUID
+import javax.crypto.Mac
+import javax.crypto.spec.SecretKeySpec
 
 data class SDKHeartbeatPayload(
     val sdk_id: String,
@@ -44,6 +46,26 @@ data class SDKManifest(
 
 typealias ManifestUpdateCallback = (SDKManifest) -> Unit
 
+/**
+ * Deterministic canonical serialization of the signed manifest fields
+ * (signature excluded), used as the HMAC-SHA256 input for signature verification
+ * (Truth Kernel §2.9). Top-level fields and feature keys are sorted so the SDK
+ * and the backend signer produce byte-identical input.
+ */
+fun canonicalManifestString(m: SDKManifest): String {
+    val features = m.features.keys.sorted()
+        .joinToString(",") { "$it=${if (m.features[it] == true) "true" else "false"}" }
+    val fields = listOf(
+        "features" to features,
+        "manifest_version" to m.manifest_version,
+        "min_sdk_version" to m.min_sdk_version,
+        "published_at" to m.published_at,
+        "rollout_percentage" to m.rollout_percentage.toString(),
+        "schema_version" to m.schema_version,
+    )
+    return fields.sortedBy { it.first }.joinToString("|") { "${it.first}=${it.second}" }
+}
+
 class AetherHealthAgent(
     private val endpoint: String,
     private val apiKey: String,
@@ -51,7 +73,15 @@ class AetherHealthAgent(
     private val appVersion: String = "",
     private val heartbeatIntervalMs: Long = 60_000L,
     private val manifestRefreshMs: Long = 300_000L,
-    private val prefs: SharedPreferences? = null
+    private val prefs: SharedPreferences? = null,
+    /**
+     * HMAC-SHA256 secret used to verify manifest signatures (Truth Kernel §2.9).
+     * When set, unsigned or invalid-signature manifests are rejected and the
+     * last-known-good manifest is kept (fail-closed). Source: the tenant's
+     * SDK_CONFIG_SECRET, provisioned out-of-band, never shipped in plaintext in
+     * the app bundle for production tenants.
+     */
+    private val manifestVerificationKey: String? = null
 ) {
     private val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
     private var heartbeatJob: Job? = null
@@ -60,6 +90,7 @@ class AetherHealthAgent(
 
     private val sdkId: String = loadOrCreateSdkId()
     private var configVersion: String = "0"
+    private var currentManifest: SDKManifest? = null
     private val manifestCallbacks = mutableListOf<ManifestUpdateCallback>()
 
     // Metrics
@@ -167,7 +198,6 @@ class AetherHealthAgent(
                 val json = JSONObject(body)
                 val manifestVersion = json.optString("manifest_version", "0")
                 val previousVersion = configVersion
-                configVersion = manifestVersion
                 val featuresJson = json.optJSONObject("features")
                 val features = mutableMapOf<String, Boolean>()
                 featuresJson?.keys()?.forEach { key -> features[key] = featuresJson.optBoolean(key, false) }
@@ -180,6 +210,17 @@ class AetherHealthAgent(
                     published_at = json.optString("published_at", ""),
                     signature = json.optString("signature", "")
                 )
+
+                // Signature gate (Truth Kernel §2.9): when a verification key is
+                // configured, reject unsigned/invalid manifests and keep the last
+                // known-good config (fail-closed). Without a key, apply as before.
+                val key = manifestVerificationKey
+                if (key != null && key.isNotEmpty() && !verifyManifestSignature(manifest, key)) {
+                    return@withContext
+                }
+
+                configVersion = manifestVersion
+                currentManifest = manifest
                 if (manifestVersion != previousVersion) {
                     val callbacks = manifestCallbacks.toList()
                     withContext(Dispatchers.Main) { callbacks.forEach { it(manifest) } }
@@ -188,6 +229,32 @@ class AetherHealthAgent(
                 conn.disconnect()
             }
         } catch (_: Exception) { /* non-blocking */ }
+    }
+
+    /** Return the currently cached (verified, if a key is configured) manifest. */
+    fun getManifest(): SDKManifest? = currentManifest
+
+    // -------------------------------------------------------------------------
+    // Manifest Signature Verification (§2.9)
+    // -------------------------------------------------------------------------
+
+    /**
+     * Verify a manifest's HMAC-SHA256 signature over its canonical serialization
+     * using [key] (hex-encoded signature, constant-time comparison). Returns false
+     * for an empty signature or empty key so callers fail closed.
+     */
+    fun verifyManifestSignature(manifest: SDKManifest, key: String): Boolean {
+        if (manifest.signature.isEmpty() || key.isEmpty()) return false
+        val canonical = canonicalManifestString(manifest)
+        val mac = Mac.getInstance("HmacSHA256")
+        mac.init(SecretKeySpec(key.toByteArray(Charsets.UTF_8), "HmacSHA256"))
+        val expected = mac.doFinal(canonical.toByteArray(Charsets.UTF_8))
+            .joinToString("") { "%02x".format(it) }
+        // MessageDigest.isEqual is constant-time on modern Android/JDK.
+        return MessageDigest.isEqual(
+            expected.toByteArray(Charsets.UTF_8),
+            manifest.signature.lowercase().toByteArray(Charsets.UTF_8)
+        )
     }
 
     private fun schemaHash(): String {

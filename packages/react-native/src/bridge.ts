@@ -55,6 +55,20 @@ export interface Identity {
   traits: Record<string, unknown>;
 }
 
+/**
+ * Per-batch ingestion health counters (Truth Kernel §2.8), delivered from the
+ * native layer via the `AetherBatchResult` event. `accepted` / `duplicate` /
+ * `rejected` come from the backend BatchResponse; `dropped_by_consent` and
+ * `queue_depth` are native SDK-side truths.
+ */
+export interface BatchHealth {
+  accepted: number;
+  duplicate: number;
+  rejected: number;
+  dropped_by_consent: number;
+  queue_depth: number;
+}
+
 export interface IdentityData {
   userId?: string;
   walletAddress?: string;
@@ -78,6 +92,34 @@ const Aether = {
 
   track(event: string, properties?: Record<string, unknown>): void {
     AetherNative?.track(event, properties ?? {});
+  },
+
+  /**
+   * Canonical low-level observation API (Truth Kernel §2.6). Emits a first-class
+   * backend event `type` directly through the native pipeline, which applies the
+   * same consent gating, batching, and queue-depth limits as `track`. Unknown
+   * (non-canonical) types are a native-side no-op, never a mislabeled event.
+   */
+  observe(type: string, properties?: Record<string, unknown>): void {
+    AetherNative?.observe?.(type, properties ?? {});
+  },
+
+  /** Current native event-queue depth (Truth Kernel §2.6 queue-depth awareness). */
+  async queueDepth(): Promise<number> {
+    try {
+      return (await AetherNative?.getQueueDepth?.()) ?? 0;
+    } catch {
+      return 0;
+    }
+  },
+
+  /**
+   * Subscribe to per-batch ingestion health (Truth Kernel §2.8) emitted by the
+   * native layer after each delivered batch. Returns an unsubscribe function.
+   */
+  onBatchResult(callback: (health: BatchHealth) => void): () => void {
+    const sub = emitter?.addListener('AetherBatchResult', callback);
+    return () => sub?.remove();
   },
 
   screenView(screenName: string, properties?: Record<string, unknown>): void {
@@ -254,6 +296,13 @@ const Aether = {
     nativeOfflinePersistence: true,
     remoteManifest: true,
     healthHeartbeat: true,
+    // Canonical observe() bridged to native (Truth Kernel §2.6).
+    observe: true,
+    // Per-batch ingestion health via the AetherBatchResult native event (§2.8).
+    batchHealth: true,
+    // Manifest signature verification is enforced in the native iOS/Android
+    // layers this bridge delegates to (§2.9).
+    manifestSignatureVerification: true,
   },
 
   // Experiments

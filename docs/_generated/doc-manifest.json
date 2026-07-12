@@ -5472,6 +5472,9 @@
       "status": "stable"
     },
     {
+      "path": "docs/source-of-truth/MODEL_GOVERNANCE.md"
+    },
+    {
       "path": "docs/source-of-truth/OLYMPUS_PROVIDER_SOURCE_CATALOG.md",
       "title": "Olympus Provider Source Catalog",
       "slug": "architecture/olympus-provider-source-catalog",

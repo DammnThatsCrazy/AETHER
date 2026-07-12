@@ -18,11 +18,11 @@ import { sendBatch } from './transport';
 import { scrubSensitiveFields } from './scrubber';
 import { SdkHealthTracker } from './health';
 import { makeServerClient } from './client';
-import type { AetherServerConfig, ServerEvent, ServerConsentState, ConsentPurpose } from './types';
+import type { AetherServerConfig, ServerEvent, ServerConsentState, ConsentPurpose, BatchHealth } from './types';
 
 export { scrubSensitiveFields } from './scrubber';
 export { makeServerClient } from './client';
-export type { AetherServerConfig, ServerEvent, ServerConsentState, ConsentPurpose } from './types';
+export type { AetherServerConfig, ServerEvent, ServerConsentState, ConsentPurpose, BatchHealth } from './types';
 export type { SdkHealthSnapshot } from './health';
 export {
   buildAgentEvent,
@@ -46,6 +46,7 @@ export class AetherServerSDK {
   private readonly health: SdkHealthTracker;
   private flushTimer: ReturnType<typeof setTimeout> | null = null;
   private flushing = false;
+  private lastBatchHealth: BatchHealth | null = null;
 
   /** Typed helpers for common server observation patterns. */
   readonly observe: ReturnType<typeof makeServerClient>;
@@ -59,6 +60,7 @@ export class AetherServerSDK {
       flushInterval: config.flushInterval ?? 5000,
       maxQueueSize: config.maxQueueSize ?? 1000,
       userAgent: config.userAgent ?? '@aether/server',
+      onBatchResult: config.onBatchResult ?? (() => { /* no-op */ }),
     };
     this.consent = this.buildConsentState(config.consent ?? {});
     this.queue = new EventQueue({ maxSize: this.config.maxQueueSize });
@@ -136,6 +138,16 @@ export class AetherServerSDK {
         );
         if (result.ok) {
           this.health.recordDelivered(item.events.length);
+          const health: BatchHealth = {
+            accepted: result.counters?.accepted ?? item.events.length,
+            duplicate: result.counters?.duplicate ?? 0,
+            rejected: result.counters?.rejected ?? 0,
+            // Server SDK sends consent as a hint and does not drop locally.
+            dropped_by_consent: 0,
+            queue_depth: this.queue.size,
+          };
+          this.lastBatchHealth = health;
+          this.config.onBatchResult(health);
         } else if (result.status >= 500 || result.status === 429 || result.status === 0) {
           this.queue.requeue(item);
           this.health.recordFailed(item.events.length);
@@ -154,6 +166,14 @@ export class AetherServerSDK {
   /** Get SDK health snapshot. */
   healthSnapshot() {
     return this.health.snapshot();
+  }
+
+  /**
+   * Per-batch ingestion health from the most recently delivered batch
+   * (Truth Kernel §2.8), or null if no batch has been delivered yet.
+   */
+  lastBatchResult(): BatchHealth | null {
+    return this.lastBatchHealth;
   }
 
   /** Flush remaining events and stop the flush timer. */

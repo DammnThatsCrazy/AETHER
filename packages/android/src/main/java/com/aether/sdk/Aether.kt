@@ -38,6 +38,12 @@ data class AetherConfig(
     val flushIntervalMs: Long = 5000L,
     val modules: ModuleConfig = ModuleConfig(),
     val privacy: PrivacyConfig = PrivacyConfig(),
+    /**
+     * Optional HMAC-SHA256 secret to verify the remote SDK manifest signature
+     * before applying it (Truth Kernel §2.9). When set, unsigned/invalid
+     * manifests are rejected and the last-known-good config is kept.
+     */
+    val manifestVerificationKey: String? = null,
     val autoResumeJourney: Boolean = true,
     val onJourneyResumed: ((resolvedAnonymousId: String, resolvedUserId: String?) -> Unit)? = null
 ) {
@@ -81,6 +87,25 @@ data class IdentityData(
 )
 
 // =============================================================================
+// BATCH HEALTH (Truth Kernel §2.8)
+// =============================================================================
+
+/**
+ * Per-batch ingestion health counters. `accepted` / `duplicate` / `rejected`
+ * are parsed from the backend BatchResponse (packages/shared/ingestion-contract.ts).
+ * `droppedByConsent` and `queueDepth` are SDK-side truths: consent gating removes
+ * events before they leave the device, and queueDepth reflects the local backlog
+ * after send.
+ */
+data class BatchHealth(
+    val accepted: Int,
+    val duplicate: Int,
+    val rejected: Int,
+    val droppedByConsent: Int,
+    val queueDepth: Int,
+)
+
+// =============================================================================
 // MAIN SDK
 // =============================================================================
 
@@ -101,6 +126,12 @@ object Aether : DefaultLifecycleObserver {
     private const val SESSION_TIMEOUT_MS = 30 * 60 * 1000L // 30 min
 
     private var healthAgent: AetherHealthAgent? = null
+
+    /** Invoked after each processed batch with per-batch ingestion health (§2.8). */
+    var onBatchResult: ((BatchHealth) -> Unit)? = null
+
+    /** Consent-dropped events accumulated since the last batch send (§2.8). */
+    private val pendingConsentDrops = java.util.concurrent.atomic.AtomicInteger(0)
 
     private var sessionId: String = UUID.randomUUID().toString()
     private var anonymousId: String = ""
@@ -276,7 +307,7 @@ object Aether : DefaultLifecycleObserver {
         "trading_agent_enabled" to "financial_activity", "trading_agent_disabled" to "financial_activity",
         "trade_intent_created" to "financial_activity", "trade_approval_requested" to "financial_activity",
         "trade_approval_resolved" to "financial_activity", "risk_policy_updated" to "financial_activity",
-        "human_trade_override_recorded" to "financial_activity"
+        "human_trade_override_recorded" to "financial_activity",
         // Stablecoin intelligence family (explicit opt-in)
         "stablecoin_transfer_observed" to "economic_observability", "stablecoin_payment_observed" to "economic_observability",
         "stablecoin_mint_observed" to "economic_observability", "stablecoin_burn_observed" to "economic_observability",
@@ -390,7 +421,8 @@ object Aether : DefaultLifecycleObserver {
             apiKey = config.apiKey,
             platform = "android",
             appVersion = try { application.packageManager.getPackageInfo(application.packageName, 0).versionName ?: "" } catch (_: Exception) { "" },
-            prefs = prefs
+            prefs = prefs,
+            manifestVerificationKey = config.manifestVerificationKey
         )
         hAgent.getDynamicState = {
             Triple(
@@ -420,6 +452,31 @@ object Aether : DefaultLifecycleObserver {
         enqueueEvent("track", props)
     }
 
+    /**
+     * Canonical low-level observation API (Truth Kernel §2.6). Emits a
+     * first-class backend event [type] directly. Semantics mirror the web SDK:
+     *
+     * - [type] must be a canonical registry event type; unknown types are a
+     *   production-safe no-op (with a debug log), never a silent mislabel.
+     * - Payloads asserting `execution_by_aether == true` are rejected — Aether
+     *   observes, it never executes.
+     * - Consent gating, sensitive-field scrubbing, batching, and the max
+     *   queue-size bound all run on the shared [enqueueEvent] path.
+     */
+    fun observe(type: String, properties: Map<String, Any?> = emptyMap()) {
+        if (!CANONICAL_EVENT_TYPES.contains(type)) {
+            log("observe(): '$type' is not a canonical event type — ignored")
+            return
+        }
+        if (properties["execution_by_aether"] == true) {
+            log("observe(): event '$type' dropped — execution_by_aether must never be true")
+            return
+        }
+        enqueueEvent(type, properties)
+    }
+
+    /** Current event-queue depth (Truth Kernel §2.6 queue-depth awareness). */
+    fun queueDepth(): Int = eventQueue.size
 
     fun startJourney(nameOrType: String, properties: Map<String, Any?> = emptyMap()) {
         currentJourneyId = (properties["journeyId"] as? String) ?: UUID.randomUUID().toString()
@@ -944,6 +1001,10 @@ object Aether : DefaultLifecycleObserver {
         val gdprMode = config?.privacy?.gdprMode ?: false
         if (type != "consent" && gdprMode && (purpose == null || !consentState.contains(purpose))) {
             log("Dropping $type before enqueue because $purpose consent is not granted")
+            // Consent gating is intentional, not a delivery failure — it is
+            // surfaced as the BatchHealth.droppedByConsent counter (§2.8).
+            pendingConsentDrops.incrementAndGet()
+            healthAgent?.recordDroppedEvents(1)
             return
         }
 
@@ -1008,12 +1069,18 @@ object Aether : DefaultLifecycleObserver {
             connection.outputStream.use { it.write(payload.toString().toByteArray()) }
             val responseCode = connection.responseCode
             val latencyMs = (System.currentTimeMillis() - sendStart).toDouble()
+            // Read the body on success (before disconnect) so per-batch health
+            // counters can be parsed from the BatchResponse (§2.8).
+            val responseBody = if (responseCode in 200..299) {
+                try { connection.inputStream.bufferedReader().readText() } catch (_: Exception) { "" }
+            } else ""
             connection.disconnect()
 
             when {
                 responseCode in 200..299 -> {
                     healthAgent?.recordBatchAttempt(true, latencyMs)
                     clearPersistedQueue()
+                    emitBatchHealth(batch.size, responseBody)
                 }
                 responseCode == 429 -> {
                     val retryAfterSec = connection.getHeaderField("Retry-After")?.toLongOrNull() ?: 5L
@@ -1058,6 +1125,40 @@ object Aether : DefaultLifecycleObserver {
                 batch.forEach { eventQueue.add(it) }
             }
         }
+    }
+
+    /**
+     * Parse per-batch acceptance counters from the /v1/batch response body and
+     * surface a [BatchHealth] via [onBatchResult] (Truth Kernel §2.8). The backend
+     * BatchResponse uses `accepted` / `duplicates` / `rejected`; the singular
+     * `duplicate` is also accepted. Falls back to treating the whole batch as
+     * accepted when the body is absent or unparseable.
+     */
+    private fun emitBatchHealth(sentCount: Int, responseBody: String) {
+        val cb = onBatchResult ?: return
+        var accepted = sentCount
+        var duplicate = 0
+        var rejected = 0
+        if (responseBody.isNotEmpty()) {
+            try {
+                val json = JSONObject(responseBody)
+                if (json.has("accepted")) accepted = json.optInt("accepted", sentCount)
+                duplicate = when {
+                    json.has("duplicate") -> json.optInt("duplicate", 0)
+                    json.has("duplicates") -> json.optInt("duplicates", 0)
+                    else -> 0
+                }
+                rejected = json.optInt("rejected", 0)
+            } catch (_: Exception) { /* keep optimistic defaults */ }
+        }
+        val health = BatchHealth(
+            accepted = accepted,
+            duplicate = duplicate,
+            rejected = rejected,
+            droppedByConsent = pendingConsentDrops.getAndSet(0),
+            queueDepth = eventQueue.size,
+        )
+        cb(health)
     }
 
     private fun fetchConfig() {

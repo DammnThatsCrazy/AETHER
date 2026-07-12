@@ -381,3 +381,25 @@ Backend admin routes for ML operational state are defined in:
 | Investor demo | ✅ (synthetic labeled) | N/A | N/A |
 
 > **Note**: "Investor demo" uses synthetic-trained artifacts explicitly labeled as such. These are never promoted to production and all responses include `synthetic_data: true`.
+
+## Model governance gates
+
+The registry now carries per-model governance metadata (`allowed_training_purposes`,
+`requires_privacy_review`, `requires_bias_audit`, `requires_model_card`,
+`requires_dataset_card`, `requires_training_manifest`, `production_promotion_allowed`),
+and `artifact_registry.promote_artifact` blocks staging/promotion when required
+governance artifacts (model card, dataset card, privacy review, training manifest,
+bias audit) are missing. The backend enforces two additional gates
+(`services/model_governance`, see `docs/source-of-truth/MODEL_GOVERNANCE.md`):
+
+- **TrainingDataGate** — consent-scoped training-data admission: data collected
+  under non-trainable purposes (`web3`/`credit`/`location`) or purposes needing a
+  separate model-training opt-in (`financial_activity`/`economic_observability`/
+  `cross_chain_observability`) is quarantined, as are unconsented identity-derived
+  labels.
+- **InferencePolicyGate** — every inference records a `serve_inference` consent
+  PolicyDecision; fail-closed under `ML_INFERENCE_POLICY_ENFORCE` or a
+  `fail_closed_required` model.
+
+These are enforced in CI by `scripts/validate_ml_registry.py` and
+`scripts/validate_model_governance.py`.

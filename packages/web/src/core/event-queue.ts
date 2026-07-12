@@ -3,9 +3,11 @@
 // Updated for multi-VM Web3 event types
 // =============================================================================
 
-import type { AetherEvent, RetryConfig, ConsentState } from '../types';
+import type { AetherEvent, RetryConfig, ConsentState, BatchHealth } from '../types';
 import { storage } from '../utils';
 import { EVENT_CONSENT_PURPOSE } from './generated-consent-map';
+
+export type { BatchHealth } from '../types';
 
 const QUEUE_STORAGE_KEY = 'event_queue';
 const MAX_STORED_EVENTS = 1000;
@@ -22,6 +24,11 @@ interface QueueConfig {
   onError?: (error: Error, events: AetherEvent[]) => void;
   /** Called after each batch send attempt with round-trip latency and success. */
   onAttempt?: (latencyMs: number, success: boolean) => void;
+  /**
+   * Called after each processed batch with per-batch health counters
+   * (accepted / duplicate / rejected / dropped_by_consent / queue_depth).
+   */
+  onBatchResult?: (health: BatchHealth) => void;
 }
 
 const DEFAULT_RETRY: Required<RetryConfig> = {
@@ -30,6 +37,13 @@ const DEFAULT_RETRY: Required<RetryConfig> = {
   maxDelay: 30000,
   backoffMultiplier: 2,
 };
+
+/** Counters parsed directly from the /v1/batch response body. */
+interface IngestCounters {
+  accepted: number;
+  duplicate: number;
+  rejected: number;
+}
 
 /**
  * Sensitive property keys scrubbed locally before an event leaves the client.
@@ -72,6 +86,7 @@ export class EventQueue {
       apiKey: config.apiKey,
       onError: config.onError,
       onAttempt: config.onAttempt,
+      onBatchResult: config.onBatchResult,
     };
     this.restoreQueue();
     this.startFlushTimer();
@@ -98,18 +113,33 @@ export class EventQueue {
     this.isFlushing = true;
     const batch = this.queue.splice(0, this.config.batchSize);
     const allowedEvents = this.filterByConsent(batch);
+    const droppedByConsent = batch.length - allowedEvents.length;
 
-    // Consent filtering is intentional, not an ingestion failure — it must not
-    // count against health metrics, so it is deliberately not reported as a drop.
+    // Consent filtering is intentional, not an ingestion failure — it is surfaced
+    // as its own `dropped_by_consent` health counter, never as a send failure.
     if (allowedEvents.length === 0) {
+      this.config.onBatchResult?.({
+        accepted: 0,
+        duplicate: 0,
+        rejected: 0,
+        dropped_by_consent: droppedByConsent,
+        queue_depth: this.queue.length,
+      });
       this.isFlushing = false;
       return;
     }
 
     const start = Date.now();
     try {
-      await this.sendBatch(allowedEvents);
+      const counters = await this.sendBatch(allowedEvents);
       this.config.onAttempt?.(Date.now() - start, true);
+      this.config.onBatchResult?.({
+        accepted: counters.accepted,
+        duplicate: counters.duplicate,
+        rejected: counters.rejected,
+        dropped_by_consent: droppedByConsent,
+        queue_depth: this.queue.length,
+      });
       this.persistQueue();
     } catch (error) {
       this.config.onAttempt?.(Date.now() - start, false);
@@ -149,7 +179,7 @@ export class EventQueue {
     });
   }
 
-  private async sendBatch(events: AetherEvent[], retryCount = 0): Promise<void> {
+  private async sendBatch(events: AetherEvent[], retryCount = 0): Promise<IngestCounters> {
     const payload = JSON.stringify({
       batch: events,
       sentAt: new Date().toISOString(),
@@ -189,6 +219,36 @@ export class EventQueue {
 
       throw new Error(`Aether API error: ${response.status} ${response.statusText}`);
     }
+
+    return this.parseIngestCounters(events.length, response);
+  }
+
+  /**
+   * Parse per-batch acceptance counters from the /v1/batch response body.
+   * The backend BatchResponse uses `accepted` / `duplicates` / `rejected`
+   * (packages/shared/ingestion-contract.ts). Falls back to treating the whole
+   * batch as accepted if the body is absent or unparseable, so health reporting
+   * never blocks a successful (2xx) delivery.
+   */
+  private async parseIngestCounters(sent: number, response: Response): Promise<IngestCounters> {
+    try {
+      const body = (await response.json()) as Record<string, unknown>;
+      const num = (v: unknown): number | undefined =>
+        typeof v === 'number' && Number.isFinite(v) ? v : undefined;
+      const accepted = num(body['accepted']);
+      const duplicate = num(body['duplicate']) ?? num(body['duplicates']);
+      const rejected = num(body['rejected']);
+      if (accepted !== undefined || duplicate !== undefined || rejected !== undefined) {
+        return {
+          accepted: accepted ?? 0,
+          duplicate: duplicate ?? 0,
+          rejected: rejected ?? 0,
+        };
+      }
+    } catch {
+      // Body missing / non-JSON — fall through to optimistic default.
+    }
+    return { accepted: sent, duplicate: 0, rejected: 0 };
   }
 
   private sendBeacon(events: AetherEvent[]): boolean {
