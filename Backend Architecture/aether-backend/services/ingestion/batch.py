@@ -491,6 +491,38 @@ async def _process_single_event(
                 reason=f"{REJECT_CONSENT_REQUIRED}:{required_consent}",
             )
 
+    # 4b-authority. Server-authoritative consent enforcement (PR 3, flag-gated).
+    #     The SERVER consent-receipt store — not the SDK context.consent snapshot
+    #     validated in 4a — decides. Absence of a server receipt is NOT
+    #     permission (fail-closed): a granted SDK snapshot with no server receipt
+    #     is still rejected. Default OFF in local so legacy ingestion tests keep
+    #     the SDK-snapshot behavior; ON in staging/production. This is the single
+    #     additive block for FT-3-AUTHORITATIVE-CONSENT (PR 5 also edits this file
+    #     — keep the surface minimal).
+    if (
+        settings.consent_authority.authoritative_consent_enforcement_enabled
+        and sdk_event.type != "consent"
+    ):
+        authoritative_purpose = EVENT_CONSENT_PURPOSE.get(sdk_event.type)
+        if authoritative_purpose:
+            from services.consent.authority import evaluate_consent
+            allowed, reason_code = await evaluate_consent(
+                tenant_id=tenant_id,
+                subject_id=sdk_event.userId,
+                anonymous_id=sdk_event.anonymousId,
+                purpose=authoritative_purpose,
+            )
+            if not allowed:
+                metrics.increment(
+                    "ingestion_consent_authority_blocked_total",
+                    labels={"purpose": authoritative_purpose, "reason": reason_code or "unknown"},
+                )
+                return EventResult(
+                    id=sdk_event.id,
+                    status="rejected",
+                    reason=f"{reason_code}:{authoritative_purpose}",
+                )
+
     # 4c. Deployment-context validation (External Agent Telemetry Plane V1).
     #     Flag-gated: only when the plane is enabled AND the event carries an
     #     agent deployment context with a deployment id.

@@ -520,6 +520,32 @@ class RouteRegistryConfig:
 
 
 # ---------------------------------------------------------------------------
+# Server-authoritative consent enforcement (PR 3) — consent as authority.
+#
+# Under the founding-tenant posture the SERVER consent-receipt store, not the
+# SDK per-event `context.consent` snapshot, is the source of truth for whether
+# ingestion may process an event. Absence of a server receipt is NOT permission
+# (fail-closed). These flags follow the trust-plane default: ON in
+# staging/production and OFF in local/dev, so existing local ingestion tests
+# keep the legacy SDK-snapshot behavior. Explicit env var always wins.
+#   - authoritative_consent_enforcement_enabled: /v1/batch consults the server
+#     ConsentReceipt store via services.consent.authority.evaluate_consent and
+#     rejects events with a stable rejection code when not allowed.
+#   - tenant_compliance_policy_enabled: evaluate_data_policy consults the
+#     tenant compliance profile and rejects prohibited data classes.
+# ---------------------------------------------------------------------------
+
+@dataclass(frozen=True)
+class ConsentAuthorityConfig:
+    authoritative_consent_enforcement_enabled: bool = _env_bool(
+        "AUTHORITATIVE_CONSENT_ENFORCEMENT_ENABLED", _TRUST_DEFAULT_ON
+    )
+    tenant_compliance_policy_enabled: bool = _env_bool(
+        "TENANT_COMPLIANCE_POLICY_ENABLED", _TRUST_DEFAULT_ON
+    )
+
+
+# ---------------------------------------------------------------------------
 # Data Quality, Drift Detection & Graph Intelligence Reliability
 # ---------------------------------------------------------------------------
 
@@ -905,6 +931,7 @@ class Settings:
     security_governance: SecurityGovernanceConfig = field(default_factory=SecurityGovernanceConfig)
     trust_plane: TrustPlaneConfig = field(default_factory=TrustPlaneConfig)
     route_registry: RouteRegistryConfig = field(default_factory=RouteRegistryConfig)
+    consent_authority: ConsentAuthorityConfig = field(default_factory=ConsentAuthorityConfig)
     quicknode: QuickNodeConfig = field(default_factory=QuickNodeConfig)
     stablecoin_intelligence: StablecoinIntelligenceConfig = field(default_factory=StablecoinIntelligenceConfig)
 
