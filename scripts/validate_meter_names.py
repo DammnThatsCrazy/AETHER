@@ -32,6 +32,11 @@ CANONICAL_NAMES: frozenset[str] = frozenset({
     "ingestion_validation_failed_total",
     "ingestion_consent_blocked_total",
     "ingestion_sensitive_scrub_total",
+    # Ingestion V2 — typed Bronze + transactional outbox (PR 5, bronze_bulk.py)
+    "ingestion_v2_batch_received_total",
+    "ingestion_v2_bronze_accepted_total",
+    "ingestion_v2_bronze_duplicate_total",
+    "ingestion_v2_transaction_rollback_total",
     # Payment Rail Observability (services/integrations/providers/payment_rails)
     "payment_rail_event_duplicate_total",
     "payment_rail_event_rejected_total",
