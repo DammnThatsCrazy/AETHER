@@ -2,6 +2,17 @@
 # AETHER — Root Module Variables
 # ============================================================================
 
+variable "deployment_profile" {
+  type        = string
+  description = "Aether deployment profile driving cost/resource toggles (see config/deployment_profiles.yaml)."
+  default     = "production-lean"
+
+  validation {
+    condition     = contains(["staging", "production-lean", "production-scale", "enterprise-isolated"], var.deployment_profile)
+    error_message = "Invalid Aether deployment profile."
+  }
+}
+
 variable "environment" {
   type        = string
   description = "Deployment environment (production, staging, dev)"
