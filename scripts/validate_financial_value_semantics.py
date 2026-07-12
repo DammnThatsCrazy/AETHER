@@ -76,6 +76,26 @@ def main() -> int:
         if "safe_rollup" not in agg:
             fail("services/profile/aggregator.py no longer uses safe_rollup for financial rollups")
 
+    # 4. Price-source breadth: peg-aware stablecoin valuation + ownership rules.
+    value_dir = VALUE_MODELS_PY.parent
+    price_sources = value_dir / "price_sources.py"
+    ownership = value_dir / "ownership_rules.py"
+    if not price_sources.exists():
+        fail("missing services/value/price_sources.py (FX / token / peg-aware stablecoin)")
+    else:
+        ps = price_sources.read_text()
+        if "stablecoin_peg_verified" not in ps or "classify_peg" not in ps:
+            fail("price_sources must value stablecoins peg-aware (classify_peg / stablecoin_peg_verified), never assume $1")
+        if re.search(r'usd_value["\']?\s*[:=]\s*["\']?0["\']?[,\s}]', ps):
+            fail("price_sources must never coerce an unavailable price to 0")
+    if not ownership.exists():
+        fail("missing services/value/ownership_rules.py")
+    else:
+        own = ownership.read_text()
+        for token in ("liability_not_asset", "testnet_excluded", "spam"):
+            if token not in own:
+                fail(f"ownership_rules missing rule: {token} (liabilities≠assets; testnet/spam excluded)")
+
     return _report()
 
 

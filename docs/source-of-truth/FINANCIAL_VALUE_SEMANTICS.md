@@ -46,10 +46,27 @@ executes.
 | `manual` | Operator-provided |
 | `unavailable` | No trusted USD price within the freshness window (usd_value null) |
 
-The deterministic CI path trusts only `fiat_identity` (USD) and
-`provider_reported` USD; FX and market pricing come from the pluggable
-price-source layer and never require live third-party credentials in tests. A
-price source being unavailable yields **unpriced**, not zero.
+The pluggable price-source layer (`services/value/price_sources.py`) resolves
+USD across fiat identity, FX, token market price, and **peg-aware stablecoin
+valuation** (reusing `services/stablecoin/valuation.classify_peg` — a stablecoin
+is never assumed to be $1). Real adapters (FX API, market data, Chainlink peg
+feeds) are credential-gated and registered at deploy time; CI runs against
+deterministic fixtures and never requires live credentials. A source being
+unavailable yields **unpriced**, not zero.
+
+Rollup inclusion additionally honors `services/value/ownership_rules.py`:
+liabilities are never counted as assets; testnet and spam/untrusted assets are
+excluded from trusted production rollups; counterparty/external/observed
+relationships are excluded from an owned portfolio. Cross-source agreement is
+tracked by `services/value/reconciliation.py` (`matched` / `conflict` /
+`sdk_only` / `provider_only` / `stale`).
+
+Higher-level rules libraries build on this: `tvl_rules` (gross/net TVL,
+wrapped/LP double-count prevention), `ltv_rules` (historical/predicted/net LTV),
+`portfolio_rules` (cash/stablecoin/volatile/liability buckets + net worth), and
+`account_rules` (Web2 asset vs liability classification). Durable snapshots
+persist via `services/value/repositories.py` (tables added in migration
+`20260721_value_semantics`).
 
 ## Safe rollups
 

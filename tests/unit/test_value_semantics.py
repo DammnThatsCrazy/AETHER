@@ -89,23 +89,39 @@ def test_single_currency_rollup_is_complete(value_mod):
 
 
 def test_mixed_currencies_are_not_scalar_summed(value_mod):
+    # UNKNOWNTOK has no price source -> unpriced; USD is priced.
     r = value_mod.safe_rollup([
         {"amount": "100", "asset_id": "USD"},
-        {"amount": "3", "asset_id": "ETH"},          # unpriced
+        {"amount": "3", "asset_id": "UNKNOWNTOK"},   # unpriced
     ])
     # No single native scalar across two currencies.
     assert r["native_total"] is None
     assert r["native_currency"] is None
-    # USD total reflects ONLY the priced (USD) subset — never the ETH added in.
+    # USD total reflects ONLY the priced (USD) subset — never the token added in.
     assert r["total_usd"] == "100"
     assert r["rollup_status"] == "partial"
     assert r["unpriced_count"] == 1
-    assert set(r["by_native_currency"]) == {"USD", "ETH"}
-    assert r["by_native_currency"]["ETH"]["usd_value"] is None
+    assert set(r["by_native_currency"]) == {"USD", "UNKNOWNTOK"}
+    assert r["by_native_currency"]["UNKNOWNTOK"]["usd_value"] is None
+
+
+def test_priced_assets_convert_to_usd_first(value_mod):
+    # ETH (market fixture) + USDC (peg-aware) + USD (identity) all price to USD.
+    r = value_mod.safe_rollup([
+        {"amount": "1", "asset_id": "ETH"},     # 1 * 3000
+        {"amount": "50", "asset_id": "USDC"},   # 50 * 1.000 (peg-verified)
+        {"amount": "100", "asset_id": "USD"},   # identity
+    ])
+    from decimal import Decimal
+    assert Decimal(r["total_usd"]) == Decimal("3150")
+    assert r["rollup_status"] == "complete"
+    assert r["unpriced_count"] == 0
+    # Still no single mixed-currency native scalar.
+    assert r["native_total"] is None
 
 
 def test_all_unpriced_yields_unavailable_not_zero(value_mod):
-    r = value_mod.safe_rollup([{"amount": "3", "asset_id": "ETH"}])
+    r = value_mod.safe_rollup([{"amount": "3", "asset_id": "UNKNOWNTOK"}])
     assert r["total_usd"] is None      # NOT "0"
     assert r["rollup_status"] == "unavailable"
 
@@ -145,14 +161,15 @@ def test_financials_never_sums_mixed_currencies(agg):
         {"id": "t1", "transfer_id": "t1", "tenant_id": "t-a", "from_entity_id": "x",
          "to_entity_id": "user-1", "amount": "100", "asset_id": "USD"},
         {"id": "t2", "transfer_id": "t2", "tenant_id": "t-a", "from_entity_id": "x",
-         "to_entity_id": "user-1", "amount": "3", "asset_id": "ETH"},   # unpriced
+         "to_entity_id": "user-1", "amount": "3", "asset_id": "UNKNOWNTOK"},  # unpriced
     ])
     out = _run(agg.financials("user-1", "t-a"))
     s = out["summary"]
     # Legacy scalar is None because currencies are mixed (blocker fixed).
     assert s["inflow_total"] is None
-    # USD-first value reflects only the priced USD leg — ETH is not coerced in.
+    # USD-first value reflects only the priced USD leg — the unpriced token is
+    # never coerced into the total.
     assert s["inflow_usd"] == "100"
     assert s["unpriced_count"] >= 1
     assert s["rollup_status"] == "partial"
-    assert set(s["by_native_currency"]) == {"USD", "ETH"}
+    assert set(s["by_native_currency"]) == {"USD", "UNKNOWNTOK"}
