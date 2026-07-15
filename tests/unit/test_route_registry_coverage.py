@@ -87,3 +87,16 @@ def test_unknown_prefix_denies():
     from services.security.route_registry import classify
     assert classify("/v1/totally-new-surface/thing") is None
     assert classify("/v1/kyber/anything") is not None  # kyber prefix is known
+
+
+def test_referral_link_routes_are_tenant_scoped_sensitive_and_audited():
+    from services.security.route_registry import classify
+
+    policy = classify("/v1/referral-links/{verified_referral_link_id}/revoke")
+
+    assert policy is not None
+    assert policy.requires_auth is True
+    assert policy.tenant_scoped is True
+    assert policy.sensitive is True
+    assert policy.audit_required is True
+    assert policy.risk_class == "medium"

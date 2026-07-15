@@ -23,6 +23,7 @@ import os
 from shared.events.events import Event, EventConsumer, EventProducer, Topic
 from shared.logger.logger import get_logger, metrics
 from repositories.lake import BronzeRepository, SilverRepository
+from services.ingestion.acquisition_privacy import sanitize_acquisition_payload
 
 logger = get_logger("aether.service.ingestion.workers")
 
@@ -50,7 +51,7 @@ async def sdk_bronze_writer(event: Event) -> None:
             source="sdk",
             source_tag=payload.get("batch_id", ""),
             provider_record_id=event_id,
-            payload=payload,
+            payload=sanitize_acquisition_payload(payload),
             schema_version=payload.get("schema_version", SCHEMA_VERSION),
             entity_id=(
                 payload.get("user_id")
@@ -120,7 +121,11 @@ def _bus_payload_to_sdk_envelope(payload: dict) -> dict:
     """Translate the normalized bus payload back to the SDK envelope shape
     the Silver projectors consume (type/messageId/context/properties)."""
     context = dict(payload.get("context") or {})
-    context.setdefault("tenantId", payload.get("tenant_id"))
+    # ``payload.tenant_id`` was bound from the authenticated ingestion context.
+    # Never let an SDK-supplied context.tenantId override that authority when
+    # rebuilding the projector envelope; doing so would permit cross-tenant
+    # Silver facts and verified-referral lookups.
+    context["tenantId"] = payload.get("tenant_id")
     return {
         "type": payload.get("event_type", ""),
         "messageId": payload.get("event_id"),

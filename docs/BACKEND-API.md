@@ -537,24 +537,73 @@ Classifies a traffic source from raw attribution data.
 }
 ```
 
-### Automatic Traffic Source Classification (v8.2.0)
+### Canonical Traffic Source Classification
 
-`POST /v1/track/traffic-source` now automatically classifies raw SDK signals into source/medium/channel using the server-side `SourceClassifier`. No client-side classification logic is needed — SDKs ship raw referrer, UTM params, click IDs, and referrer domain; the backend resolves everything.
+SDKs ship raw referrer, UTM, click-ID, landing, user-agent, and optional
+`aether_ref` evidence. The server-side `SourceClassifier` classifies that
+evidence before the existing Silver touchpoint, campaign resolver, journey
+compiler, and attribution engine consume it. Clients must not infer an AI
+provider, actor, verification level, or canonical campaign.
 
 **Classification Priority Chain:**
 
 | Priority | Signal | Confidence | Example |
 |----------|--------|------------|---------|
-| 1 | Click IDs | 1.0 | `gclid=abc` → google / cpc / Paid Search |
-| 2 | UTM params | 0.95 | `utm_source=newsletter` → newsletter / email / Email |
-| 3 | Referrer domain | 0.9 | `t.co` → twitter / social / Organic Social |
-| 4 | No signals | 0.5 | → (direct) / (none) / Direct |
+| 1 | Machine user agent | 0.98 | `GPTBot` → crawler discovery, attribution-ineligible |
+| 2 | Verified referral link | 1.0 | controlled agent placement → verified provider/product evidence |
+| 3 | Click IDs | 1.0 | `gclid=abc` → google / cpc / Paid Search |
+| 4 | UTM params | 0.95 | `utm_source=newsletter` → newsletter / email / Email |
+| 5 | Referrer domain | up to 0.96 | `chatgpt.com` → OpenAI / ChatGPT / AI Referral |
+| 6 | No signals | 0.5 | → (direct) / (none) / Direct |
 
 **Supported Click IDs (12):** `gclid`, `msclkid`, `fbclid`, `ttclid`, `twclid`, `li_fat_id`, `rdt_cid`, `scid`, `dclid`, `epik`, `irclickid`, `aff_id`
 
-**Channel Categories:** Paid Search, Paid Social, Organic Search, Organic Social, Email, Display, Affiliate, Referral, Direct, Other
+**Channel Categories:** Paid Search, Paid Social, Organic Search, Organic Social,
+Email, Display, Affiliate, Partner, Referral, AI Referral, Agent Referral,
+AI Crawler, Machine Referral, Video, Audio, SMS, Push, Direct, Other
 
-**SourceInfo model now includes:**
+Canonical touchpoints preserve `source`, `medium`, and `channel` and add
+`source_class`, `referral_mediation_type`, `ai_provider`, `ai_product`,
+`actor_type`, `journey_role`, `evidence_confidence`, `verification_level`,
+`source_classifier_version`, `attribution_eligible`, and optional verified-link
+lineage. Raw referrer query strings, fragments, and referral tokens are not
+stored in Bronze or Silver.
+
+**Verified referral link routes:**
+
+| Method | Path | Access |
+|---|---|---|
+| `POST` | `/v1/referral-links` | admin/editor/service or `referral_links:write` |
+| `GET` | `/v1/referral-links` | admin/editor/service or referral-link read/write permission |
+| `POST` | `/v1/referral-links/{id}/revoke` | admin/editor/service or `referral_links:write` |
+
+The create response discloses the opaque token once. Only its SHA-256 digest is
+persisted, and replayed source events do not increment link usage twice.
+
+**Kyber source-classification routes:**
+
+| Method | Path | Purpose |
+|---|---|---|
+| `GET` | `/v1/kyber/measurement/source-classification/health` | Inspect tenant-scoped classifier coverage and exclusions |
+| `POST` | `/v1/kyber/measurement/source-classification/reclassify` | Enqueue bounded historical repair through the existing durable jobs platform |
+
+The repair operation appends touchpoint revisions, creates new journey and
+attribution versions, and restates affected measurement windows. It never
+edits completed attribution history in place.
+
+**Tenant referral-performance rollup:**
+
+`GET /v1/attribution/referral-performance` returns economic performance from
+the tenant's active attribution runs, grouped by source class, referral
+mediation, AI provider/product, actor, journey role, and verification level.
+Optional `start_at` (inclusive), `end_at` (exclusive), `campaign_id`,
+`ai_provider`, `ai_product`, `referral_mediation_type`, and `source_class`
+filters constrain the rollup; `limit` is bounded to 1–1000. The response
+includes the applied filters, grouped rows, and attributed conversion, gross
+revenue, net revenue, and contribution-value totals. It does not recompute or
+mutate attribution history.
+
+**Legacy SourceInfo response shape remains compatible:**
 ```json
 {
   "source": "google",

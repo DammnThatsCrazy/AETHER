@@ -34,6 +34,7 @@ from typing import Optional, Sequence
 
 from shared.common.common import utc_now
 from shared.logger.logger import get_logger, metrics
+from services.ingestion.acquisition_privacy import sanitize_acquisition_payload
 
 logger = get_logger("aether.ingestion.bronze_bulk")
 
@@ -134,7 +135,8 @@ def _payload_bytes_and_hash(payload: dict) -> tuple[int, str]:
 
 def _bronze_row(rec: BronzeSDKEvent) -> dict:
     """Full record persisted to the ``data`` JSONB envelope (BaseRepository shape)."""
-    payload_bytes, payload_hash = _payload_bytes_and_hash(rec.payload)
+    payload = sanitize_acquisition_payload(rec.payload)
+    payload_bytes, payload_hash = _payload_bytes_and_hash(payload)
     now = utc_now().isoformat()
     return {
         "id": _bronze_id(rec.tenant_id, rec.event_id, rec.schema_version),
@@ -150,7 +152,7 @@ def _bronze_row(rec: BronzeSDKEvent) -> dict:
         "anonymous_id": rec.anonymous_id,
         "user_id": rec.user_id,
         "entity_id": rec.entity_id,
-        "payload": rec.payload,
+        "payload": payload,
         "payload_bytes": payload_bytes,
         "payload_hash": payload_hash,
         "source": rec.source,
@@ -162,13 +164,14 @@ def _bronze_row(rec: BronzeSDKEvent) -> dict:
 
 def _outbox_row(ob: OutboxEvent) -> dict:
     now = utc_now().isoformat()
+    payload = sanitize_acquisition_payload(ob.payload)
     return {
         "id": _outbox_id(ob.tenant_id, ob.event_id, ob.topic),
         "tenant_id": ob.tenant_id,
         "event_id": ob.event_id,
         "topic": ob.topic,
         "partition_key": ob.partition_key,
-        "payload": ob.payload,
+        "payload": payload,
         "status": ob.status or OUTBOX_PENDING,
         "attempt_count": 0,
         "available_at": ob.available_at or now,

@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { api } from '@aether-app/lib/api/endpoints';
 
 export type ActivityFamily = 'web2' | 'web3' | 'campaign' | 'commerce' | 'agent' | 'x402' | 'outcome';
 export type ActivityStatus =
@@ -13,6 +14,16 @@ export interface JourneyStep {
   activity_type: string;
   activity_status: ActivityStatus;
   actor_type: string | null;
+  source_class: string | null;
+  ai_provider: string | null;
+  ai_product: string | null;
+  referral_mediation_type: string | null;
+  journey_role: string | null;
+  verification_level: string | null;
+  evidence_confidence: number | null;
+  source_classifier_version?: string | null;
+  attribution_eligible?: boolean;
+  attributed_net_revenue: number | null;
   transition_type: string | null;
   channel: string | null;
   source: string | null;
@@ -59,26 +70,19 @@ interface Params {
   limit?: number;
 }
 
-async function fetchJourneyPage(
+export async function fetchJourneyPage(
   profileId: string,
   params: { family?: string; after?: string; before?: string; limit?: number; cursor?: string },
 ): Promise<{ steps: JourneyStep[]; meta: JourneyMeta | null; next_cursor: string | null; has_more: boolean }> {
-  const qs = new URLSearchParams();
-  if (params.family) qs.set('family', params.family);
-  if (params.after) qs.set('after', params.after);
-  if (params.before) qs.set('before', params.before);
-  if (params.limit) qs.set('limit', String(params.limit));
-  if (params.cursor) qs.set('cursor', params.cursor);
-  const url = `/v1/profile/${encodeURIComponent(profileId)}/unified-journey?${qs.toString()}`;
-  const res = await fetch(url, { credentials: 'include' });
-  if (!res.ok) throw new Error(`Journey request failed: ${res.status}`);
-  const body = await res.json();
-  const data = body.data ?? body;
+  const data = await api.profile.unifiedJourney(profileId, params);
+  const record = data && typeof data === 'object' && !Array.isArray(data)
+    ? data as Record<string, any>
+    : {};
   return {
-    steps: Array.isArray(data.steps) ? data.steps : [],
-    meta: data.meta ?? null,
-    next_cursor: data.pagination?.next_cursor ?? data.next_cursor ?? null,
-    has_more: Boolean(data.pagination?.has_more ?? data.has_more),
+    steps: Array.isArray(record.steps) ? record.steps : [],
+    meta: record.meta ?? null,
+    next_cursor: record.pagination?.next_cursor ?? record.next_cursor ?? null,
+    has_more: Boolean(record.pagination?.has_more ?? record.has_more),
   };
 }
 

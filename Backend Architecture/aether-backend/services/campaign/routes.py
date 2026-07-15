@@ -8,7 +8,7 @@ and touchpoint recording only.
 from __future__ import annotations
 
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Any, Optional
 
 from fastapi import APIRouter, Depends, Query, Request
@@ -249,14 +249,20 @@ async def get_attribution(
     ctx = trace_request(request, service="campaign")
 
     try:
+        start_at = _attribution_boundary(start_date, exclusive_end=False)
+        end_at = _attribution_boundary(end_date, exclusive_end=True)
+    except ValueError as exc:
+        raise BadRequestError(f"Invalid attribution date: {exc}")
+
+    try:
         from services.measurement.repositories.attribution_run_repo import AttributionRunRepository
         run_repo = AttributionRunRepository()
         summary = await run_repo.campaign_credit_summary(
             tenant_id=tenant.tenant_id,
             campaign_id=campaign_id,
             model_type=model,
-            start_date=start_date,
-            end_date=end_date,
+            start_date=start_at,
+            end_date=end_at,
         )
     except Exception as exc:
         logger.warning(
@@ -282,6 +288,20 @@ async def get_attribution(
         "period": {"start": start_date, "end": end_date},
         **summary,
     }).to_dict()
+
+
+def _attribution_boundary(value: Optional[str], *, exclusive_end: bool) -> Optional[datetime]:
+    if not value:
+        return None
+    date_only = len(value) == 10
+    parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=timezone.utc)
+    else:
+        parsed = parsed.astimezone(timezone.utc)
+    if exclusive_end and date_only:
+        parsed += timedelta(days=1)
+    return parsed
 
 
 @router.post("/{campaign_id}/touchpoints")
@@ -1170,5 +1190,4 @@ async def get_campaign_quality(request: Request):
         quality = {"error": str(exc), "status": "unavailable"}
     metrics.increment("campaign_quality_read")
     return APIResponse(data=quality).to_dict()
-
 

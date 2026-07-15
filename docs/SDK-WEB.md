@@ -8,6 +8,8 @@ status: stable
 since_version: "8.9.0"
 source_files:
   - packages/web/src/index.ts
+  - packages/web/src/tracking/traffic-source-tracker.ts
+  - packages/shared/acquisition-evidence.ts
   - packages/shared/events.ts
   - packages/shared/consent.ts
 canonical_owner: sdk@aether
@@ -352,13 +354,22 @@ The SDK automatically captures on init:
 - `referrerDomain` — parsed hostname with `www.` stripped (e.g. `google.com`, `t.co`)
 - All UTM parameters (`utm_source`, `utm_medium`, `utm_campaign`, `utm_term`, `utm_content`)
 - 12 click IDs (`gclid`, `msclkid`, `fbclid`, `ttclid`, `twclid`, `li_fat_id`, `rdt_cid`, `scid`, `dclid`, `epik`, `irclickid`, `aff_id`)
+- The opaque `aether_ref` value as `referralToken`
 - Landing page URL
 
 **SPA persistence:** Traffic source data is cached in `sessionStorage` on first detection. Subsequent SPA navigations return the original source data instead of losing it when `document.referrer` clears.
 
-**Acquisition evidence envelope (v8.11.0+):** The SDK emits an `AcquisitionEvidence` envelope (from `@aether/shared`) on landing that captures the full attribution signal set — UTM params, click IDs, platform identity, `utm_id`, `externalCampaignId`, `canonicalCampaignId`, and temporal metadata. This envelope is attached to touchpoint events as `acquisitionEvidence` and is used by the server-side `CampaignResolver` to deterministically link touchpoints to canonical campaign UUIDs. Import via `import type { AcquisitionEvidence } from '@aether/shared'` or call `evidenceFromSearchParams(new URLSearchParams(window.location.search))`.
+**Wire shape:** The standard web SDK attaches its first-touch observations to
+events as `context.trafficSource`; it does not emit a separate
+`context.acquisitionEvidence` field. `referralToken` is forwarded unchanged in
+that raw context and is interpreted only after server-side verification. The
+schema-versioned `AcquisitionEvidence` helper from `@aether/shared` remains
+available to custom integrations through
+`evidenceFromSearchParams(new URLSearchParams(window.location.search))`.
 
-Classification (organic, paid, social, email, direct, etc.) happens server-side via `POST /v1/track/traffic-source` using the `SourceClassifier` — the SDK ships raw signals only.
+Classification (including AI provider/product, actor, mediation, verification,
+and attribution eligibility) happens server-side using the canonical
+`SourceClassifier`; the SDK ships raw signals only.
 
 ## Rewards (A6 — Attribution-Verified Eligibility)
 

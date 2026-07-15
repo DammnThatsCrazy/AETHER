@@ -21,7 +21,7 @@ from __future__ import annotations
 
 import re
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime
 from typing import Any, Literal, Optional
 
 from fastapi import APIRouter, Depends, Request
@@ -52,6 +52,7 @@ from services.ingestion.bronze_bulk import (
     OutboxEvent,
     ingest_many,
 )
+from services.ingestion.acquisition_privacy import sanitize_acquisition_payload
 
 logger = get_logger("aether.service.ingestion.batch")
 router = APIRouter(prefix="/v1", tags=["Ingestion"])
@@ -158,6 +159,7 @@ class EventContext(BaseModel):
     provenance: Optional[dict[str, Any]] = None
     semantic: Optional[dict[str, Any]] = None
     trafficSource: Optional[dict[str, Any]] = None
+    acquisitionEvidence: Optional[dict[str, Any]] = None
     privacy: Optional[dict[str, Any]] = None
     sampling: Optional[dict[str, Any]] = None
     sequence: Optional[dict[str, Any]] = None
@@ -283,11 +285,13 @@ async def ingest_batch(
         results.append(result)
         if result.status == "accepted":
             # Build normalized payload for bus and Bronze
-            normalized = _build_normalized_payload(
-                sdk_event=sdk_event,
-                tenant_id=tenant.tenant_id,
-                batch_id=batch_id,
-                received_at=received_at,
+            normalized = sanitize_acquisition_payload(
+                _build_normalized_payload(
+                    sdk_event=sdk_event,
+                    tenant_id=tenant.tenant_id,
+                    batch_id=batch_id,
+                    received_at=received_at,
+                )
             )
             accepted_events.append(Event(
                 topic=Topic.SDK_EVENTS_VALIDATED,

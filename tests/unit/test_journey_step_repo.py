@@ -191,3 +191,38 @@ class TestJourneyStepRepoPagination:
         p1_positions = {s.get("step_position") for s in page1}
         p2_positions = {s.get("step_position") for s in page2}
         assert p1_positions.isdisjoint(p2_positions)
+
+
+def test_step_params_include_source_classification_columns():
+    from services.measurement.repositories.journey_step_repo import _step_params
+
+    classification_id = str(uuid4())
+    link_id = str(uuid4())
+    step = _make_step()
+    step.update({
+        "source_class": "ai_referral",
+        "referral_mediation_type": "ai_mediated_human_referral",
+        "ai_provider": "openai",
+        "ai_product": "chatgpt",
+        "actor_type": "human",
+        "journey_role": "entry",
+        "evidence_confidence": 0.9,
+        "verification_level": "domain_verified",
+        "source_classifier_version": "2.0",
+        "source_classification_id": classification_id,
+        "attribution_eligible": True,
+        "verified_referral_link_id": link_id,
+    })
+
+    params = _step_params(step)
+    assert len(params) == 44
+    assert params[16:21] == (
+        "ai_referral",
+        "ai_mediated_human_referral",
+        "openai",
+        "chatgpt",
+        "entry",
+    )
+    assert str(params[25]) == classification_id
+    assert params[26] is True
+    assert str(params[27]) == link_id

@@ -5,20 +5,21 @@ import {
   DataTable, EmptyState, ErrorState, EvidenceDrawer, FreshnessIndicator,
   GlyphIcon, LoadingState, Modal, ModalBody, ModalFooter, ModalHeader,
   Skeleton, StatusIndicator, Tabs, TabsContent, TabsList, TabsTrigger,
-  TerminalSeparator, TimeWindowSelector, useToast,
+  TerminalSeparator, TimeWindowSelector, formatUSD, useToast,
 } from '@aether/ui';
 import type { TimeWindow } from '@aether/ui';
 import {
   useUserProfile, useUserSessions, useUserDevices, useUserPlatforms,
   useUserJourneys, useUserWallets, useUserFinancials, useUserRewards,
   useUserIdentifiers, useUserIntelligence, useUserBehavioral,
-  useUserWhyExplain, useUserAttributionJourney, useUserGraph, useUserCluster,
+  useUserWhyExplain, useUserGraph, useUserCluster,
   useUserSocialIntelligence, useUserRecommendations,
   useUserTier, useUserAssetComposition, useUserPnl, useUserTradingProfile,
   useUserFunnel, useUserTimeToConvert, useUserJourneyEconomics, useUserDevicePerformance,
   useUserProtocolMetrics, useUserGovernanceActivity,
   useUserQuality, useUserDataFreshness, useUserWeb2Profile,
 } from '@aether-app/features/users/use-user-profile';
+import { useUnifiedJourney } from '@aether-app/features/journey';
 import { api } from '@aether-app/lib/api/endpoints';
 import { OutcomeLedgerPanel } from '@aether-app/components/outcome-ledger-panel';
 
@@ -730,23 +731,32 @@ function SignalRowWithEvidence({ sig, severityVariant }: {
 // ── Attribution "Where" tab ───────────────────────────────────────────────────
 
 function AttributionTab({ userId }: { userId: string }) {
-  const { data, isLoading, error } = useUserAttributionJourney(userId);
-  const touchpoints = asList(data?.touchpoints);
+  const { steps, loading, error } = useUnifiedJourney({ profileId: userId, limit: 100 });
 
   type Row = Record<string, unknown>;
+  const touchpoints = steps as unknown as Row[];
 
   return (
-    <Section title="Attribution journey (where conversions came from)" loading={isLoading} error={error}>
+    <Section title="Attribution journey (where conversions came from)" loading={loading} error={error}>
       <DataTable<Row>
-        keyExtractor={tp => String(tp.touchpoint_id ?? 'touchpoint')}
+        keyExtractor={tp => String(tp.step_id ?? 'touchpoint')}
         data={touchpoints as Row[]}
         emptyMessage="No touchpoints recorded"
         columns={[
           { key: 'channel', header: 'Channel', render: tp => <Badge variant="default" size="sm">{fmt(tp.channel)}</Badge> },
           { key: 'source', header: 'Source', render: tp => <span className="text-text-secondary">{fmt(tp.source)}</span> },
-          { key: 'campaign', header: 'Campaign', render: tp => tp.campaign ? <span className="text-text-primary">{fmt(tp.campaign)}</span> : <span className="text-text-muted">—</span> },
-          { key: 'event', header: 'Event type', render: tp => fmt(tp.event_type) },
-          { key: 'when', header: 'When', render: tp => relTime(tp.timestamp as string) },
+          { key: 'source_class', header: 'Source class', render: tp => fmt(tp.source_class) },
+          { key: 'ai', header: 'AI provider / product', render: tp => [tp.ai_provider, tp.ai_product].filter(Boolean).map(String).join(' / ') || '—' },
+          { key: 'mediation', header: 'Mediation', render: tp => fmt(tp.referral_mediation_type) },
+          { key: 'actor', header: 'Actor', render: tp => fmt(tp.actor_type) },
+          { key: 'role', header: 'Journey role', render: tp => fmt(tp.journey_role) },
+          { key: 'verification', header: 'Verification', render: tp => (
+            <span>{fmt(tp.verification_level)}{tp.evidence_confidence != null ? ` · ${Math.round(Number(tp.evidence_confidence) * 100)}%` : ''}</span>
+          ) },
+          { key: 'campaign', header: 'Campaign', render: tp => tp.campaign_id ? <span className="text-text-primary">{fmt(tp.campaign_id)}</span> : <span className="text-text-muted">—</span> },
+          { key: 'event', header: 'Event type', render: tp => fmt(tp.activity_type) },
+          { key: 'revenue', header: 'Net revenue', render: tp => formatUSD(tp.attributed_net_revenue as string | number | null | undefined, { fallback: '—' }) },
+          { key: 'when', header: 'When', render: tp => relTime(tp.occurred_at as string) },
         ]}
       />
     </Section>

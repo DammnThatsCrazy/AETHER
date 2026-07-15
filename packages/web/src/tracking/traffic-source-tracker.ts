@@ -18,6 +18,7 @@ export interface TrafficSourceData {
   utmCampaign?: string | null;
   utmTerm?: string | null;
   utmContent?: string | null;
+  referralToken?: string | null;
   clickIds: Record<string, string>;
   landingPage: string;
 }
@@ -71,6 +72,8 @@ export class TrafficSourceTracker {
       utmCampaign: params.get('utm_campaign'),
       utmTerm: params.get('utm_term'),
       utmContent: params.get('utm_content'),
+      // Opaque server-verified referral evidence; no client-side interpretation.
+      referralToken: params.get('aether_ref'),
       clickIds,
       landingPage: window.location.href,
     };

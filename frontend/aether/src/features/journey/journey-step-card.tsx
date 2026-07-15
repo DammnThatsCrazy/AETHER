@@ -1,4 +1,5 @@
 import { useState, type FC } from 'react';
+import { formatUSD } from '@aether/ui';
 import type { JourneyStep, ActivityFamily } from './use-unified-journey';
 
 const FAMILY_COLORS: Record<ActivityFamily, string> = {
@@ -70,6 +71,9 @@ export const JourneyStepCard: FC<Props> = ({ step, position }) => {
   const formattedTime = step.occurred_at
     ? new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }).format(new Date(step.occurred_at))
     : '—';
+  const formattedAttributedRevenue = step.attributed_net_revenue == null
+    ? null
+    : formatUSD(step.attributed_net_revenue, { fallback: '—' });
 
   return (
     <article
@@ -126,6 +130,15 @@ export const JourneyStepCard: FC<Props> = ({ step, position }) => {
           {step.session_id && <><dt className="text-text-muted">Session</dt><dd className="font-mono text-[10px]">{step.session_id.slice(0, 16)}…</dd></>}
           {step.identity_method && <><dt className="text-text-muted">ID method</dt><dd>{step.identity_method}</dd></>}
           {step.actor_type && <><dt className="text-text-muted">Actor</dt><dd>{step.actor_type}</dd></>}
+          {step.source_class && <><dt className="text-text-muted">Source class</dt><dd>{step.source_class}</dd></>}
+          {step.ai_provider && <><dt className="text-text-muted">AI provider</dt><dd>{step.ai_provider}</dd></>}
+          {step.ai_product && <><dt className="text-text-muted">AI product</dt><dd>{step.ai_product}</dd></>}
+          {step.referral_mediation_type && <><dt className="text-text-muted">Mediation</dt><dd>{step.referral_mediation_type}</dd></>}
+          {step.journey_role && <><dt className="text-text-muted">Journey role</dt><dd>{step.journey_role}</dd></>}
+          {step.verification_level && <><dt className="text-text-muted">Verification</dt><dd>{step.verification_level}</dd></>}
+          {step.evidence_confidence != null && <><dt className="text-text-muted">Evidence confidence</dt><dd>{(step.evidence_confidence * 100).toFixed(0)}%</dd></>}
+          {step.attribution_eligible === false && <><dt className="text-text-muted">Attribution</dt><dd>Excluded source noise</dd></>}
+          {formattedAttributedRevenue && <><dt className="text-text-muted">Attributed net revenue</dt><dd>{formattedAttributedRevenue}</dd></>}
           <dt className="text-text-muted">Position</dt><dd>{step.step_position}</dd>
         </dl>
       )}

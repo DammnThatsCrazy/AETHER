@@ -11,8 +11,10 @@ toc_depth: 2
 source_files:
   - Backend Architecture/aether-backend/repositories/measurement_results_repo.py
   - Backend Architecture/aether-backend/shared/measurement/restatement.py
+  - Backend Architecture/aether-backend/shared/measurement/compute.py
   - Backend Architecture/aether-backend/services/measurement/routes/integrity.py
-last_synced_commit: 491e8ba
+  - Backend Architecture/aether-backend/services/traffic/repair.py
+last_synced_commit: "04739e59"
 ---
 
 # Runbook — Measurement Restatement
@@ -66,6 +68,20 @@ Restatements go through the repository's `supersede(...)`
   the old one. The prior value is still readable with `include_superseded=true`.
 - Confirm the new `value_state` is honest: `observed`/`estimated` only when the
   data supports a number; otherwise a value-less state.
+
+## Source-classification repair
+
+The Kyber source-classification repair job is an approved restatement producer.
+After it appends corrected touchpoint classifications, it forces new journey
+versions and attribution runs, expands the materialization window to include
+every affected canonical conversion date, and passes a classifier-versioned
+reason into Gold materialization. Existing results remain in the restatement
+chain; the repaired values become the active publication.
+
+Do not run Gold materialization alone for a source correction. That would
+publish values derived from stale journeys or attribution credits. Use the
+Kyber repair endpoint so classification, journey rebuild, attribution
+recompute, and restatement occur in that order.
 
 ## Do NOT
 

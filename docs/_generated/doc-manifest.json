@@ -5118,6 +5118,11 @@
       "canonical_owner": "platform-intelligence@aether"
     },
     {
+      "path": "docs/source-of-truth/AI_AGENT_REFERRAL_ATTRIBUTION.md",
+      "title": "AI and Agent Referral Attribution Source of Truth",
+      "status": "stable"
+    },
+    {
       "path": "docs/source-of-truth/AI_OUTCOME_EFFICIENCY.md"
     },
     {
