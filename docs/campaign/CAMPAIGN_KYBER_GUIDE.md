@@ -6,7 +6,9 @@ visibility: I
 audience: [ops]
 source_files:
   - Backend Architecture/aether-backend/services/measurement/routes/kyber.py
+  - Backend Architecture/aether-backend/services/traffic/repair.py
   - frontend/kyber/src/pages/measurement/campaign-registry-health-page.tsx
+  - frontend/kyber/src/pages/measurement/kyber-measurement-ops-page.tsx
 last_synced_commit: "a681289"
 ---
 
@@ -20,6 +22,8 @@ last_synced_commit: "a681289"
 | GET | `/v1/kyber/measurement/campaign/tenant/{tenant_id}` | Per-tenant drill-down |
 | POST | `/v1/kyber/measurement/campaign/tenant/{tenant_id}/reprocess` | Trigger bounded reprocessing |
 | GET | `/v1/kyber/measurement/campaign/audit` | Audit log of resolved reviews |
+| GET | `/v1/kyber/measurement/source-classification/health` | Source classifier version, provider, mediation, and exclusion health |
+| POST | `/v1/kyber/measurement/source-classification/reclassify` | Enqueue bounded source repair and downstream recomputation |
 
 All endpoints require kyber operator authentication and are tenant-scoped.
 
@@ -56,6 +60,33 @@ For large-scale reprocessing (>5000 records), use the backfill script directly:
 ```bash
 python scripts/campaign/backfill_campaign_ids.py --tenant-id <ID> --batch-size 1000
 ```
+
+## AI and agent source repair
+
+Source repair is separate from campaign reprocessing: it corrects what a
+touchpoint represents, then deliberately invokes the existing campaign,
+journey, attribution, and measurement planes. Start with `dry_run: true` and a
+bounded date range. A live run appends classification revisions, rebuilds the
+affected profile or cluster journeys, recomputes canonical conversions, and
+restates the affected Gold windows.
+
+```json
+{
+  "start_date": "2026-07-01",
+  "end_date": "2026-07-31",
+  "dry_run": true,
+  "limit": 10000,
+  "request_id": "operator-change-2026-07-14-001"
+}
+```
+
+Keep `request_id` stable when retrying the same operator action. Supply a new
+value for an intentional rerun; otherwise the durable jobs platform returns the
+existing idempotent job. The Kyber Measurement Operations page keeps the same
+request ID after a failed submission, rotates it after a successful submission
+or input change, and shows the returned job ID, request ID, and replay status.
+Confirm the job timeline completes, then verify the classifier version
+distribution and excluded machine-traffic count.
 
 ## Audit log
 

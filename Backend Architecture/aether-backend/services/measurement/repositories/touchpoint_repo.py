@@ -18,6 +18,52 @@ _IS_LOCAL = os.getenv("AETHER_ENV", "local").lower() == "local"
 
 # In-memory fallback (local/test only)
 _local_store: dict[str, dict[str, Any]] = {}
+_local_revisions: list[dict[str, Any]] = []
+
+
+_TOUCHPOINT_COLUMNS: tuple[str, ...] = (
+    "touchpoint_id", "tenant_id", "profile_id", "cluster_id", "anonymous_id",
+    "session_id", "device_id", "account_id", "organization_id", "wallet_id",
+    "agent_id", "campaign_id", "ad_group_id", "ad_set_id", "creative_id",
+    "ad_id", "placement_id", "keyword_id", "audience_id", "offer_id",
+    "landing_page_id", "channel", "source", "medium", "platform",
+    "source_class", "referral_mediation_type", "ai_provider", "ai_product",
+    "actor_type", "journey_role", "evidence_confidence", "verification_level",
+    "source_classifier_version", "source_classified_at",
+    "normalized_referrer_domain", "referrer_path_hash",
+    "source_classification_evidence", "source_classification_id",
+    "attribution_eligible", "verified_referral_link_id", "touchpoint_type",
+    "interaction_type", "is_view_through", "is_click_through", "viewable",
+    "engaged", "dwell_ms", "position", "frequency", "occurred_at",
+    "received_at", "processed_at", "source_event_id", "connector_record_id",
+    "source_connector_id", "utm_source", "utm_medium", "utm_campaign",
+    "utm_content", "utm_term", "click_id", "referrer", "landing_url",
+    "external_campaign_id", "external_account_id", "campaign_resolution_status",
+    "campaign_resolution_method", "campaign_resolution_confidence",
+    "campaign_resolution_version", "communication_fact_id", "external_message_id",
+    "sequence_step", "variant_id", "link_id", "engagement_confidence",
+    "machine_activity_probability", "identity_resolution_method",
+    "identity_confidence", "identity_version", "consent_snapshot_id",
+    "privacy_class", "provenance", "evidence_ids", "idempotency_key",
+    "schema_version",
+)
+
+_JSON_COLUMNS = frozenset({"source_classification_evidence", "provenance", "evidence_ids"})
+_UUID_COLUMNS = frozenset({
+    "touchpoint_id", "source_classification_id", "verified_referral_link_id",
+})
+_TIMESTAMP_COLUMNS = frozenset({
+    "occurred_at", "received_at", "processed_at", "source_classified_at",
+})
+
+_CLASSIFICATION_FIELDS: tuple[str, ...] = (
+    "channel", "source", "medium", "source_class", "referral_mediation_type",
+    "ai_provider", "ai_product", "actor_type", "journey_role",
+    "evidence_confidence", "verification_level", "source_classifier_version",
+    "source_classified_at", "normalized_referrer_domain", "referrer_path_hash",
+    "source_classification_evidence", "source_classification_id",
+    "attribution_eligible", "verified_referral_link_id", "referrer",
+)
 
 
 class TouchpointRepository:
@@ -38,69 +84,70 @@ class TouchpointRepository:
         row.setdefault("idempotency_key", key)
         row.setdefault("touchpoint_id", str(uuid4()))
         row.setdefault("received_at", datetime.now(timezone.utc).isoformat())
+        row.setdefault("privacy_class", "behavioral")
+        row.setdefault("touchpoint_type", "page_view")
+        row.setdefault("is_view_through", False)
+        row.setdefault("is_click_through", False)
+        row.setdefault("schema_version", 1)
+        if row.get("source_classifier_version"):
+            row.setdefault("source_classification_id", str(uuid4()))
+            row.setdefault("source_classified_at", row.get("received_at"))
+            row.setdefault("attribution_eligible", True)
 
         pool = await self._pool()
         if pool is None:
-            _local_store[key] = row
+            # Match PostgreSQL's (tenant_id, idempotency_key) uniqueness.
+            # A bare idempotency key is not globally unique and must never
+            # allow one tenant's replay to return another tenant's row.
+            local_key = f"{row.get('tenant_id')}:{key}"
+            existing = _local_store.get(local_key)
+            if existing is not None:
+                return existing
+            _local_store[local_key] = dict(row)
+            if row.get("source_classifier_version"):
+                _local_revisions.append(_classification_revision(row, reason="ingestion"))
             return row
 
+        placeholders = ", ".join(f"${idx}" for idx in range(1, len(_TOUCHPOINT_COLUMNS) + 1))
+        sql = f"""
+            INSERT INTO silver_campaign_touchpoint_facts ({', '.join(_TOUCHPOINT_COLUMNS)})
+            VALUES ({placeholders})
+            ON CONFLICT (tenant_id, idempotency_key) DO NOTHING
+            RETURNING touchpoint_id
+        """
+        # The active classification and revision rows form a tenant-safe audit
+        # relationship. Insert the touchpoint first with a null active pointer,
+        # then append the revision and set the pointer in the same transaction;
+        # both foreign keys are immediate rather than deferrable.
+        values = [
+            None if column == "source_classification_id"
+            else _db_value(column, row.get(column))
+            for column in _TOUCHPOINT_COLUMNS
+        ]
         async with pool.acquire() as conn:
-            await conn.execute(
-                """
-                INSERT INTO silver_campaign_touchpoint_facts (
-                    touchpoint_id, tenant_id, profile_id, cluster_id, anonymous_id,
-                    session_id, device_id, account_id, organization_id, wallet_id,
-                    agent_id, campaign_id, ad_group_id, ad_set_id, creative_id,
-                    ad_id, placement_id, keyword_id, channel, source, medium,
-                    platform, touchpoint_type, interaction_type,
-                    is_view_through, is_click_through, viewable, engaged,
-                    dwell_ms, position, frequency, occurred_at, received_at,
-                    source_event_id, connector_record_id, source_connector_id,
-                    utm_source, utm_medium, utm_campaign, utm_content, utm_term,
-                    click_id, referrer, landing_url,
-                    identity_resolution_method, identity_confidence, identity_version,
-                    consent_snapshot_id, privacy_class, provenance, evidence_ids,
-                    idempotency_key, schema_version
-                ) VALUES (
-                    $1, $2, $3, $4, $5, $6, $7, $8, $9, $10,
-                    $11, $12, $13, $14, $15, $16, $17, $18, $19, $20,
-                    $21, $22, $23, $24, $25, $26, $27, $28, $29, $30,
-                    $31, $32, $33, $34, $35, $36, $37, $38, $39, $40,
-                    $41, $42, $43, $44, $45, $46, $47, $48, $49, $50,
-                    $51, $52, $53
+            async with conn.transaction():
+                inserted = await conn.fetchval(sql, *values)
+                if inserted and row.get("source_classifier_version"):
+                    revision = _classification_revision(row, reason="ingestion")
+                    await _insert_revision(conn, revision)
+                    await conn.execute(
+                        """
+                        UPDATE silver_campaign_touchpoint_facts
+                        SET source_classification_id=$3
+                        WHERE tenant_id=$1 AND touchpoint_id=$2
+                        """,
+                        row.get("tenant_id"), _uuid_or_none(row.get("touchpoint_id")),
+                        _uuid_or_none(row.get("source_classification_id")),
+                    )
+                persisted = await conn.fetchrow(
+                    """
+                    SELECT * FROM silver_campaign_touchpoint_facts
+                    WHERE tenant_id=$1 AND idempotency_key=$2
+                    """,
+                    row.get("tenant_id"),
+                    key,
                 )
-                ON CONFLICT (tenant_id, idempotency_key) DO NOTHING
-                """,
-                row.get("touchpoint_id"), row.get("tenant_id"),
-                row.get("profile_id"), row.get("cluster_id"), row.get("anonymous_id"),
-                row.get("session_id"), row.get("device_id"), row.get("account_id"),
-                row.get("organization_id"), row.get("wallet_id"),
-                row.get("agent_id"), row.get("campaign_id"), row.get("ad_group_id"),
-                row.get("ad_set_id"), row.get("creative_id"), row.get("ad_id"),
-                row.get("placement_id"), row.get("keyword_id"),
-                row.get("channel"), row.get("source"), row.get("medium"),
-                row.get("platform"),
-                row.get("touchpoint_type", "page_view"),
-                row.get("interaction_type"),
-                row.get("is_view_through", False), row.get("is_click_through", False),
-                row.get("viewable"), row.get("engaged"),
-                row.get("dwell_ms"), row.get("position"), row.get("frequency"),
-                _parse_ts(row.get("occurred_at")), _parse_ts(row.get("received_at")),
-                row.get("source_event_id"), row.get("connector_record_id"),
-                row.get("source_connector_id"),
-                row.get("utm_source"), row.get("utm_medium"), row.get("utm_campaign"),
-                row.get("utm_content"), row.get("utm_term"),
-                row.get("click_id"), row.get("referrer"), row.get("landing_url"),
-                row.get("identity_resolution_method"),
-                row.get("identity_confidence"), row.get("identity_version"),
-                row.get("consent_snapshot_id"),
-                row.get("privacy_class", "behavioral"),
-                json.dumps(row.get("provenance", {})),
-                json.dumps(row.get("evidence_ids", [])),
-                key,
-                row.get("schema_version", 1),
-            )
-        return row
+        return dict(persisted) if persisted else row
 
     async def upsert_from_campaign_touchpoint(
         self,
@@ -136,24 +183,45 @@ class TouchpointRepository:
         tenant_id: str,
         profile_id: str,
         *,
+        identity_type: Optional[str] = None,
         after_occurred: Optional[datetime] = None,
         before_occurred: Optional[datetime] = None,
         campaign_ids: Optional[list[str]] = None,
         limit: int = 500,
         cursor: Optional[str] = None,
     ) -> list[dict[str, Any]]:
-        """Return touchpoints for a profile, ordered by occurred_at ascending."""
+        """Return touchpoints for a profile or explicitly typed identity."""
+        identity_columns = {
+            "profile": "profile_id",
+            "cluster": "cluster_id",
+            "anonymous": "anonymous_id",
+        }
+        identity_column = identity_columns.get(identity_type or "")
+        if identity_type is not None and identity_column is None:
+            raise ValueError(f"unsupported identity_type: {identity_type}")
         pool = await self._pool()
         if pool is None:
             rows = [
                 r for r in _local_store.values()
                 if r.get("tenant_id") == tenant_id
-                and (r.get("profile_id") == profile_id or r.get("anonymous_id") == profile_id)
+                and (
+                    r.get(identity_column) == profile_id
+                    if identity_column
+                    else (
+                        r.get("profile_id") == profile_id
+                        or r.get("anonymous_id") == profile_id
+                    )
+                )
             ]
             rows.sort(key=lambda r: r.get("occurred_at", ""))
             return rows[:limit]
 
-        conditions = ["tenant_id = $1", "(profile_id = $2 OR anonymous_id = $2)"]
+        identity_condition = (
+            f"{identity_column} = $2"
+            if identity_column
+            else "(profile_id = $2 OR anonymous_id = $2)"
+        )
+        conditions = ["tenant_id = $1", identity_condition]
         params: list[Any] = [tenant_id, profile_id]
         p = 3
         if after_occurred:
@@ -338,9 +406,359 @@ class TouchpointRepository:
         async with pool.acquire() as conn:
             row = await conn.fetchrow(
                 "SELECT * FROM silver_campaign_touchpoint_facts WHERE tenant_id=$1 AND touchpoint_id=$2",
-                tenant_id, touchpoint_id,
+                tenant_id, _uuid_or_none(touchpoint_id),
             )
             return dict(row) if row else None
+
+    async def list_for_source_reclassification(
+        self,
+        tenant_id: str,
+        *,
+        start_at: Optional[datetime] = None,
+        end_at: Optional[datetime] = None,
+        limit: int = 500,
+        cursor_occurred_at: Optional[datetime] = None,
+        cursor_touchpoint_id: Optional[str] = None,
+    ) -> list[dict[str, Any]]:
+        """Page historical touchpoints in a stable, restart-safe order."""
+        safe_limit = max(1, min(int(limit), 5000))
+        pool = await self._pool()
+        if pool is None:
+            rows = [
+                dict(row) for row in _local_store.values()
+                if row.get("tenant_id") == tenant_id
+                and row.get("privacy_class") != "deleted"
+            ]
+            if start_at:
+                rows = [r for r in rows if (_parse_ts(r.get("occurred_at")) or datetime.min.replace(tzinfo=timezone.utc)) >= start_at]
+            if end_at:
+                rows = [r for r in rows if (_parse_ts(r.get("occurred_at")) or datetime.max.replace(tzinfo=timezone.utc)) < end_at]
+            rows.sort(key=lambda r: (_parse_ts(r.get("occurred_at")) or datetime.min.replace(tzinfo=timezone.utc), str(r.get("touchpoint_id", ""))))
+            if cursor_occurred_at:
+                cursor_key = (cursor_occurred_at, cursor_touchpoint_id or "")
+                rows = [
+                    r for r in rows
+                    if ((_parse_ts(r.get("occurred_at")) or datetime.min.replace(tzinfo=timezone.utc)), str(r.get("touchpoint_id", ""))) > cursor_key
+                ]
+            return rows[:safe_limit]
+
+        conditions = ["tenant_id = $1", "privacy_class != 'deleted'"]
+        params: list[Any] = [tenant_id]
+        index = 2
+        if start_at:
+            conditions.append(f"occurred_at >= ${index}")
+            params.append(start_at)
+            index += 1
+        if end_at:
+            conditions.append(f"occurred_at < ${index}")
+            params.append(end_at)
+            index += 1
+        if cursor_occurred_at:
+            conditions.append(
+                f"(occurred_at, touchpoint_id) > (${index}, ${index + 1}::uuid)"
+            )
+            params.extend(
+                [
+                    cursor_occurred_at,
+                    _uuid_or_none(cursor_touchpoint_id)
+                    or UUID("00000000-0000-0000-0000-000000000000"),
+                ]
+            )
+            index += 2
+        params.append(safe_limit)
+        sql = f"""
+            SELECT *
+            FROM silver_campaign_touchpoint_facts
+            WHERE {' AND '.join(conditions)}
+            ORDER BY occurred_at ASC, touchpoint_id ASC
+            LIMIT ${index}
+        """
+        async with pool.acquire() as conn:
+            return [dict(row) for row in await conn.fetch(sql, *params)]
+
+    async def apply_source_classification(
+        self,
+        tenant_id: str,
+        touchpoint_id: str,
+        classification: dict[str, Any],
+        *,
+        input_hash: str,
+        reason: str,
+        job_id: Optional[str] = None,
+    ) -> dict[str, Any]:
+        """Append an immutable classification revision and update current projections.
+
+        The touchpoint and canonical activity updates share the same transaction as
+        the revision insert. Replaying the same classifier version + input hash is
+        therefore idempotent and never destroys the prior audit trail.
+        """
+        now = datetime.now(timezone.utc)
+        classification_id = str(uuid4())
+        values = dict(classification)
+        values["source_classification_id"] = classification_id
+        values.setdefault("source_classified_at", now)
+        values.setdefault("attribution_eligible", True)
+        values.setdefault("source_classification_evidence", {})
+
+        pool = await self._pool()
+        if pool is None:
+            row = next(
+                (
+                    item for item in _local_store.values()
+                    if item.get("tenant_id") == tenant_id
+                    and str(item.get("touchpoint_id")) == str(touchpoint_id)
+                ),
+                None,
+            )
+            if row is None:
+                raise KeyError(f"touchpoint not found: {touchpoint_id}")
+            duplicate = next(
+                (
+                    rev for rev in _local_revisions
+                    if rev["tenant_id"] == tenant_id
+                    and str(rev["touchpoint_id"]) == str(touchpoint_id)
+                    and rev["classifier_version"] == values.get("source_classifier_version")
+                    and rev["input_hash"] == input_hash
+                ),
+                None,
+            )
+            if duplicate:
+                return dict(row)
+            prior = _classification_snapshot(row)
+            previous = next(
+                (
+                    rev for rev in reversed(_local_revisions)
+                    if rev["tenant_id"] == tenant_id
+                    and str(rev["touchpoint_id"]) == str(touchpoint_id)
+                    and rev.get("is_current")
+                ),
+                None,
+            )
+            revision = _classification_revision(
+                {**row, **values}, reason=reason, input_hash=input_hash,
+                job_id=job_id, prior_classification=prior,
+                previous_classification_id=(previous or {}).get("classification_id"),
+            )
+            if previous:
+                previous["is_current"] = False
+                previous["superseded_by"] = classification_id
+            _local_revisions.append(revision)
+            row.update({field: values.get(field) for field in _CLASSIFICATION_FIELDS})
+            from services.measurement.repositories.activity_repo import ActivityRepository
+            await ActivityRepository().apply_source_classification(
+                tenant_id,
+                touchpoint_id=str(touchpoint_id),
+                source_event_id=row.get("source_event_id"),
+                classification=values,
+            )
+            return dict(row)
+
+        touchpoint_uuid = _uuid_or_none(touchpoint_id)
+        if touchpoint_uuid is None:
+            raise ValueError("touchpoint_id must be a UUID")
+        async with pool.acquire() as conn:
+            async with conn.transaction():
+                row = await conn.fetchrow(
+                    """
+                    SELECT * FROM silver_campaign_touchpoint_facts
+                    WHERE tenant_id=$1 AND touchpoint_id=$2
+                    FOR UPDATE
+                    """,
+                    tenant_id, touchpoint_uuid,
+                )
+                if row is None:
+                    raise KeyError(f"touchpoint not found: {touchpoint_id}")
+                duplicate = await conn.fetchval(
+                    """
+                    SELECT classification_id
+                    FROM touchpoint_source_classification_revisions
+                    WHERE tenant_id=$1 AND touchpoint_id=$2
+                      AND classifier_version=$3 AND input_hash=$4
+                    """,
+                    tenant_id, touchpoint_uuid,
+                    values.get("source_classifier_version"), input_hash,
+                )
+                if duplicate:
+                    return dict(row)
+
+                current = await conn.fetchrow(
+                    """
+                    SELECT classification_id
+                    FROM touchpoint_source_classification_revisions
+                    WHERE tenant_id=$1 AND touchpoint_id=$2 AND is_current=TRUE
+                    FOR UPDATE
+                    """,
+                    tenant_id, touchpoint_uuid,
+                )
+                prior = _classification_snapshot(dict(row))
+                revision = _classification_revision(
+                    {**dict(row), **values}, reason=reason, input_hash=input_hash,
+                    job_id=job_id, prior_classification=prior,
+                    previous_classification_id=(str(current["classification_id"]) if current else None),
+                )
+                if current:
+                    # Avoid both the partial-current uniqueness conflict and
+                    # the immediate superseded_by FK: insert the successor as
+                    # non-current, link the predecessor, then flip it current.
+                    revision["is_current"] = False
+                    await _insert_revision(conn, revision)
+                    await conn.execute(
+                        """
+                        UPDATE touchpoint_source_classification_revisions
+                        SET is_current=FALSE, superseded_by=$3
+                        WHERE tenant_id=$1 AND classification_id=$2
+                        """,
+                        tenant_id, current["classification_id"], _uuid_or_none(classification_id),
+                    )
+                    await conn.execute(
+                        """
+                        UPDATE touchpoint_source_classification_revisions
+                        SET is_current=TRUE
+                        WHERE tenant_id=$1 AND classification_id=$2
+                        """,
+                        tenant_id, _uuid_or_none(classification_id),
+                    )
+                else:
+                    await _insert_revision(conn, revision)
+
+                assignments = ", ".join(
+                    f"{field}=${idx}" for idx, field in enumerate(_CLASSIFICATION_FIELDS, start=3)
+                )
+                update_params = [
+                    _db_value(field, values.get(field)) for field in _CLASSIFICATION_FIELDS
+                ]
+                await conn.execute(
+                    f"""
+                    UPDATE silver_campaign_touchpoint_facts
+                    SET {assignments}
+                    WHERE tenant_id=$1 AND touchpoint_id=$2
+                    """,
+                    tenant_id, touchpoint_uuid, *update_params,
+                )
+
+                # Keep the existing canonical activity projection in sync; this
+                # is a repair, not a second parallel activity pipeline.
+                activity_fields = tuple(
+                    field for field in _CLASSIFICATION_FIELDS
+                    if field not in {
+                        "referrer", "referrer_path_hash",
+                        "source_classification_evidence", "source_classified_at",
+                    }
+                )
+                activity_assignments = ", ".join(
+                    f"{field}=${idx}" for idx, field in enumerate(activity_fields, start=3)
+                )
+                activity_params = [
+                    _db_value(field, values.get(field)) for field in activity_fields
+                ]
+                domain_param = len(activity_fields) + 3
+                source_event_param = len(activity_fields) + 4
+                await conn.execute(
+                    f"""
+                    UPDATE canonical_activity
+                    SET {activity_assignments},
+                        domain=${domain_param},
+                        silver_fact_id=$2,
+                        silver_table='silver_campaign_touchpoint_facts'
+                    WHERE tenant_id=$1
+                      AND (
+                        silver_fact_id=$2
+                        OR (
+                          silver_table='silver_campaign_touchpoint_facts'
+                          AND source_event_id=${source_event_param}
+                        )
+                      )
+                    """,
+                    tenant_id, touchpoint_uuid, *activity_params,
+                    values.get("normalized_referrer_domain"),
+                    row.get("source_event_id"),
+                )
+                refreshed = await conn.fetchrow(
+                    "SELECT * FROM silver_campaign_touchpoint_facts WHERE tenant_id=$1 AND touchpoint_id=$2",
+                    tenant_id, touchpoint_uuid,
+                )
+                return dict(refreshed)
+
+    async def classification_history(
+        self, tenant_id: str, touchpoint_id: str
+    ) -> list[dict[str, Any]]:
+        pool = await self._pool()
+        if pool is None:
+            return [
+                dict(rev) for rev in _local_revisions
+                if rev.get("tenant_id") == tenant_id
+                and str(rev.get("touchpoint_id")) == str(touchpoint_id)
+            ]
+        async with pool.acquire() as conn:
+            rows = await conn.fetch(
+                """
+                SELECT * FROM touchpoint_source_classification_revisions
+                WHERE tenant_id=$1 AND touchpoint_id=$2
+                ORDER BY classified_at ASC, classification_id ASC
+                """,
+                tenant_id, _uuid_or_none(touchpoint_id),
+            )
+            return [dict(row) for row in rows]
+
+    async def source_classification_health(self, tenant_id: str) -> dict[str, Any]:
+        """Return bounded operational counts for the existing Kyber surface."""
+        pool = await self._pool()
+        if pool is None:
+            rows = [
+                row for row in _local_store.values()
+                if row.get("tenant_id") == tenant_id and row.get("privacy_class") != "deleted"
+            ]
+            return _health_summary(rows)
+        async with pool.acquire() as conn:
+            summary = await conn.fetchrow(
+                """
+                SELECT
+                    COUNT(*)::bigint AS total,
+                    COUNT(*) FILTER (WHERE source_classifier_version IS NOT NULL)::bigint AS classified,
+                    COUNT(*) FILTER (WHERE source_classifier_version IS NULL)::bigint AS unclassified,
+                    COUNT(*) FILTER (WHERE attribution_eligible=FALSE)::bigint AS excluded,
+                    COUNT(*) FILTER (
+                        WHERE verification_level = 'verified'
+                           OR verification_level LIKE 'verified%'
+                    )::bigint AS verified
+                FROM silver_campaign_touchpoint_facts
+                WHERE tenant_id=$1 AND privacy_class != 'deleted'
+                """,
+                tenant_id,
+            )
+            versions = await conn.fetch(
+                """
+                SELECT COALESCE(source_classifier_version, 'unclassified') AS name, COUNT(*)::bigint AS count
+                FROM silver_campaign_touchpoint_facts
+                WHERE tenant_id=$1 AND privacy_class != 'deleted'
+                GROUP BY 1 ORDER BY count DESC, name ASC
+                """,
+                tenant_id,
+            )
+            providers = await conn.fetch(
+                """
+                SELECT ai_provider AS name, COUNT(*)::bigint AS count
+                FROM silver_campaign_touchpoint_facts
+                WHERE tenant_id=$1 AND privacy_class != 'deleted' AND ai_provider IS NOT NULL
+                GROUP BY 1 ORDER BY count DESC, name ASC LIMIT 50
+                """,
+                tenant_id,
+            )
+            mediation = await conn.fetch(
+                """
+                SELECT referral_mediation_type AS name, COUNT(*)::bigint AS count
+                FROM silver_campaign_touchpoint_facts
+                WHERE tenant_id=$1 AND privacy_class != 'deleted' AND referral_mediation_type IS NOT NULL
+                GROUP BY 1 ORDER BY count DESC, name ASC LIMIT 50
+                """,
+                tenant_id,
+            )
+            return {
+                "summary": dict(summary),
+                "versions": [dict(row) for row in versions],
+                "providers": [dict(row) for row in providers],
+                "mediation": [dict(row) for row in mediation],
+            }
 
     async def tombstone_for_profile(self, tenant_id: str, profile_id: str) -> int:
         """Privacy erasure: mark all touchpoints for a profile as deleted.
@@ -435,3 +853,159 @@ def _classify_touchpoint(event_type: str) -> str:
         "notification_clicked": "push_click",
     }
     return mapping.get(event_type, "page_view")
+
+
+def _uuid_or_none(value: Any) -> Optional[UUID]:
+    if value in (None, ""):
+        return None
+    if isinstance(value, UUID):
+        return value
+    try:
+        return UUID(str(value))
+    except (ValueError, TypeError, AttributeError):
+        return None
+
+
+def _db_value(column: str, value: Any) -> Any:
+    if column in _JSON_COLUMNS:
+        default: Any = [] if column == "evidence_ids" else {}
+        return json.dumps(default if value is None else value, default=str)
+    if column in _UUID_COLUMNS:
+        return _uuid_or_none(value)
+    if column in _TIMESTAMP_COLUMNS:
+        return _parse_ts(value)
+    return value
+
+
+def _classification_snapshot(row: dict[str, Any]) -> dict[str, Any]:
+    snapshot = {field: row.get(field) for field in _CLASSIFICATION_FIELDS}
+    raw_referrer = snapshot.get("referrer")
+    if raw_referrer:
+        # Revision history is immutable, so legacy raw referrers must be
+        # normalized before they enter it. Never preserve path/query values in
+        # ``prior_classification`` merely because the source row predates the
+        # privacy-safe classifier.
+        from services.traffic.classifier import SourceClassifier
+
+        domain, safe_referrer, path_hash = SourceClassifier.normalize_referrer(
+            referrer=str(raw_referrer),
+            referrer_domain=str(snapshot.get("normalized_referrer_domain") or ""),
+        )
+        snapshot["referrer"] = safe_referrer or None
+        snapshot["normalized_referrer_domain"] = domain or None
+        snapshot["referrer_path_hash"] = (
+            snapshot.get("referrer_path_hash") or path_hash
+        )
+    return snapshot
+
+
+def _classification_revision(
+    row: dict[str, Any],
+    *,
+    reason: str,
+    input_hash: Optional[str] = None,
+    job_id: Optional[str] = None,
+    prior_classification: Optional[dict[str, Any]] = None,
+    previous_classification_id: Optional[str] = None,
+) -> dict[str, Any]:
+    classification = _classification_snapshot(row)
+    evidence = row.get("source_classification_evidence") or {}
+    stable_input_hash = input_hash or hashlib.sha256(
+        json.dumps(evidence, sort_keys=True, default=str).encode()
+    ).hexdigest()
+    return {
+        "classification_id": str(row.get("source_classification_id") or uuid4()),
+        "tenant_id": row.get("tenant_id"),
+        "touchpoint_id": str(row.get("touchpoint_id")),
+        "classifier_version": row.get("source_classifier_version") or "unknown",
+        "input_hash": stable_input_hash,
+        "prior_classification": prior_classification or {},
+        "classification": classification,
+        "evidence": evidence,
+        "confidence": row.get("evidence_confidence"),
+        "verification_level": row.get("verification_level"),
+        "reason": reason,
+        "job_id": job_id,
+        "previous_classification_id": previous_classification_id,
+        "superseded_by": None,
+        "is_current": True,
+        "classified_at": _parse_ts(row.get("source_classified_at")) or datetime.now(timezone.utc),
+    }
+
+
+async def _insert_revision(conn: Any, revision: dict[str, Any]) -> None:
+    await conn.execute(
+        """
+        INSERT INTO touchpoint_source_classification_revisions (
+            classification_id, tenant_id, touchpoint_id, classifier_version,
+            input_hash, prior_classification, classification, evidence,
+            confidence, verification_level, reason, job_id,
+            previous_classification_id, superseded_by, is_current, classified_at
+        ) VALUES (
+            $1, $2, $3, $4, $5, $6::jsonb, $7::jsonb, $8::jsonb,
+            $9, $10, $11, $12, $13, $14, $15, $16
+        )
+        ON CONFLICT (tenant_id, touchpoint_id, classifier_version, input_hash)
+        DO NOTHING
+        """,
+        _uuid_or_none(revision.get("classification_id")),
+        revision.get("tenant_id"),
+        _uuid_or_none(revision.get("touchpoint_id")),
+        revision.get("classifier_version"),
+        revision.get("input_hash"),
+        json.dumps(revision.get("prior_classification"), default=str),
+        json.dumps(revision.get("classification") or {}, default=str),
+        json.dumps(revision.get("evidence") or {}, default=str),
+        revision.get("confidence"), revision.get("verification_level"),
+        revision.get("reason"), revision.get("job_id"),
+        _uuid_or_none(revision.get("previous_classification_id")),
+        _uuid_or_none(revision.get("superseded_by")),
+        bool(revision.get("is_current", True)),
+        _parse_ts(revision.get("classified_at")),
+    )
+
+
+def _health_summary(rows: list[dict[str, Any]]) -> dict[str, Any]:
+    counts: dict[str, int] = {
+        "total": len(rows),
+        "classified": 0,
+        "unclassified": 0,
+        "excluded": 0,
+        "verified": 0,
+    }
+    versions: dict[str, int] = {}
+    providers: dict[str, int] = {}
+    mediation: dict[str, int] = {}
+    for row in rows:
+        version = row.get("source_classifier_version") or "unclassified"
+        versions[version] = versions.get(version, 0) + 1
+        if row.get("source_classifier_version"):
+            counts["classified"] += 1
+        else:
+            counts["unclassified"] += 1
+        if row.get("attribution_eligible") is False:
+            counts["excluded"] += 1
+        if str(row.get("verification_level") or "").startswith("verified"):
+            counts["verified"] += 1
+        if row.get("ai_provider"):
+            provider = str(row["ai_provider"])
+            providers[provider] = providers.get(provider, 0) + 1
+        if row.get("referral_mediation_type"):
+            kind = str(row["referral_mediation_type"])
+            mediation[kind] = mediation.get(kind, 0) + 1
+    as_rows = lambda values: [
+        {"name": name, "count": count}
+        for name, count in sorted(values.items(), key=lambda item: (-item[1], item[0]))
+    ]
+    return {
+        "summary": counts,
+        "versions": as_rows(versions),
+        "providers": as_rows(providers),
+        "mediation": as_rows(mediation),
+    }
+
+
+def _reset_local_touchpoints() -> None:
+    """Test helper: clear the process-local repository fallback."""
+    _local_store.clear()
+    _local_revisions.clear()

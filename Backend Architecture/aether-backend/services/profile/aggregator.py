@@ -36,6 +36,7 @@ Design rules:
 from __future__ import annotations
 
 import asyncio
+import json
 from collections import Counter, defaultdict
 from datetime import datetime, timezone
 from typing import Any, Optional
@@ -166,16 +167,22 @@ async def _safe(label: str, coro):
 
 
 def _unified_journey_unavailable(entity_id: str, tenant_id: str, reason: str) -> dict:
+    summary = {
+        "journey_id": None,
+        "journey_version_id": None,
+        "step_count": 0,
+        "compiler_version": None,
+        "quality_status": "not_provisioned",
+        "data_quality": {"status": reason, "message": None},
+    }
     return {
         "entity_id": entity_id,
         "tenant_id": tenant_id,
         "kind": "unified_journey",
         "items": [],
-        "summary": {
-            "journey_id": None,
-            "step_count": 0,
-            "data_quality": {"status": reason, "message": None},
-        },
+        "steps": [],
+        "summary": summary,
+        "meta": summary,
         "pagination": {"limit": 0, "count": 0, "has_more": False},
         "computed_at": "",
         "provenance": {"sources": []},
@@ -710,6 +717,51 @@ class Profile360Aggregator:
             ),
         )
 
+        # Economic values are authoritative attribution-credit outputs, not
+        # journey-step columns. Enrich the read model from active immutable
+        # credits using the Silver touchpoint id captured in evidence_summary.
+        conversion_ids = journey.get("conversion_ids") or []
+        if isinstance(conversion_ids, str):
+            try:
+                conversion_ids = json.loads(conversion_ids)
+            except (TypeError, ValueError):
+                conversion_ids = []
+        try:
+            from services.measurement.repositories.attribution_run_repo import (
+                AttributionRunRepository,
+            )
+
+            credits = await _safe(
+                "unified_journey.attribution_credits",
+                AttributionRunRepository().list_active_credits_for_conversions(
+                    tenant_id, [str(item) for item in conversion_ids]
+                ),
+            )
+        except Exception:
+            credits = []
+        revenue_by_touchpoint: defaultdict[str, Decimal] = defaultdict(
+            lambda: Decimal("0")
+        )
+        for credit in credits:
+            touchpoint_id = credit.get("touchpoint_id")
+            if touchpoint_id:
+                revenue_by_touchpoint[str(touchpoint_id)] += Decimal(
+                    str(credit.get("attributed_net_revenue") or "0")
+                )
+        for step in steps:
+            evidence_summary = step.get("evidence_summary") or {}
+            if isinstance(evidence_summary, str):
+                try:
+                    evidence_summary = json.loads(evidence_summary)
+                except (TypeError, ValueError):
+                    evidence_summary = {}
+            touchpoint_id = evidence_summary.get("touchpoint_id")
+            step["attributed_net_revenue"] = (
+                float(revenue_by_touchpoint[str(touchpoint_id)])
+                if touchpoint_id and str(touchpoint_id) in revenue_by_touchpoint
+                else None
+            )
+
         # Shape steps for frontend consumption
         items = [
             {
@@ -727,6 +779,15 @@ class Profile360Aggregator:
                 "metadata": {
                     "channel": s.get("channel"),
                     "source": s.get("source"),
+                    "source_class": s.get("source_class"),
+                    "referral_mediation_type": s.get("referral_mediation_type"),
+                    "ai_provider": s.get("ai_provider"),
+                    "ai_product": s.get("ai_product"),
+                    "journey_role": s.get("journey_role"),
+                    "verification_level": s.get("verification_level"),
+                    "evidence_confidence": s.get("evidence_confidence"),
+                    "source_classifier_version": s.get("source_classifier_version"),
+                    "attribution_eligible": s.get("attribution_eligible", True),
                     "domain": s.get("domain"),
                     "chain_id": s.get("chain_id"),
                     "wallet_id": s.get("wallet_id"),
@@ -754,6 +815,7 @@ class Profile360Aggregator:
             "started_at": str(journey.get("started_at") or ""),
             "ended_at": str(journey.get("ended_at") or ""),
             "converted_at": str(journey.get("converted_at") or "") or None,
+            "excluded_source_noise_count": journey.get("excluded_source_noise_count", 0),
             "data_quality": {
                 "status": quality_status,
                 "message": quality_message,
@@ -765,6 +827,55 @@ class Profile360Aggregator:
             ["journey_versions", "journey_steps"],
         )
         envelope["pagination"]["step_count"] = journey.get("step_count", 0)
+        # Stable, flat contract for the existing unified-journey hook. Keep the
+        # richer generic Profile360 items above for backward compatibility.
+        envelope["steps"] = [
+            {
+                "step_id": str(s.get("step_id")),
+                "step_position": s.get("step_position"),
+                "activity_family": s.get("activity_family"),
+                "activity_type": s.get("activity_type"),
+                "activity_status": s.get("activity_status", "observed"),
+                "actor_type": s.get("actor_type"),
+                "source_class": s.get("source_class"),
+                "referral_mediation_type": s.get("referral_mediation_type"),
+                "ai_provider": s.get("ai_provider"),
+                "ai_product": s.get("ai_product"),
+                "journey_role": s.get("journey_role"),
+                "verification_level": s.get("verification_level"),
+                "evidence_confidence": s.get("evidence_confidence"),
+                "source_classifier_version": s.get("source_classifier_version"),
+                "attribution_eligible": s.get("attribution_eligible", True),
+                "attributed_net_revenue": s.get("attributed_net_revenue"),
+                "transition_type": s.get("transition_type"),
+                "channel": s.get("channel"),
+                "source": s.get("source"),
+                "domain": s.get("normalized_referrer_domain") or s.get("domain"),
+                "dapp_id": s.get("dapp_id"),
+                "chain_id": s.get("chain_id"),
+                "wallet_id": s.get("wallet_id"),
+                "agent_id": s.get("agent_id"),
+                "campaign_id": s.get("campaign_id"),
+                "session_id": s.get("session_id"),
+                "identity_confidence": s.get("identity_confidence"),
+                "identity_method": s.get("identity_method"),
+                "occurred_at": str(s.get("occurred_at") or ""),
+                "displayLabel": _step_display_label(s),
+                "risk_score": s.get("risk_score"),
+                "risk_tier": s.get("risk_tier"),
+                "fraud_status": s.get("fraud_status"),
+                "fraud_disposition": s.get("fraud_disposition"),
+            }
+            for s in steps
+        ]
+        envelope["meta"] = {
+            "journey_id": journey_id,
+            "journey_version_id": journey_version_id,
+            "step_count": journey.get("step_count", 0),
+            "compiler_version": compiler_version,
+            "quality_status": quality_status,
+            "excluded_source_noise_count": journey.get("excluded_source_noise_count", 0),
+        }
         return envelope
 
     async def rewards(self, entity_id: str, tenant_id: str, limit: int = 100) -> dict:

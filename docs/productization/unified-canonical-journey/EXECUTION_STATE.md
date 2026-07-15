@@ -12,7 +12,8 @@ source_files:
   - Backend Architecture/aether-backend/services/measurement/repositories/journey_step_repo.py
   - Backend Architecture/aether-backend/services/measurement/silver_adapters.py
   - Backend Architecture/aether-backend/alembic/versions/20260627_canonical_activity.py
-last_synced_commit: 2ef5e44
+  - Backend Architecture/aether-backend/alembic/versions/20260725_ai_referral_attribution.py
+last_synced_commit: "6306ea81"
 ---
 
 # Unified Web2/Web3 Canonical Journey — Execution State
@@ -37,13 +38,14 @@ last_synced_commit: 2ef5e44
 
 - **`canonical_activity`** table: single source of truth for all cross-rail activity
 - **`journey_steps`** table: first-class individually queryable ordered steps
-- **JourneyCompiler v2.0**: consumes all activity families, deterministic sort, cross-rail transition taxonomy
+- **JourneyCompiler v2.0**: consumes all activity families, deterministic sort, cross-rail transition taxonomy, typed profile/cluster/anonymous lineage, and atomic version+step publication
+- **Acquisition evidence**: source class, AI/referral mediation, verification, confidence, classifier version, and eligibility flow from canonical activity into eligible journey steps; excluded source noise remains auditable and counted
 - **Silver adapters**: 11 adapter functions covering all silver tables → canonical_activity
 - **API**: `/v1/journeys/{id}/steps`, `/v1/journeys/{id}/transitions`, `/v1/journeys/{id}/explain`, `/v1/journeys/{id}/rebuild`
 - **Profile360**: `GET /v1/profile/{user_id}/unified-journey`
 - **Aether UI**: `JourneyExplorerPage`, `JourneyTimeline`, `JourneyStepCard`, `JourneyFilterBar`, `JourneyTransitionBadge`
 - **Kyber UI**: Extended `JourneyExplorerPage` with steps panel, transitions panel, explain panel, rebuild action
-- **Tests**: 6 test files covering all scenarios including tenant isolation
+- **Tests**: 6 core journey test files covering 57 collected scenarios, including tenant and typed-identity collision isolation
 - **Metrics**: `canonical_activities_ingested_total`, `journey_compile_duration_seconds`, `cross_rail_transition_count`, `web3_reorg_corrections_total`, `late_event_insertions_total`
 
 ## Pre-existing Failures (not in scope)

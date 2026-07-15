@@ -156,6 +156,22 @@ class CanonicalTouchpoint(BaseModel):
     source: Optional[str] = None
     medium: Optional[str] = None
     platform: Optional[str] = None
+    source_class: Optional[str] = None
+    referral_mediation_type: Optional[str] = None
+    ai_provider: Optional[str] = None
+    ai_product: Optional[str] = None
+    actor_type: Optional[str] = None
+    journey_role: Optional[str] = None
+    evidence_confidence: Optional[float] = None
+    verification_level: Optional[str] = None
+    source_classifier_version: Optional[str] = None
+    source_classified_at: Optional[datetime] = None
+    normalized_referrer_domain: Optional[str] = None
+    referrer_path_hash: Optional[str] = None
+    source_classification_evidence: dict[str, Any] = Field(default_factory=dict)
+    source_classification_id: Optional[str] = None
+    attribution_eligible: bool = True
+    verified_referral_link_id: Optional[str] = None
     touchpoint_type: TouchpointType = TouchpointType.page_view
     interaction_type: Optional[str] = None
     is_view_through: bool = False
@@ -361,6 +377,7 @@ class JourneyVersion(BaseModel):
     identity_version: Optional[str] = None
     data_watermark: Optional[datetime] = None
     compiler_version: str = "1.0"
+    excluded_source_noise_count: int = 0
     computed_at: datetime = Field(default_factory=datetime.utcnow)
     is_current: bool = True
 
@@ -407,6 +424,10 @@ class AttributionRun(BaseModel):
     model_type: str
     model_version: str = "1.0"
     code_version: Optional[str] = None
+    trigger_reason: Optional[str] = None
+    source_classifier_version: Optional[str] = None
+    model_config_snapshot: dict[str, Any] = Field(default_factory=dict)
+    prior_attribution_run_id: Optional[UUID] = None
     input_touchpoint_ids: list[str] = Field(default_factory=list)
     excluded_touchpoint_ids: list[str] = Field(default_factory=list)
     exclusion_reasons: dict[str, str] = Field(default_factory=dict)
@@ -442,6 +463,19 @@ class AttributionCredit(BaseModel):
     keyword_id: Optional[str] = None
     channel: Optional[str] = None
     source: Optional[str] = None
+    source_class: Optional[str] = None
+    referral_mediation_type: Optional[str] = None
+    ai_provider: Optional[str] = None
+    ai_product: Optional[str] = None
+    actor_type: Optional[str] = None
+    journey_role: Optional[str] = None
+    evidence_confidence: Optional[float] = None
+    verification_level: Optional[str] = None
+    source_classifier_version: Optional[str] = None
+    normalized_referrer_domain: Optional[str] = None
+    source_classification_id: Optional[str] = None
+    attribution_eligible: bool = True
+    verified_referral_link_id: Optional[str] = None
     credit_weight: Decimal
     attributed_conversion_count: Decimal = Decimal("0")
     attributed_gross_revenue: Optional[Decimal] = None
@@ -546,6 +580,18 @@ class CanonicalActivity(BaseModel):
     source: Optional[str] = None
     medium: Optional[str] = None
     platform: Optional[str] = None
+    source_class: Optional[str] = None
+    referral_mediation_type: Optional[str] = None
+    ai_provider: Optional[str] = None
+    ai_product: Optional[str] = None
+    journey_role: Optional[str] = None
+    evidence_confidence: Optional[float] = None
+    verification_level: Optional[str] = None
+    source_classifier_version: Optional[str] = None
+    normalized_referrer_domain: Optional[str] = None
+    source_classification_id: Optional[str] = None
+    attribution_eligible: bool = True
+    verified_referral_link_id: Optional[str] = None
     domain: Optional[str] = None
     app_id: Optional[str] = None
     screen: Optional[str] = None
@@ -627,6 +673,18 @@ class JourneyStep(BaseModel):
     actor_type: Optional[str] = None
     channel: Optional[str] = None
     source: Optional[str] = None
+    source_class: Optional[str] = None
+    referral_mediation_type: Optional[str] = None
+    ai_provider: Optional[str] = None
+    ai_product: Optional[str] = None
+    journey_role: Optional[str] = None
+    evidence_confidence: Optional[float] = None
+    verification_level: Optional[str] = None
+    source_classifier_version: Optional[str] = None
+    normalized_referrer_domain: Optional[str] = None
+    source_classification_id: Optional[str] = None
+    attribution_eligible: bool = True
+    verified_referral_link_id: Optional[str] = None
     domain: Optional[str] = None
     app_id: Optional[str] = None
     dapp_id: Optional[str] = None

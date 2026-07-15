@@ -504,6 +504,8 @@ export interface AcquisitionEvidence {
     referrer?: string;
     referrerDomain?: string;
     landingPage?: string;
+    /** Opaque `aether_ref` token. Verification and interpretation are server-owned. */
+    referralToken?: string;
     firstCapturedAt?: string;
     lastObservedAt?: string;
     sessionId?: string;

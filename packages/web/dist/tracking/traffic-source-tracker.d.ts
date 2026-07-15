@@ -6,6 +6,7 @@ export interface TrafficSourceData {
     utmCampaign?: string | null;
     utmTerm?: string | null;
     utmContent?: string | null;
+    referralToken?: string | null;
     clickIds: Record<string, string>;
     landingPage: string;
 }

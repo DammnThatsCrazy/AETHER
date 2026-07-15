@@ -14,7 +14,8 @@ source_files:
   - Backend Architecture/aether-backend/services/measurement/repositories/touchpoint_repo.py
   - Backend Architecture/aether-backend/services/measurement/repositories/conversion_repo.py
   - Backend Architecture/aether-backend/services/measurement/repositories/attribution_run_repo.py
-last_synced_commit: 93378fe
+  - Backend Architecture/aether-backend/services/traffic/repair.py
+last_synced_commit: "6306ea81"
 ---
 
 # Campaign 360 Architecture
@@ -43,6 +44,7 @@ Campaign 360 page
     ├── Journeys tab      ← CampaignPopulationExplorer.get_journeys()
     ├── Conversions tab   ← ConversionRepository.list_by_campaign()
     ├── Attribution tab   ← AttributionRunRepository.campaign_credit_summary()
+    │                        (source/referral dimensions + evidence provenance)
     ├── Graph tab         ← CampaignPopulationExplorer.get_graph_anchor()
     └── Quality tab       ← CampaignPopulationExplorer.get_overview() (data_quality field)
 ```
@@ -87,7 +89,7 @@ in the `data_quality` block. This is a strict invariant — it will never be sil
 |-----------|---------------|-----------------------|
 | Touchpoints | PostgreSQL `silver_campaign_touchpoint_facts` | `_local_store` dict in `touchpoint_repo.py` |
 | Conversions | PostgreSQL `canonical_conversions` | `_local_store` dict in `conversion_repo.py` |
-| Attribution credits | PostgreSQL `attribution_credits` + `attribution_runs` | `_local_credits` list in `attribution_run_repo.py` |
+| Attribution credits | PostgreSQL `attribution_credits` + `attribution_runs` (tenant-qualified active-run joins, immutable config snapshots, source/referral dimensions) | `_local_credits` list in `attribution_run_repo.py` |
 | Spend | PostgreSQL `spend_records` | `_local_spend` dict in `spend_repo.py` |
 | Journeys | PostgreSQL `journey_versions` | `_local_journeys` dict in `journey_repo.py` |
 
@@ -95,6 +97,14 @@ The explorer never reads directly from ClickHouse gold tables. Those are used
 by the Journey Explorer and Attribution Studio pages separately for aggregate
 analytics. Campaign 360 reads from the PostgreSQL canonical layer for
 entity-level drill-down.
+
+Source classification is evidence carried through the canonical touchpoint,
+journey step, attribution credit, and Campaign 360 read models. Campaign 360
+does not reclassify traffic. It groups persisted credits by source class,
+mediation type, AI provider/product, actor type, and journey role, and retains
+the classifier version and verification provenance used by the run. A repair
+creates a new classification revision and recomputed attribution run linked to
+the prior run; it does not mutate historical credit evidence in place.
 
 ---
 

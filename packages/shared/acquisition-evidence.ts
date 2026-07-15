@@ -1,8 +1,8 @@
 // =============================================================================
 // Aether SDK — Acquisition Evidence Contract
 //
-// The canonical, platform-agnostic structure that captures all campaign
-// attribution signals from the SDK at the landing moment.
+// The canonical, platform-agnostic structure that captures raw campaign and
+// referral evidence from the SDK at the landing moment.
 //
 // Resolution priority (server-side CampaignResolver):
 //   1. canonicalCampaignId — explicit Aether UUID, validated against tenant
@@ -14,6 +14,8 @@
 //
 // Invariant: canonicalCampaignId, if supplied, is ALWAYS validated server-side
 // against tenant ownership before use. Never trust it blindly.
+// referralToken is likewise opaque client-side and is never a campaign or
+// provider assertion until a server verifies and interprets it.
 // =============================================================================
 
 export interface AcquisitionEvidence {
@@ -56,6 +58,13 @@ export interface AcquisitionEvidence {
   referrerDomain?: string;
   landingPage?: string;
 
+  /**
+   * Opaque referral token captured from the `aether_ref` landing parameter.
+   * The SDK does not parse or trust this value; verification and interpretation
+   * are server-owned.
+   */
+  referralToken?: string;
+
   // Temporal metadata
   firstCapturedAt?: string;  // ISO 8601
   lastObservedAt?: string;   // ISO 8601
@@ -85,7 +94,7 @@ export type PaidMediaEvidence = AcquisitionEvidence & {
   externalCampaignId: string;
 };
 
-export const ACQUISITION_EVIDENCE_SCHEMA_VERSION = 1;
+export const ACQUISITION_EVIDENCE_SCHEMA_VERSION = 2;
 
 /** Build a minimal AcquisitionEvidence from URL search params (browser). */
 export function evidenceFromSearchParams(params: URLSearchParams): AcquisitionEvidence {
@@ -104,6 +113,7 @@ export function evidenceFromSearchParams(params: URLSearchParams): AcquisitionEv
     utmTerm: params.get('utm_term') ?? undefined,
     utmId: params.get('utm_id') ?? undefined,
     canonicalCampaignId: params.get('aether_cid') ?? undefined,
+    referralToken: params.get('aether_ref') ?? undefined,
     clickIds: Object.keys(clickIds).length > 0 ? clickIds : undefined,
     landingPage: (globalThis as any).window?.location?.href,
     referrer: (globalThis as any).document?.referrer || undefined,

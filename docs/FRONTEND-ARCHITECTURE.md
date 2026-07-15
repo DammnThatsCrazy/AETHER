@@ -13,7 +13,7 @@ source_files:
 canonical_owner: frontend@aether
 estimated_read_minutes: 35
 toc_depth: 4
-last_synced_commit: "fabddb8"
+last_synced_commit: "6306ea81"
 ---
 
 # Aether Frontend Architecture & Designer Handoff
@@ -41,7 +41,8 @@ There are two separate frontend applications. **Do not mix them up.**
 - **Social Intelligence** panels — their users' social platform presence
 - **Recommendation cards** — pending retargeting / campaign actions for the tenant to approve
 - **Suggestion feed** — OODA-driven prioritised recommendations with helpful/not helpful/dismiss feedback
-- Campaign management, attribution dashboards, Campaign 360 (`/campaigns/:id`) — per-campaign overview, population, clusters, conversions, attribution
+- Campaign management, attribution dashboards, Campaign 360 (`/campaigns/:id`) — per-campaign overview, population, clusters, conversions, and attribution with referral/source-class rollups
+- Profile360 and Journey Explorer source evidence — journey steps surface AI provider/product, mediation type, verification, confidence, classifier version, attribution eligibility, and attributed net revenue when backed by active credits; excluded crawler/scanner noise remains counted in journey quality metadata
 - API key management, plan management, usage metering
 - Webhook endpoint management — add/test/delete outbound delivery endpoints
 
@@ -68,7 +69,7 @@ There are two separate frontend applications. **Do not mix them up.**
 - **Mapping Review** (v8.11.0+) — unresolved/ambiguous attribution evidence queue; resolve/ignore actions create durable aliases and trigger reprocessing (`/campaign-intelligence/mapping-review`)
 - **Campaign Quality** (v8.11.0+) — measurement mapping rate gauges and quality metrics (`/campaign-intelligence/quality`)
 - **Custom Campaign** (v8.11.0+) — creation form for custom (non-platform) campaigns (`/campaign-intelligence/new`)
-- **Measurement Operations** — connector health grid, tenant drill-down, operator action buttons (restart/backfill/recompute) (`/kyber/measurement`)
+- **Measurement Operations** — connector and source-classification health, classifier-version coverage, repair status, tenant drill-down, and confirm-gated restart/backfill/recompute/repair actions (`/kyber/measurement`)
 - Lab — test fixtures and replay
 
 **Shared (`frontend/shared/` — npm package `@aether/ui`):**

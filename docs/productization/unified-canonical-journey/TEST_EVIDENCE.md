@@ -13,7 +13,7 @@ source_files:
   - tests/unit/test_silver_adapters.py
   - tests/integration/test_unified_journey_e2e.py
   - tests/security/test_journey_tenant_isolation.py
-last_synced_commit: 4d76caf
+last_synced_commit: "6306ea81"
 ---
 
 # Test Evidence — Unified Canonical Journey
@@ -23,12 +23,12 @@ last_synced_commit: 4d76caf
 | Test file | Tests | Coverage |
 |---|---|---|
 | `test_canonical_activity.py` | 8 | Upsert idempotency, status lifecycle, tenant isolation, tombstone exclusion |
-| `test_journey_compiler_v2.py` | 12 | Cross-rail ordering, deterministic sort, transitions, reorg, consent, empty profile |
-| `test_journey_step_repo.py` | 8 | Bulk insert, cursor pagination, family/wallet/session filters, adjacent steps |
+| `test_journey_compiler_v2.py` | 16 | Cross-rail ordering, deterministic sort, transitions, reorg, consent, typed-identity collisions, empty profile |
+| `test_journey_step_repo.py` | 10 | Bulk insert, cursor pagination, family/wallet/session filters, adjacent steps, source-evidence persistence contract |
 | `test_silver_adapters.py` | 14 | All 11 silver table adapters + idempotency stability + unknown table |
 | `test_unified_journey_e2e.py` | 5 | Scenarios A (campaign→web2→web3→conversion), B (anonymous), F (reorg), G (multi-tenant wallet), H (late event replay) |
-| `test_journey_tenant_isolation.py` | 3 | Tenant A cannot read tenant B activity, steps, or profile journeys |
-| **Total** | **50** | |
+| `test_journey_tenant_isolation.py` | 4 | Tenant A cannot read tenant B activity, steps, or profile journeys |
+| **Total** | **57** | |
 
 ## Key Test Scenarios
 
@@ -43,6 +43,14 @@ The same wallet address appears in two different tenants. Confirms no data leaka
 
 ### Scenario H — Late Event Deterministic Replay
 A late-arriving Web2 event with an earlier `occurred_at` is inserted after the journey was already compiled. Recompilation must place the step at the correct chronological position, producing the same deterministic ordering as if the event had arrived on time.
+
+### Typed identity collision and atomic publication
+
+Profile, cluster, and anonymous identities that share the same raw identifier
+remain separate journey lineages. Repository tests also verify the schema-v2
+source-classification step parameters, while compiler/repository behavior keeps
+version activation and step insertion in one transaction so a failed step write
+cannot expose a hollow current version.
 
 ## Running Tests
 

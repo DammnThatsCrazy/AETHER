@@ -8,17 +8,20 @@ since_version: "8.12.0"
 status: stable
 source_files:
   - Backend Architecture/aether-backend/alembic/versions/20260627_canonical_activity.py
+  - Backend Architecture/aether-backend/alembic/versions/20260725_ai_referral_attribution.py
   - Backend Architecture/aether-backend/services/measurement/engine/journey_compiler.py
   - Backend Architecture/aether-backend/services/measurement/repositories/activity_repo.py
   - Backend Architecture/aether-backend/services/measurement/repositories/journey_step_repo.py
-last_synced_commit: 2ef5e44
+last_synced_commit: "6306ea81"
 ---
 
 # Deployment Profile Matrix — Unified Canonical Journey
 
 ## Migration
 
-The canonical journey feature requires the `20260627_canonical_activity` Alembic migration.
+The canonical journey feature requires the `20260627_canonical_activity`
+migration. AI/referral source evidence and replay-safe attribution additionally
+require `20260725_ai_referral_attribution`.
 
 ```bash
 cd "Backend Architecture/aether-backend"
@@ -30,6 +33,11 @@ This migration creates:
 - `journey_steps` — first-class ordered step rows for each compiled journey version
 
 And alters `journey_versions` to add `web3_activity_ids`, `agent_activity_ids`, `x402_activity_ids`, `step_count`.
+
+The AI/referral migration adds source evidence and eligibility columns to
+touchpoints, canonical activity, journey steps, credits, and runs; durable
+classification revisions and repair jobs; typed journey lineage support; and
+the unique-active-run constraint used by atomic attribution completion.
 
 ## Environment Requirements
 
@@ -62,11 +70,13 @@ The `SilverDispatcher` runs an ordered projector list per event type (multi-proj
 | Steps per API page | 200 | Hard cap via `_MAX_STEPS_PAGE` |
 | `canonical_activity` rows | Unbounded | Partition by `occurred_at` recommended at >100M rows/tenant |
 | Rebuild concurrency | Unbounded | Add a semaphore in `rebuild_affected_by_web3_status_change` at scale |
+| Source repair batch | Operator-selected | Monitor repair progress and attribution recompute load per tenant |
 
 ## Rollout Sequence
 
-1. Deploy backend with migration (migration is additive — no existing data is modified)
+1. Deploy backend with both migrations (the schema changes are additive)
 2. Canonical activity backfill: run a one-time adapter pass over existing silver fact tables if historical journey coverage is required
-3. Deploy Aether frontend (journey explorer page activated for all profiles)
-4. Deploy Kyber frontend (compiler health panel visible to operators)
-5. Chain indexer: configure `/v1/web3/status-change` webhook for reorg/finality events
+3. Use Kyber source-classification health to assess unclassified or old-version touchpoints; run tenant-scoped repair before treating the new dimensions as complete
+4. Deploy Aether frontend (journey explorer page activated for all profiles)
+5. Deploy Kyber frontend (compiler and source-classification health panels visible to operators)
+6. Chain indexer: configure `/v1/web3/status-change` webhook for reorg/finality events

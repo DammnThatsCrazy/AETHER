@@ -2130,6 +2130,10 @@ export const api = {
       restClient.post(`/v1/kyber/measurement/conversions/${conversionId}/recompute`, wrap(unknownSchema), {}).then(r => r.data),
     recomputeAll: (tenantId: string) =>
       restClient.post(`/v1/kyber/measurement/tenants/${tenantId}/recompute-all`, wrap(unknownSchema), {}).then(r => r.data),
+    sourceClassificationHealth: () =>
+      restClient.get('/v1/kyber/measurement/source-classification/health', wrap(unknownSchema)).then(r => r.data),
+    reclassifySources: (params: { start_date: string; end_date: string; dry_run: boolean; limit: number; request_id?: string }) =>
+      restClient.post('/v1/kyber/measurement/source-classification/reclassify', wrap(unknownSchema), params).then(r => r.data),
 
     // Communications Intelligence — fleet projection/resolution health
     commsFleetHealth: (tenantId?: string) =>

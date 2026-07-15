@@ -2,8 +2,11 @@
 
 from __future__ import annotations
 
+import hashlib
+import json
 from datetime import date, datetime
 from typing import Optional
+from uuid import uuid4
 
 from fastapi import APIRouter, Depends, Query, Request
 from pydantic import BaseModel, Field
@@ -15,9 +18,13 @@ from services.measurement.repositories.connector_repo import ConnectorRepository
 from services.measurement.repositories.conversion_repo import ConversionRepository
 from services.measurement.repositories.attribution_run_repo import AttributionRunRepository
 from services.measurement.repositories.journey_repo import JourneyRepository
+from services.measurement.repositories.touchpoint_repo import TouchpointRepository
 from services.measurement.engine.attribution_engine import AttributionEngine
 from services.measurement.engine.journey_compiler import JourneyCompiler
 from services.measurement.engine.gold_materializer import backfill_tenant
+from services.jobs.service import get_jobs_service
+from services.traffic.classifier import SOURCE_CLASSIFIER_VERSION
+from services.traffic.repair import JOB_TYPE as SOURCE_REPAIR_JOB_TYPE
 
 logger = get_logger("aether.measurement.routes.kyber")
 router = APIRouter(
@@ -30,6 +37,7 @@ _connector_repo = ConnectorRepository()
 _conversion_repo = ConversionRepository()
 _run_repo = AttributionRunRepository()
 _journey_repo = JourneyRepository()
+_touchpoint_repo = TouchpointRepository()
 _engine = AttributionEngine()
 _compiler = JourneyCompiler()
 
@@ -52,6 +60,87 @@ class BackfillRequest(BaseModel):
 class RecomputeAllRequest(BaseModel):
     model_type: str = "last_touch"
     limit: int = Field(1000, ge=1, le=10000)
+
+
+class SourceClassificationRepairRequest(BaseModel):
+    start_date: Optional[str] = Field(None, description="Inclusive ISO date YYYY-MM-DD")
+    end_date: Optional[str] = Field(None, description="Inclusive ISO date YYYY-MM-DD")
+    dry_run: bool = True
+    limit: int = Field(10000, ge=1, le=100000)
+    request_id: Optional[str] = Field(
+        None,
+        min_length=8,
+        max_length=128,
+        description="Caller-stable retry id; use a new value for an intentional rerun",
+    )
+
+
+# ── Acquisition source classification operations ─────────────────────────────
+
+@router.get("/source-classification/health")
+async def source_classification_health(request: Request):
+    tenant = _require_kyber_tenant(request)
+    health = await _touchpoint_repo.source_classification_health(tenant.tenant_id)
+    summary = health.get("summary") or {}
+    total = int(summary.get("total") or 0)
+    unclassified = int(summary.get("unclassified") or 0)
+    outdated = sum(
+        int(item.get("count") or 0)
+        for item in health.get("versions") or []
+        if item.get("name") not in {SOURCE_CLASSIFIER_VERSION, "unclassified"}
+    )
+    status = (
+        "unknown" if total == 0
+        else "healthy" if unclassified == 0 and outdated == 0
+        else "degraded"
+    )
+    return APIResponse(data={
+        **health,
+        "status": status,
+        "target_classifier_version": SOURCE_CLASSIFIER_VERSION,
+    }).to_dict()
+
+
+@router.post("/source-classification/reclassify")
+async def reclassify_sources(
+    request: Request,
+    body: SourceClassificationRepairRequest,
+):
+    tenant = _require_kyber_tenant(request)
+    try:
+        start = date.fromisoformat(body.start_date) if body.start_date else None
+        end = date.fromisoformat(body.end_date) if body.end_date else None
+    except ValueError as exc:
+        raise BadRequestError(f"Invalid date: {exc}")
+    if start and end and end < start:
+        raise BadRequestError("end_date must be on or after start_date")
+
+    request_id = body.request_id or str(uuid4())
+    payload = {**body.model_dump(), "request_id": request_id}
+    stable_request = json.dumps(
+        {**payload, "classifier_version": SOURCE_CLASSIFIER_VERSION},
+        sort_keys=True,
+    )
+    idempotency_key = "source-classification:" + hashlib.sha256(
+        f"{tenant.tenant_id}:{stable_request}".encode()
+    ).hexdigest()
+    actor_id = getattr(tenant, "actor_id", None) or getattr(tenant, "subject", None)
+    job = await get_jobs_service().enqueue(
+        tenant.tenant_id,
+        SOURCE_REPAIR_JOB_TYPE,
+        payload,
+        idempotency_key=idempotency_key,
+        requested_by=str(actor_id) if actor_id else "kyber_operator",
+        max_attempts=3,
+    )
+    return APIResponse(data={
+        "job_id": job["id"],
+        "status": job["status"],
+        "replayed": bool(job.get("replayed")),
+        "dry_run": body.dry_run,
+        "target_classifier_version": SOURCE_CLASSIFIER_VERSION,
+        "request_id": request_id,
+    }).to_dict()
 
 
 # ── Connector operations ──────────────────────────────────────────────────────
@@ -104,7 +193,10 @@ async def rebuild_journey(journey_id: str, request: Request):
         return APIResponse(data=None, meta={"reason": "no_profile"}).to_dict()
 
     version = await _compiler.compile_for_profile(
-        tenant.tenant_id, profile_id, trigger_reason="operator_rebuild"
+        tenant.tenant_id,
+        profile_id,
+        identity_type=("profile" if current.get("profile_id") else "cluster"),
+        trigger_reason="operator_rebuild",
     )
     return APIResponse(data=version, meta={"rebuilt": True}).to_dict()
 

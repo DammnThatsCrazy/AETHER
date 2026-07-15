@@ -169,6 +169,8 @@ class AttributionResolver:
         event: dict[str, Any],
         touchpoints: list[dict[str, Any]],
         model_name: Optional[str] = None,
+        *,
+        lookback_window_hours: Optional[int] = None,
     ) -> AttributionResult:
         """
         Resolve attribution for a user event.
@@ -185,6 +187,9 @@ class AttributionResolver:
             touchpoints:  Raw touchpoint dicts from the journey store or
                           provided inline.
             model_name:   Optional override for the attribution model.
+            lookback_window_hours: Optional per-resolution lookback override.
+                          This is used when replaying a model-config snapshot
+                          whose horizon differs from the resolver default.
 
         Returns:
             An ``AttributionResult`` with weighted credits summing to 1.0.
@@ -193,8 +198,24 @@ class AttributionResolver:
         typed_touchpoints = self._parse_touchpoints(touchpoints)
 
         # Step 2 — filter by lookback window
-        cutoff = datetime.now(timezone.utc) - timedelta(hours=self.config.lookback_window_hours)
-        filtered = [tp for tp in typed_touchpoints if tp.timestamp >= cutoff]
+        # Historical recomputation must evaluate lookback relative to the
+        # conversion, not wall-clock time. Callers that omit an event timestamp
+        # retain the legacy "now" behavior.
+        reference_time = _event_reference_time(event)
+        # The canonical measurement engine can replay an immutable model-config
+        # snapshot whose click/view horizon is longer than this resolver's
+        # process-wide default.  An explicit per-run horizon must therefore win;
+        # otherwise valid historical touches are silently capped at 30 days.
+        effective_lookback_hours = (
+            self.config.lookback_window_hours
+            if lookback_window_hours is None
+            else int(lookback_window_hours)
+        )
+        cutoff = reference_time - timedelta(hours=effective_lookback_hours)
+        filtered = [
+            tp for tp in typed_touchpoints
+            if cutoff <= tp.timestamp <= reference_time
+        ]
 
         # Sort chronologically
         filtered.sort(key=lambda tp: tp.timestamp)
@@ -233,6 +254,8 @@ class AttributionResolver:
                     ts = datetime.now(timezone.utc)
             elif not isinstance(ts, datetime):
                 ts = datetime.now(timezone.utc)
+            if ts.tzinfo is None:
+                ts = ts.replace(tzinfo=timezone.utc)
 
             touchpoints.append(
                 Touchpoint(
@@ -245,3 +268,16 @@ class AttributionResolver:
                 )
             )
         return touchpoints
+
+
+def _event_reference_time(event: dict[str, Any]) -> datetime:
+    raw = event.get("timestamp") or event.get("occurred_at") or event.get("created_at")
+    if isinstance(raw, datetime):
+        return raw if raw.tzinfo else raw.replace(tzinfo=timezone.utc)
+    if isinstance(raw, str):
+        try:
+            parsed = datetime.fromisoformat(raw.replace("Z", "+00:00"))
+            return parsed if parsed.tzinfo else parsed.replace(tzinfo=timezone.utc)
+        except ValueError:
+            pass
+    return datetime.now(timezone.utc)

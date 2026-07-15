@@ -94,3 +94,72 @@ class TestJourneyCompilerLocal:
                 result_a.get("tenant_id") != "tenant-b"
                 and result_b.get("tenant_id") != "tenant-a"
             )
+
+
+def test_source_noise_is_counted_but_not_emitted_as_eligible_steps():
+    from services.measurement.engine.journey_compiler import _partition_source_noise
+
+    activities = [
+        {"activity_id": "human", "attribution_eligible": True, "journey_role": "entry"},
+        {"activity_id": "crawler", "attribution_eligible": False, "journey_role": "excluded"},
+        {"activity_id": "preview", "attribution_eligible": "false"},
+    ]
+    eligible, excluded_count = _partition_source_noise(activities)
+
+    assert [activity["activity_id"] for activity in eligible] == ["human"]
+    assert excluded_count == 2
+
+
+def test_journey_touchpoint_ids_are_precise_ordered_and_unique():
+    from services.measurement.engine.journey_compiler import _touchpoint_ids
+
+    touchpoint_id = str(uuid4())
+    activities = [
+        {"silver_table": "silver_campaign_touchpoint_facts", "silver_fact_id": touchpoint_id},
+        {"silver_table": "silver_campaign_touchpoint_facts", "silver_fact_id": touchpoint_id},
+        {"silver_table": "silver_conversion_facts", "silver_fact_id": str(uuid4())},
+    ]
+
+    assert _touchpoint_ids(activities) == [touchpoint_id]
+
+
+def test_journey_steps_snapshot_source_classification_dimensions():
+    from services.measurement.engine.journey_compiler import _build_steps
+
+    activity_id = str(uuid4())
+    classification_id = str(uuid4())
+    link_id = str(uuid4())
+    steps = _build_steps(
+        activities=[{
+            "activity_id": activity_id,
+            "occurred_at": _ts(),
+            "activity_family": "campaign",
+            "activity_type": "click",
+            "source_class": "ai_referral",
+            "referral_mediation_type": "ai_mediated_human_referral",
+            "ai_provider": "openai",
+            "ai_product": "chatgpt",
+            "actor_type": "human",
+            "journey_role": "entry",
+            "evidence_confidence": 0.92,
+            "verification_level": "domain_verified",
+            "source_classifier_version": "2.0",
+            "source_classification_id": classification_id,
+            "verified_referral_link_id": link_id,
+            "attribution_eligible": True,
+        }],
+        transitions=[None],
+        tenant_id="tenant-a",
+        journey_id=str(uuid4()),
+        journey_version_id=str(uuid4()),
+        profile_id="profile-001",
+    )
+
+    step = steps[0]
+    assert step["ai_provider"] == "openai"
+    assert step["ai_product"] == "chatgpt"
+    assert step["actor_type"] == "human"
+    assert step["source_classification_id"] == classification_id
+    assert step["verified_referral_link_id"] == link_id
+    assert step["attribution_eligible"] is True
+    assert step["schema_version"] == 2

@@ -138,6 +138,87 @@ class TestJourneyCompilerV2:
         assert result.get("step_count", 0) == 0
 
     @pytest.mark.asyncio
+    async def test_cluster_only_activity_builds_cluster_journey(self):
+        from services.measurement.engine.journey_compiler import JourneyCompiler
+        from services.measurement.repositories.activity_repo import ActivityRepository
+
+        cluster_id = f"cluster-{uuid4()}"
+        activity = _make_activity(profile_id=f"unused-{uuid4()}")
+        activity["profile_id"] = None
+        activity["cluster_id"] = cluster_id
+        await ActivityRepository().upsert(activity)
+
+        result = await JourneyCompiler().compile_for_profile(
+            "tenant-a", cluster_id, identity_type="cluster"
+        )
+
+        assert result["profile_id"] is None
+        assert result["cluster_id"] == cluster_id
+        assert result["journey_type"] == "cluster"
+        assert result["step_count"] == 1
+
+    @pytest.mark.asyncio
+    async def test_profile_and_cluster_with_same_id_keep_distinct_lineages(self):
+        from services.measurement.engine.journey_compiler import JourneyCompiler
+
+        shared_id = f"shared-{uuid4()}"
+        compiler = JourneyCompiler()
+
+        profile_version = await compiler.compile_for_profile(
+            "tenant-a", shared_id, identity_type="profile"
+        )
+        cluster_version = await compiler.compile_for_profile(
+            "tenant-a", shared_id, identity_type="cluster"
+        )
+
+        assert profile_version["journey_id"] != cluster_version["journey_id"]
+        assert profile_version["profile_id"] == shared_id
+        assert profile_version["cluster_id"] is None
+        assert cluster_version["profile_id"] is None
+        assert cluster_version["cluster_id"] == shared_id
+
+        current_profile = await compiler._journey_repo.find_current_for_profile(
+            "tenant-a", shared_id, identity_type="profile"
+        )
+        current_cluster = await compiler._journey_repo.find_current_for_profile(
+            "tenant-a", shared_id, identity_type="cluster"
+        )
+        assert [row["journey_id"] for row in current_profile] == [
+            profile_version["journey_id"]
+        ]
+        assert [row["journey_id"] for row in current_cluster] == [
+            cluster_version["journey_id"]
+        ]
+
+    @pytest.mark.asyncio
+    async def test_profile_and_anonymous_with_same_id_keep_distinct_lineages(self):
+        from services.measurement.engine.journey_compiler import JourneyCompiler
+
+        shared_id = f"shared-anonymous-{uuid4()}"
+        compiler = JourneyCompiler()
+
+        profile_version = await compiler.compile_for_profile(
+            "tenant-a", shared_id, identity_type="profile"
+        )
+        anonymous_version = await compiler.compile_for_profile(
+            "tenant-a", shared_id, identity_type="anonymous"
+        )
+
+        assert profile_version["journey_id"] != anonymous_version["journey_id"]
+        current_profile = await compiler._journey_repo.find_current_for_profile(
+            "tenant-a", shared_id, identity_type="profile"
+        )
+        current_anonymous = await compiler._journey_repo.find_current_for_profile(
+            "tenant-a", shared_id, identity_type="anonymous"
+        )
+        assert [row["journey_id"] for row in current_profile] == [
+            profile_version["journey_id"]
+        ]
+        assert [row["journey_id"] for row in current_anonymous] == [
+            anonymous_version["journey_id"]
+        ]
+
+    @pytest.mark.asyncio
     async def test_rebuild_consent_change(self):
         from services.measurement.engine.journey_compiler import JourneyCompiler
         compiler = JourneyCompiler()

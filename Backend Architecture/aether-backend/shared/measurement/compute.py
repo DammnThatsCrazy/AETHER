@@ -110,6 +110,7 @@ async def record_rate(
     denominator: float,
     unit: Optional[str] = None,
     lineage: Optional[dict] = None,
+    restatement_reason: Optional[str] = None,
 ) -> Optional[dict]:
     """Best-effort: compute the rate and persist a :class:`MeasurementResult` into
     the plane. Idempotent — an active result already recorded for this context is
@@ -127,6 +128,20 @@ async def record_rate(
     )
     record = result.model_dump(mode="json")
     try:
+        if restatement_reason:
+            prior = await repo.get_active(
+                context.tenant_id, metric_name, result.metric_version, context.context_hash()
+            )
+            if prior is not None:
+                lineage_with_restatement = dict(record.get("lineage") or {})
+                lineage_with_restatement["restatement_reason"] = restatement_reason
+                record["lineage"] = lineage_with_restatement
+                return await repo.supersede(
+                    context.tenant_id,
+                    prior["id"],
+                    record,
+                    reason=restatement_reason,
+                )
         return await repo.insert_result(record)
     except Exception:
         try:

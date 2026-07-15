@@ -136,6 +136,16 @@ export const api = {
     journeys: (userId: string) =>
       restClient.get(`/v1/profile/${userId}/journeys`, wrap(unknownSchema)).then(r => r.data as JourneysResponse),
 
+    /** Canonical versioned journey used by Profile 360 and Journey Explorer. */
+    unifiedJourney: (
+      userId: string,
+      params?: { family?: string; after?: string; before?: string; limit?: number; cursor?: string },
+    ) =>
+      restClient.get(
+        `/v1/profile/${encodeURIComponent(userId)}/unified-journey${buildQS({ ...params })}`,
+        wrap(unknownSchema),
+      ).then(r => r.data),
+
     /**
      * Web3 wallet profiles for every wallet linked to the user.
      * Each wallet entry includes: token balances, recent on-chain transactions,

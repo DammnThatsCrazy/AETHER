@@ -4,8 +4,10 @@ from __future__ import annotations
 
 import hashlib
 from typing import Any
+from uuid import NAMESPACE_URL, uuid5
 
 from services.silver.projectors.base import BaseProjector, ProjectionResult
+from services.traffic.classifier import SourceClassifier
 
 _TOUCHPOINT_TYPE_MAP: dict[str, str] = {
     "page": "page_view",
@@ -42,6 +44,8 @@ _ENGAGEMENT_TOUCHPOINT_TYPES = frozenset({
     "email_open", "email_click", "email_reply", "push_click",
 })
 
+_source_classifier = SourceClassifier()
+
 
 class TouchpointProjector(BaseProjector):
     """Projects ad/marketing touch events into silver_campaign_touchpoint_facts.
@@ -58,8 +62,15 @@ class TouchpointProjector(BaseProjector):
         props = event.get("properties") or {}
         campaign_ctx = ctx.get("campaign") or {}
         page_ctx = ctx.get("page") or {}
-        # AcquisitionEvidence injected by SDK on landing; camelCase keys from JS
-        acq_ev: dict[str, Any] = ctx.get("acquisitionEvidence") or {}
+        # The Web SDK currently emits ``trafficSource`` while newer/server SDKs
+        # may emit ``acquisitionEvidence``.  Merge both contracts so the same
+        # canonical classifier consumes every supported SDK generation; richer
+        # acquisitionEvidence fields win when both are present.
+        traffic_source: dict[str, Any] = ctx.get("trafficSource") or {}
+        acq_ev: dict[str, Any] = {
+            **traffic_source,
+            **(ctx.get("acquisitionEvidence") or {}),
+        }
 
         tenant_id = ctx.get("tenantId") or event.get("tenantId") or "default"
         event_type = event.get("type", "page")
@@ -88,6 +99,13 @@ class TouchpointProjector(BaseProjector):
         idem_key = hashlib.sha256(
             f"{source_event_id}:{tenant_id}:{touchpoint_type}".encode()
         ).hexdigest()
+        # Allocate stable identities before canonical-activity emission. The
+        # dispatcher emits the activity before SilverFactWriter persists the
+        # row, so repository-only UUID defaults would sever the activity ↔
+        # touchpoint/revision lineage and make replays create duplicate facts.
+        touchpoint_id = str(uuid5(
+            NAMESPACE_URL, f"aether:touchpoint:{tenant_id}:{idem_key}"
+        ))
 
         consent_id = ctx.get("consentSnapshotId")
 
@@ -124,14 +142,85 @@ class TouchpointProjector(BaseProjector):
         )
         utm_id = campaign_ctx.get("utmId") or acq_ev.get("utmId") or props.get("utm_id")
 
-        click_ids = acq_ev.get("clickIds") or {}
+        # Paid-click evidence is accepted in the canonical acquisition object,
+        # a nested properties object, or as legacy top-level properties. Merge
+        # all supported shapes before classification so a persisted gclid/fbclid
+        # cannot be misclassified as Direct.
+        click_id_candidates: dict[str, Any] = {}
+        for candidate in (
+            acq_ev.get("clickIds"),
+            props.get("clickIds"),
+            props.get("click_ids"),
+        ):
+            if isinstance(candidate, dict):
+                click_id_candidates.update(candidate)
+        for click_id_key in _source_classifier.CLICK_ID_MAP:
+            if props.get(click_id_key) and not click_id_candidates.get(click_id_key):
+                click_id_candidates[click_id_key] = props[click_id_key]
+        click_ids = {
+            click_id_key: click_id_candidates[click_id_key]
+            for click_id_key in _source_classifier.CLICK_ID_MAP
+            if click_id_candidates.get(click_id_key)
+        }
         click_id = (
             props.get("click_id")
-            or click_ids.get("gclid")
-            or props.get("gclid")
-            or click_ids.get("fbclid")
-            or props.get("fbclid")
+            or next(iter(click_ids.values()), None)
         )
+
+        raw_referrer = (
+            page_ctx.get("referrer")
+            or acq_ev.get("referrer")
+            or props.get("referrer")
+            or ""
+        )
+        referrer_domain = (
+            acq_ev.get("referrerDomain")
+            or props.get("referrer_domain")
+            or ""
+        )
+        persisted_referrer_path_hash = (
+            page_ctx.get("referrerPathHash")
+            or page_ctx.get("referrer_path_hash")
+            or acq_ev.get("referrerPathHash")
+            or acq_ev.get("referrer_path_hash")
+            or props.get("referrer_path_hash")
+        )
+        verified_referral = (
+            acq_ev.get("verifiedReferral")
+            or ctx.get("verifiedReferral")
+            or event.get("_verified_referral")
+        )
+        explicit_actor_type = (
+            ctx.get("actorType")
+            or props.get("actor_type")
+            or ("agent" if ctx.get("agentId") else None)
+        )
+        classified = _source_classifier.classify(
+            referrer=raw_referrer,
+            referrer_domain=referrer_domain,
+            utm_source=utm_source,
+            utm_medium=utm_medium,
+            utm_campaign=utm_campaign,
+            click_ids=click_ids,
+            landing_page=(
+                page_ctx.get("url")
+                or acq_ev.get("landingPage")
+                or props.get("landing_url")
+                or ""
+            ),
+            user_agent=(
+                ctx.get("userAgent")
+                or ctx.get("user_agent")
+                or props.get("user_agent")
+                or ""
+            ),
+            verified_referral=verified_referral,
+            explicit_actor_type=explicit_actor_type,
+        )
+        classification_id = str(uuid5(
+            NAMESPACE_URL,
+            f"aether:source-classification:{touchpoint_id}:{classified.classifier_version}",
+        ))
 
         # Campaign identity evidence — drive resolution in the dispatcher.
         # canonicalCampaignId is an Aether UUID already validated upstream (e.g. from
@@ -160,6 +249,7 @@ class TouchpointProjector(BaseProjector):
         )
 
         row: dict[str, Any] = {
+            "touchpoint_id": touchpoint_id,
             "tenant_id": tenant_id,
             "profile_id": event.get("userId"),
             "anonymous_id": event.get("anonymousId"),
@@ -177,10 +267,30 @@ class TouchpointProjector(BaseProjector):
             "ad_id": props.get("ad_id"),
             "placement_id": props.get("placement_id"),
             "keyword_id": props.get("keyword_id"),
-            "channel": _infer_channel(utm_medium, utm_source),
-            "source": utm_source or props.get("source"),
-            "medium": utm_medium,
+            "channel": _silver_channel(classified.channel),
+            "source": classified.source,
+            "medium": classified.medium,
             "platform": marketing_platform,
+            # Source/referral classification is orthogonal to campaign identity.
+            # These dimensions travel beside campaign_id; they never populate it.
+            "source_class": classified.source_class,
+            "referral_mediation_type": classified.referral_mediation_type,
+            "ai_provider": classified.ai_provider,
+            "ai_product": classified.ai_product,
+            "actor_type": classified.actor_type,
+            "journey_role": classified.journey_role,
+            "evidence_confidence": classified.confidence,
+            "verification_level": classified.verification_level,
+            "source_classifier_version": classified.classifier_version,
+            "source_classified_at": event.get("receivedAt") or event.get("timestamp"),
+            "normalized_referrer_domain": classified.normalized_referrer_domain,
+            "referrer_path_hash": (
+                classified.referrer_path_hash or persisted_referrer_path_hash
+            ),
+            "source_classification_evidence": classified.evidence_payload(),
+            "source_classification_id": classification_id,
+            "attribution_eligible": classified.attribution_eligible,
+            "verified_referral_link_id": classified.verified_referral_link_id,
             "touchpoint_type": touchpoint_type,
             "interaction_type": props.get("interaction_type"),
             "is_view_through": bool(props.get("is_view_through", False)),
@@ -200,7 +310,9 @@ class TouchpointProjector(BaseProjector):
             "utm_content": utm_content,
             "utm_term": utm_term,
             "click_id": click_id,
-            "referrer": page_ctx.get("referrer") or acq_ev.get("referrer") or props.get("referrer"),
+            # Never persist a raw referrer path/query; the classifier emits an
+            # origin-only representation plus a one-way path hash above.
+            "referrer": classified.normalized_referrer or None,
             "landing_url": page_ctx.get("url") or acq_ev.get("landingPage") or props.get("landing_url"),
             # Resolution evidence fields — populated here; status/method set by dispatcher
             "external_campaign_id": external_campaign_id,
@@ -226,10 +338,15 @@ class TouchpointProjector(BaseProjector):
             "identity_version": ctx.get("identityVersion"),
             "consent_snapshot_id": consent_id,
             "privacy_class": self._privacy_class(event),
-            "provenance": {"source_event_type": event_type},
+            "provenance": {
+                "source_event_type": event_type,
+                "source_classifier_version": classified.classifier_version,
+                "source_evidence_signals": list(classified.evidence),
+                "raw_referrer_present": bool(raw_referrer),
+            },
             "evidence_ids": [source_event_id] if source_event_id else [],
             "idempotency_key": idem_key,
-            "schema_version": 1,
+            "schema_version": 2,
         }
 
         return ProjectionResult(table="silver_campaign_touchpoint_facts", rows=[row])
@@ -255,3 +372,24 @@ def _infer_channel(medium: str | None, source: str | None) -> str:
     if source in ("facebook", "instagram", "twitter", "tiktok", "linkedin"):
         return "social"
     return medium or "other"
+
+
+def _silver_channel(channel: str) -> str:
+    """Translate classifier display channels into the established Silver vocabulary."""
+    mapping = {
+        "Paid Search": "paid",
+        "Paid Social": "paid",
+        "Display": "paid",
+        "Organic Search": "organic_search",
+        "Organic Social": "social",
+        "Email": "email",
+        "Affiliate": "affiliate",
+        "Partner": "partner",
+        "Referral": "referral",
+        "AI Referral": "ai_referral",
+        "Agent Referral": "agent_referral",
+        "AI Crawler": "ai_crawler",
+        "Machine Referral": "machine_referral",
+        "Direct": "direct",
+    }
+    return mapping.get(channel, channel.lower().replace(" ", "_") if channel else "other")

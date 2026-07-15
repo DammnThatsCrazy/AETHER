@@ -43,102 +43,154 @@ class ActivityRepository:
                 _local_store[idem_key] = activity
             return _local_store[idem_key]
 
+        columns = (
+            "activity_id", "tenant_id", "idempotency_key",
+            "profile_id", "cluster_id", "anonymous_id",
+            "account_id", "organization_id", "session_id", "device_id",
+            "browser_id", "install_id", "wallet_id", "wallet_address", "agent_id",
+            "activity_family", "activity_type", "actor_type",
+            "channel", "source", "medium", "platform",
+            "source_class", "referral_mediation_type", "ai_provider", "ai_product",
+            "journey_role", "evidence_confidence", "verification_level",
+            "source_classifier_version", "normalized_referrer_domain",
+            "source_classification_id", "attribution_eligible", "verified_referral_link_id",
+            "domain", "app_id", "screen", "landing_url", "referrer",
+            "dapp_id", "protocol_id", "chain_id", "contract_address",
+            "tx_hash", "block_number", "campaign_id", "conversion_id",
+            "occurred_at", "client_occurred_at", "server_received_at",
+            "chain_observed_at", "chain_confirmed_at", "activity_status",
+            "source_event_id", "source_system", "source_connector_id",
+            "identity_method", "identity_confidence", "identity_version",
+            "consent_snapshot_id", "privacy_class", "sequence_key", "schema_version",
+            "silver_fact_id", "silver_table", "gross_amount", "net_amount", "fee_amount",
+            "currency", "token_address", "value_wei",
+        )
+        values = (
+            _uuid(activity.get("activity_id")), activity.get("tenant_id"),
+            activity.get("idempotency_key"), activity.get("profile_id"),
+            activity.get("cluster_id"), activity.get("anonymous_id"),
+            activity.get("account_id"), activity.get("organization_id"),
+            activity.get("session_id"), activity.get("device_id"),
+            activity.get("browser_id"), activity.get("install_id"),
+            activity.get("wallet_id"), activity.get("wallet_address"),
+            activity.get("agent_id"), activity.get("activity_family"),
+            activity.get("activity_type"), activity.get("actor_type"),
+            activity.get("channel"), activity.get("source"), activity.get("medium"),
+            activity.get("platform"), activity.get("source_class"),
+            activity.get("referral_mediation_type"), activity.get("ai_provider"),
+            activity.get("ai_product"), activity.get("journey_role"),
+            activity.get("evidence_confidence"), activity.get("verification_level"),
+            activity.get("source_classifier_version"),
+            activity.get("normalized_referrer_domain"),
+            _uuid(activity.get("source_classification_id")),
+            activity.get("attribution_eligible", True),
+            _uuid(activity.get("verified_referral_link_id")),
+            activity.get("domain"), activity.get("app_id"), activity.get("screen"),
+            activity.get("landing_url"), activity.get("referrer"),
+            activity.get("dapp_id"), activity.get("protocol_id"), activity.get("chain_id"),
+            activity.get("contract_address"), activity.get("tx_hash"),
+            activity.get("block_number"), activity.get("campaign_id"),
+            activity.get("conversion_id"), _parse_ts(activity.get("occurred_at")),
+            _parse_ts(activity.get("client_occurred_at")),
+            _parse_ts(activity.get("server_received_at")) or datetime.now(timezone.utc),
+            _parse_ts(activity.get("chain_observed_at")),
+            _parse_ts(activity.get("chain_confirmed_at")),
+            activity.get("activity_status", "observed"), activity.get("source_event_id"),
+            activity.get("source_system"), activity.get("source_connector_id"),
+            activity.get("identity_method"), activity.get("identity_confidence"),
+            activity.get("identity_version"), activity.get("consent_snapshot_id"),
+            activity.get("privacy_class", "behavioral"), activity.get("sequence_key"),
+            activity.get("schema_version", 1), _uuid(activity.get("silver_fact_id")),
+            activity.get("silver_table"), _decimal(activity.get("gross_amount")),
+            _decimal(activity.get("net_amount")), _decimal(activity.get("fee_amount")),
+            activity.get("currency"), activity.get("token_address"), activity.get("value_wei"),
+        )
+        placeholders = ",".join(f"${i}" for i in range(1, len(columns) + 1))
         async with pool.acquire() as conn:
             await conn.execute(
+                f"INSERT INTO canonical_activity ({','.join(columns)}) "
+                f"VALUES ({placeholders}) "
+                "ON CONFLICT (tenant_id, idempotency_key) DO NOTHING",
+                *values,
+            )
+            persisted = await conn.fetchrow(
                 """
-                INSERT INTO canonical_activity (
-                    activity_id, tenant_id, idempotency_key,
-                    profile_id, cluster_id, anonymous_id,
-                    account_id, organization_id,
-                    session_id, device_id, browser_id, install_id,
-                    wallet_id, wallet_address, agent_id,
-                    activity_family, activity_type, actor_type,
-                    channel, source, medium, platform,
-                    domain, app_id, screen, landing_url, referrer,
-                    dapp_id, protocol_id, chain_id, contract_address,
-                    tx_hash, block_number,
-                    campaign_id, conversion_id,
-                    occurred_at, client_occurred_at, server_received_at,
-                    chain_observed_at, chain_confirmed_at,
-                    activity_status,
-                    source_event_id, source_system, source_connector_id,
-                    identity_method, identity_confidence, identity_version,
-                    consent_snapshot_id, privacy_class,
-                    sequence_key, schema_version,
-                    silver_fact_id, silver_table,
-                    gross_amount, net_amount, fee_amount,
-                    currency, token_address, value_wei
-                ) VALUES (
-                    $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,
-                    $11,$12,$13,$14,$15,$16,$17,$18,$19,$20,
-                    $21,$22,$23,$24,$25,$26,$27,$28,$29,$30,
-                    $31,$32,$33,$34,$35,$36,$37,$38,$39,$40,
-                    $41,$42,$43,$44,$45,$46,$47,$48,$49,$50,
-                    $51,$52,$53,$54,$55,$56,$57,$58,$59,$60
-                )
-                ON CONFLICT (tenant_id, idempotency_key) DO NOTHING
+                SELECT * FROM canonical_activity
+                WHERE tenant_id=$1 AND idempotency_key=$2
                 """,
-                _uuid(activity.get("activity_id")),
                 activity.get("tenant_id"),
                 activity.get("idempotency_key"),
-                activity.get("profile_id"),
-                activity.get("cluster_id"),
-                activity.get("anonymous_id"),
-                activity.get("account_id"),
-                activity.get("organization_id"),
-                activity.get("session_id"),
-                activity.get("device_id"),
-                activity.get("browser_id"),
-                activity.get("install_id"),
-                activity.get("wallet_id"),
-                activity.get("wallet_address"),
-                activity.get("agent_id"),
-                activity.get("activity_family"),
-                activity.get("activity_type"),
-                activity.get("actor_type"),
-                activity.get("channel"),
-                activity.get("source"),
-                activity.get("medium"),
-                activity.get("platform"),
-                activity.get("domain"),
-                activity.get("app_id"),
-                activity.get("screen"),
-                activity.get("landing_url"),
-                activity.get("referrer"),
-                activity.get("dapp_id"),
-                activity.get("protocol_id"),
-                activity.get("chain_id"),
-                activity.get("contract_address"),
-                activity.get("tx_hash"),
-                activity.get("block_number"),
-                activity.get("campaign_id"),
-                activity.get("conversion_id"),
-                _parse_ts(activity.get("occurred_at")),
-                _parse_ts(activity.get("client_occurred_at")),
-                _parse_ts(activity.get("server_received_at")) or datetime.now(timezone.utc),
-                _parse_ts(activity.get("chain_observed_at")),
-                _parse_ts(activity.get("chain_confirmed_at")),
-                activity.get("activity_status", "observed"),
-                activity.get("source_event_id"),
-                activity.get("source_system"),
-                activity.get("source_connector_id"),
-                activity.get("identity_method"),
-                activity.get("identity_confidence"),
-                activity.get("identity_version"),
-                activity.get("consent_snapshot_id"),
-                activity.get("privacy_class", "behavioral"),
-                activity.get("sequence_key"),
-                activity.get("schema_version", 1),
-                _uuid(activity.get("silver_fact_id")),
-                activity.get("silver_table"),
-                _decimal(activity.get("gross_amount")),
-                _decimal(activity.get("net_amount")),
-                _decimal(activity.get("fee_amount")),
-                activity.get("currency"),
-                activity.get("token_address"),
-                activity.get("value_wei"),
             )
-        return activity
+        return dict(persisted) if persisted else activity
+
+    async def apply_source_classification(
+        self,
+        tenant_id: str,
+        *,
+        touchpoint_id: str,
+        source_event_id: Optional[str],
+        classification: dict[str, Any],
+    ) -> int:
+        """Synchronize the current classification projection for a Silver touchpoint.
+
+        Canonical activity remains the journey compiler's authoritative input;
+        historical reclassification therefore updates its denormalized source
+        projection explicitly.  The immutable revision history lives on the
+        touchpoint side and every journey rebuild creates a new version.
+        """
+        fields = (
+            "channel", "source", "medium", "actor_type", "source_class",
+            "referral_mediation_type", "ai_provider", "ai_product", "journey_role",
+            "evidence_confidence", "verification_level", "source_classifier_version",
+            "normalized_referrer_domain", "source_classification_id",
+            "attribution_eligible", "verified_referral_link_id", "referrer",
+        )
+        pool = await self._pool()
+        if pool is None:
+            count = 0
+            for row in _local_store.values():
+                same_touchpoint = str(row.get("silver_fact_id") or "") == str(touchpoint_id)
+                same_event = bool(source_event_id) and row.get("source_event_id") == source_event_id
+                if row.get("tenant_id") == tenant_id and (same_touchpoint or same_event):
+                    for field in fields:
+                        if field in classification:
+                            row[field] = classification[field]
+                    row["domain"] = classification.get("normalized_referrer_domain")
+                    row["silver_fact_id"] = str(touchpoint_id)
+                    row["silver_table"] = "silver_campaign_touchpoint_facts"
+                    count += 1
+            return count
+
+        assignments = [f"{field} = ${index + 3}" for index, field in enumerate(fields)]
+        params = [tenant_id, _uuid(touchpoint_id)] + [
+            _uuid(classification.get(field))
+            if field in {"source_classification_id", "verified_referral_link_id"}
+            else classification.get(field)
+            for field in fields
+        ]
+        params.extend([classification.get("normalized_referrer_domain"), source_event_id])
+        domain_param = len(params) - 1
+        event_param = len(params)
+        async with pool.acquire() as conn:
+            result = await conn.execute(
+                f"""
+                UPDATE canonical_activity
+                SET {', '.join(assignments)}, domain = ${domain_param},
+                    silver_fact_id = $2,
+                    silver_table = 'silver_campaign_touchpoint_facts'
+                WHERE tenant_id = $1
+                  AND (
+                    silver_fact_id = $2::uuid
+                    OR (silver_table = 'silver_campaign_touchpoint_facts'
+                        AND source_event_id = ${event_param})
+                  )
+                """,
+                *params,
+            )
+        try:
+            return int(result.split()[-1])
+        except (IndexError, ValueError):
+            return 0
 
     async def update_status(
         self,
@@ -258,6 +310,7 @@ class ActivityRepository:
         tenant_id: str,
         profile_id: str,
         *,
+        identity_type: str = "profile",
         limit: int = 2000,
         cursor: Optional[str] = None,
         families: Optional[list[str]] = None,
@@ -265,7 +318,15 @@ class ActivityRepository:
         after: Optional[datetime] = None,
         before: Optional[datetime] = None,
     ) -> list[dict[str, Any]]:
-        """Load all canonical activity for a profile, ordered deterministically."""
+        """Load canonical activity for a typed identity, ordered deterministically."""
+        identity_columns = {
+            "profile": "profile_id",
+            "cluster": "cluster_id",
+            "anonymous": "anonymous_id",
+        }
+        identity_column = identity_columns.get(identity_type)
+        if identity_column is None:
+            raise ValueError(f"unsupported identity_type: {identity_type}")
         pool = await self._pool()
 
         _excluded_statuses = {"tombstoned", "deleted", "consent_restricted"}
@@ -273,7 +334,7 @@ class ActivityRepository:
             rows = [
                 r for r in _local_store.values()
                 if r.get("tenant_id") == tenant_id
-                and r.get("profile_id") == profile_id
+                and r.get(identity_column) == profile_id
                 and r.get("activity_status") not in _excluded_statuses
                 and (families is None or str(r.get("activity_family", "")) in families)
                 and (statuses is None or str(r.get("activity_status", "")) in statuses)
@@ -283,7 +344,7 @@ class ActivityRepository:
             rows.sort(key=lambda r: (r.get("occurred_at", ""), r.get("sequence_key") or "", str(r.get("activity_id", ""))))
             return rows[:limit]
 
-        conditions = ["tenant_id = $1", "profile_id = $2",
+        conditions = ["tenant_id = $1", f"{identity_column} = $2",
                       "activity_status NOT IN ('tombstoned', 'deleted', 'consent_restricted')"]
         params: list[Any] = [tenant_id, profile_id]
         p = 3

@@ -28,13 +28,22 @@ class JourneyStepRepository:
     async def _pool(self):
         return await get_pool()
 
-    async def bulk_create(self, steps: list[dict[str, Any]]) -> int:
+    async def bulk_create(
+        self,
+        steps: list[dict[str, Any]],
+        *,
+        connection: Any = None,
+    ) -> int:
         """Insert a full set of steps for a journey version atomically.
 
         Caller must ensure steps have unique (tenant_id, journey_version_id, step_position).
         """
         if not steps:
             return 0
+
+        if connection is not None:
+            await _insert_steps(connection, steps)
+            return len(steps)
 
         pool = await self._pool()
 
@@ -48,30 +57,7 @@ class JourneyStepRepository:
         # Build a multi-row VALUES insert; asyncpg handles this efficiently
         async with pool.acquire() as conn:
             async with conn.transaction():
-                await conn.executemany(
-                    """
-                    INSERT INTO journey_steps (
-                        step_id, tenant_id, journey_id, journey_version_id,
-                        profile_id, cluster_id,
-                        step_position, occurred_at,
-                        activity_id, activity_family, activity_type,
-                        transition_type, transition_evidence,
-                        actor_type, channel, source, domain, app_id,
-                        dapp_id, chain_id, campaign_id, conversion_id,
-                        wallet_id, agent_id, session_id, device_id,
-                        activity_status,
-                        identity_confidence, identity_method, identity_version,
-                        evidence_summary, schema_version
-                    ) VALUES (
-                        $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,
-                        $11,$12,$13,$14,$15,$16,$17,$18,$19,$20,
-                        $21,$22,$23,$24,$25,$26,$27,$28,$29,$30,
-                        $31,$32
-                    )
-                    ON CONFLICT (tenant_id, journey_version_id, step_position) DO NOTHING
-                    """,
-                    [_step_params(s) for s in steps],
-                )
+                await _insert_steps(conn, steps)
         return len(steps)
 
     async def delete_by_version(self, tenant_id: str, journey_version_id: str) -> int:
@@ -383,6 +369,41 @@ class JourneyStepRepository:
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
+async def _insert_steps(conn: Any, steps: list[dict[str, Any]]) -> None:
+    await conn.executemany(
+        """
+        INSERT INTO journey_steps (
+            step_id, tenant_id, journey_id, journey_version_id,
+            profile_id, cluster_id,
+            step_position, occurred_at,
+            activity_id, activity_family, activity_type,
+            transition_type, transition_evidence,
+            actor_type, channel, source,
+            source_class, referral_mediation_type,
+            ai_provider, ai_product, journey_role,
+            evidence_confidence, verification_level,
+            source_classifier_version, normalized_referrer_domain,
+            source_classification_id, attribution_eligible,
+            verified_referral_link_id,
+            domain, app_id,
+            dapp_id, chain_id, campaign_id, conversion_id,
+            wallet_id, agent_id, session_id, device_id,
+            activity_status,
+            identity_confidence, identity_method, identity_version,
+            evidence_summary, schema_version
+        ) VALUES (
+            $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,
+            $11,$12,$13,$14,$15,$16,$17,$18,$19,$20,
+            $21,$22,$23,$24,$25,$26,$27,$28,$29,$30,
+            $31,$32,$33,$34,$35,$36,$37,$38,$39,$40,
+            $41,$42,$43,$44
+        )
+        ON CONFLICT (tenant_id, journey_version_id, step_position) DO NOTHING
+        """,
+        [_step_params(step) for step in steps],
+    )
+
+
 def _step_params(s: dict[str, Any]) -> tuple:
     import json
     return (
@@ -402,6 +423,18 @@ def _step_params(s: dict[str, Any]) -> tuple:
         s.get("actor_type"),
         s.get("channel"),
         s.get("source"),
+        s.get("source_class"),
+        s.get("referral_mediation_type"),
+        s.get("ai_provider"),
+        s.get("ai_product"),
+        s.get("journey_role"),
+        s.get("evidence_confidence"),
+        s.get("verification_level"),
+        s.get("source_classifier_version"),
+        s.get("normalized_referrer_domain"),
+        _ensure_optional_uuid(s.get("source_classification_id")),
+        s.get("attribution_eligible", True),
+        _ensure_optional_uuid(s.get("verified_referral_link_id")),
         s.get("domain"),
         s.get("app_id"),
         s.get("dapp_id"),
@@ -430,6 +463,17 @@ def _ensure_uuid(value: Any) -> Optional[UUID]:
         return UUID(str(value))
     except (ValueError, AttributeError):
         return uuid4()
+
+
+def _ensure_optional_uuid(value: Any) -> Optional[UUID]:
+    if value is None:
+        return None
+    if isinstance(value, UUID):
+        return value
+    try:
+        return UUID(str(value))
+    except (ValueError, AttributeError):
+        return None
 
 
 def _parse_ts(value: Any) -> Optional[datetime]:

@@ -57,9 +57,9 @@ class ModelConfigRequest(BaseModel):
 
 class RunAttributionRequest(BaseModel):
     conversion_id: str
-    model_type: str = "last_touch"
+    model_type: Optional[str] = None
     model_config_id: Optional[str] = None
-    lookback_hours: int = Field(720, ge=1, le=8760)
+    lookback_hours: Optional[int] = Field(None, ge=1, le=8760)
 
 
 class BackfillRequest(BaseModel):
@@ -86,7 +86,7 @@ async def create_model_config(request: Request, body: ModelConfigRequest):
     import uuid
     from datetime import datetime, timezone
     tenant = _require_tenant(request)
-    if body.model_type not in _SUPPORTED_MODELS:
+    if body.model_type is not None and body.model_type not in _SUPPORTED_MODELS:
         raise BadRequestError(
             f"Unknown model_type '{body.model_type}'. Supported: {sorted(_SUPPORTED_MODELS)}"
         )
@@ -144,6 +144,36 @@ async def list_attribution_runs(
     }
 
 
+@router.get("/referral-performance")
+async def referral_performance(
+    request: Request,
+    start_at: Optional[datetime] = Query(None),
+    end_at: Optional[datetime] = Query(None),
+    campaign_id: Optional[str] = Query(None),
+    ai_provider: Optional[str] = Query(None),
+    ai_product: Optional[str] = Query(None),
+    referral_mediation_type: Optional[str] = Query(None),
+    source_class: Optional[str] = Query(None),
+    limit: int = Query(250, ge=1, le=1000),
+):
+    """Economic performance for classified referrals from active attribution runs."""
+    tenant = _require_tenant(request)
+    if start_at and end_at and end_at <= start_at:
+        raise BadRequestError("end_at must be after start_at")
+    result = await _run_repo.referral_performance(
+        tenant.tenant_id,
+        start_date=start_at,
+        end_date=end_at,
+        campaign_id=campaign_id,
+        ai_provider=ai_provider,
+        ai_product=ai_product,
+        referral_mediation_type=referral_mediation_type,
+        source_class=source_class,
+        limit=limit,
+    )
+    return APIResponse(data=result).to_dict()
+
+
 @router.get("/runs/{run_id}")
 async def get_attribution_run(run_id: str, request: Request):
     tenant = _require_tenant(request)
@@ -161,7 +191,7 @@ async def get_attribution_run(run_id: str, request: Request):
 @router.post("/runs")
 async def trigger_attribution_run(request: Request, body: RunAttributionRequest):
     tenant = _require_tenant(request)
-    if body.model_type not in _SUPPORTED_MODELS:
+    if body.model_type is not None and body.model_type not in _SUPPORTED_MODELS:
         raise BadRequestError(
             f"Unknown model_type '{body.model_type}'. "
             f"Supported: {sorted(_SUPPORTED_MODELS)}"
@@ -171,6 +201,7 @@ async def trigger_attribution_run(request: Request, body: RunAttributionRequest)
             tenant.tenant_id,
             body.conversion_id,
             model_type=body.model_type,
+            model_config_id=body.model_config_id,
             lookback_hours=body.lookback_hours,
             trigger_reason="api_triggered",
         )

@@ -533,22 +533,67 @@ function AttributionTab({ campaignId }: { campaignId: string }) {
   if (!data) return null;
 
   const d = data as AnyRecord;
+  const rawDimensionRollups = d.dimension_rollups;
+  const dimensionRollups = (
+    Array.isArray(rawDimensionRollups)
+      ? rawDimensionRollups
+      : Array.isArray((rawDimensionRollups as AnyRecord | null)?.items)
+        ? (rawDimensionRollups as AnyRecord).items
+        : []
+  ) as AnyRecord[];
+
   return (
-    <Card>
-      <CardHeader><CardTitle className="text-sm">Attribution credits</CardTitle></CardHeader>
-      <CardContent>
-        <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 mb-4">
-          <Metric label="Conversions" value={String(d.conversions ?? '—')} />
-          <Metric label="Gross revenue" value={d.attributed_gross_revenue != null ? fmtUSD(Number(d.attributed_gross_revenue)) : '—'} />
-          <Metric label="Net revenue" value={d.attributed_net_revenue != null ? fmtUSD(Number(d.attributed_net_revenue)) : '—'} />
-        </div>
-        <div className="text-xs text-text-muted">
-          Model: <strong>{String(d.model ?? 'last_touch')}</strong>
-          {' · '}
-          Quality: <strong>{String((d.quality as AnyRecord)?.status ?? d.data_quality ?? '—')}</strong>
-        </div>
-      </CardContent>
-    </Card>
+    <div className="space-y-4">
+      <Card>
+        <CardHeader><CardTitle className="text-sm">Attribution credits</CardTitle></CardHeader>
+        <CardContent>
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 mb-4">
+            <Metric label="Conversions" value={String(d.conversions ?? '—')} />
+            <Metric label="Gross revenue" value={d.attributed_gross_revenue != null ? fmtUSD(Number(d.attributed_gross_revenue)) : '—'} />
+            <Metric label="Net revenue" value={d.attributed_net_revenue != null ? fmtUSD(Number(d.attributed_net_revenue)) : '—'} />
+          </div>
+          <div className="text-xs text-text-muted">
+            Model: <strong>{String(d.model ?? 'last_touch')}</strong>
+            {' · '}
+            Quality: <strong>{String((d.quality as AnyRecord)?.status ?? d.data_quality ?? '—')}</strong>
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader><CardTitle className="text-sm">AI referral attribution dimensions</CardTitle></CardHeader>
+        <CardContent>
+          {dimensionRollups.length === 0
+            ? <EmptyState title="No dimension rollups" description="Provider, product, mediation, actor, and journey-role credits appear after classified touchpoints are attributed." />
+            : (
+              <DataTable
+                data={dimensionRollups}
+                keyExtractor={r => String(r.dimension_key ?? [
+                  r.source_class,
+                  r.ai_provider ?? r.provider,
+                  r.ai_product ?? r.product,
+                  r.referral_mediation_type ?? r.mediation,
+                  r.actor_type ?? r.actor,
+                  r.journey_role ?? r.role,
+                  r.verification_level,
+                ].join('|'))}
+                columns={[
+                  { key: 'source_class', header: 'Source class', render: r => String(r.source_class ?? '—') },
+                  { key: 'provider', header: 'Provider', render: r => String(r.ai_provider ?? r.provider ?? '—') },
+                  { key: 'product', header: 'Product', render: r => String(r.ai_product ?? r.product ?? '—') },
+                  { key: 'mediation', header: 'Mediation', render: r => String(r.referral_mediation_type ?? r.mediation ?? '—') },
+                  { key: 'actor', header: 'Actor', render: r => String(r.actor_type ?? r.actor ?? '—') },
+                  { key: 'role', header: 'Journey role', render: r => String(r.journey_role ?? r.role ?? '—') },
+                  { key: 'verification', header: 'Verification', render: r => String(r.verification_level ?? '—') },
+                  { key: 'conversions', header: 'Conversions', render: r => Number(r.conversions ?? r.attributed_conversions ?? 0).toLocaleString() },
+                  { key: 'net_revenue', header: 'Net revenue', render: r => fmtUSD(Number(r.attributed_net_revenue ?? r.net_revenue ?? 0)) },
+                ]}
+              />
+            )
+          }
+        </CardContent>
+      </Card>
+    </div>
   );
 }
 

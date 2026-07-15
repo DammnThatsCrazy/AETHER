@@ -63,22 +63,31 @@ class JourneyCompiler:
         tenant_id: str,
         profile_id: str,
         *,
+        identity_type: str = "profile",
         trigger_reason: str = "manual",
         session_timeout_seconds: int = _SESSION_TIMEOUT_SECONDS,
     ) -> dict[str, Any]:
-        """Build the current unified journey version for a profile."""
+        """Build the current unified journey version for a typed identity."""
         # Load cross-rail canonical activity
         activities = await self._activity_repo.list_by_profile(
-            tenant_id, profile_id, limit=_MAX_JOURNEY_STEPS,
+            tenant_id,
+            profile_id,
+            identity_type=identity_type,
+            limit=_MAX_JOURNEY_STEPS,
         )
         # Load conversions separately for attribution linkage metadata
         conversions = await self._conversion_repo.list_by_profile(
-            tenant_id, profile_id, attribution_eligible_only=False, limit=500,
+            tenant_id,
+            profile_id,
+            identity_type=identity_type,
+            attribution_eligible_only=False,
+            limit=500,
         )
 
         return await self._build_and_persist(
             tenant_id=tenant_id,
             profile_id=profile_id,
+            identity_type=identity_type,
             activities=activities,
             conversions=conversions,
             trigger_reason=trigger_reason,
@@ -94,11 +103,19 @@ class JourneyCompiler:
         tp = await self._touchpoint_repo.get(tenant_id, touchpoint_id)
         if tp is None:
             return []
-        profile_id = tp.get("profile_id") or tp.get("anonymous_id")
+        if tp.get("profile_id"):
+            identity_type, profile_id = "profile", tp["profile_id"]
+        elif tp.get("cluster_id"):
+            identity_type, profile_id = "cluster", tp["cluster_id"]
+        else:
+            identity_type, profile_id = "anonymous", tp.get("anonymous_id")
         if not profile_id:
             return []
         version = await self.compile_for_profile(
-            tenant_id, profile_id, trigger_reason="touchpoint_received",
+            tenant_id,
+            profile_id,
+            identity_type=identity_type,
+            trigger_reason="touchpoint_received",
         )
         return [version]
 
@@ -174,11 +191,15 @@ class JourneyCompiler:
         self,
         tenant_id: str,
         profile_id: str,
+        identity_type: str,
         activities: list[dict[str, Any]],
         conversions: list[dict[str, Any]],
         trigger_reason: str,
         session_timeout_seconds: int,
     ) -> dict[str, Any]:
+        if identity_type not in {"profile", "cluster", "anonymous"}:
+            raise ValueError(f"unsupported identity_type: {identity_type}")
+
         # ── 1. Sort deterministically ────────────────────────────────────────
         activities = _sort_deterministically(activities)
 
@@ -187,6 +208,11 @@ class JourneyCompiler:
         # activities are state, not journey steps; they stay in facts and
         # Profile360 but never surface as primary journey steps.
         activities, collapsed_lifecycle_count = _partition_comm_lifecycle(activities)
+
+        # Discovery crawlers, link previews, scanners, and any explicitly
+        # ineligible source classifications remain in canonical activity for
+        # evidence/audit purposes, but do not become eligible journey steps.
+        activities, excluded_source_noise_count = _partition_source_noise(activities)
 
         # ── 2. Derive summary metadata ───────────────────────────────────────
         started_at: Optional[str] = activities[0].get("occurred_at") if activities else None
@@ -202,6 +228,7 @@ class JourneyCompiler:
         campaign_ids = list({a.get("campaign_id") for a in activities if a.get("campaign_id")})
         wallet_ids = list({a.get("wallet_id") for a in activities if a.get("wallet_id")})
         conv_ids = [str(c["conversion_id"]) for c in conversions if c.get("conversion_id")]
+        touchpoint_ids = _touchpoint_ids(activities)
 
         web3_ids = [str(a.get("activity_id")) for a in activities
                     if a.get("activity_family") == ActivityFamily.web3.value]
@@ -214,9 +241,24 @@ class JourneyCompiler:
         journey_state = _derive_journey_state(activities, conversions)
 
         # ── 3. Confidence scoring ────────────────────────────────────────────
-        has_user_id = any(a.get("profile_id") for a in activities)
+        stored_profile_id = profile_id if identity_type != "cluster" else None
+        stored_cluster_id = (
+            profile_id
+            if identity_type == "cluster"
+            else next(
+                (
+                    item.get("cluster_id")
+                    for item in [*activities, *conversions]
+                    if item.get("cluster_id")
+                ),
+                None,
+            )
+        )
+        has_user_id = bool(stored_profile_id) and any(
+            a.get("profile_id") for a in activities
+        )
         confidence, _ = _scorer.score(
-            user_id=profile_id if has_user_id else None,
+            user_id=stored_profile_id if has_user_id else None,
             wallet=next((a.get("wallet_id") for a in activities if a.get("wallet_id")), None),
             anonymous_id=next((a.get("anonymous_id") for a in activities if a.get("anonymous_id")), None),
             fingerprint=next((a.get("device_id") for a in activities if a.get("device_id")), None),
@@ -225,7 +267,11 @@ class JourneyCompiler:
         )
 
         # ── 4. Load prior version for lineage ───────────────────────────────
-        prior_versions = await self._journey_repo.find_current_for_profile(tenant_id, profile_id)
+        prior_versions = await self._journey_repo.find_current_for_profile(
+            tenant_id,
+            profile_id,
+            identity_type=identity_type,
+        )
         prior = prior_versions[0] if prior_versions else None
         journey_id = prior.get("journey_id") if prior else str(uuid4())
         previous_version_id = prior.get("journey_version_id") if prior else None
@@ -236,13 +282,17 @@ class JourneyCompiler:
             "journey_version_id": new_version_id,
             "journey_id": journey_id,
             "tenant_id": tenant_id,
-            "profile_id": profile_id,
-            "journey_type": "profile",
+            "profile_id": stored_profile_id,
+            "cluster_id": stored_cluster_id,
+            "journey_type": identity_type,
             "journey_state": journey_state,
             "started_at": started_at,
             "ended_at": ended_at,
             "converted_at": converted_at,
             "conversion_ids": conv_ids,
+            "touchpoint_ids": touchpoint_ids,
+            "entry_touchpoint_id": touchpoint_ids[0] if touchpoint_ids else None,
+            "exit_touchpoint_id": touchpoint_ids[-1] if touchpoint_ids else None,
             "session_ids": session_ids,
             "device_ids": device_ids,
             "campaign_ids": campaign_ids,
@@ -253,15 +303,15 @@ class JourneyCompiler:
             "x402_activity_ids": x402_ids,
             "previous_version_id": previous_version_id,
             "collapsed_lifecycle_count": collapsed_lifecycle_count,
+            "excluded_source_noise_count": excluded_source_noise_count,
             "rebuild_reason": trigger_reason,
             "compiler_version": _COMPILER_VERSION,
             "computed_at": datetime.now(timezone.utc).isoformat(),
             "is_current": True,
         }
 
-        persisted = await self._journey_repo.create_version(new_version)
-
-        # ── 6. Bulk-insert journey_steps ─────────────────────────────────────
+        # ── 6. Build journey_steps ───────────────────────────────────────────
+        steps: list[dict[str, Any]] = []
         if activities:
             transitions = _classify_transitions(activities, session_timeout_seconds)
             steps = _build_steps(
@@ -270,16 +320,22 @@ class JourneyCompiler:
                 tenant_id=tenant_id,
                 journey_id=journey_id,
                 journey_version_id=new_version_id,
-                profile_id=profile_id,
+                profile_id=stored_profile_id,
             )
-            await self._step_repo.bulk_create(steps)
+
+        # Version activation and step insertion share one repository
+        # transaction so a failed drill-down write cannot publish a hollow
+        # current journey version.
+        persisted = await self._journey_repo.create_version(
+            new_version, steps=steps
+        )
 
         logger.info(
             "Journey compiled v2: tenant=%s profile=%s activities=%d web3=%d agent=%d "
-            "x402=%d conversions=%d state=%s confidence=%.2f reason=%s",
+            "x402=%d conversions=%d excluded_source_noise=%d state=%s confidence=%.2f reason=%s",
             tenant_id, profile_id,
             len(activities), len(web3_ids), len(agent_ids), len(x402_ids),
-            len(conv_ids), journey_state, confidence, trigger_reason,
+            len(conv_ids), excluded_source_noise_count, journey_state, confidence, trigger_reason,
         )
 
         return persisted
@@ -316,6 +372,42 @@ def _partition_comm_lifecycle(
                 continue
         primary.append(activity)
     return primary, collapsed
+
+
+def _partition_source_noise(
+    activities: list[dict[str, Any]],
+) -> tuple[list[dict[str, Any]], int]:
+    """Keep source-classification noise auditable but out of eligible journeys."""
+    eligible: list[dict[str, Any]] = []
+    excluded = 0
+    for activity in activities:
+        attribution_eligible = activity.get("attribution_eligible", True)
+        is_ineligible = attribution_eligible is False or (
+            isinstance(attribution_eligible, str)
+            and attribution_eligible.strip().lower() in {"false", "0", "no"}
+        )
+        if is_ineligible or activity.get("journey_role") == "excluded":
+            excluded += 1
+            continue
+        eligible.append(activity)
+    return eligible, excluded
+
+
+def _touchpoint_ids(activities: list[dict[str, Any]]) -> list[str]:
+    """Return ordered, unique Silver touchpoint ids represented in this version."""
+    result: list[str] = []
+    seen: set[str] = set()
+    for activity in activities:
+        if activity.get("silver_table") != "silver_campaign_touchpoint_facts":
+            continue
+        touchpoint_id = activity.get("silver_fact_id")
+        if not touchpoint_id:
+            continue
+        value = str(touchpoint_id)
+        if value not in seen:
+            seen.add(value)
+            result.append(value)
+    return result
 
 
 def _sort_deterministically(activities: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -460,6 +552,18 @@ def _build_steps(
             "actor_type": activity.get("actor_type"),
             "channel": activity.get("channel"),
             "source": activity.get("source"),
+            "source_class": activity.get("source_class"),
+            "referral_mediation_type": activity.get("referral_mediation_type"),
+            "ai_provider": activity.get("ai_provider"),
+            "ai_product": activity.get("ai_product"),
+            "journey_role": activity.get("journey_role"),
+            "evidence_confidence": activity.get("evidence_confidence"),
+            "verification_level": activity.get("verification_level"),
+            "source_classifier_version": activity.get("source_classifier_version"),
+            "normalized_referrer_domain": activity.get("normalized_referrer_domain"),
+            "source_classification_id": activity.get("source_classification_id"),
+            "attribution_eligible": activity.get("attribution_eligible", True),
+            "verified_referral_link_id": activity.get("verified_referral_link_id"),
             "domain": activity.get("domain"),
             "app_id": activity.get("app_id"),
             "dapp_id": activity.get("dapp_id"),
@@ -477,9 +581,18 @@ def _build_steps(
             "evidence_summary": {
                 "source_event_id": activity.get("source_event_id"),
                 "silver_table": activity.get("silver_table"),
+                "touchpoint_id": (
+                    str(activity.get("silver_fact_id"))
+                    if activity.get("silver_table")
+                    == "silver_campaign_touchpoint_facts"
+                    and activity.get("silver_fact_id")
+                    else None
+                ),
                 "privacy_class": activity.get("privacy_class"),
+                "source_classification_id": activity.get("source_classification_id"),
+                "verified_referral_link_id": activity.get("verified_referral_link_id"),
             },
-            "schema_version": 1,
+            "schema_version": 2,
         })
     return steps
 

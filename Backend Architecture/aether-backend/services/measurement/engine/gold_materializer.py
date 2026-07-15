@@ -43,6 +43,8 @@ class BackfillResult:
 async def materialize_campaign_performance_daily(
     tenant_id: str,
     target_date: date,
+    *,
+    restatement_reason: Optional[str] = None,
 ) -> int:
     """Aggregate attribution credits + spend_records for a campaign/date into gold_ad_spend.
 
@@ -164,6 +166,7 @@ async def materialize_campaign_performance_daily(
                     "date": target_date.isoformat(),
                     "campaigns": len(gold_rows),
                 },
+                restatement_reason=restatement_reason,
             )
         except Exception as exc:  # pragma: no cover — telemetry must not break materialization
             logger.debug("measurement plane conversion_rate record skipped: %s", exc)
@@ -260,6 +263,8 @@ async def materialize_journey_economics(
 async def materialize_attribution_credits(
     tenant_id: str,
     conversion_id: str,
+    *,
+    restatement_reason: Optional[str] = None,
 ) -> int:
     """Re-materialize campaign performance after a new attribution run completes."""
     run_repo = AttributionRunRepository()
@@ -273,7 +278,9 @@ async def materialize_attribution_credits(
     rows_written = 0
     today = date.today()
     for _ in campaign_ids:
-        rows_written += await materialize_campaign_performance_daily(tenant_id, today)
+        rows_written += await materialize_campaign_performance_daily(
+            tenant_id, today, restatement_reason=restatement_reason
+        )
 
     return rows_written
 
@@ -282,6 +289,8 @@ async def backfill_tenant(
     tenant_id: str,
     start_date: date,
     end_date: date,
+    *,
+    restatement_reason: Optional[str] = None,
 ) -> BackfillResult:
     """Backfill all Gold tables for a tenant across a date range."""
     journey_repo = JourneyRepository()
@@ -293,7 +302,9 @@ async def backfill_tenant(
     current = start_date
     while current <= end_date:
         try:
-            n = await materialize_campaign_performance_daily(tenant_id, current)
+            n = await materialize_campaign_performance_daily(
+                tenant_id, current, restatement_reason=restatement_reason
+            )
             campaign_perf_rows += n
         except Exception as exc:
             errors.append(f"campaign_perf {current}: {exc}")

@@ -164,6 +164,7 @@ class ConversionRepository:
         tenant_id: str,
         profile_id: str,
         *,
+        identity_type: Optional[str] = None,
         conversion_type: Optional[str] = None,
         status: Optional[str] = None,
         after_occurred: Optional[datetime] = None,
@@ -172,12 +173,24 @@ class ConversionRepository:
         limit: int = 200,
         cursor: Optional[str] = None,
     ) -> list[dict[str, Any]]:
+        identity_columns = {"profile": "profile_id", "cluster": "cluster_id"}
+        identity_column = identity_columns.get(identity_type or "")
+        if identity_type not in (None, "profile", "cluster"):
+            # Canonical conversions do not carry anonymous_id.
+            return []
         pool = await self._pool()
         if pool is None:
             rows = [
                 r for r in _local_store.values()
                 if r.get("tenant_id") == tenant_id
-                and (r.get("profile_id") == profile_id or r.get("cluster_id") == profile_id)
+                and (
+                    r.get(identity_column) == profile_id
+                    if identity_column
+                    else (
+                        r.get("profile_id") == profile_id
+                        or r.get("cluster_id") == profile_id
+                    )
+                )
                 and (conversion_type is None or r.get("conversion_type") == conversion_type)
                 and (status is None or r.get("conversion_status") == status)
                 and (not attribution_eligible_only or r.get("attribution_eligible"))
@@ -185,7 +198,12 @@ class ConversionRepository:
             rows.sort(key=lambda r: r.get("occurred_at", ""))
             return rows[:limit]
 
-        conditions = ["tenant_id = $1", "(profile_id = $2 OR cluster_id = $2)"]
+        identity_condition = (
+            f"{identity_column} = $2"
+            if identity_column
+            else "(profile_id = $2 OR cluster_id = $2)"
+        )
+        conditions = ["tenant_id = $1", identity_condition]
         params: list[Any] = [tenant_id, profile_id]
         p = 3
         for col, val in (("conversion_type", conversion_type), ("conversion_status", status)):

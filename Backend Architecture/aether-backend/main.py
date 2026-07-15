@@ -220,6 +220,7 @@ from services.notification_intelligence.routes import router as notification_rou
 from services.jobs.routes import router as jobs_router
 from services.jobs.kyber_routes import router as jobs_kyber_router
 from services.export import register_export_handlers
+from services.traffic.repair import register_source_classification_repair_handler
 from services.export.routes import router as exports_router
 from services.admin.routes import router as admin_router
 from services.traffic.routes import router as traffic_router
@@ -460,6 +461,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     from services.imports.commit import register_import_handlers
 
     register_import_handlers()  # import.commit / import.replay
+    register_source_classification_repair_handler()
 
     # Supervised long-running loop workers: event replay, billing overage
     # cron, notification SLA expiry, Dune polling (canonical scheduler only —

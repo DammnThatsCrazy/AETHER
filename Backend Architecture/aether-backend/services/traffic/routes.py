@@ -5,6 +5,9 @@ Automatically creates and manages "virtual links" for all detected traffic sourc
 No pre-created links required — everything is dynamically generated and aggregated.
 
 Routes:
+    POST /v1/referral-links                 Create a controlled verified link
+    GET  /v1/referral-links                 List tenant-scoped link metadata
+    POST /v1/referral-links/{id}/revoke     Revoke a controlled verified link
     POST /v1/track/traffic-source    Report a detected traffic source from SDK
     POST /v1/track/events            Track events with traffic source attribution
     GET  /v1/analytics/sources       Get aggregated traffic source analytics
@@ -20,17 +23,47 @@ from datetime import datetime, timezone
 from typing import Any, Optional
 from uuid import uuid4
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
 
-from shared.decorators import require_api_key_raw
+from shared.auth.auth import Role, TenantContext
+from shared.decorators import require_api_key, require_api_key_raw
 from .classifier import SourceClassifier
+from .referral_links import VerifiedReferralLinkRepository
 
 logger = logging.getLogger("aether.traffic")
 
 _classifier = SourceClassifier()
+_verified_referral_links = VerifiedReferralLinkRepository()
 
 router = APIRouter(prefix="/v1", tags=["traffic"])
+
+
+def _referral_link_access_allowed(tenant: TenantContext, permission: str) -> bool:
+    """Keep browser/viewer keys outside the verified-evidence control plane."""
+
+    if tenant.role in {Role.ADMIN, Role.EDITOR, Role.SERVICE}:
+        return True
+    return tenant.has_permission(permission)
+
+
+async def _require_referral_link_read(
+    tenant: TenantContext = Depends(require_api_key),
+) -> TenantContext:
+    if not (
+        _referral_link_access_allowed(tenant, "referral_links:read")
+        or _referral_link_access_allowed(tenant, "referral_links:write")
+    ):
+        raise HTTPException(status_code=403, detail="Referral-link read access required")
+    return tenant
+
+
+async def _require_referral_link_write(
+    tenant: TenantContext = Depends(require_api_key),
+) -> TenantContext:
+    if not _referral_link_access_allowed(tenant, "referral_links:write"):
+        raise HTTPException(status_code=403, detail="Referral-link write access required")
+    return tenant
 
 
 # =============================================================================
@@ -92,6 +125,24 @@ class ChannelBreakdown(BaseModel):
     revenue: float
     conversion_rate: float
     sources: list[TrafficSourceResponse]
+
+
+class VerifiedReferralLinkCreate(BaseModel):
+    """Controlled source metadata bound to a one-time-disclosed opaque token."""
+
+    placement_id: Optional[str] = Field(default=None, max_length=255)
+    agent_id: Optional[str] = Field(default=None, max_length=255)
+    campaign_id: Optional[str] = Field(default=None, max_length=255)
+    ai_provider: Optional[str] = Field(default=None, max_length=128)
+    ai_product: Optional[str] = Field(default=None, max_length=128)
+    referral_mediation_type: str = Field(
+        default="agent_mediated_referral", min_length=1, max_length=64
+    )
+    expires_at: Optional[datetime] = None
+
+
+class VerifiedReferralLinkRevoke(BaseModel):
+    reason: Optional[str] = Field(default=None, max_length=500)
 
 
 # =============================================================================
@@ -199,6 +250,83 @@ _store = TrafficStore()
 # =============================================================================
 # ROUTES
 # =============================================================================
+
+@router.post("/referral-links", status_code=201)
+async def create_verified_referral_link(
+    body: VerifiedReferralLinkCreate,
+    tenant: TenantContext = Depends(_require_referral_link_write),
+) -> dict[str, Any]:
+    """Create a tenant-scoped verified referral link.
+
+    ``referral_token`` is disclosed only in this response.  Store it in the
+    controlled agent or placement and send it as the ``aether_ref`` query
+    parameter; subsequent list responses never contain the token or its hash.
+    """
+
+    try:
+        link, token = await _verified_referral_links.create(
+            tenant.tenant_id,
+            placement_id=body.placement_id,
+            agent_id=body.agent_id,
+            campaign_id=body.campaign_id,
+            ai_provider=body.ai_provider,
+            ai_product=body.ai_product,
+            referral_mediation_type=body.referral_mediation_type,
+            expires_at=body.expires_at,
+            created_by=tenant.user_id,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    return {
+        "link": link,
+        "referral_token": token,
+        "query_parameter": "aether_ref",
+    }
+
+
+@router.get("/referral-links")
+async def list_verified_referral_links(
+    status: Optional[str] = Query(default=None),
+    limit: int = Query(default=100, ge=1, le=200),
+    offset: int = Query(default=0, ge=0),
+    tenant: TenantContext = Depends(_require_referral_link_read),
+) -> dict[str, Any]:
+    """List only the authenticated tenant's public referral-link metadata."""
+
+    try:
+        links = await _verified_referral_links.list(
+            tenant.tenant_id, status=status, limit=limit, offset=offset
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return {
+        "links": links,
+        "pagination": {
+            "limit": limit,
+            "offset": offset,
+            "returned": len(links),
+        },
+    }
+
+
+@router.post("/referral-links/{verified_referral_link_id}/revoke")
+async def revoke_verified_referral_link(
+    verified_referral_link_id: str,
+    body: VerifiedReferralLinkRevoke,
+    tenant: TenantContext = Depends(_require_referral_link_write),
+) -> dict[str, Any]:
+    """Idempotently revoke a link owned by the authenticated tenant."""
+
+    link = await _verified_referral_links.revoke(
+        tenant.tenant_id,
+        verified_referral_link_id,
+        revoked_by=tenant.user_id,
+        reason=body.reason,
+    )
+    if link is None:
+        raise HTTPException(status_code=404, detail="Verified referral link not found")
+    return {"link": link}
 
 @router.post("/track/traffic-source")
 async def report_traffic_source(
