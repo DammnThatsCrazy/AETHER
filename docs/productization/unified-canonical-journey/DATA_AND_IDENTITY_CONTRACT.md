@@ -9,7 +9,8 @@ status: stable
 source_files:
   - Backend Architecture/aether-backend/services/measurement/contracts.py
   - Backend Architecture/aether-backend/alembic/versions/20260627_canonical_activity.py
-last_synced_commit: 4d76caf
+  - Backend Architecture/aether-backend/alembic/versions/20260725_ai_referral_attribution.py
+last_synced_commit: "6306ea81"
 ---
 
 # Data and Identity Contract
@@ -42,6 +43,16 @@ Every row carries the identity chain available at write time:
 - `activity_family`: web2 | web3 | campaign | commerce | agent | x402 | outcome
 - `activity_type`: granular type from taxonomy (e.g., `page_view`, `transfer`, `click`)
 - `actor_type`: human | agent | system
+- Acquisition evidence: `source_class`, `referral_mediation_type`,
+  `ai_provider`, `ai_product`, `journey_role`, `verification_level`,
+  `evidence_confidence`, `source_classifier_version`, and
+  `source_classification_id`
+- Eligibility/provenance: `attribution_eligible`, normalized referrer domain,
+  and optional `verified_referral_link_id`
+
+Classifier revisions are append-only evidence keyed by tenant, touchpoint,
+classifier version, and stable input hash. Reclassification does not overwrite
+the historical evidence used by an earlier attribution run.
 
 ### Idempotency
 
@@ -70,6 +81,14 @@ observed → pending → confirmed → finalized
 
 `journey_steps` is a first-class table with one row per step per journey version.
 Steps are ordered by `step_position` (chronological, deterministic).
+
+Journey lineage is keyed by a typed identity (`profile`, `cluster`, or
+`anonymous`), so identical raw identifier strings in different identity
+namespaces cannot merge. Version activation and step insertion are atomic.
+Steps use schema version 2 for acquisition evidence fields. Explicitly
+ineligible discovery crawler/scanner/link-preview activity stays in
+`canonical_activity` for audit but is excluded from primary steps; each journey
+version records `excluded_source_noise_count`.
 
 ### Transition Taxonomy
 

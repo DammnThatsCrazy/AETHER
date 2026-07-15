@@ -11,7 +11,8 @@ toc_depth: 3
 source_files:
   - Backend Architecture/aether-backend/services/campaign/routes.py
   - Backend Architecture/aether-backend/services/campaign/exploration.py
-last_synced_commit: 4d76caf
+  - Backend Architecture/aether-backend/services/measurement/repositories/touchpoint_repo.py
+last_synced_commit: "6306ea81"
 ---
 
 # Campaign 360 API Reference
@@ -185,6 +186,14 @@ Paginated touchpoint list for the campaign.
       "profile_id": "string | null",
       "cluster_id": "string | null",
       "anonymous_id": "string | null",
+      "source_class": "string | null",
+      "referral_mediation_type": "string | null",
+      "ai_provider": "string | null",
+      "ai_product": "string | null",
+      "verification_level": "string | null",
+      "evidence_confidence": 0.0,
+      "source_classifier_version": "string | null",
+      "attribution_eligible": true,
       "occurred_at": "ISO 8601"
     }
   ],
@@ -338,6 +347,18 @@ pass `include_unattributed=true` to include all campaign-associated conversions.
   "pagination": { "limit": 50, "next_cursor": "string | null", "has_more": false }
 }
 ```
+
+---
+
+### GET `/{campaign_id}/attribution`
+
+Returns tenant-scoped active credit totals plus dimension rollups for channel,
+source class, referral mediation, AI provider/product, actor type, and journey
+role. Credit rows retain verification, evidence-confidence, classifier-version,
+classification-ID, and verified-referral-link provenance. The route accepts
+`model`, `start_date`, and `end_date`; date-only `end_date` is inclusive by
+normalizing it to an exclusive next-day UTC boundary. Datetimes without an
+offset are interpreted as UTC.
 
 ---
 

@@ -11,7 +11,9 @@ toc_depth: 2
 source_files:
   - Backend Architecture/aether-backend/services/campaign/exploration.py
   - Backend Architecture/aether-backend/services/measurement/repositories/attribution_run_repo.py
-last_synced_commit: 998b345
+  - Backend Architecture/aether-backend/services/measurement/engine/attribution_engine.py
+  - Backend Architecture/aether-backend/services/traffic/repair.py
+last_synced_commit: "6306ea81"
 ---
 
 # Runbook — Attribution Run Failed (Campaign 360)
@@ -33,12 +35,13 @@ and ROAS figures in Campaign 360 will be based on the last successful run
 1. **Find the failed run**:
    ```bash
    curl "$API_BASE/v1/attribution/runs?campaign_id=$CAMPAIGN_ID&status=failed&limit=5" \
-     | jq "[.items[] | {id: .attribution_run_id, model: .model_type, created_at: .created_at}]"
+     | jq "[.items[] | {id: .attribution_run_id, model: .model_type, trigger: .trigger_reason, classifier: .source_classifier_version, prior_run: .prior_attribution_run_id, created_at: .created_at}]"
    ```
 
 2. **Get the run error detail**:
    ```bash
-   curl "$API_BASE/v1/attribution/runs/$RUN_ID" | jq .error_detail
+   curl "$API_BASE/v1/attribution/runs/$RUN_ID" \
+     | jq '{failure_reason, model_config_snapshot, input_touchpoint_ids, excluded_touchpoint_ids, exclusion_reasons, source_classifier_version, prior_attribution_run_id}'
    ```
 
 3. **Identify the failure mode**:
@@ -48,7 +51,7 @@ and ROAS figures in Campaign 360 will be based on the last successful run
    | `credit_sum_tolerance_exceeded` | Total credit weights deviate > 0.1% from 1.0 per conversion. Data integrity issue. |
    | `no_eligible_conversions` | No conversions in the attribution window for this campaign. |
    | `touchpoint_join_failed` | Touchpoints for the campaign are missing or have null `occurred_at`. |
-   | `model_config_not_found` | The attribution model config referenced by the run no longer exists. |
+   | `model_config_not_found` | The requested model config was missing before the run could capture an immutable snapshot. Recomputes of an existing run reuse its snapshot unless explicitly overridden. |
    | `timeout` | The attribution engine exceeded its processing budget (> 300s for the campaign's conversion set). |
    | `database_error` | Transient PostgreSQL error. |
 
@@ -67,8 +70,9 @@ and ROAS figures in Campaign 360 will be based on the last successful run
 | `no_eligible_conversions` | Verify conversions are being ingested; if intentional, no action needed |
 | `credit_sum_tolerance_exceeded` | Inspect model config; report to measurement engineering |
 | `timeout` | Reduce the date range and run a targeted backfill in smaller windows |
-| Model config deleted | Restore the config or use a different model |
+| Model config unavailable before first run | Restore the config or explicitly choose a different model; recomputes should reuse the prior run's immutable snapshot |
 | `touchpoint_join_failed` | Fix the touchpoint records (null `occurred_at`); re-ingest; re-trigger |
+| Old/missing source classifier version | Run tenant-scoped source-classification repair in Kyber, then verify the linked recomputed run and reconciliation |
 
 ## Triggering a manual re-run
 
@@ -86,6 +90,12 @@ curl -X POST "$API_BASE/v1/attribution/backfills" \
   -H "Content-Type: application/json" \
   -d '{"start_date": "YYYY-MM-DD", "end_date": "YYYY-MM-DD"}'
 ```
+
+When correcting source evidence, prefer the Kyber source-classification repair
+workflow. It records append-only classification revisions, creates recomputed
+attribution runs linked through `prior_attribution_run_id`, and preserves the
+original run/config snapshot for audit. Do not edit historical credit rows in
+place.
 
 ## Reconciliation check after re-run
 

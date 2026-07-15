@@ -14,7 +14,7 @@ source_files:
 canonical_owner: backend@aether
 estimated_read_minutes: 8
 toc_depth: 3
-last_synced_commit: "640548e"
+last_synced_commit: "6306ea81"
 ---
 
 # Profile 360 Aggregation Layer
@@ -98,6 +98,7 @@ is what is documented below.
 | GET    | `/v1/profile/{id}/agents`                                  | Owned agents                                       |
 | GET    | `/v1/profile/{id}/wallets`                                 | Owned wallets across chains                        |
 | GET    | `/v1/profile/{id}/journeys`                                | Cross-session journey chains                       |
+| GET    | `/v1/profile/{id}/unified-journey`                         | Current typed-identity journey, ordered steps, source evidence, and quality metadata |
 | GET    | `/v1/profile/{id}/behavior`                                | Latest derived behavior snapshot                   |
 | GET    | `/v1/profile/{id}/predictions`                             | Predicted next + anomaly flags                     |
 | GET    | `/v1/profile/{id}/rewards`                                 | Rewards earned                                     |
@@ -143,6 +144,19 @@ Added after v8.8.0 (`services/profile/routes.py`):
 | GET    | `/v1/profile/{id}/agent-executions`                 | Agent executions owned or observed by this entity         |
 | GET    | `/v1/profile/{id}/actions`                          | Discrete profile actions (pagination supported)           |
 | GET    | `/v1/profile/{id}/events`                           | Profile-scoped events (alternative to timeline)           |
+
+### Unified journey source evidence
+
+`GET /v1/profile/{id}/unified-journey` preserves the generic `items` envelope
+and also returns stable `steps` and `meta` fields for the Aether journey hook.
+Each eligible step can include `source_class`, referral mediation, AI
+provider/product, verification level, evidence confidence, classifier version,
+and `attribution_eligible`. Net revenue is joined from the tenant's active,
+immutable attribution credits by captured touchpoint ID; it is not inferred
+from journey-step data. Discovery crawlers, scanners, link previews, and other
+explicitly ineligible source evidence remain auditable in canonical activity
+but are omitted from primary steps and counted in
+`meta.excluded_source_noise_count`.
 
 ### Economic intelligence endpoints
 
