@@ -1,30 +1,13 @@
-"""Tenant-level SDK dimension-coverage diagnostic.
+"""Tenant-level, statistically honest SDK dimension coverage.
 
-Where :mod:`services.reconciliation.dimension_status` answers "how complete is
-*this entity's* data?", this module answers the tenant-wide question: across a
-bounded sample of a tenant's entities, how many have usable (ready) data in
-each dimension, and how many are empty / stale / errored?
-
-It is an honest, bounded sweep:
-
-* **Bounded** — enumeration is capped at ``sample_limit`` entities. When the
-  tenant has more, ``sample_capped`` is set True and the cap is logged, so a
-  caller never mistakes a truncated sample for the whole tenant.
-* **Honest** — each entity's per-dimension state is computed by reusing
-  :func:`compute_data_status` (the canonical per-entity surface). A single
-  entity's failure degrades *that entity's* dimensions to ``error``; it never
-  aborts the sweep. A tenant with zero entities yields a well-formed empty
-  result, not an error.
-
-The four per-dimension buckets (``ready`` / ``stale`` / ``empty`` / ``error``)
-partition the sampled entities for that dimension — they always sum to
-``entities_sampled``. ``empty`` folds every non-usable, non-stale, non-error
-state (genuinely empty, insufficient_data, not_applicable, …) so the buckets
-stay a clean partition.
+Small tenant populations use a full census. Larger populations use a
+reproducible hash-ranked sample over the complete tenant frame, with population
+size, method, seed, and Wilson confidence intervals reported in the response.
 """
 
 from __future__ import annotations
 
+import math
 from datetime import datetime, timezone
 from typing import Any, Optional
 
@@ -36,53 +19,94 @@ from services.reconciliation.expectations import REGISTERED_DIMENSIONS
 
 logger = get_logger("aether.reconciliation.coverage")
 
-# Default bound on how many entities a single sweep enumerates.
 DEFAULT_SAMPLE_LIMIT = 200
-
-# The four coverage buckets, in a stable order. They partition the sample.
+SAMPLE_SEED_VERSION = "sdk-coverage-v1"
 _BUCKETS = ("ready", "stale", "empty", "error")
 
 
 def _bucket_for_state(state: str) -> str:
-    """Map a canonical dimension state into one of the four coverage buckets.
-
-    ``ready`` / ``stale`` / ``error`` map through directly; every other state
-    (``empty``, ``insufficient_data``, ``not_applicable``, ``partial``,
-    ``pending``, ``degraded``, ``suppressed``) folds into ``empty`` so the four
-    buckets always partition the sample. Only ``ready`` counts as usable.
-    """
     if state in ("ready", "stale", "error"):
         return state
     return "empty"
 
 
-async def _enumerate_entities(
-    aggregator: Any, tenant_id: str, *, fetch_limit: int
-) -> list[str]:
-    """Bounded, tenant-scoped enumeration of entity ids for a tenant.
+def _wilson_interval(successes: int, total: int) -> Optional[dict]:
+    """95% Wilson score interval; unavailable for an empty sampling frame."""
+    if total <= 0:
+        return None
+    z = 1.959963984540054
+    proportion = successes / total
+    denominator = 1 + (z * z / total)
+    centre = proportion + (z * z / (2 * total))
+    spread = z * math.sqrt(
+        (proportion * (1 - proportion) / total) + (z * z / (4 * total * total))
+    )
+    lower = max(0.0, (centre - spread) / denominator)
+    upper = min(1.0, (centre + spread) / denominator)
+    return {
+        "confidence_level": 0.95,
+        "lower": lower,
+        "upper": upper,
+        "margin_of_error": (upper - lower) / 2,
+        "method": "wilson_score",
+    }
 
-    Uses the entities repository's tenant-scoped listing method
-    (``EntityRepository.list_by_tenant``, which filters ``find_many`` on
-    ``tenant_id``). We fetch ``fetch_limit`` rows so the caller can detect the
-    cap by requesting one more than it intends to keep. Any enumeration failure
-    degrades to an empty sample (logged) rather than raising.
-    """
-    try:
-        rows = await aggregator._entities.list_by_tenant(tenant_id, limit=fetch_limit)
-    except Exception as exc:  # noqa: BLE001 — enumeration failure is surfaced, not fatal
-        logger.warning(
-            "tenant_coverage_enumeration_failed",
-            extra={"tenant_id": tenant_id, "error": str(exc)},
+
+async def _sampling_frame(
+    aggregator: Any, tenant_id: str, *, sample_limit: int
+) -> tuple[int, list[str], str]:
+    repository = aggregator._entities
+    population_size = await repository.count_by_tenant(tenant_id)
+    if population_size <= sample_limit:
+        rows = await repository.list_by_tenant(
+            tenant_id, limit=max(1, population_size)
         )
-        return []
-    ids: list[str] = []
+        methodology = "full_population_census"
+    else:
+        rows = await repository.sample_by_tenant(
+            tenant_id,
+            limit=sample_limit,
+            seed_version=SAMPLE_SEED_VERSION,
+        )
+        methodology = "deterministic_hash_sample"
+
+    entity_ids: list[str] = []
     for row in rows or []:
         if not isinstance(row, dict):
             continue
-        eid = row.get("entity_id") or row.get("id")
-        if eid:
-            ids.append(str(eid))
-    return ids
+        entity_id = row.get("entity_id") or row.get("id")
+        if entity_id:
+            entity_ids.append(str(entity_id))
+    return population_size, entity_ids, methodology
+
+
+def _unavailable_result(tenant_id: str, sample_limit: int, error_code: str) -> dict:
+    dimensions = [
+        {
+            "dimension": dimension,
+            **{bucket: 0 for bucket in _BUCKETS},
+            "coverage_ratio": None,
+            "value_state": "unavailable",
+            "confidence_interval": None,
+        }
+        for dimension in REGISTERED_DIMENSIONS
+    ]
+    return {
+        "tenant_id": tenant_id,
+        "kind": "sdk_coverage",
+        "sampling_status": "unavailable",
+        "sampling_error_code": error_code,
+        "population_size": None,
+        "entities_sampled": 0,
+        "sample_capped": False,
+        "sample_limit": sample_limit,
+        "methodology": "unavailable",
+        "seed_version": SAMPLE_SEED_VERSION,
+        "dimensions": dimensions,
+        "overall_coverage": None,
+        "overall_value_state": "unavailable",
+        "computed_at": utc_now().isoformat(),
+    }
 
 
 async def compute_tenant_coverage(
@@ -92,34 +116,7 @@ async def compute_tenant_coverage(
     sample_limit: int = DEFAULT_SAMPLE_LIMIT,
     now: Optional[datetime] = None,
 ) -> dict:
-    """Compute tenant-wide SDK dimension coverage over a bounded entity sample.
-
-    Enumerates up to ``sample_limit`` of the tenant's entities and, for each,
-    computes its per-dimension data-status via :func:`compute_data_status`.
-    Aggregates per dimension across the sample: counts of entities whose
-    dimension state is ready / stale / empty / error, plus a coverage ratio
-    (entities with usable — i.e. ``ready`` — data ÷ sampled).
-
-    Returns::
-
-        {
-          "tenant_id": ...,
-          "kind": "sdk_coverage",
-          "entities_sampled": int,
-          "sample_capped": bool,
-          "sample_limit": int,
-          "dimensions": [
-            {"dimension", "ready", "stale", "empty", "error", "coverage_ratio"},
-            ...
-          ],
-          "overall_coverage": float,
-          "computed_at": iso8601,
-        }
-
-    Honesty guarantees: a per-entity failure degrades that entity's dimensions
-    to ``error`` and the sweep continues; a tenant with zero entities returns a
-    well-formed result with ``entities_sampled == 0`` (never an error).
-    """
+    """Compute tenant coverage using a census or full-frame deterministic sample."""
     now = now or datetime.now(timezone.utc)
     sample_limit = max(1, int(sample_limit))
 
@@ -127,79 +124,111 @@ async def compute_tenant_coverage(
         from services.profile.aggregator import Profile360Aggregator
         aggregator = Profile360Aggregator()
 
-    # Fetch one more than we intend to keep so we can detect the cap honestly.
-    entity_ids = await _enumerate_entities(
-        aggregator, tenant_id, fetch_limit=sample_limit + 1
-    )
-    sample_capped = len(entity_ids) > sample_limit
-    if sample_capped:
-        entity_ids = entity_ids[:sample_limit]
-        logger.info(
-            "tenant_coverage_sample_capped",
-            extra={"tenant_id": tenant_id, "sample_limit": sample_limit},
+    try:
+        population_size, entity_ids, methodology = await _sampling_frame(
+            aggregator, tenant_id, sample_limit=sample_limit
         )
+    except Exception as exc:  # noqa: BLE001
+        logger.warning(
+            "tenant_coverage_sampling_frame_failed",
+            extra={"tenant_id": tenant_id, "error_code": type(exc).__name__},
+        )
+        return _unavailable_result(tenant_id, sample_limit, type(exc).__name__)
 
-    # tallies[dimension][bucket] = count
+    sample_capped = population_size > len(entity_ids)
     tallies: dict[str, dict[str, int]] = {
-        dim: {bucket: 0 for bucket in _BUCKETS} for dim in REGISTERED_DIMENSIONS
+        dimension: {bucket: 0 for bucket in _BUCKETS}
+        for dimension in REGISTERED_DIMENSIONS
     }
 
     for entity_id in entity_ids:
         try:
-            status = await compute_data_status(aggregator, entity_id, tenant_id, now=now)
+            status = await compute_data_status(
+                aggregator, entity_id, tenant_id, now=now
+            )
             dimension_rows = status.get("dimensions", [])
-        except Exception as exc:  # noqa: BLE001 — one entity never aborts the sweep
+        except Exception as exc:  # noqa: BLE001
             logger.warning(
                 "tenant_coverage_entity_failed",
-                extra={"tenant_id": tenant_id, "entity_id": entity_id, "error": str(exc)},
+                extra={
+                    "tenant_id": tenant_id,
+                    "entity_id": entity_id,
+                    "error_code": type(exc).__name__,
+                },
             )
-            # A wholesale per-entity failure degrades every dimension to error
-            # for that entity — surfaced, never silently dropped.
-            for dim in REGISTERED_DIMENSIONS:
-                tallies[dim]["error"] += 1
+            for dimension in REGISTERED_DIMENSIONS:
+                tallies[dimension]["error"] += 1
             continue
 
         seen: set[str] = set()
         for row in dimension_rows:
             if not isinstance(row, dict):
                 continue
-            dim = row.get("dimension")
-            if dim not in tallies:
+            dimension = row.get("dimension")
+            if dimension not in tallies:
                 continue
-            tallies[dim][_bucket_for_state(row.get("state", "empty"))] += 1
-            seen.add(dim)
-        # Defensive: a dimension missing from this entity's status counts as
-        # empty so every dimension's buckets still sum to entities_sampled.
-        for dim in REGISTERED_DIMENSIONS:
-            if dim not in seen:
-                tallies[dim]["empty"] += 1
+            tallies[dimension][_bucket_for_state(row.get("state", "empty"))] += 1
+            seen.add(dimension)
+        for dimension in REGISTERED_DIMENSIONS:
+            if dimension not in seen:
+                tallies[dimension]["empty"] += 1
 
     entities_sampled = len(entity_ids)
     dimensions: list[dict] = []
-    ratio_sum = 0.0
-    for dim in REGISTERED_DIMENSIONS:
-        counts = tallies[dim]
+    observed_ratios: list[float] = []
+    for dimension in REGISTERED_DIMENSIONS:
+        counts = tallies[dimension]
         ready = counts["ready"]
-        ratio = (ready / entities_sampled) if entities_sampled else 0.0
-        ratio_sum += ratio
+        ratio = ready / entities_sampled if entities_sampled else None
+        if ratio is not None:
+            observed_ratios.append(ratio)
+        interval = _wilson_interval(ready, entities_sampled)
+        if methodology == "full_population_census" and ratio is not None:
+            interval = {
+                "confidence_level": 1.0,
+                "lower": ratio,
+                "upper": ratio,
+                "margin_of_error": 0.0,
+                "method": "census_exact",
+            }
         dimensions.append({
-            "dimension": dim,
+            "dimension": dimension,
             "ready": ready,
             "stale": counts["stale"],
             "empty": counts["empty"],
             "error": counts["error"],
             "coverage_ratio": ratio,
+            "value_state": "observed" if ratio is not None else "missing",
+            "confidence_interval": interval,
         })
 
-    overall_coverage = (ratio_sum / len(REGISTERED_DIMENSIONS)) if REGISTERED_DIMENSIONS else 0.0
-
+    overall_coverage = (
+        sum(observed_ratios) / len(observed_ratios)
+        if observed_ratios
+        else None
+    )
     return {
         "tenant_id": tenant_id,
         "kind": "sdk_coverage",
+        "sampling_status": "available",
+        "sampling_error_code": None,
+        "population_size": population_size,
         "entities_sampled": entities_sampled,
         "sample_capped": sample_capped,
         "sample_limit": sample_limit,
+        "methodology": methodology,
+        "seed_version": SAMPLE_SEED_VERSION,
         "dimensions": dimensions,
         "overall_coverage": overall_coverage,
+        "overall_value_state": (
+            "observed" if overall_coverage is not None else "missing"
+        ),
         "computed_at": utc_now().isoformat(),
     }
+
+
+__all__ = [
+    "DEFAULT_SAMPLE_LIMIT",
+    "SAMPLE_SEED_VERSION",
+    "compute_tenant_coverage",
+]

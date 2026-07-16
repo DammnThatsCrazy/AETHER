@@ -28,9 +28,9 @@ Design rules:
        Items expose `id`, `type`, `displayLabel`, `timestamps`, `metadata`,
        and `links` (drill refs other items can navigate to). Frontends should
        not need to know which underlying table a field originated from.
-    4. **Best-effort fallback.** Any repository read that fails is caught and
-       logged; the dimension degrades to an empty list rather than 500-ing the
-       whole profile.
+    4. **Typed degradation.** Repository failures are represented as
+       DimensionReadResult.unavailable and surfaced separately from legitimate
+       empty values; the rest of the profile can still render.
 """
 
 from __future__ import annotations
@@ -46,6 +46,7 @@ from decimal import Decimal
 from shared.common.common import utc_now
 from shared.logger.logger import get_logger, metrics
 from services.value import safe_rollup, value_of
+from services.profile.read_result import DimensionReadResult
 
 logger = get_logger("aether.profile.aggregator")
 
@@ -153,17 +154,16 @@ async def _async_none():
     return None
 
 
-async def _safe(label: str, coro):
-    """Run a coroutine and return [] on error, logging the failure.
-
-    Aggregation endpoints must keep responding even if a single dependency is
-    flaky, so degraded dimensions are preferable to 500s.
-    """
+async def _safe(label: str, coro) -> DimensionReadResult[Any]:
+    """Return typed dependency availability without collapsing it into empty."""
     try:
-        return await coro
+        return DimensionReadResult.success(label, await coro)
     except Exception as exc:  # noqa: BLE001 — aggregator must never raise
-        logger.warning("profile360_aggregator_dimension_failed", extra={"dimension": label, "error": str(exc)})
-        return []
+        logger.warning(
+            "profile360_aggregator_dimension_failed",
+            extra={"dimension": label, "error_code": type(exc).__name__},
+        )
+        return DimensionReadResult.unavailable(label, type(exc).__name__)
 
 
 def _unified_journey_unavailable(entity_id: str, tenant_id: str, reason: str) -> dict:
@@ -358,12 +358,16 @@ class Profile360Aggregator:
         """
         primary_filter = {**filters, "tenant_id": tenant_id}
         legacy_filter = {**filters, "tenant_id": None}
-        primary, legacy = await asyncio.gather(
+        primary_read, legacy_read = await asyncio.gather(
             _safe("scoped.primary", repo.find_many(filters=primary_filter, limit=limit)),
             _safe("scoped.legacy", repo.find_many(filters=legacy_filter, limit=limit)),
             return_exceptions=False,
         )
-        return _merge_sort_dedupe(primary, legacy, limit=limit)
+        return _merge_sort_dedupe(
+            primary_read.value_or([]),
+            legacy_read.value_or([]),
+            limit=limit,
+        )
 
     # ── Dimensions ────────────────────────────────────────────────────
 
@@ -397,9 +401,9 @@ class Profile360Aggregator:
         # graph as Session vertices. We read both and merge by session_id.
         events: list[dict] = []
         if self._analytics is not None:
-            events = await _safe("sessions.analytics", self._analytics.query_events(
+            events = (await _safe("sessions.analytics", self._analytics.query_events(
                 tenant_id, {"user_id": entity_id}, limit=limit,
-            ))
+            ))).value_or([])
 
         session_props: dict[str, dict] = {}
         for e in events:
@@ -492,9 +496,9 @@ class Profile360Aggregator:
 
         observed_counts: dict[str, int] = defaultdict(int)
         if self._analytics is not None:
-            events = await _safe("devices.analytics", self._analytics.query_events(
+            events = (await _safe("devices.analytics", self._analytics.query_events(
                 tenant_id, {"user_id": entity_id}, limit=limit * 5,
-            ))
+            ))).value_or([])
             for e in events:
                 # Canonical SDK events normalized by services/ingestion store
                 # device_id at the top level, not inside properties. Read both
@@ -593,9 +597,12 @@ class Profile360Aggregator:
     ) -> dict:
         events: list[dict] = []
         if self._analytics is not None:
-            events = await _safe(f"{kind}.analytics", self._analytics.query_events(
-                tenant_id, {"user_id": entity_id}, limit=500,
-            ))
+            events = (await _safe(
+                f"{kind}.analytics",
+                self._analytics.query_events(
+                    tenant_id, {"user_id": entity_id}, limit=500,
+                ),
+            )).value_or([])
         counter: Counter[str] = Counter()
         last_seen: dict[str, str] = {}
         for e in events:
@@ -681,10 +688,11 @@ class Profile360Aggregator:
             return _unified_journey_unavailable(entity_id, tenant_id, "dependency_unavailable")
 
         # Load current journey version
-        versions = await _safe(
+        versions_read = await _safe(
             "unified_journey.version_lookup",
             journey_repo.find_current_for_profile(tenant_id, entity_id),
         )
+        versions = versions_read.value_or([])
         if not versions:
             return _unified_journey_unavailable(entity_id, tenant_id, "not_provisioned")
 
@@ -705,7 +713,7 @@ class Profile360Aggregator:
         before_dt = _parse_optional_ts(before)
         families = [family] if family else None
 
-        steps = await _safe(
+        steps_read = await _safe(
             "unified_journey.steps",
             step_repo.list_by_version(
                 tenant_id,
@@ -716,6 +724,7 @@ class Profile360Aggregator:
                 before=before_dt,
             ),
         )
+        steps = steps_read.value_or([])
 
         # Economic values are authoritative attribution-credit outputs, not
         # journey-step columns. Enrich the read model from active immutable
@@ -731,12 +740,13 @@ class Profile360Aggregator:
                 AttributionRunRepository,
             )
 
-            credits = await _safe(
+            credits_read = await _safe(
                 "unified_journey.attribution_credits",
                 AttributionRunRepository().list_active_credits_for_conversions(
                     tenant_id, [str(item) for item in conversion_ids]
                 ),
             )
+            credits = credits_read.value_or([])
         except Exception:
             credits = []
         revenue_by_touchpoint: defaultdict[str, Decimal] = defaultdict(
@@ -884,9 +894,9 @@ class Profile360Aggregator:
         # without coupling to the RewardsService internals.
         events: list[dict] = []
         if self._analytics is not None:
-            events = await _safe("rewards.analytics", self._analytics.query_events(
+            events = (await _safe("rewards.analytics", self._analytics.query_events(
                 tenant_id, {"user_id": entity_id}, limit=limit * 3,
-            ))
+            ))).value_or([])
         items = []
         total_value = 0.0
         for e in events:
@@ -1193,7 +1203,21 @@ class Profile360Aggregator:
                 else _async_none()
             )),
         )
-        entity, agents, wallets, transfers, deleg_out, deleg_in, behavior, chains, execs, identity_subject = results
+        (
+            entity_read,
+            agents,
+            wallets,
+            transfers,
+            deleg_out,
+            deleg_in,
+            behavior_read,
+            chains,
+            execs,
+            identity_read,
+        ) = results
+        entity = entity_read.value_or(None)
+        behavior = behavior_read.value_or(None)
+        identity_subject = identity_read.value_or(None)
         # Tenant guard on the entity row too — find_by_id is not tenant-scoped,
         # so a foreign-tenant entity with this id would otherwise leak its
         # display_name / metadata into the summary response.
@@ -1278,6 +1302,13 @@ class Profile360Aggregator:
             "tenant_id": tenant_id,
             "kind": "summary",
             "snapshot": snapshot,
+            "dependency_status": {
+                read.label: {
+                    "status": read.status,
+                    "error_code": read.error_code,
+                }
+                for read in (entity_read, behavior_read, identity_read)
+            },
             "computed_at": utc_now().isoformat(),
             "provenance": {
                 "sources": [
@@ -1309,7 +1340,7 @@ class Profile360Aggregator:
         related: dict[str, list[dict]] = {}
 
         if ot in ("agent", "agent_config"):
-            record = await _safe("drill.agent", self._agent_configs.find_by_id(object_id))
+            record = (await _safe("drill.agent", self._agent_configs.find_by_id(object_id))).value_or(None)
             if record and record.get("tenant_id") in (None, "", tenant_id):
                 execs = await self._scoped_find_many(
                     self._agent_execs, tenant_id=tenant_id,
@@ -1323,7 +1354,7 @@ class Profile360Aggregator:
                 related["payment_intents"] = [_drill_ref(i, "payment_intent", "intent_id") for i in _tenant_filter(intents, tenant_id)]
 
         elif ot in ("wallet",):
-            record = await _safe("drill.wallet", self._wallets.find_by_id(object_id))
+            record = (await _safe("drill.wallet", self._wallets.find_by_id(object_id))).value_or(None)
             if record and record.get("tenant_id") in (None, "", tenant_id):
                 transfers = await self._transfers_for_entity(
                     record.get("owner_entity_id") or "", tenant_id, limit=20,
@@ -1331,28 +1362,28 @@ class Profile360Aggregator:
                 related["transfers"] = [_drill_ref(t, "transfer", "transfer_id") for t in _tenant_filter(transfers, tenant_id)]
 
         elif ot in ("delegation",):
-            record = await _safe("drill.delegation", self._delegations.find_by_id(object_id))
+            record = (await _safe("drill.delegation", self._delegations.find_by_id(object_id))).value_or(None)
 
         elif ot in ("transfer", "flow"):
-            record = await _safe("drill.transfer", self._transfers.find_by_id(object_id))
+            record = (await _safe("drill.transfer", self._transfers.find_by_id(object_id))).value_or(None)
 
         elif ot in ("asset",):
-            record = await _safe("drill.asset", self._assets.find_by_id(object_id))
+            record = (await _safe("drill.asset", self._assets.find_by_id(object_id))).value_or(None)
 
         elif ot in ("entity", "human", "organization", "org"):
-            record = await _safe("drill.entity", self._entities.find_by_id(object_id))
+            record = (await _safe("drill.entity", self._entities.find_by_id(object_id))).value_or(None)
 
         elif ot in ("journey", "journey_chain", "chain"):
-            record = await _safe("drill.journey", self._journeys.find_by_id(object_id))
+            record = (await _safe("drill.journey", self._journeys.find_by_id(object_id))).value_or(None)
 
         elif ot in ("payment_intent", "intent"):
-            record = await _safe("drill.intent", self._intents.find_by_id(object_id))
+            record = (await _safe("drill.intent", self._intents.find_by_id(object_id))).value_or(None)
 
         elif ot in ("settlement",):
-            record = await _safe("drill.settlement", self._settlements.find_by_id(object_id))
+            record = (await _safe("drill.settlement", self._settlements.find_by_id(object_id))).value_or(None)
 
         elif ot in ("agent_execution", "execution"):
-            record = await _safe("drill.execution", self._agent_execs.find_by_id(object_id))
+            record = (await _safe("drill.execution", self._agent_execs.find_by_id(object_id))).value_or(None)
 
         else:
             record = None
@@ -1492,7 +1523,9 @@ class Profile360Aggregator:
                                    filters={"owner_entity_id": entity_id}, limit=10),
             self._transfers_for_entity(entity_id, tenant_id, limit=10),
         )
-        entity, behavior, wallets, transfers = results
+        entity_read, behavior_read, wallets, transfers = results
+        entity = entity_read.value_or(None)
+        behavior = behavior_read.value_or(None)
         entity = entity if isinstance(entity, dict) and entity.get("tenant_id") in (None, "", tenant_id) else None
         behavior = behavior if isinstance(behavior, dict) and behavior.get("tenant_id") in (None, "", tenant_id) else None
         wallets = _tenant_filter(wallets or [], tenant_id)
@@ -1548,6 +1581,13 @@ class Profile360Aggregator:
             "risk_score": risk_score,
             "anomaly_flags": anomaly_flags,
             "readiness_status": readiness_status,
+            "dependency_status": {
+                read.label: {
+                    "status": read.status,
+                    "error_code": read.error_code,
+                }
+                for read in (entity_read, behavior_read)
+            },
             "freshness_sla_hours": _FRESHNESS_SLA_HOURS,
             "computed_at": utc_now().isoformat(),
             "provenance": {"sources": ["entities", "behavior_profiles", "entity_wallets", "transfers"]},
@@ -1562,7 +1602,9 @@ class Profile360Aggregator:
                                    filters={"owner_entity_id": entity_id}, limit=10),
             self._transfers_for_entity(entity_id, tenant_id, limit=10),
         )
-        entity, behavior, wallets, transfers = results
+        entity_read, behavior_read, wallets, transfers = results
+        entity = entity_read.value_or(None)
+        behavior = behavior_read.value_or(None)
         entity = entity if isinstance(entity, dict) and entity.get("tenant_id") in (None, "", tenant_id) else None
         behavior = behavior if isinstance(behavior, dict) and behavior.get("tenant_id") in (None, "", tenant_id) else None
         wallets = _tenant_filter(wallets or [], tenant_id)
@@ -1609,6 +1651,13 @@ class Profile360Aggregator:
             "dimensions": dims,
             "dimension_count": len(dims),
             "stale_count": sum(1 for d in dims if d.get("stale")),
+            "dependency_status": {
+                read.label: {
+                    "status": read.status,
+                    "error_code": read.error_code,
+                }
+                for read in (entity_read, behavior_read)
+            },
             "freshness_sla_hours": _FRESHNESS_SLA_HOURS,
             "computed_at": utc_now().isoformat(),
             "provenance": {"sources": ["entities", "behavior_profiles", "entity_wallets", "transfers"]},

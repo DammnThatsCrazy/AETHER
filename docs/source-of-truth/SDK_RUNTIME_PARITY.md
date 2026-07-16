@@ -56,3 +56,12 @@ five counters:
 `scripts/validate_sdk_parity.py` runs in `make ci-check` via
 `scripts/repo_doctor.py`. It greps each SDK subtree for the canonical tokens
 above and fails if a required capability is absent.
+## Durable native delivery queues
+
+iOS and Android persist bounded, versioned queue envelopes with atomic file
+replacement. They restore the queue after process restart and quarantine corrupt
+state instead of crashing or silently accepting it. Flush removes a batch
+atomically; exhausted `429` and `5xx` deliveries are requeued, while terminal
+client errors are dropped. The queue remains capped to prevent unbounded device
+storage. The parity validator checks the durability and transient-retry contract
+on both native implementations.

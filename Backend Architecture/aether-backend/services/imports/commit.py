@@ -17,9 +17,9 @@ Guarantees:
   passed. A commit records real counts; a partial failure yields
   ``partially_committed`` (never a silent success).
 - **Rollback is reversible without data loss of the source**: it revokes the
-  commit's graph edges (soft-revoke) and deletes the commit's Bronze rows, but
-  the source file bytes are never touched. Upserted vertices persist (the graph
-  client exposes no vertex delete, and a vertex may be shared) — documented.
+  commit's graph edges (soft-revoke), deletes the commit's Bronze rows, and
+  garbage-collects only import-owned vertices proven to have no active/shared
+  references. The source file bytes are never touched.
 - **Replay** rolls back the prior live commit's edges, then re-stages under a
   fresh commit id, so the graph never accumulates duplicate edges.
 
@@ -241,6 +241,7 @@ async def _stage_and_mutate(
             "row_errors": len(row_errors),
         },
         "created_edges": created_edges,
+        "upserted_vertices": [vertex["vertex_id"] for vertex in vertices],
         "bronze_source_tag": commit_id,
         "row_errors": row_errors[:500],
     }
@@ -255,7 +256,24 @@ async def _apply_graph(
 
     graph = get_graph_client()
     for v in vertices:
-        props = {**v["properties"], "tenant_id": tenant_id, "import_commit_id": commit_id}
+        existing = await graph.get_vertex(v["vertex_id"])
+        existing_props = dict(existing.properties or {}) if existing is not None else {}
+        existing_tenant = existing_props.get("tenant_id")
+        if existing_tenant not in (None, "", tenant_id):
+            raise ValueError("import vertex id is already owned by another tenant")
+
+        owners = set(existing_props.get("import_commit_ids") or [])
+        if existing_props.get("import_commit_id"):
+            owners.add(str(existing_props["import_commit_id"]))
+        owners.add(commit_id)
+        props = {
+            **existing_props,
+            **v["properties"],
+            "tenant_id": tenant_id,
+            "import_commit_ids": sorted(str(owner) for owner in owners),
+        }
+        if existing is None:
+            props["import_commit_id"] = commit_id
         await graph.upsert_vertex(
             Vertex(vertex_type=v["vertex_type"], vertex_id=v["vertex_id"], properties=props)
         )
@@ -369,8 +387,11 @@ async def commit_import(tenant_id: str, import_id: str) -> dict:
 async def rollback_import(
     tenant_id: str, import_id: str, *, commit_id: Optional[str] = None, reason: str = "operator rollback"
 ) -> dict:
-    """Revoke a commit's graph edges and delete its Bronze rows; the source file
-    bytes are never touched. Upserted vertices persist (no vertex delete)."""
+    """Revoke edges, delete Bronze rows, and safely collect orphan vertices.
+
+    Source files remain immutable. A vertex is deleted only when graph-level
+    ownership and reference checks prove it belongs exclusively to this commit.
+    """
     repo = get_imports_repository()
     session = await repo.get_session(tenant_id, import_id)
     if commit_id is None:
@@ -383,13 +404,20 @@ async def rollback_import(
         raise ConflictError(f"commit {commit_id} is already rolled back")
 
     revoked = await _revoke_commit_edges(tenant_id, commit, reason)
+    vertex_gc = await _garbage_collect_vertices(tenant_id, commit)
 
     from repositories.lake import BronzeRepository
 
     bronze_deleted = await BronzeRepository(BRONZE_DOMAIN).rollback_by_source_tag(
         commit.get("bronze_source_tag", commit_id)
     )
-    manifest = {"edges_revoked": revoked, "bronze_deleted": bronze_deleted, "reason": reason}
+    manifest = {
+        "edges_revoked": revoked,
+        "bronze_deleted": bronze_deleted,
+        "vertices_deleted": vertex_gc["deleted"],
+        "vertices_retained": vertex_gc["retained"],
+        "reason": reason,
+    }
     await repo.create_rollback(tenant_id, import_id, commit_id, manifest)
     await repo.update_commit(tenant_id, commit_id, rolled_back=True)
     await repo.set_status(tenant_id, import_id, "rolled_back")
@@ -411,6 +439,30 @@ async def _revoke_commit_edges(tenant_id: str, commit: dict, reason: str) -> int
     return revoked
 
 
+async def _garbage_collect_vertices(tenant_id: str, commit: dict) -> dict:
+    """Delete only vertices proven orphaned and owned by this import commit."""
+    from shared.graph.graph import get_graph_client
+
+    graph = get_graph_client()
+    commit_id = str(commit.get("commit_id") or "")
+    deleted: list[str] = []
+    retained: list[dict] = []
+    for vertex_id in dict.fromkeys(commit.get("upserted_vertices", [])):
+        try:
+            removed, reason = await graph.delete_vertex_if_orphaned(
+                str(vertex_id),
+                tenant_id,
+                commit_id,
+            )
+        except Exception as exc:
+            removed, reason = False, type(exc).__name__
+        if removed:
+            deleted.append(str(vertex_id))
+        else:
+            retained.append({"vertex_id": str(vertex_id), "reason": reason})
+    return {"deleted": deleted, "retained": retained}
+
+
 async def replay_import(tenant_id: str, import_id: str) -> dict:
     """Re-stage from the approved mapping under a fresh commit. Revokes the prior
     live commit's edges first, so the graph never accumulates duplicates."""
@@ -423,6 +475,7 @@ async def replay_import(tenant_id: str, import_id: str) -> dict:
     prior = await repo.latest_commit(tenant_id, import_id)
     if prior is not None and not prior.get("rolled_back"):
         await _revoke_commit_edges(tenant_id, prior, "superseded by replay")
+        await _garbage_collect_vertices(tenant_id, prior)
         await repo.update_commit(tenant_id, prior["commit_id"], rolled_back=True)
 
     await repo.set_status(tenant_id, import_id, "committing")

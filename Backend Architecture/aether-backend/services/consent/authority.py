@@ -63,7 +63,7 @@ TENANT_POLICY_DENIED = "tenant_policy_denied"
 DATA_CLASSIFICATION_DENIED = "data_classification_denied"
 FINGERPRINTING_NOT_AUTHORIZED = "fingerprinting_not_authorized"
 
-# Request-time privacy signals (see DEFERRED note at bottom of module)
+# Request-time privacy signal rejection codes.
 GPC_SUPPRESSED = "gpc_suppressed"
 DNT_SUPPRESSED = "dnt_suppressed"
 
@@ -89,9 +89,9 @@ REJECTION_CODES: frozenset[str] = frozenset({
 # States that count as an affirmative, still-valid grant.
 _GRANTED_STATES = frozenset({"granted", "active"})
 
-# Global Privacy Control opts out of sale/sharing → maps to advertising intent;
-# Do Not Track opts out of behavioral tracking → maps to analytics. These are
-# receipt-recorded here; request-time header suppression is deferred (see note).
+# Global Privacy Control opts out of sale/sharing and maps to marketing;
+# Do Not Track opts out of behavioral tracking and maps to analytics. Live
+# request headers are normalized by the canonical ingestion validator.
 _GPC_SUPPRESSED_PURPOSES = frozenset({"marketing"})
 _DNT_SUPPRESSED_PURPOSES = frozenset({"analytics"})
 
@@ -254,6 +254,26 @@ _profile_repo = TenantComplianceProfileRepository()
 
 # ── Helpers ─────────────────────────────────────────────────────────────────
 
+def evaluate_request_privacy_signals(
+    purpose: str,
+    *,
+    gpc_observed: bool = False,
+    dnt_observed: bool = False,
+) -> tuple[bool, Optional[str]]:
+    """Apply live request privacy signals before receipt evaluation.
+
+    Only normalized booleans enter this decision; raw Sec-GPC/DNT header values
+    are never persisted or logged. The purpose mapping is stable and shared by
+    every ingestion path.
+    """
+    normalized = (purpose or "").strip()
+    if gpc_observed and normalized in _GPC_SUPPRESSED_PURPOSES:
+        return False, GPC_SUPPRESSED
+    if dnt_observed and normalized in _DNT_SUPPRESSED_PURPOSES:
+        return False, DNT_SUPPRESSED
+    return True, None
+
+
 def _is_past(iso: Optional[str]) -> bool:
     """True if the ISO timestamp is in the past (naive → assumed UTC)."""
     if not iso:
@@ -394,11 +414,6 @@ async def evaluate_data_policy(
     return True, None
 
 
-# ─────────────────────────────────────────────────────────────────────────────
-# DEFERRED (tracked in config/implementation_ledger.yaml FT-3-AUTHORITATIVE-
-# CONSENT): request-time DNT/GPC header suppression and request-time
-# fingerprinting-signal detection. This module enforces GPC/DNT and
-# fingerprinting authorization from the RECORDED receipt/profile state; wiring
-# the live request headers (Sec-GPC / DNT) and per-event fingerprint payload
-# detection into evaluate_consent/evaluate_data_policy is a follow-up.
-# ─────────────────────────────────────────────────────────────────────────────
+# Live Sec-GPC/DNT extraction and recursive fingerprint classification are
+# wired by services.ingestion.validation. This module remains the canonical
+# purpose/data-policy decision source so V1 and V2 cannot diverge.

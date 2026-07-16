@@ -23,7 +23,7 @@
         repo-doctor repo-doctor-fix docs-check ci-check docs-fix \
         production-status release-gate ops-readiness help \
         validate-profile-config validate-cost-policy validate-cost-policy-terraform \
-        validate-route-registry \
+        validate-route-registry validate-implementation-ledger \
         validate-storage-policies audit-readiness-check founding-tenant-release-gate
 
 # Centralized subsystem paths — single place to rename if directories move.
@@ -337,6 +337,7 @@ release-gate: ## Full release gate: repo consistency (CI mode) + strict producti
 	python scripts/production_status.py --strict
 	python scripts/ops_readiness.py
 	python scripts/release/check_foundation.py
+	python scripts/release/check_implementation_ledger.py
 	python scripts/release/check_profile_config.py
 	python scripts/release/check_cost_policy.py
 	python scripts/release/check_cost_policy_terraform.py
@@ -359,6 +360,9 @@ validate-cost-policy-terraform: ## Validate Terraform locals/profiles honor the 
 validate-route-registry: ## Validate route policy registry seed schema
 	python scripts/release/check_route_registry.py
 
+validate-implementation-ledger: ## Reject stale or overstated implementation-ledger claims
+	python scripts/release/check_implementation_ledger.py
+
 validate-storage-policies: ## Validate storage policy registry seed schema
 	python scripts/release/check_storage_policies.py
 
@@ -368,6 +372,7 @@ audit-readiness-check: ## Validate the founding-tenant control spine (ledger + c
 founding-tenant-release-gate: ## ci-check + control-spine validators + evidence bundle index
 	python scripts/repo_doctor.py --ci
 	python scripts/release/check_foundation.py
+	python scripts/release/check_implementation_ledger.py
 	python scripts/release/check_profile_config.py
 	python scripts/release/check_cost_policy.py
 	python scripts/release/check_cost_policy_terraform.py

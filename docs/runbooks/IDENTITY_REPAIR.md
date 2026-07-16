@@ -85,6 +85,15 @@ graph mirror failed and a recompute will re-assert it; `missing_in_repo` means t
 graph carries an edge the repo revoked (re-run after confirming the revoke was
 intended).
 
+After review, a Kyber operator may call
+`POST /v1/admin/kyber/identity/reconciliation/repair`. The operation is
+fail-closed and defaults to `dry_run: true`; provide a stable `request_id` for
+idempotent retries plus an operator reason. The identity repository is the
+authoritative source: an apply run mirrors active repository edges that are
+missing from the graph and soft-revokes graph-only edges. The durable repair
+record captures actor, intent, and per-edge outcomes. Tenant sessions cannot
+invoke this cross-tenant repair surface.
+
 ### After a merge/split, downstream (journeys, attribution, profile) looks stale
 Recompute. `POST /v1/identity/recompute` (`write`) re-runs resolution for the
 entity; merge/split/suppression also enqueue recompute/invalidate/reattribute work

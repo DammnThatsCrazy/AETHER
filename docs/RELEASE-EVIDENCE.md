@@ -52,5 +52,21 @@ destabilise it.
 
 - No control is ever marked `externally_assessed` from within the repo.
 - The posture never sets `external_attestation_status: report_received`.
-- The implementation ledger records every not-yet-implemented release-train item
-  as `not_started` with its blockers, rather than overstating completion.
+- The implementation ledger keeps incomplete work in a non-terminal state with
+  its blockers and remaining scope, rather than overstating completion.
+## Implementation-ledger truth gate
+
+`scripts/release/check_implementation_ledger.py` rejects unknown blockers,
+missing active surfaces, invalid statuses, terminal claims that still carry an
+exception, and `verified_complete` entries without a commit SHA. It runs in
+both release gates. Work with a documented remaining gap must stay
+`implementation_in_progress`; external certification remains
+`externally_blocked`.
+
+Canonical completion evidence for this release train is produced in GitHub
+Actions: documentation regeneration/drift review, `make ci-check`, and
+`make release-gate`. Every Terraform profile also produces immutable,
+provider-mocked configuration-plan evidence in GitHub. Environment-authoritative
+OIDC remote-plan artifacts are produced separately only when the complete
+deployment credential set is configured; promotion to `main` fails closed
+without that evidence.

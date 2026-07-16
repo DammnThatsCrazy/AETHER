@@ -70,6 +70,14 @@ recipients with the highest reached communication stage
 (attempted → delivered → engaged → replied) and delivery flags, derived from
 `silver_comms_facts` — machine-classified engagement never advances a stage.
 
+Communication funnel rates are computed through the shared measurement registry,
+not as ad hoc divisions. Every rate carries a versioned metric name, value state,
+sample sufficiency, Wilson uncertainty (when observed), and source lineage. The
+legacy scalar rate mirrors the governed value and is nullable; insufficient or
+missing samples are therefore withheld rather than presented as zero. The Aether
+tenant surface renders the state and does not reveal a numeric rate until the
+registry minimum is met.
+
 ### Reconciliation invariants
 
 The explorer enforces these invariants on every `get_overview()` call:

@@ -11,6 +11,7 @@ source_files:
   - Backend Architecture/aether-backend/shared/measurement/compute.py
   - Backend Architecture/aether-backend/repositories/measurement_results_repo.py
   - Backend Architecture/aether-backend/services/measurement/routes/integrity.py
+  - Backend Architecture/aether-backend/services/campaign/routes.py
 last_synced_commit: pending
 ---
 
@@ -118,3 +119,12 @@ few clicks to trust a rate.
   engine records the tenant-day aggregate conversion rate, not one per campaign.
 - `bootstrap_ci` is seeded for determinism; it is not a substitute for a
   calibrated model where one is required.
+## Campaign360 communication rates
+
+Campaign360 open, click, reply, and machine-event rates are registered metrics,
+not ad hoc divisions. The communication-funnel route computes them through
+`rate_result` and returns the value state, sample sufficiency, Wilson interval,
+and lineage alongside each result. The tenant UI withholds the number when the
+state is `missing_inputs` or `insufficient_data`; compatibility scalar fields
+remain nullable for older clients. A zero is shown only when it is an observed
+zero backed by the registry's minimum sample.

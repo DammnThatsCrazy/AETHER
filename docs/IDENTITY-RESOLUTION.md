@@ -352,3 +352,13 @@ changing any resolution outcome:
   the field's manual-review threshold, the engine returns a **conflict record**
   (`requires_manual_review=True`) rather than silently choosing between two
   authoritative-level sources.
+## Kyber reconciliation repair
+
+Kyber operators can repair repository/graph divergence through the tenant-scoped
+reconciliation repair endpoint. Requests default to `dry_run=true`, require an
+operator actor and reason, and accept a caller request id for idempotency. Before
+mutation, the service durably records a repair intent. Repository identity edges
+are authoritative: missing graph mirrors are recreated, while graph-only edges
+are revoked. Every edge returns an explicit outcome; partial failures remain
+visible and retryable. The service rejects any repair input that crosses tenant
+ownership boundaries.

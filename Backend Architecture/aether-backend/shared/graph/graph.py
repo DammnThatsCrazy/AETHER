@@ -891,6 +891,44 @@ class _InMemoryGraphBackend:
     async def get_vertex(self, vertex_id: str) -> Optional[Vertex]:
         return self._vertices.get(vertex_id)
 
+    async def delete_vertex_if_orphaned(
+        self,
+        vertex_id: str,
+        tenant_id: str,
+        import_commit_id: str,
+    ) -> tuple[bool, str]:
+        """Delete only a vertex exclusively owned by the rolled-back import."""
+        vertex = self._vertices.get(vertex_id)
+        if vertex is None:
+            return False, "not_found"
+        props = vertex.properties or {}
+        if str(props.get("tenant_id")) != str(tenant_id):
+            return False, "tenant_mismatch"
+        if str(props.get("import_commit_id")) != str(import_commit_id):
+            return False, "ownership_changed"
+        owners = {str(value) for value in (props.get("import_commit_ids") or [])}
+        if owners - {str(import_commit_id)}:
+            return False, "shared_history"
+        incident = [
+            edge
+            for edge in self._edges
+            if edge.from_vertex_id == vertex_id or edge.to_vertex_id == vertex_id
+        ]
+        if any(not (edge.properties or {}).get("revoked") for edge in incident):
+            return False, "active_reference"
+        if any(
+            str((edge.properties or {}).get("import_commit_id")) != str(import_commit_id)
+            for edge in incident
+        ):
+            return False, "shared_history"
+        self._vertices.pop(vertex_id, None)
+        self._edges = [
+            edge
+            for edge in self._edges
+            if edge.from_vertex_id != vertex_id and edge.to_vertex_id != vertex_id
+        ]
+        return True, "deleted"
+
     async def get_neighbors(
         self,
         vertex_id: str,
@@ -1077,6 +1115,55 @@ class _NeptuneGraphBackend:
         except Exception as e:
             logger.error(f"Neptune get_vertex error for {vertex_id}: {e}")
             return None
+
+    async def delete_vertex_if_orphaned(
+        self,
+        vertex_id: str,
+        tenant_id: str,
+        import_commit_id: str,
+    ) -> tuple[bool, str]:
+        """Atomically verify import ownership/no active references, then drop."""
+        g = await self._ensure_connected()
+        try:
+            rows = g.V(vertex_id).valueMap().toList()
+            if not rows:
+                return False, "not_found"
+            props = rows[0]
+            tenant_value = props.get("tenant_id", [None])
+            commit_value = props.get("import_commit_id", [None])
+            tenant_value = tenant_value[0] if isinstance(tenant_value, list) else tenant_value
+            commit_value = commit_value[0] if isinstance(commit_value, list) else commit_value
+            if str(tenant_value) != str(tenant_id):
+                return False, "tenant_mismatch"
+            if str(commit_value) != str(import_commit_id):
+                return False, "ownership_changed"
+            owners_value = props.get("import_commit_ids", [])
+            owners = {
+                str(value)
+                for value in (
+                    owners_value
+                    if isinstance(owners_value, list)
+                    else [owners_value]
+                )
+            }
+            if owners - {str(import_commit_id)}:
+                return False, "shared_history"
+            if int(g.V(vertex_id).bothE().hasNot("revoked").count().next()) > 0:
+                return False, "active_reference"
+            foreign_history = (
+                g.V(vertex_id)
+                .bothE()
+                .not_(__.has("import_commit_id", str(import_commit_id)))
+                .count()
+                .next()
+            )
+            if int(foreign_history) > 0:
+                return False, "shared_history"
+            g.V(vertex_id).drop().iterate()
+            return True, "deleted"
+        except Exception as exc:
+            logger.error("Neptune orphan vertex deletion failed for %s: %s", vertex_id, exc)
+            return False, "backend_error"
 
     async def get_neighbors(
         self,
@@ -1365,6 +1452,19 @@ class GraphClient:
         if self._backend is None:
             await self.connect()
         return await self._backend.get_vertex(vertex_id)  # type: ignore[union-attr]
+
+    async def delete_vertex_if_orphaned(
+        self,
+        vertex_id: str,
+        tenant_id: str,
+        import_commit_id: str,
+    ) -> tuple[bool, str]:
+        """Delete a rolled-back import vertex only when the backend proves safety."""
+        if self._backend is None:
+            await self.connect()
+        return await self._backend.delete_vertex_if_orphaned(  # type: ignore[union-attr]
+            vertex_id, tenant_id, import_commit_id
+        )
 
     async def get_neighbors(
         self,

@@ -122,7 +122,8 @@ object Aether : DefaultLifecycleObserver {
     private var flushJob: Job? = null
     private val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
 
-    private const val MAX_QUEUE_SIZE = 500
+    private const val MAX_QUEUE_SIZE = 1000
+    private const val QUEUE_FORMAT_VERSION = 1
     private const val SESSION_TIMEOUT_MS = 30 * 60 * 1000L // 30 min
 
     private var healthAgent: AetherHealthAgent? = null
@@ -608,32 +609,70 @@ object Aether : DefaultLifecycleObserver {
 
     private fun queueFile() = context?.filesDir?.resolve("aether_event_queue.json")
 
+    @Synchronized
     private fun persistQueue() {
         try {
             val file = queueFile() ?: return
-            val items = eventQueue.toList()
-            if (items.isEmpty()) { file.delete(); return }
-            val toSave = items.takeLast(1000)
-            val array = org.json.JSONArray(toSave.map { it.toString() })
-            file.writeText(array.toString())
-        } catch (_: Exception) {}
+            val items = eventQueue.toList().takeLast(MAX_QUEUE_SIZE)
+            if (items.isEmpty()) {
+                file.delete()
+                return
+            }
+            val events = JSONArray()
+            items.forEach { events.put(it) }
+            val envelope = JSONObject().apply {
+                put("version", QUEUE_FORMAT_VERSION)
+                put("savedAt", dateFormat.format(Date()))
+                put("events", events)
+            }
+            val temp = file.resolveSibling(file.name + ".tmp")
+            temp.writeText(envelope.toString())
+            if (!temp.renameTo(file)) {
+                file.writeText(temp.readText())
+                temp.delete()
+            }
+        } catch (error: Exception) {
+            log("Failed to persist durable queue: " + error.javaClass.simpleName)
+        }
     }
 
     private fun loadPersistedQueue() {
+        val file = queueFile() ?: return
+        if (!file.exists()) return
         try {
-            val file = queueFile() ?: return
-            if (!file.exists()) return
             val text = file.readText()
-            file.delete()
-            val array = org.json.JSONArray(text)
-            val capacity = maxOf(0, MAX_QUEUE_SIZE - eventQueue.size)
-            val count = minOf(array.length(), capacity)
-            for (i in 0 until count) {
-                try {
-                    eventQueue.add(JSONObject(array.getString(i)))
-                } catch (_: Exception) {}
+            val events = if (text.trimStart().startsWith("[")) {
+                JSONArray(text) // v0 compatibility
+            } else {
+                val envelope = JSONObject(text)
+                require(envelope.optInt("version", 0) == QUEUE_FORMAT_VERSION)
+                envelope.getJSONArray("events")
             }
-        } catch (_: Exception) {}
+            val capacity = maxOf(0, MAX_QUEUE_SIZE - eventQueue.size)
+            val count = minOf(events.length(), capacity)
+            for (i in 0 until count) {
+                val value = events.get(i)
+                eventQueue.add(
+                    if (value is JSONObject) value else JSONObject(value.toString())
+                )
+            }
+            persistQueue()
+            log("Restored $count events from durable queue")
+        } catch (error: Exception) {
+            val quarantine = file.resolveSibling(
+                file.name + ".corrupt." + System.currentTimeMillis()
+            )
+            file.renameTo(quarantine)
+            log("Quarantined corrupt durable queue: " + error.javaClass.simpleName)
+        }
+    }
+
+    @Synchronized
+    private fun requeueBatch(batch: List<JSONObject>) {
+        val retained = (batch + eventQueue.toList()).take(MAX_QUEUE_SIZE)
+        eventQueue.clear()
+        retained.forEach { eventQueue.add(it) }
+        persistQueue()
     }
 
     private fun clearPersistedQueue() { queueFile()?.delete() }
@@ -1024,6 +1063,7 @@ object Aether : DefaultLifecycleObserver {
         while (eventQueue.size >= MAX_QUEUE_SIZE) { eventQueue.poll() }
         eventQueue.add(event)
         eventCount++
+        persistQueue()
 
         if (eventQueue.size >= (config?.batchSize ?: 10)) {
             scope.launch { sendBatch() }
@@ -1039,6 +1079,7 @@ object Aether : DefaultLifecycleObserver {
             eventQueue.poll()?.let { batch.add(it) }
         }
         if (batch.isEmpty()) return@withContext
+        persistQueue()
 
         sendBatchWithRetry(batch, cfg, retryCount = 0)
     }
@@ -1079,7 +1120,7 @@ object Aether : DefaultLifecycleObserver {
             when {
                 responseCode in 200..299 -> {
                     healthAgent?.recordBatchAttempt(true, latencyMs)
-                    clearPersistedQueue()
+                    persistQueue()
                     emitBatchHealth(batch.size, responseBody)
                 }
                 responseCode == 429 -> {
@@ -1090,8 +1131,8 @@ object Aether : DefaultLifecycleObserver {
                         sendBatchWithRetry(batch, cfg, retryCount + 1)
                     } else {
                         healthAgent?.recordBatchAttempt(false, latencyMs)
-                        healthAgent?.recordDroppedEvents(batch.size)
-                        log("Batch dropped after $maxRetries retries (rate limited)")
+                        requeueBatch(batch)
+                        log("Batch retained after $maxRetries retries (rate limited)")
                     }
                 }
                 responseCode >= 500 -> {
@@ -1102,12 +1143,14 @@ object Aether : DefaultLifecycleObserver {
                         sendBatchWithRetry(batch, cfg, retryCount + 1)
                     } else {
                         healthAgent?.recordBatchAttempt(false, latencyMs)
-                        healthAgent?.recordDroppedEvents(batch.size)
-                        log("Batch dropped after $maxRetries retries (server error $responseCode)")
+                        requeueBatch(batch)
+                        log("Batch retained after $maxRetries retries (server error $responseCode)")
                     }
                 }
                 responseCode >= 400 -> {
                     healthAgent?.recordBatchAttempt(false, latencyMs)
+                    healthAgent?.recordDroppedEvents(batch.size)
+                    persistQueue()
                     log("Batch rejected (client error $responseCode) — not retrying")
                 }
             }
@@ -1121,8 +1164,8 @@ object Aether : DefaultLifecycleObserver {
             } else {
                 healthAgent?.recordBatchAttempt(false, 0.0)
                 healthAgent?.recordDroppedEvents(batch.size)
-                // Permanent failure — re-enqueue for next flush cycle
-                batch.forEach { eventQueue.add(it) }
+                // Permanent transport failure — retain for a later flush cycle.
+                requeueBatch(batch)
             }
         }
     }

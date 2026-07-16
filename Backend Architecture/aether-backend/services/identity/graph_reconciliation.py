@@ -10,8 +10,9 @@ The identity subsystem keeps SAME_AS edges in two places:
 Because the graph mirror is best-effort (a failed ``add_edge`` / ``revoke_edge``
 is logged, not retried), the two can drift: an edge can live in the repo but be
 missing/revoked in the graph, or linger in the graph after the repo revoked it.
-This module diffs the two and reports that drift so operators can see and act on
-it. It is strictly read-only against both stores; it never mutates edges.
+This module diffs the two and reports that drift. Its separate Kyber-only repair
+operation defaults to dry-run and applies repo-authoritative fixes only after a
+durable, idempotency-keyed intent record is written.
 
 Design notes
 ------------
@@ -45,6 +46,7 @@ from .repository import IdentityResolutionRepository
 logger = get_logger("aether.identity.graph_reconciliation")
 
 RUN_STORE_NAME = "identity_graph_reconciliation_runs"
+REPAIR_STORE_NAME = "identity_graph_repair_runs"
 
 # Bounded scan sizes so an "all" run can never fan out unboundedly.
 _DEFAULT_EDGE_SCAN = 500
@@ -60,6 +62,11 @@ DRIFT_MISSING_IN_REPO = "missing_in_repo"
 def _run_store():
     """The durable store for reconciliation run records (Redis or in-memory)."""
     return get_store(RUN_STORE_NAME)
+
+
+def _repair_store():
+    """Durable, idempotency-keyed repair run records."""
+    return get_store(REPAIR_STORE_NAME)
 
 
 def _pair(row: dict) -> Optional[tuple[str, str]]:
@@ -303,6 +310,169 @@ async def _emit_drift_event(
         ))
     except Exception as exc:  # pragma: no cover - best-effort
         logger.debug("drift event emission skipped for %s: %s", tenant_id, exc)
+
+
+async def repair_identity_edges(
+    tenant_id: str,
+    *,
+    dry_run: bool = True,
+    request_id: Optional[str] = None,
+    actor_id: Optional[str] = None,
+    reason: str = "operator requested reconciliation repair",
+    entity_ids: Optional[list[str]] = None,
+    repo: Optional[IdentityResolutionRepository] = None,
+    graph: Optional[Any] = None,
+    producer: Optional[Any] = None,
+) -> dict:
+    """Plan or apply the exact fixes identified by reconciliation.
+
+    The repository is authoritative: active repo edges missing from the graph
+    are mirrored; graph-only edges are soft-revoked. Mutating runs fail closed
+    unless a durable intent record is written first. The request id is the
+    idempotency key, so retries return the original per-edge outcomes.
+    """
+
+    run_id = request_id or f"idgr_{uuid.uuid4().hex}"
+    existing = await _repair_store().get(run_id)
+    if existing is not None:
+        if str(existing.get("tenant_id")) != str(tenant_id):
+            raise ValueError("repair request_id already belongs to another tenant")
+        return {**existing, "replayed": True}
+
+    if repo is None:
+        repo = IdentityResolutionRepository()
+    if graph is None:
+        from dependencies.providers import get_graph
+        graph = get_graph()
+
+    reconciliation = await reconcile_identity_edges(
+        tenant_id,
+        entity_ids=entity_ids,
+        repo=repo,
+        graph=graph,
+        producer=producer,
+        persist=False,
+    )
+    repo_pairs, source_ids = await _collect_repo_edges(
+        repo,
+        tenant_id,
+        [str(value) for value in entity_ids] if entity_ids else None,
+        _DEFAULT_EDGE_SCAN,
+    )
+
+    started_at = utc_now().isoformat()
+    intent = {
+        "id": run_id,
+        "tenant_id": tenant_id,
+        "dry_run": bool(dry_run),
+        "status": "planning" if dry_run else "running",
+        "actor_id": actor_id,
+        "reason": reason,
+        "entity_ids": entity_ids or [],
+        "drift_count": reconciliation["drift_count"],
+        "outcomes": [],
+        "started_at": started_at,
+        "completed_at": None,
+        "replayed": False,
+    }
+    try:
+        await _repair_store().set(run_id, intent)
+    except Exception:
+        if not dry_run:
+            raise RuntimeError("durable repair intent could not be recorded")
+        logger.warning("identity repair dry-run intent could not be persisted")
+
+    outcomes: list[dict[str, Any]] = []
+    for drift in reconciliation["drift"]:
+        pair = (str(drift["source"]), str(drift["target"]))
+        outcome: dict[str, Any] = {
+            "drift_type": drift["type"],
+            "source": pair[0],
+            "target": pair[1],
+            "action": (
+                "mirror_repo_edge"
+                if drift["type"] == DRIFT_MISSING_IN_GRAPH
+                else "revoke_graph_edge"
+            ),
+            "status": "planned" if dry_run else "pending",
+            "error_code": None,
+        }
+        if dry_run:
+            outcomes.append(outcome)
+            continue
+        try:
+            if drift["type"] == DRIFT_MISSING_IN_GRAPH:
+                from shared.graph.graph import Edge
+
+                row = repo_pairs.get(pair)
+                if row is None:
+                    raise RuntimeError("authoritative repo edge disappeared")
+                current = await graph.get_edges(
+                    pair[0],
+                    edge_type=_SAME_AS,
+                    direction="out",
+                    include_revoked=False,
+                )
+                if not any(
+                    str(edge.to_vertex_id) == pair[1]
+                    and str((edge.properties or {}).get("tenant_id")) == str(tenant_id)
+                    for edge in current or []
+                ):
+                    await graph.add_edge(Edge(
+                        edge_type=_SAME_AS,
+                        from_vertex_id=pair[0],
+                        to_vertex_id=pair[1],
+                        properties={
+                            "tenant_id": tenant_id,
+                            "edge_id": row.get("id"),
+                            "confidence": str(row.get("confidence", "")),
+                            "confidence_tier": str(row.get("confidence_tier", "")),
+                            "repair_run_id": run_id,
+                        },
+                    ))
+            else:
+                await graph.revoke_edge(
+                    pair[0],
+                    pair[1],
+                    _SAME_AS,
+                    reason=f"identity_reconciliation:{run_id}",
+                    tenant_id=tenant_id,
+                )
+            outcome["status"] = "applied"
+        except Exception as exc:
+            outcome["status"] = "failed"
+            outcome["error_code"] = type(exc).__name__
+            logger.warning(
+                "identity repair edge failed tenant=%s source=%s target=%s error=%s",
+                tenant_id,
+                pair[0],
+                pair[1],
+                type(exc).__name__,
+            )
+        outcomes.append(outcome)
+
+    failed = sum(1 for item in outcomes if item["status"] == "failed")
+    applied = sum(1 for item in outcomes if item["status"] == "applied")
+    status = "dry_run"
+    if not dry_run:
+        status = "failed" if failed and not applied else (
+            "partially_succeeded" if failed else "succeeded"
+        )
+    result = {
+        **intent,
+        "status": status,
+        "outcomes": outcomes,
+        "applied": applied,
+        "failed": failed,
+        "completed_at": utc_now().isoformat(),
+    }
+    try:
+        await _repair_store().set(run_id, result)
+    except Exception:
+        if not dry_run:
+            raise RuntimeError("repair completed but durable outcomes could not be recorded")
+        logger.warning("identity repair dry-run outcomes could not be persisted")
+    return result
 
 
 async def get_latest_reconciliation_run(tenant_id: str) -> Optional[dict]:

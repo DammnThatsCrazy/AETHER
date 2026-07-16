@@ -611,8 +611,57 @@ async def get_campaign_comms_funnel(campaign_id: str, request: Request):
     funnel = {k: int(v or 0) for k, v in funnel.items()}
     delivered = funnel.get("delivered", 0)
 
-    def rate(n: int) -> Optional[float]:
-        return round(n / delivered, 4) if delivered else None
+    from shared.measurement.compute import rate_result
+    from shared.measurement.registry import get_definition
+
+    def measured_rate(metric_name: str, numerator: int, denominator: int) -> dict:
+        definition = get_definition(metric_name)
+        value, state, uncertainty, sufficiency = rate_result(
+            numerator,
+            denominator,
+            metric_name=metric_name,
+            definition=definition,
+        )
+        return {
+            "metric_name": metric_name,
+            "metric_version": definition.version if definition else "1",
+            "value": round(value, 4) if value is not None else None,
+            "value_state": state.value,
+            "unit": definition.unit if definition else "ratio",
+            "sufficiency": sufficiency,
+            "uncertainty": (
+                uncertainty.model_dump(mode="json") if uncertainty else None
+            ),
+            "lineage": {
+                "source": "comms_facts",
+                "tenant_id": tenant.tenant_id,
+                "campaign_id": campaign_id,
+                "denominator": "delivered",
+            },
+        }
+
+    measurement_integrity = {
+        "provider_open_rate": measured_rate(
+            "email_open_rate", funnel.get("reported_opens", 0), delivered
+        ),
+        "provider_click_rate": measured_rate(
+            "email_click_rate", funnel.get("reported_clicks", 0), delivered
+        ),
+        "human_open_rate": measured_rate(
+            "email_open_rate", funnel.get("human_opens", 0), delivered
+        ),
+        "human_click_rate": measured_rate(
+            "email_click_rate", funnel.get("human_clicks", 0), delivered
+        ),
+        "human_reply_rate": measured_rate(
+            "email_reply_rate", funnel.get("replies", 0), delivered
+        ),
+        "machine_event_rate": measured_rate(
+            "machine_event_rate",
+            funnel.get("machine_events", 0),
+            funnel.get("total_events", 0),
+        ),
+    }
 
     metrics.increment("campaign_comms_funnel_read")
     return APIResponse(data={
@@ -623,8 +672,10 @@ async def get_campaign_comms_funnel(campaign_id: str, request: Request):
                 "delivered": delivered,
                 "opens": funnel.get("reported_opens", 0),
                 "clicks": funnel.get("reported_clicks", 0),
-                "open_rate": rate(funnel.get("reported_opens", 0)),
-                "click_rate": rate(funnel.get("reported_clicks", 0)),
+                "open_rate": measurement_integrity["provider_open_rate"]["value"],
+                "click_rate": measurement_integrity["provider_click_rate"]["value"],
+                "open_rate_result": measurement_integrity["provider_open_rate"],
+                "click_rate_result": measurement_integrity["provider_click_rate"],
             },
             "human_qualified": {
                 "sent": funnel.get("sent", 0),
@@ -632,9 +683,12 @@ async def get_campaign_comms_funnel(campaign_id: str, request: Request):
                 "opens": funnel.get("human_opens", 0),
                 "clicks": funnel.get("human_clicks", 0),
                 "replies": funnel.get("replies", 0),
-                "open_rate": rate(funnel.get("human_opens", 0)),
-                "click_rate": rate(funnel.get("human_clicks", 0)),
-                "reply_rate": rate(funnel.get("replies", 0)),
+                "open_rate": measurement_integrity["human_open_rate"]["value"],
+                "click_rate": measurement_integrity["human_click_rate"]["value"],
+                "reply_rate": measurement_integrity["human_reply_rate"]["value"],
+                "open_rate_result": measurement_integrity["human_open_rate"],
+                "click_rate_result": measurement_integrity["human_click_rate"],
+                "reply_rate_result": measurement_integrity["human_reply_rate"],
             },
         },
         "delivery": {
@@ -649,11 +703,10 @@ async def get_campaign_comms_funnel(campaign_id: str, request: Request):
         "quality": {
             "machine_events": funnel.get("machine_events", 0),
             "total_events": funnel.get("total_events", 0),
-            "machine_event_rate": (
-                round(funnel.get("machine_events", 0) / funnel["total_events"], 4)
-                if funnel.get("total_events") else None
-            ),
+            "machine_event_rate": measurement_integrity["machine_event_rate"]["value"],
+            "machine_event_rate_result": measurement_integrity["machine_event_rate"],
         },
+        "measurement_integrity": measurement_integrity,
     }).to_dict()
 
 

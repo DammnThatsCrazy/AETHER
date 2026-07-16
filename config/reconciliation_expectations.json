@@ -1,0 +1,6 @@
+{
+  "version": 1,
+  "description": "Tenant-specific Profile360 readiness expectations. Values inherit checked-in defaults unless overridden.",
+  "defaults": {},
+  "tenants": {}
+}

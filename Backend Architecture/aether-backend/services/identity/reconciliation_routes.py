@@ -32,6 +32,7 @@ from services.security.request_context import require_kyber_operator
 from .graph_reconciliation import (
     get_latest_reconciliation_run,
     reconcile_identity_edges,
+    repair_identity_edges,
 )
 
 logger = get_logger("aether.service.identity.reconciliation")
@@ -49,6 +50,25 @@ class ReconciliationTriggerRequest(BaseModel):
         default=None,
         description="Optional bounded set of canonical entity ids to check; "
         "omit to scan a bounded sample of the tenant's edges.",
+    )
+
+
+class ReconciliationRepairRequest(ReconciliationTriggerRequest):
+    """Audited, idempotent repair request; dry-run is intentionally the default."""
+
+    dry_run: bool = Field(
+        default=True,
+        description="Plan only unless explicitly set false by a Kyber operator.",
+    )
+    request_id: Optional[str] = Field(
+        default=None,
+        max_length=128,
+        description="Idempotency key for safe retries.",
+    )
+    reason: str = Field(
+        default="operator requested reconciliation repair",
+        min_length=3,
+        max_length=500,
     )
 
 
@@ -98,5 +118,36 @@ async def trigger_identity_reconciliation(
     logger.info(
         "kyber identity reconciliation: tenant=%s checked=%s drift=%s",
         body.tenant_id, result["checked"], result["drift_count"],
+    )
+    return APIResponse(data=result).to_dict()
+
+
+@router.post("/v1/admin/kyber/identity/reconciliation/repair")
+async def trigger_identity_reconciliation_repair(
+    body: ReconciliationRepairRequest,
+    request: Request,
+) -> dict:
+    """Plan or apply exact repo-authoritative identity graph repairs."""
+
+    require_kyber_operator(request)
+    actor_id = (
+        getattr(request.state, "operator_id", None)
+        or getattr(request.state, "subject_id", None)
+        or "kyber-operator"
+    )
+    result = await repair_identity_edges(
+        body.tenant_id,
+        dry_run=body.dry_run,
+        request_id=body.request_id,
+        actor_id=str(actor_id),
+        reason=body.reason,
+        entity_ids=body.entity_ids,
+    )
+    logger.info(
+        "kyber identity repair tenant=%s run=%s dry_run=%s status=%s",
+        body.tenant_id,
+        result["id"],
+        body.dry_run,
+        result["status"],
     )
     return APIResponse(data=result).to_dict()

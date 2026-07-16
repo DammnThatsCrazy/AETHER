@@ -75,6 +75,42 @@ _DEFINITIONS: tuple[MetricDefinition, ...] = (
         allows_probability=False,
         min_sample=20,
     ),
+    MetricDefinition(
+        name="email_open_rate",
+        unit="ratio",
+        description="Share of delivered campaign messages with a qualified open.",
+        lower=0.0,
+        upper=1.0,
+        allows_probability=False,
+        min_sample=30,
+    ),
+    MetricDefinition(
+        name="email_click_rate",
+        unit="ratio",
+        description="Share of delivered campaign messages with a qualified click.",
+        lower=0.0,
+        upper=1.0,
+        allows_probability=False,
+        min_sample=30,
+    ),
+    MetricDefinition(
+        name="email_reply_rate",
+        unit="ratio",
+        description="Share of delivered campaign messages with a human reply.",
+        lower=0.0,
+        upper=1.0,
+        allows_probability=False,
+        min_sample=30,
+    ),
+    MetricDefinition(
+        name="machine_event_rate",
+        unit="ratio",
+        description="Share of campaign communication events classified as machine generated.",
+        lower=0.0,
+        upper=1.0,
+        allows_probability=False,
+        min_sample=30,
+    ),
 )
 
 # Keyed by metric name (all seeded definitions are version "1").

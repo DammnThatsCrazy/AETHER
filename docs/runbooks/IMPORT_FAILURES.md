@@ -13,6 +13,7 @@ source_files:
   - Backend Architecture/aether-backend/services/imports/commit.py
   - Backend Architecture/aether-backend/services/imports/kyber_routes.py
   - Backend Architecture/aether-backend/repositories/imports_repo.py
+  - Backend Architecture/aether-backend/shared/graph/graph.py
 last_synced_commit: "fd23219"
 ---
 
@@ -83,3 +84,12 @@ support). Have the tenant export to CSV/JSON.
 If a requeue does not resolve a `failed` import after two attempts, capture the
 commit's `row_errors` and the `import.commit` job's `job_events`, and escalate to
 `platform@aether` — do not hand-edit graph edges or Bronze rows.
+## Rollback vertex garbage collection
+
+Rollback and replay now attempt conservative vertex cleanup after revoking the
+commit's edges. A vertex is deleted only when it was created by that import
+commit, has no active edge references, and has no ownership/history from another
+commit. Shared or historically foreign vertices are retained and reported in
+`vertices_retained`; safely orphaned vertices are reported in
+`vertices_deleted`. Repeating rollback is idempotent. Operators must never
+force-delete a retained vertex to make the counts match.
