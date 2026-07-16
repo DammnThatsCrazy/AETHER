@@ -49,6 +49,16 @@ production reject `AETHER_ROLE=all` and, in production, in-memory `CACHE_BACKEND
   `EVENT_BACKEND` (`sns_sqs`), `GRAPH_BACKEND` (`postgres`),
   `ANALYTICS_BACKEND` (`postgres`), `OBJECT_BACKEND` (`s3`).
 
+## Ingestion V2 + event-outbox relay (PR 5–6 / FT-5–6, default off)
+
+- `INGESTION_V2_ENABLED` / `INGESTION_V2_CANARY_TENANTS` — route `/v1/batch` to
+  the transactional typed-Bronze + outbox path (globally or per tenant).
+- `OUTBOX_RELAY_ENABLED` — run the `event_outbox_relay` worker (under the
+  `outbox-relay` role, or in-process under `all`) that drains `event_outbox`
+  to the event bus.
+- Relay tuning: `OUTBOX_RELAY_BATCH_SIZE` (100), `OUTBOX_RELAY_POLL_INTERVAL_S`
+  (2), `OUTBOX_RELAY_LEASE_SECONDS` (60), `OUTBOX_RELAY_MAX_ATTEMPTS` (8).
+
 ## Feature-flagged / optional groups (default off)
 
 Data quality (`AETHER_DATA_QUALITY_ENABLED`, `KYBER_INTELLIGENCE_QUALITY_ENABLED`),

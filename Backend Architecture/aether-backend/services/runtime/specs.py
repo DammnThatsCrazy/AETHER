@@ -146,6 +146,11 @@ def build_worker_specs(*, registry: Any, settings: Any) -> list[WorkerSpec]:
 
         return build_export_expiry_sweep_coro()
 
+    def _event_outbox_relay() -> Coroutine[Any, Any, None]:
+        from services.ingestion.outbox_relay import build_event_outbox_relay_coro
+
+        return build_event_outbox_relay_coro()
+
     def _payment_rail_sync() -> Coroutine[Any, Any, None]:
         from services.integrations.providers.payment_rails.sync_worker import (
             build_payment_rail_sync_coro,
@@ -211,6 +216,15 @@ def build_worker_specs(*, registry: Any, settings: Any) -> list[WorkerSpec]:
         WorkerSpec(
             name="notification_outbox",
             factory=_notification_outbox,
+        ),
+        # Ingestion V2 event-outbox relay (FT-6): drains event_outbox to the
+        # bus so downstream Bronze→Silver/identity/measurement work runs in a
+        # replayable worker instead of the request. Gated on the V2 relay flag
+        # so it never runs when the transactional ingest path is off.
+        WorkerSpec(
+            name="event_outbox_relay",
+            factory=_event_outbox_relay,
+            enabled=lambda: bool(settings.ingestion_v2.outbox_relay_enabled),
         ),
         # Physical deletion of expired export artifacts (tombstones remain).
         WorkerSpec(

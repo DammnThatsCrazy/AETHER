@@ -212,14 +212,9 @@ items:
     evidence_required: [pytest ingestion v2 output, alembic upgrade/downgrade/upgrade round-trip]
     docs_required: [docs/source-of-truth/INGESTION_CONTRACT.md]
     owner: ingestion
-    status: implementation_in_progress
+    status: implemented
     blocked_by: []
-    exception: >
-      The V1 and V2 branches now share canonical schema, consent, sensitive-field,
-      deployment-context, and classification validation. The V2 path writes typed
-      Bronze plus the transactional outbox atomically with database uniqueness as
-      its idempotency authority. The outbox relay and worker-side downstream fan-out
-      remain owned by FT-6-OUTBOX-RELAY, so this item is not terminal.
+    exception: null
     last_verified_commit: null
 
   - id: FT-6-OUTBOX-RELAY
@@ -231,14 +226,17 @@ items:
     current_behavior: Identity resolution and downstream work partly ride the request; no dedicated relay for ingestion outbox.
     required_behavior: FOR UPDATE SKIP LOCKED relay with leases/backoff/dead-letter; idempotent batched workers.
     affected_paths:
-      - Backend Architecture/aether-backend/services/runtime/
-      - Backend Architecture/aether-backend/shared/outbox.py
-    tests_required: [relay + worker tests]
-    evidence_required: [worker tests]
+      - Backend Architecture/aether-backend/services/ingestion/outbox_relay.py
+      - Backend Architecture/aether-backend/services/ingestion/workers.py
+      - Backend Architecture/aether-backend/services/runtime/roles.py
+      - Backend Architecture/aether-backend/services/runtime/specs.py
+      - Backend Architecture/aether-backend/config/settings.py
+    tests_required: [tests/unit/test_outbox_relay.py]
+    evidence_required: [pytest tests/unit/test_outbox_relay.py output]
     docs_required: [docs/BACKEND-EXECUTION-MODEL.md]
     owner: platform
-    status: not_started
-    blocked_by: [FT-5-INGESTION-V2]
+    status: implemented
+    blocked_by: []
     exception: null
     last_verified_commit: null
 
@@ -248,17 +246,30 @@ items:
     severity: P1
     release_class: general_availability_blocker
     customer_impact: Foundation for compacting high-volume data with lineage/checksum/retention.
-    current_behavior: No object-storage abstraction, descriptor layer, or storage policy registry; medallion is logical over Postgres.
+    current_behavior: >
+      Storage policy registry is enforced (config/storage_policies.yaml, one
+      policy per persistent resource type derived from repositories/repos.py
+      stores + alembic-created tables; coverage gate in
+      scripts/release/check_storage_policies.py wired into make ci-check via
+      repo_doctor). shared/storage/ ships the universal StorageDescriptor,
+      the object-store protocol (S3 lazy-boto3 + in-memory), the policy-driven
+      StorageManager (fail-closed policy_for, externalize/hydrate with sha256
+      verification and honest codec recording), and the reconciler
+      (missing/orphan/checksum-drift detection with a pure-function core).
+      Descriptors persist via StorageDescriptorRepository (table
+      storage_descriptors, migration 20260726_storage_descriptors). Runtime
+      flags (STORAGE_EXTERNALIZATION_ENABLED, STORAGE_RECONCILER_ENABLED)
+      default off; object-backed Bronze adoption is FT-8.
     required_behavior: Storage policy per persistent resource type + universal descriptor + manager + reconciler; CI fails if a persistent type lacks a policy.
     affected_paths:
       - Backend Architecture/aether-backend/shared/storage/
       - config/storage_policies.yaml
-    tests_required: [storage descriptor + policy coverage tests]
-    evidence_required: [storage policy validation output]
+    tests_required: [tests/unit/test_storage_descriptors.py (descriptor round-trip, fail-closed policy resolution, externalize/hydrate checksum verification + mismatch rejection, object store protocol, reconciler missing/orphan/drift, coverage-gate self-test)]
+    evidence_required: [scripts/release/check_storage_policies.py PASS output (schema + coverage over the derived persistent-type inventory)]
     docs_required: [docs/ELASTIC-DATA-PLANE.md]
     owner: data
-    status: not_started
-    blocked_by: [FT-5-INGESTION-V2]
+    status: implemented
+    blocked_by: []
     exception: null
     last_verified_commit: null
 
@@ -315,23 +326,31 @@ items:
     severity: P1
     release_class: general_availability_blocker
     customer_impact: Parity across SDKs, operator/tenant surfaces, and a generated evidence bundle.
-    current_behavior: Frontends still expect api_key from login; evidence bundle assembly is partial.
+    current_behavior: >
+      iOS/Android queues persist atomically and recover after restart. The
+      cross-SDK conformance matrix is derived from SDK sources and test
+      manifests by scripts/release/sdk_conformance.py (fail-closed, enforced in
+      the repo-doctor SDK runtime-parity gate). The Aether tenant frontend's
+      login / verify-email / SSO flows consume trust-plane session grants and
+      fall back to the legacy api_key shape only when the backend trust-plane
+      flag is off; Kyber already used OIDC tokens, and the demo app has no
+      login. collect_evidence.py assembles the bundle from real repo state
+      (ledger statuses, gate results, route-registry stats, consent purpose
+      registry, SDK conformance matrix) and reports FT-EXT-ATTESTATION as an
+      external action with no certification claimed.
     required_behavior: SDK parity/conformance; Aether/Kyber surfaces; full evidence bundle; frontends migrated to sessions.
     affected_paths:
       - packages/
       - frontend/
       - scripts/release/collect_evidence.py
+      - scripts/release/sdk_conformance.py
     tests_required: [SDK parity/conformance suites]
     evidence_required: [evidence bundle]
     docs_required: [docs/RELEASE-EVIDENCE.md]
     owner: sdk
-    status: implementation_in_progress
+    status: implemented
     blocked_by: [FT-1-NO-HUMAN-API-KEYS]
-    exception: >
-      iOS and Android queues now persist atomically, recover after restart, and
-      retain exhausted transient failures under bounded storage. Full cross-SDK
-      conformance evidence, remaining frontend session migration, and the final
-      evidence bundle are still open, so this item is intentionally non-terminal.
+    exception: null
     last_verified_commit: null
 
   # ---- External actions (outside repo-executable completion) --------------

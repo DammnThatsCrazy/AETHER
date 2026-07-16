@@ -41,7 +41,19 @@ async def sdk_bronze_writer(event: Event) -> None:
     (durable pre-ACK write) the duplicate check in BronzeRepository.ingest()
     will skip it silently.  This covers the replay path where the
     Bronze write came first.
+
+    Relay-originated events (V2 transactional path) are skipped entirely:
+    their typed Bronze row was persisted in the SAME transaction that
+    enqueued the outbox row (bronze_bulk.ingest_many), and the V2 row id
+    derivation differs from BronzeRepository's idempotency key — writing
+    here would create an untyped duplicate under a different row id.
     """
+    from services.ingestion.outbox_relay import RELAY_SOURCE_SERVICE
+
+    if event.source_service == RELAY_SOURCE_SERVICE:
+        metrics.increment("ingestion_bronze_relay_skip_total")
+        return
+
     payload = event.payload
     tenant_id = event.tenant_id or payload.get("tenant_id", "")
     event_id = payload.get("event_id", event.event_id)

@@ -350,6 +350,13 @@ def main(argv: Sequence[str] | None = None) -> None:
         remediation="rename non-canonical metrics.increment() names or add them to CANONICAL_NAMES in scripts/validate_meter_names.py",
     )
     run(
+        ["python", "scripts/release/check_storage_policies.py"],
+        name="Storage policy registry (schema + per-persistent-type coverage)",
+        results=results,
+        stop_on_failure=stop,
+        remediation="add a policy for every persistent resource type to config/storage_policies.yaml (inventory: repositories/repos.py stores + alembic-created tables)",
+    )
+    run(
         ["python", "scripts/validate_sdk_contracts.py"],
         name="SDK ingestion contract (shared TS ↔ backend /v1/batch)",
         results=results,

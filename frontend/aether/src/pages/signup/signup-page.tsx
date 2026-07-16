@@ -12,7 +12,7 @@ import {
   useToast,
 } from '@aether/ui';
 import type { SocialProvider } from '@aether/ui';
-import { useAuth } from '@aether-app/features/auth';
+import { useAuth, resolveAuthGrant } from '@aether-app/features/auth';
 import { api } from '@aether-app/lib/api/endpoints';
 import { OtpInput } from '@aether-app/components/otp-input';
 
@@ -55,7 +55,7 @@ const PLAN_OPTIONS = [
 
 export function SignupPage() {
   const navigate = useNavigate();
-  const { apiKeyLogin } = useAuth();
+  const { apiKeyLogin, sessionLogin } = useAuth();
   const { toast } = useToast();
 
   const [step, setStep] = useState<Step>(1);
@@ -107,11 +107,20 @@ export function SignupPage() {
     setOtpLoading(true);
     setOtpError(null);
     try {
-      const { api_key, name: verifiedName } = await api.auth.verifyEmail(email.trim(), otp);
-      apiKeyLogin(api_key, email.trim(), verifiedName || name.trim());
-      setRevealedKey(api_key);
-      setStep(2 as Step);
-      // Keep on step 2 to show key reveal; advance to 3 after user saves key
+      const response = await api.auth.verifyEmail(email.trim(), otp);
+      const verifiedName = response.name;
+      const grant = resolveAuthGrant(response);
+      if (grant.kind === 'session') {
+        // Trust-plane posture: a durable session was started — there is no
+        // reusable API key to reveal, so skip the key-reveal step entirely.
+        sessionLogin(grant.session, email.trim(), verifiedName || name.trim());
+        setStep(3);
+      } else {
+        apiKeyLogin(grant.apiKey, email.trim(), verifiedName || name.trim());
+        setRevealedKey(grant.apiKey);
+        setStep(2 as Step);
+        // Keep on step 2 to show key reveal; advance to 3 after user saves key
+      }
     } catch {
       setOtpError('Invalid or expired code — try again or request a new one');
       setResendHighlighted(true);

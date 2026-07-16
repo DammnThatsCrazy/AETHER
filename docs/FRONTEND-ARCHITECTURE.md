@@ -13,7 +13,7 @@ source_files:
 canonical_owner: frontend@aether
 estimated_read_minutes: 35
 toc_depth: 4
-last_synced_commit: "6306ea81"
+last_synced_commit: "5b2e4f54"
 ---
 
 # Aether Frontend Architecture & Designer Handoff
@@ -32,7 +32,12 @@ There are two separate frontend applications. **Do not mix them up.**
 ### What belongs where
 
 **Aether (customer-facing) contains:**
-- Auth flows (signup, login, SSO, billing)
+- Auth flows (signup, login, SSO, billing) — login / verify-email / SSO
+  consume trust-plane **session grants** (durable, revocable `sess_` tokens
+  sent as `Authorization: Bearer`; see `features/auth/grant.ts` and
+  `sessionLogin` in `features/auth/auth-context.tsx`) and fall back to the
+  legacy `api_key` response shape only when the backend trust-plane flag is
+  off; signup skips the API-key reveal step when a session is issued
 - The intelligence **graph canvas** showing the tenant's users, organizations, and AI agents — layer/overlay toggles (H2H/H2A/A2H/A2A, risk, trust, campaign, economic, fraud), path finder with multi-hop traversal modes (Shortest / Strongest / K-Shortest), cluster panel, and cluster drill-down to Cluster360; summary strip (entity/relationship/cluster/risk-alert counts), truncation warning when entity set exceeds 200, replay mode with date picker, observation-class node styling (solid/dashed/dotted borders), Recommendation/Prediction outcome panel in Inspector, **PathInspector** panel (shown in right panel when a path is active — Overview/Hops/Evidence/Score tabs, save-to-investigation action)
 - **Cluster360** (`/clusters/:clusterId`) — 7-tab cluster surface: Overview (type, state, formation reason, confidence, risk score, properties), Members (paginated DataTable with confidence + join date), Timeline (merge/split/growth events), Economic (revenue, spend, LTV, value tier, top-member breakdown), Campaigns (attributed campaigns, top channel, conversion rate), Risk (aggregate score, fraud network link, alert count, evidence refs, high-risk members), Geography (country distribution bars, concentration score)
 - **Semantic zoom** — graph canvas supports server-backed macro→cluster→entity zoom: macro level uses a `depth: 1` query scoped to cluster node types (the backend minimum depth is 1; depth-0 is rejected); clicking a cluster fetches depth-1 member expansion via `useGraphZoom(tenantId?)`

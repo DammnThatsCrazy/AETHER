@@ -363,7 +363,7 @@ validate-route-registry: ## Validate route policy registry seed schema
 validate-implementation-ledger: ## Reject stale or overstated implementation-ledger claims
 	python scripts/release/check_implementation_ledger.py
 
-validate-storage-policies: ## Validate storage policy registry seed schema
+validate-storage-policies: ## Validate storage policy registry (schema + per-persistent-type coverage)
 	python scripts/release/check_storage_policies.py
 
 audit-readiness-check: ## Validate the founding-tenant control spine (ledger + catalog + posture)

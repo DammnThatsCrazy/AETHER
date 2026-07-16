@@ -1066,6 +1066,23 @@
       "since_version": "8.9.0"
     },
     {
+      "path": "docs/ELASTIC-DATA-PLANE.md",
+      "title": "Elastic Data Plane",
+      "slug": "data/elastic-data-plane",
+      "section": "data",
+      "visibility": "I",
+      "audience": [
+        "dev-senior",
+        "architect",
+        "ops"
+      ],
+      "status": "beta",
+      "since_version": "8.12.0",
+      "estimated_read_minutes": 7,
+      "toc_depth": 3,
+      "canonical_owner": "data@aether"
+    },
+    {
       "path": "docs/ENTERPRISE-PACKAGING.md",
       "title": "Enterprise Packaging",
       "slug": "enterprise/enterprise-packaging",

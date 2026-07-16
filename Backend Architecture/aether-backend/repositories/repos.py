@@ -2441,3 +2441,41 @@ class RewardEventRepository(BaseRepository):
                     seen.add(reid)
                     results.append(r)
         return results
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# ELASTIC DATA PLANE — STORAGE DESCRIPTOR INDEX (FT-7-STORAGE-DESCRIPTORS)
+# ═══════════════════════════════════════════════════════════════════════════
+
+class StorageDescriptorRepository(BaseRepository):
+    """Descriptor index for objects externalized to the object store.
+
+    Each row is one shared.storage.descriptor.StorageDescriptor persisted as
+    JSONB: the queryable metadata (resource_type, locator, checksum, size,
+    lineage, ...) for a payload whose bytes live in S3 (or the in-memory
+    object store locally). The storage reconciler diffs this table against
+    the object store to detect missing/orphan/drifted objects.
+    """
+
+    def __init__(self) -> None:
+        super().__init__("storage_descriptors")
+
+    async def record(self, descriptor: Any) -> dict:
+        """Persist a StorageDescriptor (or its dict form) keyed by descriptor_id."""
+        data = descriptor.to_dict() if hasattr(descriptor, "to_dict") else dict(descriptor)
+        descriptor_id = data.get("descriptor_id") or data.get("id")
+        if not descriptor_id:
+            raise ValueError("storage descriptor requires a descriptor_id")
+        return await self.insert(descriptor_id, data)
+
+    async def list_for_type(
+        self, resource_type: str, tenant_id: Optional[str] = None, limit: int = 500,
+    ) -> list[dict]:
+        filters: dict[str, Any] = {"resource_type": resource_type}
+        if tenant_id is not None:
+            filters["tenant_id"] = tenant_id
+        return await self.find_many(filters=filters, limit=limit)
+
+    async def find_by_locator(self, locator: str) -> Optional[dict]:
+        rows = await self.find_many(filters={"locator": locator}, limit=1)
+        return rows[0] if rows else None

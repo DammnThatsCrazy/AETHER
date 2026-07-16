@@ -26,6 +26,30 @@ import type {
   Profile360Response, EntityGraph,
 } from '@aether/shared';
 
+// ─── Auth grant shapes (trust-plane sessions vs legacy API keys) ─────────────
+
+/** Durable, revocable trust-plane session issued by the backend on human auth. */
+export interface HumanSessionGrant {
+  session_id: string;
+  /** Opaque "sess_..." token — server-tracked, NOT a reusable API key. */
+  token: string;
+  credential_class?: string;
+  idle_expires_at?: string;
+  absolute_expires_at?: string;
+}
+
+/**
+ * Human auth response: a trust-plane `session` when the backend runs with
+ * HUMAN_SESSIONS_ENABLED, or a legacy reusable `api_key` when the flag is off.
+ */
+export interface AuthGrantResponse {
+  tenant_id?: string;
+  session?: HumanSessionGrant;
+  api_key?: string;
+  message?: string;
+  name?: string;
+}
+
 // ─── Response wrapper ────────────────────────────────────────────────────────
 const wrap = <T extends z.ZodType>(dataSchema: T) =>
   z.object({ data: dataSchema, status: z.string(), timestamp: z.string() });
@@ -1227,25 +1251,29 @@ export const api = {
   },
 
   // ── Customer auth (email registration + OTP + SSO callback) ─────────────
+  // Under the trust-plane posture (backend HUMAN_SESSIONS_ENABLED) these
+  // endpoints return a durable `session` grant instead of a reusable
+  // `api_key`; both shapes are typed so the app can prefer sessions and fall
+  // back to the legacy key only when the flag is off.
   auth: {
     /** Step 1: register email+password → sends 6-digit OTP. */
     register: (body: { name: string; email: string; password: string; plan_tier: string }) =>
       restClient.post('/v1/auth/register', wrap(unknownSchema), body).then(r => r.data),
 
-    /** Step 2: verify OTP code — creates tenant + returns API key. */
+    /** Step 2: verify OTP code — creates tenant + returns a session (or legacy API key). */
     verifyEmail: (email: string, code: string) =>
       restClient.post('/v1/auth/verify-email', wrap(unknownSchema), { email, code })
-        .then(r => r.data as { api_key: string; tenant_id: string; name: string }),
+        .then(r => r.data as AuthGrantResponse & { tenant_id: string; name?: string }),
 
     /** Email + password login for returning users. */
     login: (email: string, password: string) =>
       restClient.post('/v1/auth/login', wrap(unknownSchema), { email, password })
-        .then(r => r.data as { api_key: string; tenant_id: string }),
+        .then(r => r.data as AuthGrantResponse & { tenant_id: string }),
 
-    /** Exchange Auth0 JWT for a tenant API key (SSO callback). */
+    /** Exchange Auth0 JWT for an Aether session (or legacy API key) — SSO callback. */
     ssoCallback: (jwt: string) =>
       restClient.post('/v1/auth/sso/callback', wrap(unknownSchema), { jwt })
-        .then(r => r.data as { api_key: string }),
+        .then(r => r.data as AuthGrantResponse),
   },
 
   // ── Self-service account (me) ──────────────────────────────────────────────
