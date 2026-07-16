@@ -62,4 +62,5 @@ export * from './value';
 export * from './ingestion-contract';
 export * from './problem-details';
 export * from './dimension-state';
+export * from './temporal';
 export * from './imports';
