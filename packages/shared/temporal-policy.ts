@@ -49,6 +49,7 @@ export const temporalFamilyBounds: Record<string, TemporalFamilyBounds> = {
   friction: { maxFutureSkewMs: 300000, warnSkewMs: 30000, maxLatenessMs: 604800000 },
   identity: { maxFutureSkewMs: 60000, warnSkewMs: 30000, maxLatenessMs: 604800000 },
   identity_lc: { maxFutureSkewMs: 300000, warnSkewMs: 30000, maxLatenessMs: 604800000 },
+  interaction: { maxFutureSkewMs: 300000, warnSkewMs: 30000, maxLatenessMs: 604800000 },
   interop: { maxFutureSkewMs: 300000, warnSkewMs: 30000, maxLatenessMs: 2592000000 },
   journey: { maxFutureSkewMs: 300000, warnSkewMs: 30000, maxLatenessMs: 604800000 },
   location: { maxFutureSkewMs: 60000, warnSkewMs: 30000, maxLatenessMs: 604800000 },

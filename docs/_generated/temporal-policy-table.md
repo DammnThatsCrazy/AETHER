@@ -42,6 +42,7 @@ Enforcement modes: `off`, `shadow`, `warn`, `enforce`
 | `friction` | 300000 | 30000 | 604800000 |
 | `identity` | 60000 | 30000 | 604800000 |
 | `identity_lc` | 300000 | 30000 | 604800000 |
+| `interaction` | 300000 | 30000 | 604800000 |
 | `interop` | 300000 | 30000 | 2592000000 |
 | `journey` | 300000 | 30000 | 604800000 |
 | `location` | 60000 | 30000 | 604800000 |

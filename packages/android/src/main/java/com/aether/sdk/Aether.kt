@@ -263,6 +263,13 @@ object Aether : DefaultLifecycleObserver {
         "form_submitted" to "analytics", "form_abandoned" to "analytics",
         "search_reformulated" to "analytics", "retry_observed" to "analytics",
         "journey_stalled" to "analytics", "backtrack_observed" to "analytics",
+        // Interaction family
+        "surface_entered" to "analytics", "surface_exited" to "analytics",
+        "interaction_observed" to "analytics", "feature_started" to "analytics",
+        "feature_completed" to "analytics", "feature_abandoned" to "analytics",
+        "action_attempted" to "analytics", "action_succeeded" to "analytics",
+        "action_failed" to "analytics", "action_cancelled" to "analytics",
+        "active_interval_observed" to "analytics",
         // Server observation family
         "api_request_observed" to "analytics", "webhook_delivery_observed" to "analytics",
         "connector_sync_started" to "analytics", "connector_sync_completed" to "analytics",
