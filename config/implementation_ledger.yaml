@@ -248,17 +248,30 @@ items:
     severity: P1
     release_class: general_availability_blocker
     customer_impact: Foundation for compacting high-volume data with lineage/checksum/retention.
-    current_behavior: No object-storage abstraction, descriptor layer, or storage policy registry; medallion is logical over Postgres.
+    current_behavior: >
+      Storage policy registry is enforced (config/storage_policies.yaml, one
+      policy per persistent resource type derived from repositories/repos.py
+      stores + alembic-created tables; coverage gate in
+      scripts/release/check_storage_policies.py wired into make ci-check via
+      repo_doctor). shared/storage/ ships the universal StorageDescriptor,
+      the object-store protocol (S3 lazy-boto3 + in-memory), the policy-driven
+      StorageManager (fail-closed policy_for, externalize/hydrate with sha256
+      verification and honest codec recording), and the reconciler
+      (missing/orphan/checksum-drift detection with a pure-function core).
+      Descriptors persist via StorageDescriptorRepository (table
+      storage_descriptors, migration 20260726_storage_descriptors). Runtime
+      flags (STORAGE_EXTERNALIZATION_ENABLED, STORAGE_RECONCILER_ENABLED)
+      default off; object-backed Bronze adoption is FT-8.
     required_behavior: Storage policy per persistent resource type + universal descriptor + manager + reconciler; CI fails if a persistent type lacks a policy.
     affected_paths:
       - Backend Architecture/aether-backend/shared/storage/
       - config/storage_policies.yaml
-    tests_required: [storage descriptor + policy coverage tests]
-    evidence_required: [storage policy validation output]
+    tests_required: [tests/unit/test_storage_descriptors.py (descriptor round-trip, fail-closed policy resolution, externalize/hydrate checksum verification + mismatch rejection, object store protocol, reconciler missing/orphan/drift, coverage-gate self-test)]
+    evidence_required: [scripts/release/check_storage_policies.py PASS output (schema + coverage over the derived persistent-type inventory)]
     docs_required: [docs/ELASTIC-DATA-PLANE.md]
     owner: data
-    status: not_started
-    blocked_by: [FT-5-INGESTION-V2]
+    status: implemented
+    blocked_by: []
     exception: null
     last_verified_commit: null
 

@@ -99,6 +99,15 @@ CANONICAL_NAMES: frozenset[str] = frozenset({
     "ai_execution_fact_conflict_total",
     "ai_execution_fact_rejected_total",
     "ai_price_card_created_total",
+    # Storage plane — Elastic Data Plane descriptor/object layer (FT-7,
+    # shared/storage/manager.py + shared/storage/reconciler.py)
+    "storage_object_externalized_total",
+    "storage_object_hydrated_total",
+    "storage_hydrate_checksum_mismatch_total",
+    "storage_reconcile_run_total",
+    "storage_reconcile_missing_object_total",
+    "storage_reconcile_orphan_object_total",
+    "storage_reconcile_checksum_drift_total",
     # Dune feeder
     "dune_feeder_promoted",
     "dune_feeder_rejected",

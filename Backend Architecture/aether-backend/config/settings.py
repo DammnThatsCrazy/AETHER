@@ -638,6 +638,29 @@ class IngestionV2Config:
 
 
 # ---------------------------------------------------------------------------
+# Storage Plane (PR 7 / FT-7) — Elastic Data Plane descriptor + object layer.
+#
+# All flags default OFF/inert in local. The storage-policy registry itself
+# (config/storage_policies.yaml) is always enforced by CI regardless of these
+# flags; they gate only the RUNTIME behaviors:
+#   - externalization_enabled: master switch for StorageManager.externalize()
+#     writing packed objects to the object store. Per-resource-type permission
+#     still comes from the policy registry (allow_object_externalization).
+#   - reconciler_enabled: scheduling switch for the storage reconciler that
+#     diffs the descriptor index against the object store (missing / orphan /
+#     checksum-drift detection).
+#   - object_bucket: S3 bucket for externalized objects when
+#     settings.runtime.object_backend == "s3" (fail-closed: required then).
+# ---------------------------------------------------------------------------
+
+@dataclass(frozen=True)
+class StoragePlaneConfig:
+    externalization_enabled: bool = _env_bool("STORAGE_EXTERNALIZATION_ENABLED", False)
+    reconciler_enabled: bool = _env_bool("STORAGE_RECONCILER_ENABLED", False)
+    object_bucket: str = _env("STORAGE_OBJECT_BUCKET", "")
+
+
+# ---------------------------------------------------------------------------
 # Data Quality, Drift Detection & Graph Intelligence Reliability
 # ---------------------------------------------------------------------------
 
@@ -1026,6 +1049,7 @@ class Settings:
     runtime: RuntimeConfig = field(default_factory=RuntimeConfig)
     consent_authority: ConsentAuthorityConfig = field(default_factory=ConsentAuthorityConfig)
     ingestion_v2: IngestionV2Config = field(default_factory=IngestionV2Config)
+    storage_plane: StoragePlaneConfig = field(default_factory=StoragePlaneConfig)
     quicknode: QuickNodeConfig = field(default_factory=QuickNodeConfig)
     stablecoin_intelligence: StablecoinIntelligenceConfig = field(default_factory=StablecoinIntelligenceConfig)
 
