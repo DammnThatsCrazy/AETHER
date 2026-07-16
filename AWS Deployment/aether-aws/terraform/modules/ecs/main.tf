@@ -38,6 +38,13 @@ resource "aws_cloudwatch_log_group" "ml" {
   }
 }
 
+resource "aws_cloudwatch_log_group" "runtime_role" {
+  for_each          = var.runtime_roles
+  name              = "/ecs/${var.project}-${var.environment}/${each.key}"
+  retention_in_days = var.log_retention_days
+  tags = { Service = each.key }
+}
+
 # --------------------------------------------------------------------------
 # ECS Cluster
 # --------------------------------------------------------------------------
@@ -300,7 +307,7 @@ resource "aws_ecs_task_definition" "backend" {
   container_definitions = jsonencode([
     {
       name      = "aether-backend"
-      image     = "${var.ecr_backend_url}:latest"
+      image     = "${var.ecr_backend_url}@${var.backend_image_digest}"
       essential = true
 
       portMappings = [
@@ -367,6 +374,70 @@ resource "aws_ecs_task_definition" "backend" {
   }
 }
 
+
+# Dedicated worker task definitions. They use the same immutable application
+# image as the API but execute only their canonical role entrypoint.
+resource "aws_ecs_task_definition" "runtime_role" {
+  for_each                 = var.runtime_roles
+  family                   = "${var.project}-${var.environment}-${each.key}"
+  requires_compatibilities = ["FARGATE"]
+  network_mode             = "awsvpc"
+  cpu                      = 512
+  memory                   = 1024
+  execution_role_arn       = aws_iam_role.execution.arn
+  task_role_arn            = aws_iam_role.task.arn
+  container_definitions = jsonencode([{
+    name      = each.key
+    image     = "${var.ecr_backend_url}@${var.backend_image_digest}"
+    essential = true
+    command   = ["python", "-m", "services.runtime.run_role", each.key]
+    environment = [
+      { name = "APP_ENV", value = var.environment },
+      { name = "AETHER_ENV", value = var.environment },
+      { name = "AETHER_ROLE", value = each.key },
+      { name = "ML_SERVING_INLINE", value = var.ml_serving_inline ? "true" : "false" },
+      { name = "SQS_QUEUE_URL", value = var.sqs_queue_url },
+      { name = "DYNAMODB_CACHE_TABLE", value = var.dynamodb_cache_table },
+    ]
+    secrets = local.backend_secrets_block
+    logConfiguration = {
+      logDriver = "awslogs"
+      options = {
+        "awslogs-group"         = aws_cloudwatch_log_group.runtime_role[each.key].name
+        "awslogs-region"        = data.aws_region.current.name
+        "awslogs-stream-prefix" = each.key
+      }
+    }
+    readonlyRootFilesystem = false
+    user                   = "1000:1000"
+  }])
+  tags = { Service = each.key }
+}
+
+resource "aws_ecs_service" "runtime_role" {
+  for_each        = var.runtime_roles
+  name            = "${var.project}-${var.environment}-${each.key}"
+  cluster         = aws_ecs_cluster.this.id
+  task_definition = aws_ecs_task_definition.runtime_role[each.key].arn
+  desired_count   = 1
+  capacity_provider_strategy {
+    capacity_provider = "FARGATE"
+    base              = 1
+    weight            = 100
+  }
+  network_configuration {
+    subnets          = var.private_subnet_ids
+    security_groups  = [var.ecs_sg_id]
+    assign_public_ip = false
+  }
+  deployment_circuit_breaker {
+    enable   = true
+    rollback = true
+  }
+  enable_execute_command = false
+  tags = { Service = each.key }
+}
+
 # --------------------------------------------------------------------------
 # Task Definition — aether-ml-serving
 # --------------------------------------------------------------------------
@@ -383,7 +454,7 @@ resource "aws_ecs_task_definition" "ml" {
   container_definitions = jsonencode([
     {
       name      = "aether-ml-serving"
-      image     = "${var.ecr_ml_url}:latest"
+      image     = "${var.ecr_ml_url}@${var.ml_image_digest}"
       essential = true
 
       portMappings = [

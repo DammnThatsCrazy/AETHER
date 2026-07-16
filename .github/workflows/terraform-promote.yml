@@ -1,0 +1,94 @@
+name: Reviewed Terraform promotion
+on:
+  workflow_dispatch:
+    inputs:
+      profile:
+        type: choice
+        options: [staging, production-lean, production-scale, enterprise-isolated]
+        default: staging
+        required: true
+      action:
+        type: choice
+        options: [plan, apply]
+        default: plan
+        required: true
+      plan_run_id:
+        description: Plan workflow run ID (required for apply)
+        type: string
+        required: false
+      plan_checksum:
+        description: Approved plan SHA256 (required for apply)
+        type: string
+        required: false
+permissions:
+  contents: read
+concurrency:
+  group: terraform-${{ inputs.profile }}
+  cancel-in-progress: false
+jobs:
+  plan:
+    if: inputs.action == 'plan'
+    runs-on: ubuntu-latest
+    permissions: {contents: read, id-token: write}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: hashicorp/setup-terraform@v3
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_TERRAFORM_PLAN_ROLE_ARN }}
+          aws-region: us-east-1
+      - name: Create immutable reviewed plan
+        working-directory: AWS Deployment/aether-aws/terraform
+        run: |
+          terraform init -input=false
+          terraform validate
+          terraform plan -input=false -var-file="profiles/${{ inputs.profile }}.tfvars" -out=reviewed.tfplan
+          terraform show -json reviewed.tfplan > reviewed.tfplan.json
+          terraform show -no-color reviewed.tfplan > reviewed.tfplan.txt
+          sha256sum reviewed.tfplan > reviewed.tfplan.sha256
+          printf '%s\n' '${{ github.sha }}' > reviewed.commit
+          printf '%s\n' '${{ inputs.profile }}' > reviewed.profile
+      - uses: actions/upload-artifact@v4
+        with:
+          name: terraform-plan-${{ inputs.profile }}-${{ github.sha }}
+          path: AWS Deployment/aether-aws/terraform/reviewed.*
+          if-no-files-found: error
+          retention-days: 14
+  apply:
+    if: inputs.action == 'apply'
+    runs-on: ubuntu-latest
+    environment: production-terraform
+    permissions: {contents: read, actions: read, id-token: write}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Require explicit reviewed plan identity
+        run: |
+          test -n '${{ inputs.plan_run_id }}' || { echo '::error::plan_run_id required'; exit 1; }
+          test -n '${{ inputs.plan_checksum }}' || { echo '::error::plan_checksum required'; exit 1; }
+      - uses: actions/download-artifact@v4
+        with:
+          github-token: ${{ github.token }}
+          run-id: ${{ inputs.plan_run_id }}
+          pattern: terraform-plan-${{ inputs.profile }}-*
+          path: AWS Deployment/aether-aws/terraform
+          merge-multiple: true
+      - uses: hashicorp/setup-terraform@v3
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_TERRAFORM_APPLY_ROLE_ARN }}
+          aws-region: us-east-1
+      - name: Apply the exact approved plan (never re-plan)
+        working-directory: AWS Deployment/aether-aws/terraform
+        run: |
+          set -euo pipefail
+          test "$(cat reviewed.profile)" = '${{ inputs.profile }}'
+          test "$(cat reviewed.commit)" = '${{ github.sha }}'
+          test "$(sha256sum reviewed.tfplan | cut -d' ' -f1)" = '${{ inputs.plan_checksum }}'
+          terraform init -input=false
+          terraform apply -input=false reviewed.tfplan | tee reviewed.apply.txt
+          sha256sum reviewed.apply.txt > reviewed.apply.sha256
+      - uses: actions/upload-artifact@v4
+        with:
+          name: terraform-apply-evidence-${{ github.run_id }}
+          path: AWS Deployment/aether-aws/terraform/reviewed.apply.*
+          if-no-files-found: error

@@ -22,9 +22,9 @@
         clean validate-docs validate-frontmatter validate-ml-registry extract-docs docs-drift docs-stamp docs bump-version \
         repo-doctor repo-doctor-fix docs-check ci-check docs-fix \
         production-status release-gate ops-readiness help \
-        validate-profile-config validate-cost-policy validate-cost-policy-terraform \
+        validate-profile-config validate-cost-policy validate-cost-policy-terraform validate-delivery-topology \
         validate-route-registry validate-implementation-ledger \
-        validate-storage-policies audit-readiness-check founding-tenant-release-gate
+        validate-storage-policies audit-readiness-check founding-tenant-release-gate validate-founding-tenant-surface runtime-readiness-gate integration-durable integration-faults
 
 # Centralized subsystem paths — single place to rename if directories move.
 BACKEND_DIR := Backend Architecture/aether-backend
@@ -343,6 +343,9 @@ release-gate: ## Full release gate: repo consistency (CI mode) + strict producti
 	python scripts/release/check_cost_policy_terraform.py
 	python scripts/release/check_route_registry.py
 	python scripts/release/check_storage_policies.py
+	python scripts/validate_sdk_release_alignment.py
+	python scripts/release/sdk_conformance.py --quiet
+	python scripts/release/check_required_checks.py
 
 # ---------------------------------------------------------------------------
 # Founding-tenant production — control-spine gates (additive; ci-check unchanged)
@@ -357,6 +360,9 @@ validate-cost-policy: ## Validate production-lean cost policy (forbidden/require
 validate-cost-policy-terraform: ## Validate Terraform locals/profiles honor the production-lean cost policy
 	python scripts/release/check_cost_policy_terraform.py
 
+validate-delivery-topology: ## Validate immutable delivery and profile-to-role topology
+	python scripts/release/check_delivery_topology.py
+
 validate-route-registry: ## Validate route policy registry seed schema
 	python scripts/release/check_route_registry.py
 
@@ -365,6 +371,14 @@ validate-implementation-ledger: ## Reject stale or overstated implementation-led
 
 validate-storage-policies: ## Validate storage policy registry (schema + per-persistent-type coverage)
 	python scripts/release/check_storage_policies.py
+
+validate-required-release-checks: ## Validate required-check catalog against hosted workflows
+	python scripts/release/check_required_checks.py
+
+sdk-release-gate: ## SDK metadata, conformance, and hosted required-check contract
+	python scripts/validate_sdk_release_alignment.py
+	python scripts/release/sdk_conformance.py --quiet
+	python scripts/release/check_required_checks.py
 
 audit-readiness-check: ## Validate the founding-tenant control spine (ledger + catalog + posture)
 	python scripts/release/check_foundation.py
@@ -378,7 +392,25 @@ founding-tenant-release-gate: ## ci-check + control-spine validators + evidence 
 	python scripts/release/check_cost_policy_terraform.py
 	python scripts/release/check_route_registry.py
 	python scripts/release/check_storage_policies.py
+	python scripts/release/check_founding_tenant_surface.py
+	python scripts/validate_sdk_release_alignment.py
+	python scripts/release/sdk_conformance.py --quiet
+	python scripts/release/check_required_checks.py
 	python scripts/release/collect_evidence.py
+
+validate-founding-tenant-surface: ## Validate founding-tenant routes, roles, consumers, flags, and rollout controls
+	python scripts/release/check_founding_tenant_surface.py
+
+runtime-readiness-gate: ## Validate durable backend, explicit runtime-role, and consumer ownership topology
+	python scripts/release/check_runtime_readiness.py
+
+integration-durable: ## Run the production-shaped durable integration suite (requires Docker)
+	docker compose -f deploy/integration/docker-compose.durable.yml config --quiet
+	docker compose -f deploy/integration/docker-compose.durable.yml run --rm api python -m pytest tests/integration/test_batch_endpoint.py -q
+
+integration-faults: ## Run durable outbox/storage crash, replay, and lifecycle fault tests (requires Docker)
+	docker compose -f deploy/integration/docker-compose.durable.yml config --quiet
+	docker compose -f deploy/integration/docker-compose.durable.yml run --rm api python -m pytest tests/unit/test_outbox_relay.py tests/unit/test_object_backed_bronze.py -q
 
 .PHONY: staging-preflight staging-preflight-dry-run
 staging-preflight: ## Staging preflight gate: env/Settings, DB migrations + table shape, Redis, HTTP health, contracts (fail-closed)

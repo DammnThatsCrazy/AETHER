@@ -9,7 +9,8 @@ handler logic.
 `classify(path)` returns ``None`` when the route's 2-segment prefix is not in the
 catalog's ``known_prefixes`` — the default-deny signal that
 ``tests/unit/test_route_registry_coverage.py`` turns into a CI failure. The
-observe-mode authorization hook (PR 2c) consumes the same classification.
+runtime authorization boundary consumes the same classification and denies
+unknown routes in enforced environments.
 """
 
 from __future__ import annotations
@@ -17,7 +18,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from functools import lru_cache
 from pathlib import Path
-from typing import Optional
+from typing import Iterable, Optional
 
 import yaml
 
@@ -49,6 +50,48 @@ class RoutePolicy:
     sensitive: bool
     audit_required: bool
     risk_class: str  # low | medium | high
+
+
+def mounted_route_inventory(routes: Iterable[object]) -> list[dict]:
+    """Return the canonical policy inventory for mounted FastAPI routes.
+
+    Route templates (``/v1/profile/{entity_id}``), rather than request paths,
+    are recorded so attacker-controlled identifiers never affect policy lookup.
+    """
+    from fastapi.routing import APIRoute
+
+    inventory: list[dict] = []
+    for route in routes:
+        if not isinstance(route, APIRoute):
+            original = getattr(route, "original_router", None)
+            if original is not None:
+                inventory.extend(mounted_route_inventory(original.routes))
+            continue
+        path = getattr(route, "path", None)
+        methods = sorted(getattr(route, "methods", set()) or set())
+        if not path or not methods:
+            continue
+        policy = classify(path)
+        for method in methods:
+            inventory.append({
+                "method": method,
+                "route_template": path,
+                "route_name": getattr(route, "name", ""),
+                "policy": policy,
+            })
+    return inventory
+
+
+def validate_mounted_routes(routes: Iterable[object]) -> list[dict]:
+    """Fail startup if a mounted application route has no canonical policy."""
+    inventory = mounted_route_inventory(routes)
+    missing = sorted(
+        f"{item['method']} {item['route_template']}"
+        for item in inventory if item["policy"] is None
+    )
+    if missing:
+        raise RuntimeError("ROUTE_POLICY_UNCLASSIFIED: " + ", ".join(missing))
+    return inventory
 
 
 def _segments(path: str) -> list[str]:

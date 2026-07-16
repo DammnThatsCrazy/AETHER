@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { cardActivityBases, rejectBlockedCardLinkedFields, redactBlockedCardLinkedFields } from './card-linked-payments';
+import {
+  assertCardActivityBasis,
+  cardActivityBases,
+  normalizeCardLinkedBasis,
+  rejectBlockedCardLinkedFields,
+  redactBlockedCardLinkedFields,
+} from './card-linked-payments';
 import { paymentNetworkCatalog, paymentscanCardPrograms, paymentscanIssuers, resolvePaymentCatalogSlug } from './payment-catalog';
 
 describe('card-linked payment catalog and semantics', () => {
@@ -15,6 +21,13 @@ describe('card-linked payment catalog and semantics', () => {
   it('prevents unsupported basis values', () => {
     expect(cardActivityBases).toContain('benchmark_only');
     expect(cardActivityBases).not.toContain('onchain_card_spend');
+    expect(() => assertCardActivityBasis('spend')).not.toThrow();
+    expect(() => assertCardActivityBasis('onchain_card_spend')).toThrow(/Unsupported/);
+  });
+  it('normalizes missing bases without inventing activity', () => {
+    expect(normalizeCardLinkedBasis(undefined, 'paymentscan')).toBe('benchmark_only');
+    expect(normalizeCardLinkedBasis(undefined, 'sdk')).toBe('unknown');
+    expect(normalizeCardLinkedBasis('refund', 'provider_webhook')).toBe('refund');
   });
   it('rejects or redacts blocked card/KYC/bank fields', () => {
     expect(() => rejectBlockedCardLinkedFields({ pan: '4111111111111111' })).toThrow(/Blocked/);

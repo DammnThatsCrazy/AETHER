@@ -28,9 +28,40 @@ variable "ecr_backend_url" {
   description = "ECR repository URL for aether-backend"
 }
 
+variable "backend_image_digest" {
+  type        = string
+  description = "Immutable sha256 digest for the backend image used by API and runtime roles"
+  validation {
+    condition     = can(regex("^sha256:[0-9a-f]{64}$", var.backend_image_digest))
+    error_message = "backend_image_digest must be an immutable sha256 digest."
+  }
+}
+
+variable "runtime_roles" {
+  type        = set(string)
+  description = "Dedicated non-API runtime roles. The local-only role all is forbidden."
+  default = [
+    "outbox-relay", "stream-worker", "identity-worker", "graph-writer",
+    "measurement-worker", "materializer", "maintenance"
+  ]
+  validation {
+    condition     = !contains(var.runtime_roles, "api") && !contains(var.runtime_roles, "all")
+    error_message = "runtime_roles must contain dedicated workers only; api/all are forbidden."
+  }
+}
+
 variable "ecr_ml_url" {
   type        = string
   description = "ECR repository URL for aether-ml-serving"
+}
+
+variable "ml_image_digest" {
+  type        = string
+  description = "Immutable sha256 digest for the optional ML serving image"
+  validation {
+    condition     = can(regex("^sha256:[0-9a-f]{64}$", var.ml_image_digest))
+    error_message = "ml_image_digest must be an immutable sha256 digest."
+  }
 }
 
 variable "alb_backend_tg_arn" {

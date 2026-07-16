@@ -73,6 +73,15 @@ class TenantContext:
     api_key_tier: APIKeyTier = APIKeyTier.FREE
     plan_tier: PlanTier = PlanTier.P1_HOBBYIST
     permissions: list[str] = field(default_factory=list)
+    # Runtime authorization attributes.  Legacy API keys/JWTs default to the
+    # only serving state; trust-plane credentials populate these values from
+    # their durable records on every request (never from a long-lived cache).
+    credential_class: str = "legacy"
+    credential_status: str = "active"
+    tenant_status: str = "active"
+    organization_id: Optional[str] = None
+    organization_status: str = "active"
+    membership_status: str = "active"
 
     def has_permission(self, permission: str) -> bool:
         if self.role == Role.ADMIN:

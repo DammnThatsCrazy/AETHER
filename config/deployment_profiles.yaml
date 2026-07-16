@@ -146,7 +146,7 @@ profiles:
       required_resources:
         - cloudfront_s3_frontends
         - alb
-        - single_ecs_backend
+        - explicit_runtime_role_services
         - aurora_serverless_v2
         - sqs_sns
         - dynamodb

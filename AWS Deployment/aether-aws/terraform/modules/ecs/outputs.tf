@@ -33,6 +33,11 @@ output "backend_task_definition_arn" {
   value       = aws_ecs_task_definition.backend.arn
 }
 
+output "runtime_role_service_names" {
+  description = "ECS service name for every dedicated non-API runtime role"
+  value       = { for role, service in aws_ecs_service.runtime_role : role => service.name }
+}
+
 output "ml_task_definition_arn" {
   description = "Latest ARN of the ml-serving task definition"
   value       = aws_ecs_task_definition.ml.arn

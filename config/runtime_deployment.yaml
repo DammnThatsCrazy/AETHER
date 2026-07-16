@@ -1,0 +1,54 @@
+schema_version: 1
+canonical_source: config/runtime_deployment.yaml
+
+# Every non-local process has one role and one ECS service.  The API never owns
+# consumers; `all` is deliberately absent because it is local/test-only.
+profiles:
+  staging:
+    static_frontends: true
+    remote_ml: false
+    roles:
+      api: {desired_count: 1, cpu: 1024, memory: 2048, public: true}
+      outbox-relay: {desired_count: 1, cpu: 512, memory: 1024}
+      stream-worker: {desired_count: 1, cpu: 1024, memory: 2048}
+      identity-worker: {desired_count: 1, cpu: 512, memory: 1024}
+      graph-writer: {desired_count: 1, cpu: 512, memory: 1024}
+      measurement-worker: {desired_count: 1, cpu: 512, memory: 1024}
+      materializer: {desired_count: 1, cpu: 512, memory: 1024}
+      maintenance: {desired_count: 1, cpu: 512, memory: 1024}
+  production-lean:
+    static_frontends: true
+    remote_ml: false
+    roles:
+      api: {desired_count: 2, cpu: 1024, memory: 2048, public: true}
+      outbox-relay: {desired_count: 1, cpu: 512, memory: 1024}
+      stream-worker: {desired_count: 1, cpu: 1024, memory: 2048}
+      identity-worker: {desired_count: 1, cpu: 512, memory: 1024}
+      graph-writer: {desired_count: 1, cpu: 512, memory: 1024}
+      measurement-worker: {desired_count: 1, cpu: 512, memory: 1024}
+      materializer: {desired_count: 1, cpu: 512, memory: 1024}
+      maintenance: {desired_count: 1, cpu: 512, memory: 1024}
+  production-scale:
+    static_frontends: true
+    remote_ml: true
+    roles:
+      api: {desired_count: 3, cpu: 2048, memory: 4096, public: true}
+      outbox-relay: {desired_count: 2, cpu: 1024, memory: 2048}
+      stream-worker: {desired_count: 3, cpu: 2048, memory: 4096}
+      identity-worker: {desired_count: 2, cpu: 1024, memory: 2048}
+      graph-writer: {desired_count: 2, cpu: 1024, memory: 2048}
+      measurement-worker: {desired_count: 2, cpu: 1024, memory: 2048}
+      materializer: {desired_count: 2, cpu: 1024, memory: 2048}
+      maintenance: {desired_count: 1, cpu: 1024, memory: 2048}
+  enterprise-isolated:
+    static_frontends: true
+    remote_ml: true
+    roles:
+      api: {desired_count: 3, cpu: 2048, memory: 4096, public: true}
+      outbox-relay: {desired_count: 2, cpu: 1024, memory: 2048}
+      stream-worker: {desired_count: 3, cpu: 2048, memory: 4096}
+      identity-worker: {desired_count: 2, cpu: 1024, memory: 2048}
+      graph-writer: {desired_count: 2, cpu: 1024, memory: 2048}
+      measurement-worker: {desired_count: 2, cpu: 1024, memory: 2048}
+      materializer: {desired_count: 2, cpu: 1024, memory: 2048}
+      maintenance: {desired_count: 1, cpu: 1024, memory: 2048}

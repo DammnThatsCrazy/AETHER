@@ -3,9 +3,8 @@
 
 Checks the canonical policy DATA (config/deployment_profiles.yaml). It asserts
 production-lean declares the required cost_policy and that its forbidden list
-covers every expensive scale/enterprise resource. The Terraform-plan level
-gate that asserts a real plan excludes these resources is a follow-up
-(ledger FT-9-TERRAFORM-PROFILES); this validator fixes the policy target.
+covers every expensive scale/enterprise resource. The Terraform and immutable-delivery gates independently assert the selected
+profile excludes these resources and deploys the declared role topology.
 
 Usage: python scripts/release/check_cost_policy.py
 """
@@ -26,7 +25,7 @@ REQUIRED_FORBIDDEN = {
     "always_on_staging_compute",
 }
 REQUIRED_PRESENT = {
-    "cloudfront_s3_frontends", "single_ecs_backend",
+    "cloudfront_s3_frontends", "explicit_runtime_role_services",
     "aurora_serverless_v2", "sqs_sns", "s3_object_lake",
 }
 

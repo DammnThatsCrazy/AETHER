@@ -47,10 +47,8 @@ describe('truncate', () => {
 });
 
 describe('formatTimestamp', () => {
-  it('formats ISO string', () => {
-    const result = formatTimestamp('2024-06-15T14:30:00.000Z');
-    expect(result).toContain('2024');
-    expect(result).toContain('14');
+  it('formats a local ISO timestamp without depending on the runner timezone', () => {
+    expect(formatTimestamp('2024-06-15T14:30:00.000')).toBe('2024-06-15 14:30:00');
   });
 });
 

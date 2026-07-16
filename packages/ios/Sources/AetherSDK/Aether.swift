@@ -1080,8 +1080,7 @@ public final class Aether: NSObject {
 
     // MARK: - Consent Management
     //
-    // Canonical purposes (see packages/shared/consent.ts):
-    //   "analytics", "marketing", "web3", "agent", "commerce"
+    // Native SDK purposes supported from the canonical consent registry.
     // Callers SHOULD only pass these strings. Backend validator ignores others.
 
     public static let canonicalConsentPurposes: [String] =
@@ -1107,8 +1106,8 @@ public final class Aether: NSObject {
     /// Call grantConsent(["credit"]) or grantConsent(["location"]) explicitly after
     /// displaying the required separate opt-in UI for those purposes.
     public func grantAll() {
-        let grantable = AetherSDK.canonicalConsentPurposes.filter {
-            !AetherSDK.explicitOptInPurposes.contains($0)
+        let grantable = Self.canonicalConsentPurposes.filter {
+            !Self.explicitOptInPurposes.contains($0)
         }
         grantConsent(categories: grantable)
     }

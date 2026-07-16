@@ -270,12 +270,11 @@ final class AetherSDKTests: XCTestCase {
 
     func testTierACanonicalPurposes() {
         let purposes = Aether.canonicalConsentPurposes
-        XCTAssertEqual(purposes.count, 5)
-        XCTAssertTrue(purposes.contains("analytics"))
-        XCTAssertTrue(purposes.contains("marketing"))
-        XCTAssertTrue(purposes.contains("web3"))
-        XCTAssertTrue(purposes.contains("agent"))
-        XCTAssertTrue(purposes.contains("commerce"))
+        XCTAssertEqual(Set(purposes), Set([
+            "analytics", "marketing", "personalization", "web3",
+            "agent", "commerce", "credit", "location"
+        ]))
+        XCTAssertEqual(Set(Aether.explicitOptInPurposes), Set(["credit", "location"]))
     }
 
     // MARK: - Manifest Signature Verification (§2.9)

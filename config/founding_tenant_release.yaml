@@ -1,0 +1,117 @@
+schema_version: 1
+profile: production-lean
+environment: production
+release_surface:
+  enabled_route_prefixes:
+    - /health
+    - /ready
+    - /v1/auth
+    - /v1/batch
+    - /v1/consent
+    - /v1/dsr
+    - /v1/events
+    - /v1/exports
+    - /v1/health
+    - /v1/identity
+    - /v1/me
+    - /v1/profile360
+    - /v1/tenant
+  excluded_domains:
+    - derivatives
+    - economic
+    - financial
+    - payments
+    - rewards
+    - stablecoin
+    - agent-execution
+  runtime_roles:
+    - api
+    - outbox-relay
+    - stream-worker
+    - identity-worker
+    - graph-writer
+    - measurement-worker
+    - materializer
+    - maintenance
+  consumers:
+    - stream-ingestion-projection
+    - identity-signal-emission
+    - graph-profile-projection
+    - measurement-identity-restatement
+  event_backend: sns_sqs
+  object_backend: s3
+  database_backend: aurora_postgres
+  frontends: [aether-static, kyber-static]
+required_controls:
+  feature_flags:
+    POLICY_ENFORCEMENT_ENABLED: true
+    ROUTE_REGISTRY_ENFORCED: true
+    KYBER_OPERATOR_GATE_ENFORCED: true
+    SERVER_AUTHORITATIVE_CONSENT_ENABLED: true
+    INGESTION_V2_ENABLED: true
+    EVENT_OUTBOX_RELAY_ENABLED: true
+    OBJECT_STORAGE_EXTERNALIZATION_ENABLED: true
+  secrets:
+    - DATABASE_URL
+    - SERVICE_CREDENTIAL_SIGNING_KEY
+    - SESSION_SIGNING_KEY
+    - OBJECT_STORAGE_BUCKET
+  tests:
+    - sdk-release-gate
+    - integration-durable
+    - integration-faults
+    - runtime-readiness-gate
+    - staging-preflight
+  alerts:
+    - outbox_oldest_age
+    - consumer_lag
+    - dlq_depth
+    - worker_readiness
+    - checksum_mismatch
+rollouts:
+  route_enforcement:
+    stage: founding_tenant_enabled
+    owner: security-platform
+    tenant_allowlist_env: FOUNDING_TENANT_ALLOWLIST
+    rollback: deploy_previous_verified_release
+  ingestion_v2:
+    stage: integration
+    owner: data-platform
+    tenant_allowlist_env: FOUNDING_TENANT_ALLOWLIST
+    rollback: disable_new_ingestion_admission_after_backlog_drain
+  outbox_relay:
+    stage: integration
+    owner: data-platform
+    tenant_allowlist_env: FOUNDING_TENANT_ALLOWLIST
+    rollback: halt_admission_then_drain_outbox
+  separated_consumer_roles:
+    stage: staging
+    owner: runtime-platform
+    tenant_allowlist_env: FOUNDING_TENANT_ALLOWLIST
+    rollback: deploy_previous_verified_role_manifests
+  storage_externalization:
+    stage: integration
+    owner: storage-platform
+    tenant_allowlist_env: FOUNDING_TENANT_ALLOWLIST
+    rollback: stop_compaction_preserve_descriptors_and_objects
+  storage_reconciler:
+    stage: integration
+    owner: storage-platform
+    tenant_allowlist_env: FOUNDING_TENANT_ALLOWLIST
+    rollback: disable_reconciler_preserve_findings
+  bronze_compaction:
+    stage: integration
+    owner: storage-platform
+    tenant_allowlist_env: FOUNDING_TENANT_ALLOWLIST
+    rollback: stop_compaction_preserve_hot_rows
+  lifecycle_retention:
+    stage: integration
+    owner: privacy-platform
+    tenant_allowlist_env: FOUNDING_TENANT_ALLOWLIST
+    rollback: halt_deletion_preserve_legal_holds
+release_thresholds:
+  outbox_oldest_age_seconds: 300
+  dlq_growth_per_minute: 0
+  checksum_mismatch_count: 0
+  dsr_partial_count: 0
+  route_unknown_decision_count: 0
