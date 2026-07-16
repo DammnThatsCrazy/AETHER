@@ -55,7 +55,13 @@ five counters:
 
 `scripts/validate_sdk_parity.py` runs in `make ci-check` via
 `scripts/repo_doctor.py`. It greps each SDK subtree for the canonical tokens
-above and fails if a required capability is absent.
+above and fails if a required capability is absent. It also derives the
+cross-SDK conformance matrix via `scripts/release/sdk_conformance.py`: every
+claimed capability cell in `packages/shared/sdk-parity.json` must verify
+against its declared evidence file/symbol on disk (fail-closed — a claim whose
+evidence is absent fails the gate). The same derivation, including each SDK's
+real test-manifest inventory, is embedded in the release evidence bundle by
+`scripts/release/collect_evidence.py`.
 ## Durable native delivery queues
 
 iOS and Android persist bounded, versioned queue envelopes with atomic file

@@ -40,6 +40,12 @@ CANONICAL_NAMES: frozenset[str] = frozenset({
     "ingestion_v2_bronze_accepted_total",
     "ingestion_v2_bronze_duplicate_total",
     "ingestion_v2_transaction_rollback_total",
+    # Ingestion V2 — event-outbox relay worker (PR 6, outbox_relay.py/workers.py)
+    "ingestion_outbox_relay_claimed_total",
+    "ingestion_outbox_relay_published_total",
+    "ingestion_outbox_relay_retried_total",
+    "ingestion_outbox_relay_dead_lettered_total",
+    "ingestion_bronze_relay_skip_total",
     # Payment Rail Observability (services/integrations/providers/payment_rails)
     "payment_rail_event_duplicate_total",
     "payment_rail_event_rejected_total",
@@ -99,6 +105,15 @@ CANONICAL_NAMES: frozenset[str] = frozenset({
     "ai_execution_fact_conflict_total",
     "ai_execution_fact_rejected_total",
     "ai_price_card_created_total",
+    # Storage plane — Elastic Data Plane descriptor/object layer (FT-7,
+    # shared/storage/manager.py + shared/storage/reconciler.py)
+    "storage_object_externalized_total",
+    "storage_object_hydrated_total",
+    "storage_hydrate_checksum_mismatch_total",
+    "storage_reconcile_run_total",
+    "storage_reconcile_missing_object_total",
+    "storage_reconcile_orphan_object_total",
+    "storage_reconcile_checksum_drift_total",
     # Dune feeder
     "dune_feeder_promoted",
     "dune_feeder_rejected",

@@ -24,16 +24,47 @@ python scripts/release/collect_baseline.py --out baseline.yaml
 
 Emits branch, commit SHA, dirty status, and the founding-tenant gate inventory.
 
-## Evidence bundle index
+## Evidence bundle
 
 ```bash
 python scripts/release/collect_evidence.py --out evidence.yaml
+python scripts/release/collect_evidence.py --ci-log ci-check.log --out evidence.yaml
 ```
 
-Runs the control-spine validators (`check_foundation`, `check_profile_config`,
-`check_cost_policy`, `check_route_registry`, `check_storage_policies`), records
-their exit codes, and lists the authored docs. It is an **index**, not a gate —
-the `make validate-*` targets are the gates.
+Assembles the bundle from **real repo state** — nothing is asserted by hand:
+
+- **git state** — commit, branch, dirty flag.
+- **Control-spine validator results** — `check_foundation`,
+  `check_profile_config`, `check_cost_policy`, `check_route_registry`,
+  `check_storage_policies`, `check_implementation_ledger`, and
+  `sdk_conformance`, each with exit code, duration, and output tail (this is
+  where the storage/cost policy validation outputs land).
+- **Implementation-ledger breakdown** — every item's recorded status,
+  blockers, and exception flag, plus a status histogram. External actions are
+  reported exactly as the ledger records them: `FT-EXT-ATTESTATION` (external
+  SOC 2 / penetration test / legal review) appears with its actual
+  non-terminal status and an explicit `certifications_claimed: []` — the
+  bundle never claims or implies an external certification.
+- **Route-registry classification stats** — default decision, known-prefix
+  count, and the sensitive / high-risk / infra domain sets derived from
+  `config/route_registry.yaml`.
+- **Consent purpose registry** — contract version, purpose count, and purpose
+  ids read from `packages/shared/contracts/consent-registry.json`
+  (registry-derived; never hardcoded).
+- **Cross-SDK conformance matrix** — derived by
+  `scripts/release/sdk_conformance.py` from the SDK sources and their on-disk
+  test manifests: every claimed capability cell in
+  `packages/shared/sdk-parity.json` is verified against its declared evidence
+  file/symbol, each SDK's real test-file and test-case counts are inventoried,
+  and the test files referencing each capability are recorded. The derivation
+  fails closed on any unverifiable claim and is also enforced inside the
+  repo-doctor SDK runtime-parity gate (`scripts/validate_sdk_parity.py`).
+- **ci-check summary** — parsed from a saved `make ci-check` log when
+  provided via `--ci-log`; otherwise recorded as *not captured*. It is never
+  fabricated.
+
+It is an **index**, not a gate — it always exits 0; the `make validate-*`
+targets and `make ci-check` are the gates.
 
 ## Gates
 

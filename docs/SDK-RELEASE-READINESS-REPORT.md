@@ -28,8 +28,21 @@ Every SDK enforces the canonical event-to-consent-purpose map before enqueue/sen
 
 Release CI requires >=95% coverage for Shared, Web, React Native, Android, iOS, and backend ingestion contract checks. The validation workflow runs package tests, native build/test or lint equivalents where available, and the release-alignment drift script.
 
+## Conformance evidence
+
+The cross-SDK conformance matrix is machine-derived, never hand-asserted:
+`scripts/release/sdk_conformance.py` verifies every claimed capability cell in
+`packages/shared/sdk-parity.json` against its declared evidence file/symbol in
+the SDK sources, inventories each SDK's real test manifest, and fails closed on
+any unverifiable claim. The derivation runs inside the repo-doctor SDK
+runtime-parity gate and is embedded in the release evidence bundle
+(`scripts/release/collect_evidence.py`).
+
 ## Remaining limitations
 
-- Native iOS/Android queues are bounded and retried, but durable disk-backed persistence remains partial compared with Web localStorage persistence.
+- Native iOS/Android queues persist bounded, versioned envelopes with atomic
+  replacement, restore after restart, and quarantine corrupt state; unlike the
+  Web SDK's localStorage persistence, storage remains capped, so the oldest
+  events are dropped first under sustained offline backlog.
 - Native multi-VM wallet support is manual metadata emission; automatic provider detection remains Web-only.
 - Native health payloads do not yet include every Web-only metric such as detailed endpoint latency histograms.

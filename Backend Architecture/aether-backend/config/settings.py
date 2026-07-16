@@ -635,6 +635,36 @@ class IngestionV2Config:
         default_factory=lambda: _env_list("INGESTION_V2_CANARY_TENANTS", "")
     )
     outbox_relay_enabled: bool = _env_bool("OUTBOX_RELAY_ENABLED", False)
+    # Relay tuning (PR 6 / FT-6): claim batch size, idle poll cadence, claim
+    # lease duration (crashed relays release rows when the lease lapses) and
+    # the attempt ceiling after which a row is parked in dead_letter.
+    outbox_relay_batch_size: int = _env_int("OUTBOX_RELAY_BATCH_SIZE", 100)
+    outbox_relay_poll_interval_s: int = _env_int("OUTBOX_RELAY_POLL_INTERVAL_S", 2)
+    outbox_relay_lease_seconds: int = _env_int("OUTBOX_RELAY_LEASE_SECONDS", 60)
+    outbox_relay_max_attempts: int = _env_int("OUTBOX_RELAY_MAX_ATTEMPTS", 8)
+
+
+# ---------------------------------------------------------------------------
+# Storage Plane (PR 7 / FT-7) — Elastic Data Plane descriptor + object layer.
+#
+# All flags default OFF/inert in local. The storage-policy registry itself
+# (config/storage_policies.yaml) is always enforced by CI regardless of these
+# flags; they gate only the RUNTIME behaviors:
+#   - externalization_enabled: master switch for StorageManager.externalize()
+#     writing packed objects to the object store. Per-resource-type permission
+#     still comes from the policy registry (allow_object_externalization).
+#   - reconciler_enabled: scheduling switch for the storage reconciler that
+#     diffs the descriptor index against the object store (missing / orphan /
+#     checksum-drift detection).
+#   - object_bucket: S3 bucket for externalized objects when
+#     settings.runtime.object_backend == "s3" (fail-closed: required then).
+# ---------------------------------------------------------------------------
+
+@dataclass(frozen=True)
+class StoragePlaneConfig:
+    externalization_enabled: bool = _env_bool("STORAGE_EXTERNALIZATION_ENABLED", False)
+    reconciler_enabled: bool = _env_bool("STORAGE_RECONCILER_ENABLED", False)
+    object_bucket: str = _env("STORAGE_OBJECT_BUCKET", "")
 
 
 # ---------------------------------------------------------------------------
@@ -1026,6 +1056,7 @@ class Settings:
     runtime: RuntimeConfig = field(default_factory=RuntimeConfig)
     consent_authority: ConsentAuthorityConfig = field(default_factory=ConsentAuthorityConfig)
     ingestion_v2: IngestionV2Config = field(default_factory=IngestionV2Config)
+    storage_plane: StoragePlaneConfig = field(default_factory=StoragePlaneConfig)
     quicknode: QuickNodeConfig = field(default_factory=QuickNodeConfig)
     stablecoin_intelligence: StablecoinIntelligenceConfig = field(default_factory=StablecoinIntelligenceConfig)
 

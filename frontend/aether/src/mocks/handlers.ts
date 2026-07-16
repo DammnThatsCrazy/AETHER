@@ -1318,6 +1318,10 @@ export const handlers = [
   http.post(`${API}/v1/auth/verify-email`, () =>
     HttpResponse.json({ data: { api_key: 'ak_mock_dev_key_from_otp_verify', tenant_id: 'tenant_demo_001', name: 'Alex Reeves', message: 'Verified' }, status: 'ok', timestamp: new Date().toISOString() }),
   ),
+  // Dev mocks simulate the legacy (trust-plane flag off) backend, which
+  // returns a reusable api_key. When HUMAN_SESSIONS_ENABLED is on, the real
+  // backend returns { session: { session_id, token: "sess_...", ... } }
+  // instead — the app prefers that shape (see features/auth/grant.ts).
   http.post(`${API}/v1/auth/login`, async ({ request }) => {
     const body = await request.json() as { email?: string };
     return HttpResponse.json({ data: { api_key: 'ak_mock_login_key', tenant_id: 'tenant_demo_001', email: body.email }, status: 'ok', timestamp: new Date().toISOString() });

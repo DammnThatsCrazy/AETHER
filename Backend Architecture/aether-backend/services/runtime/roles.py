@@ -54,7 +54,7 @@ CONSUMER_ROLES: frozenset[str] = frozenset(
 # documented deferral (see config/implementation_ledger.yaml FT-4). "maintenance"
 # is the catch-all for cross-cutting crons/sweepers.
 ROLE_TO_SPEC_NAMES: dict[str, frozenset[str]] = {
-    "outbox-relay": frozenset({"notification_outbox"}),
+    "outbox-relay": frozenset({"notification_outbox", "event_outbox_relay"}),
     "stream-worker": frozenset({"event_replay", "dune_polling"}),
     "identity-worker": frozenset(),
     "graph-writer": frozenset(),

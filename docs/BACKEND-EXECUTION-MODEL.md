@@ -15,7 +15,7 @@ source_files:
 canonical_owner: platform@aether
 estimated_read_minutes: 6
 toc_depth: 3
-last_synced_commit: "6306ea81"
+last_synced_commit: "9223aaa4"
 ---
 
 # Backend Execution Model
@@ -31,7 +31,7 @@ API process no longer starts every worker, consumer, and cron in-request.
 | --- | --- |
 | `all` | Everything in one process (local/dev default). Rejected in staging/production. |
 | `api` | The FastAPI HTTP server only — no supervised workers, no stream consumers. |
-| `outbox-relay` | The notification/outbox relay worker. |
+| `outbox-relay` | Outbox relay workers: the notification outbox and the ingestion `event_outbox` relay (FT-6). |
 | `stream-worker` | Stream loops (event replay, Dune polling) + stream consumers. |
 | `identity-worker` | Identity resolution (shared consumer today — dedicated loop deferred). |
 | `graph-writer` | Graph/profile writes (shared consumer today — dedicated loop deferred). |
@@ -87,6 +87,34 @@ Each subsystem binds an explicit backend, declared via env and surfaced on
 | `OBJECT_BACKEND` | `s3` | |
 | `ML_MODE` | `inline` | `inline` or `remote`. |
 | `DEPLOYMENT_PROFILE` | `local-live` | Drives compose/helm wiring & ops tooling. |
+
+## Ingestion event-outbox relay (FT-6)
+
+The `/v1/batch` V2 path (FT-5) writes typed Bronze rows plus a transactional
+`event_outbox` row in one transaction and never publishes in-request. The
+**event-outbox relay** (`services/ingestion/outbox_relay.py`, WorkerSpec
+`event_outbox_relay`, owned by the `outbox-relay` role, gated by
+`OUTBOX_RELAY_ENABLED`) drains that table and publishes each row to the event
+bus, where the existing idempotent consumers (`services/ingestion/workers.py`)
+run the Bronze→Silver projection, identity signals, and measurement fan-out —
+downstream work becomes replayable instead of riding the request.
+
+- **Claiming:** one `UPDATE … FROM (SELECT … FOR UPDATE SKIP LOCKED)` claims a
+  batch, so any number of relay processes cooperate without double-claiming.
+- **Leases:** a claim pushes `available_at` forward by
+  `OUTBOX_RELAY_LEASE_SECONDS`; a crashed relay's rows are reclaimed when the
+  lease lapses.
+- **Backoff / dead-letter:** publish failures move rows to `retry` with
+  exponential backoff; after `OUTBOX_RELAY_MAX_ATTEMPTS` a row parks in
+  `dead_letter` (terminal, kept for ops). `attempt_count` increments at claim
+  time, so poison rows converge instead of looping.
+- **Delivery:** at-least-once. Relay-published events carry
+  `source_service="ingestion.outbox_relay"`; the Bronze-writer consumer skips
+  them because the V2 ingest transaction already persisted the typed Bronze row.
+
+Tuning env vars: `OUTBOX_RELAY_BATCH_SIZE` (100),
+`OUTBOX_RELAY_POLL_INTERVAL_S` (2), `OUTBOX_RELAY_LEASE_SECONDS` (60),
+`OUTBOX_RELAY_MAX_ATTEMPTS` (8) — all on `settings.ingestion_v2`.
 
 ## Production fail-closed rules
 
