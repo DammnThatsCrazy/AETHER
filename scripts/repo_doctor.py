@@ -225,10 +225,27 @@ def main(argv: Sequence[str] | None = None) -> None:
         remediation="fix common/model_registry.py or common/feature_contracts.py, then rerun make repo-doctor-fix",
     )
 
+    run(
+        ["python", "scripts/generate_platform_contracts.py"],
+        name="Regenerate unified-platform contract artifacts (temporal policy)",
+        results=results,
+        stop_on_failure=stop,
+        remediation="fix packages/shared/contracts/*-registry.json or the generator, then rerun make repo-doctor-fix",
+    )
+
     if args.ci or args.check:
         _check_clean(
             ["docs/_generated"],
             name="Generated artifacts — no uncommitted diff",
+            results=results,
+            stop_on_failure=stop,
+        )
+        _check_clean(
+            [
+                "packages/shared/temporal-policy.ts",
+                "Backend Architecture/aether-backend/shared/temporal/generated_policy.py",
+            ],
+            name="Unified-platform generated contracts — no uncommitted diff",
             results=results,
             stop_on_failure=stop,
         )

@@ -98,3 +98,47 @@ def test_bitemporal_envelope_mirrors_graph_contract():
 def test_barrel_exports_temporal():
     index = (REPO_ROOT / "packages" / "shared" / "index.ts").read_text(encoding="utf-8")
     assert "export * from './temporal';" in index
+    assert "export * from './temporal-policy';" in index
+
+
+def test_policy_registry_reason_codes_match_kernel():
+    """The temporal-policy registry must classify EVERY kernel reason code."""
+    import json
+
+    registry = json.loads(
+        (REPO_ROOT / "packages" / "shared" / "contracts" / "temporal-policy-registry.json")
+        .read_text(encoding="utf-8")
+    )
+    registry_codes = {entry["code"] for entry in registry["reasonCodes"]}
+    assert registry_codes == set(TEMPORAL_REASON_CODES), (
+        f"policy-registry drift: registry-only={registry_codes - set(TEMPORAL_REASON_CODES)}, "
+        f"kernel-only={set(TEMPORAL_REASON_CODES) - registry_codes}"
+    )
+
+
+def test_generated_policy_matches_registry():
+    """Generated Python policy mirrors the JSON registry (regen if this fails)."""
+    import json
+
+    from shared.temporal.generated_policy import (
+        TEMPORAL_FAMILY_BOUNDS,
+        TEMPORAL_POLICY_VERSION,
+        TEMPORAL_REASON_DISPOSITIONS,
+    )
+
+    registry = json.loads(
+        (REPO_ROOT / "packages" / "shared" / "contracts" / "temporal-policy-registry.json")
+        .read_text(encoding="utf-8")
+    )
+    assert TEMPORAL_POLICY_VERSION == registry["policyVersion"]
+    assert TEMPORAL_REASON_DISPOSITIONS == {
+        e["code"]: e["disposition"] for e in registry["reasonCodes"]
+    }
+    event_reg = json.loads(
+        (REPO_ROOT / "packages" / "shared" / "contracts" / "event-registry.json")
+        .read_text(encoding="utf-8")
+    )
+    families = {e["family"] for e in event_reg["events"]}
+    assert set(TEMPORAL_FAMILY_BOUNDS) == families, (
+        "every event family must resolve to complete temporal bounds"
+    )

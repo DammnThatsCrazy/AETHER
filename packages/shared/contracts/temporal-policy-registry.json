@@ -1,0 +1,39 @@
+{
+  "schemaVersion": "1.0.0",
+  "policyVersion": "1.0.0",
+  "description": "Canonical temporal enforcement policy. Owns the reason-code dispositions, enforcement-mode ladder, and per-event-family skew/lateness bounds applied by ingestion temporal enforcement. Generated artifacts: packages/shared/temporal-policy.ts, Backend Architecture/aether-backend/shared/temporal/generated_policy.py, docs/_generated/temporal-policy-table.md (via scripts/generate_platform_contracts.py).",
+  "enforcementModes": ["off", "shadow", "warn", "enforce"],
+  "dispositions": ["accept", "accept_with_warning", "quarantine", "reject"],
+  "reasonCodes": [
+    { "code": "timestamp_invalid", "severity": "error", "disposition": "reject", "description": "Malformed or unparseable timestamp" },
+    { "code": "timestamp_naive", "severity": "error", "disposition": "reject", "description": "No offset or Z; never silently assumed UTC" },
+    { "code": "timestamp_future", "severity": "error", "disposition": "reject", "description": "Beyond tolerated forward clock skew" },
+    { "code": "timestamp_too_old", "severity": "warning", "disposition": "quarantine", "description": "Beyond the family's allowed lateness" },
+    { "code": "timezone_invalid", "severity": "error", "disposition": "reject", "description": "Not a canonical IANA zone id" },
+    { "code": "timezone_offset_mismatch", "severity": "error", "disposition": "reject", "description": "Claimed zone and offset disagree at the event instant" },
+    { "code": "local_time_ambiguous", "severity": "warning", "disposition": "quarantine", "description": "DST fall-back: wall time occurs twice without a resolution policy" },
+    { "code": "local_time_nonexistent", "severity": "error", "disposition": "reject", "description": "DST spring-forward: wall time never occurs" },
+    { "code": "temporal_authority_missing", "severity": "error", "disposition": "reject", "description": "Calendar rule evaluated without a registered authority" },
+    { "code": "temporal_policy_violation", "severity": "error", "disposition": "reject", "description": "A registered temporal policy was violated" },
+    { "code": "temporal_provenance_missing", "severity": "info", "disposition": "accept_with_warning", "description": "Instant valid but source timezone unavailable" },
+    { "code": "clock_skew_warning", "severity": "info", "disposition": "accept_with_warning", "description": "Skew above the warn threshold, within tolerance" },
+    { "code": "delivery_lag_warning", "severity": "info", "disposition": "accept_with_warning", "description": "Delivery delay above the warn threshold" }
+  ],
+  "defaultBounds": {
+    "maxFutureSkewMs": 300000,
+    "warnSkewMs": 30000,
+    "maxLatenessMs": 604800000
+  },
+  "familyBounds": {
+    "comms": { "maxLatenessMs": 1209600000 },
+    "consent": { "maxFutureSkewMs": 60000 },
+    "derivatives": { "maxLatenessMs": 2592000000 },
+    "identity": { "maxFutureSkewMs": 60000 },
+    "interop": { "maxLatenessMs": 2592000000 },
+    "location": { "maxFutureSkewMs": 60000 },
+    "server": { "maxFutureSkewMs": 60000, "warnSkewMs": 5000 },
+    "stablecoin": { "maxLatenessMs": 2592000000 },
+    "web3_lc": { "maxLatenessMs": 2592000000 },
+    "x402": { "maxLatenessMs": 2592000000 }
+  }
+}
