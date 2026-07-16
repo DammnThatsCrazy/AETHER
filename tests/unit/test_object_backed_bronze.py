@@ -956,3 +956,60 @@ def test_reconciler_pages_all_descriptors():
         assert report.orphan_objects == [] or report.orphan_objects == ()
         assert report.missing_objects == [] or report.missing_objects == ()
         assert report.is_clean
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# REVIEW FINDINGS, wave 3 — erase-cap honesty, concurrent-compactor packs
+# ═══════════════════════════════════════════════════════════════════════════
+
+def test_dsr_reports_partial_when_the_pass_ceiling_is_hit():
+    """A compliance report must never claim completion while subject rows may
+    remain: hitting the erase-pass ceiling with rows left marks partial."""
+    with fresh() as b:
+        b.lifecycle_mod._SUBJECT_ROW_PAGE_SIZE = 1
+        b.lifecycle_mod._MAX_ERASE_PASSES = 2
+        _seed(b, n=5, anonymous_id="bulk-subject", age_hours=10)
+
+        report = _run(b.lifecycle().dsr_erase_subject("t1", "bulk-subject"))
+        assert report["status"] == "partial"
+        assert report["rows_removed"] == 2  # two passes of one row each
+        remaining = [
+            r for r in b.bronze_store.values()
+            if r.get("anonymous_id") == "bulk-subject"
+        ]
+        assert len(remaining) == 3  # honestly reported as NOT erased
+
+
+def test_concurrent_compactors_do_not_duplicate_packs():
+    """Two workers racing for the same cold rows: the loser's mark matches
+    nothing (rows already externalized by the winner), triggering its
+    stale-pack rebuild which drops the duplicate object entirely."""
+    with fresh() as b:
+        _seed(b, n=3, age_hours=100)
+        winner = b.compactor(min_age_hours=1)
+        loser = b.compactor(min_age_hours=1)
+
+        # Both workers select the SAME candidate snapshot (the race window),
+        # then the winner completes its whole pack-and-mark cycle first.
+        cutoff = datetime.now(timezone.utc)
+        stale_snapshot = _run(loser.rows.compaction_candidates(cutoff, 500))
+        assert len(stale_snapshot) == 3
+        assert _run(winner.compact_once()).rows_externalized == 3
+
+        async def stale_candidates(cutoff, limit, offset=0):
+            return stale_snapshot if offset == 0 else []
+
+        loser.rows.compaction_candidates = stale_candidates
+        stats = _run(loser.compact_once())
+        assert stats.rows_externalized == 0  # lost every row to the winner
+
+        # Exactly ONE live pack remains (the winner's); no orphan duplicate.
+        live = [d for d in b.descriptor_store.values() if not d.get("tombstoned")]
+        assert len(live) == 1
+        assert len(b.store.list()) == 1
+        winner_descriptor_id = live[0]["descriptor_id"]
+        for row in b.bronze_store.values():
+            assert row["payload_descriptor_id"] == winner_descriptor_id
+        # Rows still hydrate through the surviving pack.
+        payload = _run(winner.read_payload(next(iter(b.bronze_store.values()))))
+        assert payload["who"] == "anon-1"
