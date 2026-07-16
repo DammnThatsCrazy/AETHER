@@ -518,6 +518,17 @@ class StorageLifecycle:
                     )
                     report["status"] = "partial"
                     break
+            else:
+                # Pass ceiling reached without draining. A compliance report
+                # must never claim completion while subject rows may remain —
+                # verify once and mark partial if anything is left.
+                if await self.rows.rows_for_subject(tenant_id, subject_ref, limit=1):
+                    logger.error(
+                        f"DSR row erase hit the pass ceiling with rows remaining "
+                        f"tenant={tenant_id} subject={subject_ref} "
+                        f"(passes={_MAX_ERASE_PASSES}, page={_SUBJECT_ROW_PAGE_SIZE})"
+                    )
+                    report["status"] = "partial"
 
         # 2. Object store + descriptor index — re-pack without the subject.
         # Snapshot every descriptor first (paged to exhaustion) — a single

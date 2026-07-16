@@ -256,10 +256,14 @@ class BronzeRowStore:
     ) -> int:
         """Strip the hot payload; keep every searchable metadata column.
 
-        Rows deleted or tombstoned since selection (a concurrent DSR or
-        retention pass) are NOT marked — the returned count falling short of
-        ``len(row_ids)`` is the compactor's race signal to rebuild the packed
-        object without the vanished rows (see ``compact_once``).
+        Rows deleted, tombstoned, or ALREADY EXTERNALIZED since selection (a
+        concurrent DSR/retention pass, or another compaction worker that won
+        the race for the same cold rows) are NOT marked — the returned count
+        falling short of ``len(row_ids)`` is the compactor's race signal to
+        rebuild its packed object without the contested rows (see
+        ``compact_once``). Without the already-externalized guard, the losing
+        worker would silently re-point rows at its own pack and orphan the
+        winner's object as an unreferenced duplicate payload copy.
         """
         if not row_ids:
             return 0
@@ -270,7 +274,7 @@ class BronzeRowStore:
             marked = 0
             for rid in row_ids:
                 row = store.get(rid)
-                if row is None or row.get("tombstoned"):
+                if row is None or row.get("tombstoned") or row.get("payload_externalized"):
                     continue
                 row["payload"] = {}
                 row["payload_externalized"] = True
@@ -293,6 +297,7 @@ class BronzeRowStore:
                 updated_at = now()
             WHERE id = ANY($1)
               AND COALESCE(data->>'tombstoned', 'false') <> 'true'
+              AND COALESCE(payload_externalized, FALSE) = FALSE
             """,
             list(row_ids), descriptor_id, locator,
         )
