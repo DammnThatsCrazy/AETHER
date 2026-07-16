@@ -3,7 +3,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import { Button, SocialProviderIcon } from '@aether/ui';
 import { AetherLogo } from '@aether-app/components/aether-logo';
 import type { SocialProvider } from '@aether/ui';
-import { useAuth } from '@aether-app/features/auth';
+import { useAuth, resolveAuthGrant } from '@aether-app/features/auth';
 import { api } from '@aether-app/lib/api/endpoints';
 
 type SsoState = 'idle' | 'loading';
@@ -18,7 +18,7 @@ const SSO_PROVIDERS: Array<{ provider: SocialProvider; label: string }> = [
 export function LoginPage() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
-  const { apiKeyLogin } = useAuth();
+  const { apiKeyLogin, sessionLogin } = useAuth();
 
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -34,8 +34,13 @@ export function LoginPage() {
     setLoading(true);
     setError(null);
     try {
-      const { api_key } = await api.auth.login(email.trim(), password);
-      apiKeyLogin(api_key, email.trim());
+      // Trust-plane posture returns a durable session; legacy returns api_key.
+      const grant = resolveAuthGrant(await api.auth.login(email.trim(), password));
+      if (grant.kind === 'session') {
+        sessionLogin(grant.session, email.trim());
+      } else {
+        apiKeyLogin(grant.apiKey, email.trim());
+      }
       void navigate(redirectTo, { replace: true });
     } catch {
       setError('Incorrect email or password');

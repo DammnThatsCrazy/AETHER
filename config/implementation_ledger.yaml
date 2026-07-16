@@ -315,23 +315,31 @@ items:
     severity: P1
     release_class: general_availability_blocker
     customer_impact: Parity across SDKs, operator/tenant surfaces, and a generated evidence bundle.
-    current_behavior: Frontends still expect api_key from login; evidence bundle assembly is partial.
+    current_behavior: >
+      iOS/Android queues persist atomically and recover after restart. The
+      cross-SDK conformance matrix is derived from SDK sources and test
+      manifests by scripts/release/sdk_conformance.py (fail-closed, enforced in
+      the repo-doctor SDK runtime-parity gate). The Aether tenant frontend's
+      login / verify-email / SSO flows consume trust-plane session grants and
+      fall back to the legacy api_key shape only when the backend trust-plane
+      flag is off; Kyber already used OIDC tokens, and the demo app has no
+      login. collect_evidence.py assembles the bundle from real repo state
+      (ledger statuses, gate results, route-registry stats, consent purpose
+      registry, SDK conformance matrix) and reports FT-EXT-ATTESTATION as an
+      external action with no certification claimed.
     required_behavior: SDK parity/conformance; Aether/Kyber surfaces; full evidence bundle; frontends migrated to sessions.
     affected_paths:
       - packages/
       - frontend/
       - scripts/release/collect_evidence.py
+      - scripts/release/sdk_conformance.py
     tests_required: [SDK parity/conformance suites]
     evidence_required: [evidence bundle]
     docs_required: [docs/RELEASE-EVIDENCE.md]
     owner: sdk
-    status: implementation_in_progress
+    status: implemented
     blocked_by: [FT-1-NO-HUMAN-API-KEYS]
-    exception: >
-      iOS and Android queues now persist atomically, recover after restart, and
-      retain exhausted transient failures under bounded storage. Full cross-SDK
-      conformance evidence, remaining frontend session migration, and the final
-      evidence bundle are still open, so this item is intentionally non-terminal.
+    exception: null
     last_verified_commit: null
 
   # ---- External actions (outside repo-executable completion) --------------

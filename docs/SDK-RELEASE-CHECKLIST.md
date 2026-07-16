@@ -18,6 +18,10 @@ Process for cutting an SDK release. Publishing is automated via
 ## Checklist
 
 - [ ] Tests green for all SDKs (`@aether/web` vitest; native build checks).
+- [ ] Cross-SDK conformance matrix derives cleanly
+      (`python scripts/release/sdk_conformance.py --quiet` — every claimed
+      capability cell verified against SDK sources; also enforced by the
+      repo-doctor SDK runtime-parity gate).
 - [ ] Contracts unchanged or `schema_version` bumped + manifest updated.
 - [ ] Per-SDK CHANGELOG entry (Keep a Changelog) + version bump across packages
       (`make bump-version` / the publish workflow).

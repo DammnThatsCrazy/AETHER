@@ -4,12 +4,12 @@ import { useAuth0 } from '@auth0/auth0-react';
 import { Button, ErrorState } from '@aether/ui';
 import { AetherLogo } from '@aether-app/components/aether-logo';
 import { isLocalMocked } from '@aether-app/lib/env';
-import { useAuth } from '@aether-app/features/auth';
+import { useAuth, resolveAuthGrant } from '@aether-app/features/auth';
 import { api } from '@aether-app/lib/api/endpoints';
 
 export function CallbackPage() {
   const { isLoading, isAuthenticated, getAccessTokenSilently, error: auth0Error } = useAuth0();
-  const { apiKeyLogin } = useAuth();
+  const { apiKeyLogin, sessionLogin } = useAuth();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const [exchangeError, setExchangeError] = useState<string | null>(null);
@@ -26,15 +26,21 @@ export function CallbackPage() {
     if (!isLoading && isAuthenticated) {
       getAccessTokenSilently()
         .then(jwt => api.auth.ssoCallback(jwt))
-        .then(({ api_key }) => {
-          apiKeyLogin(api_key);
+        .then(response => {
+          // Trust-plane posture returns a durable session; legacy returns api_key.
+          const grant = resolveAuthGrant(response);
+          if (grant.kind === 'session') {
+            sessionLogin(grant.session);
+          } else {
+            apiKeyLogin(grant.apiKey);
+          }
           void navigate('/settings', { replace: true });
         })
         .catch(err => {
           setExchangeError(err instanceof Error ? err.message : 'Sign-in failed');
         });
     }
-  }, [isLoading, isAuthenticated, navigate, urlError, getAccessTokenSilently, apiKeyLogin]);
+  }, [isLoading, isAuthenticated, navigate, urlError, getAccessTokenSilently, apiKeyLogin, sessionLogin]);
 
   if (urlError || auth0Error) {
     const msg = urlErrorDesc ?? auth0Error?.message ?? urlError ?? 'Unknown error';

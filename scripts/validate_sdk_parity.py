@@ -125,6 +125,19 @@ def main() -> int:
         except Exception as exc:
             fail(f"packages/shared/sdk-parity.json is not valid JSON: {exc}")
 
+    # Every claimed parity cell must verify against the source tree (the parity
+    # file's own contract note: a validator MUST fail when a cell claims
+    # 'supported' but the evidence file/symbol is absent). The derivation also
+    # feeds the release evidence bundle (scripts/release/collect_evidence.py).
+    sys.path.insert(0, str(ROOT / "scripts" / "release"))
+    try:
+        from sdk_conformance import build_matrix  # noqa: E402
+        _, conformance_failures = build_matrix(ROOT)
+        for problem in conformance_failures:
+            fail(f"sdk-parity.json claim not derivable from source: {problem}")
+    except ImportError as exc:
+        fail(f"scripts/release/sdk_conformance.py unavailable: {exc}")
+
     return _report()
 
 

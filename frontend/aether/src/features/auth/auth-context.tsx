@@ -1,6 +1,7 @@
 import { createContext, useContext, useCallback, useReducer, useEffect, useRef, type ReactNode } from 'react';
 import type { AuthState, AetherUser, AuthTokens } from '@aether-app/types';
 import { isMockAuthAllowed, isLocalMocked } from '@aether-app/lib/env';
+import type { HumanSessionGrant } from './grant';
 
 const MOCK_USER: AetherUser = {
   id: 'mock-user-1',
@@ -8,12 +9,23 @@ const MOCK_USER: AetherUser = {
   displayName: 'Dev User',
 };
 
+/** Legacy reusable API-key credential (trust-plane flag off on the backend). */
 export const SESSION_KEY = 'aether_session_key';
+/** Trust-plane session token ("sess_...") — revocable, server-tracked. */
+export const SESSION_TOKEN_KEY = 'aether_session_token';
+/** Absolute expiry (ISO 8601) of the stored trust-plane session. */
+export const SESSION_EXPIRY_KEY = 'aether_session_expires_at';
+
+// Fallback session lifetime when the grant omits absolute_expires_at —
+// mirrors the backend default of a 12-hour absolute session expiry.
+const SESSION_FALLBACK_TTL_S = 12 * 60 * 60;
 
 interface AuthContextValue extends AuthState {
   login: () => Promise<void>;
   logout: () => Promise<void>;
   apiKeyLogin: (apiKey: string, email?: string, displayName?: string) => void;
+  /** Authenticate with a trust-plane session grant (never a reusable key). */
+  sessionLogin: (session: HumanSessionGrant, email?: string, displayName?: string) => void;
 }
 
 type AuthAction =
@@ -78,6 +90,35 @@ function decodeUser(tokens: AuthTokens): AetherUser {
 // How many seconds before expiry to trigger a silent refresh.
 const REFRESH_SKEW_S = 300;
 
+function sessionExpiryEpochS(iso: string | null | undefined): number {
+  if (iso) {
+    const parsed = Date.parse(iso);
+    if (!Number.isNaN(parsed)) return parsed / 1000;
+  }
+  return Date.now() / 1000 + SESSION_FALLBACK_TTL_S;
+}
+
+/**
+ * Restore a persisted credential, preferring the trust-plane session token
+ * over a legacy API key. Expired session tokens are cleared, never reused.
+ */
+function restoreStoredCredential(): AuthTokens | null {
+  const sessionToken = sessionStorage.getItem(SESSION_TOKEN_KEY);
+  if (sessionToken) {
+    const expiresAt = sessionExpiryEpochS(sessionStorage.getItem(SESSION_EXPIRY_KEY));
+    if (expiresAt > Date.now() / 1000) {
+      return { accessToken: sessionToken, idToken: '', refreshToken: undefined, expiresAt };
+    }
+    sessionStorage.removeItem(SESSION_TOKEN_KEY);
+    sessionStorage.removeItem(SESSION_EXPIRY_KEY);
+  }
+  const storedKey = sessionStorage.getItem(SESSION_KEY);
+  if (storedKey) {
+    return { accessToken: storedKey, idToken: '', refreshToken: undefined, expiresAt: Date.now() / 1000 + 86400 };
+  }
+  return null;
+}
+
 export function AuthProvider({ children }: { readonly children: ReactNode }) {
   const [state, dispatch] = useReducer(authReducer, {
     isAuthenticated: false,
@@ -124,21 +165,18 @@ export function AuthProvider({ children }: { readonly children: ReactNode }) {
 
   useEffect(() => {
     if (isLocalMocked()) {
-      // Check if there's a real API key in sessionStorage first
-      const storedKey = sessionStorage.getItem(SESSION_KEY);
-      if (storedKey) {
-        currentTokens = { accessToken: storedKey, idToken: '', refreshToken: undefined, expiresAt: Date.now() / 1000 + 86400 };
-        dispatch({ type: 'MOCK_LOGIN', user: MOCK_USER });
-      } else {
-        dispatch({ type: 'MOCK_LOGIN', user: MOCK_USER });
-      }
+      // Restore a real credential (session token or API key) if present
+      const restored = restoreStoredCredential();
+      if (restored) currentTokens = restored;
+      dispatch({ type: 'MOCK_LOGIN', user: MOCK_USER });
       return;
     }
 
-    // Check sessionStorage for a persisted API key first
-    const storedKey = sessionStorage.getItem(SESSION_KEY);
-    if (storedKey) {
-      currentTokens = { accessToken: storedKey, idToken: '', refreshToken: undefined, expiresAt: Date.now() / 1000 + 86400 };
+    // Restore a persisted credential — trust-plane session token first,
+    // then the legacy API key.
+    const restored = restoreStoredCredential();
+    if (restored) {
+      currentTokens = restored;
       dispatch({ type: 'AUTH_SUCCESS', user: MOCK_USER, tokens: currentTokens });
       return;
     }
@@ -234,6 +272,8 @@ export function AuthProvider({ children }: { readonly children: ReactNode }) {
 
   const apiKeyLogin = useCallback((apiKey: string, email = '', displayName = '') => {
     sessionStorage.setItem(SESSION_KEY, apiKey);
+    sessionStorage.removeItem(SESSION_TOKEN_KEY);
+    sessionStorage.removeItem(SESSION_EXPIRY_KEY);
     currentTokens = { accessToken: apiKey, idToken: '', refreshToken: undefined, expiresAt: Date.now() / 1000 + 86400 };
     const user: AetherUser = email
       ? { id: apiKey, email, displayName: displayName || email }
@@ -241,9 +281,24 @@ export function AuthProvider({ children }: { readonly children: ReactNode }) {
     dispatch({ type: 'AUTH_SUCCESS', user, tokens: currentTokens });
   }, []);
 
+  const sessionLogin = useCallback((session: HumanSessionGrant, email = '', displayName = '') => {
+    const expiresAt = sessionExpiryEpochS(session.absolute_expires_at);
+    sessionStorage.setItem(SESSION_TOKEN_KEY, session.token);
+    sessionStorage.setItem(SESSION_EXPIRY_KEY, new Date(expiresAt * 1000).toISOString());
+    // A trust-plane session supersedes any legacy key credential.
+    sessionStorage.removeItem(SESSION_KEY);
+    currentTokens = { accessToken: session.token, idToken: '', refreshToken: undefined, expiresAt };
+    const user: AetherUser = email
+      ? { id: session.session_id, email, displayName: displayName || email }
+      : MOCK_USER;
+    dispatch({ type: 'AUTH_SUCCESS', user, tokens: currentTokens });
+  }, []);
+
   const logout = useCallback(async () => {
     currentTokens = null;
     sessionStorage.removeItem(SESSION_KEY);
+    sessionStorage.removeItem(SESSION_TOKEN_KEY);
+    sessionStorage.removeItem(SESSION_EXPIRY_KEY);
     if (refreshTimerRef.current !== null) clearTimeout(refreshTimerRef.current);
     dispatch({ type: 'AUTH_LOGOUT' });
 
@@ -256,7 +311,7 @@ export function AuthProvider({ children }: { readonly children: ReactNode }) {
   }, []);
 
   return (
-    <AuthContext.Provider value={{ ...state, login, logout, apiKeyLogin }}>
+    <AuthContext.Provider value={{ ...state, login, logout, apiKeyLogin, sessionLogin }}>
       {children}
     </AuthContext.Provider>
   );
