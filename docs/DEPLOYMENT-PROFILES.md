@@ -97,9 +97,30 @@ variable and its validation exist, and that each `profiles/*.tfvars` sets a vali
 profile matching its filename. It runs in `release-gate` and
 `founding-tenant-release-gate` (not in `ci-check`).
 
-Wiring these locals into module `count`/configuration so the plan physically
-omits the resources is deferred (see the `TODO(FT-9-TERRAFORM-PROFILES)` note in
-`profiles.tf`); until then the static validator is the enforceable guarantee.
+The Infrastructure Profiles workflow has two explicit evidence layers for
+`staging`, `production-lean`, `production-scale`, and
+`enterprise-isolated`:
+
+1. Every pull request runs a provider-mocked Terraform configuration plan against
+   the real root module, provider schemas, checked-in `profiles/*.tfvars`, and
+   profile assertions. It uses no remote state or live provider APIs and publishes
+   an immutable `terraform-configuration-plan-*` artifact.
+2. When the repository has the complete deployment secret set, a separate OIDC
+   job runs an environment-authoritative plan with an isolated remote-state key
+   and publishes an immutable `terraform-remote-plan-*` artifact.
+
+If the deployment secrets are absent, pull requests receive a readiness notice
+and the remote-plan jobs are skipped; the four configuration-plan checks still
+must pass. A push to `main` fails closed before promotion when credentials are
+incomplete or any remote plan does not pass. The credentialed layer requires
+`AWS_INFRA_ROLE_ARN`, `TF_STATE_BUCKET`, `TF_LOCK_TABLE`, and the
+`TF_*` inputs for ACM, domain, alerts, Auth0, and the Aether/Kyber application
+URLs.
+
+The static cost-policy validator remains a defense-in-depth check. Reviewers
+must distinguish configuration-plan evidence from environment-authoritative
+remote-plan evidence and inspect the latter before promotion. Neither artifact
+proves that an environment has been applied or certified.
 
 ## Backend selectors
 

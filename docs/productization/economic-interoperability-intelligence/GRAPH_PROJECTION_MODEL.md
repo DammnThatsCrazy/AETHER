@@ -35,6 +35,10 @@ Cross-domain rules:
 - All mutations flow through `build_edge_properties` (tenant, actor,
   provenance, valid_from, source_event_id, idempotency key) and
   `persist_mutations`, gated per domain by `*_graph_enabled` flags.
+- Import rollback and replay use conservative ownership-aware garbage collection.
+  A vertex is removed only when the failed import is its canonical owner, the
+  vertex has no ownership history from another import, and no active edge still
+  references it. Pre-existing or shared vertices are retained.
 
 The card-linked payment rail slice adds 5 vertex types (`CARD_PROGRAM`,
 `CARD_ISSUER`, `PAYMENT_NETWORK`, `CARD_LINKED_FLOW`, `CARD_BENCHMARK`)

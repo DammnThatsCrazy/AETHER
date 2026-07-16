@@ -204,3 +204,20 @@ If resolution policy changes (e.g., a new signal type added, confidence
 threshold updated), `POST /v1/identity/recompute` replays Bronze events for
 an entity and re-stamps `canonical_entity_id` and `identity_aliases`. This is
 an operator action; it does not re-invoke `POST /v1/batch`.
+## Canonical validation boundary
+
+Both the legacy and transactional-outbox batch branches call
+`services/ingestion/validation.py` before any Bronze write or downstream
+publish. The shared result owns schema/type validation, execution-claim
+normalization, recursive sensitive-field scrubbing, server-authoritative consent,
+live `Sec-GPC`/`DNT` request signals, fingerprint-signal classification,
+tenant-policy evaluation, and deployment-context validation. A branch may decide
+how it persists an accepted event, but it may not reimplement or bypass these
+decisions.
+
+Live privacy headers are normalized to booleans at the request boundary; raw
+header values are never persisted. Fingerprint-like keys are classified
+recursively in `properties` and `context`. When a tenant policy does not
+explicitly authorize that purpose, validation fails closed with a stable privacy
+decision code. Client consent snapshots remain evidence only—the current
+server-side receipt and tenant compliance profile are authoritative.

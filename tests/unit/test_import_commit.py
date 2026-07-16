@@ -195,10 +195,13 @@ async def test_rollback_revokes_edges_and_deletes_bronze(clean):
     result = await cm.rollback_import(TENANT, import_id, reason="test rollback")
     assert result["edges_revoked"] == 4
     assert result["bronze_deleted"] == 2
+    assert len(result["vertices_deleted"]) == 4
+    assert result["vertices_retained"] == []
 
     gc = get_graph_client()
     live = await gc.get_edges(f"entity:{TENANT}:alice", direction="out")
     assert live == []  # all revoked
+    assert await gc.get_vertex(f"entity:{TENANT}:alice") is None
     # Bronze rows for the commit are gone.
     remaining = await BronzeRepository(cm.BRONZE_DOMAIN).query_by_source_tag(record["commit_id"])
     assert remaining == []
@@ -277,3 +280,58 @@ def test_handlers_are_registered():
 
     register_import_handlers()
     assert "import.commit" in HANDLER_REGISTRY and "import.replay" in HANDLER_REGISTRY
+
+
+async def test_vertex_gc_retains_shared_or_currently_referenced_vertices(clean):
+    from shared.graph.graph import Edge, get_graph_client
+
+    import_id = await _seed_approved()
+    record = await cm.commit_import(TENANT, import_id)
+    graph = get_graph_client()
+    shared_id = f"entity:{TENANT}:alice"
+    await graph.add_edge(Edge(
+        edge_type="CURRENT_REFERENCE",
+        from_vertex_id=shared_id,
+        to_vertex_id=f"external:{TENANT}:live",
+        properties={"tenant_id": TENANT, "import_commit_id": "another-commit"},
+    ))
+
+    result = await cm.rollback_import(TENANT, import_id, reason="shared safety")
+
+    assert shared_id not in result["vertices_deleted"]
+    retained = {item["vertex_id"]: item["reason"] for item in result["vertices_retained"]}
+    assert retained[shared_id] == "active_reference"
+    assert await graph.get_vertex(shared_id) is not None
+
+
+async def test_vertex_gc_is_idempotent_for_missing_vertices(clean):
+    graph = __import__(
+        "shared.graph.graph", fromlist=["get_graph_client"]
+    ).get_graph_client()
+    removed, reason = await graph.delete_vertex_if_orphaned(
+        "missing-vertex", TENANT, "missing-commit"
+    )
+    assert removed is False
+    assert reason == "not_found"
+
+
+async def test_vertex_gc_retains_preexisting_vertex_without_foreign_edges(clean):
+    from shared.graph.graph import Vertex, get_graph_client
+
+    graph = get_graph_client()
+    shared_id = f"entity:{TENANT}:alice"
+    await graph.upsert_vertex(Vertex(
+        vertex_type="Entity",
+        vertex_id=shared_id,
+        properties={"tenant_id": TENANT, "origin": "preexisting"},
+    ))
+
+    import_id = await _seed_approved()
+    await cm.commit_import(TENANT, import_id)
+    result = await cm.rollback_import(TENANT, import_id, reason="preserve original")
+
+    retained = {item["vertex_id"]: item["reason"] for item in result["vertices_retained"]}
+    assert retained[shared_id] == "ownership_changed"
+    vertex = await graph.get_vertex(shared_id)
+    assert vertex is not None
+    assert vertex.properties["origin"] == "preexisting"

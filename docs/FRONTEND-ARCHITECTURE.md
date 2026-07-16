@@ -41,7 +41,7 @@ There are two separate frontend applications. **Do not mix them up.**
 - **Social Intelligence** panels — their users' social platform presence
 - **Recommendation cards** — pending retargeting / campaign actions for the tenant to approve
 - **Suggestion feed** — OODA-driven prioritised recommendations with helpful/not helpful/dismiss feedback
-- Campaign management, attribution dashboards, Campaign 360 (`/campaigns/:id`) — per-campaign overview, population, clusters, conversions, and attribution with referral/source-class rollups
+- Campaign management, attribution dashboards, Campaign 360 (`/campaigns/:id`) — per-campaign overview, population, clusters, conversions, and attribution with referral/source-class rollups; communication rates expose governed value state, sample sufficiency, Wilson uncertainty, and lineage, and the tenant UI withholds values that do not meet the registry minimum sample
 - Profile360 and Journey Explorer source evidence — journey steps surface AI provider/product, mediation type, verification, confidence, classifier version, attribution eligibility, and attributed net revenue when backed by active credits; excluded crawler/scanner noise remains counted in journey quality metadata
 - API key management, plan management, usage metering
 - Webhook endpoint management — add/test/delete outbound delivery endpoints

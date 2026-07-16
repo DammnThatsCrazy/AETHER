@@ -10,11 +10,14 @@ source_files:
   - Backend Architecture/aether-backend/services/profile/aggregator.py
   - Backend Architecture/aether-backend/services/profile/routes.py
   - Backend Architecture/aether-backend/services/profile/intelligence.py
+  - Backend Architecture/aether-backend/services/profile/read_result.py
+  - Backend Architecture/aether-backend/services/reconciliation/expectations.py
+  - Backend Architecture/aether-backend/services/reconciliation/coverage.py
   - Backend Architecture/aether-backend/services/card_linked_payments/profile_summary.py
 canonical_owner: backend@aether
 estimated_read_minutes: 8
 toc_depth: 3
-last_synced_commit: "6306ea81"
+last_synced_commit: "6cb5d4da"
 ---
 
 # Profile 360 Aggregation Layer
@@ -563,3 +566,22 @@ Planned future drill-down endpoints for agent profiles:
 `GET /v1/profile/{id}/agent-executions` endpoint reads `AgentExecutionRepository`,
 which stores externally-observed agent task outcomes. AETHER records these
 observations but does not originate, authorize, or execute any of the tasks itself.
+## Dependency availability and tenant expectations
+
+Profile360 dependency reads use `DimensionReadResult` so a legitimate empty
+dimension remains `available`, while a failed repository read is
+`unavailable` with a stable error code. Summary, quality, and freshness
+responses surface dependency status instead of making an outage
+indistinguishable from “this tenant has no data.”
+
+Dimension readiness expectations inherit checked-in defaults and can be
+overridden per tenant through
+`config/reconciliation_expectations.json`. Overrides are validated and scoped
+by exact tenant id; an invalid operator configuration fails closed.
+
+Tenant SDK coverage uses an exact census when the population fits under the
+configured threshold. Larger tenants use a deterministic hash-ranked sample over
+the complete tenant population—not the first N rows. Responses report population
+size, method, seed version, and per-dimension Wilson confidence intervals.
+Coverage is nullable for an empty or unavailable sampling frame; it is never
+invented as zero.

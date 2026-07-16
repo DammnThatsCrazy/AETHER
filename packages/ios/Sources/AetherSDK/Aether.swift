@@ -235,6 +235,13 @@ public struct AetherEvent: Codable {
     public var context: EventContext
 }
 
+
+private struct PersistedQueueEnvelope: Codable {
+    let version: Int
+    let savedAt: String
+    let events: [AetherEvent]
+}
+
 public struct EventContext: Codable {
     public let library: LibraryInfo
     public var device: DeviceInfo?
@@ -856,35 +863,72 @@ public final class Aether: NSObject {
     }
 
     private func persistQueue() {
-        serialQueue.async { [weak self] in
-            guard let self = self, !self.eventQueue.isEmpty else { return }
-            let maxPersist = 1000
-            let toSave = Array(self.eventQueue.suffix(maxPersist))
-            guard let url = self.persistedQueueURL else { return }
-            do {
-                let dir = url.deletingLastPathComponent()
-                try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
-                let data = try JSONEncoder().encode(toSave)
-                try data.write(to: url, options: .atomic)
-            } catch {
-                self.log("Failed to persist queue: \(error)")
-            }
+        serialQueue.async { [weak self] in self?.persistQueueLocked() }
+    }
+
+    private func persistQueueLocked() {
+        guard let url = persistedQueueURL else { return }
+        if eventQueue.isEmpty {
+            try? FileManager.default.removeItem(at: url)
+            return
+        }
+        do {
+            let directory = url.deletingLastPathComponent()
+            try FileManager.default.createDirectory(
+                at: directory,
+                withIntermediateDirectories: true
+            )
+            let envelope = PersistedQueueEnvelope(
+                version: 1,
+                savedAt: ISO8601DateFormatter().string(from: Date()),
+                events: Array(eventQueue.suffix(Aether.maxQueueSize))
+            )
+            let data = try JSONEncoder().encode(envelope)
+            try data.write(to: url, options: .atomic)
+        } catch {
+            log("Failed to persist durable queue: \(type(of: error))")
         }
     }
 
     private func loadPersistedQueue() {
         guard let url = persistedQueueURL,
-              FileManager.default.fileExists(atPath: url.path),
-              let data = try? Data(contentsOf: url),
-              let events = try? JSONDecoder().decode([AetherEvent].self, from: data) else { return }
+              FileManager.default.fileExists(atPath: url.path) else { return }
+        do {
+            let data = try Data(contentsOf: url)
+            let decoder = JSONDecoder()
+            let events: [AetherEvent]
+            if let envelope = try? decoder.decode(PersistedQueueEnvelope.self, from: data) {
+                guard envelope.version == 1 else {
+                    throw CocoaError(.fileReadCorruptFile)
+                }
+                events = envelope.events
+            } else {
+                events = try decoder.decode([AetherEvent].self, from: data)
+            }
+            serialQueue.async { [weak self] in
+                guard let self = self else { return }
+                let capacity = max(0, Aether.maxQueueSize - self.eventQueue.count)
+                let restored = Array(events.prefix(capacity))
+                self.eventQueue.insert(contentsOf: restored, at: 0)
+                self.persistQueueLocked()
+                self.log("Restored \(restored.count) events from durable queue")
+            }
+        } catch {
+            let quarantine = url.deletingPathExtension()
+                .appendingPathExtension("corrupt.\(Int(Date().timeIntervalSince1970))")
+            try? FileManager.default.moveItem(at: url, to: quarantine)
+            log("Quarantined corrupt durable queue: \(type(of: error))")
+        }
+    }
+
+    private func requeueBatch(_ batch: [AetherEvent]) {
         serialQueue.async { [weak self] in
             guard let self = self else { return }
-            let capacity = max(0, Aether.maxQueueSize - self.eventQueue.count)
-            let toRestore = Array(events.prefix(capacity))
-            self.eventQueue.insert(contentsOf: toRestore, at: 0)
-            self.log("Restored \(toRestore.count) events from persistent queue")
+            self.eventQueue = Array(
+                (batch + self.eventQueue).prefix(Aether.maxQueueSize)
+            )
+            self.persistQueueLocked()
         }
-        try? FileManager.default.removeItem(at: url)
     }
 
     private func clearPersistedQueue() {
@@ -1242,6 +1286,7 @@ public final class Aether: NSObject {
             while self.eventQueue.count >= Aether.maxQueueSize { self.eventQueue.removeFirst() }
             self.eventQueue.append(event)
             self.eventCount += 1
+            self.persistQueueLocked()
             if let batchSize = self.config?.batchSize, self.eventQueue.count >= batchSize {
                 self.sendBatch()
             }
@@ -1253,6 +1298,7 @@ public final class Aether: NSObject {
 
         let batch = Array(eventQueue.prefix(config.batchSize))
         eventQueue.removeFirst(min(batch.count, eventQueue.count))
+        persistQueueLocked()
 
         sendBatchWithRetry(batch: batch, config: config, retryCount: 0)
     }
@@ -1286,7 +1332,7 @@ public final class Aether: NSObject {
                         self.sendBatchWithRetry(batch: batch, config: config, retryCount: retryCount + 1)
                     }
                 } else {
-                    self.serialQueue.async { self.eventQueue.insert(contentsOf: batch, at: 0) }
+                    self.requeueBatch(batch)
                 }
             } else if statusCode == 429 {
                 let retryAfter = (response as? HTTPURLResponse)?.value(forHTTPHeaderField: "Retry-After")
@@ -1295,6 +1341,9 @@ public final class Aether: NSObject {
                     DispatchQueue.global().asyncAfter(deadline: .now() + retryAfter) {
                         self.sendBatchWithRetry(batch: batch, config: config, retryCount: retryCount + 1)
                     }
+                } else {
+                    self.requeueBatch(batch)
+                    self.log("Batch retained after \(maxRetries) retries (rate limited)")
                 }
             } else if statusCode >= 500 {
                 if retryCount < maxRetries {
@@ -1303,13 +1352,15 @@ public final class Aether: NSObject {
                         self.sendBatchWithRetry(batch: batch, config: config, retryCount: retryCount + 1)
                     }
                 } else {
-                    self.log("Batch dropped after \(maxRetries) retries (server error \(statusCode))")
+                    self.requeueBatch(batch)
+                    self.log("Batch retained after \(maxRetries) retries (server error \(statusCode))")
                 }
             } else if statusCode >= 400 {
+                self.persistQueue()
+                self.healthAgent?.recordDroppedEvents(batch.count)
                 self.log("Batch rejected (client error \(statusCode)) — not retrying")
             } else {
-                // 2xx success — remove persisted snapshot so next launch does not re-deliver
-                self.clearPersistedQueue()
+                self.persistQueue()
                 self.emitBatchHealth(sentCount: batch.count, responseBody: data)
             }
         }.resume()

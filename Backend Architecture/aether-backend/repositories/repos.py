@@ -12,6 +12,7 @@ Backend selection:
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import json
 import os
 import re
@@ -727,6 +728,58 @@ class EntityRepository(BaseRepository):
         if entity_type:
             filters["entity_type"] = entity_type
         return await self.find_many(filters=filters, limit=limit)
+
+    async def count_by_tenant(self, tenant_id: str) -> int:
+        """Count the complete tenant sampling frame."""
+        return await self.count(filters={"tenant_id": tenant_id})
+
+    async def sample_by_tenant(
+        self,
+        tenant_id: str,
+        *,
+        limit: int,
+        seed_version: str,
+    ) -> list[dict]:
+        """Deterministically sample across the full tenant population.
+
+        PostgreSQL orders the entire tenant frame by a stable md5 rank before
+        applying LIMIT. The in-memory backend mirrors that contract with
+        sha256; neither path takes the first N rows.
+        """
+        limit = max(0, int(limit))
+        if limit == 0:
+            return []
+
+        pool = await self._ensure_pool()
+        if pool is None:
+            rows = [
+                row for row in self._store.values()
+                if row.get("tenant_id") == tenant_id
+            ]
+            rows.sort(
+                key=lambda row: (
+                    hashlib.sha256(
+                        f"{seed_version}:{row.get('entity_id') or row.get('id')}".encode("utf-8")
+                    ).hexdigest(),
+                    str(row.get("entity_id") or row.get("id") or ""),
+                )
+            )
+            return rows[:limit]
+
+        await self._ensure_table()
+        rows = await pool.fetch(
+            """
+            SELECT data
+            FROM entities
+            WHERE tenant_id = $1
+            ORDER BY md5($2 || ':' || COALESCE(data->>'entity_id', id)), id
+            LIMIT $3
+            """,
+            tenant_id,
+            seed_version,
+            limit,
+        )
+        return [json.loads(row["data"]) for row in rows]
 
 
 class IdentityClusterRepository(BaseRepository):

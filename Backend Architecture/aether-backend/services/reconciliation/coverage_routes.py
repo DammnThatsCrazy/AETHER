@@ -5,7 +5,7 @@ Exposes the bounded tenant coverage sweep from
 The router is mounted by ``main.py`` (import
 ``services.reconciliation.coverage_routes.router``).
 
-    GET /v1/diagnostics/sdk/coverage    Tenant SDK dimension coverage (bounded)
+    GET /v1/diagnostics/sdk/coverage    Tenant SDK dimension coverage (census or representative sample)
 """
 
 from __future__ import annotations
@@ -33,15 +33,14 @@ async def get_sdk_coverage(
     limit: int = Query(
         DEFAULT_SAMPLE_LIMIT,
         ge=1,
-        description="Max entities to sample for the tenant (clamped to a ceiling).",
+        description="Census threshold and maximum representative sample size.",
     ),
 ) -> dict:
-    """Tenant-wide SDK dimension coverage over a bounded sample of entities.
+    """Tenant-wide SDK dimension coverage via a census or deterministic sample.
 
-    Tenant-scoped and read-only. Reports, per dimension, how many sampled
-    entities are ready / stale / empty / error and a coverage ratio, plus an
-    overall coverage figure. ``sample_capped`` is True when the tenant has more
-    entities than were sampled.
+    Tenant-scoped and read-only. Small populations use an exact census; larger
+    populations use a deterministic full-frame hash sample with population,
+    seed, methodology, and Wilson confidence evidence in the response.
     """
     tenant = request.state.tenant
     tenant.require_permission("read")

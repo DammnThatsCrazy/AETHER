@@ -409,6 +409,14 @@ function MessagesTab({ campaignId }: { campaignId: string }) {
   const selected = (modes[mode] as AnyRecord) ?? {};
   const delivery = (funnel?.delivery as AnyRecord) ?? {};
   const quality = (funnel?.quality as AnyRecord) ?? {};
+  const rateResults = [
+    selected.open_rate_result,
+    selected.click_rate_result,
+    mode === 'human_qualified' ? selected.reply_rate_result : null,
+  ].filter(Boolean) as AnyRecord[];
+  const limitedRates = rateResults.filter(
+    result => String(result.value_state ?? 'observed') !== 'observed',
+  );
 
   return (
     <div className="space-y-4">
@@ -438,12 +446,25 @@ function MessagesTab({ campaignId }: { campaignId: string }) {
           : 'Provider-reported numbers count every provider event, including machine-generated opens and clicks.'}
       </p>
 
+      {limitedRates.length > 0 && (
+        <div className="rounded-md border border-status-warning/40 bg-status-warning/10 px-3 py-2 text-xs text-text-secondary">
+          Rate values are withheld until the governed minimum sample is met.
+          Current states: {limitedRates.map(result => String(result.value_state)).join(', ')}.
+        </div>
+      )}
+
       <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
         <Metric label="Sent" value={Number(selected.sent ?? 0).toLocaleString()} />
         <Metric label="Delivered" value={Number(selected.delivered ?? 0).toLocaleString()} />
         <Metric label={mode === 'human_qualified' ? 'Human opens' : 'Reported opens'} value={Number(selected.opens ?? 0).toLocaleString()} />
         <Metric label={mode === 'human_qualified' ? 'Human clicks' : 'Reported clicks'} value={Number(selected.clicks ?? 0).toLocaleString()} />
         <Metric label="Replies" value={Number(((modes.human_qualified as AnyRecord) ?? {}).replies ?? 0).toLocaleString()} />
+      </div>
+
+      <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+        <Metric label="Open rate" value={fmtPct(selected.open_rate as number | null)} />
+        <Metric label="Click rate" value={fmtPct(selected.click_rate as number | null)} />
+        <Metric label="Reply rate" value={fmtPct(selected.reply_rate as number | null)} />
       </div>
 
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">

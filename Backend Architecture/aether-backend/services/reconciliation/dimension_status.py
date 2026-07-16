@@ -22,7 +22,7 @@ from shared.dimension_state import (
 )
 from shared.logger.logger import get_logger
 
-from services.reconciliation.expectations import EXPECTATION_REGISTRY, get_expectation
+from services.reconciliation.expectations import REGISTERED_DIMENSIONS, get_expectation
 
 logger = get_logger("aether.reconciliation.dimension_status")
 
@@ -80,7 +80,7 @@ async def _dimension_reading(
     aggregator: Any, dimension: str, entity_id: str, tenant_id: str, *, now: datetime,
 ) -> DimensionEnvelope:
     """Read one dimension and map it to an envelope using its expectation."""
-    exp = get_expectation(dimension)
+    exp = get_expectation(dimension, tenant_id)
     method = getattr(aggregator, exp.source_method or dimension, None)
     if method is None:  # pragma: no cover — defensive
         return envelope_for_error(dimension, message=f"no aggregator method for {dimension!r}")
@@ -117,7 +117,7 @@ async def compute_data_status(
     """
     now = now or datetime.now(timezone.utc)
     envelopes: list[DimensionEnvelope] = []
-    for dimension in EXPECTATION_REGISTRY:
+    for dimension in REGISTERED_DIMENSIONS:
         envelopes.append(
             await _dimension_reading(aggregator, dimension, entity_id, tenant_id, now=now)
         )
@@ -146,7 +146,8 @@ async def compute_reconciliation(
     """
     now = now or datetime.now(timezone.utc)
     rows: list[dict] = []
-    for dimension, exp in EXPECTATION_REGISTRY.items():
+    for dimension in REGISTERED_DIMENSIONS:
+        exp = get_expectation(dimension, tenant_id)
         env = await _dimension_reading(aggregator, dimension, entity_id, tenant_id, now=now)
         met = env.state in ("ready", "not_applicable")
         rows.append({

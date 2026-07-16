@@ -131,7 +131,7 @@ items:
     evidence_required: [make validate-route-registry, pytest route registry + kyber gate output]
     docs_required: [docs/FOUNDING-TENANT-PRODUCTION.md]
     owner: trust
-    status: implemented
+    status: implementation_in_progress
     blocked_by: []
     exception: >
       Deferred to follow-ups: runtime default-deny for flag-gated routers (the CI
@@ -157,20 +157,11 @@ items:
       - Backend Architecture/aether-backend/config/settings.py
     tests_required: [tests/unit/test_consent_authority.py]
     evidence_required: [pytest consent-authority output, alembic upgrade/downgrade/upgrade]
-    docs_required: [docs/CONSENT.md, docs/PRIVACY.md]
+    docs_required: [docs/source-of-truth/INGESTION_CONTRACT.md, docs/COMPLIANCE.md]
     owner: privacy
     status: implemented
     blocked_by: []
-    exception: >
-      Deferred to follow-ups (see services/consent/authority.py DEFERRED note):
-      request-time DNT/GPC header suppression and per-event fingerprint-signal
-      detection. GPC/DNT and fingerprinting authorization ARE enforced from the
-      recorded consent-receipt / tenant-compliance-profile state; wiring the live
-      Sec-GPC / DNT request headers and request-time fingerprint payload
-      detection into the decision functions is the remaining work. The
-      ingestion hot-path enforcement ships behind
-      AUTHORITATIVE_CONSENT_ENFORCEMENT_ENABLED (default ON in staging/prod, OFF
-      in local/dev).
+    exception: null
     last_verified_commit: null
 
   - id: FT-4-RUNTIME-ROLES
@@ -190,7 +181,7 @@ items:
     evidence_required: [pytest tests/unit/test_runtime_roles.py output, Settings() production role=all + memory-backend rejection]
     docs_required: [docs/BACKEND-EXECUTION-MODEL.md]
     owner: platform
-    status: implemented
+    status: implementation_in_progress
     blocked_by: []
     exception: >
       Deferred to follow-ups: dedicated supervised worker loops + stream-consumer
@@ -221,18 +212,14 @@ items:
     evidence_required: [pytest ingestion v2 output, alembic upgrade/downgrade/upgrade round-trip]
     docs_required: [docs/source-of-truth/INGESTION_CONTRACT.md]
     owner: ingestion
-    status: implemented
+    status: implementation_in_progress
     blocked_by: []
     exception: >
-      Additive and flag-gated OFF by default (INGESTION_V2_ENABLED /
-      INGESTION_V2_CANARY_TENANTS) — the V1 /v1/batch path is unchanged. The V2
-      path writes typed Bronze + the transactional outbox atomically; DB
-      uniqueness (tenant_id,event_id,schema_version) is the idempotency source of
-      truth (Redis is not consulted). Deferred to PR 6: the outbox RELAY worker
-      that drains event_outbox to the bus and the worker-side stream processing
-      (identity resolution + downstream fan-out) that V1 currently runs in-request.
-      Deployment-context validation (External Agent Telemetry Plane, flag-gated
-      OFF) is not re-run on the V2 branch.
+      The V1 and V2 branches now share canonical schema, consent, sensitive-field,
+      deployment-context, and classification validation. The V2 path writes typed
+      Bronze plus the transactional outbox atomically with database uniqueness as
+      its idempotency authority. The outbox relay and worker-side downstream fan-out
+      remain owned by FT-6-OUTBOX-RELAY, so this item is not terminal.
     last_verified_commit: null
 
   - id: FT-6-OUTBOX-RELAY
@@ -310,9 +297,16 @@ items:
     evidence_required: [terraform validation output]
     docs_required: [docs/DEPLOYMENT-PROFILES.md, docs/PRODUCTION-DEPLOYMENT.md]
     owner: platform
-    status: not_started
+    status: implementation_in_progress
     blocked_by: [FT-COST-POLICY-DATA]
-    exception: null
+    exception: >
+      Provider-mocked configuration plans now evaluate all four checked-in
+      profiles in GitHub and preserve immutable evidence. Environment-authoritative
+      OIDC plans remain externally blocked until the complete AWS, remote-state,
+      ACM/domain/alert, Auth0, and application-URL secret set is configured.
+      Pushes to main fail closed without that remote evidence. Static frontend
+      replacement and immutable application-artifact promotion are also open, so
+      this ledger item is intentionally non-terminal.
     last_verified_commit: null
 
   - id: FT-10-SDK-CONFORMANCE-EVIDENCE
@@ -331,9 +325,13 @@ items:
     evidence_required: [evidence bundle]
     docs_required: [docs/RELEASE-EVIDENCE.md]
     owner: sdk
-    status: not_started
+    status: implementation_in_progress
     blocked_by: [FT-1-NO-HUMAN-API-KEYS]
-    exception: null
+    exception: >
+      iOS and Android queues now persist atomically, recover after restart, and
+      retain exhausted transient failures under bounded storage. Full cross-SDK
+      conformance evidence, remaining frontend session migration, and the final
+      evidence bundle are still open, so this item is intentionally non-terminal.
     last_verified_commit: null
 
   # ---- External actions (outside repo-executable completion) --------------

@@ -53,11 +53,14 @@ async def test_empty_tenant_is_wellformed_not_error():
     assert result["kind"] == "sdk_coverage"
     assert result["entities_sampled"] == 0
     assert result["sample_capped"] is False
-    assert result["overall_coverage"] == 0.0
+    assert result["overall_coverage"] is None
     assert {d["dimension"] for d in result["dimensions"]} == set(REGISTERED_DIMENSIONS)
     for d in result["dimensions"]:
         assert d["ready"] == d["stale"] == d["empty"] == d["error"] == 0
-        assert d["coverage_ratio"] == 0.0
+        assert d["coverage_ratio"] is None
+    assert result["population_size"] == 0
+    assert result["methodology"] == "full_population_census"
+    assert result["overall_value_state"] == "missing"
     assert "computed_at" in result
 
 
@@ -138,8 +141,12 @@ async def test_sample_cap_flags_truncated_sample():
     result = await compute_tenant_coverage(tid, aggregator=agg, sample_limit=2)
 
     assert result["sample_capped"] is True
+    assert result["population_size"] == 5
     assert result["entities_sampled"] == 2
     assert result["sample_limit"] == 2
+    assert result["methodology"] == "deterministic_hash_sample"
+    assert result["seed_version"] == "sdk-coverage-v1"
+    assert _dim(result, "wallets")["confidence_interval"]["method"] == "wilson_score"
     _assert_partition(result)
 
 
@@ -153,4 +160,26 @@ async def test_sample_cap_false_when_under_limit():
     result = await compute_tenant_coverage(tid, aggregator=agg, sample_limit=200)
 
     assert result["sample_capped"] is False
+    assert result["population_size"] == 3
     assert result["entities_sampled"] == 3
+    assert result["methodology"] == "full_population_census"
+
+
+@pytest.mark.asyncio
+async def test_hash_sample_is_reproducible_over_full_population():
+    agg = Profile360Aggregator()
+    tenant_id = "tenant-representative"
+    for index in range(20):
+        await _make_entity(agg, f"entity-{index:02d}", tenant_id)
+
+    first = await agg._entities.sample_by_tenant(
+        tenant_id, limit=5, seed_version="sdk-coverage-v1"
+    )
+    second = await agg._entities.sample_by_tenant(
+        tenant_id, limit=5, seed_version="sdk-coverage-v1"
+    )
+
+    first_ids = [row["entity_id"] for row in first]
+    assert first_ids == [row["entity_id"] for row in second]
+    assert len(set(first_ids)) == 5
+    assert set(first_ids) != {f"entity-{index:02d}" for index in range(5)}

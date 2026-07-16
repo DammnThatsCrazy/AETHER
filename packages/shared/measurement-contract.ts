@@ -14,6 +14,10 @@
 | 'revenue'
 | 'touchpoints'
 | 'journey_completion_rate'
+| 'email_open_rate'
+| 'email_click_rate'
+| 'email_reply_rate'
+| 'machine_event_rate'
         ;
 
       /** Definition of a single measurable metric. */
@@ -35,8 +39,8 @@
   version: '1',
   unit: 'ratio',
   description: 'Share of journeys that reached a conversion.',
-  lower: 0.0,
-  upper: 1.0,
+  lower: 0,
+  upper: 1,
   allowsProbability: false,
   minSample: 30,
 },
@@ -45,7 +49,7 @@
   version: '1',
   unit: 'count',
   description: 'Conversions credited under the active attribution model.',
-  lower: 0.0,
+  lower: 0,
   upper: null,
   allowsProbability: false,
   minSample: 1,
@@ -55,7 +59,7 @@
   version: '1',
   unit: 'currency',
   description: 'Attributed revenue over the measurement window.',
-  lower: 0.0,
+  lower: 0,
   upper: null,
   allowsProbability: false,
   minSample: 1,
@@ -65,7 +69,7 @@
   version: '1',
   unit: 'count',
   description: 'Distinct marketing touchpoints observed in the window.',
-  lower: 0.0,
+  lower: 0,
   upper: null,
   allowsProbability: false,
   minSample: 1,
@@ -75,9 +79,49 @@
   version: '1',
   unit: 'ratio',
   description: 'Share of started journeys that completed.',
-  lower: 0.0,
-  upper: 1.0,
+  lower: 0,
+  upper: 1,
   allowsProbability: false,
   minSample: 20,
+},
+{
+  name: 'email_open_rate',
+  version: '1',
+  unit: 'ratio',
+  description: 'Share of delivered campaign messages with a qualified open.',
+  lower: 0,
+  upper: 1,
+  allowsProbability: false,
+  minSample: 30,
+},
+{
+  name: 'email_click_rate',
+  version: '1',
+  unit: 'ratio',
+  description: 'Share of delivered campaign messages with a qualified click.',
+  lower: 0,
+  upper: 1,
+  allowsProbability: false,
+  minSample: 30,
+},
+{
+  name: 'email_reply_rate',
+  version: '1',
+  unit: 'ratio',
+  description: 'Share of delivered campaign messages with a human reply.',
+  lower: 0,
+  upper: 1,
+  allowsProbability: false,
+  minSample: 30,
+},
+{
+  name: 'machine_event_rate',
+  version: '1',
+  unit: 'ratio',
+  description: 'Share of campaign communication events classified as machine generated.',
+  lower: 0,
+  upper: 1,
+  allowsProbability: false,
+  minSample: 30,
 },
       ] as const;

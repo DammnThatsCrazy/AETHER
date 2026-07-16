@@ -441,7 +441,39 @@ Email-aware Campaign 360 endpoints backed by `silver_comms_facts` and the
 | GET `/{campaign_id}/messages/{external_message_id}` | Message detail: dimension record, engagement stats, link rollup |
 | GET `/{campaign_id}/links` | Link performance: human-qualified clicks and unique clickers per link |
 | GET `/{campaign_id}/comms-population` | Recipient population with communication stages (attempted → delivered → engaged → replied) and composable flag filters (`bounced`, `complained`, `unsubscribed`, `suppressed`, `human_qualified`); alias-keyed rows with Profile360 links |
-| GET `/{campaign_id}/comms-funnel` | Email funnel in two modes — `provider_reported` (every provider event) and `human_qualified` (suspected machine activity and automated replies excluded) — plus delivery detail (bounces, complaints, unsubscribes, suppressions) and quality (machine-event rate) |
+| GET `/{campaign_id}/comms-funnel` | Email funnel in two modes — `provider_reported` (every provider event) and `human_qualified` (suspected machine activity and automated replies excluded) — plus delivery detail (bounces, complaints, unsubscribes, suppressions), quality (machine-event rate), and governed `*_rate_result` objects |
+
+Each communication rate is registry-governed. The legacy scalar fields
+(`open_rate`, `click_rate`, `reply_rate`, and `machine_event_rate`) are
+nullable and mirror the corresponding result's `value`. Each
+`*_rate_result` and entry in `measurement_integrity` has this shape:
+
+```json
+{
+  "metric_name": "email_open_rate",
+  "metric_version": "1",
+  "value": null,
+  "value_state": "observed | insufficient_sample | missing",
+  "unit": "ratio",
+  "sufficiency": {
+    "sufficient": false,
+    "observations": 4,
+    "minimum_observations": 20
+  },
+  "uncertainty": null,
+  "lineage": {
+    "source": "comms_facts",
+    "tenant_id": "string",
+    "campaign_id": "string",
+    "denominator": "delivered"
+  }
+}
+```
+
+When the governed minimum sample is not met, `value` and the matching legacy
+scalar are `null`; consumers must use `value_state` and `sufficiency`
+instead of interpreting the absence as zero. Sufficient rates include a Wilson
+interval in `uncertainty`.
 
 ---
 

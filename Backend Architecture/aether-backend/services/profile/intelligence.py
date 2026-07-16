@@ -23,6 +23,7 @@ from typing import Any, Optional
 
 from shared.common.common import utc_now
 from shared.logger.logger import get_logger
+from services.profile.read_result import DimensionReadResult
 from services.policy import consent_policy_engine
 
 # Lazy type alias — avoid module-level lake/repos imports so tests can import
@@ -92,15 +93,16 @@ def _envelope(
     return result
 
 
-async def _safe(label: str, coro):
+async def _safe(label: str, coro) -> DimensionReadResult[Any]:
+    """Return typed availability; empty values are not dependency failures."""
     try:
-        return await coro
+        return DimensionReadResult.success(label, await coro)
     except Exception as exc:  # noqa: BLE001
         logger.warning(
             "intelligence_dimension_failed",
-            extra={"dimension": label, "error": str(exc)},
+            extra={"dimension": label, "error_code": type(exc).__name__},
         )
-        return []
+        return DimensionReadResult.unavailable(label, type(exc).__name__)
 
 
 def _val(r: dict) -> Any:
@@ -193,7 +195,7 @@ class IntelligenceAggregator:
     async def tier(self, entity_id: str, tenant_id: str, window: str = "30d") -> dict:
         """Entity tier (Whale/Shark/Dolphin/Fish/Shrimp) + percentile rank."""
         cutoff = _window_cutoff(window)
-        rows = _filter(await _safe("tier", self._tiers.get_metrics(entity_id)), tenant_id, cutoff)
+        rows = _filter((await _safe("tier", self._tiers.get_metrics(entity_id))).value_or([]), tenant_id, cutoff)
         items = []
         for r in rows:
             v, d = _val(r), _dims(r)
@@ -213,7 +215,7 @@ class IntelligenceAggregator:
     async def asset_composition(self, entity_id: str, tenant_id: str, window: str = "30d") -> dict:
         """On-chain portfolio composition by asset category."""
         cutoff = _window_cutoff(window)
-        rows = _filter(await _safe("asset_composition", self._asset_composition.get_metrics(entity_id)), tenant_id, cutoff)
+        rows = _filter((await _safe("asset_composition", self._asset_composition.get_metrics(entity_id))).value_or([]), tenant_id, cutoff)
         items = []
         total_value = 0.0
         for r in rows:
@@ -242,7 +244,7 @@ class IntelligenceAggregator:
     async def pnl(self, entity_id: str, tenant_id: str, window: str = "30d") -> dict:
         """Realized + unrealized PNL and TVL delta."""
         cutoff = _window_cutoff(window)
-        rows = _filter(await _safe("pnl", self._pnl.get_metrics(entity_id)), tenant_id, cutoff)
+        rows = _filter((await _safe("pnl", self._pnl.get_metrics(entity_id))).value_or([]), tenant_id, cutoff)
         items = []
         for r in rows:
             v, d = _val(r), _dims(r)
@@ -264,7 +266,7 @@ class IntelligenceAggregator:
     async def trading_profile(self, entity_id: str, tenant_id: str, window: str = "30d") -> dict:
         """On-chain trading behavior: favorite pairs, protocol loyalty, gas strategy."""
         cutoff = _window_cutoff(window)
-        rows = _filter(await _safe("trading_profile", self._trading_profile.get_metrics(entity_id)), tenant_id, cutoff)
+        rows = _filter((await _safe("trading_profile", self._trading_profile.get_metrics(entity_id))).value_or([]), tenant_id, cutoff)
         items = []
         for r in rows:
             v, d = _val(r), _dims(r)
@@ -288,7 +290,7 @@ class IntelligenceAggregator:
     async def location_history(self, entity_id: str, tenant_id: str, window: str = "30d", limit: int = 20) -> dict:
         """City-level location history with classification."""
         cutoff = _window_cutoff(window)
-        rows = _filter(await _safe("location_history", self._location_history.get_metrics(entity_id)), tenant_id, cutoff)
+        rows = _filter((await _safe("location_history", self._location_history.get_metrics(entity_id))).value_or([]), tenant_id, cutoff)
         items = []
         for r in rows:
             v, d = _val(r), _dims(r)
@@ -313,7 +315,7 @@ class IntelligenceAggregator:
     async def temporal_heatmap(self, entity_id: str, tenant_id: str, window: str = "30d") -> dict:
         """24x7 activity density matrix + streak data."""
         cutoff = _window_cutoff(window)
-        rows = _filter(await _safe("temporal_heatmap", self._temporal_heatmap.get_metrics(entity_id)), tenant_id, cutoff)
+        rows = _filter((await _safe("temporal_heatmap", self._temporal_heatmap.get_metrics(entity_id))).value_or([]), tenant_id, cutoff)
         items = []
         for r in rows:
             v, d = _val(r), _dims(r)
@@ -335,7 +337,7 @@ class IntelligenceAggregator:
     async def social_intelligence(self, entity_id: str, tenant_id: str, window: str = "30d") -> dict:
         """Cross-platform social aggregation."""
         cutoff = _window_cutoff(window)
-        rows = _filter(await _safe("social_intelligence", self._social.get_metrics(entity_id)), tenant_id, cutoff)
+        rows = _filter((await _safe("social_intelligence", self._social.get_metrics(entity_id))).value_or([]), tenant_id, cutoff)
         items = []
         for r in rows:
             v, d = _val(r), _dims(r)
@@ -359,7 +361,7 @@ class IntelligenceAggregator:
     async def journey_economics(self, entity_id: str, tenant_id: str, window: str = "30d", limit: int = 20) -> dict:
         """Per-journey ROAS, CPA, LTV, and retarget score."""
         cutoff = _window_cutoff(window)
-        rows = _filter(await _safe("journey_economics", self._journey_econ.get_metrics(entity_id)), tenant_id, cutoff)
+        rows = _filter((await _safe("journey_economics", self._journey_econ.get_metrics(entity_id))).value_or([]), tenant_id, cutoff)
         items = []
         for r in rows:
             v, d = _val(r), _dims(r)
@@ -384,7 +386,7 @@ class IntelligenceAggregator:
     async def device_performance(self, entity_id: str, tenant_id: str, window: str = "30d") -> dict:
         """Conversion rate and average conversion value per device type."""
         cutoff = _window_cutoff(window)
-        rows = _filter(await _safe("device_performance", self._journey_econ.get_metrics(entity_id)), tenant_id, cutoff)
+        rows = _filter((await _safe("device_performance", self._journey_econ.get_metrics(entity_id))).value_or([]), tenant_id, cutoff)
         device_stats: dict[str, dict] = {}
         for r in rows:
             d = _dims(r)
@@ -423,7 +425,7 @@ class IntelligenceAggregator:
     ) -> dict:
         """Staged conversion funnel: Impression → Click → Visit → Connect → Swap → Liquidity."""
         cutoff = _window_cutoff(window)
-        rows = _filter(await _safe("funnel", self._journey_econ.get_metrics(entity_id)), tenant_id, cutoff)
+        rows = _filter((await _safe("funnel", self._journey_econ.get_metrics(entity_id))).value_or([]), tenant_id, cutoff)
         if campaign_id:
             rows = [r for r in rows if _dims(r).get("campaign_id") == campaign_id]
         stage_order = ["Impression", "Click", "Visit", "Connect", "Swap", "Liquidity"]
@@ -448,7 +450,7 @@ class IntelligenceAggregator:
     async def time_to_convert(self, entity_id: str, tenant_id: str, window: str = "30d") -> dict:
         """Median time between each funnel stage conversion."""
         cutoff = _window_cutoff(window)
-        rows = _filter(await _safe("time_to_convert", self._journey_econ.get_metrics(entity_id)), tenant_id, cutoff)
+        rows = _filter((await _safe("time_to_convert", self._journey_econ.get_metrics(entity_id))).value_or([]), tenant_id, cutoff)
         stage_times: dict[str, list[float]] = {}
         for r in rows:
             d = _dims(r)
@@ -486,7 +488,7 @@ class IntelligenceAggregator:
         limit: int = 20,
     ) -> dict:
         """Pending and historical retargeting recommendations for analyst review."""
-        rows = _filter(await _safe("retarget_recs", self._journey_econ.get_metrics(entity_id)), tenant_id, None)
+        rows = _filter((await _safe("retarget_recs", self._journey_econ.get_metrics(entity_id))).value_or([]), tenant_id, None)
         items = []
         for r in rows:
             d = _dims(r)
@@ -513,7 +515,10 @@ class IntelligenceAggregator:
 
     async def web2(self, entity_id: str, tenant_id: str, window: str = "30d") -> dict:
         """TradFi portfolio, bank accounts, credit signals (requires 'credit' consent)."""
-        consent = await _safe("web2.consent", self._consent.get_consent(tenant_id, entity_id))
+        consent_read = await _safe(
+            "web2.consent", self._consent.get_consent(tenant_id, entity_id)
+        )
+        consent = consent_read.value_or(None)
         grants: list[str] = []
         snapshot_id = None
         if isinstance(consent, dict):
@@ -525,12 +530,13 @@ class IntelligenceAggregator:
         # Central consent PolicyDecision — records explainable evidence
         # (policy_decision_id) for this sensitive credit-surface access. The gate
         # behavior is unchanged; the decision is additive.
-        decision = await _safe("web2.policy", consent_policy_engine.decide(
+        decision_read = await _safe("web2.policy", consent_policy_engine.decide(
             tenant_id=tenant_id, actor_id=tenant_id, action="render_profile360",
             resource_type="profile360.web2", resource_id=entity_id, subject_ref=entity_id,
             purpose="credit", granted_purposes=grants, consent_snapshot_id=snapshot_id,
             redactable_fields=["credit_signals", "tradfi_portfolio", "bank_accounts"],
         ))
+        decision = decision_read.value_or(None)
         policy_decision_id = getattr(decision, "policy_decision_id", None)
         has_consent = bool(getattr(decision, "allowed", "credit" in grants))
         if not has_consent:
@@ -543,12 +549,12 @@ class IntelligenceAggregator:
             )
 
         cutoff = _window_cutoff(window)
-        tradfi_rows, credit_rows = await asyncio.gather(
+        tradfi_read, credit_read = await asyncio.gather(
             _safe("web2.tradfi", self._tradfi_portfolio.get_metrics(entity_id)),
             _safe("web2.credit", self._credit_signals.get_metrics(entity_id)),
         )
-        tradfi_rows = _filter(tradfi_rows, tenant_id, cutoff)
-        credit_rows = _filter(credit_rows, tenant_id, cutoff)
+        tradfi_rows = _filter(tradfi_read.value_or([]), tenant_id, cutoff)
+        credit_rows = _filter(credit_read.value_or([]), tenant_id, cutoff)
         items = []
         for r in tradfi_rows:
             v, d = _val(r), _dims(r)
@@ -573,7 +579,7 @@ class IntelligenceAggregator:
     async def protocol_metrics(self, entity_id: str, tenant_id: str, window: str = "30d") -> dict:
         """Protocol TVL history, volume, and fee revenue."""
         cutoff = _window_cutoff(window)
-        rows = _filter(await _safe("protocol_metrics", self._web3_metrics.get_metrics(entity_id)), tenant_id, cutoff)
+        rows = _filter((await _safe("protocol_metrics", self._web3_metrics.get_metrics(entity_id))).value_or([]), tenant_id, cutoff)
         items = []
         for r in rows:
             v, d = _val(r), _dims(r)
@@ -603,7 +609,7 @@ class IntelligenceAggregator:
     ) -> dict:
         """Governance proposals, votes, and participation rate."""
         cutoff = _window_cutoff(window)
-        all_rows = _filter(await _safe("governance_activity", self._governance.get_metrics(entity_id)), tenant_id, cutoff)
+        all_rows = _filter((await _safe("governance_activity", self._governance.get_metrics(entity_id))).value_or([]), tenant_id, cutoff)
         items = []
         for r in all_rows:
             v, d = _val(r), _dims(r)

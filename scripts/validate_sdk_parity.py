@@ -97,6 +97,21 @@ def main() -> int:
     _require("python", python, ["parse_batch_health", "dropped_by_consent", "queue_depth"],
              "batch health metrics [§2.8]")
 
+
+    # Native durable queues must survive restart and exhausted transient retries.
+    _require(
+        "ios",
+        ios,
+        ["PersistedQueueEnvelope", "persistQueueLocked", "requeueBatch", "Quarantined corrupt durable queue"],
+        "durable crash-safe queue [§2.6]",
+    )
+    _require(
+        "android",
+        android,
+        ["QUEUE_FORMAT_VERSION", "persistQueue", "requeueBatch", "Quarantined corrupt durable queue"],
+        "durable crash-safe queue [§2.6]",
+    )
+
     # §2.6 — the canonical, machine-checkable parity matrix must exist and parse.
     parity = PKG / "shared" / "sdk-parity.json"
     if not parity.exists():
@@ -124,7 +139,7 @@ def _report() -> int:
             "See docs/source-of-truth/SDK_RUNTIME_PARITY.md."
         )
         return 1
-    print("SDK runtime parity validation OK (observe / manifest-verify / batch-health present).")
+    print("SDK runtime parity validation OK (observe / manifest-verify / batch-health / native durability present).")
     return 0
 
 

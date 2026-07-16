@@ -52,7 +52,14 @@ from services.ingestion.bronze_bulk import (
     OutboxEvent,
     ingest_many,
 )
-from services.ingestion.acquisition_privacy import sanitize_acquisition_payload
+from services.ingestion.validation import (
+    EventValidationResult,
+    RequestPrivacySignals,
+    build_normalized_payload as _validated_normalized_payload,
+    format_rejection,
+    get_event_family as _validated_event_family,
+    validate_event,
+)
 
 logger = get_logger("aether.service.ingestion.batch")
 router = APIRouter(prefix="/v1", tags=["Ingestion"])
@@ -257,9 +264,14 @@ async def ingest_batch(
     # Flag-gated, default OFF. When enabled globally, or when this tenant is in
     # the canary list, route to the transactional typed-Bronze + outbox path.
     # The V1 path below is left entirely unchanged for every other tenant.
+    request_privacy = RequestPrivacySignals.from_headers(getattr(request, "headers", {}))
     iv2 = settings.ingestion_v2
     if iv2.enabled or tenant.tenant_id in iv2.canary_tenants:
-        return await _ingest_batch_v2(body=body, tenant=tenant)
+        return await _ingest_batch_v2(
+            body=body,
+            tenant=tenant,
+            request_privacy=request_privacy,
+        )
 
     received_at = utc_now().isoformat()
     batch_id = str(uuid.uuid4())
@@ -274,6 +286,14 @@ async def ingest_batch(
     granted_consents: frozenset[str] = frozenset(body.consents or [])
 
     for sdk_event in body.batch:
+        validation = await validate_event(
+            sdk_event=sdk_event,
+            tenant_id=tenant.tenant_id,
+            batch_id=batch_id,
+            received_at=received_at,
+            granted_consents=granted_consents,
+            request_privacy=request_privacy,
+        )
         result = await _process_single_event(
             sdk_event=sdk_event,
             tenant_id=tenant.tenant_id,
@@ -281,18 +301,14 @@ async def ingest_batch(
             received_at=received_at,
             cache=registry.cache,
             granted_consents=granted_consents,
+            request_privacy=request_privacy,
+            validation=validation,
         )
         results.append(result)
         if result.status == "accepted":
-            # Build normalized payload for bus and Bronze
-            normalized = sanitize_acquisition_payload(
-                _build_normalized_payload(
-                    sdk_event=sdk_event,
-                    tenant_id=tenant.tenant_id,
-                    batch_id=batch_id,
-                    received_at=received_at,
-                )
-            )
+            normalized = validation.normalized_event
+            if normalized is None:  # pragma: no cover - typed invariant
+                raise RuntimeError("accepted validation missing normalized event")
             accepted_events.append(Event(
                 topic=Topic.SDK_EVENTS_VALIDATED,
                 tenant_id=tenant.tenant_id,
@@ -436,7 +452,11 @@ async def ingest_batch(
 
 # ── V2 path (PR 5): transactional typed Bronze + outbox ───────────────────────
 
-async def _ingest_batch_v2(body: BatchRequest, tenant) -> dict:
+async def _ingest_batch_v2(
+    body: BatchRequest,
+    tenant,
+    request_privacy: RequestPrivacySignals = RequestPrivacySignals(),
+) -> dict:
     """Transactional /v1/batch path.
 
     Authenticate/validate/scrub/consent are handled exactly as V1 (reusing the
@@ -459,22 +479,31 @@ async def _ingest_batch_v2(body: BatchRequest, tenant) -> dict:
     candidates: list[BronzeSDKEvent] = []
     candidate_outbox: list[OutboxEvent] = []
     candidate_positions: list[int] = []  # results index for each candidate
+    candidate_deployments: list[Optional[str]] = []
 
     for sdk_event in body.batch:
-        rejection = _classify_event_v2(sdk_event, tenant.tenant_id, granted_consents)
-        if rejection is not None:
-            results.append(rejection)
+        validation = await validate_event(
+            sdk_event=sdk_event,
+            tenant_id=tenant.tenant_id,
+            batch_id=batch_id,
+            received_at=received_at,
+            granted_consents=granted_consents,
+            request_privacy=request_privacy,
+        )
+        if not validation.allowed:
+            results.append(EventResult(
+                id=sdk_event.id,
+                status="rejected",
+                reason=format_rejection(validation, sdk_event),
+            ))
             continue
 
         # Placeholder — final accepted/duplicate resolved by the bulk ingest.
         results.append(EventResult(id=sdk_event.id, status="accepted"))
 
-        normalized = _build_normalized_payload(
-            sdk_event=sdk_event,
-            tenant_id=tenant.tenant_id,
-            batch_id=batch_id,
-            received_at=received_at,
-        )
+        normalized = validation.normalized_event
+        if normalized is None:  # pragma: no cover - typed invariant
+            raise RuntimeError("accepted validation missing normalized event")
         entity_id = normalized.get("user_id") or normalized.get("anonymous_id", "")
         candidates.append(BronzeSDKEvent(
             tenant_id=tenant.tenant_id,
@@ -501,6 +530,7 @@ async def _ingest_batch_v2(body: BatchRequest, tenant) -> dict:
             payload=normalized,
         ))
         candidate_positions.append(len(results) - 1)
+        candidate_deployments.append(validation.deployment_id)
 
     if candidates:
         try:
@@ -514,11 +544,16 @@ async def _ingest_batch_v2(body: BatchRequest, tenant) -> dict:
                 "Ingestion temporarily unavailable — please retry"
             )
         # bulk.statuses is aligned to candidate input order; map back to results.
-        for pos, status in zip(candidate_positions, bulk.statuses):
-            results[pos] = EventResult(
-                id=results[pos].id,
-                status="accepted" if status == "accepted" else "duplicate",
-            )
+        for pos, status, deployment_id in zip(
+            candidate_positions, bulk.statuses, candidate_deployments
+        ):
+            normalized_status = "accepted" if status == "accepted" else "duplicate"
+            results[pos] = EventResult(id=results[pos].id, status=normalized_status)
+            if deployment_id and normalized_status == "accepted":
+                from services.agent.deployments import record_event_outcome
+                await record_event_outcome(
+                    tenant.tenant_id, deployment_id, "accepted"
+                )
 
     n_accepted = sum(1 for r in results if r.status == "accepted")
     n_duplicates = sum(1 for r in results if r.status == "duplicate")
@@ -547,77 +582,6 @@ async def _ingest_batch_v2(body: BatchRequest, tenant) -> dict:
     ).model_dump()
 
 
-def _classify_event_v2(
-    sdk_event: BaseEvent,
-    tenant_id: str,
-    granted_consents: frozenset[str],
-) -> Optional[EventResult]:
-    """Validate + scrub + consent-gate a single event for the V2 path.
-
-    Mirrors steps 1–4b of ``_process_single_event`` (type validation, observe-only
-    invariant, sensitive-field scrubbing, per-event + batch consent) but performs
-    NO cache idempotency check — in V2 the database's composite-unique index is
-    the idempotency source of truth. Returns a rejection ``EventResult`` when the
-    event must be rejected, or ``None`` when it passes and should be persisted.
-    """
-    # 1. Event type validation
-    if sdk_event.type not in CANONICAL_EVENT_TYPES:
-        metrics.increment("ingestion_validation_failed_total", labels={"reason": "unknown_type"})
-        return EventResult(
-            id=sdk_event.id,
-            status="rejected",
-            reason=f"{REJECT_UNKNOWN_TYPE}:{sdk_event.type}",
-        )
-
-    # 2. Observe-only invariant: reject any event claiming Aether executed
-    if sdk_event.properties and sdk_event.properties.get("execution_by_aether") is True:
-        metrics.increment("ingestion_validation_failed_total", labels={"reason": "execution_by_aether"})
-        return EventResult(id=sdk_event.id, status="rejected", reason=REJECT_EXECUTION_CLAIM)
-
-    # 3. Sensitive field scrubbing (recursive backend defense)
-    if sdk_event.properties:
-        scrubbed, had_sensitive = _scrub_sensitive_fields(sdk_event.properties)
-        if had_sensitive:
-            logger.warning(
-                "Sensitive fields scrubbed in event %s (tenant=%s type=%s)",
-                sdk_event.id, tenant_id, sdk_event.type,
-            )
-            metrics.increment("ingestion_sensitive_scrub_total")
-            sdk_event.properties = scrubbed
-
-    # 4a. Per-event consent snapshot (authoritative) — block only on explicit False.
-    if sdk_event.type != "consent":
-        required_purpose = EVENT_CONSENT_PURPOSE.get(sdk_event.type)
-        if required_purpose and sdk_event.context:
-            consent_obj = sdk_event.context.consent
-            if isinstance(consent_obj, dict) and consent_obj.get(required_purpose) is False:
-                metrics.increment(
-                    "ingestion_consent_blocked_total",
-                    labels={"purpose": required_purpose},
-                )
-                return EventResult(
-                    id=sdk_event.id,
-                    status="rejected",
-                    reason=f"{REJECT_CONSENT_DENIED}:{required_purpose}",
-                )
-
-    # 4b. Batch-level consent fallback when no per-event snapshot is present.
-    if sdk_event.type != "consent" and granted_consents:
-        required_consent = EVENT_CONSENT_PURPOSE.get(sdk_event.type)
-        if required_consent and required_consent not in granted_consents:
-            metrics.increment(
-                "ingestion_validation_failed_total",
-                labels={"reason": "consent_missing"},
-            )
-            return EventResult(
-                id=sdk_event.id,
-                status="rejected",
-                reason=f"{REJECT_CONSENT_REQUIRED}:{required_consent}",
-            )
-
-    return None
-
-
 # ── Per-event processing helpers ──────────────────────────────────────────────
 
 async def _process_single_event(
@@ -627,146 +591,39 @@ async def _process_single_event(
     received_at: str,
     cache: CacheClient,
     granted_consents: frozenset[str] = frozenset(),
+    request_privacy: RequestPrivacySignals = RequestPrivacySignals(),
+    validation: Optional[EventValidationResult] = None,
 ) -> EventResult:
-    """Validate, check idempotency, and return per-event status."""
+    """Consume canonical validation, then apply V1 cache idempotency only."""
 
-    # 1. Event type validation
-    if sdk_event.type not in CANONICAL_EVENT_TYPES:
-        metrics.increment("ingestion_validation_failed_total", labels={"reason": "unknown_type"})
+    decision = validation or await validate_event(
+        sdk_event=sdk_event,
+        tenant_id=tenant_id,
+        batch_id=batch_id,
+        received_at=received_at,
+        granted_consents=granted_consents,
+        request_privacy=request_privacy,
+    )
+    if not decision.allowed:
         return EventResult(
             id=sdk_event.id,
             status="rejected",
-            reason=f"{REJECT_UNKNOWN_TYPE}:{sdk_event.type}",
+            reason=format_rejection(decision, sdk_event),
         )
 
-    # 2. Observe-only invariant: reject any event claiming Aether executed
-    if sdk_event.properties and sdk_event.properties.get("execution_by_aether") is True:
-        metrics.increment("ingestion_validation_failed_total", labels={"reason": "execution_by_aether"})
-        return EventResult(
-            id=sdk_event.id,
-            status="rejected",
-            reason=REJECT_EXECUTION_CLAIM,
-        )
-
-    # 3. Sensitive field scrubbing on properties (recursive, backend defense)
-    if sdk_event.properties:
-        scrubbed, had_sensitive = _scrub_sensitive_fields(sdk_event.properties)
-        if had_sensitive:
-            logger.warning(
-                "Sensitive fields scrubbed in event %s (tenant=%s type=%s)",
-                sdk_event.id, tenant_id, sdk_event.type,
-            )
-            metrics.increment("ingestion_sensitive_scrub_total")
-            sdk_event.properties = scrubbed
-
-    # 4a. Per-event consent gate: check context.consent snapshot (authoritative)
-    #     Only block when the per-event snapshot explicitly marks the purpose False.
-    if sdk_event.type != "consent":
-        required_purpose = EVENT_CONSENT_PURPOSE.get(sdk_event.type)
-        if required_purpose and sdk_event.context:
-            consent_obj = sdk_event.context.consent
-            if consent_obj is not None and isinstance(consent_obj, dict):
-                if consent_obj.get(required_purpose) is False:
-                    metrics.increment(
-                        "ingestion_consent_blocked_total",
-                        labels={"purpose": required_purpose},
-                    )
-                    return EventResult(
-                        id=sdk_event.id,
-                        status="rejected",
-                        reason=f"{REJECT_CONSENT_DENIED}:{required_purpose}",
-                    )
-
-    # 4b. Batch-level consent gate: fallback when no per-event snapshot is present.
-    #     granted_consents is derived from BatchRequest.consents (optional hint).
-    if sdk_event.type != "consent" and granted_consents:
-        required_consent = EVENT_CONSENT_PURPOSE.get(sdk_event.type)
-        if required_consent and required_consent not in granted_consents:
-            metrics.increment(
-                "ingestion_validation_failed_total",
-                labels={"reason": "consent_missing"},
-            )
-            return EventResult(
-                id=sdk_event.id,
-                status="rejected",
-                reason=f"{REJECT_CONSENT_REQUIRED}:{required_consent}",
-            )
-
-    # 4b-authority. Server-authoritative consent enforcement (PR 3, flag-gated).
-    #     The SERVER consent-receipt store — not the SDK context.consent snapshot
-    #     validated in 4a — decides. Absence of a server receipt is NOT
-    #     permission (fail-closed): a granted SDK snapshot with no server receipt
-    #     is still rejected. Default OFF in local so legacy ingestion tests keep
-    #     the SDK-snapshot behavior; ON in staging/production. This is the single
-    #     additive block for FT-3-AUTHORITATIVE-CONSENT (PR 5 also edits this file
-    #     — keep the surface minimal).
-    if (
-        settings.consent_authority.authoritative_consent_enforcement_enabled
-        and sdk_event.type != "consent"
-    ):
-        authoritative_purpose = EVENT_CONSENT_PURPOSE.get(sdk_event.type)
-        if authoritative_purpose:
-            from services.consent.authority import evaluate_consent
-            allowed, reason_code = await evaluate_consent(
-                tenant_id=tenant_id,
-                subject_id=sdk_event.userId,
-                anonymous_id=sdk_event.anonymousId,
-                purpose=authoritative_purpose,
-            )
-            if not allowed:
-                metrics.increment(
-                    "ingestion_consent_authority_blocked_total",
-                    labels={"purpose": authoritative_purpose, "reason": reason_code or "unknown"},
-                )
-                return EventResult(
-                    id=sdk_event.id,
-                    status="rejected",
-                    reason=f"{reason_code}:{authoritative_purpose}",
-                )
-
-    # 4c. Deployment-context validation (External Agent Telemetry Plane V1).
-    #     Flag-gated: only when the plane is enabled AND the event carries an
-    #     agent deployment context with a deployment id.
-    deployment_id: Optional[str] = None
-    if settings.external_agent_telemetry.enabled:
-        deployment_ctx = sdk_event.context.agentDeployment or sdk_event.context.agent_deployment
-        if isinstance(deployment_ctx, dict):
-            deployment_id = (
-                deployment_ctx.get("deploymentId") or deployment_ctx.get("deployment_id")
-            )
-        if deployment_id:
-            from services.agent.deployments import (
-                record_event_outcome,
-                validate_deployment_context,
-            )
-            ok, reason = await validate_deployment_context(
-                tenant_id, deployment_ctx,
-                event_family=_get_event_family(sdk_event.type),
-            )
-            if not ok:
-                await record_event_outcome(tenant_id, str(deployment_id), "rejected")
-                metrics.increment(
-                    "ingestion_validation_failed_total",
-                    labels={"reason": "deployment_context"},
-                )
-                return EventResult(
-                    id=sdk_event.id,
-                    status="rejected",
-                    reason=f"{REJECT_DEPLOYMENT_CONTEXT}:{reason}",
-                )
-
-    # 4. Tenant-scoped idempotency check
-    idempotency_key = _make_idempotency_key(tenant_id, sdk_event.id, SCHEMA_VERSION)
+    idempotency_key = _make_idempotency_key(
+        tenant_id, sdk_event.id, SCHEMA_VERSION
+    )
     cache_key = f"aether:idempotency:{idempotency_key}"
-
-    is_duplicate = await _check_idempotency(cache, cache_key)
-    if is_duplicate:
+    if await _check_idempotency(cache, cache_key):
         metrics.increment("ingestion_event_duplicate_total")
         return EventResult(id=sdk_event.id, status="duplicate")
 
-    if deployment_id:
+    if decision.deployment_id:
         from services.agent.deployments import record_event_outcome
-        await record_event_outcome(tenant_id, str(deployment_id), "accepted")
+        await record_event_outcome(
+            tenant_id, decision.deployment_id, "accepted"
+        )
 
     return EventResult(id=sdk_event.id, status="accepted")
 
@@ -798,29 +655,18 @@ def _build_normalized_payload(
     batch_id: str,
     received_at: str,
 ) -> dict:
-    """Build the normalized payload written to Bronze and published to the bus."""
-    return {
-        "event_id": sdk_event.id,
-        "tenant_id": tenant_id,
-        "event_type": sdk_event.type,
-        "event_family": _get_event_family(sdk_event.type),
-        "session_id": sdk_event.sessionId,
-        "anonymous_id": sdk_event.anonymousId,
-        "user_id": sdk_event.userId,
-        "properties": _strip_canonical_entity_id(sdk_event.properties or {}),
-        "context": _strip_canonical_entity_id(sdk_event.context.model_dump(exclude_none=True)),
-        "timestamp": sdk_event.timestamp,
-        "received_at": received_at,
-        "ingested_at": utc_now().isoformat(),
-        "batch_id": batch_id,
-        "schema_version": SCHEMA_VERSION,
-        "source": "sdk",
-    }
+    """Compatibility wrapper over the canonical validation normalizer."""
+    return _validated_normalized_payload(
+        sdk_event=sdk_event,
+        tenant_id=tenant_id,
+        batch_id=batch_id,
+        received_at=received_at,
+    )
 
 
 def _get_event_family(event_type: str) -> str:
-    """Map event type to family using the generated registry."""
-    return EVENT_FAMILY.get(event_type, "core")
+    """Compatibility wrapper over the generated-registry family lookup."""
+    return _validated_event_family(event_type)
 
 
 def _strip_canonical_entity_id(obj: Any) -> Any:
