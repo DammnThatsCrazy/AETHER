@@ -14,6 +14,8 @@ on:
       - 'docs/reports/**'
       - 'CHANGELOG.md'
       - 'scripts/validate_sdk_release_alignment.py'
+      - 'scripts/release/sdk_conformance.py'
+      - 'packages/shared/sdk-parity.json'
       - '.github/workflows/sdk-release-validation.yml'
   pull_request:
     paths:
@@ -27,6 +29,8 @@ on:
       - 'docs/reports/**'
       - 'CHANGELOG.md'
       - 'scripts/validate_sdk_release_alignment.py'
+      - 'scripts/release/sdk_conformance.py'
+      - 'packages/shared/sdk-parity.json'
       - '.github/workflows/sdk-release-validation.yml'
   workflow_dispatch:
 
@@ -67,7 +71,6 @@ jobs:
         run: test -f docs/reports/SDK_PRODUCTION_READINESS_AUDIT.md || (echo "ERROR: Audit doc missing" && exit 1)
 
   android:
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -86,7 +89,6 @@ jobs:
         run: gradle assembleRelease publishToMavenLocal
 
   ios:
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v4

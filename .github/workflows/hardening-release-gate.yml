@@ -6,62 +6,15 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
 
 concurrency:
   group: hardening-release-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
 jobs:
-  sync-documentation:
-    name: Sync generated documentation
-    if: github.event_name == 'workflow_dispatch' || github.event.pull_request.head.repo.full_name == github.repository
-    runs-on: ubuntu-latest
-    outputs:
-      changed: ${{ steps.sync.outputs.changed }}
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          ref: ${{ github.head_ref || github.ref_name }}
-          fetch-depth: 0
-      - uses: actions/setup-python@v5
-        with:
-          python-version: '3.12'
-      - name: Install documentation dependencies
-        run: python -m pip install --disable-pip-version-check PyYAML
-      - name: Regenerate and review source-linked documentation
-        id: sync
-        run: |
-          python scripts/generate_contracts.py
-          set +e
-          make docs-fix
-          initial_docs_status=$?
-          set -e
-          echo "Initial docs-fix status: $initial_docs_status"
-          if ! python scripts/docs_drift.py --strict; then
-            python scripts/docs_drift.py --update
-          fi
-          make docs-fix
-          python scripts/docs_drift.py --strict
-          if [ -n "$(git status --porcelain)" ]; then
-            echo 'changed=true' >> "$GITHUB_OUTPUT"
-            git config user.name 'aether-release-bot'
-            git config user.email 'aether-release-bot@users.noreply.github.com'
-            git add -A
-            git commit \
-              -m 'docs(aether): sync hardening release surfaces' \
-              -m 'Why: keep generated and source-linked documentation aligned with the combined hardening patch.' \
-              -m 'Validation: make docs-fix; python scripts/docs_drift.py --strict; hashes refreshed only after authored-doc review.' \
-              -m 'Docs: generated indexes, manifests, and source-link stamps updated. Known limitation: full gates run on the follow-up workflow attempt.'
-            git push origin HEAD:${{ github.head_ref || github.ref_name }}
-          else
-            echo 'changed=false' >> "$GITHUB_OUTPUT"
-          fi
-
   canonical-gates:
     name: Canonical CI and release gates
-    needs: sync-documentation
-    if: needs.sync-documentation.outputs.changed == 'false'
     runs-on: ubuntu-latest
     timeout-minutes: 90
     steps:
@@ -84,31 +37,3 @@ jobs:
         run: make ci-check
       - name: Release readiness gate
         run: make release-gate
-  combine-history:
-    name: Keep the hardening train as one patch
-    needs: canonical-gates
-    if: needs.canonical-gates.result == 'success'
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          ref: ${{ github.head_ref || github.ref_name }}
-          fetch-depth: 0
-      - name: Squash remote branch after all gates pass
-        run: |
-          git fetch origin main
-          count="$(git rev-list --count origin/main..HEAD)"
-          if [ "$count" -le 1 ]; then
-            echo "Combined patch already has one commit."
-            exit 0
-          fi
-          git config user.name 'aether-release-bot'
-          git config user.email 'aether-release-bot@users.noreply.github.com'
-          git reset --soft origin/main
-          git commit \
-            -m 'security(aether): deliver combined hardening release train' \
-            -m 'Why: close the approved medium and low priority hardening gaps as one reviewable patch.' \
-            -m 'What: unify ingestion privacy validation, governed Campaign360 rates, audited identity repair, durable native queues, import graph cleanup, typed Profile360 availability, tenant expectations, representative coverage, profile-specific cloud configuration plans with credential-gated remote promotion, and ledger truth enforcement.' \
-            -m 'Validation: make docs-fix, make ci-check, and make release-gate passed in GitHub Actions before this squash.' \
-            -m 'Docs: source-of-truth and generated ownership surfaces are synchronized. Known gaps remain non-terminal in the implementation ledger.'
-          git push --force-with-lease origin HEAD:${{ github.head_ref || github.ref_name }}
