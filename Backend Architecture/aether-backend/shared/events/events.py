@@ -753,7 +753,10 @@ class EventConsumer:
                     bootstrap_servers=bootstrap,
                     group_id=self._group_id,
                     auto_offset_reset="earliest",
-                    enable_auto_commit=True,
+                    # Commit only after all handlers (or the durable DLQ path)
+                    # complete. A crash before that point deliberately causes
+                    # redelivery rather than silent loss.
+                    enable_auto_commit=False,
                     value_deserializer=lambda m: m.decode("utf-8"),
                 )
                 await self._kafka_consumer.start()
@@ -779,6 +782,7 @@ class EventConsumer:
                 try:
                     event = Event.deserialize(msg.value)
                     await self.process(event)
+                    await self._kafka_consumer.commit()
                 except Exception as e:
                     logger.error(f"Error processing Kafka message: {e}")
         except Exception as e:

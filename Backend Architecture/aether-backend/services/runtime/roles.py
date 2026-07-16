@@ -47,12 +47,9 @@ CONSUMER_ROLES: frozenset[str] = frozenset(
     }
 )
 
-# Map each worker role onto the supervised WorkerSpec names it owns. Names must
-# match services/runtime/specs.py::build_worker_specs. Consumer-attach roles
-# (identity/graph/measurement) currently own no dedicated supervised spec — their
-# work rides the shared consumer today; their standalone supervised loops are a
-# documented deferral (see config/implementation_ledger.yaml FT-4). "maintenance"
-# is the catch-all for cross-cutting crons/sweepers.
+# Map each worker role onto the supervised loop WorkerSpec names it owns. Stream
+# consumers are independently and canonically owned by ``consumer_specs.py``;
+# identity/graph/measurement therefore need no artificial loop spec here.
 ROLE_TO_SPEC_NAMES: dict[str, frozenset[str]] = {
     "outbox-relay": frozenset({"notification_outbox", "event_outbox_relay"}),
     "stream-worker": frozenset({"event_replay", "dune_polling"}),

@@ -12,6 +12,7 @@ source_files:
   - Backend Architecture/aether-backend/services/runtime/roles.py
   - Backend Architecture/aether-backend/services/runtime/run_role.py
   - Backend Architecture/aether-backend/services/runtime/specs.py
+  - Backend Architecture/aether-backend/services/runtime/consumer_specs.py
 canonical_owner: platform@aether
 estimated_read_minutes: 6
 toc_depth: 3
@@ -32,15 +33,16 @@ API process no longer starts every worker, consumer, and cron in-request.
 | `all` | Everything in one process (local/dev default). Rejected in staging/production. |
 | `api` | The FastAPI HTTP server only — no supervised workers, no stream consumers. |
 | `outbox-relay` | Outbox relay workers: the notification outbox and the ingestion `event_outbox` relay (FT-6). |
-| `stream-worker` | Stream loops (event replay, Dune polling) + stream consumers. |
-| `identity-worker` | Identity resolution (shared consumer today — dedicated loop deferred). |
-| `graph-writer` | Graph/profile writes (shared consumer today — dedicated loop deferred). |
-| `measurement-worker` | Measurement/attribution (shared consumer today — dedicated loop deferred). |
+| `stream-worker` | Stream loops plus Bronze/Silver projection and notification consumers. |
+| `identity-worker` | Identity-signal emission from validated SDK events. |
+| `graph-writer` | Profile/graph projection and delegation mutation consumers. |
+| `measurement-worker` | Identity merge/split journey rebuild and attribution restatement consumers. |
 | `materializer` | Artifact materialization sweeps (export expiry, payment-rail sync, object-backed Bronze compaction + scheduled storage reconciler — FT-8, gated by the `settings.storage_plane` flags). |
 | `maintenance` | Cross-cutting crons/sweepers (retention — including the flag-gated FT-8 storage-lifecycle retention pass, billing overage, SLA, jobs). |
 
 The canonical role set lives in `config/settings.py::RUNTIME_ROLES`; the
-role → worker mapping lives in `services/runtime/roles.py::ROLE_TO_SPEC_NAMES`.
+role → loop-worker mapping lives in `services/runtime/roles.py`; canonical
+stream ownership lives in `services/runtime/consumer_specs.py::CONSUMER_SPECS`.
 
 ## Entry point
 
@@ -57,14 +59,15 @@ python -m services.runtime.run_role maintenance    # cron/sweeper workers
 - A worker role builds `services/runtime/specs.py::build_worker_specs`, filters
   it to the specs that role owns, and runs them under the existing
   `WorkerSupervisor` (crash → backoff restart; required workers fail-closed in
-  staging/production).
+  staging/production). It also selects and attaches only that role's canonical
+  `ConsumerSpec` pipelines. Replicas use stable role-specific consumer groups.
 
 ## Lifespan gating (`WORKER_ROLES_ENABLED`)
 
 `main.py`'s FastAPI lifespan is gated by `WORKER_ROLES_ENABLED`:
 
-- **Off** (default in local/dev): byte-identical to the historical lifespan —
-  the process attaches every consumer and starts every supervised worker.
+- **Off** (default in local/dev): `all` retains the historical single-process
+  topology. An explicit `api` role remains pure and never attaches consumers.
 - **On** (default in staging/production): an `api` process starts **no** stream
   consumers and **no** supervised workers; the `all` role still starts
   everything; workers run in their own role processes.
@@ -127,10 +130,10 @@ Tuning env vars: `OUTBOX_RELAY_BATCH_SIZE` (100),
 
 Local/dev keep the single-process default (`all`, memory cache) working.
 
-## Deferred
+## Remaining validation
 
-Dedicated supervised loops and stream-consumer attachment for the
-`identity-worker`, `graph-writer`, and `measurement-worker` roles are deferred;
-their work currently rides the shared consumer, and `run_role` starts an empty
-supervisor for them. Tracked in `config/implementation_ledger.yaml`
-(`FT-4-RUNTIME-ROLES`).
+The identity, graph, and measurement consumer boundaries are implemented and
+covered by ownership tests. Broker-backed staging evidence for assignment,
+processing lag, restart counts, and bounded deployment drain remains required;
+the ledger therefore remains `implementation_in_progress` rather than claiming
+production validation.

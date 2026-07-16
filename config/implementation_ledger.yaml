@@ -170,27 +170,27 @@ items:
     severity: P1
     release_class: general_availability_blocker
     customer_impact: The API process must not start every worker/consumer/cron in production.
-    current_behavior: FastAPI lifespan starts consumers, supervised workers, and crons in-process.
+    current_behavior: Dedicated roles select canonical consumer pipelines; API owns no consumers.
     required_behavior: AETHER_ROLE + explicit backend selectors; role-specific entrypoints; production rejects role=all and memory backends.
     affected_paths:
       - Backend Architecture/aether-backend/main.py
       - Backend Architecture/aether-backend/services/runtime/roles.py
       - Backend Architecture/aether-backend/services/runtime/run_role.py
+      - Backend Architecture/aether-backend/services/runtime/consumer_specs.py
       - Backend Architecture/aether-backend/config/settings.py
-    tests_required: [tests/unit/test_runtime_roles.py]
-    evidence_required: [pytest tests/unit/test_runtime_roles.py output, Settings() production role=all + memory-backend rejection]
+    tests_required: [tests/unit/test_runtime_roles.py, tests/test_runtime_consumer_specs.py]
+    evidence_required: [pytest runtime role/consumer tests output, Settings() production role=all + memory-backend rejection]
     docs_required: [docs/BACKEND-EXECUTION-MODEL.md]
     owner: platform
     status: implementation_in_progress
     blocked_by: []
     exception: >
-      Deferred to follow-ups: dedicated supervised worker loops + stream-consumer
-      attachment for the identity/graph/measurement worker roles (they currently
-      ride the shared consumer, and run_role starts an empty supervisor for them);
-      full per-worker-role process fan-out beyond the fully-wired api role. The
-      lifespan worker/consumer split is gated behind WORKER_ROLES_ENABLED
-      (default-on non-local, off = byte-identical to before); the "all" role and
-      the flag-off path are unchanged. Production fail-closed rejection of
+      Remaining follow-up: complete broker-backed readiness/lag evidence and
+      staging deployment validation. Identity, graph, and measurement now own
+      required canonical consumer pipelines and run_role attaches them directly.
+      The "all" role remains available only for local/test aggregation. The
+      API role never attaches consumers, including during flag rollout.
+      Production fail-closed rejection of
       AETHER_ROLE=all and in-memory cache/database backends is enforced in
       Settings.__post_init__.
     last_verified_commit: null
