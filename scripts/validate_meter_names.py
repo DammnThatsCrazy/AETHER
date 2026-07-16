@@ -114,6 +114,22 @@ CANONICAL_NAMES: frozenset[str] = frozenset({
     "storage_reconcile_missing_object_total",
     "storage_reconcile_orphan_object_total",
     "storage_reconcile_checksum_drift_total",
+    # Object-backed Bronze + cross-store lifecycle (FT-8,
+    # shared/storage/compaction.py + shared/storage/lifecycle.py +
+    # services/storage_lifecycle/worker.py)
+    "storage_bronze_compaction_run_total",
+    "storage_bronze_compaction_stale_rebuild_total",
+    "storage_bronze_rows_externalized_total",
+    "storage_bronze_payload_route_hot_total",
+    "storage_bronze_payload_route_hydrated_total",
+    "storage_lifecycle_retention_object_deleted_total",
+    "storage_lifecycle_retention_object_tombstoned_total",
+    "storage_lifecycle_retention_row_deleted_total",
+    "storage_lifecycle_retention_row_tombstoned_total",
+    "storage_lifecycle_legal_hold_blocked_total",
+    "storage_lifecycle_dsr_records_erased_total",
+    "storage_lifecycle_dsr_objects_repacked_total",
+    "storage_lifecycle_sweep_error_total",
     # Dune feeder
     "dune_feeder_promoted",
     "dune_feeder_rejected",

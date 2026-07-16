@@ -59,7 +59,9 @@ ROLE_TO_SPEC_NAMES: dict[str, frozenset[str]] = {
     "identity-worker": frozenset(),
     "graph-writer": frozenset(),
     "measurement-worker": frozenset(),
-    "materializer": frozenset({"export_expiry_sweep", "payment_rail_sync"}),
+    "materializer": frozenset(
+        {"export_expiry_sweep", "payment_rail_sync", "bronze_object_compaction"}
+    ),
     "maintenance": frozenset(
         {
             "billing_overage_cron",

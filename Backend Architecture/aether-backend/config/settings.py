@@ -645,7 +645,8 @@ class IngestionV2Config:
 
 
 # ---------------------------------------------------------------------------
-# Storage Plane (PR 7 / FT-7) — Elastic Data Plane descriptor + object layer.
+# Storage Plane (PR 7 / FT-7 + PR 8 / FT-8) — Elastic Data Plane descriptor +
+# object layer, object-backed Bronze compaction, and cross-store lifecycle.
 #
 # All flags default OFF/inert in local. The storage-policy registry itself
 # (config/storage_policies.yaml) is always enforced by CI regardless of these
@@ -655,9 +656,20 @@ class IngestionV2Config:
 #     still comes from the policy registry (allow_object_externalization).
 #   - reconciler_enabled: scheduling switch for the storage reconciler that
 #     diffs the descriptor index against the object store (missing / orphan /
-#     checksum-drift detection).
+#     checksum-drift detection). Scheduled by the bronze_object_compaction
+#     worker loop (services/storage_lifecycle/worker.py).
 #   - object_bucket: S3 bucket for externalized objects when
 #     settings.runtime.object_backend == "s3" (fail-closed: required then).
+#   - bronze_compaction_enabled: FT-8 write path — pack cold Bronze payloads
+#     into objects (hot searchable metadata always stays in Postgres).
+#     Compaction only runs when externalization_enabled is ALSO true.
+#   - bronze_compaction_min_age_hours / _batch_size / _interval_s: compaction
+#     sweep tuning (only rows older than the age threshold are packed).
+#   - lifecycle_retention_enabled: FT-8 retention — the retention sweep worker
+#     additionally ages out externalized objects + Bronze rows per the policy
+#     registry's retention_class/delete_behavior (legal holds always block).
+#   - retention_standard_days: age applied to retention_class "standard"
+#     resources by the storage-plane lifecycle (legal class is never swept).
 # ---------------------------------------------------------------------------
 
 @dataclass(frozen=True)
@@ -665,6 +677,12 @@ class StoragePlaneConfig:
     externalization_enabled: bool = _env_bool("STORAGE_EXTERNALIZATION_ENABLED", False)
     reconciler_enabled: bool = _env_bool("STORAGE_RECONCILER_ENABLED", False)
     object_bucket: str = _env("STORAGE_OBJECT_BUCKET", "")
+    bronze_compaction_enabled: bool = _env_bool("BRONZE_OBJECT_COMPACTION_ENABLED", False)
+    bronze_compaction_min_age_hours: int = _env_int("BRONZE_COMPACTION_MIN_AGE_HOURS", 72)
+    bronze_compaction_batch_size: int = _env_int("BRONZE_COMPACTION_BATCH_SIZE", 500)
+    bronze_compaction_interval_s: int = _env_int("BRONZE_COMPACTION_INTERVAL_S", 3600)
+    lifecycle_retention_enabled: bool = _env_bool("STORAGE_LIFECYCLE_RETENTION_ENABLED", False)
+    retention_standard_days: int = _env_int("STORAGE_RETENTION_STANDARD_DAYS", 365)
 
 
 # ---------------------------------------------------------------------------

@@ -1,5 +1,6 @@
 """
-Aether Shared — Elastic Data Plane storage layer (FT-7-STORAGE-DESCRIPTORS).
+Aether Shared — Elastic Data Plane storage layer
+(FT-7-STORAGE-DESCRIPTORS + FT-8-OBJECT-BACKED-BRONZE).
 
 Public surface:
   - StorageDescriptor           universal handle for any externalized object
@@ -7,15 +8,34 @@ Public surface:
   - StorageManager              policy-driven externalize/hydrate
   - reconcile / ReconciliationReport
                                 descriptor-vs-object drift detection
+  - BronzeObjectCompactor / BronzeRowStore
+                                object-backed Bronze compaction + historical
+                                payload routing (FT-8)
+  - StorageLifecycle / ExternalizedBronzeDSRAdapter
+                                retention / deletion / DSR / legal holds
+                                across row store + object store + descriptor
+                                index (FT-8)
 
 Policies live in config/storage_policies.yaml (repo root) — one policy per
 persistent resource type, enforced by scripts/release/check_storage_policies.py.
 """
 
+from shared.storage.compaction import (  # noqa: F401
+    BRONZE_RESOURCE_TYPE,
+    BronzeObjectCompactor,
+    BronzePayloadUnavailableError,
+    BronzeRowStore,
+    CompactionStats,
+)
 from shared.storage.descriptor import (  # noqa: F401
     DESCRIPTOR_SCHEMA_VERSION,
     StorageDescriptor,
     sha256_hex,
+)
+from shared.storage.lifecycle import (  # noqa: F401
+    ExternalizedBronzeDSRAdapter,
+    LegalHoldActiveError,
+    StorageLifecycle,
 )
 from shared.storage.manager import (  # noqa: F401
     ChecksumMismatchError,

@@ -175,6 +175,16 @@ class DeletionPlan:
         self.add_step("postgresql", "lake_bronze", DeletionBehavior.HARD_DELETE,
                        DataClassification.CONFIDENTIAL, "Delete Bronze tier raw records")
 
+        # Externalized Bronze objects (FT-8) — packed payload segments in the
+        # object store. Erasure re-packs each object WITHOUT the subject and
+        # removes the subject's rows/descriptors across all three stores; wire
+        # shared.storage.lifecycle.ExternalizedBronzeDSRAdapter under the
+        # "object_store:bronze_sdk_events" adapter key to execute it.
+        self.add_step("object_store", "bronze_sdk_events", DeletionBehavior.HARD_DELETE,
+                       DataClassification.CONFIDENTIAL,
+                       "Propagate erasure to externalized Bronze objects (re-pack without subject)",
+                       entity_field="subject_ref")
+
         # Lake Silver/Gold tiers — pseudonymize
         self.add_step("postgresql", "lake_silver", DeletionBehavior.PSEUDONYMIZE,
                        DataClassification.CONFIDENTIAL, "Pseudonymize Silver tier entity references")
@@ -249,7 +259,18 @@ class DeletionPlan:
         Returns:
             Execution summary with per-step results, counts, and failure details.
         """
-        adapters = store_adapters or {}
+        adapters = dict(store_adapters or {})
+        # The externalized-Bronze step must never silently no-op: the default
+        # DSAR path (DSARRequest.process_erasure) supplies no adapters, which
+        # would mark the step executed with records_affected=0 while the
+        # subject's packed payloads survive in object storage. Wire the
+        # canonical adapter automatically; an explicit caller-supplied adapter
+        # still wins. Lazy import — shared.storage pulls repositories/settings.
+        _BRONZE_OBJECT_KEY = "object_store:bronze_sdk_events"
+        if _BRONZE_OBJECT_KEY not in adapters and self.tenant_id:
+            from shared.storage.lifecycle import ExternalizedBronzeDSRAdapter
+
+            adapters[_BRONZE_OBJECT_KEY] = ExternalizedBronzeDSRAdapter(self.tenant_id)
         executed = 0
         skipped = 0
         immutable_retained = 0

@@ -2479,3 +2479,23 @@ class StorageDescriptorRepository(BaseRepository):
     async def find_by_locator(self, locator: str) -> Optional[dict]:
         rows = await self.find_many(filters={"locator": locator}, limit=1)
         return rows[0] if rows else None
+
+
+class StorageLegalHoldRepository(BaseRepository):
+    """Legal holds over storage-plane data (FT-8 object-backed Bronze).
+
+    Each row is one hold: tenant_id (required), resource_type ("" = every
+    type), subject_ref ("" = every subject), reason, placed_by, and a
+    status of "active" | "released". Active holds BLOCK the storage
+    lifecycle's deletion paths (retention sweeps and DSR erasure — see
+    shared/storage/lifecycle.py) until released. Holds are legal-class
+    records themselves: released holds are retained, never hard-deleted.
+    """
+
+    def __init__(self) -> None:
+        super().__init__("storage_legal_holds")
+
+    async def active_for_tenant(self, tenant_id: str, limit: int = 500) -> list[dict]:
+        return await self.find_many(
+            filters={"tenant_id": tenant_id, "status": "active"}, limit=limit
+        )
