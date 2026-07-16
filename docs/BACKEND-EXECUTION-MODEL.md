@@ -15,7 +15,7 @@ source_files:
 canonical_owner: platform@aether
 estimated_read_minutes: 6
 toc_depth: 3
-last_synced_commit: "9223aaa4"
+last_synced_commit: "d59e5da3"
 ---
 
 # Backend Execution Model
@@ -36,8 +36,8 @@ API process no longer starts every worker, consumer, and cron in-request.
 | `identity-worker` | Identity resolution (shared consumer today — dedicated loop deferred). |
 | `graph-writer` | Graph/profile writes (shared consumer today — dedicated loop deferred). |
 | `measurement-worker` | Measurement/attribution (shared consumer today — dedicated loop deferred). |
-| `materializer` | Artifact materialization sweeps (export expiry, payment-rail sync). |
-| `maintenance` | Cross-cutting crons/sweepers (retention, billing overage, SLA, jobs). |
+| `materializer` | Artifact materialization sweeps (export expiry, payment-rail sync, object-backed Bronze compaction + scheduled storage reconciler — FT-8, gated by the `settings.storage_plane` flags). |
+| `maintenance` | Cross-cutting crons/sweepers (retention — including the flag-gated FT-8 storage-lifecycle retention pass, billing overage, SLA, jobs). |
 
 The canonical role set lives in `config/settings.py::RUNTIME_ROLES`; the
 role → worker mapping lives in `services/runtime/roles.py::ROLE_TO_SPEC_NAMES`.

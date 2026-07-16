@@ -279,17 +279,39 @@ items:
     severity: P1
     release_class: general_availability_blocker
     customer_impact: Compacts raw/historical payloads to S3; lifecycle propagates across stores.
-    current_behavior: All Bronze payloads live close to hot DB paths; no cross-store retention/deletion propagation.
+    current_behavior: >
+      Flag-gated (default OFF) Bronze compaction packs cold bronze_sdk_events
+      payloads into per-tenant externalized objects via the FT-7
+      StorageManager (policy codec/format, sha256 checksum, descriptor
+      index); hot searchable metadata is never deleted — rows keep every
+      typed column and point at the descriptor. Historical reads hydrate on
+      demand with checksum verification. The storage lifecycle applies
+      config/storage_policies.yaml retention_class/delete_behavior across
+      row store + object store + descriptor index (hard_delete vs tombstone;
+      legal class never auto-swept), DSR erasure re-packs objects without
+      the subject and re-points survivors, and storage_legal_holds block
+      every deletion path until released. Compaction + scheduled reconciler
+      run as the supervised bronze_object_compaction WorkerSpec
+      (materializer role); object retention rides the existing retention
+      sweep worker behind STORAGE_LIFECYCLE_RETENTION_ENABLED.
     required_behavior: Externalized packed objects with hot searchable metadata; hydration with checksum; retention/deletion/legal-hold/DSR across stores.
     affected_paths:
       - Backend Architecture/aether-backend/shared/storage/
-      - Backend Architecture/aether-backend/repositories/lake.py
-    tests_required: [object-backed bronze + retention tests]
-    evidence_required: [DSR lifecycle tests]
+      - Backend Architecture/aether-backend/services/storage_lifecycle/
+      - Backend Architecture/aether-backend/services/security/retention_worker.py
+      - Backend Architecture/aether-backend/services/runtime/specs.py
+      - Backend Architecture/aether-backend/services/runtime/roles.py
+      - Backend Architecture/aether-backend/repositories/repos.py
+      - Backend Architecture/aether-backend/shared/privacy/retention.py
+      - Backend Architecture/aether-backend/alembic/versions/20260727_object_backed_bronze.py
+      - Backend Architecture/aether-backend/config/settings.py
+      - config/storage_policies.yaml
+    tests_required: [tests/unit/test_object_backed_bronze.py]
+    evidence_required: [DSR + legal-hold + retention lifecycle tests in tests/unit/test_object_backed_bronze.py]
     docs_required: [docs/ELASTIC-DATA-PLANE.md]
     owner: data
-    status: not_started
-    blocked_by: [FT-7-STORAGE-DESCRIPTORS]
+    status: implemented
+    blocked_by: []
     exception: null
     last_verified_commit: null
 

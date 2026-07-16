@@ -153,7 +153,28 @@ async def reconcile_object_store(
     filters: dict[str, Any] = {}
     if tenant_id is not None:
         filters["tenant_id"] = tenant_id
-    descriptors = await descriptor_repo.find_many(filters=filters or None, limit=limit)
+    # Page the descriptor index to exhaustion (``limit`` is the page size).
+    # The object listing below is always complete, so a single capped
+    # descriptor page would misreport every object whose descriptor sits
+    # beyond the page as an orphan on every pass — and never checksum-check
+    # the skipped descriptors.
+    descriptors: list[Any] = []
+    offset = 0
+    while True:
+        page = await descriptor_repo.find_many(
+            filters=filters or None, limit=limit, offset=offset
+        )
+        descriptors.extend(page)
+        if len(page) < limit:
+            break
+        offset += limit
+    # Tombstoned descriptors (FT-8 lifecycle: object bytes lawfully removed,
+    # structural stub retained for audit) no longer claim an object — including
+    # them would misreport every tombstone as a "missing object".
+    descriptors = [
+        d for d in descriptors
+        if not (isinstance(d, Mapping) and d.get("tombstoned"))
+    ]
 
     object_checksums: dict[str, str] = {}
     for key in object_store.list(prefix):

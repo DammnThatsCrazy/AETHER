@@ -158,6 +158,11 @@ def build_worker_specs(*, registry: Any, settings: Any) -> list[WorkerSpec]:
 
         return build_payment_rail_sync_coro()
 
+    def _bronze_object_compaction() -> Coroutine[Any, Any, None]:
+        from services.storage_lifecycle.worker import build_bronze_compaction_coro
+
+        return build_bronze_compaction_coro()
+
     # ── specs (registration order mirrors the old lifespan start order) ───
 
     return [
@@ -238,5 +243,20 @@ def build_worker_specs(*, registry: Any, settings: Any) -> list[WorkerSpec]:
             name="payment_rail_sync",
             factory=_payment_rail_sync,
             enabled=lambda: bool(settings.payment_rails.enabled),
+        ),
+        # Object-backed Bronze compaction (FT-8): packs cold Bronze payloads
+        # into externalized objects (hot searchable metadata stays in Postgres)
+        # and schedules the FT-7 storage reconciler. Gated on the storage-plane
+        # flags so it never runs while the object write path is off.
+        WorkerSpec(
+            name="bronze_object_compaction",
+            factory=_bronze_object_compaction,
+            enabled=lambda: bool(
+                (
+                    settings.storage_plane.bronze_compaction_enabled
+                    and settings.storage_plane.externalization_enabled
+                )
+                or settings.storage_plane.reconciler_enabled
+            ),
         ),
     ]

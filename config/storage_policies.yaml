@@ -4071,6 +4071,26 @@ policies:
     requires_consent_invalidation: false
     requires_permission_hash: false
 
+  # Legal holds over storage-plane data (FT-8): active holds block the
+  # storage lifecycle's retention/DSR deletion paths until released. Holds
+  # are legal-class records themselves — released holds are retained.
+  - resource_type: storage_legal_holds
+    authoritative_store: postgres
+    metadata_store: postgres
+    projection_stores: []
+    codec: none
+    format: row
+    cache_ttl_seconds: 0
+    materialization_mode: none
+    retention_class: legal
+    delete_behavior: tombstone
+    legal_hold_supported: true
+    allow_adaptive_materialization: false
+    allow_object_externalization: false
+    allow_historical_table_storage: true
+    requires_consent_invalidation: false
+    requires_permission_hash: false
+
   - resource_type: targeting_leakage_findings
     authoritative_store: postgres
     metadata_store: postgres
