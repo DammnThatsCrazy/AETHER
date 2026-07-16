@@ -64,4 +64,5 @@ export * from './problem-details';
 export * from './dimension-state';
 export * from './temporal';
 export * from './temporal-policy';
+export * from './exploration-contract';
 export * from './imports';
