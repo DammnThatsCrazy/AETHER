@@ -1432,6 +1432,12 @@ export interface EventContext {
   ip?: string;
   locale?: string;
   timezone?: string;
+  /** UTC offset in minutes AT EVENT OCCURRENCE (not SDK init): -new Date().getTimezoneOffset(). */
+  utcOffsetMinutes?: number;
+  /** Where the timezone claim came from (canonical vocabulary in temporal.ts). */
+  timeZoneSource?: import('./temporal').TimeZoneSource;
+  /** Which clock produced the event timestamp (canonical vocabulary in temporal.ts). */
+  clockSource?: import('./temporal').ClockSource;
   userAgent?: string;
   consent?: ConsentState;
   provenance?: Provenance;

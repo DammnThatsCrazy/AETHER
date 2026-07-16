@@ -118,6 +118,11 @@ class EventContext(BaseModel):
     network: Optional[dict[str, Any]] = None
     locale: Optional[str] = None
     timezone: Optional[str] = None
+    # Temporal provenance (optional evidence; server computes the authoritative
+    # envelope — see services/ingestion/temporal_enforcement.py).
+    utcOffsetMinutes: Optional[int] = None
+    timeZoneSource: Optional[str] = None
+    clockSource: Optional[str] = None
     userAgent: Optional[str] = None
     ip: Optional[str] = None
     consent: Optional[dict[str, Any]] = None
@@ -273,7 +278,8 @@ async def ingest_batch(
             request_privacy=request_privacy,
         )
 
-    received_at = utc_now().isoformat()
+    received_dt = utc_now()
+    received_at = received_dt.isoformat()
     batch_id = str(uuid.uuid4())
     registry = get_registry()
 
@@ -303,6 +309,14 @@ async def ingest_batch(
             granted_consents=granted_consents,
             request_privacy=request_privacy,
             validation=validation,
+        )
+        result = _apply_temporal_enforcement(
+            sdk_event=sdk_event,
+            result=result,
+            normalized=validation.normalized_event,
+            tenant_id=tenant.tenant_id,
+            sent_at=body.sentAt,
+            received_at_dt=received_dt,
         )
         results.append(result)
         if result.status == "accepted":
@@ -467,7 +481,8 @@ async def _ingest_batch_v2(
     the outbox relay worker that drains ``event_outbox`` is PR 6). The response
     is the exact ``BatchResponse`` schema V1 returns, so V1/V2 are interchangeable.
     """
-    received_at = utc_now().isoformat()
+    received_dt = utc_now()
+    received_at = received_dt.isoformat()
     batch_id = str(uuid.uuid4())
 
     metrics.increment("ingestion_batch_received_total", labels={"tenant_id": tenant.tenant_id})
@@ -504,6 +519,19 @@ async def _ingest_batch_v2(
         normalized = validation.normalized_event
         if normalized is None:  # pragma: no cover - typed invariant
             raise RuntimeError("accepted validation missing normalized event")
+
+        temporal_result = _apply_temporal_enforcement(
+            sdk_event=sdk_event,
+            result=results[-1],
+            normalized=normalized,
+            tenant_id=tenant.tenant_id,
+            sent_at=body.sentAt,
+            received_at_dt=received_dt,
+        )
+        results[-1] = temporal_result
+        if temporal_result.status != "accepted":
+            continue
+
         entity_id = normalized.get("user_id") or normalized.get("anonymous_id", "")
         candidates.append(BronzeSDKEvent(
             tenant_id=tenant.tenant_id,
@@ -626,6 +654,75 @@ async def _process_single_event(
         )
 
     return EventResult(id=sdk_event.id, status="accepted")
+
+
+def _apply_temporal_enforcement(
+    sdk_event: BaseEvent,
+    result: EventResult,
+    normalized: Optional[dict],
+    tenant_id: str,
+    sent_at: Optional[str],
+    received_at_dt: "datetime",
+) -> EventResult:
+    """Temporal mode ladder (off → shadow → warn → enforce) for one event.
+
+    ``off`` returns immediately (zero cost). Active modes compute the
+    server-authoritative temporal envelope identically — shadow only meters,
+    warn also surfaces reasons, enforce applies reject/quarantine dispositions.
+    The envelope rides the normalized payload (``temporal`` key) into Bronze.
+    """
+    mode = settings.temporal_integrity.mode_for_tenant(tenant_id)
+    if mode == "off":
+        return result
+
+    from services.ingestion.temporal_enforcement import enforce_temporal
+
+    ctx = sdk_event.context
+    decision = enforce_temporal(
+        event_timestamp=sdk_event.timestamp,
+        event_family=_get_event_family(sdk_event.type),
+        context_timezone=ctx.timezone,
+        context_offset_minutes=ctx.utcOffsetMinutes,
+        context_tz_source=ctx.timeZoneSource,
+        context_clock_source=ctx.clockSource,
+        context_locale=ctx.locale,
+        sent_at=sent_at,
+        received_at=received_at_dt,
+    )
+
+    state = decision.envelope.temporal_state if decision.envelope else "invalid"
+    metrics.increment(
+        "ingestion_temporal_state_total",
+        labels={"tenant_id": tenant_id, "state": state, "mode": mode},
+    )
+    for code in decision.reason_codes:
+        metrics.increment(
+            "ingestion_temporal_reason_total",
+            labels={"tenant_id": tenant_id, "reason": code},
+        )
+
+    if decision.envelope is not None and normalized is not None:
+        normalized["temporal"] = decision.envelope.model_dump_bronze()
+
+    if result.status != "accepted":
+        return result
+    if mode == "enforce" and decision.blocked:
+        metrics.increment(
+            "ingestion_temporal_blocked_total",
+            labels={"tenant_id": tenant_id, "disposition": decision.disposition},
+        )
+        return EventResult(
+            id=sdk_event.id,
+            status="rejected",
+            reason=f"temporal_{decision.disposition}:" + ",".join(decision.reason_codes),
+        )
+    if mode == "warn" and decision.reason_codes:
+        return EventResult(
+            id=sdk_event.id,
+            status="accepted",
+            reason="temporal_warning:" + ",".join(decision.reason_codes),
+        )
+    return result
 
 
 def _make_idempotency_key(tenant_id: str, event_id: str, schema_version: str) -> str:
