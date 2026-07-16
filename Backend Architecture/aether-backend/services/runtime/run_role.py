@@ -18,10 +18,8 @@ The role is validated, exported as ``AETHER_ROLE`` for the process, and booted.
 Heavy imports (uvicorn, the resource registry) are performed lazily inside the
 dispatch functions so this module imports cleanly with no side effects.
 
-Deferred (see ledger FT-4): dedicated supervised loops + consumer attachment for
-the identity/graph/measurement worker roles — those currently ride the shared
-stream consumer. This entrypoint's fully-wired path today is ``api`` and the
-supervised-spec worker roles; consumer-only roles start an (empty) supervisor.
+Consumer-only roles attach their canonical ``ConsumerSpec`` entries and start
+the broker consumer even when they own no loop-style ``WorkerSpec`` entries.
 """
 
 from __future__ import annotations
@@ -56,7 +54,9 @@ async def _run_workers(role: str) -> int:
     from dependencies.providers import get_registry
     from services.runtime import (
         WorkerSupervisor,
+        attach_consumer_specs,
         build_worker_specs,
+        consumer_specs_for_role,
         specs_for_role,
     )
 
@@ -65,6 +65,10 @@ async def _run_workers(role: str) -> int:
 
     all_specs = build_worker_specs(registry=registry, settings=settings)
     specs = specs_for_role(role, all_specs)
+    consumer_specs = consumer_specs_for_role(role, settings)
+    attach_consumer_specs(registry, consumer_specs)
+    if consumer_specs:
+        await registry.consumer.start()
 
     supervisor = WorkerSupervisor()
     for spec in specs:
@@ -72,8 +76,9 @@ async def _run_workers(role: str) -> int:
     await supervisor.start_all()
 
     print(
-        f"[run_role] role={role} started {len(specs)} supervised worker(s): "
-        f"{', '.join(s.name for s in specs) or '(none — deferred/consumer-only)'}",
+        f"[run_role] role={role} started {len(specs)} supervised worker(s) and "
+        f"{len(consumer_specs)} consumer pipeline(s): "
+        f"{', '.join(s.name for s in specs + consumer_specs) or '(none)'}",
         flush=True,
     )
 
@@ -81,6 +86,9 @@ async def _run_workers(role: str) -> int:
     try:
         await stop.wait()  # run until cancelled / signalled
     finally:
+        # Stop acquisition first; EventConsumer completes the currently
+        # awaited handler before its loop observes shutdown.
+        await registry.consumer.stop()
         await supervisor.stop_all()
         await registry.shutdown()
     return 0

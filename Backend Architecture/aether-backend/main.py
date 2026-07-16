@@ -346,7 +346,12 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
       - shutdown: stop all supervised workers, gracefully close connections
     """
     from config.settings import Environment
-    from services.runtime import WorkerSupervisor, build_worker_specs
+    from services.runtime import (
+        WorkerSupervisor,
+        attach_consumer_specs,
+        build_worker_specs,
+        consumer_specs_for_role,
+    )
     from services.runtime.roles import should_start_consumers, should_start_workers
 
     # Runtime-role gating (PR 4 / FT-4). With WORKER_ROLES_ENABLED off, both
@@ -357,8 +362,15 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     # everything.
     _role = settings.runtime.aether_role
     _roles_gated = settings.runtime.worker_roles_enabled
-    _start_consumers = (not _roles_gated) or should_start_consumers(_role)
-    _start_workers = (not _roles_gated) or should_start_workers(_role)
+    # ``api`` is always pure, even during a staged flag rollout.  The flag may
+    # keep legacy single-process ``all`` behaviour, but must never turn an API
+    # deployment into an implicit worker deployment.
+    _start_consumers = _role != "api" and (
+        (not _roles_gated) or should_start_consumers(_role)
+    )
+    _start_workers = _role != "api" and (
+        (not _roles_gated) or should_start_workers(_role)
+    )
 
     registry = get_registry()
     await registry.startup()
@@ -383,30 +395,14 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
                 ) from e
             logger.warning(f"{label} wiring skipped: {e}")
 
-    # Consumer-attach wiring + stream-consumer start. Gated by runtime role:
-    # skipped entirely for a pure "api" process (whose events are produced and
-    # handled by dedicated worker-role processes). Flag off → _start_consumers
-    # True → identical to before.
+    # Canonical consumer registry: dedicated roles attach only owned pipelines;
+    # local ``all`` retains the complete single-process topology.
     if _start_consumers:
-        # Ingestion workers — sdk_bronze_writer, silver_normalizer, identity_signal_emitter
-        def _attach_ingestion() -> None:
-            from services.ingestion.workers import attach_ingestion_workers
-            attach_ingestion_workers(registry.consumer, registry.producer)
-        _attach_step("Ingestion worker", _attach_ingestion)
-
-        # Profile 360 — attach derived workers to the shared consumer.
-        # Strictly additive: workers consume new topics + a few existing ones,
-        # write to new tables only, and never mutate existing service state.
+        _consumer_specs = consumer_specs_for_role(_role, settings)
         _attach_step(
-            "Profile 360 worker",
-            lambda: attach_profile360_workers(registry.consumer, registry.graph),
+            f"{_role} consumer registry",
+            lambda: attach_consumer_specs(registry, _consumer_specs),
         )
-
-        # Measurement — identity change → journey rebuild → attribution recompute
-        def _attach_measurement_identity() -> None:
-            from services.measurement.identity_consumer import MeasurementIdentityConsumer
-            MeasurementIdentityConsumer(producer=registry.producer).register(registry.consumer)
-        _attach_step("Measurement identity consumer", _attach_measurement_identity)
 
     # Measurement — register algorithmic attribution models (markov, shapley_heuristic).
     # Model registration also serves API attribution queries, so it is
@@ -421,19 +417,20 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         logger.warning(f"Algorithmic attribution model registration skipped: {e}")
 
     if _start_consumers:
-        # Notification Intelligence — attach Kafka consumers.
-        def _attach_notification_intelligence() -> None:
-            from services.notification_intelligence.consumer import attach_notification_consumers
-            attach_notification_consumers(
-                registry.consumer,
-                producer=registry.producer,
-                cache=registry.cache,
-            )
-        _attach_step("Notification intelligence consumer", _attach_notification_intelligence)
-
         try:
             await registry.consumer.start()
+            app.state.consumer_readiness = {
+                "role": _role,
+                "attached": [spec.name for spec in _consumer_specs],
+                "required_attached": all(
+                    not spec.required or spec.topics for spec in _consumer_specs
+                ),
+                "broker_mode": registry.consumer._mode,
+                "draining": False,
+            }
         except Exception as e:  # pragma: no cover — defensive
+            if _attach_fail_closed and any(spec.required for spec in _consumer_specs):
+                raise RuntimeError(f"required {_role} consumer failed to start") from e
             logger.warning(f"Kafka consumer start skipped: {e}")
 
     # Provider Gateway (feature-flagged)

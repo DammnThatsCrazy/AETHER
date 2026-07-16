@@ -7,6 +7,12 @@ supervised ``WorkerSpec`` entries.
 
 from services.runtime.supervisor import WorkerSpec, WorkerSupervisor
 from services.runtime.specs import build_worker_specs
+from services.runtime.consumer_specs import (
+    CONSUMER_SPECS,
+    ConsumerSpec,
+    attach_consumer_specs,
+    consumer_specs_for_role,
+)
 from services.runtime.roles import (
     ALL_ROLES,
     CONSUMER_ROLES,
@@ -23,6 +29,10 @@ __all__ = [
     "WorkerSpec",
     "WorkerSupervisor",
     "build_worker_specs",
+    "ConsumerSpec",
+    "CONSUMER_SPECS",
+    "attach_consumer_specs",
+    "consumer_specs_for_role",
     "ALL_ROLES",
     "CONSUMER_ROLES",
     "ROLE_TO_SPEC_NAMES",
